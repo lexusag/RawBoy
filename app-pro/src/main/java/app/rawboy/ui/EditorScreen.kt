@@ -463,6 +463,7 @@ fun EditorScreen(vm: EditorViewModel) {
                     modifier = Modifier.heightIn(max = PANEL_MAX),
                     pickingWhite = pickingWhite,
                     onPickWhite = { pickingWhite = !pickingWhite },
+                    onSaveLensPreset = { send -> vm.saveLensPreset().let { if (send) vm.sendPresetToAuto(it) } },
                 )
             }
         }

@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { NO_ADJUSTMENTS, applyLook } from '../auto/looks/LookApplier';
+import { NO_ADJUSTMENTS, applyLook, developAuto } from '../auto/looks/LookApplier';
 import { ALL_FILM_LOOKS, FilmLooks, filmLookById } from '../auto/looks/FilmLooks';
 import { ALL_LOOKS, Looks, lookById, lutIdOf } from '../auto/looks/Look';
 import { applyAuto, measuredNoiseSettings } from '../auto/analysis/AutoTone';
@@ -27,7 +27,7 @@ import {
   sampleCurve,
   type CurvePoint,
 } from '../develop/ToneCurve';
-import { applyPreset, capturePreset, decodePresets, DEFAULT_PRESET_GROUPS, encodePresets } from '../develop/Presets';
+import { applyPreset, captureLensPreset, capturePreset, decodePresets, DEFAULT_PRESET_GROUPS, encodePresets, isLensPreset, lensPresetFor, putLensPreset } from '../develop/Presets';
 import { BandDownscaler } from '../export/BandDownscaler';
 import { FilmStocks } from '../film/FilmStocks';
 import { baseNameOf, fileName } from '../export/ExportSettings';
@@ -679,5 +679,49 @@ describe('curves', () => {
     expect(parsed.red).toEqual(IDENTITY_CURVE); // not sorted
     expect(parsed.green).toEqual(IDENTITY_CURVE);
     expect(parseCurves([1, 2])).toBeNull();
+  });
+});
+
+describe('lens presets', () => {
+  it('round-trip with their lens and match it, ignoring case', () => {
+    const lens = captureLensPreset(developParams({ lensDistortion: -12, vignetteAmount: 40 }), 'XF23mmF2 R WR');
+    expect(isLensPreset(lens)).toBe(true);
+    expect(lens.name).toBe('XF23mmF2 R WR');
+    const [decoded] = decodePresets(encodePresets([lens]));
+    expect(decoded.lens).toBe('XF23mmF2 R WR');
+    expect(Object.keys(decoded.values).sort()).toEqual(['lensDistortion', 'lensProfile', 'vignetteAmount', 'vignetteMidpoint']);
+    const look = capturePreset('Look', developParams(), ['light', 'lens'], 'XF23mmF2 R WR');
+    expect(isLensPreset(look)).toBe(false);
+    expect(lensPresetFor([look, decoded], ' xf23mmf2 r wr')).toBe(decoded);
+    expect(lensPresetFor([look, decoded], 'XF35mmF2 R WR')).toBeNull();
+    // A lens-only preset from before the lens was recorded stands for any lens.
+    const [old] = decodePresets('{"format":"rawboy-preset","version":1,"name":"Old","groups":["lens"],"values":{"lensDistortion":5}}');
+    expect(old.lens).toBeUndefined();
+    expect(lensPresetFor([old], 'XF35mmF2 R WR')).toBe(old);
+    expect(lensPresetFor([old, decoded], 'XF23mmF2 R WR')).toBe(decoded);
+  });
+
+  it('saved again replace the one for that lens', () => {
+    const first = captureLensPreset(developParams({ lensDistortion: 5 }), '50mm');
+    const other = captureLensPreset(developParams({ lensDistortion: 9 }), '85mm');
+    const list = putLensPreset([first, other], captureLensPreset(developParams({ lensDistortion: 7 }), '50mm'));
+    expect(list.map((p) => p.id)).toEqual([first.id, other.id]);
+    expect(list[0].values.lensDistortion).toBe(7);
+  });
+
+  it('change only the lens settings, on top of the look or a RawBoy preset', () => {
+    const lens = captureLensPreset(developParams({ lensProfile: false, lensDistortion: -15, vignetteAmount: 20, vignetteMidpoint: 30 }), '24mm');
+    const base = developParams({ exposure: 1.2, temperature: 5600 });
+    const plain = developAuto(base, Looks.NATURAL, 100, NO_ADJUSTMENTS, false, null, null);
+    const p = developAuto(base, Looks.NATURAL, 100, NO_ADJUSTMENTS, false, null, lens);
+    expect(p).toEqual({ ...plain, lensProfile: false, lensDistortion: -15, vignetteAmount: p.vignetteAmount, vignetteMidpoint: 30 });
+    // The look's own vignette stays on top of the lens preset's.
+    expect(p.vignetteAmount).toBeCloseTo(Math.min(100, Math.max(-100, 20 + plain.vignetteAmount - base.vignetteAmount)), 5);
+    // A RawBoy preset's Lens group gives way to the lens preset; its other groups stay.
+    const street = capturePreset('Street', developParams({ exposure: 0.3, lensDistortion: 40, vignetteAmount: -50 }), ['light', 'lens']);
+    const q = developAuto(base, Looks.NATURAL, 100, NO_ADJUSTMENTS, false, street, lens);
+    expect(q.exposure).toBeCloseTo(0.3, 6);
+    expect(q.lensDistortion).toBe(-15);
+    expect(q.vignetteAmount).toBe(20);
   });
 });

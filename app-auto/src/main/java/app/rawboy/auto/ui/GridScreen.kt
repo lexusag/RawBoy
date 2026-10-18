@@ -79,6 +79,8 @@ fun GridScreen(vm: AutoViewModel, snackbar: SnackbarHostState, pickPhotos: () ->
     val importMode by vm.importMode.collectAsStateWithLifecycle()
     val exportSettings by vm.exportSettings.collectAsStateWithLifecycle()
     val preset by vm.preset.collectAsStateWithLifecycle()
+    val lensPresets by vm.lensPresets.collectAsStateWithLifecycle()
+    var showLensPresets by remember { mutableStateOf(false) }
     val exporting = export != null
     val exportable = photos.count { it.analysis != null }
 
@@ -189,7 +191,16 @@ fun GridScreen(vm: AutoViewModel, snackbar: SnackbarHostState, pickPhotos: () ->
                             Text("Apply RawBoy preset…")
                         }
                     }
+                    // Lens presets from RawBoy: they correct every photo taken with their lens, whatever its look.
+                    if (lensPresets.isNotEmpty()) {
+                        TextButton(onClick = { showLensPresets = true }, modifier = Modifier.align(Alignment.CenterVertically)) {
+                            Text(if (lensPresets.size == 1) "1 lens preset" else "${lensPresets.size} lens presets")
+                        }
+                    }
                 }
+            }
+            if (showLensPresets && lensPresets.isNotEmpty()) {
+                LensPresetsDialog(lensPresets, onRemove = vm::removeLensPreset, onClose = { showLensPresets = false })
             }
             export?.let { e ->
                 Text(

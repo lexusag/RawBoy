@@ -485,6 +485,7 @@ export function ProApp({ store }: { store: ProStore }) {
                   blemish={session.blemish}
                   pickingWhite={pickingWhite}
                   onPickWhite={() => setPickingWhite(!pickingWhite)}
+                  onSaveLensPreset={store.saveLensPreset}
                 />
               </>
             )}

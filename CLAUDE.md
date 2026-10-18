@@ -69,6 +69,8 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
     `outToImage`, everything lens-related stays full-frame (`knownZoom` reuses the auto scale when only the crop changes).
   - `develop/CropMath.kt` — crop rect (fractions of the rotated + straightened frame), aspect ratios, handle drags,
     quarter-turn rotation. `develop/Presets.kt` — preset groups, capture/apply, the `.rawboy.json` format (org.json).
+    Lens presets = Lens group only (`isLensPreset`, `lens` = the photo's lens name): Auto matches them by lens
+    (`lensPresetFor`) and applies them after the look/preset in `LookApplier.develop` (all ports).
   - `session/PhotoSession.kt` — one open photo: decode, previews, skin mask, blemish scheduling,
     zoom tiles, LUT loading, export. Both apps' ViewModels delegate to it.
   - `gl/ThumbnailRenderer.kt` — develops a 512 px whole-image copy off screen (Auto's thumbnails),
