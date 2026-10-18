@@ -1240,8 +1240,8 @@ select {
 }
 
 /*
- * Auto: justified rows, each photo at its own aspect (--a, from the thumbnail), rows about 180 px high (120 on
- * phones, two landscape photos a row). The name and look sit over the bottom of the photo.
+ * Auto: justified rows, each photo at its own aspect (--a, from the thumbnail), rows about 180 px high (260 on
+ * desktop, 120 on phones, two landscape photos a row). The name and look sit over the bottom of the photo.
  */
 .grid.auto-grid {
   --row: 180px;
@@ -1297,6 +1297,19 @@ select {
 @media (max-width: 560px) {
   .grid.auto-grid {
     --row: 120px;
+  }
+}
+
+/* Desktop: bigger thumbnails in both grids (Auto rows about 260 px high, Browser cells at least 240 px wide). */
+@media (min-width: 1024px) {
+  .grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .grid.auto-grid {
+    --row: 260px;
   }
 }
 
