@@ -115,7 +115,7 @@ export interface BatchExport {
 export const NAMING: OutputNaming = { suffix: 'auto' };
 export const SETTINGS: ExportSettings = { format: 'jpeg', jpegQuality: 92, tiffBits: 16, maxLongSide: null };
 /** Export sizes offered (long side in pixels; null = full resolution). */
-export const EXPORT_SIZES: (number | null)[] = [null, 4096, 2048, 1080];
+export const EXPORT_SIZES: (number | null)[] = [null, 5600, 4096, 2048, 1080];
 const EXPORT_KEY = 'rawboy.auto.export';
 const GRID_THUMBNAIL = 512;
 const LOOK_THUMBNAIL = 192;

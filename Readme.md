@@ -160,7 +160,7 @@ develop one shot of a scene, swipe to the next and tap it. **Export all** saves 
 to `Pictures/RawBoy Auto/<name>-auto.jpg` (or `.tif`), one photo at a time, keeping the screen on.
 **Export all** and the photo view's **Export** ask for the format and size first (remembered for the next export),
 as RawBoy's export dialog does: JPEG with a quality slider (default 92) or TIFF (8 or 16-bit, LZW,
-default 16), at the original size or a long side of 4096, 2048 or 1080 px. Both keep the photo's EXIF.
+default 16), at the original size or a long side of 5600, 4096, 2048 or 1080 px. Both keep the photo's EXIF.
 **RawBoy presets:** **Apply RawBoy preset…** next to *Import as* (Android, iOS) opens a `.rawboy.json` file, as RawBoy
 exports it on any platform; RawBoy's **Send to Auto**, or opening a preset file with RawBoy Auto, does the same. The
 preset develops every photo, and photos added later, in place of its look: everything it holds, lens corrections,
@@ -509,6 +509,10 @@ Update it when a dependency is added or upgraded.
   and more may not fit the 4 GB WASM heap; tested in Chrome on macOS only.
 
 ## Changelog
+
+**Auto: 5600 px export size (2026-10-18)**
+
+- Auto (Android, iOS, web): the export size choices gain a long side of 5600 px, between the original size and 4096.
 
 **Faster Fujifilm RAF decodes on the web and iOS (2026-10-18)**
 

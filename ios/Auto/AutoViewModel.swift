@@ -112,7 +112,7 @@ final class AutoViewModel: ObservableObject {
     /** Defaults of exportSettings (JPEG 92 with jpegli, 16-bit TIFF, full size). */
     static let settings = ExportSettings(format: .jpeg, jpegQuality: 92, tiffBits: 16, jpegEncoder: .jpegli)
     /** Export sizes offered (long side in pixels; nil = full resolution). */
-    static let exportSizes: [Int?] = [nil, 4096, 2048, 1080]
+    static let exportSizes: [Int?] = [nil, 5600, 4096, 2048, 1080]
     static let gridThumbnail = 512
     static let lookThumbnail = 192
 
