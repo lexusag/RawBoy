@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- Develop pipeline runs as GLES 3.0 shaders (float textures, integer render targets). -->
+    <uses-feature android:glEsVersion="0x00030000" android:required="true" />
+
+    <application
+        android:allowBackup="true"
+        android:icon="@drawable/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.RawBoyAuto">
+
+        <activity
+            android:name=".AutoActivity"
+            android:exported="true"
+            android:launchMode="singleTop">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- "Open with" / "Share to RawBoy Auto", one or several raws, JPEGs, HEICs, PNGs or TIFFs -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <action android:name="android.intent.action.SEND" />
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/x-adobe-dng" />
+                <data android:mimeType="image/x-canon-cr2" />
+                <data android:mimeType="image/x-canon-cr3" />
+                <data android:mimeType="image/x-nikon-nef" />
+                <data android:mimeType="image/x-nikon-nrw" />
+                <data android:mimeType="image/x-sony-arw" />
+                <data android:mimeType="image/x-fuji-raf" />
+                <data android:mimeType="image/x-panasonic-rw2" />
+                <data android:mimeType="image/x-olympus-orf" />
+                <data android:mimeType="image/x-pentax-pef" />
+                <data android:mimeType="image/x-samsung-srw" />
+                <data android:mimeType="image/jpeg" />
+                <data android:mimeType="image/heic" />
+                <data android:mimeType="image/heif" />
+                <data android:mimeType="image/png" />
+                <data android:mimeType="image/tiff" />
+            </intent-filter>
+
+            <!-- A RawBoy preset (.rawboy.json) sent from RawBoy or opened from a file manager: applied to the batch -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="application/json" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

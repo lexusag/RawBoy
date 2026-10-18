@@ -1,0 +1,16 @@
+# Docker build context for web/Dockerfile: only what RawBoy Web needs.
+*
+!engine/src/main/cpp/
+!engine/src/main/assets/models/
+!shaders/
+!luts/
+!licenses/
+!web/
+web/node_modules/
+web/dist/
+web/native/build/
+web/public/wasm/
+web/public/models/
+web/public/mediapipe/
+web/public/coi-serviceworker.min.js
+web/public/third_party_notices.txt

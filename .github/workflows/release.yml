@@ -1,0 +1,212 @@
+# Builds signed release APKs of all three apps and attaches them to the GitHub release,
+# and deploys the public web build to Cloudflare Pages (project "rawboy").
+# Secrets: KEYSTORE_FILE (base64 of the .jks), KEYSTORE_PASS (store and key password; key alias "rawboy"),
+# CLOUDFLARE_API_TOKEN (Account > Cloudflare Pages > Edit), CLOUDFLARE_ACCOUNT_ID.
+# Publishing a release only dispatches this workflow on the default branch: caches saved by a run on a tag
+# can't be restored by later tags, so the builds run on main (sources still come from the tag).
+name: Release RawBoy
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to build and upload APKs for
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  dispatch:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - name: Dispatch the build on the default branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: >
+          gh workflow run release.yml --repo "$GITHUB_REPOSITORY"
+          --ref "${{ github.event.repository.default_branch }}" -f tag="$TAG"
+
+  apks:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # The action's default packages include "tools", which the SDK no longer has.
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools ndk;27.2.12479018 cmake;3.22.1
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # The C++ dependencies (LibRaw, DNG SDK, jpegli) rarely change between releases.
+      - uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: android-ndk27
+          max-size: 1G
+          verbose: 1
+
+      # Release builds need the Adobe DNG SDK (git-ignored); see third_party/README.md.
+      - uses: actions/cache@v4
+        with:
+          path: third_party/dng_sdk_1_7_1.zip
+          key: dng_sdk_1_7_1.zip
+
+      - name: Download Adobe DNG SDK
+        run: |
+          cd third_party
+          [ -f dng_sdk_1_7_1.zip ] || curl -fsSLO https://download.adobe.com/pub/adobe/dng/dng_sdk_1_7_1.zip
+          unzip -q dng_sdk_1_7_1.zip && mv dng_sdk_1_7_1 dng_sdk
+
+      - name: Set up signing
+        env:
+          KEYSTORE_FILE: ${{ secrets.KEYSTORE_FILE }}
+          KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
+        run: |
+          echo "$KEYSTORE_FILE" | base64 -d > "$RUNNER_TEMP/release.jks"
+          {
+            echo "storeFile=$RUNNER_TEMP/release.jks"
+            echo "storePassword=$KEYSTORE_PASS"
+            echo "keyAlias=rawboy"
+            echo "keyPassword=$KEYSTORE_PASS"
+          } > keystore.properties
+
+      # Tag vX.Y.Z -> versionName X.Y.Z, versionCode X*10000 + Y*100 + Z (so Y and Z stay below 100).
+      - name: Version from tag
+        run: |
+          name="${TAG#v}"
+          if [[ "$name" =~ ^([0-9]+)\.([0-9]{1,2})\.([0-9]{1,2})$ ]]; then
+            code=$(( 10#${BASH_REMATCH[1]} * 10000 + 10#${BASH_REMATCH[2]} * 100 + 10#${BASH_REMATCH[3]} ))
+          else
+            echo "::error::Release tag '$TAG' must be vX.Y.Z with Y and Z below 100"; exit 1
+          fi
+          echo "VERSION_NAME=$name" >> "$GITHUB_ENV"
+          echo "VERSION_CODE=$code" >> "$GITHUB_ENV"
+          echo "versionName $name, versionCode $code"
+
+      # CMake reads the launcher from the environment; AGP's CMake inherits it through the Gradle daemon.
+      # COMPILERCHECK=content: the NDK is unpacked afresh each run, so its mtime (ccache's default check) changes.
+      # Release APKs are arm64 only (x86_64 is for emulators; local builds keep it). Lint vital is skipped and
+      # the three apps' R8 runs in parallel (more heap for that).
+      - name: Build release APKs
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+          CCACHE_BASEDIR: ${{ github.workspace }}
+          CCACHE_NOHASHDIR: "true"
+          CCACHE_COMPILERCHECK: content
+        run: >
+          ./gradlew --parallel -Dorg.gradle.jvmargs="-Xmx8g -Dfile.encoding=UTF-8"
+          -x lintVitalRelease -x lintVitalStandardRelease
+          -Prawboy.versionName="$VERSION_NAME" -Prawboy.versionCode="$VERSION_CODE"
+          -Prawboy.abis=arm64-v8a :app-pro:assembleRelease :app-auto:assembleRelease
+          :app-camera:assembleStandardRelease
+
+      # Unsigned builds are named *-release-unsigned.apk, so a signing problem fails here.
+      - name: Collect APKs
+        run: |
+          mkdir dist
+          cp app-pro/build/outputs/apk/release/app-pro-release.apk "dist/RawBoy-$TAG.apk"
+          cp app-auto/build/outputs/apk/release/app-auto-release.apk "dist/RawBoy-Auto-$TAG.apk"
+          cp app-camera/build/outputs/apk/standard/release/app-camera-standard-release.apk "dist/RawBoy-Camera-$TAG.apk"
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/*.apk --clobber
+
+      - name: Remove signing files
+        if: always()
+        run: rm -f keystore.properties "$RUNNER_TEMP/release.jks"
+
+  web:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    env:
+      TAG: ${{ inputs.tag }}
+      # Emscripten's prebuilt system libraries (libc, libc++ with pthreads/exceptions), kept between runs.
+      EM_CACHE: ${{ github.workspace }}/.em_cache
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      # build:public needs the Adobe DNG SDK for rawboy-full.wasm.
+      - uses: actions/cache@v4
+        with:
+          path: third_party/dng_sdk_1_7_1.zip
+          key: dng_sdk_1_7_1.zip
+
+      - name: Download Adobe DNG SDK
+        run: |
+          cd third_party
+          [ -f dng_sdk_1_7_1.zip ] || curl -fsSLO https://download.adobe.com/pub/adobe/dng/dng_sdk_1_7_1.zip
+          unzip -q dng_sdk_1_7_1.zip && mv dng_sdk_1_7_1 dng_sdk
+
+      # Same Emscripten as web/Dockerfile. Installed at a fixed path: setup-emsdk used a new temp dir each run,
+      # which cleared EM_CACHE ("config changed") and changed the header paths ccache hashes.
+      - uses: actions/cache@v4
+        with:
+          path: ~/emsdk
+          key: emsdk-6.0.12
+
+      - name: Install Emscripten
+        run: |
+          [ -d ~/emsdk ] || git clone --depth 1 https://github.com/emscripten-core/emsdk.git ~/emsdk
+          ~/emsdk/emsdk install 6.0.12
+          ~/emsdk/emsdk activate 6.0.12
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ env.EM_CACHE }}
+          key: em-cache-6.0.12-${{ hashFiles('web/native/CMakeLists.txt') }}
+          restore-keys: em-cache-6.0.12-
+
+      - uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: emsdk-6.0.12
+          max-size: 1G
+          verbose: 1
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Build web
+        working-directory: web
+        env:
+          EM_COMPILER_WRAPPER: ccache
+          CCACHE_BASEDIR: ${{ github.workspace }}
+          CCACHE_NOHASHDIR: "true"
+        run: |
+          source ~/emsdk/emsdk_env.sh > /dev/null
+          npm ci && npm run build:public
+
+      # The tag checkout is a detached HEAD, so name the production branch or the deploy becomes a preview.
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: web
+          command: pages deploy dist --project-name rawboy --branch main

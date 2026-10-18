@@ -1,0 +1,148 @@
+import { describe, expect, it, vi } from 'vitest';
+
+// The store's analysis needs the WASM decoder; these tests only add photos, so it is stubbed out.
+vi.mock('../auto/AutoAnalysis', () => ({ analyzeFile: () => new Promise(() => {}) }));
+
+const { AutoStore, nonRawNote } = await import('../../ui/auto/AutoStore');
+
+describe('Auto import mode', () => {
+  it('new photos start in the import mode; photos already added keep theirs', () => {
+    const store = new AutoStore();
+    expect(store.state.importMode).toBe('looks');
+    store.add([new File(['a'], 'a.CR2')]);
+    store.setImportMode('film');
+    store.add([new File(['b'], 'b.CR2')]);
+    expect(store.state.photos.map((p) => [p.name, p.mode])).toEqual([['a.CR2', 'looks'], ['b.CR2', 'film']]);
+  });
+});
+
+describe('Non-RAW import note', () => {
+  it('shows only when an import includes JPEG, HEIC, PNG or TIFF files', () => {
+    expect(nonRawNote(['a.CR2', 'b.dng'])).toBeNull();
+    expect(nonRawNote(['a.CR2', 'b.JPG'])).toMatch(/^1 photo isn't RAW: .*lower quality/);
+    expect(nonRawNote(['a.heic', 'b.png', 'c.tif'])).toMatch(/^3 photos aren't RAW/);
+    const store = new AutoStore();
+    store.add([new File(['a'], 'a.CR2')]);
+    expect(store.state.message).toBeNull();
+    store.add([new File(['b'], 'b.jpeg')]);
+    expect(store.state.message).toMatch(/lower quality/);
+  });
+});
+
+describe('Pro film tone mapper', () => {
+  it('AgX/Filmic/Sigmoid turn the film off; Film brings the last stock back at full strength', async () => {
+    const { ProStore } = await import('../../ui/pro/ProStore');
+    const store = new ProStore();
+    store.selectFilm('vision500t');
+    expect(store.state.params).toMatchObject({ film: 'vision500t', filmAmount: 100 });
+    store.update({ ...store.state.params, filmAmount: 40 });
+    store.setToneMapper('filmic');
+    expect(store.state.params).toMatchObject({ film: null, toneMapper: 'filmic' });
+    store.useFilm();
+    expect(store.state.params).toMatchObject({ film: 'vision500t', filmAmount: 100, toneMapper: 'filmic' });
+  });
+});
+
+describe('Auto batch rotate', () => {
+  it('turns every selected analysed photo, wrapping at four quarter turns', async () => {
+    vi.stubGlobal('window', { setTimeout: () => 0 }); // thumbnails aren't rendered here
+    const store = new AutoStore();
+    store.add([new File(['a'], 'a.CR2'), new File(['b'], 'b.CR2'), new File(['c'], 'c.CR2')]);
+    // Analysis is stubbed out, so mark the photos analysed by hand (rotate skips unanalysed ones).
+    const { developParams } = await import('../develop/DevelopParams');
+    const analysis = { autoBase: developParams(), stats: { hasFace: false } };
+    const s = store as unknown as { _state: { photos: { analysis: unknown }[] } };
+    s._state.photos = s._state.photos.map((p, i) => ({ ...p, analysis: i < 2 ? analysis : null }));
+    const ids = new Set(store.state.photos.map((p) => p.id));
+    store.rotate(ids, -1);
+    store.rotate(new Set([store.state.photos[0].id]), 2);
+    expect(store.state.photos.map((p) => p.adjust.rotation)).toEqual([1, 3, 0]);
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('Auto batch preset', () => {
+  it('develops every photo, and photos added later, with all the preset holds; removing it brings the looks back', async () => {
+    vi.stubGlobal('window', { setTimeout: () => 0 }); // thumbnails aren't rendered here
+    const { developParams } = await import('../develop/DevelopParams');
+    const { capturePreset } = await import('../develop/Presets');
+    const { paramsOf } = await import('../../ui/auto/AutoStore');
+    const edited = developParams({
+      exposure: 0.7, contrast: 20, lut: 'asset:luts/x.cube', lutAmount: 60, lensProfile: false, lensDistortion: 25,
+      vignetteAmount: 30, vignetteMidpoint: 70, sharpening: 40, temperature: 4000,
+    });
+    const preset = capturePreset('Street', edited, ['light', 'lut', 'lens', 'detail']);
+    const store = new AutoStore();
+    store.add([new File(['a'], 'a.CR2')]);
+    const autoBase = developParams({ exposure: 1.2, temperature: 5600, denoise: 20 });
+    const analysis = { autoBase, stats: { hasFace: false } };
+    const s = store as unknown as { _state: { photos: { analysis: unknown }[] } };
+    s._state.photos = s._state.photos.map((p) => ({ ...p, analysis }));
+    store.applyPresetToAll(preset);
+    store.add([new File(['b'], 'b.CR2')]);
+    expect(store.state.photos.map((p) => p.preset?.name)).toEqual(['Street', 'Street']);
+    const a = store.state.photos[0];
+    expect(paramsOf(a)).toMatchObject({
+      exposure: 0.7, contrast: 20, lut: 'asset:luts/x.cube', lutAmount: 60, lensProfile: false, lensDistortion: 25,
+      vignetteAmount: 30, vignetteMidpoint: 70,
+      temperature: 5600, // white balance wasn't in the preset: the auto develop's stays
+      denoise: 20, sharpening: autoBase.sharpening, // noise settings are this photo's, never the preset's
+    });
+    // Auto's own controls still work on top.
+    store.setAdjust(a.id, { brightness: 100, grain: 10 });
+    expect(paramsOf(store.state.photos[0])).toMatchObject({ exposure: 3.7, grain: edited.grain + 10 });
+    store.removePreset();
+    expect(store.state.preset).toBeNull();
+    expect(paramsOf(store.state.photos[0])?.lut).not.toBe('asset:luts/x.cube');
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('Auto preset per scene', () => {
+  it('a selection gets its own preset; removing the batch preset leaves it alone', async () => {
+    vi.stubGlobal('window', { setTimeout: () => 0 }); // thumbnails aren't rendered here
+    const { developParams } = await import('../develop/DevelopParams');
+    const { capturePreset } = await import('../develop/Presets');
+    const { paramsOf } = await import('../../ui/auto/AutoStore');
+    const day = capturePreset('Day', developParams({ contrast: 10, denoise: 0 }), ['light', 'detail']);
+    const night = capturePreset('Night', developParams({ contrast: 40, denoise: 5 }), ['light', 'detail']);
+    const store = new AutoStore();
+    store.add([new File(['a'], 'a.CR2'), new File(['b'], 'b.CR2'), new File(['c'], 'c.CR2')]);
+    const analysis = { autoBase: developParams({ denoise: 55 }), stats: { hasFace: false } };
+    const s = store as unknown as { _state: { photos: { analysis: unknown }[] } };
+    s._state.photos = s._state.photos.map((p) => ({ ...p, analysis }));
+    store.applyPresetToAll(day);
+    const [, b, c] = store.state.photos;
+    store.applyPresetTo(night, new Set([b.id, c.id]));
+    expect(store.state.message).toBe('Night applied to 2 photos');
+    expect(store.state.photos.map((p) => p.preset?.name)).toEqual(['Day', 'Night', 'Night']);
+    expect(paramsOf(store.state.photos[1])).toMatchObject({ contrast: 40, denoise: 55 });
+    store.add([new File(['d'], 'd.CR2')]);
+    expect(store.state.photos[3].preset?.name).toBe('Day'); // photos added later get the batch preset
+    store.removePreset();
+    expect(store.state.photos.map((p) => p.preset?.name ?? null)).toEqual([null, 'Night', 'Night', null]);
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('Auto apply to all', () => {
+  it('gives every photo the look, including photos not analysed yet, which then keep it', async () => {
+    vi.stubGlobal('window', { setTimeout: () => 0 }); // thumbnails aren't rendered here
+    const { developParams } = await import('../develop/DevelopParams');
+    const { ALL_LOOKS } = await import('../auto/looks/Look');
+    const store = new AutoStore();
+    store.add([new File(['a'], 'a.CR2'), new File(['b'], 'b.CR2'), new File(['c'], 'c.CR2')]);
+    const analysis = { autoBase: developParams(), stats: { hasFace: false } };
+    const s = store as unknown as { _state: { photos: { analysis: unknown }[] } };
+    s._state.photos = s._state.photos.map((p, i) => ({ ...p, analysis: i === 0 ? analysis : null }));
+    const source = store.state.photos[0];
+    const look = ALL_LOOKS[ALL_LOOKS.length - 1];
+    store.setLook(source.id, look);
+    store.setStrength(source.id, 40);
+    store.applyLookToAll(source.id);
+    for (const p of store.state.photos.slice(1)) {
+      expect(p).toMatchObject({ look, strength: 40, looksApplied: true, analysis: null });
+    }
+    vi.unstubAllGlobals();
+  });
+});

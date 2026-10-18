@@ -1,0 +1,1863 @@
+/* RawBoy Web: dark editor UI. Colours as tokens; the photo area stays neutral so it doesn't bias judgement. */
+:root {
+  --bg: #121212;
+  --surface: #1c1c1e;
+  --surface-2: #26262a;
+  --border: #333338;
+  --text: #ececec;
+  --muted: #9a9aa2;
+  --accent: #e8a33d;
+  --accent-text: #1a1206;
+  --error: #ff6b6b;
+  --sidebar: 340px;
+  color-scheme: dark;
+  font: 14px/1.4 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+}
+
+button.text {
+  background: none;
+  border-color: transparent;
+  color: var(--accent);
+}
+
+button.icon {
+  background: none;
+  border-color: transparent;
+  font-size: 18px;
+  padding: 4px 8px;
+}
+
+.tool-label {
+  display: none;
+}
+
+button.icon.active {
+  color: var(--accent);
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* The apps as one segmented control at the start of each tool bar; the current one is lit. */
+.app-switcher {
+  display: flex;
+  flex: none;
+  padding: 2px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+
+.toolbar .app-switcher button {
+  min-height: 0;
+  padding: 4px 12px;
+  border: none;
+  border-radius: 7px;
+  background: none;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.toolbar .app-switcher button:hover {
+  color: var(--text);
+}
+
+.toolbar .app-switcher button.active {
+  background: var(--surface-2);
+  color: var(--text);
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+
+/* Tablets: a little tighter, so the file name keeps some room. */
+@media (max-width: 900px) {
+  .toolbar .app-switcher button {
+    padding: 4px 8px;
+  }
+}
+
+/* Phones: the apps get the tool bar's whole top line, in equal segments big enough to tap. */
+@media (max-width: 560px) {
+  .toolbar {
+    flex-wrap: wrap;
+  }
+
+  .toolbar .app-switcher {
+    order: -1;
+    flex-basis: 100%;
+    margin-bottom: 4px;
+  }
+
+  .toolbar .app-switcher button {
+    flex: 1;
+    min-height: 34px;
+    font-size: 14px;
+  }
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.tabs button {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 10px 12px;
+  color: var(--muted);
+}
+
+.tabs button.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.tabs.small {
+  border-bottom: 1px solid var(--border);
+  padding: 0 8px;
+  overflow-x: auto;
+  flex: none;
+}
+
+/* Auto: the import mode above the grid (a label and a segmented switch, not tabs). */
+.import-mode {
+  padding: 8px 16px 4px;
+  border-bottom: 1px solid var(--border);
+  flex: none;
+}
+
+.import-mode-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.import-mode-label {
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+  min-width: 64px;
+}
+
+.import-mode-row.export-options {
+  margin-top: 8px;
+}
+
+.batch-bar {
+  flex-wrap: wrap;
+  row-gap: 4px;
+  padding-bottom: 4px;
+}
+
+.import-mode .batch-bar .segmented {
+  flex: 0 1 200px;
+}
+
+/* The batch's preset: its name and a remove button, in place of "Apply RawBoy preset…". */
+.preset-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  max-width: 100%;
+  padding-left: 10px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  color: var(--accent);
+}
+
+.preset-chip button.icon {
+  font-size: 14px;
+  padding: 2px 8px;
+}
+
+.auto-export .import-mode-row {
+  gap: 8px;
+}
+
+.auto-export .import-mode-label {
+  min-width: 52px;
+}
+
+.auto-export .segmented {
+  flex: 1;
+}
+
+.auto-export .export-quality {
+  max-width: none;
+}
+
+.export-quality {
+  flex: 1;
+  max-width: 320px;
+  margin-bottom: 4px;
+}
+
+.import-mode .segmented {
+  flex: 1;
+  max-width: 320px;
+}
+
+.import-mode .note {
+  margin-top: 4px;
+}
+
+/* Auto: the batch's RawBoy preset in the grid header, and on a photo in place of the look strip. */
+.batch-preset {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.photo-preset {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 12px 0;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  flex: none;
+}
+
+.photo-preset .title {
+  flex: 1;
+  min-width: 0;
+}
+
+.photo-preset .name,
+.photo-preset .info {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.photo-preset .info {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.preset-list {
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+/* Auto detail: the Looks / Film switch above the look strip. */
+.segmented.look-mode {
+  margin: 8px 12px 0;
+  flex: none;
+}
+
+main {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+}
+
+.page {
+  position: absolute;
+  inset: 0;
+}
+
+.page.hidden {
+  display: none;
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  flex: none;
+  min-height: 48px;
+}
+
+.toolbar .title {
+  flex: 1;
+  min-width: 0;
+}
+
+.toolbar .name,
+.toolbar .info {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.toolbar .info {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.icon-narrow,
+.row-break {
+  display: none;
+}
+
+/*
+ * Phones: RawBoy's eight tools didn't fit next to the file name (the page scrolled sideways and Export was cut
+ * off). The name and shot info move to a line under the tools, with Export at its end, and Open becomes
+ * an icon.
+ */
+@media (max-width: 560px) {
+  .pro-toolbar {
+    flex-wrap: wrap;
+    gap: 2px;
+    padding: 4px 8px 6px;
+  }
+
+  /*
+   * Apps on the first line (see .app-switcher), tools on the second; the file name, Export and ? on the third, so
+   * the tools have the whole width.
+   */
+  .pro-toolbar .row-break {
+    display: block;
+    order: 1;
+    flex-basis: 100%;
+    height: 0;
+  }
+
+  .pro-toolbar .title,
+  .pro-toolbar .primary,
+  .pro-toolbar .help-button {
+    order: 2;
+  }
+
+  .pro-toolbar .title {
+    padding: 0 4px;
+  }
+
+  .pro-toolbar .label-wide {
+    display: none;
+  }
+
+  .pro-toolbar .icon-narrow {
+    display: block;
+  }
+
+  /* Hover titles never show on touch screens: a word under each tool says what it is. */
+  .pro-toolbar button.icon,
+  .pro-toolbar button.open {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 1px;
+  }
+
+  .pro-toolbar .tool-label {
+    display: block;
+    font-size: 10px;
+    font-weight: 500;
+    line-height: 12px;
+  }
+
+  .pro-toolbar button.open {
+    padding: 4px 8px;
+  }
+}
+
+/* The narrowest phones (360 px): a little less padding so the tools still fit on one line. */
+@media (max-width: 380px) {
+  .pro-toolbar button {
+    padding-left: 9px;
+    padding-right: 9px;
+  }
+
+}
+
+/* Touch screens: tool bar buttons at least 44 px, the minimum comfortable target. */
+@media (pointer: coarse) {
+  .toolbar button {
+    min-height: 44px;
+  }
+
+  .toolbar button.icon,
+  .toolbar button.open {
+    min-width: 42px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+/* 360 px phones: seven labelled tools and Auto on one line. */
+@media (max-width: 440px) {
+  .pro-toolbar button.icon,
+  .pro-toolbar button.open {
+    min-width: 38px;
+    padding-left: 2px;
+    padding-right: 2px;
+  }
+}
+
+.workspace {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.preview-wrap {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  display: flex;
+}
+
+.preview {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  background: var(--bg);
+  touch-action: none;
+  user-select: none;
+  overflow: hidden;
+}
+
+.workspace.picking-white .preview {
+  cursor: crosshair;
+}
+
+.preview canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.preview .overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.preview .placeholder {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+/* RawBoy's before/after latch, top right of the photo. */
+.compare-toggle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 5;
+  padding: 4px 10px;
+  font-size: 12px;
+  background: rgba(0, 0, 0, 0.6);
+  border-color: transparent;
+}
+
+.compare-toggle.active {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.preview-label {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.zoom-hint {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0, 0, 0, 0.6);
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+
+.zoom-hint.show {
+  opacity: 1;
+}
+
+.center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  pointer-events: none;
+}
+
+.center button {
+  pointer-events: auto;
+}
+
+.empty p {
+  color: var(--muted);
+  max-width: 420px;
+  text-align: center;
+  margin: 0 16px;
+}
+
+.export-progress {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100%;
+  height: 4px;
+}
+
+progress {
+  accent-color: var(--accent);
+}
+
+.sidebar {
+  width: var(--sidebar);
+  flex: none;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1;
+}
+
+.controls-body {
+  overflow-y: auto;
+  padding: 8px 16px 16px;
+  flex: 1;
+}
+
+.geometry {
+  padding: 8px 16px;
+  /* Under the photo on phones the panel is capped (sidebar max-height), so its content scrolls. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.geometry-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.slider {
+  padding: 4px 0;
+}
+
+/* Two sliders sharing a row (Auto's Adjust tab). */
+.slider-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.slider-pair > .slider {
+  min-width: 0;
+}
+
+.slider-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.slider-value {
+  background: none;
+  border: none;
+  padding: 2px 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.slider-value.changed {
+  color: var(--accent);
+}
+
+input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+  margin: 2px 0 0;
+}
+
+/* Keep vertical swipes as scrolls; ParamSlider handles horizontal touch drags itself. */
+.slider-track {
+  touch-action: pan-y;
+  padding: 4px 0;
+}
+
+/* A coloured track (ParamSlider's trackGradient): the gradient shows the effect, a thin bar the position. */
+.slider-track.gradient input[type='range'] {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  height: 20px;
+}
+.slider-track.gradient input[type='range']::-webkit-slider-runnable-track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--track);
+}
+.slider-track.gradient input[type='range']::-moz-range-track {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--track);
+}
+.slider-track.gradient input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 4px;
+  height: 20px;
+  margin-top: -6px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+.slider-track.gradient input[type='range']::-moz-range-thumb {
+  width: 4px;
+  height: 20px;
+  border: none;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+/* Our own fill (ParamSlider sets --from/--to): the native one always starts at the left end. */
+.slider-track.filled input[type='range'] {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  height: 20px;
+  --fill: linear-gradient(
+    to right,
+    var(--border) var(--from),
+    var(--accent) var(--from) var(--to),
+    var(--border) var(--to)
+  );
+  --tick: linear-gradient(to right, transparent 0, transparent 0);
+}
+/* Signed ranges: a mark at 0, under the fill's ends. */
+.slider-track.signed input[type='range'] {
+  --tick: linear-gradient(
+    to right,
+    transparent calc(var(--zero) - 1px),
+    var(--muted) calc(var(--zero) - 1px) calc(var(--zero) + 1px),
+    transparent calc(var(--zero) + 1px)
+  );
+}
+.slider-track.filled input[type='range']::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--tick), var(--fill);
+}
+.slider-track.filled input[type='range']::-moz-range-track {
+  height: 4px;
+  border-radius: 2px;
+  background: var(--tick), var(--fill);
+}
+.slider-track.filled input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: -6px;
+  border-radius: 50%;
+  border: 2px solid var(--bg);
+  background: var(--accent);
+}
+.slider-track.filled input[type='range']::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--bg);
+  background: var(--accent);
+}
+.slider-track.filled input[type='range']:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+  .slider-track input[type='range'] {
+    pointer-events: none;
+  }
+}
+
+.section-label {
+  margin-top: 14px;
+  margin-bottom: 4px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.note {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 2px 0 6px;
+}
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+}
+
+.switch-row input {
+  accent-color: var(--accent);
+  width: 18px;
+  height: 18px;
+}
+
+.lut-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  cursor: pointer;
+}
+
+.lut-row input {
+  accent-color: var(--accent);
+}
+
+.button-row {
+  display: flex;
+  gap: 8px;
+  padding: 8px 0;
+  flex-wrap: wrap;
+}
+
+.spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid rgba(255, 255, 255, 0.2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+}
+
+.spinner.small {
+  width: 14px;
+  height: 14px;
+  border-width: 2px;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  background: #323236;
+  border: 1px solid var(--border);
+  padding: 10px 16px;
+  border-radius: 8px;
+  max-width: calc(100% - 32px);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+  z-index: 20;
+}
+
+.drop-hint {
+  position: fixed;
+  inset: 12px;
+  border: 2px dashed var(--accent);
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(18, 18, 18, 0.7);
+  font-size: 18px;
+  pointer-events: none;
+  z-index: 30;
+}
+
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 40;
+  padding: 16px;
+}
+
+.dialog {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  width: 360px;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dialog h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.dialog.licenses {
+  width: 720px;
+  max-height: 100%;
+}
+
+.dialog.licenses p {
+  margin: 0;
+}
+
+.dialog.licenses pre {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  overflow: auto;
+  font-size: 11px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.help-button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  font-weight: 700;
+  flex: none;
+}
+
+.dialog.help {
+  width: 640px;
+  max-height: 100%;
+}
+
+.help-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.help-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.help-body h3 {
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.help-body dl {
+  margin: 0;
+}
+
+.help-row {
+  display: grid;
+  grid-template-columns: 190px 1fr;
+  gap: 12px;
+  padding: 6px 0;
+  border-top: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.help-row dt {
+  font-weight: 600;
+}
+
+.help-row dd {
+  margin: 0;
+  color: var(--muted);
+}
+
+.help-or {
+  margin: 0 6px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.dialog kbd {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 1px 6px;
+  margin-right: 3px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--text);
+}
+
+.help-about {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.help-about span {
+  flex: 1;
+  min-width: 0;
+}
+
+.help-footer {
+  margin: 0;
+  font-size: 12px;
+}
+
+@media (hover: none) {
+  .help-footer {
+    display: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .help-row {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field small,
+.muted {
+  color: var(--muted);
+}
+
+input[type='text'] {
+  font: inherit;
+  color: inherit;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+  outline: none;
+}
+
+input[type='text']:focus {
+  border-color: var(--accent);
+}
+
+select {
+  font: inherit;
+  color: inherit;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 8px;
+}
+
+.segmented {
+  display: flex;
+}
+
+.segmented button {
+  flex: 1;
+  border-radius: 0;
+}
+
+.segmented button:first-child {
+  border-radius: 8px 0 0 8px;
+}
+
+.segmented button:last-child {
+  border-radius: 0 8px 8px 0;
+}
+
+.segmented button.active {
+  background: var(--accent);
+  color: var(--accent-text);
+  border-color: var(--accent);
+}
+
+/* Auto: grid */
+.batch-progress {
+  padding: 4px 16px 8px;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.batch-progress progress {
+  width: 100%;
+}
+
+.grid {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 8px;
+  align-content: start;
+}
+
+.cell {
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  border-radius: 0;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.cell .thumb {
+  aspect-ratio: 1;
+  background: var(--surface);
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 3px solid transparent;
+}
+
+.cell.selected .thumb {
+  border-color: var(--accent);
+}
+
+.cell .thumb img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.cell .spinner {
+  position: relative;
+}
+
+.badge {
+  position: relative;
+  background: rgba(0, 0, 0, 0.6);
+  font-size: 11px;
+  padding: 2px 6px;
+  margin: 6px;
+  text-align: center;
+  max-width: calc(100% - 12px);
+}
+
+.badge.error {
+  color: var(--error);
+}
+
+.badge.corner {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+.check {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-text);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.cell-name {
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 4px;
+}
+
+.cell-look {
+  font-size: 11px;
+  color: var(--accent);
+}
+
+/*
+ * Auto: justified rows, each photo at its own aspect (--a, from the thumbnail), rows about 180 px high (120 on
+ * phones, two landscape photos a row). The name and look sit over the bottom of the photo.
+ */
+.grid.auto-grid {
+  --row: 180px;
+  display: flex;
+  flex-wrap: wrap;
+}
+
+/* Keeps the last row at its natural size instead of stretching one photo across the width. */
+.grid.auto-grid::after {
+  content: '';
+  flex: 1000 1 0;
+}
+
+.auto-grid .cell {
+  flex: var(--a) 1 calc(var(--a) * var(--row));
+  min-width: 0;
+  max-width: calc(var(--a) * var(--row) * 1.6);
+}
+
+.auto-grid .cell .thumb {
+  aspect-ratio: var(--a);
+  overflow: hidden;
+}
+
+.auto-grid .cell .thumb img {
+  object-fit: cover;
+}
+
+.cell-caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 16px 8px 5px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.7));
+  pointer-events: none;
+}
+
+.cell-caption .cell-name {
+  margin-top: 0;
+  color: #fff;
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+.cell-caption .cell-look {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 560px) {
+  .grid.auto-grid {
+    --row: 120px;
+  }
+}
+
+/* Auto: detail */
+.nav {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(0, 0, 0, 0.45);
+  border: none;
+  font-size: 28px;
+  line-height: 1;
+  padding: 10px 12px;
+  z-index: 2;
+}
+
+.nav.prev {
+  left: 8px;
+}
+
+.nav.next {
+  right: 8px;
+}
+
+/* Desktop sidebar: every look visible in a grid. Narrow screens: one scrolling row (see the media query). */
+.look-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 72px);
+  justify-content: space-between;
+  gap: 10px 8px;
+  padding: 10px 12px;
+  flex: none;
+  border-bottom: 1px solid var(--border);
+}
+
+.look {
+  background: none;
+  border: none;
+  padding: 0;
+  width: 72px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  border-radius: 0;
+}
+
+.look-thumb {
+  width: 72px;
+  height: 72px;
+  background: var(--surface-2);
+  position: relative;
+  border: 2px solid transparent;
+  overflow: hidden;
+}
+
+.look.selected .look-thumb {
+  border-color: var(--accent);
+}
+
+.look-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.suggested {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(232, 163, 61, 0.9);
+  color: var(--accent-text);
+  font-size: 10px;
+  text-align: center;
+}
+
+/* Two lines, so "Double-X 5222" and the other long stock names aren't cut off. */
+.look-name {
+  font-size: 11px;
+  line-height: 13px;
+  min-height: 26px;
+  text-align: center;
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  max-width: 100%;
+}
+
+.look.selected .look-name {
+  color: var(--accent);
+}
+
+/* Phones and narrow windows: controls under the photo. */
+@media (max-width: 760px) {
+  .workspace {
+    flex-direction: column;
+  }
+
+  .look-strip {
+    display: flex;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+  }
+
+  .sidebar {
+    width: auto;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    max-height: 45%;
+  }
+
+  .wide-only {
+    display: none;
+  }
+
+  /* Auto's selection bar holds seven controls; tighter gaps keep room for the count on a 360 px phone. */
+  .toolbar.selection-bar {
+    gap: 2px;
+  }
+}
+
+@media (min-width: 761px) {
+  .narrow-only {
+    display: none;
+  }
+}
+
+/* The crop frame and mask handles take presses on their handles; elsewhere they reach the preview. */
+.preview .overlay.crop-overlay,
+.preview .overlay.mask-overlay {
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 4px 0 8px;
+}
+
+.chips button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* Curves channel chips: one row of equal buttons that shrink to fit, each with room for its edited mark. */
+.curve-chips {
+  flex-wrap: nowrap;
+  max-width: 320px;
+}
+
+.curve-chips button {
+  flex: 1 1 0;
+  min-width: 0;
+  padding: 6px 2px;
+  white-space: nowrap;
+}
+
+.curve-mark {
+  display: inline-block;
+  width: 0.8em;
+  margin-right: -0.4em; /* keeps the label centred */
+  text-align: right;
+}
+
+/* Curves (Light tab): a square point-curve editor. Touches off the curve scroll the panel (CurvesPanel cancels the rest). */
+.curve-box {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  aspect-ratio: 1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  touch-action: pan-y;
+  cursor: crosshair;
+  overflow: visible; /* end points sit on the edges */
+}
+
+.curve-grid line,
+line.curve-grid {
+  stroke: var(--border);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.curve-point {
+  fill: var(--surface);
+  stroke-width: 2;
+}
+
+.curve-point.selected {
+  fill: var(--accent);
+}
+
+.curves .note {
+  margin-top: 8px;
+}
+
+/* The Film tone mapper's stock picker. */
+.film-stock {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 8px;
+}
+
+.film-stock select {
+  flex: 1;
+  min-width: 0;
+}
+
+.preset-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.preset-apply {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 6px 0;
+}
+
+.preset-name,
+.preset-groups {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preset-groups {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.preset-menu {
+  position: relative;
+}
+
+.preset-menu .menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.preset-menu .menu button {
+  background: none;
+  border: none;
+  text-align: left;
+  padding: 8px 10px;
+}
+
+.preset-menu .menu button:hover {
+  background: var(--surface-2);
+}
+
+.preset-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.mask-row {
+  gap: 8px;
+  padding: 0 6px;
+  border-radius: 6px;
+}
+
+.mask-row.active {
+  background: var(--surface-2);
+}
+
+.mask-name {
+  display: block;
+  width: calc(100% + 8px);
+  margin: 10px -4px 6px;
+  padding: 3px 4px;
+  background: transparent;
+  border-color: transparent;
+  border-radius: 6px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.mask-name:hover {
+  border-color: var(--border);
+}
+
+.mask-name:focus {
+  background: var(--surface-2);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+/* Narrow Masks panel: the add buttons in the heading's row, and Mask / Adjust tabs that stay in view while it scrolls. */
+.geometry-head .mask-add {
+  flex-wrap: nowrap;
+  gap: 6px;
+  padding: 6px 0;
+  min-width: 0;
+}
+
+.mask-tabs {
+  position: sticky;
+  top: -8px;
+  z-index: 1;
+  margin: 4px -16px 0;
+  padding: 0 8px;
+  background: var(--surface);
+}
+
+/* Browser */
+.browser-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  flex: none;
+}
+
+.browser-filters .segmented button {
+  white-space: nowrap;
+  padding: 4px 10px;
+}
+
+.browser-filters .count {
+  opacity: 0.7;
+  font-size: 12px;
+}
+
+.auto-advance {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.auto-advance input {
+  accent-color: var(--accent);
+}
+
+.browser .cell.current .thumb {
+  border-color: var(--accent);
+}
+
+.browser .cell.rejected .thumb img {
+  opacity: 0.3;
+}
+
+.cell-rating {
+  min-height: 16px;
+}
+
+.stars {
+  color: var(--accent);
+  font-size: 12px;
+  letter-spacing: 1px;
+}
+
+.flag {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.flag.pick {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.flag.reject {
+  background: var(--error);
+  color: #1a0606;
+}
+
+.viewer {
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  background: var(--bg);
+  overflow: hidden;
+}
+
+.zoom-box {
+  position: absolute;
+  inset: 0;
+  touch-action: pan-y;
+  user-select: none;
+}
+
+.zoom-box img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.zoom-box.zoomed {
+  touch-action: none;
+  cursor: grab;
+}
+
+.zoom-box.zoomed img {
+  inset: auto;
+  object-fit: fill;
+  max-width: none;
+}
+
+.viewer-placeholder {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: blur(2px);
+}
+
+.rating-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  flex: none;
+  flex-wrap: wrap;
+}
+
+.star-buttons {
+  display: flex;
+}
+
+.star-buttons button {
+  background: none;
+  border: none;
+  font-size: 22px;
+  line-height: 1;
+  padding: 4px 6px;
+  color: var(--border);
+}
+
+.star-buttons button.on {
+  color: var(--accent);
+}
+
+.flag-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.flag-buttons button.pick.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.flag-buttons button.reject.active {
+  background: var(--error);
+  border-color: var(--error);
+  color: #1a0606;
+}
+
+@media (max-width: 760px) {
+  .browser .toolbar {
+    gap: 2px;
+  }
+
+  /* Undo, Open, To Auto, Bin and To bin can all be there at once: one line each on a 360 px phone. */
+  .browser .toolbar button {
+    white-space: nowrap;
+  }
+
+  .browser .toolbar button.text,
+  .browser .toolbar button.primary {
+    padding: 6px;
+  }
+}
+
+/* Pro: histogram above the slider tabs; click toggles the clipping warning on the photo. */
+.histogram {
+  position: relative;
+  flex: none;
+  display: block;
+  height: 64px;
+  margin: 8px 12px 0;
+  padding: 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.histogram svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.histogram.active {
+  border-color: var(--accent);
+}
+
+.histogram .clip {
+  position: absolute;
+  top: 3px;
+  min-width: 8px;
+  height: 8px;
+  font-size: 10px;
+  line-height: 10px;
+  color: var(--muted);
+}
+
+.histogram .clip.shadows::before,
+.histogram .clip.highlights::after {
+  content: '';
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--border);
+  margin: 0 3px;
+  vertical-align: 0;
+}
+
+.histogram .clip.shadows {
+  left: 2px;
+}
+
+.histogram .clip.highlights {
+  right: 2px;
+}
+
+.histogram .clip.shadows.on::before {
+  background: rgb(40, 110, 255);
+}
+
+.histogram .clip.highlights.on::after {
+  background: rgb(255, 50, 40);
+}
+
+.histogram .clip.on {
+  color: var(--text);
+}
+
+/* Phones: a shorter histogram, so the sliders keep their room. */
+@media (max-width: 760px) {
+  .histogram {
+    height: 44px;
+  }
+}
+
+/* Browser: Send to Auto */
+.send-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.send-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.send-option:hover {
+  background: var(--surface-2);
+}
+
+.send-option input {
+  accent-color: var(--accent);
+  margin: 0;
+}
+
+.send-option .count {
+  margin-left: auto;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.send-stars {
+  display: flex;
+  gap: 6px;
+}

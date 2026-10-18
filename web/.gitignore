@@ -1,0 +1,8 @@
+node_modules/
+dist/
+native/build/
+public/wasm/
+public/models/
+public/mediapipe/
+public/coi-serviceworker.min.js
+public/third_party_notices.txt
