@@ -2,7 +2,7 @@
  * Ratings in XMP sidecars, as Lightroom, Capture One and darktable read them: xmp:Rating 0-5 stars, -1 = rejected.
  * Picks have no standard XMP field, so RawBoy keeps them in its own namespace (rawboy:Pick="1").
  *
- * RawBoy's own edits (opt-in, see Edits.ts) go in rawboy:Develop as escaped JSON, next to darktable's or Lightroom's.
+ * RawBoy's own edits (opt-in) go in rawboy:Develop and rawboy:Auto as escaped JSON, next to darktable's or Lightroom's.
  *
  * Existing sidecars usually hold another app's edits: only RawBoy's fields are changed, in place, and everything
  * else is kept byte for byte.
@@ -39,27 +39,31 @@ export function writeXmp(text: string | null, rating: Rating): string {
   return out;
 }
 
-const DEVELOP = 'rawboy:Develop';
+/**
+ * RawBoy's own fields: Develop = RawBoy (Pro) edits (develop/Edits.ts JSON), Auto = a photo's RawBoy Auto settings
+ * (look, strength, adjustments, preset, RawBoy edits; ui/auto/AutoSidecar.ts JSON).
+ */
+export type RawBoyField = 'Develop' | 'Auto';
 
-/** RawBoy's edits (Edits.ts JSON) in a sidecar's text, or null. */
-export function readEdits(text: string): string | null {
-  const v = fieldValue(text, DEVELOP);
+/** RawBoy's [field] (JSON) in a sidecar's text, or null. */
+export function readEdits(text: string, field: RawBoyField = 'Develop'): string | null {
+  const v = fieldValue(text, `rawboy:${field}`);
   return v ? unescapeXml(v) : null;
 }
 
-/** [text] (null: a new sidecar) with RawBoy's [edits] written into it; null removes them. */
-export const writeEdits = (text: string | null, edits: string | null): string =>
-  setField(text ?? EMPTY, DEVELOP, 'rawboy', RAWBOY_NS, edits == null ? null : escapeXml(edits));
+/** [text] (null: a new sidecar) with RawBoy's [field] set to [edits]; null removes it. */
+export const writeEdits = (text: string | null, edits: string | null, field: RawBoyField = 'Develop'): string =>
+  setField(text ?? EMPTY, `rawboy:${field}`, 'rawboy', RAWBOY_NS, edits == null ? null : escapeXml(edits));
 
 /**
- * One photo's sidecar as RawBoy (Pro) keeps its edits there; RawBoy Browser hands it over with a photo of a folder it
- * can write to. Writes go through the Browser's queue, so they don't race its rating writes.
+ * One photo's sidecar as RawBoy and RawBoy Auto keep their edits there; RawBoy Browser hands it over with a photo of
+ * a folder it can write to. Writes go through the Browser's queue, so they don't race its rating writes.
  */
 export interface EditsSidecar {
   /** The sidecar's file name. */
   readonly name: string;
-  read(): Promise<string | null>;
-  write(edits: string | null): Promise<void>;
+  read(field?: RawBoyField): Promise<string | null>;
+  write(edits: string | null, field?: RawBoyField): Promise<void>;
 }
 
 const XML_ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' };

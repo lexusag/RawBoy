@@ -24,9 +24,16 @@ const TAB_KEY = 'rawboy.tab';
 const pro = new ProStore();
 const auto = new AutoStore();
 const browser = new BrowserStore();
+// A folder opened again brings the photos Auto edited back into Auto, with their settings (Edits in sidecars).
+browser.onAutoEdited = (photos) => {
+  const added = auto.add(photos.map((p) => p.file), photos.map((p) => p.sidecar));
+  if (added) browser.showMessage(`${added} photo${added === 1 ? ' is' : 's are'} back in Auto with ${added === 1 ? 'its' : 'their'} edits`);
+};
 // Edits waiting for a photo's sidecar are written before the page may go away.
 document.addEventListener('visibilitychange', () => {
-  if (document.hidden) void pro.flushSidecar();
+  if (!document.hidden) return;
+  void pro.flushSidecar();
+  void auto.flushSidecars();
 });
 // Lens presets live with the RawBoy tab's presets; the Auto tab applies them by lens.
 auto.saveLensPresets = pro.putLensPresets;
@@ -148,9 +155,9 @@ export function App() {
     void pro.open(file, undefined, sidecar);
     setTab('pro');
   };
-  const browserToAuto = (files: File[]) => {
+  const browserToAuto = (files: File[], sidecars: (EditsSidecar | null)[] = []) => {
     const note = auto.state.message;
-    const added = auto.add(files);
+    const added = auto.add(files, sidecars);
     const skipped = files.length - added;
     // Auto's own note (such as JPEGs being lower quality than raws) wins over the count.
     if (auto.state.message === note) {

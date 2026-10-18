@@ -4,6 +4,11 @@ import { readEdits, readXmp, writeEdits, writeXmp } from '../browse/XmpSidecar';
 import { developParams } from '../develop/DevelopParams';
 import { decodeEdits, encodeEdits } from '../develop/Edits';
 import { newBrushLayer, newRadialLayer } from '../develop/Masks';
+import { capturePreset } from '../develop/Presets';
+import { FilmLooks } from '../auto/looks/FilmLooks';
+import { Looks } from '../auto/looks/Look';
+import { NO_ADJUSTMENTS } from '../auto/looks/LookApplier';
+import { decodeAuto, encodeAuto } from '../../ui/auto/AutoSidecar';
 import { groupPhotos, withSuffix } from '../../ui/browser/PhotoGroups';
 import { photosToSend, type BrowsePhoto, type Filter, type SendCriteria } from '../../ui/browser/BrowserStore';
 import type { Flag } from '../browse/XmpSidecar';
@@ -281,6 +286,26 @@ describe('Edits in sidecars', () => {
     expect(readEdits(removed)).toBeNull();
     expect(removed.replace(/\s+/g, '')).toBe(out.replace(/\s+rawboy:Develop="[^"]*"/, '').replace(/\s+/g, ''));
     expect(readEdits(dt)).toBeNull();
+  });
+
+  it("round-trips a photo's Auto settings, preset and RawBoy edits included", () => {
+    const preset = capturePreset('Beach', developParams({ contrast: 20, lut: 'gold' }), ['light', 'lut']);
+    const saved = {
+      mode: 'film' as const, look: Looks.NATURAL, filmLook: FilmLooks.PORTRA_400, strength: 70,
+      adjust: { ...NO_ADJUSTMENTS, brightness: 12, contrast: -8, rotation: 1 }, preset, edits: edited,
+    };
+    const back = decodeAuto(encodeAuto(saved))!;
+    expect({ ...back, preset: { ...back.preset!, id: '' }, edits: { ...back.edits!, masks: [] } })
+      .toEqual({ ...saved, preset: { ...preset, id: '' }, edits: { ...edited, masks: [] } });
+    expect(back.edits!.masks).toHaveLength(2);
+    expect(decodeAuto(encodeAuto({ ...saved, preset: null, edits: null }))).toEqual({ ...saved, preset: null, edits: null });
+    // Edits that equal the defaults are still edits.
+    expect(decodeAuto(encodeAuto({ ...saved, edits: developParams() }))!.edits).toEqual(developParams());
+    expect(decodeAuto('{"format":"rawboy-edit"}')).toBeNull();
+    // Both RawBoy fields live side by side in one sidecar.
+    const both = writeEdits(writeEdits(null, '{"a":1}'), encodeAuto(saved), 'Auto');
+    expect(readEdits(both)).toBe('{"a":1}');
+    expect(decodeAuto(readEdits(both, 'Auto')!)!.strength).toBe(70);
   });
 
   it('reads edits another tool rewrote as an element', () => {

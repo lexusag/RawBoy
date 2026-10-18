@@ -1,4 +1,5 @@
 import { isRated, NO_RATING, readEdits, readXmp, writeEdits, writeXmp, type EditsSidecar, type Flag, type Rating } from '../../engine/browse/XmpSidecar';
+import { loadHandle, saveHandle } from '../../engine/util/Handles';
 import { zipFiles } from '../common/files';
 import { groupPhotos, isPhotoName, stemOf, withSuffix, type PhotoGroup } from './PhotoGroups';
 import { thumbnailOf, viewImageOf, type ViewImage } from './Previews';
@@ -37,6 +38,8 @@ export interface BrowserState {
    * only; remembered in this browser, off until turned on).
    */
   editsInSidecars: boolean;
+  /** The folder opened last time (its handle is kept), for Reopen; null when there is none. */
+  lastFolder: string | null;
   canUndo: boolean;
   busy: boolean;
   message: string | null;
@@ -44,6 +47,8 @@ export interface BrowserState {
 
 const AUTO_ADVANCE_KEY = 'rawboy.browser.autoAdvance';
 const EDITS_IN_SIDECARS_KEY = 'rawboy.browser.editsInSidecars';
+/** IndexedDB key of the last folder's handle. */
+const FOLDER_KEY = 'browseFolder';
 const THUMBNAIL = 400;
 /** Thumbnails made at once: each decodes a full embedded JPEG. */
 const THUMB_WORKERS = 3;
@@ -143,7 +148,7 @@ async function moveFile(from: FileSystemDirectoryHandle, name: string, to: FileS
 export class BrowserStore {
   private _state: BrowserState = {
     folder: null, photos: [], filter: 'all', minStars: 0, current: null, viewing: false, binCount: 0,
-    autoAdvance: savedAutoAdvance(), editsInSidecars: savedEditsInSidecars(), canUndo: false, busy: false, message: null,
+    autoAdvance: savedAutoAdvance(), editsInSidecars: savedEditsInSidecars(), lastFolder: null, canUndo: false, busy: false, message: null,
   };
   private readonly listeners = new Set<() => void>();
   private dir: FileSystemDirectoryHandle | null = null;
@@ -157,6 +162,17 @@ export class BrowserStore {
   private generation = 0;
   private thumbQueue: string[] = [];
   private thumbWorkers = 0;
+  /**
+   * Called after a folder opens with Edits in sidecars on, with its photos that have RawBoy Auto settings in their
+   * sidecars (the page sends them back to Auto).
+   */
+  onAutoEdited: ((photos: { file: File; sidecar: EditsSidecar }[]) => void) | null = null;
+
+  constructor() {
+    void loadHandle<FileSystemDirectoryHandle>(FOLDER_KEY).then((dir) => {
+      if (dir && !this._state.lastFolder) this.update({ lastFolder: dir.name });
+    });
+  }
 
   get state() {
     return this._state;
@@ -195,7 +211,8 @@ export class BrowserStore {
     await this.flushWrites();
     this.reset();
     this.dir = dir;
-    this.update({ folder: { name: dir.name, writable: true }, busy: true });
+    this.update({ folder: { name: dir.name, writable: true }, busy: true, lastFolder: dir.name });
+    void saveHandle(FOLDER_KEY, dir);
     try {
       await this.scan();
     } catch (e) {
@@ -203,6 +220,34 @@ export class BrowserStore {
     } finally {
       this.update({ busy: false });
     }
+    if (this.dir === dir && this._state.editsInSidecars) await this.sendAutoEdited();
+  }
+
+  /** Opens the folder opened last time; the browser asks to allow it again (call from a click). */
+  async reopenLastFolder() {
+    const dir = await loadHandle<FileSystemDirectoryHandle>(FOLDER_KEY);
+    if (!dir) return this.update({ lastFolder: null });
+    const permission = dir as unknown as { requestPermission?: (o: object) => Promise<PermissionState> };
+    try {
+      if (permission.requestPermission && (await permission.requestPermission({ mode: 'readwrite' })) !== 'granted') return;
+      await this.openFolder(dir);
+    } catch (e) {
+      this.update({ message: `Couldn't open ${dir.name}: ${e instanceof Error ? e.message : String(e)}` });
+    }
+  }
+
+  /** Hands the photos whose sidecars hold RawBoy Auto settings to [onAutoEdited]. */
+  private async sendAutoEdited() {
+    const found: { file: File; sidecar: EditsSidecar }[] = [];
+    for (const p of this._state.photos) {
+      const sidecar = this.editsSidecar(p.id);
+      try {
+        if (sidecar && p.sidecars.includes(sidecar.name) && (await sidecar.read('Auto')) != null) found.push({ file: await this.fileOf(p.id), sidecar });
+      } catch {
+        // unreadable: left out
+      }
+    }
+    if (found.length) this.onAutoEdited?.(found);
   }
 
   /** Adds picked or dropped files (no folder access): photos and any .xmp sidecars among them. */
@@ -301,16 +346,17 @@ export class BrowserStore {
     const textOf = async () => ((await exists(dir, name)) ? (await (await dir.getFileHandle(name)).getFile()).text() : null);
     return {
       name,
-      read: async () => {
+      read: async (field) => {
         const text = await textOf();
-        return text == null ? null : readEdits(text);
+        return text == null ? null : readEdits(text, field);
       },
       // Queued with the rating writes, each reading the file afresh, so neither undoes the other.
-      write: (edits) => {
+      write: (edits, field) => {
         const done = this.writes.then(async () => {
           const text = await textOf();
           if (text == null && edits == null) return;
-          await writeText(dir, name, writeEdits(text, edits));
+          const out = writeEdits(text, edits, field);
+          if (out !== text) await writeText(dir, name, out);
           if (this.dir === dir) this.updatePhoto(p.id, (q) => (q.sidecars.includes(name) ? q : { ...q, sidecars: [...q.sidecars, name].sort() }));
         });
         this.writes = done.catch(() => undefined);

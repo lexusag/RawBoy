@@ -38,7 +38,8 @@ export function BrowserApp({ store, active, onEditInRawBoy, onSendToAuto }: {
   active: boolean;
   /** [sidecar]: where RawBoy keeps the photo's edits (Edits in sidecars on), else null. */
   onEditInRawBoy: (file: File, sidecar: EditsSidecar | null) => void;
-  onSendToAuto: (files: File[]) => void;
+  /** [sidecars]: where Auto keeps each photo's settings (Edits in sidecars on), else nulls. */
+  onSendToAuto: (files: File[], sidecars: (EditsSidecar | null)[]) => void;
 }) {
   const state = useSyncExternalStore(store.subscribe, () => store.state);
   const [confirmBin, setConfirmBin] = useState<'move' | 'restore' | null>(null);
@@ -53,7 +54,7 @@ export function BrowserApp({ store, active, onEditInRawBoy, onSendToAuto }: {
   const edit = async (id: string) => onEditInRawBoy(await store.file(id), store.editsSidecar(id));
   const send = async (photos: BrowsePhoto[]) => {
     try {
-      onSendToAuto(await Promise.all(photos.map((p) => store.file(p.id))));
+      onSendToAuto(await Promise.all(photos.map((p) => store.file(p.id))), photos.map((p) => store.editsSidecar(p.id)));
     } catch (e) {
       store.showMessage(`Couldn't read the photos: ${(e as Error)?.message ?? e}`);
     }
@@ -337,7 +338,7 @@ function GridView({ store, active, scroll, selection, onSelection, onBin, onSend
             Auto-advance
           </label>
           {state.folder?.writable && (
-            <label className="edits-in-sidecars" title="RawBoy saves its edits of photos opened from here in their XMP sidecars, and reopens them from there">
+            <label className="edits-in-sidecars" title="RawBoy and Auto save their edits of photos from here in the photos' XMP sidecars; opening the folder again brings them back">
               <input type="checkbox" checked={state.editsInSidecars} onChange={(e) => store.setEditsInSidecars(e.target.checked)} />
               Edits in sidecars
             </label>
@@ -350,6 +351,9 @@ function GridView({ store, active, scroll, selection, onSelection, onBin, onSend
             <>
               <p>Cull a shoot: rate, pick and reject, then move the rejects to a bin folder. Thumbnails come from the previews inside the raws, so big folders open fast.</p>
               <button type="button" className="primary" onClick={() => void openPhotos(store)}>{directoryPicker() ? 'Open a folder' : 'Choose photos'}</button>
+              {state.lastFolder && directoryPicker() && (
+                <button type="button" onClick={() => void store.reopenLastFolder()}>Reopen {state.lastFolder}</button>
+              )}
               <p>
                 {directoryPicker()
                   ? 'or drop a folder here. Ratings are saved as XMP sidecars that Lightroom, Capture One and darktable read.'

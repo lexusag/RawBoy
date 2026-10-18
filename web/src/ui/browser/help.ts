@@ -9,7 +9,7 @@ export const BROWSER_HELP: HelpSection[] = [
       { how: 'Ratings', text: 'Saved as you go in XMP sidecars next to the raws (NAME.xmp), which Lightroom, Capture One and darktable read. Rejects are rating −1.' },
       { how: 'Move rejects to bin', text: 'Moves the rejects, their sidecars and JPEGs into the folder\'s _bin subfolder. Nothing is deleted; Bin restores them.' },
       { how: 'Send to Auto', text: 'Adds photos to the Auto tab: the picks, those with at least or exactly N stars (rejects left out), or what the grid shows.' },
-      { how: 'Edits in sidecars', text: 'Off at first. When on, RawBoy saves its edits of a photo opened from here in the photo\'s sidecar, and opening it again from here brings them back.' },
+      { how: 'Edits in sidecars', text: 'Off at first. When on, RawBoy and Auto save their edits of photos from here in the photos\' sidecars; opening the folder again (Reopen) puts the photos Auto edited back into Auto.' },
       { how: 'Safari, Firefox', text: 'They can\'t write to folders: pick the photos (and any .xmp files), and Save ratings downloads the sidecars as a ZIP.' },
     ],
   },
