@@ -37,8 +37,8 @@ enum class PresetGroup(val key: String, val label: String, val fields: List<Stri
     companion object {
         fun ofKey(key: String): PresetGroup? = entries.firstOrNull { it.key == key }
 
-        /** What the save dialog ticks first: white balance is usually specific to one light, masks to one composition. */
-        val DEFAULT: Set<PresetGroup> = entries.toSet() - WHITE_BALANCE - MASKS
+        /** What the save dialog ticks first: lens corrections are usually specific to one camera and lens, masks to one composition. */
+        val DEFAULT: Set<PresetGroup> = entries.toSet() - LENS - MASKS
     }
 }
 

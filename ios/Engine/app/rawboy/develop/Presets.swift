@@ -42,8 +42,8 @@ public enum PresetGroup: String, CaseIterable, Sendable {
 
     public static func ofKey(_ key: String) -> PresetGroup? { PresetGroup(rawValue: key) }
 
-    /** What the save dialog ticks first: white balance is usually specific to one light, masks to one composition. */
-    public static let defaultGroups: Set<PresetGroup> = Set(allCases).subtracting([.whiteBalance, .masks])
+    /** What the save dialog ticks first: lens corrections are usually specific to one camera and lens, masks to one composition. */
+    public static let defaultGroups: Set<PresetGroup> = Set(allCases).subtracting([.lens, .masks])
 }
 
 /** A stored field value: a number, an optional string (LUT id, tone mapper), a switch, mask layers or curves. */

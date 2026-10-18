@@ -30,8 +30,8 @@ export const PRESET_GROUPS: readonly { key: PresetGroup; label: string; fields: 
   { key: 'masks', label: 'Masks (gradients only)', fields: ['masks'] },
 ];
 
-/** What the save dialog ticks first: white balance is usually specific to one light, masks to one composition. */
-export const DEFAULT_PRESET_GROUPS: readonly PresetGroup[] = PRESET_GROUPS.map((g) => g.key).filter((k) => k !== 'whiteBalance' && k !== 'masks');
+/** What the save dialog ticks first: lens corrections are usually specific to one camera and lens, masks to one composition. */
+export const DEFAULT_PRESET_GROUPS: readonly PresetGroup[] = PRESET_GROUPS.map((g) => g.key).filter((k) => k !== 'lens' && k !== 'masks');
 
 /**
  * A named set of slider values. values holds only the fields of groups; applying it overrides those and leaves
