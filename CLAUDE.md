@@ -478,7 +478,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
 - **Measured auto denoise** (Pro's Auto button, Auto; not Camera): `noise.cpp` `estimateNoise` (JNI
   `RawNative.noiseLevel`, `rb_noise_level`, wasm `noiseLevel`) → `NoiseLevel` (luma, chroma std in the shader's sqrt
   domain) → `AutoTone.measuredNoiseSettings`: slider = 2000 (luma) / 2600 (colour) × std × 2^((exposure + 0.7) / 2),
-  sharpening 15 → 5 as luma denoise grows; sets `colorDenoise` explicitly (ISO fallback leaves it null). ~400 patches
+  sharpening 15 → 5 as that luma value grows, then luma × 0.8 (`LUMA_DENOISE_SCALE`, 2026-10-18: the full fit read too smooth); sets `colorDenoise` explicitly (ISO fallback leaves it null). ~400 patches
   of 84 px, 16 px blocks: luma minus Gaussian σ 1.5, chroma minus σ 6; per 1 EV band the 10th percentile, weighted by
   band area (deep-shadow read noise counts). Checks: a 3×3 residual underestimated coarse (correlated) noise of the
   old Canon G9; a 2×2-binned one read texture on iPhone ProRAW as noise. Calibrated on `.raw/` with 100% crops through

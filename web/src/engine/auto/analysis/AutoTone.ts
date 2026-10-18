@@ -34,6 +34,8 @@ const BASE_SATURATION = 30;
  */
 const LUMA_DENOISE_PER_STD = 2000;
 const COLOR_DENOISE_PER_STD = 2600;
+/** The auto Denoise (luma) is this much of what the measured fit gives (see AutoTone.kt). */
+const LUMA_DENOISE_SCALE = 0.8;
 /** Scene-linear value AgX maps to display white (0.18 * 2^4.03). */
 const DISPLAY_WHITE = 2.95;
 
@@ -75,10 +77,10 @@ export const NO_NOISE: NoiseLevel = { luma: 0, chroma: 0 };
 /** [denoise, colour denoise, sharpening] for the measured [noise] at auto [exposure] (EV). */
 export function measuredNoiseSettings(noise: NoiseLevel, exposure: number): [number, number, number] {
   const shown = 2 ** ((exposure + BASE_EXPOSURE_EV) / 2);
-  const luma = clamp(round(LUMA_DENOISE_PER_STD * noise.luma * shown), 0, 100);
+  const full = clamp(round(LUMA_DENOISE_PER_STD * noise.luma * shown), 0, 100);
   const color = clamp(round(COLOR_DENOISE_PER_STD * noise.chroma * shown), 0, 100);
-  const sharpening = luma <= 20 ? 15 : luma <= 45 ? 15 - ((luma - 20) / 25) * 5 : luma <= 65 ? 10 - ((luma - 45) / 20) * 5 : 5;
-  return [luma, color, round(sharpening)];
+  const sharpening = full <= 20 ? 15 : full <= 45 ? 15 - ((full - 20) / 25) * 5 : full <= 65 ? 10 - ((full - 45) / 20) * 5 : 5;
+  return [round(full * LUMA_DENOISE_SCALE), color, round(sharpening)];
 }
 
 /** [denoise, colour denoise = null: follows denoise, sharpening] by ISO, interpolated in stops between measured points; ISO 0 = unknown. */

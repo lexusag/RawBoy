@@ -1,5 +1,12 @@
 # Changelog
 
+**Auto: gentler automatic luma denoise (2026-10-18)**
+
+- RawBoy Auto (Android, iOS, web) and RawBoy's Auto button pick a 20% lower **Denoise** (luma) from the measured
+  noise than before (`AutoTone.LUMA_DENOISE_SCALE` 0.8; e.g. the Canon G9 at ISO 400 lifted 2 EV: 55 → 44, a clean
+  Pixel shot 6 → 5, at most 80 instead of 100). Colour denoise and sharpening are unchanged, as are Camera's denoise
+  and the ISO table for photos whose noise isn't measured. The Denoise adjustment still adds on top.
+
 **Camera: merge a burst of raws (2026-10-18)**
 
 - RawBoy Camera (Android): **Merge 8 frames** in Settings (off by default). Each shot without flash captures 8 raw
