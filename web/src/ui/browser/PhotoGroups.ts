@@ -24,24 +24,32 @@ export interface PhotoGroup {
   main: string;
   /** The other files of the photo (the JPEG of a RAW + JPEG pair); they go to the bin with it. */
   companions: string[];
-  /** Existing XMP sidecars: NAME.xmp (Lightroom, Capture One) and NAME.EXT.xmp (darktable). */
+  /**
+   * Existing XMP sidecars: NAME.xmp (Lightroom, Capture One), NAME.EXT.xmp (darktable) and darktable's duplicates'
+   * NAME_01.EXT.xmp.
+   */
   sidecars: string[];
 }
 
 /** Groups a folder's file names into photos, in name order; other files are ignored. Names compare case-insensitively. */
 export function groupPhotos(names: string[]): PhotoGroup[] {
   const byStem = new Map<string, string[]>();
+  const photoNames = new Set(names.filter(isPhotoName).map((n) => n.toLowerCase()));
+  for (const name of names.filter(isPhotoName)) {
+    const key = stemOf(name).toLowerCase();
+    byStem.set(key, [...(byStem.get(key) ?? []), name]);
+  }
   const sidecars = new Map<string, string[]>();
-  for (const name of names) {
-    if (isPhotoName(name)) {
-      const key = stemOf(name).toLowerCase();
-      byStem.set(key, [...(byStem.get(key) ?? []), name]);
-    } else if (isSidecarName(name)) {
-      // NAME.xmp belongs to NAME; NAME.CR2.xmp to NAME.CR2's stem.
-      const inner = stemOf(name);
-      const key = (isPhotoName(inner) ? stemOf(inner) : inner).toLowerCase();
-      sidecars.set(key, [...(sidecars.get(key) ?? []), name]);
+  for (const name of names.filter(isSidecarName)) {
+    // NAME.xmp belongs to NAME; NAME.CR2.xmp to NAME.CR2's stem.
+    const inner = stemOf(name);
+    let key = (isPhotoName(inner) ? stemOf(inner) : inner).toLowerCase();
+    // darktable's duplicates of NAME.CR2 are NAME_01.CR2.xmp, NAME_02.CR2.xmp…, with no file of their own.
+    const duplicate = DUPLICATE.exec(inner);
+    if (duplicate && !photoNames.has(inner.toLowerCase()) && photoNames.has(duplicate[1].toLowerCase() + duplicate[2].toLowerCase())) {
+      key = stemOf(duplicate[1] + duplicate[2]).toLowerCase();
     }
+    sidecars.set(key, [...(sidecars.get(key) ?? []), name]);
   }
   const groups: PhotoGroup[] = [];
   for (const [key, files] of byStem) {
@@ -51,6 +59,9 @@ export function groupPhotos(names: string[]): PhotoGroup[] {
   }
   return groups.sort((a, b) => a.main.localeCompare(b.main, undefined, { numeric: true }));
 }
+
+/** darktable's duplicate naming: the photo's stem, "_" and the version number, then its extension. */
+const DUPLICATE = /^(.*)_\d+(\.[^.]+)$/;
 
 /** [name] with [suffix] after the photo's [stem] ("IMG_1.CR2.xmp", "-2" -> "IMG_1-2.CR2.xmp"). */
 export function withSuffix(name: string, stem: string, suffix: string): string {

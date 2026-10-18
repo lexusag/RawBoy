@@ -290,7 +290,7 @@ blemish removal use the same MediaPipe models in the browser.
   Keys: **1–5** stars, **P** pick, **X** reject, **U** unflag, **Mod+Z** undo, arrows to move, Enter to open, Esc back,
   **Z** or double-click for 1:1 of the preview, **E** to edit in RawBoy; **Auto-advance** goes on to the next photo
   after rating. Filters: All / Picks / Unflagged / Rejects and minimum stars. Ratings are written as you go into XMP
-  sidecars next to the raws (`NAME.xmp`; darktable's `NAME.CR2.xmp` is updated when present), which Lightroom,
+  sidecars next to the raws (`NAME.xmp`; darktable's `NAME.CR2.xmp` and its duplicates' `NAME_01.CR2.xmp` are updated when present), which Lightroom,
   Capture One and darktable read: `xmp:Rating` 0–5, −1 for rejects; picks go in RawBoy's own `rawboy:Pick` (XMP has
   no standard pick). Existing sidecars keep everything else byte for byte. **Move rejects to bin** moves the rejects,
   their sidecars and same-name JPEGs into a `_bin` subfolder (browsers can't use the system trash); **Undo** or
@@ -479,6 +479,12 @@ Update it when a dependency is added or upgraded.
 ## Changelog
 
 ### 0.1.0 — in development (2026-10-10)
+
+**Web: RawBoy Browser handles darktable duplicates (2026-10-18)**
+
+- darktable's duplicate sidecars (`IMG_0001_01.CR2.xmp`, `_02`…) now belong to their photo: rating a photo writes
+  the rating into every version's sidecar, and moving it to the bin (or restoring it) takes them along, renamed to
+  match. Before, they weren't linked to the photo, so they kept their old rating and stayed in the folder.
 
 **Film looks get RawBoy's own names (2026-10-18)**
 

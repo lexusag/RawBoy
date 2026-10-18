@@ -238,7 +238,18 @@ describe('Photo groups', () => {
     ]);
   });
 
+  it("attaches darktable's duplicates to their photo", () => {
+    const groups = groupPhotos(['DSC_1.NEF', 'DSC_1.NEF.xmp', 'DSC_1_01.NEF.xmp', 'DSC_1_02.NEF.xmp', 'IMG_2.CR2', 'IMG_2_01.CR2', 'IMG_2_01.CR2.xmp', 'X_01.JPG.xmp']);
+    expect(groups).toEqual([
+      { stem: 'DSC_1', main: 'DSC_1.NEF', companions: [], sidecars: ['DSC_1.NEF.xmp', 'DSC_1_01.NEF.xmp', 'DSC_1_02.NEF.xmp'] },
+      // A real file named like a duplicate keeps its own sidecar; one without its photo stays unmatched.
+      { stem: 'IMG_2_01', main: 'IMG_2_01.CR2', companions: [], sidecars: ['IMG_2_01.CR2.xmp'] },
+      { stem: 'IMG_2', main: 'IMG_2.CR2', companions: [], sidecars: [] },
+    ]);
+  });
+
   it('adds a suffix after the photo stem, keeping sidecars matched', () => {
+    expect(withSuffix('DSC_1_01.NEF.xmp', 'DSC_1', '-2')).toBe('DSC_1-2_01.NEF.xmp');
     expect(withSuffix('IMG_1.CR2', 'IMG_1', '-2')).toBe('IMG_1-2.CR2');
     expect(withSuffix('IMG_1.CR2.xmp', 'IMG_1', '-2')).toBe('IMG_1-2.CR2.xmp');
     expect(withSuffix('img_1.jpg', 'IMG_1', '-2')).toBe('img_1-2.jpg');
