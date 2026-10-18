@@ -12,9 +12,17 @@
 //   from how much the aligned tile differs from the reference beyond what noise explains, times a per-pixel weight
 //   from the local difference, so moving things fall back to the reference instead of ghosting. HDR+ merges in the
 //   frequency domain; this is the spatial-domain counterpart.
+//
+// Streaming: a worker thread aligns and merges each frame into running sums as soon as it can (its exposure and the
+// reference's levels known) and frees it, so memory holds the reference, the sums and only the frames still waiting,
+// not the whole burst.
 
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
+#include <memory>
+#include <mutex>
+#include <thread>
 #include <vector>
 
 namespace rawboy {
@@ -25,55 +33,51 @@ public:
      * [black]: per position of the 2x2 CFA block, row-major (SENSOR_DYNAMIC_BLACK_LEVEL order). [white]: clip level.
      * [noiseScale]/[noiseOffset]: the sensor's noise model in units of the white-black range, variance =
      * scale * signal + offset (SENSOR_NOISE_PROFILE, averaged over the channels); <= 0 if unknown (then estimated).
+     * [levelsKnown] false: frames wait for [setLevels] (the reference's own levels) before they are merged.
      */
-    BurstMerger(int width, int height, const float black[4], float white, float noiseScale, float noiseOffset);
+    BurstMerger(int width, int height, const float black[4], float white, float noiseScale, float noiseOffset,
+                bool levelsKnown = true);
+    ~BurstMerger();
+    BurstMerger(const BurstMerger&) = delete;
+    BurstMerger& operator=(const BurstMerger&) = delete;
 
     /**
-     * Copies one frame: 16-bit samples, [rowStride] bytes per row. [gain]: its exposure (time x ISO); frames are
-     * scaled to the first frame's. The first frame added is the reference.
+     * Copies one frame (16-bit samples, [rowStride] bytes per row) and returns its index; the first is the reference.
+     * [gain]: its exposure (time x ISO), or <= 0 if not known yet ([setGain]); frames are scaled to the reference's.
      */
-    void addFrame(const uint8_t* data, int rowStride, double gain);
+    int addFrame(const uint8_t* data, int rowStride, double gain);
 
-    int frames() const { return static_cast<int>(frames_.size()); }
+    /** A frame's exposure (time x ISO), once known; the frame is merged after that. */
+    void setGain(int frame, double gain);
 
-    /** Replaces a frame's exposure (time x ISO) when it is only known after the frame was added. */
-    void setGain(int frame, double gain) {
-        if (frame >= 0 && frame < frames() && gain > 0.0) gains_[frame] = gain;
-    }
+    /** The black levels (null: keep the constructor's) and noise model; frames are merged only after this. */
+    void setLevels(const float* black, float noiseScale, float noiseOffset);
 
-    /** Replaces the black levels (null: keep) and the noise model given at construction, before [merge]. */
-    void setLevels(const float* black, float noiseScale, float noiseOffset) {
-        if (black) for (int i = 0; i < 4; ++i) black_[i] = black[i];
-        noiseScale_ = noiseScale;
-        noiseOffset_ = noiseOffset;
-    }
+    /**
+     * Ends the burst: merges the frames still waiting (unknown exposures taken as the reference's) and returns
+     * width x height 16-bit samples, valid until the merger is destroyed. Null without frames.
+     */
+    const uint16_t* finish();
 
-    /** Aligns, merges and writes width x height 16-bit samples (tightly packed) to [out]. Needs at least one frame. */
-    void merge(uint16_t* out);
+    int frames() const;
 
-    /** Frees the frames (after [merge]). */
-    void dropFrames() { std::vector<std::vector<uint16_t>>().swap(frames_); }
+    /** Per merged frame after the reference (in order): mean tile weight 0..1, for the log. */
+    std::vector<float> frameWeights() const;
 
-    /** Per merged alternate frame (in order after the reference): mean tile weight 0..1, for the log. */
-    const std::vector<float>& frameWeights() const { return frameWeights_; }
+    /** Most frames waiting at once (copied but not yet merged), for the log. */
+    int maxQueued() const;
 
-    // Tuning, exposed for the host test.
+    // Tuning, exposed for the host test (set before adding frames).
     /** Tile weight: 1 / (1 + excess / (tileK x noise variance)); lower rejects misaligned tiles harder. */
     float tileK = 4.0f;
     /** Pixel weight: rejects where the 3x3 mean grey difference exceeds ~pixelSigmas x its noise. */
     float pixelSigmas = 3.0f;
-
-    // Displacement of each frame's merge tiles, in grey (half-res) pixels: [frame][tile] = (dx, dy). Host test only.
-    struct Shift { int dx = 0, dy = 0; };
-    std::vector<std::vector<Shift>> shifts;
-    int tilesX = 0, tilesY = 0;
 
     static constexpr int MERGE_TILE = 32;              // raw px
     static constexpr int MERGE_STRIDE = MERGE_TILE / 2;
     static constexpr int GREY_TILE = MERGE_TILE / 2;   // the merge tile in grey px
     static constexpr int GREY_STRIDE = GREY_TILE / 2;
 
-private:
     struct Plane {
         int w = 0, h = 0;
         std::vector<float> px;
@@ -83,18 +87,47 @@ private:
             return px[static_cast<size_t>(y) * w + x];
         }
     };
+    struct Shift { int dx = 0, dy = 0; };
 
-    Plane grey(int frame) const;
-    std::vector<Shift> align(const std::vector<Plane>& ref, const std::vector<Plane>& alt) const;
-    float estimateNoise(const Plane& a, const Plane& b) const;
+private:
+    struct Frame {
+        std::vector<uint16_t> raw;  // freed once merged (kept for the reference)
+        double gain = 0.0;          // <= 0: not known yet
+        bool merged = false;
+    };
 
-    int width_, height_;
+    void run();
+    void startReference(Frame& f);
+    void mergeFrame(Frame& f, size_t index);
+    Plane grey(const std::vector<uint16_t>& raw, double gain) const;
+    std::vector<Shift> align(const std::vector<Plane>& alt) const;
+    float greyVar(float level) const;
+
+    const int width_, height_;
     float black_[4];
-    float white_;
+    const float white_;
     float noiseScale_, noiseOffset_;
-    std::vector<std::vector<uint16_t>> frames_;
-    std::vector<double> gains_;
+    int tilesX_, tilesY_;
+
+    // Guarded by mutex_: the queue state the camera thread and the worker share.
+    mutable std::mutex mutex_;
+    std::condition_variable changed_;
+    std::vector<std::unique_ptr<Frame>> frames_;
+    bool levelsKnown_;
+    bool finishing_ = false;
+    size_t next_ = 0;  // next frame to merge, in order
+    int queued_ = 0, maxQueued_ = 0;
     std::vector<float> frameWeights_;
+
+    // Worker only, until finish() joins it.
+    Frame* ref_ = nullptr;  // frames_[0], taken when the worker starts on it
+    std::vector<Plane> refPyramid_;
+    float flatVar_ = 0.0f;  // estimated grey noise variance when the model is unknown
+    std::vector<float> num_;    // per raw pixel: sum of window x weight x (sample - black)
+    std::vector<float> denom_;  // per grey pixel (2x2 block): sum of window x weight
+    double refGain_ = 1.0;
+    bool finished_ = false;  // finish() ran; the reference's raw now holds the result
+    std::thread worker_;
 };
 
 }  // namespace rawboy

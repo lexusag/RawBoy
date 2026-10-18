@@ -97,8 +97,8 @@ int main() {
             fs.push_back(frame(sx, sy, nullptr, rng));
             m.addFrame(reinterpret_cast<const uint8_t*>(fs.back().data()), W * 2, 1.0);
         }
-        std::vector<uint16_t> out(W * H);
-        m.merge(out.data());
+        const uint16_t* merged = m.finish();
+        std::vector<uint16_t> out(merged, merged + W * H);
         const double flatRef = rmse(fs[0], nullptr, 40, 40, 560, 380), flatOut = rmse(out, nullptr, 40, 40, 560, 380);
         const double stripeRef = rmse(fs[0], nullptr, 610, 90, 890, 290), stripeOut = rmse(out, nullptr, 610, 90, 890, 290);
         const double darkRef = rmse(fs[0], nullptr, 40, 402, 1000, 418), darkOut = rmse(out, nullptr, 40, 402, 1000, 418);
@@ -127,8 +127,8 @@ int main() {
             fs.push_back(frame(sx, sy, &sq, rng));
             m.addFrame(reinterpret_cast<const uint8_t*>(fs.back().data()), W * 2, 1.0);
         }
-        std::vector<uint16_t> out(W * H);
-        m.merge(out.data());
+        const uint16_t* merged = m.finish();
+        std::vector<uint16_t> out(merged, merged + W * H);
         // Where the square is in the reference: it must stay; where only other frames had it: background.
         const double inRef = mean(out, 110, 130, 150, 170);
         const double expected = BLACK + 0.7 * (WHITE - BLACK);
@@ -151,8 +151,8 @@ int main() {
             fs.push_back(f);
             m.addFrame(reinterpret_cast<const uint8_t*>(fs.back().data()), W * 2, gain);
         }
-        std::vector<uint16_t> out(W * H);
-        m.merge(out.data());
+        const uint16_t* merged = m.finish();
+        std::vector<uint16_t> out(merged, merged + W * H);
         const double a = mean(fs[0], 40, 40, 560, 380), b = mean(out, 40, 40, 560, 380);
         std::printf("exposure: reference mean %.2f, merged %.2f\n", a, b);
         check(std::abs(a - b) < 1.0, "exposure: frames scaled to the reference's exposure");
@@ -166,11 +166,33 @@ int main() {
             fs.push_back(frame(i == 0 ? 0 : shake(rng), i == 0 ? 0 : shake(rng), nullptr, rng));
             m.addFrame(reinterpret_cast<const uint8_t*>(fs.back().data()), W * 2, 1.0);
         }
-        std::vector<uint16_t> out(W * H);
-        m.merge(out.data());
+        const uint16_t* merged = m.finish();
+        std::vector<uint16_t> out(merged, merged + W * H);
         const double r = rmse(fs[0], nullptr, 40, 40, 560, 380) / rmse(out, nullptr, 40, 40, 560, 380);
         std::printf("estimated noise: flat x%.2f\n", r);
         check(r > 1.5, "estimated noise: flat noise at least 1.5x lower");
+    }
+
+    // 5. As the camera feeds it: levels and exposures arrive after the frames (results lag the images).
+    {
+        const float staticBlack[4] = {60, 60, 60, 60};
+        BurstMerger m(W, H, staticBlack, WHITE, 0, 0, /* levelsKnown */ false);
+        std::vector<std::vector<uint16_t>> fs;
+        for (int i = 0; i < N; ++i) {
+            fs.push_back(frame(i == 0 ? 0 : shake(rng), i == 0 ? 0 : shake(rng), nullptr, rng));
+            const int index = m.addFrame(reinterpret_cast<const uint8_t*>(fs.back().data()), W * 2, 0.0);
+            if (i == 1) m.setLevels(black, NOISE_S, NOISE_O);  // the reference's result comes in late
+            if (i >= 1) m.setGain(index - 1, 1.0);             // each result a frame behind
+        }
+        // The last frame's exposure never arrives: finish() takes the reference's.
+        const uint16_t* merged = m.finish();
+        std::vector<uint16_t> out(merged, merged + W * H);
+        const double r = rmse(fs[0], nullptr, 40, 40, 560, 380) / rmse(out, nullptr, 40, 40, 560, 380);
+        const double a = mean(fs[0], 40, 40, 560, 380), b = mean(out, 40, 40, 560, 380);
+        std::printf("streamed: flat x%.2f, mean %.2f -> %.2f, %zu frame weights, at most %d frames waiting\n", r, a, b,
+                    m.frameWeights().size(), m.maxQueued());
+        check(r > 1.8 && std::abs(a - b) < 1.0 && m.frameWeights().size() == N - 1,
+              "streamed: late levels and exposures, all frames merged");
     }
 
     std::printf(failures ? "%d FAILED\n" : "all passed\n", failures);

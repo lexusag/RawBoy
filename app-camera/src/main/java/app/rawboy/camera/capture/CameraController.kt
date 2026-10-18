@@ -614,7 +614,8 @@ class CameraController(context: Context) : AutoCloseable {
     /**
      * A burst of [frames] raws of the still request, aligned and merged into one (BurstNative: HDR+-style, the first
      * frame is the reference) and written as DNG with the reference's metadata. Each frame is copied into native
-     * memory as it arrives. Frames that fail or don't arrive in time are left out.
+     * memory as it arrives and merged there while the burst goes on, then freed. Frames that fail or don't arrive in
+     * time are left out.
      */
     private suspend fun burstDng(
         s: CameraCaptureSession,
@@ -642,34 +643,54 @@ class CameraController(context: Context) : AutoCloseable {
             }
         }.build()
 
-        // Camera thread only, until done completes.
+        // Camera thread only. Each frame is paired with its result by timestamp; the pair hands the merger the frame's
+        // exposure (and, for the reference, its levels), so it can merge that frame while the burst goes on.
         var handle = 0L
-        val timestamps = ArrayList<Long>(frames)
+        val stamps = ArrayList<Long>(frames)
+        val indexOf = HashMap<Long, Int>()
         val results = HashMap<Long, CaptureResult>()
         var failed = 0
+        var closed = false  // handed over: late results must not reach the merger (it may be destroyed)
         val done = CompletableDeferred<Unit>()
         fun checkDone() {
-            if (timestamps.size + failed >= frames && results.size + failed >= frames) done.complete(Unit)
+            if (stamps.size + failed >= frames && results.size + failed >= frames) done.complete(Unit)
+        }
+        fun pair(stamp: Long) {
+            if (closed) return
+            val index = indexOf[stamp] ?: return
+            val r = results[stamp] ?: return
+            if (index == 0) {
+                val noise = noiseModel(r)
+                BurstNative.setLevels(handle, r.get(CaptureResult.SENSOR_DYNAMIC_BLACK_LEVEL)?.takeIf { it.size == 4 }, noise.first, noise.second)
+            }
+            gainOf(r)?.let { BurstNative.setGain(handle, index, it) }
         }
         val started = System.nanoTime()
         handler.post {
             burstSink = sink@{ img ->
                 if (done.isCompleted) return@sink
                 if (handle == 0L) {
-                    // Levels and noise come from the reference's result before the merge (setLevels); the static
-                    // black level stands in until then.
+                    // The static black level stands in until the reference's result brings its own (setLevels).
                     val black = FloatArray(4) { i -> staticBlack?.getOffsetForIndex(i % 2, i / 2)?.toFloat() ?: 64f }
-                    handle = BurstNative.create(width, height, black, white, 0f, 0f)
+                    handle = BurstNative.create(width, height, black, white)
                 }
                 val plane = img.planes[0]
-                BurstNative.addFrame(handle, plane.buffer, width, height, plane.rowStride, 1.0)
-                timestamps += img.timestamp
+                val index = BurstNative.addFrame(handle, plane.buffer, width, height, plane.rowStride)
+                if (index >= 0) {
+                    stamps += img.timestamp
+                    indexOf[img.timestamp] = index
+                    pair(img.timestamp)
+                }
                 checkDone()
             }
         }
         s.captureBurst(List(frames) { request }, object : CameraCaptureSession.CaptureCallback() {
             override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, r: TotalCaptureResult) {
-                lensResult(r).let { lr -> lr.get(CaptureResult.SENSOR_TIMESTAMP)?.let { results[it] = lr } }
+                val lr = lensResult(r)
+                lr.get(CaptureResult.SENSOR_TIMESTAMP)?.let { stamp ->
+                    results[stamp] = lr
+                    if (handle != 0L) pair(stamp)
+                }
                 checkDone()
             }
 
@@ -679,42 +700,33 @@ class CameraController(context: Context) : AutoCloseable {
             }
         }, handler)
         onSubmitted()
-        // Stops taking frames; hands over what arrived (camera thread, where it was written).
-        val state = CompletableDeferred<Triple<Long, List<Long>, Map<Long, CaptureResult>>>()
-        fun finish() = handler.post {
-            burstSink = null
-            state.complete(Triple(handle, timestamps.toList(), results.toMap()))
-        }
         try {
             // A frame takes at most 1/15 s plus readout; allow plenty, then go on with what arrived.
             withTimeoutOrNull(BURST_TIMEOUT_MS + frames * BURST_FRAME_TIMEOUT_MS) { done.await() }
         } catch (e: CancellationException) {
             handler.post {
                 burstSink = null
+                closed = true
                 if (handle != 0L) BurstNative.destroy(handle)
             }
             throw e
         }
-        finish()
-        val (h, stamps, byStamp) = state.await()
+        // Stops taking frames; hands over what arrived (camera thread, where it was written).
+        val state = CompletableDeferred<Pair<Long, CaptureResult?>>()
+        handler.post {
+            burstSink = null
+            closed = true
+            state.complete(handle to stamps.firstOrNull()?.let { results[it] })
+        }
+        val (h, reference) = state.await()
         if (h == 0L) throw IOException("Burst: no frames")
         try {
-            val reference = byStamp[stamps.first()] ?: throw IOException("Burst: no result for the first frame")
-            fun gainOf(r: CaptureResult?) =
-                ((r?.get(CaptureResult.SENSOR_EXPOSURE_TIME) ?: 0L).toDouble() * (r?.get(CaptureResult.SENSOR_SENSITIVITY) ?: 0)).takeIf { it > 0.0 }
-            val gains = DoubleArray(stamps.size) { i -> gainOf(byStamp[stamps[i]]) ?: gainOf(reference) ?: 1.0 }
-            val noise = noiseModel(reference)
-            val black = reference.get(CaptureResult.SENSOR_DYNAMIC_BLACK_LEVEL)?.takeIf { it.size == 4 }
-            val merged = withContext(Dispatchers.Default) {
-                BurstNative.setGains(h, gains)
-                BurstNative.setLevels(h, black, noise.first, noise.second)
-                BurstNative.merge(h, width, height)
-            }
+            if (reference == null) throw IOException("Burst: no result for the first frame")
+            val merged = withContext(Dispatchers.Default) { BurstNative.finish(h, width, height) }
             val weights = BurstNative.frameWeights(h)
-            val mergedMs = (System.nanoTime() - started) / 1_000_000
-            Log.d(TAG, "burst: ${stamps.size} of $frames frames, $mergedMs ms from submit to merged, " +
-                "frame weights ${weights.joinToString(" ") { "%.2f".format(it) }}, exposures ${gains.joinToString(" ") { "%.0f".format(it / 1e6) }} (ms x ISO), " +
-                "noise ${noise.first} ${noise.second}")
+            Log.d(TAG, "burst: ${weights.size + 1} of $frames frames, ${(System.nanoTime() - started) / 1_000_000} ms from submit to merged, " +
+                "at most ${BurstNative.maxQueued(h)} waiting, frame weights ${weights.joinToString(" ") { "%.2f".format(it) }}, " +
+                "noise ${noiseModel(reference).let { "${it.first} ${it.second}" }}")
             DngCreator(inf.characteristics, reference).use { dng ->
                 dng.setOrientation(exifOrientation)
                 dng.writeByteBuffer(out, Size(width, height), merged, 0)
@@ -724,6 +736,10 @@ class CameraController(context: Context) : AutoCloseable {
             BurstNative.destroy(h)
         }
     }
+
+    /** A frame's exposure as the merge scales it: time x ISO, or null if the result doesn't say. */
+    private fun gainOf(r: CaptureResult): Double? =
+        ((r.get(CaptureResult.SENSOR_EXPOSURE_TIME) ?: 0L).toDouble() * (r.get(CaptureResult.SENSOR_SENSITIVITY) ?: 0)).takeIf { it > 0.0 }
 
     /** The reference frame's noise model averaged over the CFA channels: (scale, offset), or (0, 0) if not reported. */
     private fun noiseModel(r: CaptureResult): Pair<Float, Float> {

@@ -237,9 +237,9 @@ shows them.
   merges them into one DNG before developing, as the phone's HDR+ does for its own JPEGs: each frame is aligned to the
   first (tile by tile, so hand shake is followed) and averaged in where it matches; where something moved, the first
   frame is kept, so moving things don't ghost. Noise drops by about 3× where nothing moves, so the develop picks
-  less denoise and keeps more detail. Hold still: the DNG is ready 2–3.5 s after the shutter instead of 0.3 s, though
-  the JPEG comes out about as fast (less denoise work). It needs a lot of memory (~400 MB at its peak), so Android
-  may close other apps to make room.
+  less denoise and keeps more detail. Hold still while the burst runs. The frames are merged while the burst is
+  still coming in, so the DNG follows soon after the last frame; the JPEG comes out about as fast as from one frame
+  (less denoise work). It needs ~200 MB of memory at its peak, so Android may close other apps to make room.
 - **JPEG:** encoded with Google's **jpegli** from 16-bit pixels, full-resolution colour (4:4:4), quality 95 by
   default (Settings: 70–100). jpegli's adaptive quantisation gives fewer artefacts per byte than libjpeg.
 - **RAW:** the **RAW** button in the top bar keeps the DNG next to the JPEG (lit) or not (struck through); the same
@@ -501,8 +501,8 @@ Update it when a dependency is added or upgraded.
 - Press-and-hold compare shows healed blemishes as healed (healing changes the image data itself).
 - Very large files (≥100 MP) export JPEG through a full-size Bitmap and may run out of memory (RawBoy and Auto;
   Camera's jpegli path streams and has no such limit).
-- RawBoy Camera: single raw frames unless **Merge 8 frames** is on, which needs ~400 MB at its peak (on phones with
-  less RAM Android may kill the app) and 2–3.5 s from shutter to DNG; no manual exposure
+- RawBoy Camera: single raw frames unless **Merge 8 frames** is on, which needs ~200 MB at its peak (on phones with
+  little RAM Android may kill the app) and holds the DNG until the burst is merged; no manual exposure
   or digital zoom yet. Lenses other than the main one are streamed as physical cameras of the phone's logical back
   camera; if a phone refuses that, RawBoy Camera tries opening the lens on its own, and logs what it found
   (`adb logcat -s RawBoyCamera`). The Android emulator's back camera can't write DNGs (its metadata lacks the post-raw boost
@@ -533,7 +533,10 @@ Update it when a dependency is added or upgraded.
   flat green areas 4.9–22 DN → 1.5–6.9 DN (~3.2× lower at every level), the develop's denoise 51 → 16, skin, glasses
   and knit detail kept at 100% with no blotchy colour noise; all 8 frames merged (weights ~1.0); shutter to DNG
   0.3 s → 2.1 s (2–3.5 s over several shots), shutter to JPEG 3.1 s → 2.7 s. The first burst made Android close ~20
-  background apps for memory.
+  background apps for memory, so the merge now streams: a worker thread merges each frame into running sums as soon
+  as its capture result is in, then frees it, and the result is written over the reference's samples. Host benchmark
+  (12 MP, a frame every 66 ms): peak memory 368 → 210 MB, wait after the last frame 2.0 → 0.4 s; same noise and
+  ghosting results.
 
 **Grain size, roughness and colour in RawBoy (2026-10-18)**
 
