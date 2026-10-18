@@ -296,8 +296,9 @@ blemish removal use the same MediaPipe models in the browser.
 - Lens presets: **Save lens preset** in the RawBoy tab's Lens tab, and the Auto tab gives every photo taken with that
   lens its lens corrections on top of its look or preset (only the lens settings change); a lens-only preset file
   opened with **Apply RawBoy preset…** joins the RawBoy tab's presets. Manual lenses' presets (named in the Lens tab)
-  are picked by name in the Auto tab's **Lens** menu, for every photo or a selection. Remove one with **Manage…** next
-  to the menu, or in the RawBoy tab's Presets.
+  are picked by name in the Auto tab's **Lens** menu, for every photo or a selection; the photo view has the same menu
+  for one photo and shows which preset By lens found. Remove one with **Manage…** next to the menu, or in the RawBoy
+  tab's Presets.
 - Auto → RawBoy: **Edit in RawBoy** in Auto's photo view opens that photo in the RawBoy tab, starting from Auto's
   develop and look (Reset still goes back to as-shot). And back: **Back to Auto** in the RawBoy tab's top bar returns it
   to the same photo in Auto, developed with the RawBoy edits ("RawBoy edits" in place of the look; Auto's sliders adjust
@@ -327,8 +328,8 @@ blemish removal use the same MediaPipe models in the browser.
   Browser keep their edits in their sidecar (`rawboy:Develop`, JSON of the fields changed from as shot, crop, masks
   and brush strokes included; `NAME.xmp`, else darktable's `NAME.CR2.xmp`, else a new `NAME.xmp`) and reopen with
   them instead of the previous photo's carried-over edits. Reset removes them again. Photos sent to Auto keep their
-  Auto settings there too (`rawboy:Auto`: look or film look, strength, adjustments, the preset itself and RawBoy edits
-  from Back to Auto). Opening the folder again (**Reopen <folder>** remembers the last one) puts the photos with Auto
+  Auto settings there too (`rawboy:Auto`: look or film look, strength, adjustments, the preset itself, a picked lens
+  preset or None, and RawBoy edits from Back to Auto). Opening the folder again (**Reopen <folder>** remembers the last one) puts the photos with Auto
   settings back into Auto as they were left. Other apps' data in the sidecar stays as it was; they don't read
   RawBoy's edits.
 - Auto's photo view: **Space** / **Backspace** go to the next / previous photo, as in darktable, even while a slider
@@ -517,6 +518,9 @@ Update it when a dependency is added or upgraded.
 - RawBoy Auto (Android, iOS, web): pick a lens preset for every photo and those added later, or for a selection:
   By lens (as before), None, or a named one (`Presets.chosenLensPreset`, `AutoPhoto.lensChoice`). Presets without a
   lens no longer apply to every photo. Lens presets can be removed on the web too (**Manage…**).
+- RawBoy Web: Auto's photo view shows and changes the photo's lens preset; a picked lens preset (or None) is kept in
+  the photo's sidecar with its other Auto settings (Edits in sidecars), and comes back into the lens presets if this
+  browser no longer has it.
 
 **Web: RawBoy Browser shows JPEG XL DNG previews at full size (2026-10-18)**
 

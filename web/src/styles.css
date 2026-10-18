@@ -270,6 +270,26 @@ button.icon.active {
   text-overflow: ellipsis;
 }
 
+/* Auto's photo view: the photo's lens preset. */
+.photo-lens {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 12px 0;
+  min-width: 0;
+}
+
+.photo-lens select {
+  min-width: 0;
+  max-width: 60%;
+}
+
+.photo-lens .muted {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Pro's Lens tab: the lens preset's name and Save button. */
 .lens-preset-save {
   display: flex;

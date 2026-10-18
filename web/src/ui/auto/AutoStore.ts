@@ -4,7 +4,7 @@ import { DEFAULT_STRENGTH, NO_ADJUSTMENTS, applyEditsDevelop, developAuto, sameA
 import { ALL_FILM_LOOKS, FilmLooks } from '../../engine/auto/looks/FilmLooks';
 import { suggestFilm, suggestLook } from '../../engine/auto/looks/LookSuggester';
 import type { DevelopParams } from '../../engine/develop/DevelopParams';
-import { chosenLensPreset, decodePresets, isLensPreset, NO_LENS_PRESET, putLensPreset, type Preset } from '../../engine/develop/Presets';
+import { chosenLensPreset, decodePresets, isLensPreset, NO_LENS_PRESET, putLensPreset, sameLensPreset, type Preset } from '../../engine/develop/Presets';
 import { PresetStore } from '../pro/PresetStore';
 import { exportImage } from '../../engine/export/Exporter';
 import { baseNameOf, EXTENSIONS, ExportSettingsStore, fileName, type ExportSettings, type OutputNaming } from '../../engine/export/ExportSettings';
@@ -288,7 +288,14 @@ export class AutoStore {
     const saved = text != null ? decodeAuto(text) : null;
     if (!saved || !this.photo(id)) return;
     this.saved.set(id, text!);
-    this.updatePhoto(id, (p) => ({ ...p, ...saved, looksApplied: true }));
+    // A picked lens preset is found in this browser's lens presets (by lens, or name for manual lenses), else kept there.
+    let lens = saved.lensPreset ? sameLensPreset(this._state.lensPresets, saved.lensPreset) : null;
+    if (saved.lensPreset && !lens) {
+      this.keepLensPresets([saved.lensPreset]);
+      lens = sameLensPreset(this._state.lensPresets, saved.lensPreset);
+    }
+    const lensChoice = saved.lensChoice === NO_LENS_PRESET ? NO_LENS_PRESET : lens?.id ?? null;
+    this.updatePhoto(id, (p) => ({ ...p, ...saved, lensChoice, lensPreset: lens, looksApplied: true }));
     this.refreshThumbnail(id, true);
   }
 
@@ -390,13 +397,7 @@ export class AutoStore {
    * their lens corrections on top of their look or preset, here and in the RawBoy tab's presets.
    */
   addLensPresets(presets: readonly Preset[]) {
-    const save = this.saveLensPresets;
-    if (save) save([...presets]);
-    else {
-      const all = presets.reduce(putLensPreset, PresetStore.load());
-      if (!PresetStore.save(all)) this.update({ message: 'Could not save presets in this browser' });
-      this.setLensPresets(all.filter(isLensPreset));
-    }
+    this.keepLensPresets(presets);
     const name = presets.length === 1 ? `Lens preset ${presets[0].name}` : `${presets.length} lens presets`;
     if (presets.every((p) => !p.lens?.trim())) {
       this.update({ message: `${name} saved: pick ${presets.length === 1 ? 'it' : 'them'} under Lens presets` });
@@ -407,6 +408,17 @@ export class AutoStore {
     this.update({
       message: `${name} saved for photos taken with ${presets.length === 1 ? 'that lens' : 'those lenses'} (${matched === 1 ? '1 photo' : `${matched} photos`} here)`,
     });
+  }
+
+  /** Keeps lens presets with the RawBoy tab's presets, in place of those for the same lenses (see putLensPreset). */
+  private keepLensPresets(presets: readonly Preset[]) {
+    const save = this.saveLensPresets;
+    if (save) save([...presets]);
+    else {
+      const all = presets.reduce(putLensPreset, PresetStore.load());
+      if (!PresetStore.save(all)) this.update({ message: 'Could not save presets in this browser' });
+      this.setLensPresets(all.filter(isLensPreset));
+    }
   }
 
   /** Forgets lens preset id (here and in the RawBoy tab's presets); photos that picked it go back to matching by lens. */
@@ -445,7 +457,8 @@ export class AutoStore {
     if (!ids) this.update({ lensChoice: choice });
     const photos = this._state.photos.filter((p) => !ids || ids.has(p.id));
     for (const p of photos) {
-      const lensPreset = p.analysis ? chosenLensPreset(this._state.lensPresets, choice, p.analysis.lens.lensName) : null;
+      // Before analysis by-lens finds nothing yet, but a picked preset is known (and kept in the photo's sidecar).
+      const lensPreset = chosenLensPreset(this._state.lensPresets, choice, p.analysis?.lens.lensName ?? '');
       this.changeDevelop(p.id, (q) => ({ ...q, lensChoice: choice, lensPreset }), null);
     }
     const what = choice === null ? 'Lens presets by lens' : choice === NO_LENS_PRESET ? 'No lens preset'

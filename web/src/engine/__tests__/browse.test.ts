@@ -4,7 +4,7 @@ import { readEdits, readXmp, writeEdits, writeXmp } from '../browse/XmpSidecar';
 import { developParams } from '../develop/DevelopParams';
 import { decodeEdits, encodeEdits } from '../develop/Edits';
 import { newBrushLayer, newRadialLayer } from '../develop/Masks';
-import { capturePreset } from '../develop/Presets';
+import { captureLensPreset, capturePreset, NO_LENS_PRESET, sameLensPreset } from '../develop/Presets';
 import { FilmLooks } from '../auto/looks/FilmLooks';
 import { Looks } from '../auto/looks/Look';
 import { NO_ADJUSTMENTS } from '../auto/looks/LookApplier';
@@ -354,6 +354,7 @@ describe('Edits in sidecars', () => {
     const saved = {
       mode: 'film' as const, look: Looks.NATURAL, filmLook: FilmLooks.PORTRA_400, strength: 70,
       adjust: { ...NO_ADJUSTMENTS, brightness: 12, contrast: -8, rotation: 1 }, preset, edits: edited,
+      lensChoice: null, lensPreset: null,
     };
     const back = decodeAuto(encodeAuto(saved))!;
     expect({ ...back, preset: { ...back.preset!, id: '' }, edits: { ...back.edits!, masks: [] } })
@@ -367,6 +368,23 @@ describe('Edits in sidecars', () => {
     const both = writeEdits(writeEdits(null, '{"a":1}'), encodeAuto(saved), 'Auto');
     expect(readEdits(both)).toBe('{"a":1}');
     expect(decodeAuto(readEdits(both, 'Auto')!)!.strength).toBe(70);
+  });
+
+  it("keeps a photo's picked lens preset, or None; by lens isn't stored", () => {
+    const base = decodeAuto(encodeAuto({
+      mode: 'looks', look: Looks.NATURAL, filmLook: FilmLooks.PORTRA_400, strength: 100, adjust: NO_ADJUSTMENTS,
+      preset: null, edits: null, lensChoice: null, lensPreset: null,
+    }))!;
+    expect(base.lensChoice).toBeNull();
+    const helios = captureLensPreset(developParams({ lensDistortion: -6, vignetteAmount: 25 }), '', 'Helios 44-2');
+    const picked = decodeAuto(encodeAuto({ ...base, lensChoice: helios.id, lensPreset: helios }))!;
+    expect(picked.lensPreset!.name).toBe('Helios 44-2');
+    expect(picked.lensPreset!.values).toEqual(helios.values);
+    expect(picked.lensChoice).toBe(picked.lensPreset!.id);
+    expect(sameLensPreset([helios], picked.lensPreset!)).toBe(helios);
+    const none = decodeAuto(encodeAuto({ ...base, lensChoice: NO_LENS_PRESET, lensPreset: null }))!;
+    expect(none.lensChoice).toBe(NO_LENS_PRESET);
+    expect(none.lensPreset).toBeNull();
   });
 
   it('reads edits another tool rewrote as an element', () => {
