@@ -233,13 +233,21 @@ shows them.
   the shutter) and saved as `Pictures/RawBoy Camera/IMG_<date>_<time>-camera.jpg`. You can keep shooting meanwhile;
   "Saving N…" shows the queue. The thumbnail opens the last photo. Exposure is metered on the middle half of the
   frame (width and height); a focus lock meters at its point instead.
+- **Merge 8 frames** (Settings, off by default): each shot without flash takes 8 raw frames in a quick burst and
+  merges them into one DNG before developing, as the phone's HDR+ does for its own JPEGs: each frame is aligned to the
+  first (tile by tile, so hand shake is followed) and averaged in where it matches; where something moved, the first
+  frame is kept, so moving things don't ghost. Noise drops by about 3× where nothing moves, so the develop picks
+  less denoise and keeps more detail. Hold still while the burst runs. The frames are merged while the burst is
+  still coming in, so the DNG follows soon after the last frame; the JPEG comes out about as fast as from one frame
+  (less denoise work). It needs ~200 MB of memory at its peak, so Android may close other apps to make room. The
+  shutter greys out ("Merging frames…") until the merged DNG is written, so bursts never overlap.
 - **JPEG:** encoded with Google's **jpegli** from 16-bit pixels, full-resolution colour (4:4:4), quality 95 by
   default (Settings: 70–100). jpegli's adaptive quantisation gives fewer artefacts per byte than libjpeg.
 - **RAW:** the **RAW** button in the top bar keeps the DNG next to the JPEG (lit) or not (struck through); the same
   setting as in Settings.
 - **Settings:** JPEG quality; whether to keep the DNG (on by default; off keeps only the JPEG); **Smaller photos**
   (on by default: 3000 px on the long side, area-downscaled from the full-resolution develop, with the grain sized to
-  the smaller photo; off saves full resolution); **Remember camera & settings** (off by default: each start uses the
+  the smaller photo; off saves full resolution); **Merge 8 frames** (see above); **Remember camera & settings** (off by default: each start uses the
   back W lens, Yellow Portrait 400 and default sliders; on keeps lens, side, look and sliders).
 - **How the viewfinder matches the final:** the camera's preview stream is asked for the plain sRGB tone curve, so
   the viewfinder can turn it back into linear light and run the same develop shader on it. The auto develop is
@@ -501,7 +509,8 @@ Update it when a dependency is added or upgraded.
 - Press-and-hold compare shows healed blemishes as healed (healing changes the image data itself).
 - Very large files (≥100 MP) export JPEG through a full-size Bitmap and may run out of memory (RawBoy and Auto;
   Camera's jpegli path streams and has no such limit).
-- RawBoy Camera: single raw frames, so low light is noisier than the phone's multi-frame HDR+; no manual exposure
+- RawBoy Camera: single raw frames unless **Merge 8 frames** is on, which needs ~200 MB at its peak (on phones with
+  little RAM Android may kill the app) and holds the DNG until the burst is merged; no manual exposure
   or digital zoom yet. Lenses other than the main one are streamed as physical cameras of the phone's logical back
   camera; if a phone refuses that, RawBoy Camera tries opening the lens on its own, and logs what it found
   (`adb logcat -s RawBoyCamera`). The Android emulator's back camera can't write DNGs (its metadata lacks the post-raw boost
@@ -516,6 +525,32 @@ Update it when a dependency is added or upgraded.
   and more may not fit the 4 GB WASM heap; tested in Chrome on macOS only.
 
 ## Changelog
+
+**Camera: merge a burst of raws (2026-10-18)**
+
+- RawBoy Camera (Android): **Merge 8 frames** in Settings (off by default). Each shot without flash captures 8 raw
+  frames (`CameraCaptureSession.captureBurst`), copies each into native memory as it arrives, then aligns and merges
+  them into one Bayer frame written as the DNG (`burst_merge.cpp`, `BurstNative`, `DngCreator.writeByteBuffer`). The
+  method is a simplified reimplementation of Google's HDR+ paper (Hasinoff et al. 2016): coarse-to-fine tile
+  alignment on a 2×2-averaged grey copy (even raw shifts, so the Bayer pattern is kept), then a spatial merge of
+  overlapping 32 px tiles weighted by how far each aligned tile differs from the first frame beyond noise, with a
+  per-pixel check against ghosts. The phone's own computational photography (Night Sight, HDR+) isn't available to
+  apps as raw: Camera2 extensions only return processed JPEG/YUV. Host test (`tools/burst_merge/run.sh`, synthetic
+  bursts with sub-pixel shake): noise 2.5× lower in flat areas, a moving square not ghosted, clipped light kept;
+  8 frames of 12 MP merge in ~1.7 s on 4 x86 cores. On the Pixel 9 Pro (two selfies, ISO 1212, 1/30 s): raw noise in
+  flat green areas 4.9–22 DN → 1.5–6.9 DN (~3.2× lower at every level), the develop's denoise 51 → 16, skin, glasses
+  and knit detail kept at 100% with no blotchy colour noise; all 8 frames merged (weights ~1.0); shutter to DNG
+  0.3 s → 2.1 s (2–3.5 s over several shots), shutter to JPEG 3.1 s → 2.7 s. The first burst made Android close ~20
+  background apps for memory, so the merge now streams: a worker thread merges each frame into running sums as soon
+  as its capture result is in, then frees it, and the result is written over the reference's samples. Host benchmark
+  (12 MP, a frame every 66 ms): peak memory 368 → 210 MB, wait after the last frame 2.0 → 0.4 s; same noise and
+  ghosting results. On the phone (4 merged shots, all 8 of 8): no background apps closed, noise still ~3.3× lower,
+  shutter to DNG 2.1–3.9 s. The frames come every 33 ms and a merge step takes 0.3–0.4 s, so 6–7 frames still wait
+  at once; the native peak (~590 MB, vs ~445 MB for a single shot's develop) came from back-to-back bursts
+  overlapping a develop. The shutter now waits for a burst's DNG before the next shot. Phone, with the block (6 merged
+  shots, all 8 of 8, 2.1–3.1 s to DNG, no apps closed): a merged shot alone peaks at ~320 MB native, single shots
+  (develop only) 455 MB, merged shots back to back 511 MB (a burst merging while the previous JPEG develops), down
+  from ~590 MB; shots without merge aren't blocked.
 
 **Grain size, roughness and colour in RawBoy (2026-10-18)**
 
