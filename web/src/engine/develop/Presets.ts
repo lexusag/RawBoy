@@ -107,12 +107,19 @@ export function chosenLensPreset(presets: readonly Preset[], choice: string | nu
  * lens, so several manual lenses' presets live side by side.
  */
 export function putLensPreset(presets: readonly Preset[], lensPreset: Preset): Preset[] {
-  const lens = lensPreset.lens?.trim() ?? '';
-  const old = presets.findLast(
-    (p) =>
-      isLensPreset(p) && (lens !== '' ? isPresetFor(p, lens) : !p.lens?.trim() && same(p.name, lensPreset.name)),
-  );
+  const old = sameLensPreset(presets, lensPreset);
   return old ? presets.map((p) => (p === old ? { ...lensPreset, id: old.id } : p)) : [...presets, lensPreset];
+}
+
+/**
+ * The lens preset among presets that lensPreset stands for (putLensPreset would replace it): the one for the same lens,
+ * or for no lens the one of the same name; null if none. Finds a copy kept elsewhere (a sidecar) in this list.
+ */
+export function sameLensPreset(presets: readonly Preset[], lensPreset: Preset): Preset | null {
+  const lens = lensPreset.lens?.trim() ?? '';
+  return presets.findLast(
+    (p) => isLensPreset(p) && (lens !== '' ? isPresetFor(p, lens) : !p.lens?.trim() && same(p.name, lensPreset.name)),
+  ) ?? null;
 }
 
 /** params with the preset's stored fields; a value of the wrong type (a hand-edited file) leaves the field. */

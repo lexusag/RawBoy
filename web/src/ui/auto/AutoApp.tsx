@@ -635,6 +635,21 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
               <LookStrip store={store} photo={photo} />
             </>
           )}
+          {state.lensPresets.length > 0 && (
+            // This photo's lens preset, to check or change it photo by photo.
+            <div className="photo-lens">
+              <LensPresetSelect
+                presets={state.lensPresets}
+                choice={photo.lensChoice}
+                disabled={state.export != null}
+                title={photo.lensPreset ? `Lens preset: ${photo.lensPreset.name}` : 'No lens preset on this photo'}
+                onChange={(c) => store.chooseLensPreset(c, new Set([photo.id]))}
+              />
+              {photo.lensChoice === null && (
+                <span className="muted">{photo.lensPreset ? photo.lensPreset.name : 'none for this lens'}</span>
+              )}
+            </div>
+          )}
           <div className="controls-body" ref={scroll.ref} onScroll={scroll.onScroll}>
             <nav className="tabs small">
               {(['Look', 'Adjust'] as const).map((t) => (

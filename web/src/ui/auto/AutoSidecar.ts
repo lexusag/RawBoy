@@ -3,7 +3,7 @@ import { lookById, type Look } from '../../engine/auto/looks/Look';
 import { NO_ADJUSTMENTS, type Adjustments } from '../../engine/auto/looks/LookApplier';
 import { developParams, type DevelopParams } from '../../engine/develop/DevelopParams';
 import { decodeEdits, encodeEdits, EDITS_FORMAT, EDITS_VERSION } from '../../engine/develop/Edits';
-import { decodePresets, encodePresets, type Preset } from '../../engine/develop/Presets';
+import { decodePresets, encodePresets, isLensPreset, NO_LENS_PRESET, type Preset } from '../../engine/develop/Presets';
 
 /**
  * A photo's RawBoy Auto settings as kept in its XMP sidecar (rawboy:Auto, opt-in: RawBoy Browser's Edits in sidecars),
@@ -19,6 +19,10 @@ export interface SavedAuto {
   preset: Preset | null;
   /** RawBoy edits (Back to Auto); stored as edits JSON against the global defaults, so no analysis is needed to read them. */
   edits: DevelopParams | null;
+  /** The lens preset choice (see chosenLensPreset): null = by lens, NO_LENS_PRESET, or a picked preset's id. */
+  lensChoice: string | null;
+  /** The picked lens preset itself (kept with lensChoice = its id), as for preset; else null. */
+  lensPreset: Preset | null;
 }
 
 export const AUTO_FORMAT = 'rawboy-auto';
@@ -29,6 +33,8 @@ export function encodeAuto(s: SavedAuto): string {
   return JSON.stringify({
     format: AUTO_FORMAT, version: AUTO_VERSION, mode: s.mode, look: s.look.id, filmLook: s.filmLook.id, strength: s.strength,
     adjust: s.adjust, preset: s.preset ? JSON.parse(encodePresets([s.preset])) : null, edits,
+    // By lens is the default and isn't kept: the photo's lens finds its preset again.
+    lens: s.lensChoice === NO_LENS_PRESET ? NO_LENS_PRESET : s.lensChoice !== null && s.lensPreset ? JSON.parse(encodePresets([s.lensPreset])) : undefined,
   });
 }
 
@@ -48,6 +54,12 @@ export function decodeAuto(text: string): SavedAuto | null {
   const adjust = { ...NO_ADJUSTMENTS };
   for (const k of Object.keys(NO_ADJUSTMENTS) as (keyof Adjustments)[]) adjust[k] = num(a[k], k === 'rotation' ? 0 : -100, k === 'rotation' ? 3 : 100, 0);
   adjust.rotation = Math.round(adjust.rotation);
+  let lensPreset: Preset | null = null;
+  try {
+    lensPreset = o.lens && typeof o.lens === 'object' ? decodePresets(JSON.stringify(o.lens)).find(isLensPreset) ?? null : null;
+  } catch {
+    // not a lens preset: by lens
+  }
   let preset: Preset | null = null;
   try {
     preset = o.preset ? decodePresets(JSON.stringify(o.preset))[0] ?? null : null;
@@ -62,5 +74,7 @@ export function decodeAuto(text: string): SavedAuto | null {
     adjust,
     preset,
     edits: o.edits ? decodeEdits(JSON.stringify(o.edits), developParams()) : null,
+    lensChoice: o.lens === NO_LENS_PRESET ? NO_LENS_PRESET : lensPreset?.id ?? null,
+    lensPreset,
   };
 }
