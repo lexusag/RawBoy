@@ -511,13 +511,17 @@ export class AutoStore {
 
   /**
    * Gives photo [id] what "Apply to all" copies, from the photo before it ([previousPhoto]): look (or preset), strength,
-   * warmth, tint, contrast, saturation and grain, as one undo step; brightness, denoise and rotation stay. Not while exporting.
+   * brightness, warmth, tint, contrast, saturation and grain, as one undo step (a neighbouring shot of the same scene usually wants its
+   * brightness too, unlike Apply to all); denoise and rotation stay. Not while exporting.
    */
   copyPrevious(id: string) {
     if (this._state.export) return;
     const source = this.previousPhoto(id);
     if (!source) return;
-    this.changeDevelop(id, (q) => withLookOf(q, source), true);
+    this.changeDevelop(id, (q) => {
+      const p = withLookOf(q, source);
+      return { ...p, adjust: { ...p.adjust, brightness: source.adjust.brightness } };
+    }, true);
     this.update({ message: `Copied from ${source.name}` });
   }
 

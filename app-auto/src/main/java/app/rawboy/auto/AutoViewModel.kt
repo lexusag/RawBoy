@@ -491,12 +491,15 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * Gives photo [id] what "Apply to all" copies, from the photo before it ([previousPhoto]): look (or preset), strength,
-     * warmth, tint, contrast, saturation and grain, as one undo step; brightness, denoise and rotation stay. Not while exporting.
+     * brightness, warmth, tint, contrast, saturation and grain, as one undo step (a neighbouring shot of the same scene usually wants its
+     * brightness too, unlike Apply to all); denoise and rotation stay. Not while exporting.
      */
     fun copyPrevious(id: String) {
         if (_export.value != null) return
         val source = previousPhoto(id) ?: return
-        changeDevelop(id, force = true) { it.withLookOf(source) }
+        changeDevelop(id, force = true) { p ->
+            p.withLookOf(source).let { it.copy(adjust = it.adjust.copy(brightness = source.adjust.brightness)) }
+        }
         _message.value = "Copied from ${source.name}"
     }
 
