@@ -27,7 +27,7 @@ enum class PresetGroup(val key: String, val label: String, val fields: List<Stri
             "tintHue", "tintPurity",
         ),
     ),
-    DETAIL("detail", "Detail", listOf("denoise", "colorDenoise", "sharpening", "localContrast", "highpassContrast", "grain", "bloom")),
+    DETAIL("detail", "Detail", listOf("denoise", "colorDenoise", "sharpening", "localContrast", "highpassContrast", "grain", "grainSize", "grainRoughness", "grainColor", "bloom")),
     RETOUCH("retouch", "Retouch", listOf("skinRetouch", "blemishRemoval")),
     LUT("lut", "LUT", listOf("lut", "lutAmount")),
     LENS("lens", "Lens", listOf("lensProfile", "lensDistortion", "vignetteAmount", "vignetteMidpoint")),
@@ -222,6 +222,9 @@ object Presets {
         "localContrast" -> p.localContrast
         "highpassContrast" -> p.highpassContrast
         "grain" -> p.grain
+        "grainSize" -> p.grainSize
+        "grainRoughness" -> p.grainRoughness
+        "grainColor" -> p.grainColor
         "bloom" -> p.bloom
         "skinRetouch" -> p.skinRetouch
         "blemishRemoval" -> p.blemishRemoval
@@ -276,6 +279,9 @@ object Presets {
             "localContrast" -> p.copy(localContrast = f)
             "highpassContrast" -> p.copy(highpassContrast = f)
             "grain" -> p.copy(grain = f)
+            "grainSize" -> p.copy(grainSize = f)
+            "grainRoughness" -> p.copy(grainRoughness = f)
+            "grainColor" -> p.copy(grainColor = f)
             "bloom" -> p.copy(bloom = f)
             "skinRetouch" -> p.copy(skinRetouch = f)
             "blemishRemoval" -> p.copy(blemishRemoval = f)

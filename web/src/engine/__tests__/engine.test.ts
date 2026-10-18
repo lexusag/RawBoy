@@ -257,6 +257,14 @@ describe('presets', () => {
     expect(out.rotation).toBe(2);
   });
 
+  it('keeps grain size, roughness and colour in the Detail group', () => {
+    const grainy = developParams({ grain: 40, grainSize: 60, grainRoughness: 30, grainColor: 0 });
+    const out = applyPreset(capturePreset('Grain', grainy, ['detail']), developParams());
+    expect([out.grain, out.grainSize, out.grainRoughness, out.grainColor]).toEqual([40, 60, 30, 0]);
+    const old = applyPreset(capturePreset('Old', developParams({ grain: 40 }), ['light']), grainy);
+    expect([old.grainSize, old.grainRoughness, old.grainColor]).toEqual([60, 30, 0]);
+  });
+
   it('round-trips through the file format and skips what it does not know', () => {
     const a = capturePreset('A', edited, ['light', 'lut', 'lens']);
     const b = capturePreset('B', edited, ['whiteBalance']);

@@ -21,6 +21,8 @@ interface Props {
   disabled?: boolean;
   /** CSS colours painted across the whole track instead of the accent fill (e.g. a colour gradient). */
   trackGradient?: string[];
+  /** Makes the label a button (e.g. to show more controls under the slider). */
+  onLabelClick?: () => void;
 }
 
 interface TouchDrag {
@@ -38,7 +40,7 @@ interface TouchDrag {
  * Touch is handled here rather than by the range input, so a vertical swipe that starts on the slider
  * scrolls the panel: only a mostly-horizontal drag moves the value, relative to where it started.
  */
-export function ParamSlider({ label, value, min, max, defaultValue, step, format = formatSigned, onChange, disabled, trackGradient }: Props) {
+export function ParamSlider({ label, value, min, max, defaultValue, step, format = formatSigned, onChange, disabled, trackGradient, onLabelClick }: Props) {
   const changed = value !== defaultValue;
   const s = step ?? (max - min) / 1000;
   // The fill runs from 0 on signed ranges (−100…100 and the like), so a slider at 0 shows no fill; from the left
@@ -57,7 +59,13 @@ export function ParamSlider({ label, value, min, max, defaultValue, step, format
   return (
     <div className="slider">
       <div className="slider-row">
-        <span>{label}</span>
+        {onLabelClick ? (
+          <button type="button" className="slider-label" onClick={onLabelClick}>
+            {label}
+          </button>
+        ) : (
+          <span>{label}</span>
+        )}
         <button type="button" className={`slider-value${changed ? ' changed' : ''}`} title="Reset" onClick={() => onChange(defaultValue)} disabled={disabled}>
           {format(value)}
         </button>

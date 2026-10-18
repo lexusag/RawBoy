@@ -25,6 +25,8 @@ export const toneMapperId = (t: ToneMapper): number => TONE_MAPPERS.find((m) => 
  * - contrast, saturation, highlights, shadows, whites, blacks, tint: -100..+100
  * - temperature: Kelvin; the as-shot value is the default
  * - denoise, grain, sharpening: 0..100, 0 = off; denoise is luminance noise (and colour noise while colorDenoise is null)
+ * - grainSize: 0..100, 25 = the default ~1/3200 of the long edge, each 25 doubles it (0 = half, 100 = 8x);
+ *   grainRoughness: 0..100 clumping (0 = even grain); grainColor: 0..100 per-channel colour in the grain (0 = mono)
  * - colorDenoise: 0..100 colour (chroma) noise, Pro's own slider; null = follows denoise (Auto, Camera, older edits)
  * - localContrast: -100..100 edge-aware mid-frequency detail (texture a few pixels across), 0 = off
  * - highpassContrast: -100..100 local (clarity-style) contrast, 0 = off
@@ -73,6 +75,9 @@ export interface DevelopParams {
   denoise: number;
   colorDenoise: number | null;
   grain: number;
+  grainSize: number;
+  grainRoughness: number;
+  grainColor: number;
   sharpening: number;
   localContrast: number;
   highpassContrast: number;
@@ -128,6 +133,9 @@ export const DEFAULT_PARAMS: Readonly<DevelopParams> = Object.freeze({
   denoise: 0,
   colorDenoise: null,
   grain: 0,
+  grainSize: 25,
+  grainRoughness: 0,
+  grainColor: 15,
   sharpening: 0,
   localContrast: 0,
   highpassContrast: 0,

@@ -24,6 +24,7 @@ struct ControlsPanel: View {
     var onSaveLensPreset: (_ name: String, _ sendToAuto: Bool) -> Void = { _, _ in }
 
     @AppStorage("pro.tab") private var chosenTab = 0
+    @State private var grainOpen = false
 
     private static let tabNames = ["Light", "Color", "Detail", "LUTs", "Lens"]
     private static let lutsTab = 3
@@ -167,7 +168,27 @@ struct ControlsPanel: View {
             }
         }
         slider("Bloom", \.bloom, 0...100, format: formatPlain)
-        slider("Grain", \.grain, 0...100, format: formatPlain)
+        grainSliders
+    }
+
+    /**
+     * Grain, whose name opens Size, Roughness and Color under it (shown open while any of them is changed, so an
+     * edit is never hidden). As Controls.kt's GrainSliders.
+     */
+    @ViewBuilder private var grainSliders: some View {
+        let changed = params.grainSize != defaults.grainSize || params.grainRoughness != defaults.grainRoughness
+            || params.grainColor != defaults.grainColor
+        let shown = grainOpen || changed
+        ParamSlider(label: shown ? "Grain ▾" : "Grain ▸", value: params.grain, range: 0...100, defaultValue: defaults.grain,
+                    format: formatPlain, onLabelTap: { grainOpen = !shown }) { v in set { $0.grain = v } }
+        if shown {
+            Group {
+                slider("Size", \.grainSize, 0...100, format: formatPlain)
+                slider("Roughness", \.grainRoughness, 0...100, format: formatPlain)
+                slider("Color", \.grainColor, 0...100, format: formatPlain)
+            }
+            .padding(.leading, 16)
+        }
     }
 
     private var skinNote: String? {
@@ -333,11 +354,16 @@ struct ParamSlider: View {
     var format: (Float) -> String = formatSigned
     /** Colours painted across the whole track instead of the system track (e.g. a colour gradient). */
     var trackGradient: [Color]? = nil
+    /** Makes the label tappable (e.g. to show more controls under the slider). */
+    var onLabelTap: (() -> Void)? = nil
     let onChange: (Float) -> Void
 
     var body: some View {
         HStack(spacing: 8) {
             Text(label).font(.subheadline).lineLimit(1).minimumScaleFactor(0.8).frame(width: 104, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture { onLabelTap?() }
+                .allowsHitTesting(onLabelTap != nil)
             slider
             Text(format(value))
                 .font(.subheadline.monospacedDigit())

@@ -251,9 +251,7 @@ fun ControlsPanel(
                 ParamSlider("Bloom", params.bloom, 0f..100f, defaults.bloom, ::formatPlain) {
                     onChange(params.copy(bloom = it))
                 }
-                ParamSlider("Grain", params.grain, 0f..100f, defaults.grain, ::formatPlain) {
-                    onChange(params.copy(grain = it))
-                }
+                GrainSliders(params, defaults, onChange)
             } else if (tab == 4) {
                 LensPanel(params, defaults, lens, onChange, onSaveLensPreset)
             } else {
@@ -489,6 +487,8 @@ internal fun ParamSlider(
     default: Float,
     format: (Float) -> String = ::formatSigned,
     trackBrush: Brush? = null,
+    modifier: Modifier = Modifier,
+    onLabelClick: (() -> Unit)? = null,
     onChange: (Float) -> Unit,
 ) {
     CompactSlider(
@@ -496,6 +496,8 @@ internal fun ParamSlider(
         value = value,
         range = range,
         default = default,
+        modifier = modifier,
+        onLabelClick = onLabelClick,
         rowHeight = SLIDER_ROW,
         labelWidth = SLIDER_LABEL,
         valueWidth = SLIDER_VALUE,
@@ -503,6 +505,33 @@ internal fun ParamSlider(
         trackBrush = trackBrush,
         onChange = onChange,
     )
+}
+
+/**
+ * Grain, whose name opens Size, Roughness and Color under it (shown open while any of them is changed, so an edit
+ * is never hidden).
+ */
+@Composable
+private fun GrainSliders(params: DevelopParams, defaults: DevelopParams, onChange: (DevelopParams) -> Unit) {
+    val changed = params.grainSize != defaults.grainSize || params.grainRoughness != defaults.grainRoughness ||
+        params.grainColor != defaults.grainColor
+    var open by rememberSaveable { mutableStateOf(false) }
+    val shown = open || changed
+    ParamSlider(
+        if (shown) "Grain ▾" else "Grain ▸", params.grain, 0f..100f, defaults.grain, ::formatPlain,
+        onLabelClick = { open = !shown },
+    ) { onChange(params.copy(grain = it)) }
+    if (!shown) return
+    val indent = Modifier.padding(start = 16.dp)
+    ParamSlider("Size", params.grainSize, 0f..100f, defaults.grainSize, ::formatPlain, modifier = indent) {
+        onChange(params.copy(grainSize = it))
+    }
+    ParamSlider("Roughness", params.grainRoughness, 0f..100f, defaults.grainRoughness, ::formatPlain, modifier = indent) {
+        onChange(params.copy(grainRoughness = it))
+    }
+    ParamSlider("Color", params.grainColor, 0f..100f, defaults.grainColor, ::formatPlain, modifier = indent) {
+        onChange(params.copy(grainColor = it))
+    }
 }
 
 /** A primaries slider whose track shows the colour it gives at each position ([PrimariesTrack]). */
@@ -520,7 +549,7 @@ private fun PrimariesParamSlider(
         params.bluePurity, params.tintHue, params.tintPurity) {
         Brush.horizontalGradient(PrimariesTrack.colors(params, slider, range).map { Color(it[0], it[1], it[2]) })
     }
-    ParamSlider(label, value, range, 0f, format, brush, onChange)
+    ParamSlider(label, value, range, 0f, format, brush, onChange = onChange)
 }
 
 private val SLIDER_ROW = 44.dp

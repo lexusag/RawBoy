@@ -32,7 +32,7 @@ public enum PresetGroup: String, CaseIterable, Sendable {
         case .curves: ["curves"]
         case .color: ["saturation", "redHue", "redPurity", "greenHue", "greenPurity", "blueHue", "bluePurity", "tintHue",
                       "tintPurity"]
-        case .detail: ["denoise", "colorDenoise", "sharpening", "localContrast", "highpassContrast", "grain", "bloom"]
+        case .detail: ["denoise", "colorDenoise", "sharpening", "localContrast", "highpassContrast", "grain", "grainSize", "grainRoughness", "grainColor", "bloom"]
         case .retouch: ["skinRetouch", "blemishRemoval"]
         case .lut: ["lut", "lutAmount"]
         case .lens: ["lensProfile", "lensDistortion", "vignetteAmount", "vignetteMidpoint"]
@@ -249,7 +249,8 @@ public enum Presets {
         "saturation": \.saturation, "redHue": \.redHue, "redPurity": \.redPurity, "greenHue": \.greenHue,
         "greenPurity": \.greenPurity, "blueHue": \.blueHue, "bluePurity": \.bluePurity, "tintHue": \.tintHue,
         "tintPurity": \.tintPurity, "denoise": \.denoise, "sharpening": \.sharpening, "localContrast": \.localContrast,
-        "highpassContrast": \.highpassContrast, "grain": \.grain, "bloom": \.bloom, "skinRetouch": \.skinRetouch,
+        "highpassContrast": \.highpassContrast, "grain": \.grain, "grainSize": \.grainSize,
+        "grainRoughness": \.grainRoughness, "grainColor": \.grainColor, "bloom": \.bloom, "skinRetouch": \.skinRetouch,
         "blemishRemoval": \.blemishRemoval, "lutAmount": \.lutAmount, "lensDistortion": \.lensDistortion,
         "vignetteAmount": \.vignetteAmount, "vignetteMidpoint": \.vignetteMidpoint,
         "filmAmount": \.filmAmount, "filmGrain": \.filmGrain, "halation": \.halation,

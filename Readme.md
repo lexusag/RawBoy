@@ -43,7 +43,7 @@ Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and
 | Skin retouch | 0–100. Finds skin with MediaPipe's selfie multiclass segmentation model (on device, first use per photo), then smooths blotches and redness edge-aware at ~1.2% of the face size while keeping pore texture; eyes, lips, brows, hair and background are untouched |
 | Blemish removal | 0–100. Finds small round dark/red spots on skin (same skin mask, with eyes, brows, lips and nostrils cut out using MediaPipe's Face Landmarker; very dark spots such as moles are kept), scored by how much they stand out from the surrounding skin texture; the slider sets how faint a spot may be. Each is healed like a spot-heal brush: smooth tone fill from its surroundings plus skin texture from a clean patch nearby, feathered. Applied to the full-resolution image (undoable), so preview, 100% view and export match |
 | Bloom | 0–100. Diffusion-filter glow after spektrafilm's PSF model (Pro-Mist weights: core 0.28, halo 0.42 with warm rim, power-law tail 0.30), energy-conserving, in scene-linear light with a pre-clip highlight boost so light sources glow |
-| Grain | 0–100. Film-style grain: randomly placed soft grains about 1/3200 of the long edge (fine-grain film), mostly luminance, added in AgX's log (density-like) domain as spektrafilm does |
+| Grain | 0–100. Film-style grain: randomly placed soft grains about 1/3200 of the long edge (fine-grain film), mostly luminance, added in AgX's log (density-like) domain as spektrafilm does. Tap the name to open **Size** (0–100, 25 = default, each 25 doubles it: 0 = half, 100 = 8×), **Roughness** (0–100: mixes in grains twice as large, so the grain looks uneven) and **Color** (0–100: 0 = monochrome grain, 100 = each channel its own; default 15). They stay open while any of them is changed; Detail preset group, carry over |
 | LUTs | Optional 3D LUT (HaldCLUT `.png` or `.cube`) on the final sRGB image, with Strength 0–100. Default: No LUT |
 | Lens | Embedded lens profile (DNG opcodes: shading gain maps, WarpRectilinear, FixVignetteRadial), on by default when present. Manual Distortion (auto crop/scale), Vignetting and Vignette radius. **Save lens preset** keeps these four settings as the lens preset for the photo's lens, under the name in the field next to it (the lens by default). Saving again under the same name replaces it; another name saves another preset, so one photo can save several. Manual lenses record no lens: name the preset yourself and pick it in Auto. Lens presets are listed with the other presets; **Send to Auto** (Android, iOS) also hands it to RawBoy Auto. On the web the Auto tab uses it directly |
 | Crop & rotate | Top-bar button: 90° turns left/right, **⇆ Flip** / **⇅ Flip** (mirror the picture as shown left-right or top-bottom; the crop, straighten angle and masks mirror with it), a Straighten slider (±45°, 0.1° steps, auto-cropped) and a crop frame over the whole picture: drag corners, edges or the inside. Aspect ratios Free, Original, 1:1, 4:5, 4:3, 3:2, 16:9 with a Portrait/Landscape switch. The crop is applied last, so lens corrections and the auto crop always work on the full frame. Resets for each new photo |
@@ -509,6 +509,13 @@ Update it when a dependency is added or upgraded.
   and more may not fit the 4 GB WASM heap; tested in Chrome on macOS only.
 
 ## Changelog
+
+**Grain size, roughness and colour in RawBoy (2026-10-18)**
+
+- RawBoy (Android, iOS, web): tapping Grain's name opens Size, Roughness and Color under it (`DevelopParams.grainSize`,
+  `grainRoughness`, `grainColor`; shader `uGrainRoughness`, `uGrainColor`, size through `uGrainSize`). The defaults
+  render exactly as before; Amount keeps its strength across Roughness and Color (variance-normalised). In the Detail
+  preset group. Auto and Camera keep the defaults.
 
 **Auto: 5600 px export size (2026-10-18)**
 

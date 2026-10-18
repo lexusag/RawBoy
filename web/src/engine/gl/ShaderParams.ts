@@ -136,6 +136,9 @@ export class ShaderParams {
     readonly colorDenoise: number,
     readonly colorDenoiseWide: number,
     readonly grain: number,
+    /** 0..1 clumping and 0..1 per-channel colour of the grain (`uGrainRoughness`, `uGrainColor`). */
+    readonly grainRoughness: number,
+    readonly grainColor: number,
     /** Loaded LUT matching DevelopParams.lut, or null for none (always null while a film stock is on). */
     readonly lut: LutData | null,
     readonly lutAmount: number,
@@ -179,6 +182,11 @@ export class ShaderParams {
     return Math.max(ZoomMath.HALO, retouch, wide);
   }
 
+  /** Grain Size slider -> cell size factor: 1 at 25, doubling every 25 (0.5..8). */
+  static grainSizeFactor(size: number): number {
+    return 2 ** ((size - 25) / 25);
+  }
+
   /** [asShot] holds the defaults the image was decoded with (its as-shot temperature/tint). */
   static from(
     p: DevelopParams,
@@ -214,6 +222,8 @@ export class ShaderParams {
       effectiveColorDenoise(p) / 100,
       wideDenoise(effectiveColorDenoise(p)),
       (p.grain / 100) * grainStrength,
+      p.grainRoughness / 100,
+      p.grainColor / 100,
       // Film replaces the user LUT (Pro keeps the choice for when Film is turned off).
       lut && lut.id === p.lut && p.film == null ? lut : null,
       p.lutAmount / 100,
@@ -227,7 +237,7 @@ export class ShaderParams {
       bloomSources?.tail ?? null,
       p.skinRetouch / 100,
       skinMask,
-      grainSizeScale,
+      grainSizeScale * ShaderParams.grainSizeFactor(p.grainSize),
       1,
       toneMapperId(p.toneMapper),
       asShot.displaySource ? 1 : 0,

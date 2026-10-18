@@ -185,7 +185,7 @@ export function ControlsPanel({
             {slider('Blemish removal', 'blemishRemoval', 0, 100, formatPlain)}
             {blemishNote && <Note>{blemishNote}</Note>}
             {slider('Bloom', 'bloom', 0, 100, formatPlain)}
-            {slider('Grain', 'grain', 0, 100, formatPlain)}
+            <GrainSliders params={params} defaults={defaults} onChange={onChange} />
             <Note>Denoise and grain are sized in full-resolution pixels: judge them in the 100% view (double-click the photo).</Note>
           </>
         )}
@@ -361,6 +361,42 @@ function LensPresetSave({ lensName, onSave }: { lensName: string; onSave: (name:
           ? 'This photo records no lens (a manual lens?): in the Auto tab, pick the preset by name for the photos taken with it.'
           : `The Auto tab applies these settings to every photo taken with ${lensName.trim()}, on top of its look; only the lens settings change.`}
       </Note>
+    </>
+  );
+}
+
+/**
+ * Grain, whose name opens Size, Roughness and Color under it (shown open while any of them is changed, so an edit
+ * is never hidden). Port of Controls.kt's GrainSliders.
+ */
+function GrainSliders({ params, defaults, onChange }: { params: DevelopParams; defaults: DevelopParams; onChange: (p: DevelopParams) => void }) {
+  const [open, setOpen] = useState(false);
+  const changed =
+    params.grainSize !== defaults.grainSize || params.grainRoughness !== defaults.grainRoughness || params.grainColor !== defaults.grainColor;
+  const shown = open || changed;
+  const slider = (label: string, key: 'grain' | 'grainSize' | 'grainRoughness' | 'grainColor', onLabelClick?: () => void) => (
+    <ParamSlider
+      key={key}
+      label={label}
+      value={params[key]}
+      min={0}
+      max={100}
+      defaultValue={defaults[key]}
+      format={formatPlain}
+      onLabelClick={onLabelClick}
+      onChange={(v) => onChange({ ...params, [key]: v })}
+    />
+  );
+  return (
+    <>
+      {slider(shown ? 'Grain ▾' : 'Grain ▸', 'grain', () => setOpen(!shown))}
+      {shown && (
+        <div className="slider-details">
+          {slider('Size', 'grainSize')}
+          {slider('Roughness', 'grainRoughness')}
+          {slider('Color', 'grainColor')}
+        </div>
+      )}
     </>
   );
 }
