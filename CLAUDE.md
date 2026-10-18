@@ -194,7 +194,10 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   `engine/browse/EmbeddedPreview.ts` (the cameras' embedded JPEGs found by walking TIFF IFDs/SubIFDs, CR3 boxes and
   the RAF header with `Blob.slice`, never the raw decoder; a scan for JPEG streams is the fallback, and lossless JPEG
   = sensor data is rejected by its SOF). Ratings: `engine/browse/XmpSidecar.ts` edits only `xmp:Rating` and
-  `rawboy:Pick` in place, so other apps' sidecars survive. Bin = `_bin` subfolder via `FileSystemHandle.move` (copy +
+  `rawboy:Pick` in place, so other apps' sidecars survive. Pro edits (opt-in, Browser's `editsInSidecars`, off by default): `rawboy:Develop` = escaped
+  JSON from `develop/Edits.ts` (fields differing from the photo's as-shot defaults, strokes kept via
+  `parseLayers(v, true)`); `BrowserStore.editsSidecar` hands an `EditsSidecar` to `ProStore.open` (writes queued on the
+  Browser's rating chain; Pro debounces 800 ms, flushes on open and when the page hides). Bin = `_bin` subfolder via `FileSystemHandle.move` (copy +
   size check + remove where move is missing). Browser-tested with OPFS standing in for `showDirectoryPicker` and
   generated TIFF/CR3/RAF files (no real raws needed).
   Shared native pieces: `decode.cpp` (decoder order), `image_ops.cpp` (downsample, copyTile), `band_ops.h`,

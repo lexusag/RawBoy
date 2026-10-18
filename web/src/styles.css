@@ -1612,7 +1612,8 @@ line.curve-grid {
   font-size: 12px;
 }
 
-.auto-advance {
+.auto-advance,
+.edits-in-sidecars {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1621,7 +1622,8 @@ line.curve-grid {
   font-size: 13px;
 }
 
-.auto-advance input {
+.auto-advance input,
+.edits-in-sidecars input {
   accent-color: var(--accent);
 }
 

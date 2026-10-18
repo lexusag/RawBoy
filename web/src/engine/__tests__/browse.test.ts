@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { findEmbeddedPreview, scanForJpegs, tiffOrientation } from '../browse/EmbeddedPreview';
-import { readXmp, writeXmp } from '../browse/XmpSidecar';
+import { readEdits, readXmp, writeEdits, writeXmp } from '../browse/XmpSidecar';
+import { developParams } from '../develop/DevelopParams';
+import { decodeEdits, encodeEdits } from '../develop/Edits';
+import { newBrushLayer, newRadialLayer } from '../develop/Masks';
 import { groupPhotos, withSuffix } from '../../ui/browser/PhotoGroups';
 import { photosToSend, type BrowsePhoto, type Filter, type SendCriteria } from '../../ui/browser/BrowserStore';
 import type { Flag } from '../browse/XmpSidecar';
@@ -225,6 +228,66 @@ describe('XMP sidecars', () => {
     const out = writeXmp(bare, { stars: 1, flag: null });
     expect(out).toContain('xmlns:xmp="http://ns.adobe.com/xap/1.0/"');
     expect(out.endsWith('xmp:Rating="1"/>')).toBe(true);
+  });
+});
+
+describe('Edits in sidecars', () => {
+  const defaults = developParams({ temperature: 4800, tint: 6 });
+  const brush = { ...newBrushLayer(), adjust: { ...newBrushLayer().adjust, exposure: 0.5 } };
+  const edited = developParams({
+    ...defaults, exposure: 1.3, rotation: 1, flipHorizontal: true, cropLeft: 0.1, lut: 'gold', colorDenoise: 20,
+    masks: [
+      { ...newRadialLayer("Tom's face"), adjust: { ...newRadialLayer().adjust, shadows: 30 } },
+      { ...brush, strokes: [{ id: 's', erase: false, auto: true, radius: 0.02, hardness: 40, flow: 70, points: [0.1234567, 0.5, 0.2, 0.25] }] },
+    ],
+  });
+
+  it('round-trips a whole edit, geometry and brush strokes included', () => {
+    const back = decodeEdits(encodeEdits(edited, defaults)!, defaults)!;
+    const strip = (p: typeof edited) => ({ ...p, masks: p.masks.map(({ id: _, ...l }) => ({ ...l, strokes: l.strokes.map(({ id: _s, ...s }) => s) })) });
+    expect(strip(back)).toEqual(strip({ ...edited, masks: edited.masks.map((l) => ({ ...l, strokes: l.strokes.map((s) => ({ ...s, points: [0.12346, 0.5, 0.2, 0.25] })) })) }));
+  });
+
+  it('keeps nothing for an unedited photo and ignores what it can not read', () => {
+    expect(encodeEdits(defaults, defaults)).toBeNull();
+    expect(decodeEdits('{"format":"rawboy-preset"}', defaults)).toBeNull();
+    expect(decodeEdits('not json', defaults)).toBeNull();
+    const partial = decodeEdits('{"format":"rawboy-edit","version":1,"values":{"exposure":2,"contrast":"x","future":1}}', defaults)!;
+    expect(partial).toEqual({ ...defaults, exposure: 2 });
+  });
+
+  it("adds RawBoy's edits to a darktable sidecar and leaves the rest alone", () => {
+    const dt = `<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about=""
+    xmlns:xmp="http://ns.adobe.com/xap/1.0/"
+    xmlns:darktable="http://darktable.sf.net/"
+   xmp:Rating="3"
+   darktable:history_end="2">
+   <darktable:history><rdf:Seq><rdf:li darktable:operation="exposure"/></rdf:Seq></darktable:history>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>`;
+    const json = encodeEdits(edited, defaults)!;
+    const out = writeEdits(dt, json);
+    expect(readEdits(out)).toBe(json);
+    expect(out).toContain('rawboy:Develop="{&quot;format&quot;:&quot;rawboy-edit&quot;'); // escaped in the attribute
+    expect(json).toContain('"values":{"exposure":1.3,"colorDenoise":20,'); // unedited fields aren't kept
+    expect(readXmp(out)).toEqual({ stars: 3, flag: null });
+    expect(readEdits(writeXmp(out, { stars: 5, flag: 'pick' }))).toBe(json);
+    const updated = writeEdits(out, json.replace('1.3', '0.7'));
+    expect(decodeEdits(readEdits(updated)!, defaults)!.exposure).toBe(0.7);
+    const removed = writeEdits(out, null);
+    expect(readEdits(removed)).toBeNull();
+    expect(removed.replace(/\s+/g, '')).toBe(out.replace(/\s+rawboy:Develop="[^"]*"/, '').replace(/\s+/g, ''));
+    expect(readEdits(dt)).toBeNull();
+  });
+
+  it('reads edits another tool rewrote as an element', () => {
+    const json = '{"format":"rawboy-edit","version":1,"values":{"exposure":1}}';
+    const text = `<rdf:Description rdf:about=""><rawboy:Develop>${json.replace(/"/g, '&#34;')}</rawboy:Develop></rdf:Description>`;
+    expect(readEdits(text)).toBe(json);
+    expect(readEdits(writeEdits(null, json)!)).toBe(json);
   });
 });
 

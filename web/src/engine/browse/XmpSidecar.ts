@@ -2,7 +2,9 @@
  * Ratings in XMP sidecars, as Lightroom, Capture One and darktable read them: xmp:Rating 0-5 stars, -1 = rejected.
  * Picks have no standard XMP field, so RawBoy keeps them in its own namespace (rawboy:Pick="1").
  *
- * Existing sidecars usually hold another app's edits: only those two fields are changed, in place, and everything
+ * RawBoy's own edits (opt-in, see Edits.ts) go in rawboy:Develop as escaped JSON, next to darktable's or Lightroom's.
+ *
+ * Existing sidecars usually hold another app's edits: only RawBoy's fields are changed, in place, and everything
  * else is kept byte for byte.
  */
 
@@ -37,6 +39,37 @@ export function writeXmp(text: string | null, rating: Rating): string {
   return out;
 }
 
+const DEVELOP = 'rawboy:Develop';
+
+/** RawBoy's edits (Edits.ts JSON) in a sidecar's text, or null. */
+export function readEdits(text: string): string | null {
+  const v = fieldValue(text, DEVELOP);
+  return v ? unescapeXml(v) : null;
+}
+
+/** [text] (null: a new sidecar) with RawBoy's [edits] written into it; null removes them. */
+export const writeEdits = (text: string | null, edits: string | null): string =>
+  setField(text ?? EMPTY, DEVELOP, 'rawboy', RAWBOY_NS, edits == null ? null : escapeXml(edits));
+
+/**
+ * One photo's sidecar as RawBoy (Pro) keeps its edits there; RawBoy Browser hands it over with a photo of a folder it
+ * can write to. Writes go through the Browser's queue, so they don't race its rating writes.
+ */
+export interface EditsSidecar {
+  /** The sidecar's file name. */
+  readonly name: string;
+  read(): Promise<string | null>;
+  write(edits: string | null): Promise<void>;
+}
+
+const XML_ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' };
+const escapeXml = (s: string) => s.replace(/[&<>"']/g, (c) => XML_ESCAPES[c]);
+const unescapeXml = (s: string) =>
+  s.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos);/gi, (_, e: string) => {
+    if (e[0] === '#') return String.fromCodePoint(e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : Number(e.slice(1)));
+    return { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }[e.toLowerCase()]!;
+  });
+
 const EMPTY = `<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>
 <x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="RawBoy">
  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
@@ -49,7 +82,7 @@ const EMPTY = `<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** An attribute (name="v") or simple element (<name>v</name>) form of [name]. */
-const attributeRe = (name: string) => new RegExp(`(\\s${escapeRe(name)}\\s*=\\s*)(["'])([^"']*)\\2`);
+const attributeRe = (name: string) => new RegExp(`(\\s${escapeRe(name)}\\s*=\\s*)(["'])((?:(?!\\2)[^<])*)\\2`);
 const elementRe = (name: string) => new RegExp(`(<${escapeRe(name)}>)([^<]*)(</${escapeRe(name)}>)`);
 
 function fieldValue(text: string, name: string): string | undefined {
