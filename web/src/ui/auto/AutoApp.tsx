@@ -2,6 +2,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalS
 import { ALL_LOOKS, type Look } from '../../engine/auto/looks/Look';
 import { DEFAULT_STRENGTH, type Adjustments } from '../../engine/auto/looks/LookApplier';
 import { FrameColors } from '../../engine/gl/DevelopRenderer';
+import type { PreviewImage } from '../../engine/gl/PreviewImage';
+import type { ShaderParams } from '../../engine/gl/ShaderParams';
 import { canPickOutputFolder, PHOTO_ACCEPT, pickFiles, pickOutputFolder } from '../common/files';
 import { isTabShown } from '../common/tabs';
 import { ParamSlider, formatPlain, formatSigned } from '../common/ParamSlider';
@@ -398,7 +400,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
   const pages = useMemo(() => state.photos.filter((p) => p.analysis), [state.photos]);
   const index = pages.findIndex((p) => p.id === id);
   const skinMask = session.skin.kind === 'ready' ? session.skin.mask : null;
-  const params = photo ? paramsOf(photo) : null;
+  const params = useMemo(() => (photo ? paramsOf(photo) : null), [photo]);
   // Press and hold shows the auto develop without the look.
   const shown = showAuto ? analysis?.autoBase : params ?? analysis?.autoBase;
   const shaderParams = useMemo(
@@ -407,6 +409,24 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
       : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [loaded, shown, analysis, session.lutData, session.filmData, session.lensInfo, session.base, session.bloomSources, skinMask, session.preview],
+  );
+  // Until the raw is decoded, the photo's cached preview shows its develop (no 100% view yet).
+  const cached = !loaded && state.cachedPreview?.id === id ? state.cachedPreview.image : null;
+  const [cachedParams, setCachedParams] = useState<{ image: PreviewImage; params: ShaderParams } | null>(null);
+  useEffect(() => {
+    if (!cached || !params) return;
+    let live = true;
+    void store.cachedShaderParams(id, params).then((p) => {
+      if (live && p) setCachedParams({ image: cached, params: p });
+    });
+    return () => {
+      live = false;
+    };
+  }, [store, id, cached, params]);
+  const quick = cached && cachedParams?.image === cached ? cachedParams : null;
+  const previewSession = useMemo(
+    () => (loaded || !quick ? session : { ...session, preview: quick.image, zoomCenter: null, detail: null }),
+    [loaded, quick, session],
   );
   const zoomed = session.zoomCenter != null;
   const go = (delta: number) => {
@@ -504,17 +524,19 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
           }}
         >
           <Preview
-            session={session}
-            params={shaderParams}
+            session={previewSession}
+            params={shaderParams ?? quick?.params ?? null}
             frame={FRAME_WIDTH}
             frameGrey={FrameColors[state.frameColor].level}
             onViewSize={(w, h, f) => store.setViewSize(w, h, f)}
-            onToggleZoom={store.toggleZoom}
-            onClick={(x, y) => store.onPreviewClick(x, y)}
+            onToggleZoom={(x, y) => loaded && store.toggleZoom(x, y)}
+            onClick={(x, y) => loaded && store.onPreviewClick(x, y)}
             onPan={(dx, dy) => store.session.pan(dx, dy)}
             onCompare={setShowAuto}
+            zoomHint={loaded}
           >
-            {!loaded && (
+            {!loaded && quick && <span className="spinner corner" />}
+            {!loaded && !quick && (
               <>
                 {/* Inset by the frame so the photo doesn't move when the decoded preview replaces it. */}
                 {photo.thumbnail && <img className="placeholder" src={photo.thumbnail} alt="" style={{ padding: FRAME_WIDTH, boxSizing: 'border-box' }} />}

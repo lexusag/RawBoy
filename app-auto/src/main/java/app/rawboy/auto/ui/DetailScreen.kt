@@ -78,6 +78,7 @@ import app.rawboy.auto.looks.FilmLooks
 import app.rawboy.auto.looks.Look
 import app.rawboy.auto.looks.LookApplier
 import app.rawboy.auto.looks.Looks
+import app.rawboy.gl.ShaderParams
 import app.rawboy.session.SkinState
 import app.rawboy.view.CompactSlider
 import app.rawboy.view.DevelopPreview
@@ -99,6 +100,7 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
     val exportSettings by vm.exportSettings.collectAsStateWithLifecycle()
     var exportSheet by remember { mutableStateOf(false) }
     val ready by vm.sessionReady.collectAsStateWithLifecycle()
+    val cached by vm.cachedPreview.collectAsStateWithLifecycle()
     val session = vm.session
     val preview by session.preview.collectAsStateWithLifecycle()
     val zoomCenter by session.zoomCenter.collectAsStateWithLifecycle()
@@ -198,17 +200,43 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
                     key = { currentPages.getOrNull(it)?.id ?: it },
                 ) { page ->
                     val pagePhoto = currentPages.getOrNull(page) ?: return@HorizontalPager
+                    // Until the raw is decoded, the photo's cached preview shows its develop (no 100% view yet).
+                    val cachedImage = cached?.takeIf { pagePhoto.id == id && !loaded && it.first == id }?.second
+                    val shownParams = if (showAuto && loaded) analysis.autoBase else photo.params ?: analysis.autoBase
+                    val cachedParams by produceState<ShaderParams?>(null, cachedImage, shownParams) {
+                        value = cachedImage?.let { vm.cachedShaderParams(id, shownParams) }
+                    }
                     Box(Modifier.fillMaxSize()) {
-                        if (pagePhoto.id == id && loaded) {
-                            // Press and hold shows the auto develop without the look.
-                            val shown = if (showAuto) analysis.autoBase else photo.params ?: analysis.autoBase
-                            val shaderParams = remember(shown, lutData, filmData, lensInfo, base, bloomSources, skinMask) {
-                                session.shaderParams(
-                                    shown, analysis.defaults, lutData.takeIf { shown.lut != null },
-                                    film = filmData.takeIf { shown.film != null },
-                                )
+                        val live = pagePhoto.id == id && loaded
+                        val quickParams = cachedParams.takeIf { cachedImage != null }
+                        if (live || quickParams != null) {
+                            // One call site for both, so the GL view stays when the decoded preview replaces the cached one.
+                            val shaderParams = if (live) {
+                                // Press and hold shows the auto develop without the look.
+                                val shown = shownParams
+                                remember(shown, lutData, filmData, lensInfo, base, bloomSources, skinMask) {
+                                    session.shaderParams(
+                                        shown, analysis.defaults, lutData.takeIf { shown.lut != null },
+                                        film = filmData.takeIf { shown.film != null },
+                                    )
+                                }
+                            } else {
+                                quickParams!!
                             }
-                            DevelopPreview(preview, shaderParams, zoomCenter, detail, framePx, frameColor, Modifier.fillMaxSize())
+                            DevelopPreview(
+                                if (live) preview else cachedImage, shaderParams, zoomCenter.takeIf { live }, detail.takeIf { live },
+                                framePx, frameColor, Modifier.fillMaxSize(),
+                            )
+                        }
+                        if (!live && quickParams != null) {
+                            CircularProgressIndicator(
+                                Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(12.dp)
+                                    .size(20.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        } else if (live) {
                             val zoomed = zoomCenter != null
                             Box(
                                 Modifier

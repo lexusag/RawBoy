@@ -4,7 +4,7 @@ import type { LensInfo } from '../lens/LensInfo';
 import { RawImage } from '../raw/RawImage';
 import { segmentSkin } from '../retouch/SkinSegmenter';
 import type { SkinMask } from '../retouch/SkinMask';
-import { BASE_MAX_DIMENSION, asShotDefaults, bloomSourcesOf } from '../session/PhotoSession';
+import { BASE_MAX_DIMENSION, PREVIEW_MAX_DIMENSION, asShotDefaults, bloomSourcesOf } from '../session/PhotoSession';
 import { NO_NOISE, autoDevelop, cameraMetered, type NoiseLevel } from './analysis/AutoTone';
 import { analyzeScene, type SceneStats } from './analysis/SceneAnalyzer';
 
@@ -26,9 +26,10 @@ const TAG = 'RawBoyAuto';
 /**
  * Decodes [file], keeps its small whole-image copies and works out the auto develop (port of AutoAnalysis.kt).
  * Memory hungry (a full-resolution decode): one at a time. The raw is closed before segmentation, which needs
- * only the 512 px copy.
+ * only the 512 px copy. [onPreview], if given, gets the detail view's preview (PREVIEW_MAX_DIMENSION) made from the
+ * same decode, so RawBoy Auto can show the photo before decoding it again.
  */
-export async function analyzeFile(file: Blob, label: string): Promise<Analysis> {
+export async function analyzeFile(file: Blob, label: string, onPreview?: (preview: PreviewImage) => void): Promise<Analysis> {
   const img = await RawImage.open(file);
   let base: PreviewImage;
   let bloom: BloomSources;
@@ -41,6 +42,7 @@ export async function analyzeFile(file: Blob, label: string): Promise<Analysis> 
     cameraMetered: cameraMetered(img.metadata.make, img.baselineExposure),
   };
   try {
+    if (onPreview) onPreview(await img.createPreview(PREVIEW_MAX_DIMENSION));
     const t0 = performance.now();
     base = await img.createPreview(BASE_MAX_DIMENSION);
     bloom = await bloomSourcesOf(img);

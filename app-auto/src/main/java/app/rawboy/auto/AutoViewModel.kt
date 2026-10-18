@@ -24,6 +24,7 @@ import app.rawboy.export.OutputNaming
 import app.rawboy.film.FilmData
 import app.rawboy.film.FilmStocks
 import app.rawboy.gl.FrameColor
+import app.rawboy.gl.PreviewImage
 import app.rawboy.gl.ShaderParams
 import app.rawboy.gl.ThumbnailRenderer
 import app.rawboy.lens.LensTransform
@@ -44,6 +45,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.io.File
 
 /** Where a photo is in the batch. */
 enum class PhotoStatus { QUEUED, ANALYZING, READY, FAILED, EXPORTING, EXPORTED }
@@ -189,6 +191,12 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
     private val _sessionReady = MutableStateFlow<String?>(null)
     /** Id of the photo [session] holds, once it has loaded. */
     val sessionReady = _sessionReady.asStateFlow()
+
+    /** Each analysed photo's detail preview, so a photo shows at once while [session] decodes it. */
+    private val previews = PreviewCache(File(application.cacheDir, "auto-previews"))
+    private val _cachedPreview = MutableStateFlow<Pair<String, PreviewImage>?>(null)
+    /** The selected photo's cached preview (photo id to image) while [session] is still decoding it; else null. */
+    val cachedPreview = _cachedPreview.asStateFlow()
 
     /** Single tap in the detail preview: outside the photo (fit view, [frameWidth] in pixels) cycles the frame colour. */
     fun onPreviewTap(x: Float, y: Float, frameWidth: Int) {
@@ -346,6 +354,8 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
         }
         _photos.update { list -> list.filterNot { it.id in ids } }
         ids.forEach { id -> thumbJobs.remove(id)?.cancel() }
+        ids.forEach(previews::remove)
+        if (_cachedPreview.value?.first in ids) _cachedPreview.value = null
         lookThumbs.keys.removeAll { it.first in ids }
         histories.keys.removeAll(ids)
         _undo.update { it - ids }
@@ -359,7 +369,10 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
                 val next = _photos.value.firstOrNull { it.status == PhotoStatus.QUEUED } ?: break
                 updatePhoto(next.id) { it.copy(status = PhotoStatus.ANALYZING) }
                 try {
-                    val analysis = decodeLock.withLock { withContext(Dispatchers.Default) { AutoAnalysis.analyze(getApplication(), next.uri) } }
+                    val analysis = decodeLock.withLock {
+                        withContext(Dispatchers.Default) { AutoAnalysis.analyze(getApplication(), next.uri) { previews.put(next.id, it) } }
+                    }
+                    if (photo(next.id) == null) previews.remove(next.id) // removed while it was analysed
                     val look = LookSuggester.suggest(analysis.stats, analysis.defaults.temperature)
                     val film = LookSuggester.suggestFilm(analysis.stats, analysis.defaults.temperature)
                     updatePhoto(next.id) {
@@ -535,6 +548,13 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
         _selected.value = id
         if (_sessionReady.value == id) return
         _sessionReady.value = null
+        if (_cachedPreview.value?.first != id) {
+            _cachedPreview.value = null
+            viewModelScope.launch {
+                val cached = withContext(Dispatchers.IO) { previews.get(id) } ?: return@launch
+                if (_selected.value == id && _sessionReady.value != id) _cachedPreview.value = id to cached
+            }
+        }
         viewModelScope.launch {
             try {
                 // Photos swiped past while an earlier decode ran are skipped: each decode takes seconds.
@@ -547,6 +567,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
                 session.selectLut(photo(id)?.params?.lut) { _message.value = it }
                 session.selectFilm(photo(id)?.params?.film) { _message.value = it }
                 _sessionReady.value = id
+                _cachedPreview.value = null
             } catch (e: Exception) {
                 _message.value = e.message ?: "Could not open ${p.name}"
                 _selected.value = null
@@ -560,6 +581,18 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
     fun closeDetail() {
         session.exitZoom()
         _selected.value = null
+        _cachedPreview.value = null
+    }
+
+    /**
+     * Uniforms for showing [params] on photo [id]'s cached preview: the analysis's small copies, skin mask and lens
+     * stand in for the session's (made from the same decode, so the develop matches). Null if it isn't analysed.
+     */
+    suspend fun cachedShaderParams(id: String, params: DevelopParams): ShaderParams? {
+        val a = photo(id)?.analysis ?: return null
+        val lut = params.lut?.let { runCatching { loadLut(it) }.getOrNull() }
+        val film = params.film?.let { runCatching { loadFilm(it) }.getOrNull() }
+        return ShaderParams.from(params, a.defaults, lut, LensTransform(a.lens, params), a.base, a.bloom, a.skin, film = film)
     }
 
     fun consumeMessage() {
@@ -672,6 +705,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
     override fun onCleared() {
         session.close()
         thumbnails.close()
+        previews.clear()
     }
 
     companion object {

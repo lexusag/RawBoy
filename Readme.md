@@ -482,11 +482,14 @@ Update it when a dependency is added or upgraded.
 
 ### 0.1.0 — in development (2026-10-10)
 
-**Auto: flicking through photos no longer queues decodes (2026-10-18)**
+**Auto: photos open at once in the photo view (2026-10-18)**
 
-- In the photo view (Android, iOS, web), every photo you swiped or arrow-keyed past was still decoded in full, one
-  after another, before the one you stopped on. Those decodes are now skipped, so the photo you land on starts
-  decoding as soon as the one already in progress finishes.
+- Swiping or arrow-keying to the next photo (Android, iOS, web) now shows it developed straight away, with its look
+  and sliders working, instead of the blurry grid thumbnail and a spinner while the raw decodes. Auto keeps a
+  screen-sized copy of each photo from its analysis (about 17 MB each on disk, up to about 90 photos; older ones fall
+  back to the thumbnail). The full decode still runs behind it, shown by a small spinner in the corner: 100% zoom and
+  Export become available when it finishes.
+- Photos you swipe or arrow-key past are no longer decoded one after another before the one you stop on.
 
 **Web: RawBoy Browser handles darktable duplicates (2026-10-18)**
 
