@@ -239,7 +239,8 @@ shows them.
   frame is kept, so moving things don't ghost. Noise drops by about 3× where nothing moves, so the develop picks
   less denoise and keeps more detail. Hold still while the burst runs. The frames are merged while the burst is
   still coming in, so the DNG follows soon after the last frame; the JPEG comes out about as fast as from one frame
-  (less denoise work). It needs ~200 MB of memory at its peak, so Android may close other apps to make room.
+  (less denoise work). It needs ~200 MB of memory at its peak, so Android may close other apps to make room. The
+  shutter greys out ("Merging frames…") until the merged DNG is written, so bursts never overlap.
 - **JPEG:** encoded with Google's **jpegli** from 16-bit pixels, full-resolution colour (4:4:4), quality 95 by
   default (Settings: 70–100). jpegli's adaptive quantisation gives fewer artefacts per byte than libjpeg.
 - **RAW:** the **RAW** button in the top bar keeps the DNG next to the JPEG (lit) or not (struck through); the same
@@ -536,7 +537,10 @@ Update it when a dependency is added or upgraded.
   background apps for memory, so the merge now streams: a worker thread merges each frame into running sums as soon
   as its capture result is in, then frees it, and the result is written over the reference's samples. Host benchmark
   (12 MP, a frame every 66 ms): peak memory 368 → 210 MB, wait after the last frame 2.0 → 0.4 s; same noise and
-  ghosting results.
+  ghosting results. On the phone (4 merged shots, all 8 of 8): no background apps closed, noise still ~3.3× lower,
+  shutter to DNG 2.1–3.9 s. The frames come every 33 ms and a merge step takes 0.3–0.4 s, so 6–7 frames still wait
+  at once; the native peak (~590 MB, vs ~445 MB for a single shot's develop) came from back-to-back bursts
+  overlapping a develop. The shutter now waits for a burst's DNG before the next shot.
 
 **Grain size, roughness and colour in RawBoy (2026-10-18)**
 

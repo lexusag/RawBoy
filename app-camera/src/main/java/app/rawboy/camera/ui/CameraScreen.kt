@@ -107,6 +107,7 @@ fun CameraScreen(vm: CameraViewModel, requestPermission: () -> Unit) {
     val frame by vm.frame.collectAsStateWithLifecycle()
     val params by vm.shaderParams.collectAsStateWithLifecycle()
     val pending by vm.pending.collectAsStateWithLifecycle()
+    val merging by vm.merging.collectAsStateWithLifecycle()
     val lastShot by vm.lastShot.collectAsStateWithLifecycle()
     val compare by vm.compare.collectAsStateWithLifecycle()
     val message by vm.message.collectAsStateWithLifecycle()
@@ -167,7 +168,11 @@ fun CameraScreen(vm: CameraViewModel, requestPermission: () -> Unit) {
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    if (pending > 0) "Saving $pending…" else "",
+                    when {
+                        merging -> "Merging frames…"
+                        pending > 0 -> "Saving $pending…"
+                        else -> ""
+                    },
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                     modifier = Modifier
@@ -322,7 +327,7 @@ fun CameraScreen(vm: CameraViewModel, requestPermission: () -> Unit) {
                 }
                 Spacer(Modifier.weight(1f))
                 Shutter(
-                    enabled = status == CameraStatus.READY,
+                    enabled = status == CameraStatus.READY && !merging,
                     onClick = vm::shutter,
                     modifier = Modifier.graphicsLayer {
                         scaleX = shutterScale.value

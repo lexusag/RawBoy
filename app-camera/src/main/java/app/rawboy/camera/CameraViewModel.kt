@@ -94,6 +94,13 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private val _pending = MutableStateFlow(0)
     val pending = _pending.asStateFlow()
 
+    /**
+     * A burst is being captured and merged: the shutter waits for its DNG. Back-to-back bursts each held their own
+     * frames and merge sums next to the previous shot's develop (~590 MB native on the Pixel 9 Pro).
+     */
+    private val _merging = MutableStateFlow(false)
+    val merging = _merging.asStateFlow()
+
     private val _lastShot = MutableStateFlow<LastShot?>(null)
     val lastShot = _lastShot.asStateFlow()
 
@@ -482,9 +489,11 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Takes a raw now; it is developed into a JPEG in the background. */
     fun shutter() {
-        if (_status.value != CameraStatus.READY) return
+        if (_status.value != CameraStatus.READY || _merging.value) return
         val settings = _settings.value
         val flash = settings.flash.takeIf { info?.hasFlash == true } ?: FlashMode.OFF
+        // Flash shots are single frames (CameraController.captureDng).
+        val burst = settings.burstFrames > 1 && flash == FlashMode.OFF
         // A flash shot's raw is lit by the flash, the viewfinder wasn't: no calibration from it.
         val viewfinderKey = if (flash == FlashMode.OFF) live?.stats?.key else null
         val mayHaveFace = info?.hasFaceDetection != true || controller.frames.value?.faces?.isNotEmpty() != false
@@ -496,6 +505,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 "${live?.auto?.let { "${it.temperature.toInt()}K/${it.tint.toInt()}" }}")
         }
         _pending.update { it + 1 }
+        if (burst) _merging.value = true
         viewModelScope.launch {
             val shot = try {
                 capture(settings, viewfinderKey, flash).copy(mayHaveFace = mayHaveFace)
@@ -507,6 +517,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 _message.value = "Capture failed: ${e.message ?: e.javaClass.simpleName}"
                 _pending.update { it - 1 }
                 return@launch
+            } finally {
+                if (burst) _merging.value = false
             }
             shots.send(shot)
         }
