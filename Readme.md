@@ -295,7 +295,11 @@ blemish removal use the same MediaPipe models in the browser.
   lens its lens corrections on top of its look or preset (only the lens settings change); a lens-only preset file
   opened with **Apply RawBoy preset…** joins the RawBoy tab's presets. Delete one in the RawBoy tab's Presets.
 - Auto → RawBoy: **Edit in RawBoy** in Auto's photo view opens that photo in the RawBoy tab, starting from Auto's
-  develop and look (Reset still goes back to as-shot).
+  develop and look (Reset still goes back to as-shot). And back: **Back to Auto** in the RawBoy tab's top bar returns it
+  to the same photo in Auto, developed with the RawBoy edits ("RawBoy edits" in place of the look; Auto's sliders adjust
+  on top, **Use a look** drops them, Undo too). A photo opened in RawBoy directly gets **Send to Auto**, which adds it to
+  Auto's batch with its edits. Edits come back exactly as made, crop and masks included; Apply to all and Copy previous
+  copy looks and presets, not RawBoy edits.
 - **Browser** tab (RawBoy Browser): culling. **Open** a folder (or drop one) and its photos show from the JPEG previews
   cameras embed in their raws (CR2, CR3, NEF, ARW, RAF, RW2, ORF, PEF, DNG…), read without decoding the raw, so a
   card's worth opens in seconds; a raw without one is developed as shot. A RAW + JPEG pair is one photo.
@@ -489,6 +493,12 @@ Update it when a dependency is added or upgraded.
   and more may not fit the 4 GB WASM heap; tested in Chrome on macOS only.
 
 ## Changelog
+
+**Back to Auto (web, 2026-10-18)**
+
+- RawBoy Web: **Back to Auto** / **Send to Auto** in the RawBoy tab hands the photo and its edits to the Auto tab
+  (`AutoStore.receiveEdits`, `AutoPhoto.edits`, `LookApplier.applyEditsDevelop`), so a photo can go Auto → RawBoy →
+  Auto and back again without losing its adjustments.
 
 **Lens presets for RawBoy Auto (2026-10-18)**
 

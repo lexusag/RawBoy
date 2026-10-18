@@ -93,8 +93,20 @@ export function applyLook(base: DevelopParams, look: Look, strength: number, adj
  * exposure), never from the photo the preset was made on; the Denoise adjustment still works on top.
  */
 export function applyPresetDevelop(base: DevelopParams, preset: Preset, adjust: Adjustments): DevelopParams {
+  return adjustDevelop(applyPreset(preset, base), base, adjust);
+}
+
+/**
+ * A whole develop from the RawBoy tab (web: "Back to Auto") in place of a look: [edits] exactly as RawBoy rendered them,
+ * denoise and sharpening included, with [adjust] on top as with a preset.
+ */
+export function applyEditsDevelop(edits: DevelopParams, adjust: Adjustments): DevelopParams {
+  return adjustDevelop(edits, edits, adjust);
+}
+
+/** [p] with [adjust] on top; denoise and sharpening start from [base]'s. */
+function adjustDevelop(p: DevelopParams, base: DevelopParams, adjust: Adjustments): DevelopParams {
   const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
-  const p = applyPreset(preset, base);
   const developed: DevelopParams = {
     ...p,
     exposure: clamp(p.exposure + (adjust.brightness / 100) * BRIGHTNESS_EV, -5, 5),

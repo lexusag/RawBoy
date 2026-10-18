@@ -378,6 +378,7 @@ main {
   }
 
   .pro-toolbar .title,
+  .pro-toolbar .to-auto,
   .pro-toolbar .primary,
   .pro-toolbar .help-button {
     order: 2;

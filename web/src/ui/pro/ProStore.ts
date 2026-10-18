@@ -56,6 +56,7 @@ export class ProStore {
   private frameWidth = 0;
   /** This photo's edits, for Undo and Redo. */
   private readonly history = new EditHistory<DevelopParams>();
+  private openFile: File | null = null;
 
   get state() {
     return this._state;
@@ -63,6 +64,11 @@ export class ProStore {
 
   get hasImage() {
     return this._state.fileName != null && !this._state.loading;
+  }
+
+  /** The open photo's file (for "Back to Auto"), or null. */
+  get file() {
+    return this.hasImage ? this.openFile : null;
   }
 
   get busy() {
@@ -81,6 +87,8 @@ export class ProStore {
 
   consumeMessage = () => this.set({ message: null });
 
+  showMessage = (message: string) => this.set({ message });
+
   /** Opens [file]; [params] (e.g. from Auto) replace the usual carry-over as the starting edits. */
   async open(file: File, params?: DevelopParams) {
     if (this.busy) return;
@@ -88,6 +96,7 @@ export class ProStore {
     try {
       const opened = await this.session.open(file, (d) => params ?? this.carryOverEdits(this._state, d));
       this.history.clear();
+      this.openFile = file;
       this.set({
         loading: false, fileName: file.name, info: opened.description, params: opened.params, defaults: opened.defaults,
         canUndo: false, canRedo: false,
