@@ -10,7 +10,7 @@ internal val PRO_HELP = listOf(
         listOf(
             HelpItem("Open", "Opens a RAW file (or open one with RawBoy from another app)."),
             HelpItem("Tabs", "Light, Color, Detail, LUTs and Lens hold the sliders. Edits carry over to the next photo; crop, rotation and flips don't."),
-            HelpItem("Lens preset", "Lens tab: Save lens preset keeps its settings for this photo's lens; Send to Auto also hands it to RawBoy Auto, which corrects every photo taken with that lens on top of its look."),
+            HelpItem("Lens preset", "Lens tab: name it (the lens by default) and Save lens preset keeps its settings for this photo's lens; Send to Auto also hands it to RawBoy Auto, which corrects every photo taken with that lens on top of its look. Manual lenses record no lens: Auto lets you pick their presets by name."),
             HelpItem("Top bar", "Crop & rotate (turn, flip, straighten, crop), Masks, Presets, Undo and Redo, Reset all, Auto (automatic light and colour, keeps the LUT) and Export. Long-press a tool for its full name."),
         ),
     ),

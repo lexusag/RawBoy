@@ -23,6 +23,8 @@ import androidx.compose.material3.RadioButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
@@ -83,7 +85,7 @@ fun ControlsPanel(
     pickingWhite: Boolean = false,
     onPickWhite: () -> Unit = {},
     /** Lens tab: saves its settings as the lens preset for this lens; with true, also sends it to RawBoy Auto. */
-    onSaveLensPreset: (sendToAuto: Boolean) -> Unit = {},
+    onSaveLensPreset: (name: String, sendToAuto: Boolean) -> Unit = { _, _ -> },
 ) {
     var chosenTab by rememberSaveable { mutableIntStateOf(0) }
     // Film replaces the tone mapper and the user LUT (which is kept, but not rendered), so the LUTs tab
@@ -267,7 +269,7 @@ private fun LensPanel(
     defaults: DevelopParams,
     lens: LensInfo,
     onChange: (DevelopParams) -> Unit,
-    onSaveLensPreset: (sendToAuto: Boolean) -> Unit,
+    onSaveLensPreset: (name: String, sendToAuto: Boolean) -> Unit,
 ) {
     SectionLabel("Lens profile")
     Text(lens.lensName.ifBlank { "Unknown lens" }, style = MaterialTheme.typography.bodyMedium)
@@ -308,15 +310,29 @@ private fun LensPanel(
     )
 
     SectionLabel("Lens preset")
+    // Named after the lens by default; manual lenses record none, so their presets are named here and picked in Auto.
+    var name by rememberSaveable(lens.lensName) { mutableStateOf(lens.lensName.trim()) }
+    OutlinedTextField(
+        value = name,
+        onValueChange = { name = it },
+        label = { Text("Name") },
+        placeholder = { Text(if (lens.lensName.isBlank()) "e.g. Helios 44-2" else lens.lensName) },
+        singleLine = true,
+        modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+    )
     Text(
-        "Saves these settings for ${lens.lensName.ifBlank { "photos with no lens name" }}. RawBoy Auto applies them to every " +
-            "photo taken with it, on top of its look; only the lens settings change.",
+        if (lens.lensName.isNotBlank()) {
+            "RawBoy Auto applies these settings to every photo taken with ${lens.lensName}, on top of its look; only the " +
+                "lens settings change."
+        } else {
+            "This photo records no lens (a manual lens?): in RawBoy Auto, pick the preset by name for the photos taken with it."
+        },
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 8.dp)) {
-        OutlinedButton(onClick = { onSaveLensPreset(false) }) { Text("Save lens preset") }
-        OutlinedButton(onClick = { onSaveLensPreset(true) }) { Text("Send to Auto") }
+        OutlinedButton(onClick = { onSaveLensPreset(name, false) }) { Text("Save lens preset") }
+        OutlinedButton(onClick = { onSaveLensPreset(name, true) }) { Text("Send to Auto") }
     }
 }
 

@@ -99,36 +99,59 @@ public enum Presets {
     }
 
     /**
-     * A lens preset ([Preset.isLensPreset]) of [params]' lens corrections for the lens named [lens], called after the
-     * lens ("Lens preset" when the file names none).
+     * A lens preset ([Preset.isLensPreset]) of [params]' lens corrections for the lens named [lens], called [name] (by
+     * default after the lens, or "Lens preset" when the file names none). Manual lenses record no name: their presets
+     * are named by hand and picked in Auto ([chosenLensPreset]).
      */
-    public static func captureLens(_ params: DevelopParams, lens: String) -> Preset {
-        let name = lens.trimmingCharacters(in: .whitespaces)
-        return capture(name.isEmpty ? "Lens preset" : name, params, [.lens], lens: lens)
+    public static func captureLens(_ params: DevelopParams, lens: String, name: String? = nil) -> Preset {
+        let lens = lens.trimmingCharacters(in: .whitespaces)
+        let given = (name ?? lens).trimmingCharacters(in: .whitespaces)
+        return capture(given.isEmpty ? (lens.isEmpty ? "Lens preset" : lens) : given, params, [.lens], lens: lens.isEmpty ? nil : lens)
     }
 
-    private static func sameLens(_ a: String?, _ b: String?) -> Bool {
-        guard let a, let b else { return a == nil && b == nil }
-        return a.trimmingCharacters(in: .whitespaces).lowercased() == b.trimmingCharacters(in: .whitespaces).lowercased()
+    private static func same(_ a: String, _ b: String) -> Bool {
+        a.trimmingCharacters(in: .whitespaces).lowercased() == b.trimmingCharacters(in: .whitespaces).lowercased()
     }
 
-    /** Whether [preset] was made for the lens named [lens]: same name, ignoring case and outer spaces. */
-    public static func isFor(_ preset: Preset, lens: String) -> Bool { preset.lens != nil && sameLens(preset.lens, lens) }
+    private static func isBlank(_ s: String?) -> Bool { (s ?? "").trimmingCharacters(in: .whitespaces).isEmpty }
+
+    /** Whether [preset] was made for the lens named [lens]: same name, ignoring case and outer spaces; never a blank one. */
+    public static func isFor(_ preset: Preset, lens: String) -> Bool {
+        guard !isBlank(lens), let l = preset.lens else { return false }
+        return same(l, lens)
+    }
 
     /**
-     * The lens preset among [presets] for the lens named [lens] (the last one when there are several), else the last
-     * one that names no lens (saved before RawBoy recorded it), which stands for any lens; nil if none.
+     * The lens preset among [presets] for the lens named [lens] (the last one when there are several); nil if none or
+     * the file names no lens (a manual lens: its presets are picked by hand, [chosenLensPreset]).
      */
     public static func lensPresetFor(_ presets: [Preset], lens: String) -> Preset? {
-        presets.last { $0.isLensPreset && isFor($0, lens: lens) } ?? presets.last { $0.isLensPreset && $0.lens == nil }
+        presets.last { $0.isLensPreset && isFor($0, lens: lens) }
+    }
+
+    /** [chosenLensPreset]'s choice for "no lens preset". */
+    public static let noLensPreset = "none"
+
+    /**
+     * The lens preset a photo taken with [lens] gets for [choice]: nil = by its lens ([lensPresetFor]),
+     * [noLensPreset] = none, else the lens preset with that id (none if it was removed).
+     */
+    public static func chosenLensPreset(_ presets: [Preset], choice: String?, lens: String) -> Preset? {
+        guard let choice else { return lensPresetFor(presets, lens: lens) }
+        if choice == noLensPreset { return nil }
+        return presets.first { $0.isLensPreset && $0.id == choice }
     }
 
     /**
-     * [presets] with [lensPreset] in place of the lens preset for the same lens (or the same missing lens), keeping its
-     * id and position; else added at the end.
+     * [presets] with [lensPreset] in place of the one it updates, keeping its id and position; else added at the end.
+     * A preset for a named lens updates the one for that lens; one without a lens (manual lenses) the one of the same
+     * name without a lens, so several manual lenses' presets live side by side.
      */
     public static func putLensPreset(_ presets: [Preset], _ lensPreset: Preset) -> [Preset] {
-        guard let i = presets.lastIndex(where: { $0.isLensPreset && sameLens($0.lens, lensPreset.lens) }) else {
+        let lens = lensPreset.lens ?? ""
+        guard let i = presets.lastIndex(where: {
+            $0.isLensPreset && (isBlank(lens) ? isBlank($0.lens) && same($0.name, lensPreset.name) : isFor($0, lens: lens))
+        }) else {
             return presets + [lensPreset]
         }
         var list = presets

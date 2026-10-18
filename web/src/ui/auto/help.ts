@@ -9,7 +9,7 @@ export const AUTO_HELP: HelpSection[] = [
       { how: 'Import as', text: 'Looks (a film LUT on the auto develop) or Film (developed as film), for photos added from now on.' },
       { how: 'Export', text: 'JPEG or TIFF and the size, asked when you press Export all, Export on a selection or the photo view\'s Export; remembered.' },
       { how: 'Apply RawBoy preset…', text: 'Develop every photo with a RawBoy preset instead of a look. Remove goes back to the looks.' },
-      { how: 'Lens presets', text: 'Lens presets saved in the RawBoy tab\'s Lens tab correct every photo taken with their lens, on top of its look or preset; only the lens settings change.' },
+      { how: 'Lens presets', text: 'Lens presets saved in the RawBoy tab\'s Lens tab correct every photo taken with their lens, on top of its look or preset; only the lens settings change. The Lens menu in the grid picks one for every photo (by lens, none, or a named preset, for manual lenses that record no lens); the one in the selection bar for the selected photos. Manage… removes one.' },
       { how: 'Export all', text: 'Saves every photo into a folder you pick (or one ZIP).' },
     ],
   },

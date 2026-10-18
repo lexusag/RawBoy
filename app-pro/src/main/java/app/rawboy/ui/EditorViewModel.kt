@@ -479,15 +479,16 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /**
-     * Saves the Lens tab's settings as the lens preset for this photo's lens (replacing the one saved for it before), so
-     * RawBoy Auto can correct every photo taken with that lens ([sendPresetToAuto]); returns the preset.
+     * Saves the Lens tab's settings as the lens preset called [name] for this photo's lens (replacing the one saved for it
+     * before; with no lens name, as manual lenses record, the one of that name), so RawBoy Auto can correct every photo
+     * taken with that lens, or the photos given the preset by name ([sendPresetToAuto]); returns the preset.
      */
-    fun saveLensPreset(): Preset {
-        val lensPreset = Presets.captureLens(_state.value.params, lensInfo.value.lensName)
+    fun saveLensPreset(name: String = ""): Preset {
+        val lensPreset = Presets.captureLens(_state.value.params, lensInfo.value.lensName, name)
         val list = Presets.putLensPreset(_presets.value, lensPreset)
         setPresets(list)
         _state.update { it.copy(message = "Saved lens preset ${lensPreset.name}") }
-        return list.first { it.isLensPreset && it.lens == lensPreset.lens }
+        return list.first { it.isLensPreset && it.lens == lensPreset.lens && it.name == lensPreset.name }
     }
 
     /** Overwrites [id]'s values with the current edits (same groups). */

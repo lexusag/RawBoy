@@ -16,7 +16,8 @@ struct GridScreen: View {
     @State private var showExport = false
     /** The selection as it was when its Export was tapped; nil = Export all. */
     @State private var exportIds: Set<String>?
-    @State private var showLensPresets = false
+    /** The lens preset picker: nil = closed, empty = the whole batch, else the selection as it was when it opened. */
+    @State private var lensPresetsFor: Set<String>?
 
     private var selecting: Bool { !selection.isEmpty }
     private var exporting: Bool { vm.export != nil }
@@ -75,8 +76,11 @@ struct GridScreen: View {
                 }
             }
         }
-        .sheet(isPresented: Binding(get: { showLensPresets && !vm.lensPresets.isEmpty }, set: { showLensPresets = $0 })) {
-            LensPresetsSheet(vm: vm)
+        .sheet(isPresented: Binding(get: { lensPresetsFor != nil && !vm.lensPresets.isEmpty }, set: { if !$0 { lensPresetsFor = nil } })) {
+            let ids = lensPresetsFor.flatMap { $0.isEmpty ? nil : $0 }
+            LensPresetsSheet(vm: vm, ids: ids) {
+                if ids != nil { selection = [] }
+            }
         }
         // Drop ids of photos that left the list (removed elsewhere, e.g. via the detail view).
         .onChange(of: vm.photos.map(\.id)) { _, ids in selection.formIntersection(ids) }
@@ -113,11 +117,19 @@ struct GridScreen: View {
         }
     }
 
-    /** Lens presets from RawBoy: they correct every photo taken with their lens, whatever its look. */
+    /**
+     * Lens presets from RawBoy: by lens they correct every photo taken with their lens, whatever its look; a named one
+     * (manual lenses) is picked for the batch here or for a selection.
+     */
     @ViewBuilder private var lensPresetsControl: some View {
         let n = vm.lensPresets.count
         if n > 0 {
-            Button(n == 1 ? "1 lens preset" : "\(n) lens presets") { showLensPresets = true }.font(.subheadline)
+            let label: String = {
+                guard let c = vm.lensChoice else { return n == 1 ? "1 lens preset" : "\(n) lens presets" }
+                if c == Presets.noLensPreset { return "Lens: none" }
+                return "Lens: \(vm.lensPresets.first { $0.id == c }?.name ?? "by lens")"
+            }()
+            Button(label) { lensPresetsFor = [] }.font(.subheadline).lineLimit(1)
         }
     }
 
@@ -184,6 +196,11 @@ struct GridScreen: View {
             }
             ToolbarItemGroup(placement: .topBarTrailing) {
                 Button("All") { selection = Set(vm.photos.map(\.id)) }
+                // A lens preset for these photos: manual lenses record no lens name to match by.
+                if !vm.lensPresets.isEmpty {
+                    Button("Lens preset", systemImage: "camera.aperture") { lensPresetsFor = selection }
+                        .disabled(exporting)
+                }
                 Button("Rotate left", systemImage: "rotate.left") { vm.rotate(selection, by: -1) }
                     .disabled(exporting)
                 Button("Rotate right", systemImage: "rotate.right") { vm.rotate(selection, by: 1) }
@@ -387,40 +404,70 @@ struct ExportSheet: View {
 }
 
 /**
- * The lens presets Auto keeps (sent from RawBoy or opened as files), each with the lens it corrects and a Remove
- * button. Photos taken with a listed lens get its corrections on top of their look or RawBoy preset.
+ * The lens presets Auto keeps (sent from RawBoy or opened as files), to pick one for the photos [ids] (nil = the whole
+ * batch and photos added later): by lens (each photo gets the preset saved for its lens), none, or a named preset
+ * (manual lenses record no lens name). Each preset has a Remove button.
  */
 private struct LensPresetsSheet: View {
     @ObservedObject var vm: AutoViewModel
+    let ids: Set<String>?
+    /** After a pick. */
+    let onChosen: () -> Void
     @Environment(\.dismiss) private var dismiss
+
+    /** The current pick; nil when the photos picked differ. */
+    private var current: String?? {
+        guard let ids else { return .some(vm.lensChoice) }
+        let choices = Set(vm.photos.filter { ids.contains($0.id) }.map(\.lensChoice))
+        return choices.count == 1 ? .some(choices.first!) : nil
+    }
 
     var body: some View {
         NavigationStack {
             List {
                 Section {
+                    option(nil, "By lens", "Each photo gets the preset saved for its lens")
+                    option(Presets.noLensPreset, "None", "The auto develop's lens corrections")
                     ForEach(vm.lensPresets) { p in
                         HStack {
-                            VStack(alignment: .leading) {
-                                Text(p.name)
-                                Text(Self.lensLabel(p)).font(.caption).foregroundStyle(.secondary)
-                            }
-                            Spacer()
+                            option(p.id, p.name, Self.lensLabel(p))
                             Button("Remove") { vm.removeLensPreset(p.id) }.buttonStyle(.borderless)
                         }
                     }
                 } footer: {
-                    Text("Photos taken with these lenses get their corrections on top of their look. Save them in RawBoy's Lens tab.")
+                    Text((ids == nil ? "For every photo, and photos added later. " : "")
+                         + "The lens corrections go on top of the look. Save presets in RawBoy's Lens tab.")
                 }
             }
-            .navigationTitle("Lens presets")
+            .navigationTitle(ids.map { $0.count == 1 ? "Lens preset for 1 photo" : "Lens preset for \($0.count) photos" } ?? "Lens presets")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
     }
 
+    private func option(_ value: String?, _ title: String, _ detail: String) -> some View {
+        Button {
+            vm.chooseLensPreset(value, ids: ids)
+            onChosen()
+            dismiss()
+        } label: {
+            HStack {
+                Image(systemName: current == .some(value) ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(Color.accentColor)
+                VStack(alignment: .leading) {
+                    Text(title)
+                    Text(detail).font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 0)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
     /** Which photos a lens preset is for. */
     private static func lensLabel(_ p: Preset) -> String {
-        guard let lens = p.lens else { return "Any lens" }
-        return lens.trimmingCharacters(in: .whitespaces).isEmpty ? "Photos with no lens name" : lens
+        let lens = p.lens?.trimmingCharacters(in: .whitespaces) ?? ""
+        return lens.isEmpty ? "Manual lens: pick it here" : "Photos taken with \(lens)"
     }
 }

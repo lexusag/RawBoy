@@ -69,6 +69,7 @@ import app.rawboy.auto.AutoPhoto
 import app.rawboy.auto.AutoViewModel
 import app.rawboy.auto.LookMode
 import app.rawboy.auto.PhotoStatus
+import app.rawboy.develop.Presets
 import app.rawboy.view.HelpButton
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -80,7 +81,9 @@ fun GridScreen(vm: AutoViewModel, snackbar: SnackbarHostState, pickPhotos: () ->
     val exportSettings by vm.exportSettings.collectAsStateWithLifecycle()
     val preset by vm.preset.collectAsStateWithLifecycle()
     val lensPresets by vm.lensPresets.collectAsStateWithLifecycle()
-    var showLensPresets by remember { mutableStateOf(false) }
+    val lensChoice by vm.lensChoice.collectAsStateWithLifecycle()
+    // The lens preset picker: null = closed, empty = the whole batch, else the selection as it was when it opened.
+    var lensPresetsFor by remember { mutableStateOf<Set<String>?>(null) }
     val exporting = export != null
     val exportable = photos.count { it.analysis != null }
 
@@ -110,6 +113,10 @@ fun GridScreen(vm: AutoViewModel, snackbar: SnackbarHostState, pickPhotos: () ->
                     title = { Text("${selection.size} selected") },
                     actions = {
                         TextButton(onClick = { selection = photos.map { it.id }.toSet() }) { Text("All") }
+                        // A lens preset for these photos: manual lenses record no lens name to match by.
+                        if (lensPresets.isNotEmpty()) {
+                            TextButton(onClick = { lensPresetsFor = selection }, enabled = !exporting) { Text("Lens") }
+                        }
                         IconButton(onClick = { vm.rotate(selection, -1) }, enabled = !exporting) {
                             Text("↺", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { contentDescription = "Rotate left" })
                         }
@@ -191,16 +198,36 @@ fun GridScreen(vm: AutoViewModel, snackbar: SnackbarHostState, pickPhotos: () ->
                             Text("Apply RawBoy preset…")
                         }
                     }
-                    // Lens presets from RawBoy: they correct every photo taken with their lens, whatever its look.
+                    // Lens presets from RawBoy: by lens they correct every photo taken with their lens, whatever its
+                    // look; a named one (manual lenses) is picked for the batch here or for a selection.
                     if (lensPresets.isNotEmpty()) {
-                        TextButton(onClick = { showLensPresets = true }, modifier = Modifier.align(Alignment.CenterVertically)) {
-                            Text(if (lensPresets.size == 1) "1 lens preset" else "${lensPresets.size} lens presets")
+                        val label = when (val c = lensChoice) {
+                            null -> if (lensPresets.size == 1) "1 lens preset" else "${lensPresets.size} lens presets"
+                            Presets.NO_LENS_PRESET -> "Lens: none"
+                            else -> "Lens: ${lensPresets.firstOrNull { it.id == c }?.name ?: "by lens"}"
+                        }
+                        TextButton(onClick = { lensPresetsFor = emptySet() }, modifier = Modifier.align(Alignment.CenterVertically)) {
+                            Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 }
             }
-            if (showLensPresets && lensPresets.isNotEmpty()) {
-                LensPresetsDialog(lensPresets, onRemove = vm::removeLensPreset, onClose = { showLensPresets = false })
+            val lensTarget = lensPresetsFor
+            if (lensTarget != null && lensPresets.isNotEmpty()) {
+                val ids = lensTarget.takeIf { it.isNotEmpty() }
+                val choices = ids?.let { photos.filter { p -> p.id in it }.map { p -> p.lensChoice }.distinct() }
+                LensPresetsDialog(
+                    lensPresets,
+                    count = ids?.size,
+                    choice = if (choices == null) lensChoice else if (choices.size == 1) choices[0] else MIXED,
+                    onChoose = {
+                        vm.chooseLensPreset(it, ids)
+                        lensPresetsFor = null
+                        if (ids != null) selection = emptySet()
+                    },
+                    onRemove = vm::removeLensPreset,
+                    onClose = { lensPresetsFor = null },
+                )
             }
             export?.let { e ->
                 Text(

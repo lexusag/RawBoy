@@ -11,7 +11,7 @@ import { isPressedSlider } from '../common/sliderFocus';
 import { Preview, PreviewLabel } from '../common/Preview';
 import { useTabScroll } from '../common/useTabScroll';
 import { ALL_FILM_LOOKS } from '../../engine/auto/looks/FilmLooks';
-import { isLensPreset, type Preset } from '../../engine/develop/Presets';
+import { isLensPreset, NO_LENS_PRESET, type Preset } from '../../engine/develop/Presets';
 import { groupSummary } from '../pro/PresetsPanel';
 import { PresetStore } from '../pro/PresetStore';
 import { PresetsIcon } from '../common/PresetsIcon';
@@ -79,6 +79,7 @@ function GridView({ store, scroll, lastViewed }: {
   const anchor = useRef<string | null>(null);
   // The preset picker: for the whole batch ('all') or the selection as it was when Preset was pressed.
   const [choosingPreset, setChoosingPreset] = useState<'all' | ReadonlySet<string> | null>(null);
+  const [managingLensPresets, setManagingLensPresets] = useState(false);
   // The export sheet: for every photo ('all') or the selection as it was when Export was pressed.
   const [exportSheet, setExportSheet] = useState<'all' | ReadonlySet<string> | null>(null);
   const selecting = selection.size > 0;
@@ -126,6 +127,19 @@ function GridView({ store, scroll, lastViewed }: {
             <button type="button" className="icon" title="Cancel selection" onClick={() => setSelection(new Set())}>✕</button>
             <div className="title"><div className="name">{selection.size}<span className="wide-only"> selected</span></div></div>
             <button type="button" className="text" onClick={() => setSelection(new Set(photos.map((p) => p.id)))}>All</button>
+            {state.lensPresets.length > 0 && (
+              // A lens preset for these photos: manual lenses record no lens name to match by.
+              <LensPresetSelect
+                presets={state.lensPresets}
+                choice={selectionLensChoice(photos, selection)}
+                disabled={exporting}
+                title="Lens preset for these photos (manual lenses record no lens to match by)"
+                onChange={(c) => {
+                  store.chooseLensPreset(c, new Set(selection));
+                  setSelection(new Set());
+                }}
+              />
+            )}
             <button type="button" className="icon" title="Rotate left" disabled={exporting} onClick={() => store.rotate(selection, -1)}>↺</button>
             <button type="button" className="icon" title="Rotate right" disabled={exporting} onClick={() => store.rotate(selection, 1)}>↻</button>
             <button
@@ -197,13 +211,18 @@ function GridView({ store, scroll, lastViewed }: {
               <button type="button" className="text" disabled={exporting} onClick={() => setChoosingPreset('all')}>Apply RawBoy preset…</button>
             )}
             {state.lensPresets.length > 0 && (
-              // Lens presets saved in the RawBoy tab's Lens tab: they correct every photo taken with their lens, whatever its look.
-              <span
-                className="batch-preset"
-                title={`Photos taken with these lenses get their lens corrections on top of their look: ${state.lensPresets.map((p) => p.name).join(', ')}. Manage them in the RawBoy tab's presets.`}
-              >
-                {state.lensPresets.length === 1 ? '1 lens preset' : `${state.lensPresets.length} lens presets`}
-              </span>
+              // Lens presets saved in the RawBoy tab's Lens tab: by lens they correct every photo taken with their lens,
+              // whatever its look; a named one (manual lenses) is picked for the batch here or for a selection.
+              <LensPresetSelect
+                presets={state.lensPresets}
+                choice={state.lensChoice}
+                disabled={exporting}
+                title="Lens preset for every photo and those you add next: by lens, none, or a named one (manual lenses). Manage them in the RawBoy tab's presets."
+                onChange={(c) => store.chooseLensPreset(c)}
+              />
+            )}
+            {state.lensPresets.length > 0 && (
+              <button type="button" className="text" disabled={exporting} onClick={() => setManagingLensPresets(true)}>Manage…</button>
             )}
           </div>
         </div>
@@ -257,6 +276,9 @@ function GridView({ store, scroll, lastViewed }: {
             void store.exportAll(folder, ids);
           }}
         />
+      )}
+      {managingLensPresets && state.lensPresets.length > 0 && (
+        <LensPresetsDialog store={store} presets={state.lensPresets} onDismiss={() => setManagingLensPresets(false)} />
       )}
       {choosingPreset && (
         <PresetPicker
@@ -325,6 +347,32 @@ function PresetPicker({ store, count, onPick, onDismiss }: {
         <div className="dialog-actions">
           <button type="button" className="text" onClick={onDismiss}>Cancel</button>
           <button type="button" className="primary" onClick={openFile}>From file…</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** The lens presets (saved in the RawBoy tab's Lens tab, or opened from files), each with the lens it corrects and Remove. */
+function LensPresetsDialog({ store, presets, onDismiss }: { store: AutoStore; presets: readonly Preset[]; onDismiss: () => void }) {
+  return (
+    <div className="dialog-backdrop" onClick={onDismiss}>
+      <div className="dialog" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Lens presets">
+        <h2>Lens presets</h2>
+        <div className="note">Removing one takes its corrections off the photos that use it.</div>
+        <div className="preset-list">
+          {presets.map((p) => (
+            <div key={p.id} className="preset-row">
+              <span className="preset-apply">
+                <span className="preset-name">{p.name}</span>
+                <span className="preset-groups">{p.lens?.trim() ? `Photos taken with ${p.lens.trim()}` : 'Manual lens: picked by name'}</span>
+              </span>
+              <button type="button" className="text" onClick={() => store.removeLensPreset(p.id)}>Remove</button>
+            </div>
+          ))}
+        </div>
+        <div className="dialog-actions">
+          <button type="button" className="primary" onClick={onDismiss}>Done</button>
         </div>
       </div>
     </div>
@@ -636,6 +684,41 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
 }
 
 /** What importing in [mode] does, under the "Import as" switch. */
+const BY_LENS = '';
+const MIXED = 'mixed';
+
+/** The selected photos' common lens preset choice, else MIXED. */
+function selectionLensChoice(photos: readonly AutoPhoto[], selection: ReadonlySet<string>): string | null {
+  const choices = new Set(photos.filter((p) => selection.has(p.id)).map((p) => p.lensChoice));
+  return choices.size === 1 ? [...choices][0] : MIXED;
+}
+
+/** Picks a lens preset choice (see chosenLensPreset): by lens, none, or one of presets by name. */
+function LensPresetSelect({ presets, choice, disabled, title, onChange }: {
+  presets: readonly Preset[];
+  choice: string | null;
+  disabled: boolean;
+  title: string;
+  onChange: (choice: string | null) => void;
+}) {
+  return (
+    <select
+      aria-label="Lens preset"
+      title={title}
+      value={choice ?? BY_LENS}
+      disabled={disabled}
+      onChange={(e) => onChange(e.target.value === BY_LENS ? null : e.target.value)}
+    >
+      {choice === MIXED && <option value={MIXED} disabled>Lens: mixed</option>}
+      <option value={BY_LENS}>Lens: by lens</option>
+      <option value={NO_LENS_PRESET}>Lens: none</option>
+      {presets.map((p) => (
+        <option key={p.id} value={p.id}>Lens: {p.name}{p.lens?.trim() ? '' : ' (manual)'}</option>
+      ))}
+    </select>
+  );
+}
+
 function importModeHint(mode: LookMode): string {
   return mode === 'film'
     ? 'Auto develop as film on a suggested stock, with grain and halation. For photos you add next; each can switch later.'
