@@ -49,27 +49,27 @@ export const lutIdOf = (l: Look): string | null => (l.lutFile ? `asset:luts/${l.
 export const Looks = {
   NATURAL: look('natural', 'Natural', null),
   /** The default: suggested for portraits and everyday scenes. */
-  PORTRA_400: look('portra400', 'Portra 400', 'Kodak Portra 400.cube', { grain: 20, bloom: 5, portraitRetouch: 20 }),
-  PORTRA_800: look('portra800', 'Portra 800', 'Kodak Portra 800.cube', { grain: 35, bloom: 15, portraitRetouch: 20 }),
-  EKTAR_100: look('ektar100', 'Ektar 100', 'Kodak Ektar 100.cube', { grain: 10, highpass: 10 }),
-  GOLD_200: look('gold200', 'Gold 200', 'Kodak Gold 200.cube', { grain: 25, warmth: 200, vignette: -10 }),
-  SUPERIA_400: look('superia400', 'Superia 400', 'Fuji Superia X-Tra 400.cube', { grain: 25 }),
-  FUJI_400H: look('fuji400h', 'Fuji 400H', 'Fuji Pro 400H.cube', { grain: 20, bloom: 5, portraitRetouch: 20 }),
+  PORTRA_400: look('portra400', 'Yellow Portrait 400', 'Yellow Portrait 400.cube', { grain: 20, bloom: 5, portraitRetouch: 20 }),
+  PORTRA_800: look('portra800', 'Yellow Portrait 800', 'Yellow Portrait 800.cube', { grain: 35, bloom: 15, portraitRetouch: 20 }),
+  EKTAR_100: look('ektar100', 'Yellow Vivid 100', 'Yellow Vivid 100.cube', { grain: 10, highpass: 10 }),
+  GOLD_200: look('gold200', 'Yellow Warm 200', 'Yellow Warm 200.cube', { grain: 25, warmth: 200, vignette: -10 }),
+  SUPERIA_400: look('superia400', 'Green Everyday 400', 'Green Everyday 400.cube', { grain: 25 }),
+  FUJI_400H: look('fuji400h', 'Green Pastel 400', 'Green Pastel 400.cube', { grain: 20, bloom: 5, portraitRetouch: 20 }),
   /** Tungsten cinema film, the base of CineStill 800T. */
-  VISION3_500T: look('vision500t', 'Vision3 500T', 'Kodak Vision3 500T.cube', { grain: 35, bloom: 20 }),
+  VISION3_500T: look('vision500t', 'Yellow Cine 500T', 'Yellow Cine 500T.cube', { grain: 35, bloom: 20 }),
   /** Slide film: vivid colour, deep shadows. */
-  VELVIA_50: look('velvia50', 'Velvia 50', 'Fuji Velvia 50.cube', { grain: 8, vignette: -10 }),
+  VELVIA_50: look('velvia50', 'Green Vivid Slide 50', 'Green Vivid Slide 50.cube', { grain: 8, vignette: -10 }),
   REDSCALE: look('redscale', 'Redscale', 'Redscale.png', { contrast: 5, grain: 30, vignette: -15 }),
   /** Monochrome, classic: Tri-X on a normal paper grade. */
-  TRIX_400: look('trix400', 'Tri-X 400', 'Kodak Tri-X 400.cube', { grain: 25, monochrome: true }),
+  TRIX_400: look('trix400', 'Yellow Mono 400', 'Yellow Mono 400.cube', { grain: 25, monochrome: true }),
   /** Monochrome, Tri-X developed longer: harder and grainier. */
-  TRIX_PUSH: look('trixpush', 'Tri-X Push', 'Kodak Tri-X 400 Push.cube', { grain: 40, monochrome: true }),
+  TRIX_PUSH: look('trixpush', 'Yellow Mono Push', 'Yellow Mono Push.cube', { grain: 40, monochrome: true }),
   /** Monochrome, hard: pushed Tri-X on a hard paper grade, deep blacks, bright whites. */
-  TRIX_HARD: look('trixhard', 'Tri-X Hard', 'Kodak Tri-X 400 Hard.cube', { grain: 30, vignette: -10, monochrome: true }),
+  TRIX_HARD: look('trixhard', 'Yellow Mono Hard', 'Yellow Mono Hard.cube', { grain: 30, vignette: -10, monochrome: true }),
   /** Monochrome, Eastman Double-X cinema film. */
-  DOUBLE_X: look('doublex', 'Double-X', 'Kodak Double-X 5222.cube', { grain: 20, monochrome: true }),
+  DOUBLE_X: look('doublex', 'Yellow Cine Mono', 'Yellow Cine Mono.cube', { grain: 20, monochrome: true }),
   /** Monochrome, soft: Double-X developed short on a soft paper grade, open shadows. */
-  DOUBLE_X_SOFT: look('doublexsoft', 'Double-X Soft', 'Kodak Double-X 5222 Soft.cube', { grain: 20, monochrome: true }),
+  DOUBLE_X_SOFT: look('doublexsoft', 'Yellow Cine Mono Soft', 'Yellow Cine Mono Soft.cube', { grain: 20, monochrome: true }),
 };
 
 export const ALL_LOOKS: Look[] = [

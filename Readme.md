@@ -102,24 +102,26 @@ TIFF work too, at lower quality (see *JPEG, HEIC, PNG and TIFF* below).
    none. White balance stays as shot.
 3. **Look**, suggested per photo and changeable:
 
-| Look | Film (LUT) | Suggested for |
+| Look | Character | Suggested for |
 |---|---|---|
 | Natural | none | — (the auto develop alone) |
-| Portra 400 | Kodak Portra 400 | portraits and everyday scenes; the default |
-| Portra 800 | Kodak Portra 800 | low light / ISO ≥ 3200 (more grain, some bloom) |
-| Ektar 100 | Kodak Ektar 100 | colourful green/blue scenes |
-| Gold 200 | Kodak Gold 200 | warm scenes |
-| Superia 400, Fuji 400H | Fuji Superia X-Tra 400, Fuji Pro 400H | — |
-| Vision3 500T | Kodak Vision3 500T 5219 | — (tungsten cinema film, the base of CineStill 800T; grain and bloom) |
-| Velvia 50 | Fuji Velvia 50 | — (slide film, vivid) |
+| Yellow Portrait 400 | soft colour negative, kind to skin | portraits and everyday scenes; the default |
+| Yellow Portrait 800 | the same at a higher speed | low light / ISO ≥ 3200 (more grain, some bloom) |
+| Yellow Vivid 100 | saturated, fine-grained negative | colourful green/blue scenes |
+| Yellow Warm 200 | warm consumer negative | warm scenes |
+| Green Everyday 400, Green Pastel 400 | cooler consumer negative; soft pastel negative | — |
+| Yellow Cine 500T | tungsten-balanced cinema negative | — (grain and bloom) |
+| Green Vivid Slide 50 | slide film, vivid | — |
 | Redscale | Redscale | — (red/orange redscale film) |
-| Tri-X 400, Tri-X Push, Tri-X Hard | Kodak Tri-X 400 on Polymax paper: normal; developed longer; developed longer on a hard grade | — (monochrome, rising contrast) |
-| Double-X, Double-X Soft | Kodak Double-X 5222 on 2302 print film; developed short on a soft paper grade | — (monochrome) |
+| Yellow Mono 400, Yellow Mono Push, Yellow Mono Hard | black-and-white negative on paper: normal; developed longer; developed longer on a hard grade | — (monochrome, rising contrast) |
+| Yellow Cine Mono, Yellow Cine Mono Soft | black-and-white cinema negative on print film; developed short on a soft paper grade | — (monochrome) |
+
+Look names are RawBoy's own: "Yellow" and "Green" are two families of film character, not products.
 
 The film LUTs are generated with [spectral_film_lut](https://github.com/JanLohse/spectral_film_lut) from
 each stock's datasheet (`tools/film_luts/generate.py`). Each LUT first undoes RawBoy's AgX curve, exposes the
 film on the scene light, then scans and inverts the negative (colour), prints it on paper (B&W) or shows the
-slide (Velvia). Black, white and middle grey stay where AgX put them; the tone curve and colour become the film's.
+slide. Black, white and middle grey stay where AgX put them; the tone curve and colour become the film's.
 Each stock's contrast and saturation are tuned so its look in Auto is at least as punchy as the earlier look it
 replaced (measured on test photos: global contrast and mean colourfulness).
 
@@ -127,11 +129,11 @@ replaced (measured on test photos: global contrast and mean colourfulness).
 a line under it says what each does; photos already in the batch keep their mode), or switch a photo in its detail view (the switch above the looks).
 Instead of a LUT on top of AgX, the photo is developed as
 film. The scene light exposes the negative, which is printed and the print scanned (slides: scanned), with the same
-12 stocks as RawBoy Film (Portra 400/800, Ektar 100, Gold 200, Fuji 400H, X-Tra 400, Vision3
-250D/500T, Velvia 100, Provia 100F, Ektachrome 100, Kodachrome 64) and spektrafilm's film and print LUTs. The
+12 stocks as RawBoy Film (Yellow Portrait 400/800, Yellow Vivid 100, Yellow Warm 200, Green Pastel 400, Green
+Everyday 400, Yellow Cine 250D/500T, Green Vivid Slide 100, Green Slide 100, Yellow Slide 100, Yellow Classic 64) and spektrafilm's film and print LUTs. The
 grain (in film density, sized on a 36 mm frame), halation (the reddish glow around bright light) and scatter are
 RawBoy's own (`shaders/film_form.glsl`), fitted to RawBoy Film's renders. A stock is suggested per photo (tungsten
-light: Vision3 500T); Strength blends the film with the AgX develop; Grain (±50) scales the stock's grain from none to
+light: Yellow Cine 500T); Strength blends the film with the AgX develop; Grain (±50) scales the stock's grain from none to
 double. Each photo keeps one pick per mode, and the Pro tab (web) shows a photo handed over in Film mode with its
 stock. Whites reach the print's paper white (about 0.85), not 1.0.
 
@@ -227,7 +229,7 @@ shows them.
 - **Settings:** JPEG quality; whether to keep the DNG (on by default; off keeps only the JPEG); **Smaller photos**
   (on by default: 3000 px on the long side, area-downscaled from the full-resolution develop, with the grain sized to
   the smaller photo; off saves full resolution); **Remember camera & settings** (off by default: each start uses the
-  back W lens, Portra 400 and default sliders; on keeps lens, side, look and sliders).
+  back W lens, Yellow Portrait 400 and default sliders; on keeps lens, side, look and sliders).
 - **How the viewfinder matches the final:** the camera's preview stream is asked for the plain sRGB tone curve, so
   the viewfinder can turn it back into linear light and run the same develop shader on it. The auto develop is
   worked out from a 512 px copy of the live frame about three times a second (faces from the camera's face detection
@@ -241,10 +243,10 @@ shows them.
 ### Film looks (spektrafilm)
 
 **RawBoy Film** (its own repository, see [Licence](#licence)) is RawBoy Camera with film stocks as its looks (everything else above applies), simulated by
-[spektrafilm](https://github.com/andreavolpato/spektrafilm) (Andrea Volpato): Portra 400/800, Ektar 100, Gold 200,
-Fuji 400H, X-Tra 400, Vision3 250D and 500T (printed on 2383 cinema print film), and the slide
-films Velvia 100, Provia 100F, Ektachrome 100 and Kodachrome 64 (scanned, not printed). Colour negatives are printed
-on Portra Endura paper. **Natural** is the AgX develop alone. It saves to `Pictures/RawBoy Film` (`…-film.jpg`,
+[spektrafilm](https://github.com/andreavolpato/spektrafilm) (Andrea Volpato): Yellow Portrait 400/800, Yellow Vivid 100, Yellow Warm 200,
+Green Pastel 400, Green Everyday 400, Yellow Cine 250D and 500T (printed on cinema print film), and the slide
+films Green Vivid Slide 100, Green Slide 100, Yellow Slide 100 and Yellow Classic 64 (scanned, not printed). Colour
+negatives are printed on colour paper. **Natural** is the AgX develop alone. It saves to `Pictures/RawBoy Film` (`…-film.jpg`,
 DNGs in `RAW/`), so its photos stay apart from RawBoy Camera's.
 
 - The film replaces AgX: after white balance, exposure and Shadows/Highlights, the scene light exposes the negative,
@@ -477,6 +479,15 @@ Update it when a dependency is added or upgraded.
 ## Changelog
 
 ### 0.1.0 — in development (2026-10-10)
+
+**Film looks get RawBoy's own names (2026-10-18)**
+
+- Looks and film stocks no longer carry film makers' brand or product names: the warm family is **Yellow** (Yellow
+  Portrait 400/800, Yellow Vivid 100, Yellow Warm 200, Yellow Cine 250D/500T, Yellow Slide 100, Yellow Classic 64,
+  Yellow Mono 400/Push/Hard, Yellow Cine Mono/Soft), the cool one **Green** (Green Pastel 400, Green Everyday 400,
+  Green Vivid Slide 50/100, Green Slide 100). The renders are unchanged.
+- The bundled LUT files are renamed to match. Presets, saved picks and Camera's look that name the old looks or LUT
+  files still open the same look.
 
 **RawBoy Film moves to its own repository (2026-10-18)**
 

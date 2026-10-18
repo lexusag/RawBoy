@@ -481,7 +481,7 @@ describe('auto looks', () => {
     const base = developParams({ temperature: 6000 });
     const p = applyLook(base, Looks.GOLD_200, 80, NO_ADJUSTMENTS, false);
     expect(p.lut).toBe(lutIdOf(Looks.GOLD_200));
-    expect(p.lut).toBe('asset:luts/Kodak Gold 200.cube');
+    expect(p.lut).toBe('asset:luts/Yellow Warm 200.cube');
     expect(p.grain).toBeCloseTo(25 * 0.8, 9);
     expect(p.temperature).toBeCloseTo(6000 + 200 * 0.8, 9);
   });
@@ -514,7 +514,7 @@ describe('auto looks', () => {
     expect(FilmStocks.byId('portra160')?.id).toBe('portra400');
     const old = applyPreset({ id: 'x', name: 'Old', groups: ['light', 'lut'], values: { film: 'c200', lut: 'asset:luts/Kodak Portra 160.cube' } }, developParams());
     expect(old.film).toBe('xtra400');
-    expect(old.lut).toBe('asset:luts/Kodak Portra 400.cube');
+    expect(old.lut).toBe('asset:luts/Yellow Portrait 400.cube');
   });
 
   it('every film look has a stock, its two LUTs and its own grain and halation', () => {

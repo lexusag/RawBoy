@@ -18,7 +18,7 @@ becomes a thin strip.
 
 ### P4. Tell "Film" and "Filmic" apart (Low, S) — Android, iOS, web
 The tone mapper row reads AgX, Filmic, Sigmoid, Film: a curve and a whole stock simulation, two letters apart.
-**Change:** rename the chip "Film stock", or show the stock name on it once picked ("Portra 400").
+**Change:** rename the chip "Film stock", or show the stock name on it once picked ("Yellow Portrait 400").
 
 ## RawBoy Auto
 
