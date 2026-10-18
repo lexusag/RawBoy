@@ -625,7 +625,10 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   device rotation (`Spot.turned`; iOS reads `UIDevice.orientation`), since the photo is level and the viewfinder is
   portrait. The front camera's preview crop isn't applied to the shot's spot (a few % off). Ports: `MeterArea.kt/.swift/.ts`.
 - Denoise coarse stage: `uDenoiseWide` = (denoise − 65) / 35 (`ShaderParams.wideDenoise`); luma 5×5 at stride 3,
-  chroma 7×7 at stride 6 (18 px), range weights against the fine result. Luma and chroma are separate
+  chroma 7×7 at stride 6 (18 px), range weights against the fine result. The sparse stages' taps are **jittered** per
+  pixel (`jitteredTap`: a random point of each cell, hashed from the full-res pixel, centre tap fixed, cells shrunk to
+  keep the old radius): on a fixed lattice the leftover chroma repeated every 6 px (blocky high-ISO colour noise).
+  Luma and chroma are separate
   (`uDenoise`/`uDenoiseWide` vs `uColorDenoise`/`uColorDenoiseWide`): `DevelopParams.colorDenoise` is nullable, null =
   follows `denoise` (`effectiveColorDenoise`), so Auto, Camera, AutoTone and pre-split edits/presets need no change; only
   Pro's Color denoise slider sets it (moving Luma pins it). A Detail preset without `colorDenoise` decodes it as null.

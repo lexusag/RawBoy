@@ -1,5 +1,18 @@
 # Changelog
 
+**Colour denoise without the 6 px grid (2026-10-18)**
+
+- All apps (Android, iOS, web; the shared develop shader): at high ISO the colour noise left after denoising no
+  longer forms a blocky grid. The sparse denoise stages (colour 7×7 at stride 3 and 6, luma coarse 5×5 at stride 3)
+  read the image on a fixed lattice of single pixels, so pixels 6 px apart averaged almost the same samples and the
+  leftover colour noise repeated every 6 px (a GFX 50R export at ISO 6400 pushed in Auto: colour autocorrelation 0.54
+  at 6 source px, where noise should have none). Each tap now sits at a random point of its own cell, seeded by the
+  full-resolution pixel (so preview, 100% view and export tiles match), read with bilinear filtering; the centre tap
+  stays on the pixel and the outermost taps stay within the old radius, so margins and strength are unchanged.
+  Measured on synthetic Bayer noise through the real shader (WebGL2): at Auto's high-ISO setting the grid
+  correlation at 6 px drops from 0.91 to 0.03, colour noise left 1.19 → 0.96 (0.90 → 0.54 after a 2× downscale),
+  luma unchanged within 5%.
+
 **Auto: gentler automatic luma denoise (2026-10-18)**
 
 - RawBoy Auto (Android, iOS, web) and RawBoy's Auto button pick a 20% lower **Denoise** (luma) from the measured
