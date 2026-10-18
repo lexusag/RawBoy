@@ -537,8 +537,13 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
         _sessionReady.value = null
         viewModelScope.launch {
             try {
-                decodeLock.withLock { session.open(p.uri) { photo(id)?.params ?: it } }
-                if (_selected.value != id) return@launch
+                // Photos swiped past while an earlier decode ran are skipped: each decode takes seconds.
+                val opened = decodeLock.withLock {
+                    if (_selected.value != id) return@withLock false
+                    session.open(p.uri) { photo(id)?.params ?: it }
+                    true
+                }
+                if (!opened || _selected.value != id) return@launch
                 session.selectLut(photo(id)?.params?.lut) { _message.value = it }
                 session.selectFilm(photo(id)?.params?.film) { _message.value = it }
                 _sessionReady.value = id

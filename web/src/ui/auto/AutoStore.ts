@@ -514,10 +514,15 @@ export class AutoStore {
     this.update({ selected: id });
     if (this._state.sessionReady === id) return;
     this.update({ sessionReady: null });
+    // Photos passed (arrow keys, swipes) while an earlier decode ran are skipped: each decode takes seconds.
     void this.decodeLock
-      .run(() => this.session.open(p.file, (d) => (this.photo(id) && paramsOf(this.photo(id)!)) || d))
-      .then(() => {
-        if (this._state.selected !== id) return;
+      .run(async () => {
+        if (this._state.selected !== id) return false;
+        await this.session.open(p.file, (d) => (this.photo(id) && paramsOf(this.photo(id)!)) || d);
+        return true;
+      })
+      .then((opened) => {
+        if (!opened || this._state.selected !== id) return;
         const now = this.photo(id);
         const params = now && paramsOf(now);
         this.session.selectLut(params?.lut ?? null, (m) => this.update({ message: m }));

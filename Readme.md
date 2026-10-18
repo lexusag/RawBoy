@@ -482,6 +482,12 @@ Update it when a dependency is added or upgraded.
 
 ### 0.1.0 — in development (2026-10-10)
 
+**Auto: flicking through photos no longer queues decodes (2026-10-18)**
+
+- In the photo view (Android, iOS, web), every photo you swiped or arrow-keyed past was still decoded in full, one
+  after another, before the one you stopped on. Those decodes are now skipped, so the photo you land on starts
+  decoding as soon as the one already in progress finishes.
+
 **Web: RawBoy Browser handles darktable duplicates (2026-10-18)**
 
 - darktable's duplicate sidecars (`IMG_0001_01.CR2.xmp`, `_02`…) now belong to their photo: rating a photo writes

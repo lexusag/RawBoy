@@ -525,10 +525,13 @@ final class AutoViewModel: ObservableObject {
         sessionReady = nil
         Task {
             do {
-                _ = try await decodeLock.run {
-                    try await session.open(p.url) { [weak self] in self?.photo(id)?.params ?? $0 }
+                // Photos swiped past while an earlier decode ran are skipped: each decode takes seconds.
+                let opened = try await decodeLock.run { () async throws -> Bool in
+                    guard selected == id else { return false }
+                    _ = try await session.open(p.url) { [weak self] in self?.photo(id)?.params ?? $0 }
+                    return true
                 }
-                guard selected == id else { return }
+                guard opened, selected == id else { return }
                 session.selectLut(photo(id)?.params?.lut) { [weak self] in self?.message = $0 }
                 session.selectFilm(photo(id)?.params?.film) { [weak self] in self?.message = $0 }
                 sessionReady = id
