@@ -36,7 +36,7 @@ interface Props {
   pickingWhite: boolean;
   onPickWhite: () => void;
   /** Lens tab: saves its settings as the lens preset for this lens. */
-  onSaveLensPreset: () => void;
+  onSaveLensPreset: (name: string) => void;
 }
 
 /** The editor's tabs Light, Color, Detail, LUTs, Lens (port of app-pro's Controls.kt). */
@@ -210,11 +210,7 @@ export function ControlsPanel({
             {slider('Vignette radius', 'vignetteMidpoint', 0, 100, formatPlain)}
             <Note>Distortion crops automatically so no empty edges show.</Note>
             <SectionLabel>Lens preset</SectionLabel>
-            <Note>
-              Saves these settings for {lens.lensName.trim() || 'photos with no lens name'}. The Auto tab applies them to every photo
-              taken with it, on top of its look; only the lens settings change.
-            </Note>
-            <button type="button" onClick={onSaveLensPreset}>Save lens preset</button>
+            <LensPresetSave key={lens.lensName} lensName={lens.lensName} onSave={onSaveLensPreset} />
           </>
         )}
       </div>
@@ -339,3 +335,32 @@ export function GeometryPanel({ params, onChange, onRotate, onFlip, aspect, port
 
 export const SectionLabel = ({ children }: { children: React.ReactNode }) => <div className="section-label">{children}</div>;
 export const Note = ({ children }: { children: React.ReactNode }) => <div className="note">{children}</div>;
+
+/**
+ * The Lens tab's lens preset name (the lens by default) and Save button. Manual lenses record no lens name: their
+ * presets are named here and picked by name in the Auto tab.
+ */
+function LensPresetSave({ lensName, onSave }: { lensName: string; onSave: (name: string) => void }) {
+  const [name, setName] = useState(lensName.trim());
+  const manual = !lensName.trim();
+  return (
+    <>
+      <div className="lens-preset-save">
+        <input
+          type="text"
+          aria-label="Lens preset name"
+          placeholder={manual ? 'Name, e.g. Helios 44-2' : lensName}
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && onSave(name)}
+        />
+        <button type="button" onClick={() => onSave(name)}>Save lens preset</button>
+      </div>
+      <Note>
+        {manual
+          ? 'This photo records no lens (a manual lens?): in the Auto tab, pick the preset by name for the photos taken with it.'
+          : `The Auto tab applies these settings to every photo taken with ${lensName.trim()}, on top of its look; only the lens settings change.`}
+      </Note>
+    </>
+  );
+}

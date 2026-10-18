@@ -266,8 +266,8 @@ struct EditorScreen: View {
                     onLutsTabShown: vm.refreshLuts, lens: session.lensInfo,
                     skin: session.skin, blemish: session.blemish,
                     pickingWhite: pickingWhite, onPickWhite: { pickingWhite.toggle() },
-                    onSaveLensPreset: { send in
-                        let preset = vm.saveLensPreset()
+                    onSaveLensPreset: { name, send in
+                        let preset = vm.saveLensPreset(name: name)
                         if send { vm.sendPresetToAuto(preset) }
                     })
                 .frame(maxHeight: panelMax)

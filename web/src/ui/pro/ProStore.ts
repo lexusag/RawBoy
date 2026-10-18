@@ -372,11 +372,12 @@ export class ProStore {
     this.setPresets([...this._state.presets, capturePreset(name, this._state.params, groups, this.session.state.lensInfo.lensName)]);
 
   /**
-   * Saves the Lens tab's settings as the lens preset for this photo's lens (replacing the one saved for it before); the
-   * Auto tab applies it to every photo taken with that lens.
+   * Saves the Lens tab's settings as the lens preset called name for this photo's lens (replacing the one saved for it
+   * before; with no lens name, as manual lenses record, the one of that name); the Auto tab applies it to every photo
+   * taken with that lens, or to the photos given it by name.
    */
-  saveLensPreset = () => {
-    const lensPreset = captureLensPreset(this._state.params, this.session.state.lensInfo.lensName);
+  saveLensPreset = (name = '') => {
+    const lensPreset = captureLensPreset(this._state.params, this.session.state.lensInfo.lensName, name);
     this.putLensPresets([lensPreset]);
     this.set({ message: `Saved lens preset ${lensPreset.name}` });
   };

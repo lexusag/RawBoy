@@ -37,6 +37,7 @@ document.addEventListener('visibilitychange', () => {
 });
 // Lens presets live with the RawBoy tab's presets; the Auto tab applies them by lens.
 auto.saveLensPresets = pro.putLensPresets;
+auto.deleteLensPreset = pro.deletePreset;
 let presets = pro.state.presets;
 pro.subscribe(() => {
   if (pro.state.presets === presets) return;

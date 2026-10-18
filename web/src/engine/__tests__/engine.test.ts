@@ -27,7 +27,7 @@ import {
   sampleCurve,
   type CurvePoint,
 } from '../develop/ToneCurve';
-import { applyPreset, captureLensPreset, capturePreset, decodePresets, DEFAULT_PRESET_GROUPS, encodePresets, isLensPreset, lensPresetFor, putLensPreset } from '../develop/Presets';
+import { applyPreset, captureLensPreset, capturePreset, chosenLensPreset, decodePresets, DEFAULT_PRESET_GROUPS, encodePresets, isLensPreset, lensPresetFor, NO_LENS_PRESET, putLensPreset, type Preset } from '../develop/Presets';
 import { BandDownscaler } from '../export/BandDownscaler';
 import { FilmStocks } from '../film/FilmStocks';
 import { baseNameOf, fileName } from '../export/ExportSettings';
@@ -694,11 +694,35 @@ describe('lens presets', () => {
     expect(isLensPreset(look)).toBe(false);
     expect(lensPresetFor([look, decoded], ' xf23mmf2 r wr')).toBe(decoded);
     expect(lensPresetFor([look, decoded], 'XF35mmF2 R WR')).toBeNull();
-    // A lens-only preset from before the lens was recorded stands for any lens.
-    const [old] = decodePresets('{"format":"rawboy-preset","version":1,"name":"Old","groups":["lens"],"values":{"lensDistortion":5}}');
-    expect(old.lens).toBeUndefined();
-    expect(lensPresetFor([old], 'XF35mmF2 R WR')).toBe(old);
-    expect(lensPresetFor([old, decoded], 'XF23mmF2 R WR')).toBe(decoded);
+    // A lens-only preset naming no lens (a manual lens, or saved before the lens was recorded) is only picked by hand.
+    const [manual] = decodePresets('{"format":"rawboy-preset","version":1,"name":"Helios 44-2","groups":["lens"],"values":{"lensDistortion":5}}');
+    expect(manual.lens).toBeUndefined();
+    expect(lensPresetFor([manual], 'XF35mmF2 R WR')).toBeNull();
+    expect(lensPresetFor([manual], '')).toBeNull();
+    expect(lensPresetFor([manual, decoded], 'XF23mmF2 R WR')).toBe(decoded);
+  });
+
+  it('are picked by lens, by id or not at all', () => {
+    const auto = captureLensPreset(developParams({ lensDistortion: 3 }), 'XF23mmF2 R WR');
+    const manual = captureLensPreset(developParams({ lensDistortion: -8 }), '', 'Helios 44-2');
+    expect(manual.name).toBe('Helios 44-2');
+    expect(manual.lens).toBeUndefined();
+    const list = [auto, manual];
+    expect(chosenLensPreset(list, null, 'XF23mmF2 R WR')).toBe(auto);
+    expect(chosenLensPreset(list, null, '')).toBeNull();
+    expect(chosenLensPreset(list, manual.id, 'XF23mmF2 R WR')).toBe(manual);
+    expect(chosenLensPreset(list, NO_LENS_PRESET, 'XF23mmF2 R WR')).toBeNull();
+    expect(chosenLensPreset([auto], manual.id, '')).toBeNull();
+  });
+
+  it('named for manual lenses live side by side', () => {
+    const helios = captureLensPreset(developParams({ lensDistortion: 5 }), '', 'Helios 44-2');
+    const jupiter = captureLensPreset(developParams({ lensDistortion: 2 }), '', 'Jupiter-9');
+    const list = [helios, jupiter].reduce<Preset[]>(putLensPreset, []);
+    expect(list.length).toBe(2);
+    const updated = putLensPreset(list, captureLensPreset(developParams({ lensDistortion: 7 }), '', 'helios 44-2 '));
+    expect(updated.map((p) => p.id)).toEqual([helios.id, jupiter.id]);
+    expect(updated[0].values.lensDistortion).toBe(7);
   });
 
   it('saved again replace the one for that lens', () => {

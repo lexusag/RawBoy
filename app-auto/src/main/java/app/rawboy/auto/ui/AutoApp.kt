@@ -12,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -30,6 +31,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.rawboy.auto.AutoViewModel
 import app.rawboy.develop.Preset
 import app.rawboy.develop.PresetGroup
+import app.rawboy.develop.Presets
 
 /** Grid of the batch, or one photo in detail. */
 @Composable
@@ -109,44 +111,61 @@ private fun PresetChoiceDialog(presets: List<Preset>, onChoose: (Preset?) -> Uni
 }
 
 /**
- * The lens presets Auto keeps (sent from RawBoy or opened as files), each with the lens it corrects and a Remove
- * button. Photos taken with a listed lens get its corrections on top of their look or RawBoy preset.
+ * The lens presets Auto keeps (sent from RawBoy or opened as files), to pick one for [count] photos (null = the whole
+ * batch and photos added later): by lens (each photo gets the preset saved for its lens), none, or a named preset
+ * (manual lenses record no lens name). [choice] is the current pick (see [Presets.chosenLensPreset]; [MIXED] when the
+ * photos differ). Each preset has a Remove button.
  */
 @Composable
-internal fun LensPresetsDialog(presets: List<Preset>, onRemove: (String) -> Unit, onClose: () -> Unit) {
+internal fun LensPresetsDialog(
+    presets: List<Preset>,
+    count: Int?,
+    choice: String?,
+    onChoose: (String?) -> Unit,
+    onRemove: (String) -> Unit,
+    onClose: () -> Unit,
+) {
+    @Composable
+    fun option(value: String?, title: String, detail: String, removable: Boolean) {
+        Row(
+            Modifier.fillMaxWidth().clickable { onChoose(value) }.padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            RadioButton(selected = choice == value, onClick = { onChoose(value) })
+            Column(Modifier.weight(1f)) {
+                Text(title)
+                Text(detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (removable && value != null) TextButton(onClick = { onRemove(value) }) { Text("Remove") }
+        }
+    }
     AlertDialog(
         onDismissRequest = onClose,
-        title = { Text("Lens presets") },
+        title = { Text(if (count == null) "Lens presets" else if (count == 1) "Lens preset for 1 photo" else "Lens preset for $count photos") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text(
-                    "Photos taken with these lenses get their corrections on top of their look. Save them in RawBoy's Lens tab.",
+                    (if (count == null) "For every photo, and photos added later. " else "") +
+                        "The lens corrections go on top of the look. Save presets in RawBoy's Lens tab.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                for (p in presets) {
-                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f)) {
-                            Text(p.name)
-                            Text(
-                                lensLabel(p),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        TextButton(onClick = { onRemove(p.id) }) { Text("Remove") }
-                    }
-                }
+                option(null, "By lens", "Each photo gets the preset saved for its lens", removable = false)
+                option(Presets.NO_LENS_PRESET, "None", "The auto develop's lens corrections", removable = false)
+                for (p in presets) option(p.id, p.name, lensLabel(p), removable = true)
             }
         },
         confirmButton = { TextButton(onClick = onClose) { Text("Done") } },
     )
 }
 
+/** [LensPresetsDialog]'s choice when the photos picked differ. */
+internal const val MIXED = "mixed"
+
 /** Which photos a lens preset is for, as the lens presets list shows it. */
 internal fun lensLabel(p: Preset): String {
-    val lens = p.lens ?: return "Any lens"
-    return lens.ifBlank { "Photos with no lens name" }
+    val lens = p.lens?.takeIf { it.isNotBlank() } ?: return "Manual lens: pick it here"
+    return "Photos taken with $lens"
 }
 
 /** "Light · Color · Lens": the groups a preset holds. */

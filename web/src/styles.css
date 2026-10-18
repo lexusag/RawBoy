@@ -262,6 +262,26 @@ button.icon.active {
   white-space: nowrap;
 }
 
+/* Auto: the lens preset pick in the grid header and the selection bar. */
+.batch-bar select,
+.selection-bar select {
+  min-width: 0;
+  max-width: 220px;
+  text-overflow: ellipsis;
+}
+
+/* Pro's Lens tab: the lens preset's name and Save button. */
+.lens-preset-save {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.lens-preset-save input {
+  flex: 1;
+  min-width: 0;
+}
+
 .photo-preset {
   display: flex;
   align-items: center;

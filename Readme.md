@@ -45,7 +45,7 @@ Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and
 | Bloom | 0–100. Diffusion-filter glow after spektrafilm's PSF model (Pro-Mist weights: core 0.28, halo 0.42 with warm rim, power-law tail 0.30), energy-conserving, in scene-linear light with a pre-clip highlight boost so light sources glow |
 | Grain | 0–100. Film-style grain: randomly placed soft grains about 1/3200 of the long edge (fine-grain film), mostly luminance, added in AgX's log (density-like) domain as spektrafilm does |
 | LUTs | Optional 3D LUT (HaldCLUT `.png` or `.cube`) on the final sRGB image, with Strength 0–100. Default: No LUT |
-| Lens | Embedded lens profile (DNG opcodes: shading gain maps, WarpRectilinear, FixVignetteRadial), on by default when present. Manual Distortion (auto crop/scale), Vignetting and Vignette radius. **Save lens preset** keeps these four settings as the lens preset for the photo's lens (named after it; saving again for the same lens replaces it), listed with the other presets; **Send to Auto** (Android, iOS) also hands it to RawBoy Auto. On the web the Auto tab uses it directly |
+| Lens | Embedded lens profile (DNG opcodes: shading gain maps, WarpRectilinear, FixVignetteRadial), on by default when present. Manual Distortion (auto crop/scale), Vignetting and Vignette radius. **Save lens preset** keeps these four settings as the lens preset for the photo's lens, under the name in the field next to it (the lens by default; saving again for the same lens replaces it). Manual lenses record no lens: name the preset yourself (saving again under the same name replaces it) and pick it in Auto. Lens presets are listed with the other presets; **Send to Auto** (Android, iOS) also hands it to RawBoy Auto. On the web the Auto tab uses it directly |
 | Crop & rotate | Top-bar button: 90° turns left/right, **⇆ Flip** / **⇅ Flip** (mirror the picture as shown left-right or top-bottom; the crop, straighten angle and masks mirror with it), a Straighten slider (±45°, 0.1° steps, auto-cropped) and a crop frame over the whole picture: drag corners, edges or the inside. Aspect ratios Free, Original, 1:1, 4:5, 4:3, 3:2, 16:9 with a Portrait/Landscape switch. The crop is applied last, so lens corrections and the auto crop always work on the full frame. Resets for each new photo |
 | Presets | Top-bar button (opens in place of the slider tabs): save the current edits under a name, choosing which groups to include (Light, White balance, Curves, Color, Detail, Retouch, LUT, Lens; white balance is off by default). Tap a preset to apply it: only its groups change. Update, rename, delete; import/export as `.rawboy.json` files, the same format on Android and Web. **Send to Auto** (Android, iOS) opens RawBoy Auto with the preset applied to its whole batch. Rotation, flips, straightening and crop are never part of a preset |
 | Auto | Top-bar button: RawBoy Auto's automatic develop on this photo, without a look: exposure (faces steer it, phone DNGs keep the phone's own exposure), highlights, shadows, contrast, saturation, luma and color denoise from the noise measured in the photo, sharpening, white balance back to as shot, tone mapper AgX (a Film stock stays on, like the LUT). The LUT and everything else (crop, lens, masks, retouch, grain, colour grading) stay as they are. Reset goes back to as-shot |
@@ -174,8 +174,10 @@ not applied in place of the look: Auto keeps it for photos taken with its lens (
 case) and gives them its lens corrections (embedded profile on/off, Distortion, Vignetting, Vignette radius) on top of
 their look or RawBoy preset, in this batch and later ones. Nothing else changes; a look's own vignette stays on top,
 and a RawBoy preset's Lens group gives way to the lens preset. Sending a new one for the same lens replaces it. The
-**lens presets** button in the grid lists them, to remove one. A lens-only preset saved before RawBoy recorded the lens
-counts for any lens without its own. **One preset per scene:** select a scene's photos and
+**lens presets** button in the grid (web: the **Lens** menu, and **Manage…** to remove) picks one for every photo and
+those added later: **By lens** (the default), **None**, or a named preset. Manual lenses record no lens name, so their
+presets (and lens-only presets saved before RawBoy recorded the lens) never match by lens: pick them by name, for the
+whole batch or for a selection (**Lens** in the selection bar). **Remove** forgets a preset. **One preset per scene:** select a scene's photos and
 tap **Preset** (the bookmarks icon) in the selection bar to develop just those with a preset; the rest keep theirs.
 **Rotating, removing and exporting photos:** long-press a photo in the grid to start selecting, tap others to add them
 (or **All**), then **↺** / **↻** to turn them all 90° left or right (thumbnails, photo view and exports follow; Apply to
@@ -293,7 +295,9 @@ blemish removal use the same MediaPipe models in the browser.
   **Use a look** in the photo view does it for one photo.
 - Lens presets: **Save lens preset** in the RawBoy tab's Lens tab, and the Auto tab gives every photo taken with that
   lens its lens corrections on top of its look or preset (only the lens settings change); a lens-only preset file
-  opened with **Apply RawBoy preset…** joins the RawBoy tab's presets. Delete one in the RawBoy tab's Presets.
+  opened with **Apply RawBoy preset…** joins the RawBoy tab's presets. Manual lenses' presets (named in the Lens tab)
+  are picked by name in the Auto tab's **Lens** menu, for every photo or a selection. Remove one with **Manage…** next
+  to the menu, or in the RawBoy tab's Presets.
 - Auto → RawBoy: **Edit in RawBoy** in Auto's photo view opens that photo in the RawBoy tab, starting from Auto's
   develop and look (Reset still goes back to as-shot). And back: **Back to Auto** in the RawBoy tab's top bar returns it
   to the same photo in Auto, developed with the RawBoy edits ("RawBoy edits" in place of the look; Auto's sliders adjust
@@ -504,6 +508,15 @@ Update it when a dependency is added or upgraded.
   and more may not fit the 4 GB WASM heap; tested in Chrome on macOS only.
 
 ## Changelog
+
+**Named lens presets for manual lenses (2026-10-18)**
+
+- RawBoy (Android, iOS, web): the Lens tab's lens preset has a name field (the lens by default). Photos from manual
+  lenses record no lens name; their presets are kept by name, so each manual lens can have its own
+  (`Presets.putLensPreset`).
+- RawBoy Auto (Android, iOS, web): pick a lens preset for every photo and those added later, or for a selection:
+  By lens (as before), None, or a named one (`Presets.chosenLensPreset`, `AutoPhoto.lensChoice`). Presets without a
+  lens no longer apply to every photo. Lens presets can be removed on the web too (**Manage…**).
 
 **Web: RawBoy Browser shows JPEG XL DNG previews at full size (2026-10-18)**
 

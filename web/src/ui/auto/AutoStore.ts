@@ -4,7 +4,7 @@ import { DEFAULT_STRENGTH, NO_ADJUSTMENTS, applyEditsDevelop, developAuto, sameA
 import { ALL_FILM_LOOKS, FilmLooks } from '../../engine/auto/looks/FilmLooks';
 import { suggestFilm, suggestLook } from '../../engine/auto/looks/LookSuggester';
 import type { DevelopParams } from '../../engine/develop/DevelopParams';
-import { decodePresets, isLensPreset, lensPresetFor, putLensPreset, type Preset } from '../../engine/develop/Presets';
+import { chosenLensPreset, decodePresets, isLensPreset, NO_LENS_PRESET, putLensPreset, type Preset } from '../../engine/develop/Presets';
 import { PresetStore } from '../pro/PresetStore';
 import { exportImage } from '../../engine/export/Exporter';
 import { baseNameOf, EXTENSIONS, ExportSettingsStore, fileName, type ExportSettings, type OutputNaming } from '../../engine/export/ExportSettings';
@@ -55,7 +55,9 @@ export interface AutoPhoto {
    * adjustments on top (see applyEditsDevelop); null = none. The look and preset stay for when it's removed.
    */
   edits: DevelopParams | null;
-  /** The lens preset for the photo's lens (see lensPresetFor), on top of the look or preset; null = none. */
+  /** Which lens preset the photo gets (see chosenLensPreset): null = by its lens, else a pick. */
+  lensChoice: string | null;
+  /** The lens preset lensChoice gives, on top of the look or preset; null = none. */
   lensPreset: Preset | null;
   /** True once "Apply to all" gave the photo its looks: its analysis then keeps them instead of the suggestions. */
   looksApplied: boolean;
@@ -139,6 +141,8 @@ export interface AutoState {
    * top of its look or preset.
    */
   lensPresets: Preset[];
+  /** The lens preset choice for the whole batch, which photos added later get too (null = by lens). */
+  lensChoice: string | null;
   /** Frame colour around the photo in the detail view (index into FrameColors, remembered in this browser). */
   frameColor: number;
 }
@@ -185,12 +189,14 @@ class Lock {
 /** RawBoy Auto's batch, look and export logic (port of AutoViewModel.kt). */
 export class AutoStore {
   private _state: AutoState = { photos: [], export: null, message: null, selected: null, sessionReady: null, cachedPreview: null, importMode: savedImportMode(),
-    exportSettings: savedExportSettings(), preset: null, lensPresets: PresetStore.load().filter(isLensPreset), frameColor: savedFrame() };
+    exportSettings: savedExportSettings(), preset: null, lensPresets: PresetStore.load().filter(isLensPreset), lensChoice: null, frameColor: savedFrame() };
   /**
    * Keeps lens presets opened from a file with the RawBoy tab's presets (set by the page; null: in this browser's
    * preset store directly); the RawBoy tab then hands the new list back through setLensPresets.
    */
   saveLensPresets: ((presets: Preset[]) => void) | null = null;
+  /** Deletes a lens preset from the RawBoy tab's presets (set by the page; null: from this browser's preset store). */
+  deleteLensPreset: ((id: string) => void) | null = null;
   private readonly listeners = new Set<() => void>();
   /** The detail view's photo, decoded at full resolution (preview, 100% view, single export). */
   readonly session = new PhotoSession((m) => this.update({ message: m }));
@@ -258,7 +264,7 @@ export class AutoStore {
         id: String(this.nextId++), file, name: file.name, status: 'queued', error: null, analysis: null,
         look: Looks.NATURAL, suggested: Looks.NATURAL, mode: this._state.importMode, filmLook: FilmLooks.PORTRA_400,
         suggestedFilm: FilmLooks.PORTRA_400, strength: DEFAULT_STRENGTH, adjust: NO_ADJUSTMENTS, preset: this._state.preset, edits: null,
-        lensPreset: null, looksApplied: false,
+        lensChoice: this._state.lensChoice, lensPreset: null, looksApplied: false,
         thumbnail: null,
       });
     }
@@ -391,22 +397,61 @@ export class AutoStore {
       if (!PresetStore.save(all)) this.update({ message: 'Could not save presets in this browser' });
       this.setLensPresets(all.filter(isLensPreset));
     }
-    const lenses = new Set(presets.map((p) => p.lens?.trim().toLowerCase()));
-    const matched = this._state.photos.filter((p) => p.lensPreset && lenses.has(p.lensPreset.lens?.trim().toLowerCase())).length;
     const name = presets.length === 1 ? `Lens preset ${presets[0].name}` : `${presets.length} lens presets`;
+    if (presets.every((p) => !p.lens?.trim())) {
+      this.update({ message: `${name} saved: pick ${presets.length === 1 ? 'it' : 'them'} under Lens presets` });
+      return;
+    }
+    const lenses = new Set(presets.flatMap((p) => (p.lens?.trim() ? [p.lens.trim().toLowerCase()] : [])));
+    const matched = this._state.photos.filter((p) => p.lensPreset?.lens && lenses.has(p.lensPreset.lens.trim().toLowerCase())).length;
     this.update({
       message: `${name} saved for photos taken with ${presets.length === 1 ? 'that lens' : 'those lenses'} (${matched === 1 ? '1 photo' : `${matched} photos`} here)`,
     });
   }
 
-  /** The lens presets (from the RawBoy tab's presets); each analysed photo takes the one for its lens, if any. */
+  /** Forgets lens preset id (here and in the RawBoy tab's presets); photos that picked it go back to matching by lens. */
+  removeLensPreset(id: string) {
+    const remove = this.deleteLensPreset;
+    if (remove) remove(id);
+    else {
+      const all = PresetStore.load().filter((p) => p.id !== id);
+      if (!PresetStore.save(all)) this.update({ message: 'Could not save presets in this browser' });
+      this.setLensPresets(all.filter(isLensPreset));
+    }
+  }
+
+  /**
+   * The lens presets (from the RawBoy tab's presets); each analysed photo takes the one its lensChoice gives. A removed
+   * preset's photos go back to matching by lens.
+   */
   setLensPresets(lensPresets: Preset[]) {
-    this.update({ lensPresets });
+    const kept = (c: string | null) => (c === null || c === NO_LENS_PRESET || lensPresets.some((p) => p.id === c) ? c : null);
+    this.update({ lensPresets, lensChoice: kept(this._state.lensChoice) });
     for (const p of this._state.photos) {
+      const lensChoice = kept(p.lensChoice);
+      if (lensChoice !== p.lensChoice) this.updatePhoto(p.id, (q) => ({ ...q, lensChoice }));
       if (!p.analysis) continue;
-      const next = lensPresetFor(lensPresets, p.analysis.lens.lensName);
+      const next = chosenLensPreset(lensPresets, lensChoice, p.analysis.lens.lensName);
       if (next !== p.lensPreset) this.changeDevelop(p.id, (q) => ({ ...q, lensPreset: next }), null);
     }
+  }
+
+  /**
+   * Gives the photos in ids, or the whole batch and photos added later when null, the lens preset choice (see
+   * chosenLensPreset): manual lenses record no lens name, so their presets are picked by hand.
+   */
+  chooseLensPreset(choice: string | null, ids: ReadonlySet<string> | null = null) {
+    if (this._state.export) return;
+    if (!ids) this.update({ lensChoice: choice });
+    const photos = this._state.photos.filter((p) => !ids || ids.has(p.id));
+    for (const p of photos) {
+      const lensPreset = p.analysis ? chosenLensPreset(this._state.lensPresets, choice, p.analysis.lens.lensName) : null;
+      this.changeDevelop(p.id, (q) => ({ ...q, lensChoice: choice, lensPreset }), null);
+    }
+    const what = choice === null ? 'Lens presets by lens' : choice === NO_LENS_PRESET ? 'No lens preset'
+      : this._state.lensPresets.find((p) => p.id === choice)?.name;
+    if (!what) return;
+    this.update({ message: `${what} for ${!ids ? 'all photos' : photos.length === 1 ? '1 photo' : `${photos.length} photos`}` });
   }
 
   /** Takes the RawBoy edits off one photo, back to its preset or look. */
@@ -500,7 +545,7 @@ export class AutoStore {
           const filmLook = suggestFilm(analysis.stats, analysis.defaults.temperature);
           this.updatePhoto(next.id, (p) => ({
             ...p, status: 'ready', analysis, suggested: look, suggestedFilm: filmLook,
-            lensPreset: lensPresetFor(this._state.lensPresets, analysis.lens.lensName),
+            lensPreset: chosenLensPreset(this._state.lensPresets, p.lensChoice, analysis.lens.lensName),
             look: p.looksApplied ? p.look : look, filmLook: p.looksApplied ? p.filmLook : filmLook,
           }));
           this.refreshThumbnail(next.id, true);

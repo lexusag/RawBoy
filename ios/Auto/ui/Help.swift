@@ -7,7 +7,7 @@ let autoHelp = [
         HelpItem("Import as", "Looks (a film LUT on the auto develop) or Film (developed as film), for photos added from now on."),
         HelpItem("Export", "JPEG or TIFF and the size, asked when you tap Export all, Export on a selection or the photo view's Export; remembered."),
         HelpItem("Apply RawBoy preset…", "Develop every photo with a RawBoy preset instead of a look. Remove goes back to the looks."),
-        HelpItem("Lens presets", "Lens presets sent from RawBoy's Lens tab correct every photo taken with their lens, on top of its look or preset; only the lens settings change. The lens presets button lists them, to remove one."),
+        HelpItem("Lens presets", "Lens presets sent from RawBoy's Lens tab correct every photo taken with their lens, on top of its look or preset; only the lens settings change. The lens presets button picks one for every photo (By lens, None or a named preset, for manual lenses that record no lens); Lens in the selection bar picks one for the selected photos. Remove forgets a preset."),
         HelpItem("Export all", "Saves every photo to Photos, in the RawBoy Auto album."),
     ]),
     HelpSection("Selecting photos", [

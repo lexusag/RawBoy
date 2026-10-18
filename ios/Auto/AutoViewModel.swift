@@ -30,7 +30,9 @@ struct AutoPhoto: Identifiable {
     var adjust: Adjustments = .none
     /** A RawBoy preset developing the photo in place of its look (see LookApplier.applyPreset), or nil. */
     var preset: Preset?
-    /** The lens preset for the photo's lens (see Presets.lensPresetFor), on top of the look or preset; nil = none. */
+    /** Which lens preset the photo gets (see Presets.chosenLensPreset): nil = by its lens, else a pick. */
+    var lensChoice: String?
+    /** The lens preset [lensChoice] gives, on top of the look or preset; nil = none. */
     var lensPreset: Preset?
     /** True once "Apply to all" gave the photo its looks: its analysis then keeps them instead of the suggestions. */
     var looksApplied = false
@@ -166,6 +168,8 @@ final class AutoViewModel: ObservableObject {
      * top of its look or preset. Kept for later batches ([LensPresetStore]).
      */
     @Published private(set) var lensPresets: [Preset] = LensPresetStore.load()
+    /** The lens preset choice for the whole batch, which photos added later get too (nil = by lens). */
+    @Published private(set) var lensChoice: String?
     /** Presets of an opened file that held several, to pick one from; empty when no choice is pending. */
     @Published var presetChoices: [Preset] = []
     /** The photos [presetChoices] are for: nil = the whole batch. */
@@ -204,7 +208,7 @@ final class AutoViewModel: ObservableObject {
     func add(_ urls: [URL]) {
         let known = Set(photos.map(\.id))
         let fresh = urls.filter { !known.contains($0.path) }.map {
-            AutoPhoto(url: $0, name: Imports.displayName($0), mode: importMode, preset: preset)
+            AutoPhoto(url: $0, name: Imports.displayName($0), mode: importMode, preset: preset, lensChoice: lensChoice)
         }
         if fresh.isEmpty { return }
         photos += fresh
@@ -291,22 +295,63 @@ final class AutoViewModel: ObservableObject {
      */
     private func addLensPresets(_ presets: [Preset]) {
         setLensPresets(presets.reduce(lensPresets, Presets.putLensPreset))
-        let lenses = Set(presets.map { $0.lens?.trimmingCharacters(in: .whitespaces).lowercased() })
-        let matched = photos.filter { p in p.lensPreset.map { lenses.contains($0.lens?.trimmingCharacters(in: .whitespaces).lowercased()) } ?? false }.count
         let name = presets.count == 1 ? "Lens preset \(presets[0].name)" : "\(presets.count) lens presets"
+        func lensKey(_ p: Preset) -> String? {
+            let l = p.lens?.trimmingCharacters(in: .whitespaces).lowercased() ?? ""
+            return l.isEmpty ? nil : l
+        }
+        if presets.allSatisfy({ lensKey($0) == nil }) {
+            message = "\(name) saved: pick \(presets.count == 1 ? "it" : "them") under Lens presets"
+            return
+        }
+        let lenses = Set(presets.compactMap(lensKey))
+        let matched = photos.filter { p in p.lensPreset.flatMap(lensKey).map(lenses.contains) ?? false }.count
         let here = matched == 1 ? "1 photo" : "\(matched) photos"
         message = "\(name) saved for photos taken with \(presets.count == 1 ? "that lens" : "those lenses") (\(here) here)"
     }
 
-    /** Forgets lens preset [id]; its photos go back to the auto develop's lens corrections. */
-    func removeLensPreset(_ id: String) { setLensPresets(lensPresets.filter { $0.id != id }) }
+    /** Forgets lens preset [id]; photos that picked it go back to matching by lens. */
+    func removeLensPreset(_ id: String) {
+        if lensChoice == id { lensChoice = nil }
+        for p in photos where p.lensChoice == id { updatePhoto(p.id) { $0.lensChoice = nil } }
+        setLensPresets(lensPresets.filter { $0.id != id })
+    }
+
+    /**
+     * Gives the photos in [ids], or the whole batch and photos added later when nil, the lens preset [choice] (see
+     * Presets.chosenLensPreset): manual lenses record no lens name, so their presets are picked by hand.
+     */
+    func chooseLensPreset(_ choice: String?, ids: Set<String>? = nil) {
+        if export != nil { return }
+        if ids == nil { lensChoice = choice }
+        let targets = photos.filter { ids?.contains($0.id) ?? true }
+        for p in targets {
+            let next = p.analysis.flatMap { Presets.chosenLensPreset(lensPresets, choice: choice, lens: $0.lens.lensName) }
+            changeDevelop(p.id, force: nil) {
+                $0.lensChoice = choice
+                $0.lensPreset = next
+            }
+        }
+        let what: String
+        if let choice {
+            if choice == Presets.noLensPreset {
+                what = "No lens preset"
+            } else {
+                guard let p = lensPresets.first(where: { $0.id == choice }) else { return }
+                what = p.name
+            }
+        } else {
+            what = "Lens presets by lens"
+        }
+        message = "\(what) for \(ids == nil ? "all photos" : targets.count == 1 ? "1 photo" : "\(targets.count) photos")"
+    }
 
     private func setLensPresets(_ list: [Preset]) {
         lensPresets = list
         if !LensPresetStore.save(list) { message = "Could not save lens presets" }
         for p in photos {
             guard let lens = p.analysis?.lens.lensName else { continue }
-            let next = Presets.lensPresetFor(list, lens: lens)
+            let next = Presets.chosenLensPreset(list, choice: p.lensChoice, lens: lens)
             if next != p.lensPreset { changeDevelop(p.id, force: nil) { $0.lensPreset = next } }
         }
     }
@@ -401,7 +446,7 @@ final class AutoViewModel: ObservableObject {
                         $0.analysis = analysis
                         $0.suggested = look
                         $0.suggestedFilm = film
-                        $0.lensPreset = Presets.lensPresetFor(self.lensPresets, lens: analysis.lens.lensName)
+                        $0.lensPreset = Presets.chosenLensPreset(self.lensPresets, choice: $0.lensChoice, lens: analysis.lens.lensName)
                         if !$0.looksApplied {
                             $0.look = look
                             $0.filmLook = film

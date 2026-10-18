@@ -20,8 +20,8 @@ struct ControlsPanel: View {
     /** White balance picker armed: the next tap on the photo sets temperature and tint. */
     var pickingWhite = false
     var onPickWhite: () -> Void = {}
-    /** Lens tab: saves its settings as the lens preset for this lens; with true, also sends it to RawBoy Auto. */
-    var onSaveLensPreset: (_ sendToAuto: Bool) -> Void = { _ in }
+    /** Lens tab: saves its settings as the lens preset of that name; with true, also sends it to RawBoy Auto. */
+    var onSaveLensPreset: (_ name: String, _ sendToAuto: Bool) -> Void = { _, _ in }
 
     @AppStorage("pro.tab") private var chosenTab = 0
 
@@ -194,15 +194,7 @@ struct ControlsPanel: View {
         slider("Vignette radius", \.vignetteMidpoint, 0...100, format: formatPlain)
         Note("Distortion crops automatically so no empty edges show.")
         SectionLabel("Lens preset")
-        let name = lens.lensName.trimmingCharacters(in: .whitespaces)
-        Note("Saves these settings for \(name.isEmpty ? "photos with no lens name" : name). RawBoy Auto applies them to every "
-            + "photo taken with it, on top of its look; only the lens settings change.")
-        HStack {
-            Button("Save lens preset") { onSaveLensPreset(false) }.buttonStyle(.bordered)
-            Button("Send to Auto") { onSaveLensPreset(true) }.buttonStyle(.bordered)
-        }
-        .font(.subheadline)
-        .padding(.vertical, 8)
+        LensPresetSave(lensName: lens.lensName, onSave: onSaveLensPreset).id(lens.lensName)
     }
 }
 
@@ -414,3 +406,36 @@ private struct TemperatureSlider: View {
 func formatSigned(_ v: Float) -> String { String(format: "%+d", Int(v.rounded())) }
 func formatPlain(_ v: Float) -> String { "\(Int(v.rounded()))" }
 func formatEv(_ v: Float) -> String { String(format: "%+.2f EV", v) }
+
+/**
+ * The Lens tab's lens preset name (the lens by default) and Save / Send to Auto buttons. Manual lenses record no lens
+ * name: their presets are named here and picked by name in RawBoy Auto.
+ */
+private struct LensPresetSave: View {
+    let lensName: String
+    let onSave: (_ name: String, _ sendToAuto: Bool) -> Void
+    @State private var name: String
+
+    init(lensName: String, onSave: @escaping (_ name: String, _ sendToAuto: Bool) -> Void) {
+        self.lensName = lensName
+        self.onSave = onSave
+        _name = State(initialValue: lensName.trimmingCharacters(in: .whitespaces))
+    }
+
+    var body: some View {
+        let lens = lensName.trimmingCharacters(in: .whitespaces)
+        TextField(lens.isEmpty ? "Name, e.g. Helios 44-2" : lens, text: $name)
+            .textFieldStyle(.roundedBorder)
+            .font(.subheadline)
+            .padding(.top, 4)
+        Note(lens.isEmpty
+             ? "This photo records no lens (a manual lens?): in RawBoy Auto, pick the preset by name for the photos taken with it."
+             : "RawBoy Auto applies these settings to every photo taken with \(lens), on top of its look; only the lens settings change.")
+        HStack {
+            Button("Save lens preset") { onSave(name, false) }.buttonStyle(.bordered)
+            Button("Send to Auto") { onSave(name, true) }.buttonStyle(.bordered)
+        }
+        .font(.subheadline)
+        .padding(.vertical, 8)
+    }
+}

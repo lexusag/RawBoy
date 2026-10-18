@@ -67,31 +67,51 @@ export function capturePreset(name: string, params: DevelopParams, groups: reado
   return preset;
 }
 
-/** A lens preset of params' lens corrections for the lens named lens, called after the lens ("Lens preset" when the file names none). */
-export const captureLensPreset = (params: DevelopParams, lens: string): Preset =>
-  capturePreset(lens.trim() || 'Lens preset', params, ['lens'], lens);
+/**
+ * A lens preset of params' lens corrections for the lens named lens, called name (by default after the lens, or "Lens
+ * preset" when the file names none). Manual lenses record no name: their presets are named by hand and picked in Auto
+ * (chosenLensPreset).
+ */
+export const captureLensPreset = (params: DevelopParams, lens: string, name: string = lens): Preset =>
+  capturePreset(name.trim() || lens.trim() || 'Lens preset', params, ['lens'], lens.trim() || undefined);
 
-const sameLens = (a: string | undefined, b: string | undefined): boolean =>
-  a === undefined || b === undefined ? a === b : a.trim().toLowerCase() === b.trim().toLowerCase();
+const same = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase();
 
-/** Whether preset was made for the lens named lens: same name, ignoring case and outer spaces. */
-export const isPresetFor = (preset: Preset, lens: string): boolean => preset.lens !== undefined && sameLens(preset.lens, lens);
+/** Whether preset was made for the lens named lens: same name, ignoring case and outer spaces; never a blank one. */
+export const isPresetFor = (preset: Preset, lens: string): boolean =>
+  lens.trim() !== '' && preset.lens !== undefined && same(preset.lens, lens);
 
 /**
- * The lens preset among presets for the lens named lens (the last one when there are several), else the last one that
- * names no lens (saved before RawBoy recorded it), which stands for any lens; null if none.
+ * The lens preset among presets for the lens named lens (the last one when there are several); null if none or the file
+ * names no lens (a manual lens: its presets are picked by hand, chosenLensPreset).
  */
-export function lensPresetFor(presets: readonly Preset[], lens: string): Preset | null {
-  const lensPresets = presets.filter(isLensPreset);
-  return lensPresets.findLast((p) => isPresetFor(p, lens)) ?? lensPresets.findLast((p) => p.lens === undefined) ?? null;
+export const lensPresetFor = (presets: readonly Preset[], lens: string): Preset | null =>
+  presets.findLast((p) => isLensPreset(p) && isPresetFor(p, lens)) ?? null;
+
+/** chosenLensPreset's choice for "no lens preset". */
+export const NO_LENS_PRESET = 'none';
+
+/**
+ * The lens preset a photo taken with lens gets for choice: null = by its lens (lensPresetFor), NO_LENS_PRESET = none,
+ * else the lens preset with that id (none if it was removed).
+ */
+export function chosenLensPreset(presets: readonly Preset[], choice: string | null, lens: string): Preset | null {
+  if (choice === null) return lensPresetFor(presets, lens);
+  if (choice === NO_LENS_PRESET) return null;
+  return presets.find((p) => isLensPreset(p) && p.id === choice) ?? null;
 }
 
 /**
- * presets with lensPreset in place of the lens preset for the same lens (or the same missing lens), keeping its id and
- * position; else added at the end.
+ * presets with lensPreset in place of the one it updates, keeping its id and position; else added at the end. A preset
+ * for a named lens updates the one for that lens; one without a lens (manual lenses) the one of the same name without a
+ * lens, so several manual lenses' presets live side by side.
  */
 export function putLensPreset(presets: readonly Preset[], lensPreset: Preset): Preset[] {
-  const old = presets.filter(isLensPreset).findLast((p) => sameLens(p.lens, lensPreset.lens));
+  const lens = lensPreset.lens?.trim() ?? '';
+  const old = presets.findLast(
+    (p) =>
+      isLensPreset(p) && (lens !== '' ? isPresetFor(p, lens) : !p.lens?.trim() && same(p.name, lensPreset.name)),
+  );
   return old ? presets.map((p) => (p === old ? { ...lensPreset, id: old.id } : p)) : [...presets, lensPreset];
 }
 

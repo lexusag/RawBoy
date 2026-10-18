@@ -73,7 +73,9 @@ data class AutoPhoto(
     val adjust: Adjustments = Adjustments.NONE,
     /** A RawBoy preset developing the photo in place of its look (see [LookApplier.applyPreset]), or null. */
     val preset: Preset? = null,
-    /** The lens preset for the photo's lens (see [Presets.lensPresetFor]), on top of the look or preset; null = none. */
+    /** Which lens preset the photo gets (see [Presets.chosenLensPreset]): null = by its lens, else a pick. */
+    val lensChoice: String? = null,
+    /** The lens preset [lensChoice] gives, on top of the look or preset; null = none. */
     val lensPreset: Preset? = null,
     /** True once "Apply to all" gave the photo its looks: its analysis then keeps them instead of the suggestions. */
     val looksApplied: Boolean = false,
@@ -177,6 +179,10 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
     private val _lensPresets = MutableStateFlow(LensPresetStore.load(application))
     val lensPresets = _lensPresets.asStateFlow()
 
+    /** The lens preset choice for the whole batch, which photos added later get too (null = by lens). */
+    private val _lensChoice = MutableStateFlow<String?>(null)
+    val lensChoice = _lensChoice.asStateFlow()
+
     /** Presets of an opened file that held several, to pick one from; empty when no choice is pending. */
     private val _presetChoices = MutableStateFlow<List<Preset>>(emptyList())
     val presetChoices = _presetChoices.asStateFlow()
@@ -246,7 +252,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
         val fresh = uris.distinct().filter { it.toString() !in known }.map { uri ->
             // Picker grants survive process restarts only when persisted; shares can't be (and needn't be).
             runCatching { resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-            AutoPhoto(uri = uri, name = displayName(uri), mode = _importMode.value, preset = _preset.value)
+            AutoPhoto(uri = uri, name = displayName(uri), mode = _importMode.value, preset = _preset.value, lensChoice = _lensChoice.value)
         }
         if (fresh.isEmpty()) return
         _photos.update { it + fresh }
@@ -304,15 +310,43 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
      */
     private fun addLensPresets(presets: List<Preset>) {
         setLensPresets(presets.fold(_lensPresets.value, Presets::putLensPreset))
-        val lenses = presets.map { it.lens?.trim()?.lowercase() }.toSet()
-        val matched = _photos.value.count { p -> p.lensPreset?.let { it.lens?.trim()?.lowercase() in lenses } == true }
         val name = if (presets.size == 1) "Lens preset ${presets[0].name}" else "${presets.size} lens presets"
+        if (presets.all { it.lens.isNullOrBlank() }) {
+            _message.value = "$name saved: pick ${if (presets.size == 1) "it" else "them"} under Lens presets"
+            return
+        }
+        val lenses = presets.mapNotNull { it.lens?.trim()?.lowercase() }.toSet()
+        val matched = _photos.value.count { p -> p.lensPreset?.let { it.lens?.trim()?.lowercase() in lenses } == true }
         val photos = if (matched == 1) "1 photo" else "$matched photos"
         _message.value = "$name saved for photos taken with ${if (presets.size == 1) "that lens" else "those lenses"} ($photos here)"
     }
 
-    /** Forgets lens preset [id]; its photos go back to the auto develop's lens corrections. */
-    fun removeLensPreset(id: String) = setLensPresets(_lensPresets.value.filterNot { it.id == id })
+    /** Forgets lens preset [id]; photos that picked it go back to matching by lens. */
+    fun removeLensPreset(id: String) {
+        if (_lensChoice.value == id) _lensChoice.value = null
+        _photos.value.filter { it.lensChoice == id }.forEach { p -> updatePhoto(p.id) { it.copy(lensChoice = null) } }
+        setLensPresets(_lensPresets.value.filterNot { it.id == id })
+    }
+
+    /**
+     * Gives the photos in [ids], or the whole batch and photos added later when null, the lens preset [choice] (see
+     * [Presets.chosenLensPreset]): manual lenses record no lens name, so their presets are picked by hand.
+     */
+    fun chooseLensPreset(choice: String?, ids: Set<String>? = null) {
+        if (_export.value != null) return
+        if (ids == null) _lensChoice.value = choice
+        val photos = _photos.value.filter { ids == null || it.id in ids }
+        photos.forEach { p ->
+            val preset = p.analysis?.let { Presets.chosenLensPreset(_lensPresets.value, choice, it.lens.lensName) }
+            changeDevelop(p.id, force = null) { it.copy(lensChoice = choice, lensPreset = preset) }
+        }
+        val what = when (choice) {
+            null -> "Lens presets by lens"
+            Presets.NO_LENS_PRESET -> "No lens preset"
+            else -> _lensPresets.value.firstOrNull { it.id == choice }?.name ?: return
+        }
+        _message.value = "$what for ${if (ids == null) "all photos" else if (photos.size == 1) "1 photo" else "${photos.size} photos"}"
+    }
 
     private fun setLensPresets(list: List<Preset>) {
         _lensPresets.value = list
@@ -321,7 +355,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
         }
         _photos.value.forEach { p ->
             val lens = p.analysis?.lens?.lensName ?: return@forEach
-            val next = Presets.lensPresetFor(list, lens)
+            val next = Presets.chosenLensPreset(list, p.lensChoice, lens)
             if (next != p.lensPreset) changeDevelop(p.id, force = null) { it.copy(lensPreset = next) }
         }
     }
@@ -414,7 +448,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
                     updatePhoto(next.id) {
                         it.copy(
                             status = PhotoStatus.READY, analysis = analysis, suggested = look, suggestedFilm = film,
-                            lensPreset = Presets.lensPresetFor(_lensPresets.value, analysis.lens.lensName),
+                            lensPreset = Presets.chosenLensPreset(_lensPresets.value, it.lensChoice, analysis.lens.lensName),
                             look = if (it.looksApplied) it.look else look,
                             filmLook = if (it.looksApplied) it.filmLook else film,
                         )
