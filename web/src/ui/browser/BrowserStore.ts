@@ -1,4 +1,4 @@
-import { isRated, NO_RATING, readXmp, writeXmp, type Flag, type Rating } from '../../engine/browse/XmpSidecar';
+import { isRated, NO_RATING, readEdits, readXmp, writeEdits, writeXmp, type EditsSidecar, type Flag, type Rating } from '../../engine/browse/XmpSidecar';
 import { zipFiles } from '../common/files';
 import { groupPhotos, isPhotoName, stemOf, withSuffix, type PhotoGroup } from './PhotoGroups';
 import { thumbnailOf, viewImageOf, type ViewImage } from './Previews';
@@ -32,12 +32,18 @@ export interface BrowserState {
   binCount: number;
   /** After a rating, the viewer goes on to the next photo (remembered in this browser). */
   autoAdvance: boolean;
+  /**
+   * RawBoy keeps the edits of photos opened from here in their XMP sidecars and reopens them from there (folders
+   * only; remembered in this browser, off until turned on).
+   */
+  editsInSidecars: boolean;
   canUndo: boolean;
   busy: boolean;
   message: string | null;
 }
 
 const AUTO_ADVANCE_KEY = 'rawboy.browser.autoAdvance';
+const EDITS_IN_SIDECARS_KEY = 'rawboy.browser.editsInSidecars';
 const THUMBNAIL = 400;
 /** Thumbnails made at once: each decodes a full embedded JPEG. */
 const THUMB_WORKERS = 3;
@@ -67,6 +73,14 @@ export function photosToSend(photos: BrowsePhoto[], criteria: SendCriteria, filt
         && (criteria.exact ? p.rating.stars === criteria.stars : p.rating.stars >= criteria.stars));
     case 'shown':
       return photos.filter((p) => visible(p, filter, minStars));
+  }
+}
+
+function savedEditsInSidecars(): boolean {
+  try {
+    return localStorage.getItem(EDITS_IN_SIDECARS_KEY) === '1';
+  } catch {
+    return false;
   }
 }
 
@@ -129,7 +143,7 @@ async function moveFile(from: FileSystemDirectoryHandle, name: string, to: FileS
 export class BrowserStore {
   private _state: BrowserState = {
     folder: null, photos: [], filter: 'all', minStars: 0, current: null, viewing: false, binCount: 0,
-    autoAdvance: savedAutoAdvance(), canUndo: false, busy: false, message: null,
+    autoAdvance: savedAutoAdvance(), editsInSidecars: savedEditsInSidecars(), canUndo: false, busy: false, message: null,
   };
   private readonly listeners = new Set<() => void>();
   private dir: FileSystemDirectoryHandle | null = null;
@@ -272,6 +286,37 @@ export class BrowserStore {
   /** The main file of photo [id], e.g. for opening it in RawBoy or Auto. */
   file(id: string): Promise<File> {
     return this.fileOf(id);
+  }
+
+  /**
+   * The sidecar RawBoy keeps photo [id]'s edits in: its NAME.xmp, else darktable's NAME.EXT.xmp, else a new NAME.xmp.
+   * null without folder access or with editsInSidecars off.
+   */
+  editsSidecar(id: string): EditsSidecar | null {
+    const dir = this.dir;
+    const p = this.photo(id);
+    if (!dir || !p || !this._state.editsInSidecars) return null;
+    const named = (n: string) => p.sidecars.find((s) => s.toLowerCase() === n.toLowerCase());
+    const name = named(`${p.stem}.xmp`) ?? named(`${p.main}.xmp`) ?? `${p.stem}.xmp`;
+    const textOf = async () => ((await exists(dir, name)) ? (await (await dir.getFileHandle(name)).getFile()).text() : null);
+    return {
+      name,
+      read: async () => {
+        const text = await textOf();
+        return text == null ? null : readEdits(text);
+      },
+      // Queued with the rating writes, each reading the file afresh, so neither undoes the other.
+      write: (edits) => {
+        const done = this.writes.then(async () => {
+          const text = await textOf();
+          if (text == null && edits == null) return;
+          await writeText(dir, name, writeEdits(text, edits));
+          if (this.dir === dir) this.updatePhoto(p.id, (q) => (q.sidecars.includes(name) ? q : { ...q, sidecars: [...q.sidecars, name].sort() }));
+        });
+        this.writes = done.catch(() => undefined);
+        return done;
+      },
+    };
   }
 
   // ---- Thumbnails and the viewer's image ----
@@ -509,6 +554,15 @@ export class BrowserStore {
     this.update({ autoAdvance });
     try {
       localStorage.setItem(AUTO_ADVANCE_KEY, autoAdvance ? '1' : '0');
+    } catch {
+      // not remembered
+    }
+  }
+
+  setEditsInSidecars(editsInSidecars: boolean) {
+    this.update({ editsInSidecars });
+    try {
+      localStorage.setItem(EDITS_IN_SIDECARS_KEY, editsInSidecars ? '1' : '0');
     } catch {
       // not remembered
     }

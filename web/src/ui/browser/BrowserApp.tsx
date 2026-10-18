@@ -4,6 +4,7 @@ import { isApple } from '../common/HelpDialog';
 import { AppSwitcher, HelpButton } from '../common/AppNav';
 import { BIN, photosToSend, type BrowsePhoto, type BrowserStore, type Filter, type SendCriteria } from './BrowserStore';
 import type { ViewImage } from './Previews';
+import type { EditsSidecar } from '../../engine/browse/XmpSidecar';
 
 type DirectoryPicker = (o?: object) => Promise<FileSystemDirectoryHandle>;
 const directoryPicker = () => (window as unknown as { showDirectoryPicker?: DirectoryPicker }).showDirectoryPicker;
@@ -35,7 +36,8 @@ const isTextEntry = (t: EventTarget | null) => t instanceof HTMLInputElement || 
 export function BrowserApp({ store, active, onEditInRawBoy, onSendToAuto }: {
   store: BrowserStore;
   active: boolean;
-  onEditInRawBoy: (file: File) => void;
+  /** [sidecar]: where RawBoy keeps the photo's edits (Edits in sidecars on), else null. */
+  onEditInRawBoy: (file: File, sidecar: EditsSidecar | null) => void;
   onSendToAuto: (files: File[]) => void;
 }) {
   const state = useSyncExternalStore(store.subscribe, () => store.state);
@@ -48,7 +50,7 @@ export function BrowserApp({ store, active, onEditInRawBoy, onSendToAuto }: {
   const gridScroll = useRef(0);
   const current = state.photos.find((p) => p.id === state.current) ?? null;
 
-  const edit = async (id: string) => onEditInRawBoy(await store.file(id));
+  const edit = async (id: string) => onEditInRawBoy(await store.file(id), store.editsSidecar(id));
   const send = async (photos: BrowsePhoto[]) => {
     try {
       onSendToAuto(await Promise.all(photos.map((p) => store.file(p.id))));
@@ -334,6 +336,12 @@ function GridView({ store, active, scroll, selection, onSelection, onBin, onSend
             <input type="checkbox" checked={state.autoAdvance} onChange={(e) => store.setAutoAdvance(e.target.checked)} />
             Auto-advance
           </label>
+          {state.folder?.writable && (
+            <label className="edits-in-sidecars" title="RawBoy saves its edits of photos opened from here in their XMP sidecars, and reopens them from there">
+              <input type="checkbox" checked={state.editsInSidecars} onChange={(e) => store.setEditsInSidecars(e.target.checked)} />
+              Edits in sidecars
+            </label>
+          )}
         </div>
       )}
       {state.photos.length === 0 ? (

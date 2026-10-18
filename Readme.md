@@ -316,6 +316,11 @@ blemish removal use the same MediaPipe models in the browser.
   a range, Ctrl/⌘+A for all shown, then **Send to Auto** in the selection bar.
   Writing to a folder needs Chrome or Edge (File System Access API); Safari (all iPad browsers) and Firefox pick
   files instead, rate in memory, and **Save ratings** downloads the sidecars as a ZIP; nothing is moved there.
+  **Edits in sidecars** (folders only, off by default, remembered in the browser): photos opened in RawBoy from the
+  Browser keep their edits in their sidecar (`rawboy:Develop`, JSON of the fields changed from as shot, crop, masks
+  and brush strokes included; `NAME.xmp`, else darktable's `NAME.CR2.xmp`, else a new `NAME.xmp`) and reopen with
+  them instead of the previous photo's carried-over edits. Reset removes them again. Other apps' data in the sidecar
+  stays as it was; they don't read RawBoy's edits.
 - Auto's photo view: **Space** / **Backspace** go to the next / previous photo, as in darktable, even while a slider
   has focus; **→** / **←** do too, also right after dragging a slider. A slider reached with **Tab** keeps the arrow
   keys for itself.
@@ -510,6 +515,14 @@ Update it when a dependency is added or upgraded.
   (`LookApplier.develop`). A **lens presets** button in the grid lists them (remove on Android and iOS).
 
 ### 0.1.0 — in development (2026-10-10)
+
+**Web: keep RawBoy edits in XMP sidecars (2026-10-18)**
+
+- RawBoy Browser has a new **Edits in sidecars** switch, off by default. With it on, a photo opened in RawBoy from a
+  Browser folder saves its edits into the photo's XMP sidecar as you work, next to the rating and any darktable or
+  Lightroom data, and opening it again from the Browser brings the edits back (crop, masks and brush strokes too).
+  Before, RawBoy forgot a photo's edits once you opened another one. Needs Chrome or Edge on a computer; photos
+  opened in RawBoy directly, or sent to Auto, don't use it yet.
 
 **Auto: photos open at once in the photo view (2026-10-18)**
 

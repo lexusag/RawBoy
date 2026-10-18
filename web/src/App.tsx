@@ -13,6 +13,7 @@ import { PRO_HELP } from './ui/pro/help';
 import { AUTO_HELP } from './ui/auto/help';
 import { BrowserApp } from './ui/browser/BrowserApp';
 import { BrowserStore } from './ui/browser/BrowserStore';
+import type { EditsSidecar } from './engine/browse/XmpSidecar';
 import { BROWSER_HELP } from './ui/browser/help';
 import type { TabId } from './ui/common/tabs';
 
@@ -23,6 +24,10 @@ const TAB_KEY = 'rawboy.tab';
 const pro = new ProStore();
 const auto = new AutoStore();
 const browser = new BrowserStore();
+// Edits waiting for a photo's sidecar are written before the page may go away.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) void pro.flushSidecar();
+});
 // Lens presets live with the RawBoy tab's presets; the Auto tab applies them by lens.
 auto.saveLensPresets = pro.putLensPresets;
 let presets = pro.state.presets;
@@ -138,9 +143,9 @@ export function App() {
   const nav = useMemo(() => ({ tab, setTab, openHelp: () => setShowHelp(true) }), [tab]);
 
   // Browser → RawBoy: one photo as shot; Browser → Auto: the chosen photos join Auto's batch.
-  const browserEdit = (file: File) => {
+  const browserEdit = (file: File, sidecar: EditsSidecar | null) => {
     if (pro.busy) return browser.showMessage('RawBoy is busy; try again when it has finished');
-    void pro.open(file);
+    void pro.open(file, undefined, sidecar);
     setTab('pro');
   };
   const browserToAuto = (files: File[]) => {

@@ -1,7 +1,9 @@
 import { autoBase } from '../../engine/auto/AutoAnalysis';
 import { applyAuto } from '../../engine/auto/analysis/AutoTone';
 import { cropOf, flipped, rotateCrop, withCrop, type CropRect } from '../../engine/develop/CropMath';
+import type { EditsSidecar } from '../../engine/browse/XmpSidecar';
 import { developParams, type DevelopParams } from '../../engine/develop/DevelopParams';
+import { decodeEdits, encodeEdits } from '../../engine/develop/Edits';
 import { MAX_LAYERS, SHAPE_NAMES, newBrushLayer, newLinearLayer, newRadialLayer, type BrushStroke, type MaskLayer } from '../../engine/develop/Masks';
 import { applyPreset, captureLensPreset, capturePreset, decodePresets, encodePresets, putLensPreset, type Preset, type PresetGroup } from '../../engine/develop/Presets';
 import { EXTENSIONS, ExportSettingsStore, baseNameOf, fileName, type ExportSettings } from '../../engine/export/ExportSettings';
@@ -57,6 +59,10 @@ export class ProStore {
   /** This photo's edits, for Undo and Redo. */
   private readonly history = new EditHistory<DevelopParams>();
   private openFile: File | null = null;
+  /** Where this photo's edits are kept (opened from RawBoy Browser with Edits in sidecars on), else null. */
+  private sidecar: EditsSidecar | null = null;
+  private sidecarTimer = 0;
+  private sidecarDirty = false;
 
   get state() {
     return this._state;
@@ -89,17 +95,33 @@ export class ProStore {
 
   showMessage = (message: string) => this.set({ message });
 
-  /** Opens [file]; [params] (e.g. from Auto) replace the usual carry-over as the starting edits. */
-  async open(file: File, params?: DevelopParams) {
+  /**
+   * Opens [file]; [params] (e.g. from Auto) replace the usual carry-over as the starting edits. With a [sidecar] the
+   * photo starts from the edits saved there, if any, and every edit is saved to it.
+   */
+  async open(file: File, params?: DevelopParams, sidecar: EditsSidecar | null = null) {
     if (this.busy) return;
     this.set({ loading: true });
     try {
-      const opened = await this.session.open(file, (d) => params ?? this.carryOverEdits(this._state, d));
+      await this.flushSidecar();
+      let saved: string | null = null;
+      try {
+        saved = sidecar && !params ? await sidecar.read() : null;
+      } catch {
+        // unreadable: starts as usual, and the first edit rewrites it
+      }
+      let restored = false;
+      const opened = await this.session.open(file, (d) => {
+        const fromSidecar = saved != null ? decodeEdits(saved, d) : null;
+        restored = fromSidecar != null;
+        return params ?? fromSidecar ?? this.carryOverEdits(this._state, d);
+      });
       this.history.clear();
       this.openFile = file;
+      this.sidecar = sidecar;
       this.set({
         loading: false, fileName: file.name, info: opened.description, params: opened.params, defaults: opened.defaults,
-        canUndo: false, canRedo: false,
+        canUndo: false, canRedo: false, message: restored ? `Edits from ${sidecar!.name}` : this._state.message,
       });
       this.session.selectLut(opened.params.lut, (m) => this.lutFailed(opened.params.lut, m));
       // Film tone mapper (also from Auto's Film mode, or carried over from the previous photo).
@@ -179,8 +201,31 @@ export class ProStore {
     const before = this._state.params;
     this.set({ params, canUndo: this.history.canUndo, canRedo: this.history.canRedo });
     this.session.setParams(params);
+    this.saveToSidecar();
     if (params.lut !== before.lut) this.session.selectLut(params.lut, (m) => this.lutFailed(params.lut, m));
     if (params.film !== before.film) this.session.selectFilm(params.film, (m) => this.filmFailed(params.film, m));
+  }
+
+  /** Saves the edits to the sidecar once they rest for a moment (a slider drag is one write). */
+  private saveToSidecar() {
+    if (!this.sidecar) return;
+    this.sidecarDirty = true;
+    clearTimeout(this.sidecarTimer);
+    this.sidecarTimer = window.setTimeout(() => void this.flushSidecar(), 800);
+  }
+
+  /** Writes edits waiting for the sidecar now. */
+  async flushSidecar() {
+    clearTimeout(this.sidecarTimer);
+    const sidecar = this.sidecar;
+    if (!sidecar || !this.sidecarDirty) return;
+    this.sidecarDirty = false;
+    const { params, defaults } = this._state;
+    try {
+      await sidecar.write(encodeEdits(params, defaults));
+    } catch (e) {
+      this.set({ message: `Couldn't save the edits to ${sidecar.name}: ${e instanceof Error ? e.message : String(e)}` });
+    }
   }
 
   undo = () => {

@@ -127,9 +127,10 @@ const ADJUST_RANGE: Record<keyof LayerAdjust, number> = {
 const num = (v: unknown, min: number, max: number): number | null =>
   typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : null;
 
-function parseShape(o: unknown): MaskShape | null {
+function parseShape(o: unknown, brush: boolean): MaskShape | null {
   if (!o || typeof o !== 'object') return null;
   const s = o as Record<string, unknown>;
+  if (s.kind === 'brush') return brush ? { kind: 'brush' } : null;
   const f = (k: string, min = -1, max = 2) => num(s[k], min, max);
   if (s.kind === 'linear') {
     const [x0, y0, x1, y1] = [f('x0'), f('y0'), f('x1'), f('y1')];
@@ -144,11 +145,26 @@ function parseShape(o: unknown): MaskShape | null {
   return null;
 }
 
-/** A layer from untrusted JSON (a preset file) with a fresh id, or null when it isn't one. Ranges are clamped. */
-export function parseLayer(o: unknown): MaskLayer | null {
+function parseStroke(o: unknown): BrushStroke | null {
+  if (!o || typeof o !== 'object') return null;
+  const s = o as Record<string, unknown>;
+  const points = Array.isArray(s.points) ? s.points.map((v) => num(v, -1, 2)) : [];
+  const radius = num(s.radius, MIN_BRUSH_RADIUS, MAX_BRUSH_RADIUS);
+  if (radius == null || points.length < 2 || points.length % 2 || points.some((v) => v == null)) return null;
+  return {
+    id: newId(), erase: s.erase === true, auto: s.auto === true, radius,
+    hardness: num(s.hardness, 0, 100) ?? 50, flow: num(s.flow, 1, 100) ?? 100, points: points as number[],
+  };
+}
+
+/**
+ * A layer from untrusted JSON with a fresh id, or null when it isn't one. Ranges are clamped. Preset files hold
+ * gradients only; [strokes] (a photo's own saved edits, Edits.ts) also keeps brush layers and every layer's strokes.
+ */
+export function parseLayer(o: unknown, strokes = false): MaskLayer | null {
   if (!o || typeof o !== 'object') return null;
   const l = o as Record<string, unknown>;
-  const shape = parseShape(l.shape);
+  const shape = parseShape(l.shape, strokes);
   if (!shape) return null;
   const a = l.adjust && typeof l.adjust === 'object' ? (l.adjust as Record<string, unknown>) : {};
   const adjust = { ...NO_ADJUST };
@@ -161,10 +177,11 @@ export function parseLayer(o: unknown): MaskLayer | null {
     invert: l.invert === true,
     shape,
     adjust,
-    strokes: [], // strokes never come from presets
+    // Strokes never come from presets.
+    strokes: strokes && Array.isArray(l.strokes) ? l.strokes.map(parseStroke).filter((s): s is BrushStroke => s != null) : [],
   };
 }
 
-/** Layers from untrusted JSON: invalid ones are dropped, at most MAX_LAYERS kept. */
-export const parseLayers = (v: unknown): MaskLayer[] =>
-  (Array.isArray(v) ? v : []).map(parseLayer).filter((l): l is MaskLayer => l != null).slice(0, MAX_LAYERS);
+/** Layers from untrusted JSON: invalid ones are dropped, at most MAX_LAYERS kept; [strokes] as for parseLayer. */
+export const parseLayers = (v: unknown, strokes = false): MaskLayer[] =>
+  (Array.isArray(v) ? v : []).map((o) => parseLayer(o, strokes)).filter((l): l is MaskLayer => l != null).slice(0, MAX_LAYERS);
