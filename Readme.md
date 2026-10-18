@@ -501,6 +501,13 @@ Update it when a dependency is added or upgraded.
 
 ### 0.1.0 — in development (2026-10-10)
 
+**Web: Auto keeps its open photo when you switch apps (2026-10-18)**
+
+- Auto's photo view has the RawBoy · Auto · Browser switcher in its bar, so you can leave the photo for another app and
+  come back to it. After **Edit in RawBoy**, going back to Auto reopens the same photo (decoded again: its full-size
+  image is freed while RawBoy has the photo). Before, you had to go back to the grid to switch apps, and Edit in RawBoy
+  closed the photo, so Auto came back on the grid.
+
 **Web: RawBoy Browser handles darktable duplicates (2026-10-18)**
 
 - darktable's duplicate sidecars (`IMG_0001_01.CR2.xmp`, `_02`…) now belong to their photo: rating a photo writes

@@ -173,6 +173,8 @@ export class AutoStore {
   /** The detail view's photo, decoded at full resolution (preview, 100% view, single export). */
   readonly session = new PhotoSession((m) => this.update({ message: m }));
   private readonly decodeLock = new Lock();
+  /** The open photo's full-resolution image was freed for the RawBoy tab ([editInRawBoy]); [resume] decodes it again. */
+  private released = false;
   /** The detail preview's frame width in device pixels. */
   private frameWidth = 0;
   private analyzing = false;
@@ -559,10 +561,13 @@ export class AutoStore {
     if (!p?.analysis || this._state.export) return;
     this.update({ selected: id });
     if (this._state.sessionReady === id) return;
+    this.released = false;
     this.update({ sessionReady: null });
     void this.decodeLock
       .run(() => this.session.open(p.file, (d) => (this.photo(id) && paramsOf(this.photo(id)!)) || d))
       .then(() => {
+        // Handed to the RawBoy tab while decoding: free it again (resume() decodes it once Auto is back).
+        if (this.released) return this.session.close();
         if (this._state.selected !== id) return;
         const now = this.photo(id);
         const params = now && paramsOf(now);
@@ -582,16 +587,26 @@ export class AutoStore {
 
   /**
    * Hands photo [id] over to the RawBoy tab: its file and current develop settings. Auto's full-resolution image is
-   * freed first so the two tabs don't hold two raws in the WASM heap; the detail view closes with it.
+   * freed first so the two tabs don't hold two raws in the WASM heap. The photo stays open in Auto ([resume]).
    */
   editInRawBoy(id: string): { file: File; params: DevelopParams } | null {
     const p = this.photo(id);
     const params = p && paramsOf(p);
     if (!p || !params || this._state.export) return null;
-    this.closeDetail();
+    this.session.exitZoom();
     this.session.close();
+    this.released = true;
     this.update({ sessionReady: null });
     return { file: p.file, params };
+  }
+
+  /**
+   * The Auto tab is on screen again: a photo left open when its image was handed to the RawBoy tab is decoded again,
+   * so Auto comes back on the photo it showed.
+   */
+  resume() {
+    const id = this._state.selected;
+    if (id && this.released) this.openDetail(id);
   }
 
   // ---- Export ----
