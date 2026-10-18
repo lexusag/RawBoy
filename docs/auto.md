@@ -14,8 +14,8 @@ TIFF work too, at lower quality (see *JPEG, HEIC, PNG and TIFF* below).
    what still lands near white; Shadows lift very deep shadows; Contrast starts at +15 (more for flat
    scenes, less for very wide ones, 0..30); Saturation +30; a fine grain (5) on every photo;
    Denoise, Color denoise and Sharpening come from the noise **measured in the photo** (full resolution, ~30 ms; not
-   from ISO, which says little across cameras and phones), scaled by how much the exposure lifts it; JPEG/HEIC get
-   none. White balance stays as shot.
+   from ISO, which says little across cameras and phones), scaled by how much the exposure lifts it (luma denoise kept a little gentler than colour denoise, to keep fine
+   texture); JPEG/HEIC get none. White balance stays as shot.
 3. **Look**, suggested per photo and changeable:
 
 | Look | Character | Suggested for |

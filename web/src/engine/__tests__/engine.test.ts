@@ -593,8 +593,8 @@ describe('Pro Auto button', () => {
     expect([p.lut, p.lutAmount, p.grain, p.rotation, p.skinRetouch]).toEqual(['portra', 60, 30, 1, 40]);
   });
   it('sets both denoises from the measured noise (as AutoToneTest)', () => {
-    expect(measuredNoiseSettings({ luma: 0.0107, chroma: 0.0141 }, 2)).toEqual([55, 93, 8]);
-    expect(measuredNoiseSettings({ luma: 0.0023, chroma: 0.0019 }, 0)).toEqual([6, 6, 15]);
+    expect(measuredNoiseSettings({ luma: 0.0107, chroma: 0.0141 }, 2)).toEqual([44, 93, 8]);
+    expect(measuredNoiseSettings({ luma: 0.0023, chroma: 0.0019 }, 0)).toEqual([5, 6, 15]);
     expect(measuredNoiseSettings({ luma: 0.05, chroma: 0.05 }, 0)[1]).toBe(100);
   });
 });
