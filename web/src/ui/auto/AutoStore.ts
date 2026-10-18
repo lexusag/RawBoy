@@ -19,6 +19,8 @@ import type { PreviewImage } from '../../engine/gl/PreviewImage';
 import { blemishesToHeal, PhotoSession } from '../../engine/session/PhotoSession';
 import { EditHistory } from '../common/EditHistory';
 import { imageUrl, saveBlob, writeUnique, zipFiles } from '../common/files';
+import type { EditsSidecar } from '../../engine/browse/XmpSidecar';
+import { decodeAuto, encodeAuto } from './AutoSidecar';
 import { PreviewCache } from './PreviewCache';
 
 /** Where a photo is in the batch. */
@@ -59,6 +61,8 @@ export interface AutoPhoto {
   looksApplied: boolean;
   /** Object URL of the grid thumbnail. */
   thumbnail: string | null;
+  /** Where the photo's Auto settings are kept (sent from RawBoy Browser with Edits in sidecars on), else null. */
+  sidecar: EditsSidecar | null;
 }
 
 /** A photo's edits, as Undo and Redo bring them back. */
@@ -93,7 +97,8 @@ export const lookName = (p: AutoPhoto): string => (p.edits ? EDITS_NAME : p.pres
 export function paramsOf(p: AutoPhoto): DevelopParams | null {
   const a = p.analysis;
   if (!a) return null;
-  if (p.edits) return applyEditsDevelop(p.edits, p.adjust);
+  // Edits read back from a sidecar don't know the photo is display-referred; the analysis does.
+  if (p.edits) return applyEditsDevelop({ ...p.edits, displaySource: a.defaults.displaySource }, p.adjust);
   return developAuto(a.autoBase, activeLook(p), p.strength, p.adjust, a.stats.hasFace, p.preset, p.lensPreset);
 }
 
@@ -201,6 +206,11 @@ export class AutoStore {
   private readonly thumbTimers = new Map<string, number>();
   /** Each photo's edits, for Undo and Redo in the photo view. */
   private readonly histories = new Map<string, EditHistory<Develop>>();
+  /** Settings read back from photos' sidecars; analysis waits for them, so it keeps their looks. */
+  private restoring: Promise<unknown> = Promise.resolve();
+  private readonly saveTimers = new Map<string, number>();
+  /** What each photo's sidecar was last given, so unchanged settings aren't written again. */
+  private readonly saved = new Map<string, string>();
   /** Look-strip thumbnails: the latest per photo and look, with the adjustments it was rendered at. */
   private readonly lookThumbs = new Map<string, { adjust: Adjustments; lensPreset: Preset | null; url: string }>();
 
@@ -234,14 +244,17 @@ export class AutoStore {
     this.update({ message });
   }
 
-  /** Adds photos; files already listed (same name, size and date) are skipped. Returns how many were added. */
-  add(files: File[]): number {
+  /**
+   * Adds photos; files already listed (same name, size and date) are skipped. Returns how many were added. [sidecars]
+   * (same order as [files]; RawBoy Browser's): photos come back with the Auto settings kept there, and keep them there.
+   */
+  add(files: File[], sidecars: readonly (EditsSidecar | null)[] = []): number {
     const known = new Set(this._state.photos.map((p) => fileKey(p.file)));
     const fresh: AutoPhoto[] = [];
-    for (const file of files) {
+    for (const [i, file] of files.entries()) {
       if (known.has(fileKey(file))) continue;
       known.add(fileKey(file));
-      fresh.push({
+      fresh.push({ sidecar: sidecars[i] ?? null,
         id: String(this.nextId++), file, name: file.name, status: 'queued', error: null, analysis: null,
         look: Looks.NATURAL, suggested: Looks.NATURAL, mode: this._state.importMode, filmLook: FilmLooks.PORTRA_400,
         suggestedFilm: FilmLooks.PORTRA_400, strength: DEFAULT_STRENGTH, adjust: NO_ADJUSTMENTS, preset: this._state.preset, edits: null,
@@ -252,8 +265,53 @@ export class AutoStore {
     if (!fresh.length) return 0;
     const note = nonRawNote(fresh.map((p) => p.name));
     this.update({ photos: [...this._state.photos, ...fresh], ...(note ? { message: note } : {}) });
+    const restore = Promise.all(fresh.filter((p) => p.sidecar).map((p) => this.restoreSaved(p.id, p.sidecar!)));
+    this.restoring = Promise.all([this.restoring, restore]);
     void this.processQueue();
     return fresh.length;
+  }
+
+  /** Gives photo [id] the settings kept in its sidecar, if any (they count as given, so analysis keeps the look). */
+  private async restoreSaved(id: string, sidecar: EditsSidecar) {
+    let text: string | null = null;
+    try {
+      text = await sidecar.read('Auto');
+    } catch {
+      return; // unreadable: starts as a new photo, and the first change rewrites it
+    }
+    const saved = text != null ? decodeAuto(text) : null;
+    if (!saved || !this.photo(id)) return;
+    this.saved.set(id, text!);
+    this.updatePhoto(id, (p) => ({ ...p, ...saved, looksApplied: true }));
+    this.refreshThumbnail(id, true);
+  }
+
+  /** Keeps photo [id]'s settings in its sidecar once they rest for a moment (a slider drag is one write). */
+  private scheduleSave(id: string) {
+    if (!this.photo(id)?.sidecar) return;
+    clearTimeout(this.saveTimers.get(id));
+    this.saveTimers.set(id, window.setTimeout(() => void this.saveSidecar(id), 800));
+  }
+
+  private async saveSidecar(id: string) {
+    clearTimeout(this.saveTimers.get(id));
+    this.saveTimers.delete(id);
+    const p = this.photo(id);
+    if (!p?.sidecar) return;
+    const text = encodeAuto(p);
+    if (this.saved.get(id) === text) return;
+    this.saved.set(id, text);
+    try {
+      await p.sidecar.write(text, 'Auto');
+    } catch (e) {
+      this.saved.delete(id);
+      this.update({ message: `Couldn't save ${p.name}'s settings to ${p.sidecar.name}: ${e instanceof Error ? e.message : String(e)}` });
+    }
+  }
+
+  /** Writes settings waiting for sidecars now. */
+  async flushSidecars() {
+    await Promise.all([...this.saveTimers.keys()].map((id) => this.saveSidecar(id)));
   }
 
   setViewSize(width: number, height: number, frame: number) {
@@ -411,6 +469,7 @@ export class AutoStore {
       if (!ids.has(p.id)) continue;
       if (p.thumbnail) URL.revokeObjectURL(p.thumbnail);
       clearTimeout(this.thumbTimers.get(p.id));
+      if (this.saveTimers.has(p.id)) void this.saveSidecar(p.id); // the photo's last change still reaches its sidecar
       this.histories.delete(p.id);
       void this.previews.remove(p.id);
     }
@@ -430,6 +489,7 @@ export class AutoStore {
     this.analyzing = true;
     try {
       for (;;) {
+        await this.restoring;
         const next = this._state.photos.find((p) => p.status === 'queued');
         if (!next) break;
         this.updatePhoto(next.id, (p) => ({ ...p, status: 'analyzing' }));
@@ -546,6 +606,7 @@ export class AutoStore {
       if (params?.film !== paramsBefore?.film) this.session.selectFilm(params?.film ?? null, onError);
     }
     this.refreshThumbnail(id, false);
+    this.scheduleSave(id);
   }
 
   /** Re-renders the grid thumbnail; slider drags are debounced. */

@@ -319,8 +319,11 @@ blemish removal use the same MediaPipe models in the browser.
   **Edits in sidecars** (folders only, off by default, remembered in the browser): photos opened in RawBoy from the
   Browser keep their edits in their sidecar (`rawboy:Develop`, JSON of the fields changed from as shot, crop, masks
   and brush strokes included; `NAME.xmp`, else darktable's `NAME.CR2.xmp`, else a new `NAME.xmp`) and reopen with
-  them instead of the previous photo's carried-over edits. Reset removes them again. Other apps' data in the sidecar
-  stays as it was; they don't read RawBoy's edits.
+  them instead of the previous photo's carried-over edits. Reset removes them again. Photos sent to Auto keep their
+  Auto settings there too (`rawboy:Auto`: look or film look, strength, adjustments, the preset itself and RawBoy edits
+  from Back to Auto). Opening the folder again (**Reopen <folder>** remembers the last one) puts the photos with Auto
+  settings back into Auto as they were left. Other apps' data in the sidecar stays as it was; they don't read
+  RawBoy's edits.
 - Auto's photo view: **Space** / **Backspace** go to the next / previous photo, as in darktable, even while a slider
   has focus; **→** / **←** do too, also right after dragging a slider. A slider reached with **Tab** keeps the arrow
   keys for itself.
@@ -515,6 +518,14 @@ Update it when a dependency is added or upgraded.
   (`LookApplier.develop`). A **lens presets** button in the grid lists them (remove on Android and iOS).
 
 ### 0.1.0 — in development (2026-10-10)
+
+**Web: Auto's edits survive closing the browser (2026-10-18)**
+
+- With **Edits in sidecars** on in RawBoy Browser, every photo sent from the Browser to Auto keeps its Auto settings
+  in its XMP sidecar as you work: look, strength, brightness and the other adjustments, a preset applied to it (per
+  scene or to all) and RawBoy edits brought back with Back to Auto. Close the browser, come back, press **Reopen
+  <folder>** in the Browser, and those photos are back in Auto with their edits. Before, Auto's batch and edits were
+  gone once the page closed.
 
 **Web: keep RawBoy edits in XMP sidecars (2026-10-18)**
 

@@ -197,7 +197,12 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   `rawboy:Pick` in place, so other apps' sidecars survive. Pro edits (opt-in, Browser's `editsInSidecars`, off by default): `rawboy:Develop` = escaped
   JSON from `develop/Edits.ts` (fields differing from the photo's as-shot defaults, strokes kept via
   `parseLayers(v, true)`); `BrowserStore.editsSidecar` hands an `EditsSidecar` to `ProStore.open` (writes queued on the
-  Browser's rating chain; Pro debounces 800 ms, flushes on open and when the page hides). Bin = `_bin` subfolder via `FileSystemHandle.move` (copy +
+  Browser's rating chain; Pro debounces 800 ms, flushes on open and when the page hides). Auto: `rawboy:Auto` =
+  `ui/auto/AutoSidecar.ts` JSON (look ids, strength, adjust, the preset as preset JSON, edits as edits JSON vs global
+  defaults; `paramsOf` puts the analysis's `displaySource` back). `AutoStore.add(files, sidecars)` restores before
+  analysis (`restoring`), `changeDevelop` saves (800 ms). The Browser keeps the last folder's handle in IndexedDB
+  (`engine/util/Handles.ts`, shared with the LUT folder); opening a folder hands photos with `rawboy:Auto` to Auto
+  (`onAutoEdited`). Bin = `_bin` subfolder via `FileSystemHandle.move` (copy +
   size check + remove where move is missing). Browser-tested with OPFS standing in for `showDirectoryPicker` and
   generated TIFF/CR3/RAF files (no real raws needed).
   Shared native pieces: `decode.cpp` (decoder order), `image_ops.cpp` (downsample, copyTile), `band_ops.h`,

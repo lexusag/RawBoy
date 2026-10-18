@@ -1,6 +1,7 @@
 import type { LutData, LutEntry } from './LutData';
 import { loadLut } from './LutLoader';
 import { RetiredLooks } from '../auto/looks/RetiredLooks';
+import { loadHandle, saveHandle } from '../util/Handles';
 
 /**
  * Finds LUTs (port of LutRepository.kt): bundled ones from <repo>/luts, and the user's own from files or a folder
@@ -106,40 +107,8 @@ async function scanFolder(dir: FileSystemDirectoryHandle) {
   publish();
 }
 
-// The folder handle is kept in IndexedDB (handles can't go into localStorage).
-const DB = 'rawboy';
-const STORE = 'handles';
-
-function db(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB, 1);
-    req.onupgradeneeded = () => req.result.createObjectStore(STORE);
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
-  });
-}
-
-async function saveFolder(dir: FileSystemDirectoryHandle) {
-  try {
-    const d = await db();
-    d.transaction(STORE, 'readwrite').objectStore(STORE).put(dir, 'lutFolder');
-  } catch {
-    // Not remembered; the folder still works for this visit.
-  }
-}
-
-async function loadFolder(): Promise<FileSystemDirectoryHandle | null> {
-  try {
-    const d = await db();
-    return await new Promise((resolve) => {
-      const req = d.transaction(STORE).objectStore(STORE).get('lutFolder');
-      req.onsuccess = () => resolve((req.result as FileSystemDirectoryHandle) ?? null);
-      req.onerror = () => resolve(null);
-    });
-  } catch {
-    return null;
-  }
-}
+const saveFolder = (dir: FileSystemDirectoryHandle) => saveHandle('lutFolder', dir);
+const loadFolder = () => loadHandle<FileSystemDirectoryHandle>('lutFolder');
 
 /** Recently used LUTs, shared by every session, with in-flight loads deduplicated (see CLAUDE.md: LUT loading). */
 const CACHE_SIZE = 6;
