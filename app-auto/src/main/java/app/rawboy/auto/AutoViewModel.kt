@@ -787,7 +787,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
         /** Defaults of [exportSettings]: JPEG 92, 16-bit TIFF, full size. */
         val SETTINGS = ExportSettings(format = ExportFormat.JPEG, jpegQuality = 92, tiffBits = 16)
         /** Export sizes offered (long side in pixels; null = full resolution). */
-        val EXPORT_SIZES = listOf(null, 4096, 2048, 1080)
+        val EXPORT_SIZES = listOf(null, 5600, 4096, 2048, 1080)
         const val GRID_THUMBNAIL = 512
         const val LOOK_THUMBNAIL = 192
         private const val PREFS = "auto"
