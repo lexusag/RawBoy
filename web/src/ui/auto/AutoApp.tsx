@@ -301,6 +301,25 @@ function GridView({ store, scroll, lastViewed }: {
 }
 
 /**
+ * Esc closes an Auto dialog. Capture on window runs before the page's own window listeners, which then don't see
+ * the key: it doesn't also clear the selection or leave the photo.
+ */
+function useEscToDismiss(onDismiss: () => void) {
+  const dismiss = useRef(onDismiss);
+  dismiss.current = onDismiss;
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || !isTabShown('auto')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      dismiss.current();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, []);
+}
+
+/**
  * Picks the preset to apply to the batch, or to [count] selected photos: one saved in the RawBoy tab, or one from a preset file (.rawboy.json, as
  * RawBoy exports them on the web or Android). A file with several presets lists them.
  */
@@ -314,6 +333,7 @@ function PresetPicker({ store, count, onPick, onDismiss }: {
   const [saved] = useState(() => PresetStore.load().filter((p) => !isLensPreset(p)));
   const [fromFile, setFromFile] = useState<Preset[] | null>(null);
   const list = fromFile ?? saved;
+  useEscToDismiss(onDismiss);
   const openFile = async () => {
     const [file] = await pickFiles(false, '.json,application/json');
     const presets = file ? await store.readPresetFile(file) : null;
@@ -355,6 +375,7 @@ function PresetPicker({ store, count, onPick, onDismiss }: {
 
 /** The lens presets (saved in the RawBoy tab's Lens tab, or opened from files), each with the lens it corrects and Remove. */
 function LensPresetsDialog({ store, presets, onDismiss }: { store: AutoStore; presets: readonly Preset[]; onDismiss: () => void }) {
+  useEscToDismiss(onDismiss);
   return (
     <div className="dialog-backdrop" onClick={onDismiss}>
       <div className="dialog" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Lens presets">
@@ -784,6 +805,7 @@ function ExportSheet({ store, count, onDismiss, onExport }: { store: AutoStore; 
     : count > 1
       ? 'Saved as one ZIP download.'
       : 'Saved as a download.';
+  useEscToDismiss(onDismiss);
   return (
     <div className="dialog-backdrop" onClick={onDismiss}>
       <div className="dialog auto-export" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Export">
