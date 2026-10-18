@@ -241,7 +241,8 @@ describe('presets', () => {
     expect(p.name).toBe('Warm');
     expect(p.values.exposure).toBe(0.7);
     expect(p.values.lut).toBe('asset:luts/x.cube');
-    expect('temperature' in p.values).toBe(false); // white balance is off by default
+    expect(p.values.temperature).toBe(4200); // white balance is on by default
+    expect('lensProfile' in p.values).toBe(false); // lens is off by default
     expect('rotation' in p.values || 'straighten' in p.values || 'cropLeft' in p.values).toBe(false);
   });
 
