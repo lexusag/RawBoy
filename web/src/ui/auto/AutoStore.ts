@@ -57,6 +57,19 @@ type Develop = Pick<AutoPhoto, 'look' | 'mode' | 'filmLook' | 'strength' | 'adju
 const developOf = ({ look, mode, filmLook, strength, adjust, preset, looksApplied }: AutoPhoto): Develop =>
   ({ look, mode, filmLook, strength, adjust, preset, looksApplied });
 
+/**
+ * [p] with the look (or preset), strength, warmth, tint, contrast, saturation and grain of [source] ("Apply to all", "Copy previous");
+ * brightness, denoise and rotation stay (they follow this photo's exposure, noise and framing).
+ */
+function withLookOf(p: AutoPhoto, source: AutoPhoto): AutoPhoto {
+  const { warmth, tint, contrast, saturation, grain } = source.adjust;
+  return {
+    ...p, look: source.look, mode: source.mode, filmLook: source.filmLook, strength: source.strength, preset: source.preset,
+    looksApplied: true,
+    adjust: { ...p.adjust, warmth, tint, contrast, saturation, grain },
+  };
+}
+
 export const activeLook = (p: AutoPhoto): Look => (p.mode === 'film' ? p.filmLook : p.look);
 
 /** What develops the photo, for labels: the preset's name, else the active look's. */
@@ -387,17 +400,29 @@ export class AutoStore {
     if (this._state.export) return;
     const source = this.photo(id);
     if (!source) return;
-    const { warmth, tint, contrast, saturation, grain } = source.adjust;
     for (const p of this._state.photos) {
-      if (p.id !== id) {
-        this.changeDevelop(p.id, (q) => ({
-          ...q, look: source.look, mode: source.mode, filmLook: source.filmLook, strength: source.strength, preset: source.preset,
-          looksApplied: true,
-          adjust: { ...q.adjust, warmth, tint, contrast, saturation, grain },
-        }), true);
-      }
+      if (p.id !== id) this.changeDevelop(p.id, (q) => withLookOf(q, source), true);
     }
     this.update({ message: `${lookName(source)} applied to all photos` });
+  }
+
+  /** The analysed photo before [id] in the batch (the one Backspace goes back to), for "Copy previous". */
+  previousPhoto(id: string): AutoPhoto | null {
+    const pages = this._state.photos.filter((p) => p.analysis);
+    const index = pages.findIndex((p) => p.id === id);
+    return index > 0 ? pages[index - 1] : null;
+  }
+
+  /**
+   * Gives photo [id] what "Apply to all" copies, from the photo before it ([previousPhoto]): look (or preset), strength,
+   * warmth, tint, contrast, saturation and grain, as one undo step; brightness, denoise and rotation stay. Not while exporting.
+   */
+  copyPrevious(id: string) {
+    if (this._state.export) return;
+    const source = this.previousPhoto(id);
+    if (!source) return;
+    this.changeDevelop(id, (q) => withLookOf(q, source), true);
+    this.update({ message: `Copied from ${source.name}` });
   }
 
   /** [force]: its own undo step (false: a slider, coalesced; null: Undo or Redo itself, not recorded). */

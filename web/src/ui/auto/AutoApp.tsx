@@ -549,6 +549,16 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
                   {t}
                 </button>
               ))}
+              {/* By the controls it changes; the top bar is full on phones. */}
+              <button
+                type="button"
+                className="text copy-previous"
+                disabled={state.export != null || index < 1}
+                title={index > 0 ? `Copy the look and settings of ${pages[index - 1].name}` : 'Copy the look and settings of the photo before this one'}
+                onClick={() => store.copyPrevious(id)}
+              >
+                Copy previous
+              </button>
             </nav>
             {tab === 'Look' ? (
               <>

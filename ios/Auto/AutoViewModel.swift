@@ -73,6 +73,25 @@ private extension AutoPhoto {
             looksApplied = newValue.looksApplied
         }
     }
+
+    /**
+     * The look (or preset), strength, warmth, tint, contrast, saturation and grain of [source] ("Apply to all", "Copy previous");
+     * brightness, denoise and rotation stay (they follow this photo's exposure, noise and framing).
+     */
+    mutating func takeLook(of source: AutoPhoto) {
+        let s = source.adjust
+        look = source.look
+        mode = source.mode
+        filmLook = source.filmLook
+        strength = source.strength
+        preset = source.preset
+        looksApplied = true
+        adjust.warmth = s.warmth
+        adjust.tint = s.tint
+        adjust.contrast = s.contrast
+        adjust.saturation = s.saturation
+        adjust.grain = s.grain
+    }
 }
 
 /** Progress of "Export all". */
@@ -399,23 +418,28 @@ final class AutoViewModel: ObservableObject {
     func applyLookToAll(_ id: String) {
         if export != nil { return }
         guard let source = photo(id) else { return }
-        let s = source.adjust
         for p in photos where p.id != id {
-            changeDevelop(p.id, force: true) {
-                $0.look = source.look
-                $0.mode = source.mode
-                $0.filmLook = source.filmLook
-                $0.strength = source.strength
-                $0.preset = source.preset
-                $0.looksApplied = true
-                $0.adjust.warmth = s.warmth
-                $0.adjust.tint = s.tint
-                $0.adjust.contrast = s.contrast
-                $0.adjust.saturation = s.saturation
-                $0.adjust.grain = s.grain
-            }
+            changeDevelop(p.id, force: true) { $0.takeLook(of: source) }
         }
         message = "\(source.lookName) applied to all photos"
+    }
+
+    /** The analysed photo before [id] in the batch (the one Swipe goes back to), for "Copy previous". */
+    func previousPhoto(_ id: String) -> AutoPhoto? {
+        let pages = photos.filter { $0.analysis != nil }
+        guard let i = pages.firstIndex(where: { $0.id == id }), i > 0 else { return nil }
+        return pages[i - 1]
+    }
+
+    /**
+     * Gives photo [id] what "Apply to all" copies, from the photo before it ([previousPhoto]): look (or preset), strength,
+     * warmth, tint, contrast, saturation and grain, as one undo step; brightness, denoise and rotation stay. Not while exporting.
+     */
+    func copyPrevious(_ id: String) {
+        if export != nil { return }
+        guard let source = previousPhoto(id) else { return }
+        changeDevelop(id, force: true) { $0.takeLook(of: source) }
+        message = "Copied from \(source.name)"
     }
 
     /** [force]: its own undo step (false: a slider, coalesced; nil: Undo or Redo itself, not recorded). */

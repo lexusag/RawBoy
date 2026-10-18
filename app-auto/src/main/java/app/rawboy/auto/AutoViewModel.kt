@@ -111,6 +111,23 @@ private fun AutoPhoto.withDevelop(d: Develop) = copy(
     looksApplied = d.looksApplied,
 )
 
+/**
+ * The look (or preset), strength, warmth, tint, contrast, saturation and grain of [source] ("Apply to all", "Copy previous"); brightness,
+ * denoise and rotation stay (they follow this photo's exposure, noise and framing).
+ */
+private fun AutoPhoto.withLookOf(source: AutoPhoto): AutoPhoto {
+    val s = source.adjust
+    return copy(
+        look = source.look,
+        mode = source.mode,
+        filmLook = source.filmLook,
+        strength = source.strength,
+        preset = source.preset,
+        looksApplied = true,
+        adjust = adjust.copy(warmth = s.warmth, tint = s.tint, contrast = s.contrast, saturation = s.saturation, grain = s.grain),
+    )
+}
+
 /** Whether the photo view's Undo and Redo have something to do. */
 data class UndoState(val canUndo: Boolean = false, val canRedo: Boolean = false)
 
@@ -411,21 +428,26 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
     fun applyLookToAll(id: String) {
         if (_export.value != null) return
         val source = photo(id) ?: return
-        val s = source.adjust
-        _photos.value.filter { it.id != id }.forEach { p ->
-            changeDevelop(p.id, force = true) {
-                it.copy(
-                    look = source.look,
-                    mode = source.mode,
-                    filmLook = source.filmLook,
-                    strength = source.strength,
-                    preset = source.preset,
-                    looksApplied = true,
-                    adjust = it.adjust.copy(warmth = s.warmth, tint = s.tint, contrast = s.contrast, saturation = s.saturation, grain = s.grain),
-                )
-            }
-        }
+        _photos.value.filter { it.id != id }.forEach { p -> changeDevelop(p.id, force = true) { it.withLookOf(source) } }
         _message.value = "${source.lookName} applied to all photos"
+    }
+
+    /** The analysed photo before [id] in the batch (the one Swipe and Backspace go back to), for "Copy previous". */
+    fun previousPhoto(id: String): AutoPhoto? {
+        val pages = _photos.value.filter { it.analysis != null }
+        val index = pages.indexOfFirst { it.id == id }
+        return if (index > 0) pages[index - 1] else null
+    }
+
+    /**
+     * Gives photo [id] what "Apply to all" copies, from the photo before it ([previousPhoto]): look (or preset), strength,
+     * warmth, tint, contrast, saturation and grain, as one undo step; brightness, denoise and rotation stay. Not while exporting.
+     */
+    fun copyPrevious(id: String) {
+        if (_export.value != null) return
+        val source = previousPhoto(id) ?: return
+        changeDevelop(id, force = true) { it.withLookOf(source) }
+        _message.value = "Copied from ${source.name}"
     }
 
     /** [force]: its own undo step (false: a slider, coalesced; null: Undo or Redo itself, not recorded). */
