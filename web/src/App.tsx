@@ -32,6 +32,8 @@ pro.subscribe(() => {
   auto.setLensPresets(presets.filter(isLensPreset));
 });
 const stores = { pro, auto, browser };
+// The Auto photo the RawBoy tab's photo came from (Edit in RawBoy): "Back to Auto" gives that photo the edits.
+let proFromAuto: { id: string; file: File } | null = null;
 
 const isLutFile = (f: File) => /\.(cube|png)$/i.test(f.name);
 
@@ -159,8 +161,20 @@ export function App() {
     if (pro.busy) return auto.showMessage('RawBoy is busy; try again when it has finished');
     const handoff = auto.editInRawBoy(id);
     if (!handoff) return;
+    proFromAuto = { id, file: handoff.file };
     void pro.open(handoff.file, handoff.params);
     setTab('pro');
+  };
+
+  // And back: the RawBoy tab's edits develop the photo in Auto (the one it came from, else it joins the batch).
+  const fromAuto = proFromAuto != null && pro.file === proFromAuto.file;
+  const sendToAuto = () => {
+    const file = pro.file;
+    if (!file || pro.busy) return;
+    if (!auto.receiveEdits(file, proState.params, fromAuto ? proFromAuto!.id : null)) {
+      return pro.showMessage('Auto is exporting; try again when it has finished');
+    }
+    setTab('auto');
   };
 
   return (
@@ -168,7 +182,7 @@ export function App() {
       <div className="app">
         <main>
           <section className={tab === 'pro' ? 'page' : 'page hidden'}>
-            <ProApp store={pro} />
+            <ProApp store={pro} backToAuto={fromAuto} onSendToAuto={sendToAuto} />
           </section>
           <section className={tab === 'auto' ? 'page' : 'page hidden'}>
             <AutoApp store={auto} onEditInRawBoy={editInRawBoy} />

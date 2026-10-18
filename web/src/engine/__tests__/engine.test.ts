@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { NO_ADJUSTMENTS, applyLook, developAuto } from '../auto/looks/LookApplier';
+import { NO_ADJUSTMENTS, applyEditsDevelop, applyLook, developAuto } from '../auto/looks/LookApplier';
 import { ALL_FILM_LOOKS, FilmLooks, filmLookById } from '../auto/looks/FilmLooks';
 import { ALL_LOOKS, Looks, lookById, lutIdOf } from '../auto/looks/Look';
 import { applyAuto, measuredNoiseSettings } from '../auto/analysis/AutoTone';
@@ -723,5 +723,20 @@ describe('lens presets', () => {
     expect(q.exposure).toBeCloseTo(0.3, 6);
     expect(q.lensDistortion).toBe(-15);
     expect(q.vignetteAmount).toBe(20);
+  });
+});
+
+describe('applyEditsDevelop', () => {
+  // "Back to Auto": RawBoy's edits come back exactly as made, with Auto's adjustments on top.
+  const edits = { ...developParams(), exposure: 0.7, contrast: 20, denoise: 40, sharpening: 30, rotation: 1 };
+  it('keeps the edits unchanged with no adjustments', () => {
+    expect(applyEditsDevelop(edits, NO_ADJUSTMENTS)).toEqual(edits);
+  });
+  it('adds the adjustments to the edits, denoise and sharpening from the edits', () => {
+    const p = applyEditsDevelop(edits, { ...NO_ADJUSTMENTS, contrast: 10, denoise: 5, rotation: 1 });
+    expect(p.contrast).toBe(30);
+    expect(p.denoise).toBe(45);
+    expect(p.sharpening).toBe(30);
+    expect(p.rotation).toBe(2);
   });
 });

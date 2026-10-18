@@ -16,7 +16,7 @@ import { PresetsIcon } from '../common/PresetsIcon';
 import { DeleteIcon } from '../common/DeleteIcon';
 import { UndoIcon } from '../common/UndoIcon';
 import { AppSwitcher, HelpButton } from '../common/AppNav';
-import { activeLook, EXPORT_SIZES, lookName, paramsOf, SETTINGS, type AutoPhoto, type AutoStore, type LookMode } from './AutoStore';
+import { activeLook, EDITS_NAME, EXPORT_SIZES, lookName, paramsOf, SETTINGS, type AutoPhoto, type AutoStore, type LookMode } from './AutoStore';
 
 /** The frame around the photo in the fit view, CSS pixels, as RawBoy's (grey, white or black: click outside the photo). */
 const FRAME_WIDTH = 12;
@@ -458,6 +458,8 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
   // Swipe left/right on touch screens, when not zoomed.
   const swipe = useRef<{ x: number; y: number } | null>(null);
   if (!photo || !analysis) return null;
+  // What the look strip's place holds and what press-and-hold takes away: RawBoy edits, a preset or the look.
+  const develop = photo.edits ? 'RawBoy edits' : photo.preset ? 'preset' : 'look';
   const adjustSlider = (label: string, key: keyof Adjustments, range: number) => (
     <ParamSlider label={label} value={photo.adjust[key]} min={-range} max={range} defaultValue={0} format={formatSigned} onChange={(v) => store.setAdjust(id, { [key]: v })} />
   );
@@ -532,14 +534,24 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
                 <div className="center"><span className="spinner" /></div>
               </>
             )}
-            {loaded && (showAuto || zoomed) && <PreviewLabel>{showAuto ? (photo.preset ? 'Without preset' : 'Without look') : '100%'}</PreviewLabel>}
+            {loaded && (showAuto || zoomed) && <PreviewLabel>{showAuto ? `Without ${develop}` : '100%'}</PreviewLabel>}
             {state.export && <progress className="export-progress" value={state.export.current} max={1} />}
           </Preview>
           {index > 0 && !zoomed && <button type="button" className="nav prev" onClick={() => go(-1)} title="Previous (← or Backspace)">‹</button>}
           {index < pages.length - 1 && !zoomed && <button type="button" className="nav next" onClick={() => go(1)} title="Next (→ or Space)">›</button>}
         </div>
         <aside className="sidebar auto-controls">
-          {photo.preset ? (
+          {photo.edits ? (
+            <div className="photo-preset">
+              <div className="title">
+                <div className="name">{EDITS_NAME}</div>
+                <div className="info">From the RawBoy tab · the sliders below adjust on top</div>
+              </div>
+              <button type="button" className="text" disabled={state.export != null} onClick={() => store.removeEdits(photo.id)}>
+                Use {photo.preset ? 'the preset' : 'a look'}
+              </button>
+            </div>
+          ) : photo.preset ? (
             <div className="photo-preset">
               <div className="title">
                 <div className="name">{photo.preset.name}</div>
@@ -573,7 +585,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
             </nav>
             {tab === 'Look' ? (
               <>
-                {!photo.preset && <ParamSlider label="Strength" value={photo.strength} min={0} max={100} defaultValue={DEFAULT_STRENGTH} format={formatPlain} onChange={(v) => store.setStrength(id, v)} />}
+                {!photo.preset && !photo.edits && <ParamSlider label="Strength" value={photo.strength} min={0} max={100} defaultValue={DEFAULT_STRENGTH} format={formatPlain} onChange={(v) => store.setStrength(id, v)} />}
                 {adjustSlider('Brightness', 'brightness', 100)}
                 {adjustSlider('Warmth', 'warmth', 100)}
               </>
@@ -593,7 +605,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
                 {adjustSlider('Denoise', 'denoise', 100)}
               </>
             )}
-            <div className="note">Double-click the photo for 100%. Press and hold it to see it without the {photo.preset ? 'preset' : 'look'}. Space / Backspace (or ← / →) move through the batch.</div>
+            <div className="note">Double-click the photo for 100%. Press and hold it to see it without the {develop}. Space / Backspace (or ← / →) move through the batch.</div>
           </div>
         </aside>
       </div>

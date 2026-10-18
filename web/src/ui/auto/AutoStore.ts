@@ -1,6 +1,6 @@
 import { analyzeFile, type Analysis } from '../../engine/auto/AutoAnalysis';
 import { ALL_LOOKS, Looks, type Look } from '../../engine/auto/looks/Look';
-import { DEFAULT_STRENGTH, NO_ADJUSTMENTS, developAuto, sameAdjustments, type Adjustments } from '../../engine/auto/looks/LookApplier';
+import { DEFAULT_STRENGTH, NO_ADJUSTMENTS, applyEditsDevelop, developAuto, sameAdjustments, type Adjustments } from '../../engine/auto/looks/LookApplier';
 import { ALL_FILM_LOOKS, FilmLooks } from '../../engine/auto/looks/FilmLooks';
 import { suggestFilm, suggestLook } from '../../engine/auto/looks/LookSuggester';
 import type { DevelopParams } from '../../engine/develop/DevelopParams';
@@ -46,6 +46,11 @@ export interface AutoPhoto {
   adjust: Adjustments;
   /** A RawBoy preset developing the photo in place of its look (see applyPresetDevelop), or null. */
   preset: Preset | null;
+  /**
+   * The develop the photo came back with from the RawBoy tab ("Back to Auto"), in place of its look or preset, with the
+   * adjustments on top (see applyEditsDevelop); null = none. The look and preset stay for when it's removed.
+   */
+  edits: DevelopParams | null;
   /** The lens preset for the photo's lens (see lensPresetFor), on top of the look or preset; null = none. */
   lensPreset: Preset | null;
   /** True once "Apply to all" gave the photo its looks: its analysis then keeps them instead of the suggestions. */
@@ -55,33 +60,38 @@ export interface AutoPhoto {
 }
 
 /** A photo's edits, as Undo and Redo bring them back. */
-type Develop = Pick<AutoPhoto, 'look' | 'mode' | 'filmLook' | 'strength' | 'adjust' | 'preset' | 'looksApplied'>;
+type Develop = Pick<AutoPhoto, 'look' | 'mode' | 'filmLook' | 'strength' | 'adjust' | 'preset' | 'edits' | 'looksApplied'>;
 
-const developOf = ({ look, mode, filmLook, strength, adjust, preset, looksApplied }: AutoPhoto): Develop =>
-  ({ look, mode, filmLook, strength, adjust, preset, looksApplied });
+const developOf = ({ look, mode, filmLook, strength, adjust, preset, edits, looksApplied }: AutoPhoto): Develop =>
+  ({ look, mode, filmLook, strength, adjust, preset, edits, looksApplied });
 
 /**
  * [p] with the look (or preset), strength, warmth, tint, contrast, saturation and grain of [source] ("Apply to all", "Copy previous");
- * brightness, denoise and rotation stay (they follow this photo's exposure, noise and framing).
+ * brightness, denoise and rotation stay (they follow this photo's exposure, noise and framing). RawBoy edits aren't
+ * copied (they hold the source's crop and masks); [p]'s own are replaced by the look.
  */
 function withLookOf(p: AutoPhoto, source: AutoPhoto): AutoPhoto {
   const { warmth, tint, contrast, saturation, grain } = source.adjust;
   return {
     ...p, look: source.look, mode: source.mode, filmLook: source.filmLook, strength: source.strength, preset: source.preset,
-    looksApplied: true,
+    edits: null, looksApplied: true,
     adjust: { ...p.adjust, warmth, tint, contrast, saturation, grain },
   };
 }
 
 export const activeLook = (p: AutoPhoto): Look => (p.mode === 'film' ? p.filmLook : p.look);
 
-/** What develops the photo, for labels: the preset's name, else the active look's. */
-export const lookName = (p: AutoPhoto): string => p.preset?.name ?? activeLook(p).name;
+/** Label of RawBoy edits (AutoPhoto.edits) in place of a look. */
+export const EDITS_NAME = 'RawBoy edits';
+
+/** What develops the photo, for labels: RawBoy edits, the preset's name, else the active look's. */
+export const lookName = (p: AutoPhoto): string => (p.edits ? EDITS_NAME : p.preset?.name ?? activeLook(p).name);
 
 /** The develop settings for the current look (or preset) and controls (null until analysed). */
 export function paramsOf(p: AutoPhoto): DevelopParams | null {
   const a = p.analysis;
   if (!a) return null;
+  if (p.edits) return applyEditsDevelop(p.edits, p.adjust);
   return developAuto(a.autoBase, activeLook(p), p.strength, p.adjust, a.stats.hasFace, p.preset, p.lensPreset);
 }
 
@@ -150,6 +160,9 @@ function savedImportMode(): LookMode {
   }
 }
 
+/** Files with the same name, size and date are the same photo. */
+const fileKey = (f: File) => `${f.name}|${f.size}|${f.lastModified}`;
+
 /** A simple async mutex: full-resolution decodes run one at a time. */
 class Lock {
   private tail: Promise<unknown> = Promise.resolve();
@@ -217,17 +230,16 @@ export class AutoStore {
 
   /** Adds photos; files already listed (same name, size and date) are skipped. Returns how many were added. */
   add(files: File[]): number {
-    const key = (f: File) => `${f.name}|${f.size}|${f.lastModified}`;
-    const known = new Set(this._state.photos.map((p) => key(p.file)));
+    const known = new Set(this._state.photos.map((p) => fileKey(p.file)));
     const fresh: AutoPhoto[] = [];
     for (const file of files) {
-      if (known.has(key(file))) continue;
-      known.add(key(file));
+      if (known.has(fileKey(file))) continue;
+      known.add(fileKey(file));
       fresh.push({
         id: String(this.nextId++), file, name: file.name, status: 'queued', error: null, analysis: null,
         look: Looks.NATURAL, suggested: Looks.NATURAL, mode: this._state.importMode, filmLook: FilmLooks.PORTRA_400,
-        suggestedFilm: FilmLooks.PORTRA_400, strength: DEFAULT_STRENGTH, adjust: NO_ADJUSTMENTS, preset: this._state.preset, lensPreset: null,
-        looksApplied: false,
+        suggestedFilm: FilmLooks.PORTRA_400, strength: DEFAULT_STRENGTH, adjust: NO_ADJUSTMENTS, preset: this._state.preset, edits: null,
+        lensPreset: null, looksApplied: false,
         thumbnail: null,
       });
     }
@@ -276,7 +288,7 @@ export class AutoStore {
     if (isLensPreset(preset)) return this.addLensPresets([preset]);
     if (this._state.export) return;
     this.update({ preset });
-    for (const p of this._state.photos) this.changeDevelop(p.id, (q) => ({ ...q, preset }), true);
+    for (const p of this._state.photos) this.changeDevelop(p.id, (q) => ({ ...q, preset, edits: null }), true);
     this.update({ message: `${preset.name} applied to all photos` });
   }
 
@@ -288,7 +300,7 @@ export class AutoStore {
     if (isLensPreset(preset)) return this.addLensPresets([preset]);
     if (this._state.export) return;
     const photos = this._state.photos.filter((p) => ids.has(p.id));
-    for (const p of photos) this.changeDevelop(p.id, (q) => ({ ...q, preset }), true);
+    for (const p of photos) this.changeDevelop(p.id, (q) => ({ ...q, preset, edits: null }), true);
     this.update({ message: `${preset.name} applied to ${photos.length === 1 ? '1 photo' : `${photos.length} photos`}` });
   }
 
@@ -331,6 +343,33 @@ export class AutoStore {
       const next = lensPresetFor(lensPresets, p.analysis.lens.lensName);
       if (next !== p.lensPreset) this.changeDevelop(p.id, (q) => ({ ...q, lensPreset: next }), null);
     }
+  }
+
+  /** Takes the RawBoy edits off one photo, back to its preset or look. */
+  removeEdits = (id: string) => this.changeDevelop(id, (p) => ({ ...p, edits: null }), true);
+
+  /**
+   * "Back to Auto" from the RawBoy tab: develops [file]'s photo with [params] in place of its look or preset, Auto's
+   * controls back at zero (the edits already hold what they did), as one undo step, and opens it. [id] is the photo the
+   * RawBoy tab got it from (Edit in RawBoy); otherwise the photo with the same file, added to the batch if missing.
+   * False while exporting.
+   */
+  receiveEdits(file: File, params: DevelopParams, id: string | null): boolean {
+    if (this._state.export) return false;
+    const find = () => (id && this.photo(id)?.file === file ? this.photo(id) : this._state.photos.find((p) => fileKey(p.file) === fileKey(file)));
+    let p = find();
+    if (!p) {
+      this.add([file]);
+      p = find();
+      if (!p) return false;
+    }
+    this.changeDevelop(p.id, (q) => ({ ...q, edits: params, adjust: NO_ADJUSTMENTS }), true);
+    if (p.analysis) this.openDetail(p.id);
+    else {
+      this.closeDetail();
+      this.update({ message: `${p.name} added to Auto with its RawBoy edits` });
+    }
+    return true;
   }
 
   /** Takes the preset off one photo, back to its look; the batch preset stays for photos added later. */

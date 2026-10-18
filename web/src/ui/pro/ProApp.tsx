@@ -46,8 +46,11 @@ const saveBrush = (b: BrushSettings) => {
   }
 };
 
-/** RawBoy (Pro): every control (port of app-pro's EditorScreen.kt). */
-export function ProApp({ store }: { store: ProStore }) {
+/**
+ * RawBoy (Pro): every control (port of app-pro's EditorScreen.kt). [onSendToAuto] hands the photo and its edits to the
+ * Auto tab; [backToAuto]: the photo came from there.
+ */
+export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; backToAuto: boolean; onSendToAuto: () => void }) {
   const state = useSyncExternalStore(store.subscribe, () => store.state);
   const session = useSyncExternalStore(store.session.subscribe, () => store.session.state);
   // Before/after: press and hold the photo, or latch it with the Compare button or the \ key (as in Lightroom).
@@ -333,6 +336,15 @@ export function ProApp({ store }: { store: ProStore }) {
         </button>
         <button type="button" title="Auto light and colour (keeps the LUT)" onClick={store.applyAuto} disabled={!hasImage || busy}>Auto</button>
         <span className="row-break" />
+        <button
+          type="button"
+          className="text to-auto"
+          title={backToAuto ? 'Back to the Auto tab with these edits' : 'Add to the Auto tab with these edits'}
+          onClick={onSendToAuto}
+          disabled={!hasImage || busy}
+        >
+          <span className="wide-only">{backToAuto ? 'Back to' : 'Send to'}</span><span className="narrow-only">To</span> Auto
+        </button>
         <button type="button" className="primary" onClick={() => setShowExport(true)} disabled={!hasImage || busy}>Export</button>
         <HelpButton />
       </header>
