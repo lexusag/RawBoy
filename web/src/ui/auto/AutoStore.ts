@@ -1,10 +1,11 @@
 import { analyzeFile, type Analysis } from '../../engine/auto/AutoAnalysis';
 import { ALL_LOOKS, Looks, type Look } from '../../engine/auto/looks/Look';
-import { DEFAULT_STRENGTH, NO_ADJUSTMENTS, applyLook, applyPresetDevelop, sameAdjustments, type Adjustments } from '../../engine/auto/looks/LookApplier';
+import { DEFAULT_STRENGTH, NO_ADJUSTMENTS, developAuto, sameAdjustments, type Adjustments } from '../../engine/auto/looks/LookApplier';
 import { ALL_FILM_LOOKS, FilmLooks } from '../../engine/auto/looks/FilmLooks';
 import { suggestFilm, suggestLook } from '../../engine/auto/looks/LookSuggester';
 import type { DevelopParams } from '../../engine/develop/DevelopParams';
-import { decodePresets, type Preset } from '../../engine/develop/Presets';
+import { decodePresets, isLensPreset, lensPresetFor, putLensPreset, type Preset } from '../../engine/develop/Presets';
+import { PresetStore } from '../pro/PresetStore';
 import { exportImage } from '../../engine/export/Exporter';
 import { baseNameOf, EXTENSIONS, ExportSettingsStore, fileName, type ExportSettings, type OutputNaming } from '../../engine/export/ExportSettings';
 import { FilmStocks } from '../../engine/film/FilmStocks';
@@ -47,6 +48,8 @@ export interface AutoPhoto {
   adjust: Adjustments;
   /** A RawBoy preset developing the photo in place of its look (see applyPresetDevelop), or null. */
   preset: Preset | null;
+  /** The lens preset for the photo's lens (see lensPresetFor), on top of the look or preset; null = none. */
+  lensPreset: Preset | null;
   /** True once "Apply to all" gave the photo its looks: its analysis then keeps them instead of the suggestions. */
   looksApplied: boolean;
   /** Object URL of the grid thumbnail. */
@@ -81,7 +84,7 @@ export const lookName = (p: AutoPhoto): string => p.preset?.name ?? activeLook(p
 export function paramsOf(p: AutoPhoto): DevelopParams | null {
   const a = p.analysis;
   if (!a) return null;
-  return p.preset ? applyPresetDevelop(a.autoBase, p.preset, p.adjust) : applyLook(a.autoBase, activeLook(p), p.strength, p.adjust, a.stats.hasFace);
+  return developAuto(a.autoBase, activeLook(p), p.strength, p.adjust, a.stats.hasFace, p.preset, p.lensPreset);
 }
 
 /** Progress of "Export all". */
@@ -116,6 +119,11 @@ export interface AutoState {
   exportSettings: ExportSettings;
   /** The RawBoy preset applied to the whole batch, which photos added later get too; null = looks. */
   preset: Preset | null;
+  /**
+   * Lens presets from the RawBoy tab (isLensPreset): each photo taken with a preset's lens gets its lens corrections on
+   * top of its look or preset.
+   */
+  lensPresets: Preset[];
   /** Frame colour around the photo in the detail view (index into FrameColors, remembered in this browser). */
   frameColor: number;
 }
@@ -159,13 +167,20 @@ class Lock {
 /** RawBoy Auto's batch, look and export logic (port of AutoViewModel.kt). */
 export class AutoStore {
   private _state: AutoState = { photos: [], export: null, message: null, selected: null, sessionReady: null, cachedPreview: null, importMode: savedImportMode(),
-    exportSettings: savedExportSettings(), preset: null, frameColor: savedFrame() };
+    exportSettings: savedExportSettings(), preset: null, lensPresets: PresetStore.load().filter(isLensPreset), frameColor: savedFrame() };
+  /**
+   * Keeps lens presets opened from a file with the RawBoy tab's presets (set by the page; null: in this browser's
+   * preset store directly); the RawBoy tab then hands the new list back through setLensPresets.
+   */
+  saveLensPresets: ((presets: Preset[]) => void) | null = null;
   private readonly listeners = new Set<() => void>();
   /** The detail view's photo, decoded at full resolution (preview, 100% view, single export). */
   readonly session = new PhotoSession((m) => this.update({ message: m }));
   private readonly decodeLock = new Lock();
   /** Each analysed photo's detail preview, so a photo shows at once while [session] decodes it. */
   private readonly previews = new PreviewCache();
+  /** The open photo's full-resolution image was freed for the RawBoy tab ([editInRawBoy]); [resume] decodes it again. */
+  private released = false;
   /** The detail preview's frame width in device pixels. */
   private frameWidth = 0;
   private analyzing = false;
@@ -174,7 +189,7 @@ export class AutoStore {
   /** Each photo's edits, for Undo and Redo in the photo view. */
   private readonly histories = new Map<string, EditHistory<Develop>>();
   /** Look-strip thumbnails: the latest per photo and look, with the adjustments it was rendered at. */
-  private readonly lookThumbs = new Map<string, { adjust: Adjustments; url: string }>();
+  private readonly lookThumbs = new Map<string, { adjust: Adjustments; lensPreset: Preset | null; url: string }>();
 
   get state() {
     return this._state;
@@ -217,7 +232,7 @@ export class AutoStore {
       fresh.push({
         id: String(this.nextId++), file, name: file.name, status: 'queued', error: null, analysis: null,
         look: Looks.NATURAL, suggested: Looks.NATURAL, mode: this._state.importMode, filmLook: FilmLooks.PORTRA_400,
-        suggestedFilm: FilmLooks.PORTRA_400, strength: DEFAULT_STRENGTH, adjust: NO_ADJUSTMENTS, preset: this._state.preset,
+        suggestedFilm: FilmLooks.PORTRA_400, strength: DEFAULT_STRENGTH, adjust: NO_ADJUSTMENTS, preset: this._state.preset, lensPreset: null,
         looksApplied: false,
         thumbnail: null,
       });
@@ -264,6 +279,7 @@ export class AutoStore {
    * corrections included, on top of each photo's auto develop. Each photo keeps its look for when the preset is removed.
    */
   applyPresetToAll(preset: Preset) {
+    if (isLensPreset(preset)) return this.addLensPresets([preset]);
     if (this._state.export) return;
     this.update({ preset });
     for (const p of this._state.photos) this.changeDevelop(p.id, (q) => ({ ...q, preset }), true);
@@ -275,6 +291,7 @@ export class AutoStore {
    * preset per scene. The batch preset, which photos added later get, stays as it is.
    */
   applyPresetTo(preset: Preset, ids: ReadonlySet<string>) {
+    if (isLensPreset(preset)) return this.addLensPresets([preset]);
     if (this._state.export) return;
     const photos = this._state.photos.filter((p) => ids.has(p.id));
     for (const p of photos) this.changeDevelop(p.id, (q) => ({ ...q, preset }), true);
@@ -290,6 +307,36 @@ export class AutoStore {
     if (this._state.export || !batch) return;
     this.update({ preset: null });
     for (const p of this._state.photos) if (p.preset === batch) this.changeDevelop(p.id, (q) => ({ ...q, preset: null }), true);
+  }
+
+  /**
+   * Keeps lens presets (opened from a file) in place of those for the same lenses; photos taken with those lenses get
+   * their lens corrections on top of their look or preset, here and in the RawBoy tab's presets.
+   */
+  addLensPresets(presets: readonly Preset[]) {
+    const save = this.saveLensPresets;
+    if (save) save([...presets]);
+    else {
+      const all = presets.reduce(putLensPreset, PresetStore.load());
+      if (!PresetStore.save(all)) this.update({ message: 'Could not save presets in this browser' });
+      this.setLensPresets(all.filter(isLensPreset));
+    }
+    const lenses = new Set(presets.map((p) => p.lens?.trim().toLowerCase()));
+    const matched = this._state.photos.filter((p) => p.lensPreset && lenses.has(p.lensPreset.lens?.trim().toLowerCase())).length;
+    const name = presets.length === 1 ? `Lens preset ${presets[0].name}` : `${presets.length} lens presets`;
+    this.update({
+      message: `${name} saved for photos taken with ${presets.length === 1 ? 'that lens' : 'those lenses'} (${matched === 1 ? '1 photo' : `${matched} photos`} here)`,
+    });
+  }
+
+  /** The lens presets (from the RawBoy tab's presets); each analysed photo takes the one for its lens, if any. */
+  setLensPresets(lensPresets: Preset[]) {
+    this.update({ lensPresets });
+    for (const p of this._state.photos) {
+      if (!p.analysis) continue;
+      const next = lensPresetFor(lensPresets, p.analysis.lens.lensName);
+      if (next !== p.lensPreset) this.changeDevelop(p.id, (q) => ({ ...q, lensPreset: next }), null);
+    }
   }
 
   /** Takes the preset off one photo, back to its look; the batch preset stays for photos added later. */
@@ -354,6 +401,7 @@ export class AutoStore {
           const filmLook = suggestFilm(analysis.stats, analysis.defaults.temperature);
           this.updatePhoto(next.id, (p) => ({
             ...p, status: 'ready', analysis, suggested: look, suggestedFilm: filmLook,
+            lensPreset: lensPresetFor(this._state.lensPresets, analysis.lens.lensName),
             look: p.looksApplied ? p.look : look, filmLook: p.looksApplied ? p.filmLook : filmLook,
           }));
           this.refreshThumbnail(next.id, true);
@@ -485,12 +533,12 @@ export class AutoStore {
     if (!p || !a) return null;
     const key = thumbKey(id, look);
     const hit = this.lookThumbs.get(key);
-    if (hit && sameAdjustments(hit.adjust, p.adjust)) return hit.url;
-    const params = applyLook(a.autoBase, look, DEFAULT_STRENGTH, p.adjust, a.stats.hasFace);
+    if (hit && sameAdjustments(hit.adjust, p.adjust) && hit.lensPreset === p.lensPreset) return hit.url;
+    const params = developAuto(a.autoBase, look, DEFAULT_STRENGTH, p.adjust, a.stats.hasFace, null, p.lensPreset);
     try {
       const url = await imageUrl(await this.render(p, params, LOOK_THUMBNAIL));
       if (hit) URL.revokeObjectURL(hit.url);
-      this.lookThumbs.set(key, { adjust: p.adjust, url });
+      this.lookThumbs.set(key, { adjust: p.adjust, lensPreset: p.lensPreset, url });
       return url;
     } catch {
       return null;
@@ -501,7 +549,7 @@ export class AutoStore {
   hasCurrentLookThumbnail(id: string, look: Look): boolean {
     const p = this.photo(id);
     const t = this.lookThumbs.get(thumbKey(id, look));
-    return !!p && !!t && sameAdjustments(t.adjust, p.adjust);
+    return !!p && !!t && sameAdjustments(t.adjust, p.adjust) && t.lensPreset === p.lensPreset;
   }
 
   private async render(p: AutoPhoto, params: DevelopParams, size: number): Promise<ImageData> {
@@ -522,6 +570,7 @@ export class AutoStore {
     if (!p?.analysis || this._state.export) return;
     this.update({ selected: id });
     if (this._state.sessionReady === id) return;
+    this.released = false;
     this.update({ sessionReady: null });
     if (this._state.cachedPreview?.id !== id) {
       this.update({ cachedPreview: null });
@@ -537,7 +586,10 @@ export class AutoStore {
         return true;
       })
       .then((opened) => {
-        if (!opened || this._state.selected !== id) return;
+        if (!opened) return;
+        // Handed to the RawBoy tab while decoding: free it again (resume() decodes it once Auto is back).
+        if (this.released) return this.session.close();
+        if (this._state.selected !== id) return;
         const now = this.photo(id);
         const params = now && paramsOf(now);
         this.session.selectLut(params?.lut ?? null, (m) => this.update({ message: m }));
@@ -568,16 +620,26 @@ export class AutoStore {
 
   /**
    * Hands photo [id] over to the RawBoy tab: its file and current develop settings. Auto's full-resolution image is
-   * freed first so the two tabs don't hold two raws in the WASM heap; the detail view closes with it.
+   * freed first so the two tabs don't hold two raws in the WASM heap. The photo stays open in Auto ([resume]).
    */
   editInRawBoy(id: string): { file: File; params: DevelopParams } | null {
     const p = this.photo(id);
     const params = p && paramsOf(p);
     if (!p || !params || this._state.export) return null;
-    this.closeDetail();
+    this.session.exitZoom();
     this.session.close();
+    this.released = true;
     this.update({ sessionReady: null });
     return { file: p.file, params };
+  }
+
+  /**
+   * The Auto tab is on screen again: a photo left open when its image was handed to the RawBoy tab is decoded again,
+   * so Auto comes back on the photo it showed.
+   */
+  resume() {
+    const id = this._state.selected;
+    if (id && this.released) this.openDetail(id);
   }
 
   // ---- Export ----

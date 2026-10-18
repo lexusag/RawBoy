@@ -439,15 +439,28 @@ final class EditorViewModel: ObservableObject {
 
     /** Saves the current edits of [groups] as a new preset. */
     func savePreset(_ name: String, _ groups: Set<PresetGroup>) {
-        setPresets(presets + [Presets.capture(name, state.params, groups)])
+        setPresets(presets + [Presets.capture(name, state.params, groups, lens: session.lensInfo.lensName)])
+    }
+
+    /**
+     * Saves the Lens tab's settings as the lens preset for this photo's lens (replacing the one saved for it before), so
+     * RawBoy Auto can correct every photo taken with that lens ([sendPresetToAuto]); returns the preset.
+     */
+    @discardableResult
+    func saveLensPreset() -> Preset {
+        let lensPreset = Presets.captureLens(state.params, lens: session.lensInfo.lensName)
+        let list = Presets.putLensPreset(presets, lensPreset)
+        setPresets(list)
+        message = "Saved lens preset \(lensPreset.name)"
+        return list.last { $0.isLensPreset && $0.lens == lensPreset.lens } ?? lensPreset
     }
 
     /** Overwrites [id]'s values with the current edits (same groups). */
     func updatePreset(_ id: String) {
         setPresets(presets.map { p in
             guard p.id == id else { return p }
-            let c = Presets.capture(p.name, state.params, p.groups)
-            return Preset(id: id, name: c.name, groups: c.groups, values: c.values)
+            let c = Presets.capture(p.name, state.params, p.groups, lens: p.lens ?? session.lensInfo.lensName)
+            return Preset(id: id, name: c.name, groups: c.groups, values: c.values, lens: c.lens)
         })
     }
 

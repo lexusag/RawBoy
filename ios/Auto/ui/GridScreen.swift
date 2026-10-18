@@ -16,6 +16,7 @@ struct GridScreen: View {
     @State private var showExport = false
     /** The selection as it was when its Export was tapped; nil = Export all. */
     @State private var exportIds: Set<String>?
+    @State private var showLensPresets = false
 
     private var selecting: Bool { !selection.isEmpty }
     private var exporting: Bool { vm.export != nil }
@@ -32,11 +33,13 @@ struct GridScreen: View {
                         HStack(spacing: 12) {
                             importMode
                             presetControl
+                            lensPresetsControl
                             Spacer(minLength: 0)
                         }
                         VStack(alignment: .leading, spacing: 4) {
                             importMode
                             presetControl
+                            lensPresetsControl
                         }
                     }
                     .disabled(exporting)
@@ -72,6 +75,9 @@ struct GridScreen: View {
                 }
             }
         }
+        .sheet(isPresented: Binding(get: { showLensPresets && !vm.lensPresets.isEmpty }, set: { showLensPresets = $0 })) {
+            LensPresetsSheet(vm: vm)
+        }
         // Drop ids of photos that left the list (removed elsewhere, e.g. via the detail view).
         .onChange(of: vm.photos.map(\.id)) { _, ids in selection.formIntersection(ids) }
     }
@@ -104,6 +110,14 @@ struct GridScreen: View {
             .accessibilityLabel("Remove preset \(p.name)")
         } else {
             Button("Apply RawBoy preset…") { pickPreset(nil) }.font(.subheadline)
+        }
+    }
+
+    /** Lens presets from RawBoy: they correct every photo taken with their lens, whatever its look. */
+    @ViewBuilder private var lensPresetsControl: some View {
+        let n = vm.lensPresets.count
+        if n > 0 {
+            Button(n == 1 ? "1 lens preset" : "\(n) lens presets") { showLensPresets = true }.font(.subheadline)
         }
     }
 
@@ -369,5 +383,44 @@ struct ExportSheet: View {
             }
         }
         .presentationDetents([.height(260)])
+    }
+}
+
+/**
+ * The lens presets Auto keeps (sent from RawBoy or opened as files), each with the lens it corrects and a Remove
+ * button. Photos taken with a listed lens get its corrections on top of their look or RawBoy preset.
+ */
+private struct LensPresetsSheet: View {
+    @ObservedObject var vm: AutoViewModel
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    ForEach(vm.lensPresets) { p in
+                        HStack {
+                            VStack(alignment: .leading) {
+                                Text(p.name)
+                                Text(Self.lensLabel(p)).font(.caption).foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Button("Remove") { vm.removeLensPreset(p.id) }.buttonStyle(.borderless)
+                        }
+                    }
+                } footer: {
+                    Text("Photos taken with these lenses get their corrections on top of their look. Save them in RawBoy's Lens tab.")
+                }
+            }
+            .navigationTitle("Lens presets")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
+        }
+    }
+
+    /** Which photos a lens preset is for. */
+    private static func lensLabel(_ p: Preset) -> String {
+        guard let lens = p.lens else { return "Any lens" }
+        return lens.trimmingCharacters(in: .whitespaces).isEmpty ? "Photos with no lens name" : lens
     }
 }

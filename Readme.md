@@ -45,7 +45,7 @@ Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and
 | Bloom | 0–100. Diffusion-filter glow after spektrafilm's PSF model (Pro-Mist weights: core 0.28, halo 0.42 with warm rim, power-law tail 0.30), energy-conserving, in scene-linear light with a pre-clip highlight boost so light sources glow |
 | Grain | 0–100. Film-style grain: randomly placed soft grains about 1/3200 of the long edge (fine-grain film), mostly luminance, added in AgX's log (density-like) domain as spektrafilm does |
 | LUTs | Optional 3D LUT (HaldCLUT `.png` or `.cube`) on the final sRGB image, with Strength 0–100. Default: No LUT |
-| Lens | Embedded lens profile (DNG opcodes: shading gain maps, WarpRectilinear, FixVignetteRadial), on by default when present. Manual Distortion (auto crop/scale), Vignetting and Vignette radius |
+| Lens | Embedded lens profile (DNG opcodes: shading gain maps, WarpRectilinear, FixVignetteRadial), on by default when present. Manual Distortion (auto crop/scale), Vignetting and Vignette radius. **Save lens preset** keeps these four settings as the lens preset for the photo's lens (named after it; saving again for the same lens replaces it), listed with the other presets; **Send to Auto** (Android, iOS) also hands it to RawBoy Auto. On the web the Auto tab uses it directly |
 | Crop & rotate | Top-bar button: 90° turns left/right, **⇆ Flip** / **⇅ Flip** (mirror the picture as shown left-right or top-bottom; the crop, straighten angle and masks mirror with it), a Straighten slider (±45°, 0.1° steps, auto-cropped) and a crop frame over the whole picture: drag corners, edges or the inside. Aspect ratios Free, Original, 1:1, 4:5, 4:3, 3:2, 16:9 with a Portrait/Landscape switch. The crop is applied last, so lens corrections and the auto crop always work on the full frame. Resets for each new photo |
 | Presets | Top-bar button (opens in place of the slider tabs): save the current edits under a name, choosing which groups to include (Light, White balance, Curves, Color, Detail, Retouch, LUT, Lens; white balance is off by default). Tap a preset to apply it: only its groups change. Update, rename, delete; import/export as `.rawboy.json` files, the same format on Android and Web. **Send to Auto** (Android, iOS) opens RawBoy Auto with the preset applied to its whole batch. Rotation, flips, straightening and crop are never part of a preset |
 | Auto | Top-bar button: RawBoy Auto's automatic develop on this photo, without a look: exposure (faces steer it, phone DNGs keep the phone's own exposure), highlights, shadows, contrast, saturation, luma and color denoise from the noise measured in the photo, sharpening, white balance back to as shot, tone mapper AgX (a Film stock stays on, like the LUT). The LUT and everything else (crop, lens, masks, retouch, grain, colour grading) stay as they are. Reset goes back to as-shot |
@@ -168,7 +168,14 @@ LUT, film, detail, retouch and gradient masks included, on top of each photo's a
 the auto values). Denoise, Color denoise and sharpening always come from each photo's own auto develop (its measured
 noise, so its ISO), never from the photo the preset was made on. Brightness, Warmth and the Adjust sliders still work
 on top; there is no Strength. **Remove** goes back to the looks (photos given another preset on a selection keep
-theirs); **Use a look** in the photo view does it for one photo. **One preset per scene:** select a scene's photos and
+theirs); **Use a look** in the photo view does it for one photo.
+**Lens presets:** a preset holding only the Lens group (RawBoy's Lens tab → **Save lens preset** / **Send to Auto**) is
+not applied in place of the look: Auto keeps it for photos taken with its lens (the lens name in the raw, ignoring
+case) and gives them its lens corrections (embedded profile on/off, Distortion, Vignetting, Vignette radius) on top of
+their look or RawBoy preset, in this batch and later ones. Nothing else changes; a look's own vignette stays on top,
+and a RawBoy preset's Lens group gives way to the lens preset. Sending a new one for the same lens replaces it. The
+**lens presets** button in the grid lists them, to remove one. A lens-only preset saved before RawBoy recorded the lens
+counts for any lens without its own. **One preset per scene:** select a scene's photos and
 tap **Preset** (the bookmarks icon) in the selection bar to develop just those with a preset; the rest keep theirs.
 **Rotating, removing and exporting photos:** long-press a photo in the grid to start selecting, tap others to add them
 (or **All**), then **↺** / **↻** to turn them all 90° left or right (thumbnails, photo view and exports follow; Apply to
@@ -284,6 +291,9 @@ blemish removal use the same MediaPipe models in the browser.
   selection's **Preset** button (bookmarks icon) gives just those photos a preset, so each scene can have its own.
   Brightness, Warmth and the Adjust sliders still work on top; there is no Strength. **Remove** goes back to the looks;
   **Use a look** in the photo view does it for one photo.
+- Lens presets: **Save lens preset** in the RawBoy tab's Lens tab, and the Auto tab gives every photo taken with that
+  lens its lens corrections on top of its look or preset (only the lens settings change); a lens-only preset file
+  opened with **Apply RawBoy preset…** joins the RawBoy tab's presets. Delete one in the RawBoy tab's Presets.
 - Auto → RawBoy: **Edit in RawBoy** in Auto's photo view opens that photo in the RawBoy tab, starting from Auto's
   develop and look (Reset still goes back to as-shot).
 - **Browser** tab (RawBoy Browser): culling. **Open** a folder (or drop one) and its photos show from the JPEG previews
@@ -480,6 +490,15 @@ Update it when a dependency is added or upgraded.
 
 ## Changelog
 
+**Lens presets for RawBoy Auto (2026-10-18)**
+
+- RawBoy (Android, iOS, web): **Save lens preset** in the Lens tab saves the lens settings as a preset for the photo's
+  lens (`Presets.captureLens`; preset files now record the lens they were saved on, `"lens"`). Android and iOS also
+  have **Send to Auto** there.
+- RawBoy Auto (Android, iOS, web): lens-only presets are kept per lens (`LensPresetStore`; web: the RawBoy tab's
+  presets) and applied by lens name on top of each photo's look or RawBoy preset, changing only the lens settings
+  (`LookApplier.develop`). A **lens presets** button in the grid lists them (remove on Android and iOS).
+
 ### 0.1.0 — in development (2026-10-10)
 
 **Auto: photos open at once in the photo view (2026-10-18)**
@@ -490,6 +509,13 @@ Update it when a dependency is added or upgraded.
   back to the thumbnail). The full decode still runs behind it, shown by a small spinner in the corner: 100% zoom and
   Export become available when it finishes.
 - Photos you swipe or arrow-key past are no longer decoded one after another before the one you stop on.
+
+**Web: Auto keeps its open photo when you switch apps (2026-10-18)**
+
+- Auto's photo view has the RawBoy · Auto · Browser switcher in its bar, so you can leave the photo for another app and
+  come back to it. After **Edit in RawBoy**, going back to Auto reopens the same photo (decoded again: its full-size
+  image is freed while RawBoy has the photo). Before, you had to go back to the grid to switch apps, and Edit in RawBoy
+  closed the photo, so Auto came back on the grid.
 
 **Web: RawBoy Browser handles darktable duplicates (2026-10-18)**
 

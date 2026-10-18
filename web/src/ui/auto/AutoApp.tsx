@@ -11,7 +11,7 @@ import { isPressedSlider } from '../common/sliderFocus';
 import { Preview, PreviewLabel } from '../common/Preview';
 import { useTabScroll } from '../common/useTabScroll';
 import { ALL_FILM_LOOKS } from '../../engine/auto/looks/FilmLooks';
-import type { Preset } from '../../engine/develop/Presets';
+import { isLensPreset, type Preset } from '../../engine/develop/Presets';
 import { groupSummary } from '../pro/PresetsPanel';
 import { PresetStore } from '../pro/PresetStore';
 import { PresetsIcon } from '../common/PresetsIcon';
@@ -196,6 +196,15 @@ function GridView({ store, scroll, lastViewed }: {
             ) : (
               <button type="button" className="text" disabled={exporting} onClick={() => setChoosingPreset('all')}>Apply RawBoy preset…</button>
             )}
+            {state.lensPresets.length > 0 && (
+              // Lens presets saved in the RawBoy tab's Lens tab: they correct every photo taken with their lens, whatever its look.
+              <span
+                className="batch-preset"
+                title={`Photos taken with these lenses get their lens corrections on top of their look: ${state.lensPresets.map((p) => p.name).join(', ')}. Manage them in the RawBoy tab's presets.`}
+              >
+                {state.lensPresets.length === 1 ? '1 lens preset' : `${state.lensPresets.length} lens presets`}
+              </span>
+            )}
           </div>
         </div>
       )}
@@ -279,7 +288,8 @@ function PresetPicker({ store, count, onPick, onDismiss }: {
   onPick: (p: Preset) => void;
   onDismiss: () => void;
 }) {
-  const [saved] = useState(() => PresetStore.load());
+  // Lens presets aren't listed: they already apply to the photos taken with their lens.
+  const [saved] = useState(() => PresetStore.load().filter((p) => !isLensPreset(p)));
   const [fromFile, setFromFile] = useState<Preset[] | null>(null);
   const list = fromFile ?? saved;
   const openFile = async () => {
@@ -475,6 +485,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
   return (
     <div className="editor">
       <header className="toolbar">
+        <AppSwitcher />
         <button type="button" className="icon" title="Back" onClick={() => store.closeDetail()}>←</button>
         <div className="title">
           <div className="name">{photo.name}</div>

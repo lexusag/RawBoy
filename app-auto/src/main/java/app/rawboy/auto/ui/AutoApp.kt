@@ -5,6 +5,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -21,6 +22,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
@@ -104,6 +106,47 @@ private fun PresetChoiceDialog(presets: List<Preset>, onChoose: (Preset?) -> Uni
         confirmButton = {},
         dismissButton = { TextButton(onClick = { onChoose(null) }) { Text("Cancel") } },
     )
+}
+
+/**
+ * The lens presets Auto keeps (sent from RawBoy or opened as files), each with the lens it corrects and a Remove
+ * button. Photos taken with a listed lens get its corrections on top of their look or RawBoy preset.
+ */
+@Composable
+internal fun LensPresetsDialog(presets: List<Preset>, onRemove: (String) -> Unit, onClose: () -> Unit) {
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text("Lens presets") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text(
+                    "Photos taken with these lenses get their corrections on top of their look. Save them in RawBoy's Lens tab.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                for (p in presets) {
+                    Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(p.name)
+                            Text(
+                                lensLabel(p),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        TextButton(onClick = { onRemove(p.id) }) { Text("Remove") }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onClose) { Text("Done") } },
+    )
+}
+
+/** Which photos a lens preset is for, as the lens presets list shows it. */
+internal fun lensLabel(p: Preset): String {
+    val lens = p.lens ?: return "Any lens"
+    return lens.ifBlank { "Photos with no lens name" }
 }
 
 /** "Light · Color · Lens": the groups a preset holds. */

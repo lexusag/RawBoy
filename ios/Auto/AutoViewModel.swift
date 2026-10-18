@@ -30,6 +30,8 @@ struct AutoPhoto: Identifiable {
     var adjust: Adjustments = .none
     /** A RawBoy preset developing the photo in place of its look (see LookApplier.applyPreset), or nil. */
     var preset: Preset?
+    /** The lens preset for the photo's lens (see Presets.lensPresetFor), on top of the look or preset; nil = none. */
+    var lensPreset: Preset?
     /** True once "Apply to all" gave the photo its looks: its analysis then keeps them instead of the suggestions. */
     var looksApplied = false
     var thumbnail: CGImage?
@@ -44,8 +46,8 @@ struct AutoPhoto: Identifiable {
     /** The develop settings for the current look (or preset) and controls (nil until analysed). */
     var params: DevelopParams? {
         guard let a = analysis else { return nil }
-        if let preset { return LookApplier.applyPreset(a.autoBase, preset: preset, adjust: adjust) }
-        return LookApplier.apply(a.autoBase, look: activeLook, strength: strength, adjust: adjust, hasFace: a.stats.hasFace)
+        return LookApplier.develop(a.autoBase, look: activeLook, strength: strength, adjust: adjust, hasFace: a.stats.hasFace,
+                                   preset: preset, lensPreset: lensPreset)
     }
 }
 
@@ -159,6 +161,11 @@ final class AutoViewModel: ObservableObject {
 
     /** The RawBoy preset applied to the whole batch, which photos added later get too; nil = looks. */
     @Published private(set) var preset: Preset?
+    /**
+     * Lens presets (Preset.isLensPreset) from RawBoy: each photo taken with a preset's lens gets its lens corrections on
+     * top of its look or preset. Kept for later batches ([LensPresetStore]).
+     */
+    @Published private(set) var lensPresets: [Preset] = LensPresetStore.load()
     /** Presets of an opened file that held several, to pick one from; empty when no choice is pending. */
     @Published var presetChoices: [Preset] = []
     /** The photos [presetChoices] are for: nil = the whole batch. */
@@ -172,7 +179,7 @@ final class AutoViewModel: ObservableObject {
      * Look-strip thumbnails: the latest one per photo and look, with the adjustments it was
      * rendered at (slider drags would otherwise pile up one image per value).
      */
-    private var lookThumbs: [String: (adjust: Adjustments, image: CGImage)] = [:]
+    private var lookThumbs: [String: (adjust: Adjustments, lensPreset: Preset?, image: CGImage)] = [:]
     /** Every bundled look's LUT stays loaded once used: about 3 MB each. */
     private var luts: [String: LutData] = [:]
     /** Film stocks likewise (two 33^3 LUTs each, under 1 MB). */
@@ -236,7 +243,9 @@ final class AutoViewModel: ObservableObject {
             message = "Not a RawBoy preset file"
             return
         }
-        if presets.count == 1 {
+        if presets.allSatisfy(\.isLensPreset) {
+            addLensPresets(presets)
+        } else if presets.count == 1 {
             applyPreset(first, target: ids)
         } else {
             presetTarget = ids
@@ -252,7 +261,9 @@ final class AutoViewModel: ObservableObject {
             message = "Not a RawBoy preset"
             return
         }
-        if presets.count == 1 {
+        if presets.allSatisfy(\.isLensPreset) {
+            addLensPresets(presets)
+        } else if presets.count == 1 {
             applyPresetToAll(first)
         } else {
             presetTarget = nil
@@ -268,7 +279,36 @@ final class AutoViewModel: ObservableObject {
     }
 
     private func applyPreset(_ preset: Preset, target ids: Set<String>?) {
-        if let ids { applyPreset(preset, to: ids) } else { applyPresetToAll(preset) }
+        if preset.isLensPreset {
+            presetChoices = []
+            addLensPresets([preset])
+        } else if let ids { applyPreset(preset, to: ids) } else { applyPresetToAll(preset) }
+    }
+
+    /**
+     * Keeps [presets] (lens presets) in place of those for the same lenses; photos taken with those lenses get their lens
+     * corrections on top of their look or preset, now and in later batches.
+     */
+    private func addLensPresets(_ presets: [Preset]) {
+        setLensPresets(presets.reduce(lensPresets, Presets.putLensPreset))
+        let lenses = Set(presets.map { $0.lens?.trimmingCharacters(in: .whitespaces).lowercased() })
+        let matched = photos.filter { p in p.lensPreset.map { lenses.contains($0.lens?.trimmingCharacters(in: .whitespaces).lowercased()) } ?? false }.count
+        let name = presets.count == 1 ? "Lens preset \(presets[0].name)" : "\(presets.count) lens presets"
+        let here = matched == 1 ? "1 photo" : "\(matched) photos"
+        message = "\(name) saved for photos taken with \(presets.count == 1 ? "that lens" : "those lenses") (\(here) here)"
+    }
+
+    /** Forgets lens preset [id]; its photos go back to the auto develop's lens corrections. */
+    func removeLensPreset(_ id: String) { setLensPresets(lensPresets.filter { $0.id != id }) }
+
+    private func setLensPresets(_ list: [Preset]) {
+        lensPresets = list
+        if !LensPresetStore.save(list) { message = "Could not save lens presets" }
+        for p in photos {
+            guard let lens = p.analysis?.lens.lensName else { continue }
+            let next = Presets.lensPresetFor(list, lens: lens)
+            if next != p.lensPreset { changeDevelop(p.id, force: nil) { $0.lensPreset = next } }
+        }
     }
 
     /**
@@ -361,6 +401,7 @@ final class AutoViewModel: ObservableObject {
                         $0.analysis = analysis
                         $0.suggested = look
                         $0.suggestedFilm = film
+                        $0.lensPreset = Presets.lensPresetFor(self.lensPresets, lens: analysis.lens.lensName)
                         if !$0.looksApplied {
                             $0.look = look
                             $0.filmLook = film
@@ -484,18 +525,18 @@ final class AutoViewModel: ObservableObject {
     func lookThumbnail(_ id: String, _ look: Look) async -> CGImage? {
         guard let p = photo(id), let a = p.analysis else { return nil }
         let key = Self.thumbKey(id, look)
-        if let t = lookThumbs[key], t.adjust == p.adjust { return t.image }
-        let params = LookApplier.apply(a.autoBase, look: look, strength: LookApplier.defaultStrength, adjust: p.adjust,
-                                       hasFace: a.stats.hasFace)
+        if let t = lookThumbs[key], t.adjust == p.adjust, t.lensPreset == p.lensPreset { return t.image }
+        let params = LookApplier.develop(a.autoBase, look: look, strength: LookApplier.defaultStrength, adjust: p.adjust,
+                                         hasFace: a.stats.hasFace, preset: nil, lensPreset: p.lensPreset)
         guard let image = try? await render(p, params, Self.lookThumbnail) else { return nil }
-        lookThumbs[key] = (p.adjust, image)
+        lookThumbs[key] = (p.adjust, p.lensPreset, image)
         return image
     }
 
     /** True when the look-strip thumbnail of [look] on [id] matches the photo's current settings. */
     func hasCurrentLookThumbnail(_ id: String, _ look: Look) -> Bool {
         guard let p = photo(id), let t = lookThumbs[Self.thumbKey(id, look)] else { return false }
-        return t.adjust == p.adjust
+        return t.adjust == p.adjust && t.lensPreset == p.lensPreset
     }
 
     /** Film stocks share ids with the LUT looks of the same name (portra400...), so their thumbnails get their own keys. */
@@ -711,5 +752,33 @@ extension Data {
         var b = s.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
         b += String(repeating: "=", count: (4 - b.count % 4) % 4)
         self.init(base64Encoded: b)
+    }
+}
+
+/**
+ * The lens presets RawBoy sent or the user opened (Preset.isLensPreset), as one preset file (`lens-presets.json`, the
+ * same format as RawBoy's preset files) in app storage, so later batches get them too.
+ */
+enum LensPresetStore {
+    private static var file: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("lens-presets.json")
+    }
+
+    static func load() -> [Preset] {
+        guard let text = try? String(contentsOf: file, encoding: .utf8) else { return [] }
+        return ((try? Presets.decode(text)) ?? []).filter(\.isLensPreset)
+    }
+
+    /** Always an array, so one preset doesn't change the file's shape; written whole, then swapped in. */
+    static func save(_ presets: [Preset]) -> Bool {
+        let text = presets.isEmpty ? "[]" : presets.count == 1 ? "[\(Presets.encode(presets))]" : Presets.encode(presets)
+        do {
+            try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try text.write(to: file, atomically: true, encoding: .utf8)
+            return true
+        } catch {
+            return false
+        }
     }
 }

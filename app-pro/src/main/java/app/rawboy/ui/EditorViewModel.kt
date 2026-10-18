@@ -475,14 +475,26 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Saves the current edits of [groups] as a new preset. */
     fun savePreset(name: String, groups: Set<PresetGroup>) {
-        setPresets(_presets.value + Presets.capture(name, _state.value.params, groups))
+        setPresets(_presets.value + Presets.capture(name, _state.value.params, groups, lensInfo.value.lensName))
+    }
+
+    /**
+     * Saves the Lens tab's settings as the lens preset for this photo's lens (replacing the one saved for it before), so
+     * RawBoy Auto can correct every photo taken with that lens ([sendPresetToAuto]); returns the preset.
+     */
+    fun saveLensPreset(): Preset {
+        val lensPreset = Presets.captureLens(_state.value.params, lensInfo.value.lensName)
+        val list = Presets.putLensPreset(_presets.value, lensPreset)
+        setPresets(list)
+        _state.update { it.copy(message = "Saved lens preset ${lensPreset.name}") }
+        return list.first { it.isLensPreset && it.lens == lensPreset.lens }
     }
 
     /** Overwrites [id]'s values with the current edits (same groups). */
     fun updatePreset(id: String) {
         setPresets(
             _presets.value.map {
-                if (it.id == id) Presets.capture(it.name, _state.value.params, it.groups).copy(id = id) else it
+                if (it.id == id) Presets.capture(it.name, _state.value.params, it.groups, it.lens ?: lensInfo.value.lensName).copy(id = id) else it
             },
         )
     }

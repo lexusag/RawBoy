@@ -5,6 +5,7 @@ import { AutoApp } from './ui/auto/AutoApp';
 import { AutoStore } from './ui/auto/AutoStore';
 import { ProApp } from './ui/pro/ProApp';
 import { ProStore } from './ui/pro/ProStore';
+import { isLensPreset } from './engine/develop/Presets';
 import { LicensesDialog } from './ui/common/LicensesDialog';
 import { HelpDialog, isHelpShortcut } from './ui/common/HelpDialog';
 import { AppNavContext } from './ui/common/AppNav';
@@ -22,6 +23,14 @@ const TAB_KEY = 'rawboy.tab';
 const pro = new ProStore();
 const auto = new AutoStore();
 const browser = new BrowserStore();
+// Lens presets live with the RawBoy tab's presets; the Auto tab applies them by lens.
+auto.saveLensPresets = pro.putLensPresets;
+let presets = pro.state.presets;
+pro.subscribe(() => {
+  if (pro.state.presets === presets) return;
+  presets = pro.state.presets;
+  auto.setLensPresets(presets.filter(isLensPreset));
+});
 const stores = { pro, auto, browser };
 
 const isLutFile = (f: File) => /\.(cube|png)$/i.test(f.name);
@@ -46,6 +55,7 @@ export function App() {
 
   useEffect(() => {
     document.body.dataset.tab = tab;
+    if (tab === 'auto') auto.resume();
     try {
       localStorage.setItem(TAB_KEY, tab);
     } catch {
