@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { findEmbeddedPreview, scanForJpegs, tiffOrientation } from '../browse/EmbeddedPreview';
+import { findEmbeddedPreview, findJxlPreview, scanForJpegs, tiffOrientation } from '../browse/EmbeddedPreview';
 import { readEdits, readXmp, writeEdits, writeXmp } from '../browse/XmpSidecar';
 import { developParams } from '../develop/DevelopParams';
 import { decodeEdits, encodeEdits } from '../develop/Edits';
@@ -183,6 +183,67 @@ describe('Embedded previews', () => {
     const file = new Uint8Array([1, 2, 3, ...a, 9, 9, ...jpeg(50, 50, 0xc3), ...b, 7]);
     const found = scanForJpegs(file);
     expect(found).toEqual([{ offset: 3, length: a.length }, { offset: 3 + a.length + 2 + jpeg(50, 50, 0xc3).length, length: b.length }]);
+  });
+
+  it("finds a DNG's JPEG XL previews and picks the one for the size wanted", async () => {
+    const thumb = jpeg(256, 171);
+    const small = new Uint8Array(100).fill(1);
+    const full = [new Uint8Array(300).fill(2), new Uint8Array(200).fill(3)];
+    const jxlIfd = (w: number, h: number, rows: number, blob: number, count: number): Entry[] => [
+      [256, 4, [w]], [257, 4, [h]], [259, 3, [52546]], [262, 3, [2]], [273, 4, [blob]], [278, 4, [rows]], [279, 4, [count]],
+    ];
+    // Two strips: offsets and counts as arrays, written after the blobs by hand below.
+    const file = tiff(
+      [[[274, 3, [6]], [513, 4, [-1]], [514, 4, [thumb.length]], [330, 4, [-1000]]]],
+      [thumb, small, ...full, new Uint8Array(16)],
+      [
+        jxlIfd(1024, 683, 683, -2, small.length),
+        jxlIfd(6000, 4000, 2000, -5, 0),
+        [[256, 4, [6000]], [257, 4, [4000]], [259, 3, [52546]], [262, 3, [34892]], [273, 4, [-3]], [279, 4, [300]]], // the raw
+      ],
+    );
+    // SubIFD0 lists only the first SubIFD: point it at all three, and give the 6000 px one its two strips.
+    const v = new DataView(file.buffer);
+    const entry = (ifd: number, tag: number) => {
+      const n = v.getUint16(ifd, true);
+      for (let i = 0; i < n; i++) if (v.getUint16(ifd + 2 + i * 12, true) === tag) return ifd + 2 + i * 12;
+      throw new Error(`no tag ${tag}`);
+    };
+    const sub = v.getUint32(entry(8, 330) + 8, true);
+    const ifdAt = (k: number) => sub + [0, 2 + 7 * 12 + 4, 2 * (2 + 7 * 12 + 4)][k];
+    const table = file.length - 16;
+    v.setUint32(table, ifdAt(0), true);
+    v.setUint32(table + 4, ifdAt(1), true);
+    v.setUint32(table + 8, ifdAt(2), true);
+    v.setUint32(entry(8, 330) + 4, 3, true);
+    v.setUint32(entry(8, 330) + 8, table, true);
+    const fullAt = table - full[0].length - full[1].length;
+    const strips = new Uint8Array(16);
+    const sv = new DataView(strips.buffer);
+    sv.setUint32(0, fullAt, true);
+    sv.setUint32(4, fullAt + full[0].length, true);
+    sv.setUint32(8, full[0].length, true);
+    sv.setUint32(12, full[1].length, true);
+    const out = new Uint8Array(file.length + 16);
+    out.set(file);
+    out.set(strips, file.length);
+    const ov = new DataView(out.buffer);
+    for (const [tag, at] of [[273, file.length], [279, file.length + 8]]) {
+      const p = entry(ifdAt(1), tag);
+      ov.setUint32(p + 4, 2, true);
+      ov.setUint32(p + 8, at, true);
+    }
+
+    const forGrid = await findJxlPreview(new Blob([out]), 400);
+    expect(forGrid).toMatchObject({ width: 1024, height: 683, pieceWidth: 1024, pieceHeight: 683, orientation: 6 });
+    expect(forGrid!.pieces).toEqual([{ offset: table - full[0].length - full[1].length - small.length, length: small.length }]);
+    const forViewer = await findJxlPreview(new Blob([out]), 2560);
+    expect(forViewer).toMatchObject({ width: 6000, height: 4000, pieceHeight: 2000 });
+    expect(forViewer!.pieces).toEqual([{ offset: fullAt, length: 300 }, { offset: fullAt + 300, length: 200 }]);
+    // A JPEG preview at least as big wins.
+    const withJpeg = tiff([[[513, 4, [-1]], [514, 4, [jpeg(1024, 683).length]], [330, 4, [-1000]]]], [jpeg(1024, 683), small], [jxlIfd(1024, 683, 683, -2, small.length)]);
+    expect(await findJxlPreview(new Blob([withJpeg]), 400)).toBeNull();
+    expect(await findJxlPreview(new Blob([new Uint8Array(1000)]), 400)).toBeNull();
   });
 
   it('returns null when there is no preview', async () => {

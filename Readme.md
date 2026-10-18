@@ -302,7 +302,10 @@ blemish removal use the same MediaPipe models in the browser.
   copy looks and presets, not RawBoy edits.
 - **Browser** tab (RawBoy Browser): culling. **Open** a folder (or drop one) and its photos show from the JPEG previews
   cameras embed in their raws (CR2, CR3, NEF, ARW, RAF, RW2, ORF, PEF, DNG…), read without decoding the raw, so a
-  card's worth opens in seconds; a raw without one is developed as shot. A RAW + JPEG pair is one photo.
+  card's worth opens in seconds; a raw without one is developed as shot. DNG 1.7 files with JPEG XL previews (Adobe
+  DNG Converter's lossy/JPEG XL DNGs, which keep only a 256 px JPEG thumbnail) show their JPEG XL previews instead:
+  the small one for the grid, the full-size one at 2560 px in the viewer (needs the build with the Adobe DNG SDK). A
+  RAW + JPEG pair is one photo.
   Keys: **1–5** stars, **P** pick, **X** reject, **U** unflag, **Mod+Z** undo, arrows to move, Enter to open, Esc back,
   **Z** or double-click for 1:1 of the preview, **E** to edit in RawBoy; **Auto-advance** goes on to the next photo
   after rating. Filters: All / Picks / Unflagged / Rejects and minimum stars. Ratings are written as you go into XMP
@@ -501,6 +504,13 @@ Update it when a dependency is added or upgraded.
   and more may not fit the 4 GB WASM heap; tested in Chrome on macOS only.
 
 ## Changelog
+
+**Web: RawBoy Browser shows JPEG XL DNG previews at full size (2026-10-18)**
+
+- DNGs from Adobe DNG Converter with JPEG XL compression (lossy DNGs) showed blurry thumbnails and a tiny photo in
+  the viewer: their only JPEG preview is a 256 px thumbnail; the real previews (1024 px and full size) are JPEG XL. The
+  Browser now decodes those (libjxl, already in the DNG SDK build): the 1024 px one for the grid (~30 ms), the
+  full-size one at 2560 px for the viewer (~0.3 s for 24 MP).
 
 **Back to Auto (web, 2026-10-18)**
 

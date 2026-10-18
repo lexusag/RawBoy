@@ -193,7 +193,11 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   `src/ui/browser` is web-only (no Kotlin/Swift counterpart): RawBoy Browser, culling a folder. Previews come from
   `engine/browse/EmbeddedPreview.ts` (the cameras' embedded JPEGs found by walking TIFF IFDs/SubIFDs, CR3 boxes and
   the RAF header with `Blob.slice`, never the raw decoder; a scan for JPEG streams is the fallback, and lossless JPEG
-  = sensor data is rejected by its SOF). Ratings: `engine/browse/XmpSidecar.ts` edits only `xmp:Rating` and
+  = sensor data is rejected by its SOF). DNG 1.7 JPEG XL previews (compression 52546; Adobe DNG Converter's lossy DNGs
+  keep only a 256 px JPEG beside them): `findJxlPreview` → wasm `decodeJxl` (libjxl from the DNG SDK build; lite build
+  has none and falls back to the JPEG) → `Previews.jxlViewImageOf`; the grid decodes the smallest JXL ≥ 400 px
+  (`BrowserStore.thumbnailSource`, not cached), the viewer the smallest ≥ 2560. Test files: `.raw/DSC0227*-compressed.dng`
+  (Sony A7 III, 1024 + 6000 px JXL previews). Ratings: `engine/browse/XmpSidecar.ts` edits only `xmp:Rating` and
   `rawboy:Pick` in place, so other apps' sidecars survive. Pro edits (opt-in, Browser's `editsInSidecars`, off by default): `rawboy:Develop` = escaped
   JSON from `develop/Edits.ts` (fields differing from the photo's as-shot defaults, strokes kept via
   `parseLayers(v, true)`); `BrowserStore.editsSidecar` hands an `EditsSidecar` to `ProStore.open` (writes queued on the

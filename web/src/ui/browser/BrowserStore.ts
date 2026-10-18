@@ -2,7 +2,7 @@ import { isRated, NO_RATING, readEdits, readXmp, writeEdits, writeXmp, type Edit
 import { loadHandle, saveHandle } from '../../engine/util/Handles';
 import { zipFiles } from '../common/files';
 import { groupPhotos, isPhotoName, stemOf, withSuffix, type PhotoGroup } from './PhotoGroups';
-import { thumbnailOf, viewImageOf, type ViewImage } from './Previews';
+import { jxlViewImageOf, thumbnailOf, viewImageOf, type ViewImage } from './Previews';
 
 /** The subfolder rejects are moved into: nothing is ever deleted, and Restore brings them back. */
 export const BIN = '_bin';
@@ -378,6 +378,16 @@ export class BrowserStore {
     return v;
   }
 
+  /**
+   * What [id]'s thumbnail is made from: the viewer's image, except that a DNG with JPEG XL previews decodes its
+   * small one (a full-size JXL preview takes ~10× as long), not kept.
+   */
+  private async thumbnailSource(id: string): Promise<ViewImage> {
+    const cached = this.views.get(id);
+    if (cached) return cached;
+    return (await jxlViewImageOf(await this.fileOf(id), THUMBNAIL)) ?? this.viewImage(id);
+  }
+
   /** Makes [ids]' thumbnails next (the viewer's neighbours, photos scrolled into view). */
   prioritize(ids: string[]) {
     const wanted = ids.filter((id) => this.thumbQueue.includes(id));
@@ -397,7 +407,7 @@ export class BrowserStore {
     while (this.thumbQueue.length && generation === this.generation) {
       const id = this.thumbQueue.shift()!;
       try {
-        const blob = await thumbnailOf(await this.viewImage(id), THUMBNAIL);
+        const blob = await thumbnailOf(await this.thumbnailSource(id), THUMBNAIL);
         if (generation !== this.generation) return;
         const url = URL.createObjectURL(blob);
         this.updatePhoto(id, (p) => ({ ...p, thumbnail: url, status: 'ready', error: null }));

@@ -9,6 +9,9 @@
  * - Anything else, or when the above find nothing: a scan of the file's start for JPEG streams.
  *
  * Only baseline/progressive JPEGs count (raws keep their sensor data as lossless JPEG too); the largest wins.
+ *
+ * DNG 1.7 files can keep their previews as JPEG XL instead (Adobe DNG Converter with JPEG XL compression: only a
+ * 256 px JPEG thumbnail, the real previews in JXL): [findJxlPreview] finds those, for the worker to decode.
  */
 
 export interface EmbeddedPreview {
@@ -28,6 +31,18 @@ interface JpegInfo {
   width: number;
   height: number;
   /** EXIF orientation inside the JPEG itself, 0 if it has none. */
+  orientation: number;
+}
+
+/** A JPEG XL preview IFD of a DNG: one JXL stream per strip or tile, in reading order. */
+export interface JxlPreview {
+  pieces: Candidate[];
+  width: number;
+  height: number;
+  /** Size of each piece (the last column and row of tiles may reach past the image). */
+  pieceWidth: number;
+  pieceHeight: number;
+  /** IFD0's orientation, 0 if none. */
   orientation: number;
 }
 
@@ -91,7 +106,18 @@ function isTiff(b: Uint8Array): boolean {
   return magic === 42 || magic === 0x4f52 || magic === 0x5352 || magic === 0x55;
 }
 
+const TAG_WIDTH = 256;
+const TAG_HEIGHT = 257;
 const TAG_COMPRESSION = 259;
+const TAG_PHOTOMETRIC = 262;
+const TAG_ROWS_PER_STRIP = 278;
+const TAG_TILE_WIDTH = 322;
+const TAG_TILE_LENGTH = 323;
+const TAG_TILE_OFFSETS = 324;
+const TAG_TILE_BYTE_COUNTS = 325;
+const COMPRESSION_JXL = 52546;
+/** More strips or tiles than this and the IFD isn't treated as a preview. */
+const MAX_JXL_PIECES = 1024;
 const TAG_ORIENTATION = 274;
 const TAG_STRIP_OFFSETS = 273;
 const TAG_STRIP_BYTE_COUNTS = 279;
@@ -107,10 +133,11 @@ const TYPE_SIZE: Record<number, number> = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 
  * Preview candidates of the TIFF structure at [base] in [file] (offsets in it are relative to [base]) and IFD0's
  * orientation (0 if none).
  */
-async function tiffCandidates(file: Blob, base: number): Promise<{ candidates: Candidate[]; orientation: number }> {
+async function tiffCandidates(file: Blob, base: number): Promise<{ candidates: Candidate[]; orientation: number; jxl: JxlPreview[] }> {
   const header = await view(file, base, 8);
   const le = header.getUint8(0) === 0x49;
   const candidates: Candidate[] = [];
+  const jxl: JxlPreview[] = [];
   let orientation = 0;
   const queue = [header.getUint32(4, le)];
   const seen = new Set<number>();
@@ -122,13 +149,13 @@ async function tiffCandidates(file: Blob, base: number): Promise<{ candidates: C
     const n = (await view(file, base + at, 2)).getUint16(0, le);
     if (n === 0 || n > 1000) continue;
     const ifd = await view(file, base + at + 2, n * 12 + 4);
-    const values = async (i: number): Promise<number[]> => {
+    const values = async (i: number, max = 64): Promise<number[]> => {
       const p = i * 12;
       const type = ifd.getUint16(p + 2, le);
       const count = ifd.getUint32(p + 4, le);
       const size = TYPE_SIZE[type] ?? 1;
       if (type !== 3 && type !== 4 && type !== 13) return [];
-      const wanted = Math.min(count, 64);
+      const wanted = Math.min(count, max);
       const data = size * count <= 4 ? new DataView(ifd.buffer, ifd.byteOffset + p + 8, 4) : await view(file, base + ifd.getUint32(p + 8, le), size * wanted);
       return Array.from({ length: wanted }, (_, k) => (type === 3 ? data.getUint16(k * 2, le) : data.getUint32(k * 4, le)));
     };
@@ -146,6 +173,10 @@ async function tiffCandidates(file: Blob, base: number): Promise<{ candidates: C
       const counts = tags.has(TAG_STRIP_BYTE_COUNTS) ? await values(tags.get(TAG_STRIP_BYTE_COUNTS)!) : [];
       if (offsets.length === 1 && counts.length === 1) candidates.push({ offset: base + offsets[0], length: counts[0] });
     }
+    if (compression === COMPRESSION_JXL && [1, 2, 6].includes((await one(TAG_PHOTOMETRIC)) ?? 0)) {
+      const preview = await jxlPreview(tags, one, values);
+      if (preview) jxl.push({ ...preview, pieces: preview.pieces.map((c) => ({ offset: base + c.offset, length: c.length })), orientation: 0 });
+    }
     if (tags.has(TAG_RW2_JPEG)) {
       const p = tags.get(TAG_RW2_JPEG)! * 12;
       const count = ifd.getUint32(p + 4, le);
@@ -154,7 +185,46 @@ async function tiffCandidates(file: Blob, base: number): Promise<{ candidates: C
     if (tags.has(TAG_SUB_IFDS)) queue.push(...(await values(tags.get(TAG_SUB_IFDS)!)));
     queue.push(ifd.getUint32(n * 12, le));
   }
-  return { candidates, orientation };
+  for (const p of jxl) p.orientation = orientation;
+  return { candidates, orientation, jxl };
+}
+
+/** The strips or tiles of a JPEG XL IFD; null when they don't add up. */
+async function jxlPreview(
+  tags: Map<number, number>,
+  one: (tag: number) => Promise<number | undefined>,
+  values: (i: number, max?: number) => Promise<number[]>,
+): Promise<Omit<JxlPreview, 'orientation'> | null> {
+  const width = (await one(TAG_WIDTH)) ?? 0;
+  const height = (await one(TAG_HEIGHT)) ?? 0;
+  if (!width || !height) return null;
+  const tiled = tags.has(TAG_TILE_OFFSETS);
+  const pieceWidth = tiled ? ((await one(TAG_TILE_WIDTH)) ?? 0) : width;
+  const pieceHeight = tiled ? ((await one(TAG_TILE_LENGTH)) ?? 0) : Math.min(height, (await one(TAG_ROWS_PER_STRIP)) ?? height);
+  if (!pieceWidth || !pieceHeight) return null;
+  const expected = Math.ceil(width / pieceWidth) * Math.ceil(height / pieceHeight);
+  const [offsetTag, countTag] = tiled ? [TAG_TILE_OFFSETS, TAG_TILE_BYTE_COUNTS] : [TAG_STRIP_OFFSETS, TAG_STRIP_BYTE_COUNTS];
+  if (expected > MAX_JXL_PIECES || !tags.has(offsetTag) || !tags.has(countTag)) return null;
+  const offsets = await values(tags.get(offsetTag)!, expected);
+  const counts = await values(tags.get(countTag)!, expected);
+  if (offsets.length !== expected || counts.length !== expected) return null;
+  return { pieces: offsets.map((offset, k) => ({ offset, length: counts[k] })), width, height, pieceWidth, pieceHeight };
+}
+
+/**
+ * The JPEG XL preview of the DNG [file] to decode for showing it at [maxSide]: the smallest whose long side reaches
+ * it, else the largest. Null when there is none, or it is no bigger than the largest embedded JPEG.
+ */
+export async function findJxlPreview(file: Blob, maxSide: number): Promise<JxlPreview | null> {
+  if (!isTiff(new Uint8Array(await file.slice(0, 4).arrayBuffer()))) return null;
+  const r = await tiffCandidates(file, 0);
+  const valid = r.jxl.filter((p) => p.pieces.every((c) => c.length > 0 && c.offset > 0 && c.offset + c.length <= file.size));
+  if (!valid.length) return null;
+  const side = (p: { width: number; height: number }) => Math.max(p.width, p.height);
+  valid.sort((a, b) => side(a) - side(b));
+  const pick = valid.find((p) => side(p) >= maxSide) ?? valid[valid.length - 1];
+  const jpeg = await largest(file, r.candidates);
+  return jpeg && side(jpeg.info) >= side(pick) ? null : pick;
 }
 
 const CANON_UUID = '85c0b687820f11e08111f4ce462b6a48';
