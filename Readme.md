@@ -510,6 +510,12 @@ Update it when a dependency is added or upgraded.
 
 ## Changelog
 
+**Faster Fujifilm RAF decodes on the web and iOS (2026-10-18)**
+
+- RawBoy Web and iOS: X-Trans raws (most Fujifilm RAFs) are demosaiced on all cores instead of one. LibRaw's X-Trans
+  demosaic is ~6× slower than AHD on a Bayer raw of the same size and only runs in parallel with OpenMP, which Android
+  has and the web and iOS builds don't. A 26 MP frame: 15.0 s → 4.4 s on 4 cores (x86 host build); Android unchanged.
+
 **Web: Auto shows each photo's ISO (2026-10-18)**
 
 - RawBoy Web: Auto's grid shows each photo's ISO (from its EXIF) at the end of the name line, and the photo view shows

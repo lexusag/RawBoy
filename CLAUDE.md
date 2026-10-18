@@ -276,7 +276,9 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   pool is fixed at 8 (`parallelRows`' maximum) with `PTHREAD_POOL_SIZE_STRICT=2`: a worker blocked in C++ can't grow
   the pool, so more threads would deadlock. `getExceptionMessage` needs `-sEXPORT_EXCEPTION_HANDLING_HELPERS`. The
   DNG SDK needs `qWeb=1 qDNGLittleEndian=1` (its endian detection doesn't know wasm32). LibRaw is built without
-  OpenMP for the web (no `_OPENMP` anywhere, so its headers agree). LibRaw needs `LIBRAW_OWN_SWAB` on the web: it
+  OpenMP for the web (no `_OPENMP` anywhere, so its headers agree). Without OpenMP, X-Trans (Fuji) demosaicing would run on one thread
+  (~6× AHD's cost): `decoder_libraw.cpp` hooks `interpolate_xtrans_cb` (`RawBoyLibRaw`) and runs LibRaw's own
+  `xtrans_interpolate` on overlapping horizontal bands with `parallelRows` (`parallelXTrans`); web and iOS. LibRaw needs `LIBRAW_OWN_SWAB` on the web: it
   byte-swaps big-endian data in place (`swab(p, p, n)`), which musl's `swab` corrupts (iPhone ProRAW is `MM`: garbage
   LinearizationTable, white posterised image). macOS libc and bionic happen to cope. When web and native decodes
   differ, compile a harness with `em++` (same flags, `-sNODERAWFS=1`) and run it in Node next to the clang one.
