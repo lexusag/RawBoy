@@ -354,7 +354,7 @@ describe('Edits in sidecars', () => {
     const saved = {
       mode: 'film' as const, look: Looks.NATURAL, filmLook: FilmLooks.PORTRA_400, strength: 70,
       adjust: { ...NO_ADJUSTMENTS, brightness: 12, contrast: -8, rotation: 1 }, preset, edits: edited,
-      lensChoice: null, lensPreset: null,
+      lensChoice: null, lensPreset: null, plain: false,
     };
     const back = decodeAuto(encodeAuto(saved))!;
     expect({ ...back, preset: { ...back.preset!, id: '' }, edits: { ...back.edits!, masks: [] } })
@@ -373,9 +373,12 @@ describe('Edits in sidecars', () => {
   it("keeps a photo's picked lens preset, or None; by lens isn't stored", () => {
     const base = decodeAuto(encodeAuto({
       mode: 'looks', look: Looks.NATURAL, filmLook: FilmLooks.PORTRA_400, strength: 100, adjust: NO_ADJUSTMENTS,
-      preset: null, edits: null, lensChoice: null, lensPreset: null,
+      preset: null, edits: null, lensChoice: null, lensPreset: null, plain: false,
     }))!;
     expect(base.lensChoice).toBeNull();
+    // An "As is" photo comes back as one; others don't store it.
+    expect(decodeAuto(encodeAuto({ ...base, plain: true }))!.plain).toBe(true);
+    expect(encodeAuto(base)).not.toContain('plain');
     const helios = captureLensPreset(developParams({ lensDistortion: -6, vignetteAmount: 25 }), '', 'Helios 44-2');
     const picked = decodeAuto(encodeAuto({ ...base, lensChoice: helios.id, lensPreset: helios }))!;
     expect(picked.lensPreset!.name).toBe('Helios 44-2');

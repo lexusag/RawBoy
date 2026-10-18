@@ -18,7 +18,7 @@ import { PresetsIcon } from '../common/PresetsIcon';
 import { DeleteIcon } from '../common/DeleteIcon';
 import { UndoIcon } from '../common/UndoIcon';
 import { AppSwitcher, HelpButton } from '../common/AppNav';
-import { activeLook, EDITS_NAME, EXPORT_SIZES, lookName, paramsOf, SETTINGS, type AutoPhoto, type AutoStore, type LookMode } from './AutoStore';
+import { activeLook, EDITS_NAME, EXPORT_SIZES, lookName, paramsOf, SETTINGS, type AutoPhoto, type AutoStore, type ImportMode, type LookMode } from './AutoStore';
 
 /** The frame around the photo in the fit view, CSS pixels, as RawBoy's (grey, white or black: click outside the photo). */
 const FRAME_WIDTH = 12;
@@ -198,7 +198,7 @@ function GridView({ store, scroll, lastViewed }: {
         <div className="import-mode">
           <div className="import-mode-row batch-bar">
             <span className="import-mode-label">Import as</span>
-            <ModeSwitch mode={state.importMode} onChange={(m) => store.setImportMode(m)} disabled={exporting} title={importModeHint(state.importMode)} />
+            <ModeSwitch modes={IMPORT_MODES} mode={state.importMode} onChange={(m) => store.setImportMode(m)} disabled={exporting} title={importModeHint(state.importMode)} />
             {state.preset ? (
               <span
                 className="preset-chip"
@@ -236,10 +236,12 @@ function GridView({ store, scroll, lastViewed }: {
       {photos.length === 0 ? (
         <div className="center empty">
           <p>
-            {state.importMode === 'film'
-              ? 'Pick RAW photos. Each is developed automatically as film, on a suggested stock.'
-              : 'Pick RAW photos. Each is developed automatically and gets a suggested film look.'}
-            {' JPEG, HEIC, PNG and TIFF work too, at lower quality.'}
+            {state.importMode === 'plain'
+              ? 'Pick photos, e.g. TIFFs finished elsewhere. Each is added as it is, with no automatic edits: apply a preset (just grain, say) or a look yourself.'
+              : state.importMode === 'film'
+                ? 'Pick RAW photos. Each is developed automatically as film, on a suggested stock.'
+                : 'Pick RAW photos. Each is developed automatically and gets a suggested film look.'}
+            {state.importMode !== 'plain' && ' JPEG, HEIC, PNG and TIFF work too, at lower quality.'}
           </p>
           <button type="button" className="primary" onClick={add}>Choose photos</button>
           <p>or drop them here.</p>
@@ -663,7 +665,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
             </div>
           ) : (
             <>
-              <ModeSwitch mode={photo.mode} onChange={(m) => store.setMode(photo.id, m)} className="look-mode" />
+              <ModeSwitch modes={LOOK_MODES} mode={photo.mode} onChange={(m) => store.setMode(photo.id, m)} className="look-mode" />
               <LookStrip store={store} photo={photo} />
             </>
           )}
@@ -766,24 +768,31 @@ function LensPresetSelect({ presets, choice, disabled, title, onChange }: {
   );
 }
 
-function importModeHint(mode: LookMode): string {
+function importModeHint(mode: ImportMode): string {
+  if (mode === 'plain') {
+    return 'No automatic edits and no look: each photo stays as the file is, and imports faster. Apply a preset or pick a look yourself. For photos you add next.';
+  }
   return mode === 'film'
     ? 'Auto develop as film on a suggested stock, with grain and halation. For photos you add next; each can switch later.'
     : 'Auto develop + a suggested colour look. For photos you add next; each can switch later.';
 }
 
+const LOOK_MODES: readonly [LookMode, string][] = [['looks', 'Looks'], ['film', 'Film']];
+/** Import adds "As is": no auto develop, no look (finished files that only want a preset, e.g. grain). */
+const IMPORT_MODES: readonly [ImportMode, string][] = [...LOOK_MODES, ['plain', 'As is']];
+
 /**
- * Looks (LUTs on the AgX develop) or Film (stocks rendered as negative + print): a segmented switch, as in the apps,
- * so it doesn't read as another row of tabs.
+ * Looks (LUTs on the AgX develop) or Film (stocks rendered as negative + print), plus As is when importing: a
+ * segmented switch, as in the apps, so it doesn't read as another row of tabs.
  */
-function ModeSwitch({ mode, onChange, disabled, className, title }: {
-  mode: LookMode;
-  onChange: (m: LookMode) => void;
+function ModeSwitch<M extends string>({ modes, mode, onChange, disabled, className, title }: {
+  modes: readonly [M, string][];
+  mode: M;
+  onChange: (m: M) => void;
   disabled?: boolean;
   className?: string;
   title?: string;
 }) {
-  const modes: [LookMode, string][] = [['looks', 'Looks'], ['film', 'Film']];
   return (
     <div className={className ? `segmented ${className}` : 'segmented'} title={title}>
       {modes.map(([m, text]) => (

@@ -293,6 +293,13 @@ blemish removal use the same MediaPipe models in the browser.
   selection's **Preset** button (bookmarks icon) gives just those photos a preset, so each scene can have its own.
   Brightness, Warmth and the Adjust sliders still work on top; there is no Strength. **Remove** goes back to the looks;
   **Use a look** in the photo view does it for one photo.
+- Auto's **Import as: As is** (web only): photos are added with no automatic edits and no look, for files finished
+  elsewhere (TIFFs from another editor, scans) that only want a preset, e.g. just grain. The analysis skips the auto
+  develop and the noise and skin measurements behind it, so imports are faster, and each photo starts as the file
+  itself (labelled *As is*); **Apply RawBoy preset…**, a look, Film or the sliders add what you choose. Denoise and
+  sharpening stay at the file's (none added). No "lower quality than RAW" note for these imports. While photos wait,
+  the grid shows each file's own preview as the Browser does (a JPEG/PNG as it is, a raw's or TIFF's embedded JPEG; a
+  TIFF without one appears once analysed). Kept in sidecars with the other Auto settings.
 - Lens presets: **Save lens preset** in the RawBoy tab's Lens tab, and the Auto tab gives every photo taken with that
   lens its lens corrections on top of its look or preset (only the lens settings change); a lens-only preset file
   opened with **Apply RawBoy preset…** joins the RawBoy tab's presets. Manual lenses' presets (named in the Lens tab)
@@ -526,6 +533,14 @@ Update it when a dependency is added or upgraded.
 - RawBoy Web and iOS: X-Trans raws (most Fujifilm RAFs) are demosaiced on all cores instead of one. LibRaw's X-Trans
   demosaic is ~6× slower than AHD on a Bayer raw of the same size and only runs in parallel with OpenMP, which Android
   has and the web and iOS builds don't. A 26 MP frame: 15.0 s → 4.4 s on 4 cores (x86 host build); Android unchanged.
+
+**Web: Auto imports "As is" (2026-10-18)**
+
+- RawBoy Web: Auto's *Import as* gains **As is**: no auto develop, no look, no noise/skin measurement
+  (`analyzeFile(…, plain)`, `AutoPhoto.plain`, autoBase = the as-shot defaults), so finished files such as TIFFs import
+  quickly and get only the preset applied (e.g. grain). Grid cells show the file's own preview while waiting
+  (`quickImageOf`, all import modes). The TIFF reader already covers 8/16-bit RGB/grey, strips or tiles, LZW, Deflate,
+  PackBits, ICC and orientation; float, planar, CMYK and JPEG-compressed TIFFs still aren't read.
 
 **Web: Auto shows each photo's ISO (2026-10-18)**
 
