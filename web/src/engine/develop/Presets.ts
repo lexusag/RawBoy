@@ -102,9 +102,9 @@ export function chosenLensPreset(presets: readonly Preset[], choice: string | nu
 }
 
 /**
- * presets with lensPreset in place of the one it updates, keeping its id and position; else added at the end. A preset
- * for a named lens updates the one for that lens; one without a lens (manual lenses) the one of the same name without a
- * lens, so several manual lenses' presets live side by side.
+ * presets with lensPreset in place of the one it updates, keeping its id and position; else added at the end. It
+ * updates the one of the same name for the same lens (or for no lens, as manual lenses record), so one photo can save
+ * several named lens presets side by side.
  */
 export function putLensPreset(presets: readonly Preset[], lensPreset: Preset): Preset[] {
   const old = sameLensPreset(presets, lensPreset);
@@ -112,13 +112,13 @@ export function putLensPreset(presets: readonly Preset[], lensPreset: Preset): P
 }
 
 /**
- * The lens preset among presets that lensPreset stands for (putLensPreset would replace it): the one for the same lens,
- * or for no lens the one of the same name; null if none. Finds a copy kept elsewhere (a sidecar) in this list.
+ * The lens preset among presets that lensPreset stands for (putLensPreset would replace it): the one of the same name
+ * for the same lens (or no lens); null if none. Finds a copy kept elsewhere (a sidecar) in this list.
  */
 export function sameLensPreset(presets: readonly Preset[], lensPreset: Preset): Preset | null {
   const lens = lensPreset.lens?.trim() ?? '';
   return presets.findLast(
-    (p) => isLensPreset(p) && (lens !== '' ? isPresetFor(p, lens) : !p.lens?.trim() && same(p.name, lensPreset.name)),
+    (p) => isLensPreset(p) && (lens !== '' ? isPresetFor(p, lens) : !p.lens?.trim()) && same(p.name, lensPreset.name),
   ) ?? null;
 }
 

@@ -723,6 +723,10 @@ describe('lens presets', () => {
     const updated = putLensPreset(list, captureLensPreset(developParams({ lensDistortion: 7 }), '', 'helios 44-2 '));
     expect(updated.map((p) => p.id)).toEqual([helios.id, jupiter.id]);
     expect(updated[0].values.lensDistortion).toBe(7);
+    // One photo, one recorded lens, two names: two presets.
+    const a = captureLensPreset(developParams({ lensDistortion: 1 }), '----', 'Helios 44-2');
+    const b = captureLensPreset(developParams({ lensDistortion: 2 }), '----', 'Jupiter-9');
+    expect(putLensPreset([a], b)).toHaveLength(2);
   });
 
   it('saved again replace the one for that lens', () => {

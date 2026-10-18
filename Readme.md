@@ -45,7 +45,7 @@ Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and
 | Bloom | 0–100. Diffusion-filter glow after spektrafilm's PSF model (Pro-Mist weights: core 0.28, halo 0.42 with warm rim, power-law tail 0.30), energy-conserving, in scene-linear light with a pre-clip highlight boost so light sources glow |
 | Grain | 0–100. Film-style grain: randomly placed soft grains about 1/3200 of the long edge (fine-grain film), mostly luminance, added in AgX's log (density-like) domain as spektrafilm does |
 | LUTs | Optional 3D LUT (HaldCLUT `.png` or `.cube`) on the final sRGB image, with Strength 0–100. Default: No LUT |
-| Lens | Embedded lens profile (DNG opcodes: shading gain maps, WarpRectilinear, FixVignetteRadial), on by default when present. Manual Distortion (auto crop/scale), Vignetting and Vignette radius. **Save lens preset** keeps these four settings as the lens preset for the photo's lens, under the name in the field next to it (the lens by default; saving again for the same lens replaces it). Manual lenses record no lens: name the preset yourself (saving again under the same name replaces it) and pick it in Auto. Lens presets are listed with the other presets; **Send to Auto** (Android, iOS) also hands it to RawBoy Auto. On the web the Auto tab uses it directly |
+| Lens | Embedded lens profile (DNG opcodes: shading gain maps, WarpRectilinear, FixVignetteRadial), on by default when present. Manual Distortion (auto crop/scale), Vignetting and Vignette radius. **Save lens preset** keeps these four settings as the lens preset for the photo's lens, under the name in the field next to it (the lens by default). Saving again under the same name replaces it; another name saves another preset, so one photo can save several. Manual lenses record no lens: name the preset yourself and pick it in Auto. Lens presets are listed with the other presets; **Send to Auto** (Android, iOS) also hands it to RawBoy Auto. On the web the Auto tab uses it directly |
 | Crop & rotate | Top-bar button: 90° turns left/right, **⇆ Flip** / **⇅ Flip** (mirror the picture as shown left-right or top-bottom; the crop, straighten angle and masks mirror with it), a Straighten slider (±45°, 0.1° steps, auto-cropped) and a crop frame over the whole picture: drag corners, edges or the inside. Aspect ratios Free, Original, 1:1, 4:5, 4:3, 3:2, 16:9 with a Portrait/Landscape switch. The crop is applied last, so lens corrections and the auto crop always work on the full frame. Resets for each new photo |
 | Presets | Top-bar button (opens in place of the slider tabs): save the current edits under a name, choosing which groups to include (Light, White balance, Curves, Color, Detail, Retouch, LUT, Lens; white balance is off by default). Tap a preset to apply it: only its groups change. Update, rename, delete; import/export as `.rawboy.json` files, the same format on Android and Web. **Send to Auto** (Android, iOS) opens RawBoy Auto with the preset applied to its whole batch. Rotation, flips, straightening and crop are never part of a preset |
 | Auto | Top-bar button: RawBoy Auto's automatic develop on this photo, without a look: exposure (faces steer it, phone DNGs keep the phone's own exposure), highlights, shadows, contrast, saturation, luma and color denoise from the noise measured in the photo, sharpening, white balance back to as shot, tone mapper AgX (a Film stock stays on, like the LUT). The LUT and everything else (crop, lens, masks, retouch, grain, colour grading) stay as they are. Reset goes back to as-shot |
@@ -509,6 +509,11 @@ Update it when a dependency is added or upgraded.
   and more may not fit the 4 GB WASM heap; tested in Chrome on macOS only.
 
 ## Changelog
+
+**Several lens presets from one photo (2026-10-18)**
+
+- RawBoy (Android, iOS, web): a lens preset saved under another name no longer replaces the one saved for the same lens
+  (`Presets.putLensPreset` matches lens and name), so one photo can save a preset per manual lens.
 
 **Named lens presets for manual lenses (2026-10-18)**
 
