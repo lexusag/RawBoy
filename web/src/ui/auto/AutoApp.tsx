@@ -397,6 +397,7 @@ function PhotoCell({ photo, selected, disabled, onClick, onLongPress }: {
   const longPressed = useRef(false);
   // The thumbnail's own width / height: rows are justified, each photo at its aspect (3:2 until it has loaded).
   const [aspect, setAspect] = useState(1.5);
+  const iso = isoLabel(photo);
   return (
     <button
       type="button"
@@ -435,12 +436,21 @@ function PhotoCell({ photo, selected, disabled, onClick, onLongPress }: {
         {photo.status === 'exported' && <span className="badge corner">Saved</span>}
         {selected && <span className="check">✓</span>}
         <div className="cell-caption">
-          <div className="cell-name">{photo.name}</div>
+          <div className="cell-name-row">
+            <div className="cell-name">{photo.name}</div>
+            {iso && <span className="cell-iso">{iso}</span>}
+          </div>
           {photo.analysis && <div className="cell-look">{lookName(photo)}</div>}
         </div>
       </div>
     </button>
   );
+}
+
+/** "ISO 6400" from the photo's EXIF, to judge its noise without zooming in; null until analysed or when unknown. */
+function isoLabel(photo: AutoPhoto): string | null {
+  const iso = photo.analysis?.stats.iso ?? 0;
+  return iso > 0 ? `ISO ${Math.round(iso)}` : null;
 }
 
 function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: string; onEditInRawBoy: (id: string) => void }) {
@@ -604,6 +614,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
                 <div className="center"><span className="spinner" /></div>
               </>
             )}
+            {isoLabel(photo) && <div className="preview-iso">{isoLabel(photo)}</div>}
             {loaded && (showAuto || zoomed) && <PreviewLabel>{showAuto ? `Without ${develop}` : '100%'}</PreviewLabel>}
             {state.export && <progress className="export-progress" value={state.export.current} max={1} />}
           </Preview>
