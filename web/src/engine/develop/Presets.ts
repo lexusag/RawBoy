@@ -23,7 +23,7 @@ export const PRESET_GROUPS: readonly { key: PresetGroup; label: string; fields: 
     label: 'Color',
     fields: ['saturation', 'redHue', 'redPurity', 'greenHue', 'greenPurity', 'blueHue', 'bluePurity', 'tintHue', 'tintPurity'],
   },
-  { key: 'detail', label: 'Detail', fields: ['denoise', 'colorDenoise', 'sharpening', 'localContrast', 'highpassContrast', 'grain', 'bloom'] },
+  { key: 'detail', label: 'Detail', fields: ['denoise', 'colorDenoise', 'sharpening', 'localContrast', 'highpassContrast', 'grain', 'grainSize', 'grainRoughness', 'grainColor', 'bloom'] },
   { key: 'retouch', label: 'Retouch', fields: ['skinRetouch', 'blemishRemoval'] },
   { key: 'lut', label: 'LUT', fields: ['lut', 'lutAmount'] },
   { key: 'lens', label: 'Lens', fields: ['lensProfile', 'lensDistortion', 'vignetteAmount', 'vignetteMidpoint'] },

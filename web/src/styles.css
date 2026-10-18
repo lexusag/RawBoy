@@ -695,6 +695,20 @@ progress {
   justify-content: space-between;
 }
 
+.slider-label {
+  background: none;
+  border: none;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+/* Controls a slider's label opens under it (Pro's grain details). */
+.slider-details {
+  padding-left: 16px;
+}
+
 .slider-value {
   background: none;
   border: none;

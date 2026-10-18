@@ -29,7 +29,7 @@ internal val PRO_HELP = listOf(
             HelpItem("Double-tap a slider", "Reset it (tapping its value does too)."),
             HelpItem("Pick white balance", "Color tab: tap something neutral grey and Temperature and Tint make it grey."),
             HelpItem("Curves", "Light tab: touch the curve to add a point, drag it, double-tap it to remove; elsewhere the box scrolls. RGB, then Red, Green and Blue."),
-            HelpItem("Detail", "Luma and Color denoise work separately. Local contrast brings out texture; High-pass contrast is wider clarity."),
+            HelpItem("Detail", "Luma and Color denoise work separately. Local contrast brings out texture; High-pass contrast is wider clarity. Tap Grain's name for its size, roughness and color."),
             HelpItem("Masks", "Brush, linear and radial layers with their own light and colour. Brush or Erase paints on any layer."),
             HelpItem("Presets", "Save the edits by group, apply, import and export .rawboy.json files, or Send to Auto for a whole batch."),
         ),

@@ -149,6 +149,8 @@ export class DevelopProgram {
     this.f1('uColorDenoiseWide', p.colorDenoiseWide);
     this.f1('uGrain', p.grain);
     this.f1('uGrainSize', g.grainSize * p.grainSizeScale);
+    this.f1('uGrainRoughness', p.grainRoughness);
+    this.f1('uGrainColor', p.grainColor);
     this.f1('uSharpen', p.sharpening);
     this.f1('uLocalContrast', p.localContrast);
     this.f1('uClarity', p.base != null ? p.highpassContrast : 0);
