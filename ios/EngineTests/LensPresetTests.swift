@@ -50,6 +50,10 @@ final class LensPresetTests: XCTestCase {
         let updated = Presets.putLensPreset(list, Presets.captureLens(params { $0.lensDistortion = 7 }, lens: "", name: "helios 44-2 "))
         XCTAssertEqual(updated.map(\.id), [helios.id, jupiter.id])
         XCTAssertEqual(updated[0].values["lensDistortion"], .number(7))
+        // One photo, one recorded lens, two names: two presets.
+        let a = Presets.captureLens(params { $0.lensDistortion = 1 }, lens: "----", name: "Helios 44-2")
+        let b = Presets.captureLens(params { $0.lensDistortion = 2 }, lens: "----", name: "Jupiter-9")
+        XCTAssertEqual(Presets.putLensPreset([a], b).count, 2)
     }
 
     func testSavingAgainReplacesTheOneForThatLens() {

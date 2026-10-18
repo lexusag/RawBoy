@@ -118,5 +118,9 @@ class PresetsTest {
         val updated = Presets.putLensPreset(list, again)
         assertEquals(listOf(helios.id, jupiter.id), updated.map { it.id })
         assertEquals(7f, updated[0].values["lensDistortion"])
+        // One photo, one recorded lens, two names: two presets.
+        val a = Presets.captureLens(DevelopParams(lensDistortion = 1f), "----", "Helios 44-2")
+        val b = Presets.captureLens(DevelopParams(lensDistortion = 2f), "----", "Jupiter-9")
+        assertEquals(2, Presets.putLensPreset(listOf(a), b).size)
     }
 }

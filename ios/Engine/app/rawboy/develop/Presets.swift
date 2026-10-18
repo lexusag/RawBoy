@@ -144,13 +144,13 @@ public enum Presets {
 
     /**
      * [presets] with [lensPreset] in place of the one it updates, keeping its id and position; else added at the end.
-     * A preset for a named lens updates the one for that lens; one without a lens (manual lenses) the one of the same
-     * name without a lens, so several manual lenses' presets live side by side.
+     * It updates the one of the same name for the same lens (or for no lens, as manual lenses record), so one photo can
+     * save several named lens presets side by side.
      */
     public static func putLensPreset(_ presets: [Preset], _ lensPreset: Preset) -> [Preset] {
         let lens = lensPreset.lens ?? ""
         guard let i = presets.lastIndex(where: {
-            $0.isLensPreset && (isBlank(lens) ? isBlank($0.lens) && same($0.name, lensPreset.name) : isFor($0, lens: lens))
+            $0.isLensPreset && (isBlank(lens) ? isBlank($0.lens) : isFor($0, lens: lens)) && same($0.name, lensPreset.name)
         }) else {
             return presets + [lensPreset]
         }

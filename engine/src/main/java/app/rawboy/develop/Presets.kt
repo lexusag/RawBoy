@@ -105,14 +105,14 @@ object Presets {
 
     /**
      * [presets] with [lensPreset] in place of the one it updates, keeping its id and position; else added at the end.
-     * A preset for a named lens updates the one for that lens; one without a lens (manual lenses) the one of the same
-     * name without a lens, so several manual lenses' presets live side by side.
+     * It updates the one of the same name for the same lens (or for no lens, as manual lenses record), so one photo can
+     * save several named lens presets side by side.
      */
     fun putLensPreset(presets: List<Preset>, lensPreset: Preset): List<Preset> {
         val lens = lensPreset.lens?.trim().orEmpty()
         val old = presets.lastOrNull {
-            it.isLensPreset && if (lens.isNotEmpty()) isFor(it, lens)
-            else it.lens.isNullOrBlank() && it.name.trim().equals(lensPreset.name.trim(), ignoreCase = true)
+            it.isLensPreset && (if (lens.isNotEmpty()) isFor(it, lens) else it.lens.isNullOrBlank()) &&
+                it.name.trim().equals(lensPreset.name.trim(), ignoreCase = true)
         } ?: return presets + lensPreset
         return presets.map { if (it === old) lensPreset.copy(id = old.id) else it }
     }
