@@ -154,8 +154,8 @@ settings; swiping is off while zoomed to 100% or exporting).
 photo's edits one step at a time: a look, a slider drag, a preset, a turn, Apply to all.
 **Apply to all** copies the look (and the Looks/Film mode), strength, warmth, tint, contrast, saturation and grain to
 every photo, including photos still being analysed, which keep it instead of their suggested look (brightness and
-denoise stay per photo). **Copy previous** (at the end of the Look / Adjust tabs) copies the same settings from the photo
-before this one in the batch to this photo only, as one undo step, like darktable's or Lightroom's "copy previous":
+denoise stay per photo). **Copy previous** (at the end of the Look / Adjust tabs) copies the same settings, plus
+brightness, from the photo before this one in the batch to this photo only (denoise stays), as one undo step, like darktable's or Lightroom's "copy previous":
 develop one shot of a scene, swipe to the next and tap it. **Export all** saves every photo
 to `Pictures/RawBoy Auto/<name>-auto.jpg` (or `.tif`), one photo at a time, keeping the screen on.
 **Export all** and the photo view's **Export** ask for the format and size first (remembered for the next export),
@@ -560,8 +560,8 @@ Update it when a dependency is added or upgraded.
 
 - RawBoy Auto (Android, iOS, web): **Copy previous** at the end of the photo view's Look / Adjust tabs gives the open
   photo what Apply to all copies (look or preset, Looks/Film mode, strength, warmth, tint, contrast, saturation and
-  grain) from the photo before it in the batch. Brightness, denoise and rotation stay the photo's own; Undo takes it
-  back. Off on the first photo.
+  grain) plus Brightness from the photo before it in the batch. Denoise and rotation stay the photo's own; Undo takes
+  it back. Off on the first photo.
 
 **Web: Space / Backspace change the photo in Auto (2026-10-18)**
 

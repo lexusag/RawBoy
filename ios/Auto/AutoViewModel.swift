@@ -485,12 +485,16 @@ final class AutoViewModel: ObservableObject {
 
     /**
      * Gives photo [id] what "Apply to all" copies, from the photo before it ([previousPhoto]): look (or preset), strength,
-     * warmth, tint, contrast, saturation and grain, as one undo step; brightness, denoise and rotation stay. Not while exporting.
+     * brightness, warmth, tint, contrast, saturation and grain, as one undo step (a neighbouring shot of the same scene usually wants its
+     * brightness too, unlike Apply to all); denoise and rotation stay. Not while exporting.
      */
     func copyPrevious(_ id: String) {
         if export != nil { return }
         guard let source = previousPhoto(id) else { return }
-        changeDevelop(id, force: true) { $0.takeLook(of: source) }
+        changeDevelop(id, force: true) {
+            $0.takeLook(of: source)
+            $0.adjust.brightness = source.adjust.brightness
+        }
         message = "Copied from \(source.name)"
     }
 
