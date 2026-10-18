@@ -34,6 +34,7 @@ internal val AUTO_HELP = listOf(
             HelpItem("Press and hold", "See the photo without the look."),
             HelpItem("Look, Adjust", "Look, Strength, Brightness and Warmth; Adjust has the auto develop's own sliders."),
             HelpItem("Apply to all", "Copies the look and its settings to every photo (brightness and denoise stay per photo)."),
+            HelpItem("Copy previous", "Gives this photo the look and settings of the photo before it (brightness and denoise stay)."),
         ),
     ),
 )

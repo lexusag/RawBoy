@@ -48,11 +48,17 @@ struct DetailScreen: View {
                         .padding(.top, 8)
                         LookStrip(vm: vm, photo: photo)
                     }
-                    Picker("", selection: $tab) {
-                        Text("Look").tag(0)
-                        Text("Adjust").tag(1)
+                    // Copy previous sits by the tabs, next to the controls it changes (the top bar is full on phones).
+                    HStack(spacing: 12) {
+                        Picker("", selection: $tab) {
+                            Text("Look").tag(0)
+                            Text("Adjust").tag(1)
+                        }
+                        .pickerStyle(.segmented)
+                        Button("Copy previous") { vm.copyPrevious(photo.id) }
+                            .font(.subheadline)
+                            .disabled(vm.export != nil || vm.previousPhoto(photo.id) == nil)
                     }
-                    .pickerStyle(.segmented)
                     .padding(.horizontal, 16)
                     // Room for three sliders (the Look tab); Adjust scrolls. The photo keeps the rest of the screen.
                     ScrollView {

@@ -37,6 +37,7 @@ export const AUTO_HELP: HelpSection[] = [
       { how: 'Press and hold', text: 'See the photo without the look.' },
       { how: 'Look, Adjust', text: 'Look, Strength, Brightness and Warmth; Adjust has the auto develop\'s own sliders.' },
       { how: 'Apply to all', text: 'Copies the look and its settings to every photo (brightness and denoise stay per photo).' },
+      { how: 'Copy previous', text: 'Gives this photo the look and settings of the photo before it (brightness and denoise stay).' },
       { how: 'Edit in RawBoy', text: 'Opens the photo in the RawBoy tab with this look as the starting edits.' },
     ],
   },

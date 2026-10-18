@@ -306,9 +306,18 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
             // Look: the look and the two everyday controls; Adjust: every adjustment (those two again, then the offsets from the auto develop).
             // The tab stays when swiping to another photo.
             var tab by rememberSaveable { mutableIntStateOf(0) }
-            PrimaryTabRow(selectedTabIndex = tab) {
-                SmallTab("Look", tab == 0) { tab = 0 }
-                SmallTab("Adjust", tab == 1) { tab = 1 }
+            // Copy previous sits at the tabs' end, by the controls it changes (the top bar is full on phones).
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                PrimaryTabRow(selectedTabIndex = tab, modifier = Modifier.weight(1f)) {
+                    SmallTab("Look", tab == 0) { tab = 0 }
+                    SmallTab("Adjust", tab == 1) { tab = 1 }
+                }
+                TextButton(
+                    onClick = { vm.copyPrevious(id) },
+                    enabled = export == null && vm.previousPhoto(id) != null,
+                    modifier = Modifier.height(36.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                ) { Text("Copy previous", style = MaterialTheme.typography.labelLarge) }
             }
             // Room for three sliders (the Look tab); Adjust scrolls. The photo keeps the rest of the screen.
             val scrollStates = List(2) { rememberScrollState() }
