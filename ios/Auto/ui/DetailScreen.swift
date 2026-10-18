@@ -193,19 +193,33 @@ private struct PhotoPage: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                if current, vm.sessionReady == photo.id, let analysis = photo.analysis {
-                    let shown = showAuto ? analysis.autoBase : photo.params ?? analysis.autoBase
+                let live = current && vm.sessionReady == photo.id
+                // Until the raw is decoded, the photo's cached preview shows its develop (no 100% view yet).
+                let cached = current && !live ? vm.cachedPreview.flatMap { $0.id == photo.id ? $0.image : nil } : nil
+                if let analysis = photo.analysis, live || cached != nil {
+                    // Press and hold shows the auto develop without the look.
+                    let shown = showAuto && live ? analysis.autoBase : photo.params ?? analysis.autoBase
+                    // One view for both, so it stays when the decoded preview replaces the cached one.
                     DevelopPreview(
-                        image: session.preview,
-                        params: session.shaderParams(shown, defaults: analysis.defaults, useSelectedLut: shown.lut != nil,
-                                                     film: shown.film != nil ? session.filmData : nil),
-                        zoomCenter: session.zoomCenter, detail: session.detail, frameWidth: framePx, frameColor: vm.frameColor)
-                    .gesture(previewGestures)
+                        image: live ? session.preview : cached,
+                        params: live
+                            ? session.shaderParams(shown, defaults: analysis.defaults, useSelectedLut: shown.lut != nil,
+                                                   film: shown.film != nil ? session.filmData : nil)
+                            : vm.cachedShaderParams(photo.id, shown),
+                        zoomCenter: live ? session.zoomCenter : nil, detail: live ? session.detail : nil,
+                        frameWidth: framePx, frameColor: vm.frameColor)
+                    .gesture(previewGestures(live: live))
                     .onAppear { session.setViewSize(Int(geo.size.width * scale), Int(geo.size.height * scale)) }
                     .onChange(of: geo.size) { _, s in session.setViewSize(Int(s.width * scale), Int(s.height * scale)) }
-                    if showAuto || session.zoomCenter != nil {
+                    if live, showAuto || session.zoomCenter != nil {
                         OverlayLabel(!showAuto ? "100%" : photo.preset != nil ? "Without preset" : "Without look")
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    }
+                    if !live {
+                        ProgressView()
+                            .controlSize(.small)
+                            .padding(12)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                     }
                 } else {
                     // Until the raw is decoded, show the grid thumbnail.
@@ -218,15 +232,18 @@ private struct PhotoPage: View {
         }
     }
 
-    private var previewGestures: some Gesture {
+    /** [live]: the session holds this photo; on the cached preview the session's image is still the previous photo's. */
+    private func previewGestures(live: Bool) -> some Gesture {
         let doubleTap = SpatialTapGesture(count: 2).onEnded { e in
+            guard live else { return }
             session.toggleZoom(Float(e.location.x * scale), Float(e.location.y * scale), frameWidth: framePx)
         }
         let tap = SpatialTapGesture().onEnded { e in
+            guard live else { return }
             vm.onPreviewTap(Float(e.location.x * scale), Float(e.location.y * scale), frameWidth: framePx)
         }
         let hold = LongPressGesture(minimumDuration: 0.25)
-            .onEnded { _ in showAuto = true }
+            .onEnded { _ in if live { showAuto = true } }
             .sequenced(before: DragGesture(minimumDistance: 0).onEnded { _ in showAuto = false })
         let pan = DragGesture(minimumDistance: 1)
             .onChanged { v in

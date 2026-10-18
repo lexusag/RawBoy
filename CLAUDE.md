@@ -91,6 +91,12 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   `AutoTone`: exposure/tone/noise as ordinary `DevelopParams`), `looks/` (`Looks` catalogue on the bundled
   LUTs, `LookApplier` = auto base + look × Strength + the user's `Adjustments`, `LookSuggester`).
 - `app-auto/src/main/java/app/rawboy/auto/` — `AutoViewModel.kt` (batch queue, export all), `ui/` (grid, detail).
+  `PreviewCache.kt` (ports: `ios/Auto/PreviewCache.swift`, `web/src/ui/auto/PreviewCache.ts`, OPFS or a few in memory):
+  the analysis hands it the session-size preview (`AutoAnalysis.analyze(onPreview)`), stored on disk (cap 1.5 GB,
+  emptied on launch); `openDetail` publishes it as `cachedPreview` while the session decodes, and the detail page
+  develops it with the analysis's base/bloom/skin/lens (`cachedShaderParams`) through the same preview view, so the
+  GL/Metal view stays when the decoded preview replaces it. Zoom, taps and Export wait for the session (it still holds
+  the previous photo's image). Decodes of photos swiped past are skipped (selection checked inside `decodeLock`).
 - Viewfinder (engine): `gl/ViewfinderRenderer.kt` — camera SurfaceTexture (OES) → pass 1 inverse sRGB/gamma,
   sRGB→Rec.2020, × scale, rotated upright into an RGBA16F texture (row 0 = top) → pass 2 the normal
   `DevelopProgram`. Base (512), bloom halo (512, boosted) and tail (128) are rendered on the GPU **every frame**

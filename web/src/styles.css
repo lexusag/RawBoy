@@ -821,6 +821,17 @@ input[type='range'] {
   border-width: 2px;
 }
 
+/* Auto's photo view while the raw decodes behind its cached preview. */
+.spinner.corner {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 18px;
+  height: 18px;
+  border-width: 2px;
+  pointer-events: none;
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

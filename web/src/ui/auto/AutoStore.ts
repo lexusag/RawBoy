@@ -15,9 +15,11 @@ import { renderThumbnail } from '../../engine/gl/ThumbnailRenderer';
 import { LensTransform } from '../../engine/lens/LensTransform';
 import { loadLutCached } from '../../engine/lut/LutRepository';
 import { RawImage } from '../../engine/raw/RawImage';
+import type { PreviewImage } from '../../engine/gl/PreviewImage';
 import { blemishesToHeal, PhotoSession } from '../../engine/session/PhotoSession';
 import { EditHistory } from '../common/EditHistory';
 import { imageUrl, saveBlob, writeUnique, zipFiles } from '../common/files';
+import { PreviewCache } from './PreviewCache';
 
 /** Where a photo is in the batch. */
 export type PhotoStatus = 'queued' | 'analyzing' | 'ready' | 'failed' | 'exporting' | 'exported';
@@ -109,6 +111,8 @@ export interface AutoState {
   selected: string | null;
   /** Id of the photo [session] holds, once it has loaded. */
   sessionReady: string | null;
+  /** The selected photo's cached preview while [session] is still decoding it (see PreviewCache). */
+  cachedPreview: { id: string; image: PreviewImage } | null;
   /** The mode photos are added in, chosen in the grid before importing (remembered in this browser). */
   importMode: LookMode;
   /** Format, JPEG quality, TIFF bit depth and size of exports, chosen in the grid (remembered in this browser). */
@@ -162,7 +166,7 @@ class Lock {
 
 /** RawBoy Auto's batch, look and export logic (port of AutoViewModel.kt). */
 export class AutoStore {
-  private _state: AutoState = { photos: [], export: null, message: null, selected: null, sessionReady: null, importMode: savedImportMode(),
+  private _state: AutoState = { photos: [], export: null, message: null, selected: null, sessionReady: null, cachedPreview: null, importMode: savedImportMode(),
     exportSettings: savedExportSettings(), preset: null, lensPresets: PresetStore.load().filter(isLensPreset), frameColor: savedFrame() };
   /**
    * Keeps lens presets opened from a file with the RawBoy tab's presets (set by the page; null: in this browser's
@@ -173,6 +177,8 @@ export class AutoStore {
   /** The detail view's photo, decoded at full resolution (preview, 100% view, single export). */
   readonly session = new PhotoSession((m) => this.update({ message: m }));
   private readonly decodeLock = new Lock();
+  /** Each analysed photo's detail preview, so a photo shows at once while [session] decodes it. */
+  private readonly previews = new PreviewCache();
   /** The open photo's full-resolution image was freed for the RawBoy tab ([editInRawBoy]); [resume] decodes it again. */
   private released = false;
   /** The detail preview's frame width in device pixels. */
@@ -367,7 +373,9 @@ export class AutoStore {
       if (p.thumbnail) URL.revokeObjectURL(p.thumbnail);
       clearTimeout(this.thumbTimers.get(p.id));
       this.histories.delete(p.id);
+      void this.previews.remove(p.id);
     }
+    if (this._state.cachedPreview && ids.has(this._state.cachedPreview.id)) this.update({ cachedPreview: null });
     for (const [k, t] of this.lookThumbs) {
       if (ids.has(k.split('|')[0])) {
         URL.revokeObjectURL(t.url);
@@ -387,7 +395,8 @@ export class AutoStore {
         if (!next) break;
         this.updatePhoto(next.id, (p) => ({ ...p, status: 'analyzing' }));
         try {
-          const analysis = await this.decodeLock.run(() => analyzeFile(next.file, next.name));
+          const analysis = await this.decodeLock.run(() => analyzeFile(next.file, next.name, (preview) => void this.previews.put(next.id, preview)));
+          if (!this.photo(next.id)) void this.previews.remove(next.id); // removed while it was analysed
           const look = suggestLook(analysis.stats, analysis.defaults.temperature);
           const filmLook = suggestFilm(analysis.stats, analysis.defaults.temperature);
           this.updatePhoto(next.id, (p) => ({
@@ -563,9 +572,21 @@ export class AutoStore {
     if (this._state.sessionReady === id) return;
     this.released = false;
     this.update({ sessionReady: null });
+    if (this._state.cachedPreview?.id !== id) {
+      this.update({ cachedPreview: null });
+      void this.previews.get(id).then((image) => {
+        if (image && this._state.selected === id && this._state.sessionReady !== id) this.update({ cachedPreview: { id, image } });
+      });
+    }
+    // Photos passed (arrow keys, swipes) while an earlier decode ran are skipped: each decode takes seconds.
     void this.decodeLock
-      .run(() => this.session.open(p.file, (d) => (this.photo(id) && paramsOf(this.photo(id)!)) || d))
-      .then(() => {
+      .run(async () => {
+        if (this._state.selected !== id) return false;
+        await this.session.open(p.file, (d) => (this.photo(id) && paramsOf(this.photo(id)!)) || d);
+        return true;
+      })
+      .then((opened) => {
+        if (!opened) return;
         // Handed to the RawBoy tab while decoding: free it again (resume() decodes it once Auto is back).
         if (this.released) return this.session.close();
         if (this._state.selected !== id) return;
@@ -573,7 +594,7 @@ export class AutoStore {
         const params = now && paramsOf(now);
         this.session.selectLut(params?.lut ?? null, (m) => this.update({ message: m }));
         this.session.selectFilm(params?.film ?? null, (m) => this.update({ message: m }));
-        this.update({ sessionReady: id });
+        this.update({ sessionReady: id, cachedPreview: null });
       })
       .catch((e: unknown) => {
         this.update({ message: e instanceof Error ? e.message : `Could not open ${p.name}`, selected: null });
@@ -582,7 +603,19 @@ export class AutoStore {
 
   closeDetail() {
     this.session.exitZoom();
-    this.update({ selected: null });
+    this.update({ selected: null, cachedPreview: null });
+  }
+
+  /**
+   * Uniforms for showing [params] on photo [id]'s cached preview: the analysis's small copies, skin mask and lens
+   * stand in for the session's (made from the same decode, so the develop matches). Null if it isn't analysed.
+   */
+  async cachedShaderParams(id: string, params: DevelopParams): Promise<ShaderParams | null> {
+    const a = this.photo(id)?.analysis;
+    if (!a) return null;
+    const lut = params.lut ? await loadLutCached(params.lut).catch(() => null) : null;
+    const film = params.film ? await FilmStocks.load(params.film).catch(() => null) : null;
+    return ShaderParams.from(params, a.defaults, lut, new LensTransform(a.lens, params), a.base, a.bloom, a.skin, 1, 1, null, () => null, film);
   }
 
   /**

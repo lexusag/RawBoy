@@ -121,6 +121,11 @@ final class AutoViewModel: ObservableObject {
     @Published private(set) var selected: String?
     /** Id of the photo [session] holds, once it has loaded. */
     @Published private(set) var sessionReady: String?
+    /** The selected photo's cached preview while [session] is still decoding it; else nil. */
+    @Published private(set) var cachedPreview: (id: String, image: PreviewImage)?
+    /** Each analysed photo's detail preview, so a photo shows at once while [session] decodes it. */
+    private let previews = PreviewCache(dir: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("auto-previews"))
     /** The mode photos are added in (Looks or Film), chosen in the grid before importing; remembered. */
     @Published private(set) var importMode: LookMode =
         UserDefaults.standard.string(forKey: importModeKey).flatMap(LookMode.init(rawValue:)) ?? .looks
@@ -369,7 +374,9 @@ final class AutoViewModel: ObservableObject {
         for id in ids {
             thumbTasks.removeValue(forKey: id)?.cancel()
             histories.removeValue(forKey: id)
+            previews.remove(id)
         }
+        if let c = cachedPreview, ids.contains(c.id) { cachedPreview = nil }
         lookThumbs = lookThumbs.filter { key, _ in !ids.contains(where: { key.hasPrefix($0 + "|") }) }
     }
 
@@ -380,9 +387,13 @@ final class AutoViewModel: ObservableObject {
             while let next = photos.first(where: { $0.status == .queued }) {
                 updatePhoto(next.id) { $0.status = .analyzing }
                 do {
+                    let previews = previews
                     let analysis = try await decodeLock.run {
-                        try await Task.detached(priority: .userInitiated) { try AutoAnalysis.analyze(next.url) }.value
+                        try await Task.detached(priority: .userInitiated) {
+                            try AutoAnalysis.analyze(next.url) { previews.put(next.id, $0) }
+                        }.value
                     }
+                    if photo(next.id) == nil { previews.remove(next.id) } // removed while it was analysed
                     let look = LookSuggester.suggest(analysis.stats, asShotKelvin: analysis.defaults.temperature)
                     let film = LookSuggester.suggestFilm(analysis.stats, asShotKelvin: analysis.defaults.temperature)
                     updatePhoto(next.id) {
@@ -564,15 +575,32 @@ final class AutoViewModel: ObservableObject {
         selected = id
         if sessionReady == id { return }
         sessionReady = nil
+        if cachedPreview?.id != id {
+            cachedPreview = nil
+            let previews = previews
+            Task {
+                guard let image = await Task.detached(priority: .userInitiated, operation: { previews.get(id) }).value else { return }
+                // Its look's LUT or film stock first, so the cached develop shows the look from the start.
+                if let p = photo(id)?.params {
+                    _ = try? await p.lut.asyncMap { try await loadLut($0) }
+                    _ = try? await p.film.asyncMap { try await loadFilm($0) }
+                }
+                if selected == id, sessionReady != id { cachedPreview = (id, image) }
+            }
+        }
         Task {
             do {
-                _ = try await decodeLock.run {
-                    try await session.open(p.url) { [weak self] in self?.photo(id)?.params ?? $0 }
+                // Photos swiped past while an earlier decode ran are skipped: each decode takes seconds.
+                let opened = try await decodeLock.run { () async throws -> Bool in
+                    guard selected == id else { return false }
+                    _ = try await session.open(p.url) { [weak self] in self?.photo(id)?.params ?? $0 }
+                    return true
                 }
-                guard selected == id else { return }
+                guard opened, selected == id else { return }
                 session.selectLut(photo(id)?.params?.lut) { [weak self] in self?.message = $0 }
                 session.selectFilm(photo(id)?.params?.film) { [weak self] in self?.message = $0 }
                 sessionReady = id
+                cachedPreview = nil
             } catch {
                 message = error.localizedDescription
                 selected = nil
@@ -583,6 +611,29 @@ final class AutoViewModel: ObservableObject {
     func closeDetail() {
         session.exitZoom()
         selected = nil
+        cachedPreview = nil
+    }
+
+    /**
+     * Uniforms for showing [params] on photo [id]'s cached preview: the analysis's small copies, skin mask and lens
+     * stand in for the session's (made from the same decode, so the develop matches). Nil if it isn't analysed. A LUT
+     * or film stock not loaded yet is loaded and the view redrawn with it.
+     */
+    func cachedShaderParams(_ id: String, _ params: DevelopParams) -> ShaderParams? {
+        guard let a = photo(id)?.analysis else { return nil }
+        let lut = params.lut.flatMap { luts[$0] }
+        let film = params.film.flatMap { films[$0] }
+        if (params.lut != nil && lut == nil) || (params.film != nil && film == nil) {
+            Task {
+                _ = try? await params.lut.asyncMap { try await loadLut($0) }
+                _ = try? await params.film.asyncMap { try await loadFilm($0) }
+                // Only once loaded: a failed load would otherwise redraw and retry forever.
+                let loaded = (params.lut.map { luts[$0] != nil } ?? true) && (params.film.map { films[$0] != nil } ?? true)
+                if loaded { objectWillChange.send() }
+            }
+        }
+        return ShaderParams.from(params, asShot: a.defaults, lut: lut, lens: LensTransform(info: a.lens, params: params),
+                                 base: a.base, bloomSources: a.bloom, skinMask: a.skin, film: film)
     }
 
     // MARK: - Export

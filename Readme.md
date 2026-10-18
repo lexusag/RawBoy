@@ -501,6 +501,15 @@ Update it when a dependency is added or upgraded.
 
 ### 0.1.0 — in development (2026-10-10)
 
+**Auto: photos open at once in the photo view (2026-10-18)**
+
+- Swiping or arrow-keying to the next photo (Android, iOS, web) now shows it developed straight away, with its look
+  and sliders working, instead of the blurry grid thumbnail and a spinner while the raw decodes. Auto keeps a
+  screen-sized copy of each photo from its analysis (about 17 MB each on disk, up to about 90 photos; older ones fall
+  back to the thumbnail). The full decode still runs behind it, shown by a small spinner in the corner: 100% zoom and
+  Export become available when it finishes.
+- Photos you swipe or arrow-key past are no longer decoded one after another before the one you stop on.
+
 **Web: Auto keeps its open photo when you switch apps (2026-10-18)**
 
 - Auto's photo view has the RawBoy · Auto · Browser switcher in its bar, so you can leave the photo for another app and
