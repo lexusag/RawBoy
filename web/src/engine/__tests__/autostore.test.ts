@@ -14,6 +14,28 @@ describe('Auto import mode', () => {
     store.add([new File(['b'], 'b.CR2')]);
     expect(store.state.photos.map((p) => [p.name, p.mode])).toEqual([['a.CR2', 'looks'], ['b.CR2', 'film']]);
   });
+
+  it('"As is" adds plain photos in Looks mode, with no non-RAW note; they develop as the file, a preset adds only its own', async () => {
+    const { lookName, paramsOf } = await import('../../ui/auto/AutoStore');
+    const { developParams } = await import('../develop/DevelopParams');
+    const { capturePreset } = await import('../develop/Presets');
+    const store = new AutoStore();
+    store.setImportMode('plain');
+    store.add([new File(['t'], 'scan.tif')]);
+    expect(store.state.message).toBeNull();
+    const [p] = store.state.photos;
+    expect([p.mode, p.plain]).toEqual(['looks', true]);
+    // A plain analysis's auto develop is the as-shot defaults (AutoAnalysis skips autoDevelop).
+    const defaults = developParams({ displaySource: true, temperature: 6504 });
+    const analysed = { ...p, analysis: { defaults, autoBase: defaults, stats: { hasFace: false } } } as unknown as typeof p;
+    expect(lookName(analysed)).toBe('As is');
+    expect(paramsOf(analysed)).toEqual(defaults);
+    const grain = capturePreset('Grain', developParams({ grain: 30, contrast: 10 }), ['detail']);
+    const withGrain = paramsOf({ ...analysed, preset: grain })!;
+    expect(withGrain.grain).toBe(30);
+    expect({ ...withGrain, grain: 0 }).toEqual({ ...defaults, grain: 0 });
+    expect(lookName({ ...analysed, preset: grain })).toBe('Grain');
+  });
 });
 
 describe('Non-RAW import note', () => {

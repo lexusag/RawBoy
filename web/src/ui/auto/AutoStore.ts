@@ -17,6 +17,7 @@ import { loadLutCached } from '../../engine/lut/LutRepository';
 import { RawImage } from '../../engine/raw/RawImage';
 import type { PreviewImage } from '../../engine/gl/PreviewImage';
 import { blemishesToHeal, PhotoSession } from '../../engine/session/PhotoSession';
+import { quickImageOf, thumbnailOf } from '../browser/Previews';
 import { EditHistory } from '../common/EditHistory';
 import { imageUrl, saveBlob, writeUnique, zipFiles } from '../common/files';
 import type { EditsSidecar } from '../../engine/browse/XmpSidecar';
@@ -28,6 +29,9 @@ export type PhotoStatus = 'queued' | 'analyzing' | 'ready' | 'failed' | 'exporti
 
 /** Which strip the Look tab shows: the LUT looks or film stocks rendered as negative + print (ALL_FILM_LOOKS). */
 export type LookMode = 'looks' | 'film';
+
+/** How photos are added: in a look mode, or "As is" (plain): no auto develop and no look, only what the user applies. */
+export type ImportMode = LookMode | 'plain';
 
 /**
  * One photo of the batch (port of AutoPhoto). Only small whole-image copies are kept; the full-resolution raw is
@@ -65,6 +69,11 @@ export interface AutoPhoto {
   thumbnail: string | null;
   /** Where the photo's Auto settings are kept (sent from RawBoy Browser with Edits in sidecars on), else null. */
   sidecar: EditsSidecar | null;
+  /**
+   * Added "As is": its analysis skips the auto develop (and the skin and noise measurements behind it), so the photo
+   * starts as the file itself, Natural with nothing added; a preset, look or slider is all it gets.
+   */
+  plain: boolean;
 }
 
 /** A photo's edits, as Undo and Redo bring them back. */
@@ -92,8 +101,12 @@ export const activeLook = (p: AutoPhoto): Look => (p.mode === 'film' ? p.filmLoo
 /** Label of RawBoy edits (AutoPhoto.edits) in place of a look. */
 export const EDITS_NAME = 'RawBoy edits';
 
-/** What develops the photo, for labels: RawBoy edits, the preset's name, else the active look's. */
-export const lookName = (p: AutoPhoto): string => (p.edits ? EDITS_NAME : p.preset?.name ?? activeLook(p).name);
+/** Label of a photo added "As is" while nothing is applied to it. */
+export const AS_IS_NAME = 'As is';
+
+/** What develops the photo, for labels: RawBoy edits, the preset's name, else the active look's ("As is" for a plain photo's Natural). */
+export const lookName = (p: AutoPhoto): string =>
+  p.edits ? EDITS_NAME : p.preset?.name ?? (p.plain && activeLook(p) === Looks.NATURAL ? AS_IS_NAME : activeLook(p).name);
 
 /** The develop settings for the current look (or preset) and controls (null until analysed). */
 export function paramsOf(p: AutoPhoto): DevelopParams | null {
@@ -131,7 +144,7 @@ export interface AutoState {
   /** The selected photo's cached preview while [session] is still decoding it (see PreviewCache). */
   cachedPreview: { id: string; image: PreviewImage } | null;
   /** The mode photos are added in, chosen in the grid before importing (remembered in this browser). */
-  importMode: LookMode;
+  importMode: ImportMode;
   /** Format, JPEG quality, TIFF bit depth and size of exports, chosen in the grid (remembered in this browser). */
   exportSettings: ExportSettings;
   /** The RawBoy preset applied to the whole batch, which photos added later get too; null = looks. */
@@ -165,9 +178,10 @@ function savedFrame(): number {
   }
 }
 
-function savedImportMode(): LookMode {
+function savedImportMode(): ImportMode {
   try {
-    return localStorage.getItem(IMPORT_MODE_KEY) === 'film' ? 'film' : 'looks';
+    const mode = localStorage.getItem(IMPORT_MODE_KEY);
+    return mode === 'film' || mode === 'plain' ? mode : 'looks';
   } catch {
     return 'looks';
   }
@@ -217,6 +231,8 @@ export class AutoStore {
   private readonly saveTimers = new Map<string, number>();
   /** What each photo's sidecar was last given, so unchanged settings aren't written again. */
   private readonly saved = new Map<string, string>();
+  /** Grid thumbnails from the files' own previews, made one at a time while photos wait for their analysis. */
+  private quickThumbs: Promise<unknown> = Promise.resolve();
   /** Look-strip thumbnails: the latest per photo and look, with the adjustments it was rendered at. */
   private readonly lookThumbs = new Map<string, { adjust: Adjustments; lensPreset: Preset | null; url: string }>();
 
@@ -257,20 +273,25 @@ export class AutoStore {
   add(files: File[], sidecars: readonly (EditsSidecar | null)[] = []): number {
     const known = new Set(this._state.photos.map((p) => fileKey(p.file)));
     const fresh: AutoPhoto[] = [];
+    const importMode = this._state.importMode;
+    const plain = importMode === 'plain';
+    const mode: LookMode = importMode === 'plain' ? 'looks' : importMode;
     for (const [i, file] of files.entries()) {
       if (known.has(fileKey(file))) continue;
       known.add(fileKey(file));
       fresh.push({ sidecar: sidecars[i] ?? null,
         id: String(this.nextId++), file, name: file.name, status: 'queued', error: null, analysis: null,
-        look: Looks.NATURAL, suggested: Looks.NATURAL, mode: this._state.importMode, filmLook: FilmLooks.PORTRA_400,
+        look: Looks.NATURAL, suggested: Looks.NATURAL, mode, plain, filmLook: FilmLooks.PORTRA_400,
         suggestedFilm: FilmLooks.PORTRA_400, strength: DEFAULT_STRENGTH, adjust: NO_ADJUSTMENTS, preset: this._state.preset, edits: null,
         lensChoice: this._state.lensChoice, lensPreset: null, looksApplied: false,
         thumbnail: null,
       });
     }
     if (!fresh.length) return 0;
-    const note = nonRawNote(fresh.map((p) => p.name));
+    // "As is" is for finished files: no note that they aren't raws.
+    const note = plain ? null : nonRawNote(fresh.map((p) => p.name));
     this.update({ photos: [...this._state.photos, ...fresh], ...(note ? { message: note } : {}) });
+    for (const p of fresh) this.quickThumbs = this.quickThumbs.then(() => this.quickThumbnail(p.id)).catch(() => undefined);
     const restore = Promise.all(fresh.filter((p) => p.sidecar).map((p) => this.restoreSaved(p.id, p.sidecar!)));
     this.restoring = Promise.all([this.restoring, restore]);
     void this.processQueue();
@@ -297,6 +318,21 @@ export class AutoStore {
     const lensChoice = saved.lensChoice === NO_LENS_PRESET ? NO_LENS_PRESET : lens?.id ?? null;
     this.updatePhoto(id, (p) => ({ ...p, ...saved, lensChoice, lensPreset: lens, looksApplied: true }));
     this.refreshThumbnail(id, true);
+  }
+
+  /**
+   * Shows photo [id] in the grid at once from the file's own preview (as RawBoy Browser does: a JPEG as it is, a raw's
+   * embedded JPEG), until its analysis renders the develop; nothing when the file has none or it was rendered already.
+   */
+  private async quickThumbnail(id: string) {
+    const p = this.photo(id);
+    if (!p || p.thumbnail || p.analysis) return;
+    const image = await quickImageOf(p.file);
+    if (!image || this.photo(id)?.thumbnail) return;
+    const url = URL.createObjectURL(await thumbnailOf(image, GRID_THUMBNAIL));
+    const now = this.photo(id);
+    if (!now || now.thumbnail) return URL.revokeObjectURL(url);
+    this.updatePhoto(id, (q) => ({ ...q, thumbnail: url }));
   }
 
   /** Keeps photo [id]'s settings in its sidecar once they rest for a moment (a slider drag is one write). */
@@ -348,7 +384,7 @@ export class AutoStore {
   }
 
   /** Mode for photos added from now on; photos already in the batch keep theirs. */
-  setImportMode(importMode: LookMode) {
+  setImportMode(importMode: ImportMode) {
     this.update({ importMode });
     try {
       localStorage.setItem(IMPORT_MODE_KEY, importMode);
@@ -552,14 +588,15 @@ export class AutoStore {
         if (!next) break;
         this.updatePhoto(next.id, (p) => ({ ...p, status: 'analyzing' }));
         try {
-          const analysis = await this.decodeLock.run(() => analyzeFile(next.file, next.name, (preview) => void this.previews.put(next.id, preview)));
+          const analysis = await this.decodeLock.run(() => analyzeFile(next.file, next.name, (preview) => void this.previews.put(next.id, preview), next.plain));
           if (!this.photo(next.id)) void this.previews.remove(next.id); // removed while it was analysed
           const look = suggestLook(analysis.stats, analysis.defaults.temperature);
           const filmLook = suggestFilm(analysis.stats, analysis.defaults.temperature);
           this.updatePhoto(next.id, (p) => ({
             ...p, status: 'ready', analysis, suggested: look, suggestedFilm: filmLook,
             lensPreset: chosenLensPreset(this._state.lensPresets, p.lensChoice, analysis.lens.lensName),
-            look: p.looksApplied ? p.look : look, filmLook: p.looksApplied ? p.filmLook : filmLook,
+            // A plain photo stays Natural (nothing added); its film suggestion is there if it switches to Film.
+            look: p.looksApplied || p.plain ? p.look : look, filmLook: p.looksApplied ? p.filmLook : filmLook,
           }));
           this.refreshThumbnail(next.id, true);
         } catch (e) {

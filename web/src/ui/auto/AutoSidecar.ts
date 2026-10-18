@@ -23,6 +23,8 @@ export interface SavedAuto {
   lensChoice: string | null;
   /** The picked lens preset itself (kept with lensChoice = its id), as for preset; else null. */
   lensPreset: Preset | null;
+  /** Added "As is" (AutoPhoto.plain): analysed again without the auto develop. */
+  plain: boolean;
 }
 
 export const AUTO_FORMAT = 'rawboy-auto';
@@ -34,6 +36,7 @@ export function encodeAuto(s: SavedAuto): string {
     format: AUTO_FORMAT, version: AUTO_VERSION, mode: s.mode, look: s.look.id, filmLook: s.filmLook.id, strength: s.strength,
     adjust: s.adjust, preset: s.preset ? JSON.parse(encodePresets([s.preset])) : null, edits,
     // By lens is the default and isn't kept: the photo's lens finds its preset again.
+    plain: s.plain || undefined,
     lens: s.lensChoice === NO_LENS_PRESET ? NO_LENS_PRESET : s.lensChoice !== null && s.lensPreset ? JSON.parse(encodePresets([s.lensPreset])) : undefined,
   });
 }
@@ -76,5 +79,6 @@ export function decodeAuto(text: string): SavedAuto | null {
     edits: o.edits ? decodeEdits(JSON.stringify(o.edits), developParams()) : null,
     lensChoice: o.lens === NO_LENS_PRESET ? NO_LENS_PRESET : lensPreset?.id ?? null,
     lensPreset,
+    plain: o.plain === true,
   };
 }

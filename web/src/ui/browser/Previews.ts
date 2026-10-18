@@ -40,6 +40,17 @@ export async function viewImageOf(file: File): Promise<ViewImage> {
 }
 
 /**
+ * An image of [file] the browser can show without any decode in RawBoy: a JPEG/PNG/HEIC as it is, else a raw's or
+ * TIFF's embedded JPEG preview; null when it has none (then only a full decode shows it). For RawBoy Auto's grid
+ * while photos wait for their analysis.
+ */
+export async function quickImageOf(file: File): Promise<ViewImage | null> {
+  if (!isRawName(file.name) && !/\.tiff?$/i.test(file.name)) return { blob: file, size: '', source: 'image' };
+  const embedded = await findEmbeddedPreview(file);
+  return embedded ? { blob: embedded.jpeg, size: `${embedded.width} × ${embedded.height}`, source: 'embedded' } : null;
+}
+
+/**
  * A DNG's JPEG XL preview at long side [maxSide] at most (from the smallest preview that reaches it), when it is bigger
  * than the DNG's JPEG preview; null otherwise, or when it can't be decoded (the build without the DNG SDK has no
  * libjxl). Adobe DNG Converter's JPEG XL DNGs keep only a 256 px JPEG thumbnail beside them.

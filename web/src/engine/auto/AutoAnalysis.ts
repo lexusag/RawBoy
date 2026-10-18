@@ -27,9 +27,11 @@ const TAG = 'RawBoyAuto';
  * Decodes [file], keeps its small whole-image copies and works out the auto develop (port of AutoAnalysis.kt).
  * Memory hungry (a full-resolution decode): one at a time. The raw is closed before segmentation, which needs
  * only the 512 px copy. [onPreview], if given, gets the detail view's preview (PREVIEW_MAX_DIMENSION) made from the
- * same decode, so RawBoy Auto can show the photo before decoding it again.
+ * same decode, so RawBoy Auto can show the photo before decoding it again. [plain] (Auto's "As is" import): no auto
+ * develop (autoBase = the as-shot defaults), and the noise measurement and skin segmentation it needs are skipped, so
+ * already finished files (TIFFs from another editor...) import fast and stay as they are.
  */
-export async function analyzeFile(file: Blob, label: string, onPreview?: (preview: PreviewImage) => void): Promise<Analysis> {
+export async function analyzeFile(file: Blob, label: string, onPreview?: (preview: PreviewImage) => void, plain = false): Promise<Analysis> {
   const img = await RawImage.open(file);
   let base: PreviewImage;
   let bloom: BloomSources;
@@ -46,21 +48,23 @@ export async function analyzeFile(file: Blob, label: string, onPreview?: (previe
     const t0 = performance.now();
     base = await img.createPreview(BASE_MAX_DIMENSION);
     bloom = await bloomSourcesOf(img);
-    noise = await img.measureNoise();
+    if (!plain) noise = await img.measureNoise();
     console.debug(`${TAG} small copies: ${Math.round(performance.now() - t0)} ms`);
   } finally {
     img.close();
   }
   const t0 = performance.now();
   let skin: SkinMask | null = null;
-  try {
-    skin = await segmentSkin(base, base.fullWidth, base.fullHeight);
-  } catch {
-    // MediaPipe can fail; the photo is then treated as having no face.
+  if (!plain) {
+    try {
+      skin = await segmentSkin(base, base.fullWidth, base.fullHeight);
+    } catch {
+      // MediaPipe can fail; the photo is then treated as having no face.
+    }
   }
   console.debug(`${TAG} skin detection: ${Math.round(performance.now() - t0)} ms`);
   const stats = analyzeScene(base, skin, info.iso);
-  const auto = autoDevelop(stats, info.defaults, 1, info.cameraMetered, noise);
+  const auto = plain ? info.defaults : autoDevelop(stats, info.defaults, 1, info.cameraMetered, noise);
   console.debug(
     `${TAG} analysis ${label}: key=${stats.key} p1=${stats.p1} p5=${stats.p5} p50=${stats.p50} p98=${stats.p98} p99=${stats.p99} ` +
       `clipped=${stats.clipped} chroma=${stats.chroma} face=${stats.faceArea} skin=${stats.skinLuminance} iso=${info.iso} cameraMetered=${info.cameraMetered} ` +
