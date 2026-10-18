@@ -54,6 +54,8 @@ export type Request =
   | { op: 'open'; bytes: ArrayBuffer; extraBlack: number }
   /** A HEIC or PNG decoded by the browser: canvas RGBA bytes (sRGB or Display P3) plus the file, for its EXIF. */
   | { op: 'openPixels'; rgba: ArrayBuffer; width: number; height: number; p3: boolean; bytes: ArrayBuffer }
+  /** A JPEG XL image (a DNG's preview) to 8-bit sRGB RGBA: answers {@link JxlPixels}. */
+  | { op: 'decodeJxl'; bytes: ArrayBuffer }
   | { op: 'close'; handle: number }
   | { op: 'downsample'; handle: number; width: number; height: number; boost: boolean }
   | { op: 'copyTile'; handle: number; x: number; y: number; width: number; height: number }
@@ -67,6 +69,12 @@ export type Request =
   | { op: 'jpegWrite'; id: number; rows: Uint16Array; count: number }
   | { op: 'jpegFinish'; id: number }
   | { op: 'release'; id: number };
+
+export interface JxlPixels {
+  width: number;
+  height: number;
+  rgba: Uint8Array;
+}
 
 export interface InitResult {
   dngSdk: boolean;

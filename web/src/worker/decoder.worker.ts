@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 // Hosts the WASM build of the engine's native code (web/native): decoding, previews, tiles, blemish healing,
 // export downscaling and jpegli. Full-resolution pixels stay in this worker's WASM heap.
-import type { OpenResult, Request } from './protocol';
+import type { JxlPixels, OpenResult, Request } from './protocol';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Module = any;
@@ -65,6 +65,11 @@ function run(req: Request): [unknown, Transferable[]] {
       const handle = m.openPixels(new Uint8Array(req.rgba), req.width, req.height, req.p3, new Uint8Array(req.bytes)) as number;
       if (!handle) throw new Error(m.lastError());
       return opened(handle);
+    }
+    case 'decodeJxl': {
+      const out = m.decodeJxl(new Uint8Array(req.bytes)) as JxlPixels | null;
+      if (!out) throw new Error(m.lastError());
+      return [out, [out.rgba.buffer]];
     }
     case 'close':
       m.close(req.handle);

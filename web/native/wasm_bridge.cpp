@@ -12,6 +12,11 @@
 #include <emscripten/bind.h>
 #include <emscripten/val.h>
 
+#if RAWBOY_WITH_DNG_SDK
+#include <jxl/decode_cxx.h>
+#include <jxl/thread_parallel_runner_cxx.h>
+#endif
+
 #include <cstdlib>
 #include <memory>
 #include <stdexcept>
@@ -96,6 +101,68 @@ uintptr_t openPixels(const val& rgba, int w, int h, bool p3, const val& file) {
 void close(uintptr_t h) { delete fromHandle(h); }
 std::string getLastError() { return lastError; }
 bool hasDngSdk() { return RAWBOY_WITH_DNG_SDK != 0; }
+
+/**
+ * A JPEG XL image (a DNG 1.7 preview: codestream or container) as 8-bit sRGB RGBA, for RawBoy Browser:
+ * {width, height, rgba}, or null with the reason in lastError(). Needs libjxl (rawboy-full).
+ */
+val decodeJxl(const val& bytes) {
+    lastError.clear();
+#if RAWBOY_WITH_DNG_SDK
+    try {
+        const std::vector<uint8_t> data = fromTyped<uint8_t>(bytes);
+        auto decoder = JxlDecoderMake(nullptr);
+        // A pool made per call: a lasting one would hold threads parallelRows needs (PTHREAD_POOL_SIZE_STRICT).
+        auto runner = JxlThreadParallelRunnerMake(nullptr, 4);
+        const JxlPixelFormat format{4, JXL_TYPE_UINT8, JXL_NATIVE_ENDIAN, 0};
+        JxlBasicInfo info{};
+        std::vector<uint8_t> rgba;
+        if (JxlDecoderSubscribeEvents(decoder.get(), JXL_DEC_BASIC_INFO | JXL_DEC_COLOR_ENCODING | JXL_DEC_FULL_IMAGE) != JXL_DEC_SUCCESS ||
+            JxlDecoderSetParallelRunner(decoder.get(), JxlThreadParallelRunner, runner.get()) != JXL_DEC_SUCCESS ||
+            JxlDecoderSetInput(decoder.get(), data.data(), data.size()) != JXL_DEC_SUCCESS) {
+            lastError = "JPEG XL decoder setup failed";
+            return val::null();
+        }
+        JxlDecoderCloseInput(decoder.get());
+        for (;;) {
+            const JxlDecoderStatus status = JxlDecoderProcessInput(decoder.get());
+            if (status == JXL_DEC_BASIC_INFO) {
+                if (JxlDecoderGetBasicInfo(decoder.get(), &info) != JXL_DEC_SUCCESS) break;
+            } else if (status == JXL_DEC_COLOR_ENCODING) {
+                // Lossy (XYB) images convert to it; lossless ones keep their own space (DNG previews are sRGB).
+                JxlColorEncoding srgb{};
+                srgb.color_space = JXL_COLOR_SPACE_RGB;
+                srgb.white_point = JXL_WHITE_POINT_D65;
+                srgb.primaries = JXL_PRIMARIES_SRGB;
+                srgb.transfer_function = JXL_TRANSFER_FUNCTION_SRGB;
+                srgb.rendering_intent = JXL_RENDERING_INTENT_PERCEPTUAL;
+                JxlDecoderSetPreferredColorProfile(decoder.get(), &srgb);
+            } else if (status == JXL_DEC_NEED_IMAGE_OUT_BUFFER) {
+                size_t size = 0;
+                if (JxlDecoderImageOutBufferSize(decoder.get(), &format, &size) != JXL_DEC_SUCCESS) break;
+                rgba.resize(size);
+                if (JxlDecoderSetImageOutBuffer(decoder.get(), &format, rgba.data(), rgba.size()) != JXL_DEC_SUCCESS) break;
+            } else if (status == JXL_DEC_FULL_IMAGE) {
+                val out = val::object();
+                out.set("width", info.xsize);
+                out.set("height", info.ysize);
+                out.set("rgba", toTyped(rgba.data(), rgba.size()));
+                return out;
+            } else {
+                break;  // error, or the input ended early
+            }
+        }
+        lastError = "Cannot decode the JPEG XL preview";
+    } catch (const std::bad_alloc&) {
+        lastError = "Not enough memory to decode the JPEG XL preview";
+    }
+    return val::null();
+#else
+    (void)bytes;
+    lastError = "JPEG XL needs the build with the Adobe DNG SDK";
+    return val::null();
+#endif
+}
 int width(uintptr_t h) { return fromHandle(h)->width; }
 int height(uintptr_t h) { return fromHandle(h)->height; }
 float iso(uintptr_t h) { return fromHandle(h)->iso; }
@@ -317,6 +384,7 @@ EMSCRIPTEN_BINDINGS(rawboy) {
     function("close", &close);
     function("lastError", &getLastError);
     function("hasDngSdk", &hasDngSdk);
+    function("decodeJxl", &decodeJxl);
     function("width", &width);
     function("height", &height);
     function("iso", &iso);
