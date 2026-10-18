@@ -236,9 +236,10 @@ shows them.
 - **Merge 8 frames** (Settings, off by default): each shot without flash takes 8 raw frames in a quick burst and
   merges them into one DNG before developing, as the phone's HDR+ does for its own JPEGs: each frame is aligned to the
   first (tile by tile, so hand shake is followed) and averaged in where it matches; where something moved, the first
-  frame is kept, so moving things don't ghost. Noise drops by up to ~2.8× (√8) where nothing moves, so the develop
-  picks less denoise. The burst takes about half a second in low light (hold still), and saving takes longer (~2 s,
-  estimated from the host test).
+  frame is kept, so moving things don't ghost. Noise drops by about 3× where nothing moves, so the develop picks
+  less denoise and keeps more detail. Hold still: the DNG is ready 2–3.5 s after the shutter instead of 0.3 s, though
+  the JPEG comes out about as fast (less denoise work). It needs a lot of memory (~400 MB at its peak), so Android
+  may close other apps to make room.
 - **JPEG:** encoded with Google's **jpegli** from 16-bit pixels, full-resolution colour (4:4:4), quality 95 by
   default (Settings: 70–100). jpegli's adaptive quantisation gives fewer artefacts per byte than libjpeg.
 - **RAW:** the **RAW** button in the top bar keeps the DNG next to the JPEG (lit) or not (struck through); the same
@@ -500,8 +501,8 @@ Update it when a dependency is added or upgraded.
 - Press-and-hold compare shows healed blemishes as healed (healing changes the image data itself).
 - Very large files (≥100 MP) export JPEG through a full-size Bitmap and may run out of memory (RawBoy and Auto;
   Camera's jpegli path streams and has no such limit).
-- RawBoy Camera: single raw frames unless **Merge 8 frames** is on (its merge is new and only host-tested on
-  synthetic bursts so far); no manual exposure
+- RawBoy Camera: single raw frames unless **Merge 8 frames** is on, which needs ~400 MB at its peak (on phones with
+  less RAM Android may kill the app) and 2–3.5 s from shutter to DNG; no manual exposure
   or digital zoom yet. Lenses other than the main one are streamed as physical cameras of the phone's logical back
   camera; if a phone refuses that, RawBoy Camera tries opening the lens on its own, and logs what it found
   (`adb logcat -s RawBoyCamera`). The Android emulator's back camera can't write DNGs (its metadata lacks the post-raw boost
@@ -528,7 +529,11 @@ Update it when a dependency is added or upgraded.
   per-pixel check against ghosts. The phone's own computational photography (Night Sight, HDR+) isn't available to
   apps as raw: Camera2 extensions only return processed JPEG/YUV. Host test (`tools/burst_merge/run.sh`, synthetic
   bursts with sub-pixel shake): noise 2.5× lower in flat areas, a moving square not ghosted, clipped light kept;
-  8 frames of 12 MP merge in ~1.7 s on 4 x86 cores. Not yet tried on the phone.
+  8 frames of 12 MP merge in ~1.7 s on 4 x86 cores. On the Pixel 9 Pro (two selfies, ISO 1212, 1/30 s): raw noise in
+  flat green areas 4.9–22 DN → 1.5–6.9 DN (~3.2× lower at every level), the develop's denoise 51 → 16, skin, glasses
+  and knit detail kept at 100% with no blotchy colour noise; all 8 frames merged (weights ~1.0); shutter to DNG
+  0.3 s → 2.1 s (2–3.5 s over several shots), shutter to JPEG 3.1 s → 2.7 s. The first burst made Android close ~20
+  background apps for memory.
 
 **Grain size, roughness and colour in RawBoy (2026-10-18)**
 

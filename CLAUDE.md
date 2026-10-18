@@ -524,8 +524,10 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   never write the same pixel), tile weight from the excess mean squared grey difference over 2σ², pixel weight from the
   3x3 mean difference. Output keeps the raw's integer levels (rounding ≈ 0.3 DN; scaling + patching WhiteLevel would
   keep more). The develop treats it as `effectiveFrames` (1 + Σ mean tile weights) times the light: noise ISO scale
-  ÷ that. Host test: `tools/burst_merge/run.sh`. Not yet measured on the phone (memory peak ~400 MB native for 8 ×
-  12 MP; time; whether the HAL keeps up with captureBurst at full RAW size).
+  ÷ that. Host test: `tools/burst_merge/run.sh`. Pixel 9 Pro (selfie, ISO 1212): noise ~3.2× lower (a little over √8:
+  the pixel weights smooth slightly), all 8 frames weight ~1.0, shutter to DNG 2–3.5 s (single 0.3 s), JPEG sooner
+  than a single frame (denoise 51 → 16). Memory peak ~400 MB native (8 raw copies 200 MB, 7 grey planes, the float
+  accumulator): the first burst made Android kill ~20 background apps; lower it before making the merge a default.
 - Camera focus lock: `CameraController.focusPoint`; `setCommon` puts AF_MODE_AUTO + regions on **every** request
   while locked, including the still capture (with CONTINUOUS_PICTURE there, the camera refocused at the shutter).
 - Selfie camera: front lenses with RAW only. Viewfinder mirrored (`Frame.mirror`; the shader mirrors only when the
