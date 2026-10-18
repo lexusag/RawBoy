@@ -46,6 +46,7 @@ export function App() {
 
   useEffect(() => {
     document.body.dataset.tab = tab;
+    if (tab === 'auto') auto.resume();
     try {
       localStorage.setItem(TAB_KEY, tab);
     } catch {

@@ -455,6 +455,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
   return (
     <div className="editor">
       <header className="toolbar">
+        <AppSwitcher />
         <button type="button" className="icon" title="Back" onClick={() => store.closeDetail()}>←</button>
         <div className="title">
           <div className="name">{photo.name}</div>
