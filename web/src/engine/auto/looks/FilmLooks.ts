@@ -9,23 +9,23 @@ import { RetiredLooks } from './RetiredLooks';
 const stock = (id: string, name: string, portraitRetouch = 0): Look => ({ ...Looks.NATURAL, id, name, film: id, portraitRetouch });
 
 export const FilmLooks = {
-  PORTRA_400: stock('portra400', 'Portra 400', 20),
+  PORTRA_400: stock('portra400', 'Yellow Portrait 400', 20),
 };
 
 export const ALL_FILM_LOOKS: Look[] = [
   Looks.NATURAL,
   FilmLooks.PORTRA_400,
-  stock('portra800', 'Portra 800', 20),
-  stock('ektar100', 'Ektar 100'),
-  stock('gold200', 'Gold 200'),
-  stock('fuji400h', 'Fuji 400H', 20),
-  stock('xtra400', 'X-Tra 400'),
-  stock('vision250d', 'Vision3 250D'),
-  stock('vision500t', 'Vision3 500T'),
-  stock('velvia100', 'Velvia 100'),
-  stock('provia100', 'Provia 100F'),
-  stock('ektachrome100', 'Ektachrome 100'),
-  stock('kodachrome64', 'Kodachrome 64'),
+  stock('portra800', 'Yellow Portrait 800', 20),
+  stock('ektar100', 'Yellow Vivid 100'),
+  stock('gold200', 'Yellow Warm 200'),
+  stock('fuji400h', 'Green Pastel 400', 20),
+  stock('xtra400', 'Green Everyday 400'),
+  stock('vision250d', 'Yellow Cine 250D'),
+  stock('vision500t', 'Yellow Cine 500T'),
+  stock('velvia100', 'Green Vivid Slide 100'),
+  stock('provia100', 'Green Slide 100'),
+  stock('ektachrome100', 'Yellow Slide 100'),
+  stock('kodachrome64', 'Yellow Classic 64'),
 ];
 
 export const filmLookById = (id: string): Look => {
