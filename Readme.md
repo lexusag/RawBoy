@@ -540,7 +540,10 @@ Update it when a dependency is added or upgraded.
   ghosting results. On the phone (4 merged shots, all 8 of 8): no background apps closed, noise still ~3.3× lower,
   shutter to DNG 2.1–3.9 s. The frames come every 33 ms and a merge step takes 0.3–0.4 s, so 6–7 frames still wait
   at once; the native peak (~590 MB, vs ~445 MB for a single shot's develop) came from back-to-back bursts
-  overlapping a develop. The shutter now waits for a burst's DNG before the next shot.
+  overlapping a develop. The shutter now waits for a burst's DNG before the next shot. Phone, with the block (6 merged
+  shots, all 8 of 8, 2.1–3.1 s to DNG, no apps closed): a merged shot alone peaks at ~320 MB native, single shots
+  (develop only) 455 MB, merged shots back to back 511 MB (a burst merging while the previous JPEG develops), down
+  from ~590 MB; shots without merge aren't blocked.
 
 **Grain size, roughness and colour in RawBoy (2026-10-18)**
 

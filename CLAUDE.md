@@ -537,7 +537,9 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   last frame 2.0 → 0.4 s. TSan/ASan clean on the host test. Phone (streaming): no apps
   killed, but 6–7 frames still wait (a frame every 33 ms, a merge step 0.3–0.4 s); peak ~590 MB native came from two
   bursts overlapping a develop (a single develop alone ~445 MB), so `CameraViewModel.merging` blocks the shutter until
-  a burst's DNG is written. Next if needed: request the burst in groups of 2–3 frames to cap the queue.
+  a burst's DNG is written (not the develop after it; merge off isn't blocked). With it: merged shots back to back
+  peak at 511 MB native (a burst merging while the previous JPEG develops), single shots 455 MB, a merged shot alone
+  ~320 MB; no apps killed, 2.1–3.1 s to DNG. Next if needed: request the burst in groups of 2–3 frames to cap the queue.
 - Camera focus lock: `CameraController.focusPoint`; `setCommon` puts AF_MODE_AUTO + regions on **every** request
   while locked, including the still capture (with CONTINUOUS_PICTURE there, the camera refocused at the shutter).
 - Selfie camera: front lenses with RAW only. Viewfinder mirrored (`Frame.mirror`; the shader mirrors only when the
