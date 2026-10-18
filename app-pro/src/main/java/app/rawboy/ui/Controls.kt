@@ -82,6 +82,8 @@ fun ControlsPanel(
     /** White balance picker armed: the next tap on the photo sets temperature and tint. */
     pickingWhite: Boolean = false,
     onPickWhite: () -> Unit = {},
+    /** Lens tab: saves its settings as the lens preset for this lens; with true, also sends it to RawBoy Auto. */
+    onSaveLensPreset: (sendToAuto: Boolean) -> Unit = {},
 ) {
     var chosenTab by rememberSaveable { mutableIntStateOf(0) }
     // Film replaces the tone mapper and the user LUT (which is kept, but not rendered), so the LUTs tab
@@ -251,7 +253,7 @@ fun ControlsPanel(
                     onChange(params.copy(grain = it))
                 }
             } else if (tab == 4) {
-                LensPanel(params, defaults, lens, onChange)
+                LensPanel(params, defaults, lens, onChange, onSaveLensPreset)
             } else {
                 LutPanel(params, luts, lutLoading, onChange, onSelectLut, onChooseLutFolder)
             }
@@ -260,7 +262,13 @@ fun ControlsPanel(
 }
 
 @Composable
-private fun LensPanel(params: DevelopParams, defaults: DevelopParams, lens: LensInfo, onChange: (DevelopParams) -> Unit) {
+private fun LensPanel(
+    params: DevelopParams,
+    defaults: DevelopParams,
+    lens: LensInfo,
+    onChange: (DevelopParams) -> Unit,
+    onSaveLensPreset: (sendToAuto: Boolean) -> Unit,
+) {
     SectionLabel("Lens profile")
     Text(lens.lensName.ifBlank { "Unknown lens" }, style = MaterialTheme.typography.bodyMedium)
     val summary = lens.profileSummary
@@ -298,6 +306,18 @@ private fun LensPanel(params: DevelopParams, defaults: DevelopParams, lens: Lens
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+
+    SectionLabel("Lens preset")
+    Text(
+        "Saves these settings for ${lens.lensName.ifBlank { "photos with no lens name" }}. RawBoy Auto applies them to every " +
+            "photo taken with it, on top of its look; only the lens settings change.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 8.dp)) {
+        OutlinedButton(onClick = { onSaveLensPreset(false) }) { Text("Save lens preset") }
+        OutlinedButton(onClick = { onSaveLensPreset(true) }) { Text("Send to Auto") }
+    }
 }
 
 @Composable

@@ -20,6 +20,8 @@ struct ControlsPanel: View {
     /** White balance picker armed: the next tap on the photo sets temperature and tint. */
     var pickingWhite = false
     var onPickWhite: () -> Void = {}
+    /** Lens tab: saves its settings as the lens preset for this lens; with true, also sends it to RawBoy Auto. */
+    var onSaveLensPreset: (_ sendToAuto: Bool) -> Void = { _ in }
 
     @AppStorage("pro.tab") private var chosenTab = 0
 
@@ -191,6 +193,16 @@ struct ControlsPanel: View {
         slider("Vignetting", \.vignetteAmount, -100...100)
         slider("Vignette radius", \.vignetteMidpoint, 0...100, format: formatPlain)
         Note("Distortion crops automatically so no empty edges show.")
+        SectionLabel("Lens preset")
+        let name = lens.lensName.trimmingCharacters(in: .whitespaces)
+        Note("Saves these settings for \(name.isEmpty ? "photos with no lens name" : name). RawBoy Auto applies them to every "
+            + "photo taken with it, on top of its look; only the lens settings change.")
+        HStack {
+            Button("Save lens preset") { onSaveLensPreset(false) }.buttonStyle(.bordered)
+            Button("Send to Auto") { onSaveLensPreset(true) }.buttonStyle(.bordered)
+        }
+        .font(.subheadline)
+        .padding(.vertical, 8)
     }
 }
 

@@ -265,7 +265,11 @@ struct EditorScreen: View {
                     onToneMapper: vm.setToneMapper, onFilm: vm.useFilm, onSelectFilm: vm.selectFilm,
                     onLutsTabShown: vm.refreshLuts, lens: session.lensInfo,
                     skin: session.skin, blemish: session.blemish,
-                    pickingWhite: pickingWhite, onPickWhite: { pickingWhite.toggle() })
+                    pickingWhite: pickingWhite, onPickWhite: { pickingWhite.toggle() },
+                    onSaveLensPreset: { send in
+                        let preset = vm.saveLensPreset()
+                        if send { vm.sendPresetToAuto(preset) }
+                    })
                 .frame(maxHeight: panelMax)
             }
         }

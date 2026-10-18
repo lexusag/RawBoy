@@ -35,12 +35,14 @@ interface Props {
   /** White balance picker armed: the next click on the photo sets temperature and tint. */
   pickingWhite: boolean;
   onPickWhite: () => void;
+  /** Lens tab: saves its settings as the lens preset for this lens. */
+  onSaveLensPreset: () => void;
 }
 
 /** The editor's tabs Light, Color, Detail, LUTs, Lens (port of app-pro's Controls.kt). */
 export function ControlsPanel({
   params, defaults, onChange, lutLoading, onSelectLut, filmLoading, onToneMapper, onFilm, onSelectFilm, lens, skin, blemish,
-  pickingWhite, onPickWhite,
+  pickingWhite, onPickWhite, onSaveLensPreset,
 }: Props) {
   const [chosenTab, setTab] = useState<Tab>('Light');
   // Film replaces the tone mapper and the user LUT (kept, but not rendered), so the LUTs tab hides while Film is on.
@@ -207,6 +209,12 @@ export function ControlsPanel({
             {slider('Vignetting', 'vignetteAmount', -100, 100)}
             {slider('Vignette radius', 'vignetteMidpoint', 0, 100, formatPlain)}
             <Note>Distortion crops automatically so no empty edges show.</Note>
+            <SectionLabel>Lens preset</SectionLabel>
+            <Note>
+              Saves these settings for {lens.lensName.trim() || 'photos with no lens name'}. The Auto tab applies them to every photo
+              taken with it, on top of its look; only the lens settings change.
+            </Note>
+            <button type="button" onClick={onSaveLensPreset}>Save lens preset</button>
           </>
         )}
       </div>

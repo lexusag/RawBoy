@@ -71,6 +71,8 @@ data class AutoPhoto(
     val adjust: Adjustments = Adjustments.NONE,
     /** A RawBoy preset developing the photo in place of its look (see [LookApplier.applyPreset]), or null. */
     val preset: Preset? = null,
+    /** The lens preset for the photo's lens (see [Presets.lensPresetFor]), on top of the look or preset; null = none. */
+    val lensPreset: Preset? = null,
     /** True once "Apply to all" gave the photo its looks: its analysis then keeps them instead of the suggestions. */
     val looksApplied: Boolean = false,
     val thumbnail: Bitmap? = null,
@@ -84,13 +86,7 @@ data class AutoPhoto(
 
     /** The develop settings for the current look (or preset) and controls (null until analysed). */
     val params: DevelopParams?
-        get() = analysis?.let {
-            if (preset != null) {
-                LookApplier.applyPreset(it.autoBase, preset, adjust)
-            } else {
-                LookApplier.apply(it.autoBase, activeLook, strength, adjust, it.stats.hasFace)
-            }
-        }
+        get() = analysis?.let { LookApplier.develop(it.autoBase, activeLook, strength, adjust, it.stats.hasFace, preset, lensPreset) }
 }
 
 /** A photo's edits, as Undo and Redo bring them back. */
@@ -172,6 +168,13 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
     private val _preset = MutableStateFlow<Preset?>(null)
     val preset = _preset.asStateFlow()
 
+    /**
+     * Lens presets ([Preset.isLensPreset]) from RawBoy: each photo taken with a preset's lens gets its lens corrections
+     * on top of its look or preset. Kept for later batches ([LensPresetStore]).
+     */
+    private val _lensPresets = MutableStateFlow(LensPresetStore.load(application))
+    val lensPresets = _lensPresets.asStateFlow()
+
     /** Presets of an opened file that held several, to pick one from; empty when no choice is pending. */
     private val _presetChoices = MutableStateFlow<List<Preset>>(emptyList())
     val presetChoices = _presetChoices.asStateFlow()
@@ -204,7 +207,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
      * Look-strip thumbnails: the latest one per photo and look, with the adjustments it was
      * rendered at (slider drags would otherwise pile up one bitmap per value).
      */
-    private class LookThumb(val adjust: Adjustments, val bitmap: Bitmap)
+    private class LookThumb(val adjust: Adjustments, val lensPreset: Preset?, val bitmap: Bitmap)
     private val lookThumbs = HashMap<Pair<String, String>, LookThumb>()
 
     /** Every bundled look's LUT stays loaded once used: about 3 MB each in native memory. */
@@ -264,6 +267,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
             }.getOrNull()
             when {
                 presets.isNullOrEmpty() -> _message.value = "Not a RawBoy preset file"
+                presets.all { it.isLensPreset } -> addLensPresets(presets)
                 presets.size == 1 -> applyPreset(presets[0], ids)
                 else -> {
                     presetTarget = ids
@@ -280,7 +284,39 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
         presetTarget = null
     }
 
-    private fun applyPreset(preset: Preset, ids: Set<String>?) = if (ids == null) applyPresetToAll(preset) else applyPresetTo(preset, ids)
+    private fun applyPreset(preset: Preset, ids: Set<String>?) = when {
+        preset.isLensPreset -> addLensPresets(listOf(preset))
+        ids == null -> applyPresetToAll(preset)
+        else -> applyPresetTo(preset, ids)
+    }
+
+    /**
+     * Keeps [presets] (lens presets) in place of those for the same lenses; photos taken with those lenses get their lens
+     * corrections on top of their look or preset, now and in later batches.
+     */
+    private fun addLensPresets(presets: List<Preset>) {
+        setLensPresets(presets.fold(_lensPresets.value, Presets::putLensPreset))
+        val lenses = presets.map { it.lens?.trim()?.lowercase() }.toSet()
+        val matched = _photos.value.count { p -> p.lensPreset?.let { it.lens?.trim()?.lowercase() in lenses } == true }
+        val name = if (presets.size == 1) "Lens preset ${presets[0].name}" else "${presets.size} lens presets"
+        val photos = if (matched == 1) "1 photo" else "$matched photos"
+        _message.value = "$name saved for photos taken with ${if (presets.size == 1) "that lens" else "those lenses"} ($photos here)"
+    }
+
+    /** Forgets lens preset [id]; its photos go back to the auto develop's lens corrections. */
+    fun removeLensPreset(id: String) = setLensPresets(_lensPresets.value.filterNot { it.id == id })
+
+    private fun setLensPresets(list: List<Preset>) {
+        _lensPresets.value = list
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching { LensPresetStore.save(getApplication(), list) }.onFailure { _message.value = "Could not save lens presets" }
+        }
+        _photos.value.forEach { p ->
+            val lens = p.analysis?.lens?.lensName ?: return@forEach
+            val next = Presets.lensPresetFor(list, lens)
+            if (next != p.lensPreset) changeDevelop(p.id, force = null) { it.copy(lensPreset = next) }
+        }
+    }
 
     /**
      * Develops every photo, and those added later, with [preset] in place of its look: all the preset holds, lens
@@ -365,6 +401,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
                     updatePhoto(next.id) {
                         it.copy(
                             status = PhotoStatus.READY, analysis = analysis, suggested = look, suggestedFilm = film,
+                            lensPreset = Presets.lensPresetFor(_lensPresets.value, analysis.lens.lensName),
                             look = if (it.looksApplied) it.look else look,
                             filmLook = if (it.looksApplied) it.filmLook else film,
                         )
@@ -489,11 +526,11 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
     suspend fun lookThumbnail(id: String, look: Look): Bitmap? {
         val p = photo(id) ?: return null
         val key = id to thumbKey(look)
-        lookThumbs[key]?.let { if (it.adjust == p.adjust) return it.bitmap }
+        lookThumbs[key]?.let { if (it.adjust == p.adjust && it.lensPreset == p.lensPreset) return it.bitmap }
         val a = p.analysis ?: return null
-        val params = LookApplier.apply(a.autoBase, look, LookApplier.DEFAULT_STRENGTH, p.adjust, a.stats.hasFace)
+        val params = LookApplier.develop(a.autoBase, look, LookApplier.DEFAULT_STRENGTH, p.adjust, a.stats.hasFace, null, p.lensPreset)
         val bitmap = runCatching { render(p, params, LOOK_THUMBNAIL) }.getOrNull() ?: return null
-        lookThumbs[key] = LookThumb(p.adjust, bitmap)
+        lookThumbs[key] = LookThumb(p.adjust, p.lensPreset, bitmap)
         return bitmap
     }
 
@@ -501,7 +538,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
     fun hasCurrentLookThumbnail(id: String, look: Look): Boolean {
         val p = photo(id) ?: return false
         val t = lookThumbs[id to thumbKey(look)] ?: return false
-        return t.adjust == p.adjust
+        return t.adjust == p.adjust && t.lensPreset == p.lensPreset
     }
 
     /** Film stocks share ids with the LUT looks of the same name (portra400...), so their thumbnails get their own keys. */

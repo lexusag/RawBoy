@@ -111,3 +111,31 @@ export function applyPresetDevelop(base: DevelopParams, preset: Preset, adjust: 
   const warmed = Warmth.shift(developed, WARMTH_RANGE ** (adjust.warmth / 100));
   return adjust.tint === 0 ? warmed : { ...warmed, tint: clamp(warmed.tint + adjust.tint, -100, 100) };
 }
+
+/**
+ * A photo's whole develop: preset (a RawBoy preset, see applyPresetDevelop) or else look (see applyLook), then its lens
+ * preset (isLensPreset, or null), which changes only the lens corrections: the profile switch, distortion, vignette
+ * radius and vignetting. A look's own vignette stays on top of the lens preset's vignetting; a RawBoy preset's Lens
+ * group gives way to the lens preset.
+ */
+export function developAuto(
+  base: DevelopParams,
+  look: Look,
+  strength: number,
+  adjust: Adjustments,
+  hasFace: boolean,
+  preset: Preset | null,
+  lensPreset: Preset | null,
+): DevelopParams {
+  const developed = preset ? applyPresetDevelop(base, preset, adjust) : applyLook(base, look, strength, adjust, hasFace);
+  if (!lensPreset) return developed;
+  const lens = applyPreset(lensPreset, base);
+  const lookVignette = preset ? 0 : developed.vignetteAmount - base.vignetteAmount;
+  return {
+    ...developed,
+    lensProfile: lens.lensProfile,
+    lensDistortion: lens.lensDistortion,
+    vignetteAmount: Math.min(100, Math.max(-100, lens.vignetteAmount + lookVignette)),
+    vignetteMidpoint: lens.vignetteMidpoint,
+  };
+}

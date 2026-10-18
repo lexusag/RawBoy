@@ -3,7 +3,7 @@ import { applyAuto } from '../../engine/auto/analysis/AutoTone';
 import { cropOf, flipped, rotateCrop, withCrop, type CropRect } from '../../engine/develop/CropMath';
 import { developParams, type DevelopParams } from '../../engine/develop/DevelopParams';
 import { MAX_LAYERS, SHAPE_NAMES, newBrushLayer, newLinearLayer, newRadialLayer, type BrushStroke, type MaskLayer } from '../../engine/develop/Masks';
-import { applyPreset, capturePreset, decodePresets, encodePresets, type Preset, type PresetGroup } from '../../engine/develop/Presets';
+import { applyPreset, captureLensPreset, capturePreset, decodePresets, encodePresets, putLensPreset, type Preset, type PresetGroup } from '../../engine/develop/Presets';
 import { EXTENSIONS, ExportSettingsStore, baseNameOf, fileName, type ExportSettings } from '../../engine/export/ExportSettings';
 import { FrameColors } from '../../engine/gl/DevelopRenderer';
 import { PhotoSession } from '../../engine/session/PhotoSession';
@@ -315,11 +315,24 @@ export class ProStore {
 
   /** Saves the current edits of groups as a new preset. */
   savePreset = (name: string, groups: PresetGroup[]) =>
-    this.setPresets([...this._state.presets, capturePreset(name, this._state.params, groups)]);
+    this.setPresets([...this._state.presets, capturePreset(name, this._state.params, groups, this.session.state.lensInfo.lensName)]);
+
+  /**
+   * Saves the Lens tab's settings as the lens preset for this photo's lens (replacing the one saved for it before); the
+   * Auto tab applies it to every photo taken with that lens.
+   */
+  saveLensPreset = () => {
+    const lensPreset = captureLensPreset(this._state.params, this.session.state.lensInfo.lensName);
+    this.putLensPresets([lensPreset]);
+    this.set({ message: `Saved lens preset ${lensPreset.name}` });
+  };
+
+  /** Keeps lens presets in place of those for the same lenses (Auto's lens preset files come here too). */
+  putLensPresets = (lensPresets: readonly Preset[]) => this.setPresets(lensPresets.reduce(putLensPreset, this._state.presets));
 
   /** Overwrites a preset's values with the current edits (same groups). */
   updatePreset = (id: string) =>
-    this.setPresets(this._state.presets.map((p) => (p.id === id ? { ...capturePreset(p.name, this._state.params, p.groups), id } : p)));
+    this.setPresets(this._state.presets.map((p) => (p.id === id ? { ...capturePreset(p.name, this._state.params, p.groups, p.lens ?? this.session.state.lensInfo.lensName), id } : p)));
 
   renamePreset = (id: string, name: string) =>
     this.setPresets(this._state.presets.map((p) => (p.id === id ? { ...p, name: name.trim() } : p)));
