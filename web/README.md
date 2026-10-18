@@ -39,7 +39,7 @@ by `vite.config.ts`), including the notice the DNG patent license requires. Keep
 `dist/` is static and can go on any host. The decoder uses threads, which need a cross-origin isolated page:
 `coi-serviceworker` adds the headers on hosts that can't send them (GitHub Pages); where you can, send
 `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` yourself.
-Check the bundled LUTs' licences before publishing (see the main Readme, *Third-party components*).
+Check the bundled LUTs' licences before publishing (see [Third-party components](../docs/third-party.md)).
 
 ### Cloudflare Pages
 

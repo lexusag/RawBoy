@@ -1,8 +1,8 @@
 # CLAUDE.md
 
-Guidance for working on RawBoy. Features, slider semantics and the changelog live in
-`Readme.md`; this file covers how the code fits together, how to test, and the traps
-already found.
+Guidance for working on RawBoy. Features and slider semantics live in `docs/` (linked from
+`Readme.md`), the changelog in `CHANGELOG.md`; this file covers how the code fits together, how
+to test, and the traps already found.
 
 ## What it is
 
@@ -676,5 +676,6 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
 - spektrafilm LUTs are CC BY-SA 4.0: keep `luts/spektrafilm/SPEKTRAFILM_LICENSE.txt` unmodified and the LUT creator's
   `.cube` headers intact, record RawBoy's changes in `CHANGELOG.txt` (written by the generator), and don't use the
   name "spektrafilm" in app branding (factual credit only, as Camera's Settings does).
-- Update `Readme.md` (controls table + changelog) with each user-visible change. The owner commits.
+- Update the docs with each user-visible change: the app's page in `docs/` (RawBoy's controls table is
+  `docs/rawboy.md`) and a new entry at the top of `CHANGELOG.md`. The owner commits.
 - `UI.md` is the backlog of UI proposals not done yet (from the 2026-10-17 review); remove an item when it lands.
