@@ -510,6 +510,11 @@ Update it when a dependency is added or upgraded.
 
 ## Changelog
 
+**Web: Auto shows each photo's ISO (2026-10-18)**
+
+- RawBoy Web: Auto's grid shows each photo's ISO (from its EXIF) at the end of the name line, and the photo view shows
+  it in the view's bottom-left corner (also at 100%), so noise can be judged without the 100% view. Hidden when the file has none.
+
 **Several lens presets from one photo (2026-10-18)**
 
 - RawBoy (Android, iOS, web): a lens preset saved under another name no longer replaces the one saved for the same lens

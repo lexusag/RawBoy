@@ -571,6 +571,19 @@ main {
   pointer-events: none;
 }
 
+/* Auto's photo view: the photo's ISO, to judge its noise without the 100% view. */
+.preview-iso {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 3px 7px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
 .zoom-hint {
   position: absolute;
   bottom: 16px;
@@ -1285,6 +1298,28 @@ select {
   color: #fff;
   font-size: 11px;
   opacity: 0.85;
+}
+
+/* The name, with the photo's ISO at the end of its line. */
+.cell-name-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.cell-name-row .cell-name {
+  flex: 1;
+  min-width: 0;
+}
+
+.cell-iso {
+  flex: none;
+  color: #fff;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  padding: 0 4px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.45);
 }
 
 .cell-caption .cell-look {
