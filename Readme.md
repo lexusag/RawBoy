@@ -233,13 +233,19 @@ shows them.
   the shutter) and saved as `Pictures/RawBoy Camera/IMG_<date>_<time>-camera.jpg`. You can keep shooting meanwhile;
   "Saving N…" shows the queue. The thumbnail opens the last photo. Exposure is metered on the middle half of the
   frame (width and height); a focus lock meters at its point instead.
+- **Merge 8 frames** (Settings, off by default): each shot without flash takes 8 raw frames in a quick burst and
+  merges them into one DNG before developing, as the phone's HDR+ does for its own JPEGs: each frame is aligned to the
+  first (tile by tile, so hand shake is followed) and averaged in where it matches; where something moved, the first
+  frame is kept, so moving things don't ghost. Noise drops by up to ~2.8× (√8) where nothing moves, so the develop
+  picks less denoise. The burst takes about half a second in low light (hold still), and saving takes longer (~2 s,
+  estimated from the host test).
 - **JPEG:** encoded with Google's **jpegli** from 16-bit pixels, full-resolution colour (4:4:4), quality 95 by
   default (Settings: 70–100). jpegli's adaptive quantisation gives fewer artefacts per byte than libjpeg.
 - **RAW:** the **RAW** button in the top bar keeps the DNG next to the JPEG (lit) or not (struck through); the same
   setting as in Settings.
 - **Settings:** JPEG quality; whether to keep the DNG (on by default; off keeps only the JPEG); **Smaller photos**
   (on by default: 3000 px on the long side, area-downscaled from the full-resolution develop, with the grain sized to
-  the smaller photo; off saves full resolution); **Remember camera & settings** (off by default: each start uses the
+  the smaller photo; off saves full resolution); **Merge 8 frames** (see above); **Remember camera & settings** (off by default: each start uses the
   back W lens, Yellow Portrait 400 and default sliders; on keeps lens, side, look and sliders).
 - **How the viewfinder matches the final:** the camera's preview stream is asked for the plain sRGB tone curve, so
   the viewfinder can turn it back into linear light and run the same develop shader on it. The auto develop is
@@ -494,7 +500,8 @@ Update it when a dependency is added or upgraded.
 - Press-and-hold compare shows healed blemishes as healed (healing changes the image data itself).
 - Very large files (≥100 MP) export JPEG through a full-size Bitmap and may run out of memory (RawBoy and Auto;
   Camera's jpegli path streams and has no such limit).
-- RawBoy Camera: single raw frames, so low light is noisier than the phone's multi-frame HDR+; no manual exposure
+- RawBoy Camera: single raw frames unless **Merge 8 frames** is on (its merge is new and only host-tested on
+  synthetic bursts so far); no manual exposure
   or digital zoom yet. Lenses other than the main one are streamed as physical cameras of the phone's logical back
   camera; if a phone refuses that, RawBoy Camera tries opening the lens on its own, and logs what it found
   (`adb logcat -s RawBoyCamera`). The Android emulator's back camera can't write DNGs (its metadata lacks the post-raw boost
@@ -509,6 +516,19 @@ Update it when a dependency is added or upgraded.
   and more may not fit the 4 GB WASM heap; tested in Chrome on macOS only.
 
 ## Changelog
+
+**Camera: merge a burst of raws (2026-10-18)**
+
+- RawBoy Camera (Android): **Merge 8 frames** in Settings (off by default). Each shot without flash captures 8 raw
+  frames (`CameraCaptureSession.captureBurst`), copies each into native memory as it arrives, then aligns and merges
+  them into one Bayer frame written as the DNG (`burst_merge.cpp`, `BurstNative`, `DngCreator.writeByteBuffer`). The
+  method is a simplified reimplementation of Google's HDR+ paper (Hasinoff et al. 2016): coarse-to-fine tile
+  alignment on a 2×2-averaged grey copy (even raw shifts, so the Bayer pattern is kept), then a spatial merge of
+  overlapping 32 px tiles weighted by how far each aligned tile differs from the first frame beyond noise, with a
+  per-pixel check against ghosts. The phone's own computational photography (Night Sight, HDR+) isn't available to
+  apps as raw: Camera2 extensions only return processed JPEG/YUV. Host test (`tools/burst_merge/run.sh`, synthetic
+  bursts with sub-pixel shake): noise 2.5× lower in flat areas, a moving square not ghosted, clipped light kept;
+  8 frames of 12 MP merge in ~1.7 s on 4 x86 cores. Not yet tried on the phone.
 
 **Grain size, roughness and colour in RawBoy (2026-10-18)**
 

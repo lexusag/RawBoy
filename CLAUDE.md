@@ -513,6 +513,19 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
 - Pro's Auto button: `AutoAnalysis.autoBase` (SceneAnalyzer + AutoTone on the session's 512 px base and skin mask,
   `PhotoSession.skinMask()` forces segmentation) → `AutoTone.applyTo` takes only light/colour/detail fields and keeps
   `lut`/`lutAmount`. Same in `ProStore.applyAuto` / `applyAuto` (TS).
+- **Camera burst merge** (`CameraSettings.mergeBurst`, `CameraController.burstDng`, `engine/src/main/cpp/burst_merge.*`,
+  `raw/BurstNative.kt`): `captureBurst` of N identical still requests (ZSL off, no flash); the raw reader's listener
+  hands each image to `burstSink`, which copies it into native memory at once (the reader keeps maxImages 2), and
+  results are paired with images by `SENSOR_TIMESTAMP`. Gains (t × ISO), the reference's dynamic black and
+  `SENSOR_NOISE_PROFILE` (averaged over channels; 0 = estimate from the frames) are set before the merge. The merge is
+  our own simplified HDR+ (paper only, no GPL code): align on the 2×2 grey copy (pyramid 1/2/4/4, 8 px tiles, last
+  level = the merge tiles of 16 grey px at stride 8), integer grey shifts = even raw shifts (CFA phase kept); spatial
+  merge of 32 px raw tiles with sin² windows (sum to 1 at half stride; even/odd tile rows in two passes so threads
+  never write the same pixel), tile weight from the excess mean squared grey difference over 2σ², pixel weight from the
+  3x3 mean difference. Output keeps the raw's integer levels (rounding ≈ 0.3 DN; scaling + patching WhiteLevel would
+  keep more). The develop treats it as `effectiveFrames` (1 + Σ mean tile weights) times the light: noise ISO scale
+  ÷ that. Host test: `tools/burst_merge/run.sh`. Not yet measured on the phone (memory peak ~400 MB native for 8 ×
+  12 MP; time; whether the HAL keeps up with captureBurst at full RAW size).
 - Camera focus lock: `CameraController.focusPoint`; `setCommon` puts AF_MODE_AUTO + regions on **every** request
   while locked, including the still capture (with CONTINUOUS_PICTURE there, the camera refocused at the shutter).
 - Selfie camera: front lenses with RAW only. Viewfinder mirrored (`Frame.mirror`; the shader mirrors only when the

@@ -489,6 +489,14 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel) {
         )
         Spacer(Modifier.height(16.dp))
         SettingSwitch(
+            title = "Merge ${CameraSettings.BURST_FRAMES} frames",
+            subtitle = "Each shot takes ${CameraSettings.BURST_FRAMES} raws and merges them into one: less noise, " +
+                "takes a little longer to save. Hold still; not used with flash",
+            checked = settings.mergeBurst,
+            onChange = vm::setMergeBurst,
+        )
+        Spacer(Modifier.height(16.dp))
+        SettingSwitch(
             title = "Histogram",
             subtitle = "A live RGB histogram in a corner of the viewfinder",
             checked = settings.showHistogram,
