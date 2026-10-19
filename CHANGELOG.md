@@ -12,6 +12,10 @@
   Measured on synthetic Bayer noise through the real shader (WebGL2): at Auto's high-ISO setting the grid
   correlation at 6 px drops from 0.91 to 0.03, colour noise left 1.19 → 0.96 (0.90 → 0.54 after a 2× downscale),
   luma unchanged within 5%.
+- At high colour denoise (above 65) a last, coarsest colour stage reads the 512 px base copy (3×3 taps, range
+  weighted with the same luma guard), for colour blotches 20–60 px across that the 18 px stage can't reach and that
+  turn into blocky patches when the exposure is raised. On DSCF1837.RAF (GFX 50R, the blurred legs): colour noise at
+  8–16 px 5.7 → 2.8, at 4–8 px 3.5 → 1.1. Luma is left alone (flattening it at that scale would make skin plastic).
 
 **Auto: gentler automatic luma denoise (2026-10-18)**
 

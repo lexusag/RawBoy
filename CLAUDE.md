@@ -628,6 +628,8 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   chroma 7×7 at stride 6 (18 px), range weights against the fine result. The sparse stages' taps are **jittered** per
   pixel (`jitteredTap`: a random point of each cell, hashed from the full-res pixel, centre tap fixed, cells shrunk to
   keep the old radius): on a fixed lattice the leftover chroma repeated every 6 px (blocky high-ISO colour noise).
+  After the 18 px chroma stage, a 3×3 stage on `uBase` (512 px, ~16 px/texel on 50 MP) takes the coarsest colour
+  blotches (skipped when `uBaseTexel` is 1, i.e. no base bound); chroma only.
   Luma and chroma are separate
   (`uDenoise`/`uDenoiseWide` vs `uColorDenoise`/`uColorDenoiseWide`): `DevelopParams.colorDenoise` is nullable, null =
   follows `denoise` (`effectiveColorDenoise`), so Auto, Camera, AutoTone and pre-split edits/presets need no change; only
