@@ -577,9 +577,11 @@ vec3 bloomBoost(vec3 c) {
     return c * (1.0 + 6.0 * t * t);
 }
 
-// Scattered light through a diffusion filter, after spektrafilm's PSF model
-// (Pro-Mist weights): core 0.28 + halo 0.42 + bloom 0.30, each normalised, so
-// mixing it in conserves energy. The halo has a slightly warm outer rim.
+// Scattered light through a diffusion filter, after spektrafilm's PSF model: core 0.25 + halo
+// 0.30 + tail 0.45, each normalised, so mixing it in conserves energy. The halo has a slightly
+// warm outer rim. Every kernel is round, its weights falling to zero at its rim, with taps one
+// texel apart on a bilinear copy: square tap grids with heavy corner weights drew square halos
+// around bright windows, and taps further apart than a texel would leave a grid pattern.
 vec3 bloomScatter(vec2 uvG, vec2 imagePx) {
     vec2 uv = imagePx / uImageSize;
 
@@ -595,32 +597,36 @@ vec3 bloomScatter(vec2 uvG, vec2 imagePx) {
         }
     }
 
-    // Halo: 2D exponential on the 512 px copy (reach ~1% of the long edge).
+    // Halo: Gaussian on the 512 px copy, sigma 1.2 texels (~0.25% of the long edge), out to 3.5 texels.
     vec3 halo = vec3(0.0);
     float hw = 0.0;
-    for (int j = -2; j <= 2; ++j) {
-        for (int i = -2; i <= 2; ++i) {
-            vec2 o = vec2(i, j) * 1.4;
-            float w = exp(-length(o) / 1.5);
-            halo += w * texture(uBloomHalo, uv + o * uBloomHaloTexel).rgb;
+    for (int j = -3; j <= 3; ++j) {
+        for (int i = -3; i <= 3; ++i) {
+            float r2 = float(i * i + j * j);
+            float rim = max(1.0 - r2 / 12.25, 0.0);
+            float w = exp(-r2 / 2.88) * rim * rim;
+            halo += w * texture(uBloomHalo, uv + vec2(i, j) * uBloomHaloTexel).rgb;
             hw += w;
         }
     }
 
-    // Bloom: power-law tail (alpha 2.9) on the 128 px copy (reach ~3% of the long edge).
+    // Tail: power law (alpha 2) on the 64 px copy, out to 7 texels (~10% of the long edge).
     vec3 tail = vec3(0.0);
     float tw = 0.0;
-    for (int j = -3; j <= 3; ++j) {
-        for (int i = -3; i <= 3; ++i) {
-            vec2 o = vec2(i, j);
-            float w = pow(1.0 + length(o), -2.9);
-            tail += w * texture(uBloomTail, uv + o * uBloomTailTexel).rgb;
+    for (int j = -6; j <= 6; ++j) {
+        for (int i = -6; i <= 6; ++i) {
+            float r2 = float(i * i + j * j);
+            float rim = 1.0 - r2 / 49.0;
+            if (rim <= 0.0) continue;
+            float d = 1.0 + sqrt(r2);
+            float w = rim * rim / (d * d);
+            tail += w * texture(uBloomTail, uv + vec2(i, j) * uBloomTailTexel).rgb;
             tw += w;
         }
     }
 
     vec3 warmRim = vec3(1.024, 1.004, 0.968);
-    return 0.28 * core / cw + 0.42 * warmRim * halo / hw + 0.30 * tail / tw;
+    return 0.25 * core / cw + 0.30 * warmRim * halo / hw + 0.45 * tail / tw;
 }
 
 vec2 toSensor(vec2 p) { return (uToSensor * vec3(p, 1.0)).xy; }

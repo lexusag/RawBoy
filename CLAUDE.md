@@ -103,7 +103,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   the previous photo's image). Decodes of photos swiped past are skipped (selection checked inside `decodeLock`).
 - Viewfinder (engine): `gl/ViewfinderRenderer.kt` — camera SurfaceTexture (OES) → pass 1 inverse sRGB/gamma,
   sRGB→Rec.2020, × scale, rotated upright into an RGBA16F texture (row 0 = top) → pass 2 the normal
-  `DevelopProgram`. Base (512), bloom halo (512, boosted) and tail (128) are rendered on the GPU **every frame**
+  `DevelopProgram`. Base (512), bloom halo (512, boosted) and tail (64) are rendered on the GPU **every frame**
   (`makeCopies`, bound via `DevelopProgram.bindLiveCopies`): built from the readback they lagged and bright lights
   left trails. Every ~300 ms the 512 px base is read back → `gl/ViewfinderBase.kt` (analysis only).
 - `app-camera/src/main/java/app/rawboy/camera/` — `capture/CameraController.kt` (Camera2: back camera with RAW,
@@ -396,7 +396,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   `LensTransform.sourceBounds(out, ShaderParams.spatialMargin)`. Anything that widens a filter must
   widen `spatialMargin`.
 - Large-radius effects (high-pass contrast, bloom, skin mask) sample small **whole-image textures**
-  (512/128 px) so preview, 100% and export match without seams.
+  (512/64 px) so preview, 100% and export match without seams.
 - Texture units: 0 image, 1 LUT (3D), 2 lens shading, 3 base (512), 4 bloom halo, 5 bloom tail, 6 skin mask, 7 brush atlas,
   8 film LUT, 9 print LUT (film looks: RawBoy Film and Auto's Film mode, all platforms).
 - Mask layers (`develop/Masks.ts`, web only so far): `DevelopParams.masks`, positions in fractions of the decoded image,

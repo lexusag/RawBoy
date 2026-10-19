@@ -232,7 +232,7 @@ export class ShaderParams {
       p.localContrast / 100,
       p.highpassContrast / 100,
       base,
-      (p.bloom / 100) * 0.35, // up to 35% of the light scattered
+      (p.bloom / 100) * (0.35 + (0.25 * p.bloom) / 100), // up to 60% of the light scattered
       bloomSources?.halo ?? null,
       bloomSources?.tail ?? null,
       p.skinRetouch / 100,

@@ -17,7 +17,7 @@ flowchart TD
     subgraph AUX["Small whole-image textures"]
         direction TB
         base["512 px base<br/>(high-pass contrast)"]
-        bloomTex["Bloom halo 512 px<br/>+ tail 128 px"]
+        bloomTex["Bloom halo 512 px<br/>+ tail 64 px"]
         skin["Skin mask<br/>(MediaPipe)"]
     end
 

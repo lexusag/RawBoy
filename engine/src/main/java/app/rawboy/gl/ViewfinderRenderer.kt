@@ -212,7 +212,7 @@ class ViewfinderRenderer(
 
     /**
      * The copies a decoded raw gets from PhotoSession (base, bloomSourcesOf), from the linear frame: [small] the
-     * ~512 px base (trilinear, from mipmaps), [halo] the same highlight-boosted, [tail] that box-filtered to ~128 px.
+     * ~512 px base (trilinear, from mipmaps), [halo] the same highlight-boosted, [tail] that box-filtered to ~64 px.
      */
     private fun makeCopies(sw: Int, sh: Int, tw: Int, th: Int) {
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, linear.texture)
@@ -566,11 +566,14 @@ uniform vec2 uSourceTexel;
 in vec2 vUp;
 out vec4 fragColor;
 void main() {
-    vec3 s = texture(uSource, vUp + vec2(-1.0, -1.0) * uSourceTexel).rgb
-           + texture(uSource, vUp + vec2(1.0, -1.0) * uSourceTexel).rgb
-           + texture(uSource, vUp + vec2(-1.0, 1.0) * uSourceTexel).rgb
-           + texture(uSource, vUp + vec2(1.0, 1.0) * uSourceTexel).rgb;
-    fragColor = vec4(s * 0.25, 1.0);
+    // 8x box: 4x4 bilinear taps, each the mean of 2x2 source texels.
+    vec3 s = vec3(0.0);
+    for (int j = 0; j < 4; ++j) {
+        for (int i = 0; i < 4; ++i) {
+            s += texture(uSource, vUp + vec2(float(2 * i - 3), float(2 * j - 3)) * uSourceTexel).rgb;
+        }
+    }
+    fragColor = vec4(s * 0.0625, 1.0);
 }
 """
         }
