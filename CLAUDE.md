@@ -632,6 +632,8 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   keep the old radius): on a fixed lattice the leftover chroma repeated every 6 px (blocky high-ISO colour noise).
   After the 18 px chroma stage, a 7×7 stage on `uBase` (512 px, ~16 px/texel on 50 MP; stride 1: stride 2 drew a grid) takes the coarsest colour
   blotches (skipped when `uBaseTexel` is 1, i.e. no base bound); chroma only.
+  Both coarse colour stages are **gated**: each moves the colour only while its change is under ~0.35 × the slider's
+  sigma (flat-topped `exp(-g²)`); without it they averaged irises into the skin (blue-grey eyes turned brown).
   Luma and chroma are separate
   (`uDenoise`/`uDenoiseWide` vs `uColorDenoise`/`uColorDenoiseWide`): `DevelopParams.colorDenoise` is nullable, null =
   follows `denoise` (`effectiveColorDenoise`), so Auto, Camera, AutoTone and pre-split edits/presets need no change; only

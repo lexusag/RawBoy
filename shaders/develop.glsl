@@ -348,7 +348,14 @@ vec3 denoise(vec2 uv, vec2 fullPx, vec3 rgb) {
                 wcW += w;
             }
         }
-        fineC = mix(fineC, wcSum / wcW, uColorDenoiseWide);
+        // The coarse stages are for blotches in even areas: their leftover is faint next to the slider's noise level.
+        // A small feature with its own colour (an iris, a catchlight's rim) differs from its surroundings by much
+        // more, and averaging it with them turned blue-grey eyes brown. So each coarse stage moves the colour by its
+        // full amount only while the change is small (gate ~0.35 sigma, flat-topped), and leaves larger changes alone.
+        vec3 wc = wcSum / wcW - fineC;
+        float invGate = 1.0 / (2.0 * 0.35 * 0.35 * sigmaC * sigmaC);
+        float gw = dot(wc, wc) * invGate;
+        fineC += wc * (uColorDenoiseWide * exp(-gw * gw));
 
         // Coarsest colour scale, from the 512 px base copy (~16 px per texel on a 50 MP raw, ~8 on a phone): colour
         // blotches 20-100 px across outlive the 18 px stage, and raising the exposure turns them into blotchy
@@ -370,7 +377,11 @@ vec3 denoise(vec2 uv, vec2 fullPx, vec3 rgb) {
                 bW += w;
             }
         }
-        if (bW > 1e-4) fineC = mix(fineC, bSum / bW, uColorDenoiseWide);
+        if (bW > 1e-4) {
+            vec3 bc = bSum / bW - fineC;
+            float gb = dot(bc, bc) * invGate;
+            fineC += bc * (uColorDenoiseWide * exp(-gb * gb));
+        }
     }
     vec3 outSqrt = max(vec3(fineL) + fineC, 0.0);
     return outSqrt * outSqrt;
