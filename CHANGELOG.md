@@ -1,5 +1,14 @@
 # Changelog
 
+**Web: Denoise & sharpening is its own preset group (2026-10-19)**
+
+- RawBoy (web): **Save preset** has a new **Denoise & sharpening** group (Luma denoise, Color denoise, Sharpening),
+  off by default; Detail keeps local contrast, high-pass, bloom and grain. RawBoy Auto (web) keeps its measured
+  denoise and sharpening unless a preset holds that group, whatever else the preset holds; before, presets with Light
+  never set them, even when saved with Detail. Presets saved before: Detail-only ones (e.g. a denoise preset) keep
+  their denoise in the new group; ones with Light leave denoise to Auto as before (re-save them with the group ticked
+  to apply theirs).
+
 **Web Browser: Reopen in Arc (2026-10-19)**
 
 - RawBoy Browser (web): Arc never shows its access prompt for a remembered folder, so **Reopen** waited forever and

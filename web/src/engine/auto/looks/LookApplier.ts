@@ -89,21 +89,20 @@ export function applyLook(base: DevelopParams, look: Look, strength: number, adj
  * A RawBoy preset in place of a look: [base] (the auto develop) with every field the preset holds, exactly as RawBoy
  * applies it (tone mapper, film, LUT, colour, detail, retouch, lens corrections, gradient masks...), then [adjust] on
  * top as with a look. Fields the preset leaves out keep the auto develop's values; there is no Strength.
- * Denoise, Color denoise and sharpening always come from the auto develop, measured on this photo (its ISO and
- * exposure), never from the photo the preset was made on; the Denoise adjustment still works on top.
+ * Denoise, Color denoise and sharpening come from the auto develop, measured on this photo (its ISO and exposure),
+ * unless the preset holds the Denoise & sharpening group; the Denoise adjustment works on top either way.
  */
 export function applyPresetDevelop(base: DevelopParams, preset: Preset, adjust: Adjustments): DevelopParams {
-  return adjustDevelop(applyPreset(preset, base), base, adjust);
+  return adjustDevelop(applyPreset(preset, base), adjust);
 }
 
 /**
  * A partial RawBoy preset (see replacesLook) on top of a look: [look] at [strength] as applyLook develops it, then only
- * the fields of the preset's groups, then [adjust]. A Detail group's denoise and sharpening are the preset's (that is
- * what a Detail preset is for); without one they stay the auto develop's.
+ * the fields of the preset's groups, then [adjust]. Denoise and sharpening stay the auto develop's unless the preset
+ * holds the Denoise & sharpening group.
  */
 export function applyPresetOnLook(base: DevelopParams, look: Look, strength: number, adjust: Adjustments, hasFace: boolean, preset: Preset): DevelopParams {
-  const p = applyPreset(preset, applyLook(base, look, strength, NO_ADJUSTMENTS, hasFace));
-  return adjustDevelop(p, preset.groups.includes('detail') ? p : base, adjust);
+  return adjustDevelop(applyPreset(preset, applyLook(base, look, strength, NO_ADJUSTMENTS, hasFace)), adjust);
 }
 
 /**
@@ -111,20 +110,19 @@ export function applyPresetOnLook(base: DevelopParams, look: Look, strength: num
  * denoise and sharpening included, with [adjust] on top as with a preset.
  */
 export function applyEditsDevelop(edits: DevelopParams, adjust: Adjustments): DevelopParams {
-  return adjustDevelop(edits, edits, adjust);
+  return adjustDevelop(edits, adjust);
 }
 
-/** [p] with [adjust] on top; denoise and sharpening start from [base]'s. */
-function adjustDevelop(p: DevelopParams, base: DevelopParams, adjust: Adjustments): DevelopParams {
+/** [p] with [adjust] on top. */
+function adjustDevelop(p: DevelopParams, adjust: Adjustments): DevelopParams {
   const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
   const developed: DevelopParams = {
     ...p,
     exposure: clamp(p.exposure + (adjust.brightness / 100) * BRIGHTNESS_EV, -5, 5),
     contrast: clamp(p.contrast + adjust.contrast, -100, 100),
     saturation: saturation(p.saturation, adjust.saturation),
-    denoise: clamp(base.denoise + adjust.denoise, 0, 100),
-    colorDenoise: base.colorDenoise == null ? null : clamp(base.colorDenoise + adjust.denoise, 0, 100),
-    sharpening: base.sharpening,
+    denoise: clamp(p.denoise + adjust.denoise, 0, 100),
+    colorDenoise: p.colorDenoise == null ? null : clamp(p.colorDenoise + adjust.denoise, 0, 100),
     // With a film stock its grain is the one rendered, so Grain scales that one, as in Film mode.
     grain: p.film != null ? p.grain : clamp(p.grain + adjust.grain, 0, 100),
     filmGrain: p.film != null ? clamp(p.filmGrain * (1 + adjust.grain / 50), 0, 200) : p.filmGrain,
