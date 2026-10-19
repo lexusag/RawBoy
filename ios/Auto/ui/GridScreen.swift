@@ -176,13 +176,13 @@ struct GridScreen: View {
     }
 
     private func cell(_ photo: AutoPhoto) -> some View {
-        PhotoCell(photo: photo, selected: selection.contains(photo.id))
+        PhotoCell(photo: photo, next: vm.opening == photo.id, selected: selection.contains(photo.id))
             .onTapGesture {
                 guard !exporting else { return }
                 if selecting {
                     if selection.contains(photo.id) { selection.remove(photo.id) } else { selection.insert(photo.id) }
-                } else if photo.analysis != nil {
-                    vm.openDetail(photo.id)
+                } else {
+                    vm.openFromGrid(photo.id)
                 }
             }
             .onLongPressGesture { if !exporting { selection.insert(photo.id) } }
@@ -246,6 +246,8 @@ struct GridScreen: View {
 
 private struct PhotoCell: View {
     let photo: AutoPhoto
+    /** Tapped while waiting: analysed next, then opened. */
+    let next: Bool
     let selected: Bool
 
     var body: some View {
@@ -256,7 +258,7 @@ private struct PhotoCell: View {
                     Image(decorative: t, scale: 1).resizable().scaledToFill()
                 }
                 switch photo.status {
-                case .queued: Badge(text: "Waiting")
+                case .queued: Badge(text: next ? "Next" : "Waiting")
                 case .analyzing, .exporting: ProgressView()
                 case .failed: Badge(text: photo.error ?? "Failed", error: true)
                 case .exported: Badge(text: "Saved").frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)

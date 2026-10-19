@@ -252,12 +252,13 @@ function GridView({ store, scroll, lastViewed }: {
             <PhotoCell
               key={p.id}
               photo={p}
+              next={state.opening === p.id}
               selected={selection.has(p.id)}
               disabled={exporting}
               onClick={(e) => {
                 if (e.shiftKey) selectRange(p.id);
                 else if (selecting || e.metaKey || e.ctrlKey) toggle(p.id);
-                else if (p.analysis) store.openDetail(p.id);
+                else store.openFromGrid(p.id);
               }}
               onLongPress={() => toggle(p.id)}
             />
@@ -409,8 +410,10 @@ function isTextEntry(target: EventTarget | null): boolean {
   return target instanceof HTMLInputElement && !['button', 'checkbox', 'radio', 'range', 'submit', 'reset', 'file', 'color'].includes(target.type);
 }
 
-function PhotoCell({ photo, selected, disabled, onClick, onLongPress }: {
+function PhotoCell({ photo, next, selected, disabled, onClick, onLongPress }: {
   photo: AutoPhoto;
+  /** Clicked while waiting: analysed next, then opened. */
+  next: boolean;
   selected: boolean;
   disabled: boolean;
   onClick: (e: React.MouseEvent) => void;
@@ -453,7 +456,7 @@ function PhotoCell({ photo, selected, disabled, onClick, onLongPress }: {
             }}
           />
         )}
-        {photo.status === 'queued' && <span className="badge">Waiting</span>}
+        {photo.status === 'queued' && <span className="badge">{next ? 'Next' : 'Waiting'}</span>}
         {(photo.status === 'analyzing' || photo.status === 'exporting') && <span className="spinner" />}
         {photo.status === 'failed' && <span className="badge error">{photo.error ?? 'Failed'}</span>}
         {photo.status === 'exported' && <span className="badge corner">Saved</span>}

@@ -45,6 +45,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.yield
 import java.io.File
 
 /** Where a photo is in the batch. */
@@ -192,6 +193,10 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
     /** Photo shown in the detail view, or null for the grid. */
     private val _selected = MutableStateFlow<String?>(null)
     val selected = _selected.asStateFlow()
+
+    /** A waiting photo tapped in the grid: analysed next, ahead of the rest, then opened (null: none). */
+    private val _opening = MutableStateFlow<String?>(null)
+    val opening = _opening.asStateFlow()
 
     /** The detail view's photo, decoded at full resolution (preview, 100% view, single export). */
     val session = PhotoSession(
@@ -423,6 +428,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
             runCatching { resolver.releasePersistableUriPermission(p.uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
         }
         _photos.update { list -> list.filterNot { it.id in ids } }
+        if (_opening.value in ids) _opening.value = null
         ids.forEach { id -> thumbJobs.remove(id)?.cancel() }
         ids.forEach(previews::remove)
         if (_cachedPreview.value?.first in ids) _cachedPreview.value = null
@@ -436,7 +442,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
         if (analysisJob?.isActive == true) return
         analysisJob = viewModelScope.launch {
             while (true) {
-                val next = _photos.value.firstOrNull { it.status == PhotoStatus.QUEUED } ?: break
+                val next = nextQueued() ?: break
                 updatePhoto(next.id) { it.copy(status = PhotoStatus.ANALYZING) }
                 try {
                     val analysis = decodeLock.withLock {
@@ -454,15 +460,31 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
                         )
                     }
                     refreshThumbnail(next.id, immediate = true)
+                    openIfWaiting(next.id)
                 } catch (e: CancellationException) {
                     throw e
                 } catch (e: Throwable) {
                     // OutOfMemoryError and native failures too: mark this photo and go on with the rest.
                     val reason = if (e is OutOfMemoryError) "Not enough memory" else e.message ?: e.javaClass.simpleName
                     updatePhoto(next.id) { it.copy(status = PhotoStatus.FAILED, error = reason) }
+                    if (_opening.value == next.id) _opening.value = null
                 }
             }
         }
+    }
+
+    /** The photo to analyse next: the one tapped to open ([opening]) if it's still waiting, else the first waiting. */
+    private fun nextQueued(): AutoPhoto? =
+        _opening.value?.let(::photo)?.takeIf { it.status == PhotoStatus.QUEUED }
+            ?: _photos.value.firstOrNull { it.status == PhotoStatus.QUEUED }
+
+    /** Opens photo [id] now that it's analysed, if it was tapped while waiting and the grid is still showing. */
+    private suspend fun openIfWaiting(id: String) {
+        if (_opening.value != id) return
+        _opening.value = null
+        if (_selected.value != null) return
+        openDetail(id)
+        yield() // its decode takes the lock before the next analysis
     }
 
     private fun updatePhoto(id: String, change: (AutoPhoto) -> AutoPhoto) =
@@ -615,6 +637,20 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     // ---- Detail view ----
+
+    /**
+     * A photo tapped in the grid: opens it if it's analysed; one still waiting (or being analysed) is analysed next,
+     * ahead of the rest, and opens when that's done.
+     */
+    fun openFromGrid(id: String) {
+        val p = photo(id) ?: return
+        if (_export.value != null) return
+        if (p.analysis != null) {
+            openDetail(id)
+        } else if (p.status == PhotoStatus.QUEUED || p.status == PhotoStatus.ANALYZING) {
+            _opening.value = id
+        }
+    }
 
     fun openDetail(id: String) {
         val p = photo(id) ?: return

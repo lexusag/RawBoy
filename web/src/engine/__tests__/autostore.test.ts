@@ -168,3 +168,29 @@ describe('Auto apply to all', () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe('Auto: opening a waiting photo', () => {
+  it('analyses a clicked waiting photo next, ahead of the rest, then opens it', async () => {
+    const store = new AutoStore();
+    store.add([new File(['a'], 'a.CR2'), new File(['b'], 'b.CR2'), new File(['c'], 'c.CR2')]);
+    const [a, b, c] = store.state.photos;
+    await new Promise((r) => setTimeout(r, 0));
+    // a is being analysed (the stubbed analysis never ends); a click on c makes it next instead of b.
+    expect(store.state.photos.map((p) => p.status)).toEqual(['analyzing', 'queued', 'queued']);
+    const s = store as unknown as { nextQueued: () => { id: string } | undefined; openIfWaiting: (id: string) => void };
+    expect(s.nextQueued()?.id).toBe(b.id);
+    store.openFromGrid(c.id);
+    expect(store.state.opening).toBe(c.id);
+    expect(s.nextQueued()?.id).toBe(c.id);
+    const opened: string[] = [];
+    store.openDetail = (id: string) => void opened.push(id);
+    s.openIfWaiting(a.id); // another photo finishing doesn't open anything
+    expect([opened, store.state.opening]).toEqual([[], c.id]);
+    s.openIfWaiting(c.id);
+    expect([opened, store.state.opening]).toEqual([[c.id], null]);
+    // Removed while waiting: nothing is waiting to open any more.
+    store.openFromGrid(c.id);
+    store.remove(new Set([c.id]));
+    expect(store.state.opening).toBeNull();
+  });
+});
