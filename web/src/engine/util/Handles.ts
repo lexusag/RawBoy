@@ -34,3 +34,13 @@ export async function loadHandle<T extends FileSystemHandle>(key: string): Promi
     return null;
   }
 }
+
+/** Forgets the handle remembered under [key]; quietly not when IndexedDB is unavailable. */
+export async function deleteHandle(key: string) {
+  try {
+    const d = await db();
+    d.transaction(STORE, 'readwrite').objectStore(STORE).delete(key);
+  } catch {
+    // Nothing remembered to forget.
+  }
+}

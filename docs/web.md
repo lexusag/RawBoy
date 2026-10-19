@@ -62,7 +62,7 @@ blemish removal use the same MediaPipe models in the browser.
   and brush strokes included; `NAME.xmp`, else darktable's `NAME.CR2.xmp`, else a new `NAME.xmp`) and reopen with
   them instead of the previous photo's carried-over edits. Reset removes them again. Photos sent to Auto keep their
   Auto settings there too (`rawboy:Auto`: look or film look, strength, adjustments, the preset itself, a picked lens
-  preset or None, and RawBoy edits from Back to Auto). Opening the folder again (**Reopen <folder>** remembers the last one) puts the photos with Auto
+  preset or None, and RawBoy edits from Back to Auto). Opening the folder again (**Reopen <folder>** remembers the last one; it asks for access again when needed, and falls back to the folder picker when access is refused or the folder is gone) puts the photos with Auto
   settings back into Auto as they were left. Other apps' data in the sidecar stays as it was; they don't read
   RawBoy's edits.
 - Auto's photo view: **Space** / **Backspace** go to the next / previous photo, as in darktable, even while a slider

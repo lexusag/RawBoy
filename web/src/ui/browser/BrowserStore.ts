@@ -1,5 +1,5 @@
 import { isRated, NO_RATING, readEdits, readXmp, writeEdits, writeXmp, type EditsSidecar, type Flag, type Rating } from '../../engine/browse/XmpSidecar';
-import { loadHandle, saveHandle } from '../../engine/util/Handles';
+import { deleteHandle, loadHandle, saveHandle } from '../../engine/util/Handles';
 import { zipFiles } from '../common/files';
 import { groupPhotos, isPhotoName, stemOf, withSuffix, type PhotoGroup } from './PhotoGroups';
 import { jxlViewImageOf, thumbnailOf, viewImageOf, type ViewImage } from './Previews';
@@ -223,17 +223,38 @@ export class BrowserStore {
     if (this.dir === dir && this._state.editsInSidecars) await this.sendAutoEdited();
   }
 
-  /** Opens the folder opened last time; the browser asks to allow it again (call from a click). */
-  async reopenLastFolder() {
+  /**
+   * Opens the folder opened last time after checking it can still be used (call from a click): read-write access is
+   * asked for again when the browser no longer grants it, and a folder that was moved, renamed or deleted is forgotten.
+   * Anything but 'opened' leaves the current state as it was; [reopenFolder] then falls back to picking the folder.
+   */
+  async reopenLastFolder(): Promise<{ result: 'opened' | 'denied' | 'gone'; dir: FileSystemDirectoryHandle | null }> {
     const dir = await loadHandle<FileSystemDirectoryHandle>(FOLDER_KEY);
-    if (!dir) return this.update({ lastFolder: null });
-    const permission = dir as unknown as { requestPermission?: (o: object) => Promise<PermissionState> };
-    try {
-      if (permission.requestPermission && (await permission.requestPermission({ mode: 'readwrite' })) !== 'granted') return;
-      await this.openFolder(dir);
-    } catch (e) {
-      this.update({ message: `Couldn't open ${dir.name}: ${e instanceof Error ? e.message : String(e)}` });
+    if (!dir) {
+      this.update({ lastFolder: null });
+      return { result: 'gone', dir: null };
     }
+    const handle = dir as unknown as {
+      queryPermission?: (o: object) => Promise<PermissionState>;
+      requestPermission?: (o: object) => Promise<PermissionState>;
+    };
+    const mode = { mode: 'readwrite' };
+    try {
+      if ((await handle.queryPermission?.(mode)) !== 'granted' && (await handle.requestPermission?.(mode)) !== 'granted') return { result: 'denied', dir };
+    } catch {
+      return { result: 'denied', dir };
+    }
+    try {
+      // A handle to a folder that is gone still exists; listing it is what fails (NotFoundError).
+      for await (const _ of values(dir)) break;
+    } catch (e) {
+      if ((e as Error)?.name === 'NotAllowedError' || (e as Error)?.name === 'SecurityError') return { result: 'denied', dir };
+      void deleteHandle(FOLDER_KEY);
+      this.update({ lastFolder: null });
+      return { result: 'gone', dir: null };
+    }
+    await this.openFolder(dir);
+    return { result: 'opened', dir };
   }
 
   /** Hands the photos whose sidecars hold RawBoy Auto settings to [onAutoEdited]. */
