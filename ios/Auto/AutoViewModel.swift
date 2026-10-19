@@ -104,6 +104,8 @@ struct BatchExport: Equatable {
     var total: Int
     var failed: Int
     var current: Float = 0
+    /// Stop was pressed: the photo being exported finishes, the rest are left as they are.
+    var stopping = false
 }
 
 @MainActor
@@ -763,9 +765,13 @@ final class AutoViewModel: ObservableObject {
         keepAwake(true)
         Task {
             var failed = 0
+            var attempted = 0
+            var stopped = false
             for (index, item) in todo.enumerated() {
+                if export?.stopping == true { stopped = true; break }
                 guard let p = photo(item.id) else { continue }  // removed meanwhile
                 updatePhoto(p.id) { $0.status = .exporting }
+                attempted += 1
                 var ok = false
                 do {
                     let file = try await decodeLock.run { try await exportOne(p, settings) }
@@ -776,14 +782,22 @@ final class AutoViewModel: ObservableObject {
                     updatePhoto(p.id) { $0.error = error.localizedDescription }
                 }
                 updatePhoto(p.id) { $0.status = ok ? .exported : .failed }
-                export = BatchExport(done: index + 1, total: todo.count, failed: failed)
+                export?.done = index + 1
+                export?.failed = failed
+                export?.current = 0
             }
-            let saved = todo.count - failed
-            message = "Saved \(saved) \(saved == 1 ? "photo" : "photos") to Photos › \(Self.naming.folder)"
+            let saved = attempted - failed
+            // Photos finished before Stop are already in Photos and stay there.
+            message = (stopped ? "Stopped · " : "") + "Saved \(saved) \(saved == 1 ? "photo" : "photos") to Photos › \(Self.naming.folder)"
                 + (failed > 0 ? " · \(failed) failed" : "")
             export = nil
             keepAwake(false)
         }
+    }
+
+    /// Stops "Export all" after the photo being exported; photos already saved stay.
+    func stopExport() {
+        if let e = export, e.total > 1 { export?.stopping = true }
     }
 
     private func exportOne(_ p: AutoPhoto, _ settings: ExportSettings) async throws -> URL {

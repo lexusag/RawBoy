@@ -142,6 +142,8 @@ export interface BatchExport {
   total: number;
   failed: number;
   current: number;
+  /** Stop was pressed: the photo being exported finishes, the rest are left as they are. */
+  stopping?: boolean;
 }
 
 export const NAMING: OutputNaming = { suffix: 'auto' };
@@ -938,10 +940,18 @@ export class AutoStore {
     let failed = 0;
     const settings = this._state.exportSettings;
     const zipped: { name: string; blob: Blob }[] = [];
+    let attempted = 0;
+    let stopped = false;
     for (let index = 0; index < todo.length; index++) {
+      // Read through a cast: TypeScript keeps the narrowing to null from the guard at the top across the awaits.
+      if ((this._state.export as BatchExport | null)?.stopping) {
+        stopped = true;
+        break;
+      }
       const p = this.photo(todo[index].id);
       if (!p) continue; // removed meanwhile
       this.updatePhoto(p.id, (q) => ({ ...q, status: 'exporting' }));
+      attempted++;
       let ok = false;
       try {
         const blob = await this.decodeLock.run(() => this.exportOne(p, settings, (f) => this.update({ export: { ...this._state.export!, current: f } })));
@@ -953,14 +963,21 @@ export class AutoStore {
         this.updatePhoto(p.id, (q) => ({ ...q, error: e instanceof Error ? e.message : String(e) }));
       }
       this.updatePhoto(p.id, (q) => ({ ...q, status: ok ? 'exported' : 'failed' }));
-      this.update({ export: { done: index + 1, total: todo.length, failed, current: 0 } });
+      this.update({ export: { ...this._state.export!, done: index + 1, failed, current: 0 } });
     }
-    const saved = todo.length - failed;
+    const saved = attempted - failed;
+    // Photos finished before Stop are kept: written to the folder already, or still zipped.
     if (!folder && zipped.length) saveBlob('RawBoy Auto.zip', await zipFiles(zipped));
     this.update({
       export: null,
-      message: `Saved ${saved} ${saved === 1 ? 'photo' : 'photos'}${folder ? ` to ${folder.name}` : ' (ZIP)'}${failed > 0 ? ` · ${failed} failed` : ''}`,
+      message: `${stopped ? 'Stopped · ' : ''}Saved ${saved} ${saved === 1 ? 'photo' : 'photos'}${folder ? ` to ${folder.name}` : ' (ZIP)'}${failed > 0 ? ` · ${failed} failed` : ''}`,
     });
+  }
+
+  /** Stops "Export all" after the photo being exported; photos already saved stay. */
+  stopExport() {
+    const e = this._state.export;
+    if (e && e.total > 1 && !e.stopping) this.update({ export: { ...e, stopping: true } });
   }
 
   private async exportOne(p: AutoPhoto, settings: ExportSettings, onProgress: (f: number) => void): Promise<Blob> {

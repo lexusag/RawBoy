@@ -73,7 +73,8 @@ every photo, including photos still being analysed, which keep it instead of the
 denoise stay per photo). **Copy previous** (at the end of the Look / Adjust tabs) copies the same settings, plus
 brightness, from the photo before this one in the batch to this photo only (denoise stays), as one undo step, like darktable's or Lightroom's "copy previous":
 develop one shot of a scene, swipe to the next and tap it. **Export all** saves every photo
-to `Pictures/RawBoy Auto/<name>-auto.jpg` (or `.tif`), one photo at a time, keeping the screen on.
+to `Pictures/RawBoy Auto/<name>-auto.jpg` (or `.tif`), one photo at a time, keeping the screen on. **Stop**, next to the progress bar, ends the export after the
+photo being saved; photos already saved stay (on the web without a folder, the ZIP holds those).
 **Export all** and the photo view's **Export** ask for the format and size first (remembered for the next export),
 as RawBoy's export dialog does: JPEG with a quality slider (default 92) or TIFF (8 or 16-bit, LZW,
 default 16), at the original size or a long side of 5600, 4096, 2048 or 1080 px. Both keep the photo's EXIF.

@@ -133,7 +133,8 @@ private fun AutoPhoto.withLookOf(source: AutoPhoto): AutoPhoto {
 data class UndoState(val canUndo: Boolean = false, val canRedo: Boolean = false)
 
 /** Progress of "Export all". */
-data class BatchExport(val done: Int, val total: Int, val failed: Int, val current: Float = 0f)
+/** Progress of "Export all"; [stopping]: Stop was pressed, the photo being exported finishes and the rest are left. */
+data class BatchExport(val done: Int, val total: Int, val failed: Int, val current: Float = 0f, val stopping: Boolean = false)
 
 class AutoViewModel(application: Application) : AndroidViewModel(application) {
     private val _photos = MutableStateFlow<List<AutoPhoto>>(emptyList())
@@ -756,9 +757,13 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
         val settings = _exportSettings.value
         exportJob = viewModelScope.launch {
             var failed = 0
-            todo.forEachIndexed { index, photo ->
-                val p = photo(photo.id) ?: return@forEachIndexed // removed meanwhile
+            var attempted = 0
+            var stopped = false
+            for ((index, photo) in todo.withIndex()) {
+                if (_export.value?.stopping == true) { stopped = true; break }
+                val p = photo(photo.id) ?: continue // removed meanwhile
                 updatePhoto(p.id) { it.copy(status = PhotoStatus.EXPORTING) }
+                attempted++
                 val ok = try {
                     decodeLock.withLock { exportOne(p, settings) { f -> _export.update { it?.copy(current = f) } } }
                     true
@@ -770,15 +775,22 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
                     false
                 }
                 updatePhoto(p.id) { it.copy(status = if (ok) PhotoStatus.EXPORTED else PhotoStatus.FAILED) }
-                _export.value = BatchExport(done = index + 1, total = todo.size, failed = failed)
+                _export.update { it?.copy(done = index + 1, failed = failed, current = 0f) }
             }
-            val saved = todo.size - failed
+            val saved = attempted - failed
             _message.value = buildString {
+                // Photos finished before Stop are already in Pictures and stay there.
+                if (stopped) append("Stopped · ")
                 append("Saved $saved ${if (saved == 1) "photo" else "photos"} to Pictures/${NAMING.folder}")
                 if (failed > 0) append(" · $failed failed")
             }
             _export.value = null
         }
+    }
+
+    /** Stops "Export all" after the photo being exported; photos already saved stay. */
+    fun stopExport() {
+        _export.update { e -> if (e != null && e.total > 1) e.copy(stopping = true) else e }
     }
 
     private suspend fun exportOne(p: AutoPhoto, settings: ExportSettings, onProgress: (Float) -> Unit) {
