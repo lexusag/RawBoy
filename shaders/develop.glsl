@@ -577,8 +577,27 @@ vec3 bloomBoost(vec3 c) {
     return c * (1.0 + 6.0 * t * t);
 }
 
-// Scattered light through a diffusion filter, after spektrafilm's PSF model: core 0.25 + halo
-// 0.30 + tail 0.45, each normalised, so mixing it in conserves energy. The halo has a slightly
+// Cubic B-spline sample of a small copy from four bilinear taps: smooth and close to round,
+// where a bilinear sample of a coarse copy shows its texel grid.
+vec3 textureBSpline(sampler2D t, vec2 uv, vec2 texel) {
+    vec2 st = uv / texel - 0.5;
+    vec2 i = floor(st);
+    vec2 f = st - i;
+    vec2 f2 = f * f;
+    vec2 f3 = f2 * f;
+    vec2 w0 = (1.0 - 3.0 * f + 3.0 * f2 - f3) / 6.0;
+    vec2 w1 = (4.0 - 6.0 * f2 + 3.0 * f3) / 6.0;
+    vec2 w3 = f3 / 6.0;
+    vec2 g0 = w0 + w1;
+    vec2 g1 = 1.0 - g0;
+    vec2 h0 = (i - 0.5 + w1 / g0) * texel;
+    vec2 h1 = (i + 1.5 + w3 / g1) * texel;
+    return g0.y * (g0.x * texture(t, h0).rgb + g1.x * texture(t, vec2(h1.x, h0.y)).rgb)
+         + g1.y * (g0.x * texture(t, vec2(h0.x, h1.y)).rgb + g1.x * texture(t, h1).rgb);
+}
+
+// Scattered light through a diffusion filter, after spektrafilm's PSF model: core 0.30 + halo
+// 0.25 + tail 0.45, each normalised, so mixing it in conserves energy. The halo has a slightly
 // warm outer rim. Every kernel is round, its weights falling to zero at its rim, with taps one
 // texel apart on a bilinear copy: square tap grids with heavy corner weights drew square halos
 // around bright windows, and taps further apart than a texel would leave a grid pattern.
@@ -610,7 +629,9 @@ vec3 bloomScatter(vec2 uvG, vec2 imagePx) {
         }
     }
 
-    // Tail: power law (alpha 2) on the 64 px copy, out to 7 texels (~10% of the long edge).
+    // Tail: power law (alpha 2.2, knee 0.6 texel) on the 64 px copy, out to 7 texels (~10% of the long
+    // edge): dense next to the light, like a mist filter, fading into a wide haze. The inner taps carry
+    // most of the weight, so they sample the copy as a B-spline (bilinear there drew its texels as squares).
     vec3 tail = vec3(0.0);
     float tw = 0.0;
     for (int j = -6; j <= 6; ++j) {
@@ -618,15 +639,15 @@ vec3 bloomScatter(vec2 uvG, vec2 imagePx) {
             float r2 = float(i * i + j * j);
             float rim = 1.0 - r2 / 49.0;
             if (rim <= 0.0) continue;
-            float d = 1.0 + sqrt(r2);
-            float w = rim * rim / (d * d);
-            tail += w * texture(uBloomTail, uv + vec2(i, j) * uBloomTailTexel).rgb;
+            float w = pow(1.0 + sqrt(r2) / 0.6, -2.2) * rim * rim;
+            vec2 at = uv + vec2(i, j) * uBloomTailTexel;
+            tail += w * (r2 <= 2.0 ? textureBSpline(uBloomTail, at, uBloomTailTexel) : texture(uBloomTail, at).rgb);
             tw += w;
         }
     }
 
     vec3 warmRim = vec3(1.024, 1.004, 0.968);
-    return 0.25 * core / cw + 0.30 * warmRim * halo / hw + 0.45 * tail / tw;
+    return 0.30 * core / cw + 0.25 * warmRim * halo / hw + 0.45 * tail / tw;
 }
 
 vec2 toSensor(vec2 p) { return (uToSensor * vec3(p, 1.0)).xy; }

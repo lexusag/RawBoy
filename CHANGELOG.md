@@ -5,8 +5,9 @@
 - All apps: Bloom no longer draws square halos around bright windows. Its halo and tail now use round kernels whose
   weights fade to zero at the rim, sampled one texel apart; before, square tap grids with heavy corner weights showed
   as blocky squares, most visibly at Bloom 100. The tail reaches about 10% of the long edge (was ~3%), from a 64 px
-  copy (was 128 px; the Camera viewfinder's live copy follows), and Bloom 100 now scatters 60% of the light (was 35%),
-  so the slider goes much further. Low values, as the Auto looks use, change little (20 scatters 8%, was 7%).
+  copy (was 128 px; the Camera viewfinder's live copy follows). The glow is dense next to the light and fades into a
+  wide haze, like a mist filter, and it thickens as the slider rises: Bloom 100 scatters 75% of the light (was 35%),
+  about a 1/2 black mist. Low values, as the Auto looks use, change little (20 scatters 9%, was 7%).
 
 **Colour denoise keeps eye colour (2026-10-19)**
 
