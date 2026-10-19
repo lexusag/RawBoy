@@ -351,19 +351,21 @@ vec3 denoise(vec2 uv, vec2 fullPx, vec3 rgb) {
         fineC = mix(fineC, wcSum / wcW, uColorDenoiseWide);
 
         // Coarsest colour scale, from the 512 px base copy (~16 px per texel on a 50 MP raw, ~8 on a phone): colour
-        // blotches 20-60 px across outlive the 18 px stage, and raising the exposure turns them into blocky
-        // patches. Range-weighted against the result so far, with the same luma guard, so colour edges stay.
-        // Skipped without a base copy (uBaseTexel 1).
+        // blotches 20-100 px across outlive the 18 px stage, and raising the exposure turns them into blotchy
+        // patches. 7x7 texels at stride 1 (a sparser stride drew a 2-texel grid), Gaussian sigma ~1.8 texels.
+        // Range-weighted against the result so far, with tighter luma and colour guards than the other stages
+        // (the blotches are faint), so colour edges and small features (eyes, lips) stay. Skipped without a base
+        // copy (uBaseTexel 1).
         vec2 buv = fullPx / uImageSize;
         vec3 bSum = vec3(0.0);
         float bW = 0.0;
-        for (int j = -1; j <= 1 && uBaseTexel.x < 0.5; ++j) {
-            for (int i = -1; i <= 1; ++i) {
+        for (int j = -3; j <= 3 && uBaseTexel.x < 0.5; ++j) {
+            for (int i = -3; i <= 3; ++i) {
                 vec3 s = sqrt(max(texture(uBase, buv + vec2(i, j) * uBaseTexel).rgb, 0.0));
                 float l = (s.r + s.g + s.b) / 3.0;
                 vec3 dc = (s - l) - fineC;
                 float dl = l - fineL;
-                float w = exp(-float(i * i + j * j) * 0.5 - dl * dl * invLumaC * 0.5 - dot(dc, dc) * invChroma);
+                float w = exp(-float(i * i + j * j) * 0.16 - dl * dl * invLumaC - dot(dc, dc) * invChroma * 4.0);
                 bSum += (s - l) * w;
                 bW += w;
             }
