@@ -24,7 +24,7 @@ shows them.
   the shutter) and saved as `Pictures/RawBoy Camera/IMG_<date>_<time>-camera.jpg`. You can keep shooting meanwhile;
   "Saving N…" shows the queue. The thumbnail opens the last photo. Exposure is metered on the middle half of the
   frame (width and height); a focus lock meters at its point instead.
-- **Merge 8 frames** (Settings, off by default): each shot without flash takes 8 raw frames in a quick burst and
+- **Merge 8 frames** (the burst button in the top bar, or Settings; off by default): each shot without flash takes 8 raw frames in a quick burst and
   merges them into one DNG before developing, as the phone's HDR+ does for its own JPEGs: each frame is aligned to the
   first (tile by tile, so hand shake is followed) and averaged in where it matches; where something moved, the first
   frame is kept, so moving things don't ghost. Noise drops by about 3× where nothing moves, so the develop picks
