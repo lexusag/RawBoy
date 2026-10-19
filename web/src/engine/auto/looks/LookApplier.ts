@@ -1,6 +1,6 @@
 import { Warmth } from '../analysis/Warmth';
 import type { DevelopParams } from '../../develop/DevelopParams';
-import { applyPreset, type Preset } from '../../develop/Presets';
+import { applyPreset, replacesLook, type Preset } from '../../develop/Presets';
 import { lutIdOf, type Look } from './Look';
 
 /**
@@ -97,6 +97,16 @@ export function applyPresetDevelop(base: DevelopParams, preset: Preset, adjust: 
 }
 
 /**
+ * A partial RawBoy preset (see replacesLook) on top of a look: [look] at [strength] as applyLook develops it, then only
+ * the fields of the preset's groups, then [adjust]. A Detail group's denoise and sharpening are the preset's (that is
+ * what a Detail preset is for); without one they stay the auto develop's.
+ */
+export function applyPresetOnLook(base: DevelopParams, look: Look, strength: number, adjust: Adjustments, hasFace: boolean, preset: Preset): DevelopParams {
+  const p = applyPreset(preset, applyLook(base, look, strength, NO_ADJUSTMENTS, hasFace));
+  return adjustDevelop(p, preset.groups.includes('detail') ? p : base, adjust);
+}
+
+/**
  * A whole develop from the RawBoy tab (web: "Back to Auto") in place of a look: [edits] exactly as RawBoy rendered them,
  * denoise and sharpening included, with [adjust] on top as with a preset.
  */
@@ -125,9 +135,9 @@ function adjustDevelop(p: DevelopParams, base: DevelopParams, adjust: Adjustment
 }
 
 /**
- * A photo's whole develop: preset (a RawBoy preset, see applyPresetDevelop) or else look (see applyLook), then its lens
- * preset (isLensPreset, or null), which changes only the lens corrections: the profile switch, distortion, vignette
- * radius and vignetting. A look's own vignette stays on top of the lens preset's vignetting; a RawBoy preset's Lens
+ * A photo's whole develop: preset (a RawBoy preset with the Light group, see applyPresetDevelop) or else look (see
+ * applyLook) with a partial preset's groups on top (applyPresetOnLook), then its lens preset (isLensPreset, or null),
+ * which changes only the lens corrections: the profile switch, distortion, vignette radius and vignetting. A look's own vignette stays on top of the lens preset's vignetting; a RawBoy preset's Lens
  * group gives way to the lens preset.
  */
 export function developAuto(
@@ -139,10 +149,13 @@ export function developAuto(
   preset: Preset | null,
   lensPreset: Preset | null,
 ): DevelopParams {
-  const developed = preset ? applyPresetDevelop(base, preset, adjust) : applyLook(base, look, strength, adjust, hasFace);
+  const whole = preset != null && replacesLook(preset);
+  const developed = !preset ? applyLook(base, look, strength, adjust, hasFace)
+    : whole ? applyPresetDevelop(base, preset, adjust)
+    : applyPresetOnLook(base, look, strength, adjust, hasFace, preset);
   if (!lensPreset) return developed;
   const lens = applyPreset(lensPreset, base);
-  const lookVignette = preset ? 0 : developed.vignetteAmount - base.vignetteAmount;
+  const lookVignette = whole || preset?.groups.includes('lens') ? 0 : developed.vignetteAmount - base.vignetteAmount;
   return {
     ...developed,
     lensProfile: lens.lensProfile,

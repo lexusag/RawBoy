@@ -17,6 +17,8 @@ blemish removal use the same MediaPipe models in the browser.
   of each photo's auto develop (groups the preset leaves out keep the auto values). Photos added later get it too.
   Denoise, Color denoise and sharpening come from each photo's auto develop (its own noise), not the preset. A
   selection's **Preset** button (bookmarks icon) gives just those photos a preset, so each scene can have its own.
+  A preset without the Light group (only Detail, only Color...) changes just its groups on top of each photo's look,
+  RawBoy preset or RawBoy edits, and leaves the rest as it was (its denoise and sharpening are applied as saved).
   Brightness, Warmth and the Adjust sliders still work on top; there is no Strength. **Remove** goes back to the looks;
   **Use a look** in the photo view does it for one photo.
 - Auto's **Import as: As is** (web only): photos are added with no automatic edits and no look, for files finished

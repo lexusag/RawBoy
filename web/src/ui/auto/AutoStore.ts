@@ -4,7 +4,7 @@ import { DEFAULT_STRENGTH, NO_ADJUSTMENTS, applyEditsDevelop, developAuto, sameA
 import { ALL_FILM_LOOKS, FilmLooks } from '../../engine/auto/looks/FilmLooks';
 import { suggestFilm, suggestLook } from '../../engine/auto/looks/LookSuggester';
 import type { DevelopParams } from '../../engine/develop/DevelopParams';
-import { chosenLensPreset, decodePresets, isLensPreset, NO_LENS_PRESET, putLensPreset, sameLensPreset, type Preset } from '../../engine/develop/Presets';
+import { applyPreset, chosenLensPreset, decodePresets, isLensPreset, layerPreset, NO_LENS_PRESET, putLensPreset, replacesLook, sameLensPreset, type Preset } from '../../engine/develop/Presets';
 import { PresetStore } from '../pro/PresetStore';
 import { exportImage } from '../../engine/export/Exporter';
 import { baseNameOf, EXTENSIONS, ExportSettingsStore, fileName, type ExportSettings, type OutputNaming } from '../../engine/export/ExportSettings';
@@ -96,6 +96,17 @@ function withLookOf(p: AutoPhoto, source: AutoPhoto): AutoPhoto {
   };
 }
 
+/**
+ * [p] given [preset]: one with the Light group (replacesLook) develops it in place of its look and RawBoy edits; any
+ * other changes only its own groups, in the RawBoy edits, the preset or on top of the look the photo has, and leaves
+ * the rest as it was. [layered] is what the photo's preset becomes when it has one (layerPreset by default).
+ */
+export function withPreset(p: AutoPhoto, preset: Preset, layered: (under: Preset) => Preset = (under) => layerPreset(under, preset)): AutoPhoto {
+  if (replacesLook(preset)) return { ...p, preset, edits: null };
+  if (p.edits) return { ...p, edits: applyPreset(preset, p.edits) };
+  return { ...p, preset: p.preset ? layered(p.preset) : preset };
+}
+
 export const activeLook = (p: AutoPhoto): Look => (p.mode === 'film' ? p.filmLook : p.look);
 
 /** Label of RawBoy edits (AutoPhoto.edits) in place of a look. */
@@ -104,9 +115,17 @@ export const EDITS_NAME = 'RawBoy edits';
 /** Label of a photo added "As is" while nothing is applied to it. */
 export const AS_IS_NAME = 'As is';
 
-/** What develops the photo, for labels: RawBoy edits, the preset's name, else the active look's ("As is" for a plain photo's Natural). */
-export const lookName = (p: AutoPhoto): string =>
-  p.edits ? EDITS_NAME : p.preset?.name ?? (p.plain && activeLook(p) === Looks.NATURAL ? AS_IS_NAME : activeLook(p).name);
+/**
+ * What develops the photo, for labels: RawBoy edits, the preset's name, else the active look's ("As is" for a plain
+ * photo's Natural), with a partial preset's name after the look's (alone on a plain photo).
+ */
+export function lookName(p: AutoPhoto): string {
+  if (p.edits) return EDITS_NAME;
+  if (p.preset && replacesLook(p.preset)) return p.preset.name;
+  const asIs = p.plain && activeLook(p) === Looks.NATURAL;
+  if (p.preset) return asIs ? p.preset.name : `${activeLook(p).name} + ${p.preset.name}`;
+  return asIs ? AS_IS_NAME : activeLook(p).name;
+}
 
 /** The develop settings for the current look (or preset) and controls (null until analysed). */
 export function paramsOf(p: AutoPhoto): DevelopParams | null {
@@ -399,24 +418,30 @@ export class AutoStore {
   /**
    * Develops every photo, and those added later, with [preset] in place of its look: all the preset holds, lens
    * corrections included, on top of each photo's auto develop. Each photo keeps its look for when the preset is removed.
+   * A preset without the Light group changes only its own groups on every photo (see withPreset), and joins the batch
+   * preset for photos added later.
    */
   applyPresetToAll(preset: Preset) {
     if (isLensPreset(preset)) return this.addLensPresets([preset]);
     if (this._state.export) return;
-    this.update({ preset });
-    for (const p of this._state.photos) this.changeDevelop(p.id, (q) => ({ ...q, preset, edits: null }), true);
+    const before = this._state.preset;
+    const batch = before && !replacesLook(preset) ? layerPreset(before, preset) : preset;
+    this.update({ preset: batch });
+    // Photos with the batch preset keep sharing it (removePreset finds them by it).
+    for (const p of this._state.photos) this.changeDevelop(p.id, (q) => withPreset(q, preset, (under) => (under === before ? batch : layerPreset(under, preset))), true);
     this.update({ message: `${preset.name} applied to all photos` });
   }
 
   /**
    * Develops only the photos in [ids] (the grid's selection, e.g. one scene) with [preset], so one batch can hold a
-   * preset per scene. The batch preset, which photos added later get, stays as it is.
+   * preset per scene. The batch preset, which photos added later get, stays as it is. A preset without the Light group
+   * changes only its own groups (see withPreset).
    */
   applyPresetTo(preset: Preset, ids: ReadonlySet<string>) {
     if (isLensPreset(preset)) return this.addLensPresets([preset]);
     if (this._state.export) return;
     const photos = this._state.photos.filter((p) => ids.has(p.id));
-    for (const p of photos) this.changeDevelop(p.id, (q) => ({ ...q, preset, edits: null }), true);
+    for (const p of photos) this.changeDevelop(p.id, (q) => withPreset(q, preset), true);
     this.update({ message: `${preset.name} applied to ${photos.length === 1 ? '1 photo' : `${photos.length} photos`}` });
   }
 

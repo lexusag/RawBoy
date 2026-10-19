@@ -85,6 +85,12 @@ the auto values). Denoise, Color denoise and sharpening always come from each ph
 noise, so its ISO), never from the photo the preset was made on. Brightness, Warmth and the Adjust sliders still work
 on top; there is no Strength. **Remove** goes back to the looks (photos given another preset on a selection keep
 theirs); **Use a look** in the photo view does it for one photo.
+**Partial presets** (web): a preset without the Light group (only Detail, only Color, Curves and White balance...)
+doesn't replace anything: it changes just the settings of its groups and leaves the rest of each photo as it was, on
+top of its look (Strength stays), its RawBoy preset (shown as e.g. *Scene A + Grain*) or its RawBoy edits. Its Detail
+values are applied as saved, denoise and sharpening included, so a grain preset works on any photo. **Remove** in the
+photo view takes it off, back to the look alone. With **Edits in sidecars** on (RawBoy Browser), the result is kept
+in the photo's XMP sidecar like any other Auto setting.
 **Lens presets:** a preset holding only the Lens group (RawBoy's Lens tab → **Save lens preset** / **Send to Auto**) is
 not applied in place of the look: Auto keeps it for photos taken with its lens (the lens name in the raw, ignoring
 case) and gives them its lens corrections (embedded profile on/off, Distortion, Vignetting, Vignette radius) on top of

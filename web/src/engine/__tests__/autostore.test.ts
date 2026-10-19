@@ -34,7 +34,7 @@ describe('Auto import mode', () => {
     const withGrain = paramsOf({ ...analysed, preset: grain })!;
     expect(withGrain.grain).toBe(30);
     expect({ ...withGrain, grain: 0 }).toEqual({ ...defaults, grain: 0 });
-    expect(lookName({ ...analysed, preset: grain })).toBe('Grain');
+    expect(lookName({ ...analysed, preset: grain })).toBe('Grain'); // a plain photo's label is the preset alone
   });
 });
 
@@ -116,6 +116,84 @@ describe('Auto batch preset', () => {
     store.removePreset();
     expect(store.state.preset).toBeNull();
     expect(paramsOf(store.state.photos[0])?.lut).not.toBe('asset:luts/x.cube');
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('Auto partial preset', () => {
+  it('a preset without Light changes only its groups, on top of the look, a preset or RawBoy edits, and reaches the sidecar', async () => {
+    vi.stubGlobal('window', { setTimeout: () => 0 }); // thumbnails aren't rendered here
+    const { developParams } = await import('../develop/DevelopParams');
+    const { capturePreset } = await import('../develop/Presets');
+    const { applyLook, NO_ADJUSTMENTS } = await import('../auto/looks/LookApplier');
+    const { Looks } = await import('../auto/looks/Look');
+    const { decodeAuto } = await import('../../ui/auto/AutoSidecar');
+    const { lookName, paramsOf } = await import('../../ui/auto/AutoStore');
+    const grain = capturePreset('Grain', developParams({ grain: 60, grainSize: 40, sharpening: 33, denoise: 12, contrast: 50 }), ['detail']);
+    const scene = capturePreset('Scene A', developParams({ contrast: 30, grain: 5, temperature: 4000 }), ['light', 'whiteBalance', 'detail']);
+    const writes: string[] = [];
+    const sidecar = { name: 'a.xmp', read: async () => null, write: async (t: string | null) => void writes.push(t!) };
+    const store = new AutoStore();
+    store.add([new File(['a'], 'a.CR2'), new File(['b'], 'b.CR2'), new File(['c'], 'c.CR2')], [sidecar, null, null]);
+    const autoBase = developParams({ exposure: 0.8, denoise: 40, sharpening: 10 });
+    const analysis = { autoBase, defaults: developParams(), stats: { hasFace: false } };
+    const s = store as unknown as { _state: { photos: { analysis: unknown }[] } };
+    s._state.photos = s._state.photos.map((p) => ({ ...p, analysis }));
+    const [a, b, c] = store.state.photos;
+    store.setLook(a.id, Looks.PORTRA_400);
+    store.applyPresetTo(scene, new Set([b.id]));
+    store.receiveEdits(c.file, developParams({ exposure: 1.5, contrast: -20 }), c.id);
+    store.applyPresetToAll(grain);
+
+    // On a look: the look stays (LUT, contrast, Strength), Detail is all the preset's (its bloom too), denoise and
+    // sharpening included.
+    const [pa, pb, pc] = store.state.photos;
+    const look = applyLook(autoBase, Looks.PORTRA_400, 100, NO_ADJUSTMENTS, false);
+    expect(look.bloom).toBeGreaterThan(0);
+    expect(paramsOf(pa)).toEqual({ ...look, ...grain.values });
+    expect(paramsOf(pa)).toMatchObject({ grain: 60, grainSize: 40, sharpening: 33, denoise: 12, bloom: 0, contrast: look.contrast });
+    expect(lookName(pa)).toBe(`${Looks.PORTRA_400.name} + Grain`);
+    // On a preset: its Light and white balance stay, its Detail gives way.
+    expect(pb.preset?.name).toBe('Scene A + Grain');
+    expect(paramsOf(pb)).toMatchObject({ contrast: 30, temperature: 4000, grain: 60, grainSize: 40 });
+    // On RawBoy edits: they stay, with the preset's Detail.
+    expect(pc.edits).toMatchObject({ exposure: 1.5, contrast: -20, grain: 60, sharpening: 33 });
+    expect(paramsOf(pc)).toMatchObject({ exposure: 1.5, contrast: -20, grain: 60 });
+    // Auto's own Grain still works on top.
+    store.setAdjust(pa.id, { grain: 10 });
+    expect(paramsOf(store.state.photos[0])!.grain).toBe(70);
+
+    // The photo with a sidecar keeps the preset there and comes back with the same develop.
+    await store.flushSidecars();
+    const saved = decodeAuto(writes.at(-1)!)!;
+    expect(saved.preset).toMatchObject({ name: 'Grain', groups: ['detail'] });
+    expect(saved.look.id).toBe(Looks.PORTRA_400.id);
+    const back = { ...store.state.photos[0], ...saved };
+    expect(paramsOf(back)).toEqual(paramsOf(store.state.photos[0]));
+
+    // Removing the batch preset takes off the layered one too: photos keep their look, preset and edits.
+    store.removePreset();
+    expect(store.state.photos.map((p) => p.preset?.name ?? null)).toEqual([null, 'Scene A + Grain', null]);
+    expect(paramsOf(store.state.photos[0])!.grain).toBe(look.grain + 10);
+    vi.unstubAllGlobals();
+  });
+
+  it('joins the batch preset, which photos added later get', async () => {
+    vi.stubGlobal('window', { setTimeout: () => 0 });
+    const { developParams } = await import('../develop/DevelopParams');
+    const { capturePreset } = await import('../develop/Presets');
+    const day = capturePreset('Day', developParams({ contrast: 10 }), ['light']);
+    const grain = capturePreset('Grain', developParams({ grain: 60 }), ['detail']);
+    const store = new AutoStore();
+    store.add([new File(['a'], 'a.CR2')]);
+    store.applyPresetToAll(day);
+    store.applyPresetToAll(grain);
+    store.add([new File(['b'], 'b.CR2')]);
+    expect(store.state.preset?.name).toBe('Day + Grain');
+    expect(store.state.photos.map((p) => p.preset?.name)).toEqual(['Day + Grain', 'Day + Grain']);
+    expect(store.state.photos[0].preset).toBe(store.state.preset);
+    store.removePreset();
+    expect(store.state.photos.map((p) => p.preset)).toEqual([null, null]);
     vi.unstubAllGlobals();
   });
 });
