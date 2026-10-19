@@ -1,5 +1,13 @@
 # Changelog
 
+**Web Browser: Reopen in Arc (2026-10-19)**
+
+- RawBoy Browser (web): Arc never shows its access prompt for a remembered folder, so **Reopen** waited forever and
+  opening that folder again from the picker hung. In Arc, RawBoy no longer remembers the folder (no Reopen button), so
+  **Open a folder** asks for access normally. In any browser, a Reopen whose access prompt isn't answered within 3
+  seconds gives up with a message and forgets the folder. After this update, open your folder once with **Open a
+  folder** to get the Reopen button back (Chrome, Edge).
+
 **Web Auto: presets apply only the sections they hold (2026-10-19)**
 
 - RawBoy Auto (web): a preset without the Light group, for example one holding only Detail, now changes just those

@@ -49,6 +49,38 @@ const AUTO_ADVANCE_KEY = 'rawboy.browser.autoAdvance';
 const EDITS_IN_SIDECARS_KEY = 'rawboy.browser.editsInSidecars';
 /** IndexedDB key of the last folder's handle. */
 const FOLDER_KEY = 'browseFolder';
+const LAST_FOLDER_KEY = 'rawboy.browser.lastFolder';
+/** How long a permission request may stay unanswered before RawBoy assumes the browser didn't show its prompt. */
+const PROMPT_WAIT_MS = 3000;
+
+/**
+ * Arc (Chromium) never shows its access prompt for a remembered folder, so the request waits forever, and opening that
+ * folder again from the picker hung too. There RawBoy doesn't remember folders: Arc puts its colours in CSS variables.
+ */
+export function isArc(): boolean {
+  try {
+    return getComputedStyle(document.documentElement).getPropertyValue('--arc-palette-title').trim() !== '';
+  } catch {
+    return false;
+  }
+}
+
+function savedLastFolder(): string | null {
+  try {
+    return localStorage.getItem(LAST_FOLDER_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function saveLastFolder(name: string | null) {
+  try {
+    if (name == null) localStorage.removeItem(LAST_FOLDER_KEY);
+    else localStorage.setItem(LAST_FOLDER_KEY, name);
+  } catch {
+    // Not remembered: no Reopen button next visit.
+  }
+}
 const THUMBNAIL = 400;
 /** Thumbnails made at once: each decodes a full embedded JPEG. */
 const THUMB_WORKERS = 3;
@@ -169,9 +201,8 @@ export class BrowserStore {
   onAutoEdited: ((photos: { file: File; sidecar: EditsSidecar }[]) => void) | null = null;
 
   constructor() {
-    void loadHandle<FileSystemDirectoryHandle>(FOLDER_KEY).then((dir) => {
-      if (dir && !this._state.lastFolder) this.update({ lastFolder: dir.name });
-    });
+    // Only the name: the handle itself is read from IndexedDB on Reopen, not on every visit.
+    this._state.lastFolder = savedLastFolder();
   }
 
   get state() {
@@ -211,8 +242,8 @@ export class BrowserStore {
     await this.flushWrites();
     this.reset();
     this.dir = dir;
-    this.update({ folder: { name: dir.name, writable: true }, busy: true, lastFolder: dir.name });
-    void saveHandle(FOLDER_KEY, dir);
+    this.update({ folder: { name: dir.name, writable: true }, busy: true });
+    this.remember(isArc() ? null : dir);
     try {
       await this.scan();
     } catch (e) {
@@ -228,10 +259,10 @@ export class BrowserStore {
    * asked for again when the browser no longer grants it, and a folder that was moved, renamed or deleted is forgotten.
    * Anything but 'opened' leaves the current state as it was; [reopenFolder] then falls back to picking the folder.
    */
-  async reopenLastFolder(): Promise<{ result: 'opened' | 'denied' | 'gone'; dir: FileSystemDirectoryHandle | null }> {
+  async reopenLastFolder(): Promise<{ result: 'opened' | 'denied' | 'gone' | 'unanswered'; dir: FileSystemDirectoryHandle | null }> {
     const dir = await loadHandle<FileSystemDirectoryHandle>(FOLDER_KEY);
     if (!dir) {
-      this.update({ lastFolder: null });
+      this.remember(null);
       return { result: 'gone', dir: null };
     }
     const handle = dir as unknown as {
@@ -240,7 +271,16 @@ export class BrowserStore {
     };
     const mode = { mode: 'readwrite' };
     try {
-      if ((await handle.queryPermission?.(mode)) !== 'granted' && (await handle.requestPermission?.(mode)) !== 'granted') return { result: 'denied', dir };
+      if ((await handle.queryPermission?.(mode)) !== 'granted') {
+        // A browser that doesn't show its prompt (Arc) never answers: stop waiting and forget the folder.
+        const unanswered = new Promise<'unanswered'>((resolve) => setTimeout(() => resolve('unanswered'), PROMPT_WAIT_MS));
+        const answer = await Promise.race([handle.requestPermission?.(mode) ?? Promise.resolve('granted'), unanswered]);
+        if (answer === 'unanswered') {
+          this.remember(null);
+          return { result: 'unanswered', dir: null };
+        }
+        if (answer !== 'granted') return { result: 'denied', dir };
+      }
     } catch {
       return { result: 'denied', dir };
     }
@@ -249,12 +289,18 @@ export class BrowserStore {
       for await (const _ of values(dir)) break;
     } catch (e) {
       if ((e as Error)?.name === 'NotAllowedError' || (e as Error)?.name === 'SecurityError') return { result: 'denied', dir };
-      void deleteHandle(FOLDER_KEY);
-      this.update({ lastFolder: null });
+      this.remember(null);
       return { result: 'gone', dir: null };
     }
     await this.openFolder(dir);
     return { result: 'opened', dir };
+  }
+
+  /** Remembers [dir] for Reopen, or forgets the remembered folder (null). */
+  private remember(dir: FileSystemDirectoryHandle | null) {
+    void (dir ? saveHandle(FOLDER_KEY, dir) : deleteHandle(FOLDER_KEY));
+    saveLastFolder(dir?.name ?? null);
+    this.update({ lastFolder: dir?.name ?? null });
   }
 
   /** Hands the photos whose sidecars hold RawBoy Auto settings to [onAutoEdited]. */
