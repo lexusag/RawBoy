@@ -20,6 +20,25 @@ export async function openPhotos(store: BrowserStore) {
   }
 }
 
+/**
+ * Reopens the last folder (Reopen button): its access is checked and asked for again first. When access is refused or
+ * the folder is gone, the folder picker opens instead (in the old folder when there is one).
+ */
+export async function reopenFolder(store: BrowserStore) {
+  const name = store.state.lastFolder;
+  const { result, dir } = await store.reopenLastFolder();
+  if (result === 'opened') return;
+  const why = result === 'denied' ? `RawBoy has no access to ${name} any more.` : `${name} isn’t there any more (moved, renamed or deleted).`;
+  const picker = directoryPicker();
+  try {
+    if (!picker) throw new Error();
+    await store.openFolder(await picker({ id: 'rawboy-browse', mode: 'readwrite', ...(dir ? { startIn: dir } : {}) }));
+  } catch (e) {
+    // The permission prompt may have used up the click, so the picker can refuse to open: say what to do instead.
+    if ((e as Error)?.name !== 'AbortError') store.showMessage(`${why} Choose it with Open a folder.`);
+  }
+}
+
 const FILTERS: { key: Filter; label: string }[] = [
   { key: 'all', label: 'All' },
   { key: 'picks', label: 'Picks' },
@@ -352,7 +371,7 @@ function GridView({ store, active, scroll, selection, onSelection, onBin, onSend
               <p>Cull a shoot: rate, pick and reject, then move the rejects to a bin folder. Thumbnails come from the previews inside the raws, so big folders open fast.</p>
               <button type="button" className="primary" onClick={() => void openPhotos(store)}>{directoryPicker() ? 'Open a folder' : 'Choose photos'}</button>
               {state.lastFolder && directoryPicker() && (
-                <button type="button" onClick={() => void store.reopenLastFolder()}>Reopen {state.lastFolder}</button>
+                <button type="button" onClick={() => void reopenFolder(store)}>Reopen {state.lastFolder}</button>
               )}
               <p>
                 {directoryPicker()

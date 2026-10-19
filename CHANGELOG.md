@@ -1,5 +1,12 @@
 # Changelog
 
+**Web Browser: Reopen checks the folder first (2026-10-19)**
+
+- RawBoy Browser (web): **Reopen <folder>** checks the remembered folder before opening it. When the browser no longer
+  grants read-write access it asks again; when access is refused, or the folder was moved, renamed or deleted, the
+  folder picker opens instead (in the old folder when it still exists), or a message says to choose it with **Open a
+  folder**. A folder that is gone is forgotten, so its Reopen button goes away.
+
 **Camera: burst button in the top bar (2026-10-19)**
 
 - RawBoy Camera (Android): a burst button (stacked frames) next to RAW turns **Merge 8 frames** on (lit) or off
