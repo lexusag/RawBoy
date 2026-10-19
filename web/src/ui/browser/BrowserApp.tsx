@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } fr
 import { PHOTO_ACCEPT, pickFiles, saveBlob } from '../common/files';
 import { isApple } from '../common/HelpDialog';
 import { AppSwitcher, HelpButton } from '../common/AppNav';
-import { BIN, photosToSend, type BrowsePhoto, type BrowserStore, type Filter, type SendCriteria } from './BrowserStore';
+import { BIN, isArc, photosToSend, type BrowsePhoto, type BrowserStore, type Filter, type SendCriteria } from './BrowserStore';
 import type { ViewImage } from './Previews';
 import type { EditsSidecar } from '../../engine/browse/XmpSidecar';
 
@@ -28,6 +28,7 @@ export async function reopenFolder(store: BrowserStore) {
   const name = store.state.lastFolder;
   const { result, dir } = await store.reopenLastFolder();
   if (result === 'opened') return;
+  if (result === 'unanswered') return store.showMessage(`This browser didn’t show its access prompt for ${name}. Reload the page and choose the folder with Open a folder.`);
   const why = result === 'denied' ? `RawBoy has no access to ${name} any more.` : `${name} isn’t there any more (moved, renamed or deleted).`;
   const picker = directoryPicker();
   try {
@@ -370,7 +371,7 @@ function GridView({ store, active, scroll, selection, onSelection, onBin, onSend
             <>
               <p>Cull a shoot: rate, pick and reject, then move the rejects to a bin folder. Thumbnails come from the previews inside the raws, so big folders open fast.</p>
               <button type="button" className="primary" onClick={() => void openPhotos(store)}>{directoryPicker() ? 'Open a folder' : 'Choose photos'}</button>
-              {state.lastFolder && directoryPicker() && (
+              {state.lastFolder && directoryPicker() && !isArc() && (
                 <button type="button" onClick={() => void reopenFolder(store)}>Reopen {state.lastFolder}</button>
               )}
               <p>
