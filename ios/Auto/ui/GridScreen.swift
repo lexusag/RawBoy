@@ -49,7 +49,15 @@ struct GridScreen: View {
                 }
                 if let e = vm.export {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text("Exporting \(min(e.done + 1, e.total)) of \(e.total)").font(.caption)
+                        HStack {
+                            Text(e.stopping
+                                ? "Stopping after photo \(min(e.done + 1, e.total))…"
+                                : "Exporting \(min(e.done + 1, e.total)) of \(e.total)").font(.caption)
+                            Spacer()
+                            if e.total > 1 {
+                                Button("Stop") { vm.stopExport() }.font(.caption).disabled(e.stopping)
+                            }
+                        }
                         ProgressView(value: min(max((Double(e.done) + Double(e.current)) / Double(e.total), 0), 1))
                     }
                     .padding(.horizontal, 16)

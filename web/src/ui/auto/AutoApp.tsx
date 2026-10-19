@@ -231,7 +231,16 @@ function GridView({ store, scroll, lastViewed }: {
       )}
       {state.export && (
         <div className="batch-progress">
-          <span>Exporting {Math.min(state.export.done + 1, state.export.total)} of {state.export.total}</span>
+          <div className="batch-progress-row">
+            <span>
+              {state.export.stopping
+                ? `Stopping after photo ${Math.min(state.export.done + 1, state.export.total)}…`
+                : `Exporting ${Math.min(state.export.done + 1, state.export.total)} of ${state.export.total}`}
+            </span>
+            {state.export.total > 1 && (
+              <button type="button" className="text" disabled={state.export.stopping} onClick={() => store.stopExport()}>Stop</button>
+            )}
+          </div>
           <progress value={Math.min(1, (state.export.done + state.export.current) / state.export.total)} max={1} />
         </div>
       )}

@@ -1,5 +1,12 @@
 # Changelog
 
+**Auto: stop a batch export (2026-10-19)**
+
+- RawBoy Auto (Android, iOS, web): **Export all** and Export on a selection show a **Stop** button next to the
+  progress bar. It ends the export after the photo being saved; photos already saved stay where they are (on the web
+  without a folder, the ZIP is still downloaded with the photos finished so far), and the rest stay in the batch to
+  export later. The message then starts with *Stopped*.
+
 **Web: Denoise & sharpening is its own preset group (2026-10-19)**
 
 - RawBoy (web): **Save preset** has a new **Denoise & sharpening** group (Luma denoise, Color denoise, Sharpening),

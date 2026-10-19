@@ -231,11 +231,20 @@ fun GridScreen(vm: AutoViewModel, snackbar: SnackbarHostState, pickPhotos: () ->
                 )
             }
             export?.let { e ->
-                Text(
-                    "Exporting ${minOf(e.done + 1, e.total)} of ${e.total}",
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                )
+                Row(
+                    Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        if (e.stopping) "Stopping after photo ${minOf(e.done + 1, e.total)}…"
+                        else "Exporting ${minOf(e.done + 1, e.total)} of ${e.total}",
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.weight(1f).padding(vertical = 4.dp),
+                    )
+                    if (e.total > 1) {
+                        TextButton(onClick = vm::stopExport, enabled = !e.stopping) { Text("Stop") }
+                    }
+                }
                 LinearProgressIndicator(
                     progress = { ((e.done + e.current) / e.total).coerceIn(0f, 1f) },
                     modifier = Modifier.fillMaxWidth(),
