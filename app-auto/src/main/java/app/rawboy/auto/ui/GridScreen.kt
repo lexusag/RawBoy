@@ -77,6 +77,7 @@ import app.rawboy.view.HelpButton
 fun GridScreen(vm: AutoViewModel, snackbar: SnackbarHostState, pickPhotos: () -> Unit, pickPreset: (Set<String>?) -> Unit) {
     val photos by vm.photos.collectAsStateWithLifecycle()
     val export by vm.export.collectAsStateWithLifecycle()
+    val opening by vm.opening.collectAsStateWithLifecycle()
     val importMode by vm.importMode.collectAsStateWithLifecycle()
     val exportSettings by vm.exportSettings.collectAsStateWithLifecycle()
     val preset by vm.preset.collectAsStateWithLifecycle()
@@ -281,12 +282,14 @@ fun GridScreen(vm: AutoViewModel, snackbar: SnackbarHostState, pickPhotos: () ->
                                     val selected = photo.id in selection
                                     PhotoCell(
                                         photo,
+                                        next = photo.id == opening,
                                         selected = selected,
                                         enabled = !exporting,
                                         onClick = {
-                                            when {
-                                                selecting -> selection = if (selected) selection - photo.id else selection + photo.id
-                                                photo.analysis != null -> vm.openDetail(photo.id)
+                                            if (selecting) {
+                                                selection = if (selected) selection - photo.id else selection + photo.id
+                                            } else {
+                                                vm.openFromGrid(photo.id)
                                             }
                                         },
                                         onLongClick = { selection = selection + photo.id },
@@ -326,6 +329,8 @@ fun GridScreen(vm: AutoViewModel, snackbar: SnackbarHostState, pickPhotos: () ->
 @Composable
 private fun PhotoCell(
     photo: AutoPhoto,
+    /** Tapped while waiting: analysed next, then opened. */
+    next: Boolean,
     selected: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
@@ -344,7 +349,7 @@ private fun PhotoCell(
                 Image(it.asImageBitmap(), contentDescription = photo.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
             }
             when (photo.status) {
-                PhotoStatus.QUEUED -> Badge("Waiting")
+                PhotoStatus.QUEUED -> Badge(if (next) "Next" else "Waiting")
                 PhotoStatus.ANALYZING -> CircularProgressIndicator(Modifier.size(32.dp))
                 PhotoStatus.EXPORTING -> CircularProgressIndicator(Modifier.size(32.dp))
                 PhotoStatus.FAILED -> Badge(photo.error ?: "Failed", error = true)

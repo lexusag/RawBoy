@@ -9,6 +9,7 @@ let autoHelp = [
         HelpItem("Apply RawBoy preset…", "Develop every photo with a RawBoy preset instead of a look. Remove goes back to the looks."),
         HelpItem("Lens presets", "Lens presets sent from RawBoy's Lens tab correct every photo taken with their lens, on top of its look or preset; only the lens settings change. The lens presets button picks one for every photo (By lens, None or a named preset, for manual lenses that record no lens); Lens in the selection bar picks one for the selected photos. Remove forgets a preset."),
         HelpItem("Export all", "Saves every photo to Photos, in the RawBoy Auto album."),
+        HelpItem("Tap a waiting photo", "It's analysed next, ahead of the rest (marked Next), and opens when it's ready."),
     ]),
     HelpSection("Selecting photos", [
         HelpItem("Long-press a photo", "Start selecting; then tap others to add or remove them, or All."),

@@ -1,6 +1,6 @@
 # Changelog
 
-**Colour denoise without the 6 px grid (2026-10-18)**
+**Colour denoise without the 6 px grid (2026-10-19)**
 
 - All apps (Android, iOS, web; the shared develop shader): at high ISO the colour noise left after denoising no
   longer forms a blocky grid. The sparse denoise stages (colour 7×7 at stride 3 and 6, luma coarse 5×5 at stride 3)
@@ -16,6 +16,25 @@
   weighted with the same luma guard), for colour blotches 20–60 px across that the 18 px stage can't reach and that
   turn into blocky patches when the exposure is raised. On DSCF1837.RAF (GFX 50R, the blurred legs): colour noise at
   8–16 px 5.7 → 2.8, at 4–8 px 3.5 → 1.1. Luma is left alone (flattening it at that scale would make skin plastic).
+
+**Auto: open a waiting photo ahead of the queue (2026-10-19)**
+
+- RawBoy Auto (Android, iOS, web): tapping or clicking a photo that's still waiting for its analysis moves it to the
+  front of the queue (its badge reads **Next**) and opens it as soon as it's analysed, unless another photo was opened
+  meanwhile. Before, waiting photos did nothing when tapped. The photo being analysed finishes first (a decode can't be
+  interrupted), and the opened photo's full decode goes ahead of the next analysis.
+
+**Web Browser: Reopen checks the folder first (2026-10-19)**
+
+- RawBoy Browser (web): **Reopen <folder>** checks the remembered folder before opening it. When the browser no longer
+  grants read-write access it asks again; when access is refused, or the folder was moved, renamed or deleted, the
+  folder picker opens instead (in the old folder when it still exists), or a message says to choose it with **Open a
+  folder**. A folder that is gone is forgotten, so its Reopen button goes away.
+
+**Camera: burst button in the top bar (2026-10-19)**
+
+- RawBoy Camera (Android): a burst button (stacked frames) next to RAW turns **Merge 8 frames** on (lit) or off
+  (dimmed), the same setting as the Settings switch.
 
 **Auto: gentler automatic luma denoise (2026-10-18)**
 

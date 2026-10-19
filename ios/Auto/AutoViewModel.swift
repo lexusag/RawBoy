@@ -121,6 +121,8 @@ final class AutoViewModel: ObservableObject {
     @Published var message: String?
     /** Photo shown in the detail view, or nil for the grid. */
     @Published private(set) var selected: String?
+    /** A waiting photo tapped in the grid: analysed next, ahead of the rest, then opened (nil: none). */
+    @Published private(set) var opening: String?
     /** Id of the photo [session] holds, once it has loaded. */
     @Published private(set) var sessionReady: String?
     /** The selected photo's cached preview while [session] is still decoding it; else nil. */
@@ -416,6 +418,7 @@ final class AutoViewModel: ObservableObject {
         }
         for p in photos where ids.contains(p.id) { Imports.delete(p.url) }
         photos.removeAll { ids.contains($0.id) }
+        if let o = opening, ids.contains(o) { opening = nil }
         for id in ids {
             thumbTasks.removeValue(forKey: id)?.cancel()
             histories.removeValue(forKey: id)
@@ -429,7 +432,7 @@ final class AutoViewModel: ObservableObject {
     private func processQueue() {
         if analysisTask != nil { return }
         analysisTask = Task {
-            while let next = photos.first(where: { $0.status == .queued }) {
+            while let next = nextQueued() {
                 updatePhoto(next.id) { $0.status = .analyzing }
                 do {
                     let previews = previews
@@ -453,16 +456,33 @@ final class AutoViewModel: ObservableObject {
                         }
                     }
                     refreshThumbnail(next.id, immediate: true)
+                    await openIfWaiting(next.id)
                 } catch {
                     // Mark this photo and go on with the rest.
                     updatePhoto(next.id) {
                         $0.status = .failed
                         $0.error = error.localizedDescription
                     }
+                    if opening == next.id { opening = nil }
                 }
             }
             analysisTask = nil
         }
+    }
+
+    /** The photo to analyse next: the one tapped to open ([opening]) if it's still waiting, else the first waiting. */
+    private func nextQueued() -> AutoPhoto? {
+        if let id = opening, let p = photo(id), p.status == .queued { return p }
+        return photos.first { $0.status == .queued }
+    }
+
+    /** Opens photo [id] now that it's analysed, if it was tapped while waiting and the grid is still showing. */
+    private func openIfWaiting(_ id: String) async {
+        guard opening == id else { return }
+        opening = nil
+        guard selected == nil else { return }
+        openDetail(id)
+        await Task.yield() // its decode takes the lock before the next analysis
     }
 
     private func updatePhoto(_ id: String, _ change: (inout AutoPhoto) -> Void) {
@@ -618,6 +638,19 @@ final class AutoViewModel: ObservableObject {
     }
 
     // MARK: - Detail view
+
+    /**
+     * A photo tapped in the grid: opens it if it's analysed; one still waiting (or being analysed) is analysed next,
+     * ahead of the rest, and opens when that's done.
+     */
+    func openFromGrid(_ id: String) {
+        guard let p = photo(id), export == nil else { return }
+        if p.analysis != nil {
+            openDetail(id)
+        } else if p.status == .queued || p.status == .analyzing {
+            opening = id
+        }
+    }
 
     func openDetail(_ id: String) {
         guard let p = photo(id), p.analysis != nil, export == nil else { return }

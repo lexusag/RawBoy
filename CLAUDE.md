@@ -93,6 +93,8 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   `AutoTone`: exposure/tone/noise as ordinary `DevelopParams`), `looks/` (`Looks` catalogue on the bundled
   LUTs, `LookApplier` = auto base + look × Strength + the user's `Adjustments`, `LookSuggester`).
 - `app-auto/src/main/java/app/rawboy/auto/` — `AutoViewModel.kt` (batch queue, export all), `ui/` (grid, detail).
+  A waiting photo tapped in the grid (`openFromGrid` → `opening`) is analysed next (`nextQueued`) and opened when done
+  (`openIfWaiting`, only while the grid shows; all ports).
   `PreviewCache.kt` (ports: `ios/Auto/PreviewCache.swift`, `web/src/ui/auto/PreviewCache.ts`, OPFS or a few in memory):
   the analysis hands it the session-size preview (`AutoAnalysis.analyze(onPreview)`), stored on disk (cap 1.5 GB,
   emptied on launch); `openDetail` publishes it as `cachedPreview` while the session decodes, and the detail page

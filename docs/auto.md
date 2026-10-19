@@ -95,6 +95,8 @@ those added later: **By lens** (the default), **None**, or a named preset. Manua
 presets (and lens-only presets saved before RawBoy recorded the lens) never match by lens: pick them by name, for the
 whole batch or for a selection (**Lens** in the selection bar). **Remove** forgets a preset. **One preset per scene:** select a scene's photos and
 tap **Preset** (the bookmarks icon) in the selection bar to develop just those with a preset; the rest keep theirs.
+**Opening a photo that's still waiting:** tap (web: click) a photo marked *Waiting* and it's analysed next, ahead of
+the rest of the batch (its badge reads *Next*), then opens once it's ready, unless another photo was opened meanwhile.
 **Rotating, removing and exporting photos:** long-press a photo in the grid to start selecting, tap others to add them
 (or **All**), then **↺** / **↻** to turn them all 90° left or right (thumbnails, photo view and exports follow; Apply to
 all leaves each photo's rotation alone), **Remove** (a bin icon), or **Export** to save only the
