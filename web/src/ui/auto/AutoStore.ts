@@ -158,6 +158,8 @@ export interface AutoState {
   lensChoice: string | null;
   /** Frame colour around the photo in the detail view (index into FrameColors, remembered in this browser). */
   frameColor: number;
+  /** A waiting photo clicked in the grid: analysed next, ahead of the rest, then opened (null: none). */
+  opening: string | null;
 }
 
 const IMPORT_MODE_KEY = 'rawboy.auto.importMode';
@@ -203,7 +205,8 @@ class Lock {
 /** RawBoy Auto's batch, look and export logic (port of AutoViewModel.kt). */
 export class AutoStore {
   private _state: AutoState = { photos: [], export: null, message: null, selected: null, sessionReady: null, cachedPreview: null, importMode: savedImportMode(),
-    exportSettings: savedExportSettings(), preset: null, lensPresets: PresetStore.load().filter(isLensPreset), lensChoice: null, frameColor: savedFrame() };
+    exportSettings: savedExportSettings(), preset: null, lensPresets: PresetStore.load().filter(isLensPreset), lensChoice: null, frameColor: savedFrame(),
+    opening: null };
   /**
    * Keeps lens presets opened from a file with the RawBoy tab's presets (set by the page; null: in this browser's
    * preset store directly); the RawBoy tab then hands the new list back through setLensPresets.
@@ -568,6 +571,7 @@ export class AutoStore {
       void this.previews.remove(p.id);
     }
     if (this._state.cachedPreview && ids.has(this._state.cachedPreview.id)) this.update({ cachedPreview: null });
+    if (this._state.opening && ids.has(this._state.opening)) this.update({ opening: null });
     for (const [k, t] of this.lookThumbs) {
       if (ids.has(k.split('|')[0])) {
         URL.revokeObjectURL(t.url);
@@ -584,7 +588,7 @@ export class AutoStore {
     try {
       for (;;) {
         await this.restoring;
-        const next = this._state.photos.find((p) => p.status === 'queued');
+        const next = this.nextQueued();
         if (!next) break;
         this.updatePhoto(next.id, (p) => ({ ...p, status: 'analyzing' }));
         try {
@@ -599,14 +603,29 @@ export class AutoStore {
             look: p.looksApplied || p.plain ? p.look : look, filmLook: p.looksApplied ? p.filmLook : filmLook,
           }));
           this.refreshThumbnail(next.id, true);
+          this.openIfWaiting(next.id);
         } catch (e) {
           // Mark this photo and go on with the rest.
           this.updatePhoto(next.id, (p) => ({ ...p, status: 'failed', error: e instanceof Error ? e.message : String(e) }));
+          if (this._state.opening === next.id) this.update({ opening: null });
         }
       }
     } finally {
       this.analyzing = false;
     }
+  }
+
+  /** The photo to analyse next: the one clicked to open ([opening]) if it's still waiting, else the first waiting. */
+  private nextQueued(): AutoPhoto | undefined {
+    const opening = this._state.opening ? this.photo(this._state.opening) : undefined;
+    return opening?.status === 'queued' ? opening : this._state.photos.find((p) => p.status === 'queued');
+  }
+
+  /** Opens photo [id] now that it's analysed, if it was clicked while waiting and the grid is still showing. */
+  private openIfWaiting(id: string) {
+    if (this._state.opening !== id) return;
+    this.update({ opening: null });
+    if (this._state.selected === null) this.openDetail(id);
   }
 
   // ---- Look and controls ----
@@ -763,6 +782,17 @@ export class AutoStore {
   }
 
   // ---- Detail view ----
+
+  /**
+   * A photo clicked in the grid: opens it if it's analysed; one still waiting (or being analysed) is analysed next,
+   * ahead of the rest, and opens when that's done.
+   */
+  openFromGrid(id: string) {
+    const p = this.photo(id);
+    if (!p || this._state.export) return;
+    if (p.analysis) this.openDetail(id);
+    else if (p.status === 'queued' || p.status === 'analyzing') this.update({ opening: id });
+  }
 
   openDetail(id: string) {
     const p = this.photo(id);

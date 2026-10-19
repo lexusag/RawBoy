@@ -11,6 +11,7 @@ export const AUTO_HELP: HelpSection[] = [
       { how: 'Apply RawBoy preset…', text: 'Develop every photo with a RawBoy preset instead of a look. Remove goes back to the looks.' },
       { how: 'Lens presets', text: 'Lens presets saved in the RawBoy tab\'s Lens tab correct every photo taken with their lens, on top of its look or preset; only the lens settings change. The Lens menu in the grid picks one for every photo (by lens, none, or a named preset, for manual lenses that record no lens); the one in the selection bar for the selected photos, and the one in the photo view for that photo. Manage… removes one.' },
       { how: 'Export all', text: 'Saves every photo into a folder you pick (or one ZIP).' },
+      { how: 'Click a waiting photo', text: 'It\'s analysed next, ahead of the rest (marked Next), and opens when it\'s ready.' },
       { how: 'ISO', text: 'Each photo shows its ISO (from the file) beside its name in the grid and in the bottom-left corner of the photo view, to judge its noise without zooming in.' },
     ],
   },

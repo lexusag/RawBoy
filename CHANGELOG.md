@@ -1,5 +1,12 @@
 # Changelog
 
+**Auto: open a waiting photo ahead of the queue (2026-10-19)**
+
+- RawBoy Auto (Android, iOS, web): tapping or clicking a photo that's still waiting for its analysis moves it to the
+  front of the queue (its badge reads **Next**) and opens it as soon as it's analysed, unless another photo was opened
+  meanwhile. Before, waiting photos did nothing when tapped. The photo being analysed finishes first (a decode can't be
+  interrupted), and the opened photo's full decode goes ahead of the next analysis.
+
 **Web Browser: Reopen checks the folder first (2026-10-19)**
 
 - RawBoy Browser (web): **Reopen <folder>** checks the remembered folder before opening it. When the browser no longer
