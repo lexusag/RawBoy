@@ -1,5 +1,13 @@
 # Changelog
 
+**Web Auto: presets apply only the sections they hold (2026-10-19)**
+
+- RawBoy Auto (web): a preset without the Light group, for example one holding only Detail, now changes just those
+  settings and leaves the rest of each photo alone: its look (and Strength), its RawBoy preset (labelled e.g.
+  *Scene A + Grain*) or its RawBoy edits. Before, any preset replaced the photo's look and edits, and its denoise and
+  sharpening were ignored. Presets with the Light group still develop the photo in place of its look. With **Edits in
+  sidecars** on, the result is saved in the photo's XMP sidecar.
+
 **Colour denoise without the 6 px grid (2026-10-19)**
 
 - All apps (Android, iOS, web; the shared develop shader): at high ISO the colour noise left after denoising no

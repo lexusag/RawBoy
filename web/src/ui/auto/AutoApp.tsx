@@ -11,7 +11,7 @@ import { isPressedSlider } from '../common/sliderFocus';
 import { Preview, PreviewLabel } from '../common/Preview';
 import { useTabScroll } from '../common/useTabScroll';
 import { ALL_FILM_LOOKS } from '../../engine/auto/looks/FilmLooks';
-import { isLensPreset, NO_LENS_PRESET, type Preset } from '../../engine/develop/Presets';
+import { isLensPreset, NO_LENS_PRESET, replacesLook, type Preset } from '../../engine/develop/Presets';
 import { groupSummary } from '../pro/PresetsPanel';
 import { PresetStore } from '../pro/PresetStore';
 import { PresetsIcon } from '../common/PresetsIcon';
@@ -202,7 +202,9 @@ function GridView({ store, scroll, lastViewed }: {
             {state.preset ? (
               <span
                 className="preset-chip"
-                title={`${groupSummary(state.preset)}. Every photo, and those you add next, is developed with this preset (lens corrections included) instead of its look.`}
+                title={replacesLook(state.preset)
+                  ? `${groupSummary(state.preset)}. Every photo, and those you add next, is developed with this preset (lens corrections included) instead of its look.`
+                  : `${groupSummary(state.preset)}. Every photo you add next gets only these settings from the preset, on top of its look.`}
               >
                 <span className="batch-preset">Preset: {state.preset.name}</span>
                 <button type="button" className="icon" title="Remove preset" aria-label="Remove preset" disabled={exporting} onClick={() => store.removePreset()}>✕</button>
@@ -658,7 +660,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
                 Use {photo.preset ? 'the preset' : 'a look'}
               </button>
             </div>
-          ) : photo.preset ? (
+          ) : photo.preset && replacesLook(photo.preset) ? (
             <div className="photo-preset">
               <div className="title">
                 <div className="name">{photo.preset.name}</div>
@@ -668,6 +670,16 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
             </div>
           ) : (
             <>
+              {photo.preset && (
+                // A preset without Light changes only its groups, on top of the look below.
+                <div className="photo-preset">
+                  <div className="title">
+                    <div className="name">{photo.preset.name}</div>
+                    <div className="info">RawBoy preset · {groupSummary(photo.preset)} · on top of the look</div>
+                  </div>
+                  <button type="button" className="text" disabled={state.export != null} onClick={() => store.removePhotoPreset(photo.id)}>Remove</button>
+                </div>
+              )}
               <ModeSwitch modes={LOOK_MODES} mode={photo.mode} onChange={(m) => store.setMode(photo.id, m)} className="look-mode" />
               <LookStrip store={store} photo={photo} />
             </>
@@ -707,7 +719,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
             </nav>
             {tab === 'Look' ? (
               <>
-                {!photo.preset && !photo.edits && <ParamSlider label="Strength" value={photo.strength} min={0} max={100} defaultValue={DEFAULT_STRENGTH} format={formatPlain} onChange={(v) => store.setStrength(id, v)} />}
+                {!(photo.preset && replacesLook(photo.preset)) && !photo.edits && <ParamSlider label="Strength" value={photo.strength} min={0} max={100} defaultValue={DEFAULT_STRENGTH} format={formatPlain} onChange={(v) => store.setStrength(id, v)} />}
                 {adjustSlider('Brightness', 'brightness', 100)}
                 {adjustSlider('Warmth', 'warmth', 100)}
               </>

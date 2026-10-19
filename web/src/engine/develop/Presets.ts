@@ -122,6 +122,28 @@ export function sameLensPreset(presets: readonly Preset[], lensPreset: Preset): 
   ) ?? null;
 }
 
+/**
+ * Whether RawBoy Auto develops a photo with preset in place of its look: it holds the Light group (tone mapper, film,
+ * exposure), which is what a look is. Any other preset (only Detail, only Color...) changes just its own groups on top
+ * of the photo's look, preset or RawBoy edits (layerPreset).
+ */
+export const replacesLook = (p: Preset): boolean => p.groups.includes('light');
+
+/**
+ * under with over's groups in place of its own, the rest of under as it was, named after both: a partial preset
+ * (see replacesLook) applied on top of a photo's preset.
+ */
+export function layerPreset(under: Preset, over: Preset): Preset {
+  const replaced = new Set(PRESET_GROUPS.filter((g) => over.groups.includes(g.key)).flatMap((g) => g.fields));
+  const values: Preset['values'] = {};
+  for (const [f, v] of Object.entries(under.values)) if (!replaced.has(f as keyof DevelopParams)) values[f as keyof DevelopParams] = v;
+  Object.assign(values, over.values);
+  const groups = PRESET_GROUPS.map((g) => g.key).filter((k) => under.groups.includes(k) || over.groups.includes(k));
+  const preset: Preset = { id: newId(), name: `${under.name} + ${over.name}`, groups, values };
+  if (under.lens !== undefined) preset.lens = under.lens;
+  return preset;
+}
+
 /** params with the preset's stored fields; a value of the wrong type (a hand-edited file) leaves the field. */
 export function applyPreset(preset: Preset, params: DevelopParams): DevelopParams {
   const p: Record<string, unknown> = { ...params };
