@@ -491,10 +491,10 @@ public final class PhotoSession: ObservableObject {
         return p
     }
 
-    /** The highlight-boosted halo (512 px) and tail (64 px) copies bloom scatters light from. */
+    /** The highlight-boosted halo (512 px) and tail (64 px, already scattered) copies bloom scatters light from. */
     public nonisolated static func bloomSourcesOf(_ image: RawImage) -> BloomSources {
         BloomSources(halo: image.createPreview(maxDimension: baseMaxDimension, boostHighlights: true),
-                     tail: image.createPreview(maxDimension: bloomTailMaxDimension, boostHighlights: true))
+                     tail: BloomTail.scatter(image.createPreview(maxDimension: bloomTailMaxDimension, boostHighlights: true)))
     }
 
     private struct Loaded: @unchecked Sendable {

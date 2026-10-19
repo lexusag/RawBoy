@@ -7,6 +7,7 @@ import type { MaskLayer } from '../develop/Masks';
 import { exportImage } from '../export/Exporter';
 import type { ExportSettings } from '../export/ExportSettings';
 import { FilmStocks, type FilmData } from '../film/FilmStocks';
+import { scatterBloomTail } from '../gl/BloomTail';
 import type { BloomSources, PreviewImage } from '../gl/PreviewImage';
 import { ShaderParams, WIDE_DENOISE_MARGIN, wideDenoise } from '../gl/ShaderParams';
 import { ZoomMath, contains, rect, type DetailTile } from '../gl/Zoom';
@@ -67,11 +68,11 @@ export function asShotDefaults(image: RawImage): DevelopParams {
   return developParams({ temperature: kelvin, tint, displaySource: image.displayReferred });
 }
 
-/** The highlight-boosted halo (512 px) and tail (64 px) copies bloom scatters light from. */
+/** The highlight-boosted halo (512 px) and tail (64 px, already scattered) copies bloom scatters light from. */
 export async function bloomSourcesOf(image: RawImage): Promise<BloomSources> {
   return {
     halo: await image.createPreview(BASE_MAX_DIMENSION, true),
-    tail: await image.createPreview(BLOOM_TAIL_MAX_DIMENSION, true),
+    tail: scatterBloomTail(await image.createPreview(BLOOM_TAIL_MAX_DIMENSION, true)),
   };
 }
 

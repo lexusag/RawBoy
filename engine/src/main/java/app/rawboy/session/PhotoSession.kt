@@ -18,6 +18,7 @@ import app.rawboy.export.Exporter
 import app.rawboy.export.OutputNaming
 import app.rawboy.film.FilmData
 import app.rawboy.gl.BloomSources
+import app.rawboy.gl.BloomTail
 import app.rawboy.gl.DetailTile
 import app.rawboy.gl.PreviewImage
 import app.rawboy.gl.ShaderParams
@@ -529,10 +530,10 @@ class PhotoSession(
             return DevelopParams(temperature = kelvin.toFloat(), tint = tint.toFloat(), displaySource = image.displayReferred)
         }
 
-        /** The highlight-boosted halo (512 px) and tail (64 px) copies bloom scatters light from. */
+        /** The highlight-boosted halo (512 px) and tail (64 px, already scattered) copies bloom scatters light from. */
         fun bloomSourcesOf(image: RawImage) = BloomSources(
             halo = image.createPreview(BASE_MAX_DIMENSION, boostHighlights = true),
-            tail = image.createPreview(BLOOM_TAIL_MAX_DIMENSION, boostHighlights = true),
+            tail = BloomTail.scatter(image.createPreview(BLOOM_TAIL_MAX_DIMENSION, boostHighlights = true)),
         )
 
         private fun load(context: Context, uri: Uri): Loaded {

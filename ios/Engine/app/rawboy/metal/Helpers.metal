@@ -99,3 +99,21 @@ fragment float4 boxDownFragment(PassOut in [[stage_in]], texture2d<float> source
     }
     return float4(sum * 0.0625, 1.0);
 }
+
+/** Same-size pass: BloomTail's kernel (keep the two in step), edges clamped by the sampler. */
+fragment float4 tailScatterFragment(PassOut in [[stage_in]], texture2d<float> source [[texture(0)]], sampler s [[sampler(0)]],
+                                    constant float2& texel [[buffer(0)]]) {
+    float3 sum = float3(0.0);
+    float ws = 0.0;
+    for (int j = -6; j <= 6; ++j) {
+        for (int i = -6; i <= 6; ++i) {
+            float r2 = float(i * i + j * j);
+            float rim = 1.0 - r2 / 49.0;
+            if (rim <= 0.0) continue;
+            float w = pow(1.0 + sqrt(r2) / 0.6, -2.2) * rim * rim;
+            sum += w * source.sample(s, in.uv + float2(float(i), float(j)) * texel).rgb;
+            ws += w;
+        }
+    }
+    return float4(sum / ws, 1.0);
+}

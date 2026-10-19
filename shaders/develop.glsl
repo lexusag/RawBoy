@@ -598,9 +598,8 @@ vec3 textureBSpline(sampler2D t, vec2 uv, vec2 texel) {
 
 // Scattered light through a diffusion filter, after spektrafilm's PSF model: core 0.30 + halo
 // 0.25 + tail 0.45, each normalised, so mixing it in conserves energy. The halo has a slightly
-// warm outer rim. Every kernel is round, its weights falling to zero at its rim, with taps one
-// texel apart on a bilinear copy: square tap grids with heavy corner weights drew square halos
-// around bright windows, and taps further apart than a texel would leave a grid pattern.
+// warm outer rim. The kernels are round, their weights falling to zero at the rim: square tap
+// grids with heavy corner weights drew square halos around bright windows.
 vec3 bloomScatter(vec2 uvG, vec2 imagePx) {
     vec2 uv = imagePx / uImageSize;
 
@@ -629,25 +628,13 @@ vec3 bloomScatter(vec2 uvG, vec2 imagePx) {
         }
     }
 
-    // Tail: power law (alpha 2.2, knee 0.6 texel) on the 64 px copy, out to 7 texels (~10% of the long
-    // edge): dense next to the light, like a mist filter, fading into a wide haze. The inner taps carry
-    // most of the weight, so they sample the copy as a B-spline (bilinear there drew its texels as squares).
-    vec3 tail = vec3(0.0);
-    float tw = 0.0;
-    for (int j = -6; j <= 6; ++j) {
-        for (int i = -6; i <= 6; ++i) {
-            float r2 = float(i * i + j * j);
-            float rim = 1.0 - r2 / 49.0;
-            if (rim <= 0.0) continue;
-            float w = pow(1.0 + sqrt(r2) / 0.6, -2.2) * rim * rim;
-            vec2 at = uv + vec2(i, j) * uBloomTailTexel;
-            tail += w * (r2 <= 2.0 ? textureBSpline(uBloomTail, at, uBloomTailTexel) : texture(uBloomTail, at).rgb);
-            tw += w;
-        }
-    }
+    // Tail: the 64 px copy arrives already scattered (BloomTail: a round power law out to ~10% of the long
+    // edge, dense next to the light like a mist filter, fading into a wide haze). One B-spline sample keeps it
+    // smooth; summing taps per pixel from a bilinear copy showed the coarse texels as bands and squares.
+    vec3 tail = textureBSpline(uBloomTail, uv, uBloomTailTexel);
 
     vec3 warmRim = vec3(1.024, 1.004, 0.968);
-    return 0.30 * core / cw + 0.25 * warmRim * halo / hw + 0.45 * tail / tw;
+    return 0.30 * core / cw + 0.25 * warmRim * halo / hw + 0.45 * tail;
 }
 
 vec2 toSensor(vec2 p) { return (uToSensor * vec3(p, 1.0)).xy; }
