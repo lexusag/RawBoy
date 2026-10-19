@@ -577,9 +577,29 @@ vec3 bloomBoost(vec3 c) {
     return c * (1.0 + 6.0 * t * t);
 }
 
-// Scattered light through a diffusion filter, after spektrafilm's PSF model
-// (Pro-Mist weights): core 0.28 + halo 0.42 + bloom 0.30, each normalised, so
-// mixing it in conserves energy. The halo has a slightly warm outer rim.
+// Cubic B-spline sample of a small copy from four bilinear taps: smooth and close to round,
+// where a bilinear sample of a coarse copy shows its texel grid.
+vec3 textureBSpline(sampler2D t, vec2 uv, vec2 texel) {
+    vec2 st = uv / texel - 0.5;
+    vec2 i = floor(st);
+    vec2 f = st - i;
+    vec2 f2 = f * f;
+    vec2 f3 = f2 * f;
+    vec2 w0 = (1.0 - 3.0 * f + 3.0 * f2 - f3) / 6.0;
+    vec2 w1 = (4.0 - 6.0 * f2 + 3.0 * f3) / 6.0;
+    vec2 w3 = f3 / 6.0;
+    vec2 g0 = w0 + w1;
+    vec2 g1 = 1.0 - g0;
+    vec2 h0 = (i - 0.5 + w1 / g0) * texel;
+    vec2 h1 = (i + 1.5 + w3 / g1) * texel;
+    return g0.y * (g0.x * texture(t, h0).rgb + g1.x * texture(t, vec2(h1.x, h0.y)).rgb)
+         + g1.y * (g0.x * texture(t, vec2(h0.x, h1.y)).rgb + g1.x * texture(t, h1).rgb);
+}
+
+// Scattered light through a diffusion filter, after spektrafilm's PSF model: core 0.30 + halo
+// 0.25 + tail 0.45, each normalised, so mixing it in conserves energy. The halo has a slightly
+// warm outer rim. The kernels are round, their weights falling to zero at the rim: square tap
+// grids with heavy corner weights drew square halos around bright windows.
 vec3 bloomScatter(vec2 uvG, vec2 imagePx) {
     vec2 uv = imagePx / uImageSize;
 
@@ -595,32 +615,26 @@ vec3 bloomScatter(vec2 uvG, vec2 imagePx) {
         }
     }
 
-    // Halo: 2D exponential on the 512 px copy (reach ~1% of the long edge).
+    // Halo: Gaussian on the 512 px copy, sigma 1.2 texels (~0.25% of the long edge), out to 3.5 texels.
     vec3 halo = vec3(0.0);
     float hw = 0.0;
-    for (int j = -2; j <= 2; ++j) {
-        for (int i = -2; i <= 2; ++i) {
-            vec2 o = vec2(i, j) * 1.4;
-            float w = exp(-length(o) / 1.5);
-            halo += w * texture(uBloomHalo, uv + o * uBloomHaloTexel).rgb;
+    for (int j = -3; j <= 3; ++j) {
+        for (int i = -3; i <= 3; ++i) {
+            float r2 = float(i * i + j * j);
+            float rim = max(1.0 - r2 / 12.25, 0.0);
+            float w = exp(-r2 / 2.88) * rim * rim;
+            halo += w * texture(uBloomHalo, uv + vec2(i, j) * uBloomHaloTexel).rgb;
             hw += w;
         }
     }
 
-    // Bloom: power-law tail (alpha 2.9) on the 128 px copy (reach ~3% of the long edge).
-    vec3 tail = vec3(0.0);
-    float tw = 0.0;
-    for (int j = -3; j <= 3; ++j) {
-        for (int i = -3; i <= 3; ++i) {
-            vec2 o = vec2(i, j);
-            float w = pow(1.0 + length(o), -2.9);
-            tail += w * texture(uBloomTail, uv + o * uBloomTailTexel).rgb;
-            tw += w;
-        }
-    }
+    // Tail: the 64 px copy arrives already scattered (BloomTail: a round power law out to ~10% of the long
+    // edge, dense next to the light like a mist filter, fading into a wide haze). One B-spline sample keeps it
+    // smooth; summing taps per pixel from a bilinear copy showed the coarse texels as bands and squares.
+    vec3 tail = textureBSpline(uBloomTail, uv, uBloomTailTexel);
 
     vec3 warmRim = vec3(1.024, 1.004, 0.968);
-    return 0.28 * core / cw + 0.42 * warmRim * halo / hw + 0.30 * tail / tw;
+    return 0.30 * core / cw + 0.25 * warmRim * halo / hw + 0.45 * tail;
 }
 
 vec2 toSensor(vec2 p) { return (uToSensor * vec3(p, 1.0)).xy; }
