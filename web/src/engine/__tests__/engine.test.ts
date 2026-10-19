@@ -625,9 +625,22 @@ describe('PrimariesTrack', () => {
 });
 
 describe('split denoise in presets', () => {
-  it('the Detail group carries both denoises', () => {
-    const preset = decodePresets(encodePresets([capturePreset('Split', developParams({ denoise: 30, colorDenoise: 60 }), ['detail'])]))[0];
-    expect(applyPreset(preset, developParams({ colorDenoise: 5 }))).toMatchObject({ denoise: 30, colorDenoise: 60 });
+  it('the Denoise & sharpening group carries both denoises', () => {
+    const preset = decodePresets(encodePresets([capturePreset('Split', developParams({ denoise: 30, colorDenoise: 60, sharpening: 7 }), ['denoise'])]))[0];
+    expect(applyPreset(preset, developParams({ colorDenoise: 5 }))).toMatchObject({ denoise: 30, colorDenoise: 60, sharpening: 7 });
+    // Detail alone leaves them.
+    const detail = decodePresets(encodePresets([capturePreset('Grain', developParams({ denoise: 30, grain: 40 }), ['detail'])]))[0];
+    expect(detail.groups).toEqual(['detail']);
+    expect(applyPreset(detail, developParams({ denoise: 5 }))).toMatchObject({ denoise: 5, grain: 40 });
+  });
+
+  it('presets from before the Denoise group: Detail-only ones keep their denoise, ones with Light leave it', () => {
+    const detail = decodePresets('{"format":"rawboy-preset","version":1,"name":"D","groups":["detail"],"values":{"denoise":40,"colorDenoise":80,"sharpening":9,"grain":20}}')[0];
+    expect(detail.groups).toEqual(['detail', 'denoise']);
+    expect(applyPreset(detail, developParams())).toMatchObject({ denoise: 40, colorDenoise: 80, sharpening: 9, grain: 20 });
+    const scene = decodePresets('{"format":"rawboy-preset","version":1,"name":"S","groups":["light","detail"],"values":{"contrast":10,"denoise":40,"grain":20}}')[0];
+    expect(scene.groups).toEqual(['light', 'detail']);
+    expect(applyPreset(scene, developParams({ denoise: 5 }))).toMatchObject({ contrast: 10, denoise: 5, grain: 20 });
   });
 
   it('presets from before the split set both from the one denoise', () => {

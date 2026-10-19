@@ -7,7 +7,7 @@ import { parseCurves, type ToneCurves } from './ToneCurve';
  * Groups of sliders a preset can hold (port of develop/Presets.kt). Geometry (rotation, flips, straighten, crop) belongs
  * to one photo and is never part of a preset. The key is the name in preset files (shared with Android).
  */
-export type PresetGroup = 'light' | 'whiteBalance' | 'curves' | 'color' | 'detail' | 'retouch' | 'lut' | 'lens' | 'masks';
+export type PresetGroup = 'light' | 'whiteBalance' | 'curves' | 'color' | 'detail' | 'denoise' | 'retouch' | 'lut' | 'lens' | 'masks';
 
 export const PRESET_GROUPS: readonly { key: PresetGroup; label: string; fields: readonly (keyof DevelopParams)[] }[] = [
   {
@@ -23,15 +23,21 @@ export const PRESET_GROUPS: readonly { key: PresetGroup; label: string; fields: 
     label: 'Color',
     fields: ['saturation', 'redHue', 'redPurity', 'greenHue', 'greenPurity', 'blueHue', 'bluePurity', 'tintHue', 'tintPurity'],
   },
-  { key: 'detail', label: 'Detail', fields: ['denoise', 'colorDenoise', 'sharpening', 'localContrast', 'highpassContrast', 'grain', 'grainSize', 'grainRoughness', 'grainColor', 'bloom'] },
+  { key: 'detail', label: 'Detail', fields: ['localContrast', 'highpassContrast', 'grain', 'grainSize', 'grainRoughness', 'grainColor', 'bloom'] },
+  // Its own group, off by default: RawBoy Auto measures denoise and sharpening on each photo (its ISO and noise), and
+  // a preset overrides that only when it holds this group.
+  { key: 'denoise', label: 'Denoise & sharpening', fields: ['denoise', 'colorDenoise', 'sharpening'] },
   { key: 'retouch', label: 'Retouch', fields: ['skinRetouch', 'blemishRemoval'] },
   { key: 'lut', label: 'LUT', fields: ['lut', 'lutAmount'] },
   { key: 'lens', label: 'Lens', fields: ['lensProfile', 'lensDistortion', 'vignetteAmount', 'vignetteMidpoint'] },
   { key: 'masks', label: 'Masks (gradients only)', fields: ['masks'] },
 ];
 
-/** What the save dialog ticks first: lens corrections are usually specific to one camera and lens, masks to one composition. */
-export const DEFAULT_PRESET_GROUPS: readonly PresetGroup[] = PRESET_GROUPS.map((g) => g.key).filter((k) => k !== 'lens' && k !== 'masks');
+/**
+ * What the save dialog ticks first: lens corrections are usually specific to one camera and lens, masks to one
+ * composition, and denoise to one photo's noise (Auto measures it per photo).
+ */
+export const DEFAULT_PRESET_GROUPS: readonly PresetGroup[] = PRESET_GROUPS.map((g) => g.key).filter((k) => k !== 'lens' && k !== 'masks' && k !== 'denoise');
 
 /**
  * A named set of slider values. values holds only the fields of groups; applying it overrides those and leaves
@@ -193,9 +199,13 @@ export function decodePresets(text: string): Preset[] {
   return objects.map((o) => {
     if (!o || typeof o !== 'object' || (o as { format?: unknown }).format !== PRESET_FORMAT) throw new Error('Not a RawBoy preset');
     const { name, lens, groups: rawGroups, values: rawValues } = o as { name?: unknown; lens?: unknown; groups?: unknown; values?: unknown };
-    const groupKeys = Array.isArray(rawGroups) ? rawGroups : [];
-    const groups = PRESET_GROUPS.filter((g) => groupKeys.includes(g.key));
+    const groupKeys = Array.isArray(rawGroups) ? [...rawGroups] : [];
     const v = rawValues && typeof rawValues === 'object' ? (rawValues as Record<string, unknown>) : {};
+    // Before denoise had its own group it was part of Detail (Android's presets still keep it there). A preset with
+    // Detail but no Light (a denoise or grain preset) keeps its denoise; one with Light leaves denoise to Auto, as it did.
+    const oldDetail = groupKeys.includes('detail') && !groupKeys.includes('denoise') && ['denoise', 'colorDenoise', 'sharpening'].some((f) => f in v);
+    if (oldDetail && !groupKeys.includes('light')) groupKeys.push('denoise');
+    const groups = PRESET_GROUPS.filter((g) => groupKeys.includes(g.key));
     const values: Preset['values'] = {};
     for (const g of groups) {
       for (const f of g.fields) {

@@ -108,7 +108,7 @@ describe('Auto batch preset', () => {
       exposure: 0.7, contrast: 20, lut: 'asset:luts/x.cube', lutAmount: 60, lensProfile: false, lensDistortion: 25,
       vignetteAmount: 30, vignetteMidpoint: 70,
       temperature: 5600, // white balance wasn't in the preset: the auto develop's stays
-      denoise: 20, sharpening: autoBase.sharpening, // noise settings are this photo's, never the preset's
+      denoise: 20, sharpening: autoBase.sharpening, // noise settings are this photo's: the preset has no Denoise group
     });
     // Auto's own controls still work on top.
     store.setAdjust(a.id, { brightness: 100, grain: 10 });
@@ -116,6 +116,29 @@ describe('Auto batch preset', () => {
     store.removePreset();
     expect(store.state.preset).toBeNull();
     expect(paramsOf(store.state.photos[0])?.lut).not.toBe('asset:luts/x.cube');
+    vi.unstubAllGlobals();
+  });
+});
+
+describe('Auto preset denoise', () => {
+  it('a preset with Denoise & sharpening sets them in place of the measured ones, Light or not', async () => {
+    vi.stubGlobal('window', { setTimeout: () => 0 });
+    const { developParams } = await import('../develop/DevelopParams');
+    const { capturePreset } = await import('../develop/Presets');
+    const { paramsOf } = await import('../../ui/auto/AutoStore');
+    const look = developParams({ contrast: 20, denoise: 16, colorDenoise: 80, sharpening: 15 });
+    const store = new AutoStore();
+    store.add([new File(['a'], 'a.CR2'), new File(['b'], 'b.CR2')]);
+    const analysis = { autoBase: developParams({ denoise: 16, colorDenoise: 28, sharpening: 10 }), stats: { hasFace: false } };
+    const s = store as unknown as { _state: { photos: { analysis: unknown }[] } };
+    s._state.photos = s._state.photos.map((p) => ({ ...p, analysis }));
+    const [a, b] = store.state.photos;
+    store.applyPresetTo(capturePreset('With', look, ['light', 'detail', 'denoise']), new Set([a.id]));
+    store.applyPresetTo(capturePreset('Without', look, ['light', 'detail']), new Set([b.id]));
+    expect(paramsOf(store.state.photos[0])).toMatchObject({ contrast: 20, denoise: 16, colorDenoise: 80, sharpening: 15 });
+    expect(paramsOf(store.state.photos[1])).toMatchObject({ contrast: 20, denoise: 16, colorDenoise: 28, sharpening: 10 });
+    store.setAdjust(a.id, { denoise: 10 });
+    expect(paramsOf(store.state.photos[0])).toMatchObject({ denoise: 26, colorDenoise: 90 });
     vi.unstubAllGlobals();
   });
 });
@@ -129,7 +152,7 @@ describe('Auto partial preset', () => {
     const { Looks } = await import('../auto/looks/Look');
     const { decodeAuto } = await import('../../ui/auto/AutoSidecar');
     const { lookName, paramsOf } = await import('../../ui/auto/AutoStore');
-    const grain = capturePreset('Grain', developParams({ grain: 60, grainSize: 40, sharpening: 33, denoise: 12, contrast: 50 }), ['detail']);
+    const grain = capturePreset('Grain', developParams({ grain: 60, grainSize: 40, sharpening: 33, denoise: 12, contrast: 50 }), ['detail', 'denoise']);
     const scene = capturePreset('Scene A', developParams({ contrast: 30, grain: 5, temperature: 4000 }), ['light', 'whiteBalance', 'detail']);
     const writes: string[] = [];
     const sidecar = { name: 'a.xmp', read: async () => null, write: async (t: string | null) => void writes.push(t!) };
@@ -166,7 +189,7 @@ describe('Auto partial preset', () => {
     // The photo with a sidecar keeps the preset there and comes back with the same develop.
     await store.flushSidecars();
     const saved = decodeAuto(writes.at(-1)!)!;
-    expect(saved.preset).toMatchObject({ name: 'Grain', groups: ['detail'] });
+    expect(saved.preset).toMatchObject({ name: 'Grain', groups: ['detail', 'denoise'] });
     expect(saved.look.id).toBe(Looks.PORTRA_400.id);
     const back = { ...store.state.photos[0], ...saved };
     expect(paramsOf(back)).toEqual(paramsOf(store.state.photos[0]));
