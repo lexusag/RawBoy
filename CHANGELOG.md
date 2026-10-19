@@ -1,5 +1,10 @@
 # Changelog
 
+**Camera: burst button in the top bar (2026-10-19)**
+
+- RawBoy Camera (Android): a burst button (stacked frames) next to RAW turns **Merge 8 frames** on (lit) or off
+  (dimmed), the same setting as the Settings switch.
+
 **Auto: gentler automatic luma denoise (2026-10-18)**
 
 - RawBoy Auto (Android, iOS, web) and RawBoy's Auto button pick a 20% lower **Denoise** (luma) from the measured
