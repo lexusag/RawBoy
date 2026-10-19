@@ -1,5 +1,13 @@
 # Changelog
 
+**Colour denoise keeps eye colour (2026-10-19)**
+
+- All apps: at high colour denoise (above 65) the coarse colour stages now leave small features with their own colour
+  alone: they only move a pixel's colour while the change is small, as the leftover blotches in even areas are. Before,
+  they averaged an iris with the skin around it, so blue-grey eyes came out brown. On DSCF1837.RAF (GFX 50R, colour
+  denoise 99.6) the iris colour error drops from 33 to 7 (sqrt-domain chroma, ×1000) while the blurred legs measure as
+  before.
+
 **Auto: stop a batch export (2026-10-19)**
 
 - RawBoy Auto (Android, iOS, web): **Export all** and Export on a selection show a **Stop** button next to the
