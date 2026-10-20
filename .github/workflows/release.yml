@@ -2,6 +2,8 @@
 # and deploys the public web build to Cloudflare Pages (project "rawboy").
 # Secrets: KEYSTORE_FILE (base64 of the .jks), KEYSTORE_PASS (store and key password; key alias "rawboy"),
 # CLOUDFLARE_API_TOKEN (Account > Cloudflare Pages > Edit), CLOUDFLARE_ACCOUNT_ID.
+# The web deploy is skipped when nothing the web build reads changed since the commit the live site was built from
+# (dist/deployed-commit.txt); run the workflow by hand with "Deploy the web build even if unchanged" to force it.
 # Publishing a release only dispatches this workflow on the default branch: caches saved by a run on a tag
 # can't be restored by later tags, so the builds run on main (sources still come from the tag).
 name: Release RawBoy
@@ -14,6 +16,10 @@ on:
       tag:
         description: Existing release tag to build and upload APKs for
         required: true
+      force_web:
+        description: Deploy the web build even if unchanged
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -135,8 +141,45 @@ jobs:
         if: always()
         run: rm -f keystore.properties "$RUNNER_TEMP/release.jks"
 
-  web:
+  # Compares the tag with the commit the live site was built from. No marker on the site (first deploy, or it
+  # can't be fetched) counts as changed.
+  web-changes:
     if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      deploy: ${{ steps.check.outputs.deploy }}
+    env:
+      TAG: ${{ inputs.tag }}
+      FORCE: ${{ inputs.force_web }}
+      # Production URL of the Cloudflare Pages project.
+      SITE: https://rawboy.pages.dev
+      # Everything build:public reads: the web app, the shared shaders, LUTs, native engine, models and licences.
+      WEB_PATHS: >-
+        web shaders luts engine/src/main/cpp engine/src/main/assets/models licenses third_party
+        .github/workflows/release.yml
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Check for web changes
+        id: check
+        run: |
+          deploy() { echo "$1"; echo "deploy=$2" >> "$GITHUB_OUTPUT"; exit 0; }
+          [ "$FORCE" = true ] && deploy "Forced deploy" true
+          base=$(curl -fsS --max-time 30 "$SITE/deployed-commit.txt" | tr -d '[:space:]') || true
+          [[ "$base" =~ ^[0-9a-f]{40}$ ]] || deploy "No deployed commit on the live site" true
+          git fetch --quiet --depth 1 origin "$base" || deploy "Deployed commit $base not found" true
+          changed=$(git diff --name-only "$base" HEAD -- $WEB_PATHS)
+          [ -n "$changed" ] || deploy "No web changes since ${base:0:7}" false
+          echo "Changed since ${base:0:7}:"
+          deploy "$changed" true
+
+  web:
+    needs: web-changes
+    if: needs.web-changes.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -201,6 +244,7 @@ jobs:
         run: |
           source ~/emsdk/emsdk_env.sh > /dev/null
           npm ci && npm run build:public
+          git rev-parse HEAD > dist/deployed-commit.txt
 
       # The tag checkout is a detached HEAD, so name the production branch or the deploy becomes a preview.
       - name: Deploy to Cloudflare Pages
