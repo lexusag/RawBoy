@@ -1,5 +1,11 @@
 # Changelog
 
+**iOS: Brightness and Warmth sliders move again (2026-10-20)**
+
+- iOS apps: sliders centred on 0 (Camera's Brightness and Warmth, Auto's adjustments) didn't respond to touch on
+  iOS 26. They now handle the drag themselves: drag anywhere on the row to move the value, double-tap or tap the
+  number to reset. VoiceOver can still adjust them (swipe up/down).
+
 **Bloom: round, soft and wider (2026-10-19)**
 
 - All apps: Bloom no longer draws square halos or blocky bands around bright windows. The halo uses a round kernel
