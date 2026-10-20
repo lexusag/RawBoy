@@ -9,6 +9,8 @@ Command line: `./gradlew :app-pro:assembleDebug` (RawBoy), `./gradlew :app-auto:
 minSdk 29 (Android 10). No storage permissions needed: input comes through the system picker or "Open with",
 and output goes through MediaStore.
 
+The iOS apps are built with Xcode on a Mac: see [Installing on your iPhone](ios-install.md).
+
 ## Release build
 
 1. Create a signing key once (keep the file and passwords safe; you need the same key for every update):
