@@ -1,5 +1,10 @@
 # Changelog
 
+**Camera: RAW off by default (2026-10-20)**
+
+- RawBoy Camera (Android, iOS): new installs save only the JPEG; tap **RAW** in the top bar (or Settings › Keep raw)
+  to keep the DNG as well. A choice you already made is kept.
+
 **iOS: Brightness and Warmth sliders move again (2026-10-20)**
 
 - iOS apps: sliders centred on 0 (Camera's Brightness and Warmth, Auto's adjustments) didn't respond to touch on
