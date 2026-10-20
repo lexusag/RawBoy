@@ -27,6 +27,7 @@ Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and
 - [RawBoy Web](docs/web.md)
 - [Pipeline](docs/pipeline.md): how a raw is developed
 - [Building](docs/building.md), including release builds
+- [Installing on your iPhone](docs/ios-install.md): build the iOS apps and sideload them with your Apple ID
 - [Known limitations / next steps](docs/limitations.md)
 - [Third-party components](docs/third-party.md)
 - [Changelog](CHANGELOG.md)
