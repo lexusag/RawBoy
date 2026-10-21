@@ -85,7 +85,23 @@ const THUMBNAIL = 400;
 /** Thumbnails made at once: each decodes a full embedded JPEG. */
 const THUMB_WORKERS = 3;
 
-type Undo = { kind: 'rating'; id: string; rating: Rating } | { kind: 'bin'; moves: { from: string; to: string }[] };
+/** A rating change (one photo, or a selection rated at once) undoes in one step. */
+type Undo = { kind: 'rating'; ratings: { id: string; rating: Rating }[] } | { kind: 'bin'; moves: { from: string; to: string }[] };
+
+/**
+ * [ratings] after [stars] is given to them all: a number every one of them already has clears the stars (as the same
+ * number again does on one photo), and stars take a reject out of the rejects, as in Lightroom.
+ */
+export function withStars(ratings: Rating[], stars: number): Rating[] {
+  const clear = ratings.every((r) => r.stars === stars);
+  return ratings.map((r) => ({ stars: clear ? 0 : stars, flag: r.flag === 'reject' ? null : r.flag }));
+}
+
+/** [ratings] after [flag] is toggled on them all: set on each, or cleared when every one already has it. */
+export function withFlag(ratings: Rating[], flag: Exclude<Flag, null>): Rating[] {
+  const clear = ratings.every((r) => r.flag === flag);
+  return ratings.map((r) => ({ ...r, flag: clear ? null : flag }));
+}
 
 /** True when [photo] passes the grid's filter. */
 export function visible(photo: BrowsePhoto, filter: Filter, minStars: number): boolean {
@@ -488,30 +504,38 @@ export class BrowserStore {
 
   // ---- Rating ----
 
-  setStars(id: string, stars: number) {
-    const p = this.photo(id);
-    if (!p) return;
-    // Stars on a reject take it out of the rejects, as in Lightroom.
-    this.rate(id, { stars: p.rating.stars === stars ? 0 : stars, flag: p.rating.flag === 'reject' ? null : p.rating.flag });
+  // Each takes one photo or several (the grid's selection); several are rated together and undo in one step.
+
+  setStars(ids: string | string[], stars: number) {
+    const photos = this.photosOf(ids);
+    this.rate(photos, withStars(photos.map((p) => p.rating), stars));
   }
 
-  /** Sets [flag], or clears it when the photo already has it. */
-  toggleFlag(id: string, flag: Exclude<Flag, null>) {
-    const p = this.photo(id);
-    if (p) this.rate(id, { ...p.rating, flag: p.rating.flag === flag ? null : flag });
+  /** Sets [flag], or clears it when the photos already have it. */
+  toggleFlag(ids: string | string[], flag: Exclude<Flag, null>) {
+    const photos = this.photosOf(ids);
+    this.rate(photos, withFlag(photos.map((p) => p.rating), flag));
   }
 
-  clearFlag(id: string) {
-    const p = this.photo(id);
-    if (p) this.rate(id, { ...p.rating, flag: null });
+  clearFlag(ids: string | string[]) {
+    const photos = this.photosOf(ids);
+    this.rate(photos, photos.map((p) => ({ ...p.rating, flag: null })));
   }
 
-  private rate(id: string, rating: Rating, undoable = true) {
-    const p = this.photo(id);
-    if (!p || (p.rating.stars === rating.stars && p.rating.flag === rating.flag)) return;
-    if (undoable) this.pushUndo({ kind: 'rating', id, rating: p.rating });
-    this.updatePhoto(id, (q) => ({ ...q, rating }));
-    this.scheduleWrite(id);
+  private photosOf(ids: string | string[]): BrowsePhoto[] {
+    const wanted = new Set(typeof ids === 'string' ? [ids] : ids);
+    return this._state.photos.filter((p) => wanted.has(p.id));
+  }
+
+  private rate(photos: BrowsePhoto[], ratings: Rating[], undoable = true) {
+    const changed = photos
+      .map((p, i) => ({ p, rating: ratings[i] }))
+      .filter(({ p, rating }) => p.rating.stars !== rating.stars || p.rating.flag !== rating.flag);
+    if (!changed.length) return;
+    if (undoable) this.pushUndo({ kind: 'rating', ratings: changed.map(({ p }) => ({ id: p.id, rating: p.rating })) });
+    const next = new Map(changed.map(({ p, rating }) => [p.id, rating]));
+    this.update({ photos: this._state.photos.map((q) => (next.has(q.id) ? { ...q, rating: next.get(q.id)! } : q)) });
+    for (const id of next.keys()) this.scheduleWrite(id);
   }
 
   private pushUndo(u: Undo) {
@@ -526,8 +550,10 @@ export class BrowserStore {
     this.update({ canUndo: this.undoStack.length > 0 });
     if (!u) return;
     if (u.kind === 'rating') {
-      this.rate(u.id, u.rating, false);
-      this.update({ current: u.id });
+      const ratings = new Map(u.ratings.map((r) => [r.id, r.rating]));
+      const photos = this._state.photos.filter((p) => ratings.has(p.id));
+      this.rate(photos, photos.map((p) => ratings.get(p.id)!), false);
+      if (u.ratings.length === 1) this.update({ current: u.ratings[0].id });
       return;
     }
     await this.moveBack(u.moves);

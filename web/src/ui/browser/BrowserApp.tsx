@@ -4,7 +4,7 @@ import { isApple } from '../common/HelpDialog';
 import { AppSwitcher, HelpButton } from '../common/AppNav';
 import { BIN, isArc, photosToSend, type BrowsePhoto, type BrowserStore, type Filter, type SendCriteria } from './BrowserStore';
 import type { ViewImage } from './Previews';
-import type { EditsSidecar } from '../../engine/browse/XmpSidecar';
+import type { EditsSidecar, Flag, Rating } from '../../engine/browse/XmpSidecar';
 
 type DirectoryPicker = (o?: object) => Promise<FileSystemDirectoryHandle>;
 const directoryPicker = () => (window as unknown as { showDirectoryPicker?: DirectoryPicker }).showDirectoryPicker;
@@ -63,7 +63,7 @@ export function BrowserApp({ store, active, onEditInRawBoy, onSendToAuto }: {
 }) {
   const state = useSyncExternalStore(store.subscribe, () => store.state);
   const [confirmBin, setConfirmBin] = useState<'move' | 'restore' | null>(null);
-  // Long-press (or Ctrl/Cmd-click) a photo to start selecting, as in Auto; the selection goes to Auto in one go.
+  // Long-press (or Ctrl/Cmd-click) a photo to start selecting, as in Auto; the selection is rated, or goes to Auto, in one go.
   const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
   const [sending, setSending] = useState(false);
   // What Send to Auto offers first: the last choice, else the picks when there are any.
@@ -104,18 +104,19 @@ export function BrowserApp({ store, active, onEditInRawBoy, onSendToAuto }: {
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const id = store.state.current;
-      if (!id) return;
+      // In the grid, rating keys act on the selection while there is one.
+      const many = !store.state.viewing && selection.size > 0;
+      const rated = many ? [...selection] : id;
+      if (!rated) return;
       const key = e.key.toLowerCase();
-      if (/^[0-5]$/.test(key)) {
-        if (key === '0') store.setStars(id, 0);
-        else store.setStars(id, Number(key));
-      } else if (key === 'p') store.toggleFlag(id, 'pick');
-      else if (key === 'x') store.toggleFlag(id, 'reject');
-      else if (key === 'u') store.clearFlag(id);
-      else if (key === 'e') return void edit(id);
+      if (/^[0-5]$/.test(key)) store.setStars(rated, Number(key));
+      else if (key === 'p') store.toggleFlag(rated, 'pick');
+      else if (key === 'x') store.toggleFlag(rated, 'reject');
+      else if (key === 'u') store.clearFlag(rated);
+      else if (key === 'e' && id) return void edit(id);
       else return;
       e.preventDefault();
-      store.advance();
+      if (!many) store.advance();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -402,6 +403,40 @@ function GridView({ store, active, scroll, selection, onSelection, onBin, onSend
           ))}
         </div>
       )}
+      {selecting && (
+        <RatingBar
+          ratings={shown.filter((p) => selection.has(p.id)).map((p) => p.rating)}
+          onStars={(n) => store.setStars([...selection], n)}
+          onFlag={(f) => store.toggleFlag([...selection], f)}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Stars and Pick / Reject for the photo view's photo, or the grid's selection: what they all share shows as set, and
+ * a press sets it on every one (or clears it when they all have it already).
+ */
+function RatingBar({ ratings, onStars, onFlag }: {
+  ratings: Rating[];
+  onStars: (n: number) => void;
+  onFlag: (flag: Exclude<Flag, null>) => void;
+}) {
+  const shared = <T,>(of: (r: Rating) => T) => (ratings.length && ratings.every((r) => of(r) === of(ratings[0])) ? of(ratings[0]) : null);
+  const stars = shared((r) => r.stars) ?? 0;
+  const flag = shared((r) => r.flag);
+  return (
+    <div className="rating-bar">
+      <div className="star-buttons" role="group" aria-label="Stars">
+        {[1, 2, 3, 4, 5].map((n) => (
+          <button key={n} type="button" className={n <= stars ? 'on' : ''} title={`${n} star${n === 1 ? '' : 's'} (${n})`} onClick={() => onStars(n)}>★</button>
+        ))}
+      </div>
+      <div className="flag-buttons">
+        <button type="button" className={flag === 'pick' ? 'pick active' : 'pick'} title="Pick (P)" onClick={() => onFlag('pick')}>⚑ Pick</button>
+        <button type="button" className={flag === 'reject' ? 'reject active' : 'reject'} title="Reject (X)" onClick={() => onFlag('reject')}>✕ Reject</button>
+      </div>
     </div>
   );
 }
@@ -588,7 +623,6 @@ function Viewer({ store, photo, active, onEdit }: { store: BrowserStore; photo: 
 
   const swipe = useRef<{ x: number; y: number } | null>(null);
   const [zoomed, setZoomed] = useState(false);
-  const r = photo.rating;
   const current = view?.id === photo.id ? view : null;
   const sourceLabel = current?.image.source === 'embedded' ? 'camera preview' : current?.image.source === 'decoded' ? 'developed as shot' : '';
   const rate = (fn: () => void) => {
@@ -635,17 +669,11 @@ function Viewer({ store, photo, active, onEdit }: { store: BrowserStore; photo: 
         {index > 0 && !zoomed && <button type="button" className="nav prev" onClick={() => store.step(-1)} title="Previous (←)">‹</button>}
         {index < shown.length - 1 && !zoomed && <button type="button" className="nav next" onClick={() => store.step(1)} title="Next (→)">›</button>}
       </div>
-      <div className="rating-bar">
-        <div className="star-buttons" role="group" aria-label="Stars">
-          {[1, 2, 3, 4, 5].map((n) => (
-            <button key={n} type="button" className={n <= r.stars ? 'on' : ''} title={`${n} star${n === 1 ? '' : 's'} (${n})`} onClick={() => rate(() => store.setStars(photo.id, n))}>★</button>
-          ))}
-        </div>
-        <div className="flag-buttons">
-          <button type="button" className={r.flag === 'pick' ? 'pick active' : 'pick'} title="Pick (P)" onClick={() => rate(() => store.toggleFlag(photo.id, 'pick'))}>⚑ Pick</button>
-          <button type="button" className={r.flag === 'reject' ? 'reject active' : 'reject'} title="Reject (X)" onClick={() => rate(() => store.toggleFlag(photo.id, 'reject'))}>✕ Reject</button>
-        </div>
-      </div>
+      <RatingBar
+        ratings={[photo.rating]}
+        onStars={(n) => rate(() => store.setStars(photo.id, n))}
+        onFlag={(f) => rate(() => store.toggleFlag(photo.id, f))}
+      />
     </div>
   );
 }
