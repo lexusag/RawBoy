@@ -10,7 +10,7 @@ import { Looks } from '../auto/looks/Look';
 import { NO_ADJUSTMENTS } from '../auto/looks/LookApplier';
 import { decodeAuto, encodeAuto } from '../../ui/auto/AutoSidecar';
 import { groupPhotos, withSuffix } from '../../ui/browser/PhotoGroups';
-import { photosToSend, type BrowsePhoto, type Filter, type SendCriteria } from '../../ui/browser/BrowserStore';
+import { BrowserStore, photosToSend, withFlag, withStars, type BrowsePhoto, type Filter, type SendCriteria } from '../../ui/browser/BrowserStore';
 import type { Flag } from '../browse/XmpSidecar';
 
 /** A structurally complete JPEG (not decodable): SOF [sof] with the size, a scan with stuffed and restart bytes, EOI. */
@@ -441,5 +441,32 @@ describe('photosToSend', () => {
   it('takes what the grid shows', () => {
     expect(ids({ kind: 'shown' }, 'unflagged', 4)).toEqual(['b']);
     expect(ids({ kind: 'shown' }, 'rejects')).toEqual(['d']);
+  });
+});
+
+describe('Rating a selection', () => {
+  it('sets stars on every photo, or clears them when all already have them', () => {
+    expect(withStars([{ stars: 3, flag: null }, { stars: 0, flag: 'pick' }], 3)).toEqual([{ stars: 3, flag: null }, { stars: 3, flag: 'pick' }]);
+    expect(withStars([{ stars: 3, flag: null }, { stars: 3, flag: 'pick' }], 3)).toEqual([{ stars: 0, flag: null }, { stars: 0, flag: 'pick' }]);
+    expect(withStars([{ stars: 2, flag: 'reject' }], 4)).toEqual([{ stars: 4, flag: null }]);
+  });
+
+  it('flags every photo, or unflags them when all already have the flag', () => {
+    expect(withFlag([{ stars: 1, flag: 'pick' }, { stars: 2, flag: 'reject' }], 'pick')).toEqual([{ stars: 1, flag: 'pick' }, { stars: 2, flag: 'pick' }]);
+    expect(withFlag([{ stars: 1, flag: 'pick' }, { stars: 2, flag: 'pick' }], 'pick')).toEqual([{ stars: 1, flag: null }, { stars: 2, flag: null }]);
+  });
+
+  it('rates the selected photos together and undoes them in one step', async () => {
+    const store = new BrowserStore();
+    await store.addFiles(['a.jpg', 'b.jpg', 'c.jpg'].map((n) => new File([], n)));
+    const ratings = () => store.state.photos.map((p) => `${p.rating.stars}${p.rating.flag ?? ''}`);
+    store.setStars('a.jpg', 2);
+    store.setStars(['a.jpg', 'b.jpg'], 4);
+    store.toggleFlag(['a.jpg', 'b.jpg'], 'pick');
+    expect(ratings()).toEqual(['4pick', '4pick', '0']);
+    await store.undo();
+    expect(ratings()).toEqual(['4', '4', '0']);
+    await store.undo();
+    expect(ratings()).toEqual(['2', '0', '0']);
   });
 });

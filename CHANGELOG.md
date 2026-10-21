@@ -1,5 +1,13 @@
 # Changelog
 
+**Browser: rate a selection (2026-10-21)**
+
+- RawBoy Browser (web): select photos in the grid (long-press or Ctrl/⌘-click, Shift-click, Ctrl/⌘+A) and rate
+  them together: a stars and Pick / Reject bar shows under the grid while photos are selected, and **1–5**, **0**,
+  **P**, **X** and **U** apply to the whole selection. Pressing what every selected photo already has clears it, as on
+  one photo. Each photo's XMP sidecar is written as usual (or goes into Save ratings' ZIP), and one Undo takes the
+  whole change back.
+
 **Camera: RAW off by default (2026-10-20)**
 
 - RawBoy Camera (Android, iOS): new installs save only the JPEG; tap **RAW** in the top bar (or Settings › Keep raw)

@@ -20,6 +20,7 @@ export const BROWSER_HELP: HelpSection[] = [
       { how: 'Shift-click', text: 'Select every photo between the last one picked and this one.' },
       { keys: ['Mod+A'], text: 'Select every photo the grid shows' },
       { keys: ['Esc'], text: 'Clear the selection' },
+      { how: 'Rate', text: 'Stars, Pick and Reject (the bar below the grid, or the keys) act on every selected photo; the same key again, when they all have it, clears it. One Undo takes it back.' },
       { how: 'Send to Auto', text: 'Add only the selected photos to the Auto tab.' },
     ],
   },
