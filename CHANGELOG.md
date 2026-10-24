@@ -1,5 +1,12 @@
 # Changelog
 
+**Curves take less room on phones (2026-10-24)**
+
+- RawBoy (Android, iOS, web on phones): the Curves box is now twice as wide as tall (at most 400 dp/pt/px wide)
+  instead of square, so it no longer fills the panel under the photo. On Android its 320 dp width cap never applied
+  (the full width overrode it), so on a Pixel 9 Pro the box was about 410 dp tall; it is now about 190. Points still
+  grab within the same finger distance in both directions. The web's side panel on wider screens keeps its square box.
+
 **Android: dragging the crop no longer swipes back (2026-10-24)**
 
 - RawBoy (Android): on a landscape photo the crop frame's left and right handles sit at the screen's edges, so

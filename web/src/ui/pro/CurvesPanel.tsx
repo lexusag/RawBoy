@@ -24,7 +24,8 @@ const TOUCH_GRAB_PX = 28;
 const DOUBLE_TAP_MS = 350;
 
 /**
- * Curves in Pro's Light tab (port of app-pro's CurvesPanel.kt): a channel picker and a square point-curve editor.
+ * Curves in Pro's Light tab (port of app-pro's CurvesPanel.kt): a channel picker and a point-curve editor, square in
+ * the side panel and twice as wide as tall on phones (styles.css), so it leaves room for the rest of the panel.
  * Press on the curve box to add a point, drag a point to move it, double-click (double-tap) a point to remove it.
  * Touch only grabs near a point or the curve (adding the point on the curve); elsewhere it scrolls the panel.
  */
@@ -36,6 +37,8 @@ export function CurvesPanel({ curves, onChange }: { curves: ToneCurves; onChange
   const drag = useRef<{ id: number; index: number; points: readonly CurvePoint[]; rect: DOMRect } | null>(null);
   const lastTap = useRef({ time: 0, index: -1 });
   const box = useRef<SVGSVGElement>(null);
+  // Height / width of the box, so the points stay round in a box that isn't square.
+  const [aspect, setAspect] = useState(1);
 
   // The box allows vertical panning (touch-action: pan-y) so touches off the curve scroll; once a press has grabbed
   // the curve, cancelling its touch events keeps the browser from scrolling. pointerdown runs before touchstart.
@@ -47,7 +50,12 @@ export function CurvesPanel({ curves, onChange }: { curves: ToneCurves; onChange
     };
     el.addEventListener('touchstart', hold, { passive: false });
     el.addEventListener('touchmove', hold, { passive: false });
+    const observer = new ResizeObserver(() => {
+      if (el.clientWidth > 0 && el.clientHeight > 0) setAspect(el.clientHeight / el.clientWidth);
+    });
+    observer.observe(el);
     return () => {
+      observer.disconnect();
       el.removeEventListener('touchstart', hold);
       el.removeEventListener('touchmove', hold);
     };
@@ -56,16 +64,16 @@ export function CurvesPanel({ curves, onChange }: { curves: ToneCurves; onChange
   const setPoints = (p: readonly CurvePoint[]) => onChange({ ...curves, [channel]: p });
 
   const toCurve = (e: React.PointerEvent<SVGSVGElement>, r = e.currentTarget.getBoundingClientRect()) => {
-    return { x: (e.clientX - r.left) / r.width, y: 1 - (e.clientY - r.top) / r.height, size: r.width };
+    return { x: (e.clientX - r.left) / r.width, y: 1 - (e.clientY - r.top) / r.height, width: r.width, height: r.height };
   };
 
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     if (e.button !== 0) return;
     const rect = e.currentTarget.getBoundingClientRect();
-    const { x, y, size } = toCurve(e, rect);
+    const { x, y, width, height } = toCurve(e, rect);
     const touch = e.pointerType !== 'mouse';
     let next = points;
-    let index = nearestCurvePoint(points, x, y, (touch ? TOUCH_GRAB_PX : GRAB_PX) / size);
+    let index = nearestCurvePoint(points, x, y, (touch ? TOUCH_GRAB_PX : GRAB_PX) / width, height / width);
     const now = performance.now();
     if (index >= 0 && lastTap.current.index === index && now - lastTap.current.time < DOUBLE_TAP_MS) {
       lastTap.current = { time: 0, index: -1 };
@@ -75,7 +83,7 @@ export function CurvesPanel({ curves, onChange }: { curves: ToneCurves; onChange
     }
     if (index < 0) {
       const onCurve = evaluateCurve(points, x);
-      if (touch && Math.abs(onCurve - y) * size > TOUCH_GRAB_PX) return; // off the curve: let the touch scroll
+      if (touch && Math.abs(onCurve - y) * height > TOUCH_GRAB_PX) return; // off the curve: let the touch scroll
       const added = addCurvePoint(points, x, touch ? onCurve : y);
       if (!added) return;
       next = added.points;
@@ -147,11 +155,12 @@ export function CurvesPanel({ curves, onChange }: { curves: ToneCurves; onChange
         <line className="curve-grid" x1={0} y1={1} x2={1} y2={0} />
         <path d={path} fill="none" stroke={CURVE_COLORS[channel]} strokeWidth={2} vectorEffect="non-scaling-stroke" />
         {points.map(([px, py], i) => (
-          <circle
+          <ellipse
             key={i}
             cx={px}
             cy={1 - py}
-            r={0.022}
+            rx={0.022}
+            ry={0.022 / aspect}
             className={i === selected ? 'curve-point selected' : 'curve-point'}
             stroke={CURVE_COLORS[channel]}
             vectorEffect="non-scaling-stroke"
