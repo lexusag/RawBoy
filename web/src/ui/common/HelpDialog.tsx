@@ -1,4 +1,5 @@
 import { useEffect, type ReactNode } from 'react';
+import { shortcutKey } from './shortcutKey';
 
 /** One line of a help sheet: the keys (each a combination such as "Mod+Z"), or the gesture, and what it does. */
 export interface HelpItem {
@@ -22,7 +23,7 @@ export const isApple = /Mac|iPhone|iPad|iPod/.test(
 const keyLabel = (k: string) => (k === 'Mod' ? (isApple ? '⌘' : 'Ctrl') : k);
 
 /** The shortcut that opens and closes the help: Ctrl+/ (⌘/ on Apple devices), as in Google's apps. */
-export const isHelpShortcut = (e: KeyboardEvent) => e.key === '/' && (isApple ? e.metaKey : e.ctrlKey) && !e.altKey;
+export const isHelpShortcut = (e: KeyboardEvent) => shortcutKey(e) === '/' && (isApple ? e.metaKey : e.ctrlKey) && !e.altKey;
 
 /** The shortcut's label for the "?" button's tooltip. */
 export const HELP_SHORTCUT = isApple ? '⌘/' : 'Ctrl+/';

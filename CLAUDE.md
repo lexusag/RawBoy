@@ -82,6 +82,8 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   - `view/Help.kt` — the top bars' "?" button and sheet. Each app's content is its `ui/Help.kt`, mirrored in iOS
     `ui/Help.swift` and web `ui/pro/help.ts` / `ui/auto/help.ts` (web: also Ctrl/⌘+/, `ui/common/HelpDialog.tsx`).
     Update them with user-visible controls and gestures.
+    Web keyboard shortcuts match on `shortcutKey(e)` (`ui/common/shortcutKey.ts`), never `e.key` for letters or
+    [ ] \\ /: on a Ukrainian (any non-Latin) layout `e.key` is the Cyrillic letter, so it falls back to `e.code`.
   - `retouch/SkinSegmenter.kt` — MediaPipe skin segmentation + Face Landmarker feature exclusion.
 - `app-pro/src/main/java/app/rawboy/ui/` — `EditorViewModel.kt` (Pro state, carry-over, presets), `Controls.kt`
   (tabs Light, Color, Detail, LUTs, Lens, `ParamSlider`, Crop & rotate panel), `EditorScreen.kt`,

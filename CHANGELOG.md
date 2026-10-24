@@ -1,5 +1,12 @@
 # Changelog
 
+**Web: shortcuts work in Ukrainian and other non-Latin layouts (2026-10-24)**
+
+- RawBoy Web (Pro, Auto, Browser): letter shortcuts (Z zoom, Ctrl/⌘+Z undo, P / X / U flags, B / E / V mask tools,
+  [ ] brush size, \\ compare, Ctrl/⌘+A select all, …) did nothing while a Ukrainian, Russian or other non-Latin
+  keyboard layout was active, because the key then types a Cyrillic letter. They now go by the physical key, as in
+  Lightroom. Latin layouts (AZERTY, Dvorak) keep following the letter printed on the key.
+
 **Auto: finer film grain in Film mode (2026-10-24)**
 
 - RawBoy Auto (Android, iOS, web): the film stocks in Film mode start with 20% less grain than before. The Grain
