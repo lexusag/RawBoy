@@ -88,15 +88,24 @@ object LookApplier {
      * Denoise, Color denoise and sharpening always come from the auto develop, measured on this photo (its ISO and
      * exposure), never from the photo the preset was made on; the Denoise adjustment still works on top.
      */
-    fun applyPreset(base: DevelopParams, preset: Preset, adjust: Adjustments): DevelopParams {
-        val p = Presets.apply(preset, base)
+    fun applyPreset(base: DevelopParams, preset: Preset, adjust: Adjustments): DevelopParams =
+        adjusted(Presets.apply(preset, base).copy(denoise = base.denoise, colorDenoise = base.colorDenoise, sharpening = base.sharpening), adjust)
+
+    /**
+     * A whole develop from RawBoy ("Send to Auto", [app.rawboy.develop.Edits]) in place of a look: [edits] exactly as
+     * RawBoy rendered them, denoise, sharpening, crop, masks and light leaks included, with [adjust] on top as with a
+     * preset. Port of web's applyEditsDevelop.
+     */
+    fun applyEdits(edits: DevelopParams, adjust: Adjustments): DevelopParams = adjusted(edits, adjust)
+
+    /** [p] with [adjust] on top (a preset's or RawBoy edits' develop). */
+    private fun adjusted(p: DevelopParams, adjust: Adjustments): DevelopParams {
         val developed = p.copy(
             exposure = (p.exposure + adjust.brightness / 100f * BRIGHTNESS_EV).coerceIn(-5f, 5f),
             contrast = (p.contrast + adjust.contrast).coerceIn(-100f, 100f),
             saturation = saturation(p.saturation, adjust.saturation),
-            denoise = (base.denoise + adjust.denoise).coerceIn(0f, 100f),
-            colorDenoise = base.colorDenoise?.let { (it + adjust.denoise).coerceIn(0f, 100f) },
-            sharpening = base.sharpening,
+            denoise = (p.denoise + adjust.denoise).coerceIn(0f, 100f),
+            colorDenoise = p.colorDenoise?.let { (it + adjust.denoise).coerceIn(0f, 100f) },
             // With a film stock its grain is the one rendered, so Grain scales that one, as in Film mode.
             grain = if (p.film != null) p.grain else (p.grain + adjust.grain).coerceIn(0f, 100f),
             filmGrain = if (p.film != null) (p.filmGrain * (1f + adjust.grain / 50f)).coerceIn(0f, 200f) else p.filmGrain,
