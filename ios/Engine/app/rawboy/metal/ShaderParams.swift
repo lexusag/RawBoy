@@ -55,6 +55,8 @@ public final class ShaderParams: @unchecked Sendable {
     public let halation: Float
     /** `uCurve`: DevelopParams.curves as ToneCurves.table(), or nil when they are all the identity. */
     public let curve: [Float]?
+    /** `uClipLevel`: DevelopParams.clipLevel of the as-shot defaults (blown highlights), 0 = unknown. */
+    public let clipLevel: Float
 
     public init(whiteBalance: [Float], exposure: Float, contrast: Float, saturation: Float, shadows: Float,
                 highlights: Float, blacks: Float, whites: Float, denoise: Float, denoiseWide: Float,
@@ -64,7 +66,7 @@ public final class ShaderParams: @unchecked Sendable {
                 base: PreviewImage?, bloom: Float, bloomHalo: PreviewImage?, bloomTail: PreviewImage?,
                 skinRetouch: Float, skinMask: SkinMask?, grainSizeScale: Float = 1, gamutSoft: Float = 1,
                 toneMapper: Int = 0, displaySource: Float = 0, layers: LayerUniforms = .none, film: FilmData? = nil, filmAmount: Float = 0,
-                filmGrain: Float = 1, halation: Float = 1, curve: [Float]? = nil) {
+                filmGrain: Float = 1, halation: Float = 1, curve: [Float]? = nil, clipLevel: Float = 0) {
         self.whiteBalance = whiteBalance
         self.exposure = exposure
         self.contrast = contrast
@@ -102,6 +104,7 @@ public final class ShaderParams: @unchecked Sendable {
         self.filmGrain = filmGrain
         self.halation = halation
         self.curve = curve
+        self.clipLevel = clipLevel
     }
 
     /**
@@ -192,7 +195,8 @@ public final class ShaderParams: @unchecked Sendable {
             filmAmount: filmUsed != nil ? (p.filmAmount / 100).clamped(0, 1) : 0,
             filmGrain: p.filmGrain / 100,
             halation: p.halation / 100,
-            curve: p.curves.table())
+            curve: p.curves.table(),
+            clipLevel: asShot.clipLevel)
     }
 
     /** Full layer temperature offset (100) moves the white this many mireds; + = warmer, as the global slider. */

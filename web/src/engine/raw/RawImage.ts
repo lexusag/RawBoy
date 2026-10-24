@@ -20,6 +20,8 @@ export class RawImage {
   readonly iso: number;
   /** DNG BaselineExposure in EV, already applied to the pixels; NaN if the file has none. */
   readonly baselineExposure: number;
+  /** Pixel value of blown highlights (clipped in every channel), 0 if unknown (see DevelopParams.clipLevel). */
+  readonly clipLevel: number;
   /** A JPEG/HEIC, not a raw: rendered with `uDisplaySource` (see DevelopParams.displaySource). */
   readonly displayReferred: boolean;
   /** As-shot white chromaticity, CIE 1931 xy. */
@@ -35,6 +37,7 @@ export class RawImage {
     this.camera = r.camera;
     this.iso = r.iso;
     this.baselineExposure = r.baselineExposure;
+    this.clipLevel = r.clipLevel;
     this.displayReferred = r.displayReferred;
     this.asShotWhite = r.asShotWhite;
     this.lens = LensInfo.fromNative(r.lensName, r.width, r.height, r.lensInfo, r.lensShading);

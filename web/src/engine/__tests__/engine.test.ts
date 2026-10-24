@@ -88,6 +88,14 @@ describe('shader params', () => {
     expect(p.toneMapper).toBe(0); // AgX
   });
 
+  it("takes the clip level from the photo's as-shot defaults, not the edit", () => {
+    const asShot = developParams({ clipLevel: 0.71 });
+    const edit = developParams({ temperature: 3000 });
+    expect(ShaderParams.from(edit, asShot, null, new LensTransform(LensInfo.none(100, 100), edit), null, null, null).clipLevel).toBe(0.71);
+    const d = developParams();
+    expect(ShaderParams.from(d, d, null, new LensTransform(LensInfo.none(100, 100), d), null, null, null).clipLevel).toBe(0);
+  });
+
   it('maps the tone mapper to its shader id', () => {
     const d = developParams({ toneMapper: 'sigmoid' });
     expect(ShaderParams.from(d, d, null, new LensTransform(LensInfo.none(100, 100), d), null, null, null).toneMapper).toBe(2);

@@ -109,6 +109,11 @@ export interface DevelopParams {
    * a photo's as-shot defaults, from the decoder; never a slider or preset value.
    */
   displaySource?: boolean;
+  /**
+   * Pixel value of the photo's blown highlights (RawImage.clipLevel), which white balance changes leave neutral
+   * (`uClipLevel`); 0 or absent = unknown. Set only on a photo's as-shot defaults, from the decoder, like displaySource.
+   */
+  clipLevel?: number;
 }
 
 export const DEFAULT_PARAMS: Readonly<DevelopParams> = Object.freeze({

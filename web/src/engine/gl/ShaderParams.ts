@@ -173,6 +173,8 @@ export class ShaderParams {
     readonly halation = 1,
     /** `uCurve`: DevelopParams.curves as ToneCurve.ts's curveTable, or null when they are all the identity. */
     readonly curve: Float32Array | null = null,
+    /** `uClipLevel`: DevelopParams.clipLevel of the as-shot defaults (blown highlights), 0 = unknown. */
+    readonly clipLevel = 0,
   ) {}
 
   /** Extra source pixels needed around an output region for the spatial effects, so tiles join seamlessly. */
@@ -250,6 +252,7 @@ export class ShaderParams {
       p.filmGrain / 100,
       p.halation / 100,
       curveTable(p.curves),
+      asShot.clipLevel ?? 0,
     );
   }
 }

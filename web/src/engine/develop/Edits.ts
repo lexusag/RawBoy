@@ -15,7 +15,7 @@ export const EDITS_VERSION = 1;
 const round = (v: number) => Math.round(v * 1e5) / 1e5;
 
 const valuesOf = (params: DevelopParams): Record<string, unknown> => {
-  const { displaySource: _, ...values } = params; // a property of the file, not an edit
+  const { displaySource: _, clipLevel: _c, ...values } = params; // properties of the file, not edits
   return {
     ...values,
     masks: params.masks.map(({ id: _id, ...l }: MaskLayer) => ({

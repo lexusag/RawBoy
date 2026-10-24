@@ -144,6 +144,7 @@ export class DevelopProgram {
     this.f1('uGamutSoft', p.gamutSoft);
     this.i1('uToneMapper', p.toneMapper);
     this.f1('uDisplaySource', p.displaySource);
+    this.f1('uClipLevel', p.clipLevel);
     this.f1('uShadows', p.shadows);
     this.f1('uHighlights', p.highlights);
     this.f1('uBlacks', p.blacks);
