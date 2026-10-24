@@ -6,9 +6,13 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.CameraMetadata
+import android.location.Location
+import android.location.altitude.AltitudeConverter
 import android.net.Uri
+import android.os.Build
 import android.os.Process
 import android.provider.MediaStore
+import android.system.Os
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -21,9 +25,12 @@ import app.rawboy.auto.looks.Adjustments
 import app.rawboy.auto.looks.LookApplier
 import app.rawboy.camera.capture.CameraController
 import app.rawboy.camera.capture.FlashMode
+import app.rawboy.camera.capture.LocationTracker
 import app.rawboy.camera.capture.ShutterSound
 import app.rawboy.develop.DevelopParams
 import app.rawboy.develop.Histogram
+import app.rawboy.export.DngGps
+import app.rawboy.export.ExifMetadata
 import app.rawboy.export.ExportFormat
 import app.rawboy.export.ExportSettings
 import app.rawboy.export.ExportGpu
@@ -152,6 +159,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     val shutterEvents = _shutterEvents.asSharedFlow()
 
     private val shutterSound = ShutterSound()
+    /** The phone's position while geotagging is on and the camera is in front. */
+    private val location = LocationTracker(application)
+    val hasLocationPermission: Boolean get() = location.hasPermission()
     /** The law here requires the shutter sound (Japan, Korea…): it plays whatever the setting says. */
     val shutterSoundRequired = ShutterSound.required()
 
@@ -250,11 +260,18 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     fun onResume() {
         resumed = true
+        // Location access taken away in the system settings: geotagging can't work, so it shows as off.
+        if (_settings.value.geotag && !location.hasPermission()) {
+            change { it.copy(geotag = false) }
+            _message.value = "Geotagging turned off: no location access"
+        }
+        updateLocation()
         startIfReady()
     }
 
     fun onPause() {
         resumed = false
+        updateLocation()
         // The process may be killed in the background: write settings still waiting for a slider to rest.
         if (saveJob?.isActive == true) {
             saveJob?.cancel()
@@ -466,6 +483,21 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setMergeBurst(on: Boolean) = change { it.copy(mergeBurst = on) }
     fun setShutterSound(on: Boolean) = change { it.copy(shutterSound = on) }
 
+    /** Turning it on needs location access first: the UI asks for it, then calls [onLocationPermission]. */
+    fun setGeotag(on: Boolean) {
+        change { it.copy(geotag = on && location.hasPermission()) }
+        updateLocation()
+    }
+
+    fun onLocationPermission(granted: Boolean) {
+        if (granted) setGeotag(true) else _message.value = "No location access: photos aren't geotagged"
+    }
+
+    /** Listens for the position only while it is used: geotagging on and the camera in front. */
+    private fun updateLocation() {
+        if (_settings.value.geotag && resumed) location.start() else location.stop()
+    }
+
     /** Off <-> Focus-flash. */
     fun cycleFlash() = change { it.copy(flash = FlashMode.entries[(it.flash.ordinal + 1) % FlashMode.entries.size]) }
 
@@ -544,6 +576,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val orientation = controller.exifOrientation(degrees)
         // The photo is level with the horizon; the tap was on the (portrait) viewfinder.
         val meter = meterArea().let { if (it is MeterArea.Spot) it.turned(degrees) else it }
+        val fix = if (settings.geotag) location.current() else null
         return if (settings.keepDng) {
             val (uri, name) = withContext(Dispatchers.IO) {
                 MediaStoreOutput.create(resolver, baseName, "dng", DNG_MIME, RAW_NAMING)
@@ -552,7 +585,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             val result = try {
                 withContext(Dispatchers.IO) {
                     val out = resolver.openOutputStream(uri, "w") ?: throw java.io.IOException("Cannot write $name")
-                    val result = out.buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide, settings.burstFrames) { onShutter() } }
+                    val result = out.buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide, settings.burstFrames, fix) { onShutter() } }
+                    fix?.let { addGps(uri, it) }
                     MediaStoreOutput.publish(resolver, uri)
                     result
                 }
@@ -565,13 +599,64 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         } else {
             val file = File(app.cacheDir, "$baseName.dng")
             val result = try {
-                withContext(Dispatchers.IO) { file.outputStream().buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide, settings.burstFrames) { onShutter() } } }
+                withContext(Dispatchers.IO) {
+                    val result = file.outputStream().buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide, settings.burstFrames, fix) { onShutter() } }
+                    fix?.let { addGps(Uri.fromFile(file), it) }
+                    result
+                }
             } catch (t: Throwable) {
                 file.delete()
                 throw t
             }
             Shot(Uri.fromFile(file), file.name, file, settings, viewfinderKey, isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames)
         }
+    }
+
+    /**
+     * Completes the DNG's GPS tags with the altitude, which DngCreator leaves out (see DngGps); the JPEG copies them
+     * from the DNG. Best effort: DngCreator's latitude, longitude and time stay if this fails. IO thread.
+     */
+    private fun addGps(dng: Uri, fix: Location) {
+        try {
+            app.contentResolver.openFileDescriptor(dng, "rw")?.use { pfd ->
+                val fd = pfd.fileDescriptor
+                val done = DngGps.write(
+                    gpsOf(fix), Os.fstat(fd).st_size,
+                    read = { offset, length ->
+                        val b = ByteArray(length)
+                        var n = 0
+                        while (n < length) {
+                            val got = Os.pread(fd, b, n, length - n, offset + n)
+                            if (got <= 0) break
+                            n += got
+                        }
+                        b.copyOf(n)
+                    },
+                    write = { offset, bytes ->
+                        var n = 0
+                        while (n < bytes.size) n += Os.pwrite(fd, bytes, n, bytes.size - n, offset + n)
+                    },
+                )
+                if (!done) Log.w(TAG, "DNG GPS: no GPS IFD to replace")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "DNG GPS", e)
+        }
+    }
+
+    /** [fix] as GPS tags. Altitude above sea level: Android 14+ converts the fix's height above the ellipsoid. */
+    private fun gpsOf(fix: Location): ExifMetadata.Gps {
+        val altitude = when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && fix.hasMslAltitude() -> fix.mslAltitudeMeters
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE && fix.hasAltitude() -> try {
+                Location(fix).also { AltitudeConverter().addMslAltitudeToLocation(app, it) }.mslAltitudeMeters
+            } catch (e: Exception) {
+                fix.altitude
+            }
+            fix.hasAltitude() -> fix.altitude
+            else -> Double.NaN
+        }
+        return ExifMetadata.Gps.of(fix.latitude, fix.longitude, altitude, fix.time)
     }
 
     /** Raw -> auto develop + look -> JPEG (jpegli), as RawBoy Auto develops a photo. */
@@ -691,6 +776,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             CameraSettingsStore.save(app, _settings.value) // still pending: save now
         }
         shots.close()
+        location.stop()
         shutterSound.release()
         controller.close()
         histogramRenderer.close()

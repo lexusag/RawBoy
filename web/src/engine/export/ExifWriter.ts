@@ -71,6 +71,7 @@ const T = {
   OffsetTimeOriginal: 0x9011, ExposureBias: 0x9204, FocalLength: 0x920a, SubSecTimeOriginal: 0x9291,
   ColorSpace: 0xa001, FocalLength35mm: 0xa405, LensMake: 0xa433, LensModel: 0xa434,
   GpsVersion: 0x0000, GpsLatRef: 0x0001, GpsLat: 0x0002, GpsLonRef: 0x0003, GpsLon: 0x0004, GpsAltRef: 0x0005, GpsAlt: 0x0006,
+  GpsTimeStamp: 0x0007, GpsDateStamp: 0x001d,
 };
 
 const dms = (v: Float64Array | number[]): [number, number][] => [rational(v[0], 1), rational(v[1], 1), rational(v[2], 10000)];
@@ -111,6 +112,11 @@ function ifds(m: PhotoMetadata) {
       gps.push(undefinedBytes(T.GpsAltRef, [g.belowSeaLevel ? 1 : 0]));
       gps.push(rationals(T.GpsAlt, [rational(Math.abs(g.altitude), 100)]));
     }
+    const t = g.timeStamp;
+    if (t && t.length === 3 && Array.from(t).every((x) => Number.isFinite(x) && x >= 0)) {
+      gps.push(rationals(T.GpsTimeStamp, [rational(t[0], 1), rational(t[1], 1), rational(t[2], 1000)]));
+    }
+    if (g.dateStamp && /^\d{4}:\d\d:\d\d$/.test(g.dateStamp)) gps.push(ascii(T.GpsDateStamp, g.dateStamp));
   }
   return { ifd0, exif, gps };
 }

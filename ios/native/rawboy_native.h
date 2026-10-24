@@ -40,6 +40,8 @@ typedef struct {
     char gpsLatitudeRef, gpsLongitudeRef;
     double gpsAltitude;  // metres
     bool gpsBelowSeaLevel;
+    double gpsTimeStamp[3];  // the fix's UTC hours, minutes, seconds (NaN if unknown)
+    const char* gpsDateStamp;  // the fix's UTC date, "YYYY:MM:DD" (empty if unknown)
 } RBMetadata;
 
 /** True when the Adobe DNG SDK (DNG 1.7 / JPEG XL) is built in. */

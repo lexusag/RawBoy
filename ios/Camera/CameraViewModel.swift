@@ -52,6 +52,8 @@ final class CameraViewModel: ObservableObject {
     private var info: CameraController.Info?
     private var startTask: Task<Void, Never>?
     private var active = false
+    /** The phone's position while geotagging is on and the app is in front. */
+    private let location = LocationTracker()
 
     /** The latest analysed viewfinder frame. */
     private struct Live {
@@ -122,6 +124,12 @@ final class CameraViewModel: ObservableObject {
     /** Asks for camera access (once) and starts the camera. */
     func activate() {
         active = true
+        // Location access taken away in the Settings app: geotagging can't work, so it shows as off.
+        if settings.geotag && !location.authorized && !location.undetermined {
+            change { $0.geotag = false }
+            message = "Geotagging turned off: no location access"
+        }
+        updateLocation()
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:
             startIfReady()
@@ -137,6 +145,7 @@ final class CameraViewModel: ObservableObject {
 
     func deactivate() {
         active = false
+        updateLocation()
         if saveTask != nil {
             saveTask?.cancel()
             saveTask = nil
@@ -358,6 +367,29 @@ final class CameraViewModel: ObservableObject {
         change { $0.showHistogram = on }
         if !on { histogram = nil }
     }
+    /** Turning it on asks for location access first (the system prompt the first time). */
+    func setGeotag(_ on: Bool) {
+        guard on else {
+            change { $0.geotag = false }
+            updateLocation()
+            return
+        }
+        location.requestAccess { [weak self] granted in
+            guard let self else { return }
+            if granted {
+                change { $0.geotag = true }
+            } else {
+                message = "No location access: allow it for RawBoy Camera in the Settings app"
+            }
+            updateLocation()
+        }
+    }
+
+    /** Listens for the position only while it is used: geotagging on and the app in front. */
+    private func updateLocation() {
+        if settings.geotag && active { location.start() } else { location.stop() }
+    }
+
     func toggleFlash() { change { $0.flash = $0.flash == .off ? .on : .off } }
 
     func setCompare(_ on: Bool) {
@@ -393,10 +425,11 @@ final class CameraViewModel: ObservableObject {
         // The photo is level with the horizon; the tap was on the (portrait) viewfinder.
         let meter = meterArea.turned(currentDeviceDegrees())
         let name = "IMG_" + Self.timestamp()
+        let gps = s.geotag ? location.current.map(LocationTracker.gpsMetadata) : nil
         pending += 1
         Task {
             do {
-                let result = try await controller.captureDng(flash: flash) { [weak self] in
+                let result = try await controller.captureDng(flash: flash, gps: gps) { [weak self] in
                     Task { @MainActor in self?.shutterCount += 1 }
                 }
                 shots.append(Shot(dng: result.dng, name: name, settings: s, viewfinderKey: viewfinderKey,

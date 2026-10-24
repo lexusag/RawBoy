@@ -285,6 +285,13 @@ private struct SettingsSheet: View {
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
+                    Toggle(isOn: Binding(get: { vm.settings.geotag }, set: vm.setGeotag)) {
+                        VStack(alignment: .leading) {
+                            Text("Geotag")
+                            Text("Save where each photo was taken (GPS) in the JPEG and DNG. Asks for location access")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
                     Toggle(isOn: Binding(get: { vm.settings.showHistogram }, set: vm.setShowHistogram)) {
                         VStack(alignment: .leading) {
                             Text("Histogram")

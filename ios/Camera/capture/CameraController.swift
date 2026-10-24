@@ -1,5 +1,6 @@
 @preconcurrency import AVFoundation
 import Foundation
+import ImageIO
 import os
 import UIKit
 
@@ -242,8 +243,12 @@ final class CameraController: NSObject, @unchecked Sendable {
 
     // MARK: - Capture
 
-    /** Takes a raw still; [onShutter] runs when the camera captures it (shutter feedback). */
-    func captureDng(flash: FlashMode, onShutter: @escaping @Sendable () -> Void) async throws -> CaptureResult {
+    /**
+     * Takes a raw still; [onShutter] runs when the camera captures it (shutter feedback). [gps]: ImageIO's GPS
+     * dictionary for the DNG (LocationTracker.gpsMetadata), or nil.
+     */
+    func captureDng(flash: FlashMode, gps: [String: Any]? = nil,
+                    onShutter: @escaping @Sendable () -> Void) async throws -> CaptureResult {
         try await withCheckedThrowingContinuation { (c: CheckedContinuation<CaptureResult, Error>) in
             queue.async {
                 guard let rawType = self.rawType else {
@@ -265,7 +270,7 @@ final class CameraController: NSObject, @unchecked Sendable {
                     }
                 }
                 let iso = self.input?.device.iso ?? 0
-                let delegate = PhotoDelegate(onShutter: onShutter) { [weak self] result in
+                let delegate = PhotoDelegate(gps: gps, onShutter: onShutter) { [weak self] result in
                     self?.queue.async { self?.captures[settings.uniqueID] = nil }
                     switch result {
                     case let .success(data): c.resume(returning: CaptureResult(dng: data, iso: iso))
@@ -279,14 +284,24 @@ final class CameraController: NSObject, @unchecked Sendable {
     }
 
     /** One still: the DNG data, or why it failed. */
-    private final class PhotoDelegate: NSObject, AVCapturePhotoCaptureDelegate {
+    private final class PhotoDelegate: NSObject, AVCapturePhotoCaptureDelegate, AVCapturePhotoFileDataRepresentationCustomizer {
+        private let gps: [String: Any]?
         private let onShutter: @Sendable () -> Void
         private let done: (Result<Data, Error>) -> Void
         private var data: Data?
 
-        init(onShutter: @escaping @Sendable () -> Void, done: @escaping (Result<Data, Error>) -> Void) {
+        init(gps: [String: Any]?, onShutter: @escaping @Sendable () -> Void, done: @escaping (Result<Data, Error>) -> Void) {
+            self.gps = gps
             self.onShutter = onShutter
             self.done = done
+        }
+
+        /** Geotagging: the photo's own metadata plus the GPS dictionary. */
+        func replacementMetadata(for photo: AVCapturePhoto) -> [String: Any]? {
+            guard let gps else { return nil }
+            var metadata = photo.metadata
+            metadata[kCGImagePropertyGPSDictionary as String] = gps
+            return metadata
         }
 
         func photoOutput(_ output: AVCapturePhotoOutput, willCapturePhotoFor resolvedSettings: AVCaptureResolvedPhotoSettings) {
@@ -294,7 +309,7 @@ final class CameraController: NSObject, @unchecked Sendable {
         }
 
         func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
-            if photo.isRawPhoto { data = photo.fileDataRepresentation() }
+            if photo.isRawPhoto { data = gps == nil ? photo.fileDataRepresentation() : photo.fileDataRepresentation(with: self) }
         }
 
         func photoOutput(_ output: AVCapturePhotoOutput, didFinishCaptureFor resolvedSettings: AVCaptureResolvedPhotoSettings,
