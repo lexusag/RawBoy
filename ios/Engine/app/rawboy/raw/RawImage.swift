@@ -246,6 +246,8 @@ public struct PhotoMetadata: Sendable {
         public let latitudeRef: String, longitudeRef: String
         public let altitude: Double  // metres, NaN if unknown
         public let belowSeaLevel: Bool
+        public let timeStamp: [Double]?  // the fix's UTC hours, minutes, seconds; nil if unknown
+        public let dateStamp: String  // the fix's UTC date, "YYYY:MM:DD"; empty if unknown
     }
 
     public let make, model, lensMake, lensModel, artist, copyright: String
@@ -277,7 +279,10 @@ public struct PhotoMetadata: Sendable {
                 longitude: [m.gpsLongitude.0, m.gpsLongitude.1, m.gpsLongitude.2],
                 latitudeRef: String(UnicodeScalar(UInt8(bitPattern: m.gpsLatitudeRef))),
                 longitudeRef: String(UnicodeScalar(UInt8(bitPattern: m.gpsLongitudeRef))),
-                altitude: m.gpsAltitude, belowSeaLevel: m.gpsBelowSeaLevel)
+                altitude: m.gpsAltitude, belowSeaLevel: m.gpsBelowSeaLevel,
+                timeStamp: [m.gpsTimeStamp.0, m.gpsTimeStamp.1, m.gpsTimeStamp.2].allSatisfy(\.isFinite)
+                    ? [m.gpsTimeStamp.0, m.gpsTimeStamp.1, m.gpsTimeStamp.2] : nil,
+                dateStamp: String(cString: m.gpsDateStamp))
         } else {
             gps = nil
         }

@@ -101,7 +101,7 @@ import kotlin.math.roundToInt
 /** Viewfinder with the look controls, shutter and the last photo. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CameraScreen(vm: CameraViewModel, requestPermission: () -> Unit) {
+fun CameraScreen(vm: CameraViewModel, requestPermission: () -> Unit, requestLocation: () -> Unit) {
     val status by vm.status.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val frame by vm.frame.collectAsStateWithLifecycle()
@@ -361,7 +361,7 @@ fun CameraScreen(vm: CameraViewModel, requestPermission: () -> Unit) {
 
     if (showSettings) {
         ModalBottomSheet(onDismissRequest = { showSettings = false }) {
-            SettingsContent(settings, vm)
+            SettingsContent(settings, vm, requestLocation)
         }
     }
 }
@@ -451,7 +451,7 @@ private fun LookSlider(
 ) = CompactSlider(label, value, range, default, rowHeight = 36.dp, labelWidth = 88.dp, valueWidth = 44.dp, onChange = onChange)
 
 @Composable
-private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel) {
+private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, requestLocation: () -> Unit) {
     Column(
         Modifier
             .padding(horizontal = 24.dp)
@@ -509,6 +509,13 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel) {
             checked = settings.shutterSound || vm.shutterSoundRequired,
             enabled = !vm.shutterSoundRequired,
             onChange = vm::setShutterSound,
+        )
+        Spacer(Modifier.height(16.dp))
+        SettingSwitch(
+            title = "Geotag",
+            subtitle = "Save where each photo was taken (GPS) in the JPEG and DNG. Asks for location access",
+            checked = settings.geotag,
+            onChange = { on -> if (on && !vm.hasLocationPermission) requestLocation() else vm.setGeotag(on) },
         )
         Spacer(Modifier.height(16.dp))
         SettingSwitch(

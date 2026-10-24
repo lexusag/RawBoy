@@ -123,4 +123,23 @@ class PresetsTest {
         val b = Presets.captureLens(DevelopParams(lensDistortion = 2f), "----", "Jupiter-9")
         assertEquals(2, Presets.putLensPreset(listOf(a), b).size)
     }
+
+    @Test
+    fun blackAndWhitePresetsHaveTheirOwnSection() {
+        val mono = Presets.capture("Mono", DevelopParams(lut = "asset:luts/Yellow Mono 400.cube"), setOf(PresetGroup.LUT))
+        val grey = Presets.capture("Grey", DevelopParams(saturation = -100f), setOf(PresetGroup.COLOR))
+        val half = Presets.capture("Half", DevelopParams(lut = "asset:luts/Yellow Mono 400.cube", lutAmount = 50f), setOf(PresetGroup.LUT))
+        val warm = Presets.capture("Warm", DevelopParams(lut = "asset:luts/Yellow Warm 200.cube"), setOf(PresetGroup.LUT))
+        assertTrue(mono.isMonochrome)
+        assertTrue(grey.isMonochrome)
+        assertFalse(half.isMonochrome)
+        assertFalse(warm.isMonochrome)
+        // A film stock drops the LUT, so the photo keeps its colour.
+        val film = Presets.capture("Film", DevelopParams(lut = "asset:luts/Yellow Mono 400.cube", film = "portra400"), setOf(PresetGroup.LIGHT, PresetGroup.LUT))
+        assertFalse(film.isMonochrome)
+
+        assertEquals(listOf("Color" to listOf(warm, half), "Black & white" to listOf(mono, grey)), Presets.sections(listOf(warm, mono, half, grey)))
+        assertEquals(listOf(null to listOf(warm)), Presets.sections(listOf(warm)))
+        assertEquals(listOf("Black & white" to listOf(mono)), Presets.sections(listOf(mono)))
+    }
 }

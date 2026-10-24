@@ -11,7 +11,7 @@ import { isPressedSlider } from '../common/sliderFocus';
 import { Preview, PreviewLabel, zoomLabel } from '../common/Preview';
 import { useTabScroll } from '../common/useTabScroll';
 import { ALL_FILM_LOOKS } from '../../engine/auto/looks/FilmLooks';
-import { isLensPreset, NO_LENS_PRESET, replacesLook, type Preset } from '../../engine/develop/Presets';
+import { isLensPreset, NO_LENS_PRESET, presetSections, replacesLook, type Preset } from '../../engine/develop/Presets';
 import { groupSummary } from '../pro/PresetsPanel';
 import { PresetStore } from '../pro/PresetStore';
 import { PresetsIcon } from '../common/PresetsIcon';
@@ -381,12 +381,17 @@ function PresetPicker({ store, count, onPick, onDismiss }: {
         </div>
         {list.length > 0 && (
           <div className="preset-list">
-            {list.map((p) => (
-              <div key={p.id} className="preset-row">
-                <button type="button" className="preset-apply" onClick={() => onPick(p)}>
-                  <span className="preset-name">{p.name}</span>
-                  <span className="preset-groups">{groupSummary(p)}</span>
-                </button>
+            {presetSections(list).map((section) => (
+              <div key={section.label ?? 'all'}>
+                {section.label && <div className="section-label">{section.label}</div>}
+                {section.presets.map((p) => (
+                  <div key={p.id} className="preset-row">
+                    <button type="button" className="preset-apply" onClick={() => onPick(p)}>
+                      <span className="preset-name">{p.name}</span>
+                      <span className="preset-groups">{groupSummary(p)}</span>
+                    </button>
+                  </div>
+                ))}
               </div>
             ))}
           </div>
@@ -990,11 +995,26 @@ function LookStrip({ store, photo }: { store: AutoStore; photo: AutoPhoto }) {
     if (el.scrollWidth <= el.clientWidth) return;
     el.querySelector<HTMLElement>('.look.selected')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [photo.id, photo.mode, activeLook(photo).id]);
+  const looks = photo.mode === 'film' ? ALL_FILM_LOOKS : ALL_LOOKS;
+  const mono = looks.filter((l) => l.monochrome);
+  const chips = (list: Look[]) => list.map((look) => <LookChip key={look.id} store={store} photo={photo} look={look} />);
   return (
     <div className="look-strip" ref={ref}>
-      {(photo.mode === 'film' ? ALL_FILM_LOOKS : ALL_LOOKS).map((look) => (
-        <LookChip key={look.id} store={store} photo={photo} look={look} />
-      ))}
+      {mono.length === 0 ? (
+        <div className="look-section"><div className="look-chips">{chips(looks)}</div></div>
+      ) : (
+        // Colour and black and white looks in their own sections: a heading above each (a divider between them in the row).
+        <>
+          <div className="look-section">
+            <div className="look-section-label">Color</div>
+            <div className="look-chips">{chips(looks.filter((l) => !l.monochrome))}</div>
+          </div>
+          <div className="look-section">
+            <div className="look-section-label">Black &amp; white</div>
+            <div className="look-chips">{chips(mono)}</div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

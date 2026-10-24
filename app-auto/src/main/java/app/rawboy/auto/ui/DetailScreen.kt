@@ -23,8 +23,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -51,6 +51,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -478,22 +479,37 @@ private fun editsSummary(e: DevelopParams): String {
 private fun LookStrip(vm: AutoViewModel, photo: AutoPhoto) {
     val state = rememberLazyListState()
     val looks = if (photo.mode == LookMode.FILM) FilmLooks.ALL else Looks.ALL
+    // Colour and black and white looks in sections (the list has colour first): the first chip of each carries the
+    // section's heading, and a divider stands between them.
+    val sectioned = looks.any { it.monochrome } && looks.any { !it.monochrome }
     LaunchedEffect(photo.id, photo.mode) {
-        state.scrollToItem(looks.indexOf(photo.activeLook).coerceAtLeast(0))
+        val i = looks.indexOf(photo.activeLook).coerceAtLeast(0)
+        state.scrollToItem(if (sectioned && looks[i].monochrome) i + 1 else i)
     }
     LazyRow(
         state = state,
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        items(looks, key = { it.id }) { look ->
-            LookChip(vm, photo, look)
+        looks.forEachIndexed { i, look ->
+            val starts = sectioned && (i == 0 || look.monochrome != looks[i - 1].monochrome)
+            if (starts && i > 0) {
+                item(key = "divider") { VerticalDivider(Modifier.height(LOOK_SIZE + LOOK_HEADING + 32.dp)) }
+            }
+            val heading = when {
+                !sectioned -> null
+                !starts -> ""
+                look.monochrome -> "Black & white"
+                else -> "Color"
+            }
+            item(key = look.id) { LookChip(vm, photo, look, heading) }
         }
     }
 }
 
+/** [heading]: the section's name above the first chip of a section, "" above the others, null with no sections. */
 @Composable
-private fun LookChip(vm: AutoViewModel, photo: AutoPhoto, look: Look) {
+private fun LookChip(vm: AutoViewModel, photo: AutoPhoto, look: Look, heading: String? = null) {
     // Keeps showing the previous thumbnail while a slider moves; re-renders once it rests.
     val thumb by produceState<Bitmap?>(null, photo.id, look.id, photo.adjust) {
         if (!vm.hasCurrentLookThumbnail(photo.id, look)) delay(400)
@@ -506,6 +522,19 @@ private fun LookChip(vm: AutoViewModel, photo: AutoPhoto, look: Look) {
             .clickable { vm.setLook(photo.id, look) },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        if (heading != null) {
+            // Wider than the chip: drawn on past its right edge, over the next chips' empty headings.
+            Box(Modifier.fillMaxWidth().height(LOOK_HEADING)) {
+                Text(
+                    heading,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    softWrap = false,
+                    modifier = Modifier.wrapContentWidth(Alignment.Start, unbounded = true),
+                )
+            }
+        }
         Box(
             Modifier
                 .size(LOOK_SIZE)
@@ -593,6 +622,7 @@ private fun Label(text: String, modifier: Modifier) {
 /** The frame around the photo in the fit view, as RawBoy's (grey, white or black: tap outside the photo). */
 private val FRAME_WIDTH = 12.dp
 private val LOOK_SIZE = 64.dp
+private val LOOK_HEADING = 16.dp
 private val SLIDER_ROW = 40.dp
 private val SLIDER_PAIR_ROW = 48.dp
 private const val COMPARE_DELAY_MS = 250L

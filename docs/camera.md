@@ -39,8 +39,18 @@ shows them.
   (on by default: 3000 px on the long side, area-downscaled from the full-resolution develop, with the grain sized to
   the smaller photo and a light sharpening after the downscale; off saves full resolution, unsharpened); **Merge 8 frames** (see above); **Shutter sound** (off by default: a click on each
   shot; where the law requires it, such as Japan and Korea, Android reports so and it is always on and greyed out);
+  **Geotag** (off by default; see below);
   **Remember camera & settings** (off by default: each start uses the
   back W lens, Yellow Portrait 400 and default sliders; on keeps lens, side, look and sliders).
+- **Geotag:** with it on, each JPEG and DNG gets the GPS tags of where it was taken: latitude, longitude, altitude
+  above sea level and the fix's UTC date and time. Location access is asked for only when you turn it on (approximate
+  location is enough on Android too, just less exact); without it the switch stays off. The position comes from the
+  phone's location service while the camera is open (Android: the fused provider, else GPS and network, no Google
+  Play services; iOS: Core Location) and is stopped as soon as the camera leaves the screen. A shot gets the latest
+  fix up to 10 minutes old, so a photo taken before the first fix (or with location off in the system) has no GPS.
+  Android's DngCreator writes no altitude, so the camera appends a complete GPS IFD to the DNG and points IFD0 at it
+  (`DngGps`); Android 14+ converts the fix's height above the ellipsoid to height above sea level. The GPS tags
+  carry on through RawBoy and Auto exports of the DNG (JPEG and TIFF, all platforms).
 - **How the viewfinder matches the final:** the camera's preview stream is asked for the plain sRGB tone curve, so
   the viewfinder can turn it back into linear light and run the same develop shader on it. The auto develop is
   worked out from a 512 px copy of the live frame about three times a second (faces from the camera's face detection

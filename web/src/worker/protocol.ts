@@ -28,6 +28,10 @@ export interface PhotoMetadata {
     /** Metres; NaN if unknown. */
     altitude: number;
     belowSeaLevel: boolean;
+    /** The fix's UTC hours, minutes, seconds; absent if unknown. */
+    timeStamp?: Float64Array;
+    /** The fix's UTC date, "YYYY:MM:DD"; empty or absent if unknown. */
+    dateStamp?: string;
   } | null;
 }
 

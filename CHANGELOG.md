@@ -7,6 +7,28 @@
 - RawBoy and Auto (Android, web): the 100% view (and the web's wheel zoom) keeps the frame along the edges, with the
   photo inside it; panning still reaches the photo's edges and corners.
 
+**Color and black & white sections in look and preset lists (2026-10-24)**
+
+- RawBoy, Auto and Camera (Android, web): look and preset pickers list black and white ones apart from the colour ones,
+  under **Color** and **Black & white** headings: Auto's look strip (a divider between the two in the phone's row),
+  Camera's Look menu, RawBoy's included LUTs, the Presets panel and Auto's preset picker. A preset counts as black and
+  white with Saturation -100 or a black and white LUT at full strength. Not on iOS yet.
+
+**Auto: Denoise favours colour noise (2026-10-24)**
+
+- RawBoy Auto (Android, iOS, web): the Denoise adjustment used to add the same amount to luma and colour denoise.
+  Raising it now clears colour noise (blotches) first and fast, and smooths luma later and gently: at +25 colour
+  denoise rises by 44 and luma by 4, at +50 by 75 and 15, at +100 by 100 and 60. Lowering it takes luma denoise away
+  first, colour later; -100 still turns both off. Photos with Denoise at 0 look as before.
+
+**Camera: geotagging (2026-10-24)**
+
+- RawBoy Camera (Android, iOS): a **Geotag** switch in Settings, off by default. On, each JPEG and DNG records where
+  it was taken (GPS latitude, longitude, altitude and the fix's UTC date and time). Location access is asked for only
+  when you turn it on, and the location service runs only while the camera is open.
+- RawBoy, Auto and Camera (Android, iOS, web): exports keep the GPS time and date stamps too, next to the position
+  and altitude they already kept.
+
 **Auto batch-exports photos with their full RawBoy edits (2026-10-24)**
 
 - RawBoy → Auto (Android): **Export › Send to Auto** in RawBoy hands the open photo to RawBoy Auto with every edit:

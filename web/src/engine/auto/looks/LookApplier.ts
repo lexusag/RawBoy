@@ -6,8 +6,9 @@ import { lutIdOf, type Look } from './Look';
 /**
  * The user's controls on top of the auto develop and the look; all 0 = as suggested. [brightness] -100..100 shifts
  * exposure; [warmth] -100..100 warms or cools; [tint] -50..50 (+ = magenta), [contrast] -50..50, [saturation]
- * -100..100, [grain] -50..50 and [denoise] -100..100 are added to the slider values the auto develop and the look arrive at,
- * except negative [saturation], which moves the saturation they arrive at towards -100 (-100 = black and white).
+ * -100..100 and [grain] -50..50 are added to the slider values the auto develop and the look arrive at, except negative
+ * [saturation], which moves the saturation they arrive at towards -100 (-100 = black and white). [denoise] -100..100
+ * shifts the auto luma and colour denoise, colour first (see denoiseWith).
  * [rotation] is clockwise quarter turns (0..3) on top of the photo's own orientation.
  */
 export interface Adjustments {
@@ -35,6 +36,24 @@ export const DEFAULT_STRENGTH = 100;
 const BRIGHTNESS_EV = 3;
 /** Warmth ±100 = temperature x2 / ÷2 on top of the auto white balance (tint follows). */
 const WARMTH_RANGE = 2;
+/** The most Denoise +100 adds to the auto luma denoise (colour denoise gets +100). */
+const LUMA_DENOISE_MAX_SHIFT = 60;
+
+/**
+ * [luma, colour] denoise for [p]'s auto values with the Denoise adjustment [adjust] -100..100 on top. Colour noise
+ * (blotches) goes first, as it costs little detail: above 0 colour denoise rises fast (ease-out, +100 at the top) and
+ * luma slowly (t², +LUMA_DENOISE_MAX_SHIFT at the top); below 0 luma drops fast and colour slowly, both off at -100.
+ * A colour denoise that follows luma (null) gets its own value once Denoise moves.
+ */
+export function denoiseWith(p: DevelopParams, adjust: number): [number, number | null] {
+  if (adjust === 0) return [p.denoise, p.colorDenoise];
+  const t = Math.min(1, Math.abs(adjust) / 100);
+  const fast = 1 - (1 - t) * (1 - t);
+  const slow = t * t;
+  const [luma, color] = adjust > 0 ? [LUMA_DENOISE_MAX_SHIFT * slow, 100 * fast] : [-100 * fast, -100 * slow];
+  const clamp = (v: number) => Math.min(100, Math.max(0, v));
+  return [clamp(p.denoise + luma), clamp((p.colorDenoise ?? p.denoise) + color)];
+}
 
 /**
  * Positive [adjust] adds to the auto + look saturation; negative scales it towards -100, so the slider's bottom is
@@ -54,14 +73,14 @@ export function applyLook(base: DevelopParams, look: Look, strength: number, adj
   const k = strength / 100;
   const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
   const add = (value: number, delta: number, min = -100, max = 100) => clamp(value + delta * k, min, max);
+  const [denoise, colorDenoise] = denoiseWith(base, adjust.denoise);
   const developed: DevelopParams = {
     ...base,
     exposure: clamp(base.exposure + look.exposure * k + (adjust.brightness / 100) * BRIGHTNESS_EV, -5, 5),
     contrast: clamp(base.contrast + look.contrast * k + adjust.contrast, -100, 100),
     saturation: saturation(base.saturation + look.saturation * k, adjust.saturation),
-    denoise: clamp(base.denoise + adjust.denoise, 0, 100),
-    // A measured colour denoise (AutoTone) moves with Denoise too; null keeps following it.
-    colorDenoise: base.colorDenoise == null ? null : clamp(base.colorDenoise + adjust.denoise, 0, 100),
+    denoise,
+    colorDenoise,
     highlights: add(base.highlights, look.highlights),
     blacks: add(base.blacks, look.blacks),
     whites: add(base.whites, look.whites),
@@ -116,13 +135,14 @@ export function applyEditsDevelop(edits: DevelopParams, adjust: Adjustments): De
 /** [p] with [adjust] on top. */
 function adjustDevelop(p: DevelopParams, adjust: Adjustments): DevelopParams {
   const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
+  const [denoise, colorDenoise] = denoiseWith(p, adjust.denoise);
   const developed: DevelopParams = {
     ...p,
     exposure: clamp(p.exposure + (adjust.brightness / 100) * BRIGHTNESS_EV, -5, 5),
     contrast: clamp(p.contrast + adjust.contrast, -100, 100),
     saturation: saturation(p.saturation, adjust.saturation),
-    denoise: clamp(p.denoise + adjust.denoise, 0, 100),
-    colorDenoise: p.colorDenoise == null ? null : clamp(p.colorDenoise + adjust.denoise, 0, 100),
+    denoise,
+    colorDenoise,
     // With a film stock its grain is the one rendered, so Grain scales that one, as in Film mode.
     grain: p.film != null ? p.grain : clamp(p.grain + adjust.grain, 0, 100),
     filmGrain: p.film != null ? clamp(p.filmGrain * (1 + adjust.grain / 50), 0, 200) : p.filmGrain,

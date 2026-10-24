@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { NO_ADJUSTMENTS, applyEditsDevelop, applyLook, developAuto } from '../auto/looks/LookApplier';
 import { ALL_FILM_LOOKS, FILM_GRAIN, FilmLooks, filmLookById } from '../auto/looks/FilmLooks';
-import { ALL_LOOKS, Looks, lookById, lutIdOf } from '../auto/looks/Look';
+import { ALL_LOOKS, Looks, isMonochromeLut, lookById, lutIdOf } from '../auto/looks/Look';
 import { applyAuto, measuredNoiseSettings } from '../auto/analysis/AutoTone';
 import { Warmth } from '../auto/analysis/Warmth';
 import { Mat3 } from '../color/Mat3';
@@ -28,7 +28,7 @@ import {
   sampleCurve,
   type CurvePoint,
 } from '../develop/ToneCurve';
-import { applyPreset, captureLensPreset, capturePreset, chosenLensPreset, decodePresets, DEFAULT_PRESET_GROUPS, encodePresets, isLensPreset, lensPresetFor, NO_LENS_PRESET, putLensPreset, type Preset } from '../develop/Presets';
+import { applyPreset, captureLensPreset, capturePreset, chosenLensPreset, decodePresets, DEFAULT_PRESET_GROUPS, encodePresets, isLensPreset, isMonochromePreset, lensPresetFor, NO_LENS_PRESET, presetSections, putLensPreset, type Preset } from '../develop/Presets';
 import { BandDownscaler } from '../export/BandDownscaler';
 import { FilmStocks } from '../film/FilmStocks';
 import { baseNameOf, fileName } from '../export/ExportSettings';
@@ -260,6 +260,26 @@ describe('crop', () => {
 });
 
 describe('presets', () => {
+  it('puts black and white presets and LUTs in their own section', () => {
+    const lut = 'asset:luts/Yellow Mono 400.cube';
+    const mono = capturePreset('Mono', developParams({ lut }), ['lut']);
+    const grey = capturePreset('Grey', developParams({ saturation: -100 }), ['color']);
+    const half = capturePreset('Half', developParams({ lut, lutAmount: 50 }), ['lut']);
+    const warm = capturePreset('Warm', developParams({ lut: 'asset:luts/Yellow Warm 200.cube' }), ['lut']);
+    expect([mono, grey, half, warm].map(isMonochromePreset)).toEqual([true, true, false, false]);
+    // A film stock drops the LUT, so the photo keeps its colour.
+    expect(isMonochromePreset(capturePreset('Film', developParams({ lut, film: 'portra400' }), ['light', 'lut']))).toBe(false);
+    expect(presetSections([warm, mono, half, grey])).toEqual([
+      { label: 'Color', presets: [warm, half] },
+      { label: 'Black & white', presets: [mono, grey] },
+    ]);
+    expect(presetSections([warm])).toEqual([{ label: null, presets: [warm] }]);
+    expect(presetSections([mono])).toEqual([{ label: 'Black & white', presets: [mono] }]);
+    expect(isMonochromeLut(lut)).toBe(true);
+    expect(isMonochromeLut('asset:luts/Redscale.png')).toBe(false);
+    expect(isMonochromeLut(null)).toBe(false);
+  });
+
   const edited = developParams({
     exposure: 0.7, contrast: 20, temperature: 4200, tint: 8, grain: 30, lut: 'asset:luts/x.cube', lutAmount: 60,
     lensProfile: false, rotation: 1, straighten: 3, cropLeft: 0.1,
@@ -565,6 +585,24 @@ describe('auto looks', () => {
     expect(p).toMatchObject({ contrast: -5, saturation: 40, denoise: 0, temperature: 6000, tint: 13 });
   });
 
+  it('Denoise moves colour denoise first and luma later and gently', () => {
+    const base = developParams({ denoise: 20, colorDenoise: 30 });
+    const at = (denoise: number) => {
+      const p = applyLook(base, Looks.NATURAL, 100, { ...NO_ADJUSTMENTS, denoise }, false);
+      return [p.denoise, p.colorDenoise];
+    };
+    expect(at(0)).toEqual([20, 30]);
+    expect(at(25)).toEqual([23.75, 73.75]);
+    expect(at(50)).toEqual([35, 100]);
+    expect(at(100)).toEqual([80, 100]);
+    expect(at(-20)).toEqual([0, 26]);
+    expect(at(-100)).toEqual([0, 0]);
+    // A colour denoise that follows luma gets its own value once Denoise moves.
+    const iso = applyLook(developParams({ denoise: 20, colorDenoise: null }), Looks.NATURAL, 100, { ...NO_ADJUSTMENTS, denoise: 50 }, false);
+    expect([iso.denoise, iso.colorDenoise]).toEqual([35, 95]);
+    expect(applyLook(developParams({ denoise: 20, colorDenoise: null }), Looks.NATURAL, 100, NO_ADJUSTMENTS, false).colorDenoise).toBeNull();
+  });
+
   it('rotation adds quarter turns to the photo, wrapping at four', () => {
     const base = developParams({ rotation: 1 });
     expect(applyLook(base, Looks.NATURAL, 100, NO_ADJUSTMENTS, false).rotation).toBe(1);
@@ -855,7 +893,9 @@ describe('applyEditsDevelop', () => {
   it('adds the adjustments to the edits, denoise and sharpening from the edits', () => {
     const p = applyEditsDevelop(edits, { ...NO_ADJUSTMENTS, contrast: 10, denoise: 5, rotation: 1 });
     expect(p.contrast).toBe(30);
-    expect(p.denoise).toBe(45);
+    // Denoise +5 is mostly colour denoise (see the Denoise mapping above).
+    expect(p.denoise).toBeCloseTo(40.15, 9);
+    expect(p.colorDenoise).toBeCloseTo(49.75, 9);
     expect(p.sharpening).toBe(30);
     expect(p.rotation).toBe(2);
   });
