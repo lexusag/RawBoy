@@ -29,6 +29,8 @@ data class CameraSettings(
     val mergeBurst: Boolean = false,
     /** Play the camera shutter click on each shot. Where the law requires it, Android plays it regardless (ShutterSound). */
     val shutterSound: Boolean = false,
+    /** Save where each photo was taken (GPS tags in the JPEG and DNG). Needs location permission, asked when turned on. */
+    val geotag: Boolean = false,
     /**
      * Per camera ([lensKey]): gain from the linearised preview to raw units (1.0 = sensor clip), learned
      * from each shot (raw key / viewfinder key), so the viewfinder's auto exposure matches the final.
@@ -102,6 +104,7 @@ object CameraSettingsStore {
             showHistogram = p.getBoolean("showHistogram", d.showHistogram),
             mergeBurst = p.getBoolean("mergeBurst", d.mergeBurst),
             shutterSound = p.getBoolean("shutterSound", d.shutterSound),
+            geotag = p.getBoolean("geotag", d.geotag),
             previewScales = parseScales(p.getString(SCALES_KEY, null)),
             flashGuides = parseScales(p.getString(FLASH_GUIDES_KEY, null), min = 1e-2f, max = 1e4f),
             // "FLASH" (plain flash, since removed) becomes Focus-flash.
@@ -135,6 +138,7 @@ object CameraSettingsStore {
             .putBoolean("showHistogram", s.showHistogram)
             .putBoolean("mergeBurst", s.mergeBurst)
             .putBoolean("shutterSound", s.shutterSound)
+            .putBoolean("geotag", s.geotag)
             .putBoolean("front", s.front)
             .putString("lens", s.lens)
             .putString("flash", s.flash.name)

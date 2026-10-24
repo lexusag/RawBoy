@@ -1,3 +1,4 @@
+#include "exif_reader.h"
 #include "rawboy.h"
 
 namespace rawboy {
@@ -18,6 +19,7 @@ bool decodeAny(const uint8_t* data, size_t size, DecodedImage& out, std::string&
     // RawBoy's own lens-correction handling. DNGs it can't read (DNG 1.7 JPEG XL,
     // and other newer encodings) fall back to the Adobe DNG SDK.
     bool ok = decodeWithLibRaw(data, size, out, error, extraBlack);
+    if (ok && out.metadata.hasGps && looksLikeTiff(data, size)) readGpsStamps(data, size, out.metadata);
     std::string dngError;
 #if RAWBOY_WITH_DNG_SDK
     if (!ok && looksLikeTiff(data, size)) {

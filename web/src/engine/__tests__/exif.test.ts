@@ -72,6 +72,18 @@ describe('EXIF writer', () => {
     expect(t.get('gps.4')).toEqual([24, 30, 1.25]);
     expect(t.get('gps.5')).toEqual([0]);
     expect(t.get('gps.6')).toEqual([1840]);
+    expect(t.has('gps.7')).toBe(false); // no time stamp in the source
+    expect(t.has('gps.1d')).toBe(false);
+  });
+
+  it('keeps the GPS time and date stamps', () => {
+    const gps = { ...meta().gps!, timeStamp: new Float64Array([18, 5, 9.25]), dateStamp: '2026:10:24' };
+    const t = read(exifSegment(meta({ gps })));
+    expect(t.get('gps.7')).toEqual([18, 5, 9.25]);
+    expect(t.get('gps.1d')).toBe('2026:10:24');
+    const bad = read(exifSegment(meta({ gps: { ...gps, timeStamp: new Float64Array([NaN, NaN, NaN]), dateStamp: '' } })));
+    expect(bad.has('gps.7')).toBe(false);
+    expect(bad.has('gps.1d')).toBe(false);
   });
 
   it('leaves unknown values out', () => {

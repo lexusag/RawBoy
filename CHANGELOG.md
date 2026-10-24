@@ -7,6 +7,14 @@
   denoise rises by 44 and luma by 4, at +50 by 75 and 15, at +100 by 100 and 60. Lowering it takes luma denoise away
   first, colour later; -100 still turns both off. Photos with Denoise at 0 look as before.
 
+**Camera: geotagging (2026-10-24)**
+
+- RawBoy Camera (Android, iOS): a **Geotag** switch in Settings, off by default. On, each JPEG and DNG records where
+  it was taken (GPS latitude, longitude, altitude and the fix's UTC date and time). Location access is asked for only
+  when you turn it on, and the location service runs only while the camera is open.
+- RawBoy, Auto and Camera (Android, iOS, web): exports keep the GPS time and date stamps too, next to the position
+  and altitude they already kept.
+
 **Auto batch-exports photos with their full RawBoy edits (2026-10-24)**
 
 - RawBoy → Auto (Android): **Export › Send to Auto** in RawBoy hands the open photo to RawBoy Auto with every edit:
