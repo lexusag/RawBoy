@@ -3,9 +3,9 @@ import Foundation
 /**
  * The user's controls on top of the auto develop and the look; all 0 = as suggested. [brightness] -100..100 shifts
  * exposure; [warmth] -100..100 warms or cools; [tint] -50..50 (+ = magenta), [contrast] -50..50, [saturation]
- * -100..100, [grain] -50..50 and [denoise] -100..100 are added to the slider values the auto develop and the look
- * arrive at, except negative [saturation], which moves the saturation they arrive at towards -100 (-100 = black and
- * white). [rotation] is clockwise quarter turns (0..3) on top of the photo's own orientation.
+ * -100..100 and [grain] -50..50 are added to the slider values the auto develop and the look arrive at, except negative
+ * [saturation], which moves the saturation they arrive at towards -100 (-100 = black and white). [denoise] -100..100
+ * shifts the auto luma and colour denoise, colour first (see LookApplier.denoise). [rotation] is clockwise quarter turns (0..3) on top of the photo's own orientation.
  */
 public struct Adjustments: Equatable, Sendable {
     public var brightness: Float = 0
@@ -42,6 +42,24 @@ public enum LookApplier {
     /** Warmth ±100 = temperature x2 / ÷2 on top of the auto white balance (tint follows, see Warmth). */
     private static let warmthRange: Float = 2
 
+    /** The most Denoise +100 adds to the auto luma denoise (colour denoise gets +100). */
+    private static let lumaDenoiseMaxShift: Float = 60
+
+    /**
+     * (luma, colour) denoise for [p]'s auto values with the Denoise adjustment [adjust] -100..100 on top. Colour noise
+     * (blotches) goes first, as it costs little detail: above 0 colour denoise rises fast (ease-out, +100 at the top) and
+     * luma slowly (t², +lumaDenoiseMaxShift at the top); below 0 luma drops fast and colour slowly, both off at -100.
+     * A colour denoise that follows luma (nil) gets its own value once Denoise moves.
+     */
+    static func denoise(_ p: DevelopParams, adjust: Float) -> (Float, Float?) {
+        if adjust == 0 { return (p.denoise, p.colorDenoise) }
+        let t = min(1, abs(adjust) / 100)
+        let fast = 1 - (1 - t) * (1 - t)
+        let slow = t * t
+        let (luma, color) = adjust > 0 ? (lumaDenoiseMaxShift * slow, 100 * fast) : (-100 * fast, -100 * slow)
+        return ((p.denoise + luma).clamped(0, 100), ((p.colorDenoise ?? p.denoise) + color).clamped(0, 100))
+    }
+
     /**
      * [strength] 0..100 scales the LUT and every adjustment of [look] (0 = the auto
      * develop alone); [adjust] comes on top, at full strength.
@@ -56,9 +74,7 @@ public enum LookApplier {
         d.exposure = (base.exposure + look.exposure * k + adjust.brightness / 100 * brightnessEv).clamped(-5, 5)
         d.contrast = (base.contrast + look.contrast * k + adjust.contrast).clamped(-100, 100)
         d.saturation = saturation(base.saturation + look.saturation * k, adjust.saturation)
-        d.denoise = (base.denoise + adjust.denoise).clamped(0, 100)
-        // A measured colour denoise (AutoTone) moves with Denoise too; nil keeps following it.
-        d.colorDenoise = base.colorDenoise.map { ($0 + adjust.denoise).clamped(0, 100) }
+        (d.denoise, d.colorDenoise) = denoise(base, adjust: adjust.denoise)
         d.highlights = add(base.highlights, look.highlights)
         d.blacks = add(base.blacks, look.blacks)
         d.whites = add(base.whites, look.whites)
@@ -95,8 +111,7 @@ public enum LookApplier {
         d.exposure = (p.exposure + adjust.brightness / 100 * brightnessEv).clamped(-5, 5)
         d.contrast = (p.contrast + adjust.contrast).clamped(-100, 100)
         d.saturation = saturation(p.saturation, adjust.saturation)
-        d.denoise = (base.denoise + adjust.denoise).clamped(0, 100)
-        d.colorDenoise = base.colorDenoise.map { ($0 + adjust.denoise).clamped(0, 100) }
+        (d.denoise, d.colorDenoise) = denoise(base, adjust: adjust.denoise)
         d.sharpening = base.sharpening
         // With a film stock its grain is the one rendered, so Grain scales that one, as in Film mode.
         if p.film != nil {

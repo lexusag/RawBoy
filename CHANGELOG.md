@@ -1,5 +1,12 @@
 # Changelog
 
+**Auto: Denoise favours colour noise (2026-10-24)**
+
+- RawBoy Auto (Android, iOS, web): the Denoise adjustment used to add the same amount to luma and colour denoise.
+  Raising it now clears colour noise (blotches) first and fast, and smooths luma later and gently: at +25 colour
+  denoise rises by 44 and luma by 4, at +50 by 75 and 15, at +100 by 100 and 60. Lowering it takes luma denoise away
+  first, colour later; -100 still turns both off. Photos with Denoise at 0 look as before.
+
 **Camera: geotagging (2026-10-24)**
 
 - RawBoy Camera (Android, iOS): a **Geotag** switch in Settings, off by default. On, each JPEG and DNG records where

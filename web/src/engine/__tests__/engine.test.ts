@@ -557,6 +557,24 @@ describe('auto looks', () => {
     expect(p).toMatchObject({ contrast: -5, saturation: 40, denoise: 0, temperature: 6000, tint: 13 });
   });
 
+  it('Denoise moves colour denoise first and luma later and gently', () => {
+    const base = developParams({ denoise: 20, colorDenoise: 30 });
+    const at = (denoise: number) => {
+      const p = applyLook(base, Looks.NATURAL, 100, { ...NO_ADJUSTMENTS, denoise }, false);
+      return [p.denoise, p.colorDenoise];
+    };
+    expect(at(0)).toEqual([20, 30]);
+    expect(at(25)).toEqual([23.75, 73.75]);
+    expect(at(50)).toEqual([35, 100]);
+    expect(at(100)).toEqual([80, 100]);
+    expect(at(-20)).toEqual([0, 26]);
+    expect(at(-100)).toEqual([0, 0]);
+    // A colour denoise that follows luma gets its own value once Denoise moves.
+    const iso = applyLook(developParams({ denoise: 20, colorDenoise: null }), Looks.NATURAL, 100, { ...NO_ADJUSTMENTS, denoise: 50 }, false);
+    expect([iso.denoise, iso.colorDenoise]).toEqual([35, 95]);
+    expect(applyLook(developParams({ denoise: 20, colorDenoise: null }), Looks.NATURAL, 100, NO_ADJUSTMENTS, false).colorDenoise).toBeNull();
+  });
+
   it('rotation adds quarter turns to the photo, wrapping at four', () => {
     const base = developParams({ rotation: 1 });
     expect(applyLook(base, Looks.NATURAL, 100, NO_ADJUSTMENTS, false).rotation).toBe(1);
@@ -847,7 +865,9 @@ describe('applyEditsDevelop', () => {
   it('adds the adjustments to the edits, denoise and sharpening from the edits', () => {
     const p = applyEditsDevelop(edits, { ...NO_ADJUSTMENTS, contrast: 10, denoise: 5, rotation: 1 });
     expect(p.contrast).toBe(30);
-    expect(p.denoise).toBe(45);
+    // Denoise +5 is mostly colour denoise (see the Denoise mapping above).
+    expect(p.denoise).toBeCloseTo(40.15, 9);
+    expect(p.colorDenoise).toBeCloseTo(49.75, 9);
     expect(p.sharpening).toBe(30);
     expect(p.rotation).toBe(2);
   });
