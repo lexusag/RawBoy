@@ -48,9 +48,9 @@ export const PRO_HELP: HelpSection[] = [
   {
     title: 'Light leaks',
     items: [
-      { how: '+ Light leak', text: 'Adds a film-style warm glow (up to 4). Drag it anywhere inside to move it, the dots to resize, the outer knob to rotate.' },
-      { how: 'Intensity', text: 'A glow at low values; from about 60% it also covers the photo, and at 100% its middle (inside the dashed ring) hides what is under it: a tasteful way to cover part of a nude.' },
-      { how: 'Size, Stretch, Rotation, Softness, Colour', text: 'Shape and colour, from magenta-red to amber. New shape picks another uneven rim. Leaks belong to the photo: presets don\'t keep them.' },
+      { how: '+ Streak, + Glow', text: 'Adds a film-style leak (up to 4): a streak is a beam of light across the photo, white-hot in the middle with coloured edges; a glow is a round blob. Drag it anywhere inside to move it, the dots to resize (a streak: side dots width, end dots length), the knob to rotate. The Streak / Glow switch changes the selected one.' },
+      { how: 'Intensity', text: 'A glow at low values; from about 60% it also covers the photo, and at 100% its middle (inside the dashed lines) hides what is under it: a tasteful way to cover part of a nude.' },
+      { how: 'Width, Length / Size, Stretch, Rotation, Softness, Colour', text: 'Shape and colour, from magenta-red to amber. Several streaks side by side make a wider burn. New shape picks another uneven edge. Leaks belong to the photo: presets don\'t keep them.' },
     ],
   },
 ];

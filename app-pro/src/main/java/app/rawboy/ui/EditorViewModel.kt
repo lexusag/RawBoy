@@ -17,6 +17,7 @@ import app.rawboy.develop.BrushRaster
 import app.rawboy.develop.BrushStroke
 import app.rawboy.develop.DevelopParams
 import app.rawboy.develop.Histogram
+import app.rawboy.develop.LeakKind
 import app.rawboy.develop.LightLeak
 import app.rawboy.develop.LightLeaks
 import app.rawboy.develop.MaskLayer
@@ -342,10 +343,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     // Light leaks (see LightLeaks.kt).
 
     /** Adds a light leak (up to LightLeaks.MAX_LEAKS) in the middle; returns its id, or null when full. */
-    fun addLeak(): String? {
+    fun addLeak(kind: LeakKind = LeakKind.STREAK): String? {
         val p = _state.value.params
         if (p.leaks.size >= LightLeaks.MAX_LEAKS) return null
-        val leak = LightLeaks.newLeak()
+        val leak = LightLeaks.newLeak(kind)
         commit(p.copy(leaks = p.leaks + leak), force = true)
         return leak.id
     }

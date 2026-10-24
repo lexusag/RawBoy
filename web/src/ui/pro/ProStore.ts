@@ -5,7 +5,7 @@ import type { EditsSidecar } from '../../engine/browse/XmpSidecar';
 import { developParams, type DevelopParams } from '../../engine/develop/DevelopParams';
 import { decodeEdits, encodeEdits } from '../../engine/develop/Edits';
 import { MAX_LAYERS, SHAPE_NAMES, newBrushLayer, newLinearLayer, newRadialLayer, type BrushStroke, type MaskLayer } from '../../engine/develop/Masks';
-import { MAX_LEAKS, newLightLeak, type LightLeak } from '../../engine/develop/LightLeaks';
+import { MAX_LEAKS, newLightLeak, type LeakKind, type LightLeak } from '../../engine/develop/LightLeaks';
 import { applyPreset, captureLensPreset, capturePreset, decodePresets, encodePresets, putLensPreset, type Preset, type PresetGroup } from '../../engine/develop/Presets';
 import { EXTENSIONS, ExportSettingsStore, baseNameOf, fileName, type ExportSettings } from '../../engine/export/ExportSettings';
 import { FrameColors } from '../../engine/gl/DevelopRenderer';
@@ -323,10 +323,10 @@ export class ProStore {
   };
 
   /** Adds a light leak (up to MAX_LEAKS) at image fractions [cx], [cy]; returns its id, or null when full. */
-  addLeak = (cx = 0.5, cy = 0.5): string | null => {
+  addLeak = (kind: LeakKind = 'streak', cx = 0.5, cy = 0.5): string | null => {
     const p = this._state.params;
     if (p.leaks.length >= MAX_LEAKS) return null;
-    const leak = newLightLeak(cx, cy);
+    const leak = newLightLeak(cx, cy, kind);
     this.commit({ ...p, leaks: [...p.leaks, leak] }, true);
     return leak.id;
   };

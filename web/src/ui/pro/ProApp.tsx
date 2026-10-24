@@ -524,8 +524,8 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
                 leaks={leaks}
                 selectedId={leakId}
                 onSelect={setSelectedLeak}
-                onAdd={() => {
-                  const id = store.addLeak();
+                onAdd={(kind) => {
+                  const id = store.addLeak(kind);
                   if (id) setSelectedLeak(id);
                 }}
                 onUpdate={store.updateLeak}
@@ -607,24 +607,24 @@ function ResetIcon() {
   );
 }
 
-/** A light leak as the overlay draws it: a radial shape whose feather is the leak's softness. */
+/** A light leak as the overlay draws it: a radial shape whose feather is the leak's softness (a streak: a band). */
 const leakLayer = (l: LightLeak) => ({
   id: l.id,
   enabled: l.enabled,
   strokes: [],
+  band: l.kind === 'streak',
   shape: { kind: 'radial' as const, cx: l.cx, cy: l.cy, rx: l.rx, ry: l.ry, angle: l.angle, feather: Math.max(1, l.softness) },
 });
 
 const withLeakShape = (l: LightLeak, s: MaskShape): LightLeak =>
   s.kind === 'radial' ? { ...l, cx: s.cx, cy: s.cy, rx: s.rx, ry: s.ry, angle: s.angle } : l;
 
-/** Light leaks: a glow with rays, film-burn style. */
+/** Light leaks: a diagonal beam of light with a glow either side, film-burn style. */
 function LeakIcon() {
   return (
-    <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" style={{ display: 'block' }} aria-hidden="true">
-      <circle cx={10} cy={14} r={6} fill="currentColor" stroke="none" fillOpacity={0.35} />
-      <circle cx={10} cy={14} r={3} fill="currentColor" stroke="none" />
-      <path d="M17 7l3-3M14 5V2M19 10h3" />
+    <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" style={{ display: 'block' }} aria-hidden="true">
+      <path d="M3 17L21 7" strokeWidth={8} strokeOpacity={0.3} />
+      <path d="M3 17L21 7" strokeWidth={3} />
     </svg>
   );
 }

@@ -33,8 +33,11 @@ export interface BrushSettings {
   auto: boolean;
 }
 
-/** What the overlay draws of a layer: also light leaks, as radial shapes (LeaksPanel). */
-export type OverlayLayer = Pick<MaskLayer, 'id' | 'enabled' | 'shape' | 'strokes'>;
+/**
+ * What the overlay draws of a layer: also light leaks, as radial shapes (LeaksPanel). [band]: a radial shape drawn and
+ * hit-tested as a straight band (rectangle) instead of an ellipse: a streak leak, rx = half length, ry = half width.
+ */
+export type OverlayLayer = Pick<MaskLayer, 'id' | 'enabled' | 'shape' | 'strokes'> & { band?: boolean };
 
 interface Props {
   /** Geometry of the view the preview shows (with the crop). */
@@ -180,10 +183,15 @@ export function MaskOverlay(props: Props) {
     const cy = s.cy * H;
     const at = (u: number, v: number): Pt => toScreen(cx + c * u - sn * v, cy + sn * u + c * v);
     const ellipse = (k: number): Pt[] =>
-      Array.from({ length: STEPS }, (_, i) => {
-        const t = (i / STEPS) * 2 * Math.PI;
-        return at(k * rx * Math.cos(t), k * ry * Math.sin(t));
-      });
+      l.band
+        ? // The band's two long edges at k x its half width, as one closed outline (bent by the lens like the shader).
+          [-1, 1].flatMap((side) =>
+            Array.from({ length: STEPS + 1 }, (_, i) => at(side * rx * (1 - (2 * i) / STEPS), side * k * ry)),
+          )
+        : Array.from({ length: STEPS }, (_, i) => {
+            const t = (i / STEPS) * 2 * Math.PI;
+            return at(k * rx * Math.cos(t), k * ry * Math.sin(t));
+          });
     return {
       kind: 'radial' as const,
       outer: ellipse(1),
@@ -191,14 +199,15 @@ export function MaskOverlay(props: Props) {
       pin: at(0, 0) as Pt | null,
       rx: [at(rx, 0), at(-rx, 0)],
       ry: [at(0, ry), at(0, -ry)],
-      knob: at(0, -ry * KNOB),
+      // A thin band's knob keeps clear of its width handles.
+      knob: at(0, -(l.band ? Math.max(ry * KNOB, ry + 0.06 * long) : ry * KNOB)),
       knobBase: at(0, -ry),
     };
   };
 
   const selected = layers.find((l) => l.id === selectedId) ?? null;
 
-  /** Overlay point [p] lies inside a radial shape's outer ellipse. */
+  /** Overlay point [p] lies inside a radial shape's outer ellipse (a band: its rectangle). */
   const inside = (l: OverlayLayer, p: Pt): boolean => {
     const s = l.shape;
     if (s.kind !== 'radial') return false;
@@ -208,7 +217,7 @@ export function MaskOverlay(props: Props) {
     const dy = y - s.cy * H;
     const u = (Math.cos(a) * dx + Math.sin(a) * dy) / (s.rx * long);
     const v = (-Math.sin(a) * dx + Math.cos(a) * dy) / (s.ry * long);
-    return u * u + v * v < 1;
+    return l.band ? Math.abs(u) < 1 && Math.abs(v) < 1 : u * u + v * v < 1;
   };
 
   const hit = (p: Pt): { id: string; handle: Handle | 'pin' } | null => {

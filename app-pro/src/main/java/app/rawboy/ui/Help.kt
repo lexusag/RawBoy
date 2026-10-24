@@ -31,7 +31,7 @@ internal val PRO_HELP = listOf(
             HelpItem("Curves", "Light tab: touch the curve to add a point, drag it, double-tap it to remove; elsewhere the box scrolls. RGB, then Red, Green and Blue."),
             HelpItem("Detail", "Luma and Color denoise work separately. Local contrast brings out texture; High-pass contrast is wider clarity. Tap Grain's name for its size, roughness and color."),
             HelpItem("Masks", "Brush, linear and radial layers with their own light and colour. Brush or Erase paints on any layer."),
-            HelpItem("Light leaks", "Film-style warm glows (up to 4): drag one anywhere inside to move it, the dots to resize, the knob to rotate. At 100% intensity its middle (inside the dashed ring) hides what is under it, a tasteful way to cover part of a nude; lower, it is a glow. Leaks belong to the photo: presets don't keep them."),
+            HelpItem("Light leaks", "Film-style light (up to 4): streaks (beams across the photo, white-hot in the middle with coloured edges) or glows. Drag one anywhere inside to move it, the dots to resize (a streak: side dots width, end dots length), the knob to rotate. At 100% intensity its middle (inside the dashed lines) hides what is under it, a tasteful way to cover part of a nude; lower, it is a glow. Leaks belong to the photo: presets don't keep them."),
             HelpItem("Presets", "Save the edits by group, apply, import and export .rawboy.json files, or Send to Auto for a whole batch."),
         ),
     ),

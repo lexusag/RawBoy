@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { developParams } from '../develop/DevelopParams';
 import { decodeEdits, encodeEdits } from '../develop/Edits';
-import { MAX_LEAKS, leakColor, newLightLeak, packLeaks, parseLeaks } from '../develop/LightLeaks';
+import { LEAK_DEFAULTS, MAX_LEAKS, leakColor, newLightLeak, packLeaks, parseLeaks, withLeakKind } from '../develop/LightLeaks';
 import { applyPreset, capturePreset, PRESET_GROUPS } from '../develop/Presets';
 
 describe('light leaks', () => {
   it('packs shown leaks into image pixels and skips hidden or transparent ones', () => {
-    const a = { ...newLightLeak(0.25, 0.5), rx: 0.1, ry: 0.05, angle: 90, softness: 40, intensity: 80, hue: 0, seed: 0.3 };
+    const a = { ...newLightLeak(0.25, 0.5, 'glow'), rx: 0.1, ry: 0.05, angle: 90, softness: 40, intensity: 80, hue: 0, seed: 0.3 };
     const hidden = { ...newLightLeak(), enabled: false };
     const clear = { ...newLightLeak(), intensity: 0 };
     const u = packLeaks([hidden, a, clear], 4000, 3000);
@@ -18,6 +18,16 @@ describe('light leaks', () => {
     expect(u.shape[3]).toBeCloseTo(0.3, 6);
     expect(u.color[3]).toBeCloseTo(0.8, 6);
     expect(packLeaks([], 4000, 3000).count).toBe(0);
+  });
+
+  it('marks streaks in the seed slot and starts them as a long thin beam', () => {
+    const s = { ...newLightLeak(0.5, 0.5), seed: 0.25 };
+    expect(s.kind).toBe('streak');
+    expect(s.rx / s.ry).toBeGreaterThan(5);
+    expect(packLeaks([s], 4000, 3000).shape[3]).toBeCloseTo(2.25, 6);
+    const g = withLeakKind({ ...s, angle: 30, hue: 0 }, 'glow');
+    expect(g).toMatchObject({ kind: 'glow', ...LEAK_DEFAULTS.glow, angle: 30, hue: 0, cx: 0.5 });
+    expect(packLeaks([g], 4000, 3000).shape[3]).toBeCloseTo(0.25, 6);
   });
 
   it('makes warm colours: red at 0, orange in between, yellow at the top', () => {
@@ -40,6 +50,8 @@ describe('light leaks', () => {
     expect(parsed[0].intensity).toBe(100);
     expect(parsed[0].hue).toBe(60);
     expect(parsed[0].enabled).toBe(true);
+    expect(parsed[0].kind).toBe('glow'); // saved before streaks
+    expect(parseLeaks([{ ...many[0], kind: 'streak' }])[0].kind).toBe('streak');
     expect(parseLeaks('nope')).toEqual([]);
   });
 

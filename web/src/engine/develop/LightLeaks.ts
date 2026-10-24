@@ -1,20 +1,26 @@
 import { newId } from './Masks';
 
 /**
- * Light leaks (Pro): film-style warm glows over the finished picture, dragged into place on the photo. At full
+ * Light leaks (Pro): film-style warm light over the finished picture, dragged into place on the photo. At full
  * intensity a leak's core replaces what is under it, so it can tastefully cover part of a photo (shaders/light_leak.glsl).
+ * kind 'streak' is a straight beam (white-hot middle line, coloured edges, fading out past its ends), 'glow' an
+ * uneven elliptical blob.
  *
  * Geometry is a radial mask's (Masks.ts): centre (cx, cy) in fractions of the decoded image, radii rx/ry as fractions
- * of its long side, angle in degrees (clockwise), so a leak stays on the same content through crop, rotation and lens
- * corrections. softness 0..100 = the outer part of the radius over which the glow fades (the rest is its solid core);
+ * of its long side (a streak: half length, half width), angle in degrees (clockwise), so a leak stays on the same
+ * content through crop, rotation and lens corrections. softness 0..100 = the outer part of the radius (a streak's
+ * width) over which the light fades (the rest is its solid core);
  * intensity 0..100 (glow up to ~60, then it also covers: fully in the core at 100); hue in degrees, -40 (magenta-red)
  * .. 0 (red) .. 30 (orange) .. 60 (yellow); seed 0..1 picks the rim's uneven shape.
  *
  * Leaks belong to one photo's content: they reset for each new photo and presets don't keep them.
  */
+export type LeakKind = 'streak' | 'glow';
+
 export interface LightLeak {
   id: string;
   enabled: boolean;
+  kind: LeakKind;
   cx: number;
   cy: number;
   rx: number;
@@ -32,10 +38,21 @@ export const MAX_LEAKS = 4;
 export const LEAK_HUE_MIN = -40;
 export const LEAK_HUE_MAX = 60;
 
+/** Size, stretch and softness a leak of each kind starts with (a streak crosses most of the photo). */
+export const LEAK_DEFAULTS: Record<LeakKind, { rx: number; ry: number; softness: number }> = {
+  streak: { rx: 0.5, ry: 0.05, softness: 60 },
+  glow: { rx: 0.16, ry: 0.11, softness: 50 },
+};
+
+export const newLeakSeed = (): number => Math.round(Math.random() * 1000) / 1000;
+
 /** A warm orange leak in the middle, solid enough to cover what is under its core. */
-export const newLightLeak = (cx = 0.5, cy = 0.5): LightLeak => ({
-  id: newId(), enabled: true, cx, cy, rx: 0.16, ry: 0.11, angle: -20, softness: 50, intensity: 100, hue: 22, seed: Math.round(Math.random() * 1000) / 1000,
+export const newLightLeak = (cx = 0.5, cy = 0.5, kind: LeakKind = 'streak'): LightLeak => ({
+  id: newId(), enabled: true, kind, cx, cy, ...LEAK_DEFAULTS[kind], angle: -20, intensity: 100, hue: 22, seed: newLeakSeed(),
 });
+
+/** The leak turned into [kind], with that kind's size and softness; place, angle, colour and intensity stay. */
+export const withLeakKind = (l: LightLeak, kind: LeakKind): LightLeak => (l.kind === kind ? l : { ...l, kind, ...LEAK_DEFAULTS[kind] });
 
 /** The rim colour for [hue] (display RGB 0..1): fully saturated warm light, brightest at yellow. */
 export function leakColor(hue: number): [number, number, number] {
@@ -67,6 +84,7 @@ export function parseLeak(o: unknown): LightLeak | null {
   return {
     id: newId(),
     enabled: typeof s.enabled === 'boolean' ? s.enabled : true,
+    kind: s.kind === 'streak' ? 'streak' : 'glow', // leaks saved before streaks were glows
     cx, cy, rx, ry,
     angle: num(s.angle, -360, 360) ?? 0,
     softness: num(s.softness, 0, 100) ?? 50,
@@ -110,7 +128,7 @@ export function packLeaks(leaks: readonly LightLeak[], imageWidth: number, image
     const o = i * 4;
     const a = (l.angle * Math.PI) / 180;
     u.geom.set([l.cx * imageWidth, l.cy * imageHeight, 1 / Math.max(l.rx * long, 1), 1 / Math.max(l.ry * long, 1)], o);
-    u.shape.set([Math.cos(a), Math.sin(a), Math.min(1, Math.max(0, l.softness / 100)), l.seed], o);
+    u.shape.set([Math.cos(a), Math.sin(a), Math.min(1, Math.max(0, l.softness / 100)), l.seed + (l.kind === 'streak' ? 2 : 0)], o);
     u.color.set([...leakColor(l.hue), Math.min(1, Math.max(0, l.intensity / 100))], o);
   });
   return u;

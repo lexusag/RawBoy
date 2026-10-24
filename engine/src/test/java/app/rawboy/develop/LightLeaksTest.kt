@@ -8,7 +8,7 @@ import org.junit.Test
 class LightLeaksTest {
     @Test
     fun packsShownLeaksIntoImagePixelsAndSkipsHiddenOrTransparentOnes() {
-        val a = LightLeaks.newLeak(0.25f, 0.5f).copy(rx = 0.1f, ry = 0.05f, angle = 90f, softness = 40f, intensity = 80f, hue = 0f, seed = 0.3f)
+        val a = LightLeaks.newLeak(LeakKind.GLOW, 0.25f, 0.5f).copy(rx = 0.1f, ry = 0.05f, angle = 90f, softness = 40f, intensity = 80f, hue = 0f, seed = 0.3f)
         val hidden = LightLeaks.newLeak().copy(enabled = false)
         val clear = LightLeaks.newLeak().copy(intensity = 0f)
         val u = LightLeaks.pack(listOf(hidden, a, clear), 4000, 3000)
@@ -26,6 +26,20 @@ class LightLeaksTest {
     }
 
     @Test
+    fun marksStreaksInTheSeedSlotAndStartsThemAsALongThinBeam() {
+        val s = LightLeaks.newLeak().copy(seed = 0.25f)
+        assertEquals(LeakKind.STREAK, s.kind)
+        assertTrue(s.rx / s.ry > 5f)
+        assertEquals(2.25f, LightLeaks.pack(listOf(s), 4000, 3000).shape[3], 1e-6f)
+        val g = s.copy(angle = 30f, hue = 0f).withKind(LeakKind.GLOW)
+        assertEquals(LeakKind.GLOW.rx, g.rx, 0f)
+        assertEquals(LeakKind.GLOW.softness, g.softness, 0f)
+        assertEquals(30f, g.angle, 0f)
+        assertEquals(0.5f, g.cx, 0f)
+        assertEquals(0.25f, LightLeaks.pack(listOf(g), 4000, 3000).shape[3], 1e-6f)
+    }
+
+    @Test
     fun makesWarmColours() {
         val red = LightLeaks.color(0f)
         assertEquals(1f, red[0], 0f)
@@ -40,7 +54,7 @@ class LightLeaksTest {
 
     @Test
     fun theOverlayShapeKeepsTheGeometry() {
-        val l = LightLeaks.newLeak(0.3f, 0.6f)
+        val l = LightLeaks.newLeak(cx = 0.3f, cy = 0.6f)
         val moved = l.withShape(l.shape.copy(cx = 0.4f, angle = 10f, feather = 5f))
         assertEquals(0.4f, moved.cx, 0f)
         assertEquals(10f, moved.angle, 0f)
