@@ -415,8 +415,12 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
 - Large-radius effects (high-pass contrast, bloom, skin mask) sample small **whole-image textures**
   (512/64 px) so preview, 100% and export match without seams. Bloom's 64 px tail is scattered once when it is made
   (`gl/BloomTail.kt/.ts/.swift`; the viewfinders' `TAIL_SCATTER` / `tailScatterFragment` pass, same kernel) and
-  sampled once per pixel as a cubic B-spline (`textureBSpline`): summing its taps per pixel from the bilinear copy
-  showed the coarse texels as bands and squares.
+  sampled once per pixel as a cubic B-spline (`bloomTailBand`): summing its taps per pixel from the bilinear copy
+  showed the coarse texels as bands and squares. Bloom scatters highlights only: `bloomKnee` (smoothstep 0.36..1.44
+  on the brightest channel x `uExposure`) weighs every core/halo tap and what `bloom()` takes from the pixel. The
+  knee follows exposure, so the tail is scattered for 6 exposures (2^0..2^5), stacked as bands in one texture, and
+  the shader blends the two either side of `uExposure`. The boosted halo copy itself is unchanged (Film's halation reads
+  it whole); keep the knee's constants in step in all those places.
 - Texture units: 0 image, 1 LUT (3D), 2 lens shading, 3 base (512), 4 bloom halo, 5 bloom tail, 6 skin mask, 7 brush atlas,
   8 film LUT, 9 print LUT (film looks: RawBoy Film and Auto's Film mode, all platforms), 10–11 the wavelet denoise
   passes, 12 the lens blur result (`uBokeh`), 13 the lens blur's own passes.

@@ -100,9 +100,15 @@ fragment float4 boxDownFragment(PassOut in [[stage_in]], texture2d<float> source
     return float4(sum * 0.0625, 1.0);
 }
 
-/** Same-size pass: BloomTail's kernel (keep the two in step), edges clamped by the sampler. */
+/**
+ * BloomTail's kernel and bands (keep the two in step): the target is the source's size x 6 bands high, band k kneed
+ * at exposure 2^k; edges clamped by the sampler.
+ */
 fragment float4 tailScatterFragment(PassOut in [[stage_in]], texture2d<float> source [[texture(0)]], sampler s [[sampler(0)]],
                                     constant float2& texel [[buffer(0)]]) {
+    float band = floor(in.uv.y * 6.0);
+    float2 uv = float2(in.uv.x, in.uv.y * 6.0 - band);
+    float gain = exp2(band);
     float3 sum = float3(0.0);
     float ws = 0.0;
     for (int j = -6; j <= 6; ++j) {
@@ -111,7 +117,8 @@ fragment float4 tailScatterFragment(PassOut in [[stage_in]], texture2d<float> so
             float rim = 1.0 - r2 / 49.0;
             if (rim <= 0.0) continue;
             float w = pow(1.0 + sqrt(r2) / 0.6, -2.2) * rim * rim;
-            sum += w * source.sample(s, in.uv + float2(float(i), float(j)) * texel).rgb;
+            float3 c = source.sample(s, uv + float2(float(i), float(j)) * texel).rgb;
+            sum += w * smoothstep(0.36, 1.44, max(c.r, max(c.g, c.b)) * gain) * c; // develop.glsl's bloomKnee
             ws += w;
         }
     }

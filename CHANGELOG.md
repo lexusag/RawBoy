@@ -1,5 +1,12 @@
 # Changelog
 
+**Bloom glows from highlights only (2026-10-24)**
+
+- RawBoy, Auto and Camera (Android, iOS, web): Bloom used to mix the whole picture with its blur, so at higher values
+  midtones lost detail and shadows were veiled. Now only the highlights and the tones just below them scatter light
+  (a smooth knee from 1 to 3 EV above middle grey, measured after Exposure, so it follows exposure edits); everything
+  else stays as sharp as at Bloom 0 and only picks up the glow of nearby lights. Light sources glow as before.
+
 **Masks: Lens blur (2026-10-24)**
 
 - RawBoy (Android, web): each mask layer has a Lens blur slider, a round lens-like defocus inside the mask (radius up

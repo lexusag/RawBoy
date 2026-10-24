@@ -39,7 +39,7 @@ void main() {
             if (b.a > 1e-3) x = mix(x, b.rgb / b.a, t);
         }
     }
-    if (uBloom > 0.0) x = mix(x, bloomScatter(uvG, srcG), uBloom);
+    if (uBloom > 0.0) x = bloom(x, uvG, srcG);
     if (uFilmAmount > 0.0) x = filmOptics(x, uvG, srcG);
     x *= lensGain(sG, srcG);
     vec3 c = develop(max(x, 0.0), outPx, lm);

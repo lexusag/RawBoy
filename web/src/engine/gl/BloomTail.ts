@@ -5,9 +5,18 @@ import type { PreviewImage } from './PreviewImage';
  * Bloom's wide tail, scattered once per photo on its small (~64 px) copy: a round power law (alpha 2.2, knee
  * 0.6 texel) out to 7 texels (~10% of the long edge), its weights falling to zero at the rim. The develop shader
  * samples the result as a B-spline, so the glow is smooth: summed per pixel from a bilinear copy, the coarse
- * texels showed as bands and squares. Port of BloomTail.kt.
+ * texels showed as bands and squares. Only the highlights scatter (the shader's bloomKnee), and which tones are
+ * highlights depends on exposure, so the result is `BLOOM_TAIL_BANDS` copies stacked top to bottom, kneed at exposure
+ * 2^0 .. 2^5; the shader blends the two either side of its own. Port of BloomTail.kt.
  */
 export const BLOOM_TAIL_RADIUS = 6;
+
+/** Exposure bands, 2^0 .. 2^(BANDS - 1) (develop.glsl's BLOOM_TAIL_BANDS). */
+export const BLOOM_TAIL_BANDS = 6;
+
+// develop.glsl's BLOOM_KNEE_LO / _HI.
+const KNEE_LO = 0.36;
+const KNEE_HI = 1.44;
 
 /** Tap offsets and their weights, summing to 1. */
 const taps = (() => {
@@ -29,30 +38,46 @@ const taps = (() => {
   return { dx, dy, weight: Float32Array.from(ws, (w) => w / sum) };
 })();
 
-/** `img` (half-float RGB) scattered by the tail kernel, edges clamped. */
+/** The develop shader's bloomKnee: the share of light bloom scatters from a pixel `r` `g` `b` at exposure `gain`. */
+export function bloomKnee(r: number, g: number, b: number, gain: number): number {
+  const t = Math.min(1, Math.max(0, (Math.max(r, g, b) * gain - KNEE_LO) / (KNEE_HI - KNEE_LO)));
+  return t * t * (3 - 2 * t);
+}
+
+/** `img` (half-float RGB), its highlights scattered by the tail kernel, edges clamped: BLOOM_TAIL_BANDS bands. */
 export function scatterBloomTail(img: PreviewImage): PreviewImage {
   const { width: w, height: h } = img;
   const rgb = Float32Array.from(img.pixels, halfToFloat);
-  const out = new Uint16Array(w * h * 3);
+  const lit = new Float32Array(rgb.length);
+  const out = new Uint16Array(w * h * BLOOM_TAIL_BANDS * 3);
   const { dx, dy, weight } = taps;
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      let r = 0;
-      let g = 0;
-      let b = 0;
-      for (let k = 0; k < weight.length; k++) {
-        const sy = Math.min(h - 1, Math.max(0, y + dy[k]));
-        const sx = Math.min(w - 1, Math.max(0, x + dx[k]));
-        const o = (sy * w + sx) * 3;
-        r += weight[k] * rgb[o];
-        g += weight[k] * rgb[o + 1];
-        b += weight[k] * rgb[o + 2];
+  for (let band = 0; band < BLOOM_TAIL_BANDS; band++) {
+    const gain = 2 ** band;
+    for (let o = 0; o < rgb.length; o += 3) {
+      const k = bloomKnee(rgb[o], rgb[o + 1], rgb[o + 2], gain);
+      lit[o] = k * rgb[o];
+      lit[o + 1] = k * rgb[o + 1];
+      lit[o + 2] = k * rgb[o + 2];
+    }
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        let r = 0;
+        let g = 0;
+        let b = 0;
+        for (let k = 0; k < weight.length; k++) {
+          const sy = Math.min(h - 1, Math.max(0, y + dy[k]));
+          const sx = Math.min(w - 1, Math.max(0, x + dx[k]));
+          const o = (sy * w + sx) * 3;
+          r += weight[k] * lit[o];
+          g += weight[k] * lit[o + 1];
+          b += weight[k] * lit[o + 2];
+        }
+        const o = ((band * h + y) * w + x) * 3;
+        out[o] = floatToHalf(r);
+        out[o + 1] = floatToHalf(g);
+        out[o + 2] = floatToHalf(b);
       }
-      const o = (y * w + x) * 3;
-      out[o] = floatToHalf(r);
-      out[o + 1] = floatToHalf(g);
-      out[o + 2] = floatToHalf(b);
     }
   }
-  return { ...img, pixels: out };
+  return { ...img, height: h * BLOOM_TAIL_BANDS, pixels: out };
 }

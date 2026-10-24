@@ -30,9 +30,9 @@ uniform vec2 uBaseTexel;    // 1 / base size
 uniform vec2 uImageSize;    // full-resolution image size (display orientation)
 uniform float uBloom;            // scattered fraction p, 0 = off
 uniform sampler2D uBloomHalo;    // highlight-boosted ~512 px copy
-uniform sampler2D uBloomTail;    // highlight-boosted ~128 px copy
+uniform sampler2D uBloomTail;    // highlight-boosted ~64 px copy, scattered: BLOOM_TAIL_BANDS bands (BloomTail)
 uniform vec2 uBloomHaloTexel;
-uniform vec2 uBloomTailTexel;
+uniform vec2 uBloomTailTexel;    // of the whole texture, all bands
 uniform float uRetouch;          // 0..1
 uniform sampler2D uSkinMask;     // 0..1 skin probability over the whole image
 uniform float uSkinSigma;        // smoothing sigma, full-resolution px (scaled to face size)
@@ -620,11 +620,44 @@ vec4 textureBSpline4(sampler2D t, vec2 uv, vec2 texel) {
          + g1.y * (g0.x * texture(t, vec2(h0.x, h1.y)) + g1.x * texture(t, h1));
 }
 
-vec3 textureBSpline(sampler2D t, vec2 uv, vec2 texel) { return textureBSpline4(t, uv, texel).rgb; }
+// Bloom's knee, in scene light after exposure (middle grey 0.18): from 1 EV above grey to 3 EV above.
+const float BLOOM_KNEE_LO = 0.36;
+const float BLOOM_KNEE_HI = 1.44;
+// The tail's bands: its copy kneed at exposure 2^0 .. 2^5 (BloomTail.BANDS).
+const int BLOOM_TAIL_BANDS = 6;
 
-// Scattered light through a diffusion filter, after spektrafilm's PSF model: core 0.30 + halo
-// 0.25 + tail 0.45, each normalised, so mixing it in conserves energy. The halo has a slightly
-// warm outer rim. The kernels are round, their weights falling to zero at the rim: square tap
+// How much of a pixel's light bloom scatters, by its brightest channel at exposure [gain]: none in the midtones
+// and shadows, rising smoothly through the tones just below the highlights to all of it in the highlights.
+// BloomTail.knee is the same curve.
+float bloomKnee(vec3 c, float gain) {
+    return smoothstep(BLOOM_KNEE_LO, BLOOM_KNEE_HI, max(c.r, max(c.g, c.b)) * gain);
+}
+
+// Cubic B-spline sample of one of the tail's bands (BloomTail: BLOOM_TAIL_BANDS copies stacked top to bottom)
+// from four bilinear taps: smooth and close to round, where a bilinear sample of a coarse copy shows its texel grid.
+// Taps stay inside the band, like a clamped edge.
+vec3 bloomTailBand(float band, vec2 uv) {
+    vec2 texel = uBloomTailTexel * vec2(1.0, float(BLOOM_TAIL_BANDS)); // in the band's own uv
+    vec2 st = uv / texel - 0.5;
+    vec2 i = floor(st);
+    vec2 f = st - i;
+    vec2 f2 = f * f;
+    vec2 f3 = f2 * f;
+    vec2 w0 = (1.0 - 3.0 * f + 3.0 * f2 - f3) / 6.0;
+    vec2 w1 = (4.0 - 6.0 * f2 + 3.0 * f3) / 6.0;
+    vec2 w3 = f3 / 6.0;
+    vec2 g0 = w0 + w1;
+    vec2 g1 = 1.0 - g0;
+    vec2 h0 = (i - 0.5 + w1 / g0) * texel;
+    vec2 h1 = (i + 1.5 + w3 / g1) * texel;
+    vec2 y = (band + clamp(vec2(h0.y, h1.y), 0.5 * texel.y, 1.0 - 0.5 * texel.y)) / float(BLOOM_TAIL_BANDS);
+    return g0.y * (g0.x * texture(uBloomTail, vec2(h0.x, y.x)).rgb + g1.x * texture(uBloomTail, vec2(h1.x, y.x)).rgb)
+         + g1.y * (g0.x * texture(uBloomTail, vec2(h0.x, y.y)).rgb + g1.x * texture(uBloomTail, vec2(h1.x, y.y)).rgb);
+}
+
+// Light scattered from the highlights (bloomKnee) through a diffusion filter, after spektrafilm's PSF model: core
+// 0.30 + halo 0.25 + tail 0.45, each normalised, so it puts back the light bloom() takes (more near clipping). The
+// halo has a slightly warm outer rim. The kernels are round, their weights falling to zero at the rim: square tap
 // grids with heavy corner weights drew square halos around bright windows.
 vec3 bloomScatter(vec2 uvG, vec2 imagePx) {
     vec2 uv = imagePx / uImageSize;
@@ -636,7 +669,8 @@ vec3 bloomScatter(vec2 uvG, vec2 imagePx) {
     for (int j = -1; j <= 1; ++j) {
         for (int i = -1; i <= 1; ++i) {
             float w = exp(-0.5 * float(i * i + j * j));
-            core += w * bloomBoost(texture(uImage, uvG + vec2(i, j) * corePx).rgb);
+            vec3 c = texture(uImage, uvG + vec2(i, j) * corePx).rgb;
+            core += w * bloomKnee(c, uExposure) * bloomBoost(c);
             cw += w;
         }
     }
@@ -649,18 +683,29 @@ vec3 bloomScatter(vec2 uvG, vec2 imagePx) {
             float r2 = float(i * i + j * j);
             float rim = max(1.0 - r2 / 12.25, 0.0);
             float w = exp(-r2 / 2.88) * rim * rim;
-            halo += w * texture(uBloomHalo, uv + vec2(i, j) * uBloomHaloTexel).rgb;
+            vec3 c = texture(uBloomHalo, uv + vec2(i, j) * uBloomHaloTexel).rgb;
+            halo += w * bloomKnee(c, uExposure) * c;
             hw += w;
         }
     }
 
-    // Tail: the 64 px copy arrives already scattered (BloomTail: a round power law out to ~10% of the long
-    // edge, dense next to the light like a mist filter, fading into a wide haze). One B-spline sample keeps it
-    // smooth; summing taps per pixel from a bilinear copy showed the coarse texels as bands and squares.
-    vec3 tail = textureBSpline(uBloomTail, uv, uBloomTailTexel);
+    // Tail: the 64 px copy arrives already kneed and scattered (BloomTail: a round power law out to ~10% of the
+    // long edge, dense next to the light like a mist filter, fading into a wide haze), once per whole EV of exposure;
+    // the two either side of uExposure are blended. B-spline samples keep it smooth; summing taps per pixel from a
+    // bilinear copy showed the coarse texels as bands and squares.
+    float ev = clamp(log2(uExposure), 0.0, float(BLOOM_TAIL_BANDS - 1));
+    float band = min(floor(ev), float(BLOOM_TAIL_BANDS - 2));
+    vec3 tail = mix(bloomTailBand(band, uv), bloomTailBand(band + 1.0, uv), ev - band);
 
     vec3 warmRim = vec3(1.024, 1.004, 0.968);
     return 0.30 * core / cw + 0.25 * warmRim * halo / hw + 0.45 * tail;
+}
+
+// Bloom at strength uBloom: the highlights give up that share of their light (bloomKnee), which comes back spread
+// around them by bloomScatter. Midtones and shadows keep theirs, so they stay sharp and only light from nearby
+// highlights reaches them; mixing the whole image with its scatter veiled every tone.
+vec3 bloom(vec3 x, vec2 uvG, vec2 imagePx) {
+    return x + uBloom * (bloomScatter(uvG, imagePx) - bloomKnee(x, uExposure) * x);
 }
 
 vec2 toSensor(vec2 p) { return (uToSensor * vec3(p, 1.0)).xy; }

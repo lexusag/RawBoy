@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { scatterBloomTail } from '../gl/BloomTail';
+import { BLOOM_TAIL_BANDS, bloomKnee, scatterBloomTail } from '../gl/BloomTail';
 import { floatToHalf, halfToFloat } from '../util/half';
 
 describe('floatToHalf', () => {
@@ -27,9 +27,24 @@ describe('scatterBloomTail', () => {
   };
   const at = (p: Uint16Array, x: number, y: number) => halfToFloat(p[(y * w + x) * 3]);
 
-  it('keeps a flat image flat', () => {
-    const out = scatterBloomTail(image(() => 0.5)).pixels;
-    for (let i = 0; i < out.length; i++) expect(halfToFloat(out[i])).toBeCloseTo(0.5, 3);
+  it('keeps a flat image flat in every band, kneed at its exposure', () => {
+    const out = scatterBloomTail(image(() => 0.5));
+    expect(out.height).toBe(h * BLOOM_TAIL_BANDS);
+    for (let band = 0; band < BLOOM_TAIL_BANDS; band++) {
+      const want = 0.5 * bloomKnee(0.5, 0.5, 0.5, 2 ** band);
+      for (let i = band * w * h * 3; i < (band + 1) * w * h * 3; i++) expect(halfToFloat(out.pixels[i])).toBeCloseTo(want, 3);
+    }
+  });
+
+  it('scatters only the highlights', () => {
+    expect(bloomKnee(0.18, 0.18, 0.18, 1)).toBe(0); // middle grey
+    expect(bloomKnee(0.3, 0.45, 0.2, 2)).toBeCloseTo(0.5, 6); // the brightest channel x exposure, halfway: 2.3 EV over grey
+    expect(bloomKnee(1, 1, 1, 2)).toBe(1);
+    // A midtone wall with a lamp: band 0 holds the lamp's glow alone; brighter bands lift the wall into it.
+    const out = scatterBloomTail(image((x, y) => (x === 32 && y === 21 ? 100 : 0.1))).pixels;
+    expect(at(out, 2, 2)).toBe(0);
+    expect(at(out, 33, 21)).toBeGreaterThan(0.5);
+    expect(at(out, 2, 2 + 4 * h)).toBeCloseTo(0.1 * bloomKnee(0.1, 0.1, 0.1, 16), 3);
   });
 
   it('spreads a point light into a round glow that keeps its energy', () => {
