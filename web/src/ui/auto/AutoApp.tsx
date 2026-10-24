@@ -224,6 +224,18 @@ function GridView({ store, scroll, lastViewed }: {
                 Sort: {state.sort === 'date' ? 'Shoot date' : 'File name'}
               </button>
             )}
+            {state.photos.length > 0 && (
+              // For a finished series: each photo's own measured denoise, over presets, RawBoy edits and the slider.
+              <button
+                type="button"
+                className="text"
+                disabled={exporting}
+                title="Give every photo the denoise and sharpening measured on it (its noise and ISO), in place of what presets, RawBoy edits or the Denoise slider set. Looks, presets, lens corrections and other settings stay."
+                onClick={() => store.autoDenoiseAll()}
+              >
+                Auto denoise all
+              </button>
+            )}
             {state.lensPresets.length > 0 && (
               // Lens presets saved in the RawBoy tab's Lens tab: by lens they correct every photo taken with their lens,
               // whatever its look; a named one (manual lenses) is picked for the batch here or for a selection.

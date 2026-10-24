@@ -3,8 +3,9 @@ import { ALL_LOOKS, Looks, type Look } from '../../engine/auto/looks/Look';
 import { DEFAULT_STRENGTH, NO_ADJUSTMENTS, applyEditsDevelop, developAuto, sameAdjustments, type Adjustments } from '../../engine/auto/looks/LookApplier';
 import { ALL_FILM_LOOKS, FilmLooks } from '../../engine/auto/looks/FilmLooks';
 import { suggestFilm, suggestLook } from '../../engine/auto/looks/LookSuggester';
+import { autoDevelop } from '../../engine/auto/analysis/AutoTone';
 import type { DevelopParams } from '../../engine/develop/DevelopParams';
-import { applyPreset, chosenLensPreset, decodePresets, isLensPreset, layerPreset, NO_LENS_PRESET, putLensPreset, replacesLook, sameLensPreset, type Preset } from '../../engine/develop/Presets';
+import { applyPreset, chosenLensPreset, decodePresets, isLensPreset, layerPreset, NO_LENS_PRESET, PRESET_GROUPS, putLensPreset, replacesLook, sameLensPreset, type Preset } from '../../engine/develop/Presets';
 import { PresetStore } from '../pro/PresetStore';
 import { exportImage } from '../../engine/export/Exporter';
 import { baseNameOf, EXTENSIONS, ExportSettingsStore, fileName, type ExportSettings, type OutputNaming } from '../../engine/export/ExportSettings';
@@ -109,6 +110,28 @@ export function withPreset(p: AutoPhoto, preset: Preset, layered: (under: Preset
   if (replacesLook(preset)) return { ...p, preset, edits: null };
   if (p.edits) return { ...p, edits: applyPreset(preset, p.edits) };
   return { ...p, preset: p.preset ? layered(p.preset) : preset };
+}
+
+/** The fields of a preset's Denoise & sharpening group, which "Auto denoise all" gives back to each photo's auto develop. */
+const DENOISE_FIELDS = PRESET_GROUPS.find((g) => g.key === 'denoise')!.fields;
+
+/**
+ * Denoise, Color denoise and sharpening of the auto develop for analysis [a]: measured on the photo (its noise, ISO and
+ * exposure). A photo added "As is" skipped the noise measurement, so it gets the ISO table's values.
+ */
+export function autoNoiseOf(a: Analysis, plain: boolean): Pick<DevelopParams, 'denoise' | 'colorDenoise' | 'sharpening'> {
+  const auto = plain ? autoDevelop(a.stats, a.defaults) : a.autoBase;
+  return { denoise: auto.denoise, colorDenoise: auto.colorDenoise, sharpening: auto.sharpening };
+}
+
+/** [preset] without its Denoise & sharpening group (null when nothing else is left); [preset] itself when it has none. */
+export function withoutDenoise(preset: Preset): Preset | null {
+  if (!preset.groups.includes('denoise')) return preset;
+  const groups = preset.groups.filter((g) => g !== 'denoise');
+  if (groups.length === 0) return null;
+  const values = { ...preset.values };
+  for (const f of DENOISE_FIELDS) delete values[f];
+  return { ...preset, groups, values };
 }
 
 export const activeLook = (p: AutoPhoto): Look => (p.mode === 'film' ? p.filmLook : p.look);
@@ -774,6 +797,34 @@ export class AutoStore {
       return { ...p, adjust: { ...p.adjust, brightness: source.adjust.brightness } };
     }, true);
     this.update({ message: `Copied from ${source.name}` });
+  }
+
+  /**
+   * "Auto denoise all", for a batch that's otherwise done: every photo gets the denoise, colour denoise and sharpening
+   * the auto develop measured on it, whatever else develops it. The Denoise slider goes back to 0, presets (the batch's
+   * too, for photos added later) lose their Denoise & sharpening group, and RawBoy edits take the auto values in place
+   * of their own; looks, presets, lens corrections and the other sliders stay. One undo step per photo; RawBoy edits of
+   * photos still being analysed are left as they are. Not while exporting.
+   */
+  autoDenoiseAll() {
+    if (this._state.export) return;
+    const stripped = new Map<Preset, Preset | null>();
+    const strip = (preset: Preset | null) => {
+      if (!preset) return null;
+      if (!stripped.has(preset)) stripped.set(preset, withoutDenoise(preset));
+      return stripped.get(preset)!;
+    };
+    if (this._state.preset) this.update({ preset: strip(this._state.preset) });
+    let count = 0;
+    for (const p of this._state.photos) {
+      const noise = p.edits && p.analysis ? autoNoiseOf(p.analysis, p.plain) : null;
+      const edits = p.edits && noise && DENOISE_FIELDS.some((f) => p.edits![f] !== noise[f as keyof typeof noise]) ? { ...p.edits, ...noise } : p.edits;
+      const preset = strip(p.preset);
+      if (p.adjust.denoise === 0 && edits === p.edits && preset === p.preset) continue;
+      this.changeDevelop(p.id, (q) => ({ ...q, adjust: { ...q.adjust, denoise: 0 }, preset, edits }), true);
+      count++;
+    }
+    this.update({ message: count === 0 ? 'Every photo already has its auto denoise' : `Auto denoise on ${count === 1 ? '1 photo' : `${count} photos`}` });
   }
 
   /** [force]: its own undo step (false: a slider, coalesced; null: Undo or Redo itself, not recorded). */
