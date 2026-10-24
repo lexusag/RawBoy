@@ -12,6 +12,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.ui.graphics.Color
 import androidx.core.content.IntentCompat
 import app.rawboy.auto.ui.AutoApp
+import app.rawboy.develop.Edits
 
 class AutoActivity : ComponentActivity() {
     private val viewModel: AutoViewModel by viewModels()
@@ -33,6 +34,13 @@ class AutoActivity : ComponentActivity() {
     }
 
     private fun handleIntent(intent: Intent?) {
+        // RawBoy's "Send to Auto" for one photo: the photo with its edits, developed as RawBoy showed it.
+        if (intent?.action == Edits.ACTION_SEND_TO_AUTO) {
+            val photo = IntentCompat.getParcelableExtra(intent, Edits.EXTRA_PHOTO, Uri::class.java)
+            val edits = IntentCompat.getParcelableExtra(intent, Edits.EXTRA_EDITS, Uri::class.java)
+            if (photo != null && edits != null) viewModel.receiveEdits(photo, edits)
+            return
+        }
         val uris: List<Uri> = when (intent?.action) {
             Intent.ACTION_VIEW -> listOfNotNull(intent.data)
             Intent.ACTION_SEND -> listOfNotNull(IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java))

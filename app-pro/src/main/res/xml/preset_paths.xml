@@ -1,5 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Preset files handed to RawBoy Auto by "Send to Auto" (EditorViewModel.sendPresetToAuto). -->
+<!-- Files handed to RawBoy Auto by "Send to Auto": presets (EditorViewModel.sendPresetToAuto) and one photo's edits
+     (EditorViewModel.sendPhotoToAuto). -->
 <paths>
     <cache-path name="presets" path="presets/" />
+    <cache-path name="edits" path="edits/" />
 </paths>

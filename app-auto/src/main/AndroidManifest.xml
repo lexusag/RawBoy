@@ -51,6 +51,12 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <data android:mimeType="application/json" />
             </intent-filter>
+
+            <!-- RawBoy's "Send to Auto" for one photo: the photo and its edits file as extras (Edits.ACTION_SEND_TO_AUTO) -->
+            <intent-filter>
+                <action android:name="app.rawboy.action.SEND_EDITS" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
         </activity>
     </application>
 </manifest>

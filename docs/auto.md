@@ -61,8 +61,9 @@ of warming, green when cooling), so warming doesn't leave the green/teal cast of
 the **Look** tab. The **Adjust** tab has every adjustment, Brightness next to Contrast and Warmth next to Tint, then
 the other auto develop sliders (0 = as Auto set them): **Contrast** (±50),
 **Saturation** (±100; −100 is black and white, the film look keeps its tone curve but loses its colour cast), **Tint** (±50, + = magenta, on top of what Warmth adds), **Grain** (±50, on top of the base
-grain and the look's) and **Denoise** (±100, on top of the measured luma and colour denoise; below 0 it takes the auto denoise away,
-down to none, e.g. to keep fine detail at high ISO). Press and hold the photo to see it without the look. As in RawBoy, a thin frame around the photo (neutral
+grain and the look's) and **Denoise** (±100, on top of the measured luma and colour denoise, colour first: raising it clears colour noise fast
+and smooths luma later and gently, at most +60; below 0 it takes the luma denoise away first, then the colour denoise,
+down to none at −100, e.g. to keep fine detail at high ISO). Press and hold the photo to see it without the look. As in RawBoy, a thin frame around the photo (neutral
 grey by default) helps judge exposure; tap (click) outside the photo to cycle it through grey, white and black.
 **Swipe left or right** on the photo to move to the previous or next photo in the batch (each keeps its own
 settings; swiping is off while zoomed to 100% or exporting).
@@ -97,6 +98,17 @@ top of its look (Strength stays), its RawBoy preset (shown as e.g. *Scene A + Gr
 Denoise & sharpening group, when it has one, applies as saved too. **Remove** in the
 photo view takes it off, back to the look alone. With **Edits in sidecars** on (RawBoy Browser), the result is kept
 in the photo's XMP sidecar like any other Auto setting.
+**RawBoy edits** (Android, web): one photo's complete RawBoy develop, sent with it, in place of its look. On Android,
+RawBoy's **Export › Send to Auto** opens RawBoy Auto with the photo and its edits; on the web, **Back to Auto** / **Send to
+Auto** in the RawBoy tab. Everything comes along exactly as made: crop, rotation and flips, every mask layer with its
+brush strokes and Lens blur, light leaks, curves, film or LUT, denoise and sharpening. The photo shows *RawBoy edits*
+in place of the look strip (with what it carries, e.g. *crop, 2 masks, lens blur, 1 light leak*); Brightness,
+Warmth and the Adjust sliders work on top, **Use a look** drops the edits, and Undo brings them back. **Export all**
+and the photo's **Export** render them in full, painted masks and lens blur included, so the batch comes out as RawBoy
+showed each photo (grid thumbnails show them too, at thumbnail resolution). Edits belong to their photo: **Apply to
+all**, **Copy previous** and a full RawBoy preset replace them instead of copying them, since another photo's crop,
+strokes and leaks wouldn't fit. For one look across a batch, save the edits as a preset in RawBoy (gradient masks
+can go in it; brush strokes, crop and light leaks never do) and apply that.
 **Lens presets:** a preset holding only the Lens group (RawBoy's Lens tab → **Save lens preset** / **Send to Auto**) is
 not applied in place of the look: Auto keeps it for photos taken with its lens (the lens name in the raw, ignoring
 case) and gives them its lens corrections (embedded profile on/off, Distortion, Vignetting, Vignette radius) on top of

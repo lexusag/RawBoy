@@ -7,6 +7,33 @@
   Camera's Look menu, RawBoy's included LUTs, the Presets panel and Auto's preset picker. A preset counts as black and
   white with Saturation -100 or a black and white LUT at full strength. Not on iOS yet.
 
+**Auto: Denoise favours colour noise (2026-10-24)**
+
+- RawBoy Auto (Android, iOS, web): the Denoise adjustment used to add the same amount to luma and colour denoise.
+  Raising it now clears colour noise (blotches) first and fast, and smooths luma later and gently: at +25 colour
+  denoise rises by 44 and luma by 4, at +50 by 75 and 15, at +100 by 100 and 60. Lowering it takes luma denoise away
+  first, colour later; -100 still turns both off. Photos with Denoise at 0 look as before.
+
+**Camera: geotagging (2026-10-24)**
+
+- RawBoy Camera (Android, iOS): a **Geotag** switch in Settings, off by default. On, each JPEG and DNG records where
+  it was taken (GPS latitude, longitude, altitude and the fix's UTC date and time). Location access is asked for only
+  when you turn it on, and the location service runs only while the camera is open.
+- RawBoy, Auto and Camera (Android, iOS, web): exports keep the GPS time and date stamps too, next to the position
+  and altitude they already kept.
+
+**Auto batch-exports photos with their full RawBoy edits (2026-10-24)**
+
+- RawBoy → Auto (Android): **Export › Send to Auto** in RawBoy hands the open photo to RawBoy Auto with every edit:
+  crop, rotation and flips, mask layers with their brush strokes and Lens blur, light leaks, curves, film or LUT,
+  denoise. Auto shows it as *RawBoy edits* in place of the look (with what it carries), its sliders adjust on top,
+  **Use a look** drops the edits, and Export all renders them. Until now Android could only send presets, which never
+  hold a photo's crop, strokes or leaks. The edits travel as the same JSON as the web's sidecar edits.
+- Auto (Android, web): batch export and the grid thumbnails now render RawBoy edits' painted (brush) masks and Lens
+  blur. Before, only the photo view and its single Export did: Export all dropped brush masks and lens blur (web), so
+  a photo sent back from the RawBoy tab came out differently. Photos added As is (web) get the skin mask RawBoy edits'
+  skin retouch and blemish removal need.
+
 **Bloom glows from highlights only (2026-10-24)**
 
 - RawBoy, Auto and Camera (Android, iOS, web): Bloom used to mix the whole picture with its blur, so at higher values

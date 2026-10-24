@@ -210,6 +210,9 @@ val metadata(uintptr_t h) {
         gps.set("longitudeRef", std::string(1, m.gpsLongitudeRef));
         gps.set("altitude", m.gpsAltitude);
         gps.set("belowSeaLevel", m.gpsBelowSeaLevel);
+        if (std::isfinite(m.gpsTimeStamp[0]) && std::isfinite(m.gpsTimeStamp[1]) && std::isfinite(m.gpsTimeStamp[2]))
+            gps.set("timeStamp", toTyped(m.gpsTimeStamp, 3));
+        gps.set("dateStamp", m.gpsDateStamp);
         o.set("gps", gps);
     } else {
         o.set("gps", val::null());

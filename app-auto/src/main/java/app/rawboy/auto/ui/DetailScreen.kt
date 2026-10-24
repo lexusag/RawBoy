@@ -83,6 +83,9 @@ import app.rawboy.auto.looks.FilmLooks
 import app.rawboy.auto.looks.Look
 import app.rawboy.auto.looks.LookApplier
 import app.rawboy.auto.looks.Looks
+import app.rawboy.develop.CropMath
+import app.rawboy.develop.DevelopParams
+import app.rawboy.develop.crop
 import app.rawboy.gl.ShaderParams
 import app.rawboy.session.SkinState
 import app.rawboy.view.CompactSlider
@@ -115,6 +118,7 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
     val lensInfo by session.lensInfo.collectAsStateWithLifecycle()
     val base by session.base.collectAsStateWithLifecycle()
     val bloomSources by session.bloomSources.collectAsStateWithLifecycle()
+    val bokehSource by session.bokehSource.collectAsStateWithLifecycle()
     val skin by session.skin.collectAsStateWithLifecycle()
     val skinMask = (skin as? SkinState.Ready)?.mask
     val undoStates by vm.undoStates.collectAsStateWithLifecycle()
@@ -236,7 +240,7 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
                             val shaderParams = if (live) {
                                 // Press and hold shows the auto develop without the look.
                                 val shown = shownParams
-                                remember(shown, lutData, filmData, lensInfo, base, bloomSources, skinMask) {
+                                remember(shown, lutData, filmData, lensInfo, base, bloomSources, bokehSource, skinMask) {
                                     session.shaderParams(
                                         shown, analysis.defaults, lutData.takeIf { shown.lut != null },
                                         film = filmData.takeIf { shown.film != null },
@@ -289,7 +293,15 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
                                     },
                             )
                             if (showAuto || zoomed) {
-                                Label(if (!showAuto) "100%" else if (photo.preset != null) "Without preset" else "Without look", Modifier.align(Alignment.TopStart))
+                                Label(
+                                    when {
+                                        !showAuto -> "100%"
+                                        photo.edits != null -> "Without edits"
+                                        photo.preset != null -> "Without preset"
+                                        else -> "Without look"
+                                    },
+                                    Modifier.align(Alignment.TopStart),
+                                )
                             }
                             // Qualified: inside this Box the ColumnScope overload would win.
                             androidx.compose.animation.AnimatedVisibility(
@@ -321,26 +333,14 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
             }
 
             val preset = photo.preset
-            if (preset != null) {
+            if (photo.edits != null) {
+                // RawBoy's own develop of this photo, crop, masks and light leaks included, in place of the look strip.
+                ReplacedLook(AutoPhoto.EDITS_NAME, "Sent from RawBoy · ${editsSummary(photo.edits)}") {
+                    TextButton(onClick = { vm.removeEdits(id) }, enabled = export == null) { Text("Use a look") }
+                }
+            } else if (preset != null) {
                 // A RawBoy preset develops this photo in place of the look strip.
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(start = 12.dp, end = 12.dp, top = 8.dp)
-                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.small)
-                        .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(preset.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(
-                            "RawBoy preset · ${groupSummary(preset)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
+                ReplacedLook(preset.name, "RawBoy preset · ${groupSummary(preset)}") {
                     TextButton(onClick = { vm.removePhotoPreset(id) }, enabled = export == null) { Text("Use a look") }
                 }
             } else {
@@ -380,7 +380,7 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
             ) {
                 val a = photo.adjust
                 if (tab == 0) {
-                    if (preset == null) {
+                    if (preset == null && photo.edits == null) {
                         AutoSlider("Strength", photo.strength, 0f..100f, LookApplier.DEFAULT_STRENGTH) { vm.setStrength(id, it) }
                     }
                     AutoSlider("Brightness", a.brightness, -100f..100f, 0f) { v -> vm.setAdjust(id) { it.copy(brightness = v) } }
@@ -415,6 +415,45 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
             },
         )
     }
+}
+
+/** What develops the photo in place of the look strip (a RawBoy preset or RawBoy edits): [name], [detail], and [action]. */
+@Composable
+private fun ReplacedLook(name: String, detail: String, action: @Composable () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = 12.dp, end = 12.dp, top = 8.dp)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.small)
+            .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        action()
+    }
+}
+
+/** The photo-specific parts RawBoy edits carry, for the edits card ("crop, 2 masks, 1 light leak"). */
+private fun editsSummary(e: DevelopParams): String {
+    fun count(n: Int, one: String) = if (n == 1) "1 $one" else "$n ${one}s"
+    val parts = buildList {
+        if (e.crop != CropMath.FULL || e.straighten != 0f) add("crop")
+        val masks = e.masks.count { !it.isIdentity && it.hasMask }
+        if (masks > 0) add(count(masks, "mask"))
+        if (e.masks.any { it.enabled && it.opacity > 0f && it.adjust.lensBlur > 0f }) add("lens blur")
+        val leaks = e.leaks.count { !it.isIdentity }
+        if (leaks > 0) add(count(leaks, "light leak"))
+    }
+    return parts.joinToString().ifEmpty { "every slider as set there" }
 }
 
 @Composable

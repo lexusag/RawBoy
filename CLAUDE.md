@@ -95,6 +95,13 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   `AutoTone`: exposure/tone/noise as ordinary `DevelopParams`), `looks/` (`Looks` catalogue on the bundled
   LUTs, `LookApplier` = auto base + look × Strength + the user's `Adjustments`, `LookSuggester`).
 - `app-auto/src/main/java/app/rawboy/auto/` — `AutoViewModel.kt` (batch queue, export all), `ui/` (grid, detail).
+  RawBoy edits in Auto (Android + web: `AutoPhoto.edits`, `LookApplier.applyEdits`/`applyEditsDevelop`): one photo's whole
+  develop in place of its look. Android: Pro's Export › Send to Auto → `Edits.ACTION_SEND_TO_AUTO` with the photo and an
+  `Edits.kt` JSON file (same format as web's `Edits.ts`; strokes and leaks kept) as extras, read grants via ClipData;
+  Auto decodes it against the analysis's as-shot defaults (`pendingEdits` until then). Batch export builds the brush
+  rasters and the bokeh source itself (`editTexturesOf` in `PhotoSession.kt/.ts`); thumbnails and the cached preview
+  rasterise strokes on the 512 px base (`brushLookup`) and blur from the bloom halo copy. Apply to all, Copy previous
+  and full presets replace edits (they hold one photo's crop, strokes and leaks).
   A waiting photo tapped in the grid (`openFromGrid` → `opening`) is analysed next (`nextQueued`) and opened when done
   (`openIfWaiting`, only while the grid shows; all ports).
   Batch order (all ports, and the web's Browser): `auto/PhotoOrder.kt/.swift/.ts` (`PhotoSort` DATE default / NAME,
@@ -120,7 +127,11 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   with per-lens keys (`setPhysicalCameraKey`) and per-lens results/characteristics for DngCreator; fallback: open the
   physical id directly), `CameraViewModel.kt` (live auto develop, capture → DNG →
   one-at-a-time develop → jpegli JPEG, `previewScale` calibration from raw key / viewfinder key),
-  `CameraSettings.kt`, `ui/`.
+  `CameraSettings.kt`, `ui/`. Geotag (off by default; location permission asked only when switched on):
+  `capture/LocationTracker.kt` (platform LocationManager, fused else GPS + network; iOS `capture/LocationTracker.swift`,
+  Core Location) → `DngCreator.setLocation` (no altitude) → `export/DngGps.kt` appends a full GPS IFD to the DNG and
+  repoints IFD0's GPSInfo; the JPEG copies it via `Exporter.EXIF_TAGS`. iOS: `replacementMetadata` adds ImageIO's GPS
+  dictionary to the DNG. GPS time/date stamps: `PhotoMetadata.gpsTimeStamp`/`gpsDateStamp` (`readGpsStamps` after LibRaw, which keeps no date).
 - `luts/` — bundled LUTs, copied into the engine's assets by the `copyLuts` Gradle task.
   User-visible look/stock names and bundled LUT file names are RawBoy's own (Yellow/Green families, 2026-10-18): no
   film makers' brand or product names; old LUT file ids map to the new ones in `RetiredLooks` (all ports).

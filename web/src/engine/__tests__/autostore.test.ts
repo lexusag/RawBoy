@@ -138,7 +138,9 @@ describe('Auto preset denoise', () => {
     expect(paramsOf(store.state.photos[0])).toMatchObject({ contrast: 20, denoise: 16, colorDenoise: 80, sharpening: 15 });
     expect(paramsOf(store.state.photos[1])).toMatchObject({ contrast: 20, denoise: 16, colorDenoise: 28, sharpening: 10 });
     store.setAdjust(a.id, { denoise: 10 });
-    expect(paramsOf(store.state.photos[0])).toMatchObject({ denoise: 26, colorDenoise: 90 });
+    // Denoise +10 is mostly colour denoise.
+    expect(paramsOf(store.state.photos[0])!.denoise).toBeCloseTo(16.6, 9);
+    expect(paramsOf(store.state.photos[0])!.colorDenoise).toBeCloseTo(99, 9);
     vi.unstubAllGlobals();
   });
 });

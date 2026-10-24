@@ -213,7 +213,7 @@ object Presets {
         return Preset(newId(), o.optString("name").ifBlank { "Preset" }, groups, values, lens)
     }
 
-    private fun get(p: DevelopParams, field: String): Any? = when (field) {
+    internal fun get(p: DevelopParams, field: String): Any? = when (field) {
         "toneMapper" -> p.toneMapper.key
         "film" -> p.film
         "filmAmount" -> p.filmAmount
@@ -260,7 +260,7 @@ object Presets {
     }
 
     /** A value of the wrong type (a hand-edited file) leaves the field unchanged. */
-    private fun set(p: DevelopParams, field: String, value: Any?): DevelopParams {
+    internal fun set(p: DevelopParams, field: String, value: Any?): DevelopParams {
         if (field == "lut") return if (value == null || value is String) p.copy(lut = (value as String?)?.let(RetiredLooks::lut)) else p
         if (field == "film") return if (value == null || value is String) p.copy(film = (value as String?)?.let(RetiredLooks::stock)) else p
         if (field == "colorDenoise" && value == null) return p.copy(colorDenoise = null)
