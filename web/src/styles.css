@@ -428,6 +428,20 @@ main {
     padding: 0 4px;
   }
 
+  /* The name and shot info scroll sideways with a finger instead of ending in an ellipsis. */
+  .pro-toolbar .name,
+  .pro-toolbar .info {
+    overflow-x: auto;
+    text-overflow: clip;
+    scrollbar-width: none;
+    overscroll-behavior-x: contain;
+  }
+
+  .pro-toolbar .name::-webkit-scrollbar,
+  .pro-toolbar .info::-webkit-scrollbar {
+    display: none;
+  }
+
   .pro-toolbar .label-wide {
     display: none;
   }

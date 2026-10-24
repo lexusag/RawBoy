@@ -1,5 +1,11 @@
 # Changelog
 
+**Pro on phones: the shot info line scrolls sideways (2026-10-24)**
+
+- RawBoy (Android, web on phones): the file name and shot info under the tools used to end in an ellipsis when they
+  didn't fit. The line now scrolls sideways with a finger, so the whole of it can be read. Android also shows the
+  full file name instead of shortening it in the middle.
+
 **Auto: Export all shows its progress in the grid (2026-10-24)**
 
 - RawBoy Auto (Android, iOS, web): while Export all runs, the photos still to be saved show in grey, and each fades
