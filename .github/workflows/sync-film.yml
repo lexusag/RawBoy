@@ -1,0 +1,103 @@
+# Opens (or updates) a pull request in lexusag/RawBoyFilm that brings over RawBoy's shared engine and camera files,
+# using RawBoyFilm's own tools/sync_from_rawboy.sh (see "Keeping up with RawBoy" in RawBoyFilm's README).
+# Run it by hand from the Actions tab. The PR lists the RawBoy commits since the last "Sync from RawBoy <sha>" commit
+# on RawBoyFilm's main; review it, build, and merge (squash keeps the "Sync from RawBoy <sha>" title for next time).
+# Secret: RAWBOYFILM_TOKEN, a fine-grained personal access token with access to lexusag/RawBoyFilm only and
+# repository permissions Contents: Read and write, Pull requests: Read and write.
+name: Sync RawBoy Film
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: RawBoy branch, tag or commit to sync from
+        default: main
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-film
+  cancel-in-progress: false
+
+env:
+  FILM_REPO: lexusag/RawBoyFilm
+  FILM_BRANCH: sync/rawboy
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out RawBoy
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref }}
+          path: rawboy
+          fetch-depth: 0
+
+      - name: Check out RawBoy Film
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.FILM_REPO }}
+          token: ${{ secrets.RAWBOYFILM_TOKEN }}
+          path: film
+          fetch-depth: 0
+
+      - name: Run the sync script
+        run: film/tools/sync_from_rawboy.sh "$GITHUB_WORKSPACE/rawboy"
+
+      - name: Commit and open the pull request
+        working-directory: film
+        env:
+          GH_TOKEN: ${{ secrets.RAWBOYFILM_TOKEN }}
+          REF: ${{ inputs.ref }}
+        run: |
+          git add -A
+          if git diff --cached --quiet; then
+            echo "RawBoy Film already matches RawBoy $REF; nothing to sync." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          sha=$(git -C ../rawboy rev-parse HEAD)
+          short=$(git -C ../rawboy rev-parse --short=7 HEAD)
+          title="Sync from RawBoy $short"
+
+          # The RawBoy commit the last sync came from, taken from RawBoy Film's history.
+          last=$(git log --format=%s | sed -n 's/^Sync from RawBoy \([0-9a-f]\{7,40\}\).*/\1/p' | head -n 1)
+          {
+            echo "Brings over RawBoy's shared files at [\`$short\`](https://github.com/$GITHUB_REPOSITORY/commit/$sha) with \`tools/sync_from_rawboy.sh\`."
+            echo
+            if [ -n "$last" ] && git -C ../rawboy cat-file -e "$last^{commit}" 2>/dev/null; then
+              echo "RawBoy commits since the last sync (\`$last\`):"
+              echo
+              git -C ../rawboy log --no-merges --format="- %s (%h)" "$last..$sha"
+            else
+              echo "No earlier \"Sync from RawBoy <sha>\" commit was found, so the RawBoy commits aren't listed."
+            fi
+            echo
+            echo "Files:"
+            echo
+            echo '```'
+            git diff --cached --stat=120 | tail -n 40
+            echo '```'
+            echo
+            echo "Check that no film-only change to a shared file is undone, build \`:app-camera:assembleFilmDebug\` and the \`RawBoyFilm\` scheme, then merge."
+            echo
+            echo "Opened by the [Sync RawBoy Film]($GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID) workflow."
+          } > ../pr-body.md
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git switch -C "$FILM_BRANCH"
+          git commit -q -m "$title" -m "From $GITHUB_REPOSITORY@$sha."
+          git push --force origin "$FILM_BRANCH"
+
+          # One sync PR at a time: a later run replaces the open one's branch and refreshes its title and body.
+          pr=$(gh pr list --repo "$FILM_REPO" --head "$FILM_BRANCH" --state open --json url --jq '.[0].url')
+          if [ -n "$pr" ]; then
+            gh pr edit "$pr" --title "$title" --body-file ../pr-body.md
+          else
+            pr=$(gh pr create --repo "$FILM_REPO" --base main --head "$FILM_BRANCH" --title "$title" --body-file ../pr-body.md)
+          fi
+          echo "Pull request: $pr" >> "$GITHUB_STEP_SUMMARY"
