@@ -82,6 +82,8 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   - `view/Help.kt` — the top bars' "?" button and sheet. Each app's content is its `ui/Help.kt`, mirrored in iOS
     `ui/Help.swift` and web `ui/pro/help.ts` / `ui/auto/help.ts` (web: also Ctrl/⌘+/, `ui/common/HelpDialog.tsx`).
     Update them with user-visible controls and gestures.
+    Web keyboard shortcuts match on `shortcutKey(e)` (`ui/common/shortcutKey.ts`), never `e.key` for letters or
+    [ ] \\ /: on a Ukrainian (any non-Latin) layout `e.key` is the Cyrillic letter, so it falls back to `e.code`.
   - `retouch/SkinSegmenter.kt` — MediaPipe skin segmentation + Face Landmarker feature exclusion.
 - `app-pro/src/main/java/app/rawboy/ui/` — `EditorViewModel.kt` (Pro state, carry-over, presets), `Controls.kt`
   (tabs Light, Color, Detail, LUTs, Lens, `ParamSlider`, Crop & rotate panel), `EditorScreen.kt`,
@@ -583,7 +585,9 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   the next free code reaches 2^n; the EOI accounts for the entry the decoder adds on the last code). Its IFD0 is laid
   out by `ExifWriter.tiffIfds` (Kotlin/Swift/TS), which adds the photo's EXIF (Exif and GPS IFDs) after it, the same
   tags JPEGs get; Android reads them from the source with ExifInterface (`ExifMetadata.from`), which can't write
-  TIFFs. Auto's **Export as** (format, quality, bit depth, size) lives in each Auto's view model/store, not in the
+  TIFFs. DngCreator's DNGs (RawBoy Camera) keep ExposureTime, FNumber, ISO, DateTimeOriginal and FocalLength in
+  IFD0 (TIFF/EP), where ExifInterface skips them (it only reads those tags from an Exif IFD): `TiffEpTags` reads them and
+  `Exporter` fills the gaps, for JPEG (`copyExif`) and TIFF (`readExif`). Auto's **Export as** (format, quality, bit depth, size) lives in each Auto's view model/store, not in the
   shared `ExportSettingsStore`.
 - **Preview tone curve (Pixel):** `TONEMAP_AVAILABLE_TONE_MAP_MODES` = CONTRAST_CURVE, FAST, HIGH_QUALITY only (no
   preset/gamma); asking for nothing left the Pixel's own scene-dependent tone mapping on the preview (result

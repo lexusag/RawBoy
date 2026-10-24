@@ -6,6 +6,7 @@ import { AppSwitcher, HelpButton } from '../common/AppNav';
 import { BIN, isArc, photosToSend, type BrowsePhoto, type BrowserStore, type Filter, type SendCriteria } from './BrowserStore';
 import type { ViewImage } from './Previews';
 import type { EditsSidecar, Flag, Rating } from '../../engine/browse/XmpSidecar';
+import { shortcutKey } from '../common/shortcutKey';
 
 type DirectoryPicker = (o?: object) => Promise<FileSystemDirectoryHandle>;
 const directoryPicker = () => (window as unknown as { showDirectoryPicker?: DirectoryPicker }).showDirectoryPicker;
@@ -98,7 +99,7 @@ export function BrowserApp({ store, active, onEditInRawBoy, onSendToAuto }: {
     const onKey = (e: KeyboardEvent) => {
       if (isTextEntry(e.target) || document.querySelector('.dialog')) return;
       const mod = isApple ? e.metaKey : e.ctrlKey;
-      if (mod && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+      if (mod && shortcutKey(e) === 'z' && !e.shiftKey) {
         e.preventDefault();
         void store.undo();
         return;
@@ -109,7 +110,7 @@ export function BrowserApp({ store, active, onEditInRawBoy, onSendToAuto }: {
       const many = !store.state.viewing && selection.size > 0;
       const rated = many ? [...selection] : id;
       if (!rated) return;
-      const key = e.key.toLowerCase();
+      const key = shortcutKey(e);
       if (/^[0-5]$/.test(key)) store.setStars(rated, Number(key));
       else if (key === 'p') store.toggleFlag(rated, 'pick');
       else if (key === 'x') store.toggleFlag(rated, 'reject');
@@ -262,7 +263,7 @@ function GridView({ store, active, scroll, selection, onSelection, onBin, onSend
     if (!active) return;
     const onKey = (e: KeyboardEvent) => {
       if (isTextEntry(e.target) || document.querySelector('.dialog')) return;
-      if (e.key.toLowerCase() === 'a' && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey) {
+      if (shortcutKey(e) === 'a' && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey) {
         e.preventDefault();
         onSelection(new Set(shown.map((p) => p.id)));
         return;
@@ -618,7 +619,7 @@ function Viewer({ store, photo, active, onEdit }: { store: BrowserStore; photo: 
       if (isTextEntry(e.target) || document.querySelector('.dialog') || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') store.step(-1);
       else if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') store.step(1);
-      else if (e.key === 'Escape' || e.key === 'Enter' || e.key.toLowerCase() === 'g') store.closeViewer();
+      else if (e.key === 'Escape' || e.key === 'Enter' || shortcutKey(e) === 'g') store.closeViewer();
       else return;
       e.preventDefault();
     };
@@ -732,7 +733,7 @@ function ZoomImage({ url, alt, active, onZoom }: { url: string; alt: string; act
   useEffect(() => {
     if (!active) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() !== 'z' || e.metaKey || e.ctrlKey || e.altKey || isTextEntry(e.target)) return;
+      if (shortcutKey(e) !== 'z' || e.metaKey || e.ctrlKey || e.altKey || isTextEntry(e.target)) return;
       e.preventDefault();
       toggle(pointer.current?.x, pointer.current?.y);
     };

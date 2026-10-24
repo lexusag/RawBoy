@@ -1,4 +1,4 @@
-import { useRef, type CSSProperties } from 'react';
+import { useEffect, useRef, type CSSProperties } from 'react';
 
 export const formatSigned = (v: number) => `${Math.round(v) > 0 ? '+' : ''}${Math.round(v)}`;
 export const formatPlain = (v: number) => String(Math.round(v));
@@ -7,6 +7,26 @@ export const formatDegrees = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}
 
 /** Touch movement (px) before a gesture is judged a horizontal drag or a vertical scroll. */
 const SLOP = 8;
+
+/** A wheel turn within this long (ms) of the page scrolling keeps scrolling it, even over a slider. */
+const SCROLL_GRACE = 400;
+let lastPageScroll = -Infinity;
+// Bubbles after the sliders' listeners: a wheel event no slider took scrolled the page (or a panel). Scroll events
+// (captured: they don't bubble) keep it going while a smooth scroll is still moving the panel under the pointer.
+window.addEventListener('wheel', (e) => { if (!e.defaultPrevented) lastPageScroll = e.timeStamp; }, { passive: true });
+window.addEventListener('scroll', (e) => { lastPageScroll = e.timeStamp; }, { passive: true, capture: true });
+
+/**
+ * Wheel notches in a wheel event, positive for up. A mouse wheel gives one per click (100 px in Chrome, ~50 in
+ * Firefox, 3 lines in line mode); a trackpad gives fractions. Shift turns the wheel horizontal in most browsers.
+ */
+function wheelNotches(e: WheelEvent): number {
+  const d = e.deltaY !== 0 ? e.deltaY : e.shiftKey ? e.deltaX : 0;
+  if (d === 0) return 0;
+  if (e.deltaMode === WheelEvent.DOM_DELTA_LINE) return -d / 3;
+  if (e.deltaMode === WheelEvent.DOM_DELTA_PAGE) return -d * 10;
+  return Math.abs(d) >= 40 ? -Math.sign(d) * Math.max(1, Math.round(Math.abs(d) / 100)) : -d / 100;
+}
 
 interface Props {
   label: string;
@@ -39,6 +59,8 @@ interface TouchDrag {
  * Port of the apps' ParamSlider: label, value (click to reset) and a range input (double-click to reset).
  * Touch is handled here rather than by the range input, so a vertical swipe that starts on the slider
  * scrolls the panel: only a mostly-horizontal drag moves the value, relative to where it started.
+ * As in darktable, the mouse wheel over a slider moves it (no click needed): 1/200 of the range per notch, Shift
+ * 10× coarser, Ctrl/⌘ 10× finer. A wheel that was just scrolling the panel keeps scrolling it.
  */
 export function ParamSlider({ label, value, min, max, defaultValue, step, format = formatSigned, onChange, disabled, trackGradient, onLabelClick }: Props) {
   const changed = value !== defaultValue;
@@ -56,8 +78,36 @@ export function ParamSlider({ label, value, min, max, defaultValue, step, format
   } as CSSProperties;
   const lastTap = useRef(0);
   const drag = useRef<TouchDrag | null>(null);
+  const root = useRef<HTMLDivElement>(null);
+  const live = useRef({ value, min, max, s, disabled, onChange });
+  live.current = { value, min, max, s, disabled, onChange };
+  useEffect(() => {
+    const el = root.current!;
+    // The unsnapped value the wheel is at, so trackpad fractions add up. [seen] and [sent] tell a value set
+    // elsewhere (a drag, a reset, undo) from the wheel's own, which may not have rendered yet.
+    let raw = NaN;
+    let seen = NaN;
+    let sent = NaN;
+    // Not React's onWheel: that listener is passive, so it couldn't stop the page from scrolling.
+    const onWheel = (e: WheelEvent) => {
+      const { value, min, max, s, disabled, onChange } = live.current;
+      if (disabled || e.timeStamp - lastPageScroll < SCROLL_GRACE) return;
+      const notches = wheelNotches(e);
+      if (notches === 0) return;
+      e.preventDefault(); // also keeps Ctrl+wheel from zooming the page
+      const range = max - min;
+      const perNotch = e.ctrlKey || e.metaKey ? Math.max(s, range / 2000) : e.shiftKey ? range / 20 : Math.max(s, range / 200);
+      if (value !== seen && value !== sent) raw = value;
+      seen = value;
+      raw = Math.min(max, Math.max(min, raw + notches * perNotch));
+      sent = Math.min(max, Math.max(min, min + Math.round((raw - min) / s) * s));
+      if (sent !== value) onChange(sent);
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, []);
   return (
-    <div className="slider">
+    <div className="slider" ref={root}>
       <div className="slider-row">
         {onLabelClick ? (
           <button type="button" className="slider-label" onClick={onLabelClick}>

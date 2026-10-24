@@ -75,7 +75,7 @@ blemish removal use the same MediaPipe models in the browser.
   RawBoy's edits.
 - Auto's photo view: **Space** / **Backspace** go to the next / previous photo, as in darktable, even while a slider
   has focus; **→** / **←** do too, also right after dragging a slider. A slider reached with **Tab** keeps the arrow
-  keys for itself.
+  keys for itself. **C** is Copy previous (by key position, so it works on any keyboard layout).
 - **?** in the top bar, or **Ctrl+/** (**⌘/** on a Mac), shows the open tab's basics and keyboard shortcuts; Esc closes it.
 - Opens JPEG XL DNGs with the Adobe DNG SDK, like the apps. **Licences** at the end of the help (**?**) lists the
   third-party licences. Setup and builds: [web/README.md](../web/README.md).

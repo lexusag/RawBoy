@@ -19,6 +19,7 @@ import { DeleteIcon } from '../common/DeleteIcon';
 import { UndoIcon } from '../common/UndoIcon';
 import { AppSwitcher, HelpButton } from '../common/AppNav';
 import { activeLook, EDITS_NAME, EXPORT_SIZES, lookName, paramsOf, SETTINGS, type AutoPhoto, type AutoStore, type ImportMode, type LookMode } from './AutoStore';
+import { shortcutKey } from '../common/shortcutKey';
 
 /** The frame around the photo in the fit view, CSS pixels, as RawBoy's (grey, white or black: click outside the photo). */
 const FRAME_WIDTH = 12;
@@ -92,7 +93,7 @@ function GridView({ store, scroll, lastViewed }: {
     const onKey = (e: KeyboardEvent) => {
       if (!isTabShown('auto')) return;
       if (e.key === 'Escape') setSelection(new Set());
-      else if (e.key.toLowerCase() === 'a' && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && !isTextEntry(e.target)) {
+      else if (shortcutKey(e) === 'a' && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && !isTextEntry(e.target)) {
         e.preventDefault();
         setSelection(new Set(photosRef.current.map((p) => p.id)));
       }
@@ -553,7 +554,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!isTabShown('auto')) return;
-      const key = e.key.toLowerCase();
+      const key = shortcutKey(e);
       if ((e.metaKey || e.ctrlKey) && !e.altKey && (key === 'z' || (key === 'y' && e.ctrlKey))) {
         // Undo, or Redo with Shift (or Ctrl+Y), also while a slider has focus.
         const t = e.target;
@@ -568,6 +569,12 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
       if (e.key === ' ' || e.key === 'Backspace') {
         e.preventDefault();
         go(e.key === ' ' ? 1 : -1);
+        return;
+      }
+      // C: Copy previous. By key position (code), so it works on any layout (e.g. Ukrainian).
+      if (e.code === 'KeyC' && !e.shiftKey) {
+        e.preventDefault();
+        store.copyPrevious(id);
         return;
       }
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
@@ -731,7 +738,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
                 type="button"
                 className="text copy-previous"
                 disabled={state.export != null || index < 1}
-                title={index > 0 ? `Copy the look and settings of ${pages[index - 1].name}` : 'Copy the look and settings of the photo before this one'}
+                title={index > 0 ? `Copy the look and settings of ${pages[index - 1].name} (C)` : 'Copy the look and settings of the photo before this one (C)'}
                 onClick={() => store.copyPrevious(id)}
               >
                 Copy previous
