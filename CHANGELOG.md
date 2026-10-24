@@ -1,5 +1,12 @@
 # Changelog
 
+**Android: dragging the crop no longer swipes back (2026-10-24)**
+
+- RawBoy (Android): on a landscape photo the crop frame's left and right handles sit at the screen's edges, so
+  dragging them fired the system back gesture. Crop & rotate now keeps the area around those handles out of the back
+  gesture (the whole edge when it is short enough, else its corners and middle handle, within Android's 200 dp per
+  edge limit). Swiping back elsewhere on the screen works as before.
+
 **Blown highlights stay white when white balance changes; infrared highlights no longer go yellow (2026-10-24)**
 
 - All apps (Android, iOS, web): blown highlights (a bulb's filament, the sun) were made neutral at the photo's as-shot
