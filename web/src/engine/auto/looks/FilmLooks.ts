@@ -6,7 +6,11 @@ import { RetiredLooks } from './RetiredLooks';
  * LUT: negative, print and scan (slides: scan only), with grain and halation. Looks add only skin retouch on the
  * portrait films; the auto develop's exposure, white balance and denoise stay.
  */
-const stock = (id: string, name: string, portraitRetouch = 0): Look => ({ ...Looks.NATURAL, id, name, film: id, portraitRetouch });
+/** Auto's film grain, a little finer than the stock's own (100). */
+export const FILM_GRAIN = 80;
+
+const stock = (id: string, name: string, portraitRetouch = 0): Look =>
+  ({ ...Looks.NATURAL, id, name, film: id, portraitRetouch, filmGrain: FILM_GRAIN });
 
 export const FilmLooks = {
   PORTRA_400: stock('portra400', 'Yellow Portrait 400', 20),

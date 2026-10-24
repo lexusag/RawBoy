@@ -1,5 +1,10 @@
 # Changelog
 
+**Auto: finer film grain in Film mode (2026-10-24)**
+
+- RawBoy Auto (Android, iOS, web): the film stocks in Film mode start with 20% less grain than before. The Grain
+  slider still scales it from none (−50) to double (+50). RawBoy's own Film grain slider is unchanged.
+
 **Camera and Auto: JPEGs keep shutter speed, aperture, ISO and focal length (2026-10-24)**
 
 - RawBoy Camera's JPEGs, and JPEG or TIFF exports from Auto and RawBoy (Android) of RawBoy Camera's DNGs, came out
