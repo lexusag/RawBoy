@@ -11,7 +11,7 @@ import { scatterBloomTail } from '../gl/BloomTail';
 import { BOKEH_SOURCE_MAX_DIMENSION } from '../gl/BokehTexture';
 import type { BloomSources, PreviewImage } from '../gl/PreviewImage';
 import { WAVELET_DENOISE_MARGIN } from '../gl/WaveletDenoise';
-import { ShaderParams, WIDE_DENOISE_MARGIN, wideDenoise } from '../gl/ShaderParams';
+import { ShaderParams, WIDE_DENOISE_MARGIN, wideDenoise, type BrushLookup } from '../gl/ShaderParams';
 import { ZoomMath, contains, rect, type DetailTile } from '../gl/Zoom';
 import { LensInfo } from '../lens/LensInfo';
 import { LensTransform } from '../lens/LensTransform';
@@ -600,4 +600,40 @@ export function blemishesToHeal(spots: Float32Array, level: number): Float32Arra
   let count = 0;
   for (let i = 0; i < spots.length / 4; i++) if (spots[i * 4 + 3] >= minScore) count++;
   return spots.slice(0, count * 4);
+}
+
+/**
+ * Painted masks of [layers] rasterised on [image] (a whole-image copy) for a develop outside a session: Auto's grid
+ * thumbnails (its 512 px base) and batch export (the session preview's size, see editTexturesOf). Each layer with
+ * strokes gets its raster once; the Auto mask guide is made from [image] the first time a stroke needs it.
+ */
+export function brushLookup(image: PreviewImage, layers: readonly MaskLayer[]): BrushLookup {
+  let guide: BrushGuide | null = null;
+  const rasters = new Map<string, BrushRaster>();
+  for (const l of layers) {
+    if (!l.strokes.length) continue;
+    const r = new BrushRaster(image.width, image.height, () => (guide ??= makeGuide(image)));
+    r.sync(l.strokes);
+    rasters.set(l.id, r);
+  }
+  return (l) => rasters.get(l.id) ?? null;
+}
+
+/** What exporting RawBoy edits needs besides the analysis's small copies (see editTexturesOf). */
+export interface EditTextures {
+  brushFor: BrushLookup;
+  /** The lens blur's source copy, or null when no layer blurs. */
+  bokehSource: PreviewImage | null;
+}
+
+/**
+ * The painted masks and the lens blur source for exporting [p] from [image] without a session (Auto's batch export),
+ * made as the session makes them (brush rasters at the preview's size, the boosted bokeh copy), so the export matches
+ * what RawBoy showed. Call after any blemish healing: the session makes them from the healed image too.
+ */
+export async function editTexturesOf(image: RawImage, p: DevelopParams): Promise<EditTextures> {
+  const blurs = p.masks.some((l) => l.enabled && l.opacity > 0 && l.adjust.lensBlur > 0);
+  const bokehSource = blurs ? await image.createPreview(BOKEH_SOURCE_MAX_DIMENSION, true) : null;
+  if (!p.masks.some((l) => l.strokes.length)) return { brushFor: () => null, bokehSource };
+  return { brushFor: brushLookup(await image.createPreview(PREVIEW_MAX_DIMENSION), p.masks), bokehSource };
 }

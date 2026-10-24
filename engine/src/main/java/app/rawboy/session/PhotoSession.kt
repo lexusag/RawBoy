@@ -593,6 +593,37 @@ class PhotoSession(
     }
 }
 
+/**
+ * Painted masks of [layers] rasterised on [image] (a whole-image copy) for a develop outside a session: Auto's grid
+ * thumbnails (its 512 px base) and batch export (the session preview's size, see [editTexturesOf]). Each layer with
+ * strokes gets its raster once; the Auto mask guide is made from [image] the first time a stroke needs it.
+ */
+fun brushLookup(image: PreviewImage, layers: List<MaskLayer>): (MaskLayer) -> BrushRaster? {
+    var guide: BrushGuide? = null
+    val rasters = HashMap<String, BrushRaster>()
+    for (l in layers) {
+        if (l.strokes.isEmpty()) continue
+        rasters[l.id] = BrushRaster(image.width, image.height) { guide ?: BrushGuide.of(image).also { guide = it } }
+            .apply { sync(l.strokes) }
+    }
+    return { rasters[it.id] }
+}
+
+/** What exporting RawBoy edits needs besides the analysis's small copies (see [editTexturesOf]). */
+class EditTextures(val brushFor: (MaskLayer) -> BrushRaster?, val bokehSource: PreviewImage?)
+
+/**
+ * The painted masks and the lens blur source for exporting [p] from [image] without a session (Auto's batch export),
+ * made as [PhotoSession] makes them (brush rasters at the preview's size, the boosted bokeh copy), so the export
+ * matches what RawBoy showed. Call after any blemish healing: the session makes them from the healed image too.
+ */
+fun editTexturesOf(image: RawImage, p: DevelopParams): EditTextures {
+    val blurs = p.masks.any { it.enabled && it.opacity > 0f && it.adjust.lensBlur > 0f }
+    val bokehSource = if (blurs) image.createPreview(BokehTexture.SOURCE_MAX_DIMENSION, boostHighlights = true) else null
+    if (p.masks.none { it.strokes.isNotEmpty() }) return EditTextures({ null }, bokehSource)
+    return EditTextures(brushLookup(image.createPreview(PhotoSession.PREVIEW_MAX_DIMENSION), p.masks), bokehSource)
+}
+
 /** Everything decoded for one photo, swapped in together. */
 private class Loaded(
     val image: RawImage,

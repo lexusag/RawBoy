@@ -96,4 +96,16 @@ class LookApplierTest {
         assertEquals(-15f, q.lensDistortion, 1e-6f)
         assertEquals(20f, q.vignetteAmount, 1e-6f)
     }
+
+    @Test
+    fun rawBoyEditsDevelopAsTheyAreWithTheAdjustmentsOnTop() {
+        val edits = DevelopParams(exposure = 0.5f, denoise = 40f, sharpening = 20f, cropLeft = 0.1f, rotation = 1)
+        assertEquals(edits, LookApplier.applyEdits(edits, Adjustments.NONE))
+        val p = LookApplier.applyEdits(edits, Adjustments(brightness = 50f, denoise = -10f, rotation = 1))
+        assertEquals(2f, p.exposure, 1e-6f) // Brightness 50 = +1.5 EV
+        assertEquals(21f, p.denoise, 1e-4f) // RawBoy's own denoise, not re-measured (Denoise -10 takes luma first)
+        assertEquals(20f, p.sharpening, 1e-6f)
+        assertEquals(0.1f, p.cropLeft, 0f)
+        assertEquals(2, p.rotation)
+    }
 }

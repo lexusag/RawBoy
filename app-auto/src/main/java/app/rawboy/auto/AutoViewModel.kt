@@ -15,6 +15,9 @@ import app.rawboy.auto.looks.LookApplier
 import app.rawboy.auto.looks.LookSuggester
 import app.rawboy.auto.looks.Looks
 import app.rawboy.develop.DevelopParams
+import app.rawboy.develop.Edits
+import app.rawboy.develop.MaskLayer
+import app.rawboy.develop.BrushRaster
 import app.rawboy.develop.Preset
 import app.rawboy.develop.Presets
 import app.rawboy.export.ExportFormat
@@ -34,6 +37,8 @@ import app.rawboy.raw.RawImage
 import app.rawboy.session.PhotoSession
 import app.rawboy.view.EditHistory
 import app.rawboy.session.blemishesToHeal
+import app.rawboy.session.brushLookup
+import app.rawboy.session.editTexturesOf
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -76,6 +81,13 @@ data class AutoPhoto(
     val adjust: Adjustments = Adjustments.NONE,
     /** A RawBoy preset developing the photo in place of its look (see [LookApplier.applyPreset]), or null. */
     val preset: Preset? = null,
+    /**
+     * The develop RawBoy sent with the photo ("Send to Auto", [Edits]) in place of its look or preset, with the
+     * adjustments on top (see [LookApplier.applyEdits]); null = none. The look and preset stay for when it's removed.
+     */
+    val edits: DevelopParams? = null,
+    /** RawBoy edits ([Edits] JSON) received before the analysis: decoded against its as-shot defaults once it's in. */
+    val pendingEdits: String? = null,
     /** Which lens preset the photo gets (see [Presets.chosenLensPreset]): null = by its lens, else a pick. */
     val lensChoice: String? = null,
     /** The lens preset [lensChoice] gives, on top of the look or preset; null = none. */
@@ -88,12 +100,20 @@ data class AutoPhoto(
 
     val activeLook: Look get() = if (mode == LookMode.FILM) filmLook else look
 
-    /** What develops the photo, for labels: the preset's name, else the active look's. */
-    val lookName: String get() = preset?.name ?: activeLook.name
+    /** What develops the photo, for labels: RawBoy edits, the preset's name, else the active look's. */
+    val lookName: String get() = if (edits != null) EDITS_NAME else preset?.name ?: activeLook.name
 
-    /** The develop settings for the current look (or preset) and controls (null until analysed). */
+    /** The develop settings for the current RawBoy edits, look (or preset) and controls (null until analysed). */
     val params: DevelopParams?
-        get() = analysis?.let { LookApplier.develop(it.autoBase, activeLook, strength, adjust, it.stats.hasFace, preset, lensPreset) }
+        get() = analysis?.let { a ->
+            edits?.let { LookApplier.applyEdits(it, adjust) }
+                ?: LookApplier.develop(a.autoBase, activeLook, strength, adjust, a.stats.hasFace, preset, lensPreset)
+        }
+
+    companion object {
+        /** Label of RawBoy edits ([edits]) in place of a look. */
+        const val EDITS_NAME = "RawBoy edits"
+    }
 }
 
 /** A photo's edits, as Undo and Redo bring them back. */
@@ -104,19 +124,21 @@ private data class Develop(
     val strength: Float,
     val adjust: Adjustments,
     val preset: Preset?,
+    val edits: DevelopParams?,
     val looksApplied: Boolean,
 )
 
-private val AutoPhoto.develop get() = Develop(look, mode, filmLook, strength, adjust, preset, looksApplied)
+private val AutoPhoto.develop get() = Develop(look, mode, filmLook, strength, adjust, preset, edits, looksApplied)
 
 private fun AutoPhoto.withDevelop(d: Develop) = copy(
     look = d.look, mode = d.mode, filmLook = d.filmLook, strength = d.strength, adjust = d.adjust, preset = d.preset,
-    looksApplied = d.looksApplied,
+    edits = d.edits, looksApplied = d.looksApplied,
 )
 
 /**
  * The look (or preset), strength, warmth, tint, contrast, saturation and grain of [source] ("Apply to all", "Copy previous"); brightness,
- * denoise and rotation stay (they follow this photo's exposure, noise and framing).
+ * denoise and rotation stay (they follow this photo's exposure, noise and framing). RawBoy edits aren't copied (they
+ * hold the source's crop, masks and light leaks); this photo's own are replaced by the look.
  */
 private fun AutoPhoto.withLookOf(source: AutoPhoto): AutoPhoto {
     val s = source.adjust
@@ -126,6 +148,7 @@ private fun AutoPhoto.withLookOf(source: AutoPhoto): AutoPhoto {
         filmLook = source.filmLook,
         strength = source.strength,
         preset = source.preset,
+        edits = null,
         looksApplied = true,
         adjust = adjust.copy(warmth = s.warmth, tint = s.tint, contrast = s.contrast, saturation = s.saturation, grain = s.grain),
     )
@@ -284,7 +307,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
      * Adds photos from the picker or an intent; already listed ones are skipped. They join the batch once their dates are
      * read (a few small reads each), so it never reorders under the user's finger.
      */
-    fun add(uris: List<Uri>) {
+    fun add(uris: List<Uri>, edits: Map<Uri, String> = emptyMap()) {
         val known = _photos.value.map { it.id }.toSet()
         val wanted = uris.distinct().filter { it.toString() !in known }
         if (wanted.isEmpty()) return
@@ -299,7 +322,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
                     runCatching { app.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
                     AutoPhoto(
                         uri = uri, name = displayName(uri), date = CaptureDate.read(app, uri), mode = mode, preset = preset,
-                        lensChoice = lensChoice,
+                        lensChoice = lensChoice, pendingEdits = edits[uri],
                     )
                 }
             }
@@ -308,9 +331,47 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
             if (fresh.isEmpty()) return@launch
             _photos.update { sorted(it + fresh) }
             nonRawNote(fresh.map { it.name })?.let { _message.value = it }
+            fresh.singleOrNull { it.pendingEdits != null }?.let { _message.value = "${it.name} added with its RawBoy edits" }
             processQueue()
         }
     }
+
+    /**
+     * RawBoy's "Send to Auto" for one photo: develops [uri]'s photo with the edits in [editsUri] ([Edits] JSON) in place
+     * of its look or preset, Auto's controls back at zero (the edits already hold what they did), as one undo step, and
+     * opens it. A photo not in the batch joins it and gets them once analysed. Not while exporting.
+     */
+    fun receiveEdits(uri: Uri, editsUri: Uri) {
+        if (_export.value != null) {
+            _message.value = "Auto is exporting; send the photo again when it has finished"
+            return
+        }
+        viewModelScope.launch {
+            val text = runCatching {
+                withContext(Dispatchers.IO) {
+                    getApplication<Application>().contentResolver.openInputStream(editsUri)!!.use { it.readBytes().decodeToString() }
+                }
+            }.getOrNull()
+            if (text == null || Edits.decode(text, DevelopParams()) == null) {
+                _message.value = "Could not read the RawBoy edits"
+                return@launch
+            }
+            val p = photo(uri.toString())
+            if (p == null) return@launch add(listOf(uri), mapOf(uri to text))
+            val a = p.analysis
+            if (a == null) {
+                updatePhoto(p.id) { it.copy(pendingEdits = text) }
+                _message.value = "${p.name} gets its RawBoy edits once analysed"
+                return@launch
+            }
+            changeDevelop(p.id, force = true) { it.copy(edits = Edits.decode(text, a.defaults), adjust = Adjustments.NONE) }
+            if (_selected.value != p.id) openDetail(p.id)
+            _message.value = "${p.name} developed with its RawBoy edits"
+        }
+    }
+
+    /** Takes the RawBoy edits off one photo, back to its preset or look. */
+    fun removeEdits(id: String) = changeDevelop(id, force = true) { it.copy(edits = null) }
 
     /** Mode for photos added from now on; photos already in the batch keep theirs. */
     fun setImportMode(mode: LookMode) {
@@ -419,7 +480,8 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
     fun applyPresetToAll(preset: Preset) {
         if (_export.value != null) return
         _preset.value = preset
-        _photos.value.forEach { p -> changeDevelop(p.id, force = true) { it.copy(preset = preset) } }
+        // A preset develops in place of RawBoy edits too, as in place of a look.
+        _photos.value.forEach { p -> changeDevelop(p.id, force = true) { it.copy(preset = preset, edits = null) } }
         _message.value = "${preset.name} applied to all photos"
     }
 
@@ -430,7 +492,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
     fun applyPresetTo(preset: Preset, ids: Set<String>) {
         if (_export.value != null) return
         val photos = _photos.value.filter { it.id in ids }
-        photos.forEach { p -> changeDevelop(p.id, force = true) { it.copy(preset = preset) } }
+        photos.forEach { p -> changeDevelop(p.id, force = true) { it.copy(preset = preset, edits = null) } }
         _message.value = "${preset.name} applied to ${if (photos.size == 1) "1 photo" else "${photos.size} photos"}"
     }
 
@@ -481,6 +543,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
         if (_cachedPreview.value?.first in ids) _cachedPreview.value = null
         lookThumbs.keys.removeAll { it.first in ids }
         histories.keys.removeAll(ids)
+        smallBrushes.keys.removeAll(ids)
         _undo.update { it - ids }
     }
 
@@ -519,6 +582,10 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
                             lensPreset = Presets.chosenLensPreset(_lensPresets.value, it.lensChoice, analysis.lens.lensName),
                             look = if (it.looksApplied) it.look else look,
                             filmLook = if (it.looksApplied) it.filmLook else film,
+                            // RawBoy edits sent with the photo: absolute values against this file's as-shot defaults.
+                            edits = it.pendingEdits?.let { e -> Edits.decode(e, analysis.defaults) } ?: it.edits,
+                            adjust = if (it.pendingEdits != null) Adjustments.NONE else it.adjust,
+                            pendingEdits = null,
                         )
                     }
                     refreshThumbnail(next.id, immediate = true)
@@ -682,8 +749,28 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
         val a = p.analysis ?: throw IllegalStateException("not analysed")
         val lut = params.lut?.let { loadLut(it) }
         val film = params.film?.let { loadFilm(it) }
-        val shader = ShaderParams.from(params, a.defaults, lut, LensTransform(a.lens, params), a.base, a.bloom, a.skin, film = film)
-        return thumbnails.render(shader, a.base, size)
+        return thumbnails.render(smallShader(p.id, a, params, lut, film), a.base, size)
+    }
+
+    /** Painted masks of each photo's RawBoy edits on its 512 px base, for the mask list they were made for. */
+    private val smallBrushes = HashMap<String, Pair<List<MaskLayer>, (MaskLayer) -> BrushRaster?>>()
+
+    /**
+     * Uniforms for [params] on the analysis's small copies (thumbnails, the cached preview): RawBoy edits' painted masks
+     * are rasterised on the 512 px base (once per edit) and their lens blur starts from the boosted bloom copy, so a
+     * thumbnail shows them as the export will, only coarser.
+     */
+    private fun smallShader(id: String, a: Analysis, params: DevelopParams, lut: LutData?, film: FilmData?): ShaderParams {
+        val brushFor: (MaskLayer) -> BrushRaster? = if (params.masks.none { it.strokes.isNotEmpty() }) {
+            { null }
+        } else {
+            smallBrushes[id]?.takeIf { it.first === params.masks }?.second
+                ?: brushLookup(a.base, params.masks).also { smallBrushes[id] = params.masks to it }
+        }
+        return ShaderParams.from(
+            params, a.defaults, lut, LensTransform(a.lens, params), a.base, a.bloom, a.skin, film = film, brushFor = brushFor,
+            bokehSource = a.bloom.halo,
+        )
     }
 
     private suspend fun loadLut(id: String): LutData = lutLock.withLock {
@@ -764,7 +851,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
         val a = photo(id)?.analysis ?: return null
         val lut = params.lut?.let { runCatching { loadLut(it) }.getOrNull() }
         val film = params.film?.let { runCatching { loadFilm(it) }.getOrNull() }
-        return ShaderParams.from(params, a.defaults, lut, LensTransform(a.lens, params), a.base, a.bloom, a.skin, film = film)
+        return smallShader(id, a, params, lut, film)
     }
 
     fun consumeMessage() {
@@ -866,9 +953,12 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
                 if (params.blemishRemoval > 0f && skin != null && skin.hasSkin) {
                     img.healBlemishes(blemishesToHeal(img.detectBlemishes(skin), params.blemishRemoval))
                 }
+                // RawBoy edits' painted masks and lens blur, made from the healed image as the detail view makes them.
+                val textures = editTexturesOf(img, params)
                 // The stored 512/128 px copies were made from this same file, so they match.
                 val shader = ShaderParams.from(
                     params, a.defaults, lut, LensTransform(img.lens, params), a.base, a.bloom, a.skin, film = film,
+                    brushFor = textures.brushFor, bokehSource = textures.bokehSource,
                 )
                 Exporter(getApplication()).export(img, p.uri, p.name, shader, settings, NAMING, onProgress = onProgress)
             }
