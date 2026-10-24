@@ -3,8 +3,8 @@ import SwiftUI
 import UIKit
 
 /**
- * Curves in the Light tab (Android's CurvesPanel.kt, web's CurvesPanel.tsx): a channel picker and a square
- * point-curve editor. Touch the curve to add a point on it, drag a point to move it, double-tap a point to remove it.
+ * Curves in the Light tab (Android's CurvesPanel.kt, web's CurvesPanel.tsx): a channel picker and a point-curve
+ * editor twice as wide as tall, so it leaves the panel under the photo room for the rest. Touch the curve to add a point on it, drag a point to move it, double-tap a point to remove it.
  * Touches elsewhere in the box fall through, so they scroll the panel (`CurveTouchLayer`).
  */
 struct CurvesPanel: View {
@@ -89,7 +89,7 @@ struct CurvesPanel: View {
                     let h = size.height - 2 * Self.inset
                     let x = Float((p.x - Self.inset) / w), y = Float(1 - (p.y - Self.inset) / h)
                     if began {
-                        press(x, y, radius: Float(Self.grabRadius / w))
+                        press(x, y, radius: Float(Self.grabRadius / w), aspect: Float(h / w))
                     } else if let d = drag, d.index >= 0 {  // < 0: this touch removed a point or had nothing to grab
                         let moved = ToneCurves.move(d.points, d.index, x, y)
                         drag = (d.index, moved)
@@ -97,8 +97,8 @@ struct CurvesPanel: View {
                     }
                 }, onEnd: { drag = nil }))
             }
-            .aspectRatio(1, contentMode: .fit)
-            .frame(maxWidth: 320)
+            .aspectRatio(2, contentMode: .fit)
+            .frame(maxWidth: 400)
             if let i = selected, i < points.count {
                 Note("Input \(Int((points[i].x * 255).rounded())) → output \(Int((points[i].y * 255).rounded()))")
             } else {
@@ -109,10 +109,10 @@ struct CurvesPanel: View {
     }
 
     /** The start of a touch on the curve: grab the nearest point, remove it on a double tap, or add one on the curve. */
-    private func press(_ x: Float, _ y: Float, radius: Float) {
+    private func press(_ x: Float, _ y: Float, radius: Float, aspect: Float) {
         var pts = points
         let now = Date()
-        if let i = ToneCurves.nearest(pts, x, y, radius: radius) {
+        if let i = ToneCurves.nearest(pts, x, y, radius: radius, aspect: aspect) {
             if let t = lastTap, t.index == i, now.timeIntervalSince(t.time) < Self.doubleTap {
                 lastTap = nil
                 selected = nil
@@ -179,7 +179,7 @@ private final class CurveTouchView: UIView {
         let w = bounds.width - 2 * inset, h = bounds.height - 2 * inset
         guard w > 0, h > 0 else { return nil }
         let x = Float((point.x - inset) / w), y = Float(1 - (point.y - inset) / h)
-        if ToneCurves.nearest(points, x, y, radius: Float(grab / w)) != nil { return self }
+        if ToneCurves.nearest(points, x, y, radius: Float(grab / w), aspect: Float(h / w)) != nil { return self }
         return abs(CGFloat(ToneCurves.evaluate(points, x) - y)) * h <= grab ? self : nil
     }
 

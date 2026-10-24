@@ -43,6 +43,9 @@ import kotlin.math.roundToInt
 /** Finger distance that grabs a point or the curve; touches farther away scroll the panel instead. */
 private val GRAB_RADIUS = 24.dp
 private const val DOUBLE_TAP_MS = 350L
+/** The curve box: width / height, and its widest (web's styles.css on phones and iOS match). */
+private const val ASPECT = 2f
+private val MAX_WIDTH = 400.dp
 
 @Composable
 private fun curveColor(c: CurveChannel): Color = when (c) {
@@ -53,8 +56,8 @@ private fun curveColor(c: CurveChannel): Color = when (c) {
 }
 
 /**
- * Curves in the Light tab (web: CurvesPanel.tsx, iOS: CurvesPanel.swift): a channel picker and a square point-curve
- * editor. Touch the curve to add a point on it, drag a point to move it, double-tap a point to remove it. Touches
+ * Curves in the Light tab (web: CurvesPanel.tsx, iOS: CurvesPanel.swift): a channel picker and a point-curve editor
+ * twice as wide as tall, so it leaves the short panel under the photo room for the rest. Touch the curve to add a point on it, drag a point to move it, double-tap a point to remove it. Touches
  * elsewhere in the box aren't consumed, so they scroll the panel.
  */
 @Composable
@@ -91,9 +94,10 @@ internal fun CurvesPanel(curves: ToneCurves, onChange: (ToneCurves) -> Unit) {
         }
         Canvas(
             Modifier
+                // widthIn before fillMaxWidth: the other way round the full width overrides the cap.
+                .widthIn(max = MAX_WIDTH)
                 .fillMaxWidth()
-                .widthIn(max = 320.dp)
-                .aspectRatio(1f)
+                .aspectRatio(ASPECT)
                 .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp))
                 .pointerInput(channel) {
                     var lastTapTime = 0L
@@ -107,7 +111,7 @@ internal fun CurvesPanel(curves: ToneCurves, onChange: (ToneCurves) -> Unit) {
                         // The working copy: moves never act on a composition that hasn't caught up with the last change.
                         var pts = current[channel]
                         val grab = GRAB_RADIUS.toPx()
-                        var index = ToneCurves.nearest(pts, at.x, at.y, grab / w)
+                        var index = ToneCurves.nearest(pts, at.x, at.y, grab / w, h / w)
                         if (index >= 0 && index == lastTapIndex && down.uptimeMillis - lastTapTime < DOUBLE_TAP_MS) {
                             lastTapIndex = -1
                             down.consume()

@@ -7,6 +7,7 @@ import { ProApp } from './ui/pro/ProApp';
 import { ProStore } from './ui/pro/ProStore';
 import { isLensPreset } from './engine/develop/Presets';
 import { LicensesDialog } from './ui/common/LicensesDialog';
+import { SaveToPhotosSheet } from './ui/common/SaveToPhotosSheet';
 import { HelpDialog, isHelpShortcut } from './ui/common/HelpDialog';
 import { AppNavContext } from './ui/common/AppNav';
 import { PRO_HELP } from './ui/pro/help';
@@ -205,6 +206,7 @@ export function App() {
           </section>
         </main>
         {message && <Toast message={message} onDismiss={() => stores[tab].consumeMessage()} />}
+        <SaveToPhotosSheet />
         {showLicenses && <LicensesDialog onDismiss={() => setShowLicenses(false)} />}
         {showHelp && (
           <HelpDialog

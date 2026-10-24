@@ -10,7 +10,7 @@ import { EXTENSIONS, ExportSettingsStore, baseNameOf, fileName, type ExportSetti
 import { FrameColors } from '../../engine/gl/DevelopRenderer';
 import { PhotoSession } from '../../engine/session/PhotoSession';
 import { EditHistory } from '../common/EditHistory';
-import { saveBlob } from '../common/files';
+import { saveBlob, saveExports, savesToPhotos } from '../common/files';
 import { PresetStore } from './PresetStore';
 
 export interface EditorState {
@@ -432,8 +432,9 @@ export class ProStore {
     try {
       const blob = await this.session.export(current.params, current.defaults, settings, (f) => this.set({ exportProgress: f }));
       const name = fileName(baseNameOf(current.fileName ?? 'image'), EXTENSIONS[settings.format], 0, { suffix: 'rawboy' });
-      saveBlob(name, blob);
-      this.set({ exporting: false, message: `Saved ${name}` });
+      await saveExports([{ name, blob }], name);
+      // On iOS the Save to Photos sheet comes up instead.
+      this.set({ exporting: false, message: savesToPhotos() ? null : `Saved ${name}` });
     } catch (e) {
       this.set({ exporting: false, message: `Export failed: ${e instanceof Error ? e.message : String(e)}` });
     }

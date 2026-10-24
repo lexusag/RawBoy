@@ -66,6 +66,9 @@ down to none, e.g. to keep fine detail at high ISO). Press and hold the photo to
 grey by default) helps judge exposure; tap (click) outside the photo to cycle it through grey, white and black.
 **Swipe left or right** on the photo to move to the previous or next photo in the batch (each keeps its own
 settings; swiping is off while zoomed to 100% or exporting).
+**Remove from batch** (the bin in the web's top bar, the ⋮ menu on Android; **Delete** on the web) takes the open photo
+out of the batch, the file stays, and goes on to the next photo (the one before it at the batch's end; back to the
+grid when it was the last).
 **Undo** and **Redo** (arrows in the photo view's top bar; Ctrl/⌘ Z and Shift Ctrl/⌘ Z on the web) take back the
 photo's edits one step at a time: a look, a slider drag, a preset, a turn, Apply to all.
 **Apply to all** copies the look (and the Looks/Film mode), strength, warmth, tint, contrast, saturation and grain to

@@ -4,7 +4,7 @@ import { DEFAULT_STRENGTH, type Adjustments } from '../../engine/auto/looks/Look
 import { FrameColors } from '../../engine/gl/DevelopRenderer';
 import type { PreviewImage } from '../../engine/gl/PreviewImage';
 import type { ShaderParams } from '../../engine/gl/ShaderParams';
-import { canPickOutputFolder, PHOTO_ACCEPT, pickFiles, pickOutputFolder } from '../common/files';
+import { canPickOutputFolder, PHOTO_ACCEPT, pickFiles, pickOutputFolder, savesToPhotos } from '../common/files';
 import { isTabShown } from '../common/tabs';
 import { ParamSlider, formatPlain, formatSigned } from '../common/ParamSlider';
 import { isPressedSlider } from '../common/sliderFocus';
@@ -575,6 +575,12 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
         go(e.key === ' ' ? 1 : -1);
         return;
       }
+      // Delete: out of the batch, on to the next photo.
+      if (e.key === 'Delete') {
+        e.preventDefault();
+        store.removeOpened(id);
+        return;
+      }
       // C: Copy previous. By key position (code), so it works on any layout (e.g. Ukrainian).
       if (e.code === 'KeyC' && !e.shiftKey) {
         e.preventDefault();
@@ -615,6 +621,9 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
         </button>
         <button type="button" className="icon" title="Redo (Shift Ctrl/⌘ Z)" aria-label="Redo" disabled={state.export != null || !store.canRedo(id)} onClick={() => store.redo(id)}>
           <UndoIcon redo />
+        </button>
+        <button type="button" className="icon" title="Remove from the batch (Delete); the file stays" aria-label="Remove from batch" disabled={state.export != null} onClick={() => store.removeOpened(id)}>
+          <DeleteIcon />
         </button>
         <button type="button" className="text" disabled={state.export != null || state.photos.length < 2} onClick={() => store.applyLookToAll(id)}>Apply to all</button>
         <button type="button" className="text" disabled={state.export != null} title="Open in the RawBoy tab with these settings" onClick={() => onEditInRawBoy(id)}>Edit<span className="wide-only"> in RawBoy</span></button>
@@ -857,7 +866,9 @@ function ModeSwitch<M extends string>({ modes, mode, onChange, disabled, classNa
 function ExportSheet({ store, count, onDismiss, onExport }: { store: AutoStore; count: number; onDismiss: () => void; onExport: () => void }) {
   const where = canPickOutputFolder()
     ? 'You pick the folder next.'
-    : count > 1
+    : savesToPhotos()
+      ? `When it’s done, tap Save to Photos to add ${count > 1 ? 'them' : 'it'} to your gallery.`
+      : count > 1
       ? 'Saved as one ZIP download.'
       : 'Saved as a download.';
   useEscToDismiss(onDismiss);

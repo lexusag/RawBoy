@@ -106,12 +106,15 @@ export function curveTable(c: ToneCurves): Float32Array | null {
   return out;
 }
 
-/** Index of the point within radius of (x, y), the closest one, or -1. */
-export function nearestCurvePoint(points: readonly CurvePoint[], x: number, y: number, radius: number): number {
+/**
+ * Index of the point within radius of (x, y), the closest one, or -1. radius is a fraction of the box's width; aspect
+ * (box height / width) makes the distance round on screen in a box that isn't square.
+ */
+export function nearestCurvePoint(points: readonly CurvePoint[], x: number, y: number, radius: number, aspect = 1): number {
   let best = -1;
   let bestD = radius * radius;
   points.forEach(([px, py], i) => {
-    const d = (px - x) ** 2 + (py - y) ** 2;
+    const d = (px - x) ** 2 + ((py - y) * aspect) ** 2;
     if (d <= bestD) {
       best = i;
       bestD = d;

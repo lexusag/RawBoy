@@ -31,8 +31,12 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -168,8 +172,25 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
                     IconButton(onClick = { vm.redo(id) }, enabled = export == null && undo.canRedo) {
                         Icon(RedoIcon, contentDescription = "Redo")
                     }
-                    TextButton(onClick = { vm.applyLookToAll(id) }, enabled = export == null && photos.size > 1) {
-                        Text("Apply to all")
+                    // Apply to all and Remove share a menu: the bar is full on phones and the name needs the room.
+                    var menu by remember { mutableStateOf(false) }
+                    Box {
+                        IconButton(onClick = { menu = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "More")
+                        }
+                        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Apply to all") },
+                                onClick = { menu = false; vm.applyLookToAll(id) },
+                                enabled = export == null && photos.size > 1,
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Remove from batch") },
+                                onClick = { menu = false; vm.removeOpened(id) },
+                                leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                                enabled = export == null,
+                            )
+                        }
                     }
                     Button(onClick = { exportSheet = true }, enabled = loaded && export == null) { Text("Export") }
                     HelpButton("RawBoy Auto", AUTO_HELP, licences = true)

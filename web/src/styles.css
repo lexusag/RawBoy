@@ -965,7 +965,12 @@ input[type='range'] {
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+.dialog .error {
+  color: var(--error);
 }
 
 .dialog.licenses {
@@ -1554,7 +1559,7 @@ select {
   text-align: right;
 }
 
-/* Curves (Light tab): a square point-curve editor. Touches off the curve scroll the panel (CurvesPanel cancels the rest). */
+/* Curves (Light tab): a square point-curve editor (2:1 on phones, below). Touches off the curve scroll the panel (CurvesPanel cancels the rest). */
 .curve-box {
   display: block;
   width: 100%;
@@ -1586,6 +1591,18 @@ line.curve-grid {
 
 .curves .note {
   margin-top: 8px;
+}
+
+/* Phones: the panel under the photo is short, so the box is twice as wide as tall (CurvesPanel.kt on Android). */
+@media (max-width: 760px) {
+  .curve-chips,
+  .curve-box {
+    max-width: 400px;
+  }
+
+  .curve-box {
+    aspect-ratio: 2;
+  }
 }
 
 /* The Film tone mapper's stock picker. */
