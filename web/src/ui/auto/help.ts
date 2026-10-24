@@ -45,7 +45,7 @@ export const AUTO_HELP: HelpSection[] = [
       { how: 'Look, Adjust', text: 'Look, Strength, Brightness and Warmth; Adjust has the auto develop\'s own sliders.' },
       { how: 'Apply to all', text: 'Copies the look and its settings to every photo (brightness and denoise stay per photo).' },
       { keys: ['C'], how: 'Copy previous', text: 'Gives this photo the look, brightness and settings of the photo before it (denoise stays).' },
-      { how: 'Edit in RawBoy', text: 'Opens the photo in the RawBoy tab with this look as the starting edits. Back to Auto there brings it back with your RawBoy edits, the sliders here adjust on top, and Use a look drops them.' },
+      { how: 'Edit in RawBoy', text: 'Opens the photo in the RawBoy tab with this look as the starting edits. Back to Auto there brings it back with your RawBoy edits (crop, masks, lens blur and light leaks too, in Export all as well), the sliders here adjust on top, and Use a look drops them.' },
     ],
   },
 ];

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -34,6 +35,8 @@ fun ExportDialog(
     sourceName: String,
     onDismiss: () -> Unit,
     onExport: (ExportSettings) -> Unit,
+    /** Hands the photo with all its edits to RawBoy Auto, for its batch export. */
+    onSendToAuto: () -> Unit,
 ) {
     var settings by remember { mutableStateOf(initial) }
 
@@ -85,6 +88,16 @@ fun ExportDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Spacer(Modifier.height(16.dp))
+                HorizontalDivider()
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "Or add this photo to RawBoy Auto's batch with every edit (crop, masks, lens blur, light leaks) " +
+                        "and export it there with the rest.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                TextButton(onClick = onSendToAuto) { Text("Send to Auto") }
             }
         },
         confirmButton = { TextButton(onClick = { onExport(settings) }) { Text("Export") } },
