@@ -1,5 +1,13 @@
 # Changelog
 
+**Auto: Auto denoise all (2026-10-24)**
+
+- RawBoy Auto (Android, web): **Auto denoise all** in the grid's top row gives every photo of the batch its own
+  measured denoise, colour denoise and sharpening, for when a series is finished with its presets and lens
+  corrections. The Denoise slider goes back to 0; on the web presets lose their Denoise & sharpening group and RawBoy
+  edits take the measured values (photos added "As is" use the ISO table). Looks, presets, lens corrections and the
+  other settings stay; Undo in a photo takes it back. Not on iOS yet.
+
 **Bloom glows from highlights only (2026-10-24)**
 
 - RawBoy, Auto and Camera (Android, iOS, web): Bloom used to mix the whole picture with its blur, so at higher values

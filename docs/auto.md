@@ -75,7 +75,11 @@ photo's edits one step at a time: a look, a slider drag, a preset, a turn, Apply
 every photo, including photos still being analysed, which keep it instead of their suggested look (brightness and
 denoise stay per photo). **Copy previous** (at the end of the Look / Adjust tabs) copies the same settings, plus
 brightness, from the photo before this one in the batch to this photo only (denoise stays), as one undo step, like darktable's or Lightroom's "copy previous":
-develop one shot of a scene, swipe to the next and tap it. **Export all** saves every photo
+develop one shot of a scene, swipe to the next and tap it. **Auto denoise all** (in the grid's top row, Android and
+web) is for a finished series: every photo gets the denoise, colour denoise and sharpening the auto develop measured on
+it (its noise, ISO and exposure), in place of its Denoise slider and, on the web, of a preset's Denoise & sharpening
+group (the batch preset's too) and RawBoy edits' own values. Looks, presets, lens corrections and the other sliders
+stay; it is one undo step per photo. **Export all** saves every photo
 to `Pictures/RawBoy Auto/<name>-auto.jpg` (or `.tif`), one photo at a time, keeping the screen on. **Stop**, next to the progress bar, ends the export after the
 photo being saved; photos already saved stay (on the web without a folder, the ZIP holds those).
 While it runs, the grid shows the photos still to be saved in grey; each turns to colour once it's saved.

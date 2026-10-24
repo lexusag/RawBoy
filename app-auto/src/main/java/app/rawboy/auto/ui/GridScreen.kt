@@ -214,6 +214,12 @@ fun GridScreen(vm: AutoViewModel, snackbar: SnackbarHostState, pickPhotos: () ->
                             Text(if (sort == PhotoSort.DATE) "Sort: Shoot date" else "Sort: File name", maxLines = 1)
                         }
                     }
+                    // For a finished series: each photo's own measured denoise in place of its Denoise slider.
+                    if (photos.isNotEmpty()) {
+                        TextButton(onClick = vm::autoDenoiseAll, enabled = !exporting, modifier = Modifier.align(Alignment.CenterVertically)) {
+                            Text("Auto denoise all", maxLines = 1)
+                        }
+                    }
                     // Lens presets from RawBoy: by lens they correct every photo taken with their lens, whatever its
                     // look; a named one (manual lenses) is picked for the batch here or for a selection.
                     if (lensPresets.isNotEmpty()) {
