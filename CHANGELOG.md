@@ -1,5 +1,12 @@
 # Changelog
 
+**Web: mouse wheel moves sliders (2026-10-24)**
+
+- RawBoy and Auto (web): as in darktable, turning the mouse wheel over a slider moves it, no click needed: 1/200 of
+  its range per notch (1 on a −100…100 slider, 0.05 EV on Exposure), Shift for 10× bigger steps, Ctrl/⌘ for 10×
+  finer ones. A wheel that is scrolling the panel keeps scrolling it when a slider passes under the pointer; the
+  wheel takes the slider once the panel has been still for a moment. A run of wheel steps is one undo step.
+
 **Web: shortcuts work in Ukrainian and other non-Latin layouts (2026-10-24)**
 
 - RawBoy Web (Pro, Auto, Browser): letter shortcuts (Z zoom, Ctrl/⌘+Z undo, P / X / U flags, B / E / V mask tools,

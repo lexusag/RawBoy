@@ -36,7 +36,7 @@
 
 The **?** button in the top bar of every app (Ctrl+/ or ⌘/ on the web) shows the basics and gestures in a short sheet.
 
-Edits carry over when you open the next file, except rotation, flips, straightening and crop, which reset per photo. White balance carries over only if you changed it; otherwise each file uses its own as-shot white balance. Reset returns to the file's as-shot defaults. Double-tap a slider (or tap its value) to reset it. Double-tap the image for a 100% view at that point, drag to pan, and double-tap again to go back. Press and hold the image to compare with the as-shot render. A thin frame around the photo (neutral grey by default) helps judge exposure; tap outside the photo to cycle it through grey, white and black.
+Edits carry over when you open the next file, except rotation, flips, straightening and crop, which reset per photo. White balance carries over only if you changed it; otherwise each file uses its own as-shot white balance. Reset returns to the file's as-shot defaults. Double-tap a slider (or tap its value) to reset it. On the web, the mouse wheel over a slider moves it without clicking (Shift: big steps, Ctrl/⌘: fine steps). Double-tap the image for a 100% view at that point, drag to pan, and double-tap again to go back. Press and hold the image to compare with the as-shot render. A thin frame around the photo (neutral grey by default) helps judge exposure; tap outside the photo to cycle it through grey, white and black.
 
 ## LUTs
 
