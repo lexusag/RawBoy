@@ -1,5 +1,12 @@
 # Changelog
 
+**Auto: remove the open photo from the batch (2026-10-24)**
+
+- RawBoy Auto (Android, web): the photo view can take the open photo out of the batch (the file stays) and goes on to
+  the next photo, or the one before it at the batch's end; back to the grid after the last one. Web: a bin in the top
+  bar, or the Delete key. Android: Remove from batch in a new ⋮ menu in the top bar, which also holds Apply to all,
+  to give the file name room on phones.
+
 **Android: dragging the crop no longer swipes back (2026-10-24)**
 
 - RawBoy (Android): on a landscape photo the crop frame's left and right handles sit at the screen's edges, so
