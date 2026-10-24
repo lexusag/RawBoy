@@ -95,6 +95,13 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   `AutoTone`: exposure/tone/noise as ordinary `DevelopParams`), `looks/` (`Looks` catalogue on the bundled
   LUTs, `LookApplier` = auto base + look × Strength + the user's `Adjustments`, `LookSuggester`).
 - `app-auto/src/main/java/app/rawboy/auto/` — `AutoViewModel.kt` (batch queue, export all), `ui/` (grid, detail).
+  RawBoy edits in Auto (Android + web: `AutoPhoto.edits`, `LookApplier.applyEdits`/`applyEditsDevelop`): one photo's whole
+  develop in place of its look. Android: Pro's Export › Send to Auto → `Edits.ACTION_SEND_TO_AUTO` with the photo and an
+  `Edits.kt` JSON file (same format as web's `Edits.ts`; strokes and leaks kept) as extras, read grants via ClipData;
+  Auto decodes it against the analysis's as-shot defaults (`pendingEdits` until then). Batch export builds the brush
+  rasters and the bokeh source itself (`editTexturesOf` in `PhotoSession.kt/.ts`); thumbnails and the cached preview
+  rasterise strokes on the 512 px base (`brushLookup`) and blur from the bloom halo copy. Apply to all, Copy previous
+  and full presets replace edits (they hold one photo's crop, strokes and leaks).
   A waiting photo tapped in the grid (`openFromGrid` → `opening`) is analysed next (`nextQueued`) and opened when done
   (`openIfWaiting`, only while the grid shows; all ports).
   Batch order (all ports, and the web's Browser): `auto/PhotoOrder.kt/.swift/.ts` (`PhotoSort` DATE default / NAME,

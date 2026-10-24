@@ -8,7 +8,8 @@ import { applyPreset, chosenLensPreset, decodePresets, isLensPreset, layerPreset
 import { PresetStore } from '../pro/PresetStore';
 import { exportImage } from '../../engine/export/Exporter';
 import { baseNameOf, EXTENSIONS, ExportSettingsStore, fileName, type ExportSettings, type OutputNaming } from '../../engine/export/ExportSettings';
-import { FilmStocks } from '../../engine/film/FilmStocks';
+import { FilmStocks, type FilmData } from '../../engine/film/FilmStocks';
+import type { LutData } from '../../engine/lut/LutData';
 import { FrameColors } from '../../engine/gl/DevelopRenderer';
 import { ShaderParams } from '../../engine/gl/ShaderParams';
 import { renderThumbnail } from '../../engine/gl/ThumbnailRenderer';
@@ -16,7 +17,10 @@ import { LensTransform } from '../../engine/lens/LensTransform';
 import { loadLutCached } from '../../engine/lut/LutRepository';
 import { RawImage } from '../../engine/raw/RawImage';
 import type { PreviewImage } from '../../engine/gl/PreviewImage';
-import { blemishesToHeal, PhotoSession } from '../../engine/session/PhotoSession';
+import { blemishesToHeal, brushLookup, editTexturesOf, PhotoSession } from '../../engine/session/PhotoSession';
+import type { MaskLayer } from '../../engine/develop/Masks';
+import { segmentSkin } from '../../engine/retouch/SkinSegmenter';
+import type { BrushLookup } from '../../engine/gl/ShaderParams';
 import { quickImageOf, thumbnailOf } from '../browser/Previews';
 import { EditHistory } from '../common/EditHistory';
 import { imageUrl, saveExports, savesToPhotos, writeUnique } from '../common/files';
@@ -260,6 +264,8 @@ export class AutoStore {
   private analyzing = false;
   private nextId = 1;
   private readonly thumbTimers = new Map<string, number>();
+  /** Painted masks of RawBoy edits on the analysis's base, by the edits' mask list (see smallShader). */
+  private readonly brushes = new WeakMap<readonly MaskLayer[], BrushLookup>();
   /** Each photo's edits, for Undo and Redo in the photo view. */
   private readonly histories = new Map<string, EditHistory<Develop>>();
   /** Settings read back from photos' sidecars; analysis waits for them, so it keeps their looks. */
@@ -852,10 +858,23 @@ export class AutoStore {
     if (!a) throw new Error('not analysed');
     const lut = params.lut ? await loadLutCached(params.lut) : null;
     const film = params.film ? await FilmStocks.load(params.film) : null;
-    const shader = ShaderParams.from(
-      params, a.defaults, lut, new LensTransform(a.lens, params), a.base, a.bloom, a.skin, 1, 1, null, () => null, film,
+    return renderThumbnail(this.smallShader(a, params, lut, film), a.base, size);
+  }
+
+  /**
+   * Uniforms for [params] on the analysis's small copies (thumbnails, the cached preview): RawBoy edits' painted masks
+   * are rasterised on the 512 px base (once per edit, see brushes) and their lens blur starts from the boosted bloom
+   * copy, so a thumbnail shows them as the export will, only coarser.
+   */
+  private smallShader(a: Analysis, params: DevelopParams, lut: LutData | null, film: FilmData | null): ShaderParams {
+    let brushFor: BrushLookup = () => null;
+    if (params.masks.some((l) => l.strokes.length)) {
+      brushFor = this.brushes.get(params.masks) ?? brushLookup(a.base, params.masks);
+      this.brushes.set(params.masks, brushFor);
+    }
+    return ShaderParams.from(
+      params, a.defaults, lut, new LensTransform(a.lens, params), a.base, a.bloom, a.skin, 1, 1, null, brushFor, film, a.bloom.halo,
     );
-    return renderThumbnail(shader, a.base, size);
   }
 
   // ---- Detail view ----
@@ -921,7 +940,7 @@ export class AutoStore {
     if (!a) return null;
     const lut = params.lut ? await loadLutCached(params.lut).catch(() => null) : null;
     const film = params.film ? await FilmStocks.load(params.film).catch(() => null) : null;
-    return ShaderParams.from(params, a.defaults, lut, new LensTransform(a.lens, params), a.base, a.bloom, a.skin, 1, 1, null, () => null, film);
+    return this.smallShader(a, params, lut, film);
   }
 
   /**
@@ -1043,11 +1062,17 @@ export class AutoStore {
     const film = params.film ? await FilmStocks.load(params.film) : null;
     const img = await RawImage.open(p.file);
     try {
+      // A photo added As is has no skin mask; RawBoy edits with skin retouch or blemish removal still need one.
+      const skin = a.skin ?? (params.skinRetouch > 0 || params.blemishRemoval > 0
+        ? await segmentSkin(a.base, img.width, img.height).catch(() => null) : null);
       // A preset's Blemish removal heals the full-resolution image, as the detail view does.
-      if (params.blemishRemoval > 0 && a.skin?.hasSkin) await img.healBlemishes(blemishesToHeal(await img.detectBlemishes(a.skin), params.blemishRemoval));
+      if (params.blemishRemoval > 0 && skin?.hasSkin) await img.healBlemishes(blemishesToHeal(await img.detectBlemishes(skin), params.blemishRemoval));
+      // RawBoy edits' painted masks and lens blur, made from the healed image as the detail view makes them.
+      const textures = await editTexturesOf(img, params);
       // The stored 512/128 px copies were made from this same file, so they match.
       const shader = ShaderParams.from(
-        params, a.defaults, lut, new LensTransform(img.lens, params), a.base, a.bloom, a.skin, 1, 1, null, () => null, film,
+        params, a.defaults, lut, new LensTransform(img.lens, params), a.base, a.bloom, skin, 1, 1, null, textures.brushFor, film,
+        textures.bokehSource,
       );
       return await exportImage(img, shader, settings, onProgress);
     } finally {

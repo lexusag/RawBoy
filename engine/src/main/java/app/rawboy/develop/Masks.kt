@@ -121,9 +121,11 @@ object Masks {
     fun forPreset(layers: List<MaskLayer>): List<MaskLayer> =
         layers.filter { it.shape !is MaskShape.Brush }.map { if (it.strokes.isEmpty()) it else it.copy(strokes = emptyList()) }
 
-    // Preset files (the same JSON as web's Masks.ts writes). Strokes are never written or read.
+    // Preset files and a photo's edits (the same JSON as web's Masks.ts writes). Presets never write or read strokes.
 
-    fun toJson(layers: List<MaskLayer>): JSONArray = JSONArray(forPreset(layers).map(::layerJson))
+    /** [layers] as JSON: as a preset keeps them ([forPreset]), or with brush layers and strokes for one photo's [Edits]. */
+    fun toJson(layers: List<MaskLayer>, strokes: Boolean = false): JSONArray =
+        JSONArray((if (strokes) layers else forPreset(layers)).map(::layerJson))
 
     private fun layerJson(l: MaskLayer) = JSONObject().apply {
         put("id", l.id)
@@ -154,21 +156,36 @@ object Masks {
                 put("saturation", num(a.saturation)); put("clarity", num(a.clarity)); put("lensBlur", num(a.lensBlur))
             },
         )
-        put("strokes", JSONArray())
+        put(
+            "strokes",
+            JSONArray(
+                l.strokes.map { st ->
+                    JSONObject().apply {
+                        put("erase", st.erase); put("auto", st.auto); put("radius", num(st.radius))
+                        put("hardness", num(st.hardness)); put("flow", num(st.flow))
+                        // 1/100000 of the image: far below a pixel, and a much smaller file (as web's Edits.ts).
+                        put("points", JSONArray(st.points.map { Math.round(it * 1e5) / 1e5 }))
+                    }
+                },
+            ),
+        )
     }
 
     /** Floats via their shortest decimal, so 0.1 is written as 0.1. */
     private fun num(f: Float): Double = f.toString().toDouble()
 
-    /** Layers from untrusted JSON (a preset file), each with a fresh id: invalid ones are dropped, ranges clamped. */
-    fun parseLayers(v: Any?): List<MaskLayer> {
+    /**
+     * Layers from untrusted JSON, each with a fresh id: invalid ones are dropped, ranges clamped. Preset files hold
+     * gradients only; [strokes] (a photo's own edits, [Edits]) also keeps brush layers and every layer's strokes.
+     */
+    fun parseLayers(v: Any?, strokes: Boolean = false): List<MaskLayer> {
         val a = v as? JSONArray ?: return emptyList()
-        return (0 until a.length()).mapNotNull { parseLayer(a.opt(it)) }.take(MAX_LAYERS)
+        return (0 until a.length()).mapNotNull { parseLayer(a.opt(it), strokes) }.take(MAX_LAYERS)
     }
 
-    private fun parseLayer(v: Any?): MaskLayer? {
+    private fun parseLayer(v: Any?, strokes: Boolean): MaskLayer? {
         val o = v as? JSONObject ?: return null
-        val shape = parseShape(o.optJSONObject("shape")) ?: return null
+        val shape = parseShape(o.optJSONObject("shape"), strokes) ?: return null
         val a = o.optJSONObject("adjust") ?: JSONObject()
         fun adj(k: String, range: Float) = num(a, k, -range, range) ?: 0f
         return MaskLayer(
@@ -183,11 +200,27 @@ object Masks {
                 adj("temperature", 100f), adj("tint", 100f), adj("saturation", 100f), adj("clarity", 100f),
                 num(a, "lensBlur", 0f, 100f) ?: 0f,
             ),
-            strokes = emptyList(), // strokes never come from presets
+            // Strokes never come from presets.
+            strokes = if (!strokes) emptyList() else o.optJSONArray("strokes")?.let { a ->
+                (0 until a.length()).mapNotNull { parseStroke(a.opt(it)) }
+            }.orEmpty(),
         )
     }
 
-    private fun parseShape(s: JSONObject?): MaskShape? {
+    private fun parseStroke(v: Any?): BrushStroke? {
+        val o = v as? JSONObject ?: return null
+        val a = o.optJSONArray("points") ?: return null
+        val points = (0 until a.length()).map { i -> (a.opt(i) as? Number)?.toFloat()?.takeIf { it.isFinite() }?.coerceIn(-1f, 2f) }
+        val radius = num(o, "radius", MIN_BRUSH_RADIUS, MAX_BRUSH_RADIUS)
+        if (radius == null || points.size < 2 || points.size % 2 != 0 || points.any { it == null }) return null
+        return BrushStroke(
+            id = newId(), erase = o.opt("erase") == true, auto = o.opt("auto") == true, radius = radius,
+            hardness = num(o, "hardness", 0f, 100f) ?: 50f, flow = num(o, "flow", 1f, 100f) ?: 100f,
+            points = points.map { it!! },
+        )
+    }
+
+    private fun parseShape(s: JSONObject?, brush: Boolean): MaskShape? {
         if (s == null) return null
         fun f(k: String, min: Float = -1f, max: Float = 2f) = num(s, k, min, max)
         return when (s.optString("kind")) {
@@ -199,6 +232,7 @@ object Masks {
                 f("cx") ?: return null, f("cy") ?: return null, f("rx", 0.005f, 3f) ?: return null, f("ry", 0.005f, 3f) ?: return null,
                 f("angle", -360f, 360f) ?: return null, f("feather", 0f, 100f) ?: return null,
             )
+            "brush" -> if (brush) MaskShape.Brush else null
             else -> null
         }
     }

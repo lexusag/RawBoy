@@ -527,6 +527,10 @@ fun EditorScreen(vm: EditorViewModel) {
                 showExport = false
                 vm.export(settings)
             },
+            onSendToAuto = {
+                showExport = false
+                vm.sendPhotoToAuto()
+            },
         )
     }
 }
