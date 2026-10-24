@@ -69,6 +69,8 @@ void readMetadata(const dng_exif& e, PhotoMetadata& m) {
         m.gpsLongitudeRef = lonRef;
         m.gpsAltitude = value(e.fGPSAltitude);
         m.gpsBelowSeaLevel = e.fGPSAltitudeRef == 1;
+        for (int i = 0; i < 3; ++i) m.gpsTimeStamp[i] = value(e.fGPSTimeStamp[i]);
+        m.gpsDateStamp = e.fGPSDateStamp.Get();
     }
 }
 

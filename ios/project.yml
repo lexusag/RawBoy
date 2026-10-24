@@ -169,6 +169,7 @@ targets:
         UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
         UIRequiresFullScreen: true
         NSCameraUsageDescription: RawBoy Camera takes RAW photos and shows them developed live.
+        NSLocationWhenInUseUsageDescription: With Geotag on, RawBoy Camera saves where each photo was taken in the photo.
         NSPhotoLibraryUsageDescription: RawBoy Camera saves photos into its own albums in your library.
         NSPhotoLibraryAddUsageDescription: RawBoy Camera saves photos to your library.
     settings:

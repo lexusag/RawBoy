@@ -13,6 +13,12 @@ namespace rawboy {
  */
 bool readExif(const uint8_t* tiff, size_t size, PhotoMetadata& out, int& orientation);
 
+/**
+ * The GPS time and date stamps of a TIFF-structured file (a DNG or another TIFF-based raw) into [out]: LibRaw doesn't
+ * keep the date stamp.
+ */
+void readGpsStamps(const uint8_t* tiff, size_t size, PhotoMetadata& out);
+
 /** The TIFF-structured EXIF block of a HEIF/HEIC file (its 'Exif' item), or false if it has none. */
 bool findHeifExif(const uint8_t* data, size_t size, const uint8_t*& tiff, size_t& tiffSize);
 
