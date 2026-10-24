@@ -18,8 +18,8 @@ Downscaler* fromHandle(jlong handle) { return reinterpret_cast<Downscaler*>(hand
 extern "C" {
 
 JNIEXPORT jlong JNICALL Java_app_rawboy_export_BandNative_createDownscaler(JNIEnv*, jclass, jint inW, jint inH,
-                                                                            jint outW, jint outH) {
-    return reinterpret_cast<jlong>(new Downscaler(inW, inH, outW, outH));
+                                                                            jint outW, jint outH, jfloat sharpen) {
+    return reinterpret_cast<jlong>(new Downscaler(inW, inH, outW, outH, sharpen));
 }
 
 JNIEXPORT jint JNICALL Java_app_rawboy_export_BandNative_maxOutputRows(JNIEnv*, jclass, jlong handle, jint inputRows) {

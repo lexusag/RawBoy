@@ -21,14 +21,17 @@ public struct ExportSettings: Equatable, Sendable {
     public var jpegEncoder: JpegEncoder = .system
     /** Long side of the saved image in pixels, area-downscaled from full resolution; nil = full size. */
     public var maxLongSide: Int?
+    /** Light sharpening after the downscale (0 = none, ~0.5 subtle); only when maxLongSide makes the image smaller. */
+    public var downscaleSharpen: Float = 0
 
     public init(format: ExportFormat = .jpeg, jpegQuality: Int = 92, tiffBits: Int = 16,
-                jpegEncoder: JpegEncoder = .system, maxLongSide: Int? = nil) {
+                jpegEncoder: JpegEncoder = .system, maxLongSide: Int? = nil, downscaleSharpen: Float = 0) {
         self.format = format
         self.jpegQuality = jpegQuality
         self.tiffBits = tiffBits
         self.jpegEncoder = jpegEncoder
         self.maxLongSide = maxLongSide
+        self.downscaleSharpen = downscaleSharpen
     }
 }
 

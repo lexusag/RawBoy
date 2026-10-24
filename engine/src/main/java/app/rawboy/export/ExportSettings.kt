@@ -20,6 +20,8 @@ data class ExportSettings(
     val jpegEncoder: JpegEncoder = JpegEncoder.SYSTEM,
     /** Long side of the saved image in pixels, area-downscaled from full resolution; null = full size. */
     val maxLongSide: Int? = null,
+    /** Light sharpening after the downscale (0 = none, ~0.5 subtle); only when [maxLongSide] makes the image smaller. */
+    val downscaleSharpen: Float = 0f,
 )
 
 object ExportSettingsStore {

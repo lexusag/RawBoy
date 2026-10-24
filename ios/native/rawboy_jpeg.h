@@ -17,7 +17,8 @@ extern "C" {
 /** Exact area-average downscaler streamed row by row (rawboy::Downscaler; BandDownscaler.kt is the contract). */
 typedef struct RBDownscaler RBDownscaler;
 
-RB_JPEG_API RBDownscaler* rb_downscaler_create(int inWidth, int inHeight, int outWidth, int outHeight);
+/** [sharpen] > 0: light luma unsharp mask after the downscale (holds one row back until finish). */
+RB_JPEG_API RBDownscaler* rb_downscaler_create(int inWidth, int inHeight, int outWidth, int outHeight, float sharpen);
 /** Most output rows one push of [inputRows] rows can produce (size of [out] in rows). */
 RB_JPEG_API int rb_downscaler_max_output_rows(const RBDownscaler* downscaler, int inputRows);
 /** Adds [rows] rows of RGB 16-bit samples; writes finished output rows to [out] and returns their count. */

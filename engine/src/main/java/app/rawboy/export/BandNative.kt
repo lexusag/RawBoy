@@ -8,7 +8,7 @@ internal object BandNative {
         System.loadLibrary("rawboyjpeg")
     }
 
-    @JvmStatic external fun createDownscaler(inWidth: Int, inHeight: Int, outWidth: Int, outHeight: Int): Long
+    @JvmStatic external fun createDownscaler(inWidth: Int, inHeight: Int, outWidth: Int, outHeight: Int, sharpen: Float): Long
     @JvmStatic external fun maxOutputRows(handle: Long, inputRows: Int): Int
     @JvmStatic external fun push(handle: Long, input: ShortArray, rows: Int, output: ShortArray): Int
     @JvmStatic external fun finish(handle: Long, output: ShortArray): Int
