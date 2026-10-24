@@ -19,7 +19,7 @@ import type { PreviewImage } from '../../engine/gl/PreviewImage';
 import { blemishesToHeal, PhotoSession } from '../../engine/session/PhotoSession';
 import { quickImageOf, thumbnailOf } from '../browser/Previews';
 import { EditHistory } from '../common/EditHistory';
-import { imageUrl, saveBlob, writeUnique, zipFiles } from '../common/files';
+import { imageUrl, saveExports, savesToPhotos, writeUnique } from '../common/files';
 import type { EditsSidecar } from '../../engine/browse/XmpSidecar';
 import { findCaptureDate } from '../../engine/browse/CaptureDate';
 import { fileDate, saveSort, savedSort, sortPhotos, type PhotoSort } from '../../engine/auto/PhotoOrder';
@@ -959,7 +959,8 @@ export class AutoStore {
         this.session.export(params, a.defaults, this._state.exportSettings, (f) => this.update({ export: { ...this._state.export!, current: f } })),
       );
       const name = await this.save(p, blob, folder, this._state.exportSettings);
-      this.update({ message: `Saved ${name}` });
+      // On iOS the Save to Photos sheet comes up instead.
+      if (folder || !savesToPhotos()) this.update({ message: `Saved ${name}` });
       ok = true;
     } catch (e) {
       this.update({ message: `Export failed: ${e instanceof Error ? e.message : String(e)}` });
@@ -971,7 +972,7 @@ export class AutoStore {
   /**
    * Exports every analysed photo in turn (only those in [ids] when given: the grid's selection), decoding each again;
    * a failure skips to the next. With a [folder] the files are written there; otherwise they're collected into one
-   * ZIP download.
+   * ZIP download (on iOS, for Save to Photos).
    */
   async exportAll(folder: FileSystemDirectoryHandle | null, ids?: ReadonlySet<string>) {
     if (this._state.export) return;
@@ -1011,10 +1012,13 @@ export class AutoStore {
     }
     const saved = attempted - failed;
     // Photos finished before Stop are kept: written to the folder already, or still zipped.
-    if (!folder && zipped.length) saveBlob('RawBoy Auto.zip', await zipFiles(zipped));
+    if (!folder) await saveExports(zipped, 'RawBoy Auto.zip');
+    const where = folder ? ` to ${folder.name}` : savesToPhotos() ? '' : ' (ZIP)';
+    // On iOS the Save to Photos sheet says how many are ready; the toast is left for a stop or failures.
+    const quiet = !folder && savesToPhotos() && !stopped && failed === 0;
     this.update({
       export: null,
-      message: `${stopped ? 'Stopped · ' : ''}Saved ${saved} ${saved === 1 ? 'photo' : 'photos'}${folder ? ` to ${folder.name}` : ' (ZIP)'}${failed > 0 ? ` · ${failed} failed` : ''}`,
+      message: quiet ? null : `${stopped ? 'Stopped · ' : ''}${folder || !savesToPhotos() ? 'Saved' : 'Exported'} ${saved} ${saved === 1 ? 'photo' : 'photos'}${where}${failed > 0 ? ` · ${failed} failed` : ''}`,
     });
   }
 
@@ -1048,7 +1052,7 @@ export class AutoStore {
     const ext = EXTENSIONS[settings.format];
     if (folder) return writeUnique(folder, (c) => fileName(base, ext, c, NAMING), blob);
     const name = fileName(base, ext, 0, NAMING);
-    saveBlob(name, blob);
+    await saveExports([{ name, blob }], name);
     return name;
   }
 }

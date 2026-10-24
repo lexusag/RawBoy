@@ -4,7 +4,7 @@ import { DEFAULT_STRENGTH, type Adjustments } from '../../engine/auto/looks/Look
 import { FrameColors } from '../../engine/gl/DevelopRenderer';
 import type { PreviewImage } from '../../engine/gl/PreviewImage';
 import type { ShaderParams } from '../../engine/gl/ShaderParams';
-import { canPickOutputFolder, PHOTO_ACCEPT, pickFiles, pickOutputFolder } from '../common/files';
+import { canPickOutputFolder, PHOTO_ACCEPT, pickFiles, pickOutputFolder, savesToPhotos } from '../common/files';
 import { isTabShown } from '../common/tabs';
 import { ParamSlider, formatPlain, formatSigned } from '../common/ParamSlider';
 import { isPressedSlider } from '../common/sliderFocus';
@@ -862,7 +862,9 @@ function ModeSwitch<M extends string>({ modes, mode, onChange, disabled, classNa
 function ExportSheet({ store, count, onDismiss, onExport }: { store: AutoStore; count: number; onDismiss: () => void; onExport: () => void }) {
   const where = canPickOutputFolder()
     ? 'You pick the folder next.'
-    : count > 1
+    : savesToPhotos()
+      ? `When it’s done, tap Save to Photos to add ${count > 1 ? 'them' : 'it'} to your gallery.`
+      : count > 1
       ? 'Saved as one ZIP download.'
       : 'Saved as a download.';
   useEscToDismiss(onDismiss);

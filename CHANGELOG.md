@@ -1,5 +1,12 @@
 # Changelog
 
+**Web on iPhone and iPad: exports go to Photos (2026-10-24)**
+
+- RawBoy and Auto (web, Safari and the home-screen app on iOS/iPadOS): exports used to land in Files as downloads
+  (a ZIP for Export all). When an export finishes, a sheet now offers Save to Photos, which opens the share sheet
+  with every exported photo; its Save Image (Save N Images) puts them in the gallery. Safari opens the share sheet
+  only from a tap, so this one extra tap is needed; Download instead keeps the old behaviour. Other browsers and
+  platforms are unchanged.
 **Auto: remove the open photo from the batch (2026-10-24)**
 
 - RawBoy Auto (Android, web): the photo view can take the open photo out of the batch (the file stays) and goes on to

@@ -965,7 +965,12 @@ input[type='range'] {
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 8px;
+}
+
+.dialog .error {
+  color: var(--error);
 }
 
 .dialog.licenses {
