@@ -17,6 +17,8 @@ enum LookMode: String { case looks, film }
 struct AutoPhoto: Identifiable {
     let url: URL
     let name: String
+    /** When it was shot, else the file's date, as an EXIF date ([CaptureDate]); nil if unknown. Orders the batch. */
+    var date: String?
     var status: PhotoStatus = .queued
     var error: String?
     var analysis: Analysis?
@@ -136,6 +138,10 @@ final class AutoViewModel: ObservableObject {
     @Published private(set) var importMode: LookMode =
         UserDefaults.standard.string(forKey: importModeKey).flatMap(LookMode.init(rawValue:)) ?? .looks
     private static let importModeKey = "auto.importMode"
+    /** How the batch is ordered: by shoot date (the default) or file name; remembered. */
+    @Published private(set) var sort: PhotoSort =
+        UserDefaults.standard.string(forKey: sortKey).flatMap(PhotoSort.init(rawValue:)) ?? .date
+    private static let sortKey = "auto.sort"
     /** Format, JPEG quality, TIFF bit depth and size of exports, chosen in the grid; remembered. */
     @Published private(set) var exportSettings: ExportSettings = {
         var s = AutoViewModel.settings
@@ -208,16 +214,37 @@ final class AutoViewModel: ObservableObject {
                                onMessage: { [unowned self] in self.message = $0 })
     }
 
-    /** Adds imported files; already listed ones are skipped. */
+    private func sorted(_ list: [AutoPhoto]) -> [AutoPhoto] {
+        list.sorted { PhotoOrder.inOrder(sort, ($0.date, $0.name), ($1.date, $1.name)) }
+    }
+
+    /** Orders the batch by [sort] from now on. */
+    func setSort(_ sort: PhotoSort) {
+        self.sort = sort
+        UserDefaults.standard.set(sort.rawValue, forKey: Self.sortKey)
+        photos = sorted(photos)
+    }
+
+    /**
+     * Adds imported files; already listed ones are skipped. They join the batch once their dates are read (ImageIO's
+     * metadata, off the main actor), so it never reorders under the user's finger.
+     */
     func add(_ urls: [URL]) {
         let known = Set(photos.map(\.id))
-        let fresh = urls.filter { !known.contains($0.path) }.map {
-            AutoPhoto(url: $0, name: Imports.displayName($0), mode: importMode, preset: preset, lensChoice: lensChoice)
+        let wanted = urls.filter { !known.contains($0.path) }
+        if wanted.isEmpty { return }
+        let (mode, preset, lensChoice) = (importMode, preset, lensChoice)
+        Task {
+            let dates = await Task.detached(priority: .userInitiated) { wanted.map(CaptureDate.read) }.value
+            let now = Set(photos.map(\.id))
+            let fresh = zip(wanted, dates).filter { !now.contains($0.0.path) }.map { url, date in
+                AutoPhoto(url: url, name: Imports.displayName(url), date: date, mode: mode, preset: preset, lensChoice: lensChoice)
+            }
+            if fresh.isEmpty { return }
+            photos = sorted(photos + fresh)
+            if let note = Self.nonRawNote(fresh.map(\.name)) { message = note }
+            processQueue()
         }
-        if fresh.isEmpty { return }
-        photos += fresh
-        if let note = Self.nonRawNote(fresh.map(\.name)) { message = note }
-        processQueue()
     }
 
     /** File types Auto opens besides raws: already processed by the camera, so they give lower-quality results. */

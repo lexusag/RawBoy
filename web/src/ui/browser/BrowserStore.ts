@@ -1,4 +1,6 @@
 import { isRated, NO_RATING, readEdits, readXmp, writeEdits, writeXmp, type EditsSidecar, type Flag, type Rating } from '../../engine/browse/XmpSidecar';
+import { findCaptureDate } from '../../engine/browse/CaptureDate';
+import { fileDate, saveSort, savedSort, sortPhotos, type PhotoSort } from '../../engine/auto/PhotoOrder';
 import { deleteHandle, loadHandle, saveHandle } from '../../engine/util/Handles';
 import { zipFiles } from '../common/files';
 import { groupPhotos, isPhotoName, stemOf, withSuffix, type PhotoGroup } from './PhotoGroups';
@@ -11,6 +13,8 @@ export interface BrowsePhoto extends PhotoGroup {
   /** The main file's name (unique in the folder). */
   id: string;
   rating: Rating;
+  /** When it was shot, else the file's date, as an EXIF date (CaptureDate); null until read, or if unknown. */
+  date: string | null;
   /** Object URL of the grid thumbnail. */
   thumbnail: string | null;
   status: 'queued' | 'ready' | 'failed';
@@ -26,6 +30,8 @@ export interface BrowserState {
   filter: Filter;
   /** Shows only photos with at least this many stars (0 = any). */
   minStars: number;
+  /** How the grid is ordered: by shoot date (the default) or file name (remembered in this browser). */
+  sort: PhotoSort;
   /** The photo the keyboard acts on (highlighted in the grid, shown in the viewer). */
   current: string | null;
   viewing: boolean;
@@ -46,6 +52,7 @@ export interface BrowserState {
 }
 
 const AUTO_ADVANCE_KEY = 'rawboy.browser.autoAdvance';
+const SORT_KEY = 'rawboy.browser.sort';
 const EDITS_IN_SIDECARS_KEY = 'rawboy.browser.editsInSidecars';
 /** IndexedDB key of the last folder's handle. */
 const FOLDER_KEY = 'browseFolder';
@@ -195,7 +202,7 @@ async function moveFile(from: FileSystemDirectoryHandle, name: string, to: FileS
  */
 export class BrowserStore {
   private _state: BrowserState = {
-    folder: null, photos: [], filter: 'all', minStars: 0, current: null, viewing: false, binCount: 0,
+    folder: null, photos: [], filter: 'all', minStars: 0, sort: savedSort(SORT_KEY), current: null, viewing: false, binCount: 0,
     autoAdvance: savedAutoAdvance(), editsInSidecars: savedEditsInSidecars(), lastFolder: null, canUndo: false, busy: false, message: null,
   };
   private readonly listeners = new Set<() => void>();
@@ -347,8 +354,9 @@ export class BrowserStore {
       const old = known.get(g.main);
       photos.push(old ? { ...old, ...g } : await this.newPhoto(g));
     }
-    this.update({ folder: { name: 'Picked photos', writable: false }, photos });
-    this.queueThumbnails(photos.filter((p) => !known.has(p.id)).map((p) => p.id));
+    this.update({ folder: { name: 'Picked photos', writable: false }, photos: this.sorted(photos) });
+    this.queueThumbnails(this._state.photos.filter((p) => !known.has(p.id)).map((p) => p.id));
+    void this.readDates(this.generation);
   }
 
   private reset() {
@@ -383,12 +391,45 @@ export class BrowserStore {
     }
     for (const [id, p] of known) if (p.thumbnail && !photos.some((q) => q.id === id)) URL.revokeObjectURL(p.thumbnail);
     const current = photos.some((p) => p.id === this._state.current) ? this._state.current : null;
-    this.update({ photos, binCount, current, viewing: this._state.viewing && current != null });
-    this.queueThumbnails(photos.filter((p) => !p.thumbnail).map((p) => p.id));
+    this.update({ photos: this.sorted(photos), binCount, current, viewing: this._state.viewing && current != null });
+    this.queueThumbnails(this._state.photos.filter((p) => !p.thumbnail).map((p) => p.id));
+    void this.readDates(generation);
   }
 
   private async newPhoto(g: PhotoGroup): Promise<BrowsePhoto> {
-    return { ...g, id: g.main, rating: await this.readRating(g), thumbnail: null, status: 'queued', error: null };
+    return { ...g, id: g.main, rating: await this.readRating(g), date: null, thumbnail: null, status: 'queued', error: null };
+  }
+
+  private sorted(photos: BrowsePhoto[]): BrowsePhoto[] {
+    return sortPhotos(photos, this._state.sort, (p) => p.main);
+  }
+
+  /**
+   * Reads the dates of the photos that have none yet (capture date, else the file's) after the grid shows them in name
+   * order, then reorders the grid once: a folder opens as fast as before and moves at most once.
+   */
+  private async readDates(generation: number) {
+    const dates = new Map<string, string>();
+    for (const p of this._state.photos) {
+      if (p.date != null) continue;
+      try {
+        const file = await this.fileOf(p.id);
+        const date = (await findCaptureDate(file)) ?? fileDate(file.lastModified);
+        if (date) dates.set(p.id, date);
+      } catch {
+        // unreadable: stays undated, after the dated photos
+      }
+      if (generation !== this.generation) return;
+    }
+    if (!dates.size) return;
+    this.update({ photos: this.sorted(this._state.photos.map((p) => (dates.has(p.id) ? { ...p, date: dates.get(p.id)! } : p))) });
+  }
+
+  /** Orders the grid by [sort] from now on (remembered in this browser). */
+  setSort(sort: PhotoSort) {
+    saveSort(SORT_KEY, sort);
+    this._state = { ...this._state, sort };
+    this.update({ photos: this.sorted(this._state.photos) });
   }
 
   /** The rating in the photo's first sidecar that has one. */

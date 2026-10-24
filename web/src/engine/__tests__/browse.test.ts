@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { findEmbeddedPreview, findJxlPreview, scanForJpegs, tiffOrientation } from '../browse/EmbeddedPreview';
 import { readEdits, readXmp, writeEdits, writeXmp } from '../browse/XmpSidecar';
 import { developParams } from '../develop/DevelopParams';
@@ -468,5 +468,16 @@ describe('Rating a selection', () => {
     expect(ratings()).toEqual(['4', '4', '0']);
     await store.undo();
     expect(ratings()).toEqual(['2', '0', '0']);
+  });
+
+  it('orders the grid by shoot date (else file date), or by name', async () => {
+    const store = new BrowserStore();
+    const at = (h: number) => new Date(2026, 9, 1, h).getTime();
+    await store.addFiles([new File([], 'IMG_10.jpg', { lastModified: at(9) }), new File([], 'IMG_9.jpg', { lastModified: at(11) }), new File([], 'IMG_2.jpg', { lastModified: at(10) })]);
+    const order = () => store.state.photos.map((p) => p.id);
+    await vi.waitFor(() => expect(order()).toEqual(['IMG_10.jpg', 'IMG_2.jpg', 'IMG_9.jpg']));
+    store.setSort('name');
+    expect(order()).toEqual(['IMG_2.jpg', 'IMG_9.jpg', 'IMG_10.jpg']);
+    store.setSort('date');
   });
 });

@@ -61,6 +61,8 @@ enum class LookMode { LOOKS, FILM }
 data class AutoPhoto(
     val uri: Uri,
     val name: String,
+    /** When it was shot, else the file's date, as an EXIF date ([CaptureDate]); null if unknown. Orders the batch. */
+    val date: String? = null,
     val status: PhotoStatus = PhotoStatus.QUEUED,
     val error: String? = null,
     val analysis: Analysis? = null,
@@ -251,19 +253,52 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
     private val _undo = MutableStateFlow<Map<String, UndoState>>(emptyMap())
     val undoStates = _undo.asStateFlow()
 
-    /** Adds photos from the picker or an intent; already listed ones are skipped. */
+    /** How the batch is ordered: by shoot date (the default) or file name; remembered. */
+    private val _sort = MutableStateFlow(
+        runCatching { PhotoSort.valueOf(prefs.getString(KEY_SORT, null)!!) }.getOrDefault(PhotoSort.DATE),
+    )
+    val sort = _sort.asStateFlow()
+
+    private fun sorted(photos: List<AutoPhoto>) =
+        photos.sortedWith(PhotoOrder.comparator(_sort.value, AutoPhoto::date, AutoPhoto::name))
+
+    /** Orders the batch by [sort] from now on. */
+    fun setSort(sort: PhotoSort) {
+        _sort.value = sort
+        prefs.edit().putString(KEY_SORT, sort.name).apply()
+        _photos.update { sorted(it) }
+    }
+
+    /**
+     * Adds photos from the picker or an intent; already listed ones are skipped. They join the batch once their dates are
+     * read (a few small reads each), so it never reorders under the user's finger.
+     */
     fun add(uris: List<Uri>) {
         val known = _photos.value.map { it.id }.toSet()
-        val resolver = getApplication<Application>().contentResolver
-        val fresh = uris.distinct().filter { it.toString() !in known }.map { uri ->
-            // Picker grants survive process restarts only when persisted; shares can't be (and needn't be).
-            runCatching { resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
-            AutoPhoto(uri = uri, name = displayName(uri), mode = _importMode.value, preset = _preset.value, lensChoice = _lensChoice.value)
+        val wanted = uris.distinct().filter { it.toString() !in known }
+        if (wanted.isEmpty()) return
+        val mode = _importMode.value
+        val preset = _preset.value
+        val lensChoice = _lensChoice.value
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            val read = withContext(Dispatchers.IO) {
+                wanted.map { uri ->
+                    // Picker grants survive process restarts only when persisted; shares can't be (and needn't be).
+                    runCatching { app.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+                    AutoPhoto(
+                        uri = uri, name = displayName(uri), date = CaptureDate.read(app, uri), mode = mode, preset = preset,
+                        lensChoice = lensChoice,
+                    )
+                }
+            }
+            val now = _photos.value.map { it.id }.toSet()
+            val fresh = read.filter { it.id !in now }
+            if (fresh.isEmpty()) return@launch
+            _photos.update { sorted(it + fresh) }
+            nonRawNote(fresh.map { it.name })?.let { _message.value = it }
+            processQueue()
         }
-        if (fresh.isEmpty()) return
-        _photos.update { it + fresh }
-        nonRawNote(fresh.map { it.name })?.let { _message.value = it }
-        processQueue()
     }
 
     /** Mode for photos added from now on; photos already in the batch keep theirs. */
@@ -845,6 +880,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
         private const val KEY_EXPORT_QUALITY = "exportJpegQuality"
         private const val KEY_EXPORT_BITS = "exportTiffBits"
         private const val KEY_FRAME = "frame"
+        private const val KEY_SORT = "sort"
     }
 }
 

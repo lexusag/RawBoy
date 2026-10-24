@@ -95,6 +95,11 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
 - `app-auto/src/main/java/app/rawboy/auto/` — `AutoViewModel.kt` (batch queue, export all), `ui/` (grid, detail).
   A waiting photo tapped in the grid (`openFromGrid` → `opening`) is analysed next (`nextQueued`) and opened when done
   (`openIfWaiting`, only while the grid shows; all ports).
+  Batch order (all ports, and the web's Browser): `auto/PhotoOrder.kt/.swift/.ts` (`PhotoSort` DATE default / NAME,
+  remembered; EXIF date strings sort as text, undated photos last by name) and `CaptureDate` (Android ExifInterface +
+  its own CR3 box reader, iOS ImageIO, web `engine/browse/CaptureDate.ts` with `Blob.slice`; fallback the file's
+  modified date). Android/iOS read dates before photos join the batch; the web adds them at once (`add` is sync) and
+  reorders once when the dates are in.
   `PreviewCache.kt` (ports: `ios/Auto/PreviewCache.swift`, `web/src/ui/auto/PreviewCache.ts`, OPFS or a few in memory):
   the analysis hands it the session-size preview (`AutoAnalysis.analyze(onPreview)`), stored on disk (cap 1.5 GB,
   emptied on launch); `openDetail` publishes it as `cachedPreview` while the session decodes, and the detail page

@@ -34,12 +34,14 @@ struct GridScreen: View {
                         HStack(spacing: 12) {
                             importMode
                             presetControl
+                            sortControl
                             lensPresetsControl
                             Spacer(minLength: 0)
                         }
                         VStack(alignment: .leading, spacing: 4) {
                             importMode
                             presetControl
+                            sortControl
                             lensPresetsControl
                         }
                     }
@@ -103,6 +105,17 @@ struct GridScreen: View {
             }
             .pickerStyle(.segmented)
             .frame(width: 180)
+        }
+    }
+
+    /** The batch's order: by shoot date (photos without one by their file's date), or by file name. */
+    @ViewBuilder private var sortControl: some View {
+        if !vm.photos.isEmpty {
+            Button(vm.sort == .date ? "Sort: Shoot date" : "Sort: File name") {
+                vm.setSort(vm.sort == .date ? .name : .date)
+            }
+            .font(.subheadline)
+            .lineLimit(1)
         }
     }
 
