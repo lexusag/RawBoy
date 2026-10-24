@@ -139,12 +139,16 @@ data class ToneCurves(
             return FloatArray(count) { evaluate(points, it / (count - 1f), m) }
         }
 
-        /** Index of the point within [radius] of ([x], [y]), the closest one, or -1. */
-        fun nearest(points: List<CurvePoint>, x: Float, y: Float, radius: Float): Int {
+        /**
+         * Index of the point within [radius] of ([x], [y]), the closest one, or -1. [radius] is a fraction of the box's
+         * width; [aspect] (box height / width) makes the distance round on screen in a box that isn't square.
+         */
+        fun nearest(points: List<CurvePoint>, x: Float, y: Float, radius: Float, aspect: Float = 1f): Int {
             var best = -1
             var bestD = radius * radius
             points.forEachIndexed { i, p ->
-                val d = (p.x - x) * (p.x - x) + (p.y - y) * (p.y - y)
+                val dy = (p.y - y) * aspect
+                val d = (p.x - x) * (p.x - x) + dy * dy
                 if (d <= bestD) {
                     best = i
                     bestD = d
