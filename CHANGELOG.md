@@ -1,5 +1,12 @@
 # Changelog
 
+**The frame around the photo stays (2026-10-24)**
+
+- RawBoy Auto (Android, web): switching to a photo that is still rendering kept its thumbnail but dropped the grey /
+  white / black frame around it, so the frame blinked out and back. The frame now stays around the thumbnail too.
+- RawBoy and Auto (Android, web): the 100% view (and the web's wheel zoom) keeps the frame along the edges, with the
+  photo inside it; panning still reaches the photo's edges and corners.
+
 **Color and black & white sections in look and preset lists (2026-10-24)**
 
 - RawBoy, Auto and Camera (Android, web): look and preset pickers list black and white ones apart from the colour ones,

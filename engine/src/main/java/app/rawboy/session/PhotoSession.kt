@@ -125,6 +125,9 @@ class PhotoSession(
     private var params = DevelopParams()
     private var viewWidth = 0
     private var viewHeight = 0
+
+    /** The frame the 100% view keeps around the photo, pixels (ZoomMath's [frame]). */
+    private var viewFrame = 0
     /** Painted masks by layer id (see [brushRaster]); UI thread only. */
     private val brushes = HashMap<String, BrushRaster>()
     private var guide: BrushGuide? = null
@@ -261,9 +264,10 @@ class PhotoSession(
         }
     }
 
-    fun setViewSize(width: Int, height: Int) {
+    fun setViewSize(width: Int, height: Int, frame: Int = 0) {
         viewWidth = width
         viewHeight = height
+        viewFrame = frame
         _zoomCenter.value?.let { setZoomCenter(it.first, it.second) }
     }
 
@@ -287,7 +291,7 @@ class PhotoSession(
         val h = lens.outputHeight
         val zoom = _zoomCenter.value
         val r = if (zoom != null) {
-            ZoomMath.zoomedRect(zoom.first, zoom.second, viewWidth, viewHeight, w, h)
+            ZoomMath.zoomedRect(zoom.first, zoom.second, viewWidth, viewHeight, w, h, viewFrame)
         } else {
             ZoomMath.fitRect(viewWidth, viewHeight, w, h, frameWidth)
         }
@@ -334,7 +338,7 @@ class PhotoSession(
     private fun setZoomCenter(cx: Float, cy: Float) {
         val img = image ?: return
         val lens = lensFor(params)
-        val c = ZoomMath.clampCenter(cx, cy, viewWidth, viewHeight, lens.outputWidth, lens.outputHeight)
+        val c = ZoomMath.clampCenter(cx, cy, viewWidth, viewHeight, lens.outputWidth, lens.outputHeight, viewFrame)
         _zoomCenter.value = c
         ensureDetail(img, c)
     }
@@ -343,7 +347,7 @@ class PhotoSession(
     private fun ensureDetail(img: RawImage, c: Pair<Float, Float>) {
         if (tileJob?.isActive == true) return
         val lens = lensFor(params)
-        val view = ZoomMath.viewRect(c.first, c.second, viewWidth, viewHeight, lens.outputWidth, lens.outputHeight)
+        val view = ZoomMath.viewRect(c.first, c.second, viewWidth, viewHeight, lens.outputWidth, lens.outputHeight, viewFrame)
         // Source pixels the view needs, through rotation and lens geometry, plus the denoise halo.
         val needed = lens.sourceBounds(view, spatialMargin(params))
         val current = _detail.value

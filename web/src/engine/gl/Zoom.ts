@@ -21,6 +21,8 @@ export interface DetailTile {
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 /** Kotlin's coerceIn: lo wins when lo > hi, so the result never passes it. */
 const coerceIn = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(v, hi));
+/** The view's size less a frame on both sides. */
+const inner = (size: number, frame: number) => Math.max(1, size - 2 * frame);
 
 /**
  * Geometry of the zoomed view, centred on (cx, cy): [scale] device pixels per full-resolution pixel, 1 = the 100% view
@@ -34,15 +36,20 @@ export const ZoomMath = {
   MIN_TILE: 2048,
   TILE_SLACK: 512,
 
-  /** Keeps the visible region inside the image. */
-  clampCenter(cx: number, cy: number, viewW: number, viewH: number, imgW: number, imgH: number, scale = 1): [number, number] {
-    const halfW = Math.min(viewW / scale, imgW) / 2;
-    const halfH = Math.min(viewH / scale, imgH) / 2;
+  /**
+   * Keeps the visible region inside the image. [frame]: the band the zoomed view keeps around the photo on every
+   * side, device pixels, so the photo shows inside the view minus the frame.
+   */
+  clampCenter(cx: number, cy: number, viewW: number, viewH: number, imgW: number, imgH: number, scale = 1, frame = 0): [number, number] {
+    const halfW = Math.min(inner(viewW, frame) / scale, imgW) / 2;
+    const halfH = Math.min(inner(viewH, frame) / scale, imgH) / 2;
     return [clamp(cx, halfW, imgW - halfW), clamp(cy, halfH, imgH - halfH)];
   },
 
-  /** The full-resolution region visible on screen. */
-  viewRect(cx: number, cy: number, viewW: number, viewH: number, imgW: number, imgH: number, scale = 1): PixelRect {
+  /** The full-resolution region visible on screen (inside the [frame], as for [clampCenter]). */
+  viewRect(cx: number, cy: number, viewW: number, viewH: number, imgW: number, imgH: number, scale = 1, frame = 0): PixelRect {
+    viewW = inner(viewW, frame);
+    viewH = inner(viewH, frame);
     if (scale !== 1) {
       // Fractional pixels: whole ones would make panning jump [scale] device pixels at a time.
       const w = Math.min(viewW / scale, imgW);
@@ -60,8 +67,8 @@ export const ZoomMath = {
    * Where the whole output image sits in the zoomed view ([scale] device pixels per image pixel), as [left, top,
    * width, height] in device pixels: the visible region is centred like DevelopRenderer.drawZoomed's quad.
    */
-  zoomedRect(cx: number, cy: number, viewW: number, viewH: number, imgW: number, imgH: number, scale = 1): number[] {
-    const v = ZoomMath.viewRect(cx, cy, viewW, viewH, imgW, imgH, scale);
+  zoomedRect(cx: number, cy: number, viewW: number, viewH: number, imgW: number, imgH: number, scale = 1, frame = 0): number[] {
+    const v = ZoomMath.viewRect(cx, cy, viewW, viewH, imgW, imgH, scale, frame);
     return [(viewW - v.width * scale) / 2 - v.x * scale, (viewH - v.height * scale) / 2 - v.y * scale, imgW * scale, imgH * scale];
   },
 

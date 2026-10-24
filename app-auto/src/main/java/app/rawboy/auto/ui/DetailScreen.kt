@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -65,6 +66,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
@@ -216,7 +220,7 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
                     .weight(1f)
                     .fillMaxWidth()
                     .background(Color(0xFF121212))
-                    .onSizeChanged { session.setViewSize(it.width, it.height) },
+                    .onSizeChanged { session.setViewSize(it.width, it.height, framePx) },
             ) {
                 HorizontalPager(
                     state = pagerState,
@@ -315,8 +319,23 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
                         } else {
                             // Until the raw is decoded, show the grid thumbnail.
                             pagePhoto.thumbnail?.let {
-                                // Inset by the frame so the photo doesn't move when the decoded preview replaces it.
-                                Image(it.asImageBitmap(), pagePhoto.name, Modifier.fillMaxSize().padding(FRAME_WIDTH), contentScale = ContentScale.Fit)
+                                // Inset by the frame so the photo doesn't move when the decoded preview replaces it,
+                                // and framed as the preview will be, so the frame doesn't blink out while it renders.
+                                Box(Modifier.fillMaxSize().padding(FRAME_WIDTH), contentAlignment = Alignment.Center) {
+                                    Image(
+                                        it.asImageBitmap(), pagePhoto.name,
+                                        Modifier
+                                            .aspectRatio(it.width.toFloat() / it.height)
+                                            .drawBehind {
+                                                val f = framePx.toFloat()
+                                                drawRect(
+                                                    Color(frameColor.level, frameColor.level, frameColor.level),
+                                                    topLeft = Offset(-f, -f), size = Size(size.width + 2 * f, size.height + 2 * f),
+                                                )
+                                            },
+                                        contentScale = ContentScale.Fit,
+                                    )
+                                }
                             }
                             if (pagePhoto.id == id) CircularProgressIndicator(Modifier.align(Alignment.Center))
                         }

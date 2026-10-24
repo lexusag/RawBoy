@@ -554,6 +554,8 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
     () => (loaded || !quick ? session : { ...session, preview: quick.image, zoomCenter: null, detail: null }),
     [loaded, quick, session],
   );
+  // The thumbnail shown until the raw is decoded, by its size: the frame goes around it (Preview's placeholderSize).
+  const [thumbSize, setThumbSize] = useState<{ src: string; size: [number, number] } | null>(null);
   const zoomed = session.zoomCenter != null;
   const go = (delta: number) => {
     if (zoomed || state.export) return;
@@ -672,6 +674,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
             params={shaderParams ?? quick?.params ?? null}
             frame={FRAME_WIDTH}
             frameGrey={FrameColors[state.frameColor].level}
+            placeholderSize={thumbSize?.src === photo.thumbnail ? thumbSize.size : null}
             onViewSize={(w, h, f) => store.setViewSize(w, h, f)}
             onToggleZoom={(x, y) => loaded && store.toggleZoom(x, y)}
             onClick={(x, y) => loaded && store.onPreviewClick(x, y)}
@@ -684,7 +687,15 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
             {!loaded && !quick && (
               <>
                 {/* Inset by the frame so the photo doesn't move when the decoded preview replaces it. */}
-                {photo.thumbnail && <img className="placeholder" src={photo.thumbnail} alt="" style={{ padding: FRAME_WIDTH, boxSizing: 'border-box' }} />}
+                {photo.thumbnail && (
+                  <img
+                    className="placeholder"
+                    src={photo.thumbnail}
+                    alt=""
+                    style={{ padding: FRAME_WIDTH, boxSizing: 'border-box' }}
+                    onLoad={(e) => setThumbSize({ src: e.currentTarget.src, size: [e.currentTarget.naturalWidth, e.currentTarget.naturalHeight] })}
+                  />
+                )}
                 <div className="center"><span className="spinner" /></div>
               </>
             )}
