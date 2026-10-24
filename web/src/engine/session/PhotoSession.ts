@@ -9,6 +9,7 @@ import type { ExportSettings } from '../export/ExportSettings';
 import { FilmStocks, type FilmData } from '../film/FilmStocks';
 import { scatterBloomTail } from '../gl/BloomTail';
 import type { BloomSources, PreviewImage } from '../gl/PreviewImage';
+import { WAVELET_DENOISE_MARGIN } from '../gl/WaveletDenoise';
 import { ShaderParams, WIDE_DENOISE_MARGIN, wideDenoise } from '../gl/ShaderParams';
 import { ZoomMath, contains, rect, type DetailTile } from '../gl/Zoom';
 import { LensInfo } from '../lens/LensInfo';
@@ -456,7 +457,8 @@ export class PhotoSession {
     const mask = s.kind === 'ready' ? s.mask : null;
     const retouch = params.skinRetouch > 0 && mask?.hasSkin ? Math.trunc(mask.sigmaPx * 2.4) + 4 : 0;
     const wide = wideDenoise(Math.max(params.denoise, effectiveColorDenoise(params))) > 0 ? WIDE_DENOISE_MARGIN : 0;
-    return Math.max(ZoomMath.HALO, retouch, wide);
+    const prePass = Math.max(params.denoise, effectiveColorDenoise(params)) > 0 ? WAVELET_DENOISE_MARGIN : 0;
+    return Math.max(ZoomMath.HALO, retouch, wide) + prePass;
   }
 
   /** Lens geometry for [params] on the current image; cached while the lens sliders are unchanged. */

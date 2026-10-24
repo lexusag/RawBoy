@@ -1,6 +1,7 @@
 import { DevelopInputs, DevelopProgram, FullscreenQuad, SampleGeometry, createTexture, uploadHalfRgb } from './GlCommon';
 import type { PreviewImage } from './PreviewImage';
 import type { ShaderParams } from './ShaderParams';
+import { WaveletDenoise } from './WaveletDenoise';
 import { rect, type PixelRect } from './Zoom';
 
 /**
@@ -15,6 +16,9 @@ export class OffscreenDeveloper {
   private readonly inputTexture: WebGLTexture;
   private readonly outputTexture: WebGLTexture;
   private readonly framebuffer: WebGLFramebuffer;
+  private readonly denoiser: WaveletDenoise;
+  private uploads = 0;
+  private denoisedInput = false;
   imageWidth = 1;
   imageHeight = 1;
   /** Smallest grain cell for [render] (see SampleGeometry.minGrainPx). */
@@ -31,6 +35,7 @@ export class OffscreenDeveloper {
     this.inputTexture = createTexture(gl, gl.LINEAR);
     this.outputTexture = createTexture(gl, gl.NEAREST);
     this.framebuffer = gl.createFramebuffer()!;
+    this.denoiser = new WaveletDenoise(gl, this.quad);
   }
 
   get maxTextureSize(): number {
@@ -52,7 +57,7 @@ export class OffscreenDeveloper {
     gl.bindTexture(gl.TEXTURE_2D, this.inputTexture);
     uploadHalfRgb(gl, inRect.width, inRect.height, input);
     const geometry = new SampleGeometry(inRect.width, inRect.height, inRect, out, this.imageWidth, this.imageHeight, this.minGrainPx);
-    return this.draw(params, geometry, out.width, out.height);
+    return this.draw(params, geometry, out.width, out.height, this.denoised(params, inRect.width, inRect.height, 1));
   }
 
   /** Develops the whole photo from its downscaled [preview] into a [width] x [height] image, as the fit view does. */
@@ -65,10 +70,18 @@ export class OffscreenDeveloper {
       preview.width, preview.height, rect(0, 0, preview.fullWidth, preview.fullHeight),
       rect(0, 0, params.lens.outputWidth, params.lens.outputHeight), preview.fullWidth, preview.fullHeight,
     );
-    return this.draw(params, geometry, width, height);
+    return this.draw(params, geometry, width, height, this.denoised(params, preview.width, preview.height, preview.width / preview.fullWidth));
   }
 
-  private draw(params: ShaderParams, geometry: SampleGeometry, width: number, height: number): Uint16Array | Uint32Array {
+  /** The input texture, or its copy through the wavelet denoise pre-pass when denoise is on (see WaveletDenoise). */
+  private denoised(p: ShaderParams, width: number, height: number, pixelScale: number): WebGLTexture {
+    this.uploads++; // every render uploads new pixels
+    this.denoisedInput = this.denoiser.active(p.denoise, p.colorDenoise);
+    if (!this.denoisedInput) return this.inputTexture;
+    return this.denoiser.apply(this.inputTexture, `u${this.uploads}`, width, height, pixelScale, p.denoise, p.colorDenoise);
+  }
+
+  private draw(params: ShaderParams, geometry: SampleGeometry, width: number, height: number, input: WebGLTexture): Uint16Array | Uint32Array {
     const gl = this.gl;
     gl.bindTexture(gl.TEXTURE_2D, this.outputTexture);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16UI, width, height, 0, gl.RGBA_INTEGER, gl.UNSIGNED_SHORT, null);
@@ -78,8 +91,9 @@ export class OffscreenDeveloper {
     if (status !== gl.FRAMEBUFFER_COMPLETE) throw new Error(`Framebuffer incomplete: 0x${status.toString(16)}`);
 
     gl.viewport(0, 0, width, height);
-    gl.bindTexture(gl.TEXTURE_2D, this.inputTexture);
+    gl.bindTexture(gl.TEXTURE_2D, input);
     this.program.bind(params, geometry, 1, 1, false); // framebuffer row 0 = output row 0
+    this.program.setDenoisePre(this.denoisedInput);
     this.quad.draw();
 
     // RGBA_INTEGER + UNSIGNED_INT is always readable from an unsigned integer target. Never try UNSIGNED_SHORT,
@@ -102,6 +116,7 @@ export class OffscreenDeveloper {
     gl.deleteFramebuffer(this.framebuffer);
     gl.deleteTexture(this.inputTexture);
     gl.deleteTexture(this.outputTexture);
+    this.denoiser.release();
     this.quad.release();
     this.inputs.release();
     this.program.release();

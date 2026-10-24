@@ -1,6 +1,6 @@
 # Known limitations / next steps
 
-- Denoise and Grain are sized in full-resolution pixels, so the fit-to-screen preview shows them weaker than the exported file. Judge them in the 100% view.
+- Grain and the fine colour denoise are sized in full-resolution pixels, so the fit-to-screen preview shows them weaker than the exported file (the multi-scale luma denoise follows the preview's scale). Judge them in the 100% view.
 - Shadows/Highlights are per-pixel tone curves. A local (guided-filter) version would keep more micro-contrast.
 - Zoom is fit or 100% only, with no pinch zoom.
 - Press-and-hold compare shows healed blemishes as healed (healing changes the image data itself).

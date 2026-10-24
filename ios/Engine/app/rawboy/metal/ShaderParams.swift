@@ -112,7 +112,9 @@ public final class ShaderParams: @unchecked Sendable {
         var retouch = 0
         if skinRetouch > 0, let skinMask, skinMask.hasSkin { retouch = Int(skinMask.sigmaPx * 2.4) + 4 }
         let wide = denoiseWide > 0 || colorDenoiseWide > 0 ? Self.wideDenoiseMargin : 0
-        return max(ZoomMath.halo, retouch, wide)
+        // The wavelet denoise pre-pass runs before the shader, so its reach adds to the shader's.
+        let prePass = denoise > 0 || colorDenoise > 0 ? WaveletDenoise.margin : 0
+        return max(ZoomMath.halo, retouch, wide) + prePass
     }
 
     /**

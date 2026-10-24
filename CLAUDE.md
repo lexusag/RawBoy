@@ -644,6 +644,30 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   With both equal the shader output is the old single denoise. Needs `WIDE_DENOISE_MARGIN` (20) source
   pixels: `ShaderParams.spatialMargin` and PhotoSession's zoom margin include it. Camera's high-ISO curve
   (`highIsoDenoise`, by ISO × noise scale) pushes up to 100.
+- **Wavelet denoise pre-pass** (2026-10-24, all platforms; `gl/WaveletDenoise.kt/.ts`, `metal/WaveletDenoise.swift`,
+  passes `shaders/denoise_*.frag` + `denoise.vert`, hand-ported to Metal at the end of `Helpers.metal`: keep in step):
+  renders a denoised copy of the input texture before the develop shader, which then runs with `uDenoisePre` 1 (luma
+  stages skipped, chroma stages only). sqrt(x + c) domain, luma = mean, **ratio chroma** (c − L)/(L + 0.02); B3 à
+  trous, 5 levels at full res (strides 1..16, `MARGIN` 64 added to `spatialMargin` and PhotoSession's zoom margin
+  whenever denoise > 0); per band a garrote on the **local energy** (3×3 at about the band's spacing; per-coefficient
+  thresholds left salt-and-pepper dots), thresholds = slider σ (0.03 × slider) × measured band-noise profile × k,
+  then a fixed fraction of each band added back (`LUMA_KEEP`, ~0.35–0.5: the owner's pick, "Grain kept 1.75" in the
+  web comparison); chroma kept ≥ luma's factor (luma guard). Full-res bands 0–1 of chroma are left to the shader's
+  ratio-chroma bilateral (`FINE_CHROMA_BANDS`): shrunk in the wavelet, the dim channels under coloured light (what a
+  mono LUT shows) were wiped. On a downscaled texture band j = full-res band j + log2(1/pixelScale), fewer levels.
+  Needs float render targets (`GL_EXT_color_buffer_float`; logged as "wavelet denoise off" without, then the shader
+  denoises alone); Metal always. Cached by source texture + strength, so other sliders don't re-run it. Not in the
+  viewfinders (shots get it via OffscreenDeveloper). Findings behind it (DSCF2244 GFX ISO 1000 wall, DSCF1705 ISO
+  6400 blue light + mono LUT, A7 III / Pixel crops): the old bilateral kept 39% of the finest band but 83–88% of
+  bands 2–4 → blotchy mottle; camera noise is correlated (coarse bands 1.5× luma, 2–4× chroma of white noise:
+  `LUMA_PROFILE`/`CHROMA_PROFILE`); near black read noise dominates (std equal across channels on the wall), sqrt(x)
+  turned it into dark dots → c = (12σ)², thresholds scaled by the transform's slope there (min ½). A per-image
+  variance = a·x + b fit for c was tried and dropped (underestimated b on demosaiced data, unstable across files).
+  Plain difference chroma made a mono LUT under blue light blotchy even with chroma-only denoise: chroma is ratio
+  everywhere now (`chromaOf` in develop.glsl). Auto's measured slider constants (2000/2600, ×0.8) were tuned on the
+  old filter: retune from the owner's batches if needed. Comparison harness used: playwright export crops through
+  `PhotoSession.export` + contrast-stretched montages (scratch, not in the repo); Vite needed a restart after every
+  shader or module edit (stale `?t=` copies, see the web traps).
 - `ViewfinderRenderer`: pass 1 and the readback must run even before the first params arrive (the first params
   come from the first readback); only pass 2 waits for params.
 - Compose text on a plain black `Box` is black (no `Surface` → default content colour): Camera wraps its screen in a `Surface`.

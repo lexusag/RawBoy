@@ -1,5 +1,20 @@
 # Changelog
 
+**Denoise: no more blotchy texture on flat surfaces (2026-10-24)**
+
+- All apps (Android, iOS, web): Luma denoise is now multi-scale. Camera noise isn't only fine grain: demosaicing
+  spreads it into blobs several pixels across, and the old filter removed the fine grain but kept 83–88% of those, so
+  flat walls, skies and skin turned into blotchy, mottled texture once the exposure went up (visible from about
+  ISO 1000). The new denoise takes noise out at every scale up to about 60 px and leaves an even fine grain of the
+  photo's own noise, so it looks like a cleaner sensor rather than plastic. Dark shadows no longer turn into dark
+  dots, and colour blotches 8 px and larger go too.
+- Color denoise measures colour relative to brightness: texture under strongly coloured light (stage lights) stays
+  detail instead of being smoothed as colour, so a mono LUT on such a photo no longer shows the face as blotches.
+- The Luma / Color denoise sliders keep their meaning; Auto's measured denoise sets them as before. Edges that
+  denoised photos need from around a tile grew by 64 px, so exports read a little more of the image per tile.
+- The Camera viewfinder keeps the single-pass filter (the multi-scale one would cost too much per frame); shots get
+  the new denoise.
+
 **Browser: rate a selection (2026-10-21)**
 
 - RawBoy Browser (web): select photos in the grid (long-press or Ctrl/⌘-click, Shift-click, Ctrl/⌘+A) and rate

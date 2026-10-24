@@ -24,7 +24,7 @@ flowchart TD
     subgraph GPU["Develop shader — GLES 3.0 / WebGL2, per output pixel"]
         direction TB
         geo["Geometry: crop → rotate/straighten →<br/>auto-scale → distortion → DNG warp (+ lateral CA)"]
-        spatial["Denoise → skin retouch → sharpening →<br/>local contrast → high-pass contrast → bloom"]
+        spatial["Fine colour denoise → skin retouch → sharpening →<br/>local contrast → high-pass contrast → bloom"]
         vig["Lens vignetting"]
         light["WB re-balance × RGB primaries →<br/>exposure → shadows/highlights →<br/>purity-limited saturation"]
         agx["Tone mapper: log2 → grain → contrast →<br/>AgX (inset/outset) · Filmic · Sigmoid"]
@@ -36,7 +36,8 @@ flowchart TD
     end
 
     raw --> dec
-    blem --> geo
+    blem --> wav["Wavelet denoise pre-pass (GPU, before the develop shader):<br/>luma + coarse colour, 5 scales"]
+    wav --> geo
     blem -.-> AUX
     AUX -.-> spatial
 
@@ -49,8 +50,9 @@ The same steps as text:
 ```
 raw ──LibRaw (or Adobe DNG SDK)──▶ defective column + hot pixel removal (CFA, before demosaic) ▶ DNG gain maps ▶ linear Rec.2020 (D65), as-shot WB, oriented, half-float
     [blemish healing, when on, edits this full-resolution image]
+    ──GPU pre-pass, per source texel (denoise on; not the camera viewfinder)──▶ wavelet denoise: luma + colour blotches
     ──GPU, per output pixel──▶ crop ▶ rotate/straighten ▶ lens geometry (auto-scale, distortion, DNG warp)
-       ▶ denoise ▶ skin retouch ▶ sharpening ▶ local contrast ▶ high-pass contrast ▶ bloom ▶ lens vignetting
+       ▶ fine colour denoise ▶ skin retouch ▶ sharpening ▶ local contrast ▶ high-pass contrast ▶ bloom ▶ lens vignetting
        ▶ WB re-balance × RGB primaries ▶ exposure ▶ shadows/highlights ▶ purity-limited saturation
        ▶ tone mapper (AgX: inset ▶ log2 ▶ grain ▶ contrast ▶ sigmoid ▶ outset; Filmic / Sigmoid: log2 ▶ grain ▶ contrast ▶ curve) ▶ whites/blacks ▶ soft gamut compression ▶ Rec.709/sRGB ▶ LUT ▶ point curves
 ```
