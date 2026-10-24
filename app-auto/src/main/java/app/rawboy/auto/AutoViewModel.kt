@@ -473,6 +473,21 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
         _undo.update { it - ids }
     }
 
+    /**
+     * Takes the detail view's photo [id] out of the batch (nothing is deleted from storage) and opens the next analysed
+     * photo, or the one before it at the batch's end; back to the grid when it was the last one.
+     */
+    fun removeOpened(id: String) {
+        val p = photo(id) ?: return
+        if (_export.value != null) return
+        val pages = _photos.value.filter { it.analysis != null }
+        val index = pages.indexOfFirst { it.id == id }
+        val next = if (index < 0) null else pages.getOrNull(index + 1) ?: pages.getOrNull(index - 1)
+        remove(setOf(id))
+        next?.let { openDetail(it.id) }
+        _message.value = "${p.name} removed from the batch"
+    }
+
     /** Analyses queued photos one at a time (each decode needs the full raw in memory). */
     private fun processQueue() {
         if (analysisJob?.isActive == true) return

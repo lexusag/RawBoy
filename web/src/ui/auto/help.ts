@@ -35,6 +35,7 @@ export const AUTO_HELP: HelpSection[] = [
       { keys: ['Backspace', '←'], how: 'swipe right', text: 'Previous photo' },
       { how: 'Tab to a slider', text: 'Then ← / → move the slider instead; Space and Backspace still change the photo.' },
       { how: 'Mouse wheel over a slider', text: 'Move it without clicking; with Shift in big steps, with Ctrl/⌘ in fine ones.' },
+      { keys: ['Delete'], how: 'Remove (bin)', text: 'Take this photo out of the batch (the file stays) and go on to the next.' },
       { keys: ['Esc'], text: 'Back to the grid' },
       { keys: ['Mod+Z'], text: 'Undo this photo\'s last edit; with Shift, Redo (also the arrows in the top bar)' },
       { how: 'Double-click', text: '100% view; drag to pan, double-click again to go back.' },

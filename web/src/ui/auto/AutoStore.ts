@@ -637,6 +637,21 @@ export class AutoStore {
     this.update({ photos: this._state.photos.filter((p) => !ids.has(p.id)) });
   }
 
+  /**
+   * Takes the detail view's photo [id] out of the batch (nothing is deleted from disk) and opens the next analysed
+   * photo, or the one before it at the batch's end; back to the grid when it was the last one.
+   */
+  removeOpened(id: string) {
+    const p = this.photo(id);
+    if (!p || this._state.export) return;
+    const pages = this._state.photos.filter((q) => q.analysis);
+    const index = pages.findIndex((q) => q.id === id);
+    const next = index < 0 ? undefined : pages[index + 1] ?? pages[index - 1];
+    this.remove(new Set([id]));
+    if (next) this.openDetail(next.id);
+    this.showMessage(`${p.name} removed from the batch`);
+  }
+
   /** Analyses queued photos one at a time (each decode needs the full raw in memory). */
   private async processQueue() {
     if (this.analyzing) return;
