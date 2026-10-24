@@ -150,12 +150,16 @@ public struct ToneCurves: Equatable, Sendable {
         return (0..<count).map { evaluate(points, Float($0) / Float(count - 1), m) }
     }
 
-    /** Index of the point within [radius] of ([x], [y]), the closest one, or nil. */
-    public static func nearest(_ points: [CurvePoint], _ x: Float, _ y: Float, radius: Float) -> Int? {
+    /**
+     * Index of the point within [radius] of ([x], [y]), the closest one, or nil. [radius] is a fraction of the box's
+     * width; [aspect] (box height / width) makes the distance round on screen in a box that isn't square.
+     */
+    public static func nearest(_ points: [CurvePoint], _ x: Float, _ y: Float, radius: Float, aspect: Float = 1) -> Int? {
         var best: Int?
         var bestD = radius * radius
         for (i, p) in points.enumerated() {
-            let d = (p.x - x) * (p.x - x) + (p.y - y) * (p.y - y)
+            let dy = (p.y - y) * aspect
+            let d = (p.x - x) * (p.x - x) + dy * dy
             if d <= bestD {
                 best = i
                 bestD = d

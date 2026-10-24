@@ -41,6 +41,12 @@ final class ToneCurveTests: XCTestCase {
         XCTAssertEqual(ToneCurves.remove(added.points, 0), added.points)
     }
 
+    func testNearestMeasuresOnScreenInAWideBox() {
+        XCTAssertNil(ToneCurves.nearest(s, 0.25, 0.28, radius: 0.05))
+        // A box 0.4 as tall as wide: 0.1 of its height is 0.04 of its width, inside the radius.
+        XCTAssertEqual(ToneCurves.nearest(s, 0.25, 0.28, radius: 0.05, aspect: 0.4), 1)
+    }
+
     func testRoundTripsThroughPresetsInTheirOwnGroup() throws {
         var curves = ToneCurves()
         curves.rgb = s

@@ -22,6 +22,7 @@ import {
   curveTable,
   evaluateCurve,
   moveCurvePoint,
+  nearestCurvePoint,
   parseCurves,
   removeCurvePoint,
   sampleCurve,
@@ -714,6 +715,12 @@ describe('curves', () => {
     expect(moveCurvePoint(added.points, 0, 0.7, 0.1)[0]).toEqual([0.5 - CURVE_MIN_GAP, 0.1]);
     expect(removeCurvePoint(added.points, 1)).toEqual(IDENTITY_CURVE);
     expect(removeCurvePoint(added.points, 0)).toBe(added.points);
+  });
+
+  it('finds the nearest point on screen in a wide box', () => {
+    expect(nearestCurvePoint(s, 0.25, 0.28, 0.05)).toBe(-1);
+    // A box 0.4 as tall as wide: 0.1 of its height is 0.04 of its width, inside the radius.
+    expect(nearestCurvePoint(s, 0.25, 0.28, 0.05, 0.4)).toBe(1);
   });
 
   it('round-trips through presets in their own group and rejects malformed curves', () => {

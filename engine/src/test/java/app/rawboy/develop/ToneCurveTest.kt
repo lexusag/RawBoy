@@ -50,6 +50,13 @@ class ToneCurveTest {
     }
 
     @Test
+    fun nearestMeasuresOnScreenInAWideBox() {
+        assertEquals(-1, ToneCurves.nearest(s, 0.25f, 0.28f, 0.05f))
+        // A box 0.4 as tall as wide: 0.1 of its height is 0.04 of its width, inside the radius.
+        assertEquals(1, ToneCurves.nearest(s, 0.25f, 0.28f, 0.05f, aspect = 0.4f))
+    }
+
+    @Test
     fun roundTripsThroughPresetsInTheirOwnGroup() {
         val curves = ToneCurves(rgb = s, blue = listOf(CurvePoint(0f, 0.1f), CurvePoint(1f, 0.9f)))
         val preset = Presets.capture("Curve", DevelopParams(curves = curves, exposure = 1f), setOf(PresetGroup.CURVES))
