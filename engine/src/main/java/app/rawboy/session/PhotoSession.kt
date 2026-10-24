@@ -19,6 +19,7 @@ import app.rawboy.export.OutputNaming
 import app.rawboy.film.FilmData
 import app.rawboy.gl.BloomSources
 import app.rawboy.gl.BloomTail
+import app.rawboy.gl.BokehTexture
 import app.rawboy.gl.DetailTile
 import app.rawboy.gl.PreviewImage
 import app.rawboy.gl.ShaderParams
@@ -31,6 +32,7 @@ import app.rawboy.lut.LutLoader
 import app.rawboy.raw.RawImage
 import app.rawboy.retouch.SkinMask
 import app.rawboy.retouch.SkinSegmenter
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -87,6 +89,11 @@ class PhotoSession(
     /** Highlight-boosted small copies that bloom scatters light from. */
     private val _bloomSources = MutableStateFlow<BloomSources?>(null)
     val bloomSources = _bloomSources.asStateFlow()
+
+    /** Highlight-boosted ~1536 px copy the masks' lens blur works from; made the first time a layer blurs. */
+    private val _bokehSource = MutableStateFlow<PreviewImage?>(null)
+    val bokehSource = _bokehSource.asStateFlow()
+    private var bokehJob: Job? = null
 
     /** Centre of the 100% view in full-resolution pixels; null = fit to view. */
     private val _zoomCenter = MutableStateFlow<Pair<Float, Float>?>(null)
@@ -158,6 +165,8 @@ class PhotoSession(
         _preview.value = loaded.preview
         _base.value = loaded.base
         _bloomSources.value = loaded.bloom
+        bokehJob?.cancel()
+        _bokehSource.value = null
         skinJob?.cancel()
         _skin.value = SkinState.NotComputed
         blemishJob?.cancel()
@@ -168,6 +177,7 @@ class PhotoSession(
         guideSource = null
         params = initialParams(defaults)
         ensureSkinMask()
+        ensureBokehSource()
         // Camera and exposure (ISO, shutter, aperture, focal length); the decoder's summary if none of it is known.
         return Opened(loaded.image.shotInfo.line().ifEmpty { loaded.image.description }, defaults, params)
     }
@@ -178,6 +188,7 @@ class PhotoSession(
         params = newParams
         if (newParams.skinRetouch > 0f || newParams.blemishRemoval > 0f) ensureSkinMask()
         if (newParams.blemishRemoval != before.blemishRemoval) scheduleBlemishes()
+        ensureBokehSource()
         // A 90 degree turn or a new crop changes the output shape, and a flip moves the content, so the zoom position
         // no longer applies.
         val flipChanged = newParams.flipHorizontal != before.flipHorizontal || newParams.flipVertical != before.flipVertical
@@ -194,8 +205,27 @@ class PhotoSession(
     ): ShaderParams =
         ShaderParams.from(
             p, defaults, lut, lensFor(p), _base.value, _bloomSources.value, (_skin.value as? SkinState.Ready)?.mask,
-            maskView = maskView, brushFor = ::brushRaster, film = film,
+            maskView = maskView, brushFor = ::brushRaster, film = film, bokehSource = _bokehSource.value,
         )
+
+    /** Starts making the lens blur's source copy once a mask layer of [p] blurs (see BokehTexture). */
+    private fun ensureBokehSource(p: DevelopParams = params) {
+        val img = image ?: return
+        if (_bokehSource.value != null || bokehJob?.isActive == true) return
+        if (p.masks.none { it.enabled && it.opacity > 0f && it.adjust.lensBlur > 0f }) return
+        bokehJob = scope.launch {
+            try {
+                val source = withContext(Dispatchers.Default) {
+                    img.createPreview(BokehTexture.SOURCE_MAX_DIMENSION, boostHighlights = true)
+                }
+                if (image === img) _bokehSource.value = source
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onMessage("Lens blur failed: ${e.message}")
+            }
+        }
+    }
 
     /**
      * The painted mask of [layer] brought up to its strokes (incrementally while a stroke grows), or null without
@@ -407,6 +437,9 @@ class PhotoSession(
             _preview.value = rebuilt.first
             _base.value = rebuilt.second
             _bloomSources.value = rebuilt.third
+            bokehJob?.cancel() // made again from the healed image
+            _bokehSource.value = null
+            ensureBokehSource()
             _detail.value = null // the 100% tile shows old pixels; reload it
             recheckZoomTile()
             _blemish.value = BlemishState(working = false, healed = count, detected = (blemishSpots?.size ?: 0) / 4)
@@ -498,6 +531,8 @@ class PhotoSession(
         val img = image ?: throw IllegalStateException("No photo open")
         val lut = p.lut?.takeIf { p.film == null }?.let { loadLut(it) }
         val film = p.film?.let { id -> filmLoader?.invoke(id) }
+        ensureBokehSource(p)
+        bokehJob?.join()
         return withContext(Dispatchers.Default) {
             Exporter(context).export(
                 image = img,

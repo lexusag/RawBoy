@@ -100,6 +100,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     val skin = session.skin
     val blemish = session.blemish
     val bloomSources = session.bloomSources
+    val bokehSource = session.bokehSource
     val zoomCenter = session.zoomCenter
     val detail = session.detail
     val lensInfo = session.lensInfo

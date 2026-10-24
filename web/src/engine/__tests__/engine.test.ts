@@ -12,7 +12,7 @@ import { WhiteBalance } from '../color/WhiteBalance';
 import { cropHandleAt, cropWithAspect, dragCrop, FULL_CROP, flipped, rotateCrop, withCrop } from '../develop/CropMath';
 import { developParams, effectiveColorDenoise } from '../develop/DevelopParams';
 import { BrushRaster, type BrushGuide } from '../develop/BrushRaster';
-import { NO_ADJUST, curveOffset, forPreset, newBrushLayer, newLinearLayer, newRadialLayer, parseLayers, type BrushStroke } from '../develop/Masks';
+import { MAX_LENS_BLUR, NO_ADJUST, curveOffset, forPreset, newBrushLayer, newLinearLayer, newRadialLayer, parseLayers, type BrushStroke, type MaskLayer } from '../develop/Masks';
 import {
   CURVE_MIN_GAP,
   CURVE_SIZE,
@@ -33,6 +33,7 @@ import { BandDownscaler } from '../export/BandDownscaler';
 import { FilmStocks } from '../film/FilmStocks';
 import { baseNameOf, fileName } from '../export/ExportSettings';
 import { NO_LAYERS, ShaderParams, WIDE_DENOISE_MARGIN, packLayers } from '../gl/ShaderParams';
+import { BOKEH_RADIUS, bokehGeometry } from '../gl/BokehTexture';
 import { WAVELET_DENOISE_MARGIN, denoiseLevels } from '../gl/WaveletDenoise';
 import { ZoomMath, rect } from '../gl/Zoom';
 import { LensInfo } from '../lens/LensInfo';
@@ -395,6 +396,33 @@ describe('mask layers', () => {
     expect(parsed[1].opacity).toBe(100);
     expect(parsed[1].adjust.exposure).toBe(5);
     expect(parsed[1].shape.kind === 'radial' && parsed[1].shape.feather).toBe(100);
+  });
+
+  it('packs lens blur as a radius and sizes the bokeh texture to it', () => {
+    const blurred = { ...newRadialLayer(), adjust: { ...NO_ADJUST, lensBlur: 50 } };
+    const u = packLayers([blurred], 6000, 4000, 5500, 0, true);
+    expect(u.count).toBe(1); // lens blur alone makes a layer count
+    expect(u.blur[0]).toBeCloseTo(0.5 * MAX_LENS_BLUR * 6000);
+    const [neg, big] = parseLayers([
+      { shape: { kind: 'radial', cx: 0.5, cy: 0.5, rx: 0.2, ry: 0.2, angle: 0, feather: 50 }, adjust: { lensBlur: -20 } },
+      { shape: { kind: 'radial', cx: 0.5, cy: 0.5, rx: 0.2, ry: 0.2, angle: 0, feather: 50 }, adjust: { lensBlur: 300 } },
+    ]);
+    expect(neg.adjust.lensBlur).toBe(0);
+    expect(big.adjust.lensBlur).toBe(100);
+
+    const source = { width: 1536, height: 1024, pixels: new Uint16Array(0), fullWidth: 6000, fullHeight: 4000 };
+    const params = (layers: MaskLayer[]) => {
+      const lens = new LensTransform(LensInfo.none(6000, 4000), developParams());
+      return ShaderParams.from(developParams({ masks: layers }), developParams(), null, lens, null, null, null, 1, 1, null, () => null, null, source);
+    };
+    expect(bokehGeometry(params([]))).toBeNull();
+    const g = bokehGeometry(params([blurred]))!;
+    expect(g.maxRadius).toBeCloseTo(BOKEH_RADIUS, 0);
+    expect(g.width / g.height).toBeCloseTo(1.5, 1);
+    // A small blur can't use more than the source copy.
+    const faint = bokehGeometry(params([{ ...blurred, adjust: { ...NO_ADJUST, lensBlur: 1 } }]))!;
+    expect(faint.width).toBe(1536);
+    expect(faint.maxRadius).toBeLessThan(BOKEH_RADIUS);
   });
 });
 

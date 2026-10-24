@@ -86,6 +86,7 @@ fun EditorScreen(vm: EditorViewModel) {
     val lensInfo by vm.lensInfo.collectAsStateWithLifecycle()
     val base by vm.base.collectAsStateWithLifecycle()
     val bloomSources by vm.bloomSources.collectAsStateWithLifecycle()
+    val bokehSource by vm.bokehSource.collectAsStateWithLifecycle()
     val skin by vm.skin.collectAsStateWithLifecycle()
     val blemish by vm.blemish.collectAsStateWithLifecycle()
     val skinMask = (skin as? SkinState.Ready)?.mask
@@ -239,10 +240,10 @@ fun EditorScreen(vm: EditorViewModel) {
                 // The crop tool shows the whole frame with the crop drawn over it.
                 val shown = if (geometryMode) edited.withoutCrop() else edited
                 val maskView = if (masksMode && showMask && !showOriginal) selectedId else null
-                val shaderParams = remember(shown, state.defaults, lutData, filmData, lensInfo, base, bloomSources, skinMask, maskView, preview) {
+                val shaderParams = remember(shown, state.defaults, lutData, filmData, lensInfo, base, bloomSources, skinMask, maskView, preview, bokehSource) {
                     ShaderParams.from(
                         shown, state.defaults, lutData, vm.lensFor(shown), base, bloomSources, skinMask,
-                        maskView = maskView, brushFor = vm::brushRaster, film = filmData,
+                        maskView = maskView, brushFor = vm::brushRaster, film = filmData, bokehSource = bokehSource,
                     )
                 }
                 DevelopPreview(
@@ -252,12 +253,12 @@ fun EditorScreen(vm: EditorViewModel) {
                 // Histogram of the whole edit (crop applied, no mask view) from the 512 px base copy, once the
                 // params rest for a moment: a slider drag would otherwise queue a render per step.
                 val histogramBase = base.takeIf { histogramShown }
-                LaunchedEffect(edited, state.defaults, lutData, filmData, lensInfo, histogramBase, bloomSources, skinMask) {
+                LaunchedEffect(edited, state.defaults, lutData, filmData, lensInfo, histogramBase, bloomSources, skinMask, bokehSource) {
                     val b = histogramBase ?: return@LaunchedEffect
                     delay(HISTOGRAM_DELAY_MS)
                     val params = ShaderParams.from(
                         edited, state.defaults, lutData, vm.lensFor(edited), b, bloomSources, skinMask,
-                        brushFor = vm::brushRaster, film = filmData,
+                        brushFor = vm::brushRaster, film = filmData, bokehSource = bokehSource,
                     )
                     vm.updateHistogram(params, b)
                 }

@@ -4,7 +4,7 @@ import { WhiteBalance } from '../color/WhiteBalance';
 import { effectiveColorDenoise, toneMapperId, type DevelopParams } from '../develop/DevelopParams';
 import type { BrushRaster } from '../develop/BrushRaster';
 import { curveTable } from '../develop/ToneCurve';
-import { CURVE_SCALE, MAX_LAYERS, layerIsIdentity, type MaskLayer } from '../develop/Masks';
+import { CURVE_SCALE, MAX_LAYERS, MAX_LENS_BLUR, layerIsIdentity, type MaskLayer } from '../develop/Masks';
 import { NO_LEAKS, packLeaks, type LeakUniforms } from '../develop/LightLeaks';
 import type { FilmData } from '../film/FilmStocks';
 import type { LensTransform } from '../lens/LensTransform';
@@ -40,6 +40,8 @@ export interface LayerUniforms {
   tone: Float32Array; // MAX_LAYERS x vec4
   color: Float32Array; // MAX_LAYERS x vec4
   whiteBalance: Float32Array; // MAX_LAYERS x mat3, column-major
+  /** Lens blur radius of each layer at full mask, full-resolution pixels (`uLayerBlur`). */
+  blur: Float32Array; // MAX_LAYERS
   /** 0 = off, else the shown layer's packed index + 1. */
   view: number;
   /** Painted mask of each packed layer (null = no strokes); slot i of the brush atlas. */
@@ -56,6 +58,7 @@ export const NO_LAYERS: LayerUniforms = {
   tone: new Float32Array(MAX_LAYERS * 4),
   color: new Float32Array(MAX_LAYERS * 4),
   whiteBalance: new Float32Array(MAX_LAYERS * 9),
+  blur: new Float32Array(MAX_LAYERS),
   view: 0,
   brush: [],
 };
@@ -85,6 +88,7 @@ export function packLayers(
     tone: new Float32Array(MAX_LAYERS * 4),
     color: new Float32Array(MAX_LAYERS * 4),
     whiteBalance: new Float32Array(MAX_LAYERS * 9),
+    blur: new Float32Array(MAX_LAYERS),
     view: 0,
     brush: [],
   };
@@ -116,6 +120,7 @@ export function packLayers(
     const layerWhite = WhiteBalance.xyFromTempTint(1e6 / Math.max(mired, 1), tint + a.tint);
     const wb = a.temperature === 0 && a.tint === 0 ? Mat3.diagonal(1, 1, 1) : WhiteBalance.rebalanceMatrix(target, layerWhite);
     u.whiteBalance.set(Mat3.toGlColumnMajor(wb), i * 9);
+    u.blur[i] = (a.lensBlur / 100) * MAX_LENS_BLUR * long;
     if (l.id === viewId) u.view = i + 1;
     u.brush.push(l.strokes.length ? brushFor(l) : null);
   });
@@ -178,6 +183,8 @@ export class ShaderParams {
     readonly clipLevel = 0,
     /** Light leaks over the finished picture (shaders/light_leak.glsl). */
     readonly leaks: LeakUniforms = NO_LEAKS,
+    /** Highlight-boosted whole-image copy the lens blur starts from (BokehTexture), or null: no lens blur. */
+    readonly bokehSource: PreviewImage | null = null,
   ) {}
 
   /** Extra source pixels needed around an output region for the spatial effects, so tiles join seamlessly. */
@@ -211,6 +218,8 @@ export class ShaderParams {
     brushFor: BrushLookup = () => null,
     /** Loaded film stock for DevelopParams.film (Auto's Film mode). */
     film: FilmData | null = null,
+    /** Highlight-boosted copy for the masks' lens blur (PhotoSession.bokehSource). */
+    bokehSource: PreviewImage | null = null,
   ): ShaderParams {
     const filmUsed = film && film.stock.id === p.film ? film : null;
     const sourceWhite = WhiteBalance.xyFromTempTint(asShot.temperature, asShot.tint);
@@ -257,6 +266,7 @@ export class ShaderParams {
       curveTable(p.curves),
       asShot.clipLevel ?? 0,
       packLeaks(p.leaks, lens.width, lens.height),
+      bokehSource,
     );
   }
 }

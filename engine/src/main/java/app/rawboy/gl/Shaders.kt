@@ -28,15 +28,22 @@ internal object Shaders {
     private const val FILM_FORM = ShaderSources.FILM_FORM
     private const val LIGHT_LEAK = ShaderSources.LIGHT_LEAK
 
-    fun fragment(forExport: Boolean): String = buildString {
+    private fun header(out: String): String = buildString {
         // highp int: fragment shaders default ints to mediump (16-bit on some GPUs),
         // which breaks the 32-bit grain hash.
         append("#version 300 es\nprecision highp float;\nprecision highp int;\nprecision highp sampler2D;\nprecision highp sampler3D;\n")
         // Film edition only (engine flavour "film"): spektrafilm, shaders/film. Standard builds have an empty FILM.
         if (FILM.isNotEmpty()) append("#define RAWBOY_FILM 1\n")
-        append(if (forExport) "out uvec4 fragColor;\n" else "out vec4 fragColor;\n")
+        append(out)
         append(DEVELOP)
         append(FILM.ifEmpty { FILM_FORM })
+    }
+
+    /** develop.glsl with its own [main] in place of main_body.glsl (the lens blur's mask pass, BokehTexture). */
+    fun fragmentWithMain(main: String): String = header("out vec4 fragColor;\n") + main
+
+    fun fragment(forExport: Boolean): String = buildString {
+        append(header(if (forExport) "out uvec4 fragColor;\n" else "out vec4 fragColor;\n"))
         append(LIGHT_LEAK)
         append(MAIN_BODY)
         append("    if (uLutAmount > 0.0) c = clamp(applyLut(c), 0.0, 1.0);\n")
