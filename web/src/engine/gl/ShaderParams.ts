@@ -5,6 +5,7 @@ import { effectiveColorDenoise, toneMapperId, type DevelopParams } from '../deve
 import type { BrushRaster } from '../develop/BrushRaster';
 import { curveTable } from '../develop/ToneCurve';
 import { CURVE_SCALE, MAX_LAYERS, layerIsIdentity, type MaskLayer } from '../develop/Masks';
+import { NO_LEAKS, packLeaks, type LeakUniforms } from '../develop/LightLeaks';
 import type { FilmData } from '../film/FilmStocks';
 import type { LensTransform } from '../lens/LensTransform';
 import type { LutData } from '../lut/LutData';
@@ -175,6 +176,8 @@ export class ShaderParams {
     readonly curve: Float32Array | null = null,
     /** `uClipLevel`: DevelopParams.clipLevel of the as-shot defaults (blown highlights), 0 = unknown. */
     readonly clipLevel = 0,
+    /** Light leaks over the finished picture (shaders/light_leak.glsl). */
+    readonly leaks: LeakUniforms = NO_LEAKS,
   ) {}
 
   /** Extra source pixels needed around an output region for the spatial effects, so tiles join seamlessly. */
@@ -253,6 +256,7 @@ export class ShaderParams {
       p.halation / 100,
       curveTable(p.curves),
       asShot.clipLevel ?? 0,
+      packLeaks(p.leaks, lens.width, lens.height),
     );
   }
 }

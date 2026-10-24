@@ -3,6 +3,7 @@
 import DEVELOP from '../../../../shaders/develop.glsl?raw';
 import DEVELOP_VERT from '../../../../shaders/develop.vert?raw';
 import FILM_FORM from '../../../../shaders/film_form.glsl?raw';
+import LIGHT_LEAK from '../../../../shaders/light_leak.glsl?raw';
 import MAIN_BODY from '../../../../shaders/main_body.glsl?raw';
 
 /** Same assembly as engine/.../gl/Shaders.kt. */
@@ -15,9 +16,11 @@ export const Shaders = {
     s += forExport ? 'out uvec4 fragColor;\n' : 'out vec4 fragColor;\n';
     s += DEVELOP;
     s += FILM_FORM;
+    s += LIGHT_LEAK;
     s += MAIN_BODY;
     s += '    if (uLutAmount > 0.0) c = clamp(applyLut(c), 0.0, 1.0);\n';
     s += '    if (uCurveOn > 0.0) c = applyCurves(c);\n';
+    s += '    if (uLeakCount > 0) c = applyLeaks(c, srcG);\n';
     // 16-bit unsigned integer target for export: exact, core in WebGL2.
     s += forExport
       ? '    fragColor = uvec4(uvec3(c * 65535.0 + 0.5), 65535u);\n'

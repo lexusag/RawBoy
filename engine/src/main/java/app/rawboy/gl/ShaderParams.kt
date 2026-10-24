@@ -5,6 +5,8 @@ import app.rawboy.color.Primaries
 import app.rawboy.color.WhiteBalance
 import app.rawboy.develop.BrushRaster
 import app.rawboy.develop.DevelopParams
+import app.rawboy.develop.LeakUniforms
+import app.rawboy.develop.LightLeaks
 import app.rawboy.develop.MaskLayer
 import app.rawboy.develop.MaskShape
 import app.rawboy.develop.Masks
@@ -76,6 +78,8 @@ class ShaderParams(
     val curve: FloatArray? = null,
     /** `uClipLevel`: DevelopParams.clipLevel of the as-shot defaults (blown highlights), 0 = unknown. */
     val clipLevel: Float = 0f,
+    /** Light leaks over the finished picture (shaders/light_leak.glsl). */
+    val leaks: LeakUniforms = LeakUniforms.NONE,
 ) {
     /**
      * Extra source pixels needed around an output region for the spatial effects
@@ -175,6 +179,7 @@ class ShaderParams(
                 halation = p.halation / 100f,
                 curve = p.curves.table(),
                 clipLevel = asShot.clipLevel,
+                leaks = LightLeaks.pack(p.leaks, lens.width, lens.height),
             )
         }
 

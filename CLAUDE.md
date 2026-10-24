@@ -432,6 +432,13 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   UI: `app-pro/.../ui/MasksPanel.kt`, `MaskOverlay.kt` (drawing + `rememberMaskGestures`, applied **last** on the
   preview's gesture layer: Compose siblings don't share touches, so the mask gestures live on that layer and consume
   only handles/strokes). `EditorTopBar.kt` holds the top bar and `EditorMode`.
+- Light leaks (Pro, Android + web; `develop/LightLeaks.kt/.ts`, `shaders/light_leak.glsl`): `DevelopParams.leaks`, up to
+  `MAX_LEAKS` (4) radial glows in image fractions, applied by each shader assembly **after** the curves line
+  (`applyLeaks(c, srcG)`; iOS gen.sh includes the file but binds nothing, so count 0 = off). Display-space screen blend
+  plus a cover term (core² × smoothstep(0.4, 1, intensity)), so at 100 the core replaces the picture (the tool's purpose:
+  covering parts of a nude). The rim wobble only enlarges the glow, so the overlay's dashed ring is always fully covered.
+  UI reuses the mask overlay with the leaks as radial shapes and `grabInside` (drag anywhere inside). Per photo, not in
+  presets (web edits sidecar keeps them).
 - Engine JVM tests: `./gradlew :engine:testStandardDebugUnitTest` (`engine/src/test`, junit + org.json; `retouch/Filters.kt`
   keeps `box` out of `SkinSegmenter`, which loads MediaPipe).
 - Brush masks (`develop/BrushRaster.ts`): strokes are vectors in `MaskLayer.strokes` (image fractions), rasterised on

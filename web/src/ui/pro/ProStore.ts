@@ -5,6 +5,7 @@ import type { EditsSidecar } from '../../engine/browse/XmpSidecar';
 import { developParams, type DevelopParams } from '../../engine/develop/DevelopParams';
 import { decodeEdits, encodeEdits } from '../../engine/develop/Edits';
 import { MAX_LAYERS, SHAPE_NAMES, newBrushLayer, newLinearLayer, newRadialLayer, type BrushStroke, type MaskLayer } from '../../engine/develop/Masks';
+import { MAX_LEAKS, newLightLeak, type LightLeak } from '../../engine/develop/LightLeaks';
 import { applyPreset, captureLensPreset, capturePreset, decodePresets, encodePresets, putLensPreset, type Preset, type PresetGroup } from '../../engine/develop/Presets';
 import { EXTENSIONS, ExportSettingsStore, baseNameOf, fileName, type ExportSettings } from '../../engine/export/ExportSettings';
 import { FrameColors } from '../../engine/gl/DevelopRenderer';
@@ -131,7 +132,7 @@ export class ProStore {
     }
   }
 
-  /** Edits carry over to the next file. White balance only if the user changed it; rotation, flips, crop and masks never. */
+  /** Edits carry over to the next file. White balance only if the user changed it; rotation, flips, crop, masks and light leaks never. */
   private carryOverEdits(previous: EditorState, newDefaults: DevelopParams): DevelopParams {
     if (previous.fileName == null) return newDefaults;
     const p = withCrop(
@@ -142,6 +143,7 @@ export class ProStore {
         flipVertical: newDefaults.flipVertical,
         straighten: newDefaults.straighten,
         masks: newDefaults.masks,
+        leaks: newDefaults.leaks,
       },
       cropOf(newDefaults),
     );
@@ -318,6 +320,26 @@ export class ProStore {
     const p = this._state.params;
     this.commit({ ...p, masks: p.masks.filter((l) => l.id !== id) }, true);
     this.session.dropBrush(id);
+  };
+
+  /** Adds a light leak (up to MAX_LEAKS) at image fractions [cx], [cy]; returns its id, or null when full. */
+  addLeak = (cx = 0.5, cy = 0.5): string | null => {
+    const p = this._state.params;
+    if (p.leaks.length >= MAX_LEAKS) return null;
+    const leak = newLightLeak(cx, cy);
+    this.commit({ ...p, leaks: [...p.leaks, leak] }, true);
+    return leak.id;
+  };
+
+  /** A leak's slider or drag; [force] for a button (shuffle shape, show/hide). */
+  updateLeak = (id: string, change: (l: LightLeak) => LightLeak, force = false) => {
+    const p = this._state.params;
+    this.commit({ ...p, leaks: p.leaks.map((l) => (l.id === id ? change(l) : l)) }, force);
+  };
+
+  removeLeak = (id: string) => {
+    const p = this._state.params;
+    this.commit({ ...p, leaks: p.leaks.filter((l) => l.id !== id) }, true);
   };
 
   /** Points of the stroke being painted that haven't reached the params yet (one update per frame). */

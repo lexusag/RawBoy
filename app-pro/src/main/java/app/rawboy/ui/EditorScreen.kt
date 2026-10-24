@@ -42,6 +42,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntSize
+import app.rawboy.develop.MaskLayer
 import app.rawboy.develop.MaskShape
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -127,6 +128,9 @@ fun EditorScreen(vm: EditorViewModel) {
     val geometryMode = mode == EditorMode.GEOMETRY
     val presetsMode = mode == EditorMode.PRESETS
     val masksMode = mode == EditorMode.MASKS
+    val leaksMode = mode == EditorMode.LEAKS
+    // Handles on the photo, also beyond it (the margin), in either tool.
+    val shapesMode = masksMode || leaksMode
     // The histogram sits above the slider tabs, so only while they show (the tools replace them).
     val histogramShown = state.hasImage && mode == EditorMode.NONE
     // White balance picker: armed from the Color tab, the next tap on the photo picks.
@@ -148,7 +152,12 @@ fun EditorScreen(vm: EditorViewModel) {
     val brush by vm.brush.collectAsStateWithLifecycle()
     val layers = state.params.masks
     val selectedId = selectedLayer?.takeIf { id -> layers.any { it.id == id } } ?: layers.firstOrNull()?.id
-    val marginPx = with(LocalDensity.current) { if (masksMode) MASK_MARGIN.roundToPx() else 0 }
+    // Light leaks (UI state; the leaks are in the params). The overlay draws and drags them as radial shapes.
+    var selectedLeakState by rememberSaveable { mutableStateOf<String?>(null) }
+    val leaks = state.params.leaks
+    val selectedLeak = selectedLeakState?.takeIf { id -> leaks.any { it.id == id } } ?: leaks.lastOrNull()?.id
+    val leakShapes = remember(leaks) { leaks.map { MaskLayer(it.id, "", enabled = it.enabled, shape = it.shape) } }
+    val marginPx = with(LocalDensity.current) { if (shapesMode) MASK_MARGIN.roundToPx() else 0 }
     var viewSize by remember { mutableStateOf(IntSize.Zero) }
     // Crop shape lock (UI only; the crop itself is in the params). Portrait null = follow the frame.
     var cropAspect by rememberSaveable { mutableStateOf(CropAspect.FREE) }
@@ -157,6 +166,7 @@ fun EditorScreen(vm: EditorViewModel) {
         cropAspect = CropAspect.FREE
         cropPortrait = null
         selectedLayer = null
+        selectedLeakState = null
     }
     val frame = vm.lensFor(state.params.withoutCrop())
     val portrait = cropPortrait ?: (frame.frameHeight > frame.frameWidth)
@@ -262,6 +272,19 @@ fun EditorScreen(vm: EditorViewModel) {
                     ),
                     onPaintAt = { paintAt = it },
                 )
+                val leakGestures = rememberMaskGestures(
+                    shaderParams.lens, leakShapes, selectedLeak, framePx + marginPx, zoomCenter, MaskTool.MOVE, brush,
+                    MaskActions(
+                        onSelect = { selectedLeakState = it },
+                        onChange = { id, shape -> if (shape is MaskShape.Radial) vm.updateLeak(id) { it.withShape(shape) } },
+                        onStrokeBegin = { _, _ -> },
+                        onStrokeExtend = { _, _, _ -> },
+                        onStrokeCancel = {},
+                        onPan = vm::pan,
+                    ),
+                    onPaintAt = {},
+                    grabInside = true,
+                )
 
                 // Double tap: 100% at that point / back to fit. Drag: pan at 100%.
                 // Press and hold: compare with the as-shot render (delayed so taps
@@ -269,14 +292,14 @@ fun EditorScreen(vm: EditorViewModel) {
                 Box(
                     Modifier
                         .matchParentSize()
-                        .pointerInput(geometryMode, masksMode, marginPx) {
+                        .pointerInput(geometryMode, shapesMode, marginPx) {
                             detectTapGestures(
                                 // Zoom and frame colour work on the cropped view; the crop tool shows the whole frame.
-                                // Masks zoom too (frame-colour taps stay off while masking).
+                                // Masks and leaks zoom too (frame-colour taps stay off while they are open).
                                 onDoubleTap = { if (!geometryMode) vm.toggleZoom(it.x, it.y, marginPx) },
                                 onTap = {
                                     when {
-                                        geometryMode || masksMode -> {}
+                                        geometryMode || shapesMode -> {}
                                         pickingWhite -> {
                                             pickingWhite = false
                                             vm.pickWhite(it.x, it.y)
@@ -302,13 +325,20 @@ fun EditorScreen(vm: EditorViewModel) {
                             }
                         }
                         // Last, so it sees each touch first and takes only handles and paint strokes.
-                        .then(if (masksMode && preview != null) maskGestures else Modifier),
+                        .then(if (masksMode && preview != null) maskGestures else Modifier)
+                        .then(if (leaksMode && preview != null) leakGestures else Modifier),
                 )
                 if (masksMode && preview != null && !showOriginal) {
                     MaskOverlay(
                         shaderParams.lens, layers, selectedId, framePx + marginPx, zoomCenter,
                         if (selectedId != null) maskTool else MaskTool.MOVE, brush, paintAt, sizeRing,
                         Modifier.matchParentSize(),
+                    )
+                }
+                if (leaksMode && preview != null && !showOriginal) {
+                    MaskOverlay(
+                        shaderParams.lens, leakShapes, selectedLeak, framePx + marginPx, zoomCenter,
+                        MaskTool.MOVE, brush, null, false, Modifier.matchParentSize(),
                     )
                 }
                 if (geometryMode && zoomCenter == null && preview != null) {
@@ -424,6 +454,21 @@ fun EditorScreen(vm: EditorViewModel) {
                         },
                         onDone = { mode = EditorMode.NONE },
                     ),
+                    modifier = Modifier.heightIn(max = PANEL_MAX),
+                )
+            } else if (state.hasImage && leaksMode) {
+                LeaksPanel(
+                    leaks = leaks,
+                    selectedId = selectedLeak,
+                    zoomed = zoomCenter != null,
+                    onSelect = { selectedLeakState = it },
+                    onAdd = { vm.addLeak()?.let { selectedLeakState = it } },
+                    onUpdate = vm::updateLeak,
+                    onRemove = vm::removeLeak,
+                    onToggleZoom = {
+                        if (zoomCenter != null) vm.exitZoom() else vm.toggleZoom(viewSize.width / 2f, viewSize.height / 2f, marginPx)
+                    },
+                    onDone = { mode = EditorMode.NONE },
                     modifier = Modifier.heightIn(max = PANEL_MAX),
                 )
             } else if (state.hasImage && presetsMode) {

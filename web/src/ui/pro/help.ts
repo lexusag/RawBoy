@@ -9,7 +9,7 @@ export const PRO_HELP: HelpSection[] = [
       { how: 'Open, or drop a file', text: 'Opens a RAW file. Dropped .cube and HaldCLUT .png files go to Your LUTs.' },
       { how: 'Tabs', text: 'Light, Color, Detail, LUTs and Lens hold the sliders. Edits carry over to the next photo; crop, rotation and flips don\'t.' },
       { how: 'Lens preset', text: 'Lens tab: name it (the lens by default) and Save lens preset keeps its settings for this photo\'s lens; the Auto tab corrects every photo taken with that lens with it, on top of its look. Manual lenses record no lens: the Auto tab lets you pick their presets by name.' },
-      { how: 'Top bar', text: 'Crop & rotate (turn, flip, straighten, crop), Presets, Masks, Undo and Redo (Ctrl/⌘ Z, Shift Ctrl/⌘ Z), Reset all, Auto (automatic light and colour, keeps the LUT) and Export.' },
+      { how: 'Top bar', text: 'Crop & rotate (turn, flip, straighten, crop), Presets, Masks, Light leaks, Undo and Redo (Ctrl/⌘ Z, Shift Ctrl/⌘ Z), Reset all, Auto (automatic light and colour, keeps the LUT) and Export.' },
       { how: 'Back to Auto', text: 'Returns a photo opened from the Auto tab (Edit in RawBoy) there with these edits; Send to Auto adds any other photo to Auto\'s batch with them.' },
     ],
   },
@@ -43,6 +43,14 @@ export const PRO_HELP: HelpSection[] = [
       { keys: ['[', ']'], text: 'Smaller or larger brush' },
       { keys: ['Space'], text: 'Hold to pan while zoomed' },
       { keys: ['Mod+Z'], text: 'Undo (each stroke is one step); with Shift, Redo' },
+    ],
+  },
+  {
+    title: 'Light leaks',
+    items: [
+      { how: '+ Light leak', text: 'Adds a film-style warm glow (up to 4). Drag it anywhere inside to move it, the dots to resize, the outer knob to rotate.' },
+      { how: 'Intensity', text: 'A glow at low values; from about 60% it also covers the photo, and at 100% its middle (inside the dashed ring) hides what is under it: a tasteful way to cover part of a nude.' },
+      { how: 'Size, Stretch, Rotation, Softness, Colour', text: 'Shape and colour, from magenta-red to amber. New shape picks another uneven rim. Leaks belong to the photo: presets don\'t keep them.' },
     ],
   },
 ];
