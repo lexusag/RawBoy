@@ -1,5 +1,12 @@
 # Changelog
 
+**Masks: Lens blur (2026-10-24)**
+
+- RawBoy (Android, web): each mask layer has a Lens blur slider, a round lens-like defocus inside the mask (radius up
+  to 3% of the photo's long side). Small bright lights and highlights become clean, bright bokeh discs instead of a
+  grey smear, and the sharp part beside the mask stays clean (no halo of blurred background over it). Preview, 100%
+  view and export match. Not on iOS yet.
+
 **Web: mouse wheel zooms the photo (2026-10-24)**
 
 - RawBoy and Auto (web, desktop): the mouse wheel over the photo zooms in and out around the pointer, from the whole

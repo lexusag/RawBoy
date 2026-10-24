@@ -214,6 +214,8 @@ struct DevelopProgram {
             "uImage": image, "uLut": inputs.lut, "uShading": inputs.shading, "uBase": inputs.base,
             "uBloomHalo": inputs.bloomHalo, "uBloomTail": inputs.bloomTail, "uSkinMask": inputs.skinMask,
             "uBrushMask": inputs.brush, "uFilmLut": inputs.filmLut, "uPrintLut": inputs.printLut,
+            // No lens blur on iOS yet (uBokehScale stays 0); any texture keeps the slot bound.
+            "uBokeh": inputs.base,
         ].merging(overrides) { $1 }
         for (name, index) in DevelopLayout.textures {
             encoder.setFragmentTexture(textures[name], index: index)

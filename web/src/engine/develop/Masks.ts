@@ -45,6 +45,8 @@ export interface LayerAdjust {
   tint: number;
   saturation: number;
   clarity: number;
+  /** 0..100: lens blur (round, bokeh-like discs), up to MAX_LENS_BLUR of the long side at 100. */
+  lensBlur: number;
 }
 
 export interface MaskLayer {
@@ -72,11 +74,14 @@ export const curveOffset = (curve: number, s: number, long: number): number => (
 export const MAX_LAYERS = 4;
 
 export const LAYER_ADJUST_KEYS: readonly (keyof LayerAdjust)[] = [
-  'exposure', 'contrast', 'highlights', 'shadows', 'temperature', 'tint', 'saturation', 'clarity',
+  'exposure', 'contrast', 'highlights', 'shadows', 'temperature', 'tint', 'saturation', 'clarity', 'lensBlur',
 ];
 
+/** Lens blur radius at 100, a fraction of the image's long side. */
+export const MAX_LENS_BLUR = 0.03;
+
 export const NO_ADJUST: Readonly<LayerAdjust> = Object.freeze({
-  exposure: 0, contrast: 0, highlights: 0, shadows: 0, temperature: 0, tint: 0, saturation: 0, clarity: 0,
+  exposure: 0, contrast: 0, highlights: 0, shadows: 0, temperature: 0, tint: 0, saturation: 0, clarity: 0, lensBlur: 0,
 });
 
 export const newId = (): string =>
@@ -120,8 +125,9 @@ export const forPreset = (layers: readonly MaskLayer[]): MaskLayer[] =>
 export const layerIsIdentity = (l: MaskLayer): boolean =>
   !l.enabled || l.opacity <= 0 || LAYER_ADJUST_KEYS.every((k) => l.adjust[k] === 0);
 
-const ADJUST_RANGE: Record<keyof LayerAdjust, number> = {
-  exposure: 5, contrast: 100, highlights: 100, shadows: 100, temperature: 100, tint: 100, saturation: 100, clarity: 100,
+const ADJUST_RANGE: Record<keyof LayerAdjust, [number, number]> = {
+  exposure: [-5, 5], contrast: [-100, 100], highlights: [-100, 100], shadows: [-100, 100], temperature: [-100, 100],
+  tint: [-100, 100], saturation: [-100, 100], clarity: [-100, 100], lensBlur: [0, 100],
 };
 
 const num = (v: unknown, min: number, max: number): number | null =>
@@ -168,7 +174,7 @@ export function parseLayer(o: unknown, strokes = false): MaskLayer | null {
   if (!shape) return null;
   const a = l.adjust && typeof l.adjust === 'object' ? (l.adjust as Record<string, unknown>) : {};
   const adjust = { ...NO_ADJUST };
-  for (const k of LAYER_ADJUST_KEYS) adjust[k] = num(a[k], -ADJUST_RANGE[k], ADJUST_RANGE[k]) ?? 0;
+  for (const k of LAYER_ADJUST_KEYS) adjust[k] = num(a[k], ...ADJUST_RANGE[k]) ?? 0;
   return {
     id: newId(),
     name: typeof l.name === 'string' && l.name.trim() ? l.name.trim() : SHAPE_NAMES[shape.kind],

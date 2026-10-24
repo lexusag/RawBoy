@@ -60,6 +60,11 @@ uniform int uMaskView;                // 0 = off, else layer index + 1 shown as 
 uniform sampler2D uBrushMask;         // painted masks, RG (paint, erase), a 2x2 atlas: one slot per layer
 uniform vec4 uBrushSlot[MAX_LAYERS];  // slot origin.xy and size.zw in atlas uv; size 0 = nothing painted
 uniform vec2 uBrushTexel;             // 1 / atlas size
+uniform float uLayerBlur[MAX_LAYERS]; // lens blur radius at full mask, full-resolution pixels; 0 = none
+// Lens blur (bokeh, see gl/BokehTexture): the whole image disc-blurred by the masks' radii, premultiplied (rgb * a, a).
+uniform sampler2D uBokeh;
+uniform vec2 uBokehTexel;             // 1 / bokeh texture size
+uniform float uBokehScale;            // bokeh texels per full-resolution pixel; 0 = off
 
 // Sampling geometry, so spatial effects are sized in full-resolution pixels
 // in both the downscaled preview and the full-resolution export tiles.
@@ -598,7 +603,7 @@ vec3 bloomBoost(vec3 c) {
 
 // Cubic B-spline sample of a small copy from four bilinear taps: smooth and close to round,
 // where a bilinear sample of a coarse copy shows its texel grid.
-vec3 textureBSpline(sampler2D t, vec2 uv, vec2 texel) {
+vec4 textureBSpline4(sampler2D t, vec2 uv, vec2 texel) {
     vec2 st = uv / texel - 0.5;
     vec2 i = floor(st);
     vec2 f = st - i;
@@ -611,9 +616,11 @@ vec3 textureBSpline(sampler2D t, vec2 uv, vec2 texel) {
     vec2 g1 = 1.0 - g0;
     vec2 h0 = (i - 0.5 + w1 / g0) * texel;
     vec2 h1 = (i + 1.5 + w3 / g1) * texel;
-    return g0.y * (g0.x * texture(t, h0).rgb + g1.x * texture(t, vec2(h1.x, h0.y)).rgb)
-         + g1.y * (g0.x * texture(t, vec2(h0.x, h1.y)).rgb + g1.x * texture(t, h1).rgb);
+    return g0.y * (g0.x * texture(t, h0) + g1.x * texture(t, vec2(h1.x, h0.y)))
+         + g1.y * (g0.x * texture(t, vec2(h0.x, h1.y)) + g1.x * texture(t, h1));
 }
+
+vec3 textureBSpline(sampler2D t, vec2 uv, vec2 texel) { return textureBSpline4(t, uv, texel).rgb; }
 
 // Scattered light through a diffusion filter, after spektrafilm's PSF model: core 0.30 + halo
 // 0.25 + tail 0.45, each normalised, so mixing it in conserves energy. The halo has a slightly
@@ -727,6 +734,17 @@ float layerMask(int i, vec2 p) {
     if (c.w > 0.5) m = 1.0 - m;
     return m * c.z;
 }
+
+// Lens blur radius at a pixel in full-resolution pixels: the strongest layer's blur times its mask weight.
+float bokehRadius(float lm[MAX_LAYERS]) {
+    float r = 0.0;
+    for (int i = 0; i < MAX_LAYERS; ++i) r = max(r, i < uLayerCount ? lm[i] * uLayerBlur[i] : 0.0);
+    return r;
+}
+
+// How much of the lens blur shows at a radius of [r] bokeh texels: below ~1.5 texels the small texture can't hold
+// the blur, so it fades in from the sharp image. The bokeh passes weight their samples by the same ramp.
+float bokehFade(float r) { return clamp(r / 1.5, 0.0, 1.0); }
 
 // Levels (Whites/Blacks) on the display-encoded signal.
 vec3 applyLevels(vec3 c) {
