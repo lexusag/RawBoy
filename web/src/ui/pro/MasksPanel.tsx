@@ -42,6 +42,7 @@ const ADJUST_SLIDERS: readonly { key: keyof LayerAdjust; label: string; min: num
   { key: 'tint', label: 'Tint', min: -100, max: 100 },
   { key: 'saturation', label: 'Saturation', min: -100, max: 100 },
   { key: 'clarity', label: 'Clarity', min: -100, max: 100 },
+  { key: 'lensBlur', label: 'Lens blur', min: 0, max: 100 },
 ];
 
 /**

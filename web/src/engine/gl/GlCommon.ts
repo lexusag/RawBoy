@@ -8,11 +8,14 @@ import type { SkinMask } from '../retouch/SkinMask';
 import type { PreviewImage } from './PreviewImage';
 import type { ShaderParams } from './ShaderParams';
 import { Shaders } from './Shaders';
+import { BokehTexture, bokehUniforms, type BokehGeometry } from './BokehTexture';
 import type { PixelRect } from './Zoom';
 
 /** Port of engine/.../gl/GlCommon.kt for WebGL2. Texture units match Android's. */
 export const Units = {
   IMAGE: 0, LUT: 1, SHADING: 2, BASE: 3, BLOOM_HALO: 4, BLOOM_TAIL: 5, SKIN: 6, BRUSH: 7, FILM_LUT: 8, PRINT_LUT: 9,
+  // 10, 11: the wavelet denoise pre-pass; 13: the lens blur passes.
+  BOKEH: 12,
 } as const;
 
 /**
@@ -91,8 +94,9 @@ export class DevelopProgram {
   private readonly id: WebGLProgram;
   private readonly u = new Map<string, WebGLUniformLocation | null>();
 
-  constructor(private readonly gl: WebGL2RenderingContext, forExport: boolean) {
-    this.id = createProgram(gl, Shaders.VERTEX, Shaders.fragment(forExport));
+  /** [fragment]: another main on the develop library (the lens blur's mask pass); the develop shader by default. */
+  constructor(private readonly gl: WebGL2RenderingContext, forExport: boolean, fragment = Shaders.fragment(forExport)) {
+    this.id = createProgram(gl, Shaders.VERTEX, fragment);
   }
 
   private loc(name: string): WebGLUniformLocation | null {
@@ -173,7 +177,31 @@ export class DevelopProgram {
     this.f2('uBloomHaloTexel', 1 / (p.bloomHalo?.width ?? 1), 1 / (p.bloomHalo?.height ?? 1));
     this.f2('uBloomTailTexel', 1 / (p.bloomTail?.width ?? 1), 1 / (p.bloomTail?.height ?? 1));
     this.f2('uBaseTexel', 1 / (p.base?.width ?? 1), 1 / (p.base?.height ?? 1));
-    this.f2('uImageSize', g.imageWidth, g.imageHeight);
+    this.bindMasks(p, g.imageWidth, g.imageHeight);
+    this.i1('uBokeh', Units.BOKEH);
+    const bokeh = bokehUniforms(p);
+    this.f1('uBokehScale', bokeh.scale);
+    this.f2('uBokehTexel', bokeh.texelX, bokeh.texelY);
+    this.i1('uLut', Units.LUT);
+    this.f1('uLutSize', p.lut?.size ?? 2);
+    this.f1('uLutAmount', p.lut != null ? p.lutAmount : 0);
+    this.f1('uCurveOn', p.curve ? 1 : 0);
+    if (p.curve) gl.uniform3fv(this.loc('uCurve'), p.curve);
+    this.f2('uTexel', 1 / g.textureWidth, 1 / g.textureHeight);
+    this.f1('uPixelScale', g.textureWidth / g.input.width);
+    this.f2('uInOrigin', g.input.x, g.input.y);
+    this.f2('uInSpan', g.input.width, g.input.height);
+    this.f2('uOutOrigin', g.output.x, g.output.y);
+    this.f2('uOutSpan', g.output.width, g.output.height);
+    this.bindLens(p.lens);
+    this.bindFilm(p, g);
+  }
+
+  /** Mask layer uniforms (positions in image pixels of an [imageWidth] x [imageHeight] image); uses this program. */
+  bindMasks(p: ShaderParams, imageWidth: number, imageHeight: number) {
+    const gl = this.gl;
+    gl.useProgram(this.id);
+    this.f2('uImageSize', imageWidth, imageHeight);
     const layers = p.layers;
     this.i1('uLayerCount', layers.count);
     gl.uniform4fv(this.loc('uMaskGeom'), layers.geom);
@@ -181,6 +209,7 @@ export class DevelopProgram {
     gl.uniform4fv(this.loc('uLayerTone'), layers.tone);
     gl.uniform4fv(this.loc('uLayerColor'), layers.color);
     gl.uniformMatrix3fv(this.loc('uLayerWb'), false, layers.whiteBalance);
+    gl.uniform1fv(this.loc('uLayerBlur'), layers.blur);
     this.i1('uMaskView', layers.view);
     const leaks = p.leaks;
     this.i1('uLeakCount', leaks.count);
@@ -200,19 +229,25 @@ export class DevelopProgram {
     });
     gl.uniform4fv(this.loc('uBrushSlot'), slots);
     this.f2('uBrushTexel', 1 / (2 * brushW), 1 / (2 * brushH));
-    this.i1('uLut', Units.LUT);
-    this.f1('uLutSize', p.lut?.size ?? 2);
-    this.f1('uLutAmount', p.lut != null ? p.lutAmount : 0);
-    this.f1('uCurveOn', p.curve ? 1 : 0);
-    if (p.curve) gl.uniform3fv(this.loc('uCurve'), p.curve);
-    this.f2('uTexel', 1 / g.textureWidth, 1 / g.textureHeight);
-    this.f1('uPixelScale', g.textureWidth / g.input.width);
-    this.f2('uInOrigin', g.input.x, g.input.y);
-    this.f2('uInSpan', g.input.width, g.input.height);
-    this.f2('uOutOrigin', g.output.x, g.output.y);
-    this.f2('uOutSpan', g.output.width, g.output.height);
-    this.bindLens(p.lens);
-    this.bindFilm(p, g);
+  }
+
+  /**
+   * The lens blur's mask pass (bokeh_prep.glsl): after [bindMasks]; [sourceUnit] holds the boosted copy, sampled at
+   * [lod]. Every sampler gets its own unit as in [bind]: samplers of different types left on unit 0 fail the draw.
+   */
+  bokehPrep(sourceUnit: number, lod: number, g: BokehGeometry) {
+    for (const [name, unit] of [
+      ['uImage', Units.IMAGE], ['uLut', Units.LUT], ['uShading', Units.SHADING], ['uBase', Units.BASE],
+      ['uBloomHalo', Units.BLOOM_HALO], ['uBloomTail', Units.BLOOM_TAIL], ['uSkinMask', Units.SKIN],
+      ['uBrushMask', Units.BRUSH], ['uFilmLut', Units.FILM_LUT], ['uPrintLut', Units.PRINT_LUT], ['uBokeh', Units.BOKEH],
+    ] as const) this.i1(name, unit);
+    this.f2('uScale', 1, 1); // the whole target (develop.vert)
+    this.f1('uFlipY', 0);
+    this.gl.uniform4f(this.loc('uUvRect'), 0, 0, 1, 1);
+    this.i1('uBokehSrc', sourceUnit);
+    this.f1('uBokehSrcLod', lod);
+    this.f2('uBokehSize', g.width, g.height);
+    this.f1('uBokehScale', g.scale);
   }
 
   /** Film look (shaders/film_form.glsl); everything 0 = off without one. */
@@ -500,6 +535,7 @@ export class DevelopInputs {
   readonly lut: LutTexture;
   readonly brush: BrushTexture;
   readonly film: FilmTextures;
+  readonly bokeh: BokehTexture;
 
   constructor(gl: WebGL2RenderingContext) {
     this.base = new ImageTexture(gl, Units.BASE);
@@ -510,6 +546,7 @@ export class DevelopInputs {
     this.lut = new LutTexture(gl);
     this.brush = new BrushTexture(gl);
     this.film = new FilmTextures(gl);
+    this.bokeh = new BokehTexture(gl);
   }
 
   bind(p: ShaderParams) {
@@ -521,10 +558,11 @@ export class DevelopInputs {
     this.skin.bind(p.skinMask);
     this.brush.bind(p.layers.brush);
     this.film.bind(p.film);
+    this.bokeh.bind(p); // after the brush atlas: its mask pass reads it
   }
 
   release() {
-    for (const t of [this.base, this.halo, this.tail, this.skin, this.shading, this.lut, this.brush, this.film]) t.release();
+    for (const t of [this.base, this.halo, this.tail, this.skin, this.shading, this.lut, this.brush, this.film, this.bokeh]) t.release();
   }
 }
 

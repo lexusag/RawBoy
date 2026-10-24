@@ -8,6 +8,7 @@ import { exportImage } from '../export/Exporter';
 import type { ExportSettings } from '../export/ExportSettings';
 import { FilmStocks, type FilmData } from '../film/FilmStocks';
 import { scatterBloomTail } from '../gl/BloomTail';
+import { BOKEH_SOURCE_MAX_DIMENSION } from '../gl/BokehTexture';
 import type { BloomSources, PreviewImage } from '../gl/PreviewImage';
 import { WAVELET_DENOISE_MARGIN } from '../gl/WaveletDenoise';
 import { ShaderParams, WIDE_DENOISE_MARGIN, wideDenoise } from '../gl/ShaderParams';
@@ -43,6 +44,8 @@ export interface SessionState {
   base: PreviewImage | null;
   /** Highlight-boosted small copies that bloom scatters light from. */
   bloomSources: BloomSources | null;
+  /** Highlight-boosted copy the masks' lens blur starts from; made the first time a layer blurs. */
+  bokehSource: PreviewImage | null;
   skin: SkinState;
   blemish: BlemishState;
   /** Centre of the 100% view in full-resolution pixels; null = fit to view. */
@@ -92,6 +95,7 @@ export class PhotoSession {
     preview: null,
     base: null,
     bloomSources: null,
+    bokehSource: null,
     skin: { kind: 'notComputed' },
     blemish: { working: false, healed: 0, detected: 0 },
     zoomCenter: null,
@@ -106,6 +110,8 @@ export class PhotoSession {
   private params: DevelopParams = developParams();
   /** The skin segmentation in progress or done, so the Auto button can wait for it. */
   private skinJob: Promise<void> | null = null;
+  /** The lens blur's source copy being made, so export can wait for it. */
+  private bokehJob: Promise<void> | null = null;
   private viewWidth = 0;
   private viewHeight = 0;
   private tileLoading = false;
@@ -200,11 +206,13 @@ export class PhotoSession {
       preview: loaded.preview,
       base: loaded.base,
       bloomSources: loaded.bloom,
+      bokehSource: null,
       skin: { kind: 'notComputed' },
       blemish: { working: false, healed: 0, detected: 0 },
     });
     this.params = initialParams(defaults);
     this.ensureSkinMask();
+    this.ensureBokehSource();
     // Camera and exposure (ISO, shutter, aperture, focal length); the decoder's summary if none of it is known.
     return { description: shotInfoLine(img.camera, img.metadata) || img.description, defaults, params: this.params };
   }
@@ -215,6 +223,7 @@ export class PhotoSession {
     this.params = newParams;
     if (newParams.skinRetouch > 0 || newParams.blemishRemoval > 0) this.ensureSkinMask();
     if (newParams.blemishRemoval !== before.blemishRemoval) this.scheduleBlemishes();
+    this.ensureBokehSource();
     // A 90 degree turn or a new crop changes the output shape, and a flip moves the content, so the zoom position
     // no longer applies.
     const cropChanged =
@@ -269,8 +278,26 @@ export class PhotoSession {
     const s = this._state;
     return ShaderParams.from(
       p, defaults, lut, this.lensFor(p), s.base, s.bloomSources, s.skin.kind === 'ready' ? s.skin.mask : null, 1, 1, maskView,
-      (l) => this.brushRaster(l), film,
+      (l) => this.brushRaster(l), film, s.bokehSource,
     );
+  }
+
+  /** Makes the lens blur's source copy once a mask layer of [p] blurs (see BokehTexture). */
+  private ensureBokehSource(p: DevelopParams = this.params) {
+    const img = this.image;
+    if (!img || this._state.bokehSource || this.bokehJob) return;
+    if (!p.masks.some((l) => l.enabled && l.opacity > 0 && l.adjust.lensBlur > 0)) return;
+    this.bokehJob = (async () => {
+      try {
+        const source = await img.createPreview(BOKEH_SOURCE_MAX_DIMENSION, true);
+        if (this.image === img) this.update({ bokehSource: source });
+      } catch (e) {
+        this.onMessage(`Lens blur failed: ${e instanceof Error ? e.message : String(e)}`);
+      } finally {
+        this.bokehJob = null;
+      }
+      if (this.image !== img) this.ensureBokehSource(); // another photo opened meanwhile
+    })();
   }
 
   setViewSize(width: number, height: number) {
@@ -480,9 +507,12 @@ export class PhotoSession {
         preview,
         base,
         bloomSources: bloom,
+        bokehSource: null, // made again from the healed image
+
         detail: null, // the 100% tile shows old pixels; reload it
         blemish: { working: false, healed: count, detected: (this.blemishSpots?.length ?? 0) / 4 },
       });
+      this.ensureBokehSource();
       this.recheckZoomTile();
     })().catch((e: unknown) => {
       this.onMessage(`Blemish removal failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -550,6 +580,8 @@ export class PhotoSession {
     if (!img) throw new Error('No photo open');
     const lut = p.lut && p.film == null ? await loadLutCached(p.lut) : null;
     const film = p.film ? await FilmStocks.load(p.film) : null;
+    this.ensureBokehSource(p);
+    await this.bokehJob;
     return exportImage(img, this.shaderParams(p, defaults, lut, null, film), settings, onProgress);
   }
 

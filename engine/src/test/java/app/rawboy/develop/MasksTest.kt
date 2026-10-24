@@ -99,6 +99,22 @@ class MasksTest {
     }
 
     @Test
+    fun packsLensBlurAsARadius() {
+        val blurred = Masks.newRadial().copy(adjust = LayerAdjust(lensBlur = 50f))
+        val u = ShaderParams.packLayers(listOf(blurred), 6000, 4000, 5500f, 0f, true)
+        assertEquals(1, u.count) // lens blur alone makes a layer count
+        assertEquals(0.5f * Masks.MAX_LENS_BLUR * 6000, u.blur[0], 1e-3f)
+        val shape = """{"kind":"radial","cx":0.5,"cy":0.5,"rx":0.2,"ry":0.2,"angle":0,"feather":50}"""
+        val (neg, big) = Masks.parseLayers(org.json.JSONArray("""[
+            {"shape":$shape,"adjust":{"lensBlur":-20}}, {"shape":$shape,"adjust":{"lensBlur":300}}
+        ]"""))
+        assertEquals(0f, neg.adjust.lensBlur)
+        assertEquals(100f, big.adjust.lensBlur)
+        val back = Masks.parseLayers(Masks.toJson(listOf(blurred))).single()
+        assertEquals(50f, back.adjust.lensBlur)
+    }
+
+    @Test
     fun presetsKeepGradientsOnly() {
         val sky = Masks.newLinear().copy(adjust = LayerAdjust(exposure = -1f), strokes = listOf(b))
         val painted = Masks.newBrush().copy(strokes = listOf(a))

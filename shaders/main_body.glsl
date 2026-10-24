@@ -31,6 +31,14 @@ void main() {
     clarity = clamp(clarity, -1.0, 1.0);
     if (clarity != 0.0) g *= clarityGain(lum(x), srcG, clarity);
     x *= g;
+    if (uBokehScale > 0.0) {
+        // Lens blur: the disc-blurred image (no sharpening or clarity) where the masks ask for it.
+        float t = bokehFade(bokehRadius(lm) * uBokehScale);
+        if (t > 0.0) {
+            vec4 b = textureBSpline4(uBokeh, srcG / uImageSize, uBokehTexel);
+            if (b.a > 1e-3) x = mix(x, b.rgb / b.a, t);
+        }
+    }
     if (uBloom > 0.0) x = bloom(x, uvG, srcG);
     if (uFilmAmount > 0.0) x = filmOptics(x, uvG, srcG);
     x *= lensGain(sG, srcG);

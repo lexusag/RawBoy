@@ -55,6 +55,8 @@ data class LayerAdjust(
     val tint: Float = 0f,
     val saturation: Float = 0f,
     val clarity: Float = 0f,
+    /** 0..100: lens blur (round, bokeh-like discs), up to [Masks.MAX_LENS_BLUR] of the long side at 100. */
+    val lensBlur: Float = 0f,
 ) {
     val isZero: Boolean get() = this == LayerAdjust()
 }
@@ -86,6 +88,9 @@ object Masks {
      * many long sides along the gradient. Shared by the shader packing and the overlay so both bend alike.
      */
     const val CURVE_SCALE = 0.5f
+
+    /** Lens blur radius at 100, a fraction of the image's long side. */
+    const val MAX_LENS_BLUR = 0.03f
 
     /** Brush radius limits, fractions of the long side (the upper one bounds the cost of one dab). */
     const val MIN_BRUSH_RADIUS = 0.002f
@@ -146,7 +151,7 @@ object Masks {
             JSONObject().apply {
                 put("exposure", num(a.exposure)); put("contrast", num(a.contrast)); put("highlights", num(a.highlights))
                 put("shadows", num(a.shadows)); put("temperature", num(a.temperature)); put("tint", num(a.tint))
-                put("saturation", num(a.saturation)); put("clarity", num(a.clarity))
+                put("saturation", num(a.saturation)); put("clarity", num(a.clarity)); put("lensBlur", num(a.lensBlur))
             },
         )
         put("strokes", JSONArray())
@@ -176,6 +181,7 @@ object Masks {
             adjust = LayerAdjust(
                 adj("exposure", 5f), adj("contrast", 100f), adj("highlights", 100f), adj("shadows", 100f),
                 adj("temperature", 100f), adj("tint", 100f), adj("saturation", 100f), adj("clarity", 100f),
+                num(a, "lensBlur", 0f, 100f) ?: 0f,
             ),
             strokes = emptyList(), // strokes never come from presets
         )

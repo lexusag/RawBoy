@@ -28,4 +28,10 @@ export const Shaders = {
     s += '}\n';
     return s;
   },
+
+  /** The develop library (uniforms, layerMask, ...) with its own [main] instead of main_body.glsl; float output. */
+  fragmentWithMain(main: string): string {
+    return '#version 300 es\nprecision highp float;\nprecision highp int;\nprecision highp sampler2D;\nprecision highp sampler3D;\n'
+      + 'out vec4 fragColor;\n' + DEVELOP + FILM_FORM + main;
+  },
 };

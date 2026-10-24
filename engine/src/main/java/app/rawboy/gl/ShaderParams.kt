@@ -80,6 +80,8 @@ class ShaderParams(
     val clipLevel: Float = 0f,
     /** Light leaks over the finished picture (shaders/light_leak.glsl). */
     val leaks: LeakUniforms = LeakUniforms.NONE,
+    /** Highlight-boosted ~1536 px copy of the whole image the masks' lens blur works from (BokehTexture), or null. */
+    val bokehSource: PreviewImage? = null,
 ) {
     /**
      * Extra source pixels needed around an output region for the spatial effects
@@ -131,6 +133,8 @@ class ShaderParams(
             brushFor: (MaskLayer) -> BrushRaster? = { null },
             /** Loaded spektrafilm stock for DevelopParams.film (Camera). */
             film: FilmData? = null,
+            /** See [ShaderParams.bokehSource]; lens blur stays off without it. */
+            bokehSource: PreviewImage? = null,
         ): ShaderParams {
             val filmUsed = film?.takeIf { it.stock.id == p.film }
             val sourceWhite = WhiteBalance.xyFromTempTint(asShot.temperature.toDouble(), asShot.tint.toDouble())
@@ -180,6 +184,7 @@ class ShaderParams(
                 curve = p.curves.table(),
                 clipLevel = asShot.clipLevel,
                 leaks = LightLeaks.pack(p.leaks, lens.width, lens.height),
+                bokehSource = bokehSource,
             )
         }
 
@@ -210,6 +215,7 @@ class ShaderParams(
             val tone = FloatArray(n * 4)
             val color = FloatArray(n * 4)
             val wbs = FloatArray(n * 9)
+            val blur = FloatArray(n)
             val brush = arrayOfNulls<BrushRaster>(n)
             var view = 0
             val target = WhiteBalance.xyFromTempTint(kelvin.toDouble(), tint.toDouble())
@@ -245,10 +251,12 @@ class ShaderParams(
                 val layerWhite = WhiteBalance.xyFromTempTint(1e6 / max(mired, 1.0), (tint + a.tint).toDouble())
                 val wb = if (a.temperature == 0f && a.tint == 0f) Mat3.diagonal(1.0, 1.0, 1.0) else WhiteBalance.rebalanceMatrix(target, layerWhite)
                 Mat3.toGlColumnMajor(wb).copyInto(wbs, i * 9)
+                // Lens blur: the disc radius at full mask, in full-resolution pixels.
+                blur[i] = a.lensBlur / 100f * Masks.MAX_LENS_BLUR * long
                 if (l.id == viewId) view = i + 1
                 if (l.strokes.isNotEmpty()) brush[i] = brushFor(l)
             }
-            return LayerUniforms(used.size, geom, shape, tone, color, wbs, view, brush.toList())
+            return LayerUniforms(used.size, geom, shape, tone, color, wbs, view, brush.toList(), blur)
         }
     }
 }
@@ -269,6 +277,8 @@ class LayerUniforms(
     val view: Int,
     /** Painted mask of each packed layer (null = no strokes); slot i of the brush atlas. */
     val brush: List<BrushRaster?>,
+    /** Lens blur radius of each packed layer at full mask, full-resolution pixels (`uLayerBlur`); 0 = none. */
+    val blur: FloatArray = FloatArray(4),
 ) {
     companion object {
         val NONE = LayerUniforms(

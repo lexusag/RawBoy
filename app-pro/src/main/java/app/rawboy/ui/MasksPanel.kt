@@ -247,6 +247,7 @@ private fun AdjustTab(layer: MaskLayer, actions: MaskPanelActions) {
     ParamSlider("Tint", a.tint, -100f..100f, 0f, onChange = set { copy(tint = it) })
     ParamSlider("Saturation", a.saturation, -100f..100f, 0f, onChange = set { copy(saturation = it) })
     ParamSlider("Clarity", a.clarity, -100f..100f, 0f, onChange = set { copy(clarity = it) })
+    ParamSlider("Lens blur", a.lensBlur, 0f..100f, 0f, onChange = set { copy(lensBlur = it) })
 }
 
 @Composable

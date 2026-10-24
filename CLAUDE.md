@@ -422,11 +422,20 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   the shader blends the two either side of `uExposure`. The boosted halo copy itself is unchanged (Film's halation reads
   it whole); keep the knee's constants in step in all those places.
 - Texture units: 0 image, 1 LUT (3D), 2 lens shading, 3 base (512), 4 bloom halo, 5 bloom tail, 6 skin mask, 7 brush atlas,
-  8 film LUT, 9 print LUT (film looks: RawBoy Film and Auto's Film mode, all platforms).
+  8 film LUT, 9 print LUT (film looks: RawBoy Film and Auto's Film mode, all platforms), 10–11 the wavelet denoise
+  passes, 12 the lens blur result (`uBokeh`), 13 the lens blur's own passes.
 - Web wheel zoom (web only, desktop pointers: `Preview`'s `onZoomBy`, `PhotoSession.zoomBy`): `SessionState.zoomScale`
   (device px per full-res px; 1 = 100%, the apps' only zoomed scale) goes through `ZoomMath`'s `scale` parameters
   (fractional view rects when ≠ 1). Up to `ZoomMath.previewSuffices` the zoomed view draws from the preview texture
   (also while a tile for a new region or scale loads); above it from a full-res tile (linear filtering below 100%).
+- Lens blur (mask layers' `lensBlur`, Android and web; `gl/BokehTexture.kt/.ts`): bloom-style, a small whole-image
+  texture, so preview, 100% and export match with no `spatialMargin`. From a highlight-boosted 1536 px copy
+  (`ShaderParams.bokehSource`, made by `PhotoSession` the first time a layer blurs), two GPU passes re-run only when the
+  masks or source change: `shaders/bokeh_prep.glsl` (appended after develop.glsl in place of main_body, so it uses the
+  same `layerMask`; writes rgb premultiplied by the fade-in and the radius) and `bokeh_gather.frag` (exact disc gather,
+  a sample's radius capped by the centre's, so the sharp subject never smears). The texture is sized so the largest
+  radius is `BOKEH_RADIUS` (16) texels; main_body mixes it in by the radius at each pixel. Off without
+  EXT_color_buffer_float. iOS binds a dummy texture and leaves it off.
 - Mask layers (`develop/Masks.ts`, web only so far): `DevelopParams.masks`, positions in fractions of the decoded image,
   evaluated in the shader at `srcG` (the sampled image pixel), so they stay on the content through crop/lens. Analytic
   gradients only (no texture, no neighbourhood, so no `spatialMargin`); packed by `ShaderParams.packLayers` into

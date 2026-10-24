@@ -103,8 +103,8 @@ internal object GlUtil {
 }
 
 /** Compiled develop shader plus uniform locations. */
-internal class DevelopProgram(forExport: Boolean) {
-    private val id = GlUtil.createProgram(Shaders.VERTEX, Shaders.fragment(forExport))
+internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fragment(forExport)) {
+    private val id = GlUtil.createProgram(Shaders.VERTEX, fragment)
     private val uImage = GLES30.glGetUniformLocation(id, "uImage")
     private val uScale = GLES30.glGetUniformLocation(id, "uScale")
     private val uFlipY = GLES30.glGetUniformLocation(id, "uFlipY")
@@ -189,6 +189,13 @@ internal class DevelopProgram(forExport: Boolean) {
     private val uLeakGeom = GLES30.glGetUniformLocation(id, "uLeakGeom")
     private val uLeakShape = GLES30.glGetUniformLocation(id, "uLeakShape")
     private val uLeakColor = GLES30.glGetUniformLocation(id, "uLeakColor")
+    private val uLayerBlur = GLES30.glGetUniformLocation(id, "uLayerBlur")
+    private val uBokeh = GLES30.glGetUniformLocation(id, "uBokeh")
+    private val uBokehScale = GLES30.glGetUniformLocation(id, "uBokehScale")
+    private val uBokehTexel = GLES30.glGetUniformLocation(id, "uBokehTexel")
+    private val uBokehSrc = GLES30.glGetUniformLocation(id, "uBokehSrc")
+    private val uBokehSrcLod = GLES30.glGetUniformLocation(id, "uBokehSrcLod")
+    private val uBokehSize = GLES30.glGetUniformLocation(id, "uBokehSize")
     private val uClipWarn = GLES30.glGetUniformLocation(id, "uClipWarn")
     private val uBrushMask = GLES30.glGetUniformLocation(id, "uBrushMask")
     private val uBrushSlot = GLES30.glGetUniformLocation(id, "uBrushSlot")
@@ -282,7 +289,43 @@ internal class DevelopProgram(forExport: Boolean) {
         bindLens(p.lens)
         bindLayers(p.layers)
         bindLeaks(p.leaks)
+        GLES30.glUniform1i(uBokeh, BokehTexture.UNIT)
+        val bokeh = BokehTexture.geometry(p)
+        GLES30.glUniform1f(uBokehScale, bokeh?.scale ?: 0f)
+        GLES30.glUniform2f(uBokehTexel, 1f / (bokeh?.width ?: 1), 1f / (bokeh?.height ?: 1))
         bindFilm(p, g)
+    }
+
+    /** Mask layer uniforms (positions in image pixels of an [imageWidth] x [imageHeight] image); uses this program. */
+    fun bindMasks(p: ShaderParams, imageWidth: Int, imageHeight: Int) {
+        GLES30.glUseProgram(id)
+        GLES30.glUniform2f(uImageSize, imageWidth.toFloat(), imageHeight.toFloat())
+        bindLayers(p.layers)
+    }
+
+    /**
+     * The lens blur's mask pass (bokeh_prep.glsl): after [bindMasks]; [sourceUnit] holds the boosted copy, sampled at
+     * [lod]. Every sampler gets its own unit as in [bind]: samplers of different types left on unit 0 fail the draw.
+     */
+    fun bokehPrep(sourceUnit: Int, lod: Float, g: BokehTexture.Geometry) {
+        GLES30.glUniform1i(uImage, 0)
+        GLES30.glUniform1i(uLut, LutTexture.UNIT)
+        GLES30.glUniform1i(uShading, ShadingTexture.UNIT)
+        GLES30.glUniform1i(uBase, ImageTexture.BASE_UNIT)
+        GLES30.glUniform1i(uBloomHalo, ImageTexture.BLOOM_HALO_UNIT)
+        GLES30.glUniform1i(uBloomTail, ImageTexture.BLOOM_TAIL_UNIT)
+        GLES30.glUniform1i(uSkinMask, MaskTexture.UNIT)
+        GLES30.glUniform1i(uBrushMask, BrushTexture.UNIT)
+        GLES30.glUniform1i(uFilmLut, FilmTextures.FILM_UNIT)
+        GLES30.glUniform1i(uPrintLut, FilmTextures.PRINT_UNIT)
+        GLES30.glUniform1i(uBokeh, BokehTexture.UNIT)
+        GLES30.glUniform2f(uScale, 1f, 1f) // the whole target (develop.vert)
+        GLES30.glUniform1f(uFlipY, 0f)
+        GLES30.glUniform4f(uUvRect, 0f, 0f, 1f, 1f)
+        GLES30.glUniform1i(uBokehSrc, sourceUnit)
+        GLES30.glUniform1f(uBokehSrcLod, lod)
+        GLES30.glUniform2f(uBokehSize, g.width.toFloat(), g.height.toFloat())
+        GLES30.glUniform1f(uBokehScale, g.scale)
     }
 
     /** After [bind], with the program in use: the bound image went through the wavelet denoise pre-pass (WaveletDenoise). */
@@ -359,6 +402,7 @@ internal class DevelopProgram(forExport: Boolean) {
         GLES30.glUniform4fv(uLayerColor, n, l.color, 0)
         GLES30.glUniformMatrix3fv(uLayerWb, n, false, l.whiteBalance, 0)
         GLES30.glUniform1i(uMaskView, l.view)
+        GLES30.glUniform1fv(uLayerBlur, n, l.blur, 0)
         // Painted masks: slot i of the 2x2 brush atlas (see BrushTexture); zero size = no strokes.
         GLES30.glUniform1i(uBrushMask, BrushTexture.UNIT)
         val slots = FloatArray(n * 4)
