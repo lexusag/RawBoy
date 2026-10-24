@@ -1,5 +1,11 @@
 # Changelog
 
+**Camera: only Focus-flash (2026-10-24)**
+
+- RawBoy Camera (Android): the plain Flash mode is gone. The bolt button now turns Focus-flash on or off (the light
+  comes on, the camera focuses with it, then the flash fires). If Flash was the remembered choice, it becomes
+  Focus-flash.
+
 **Auto: Export all shows its progress in the grid (2026-10-24)**
 
 - RawBoy Auto (Android, iOS, web): while Export all runs, the photos still to be saved show in grey, and each fades

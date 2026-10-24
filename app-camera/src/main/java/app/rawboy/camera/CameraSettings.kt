@@ -99,7 +99,11 @@ object CameraSettingsStore {
             mergeBurst = p.getBoolean("mergeBurst", d.mergeBurst),
             previewScales = parseScales(p.getString(SCALES_KEY, null)),
             flashGuides = parseScales(p.getString(FLASH_GUIDES_KEY, null), min = 1e-2f, max = 1e4f),
-            flash = runCatching { FlashMode.valueOf(p.getString("flash", null)!!) }.getOrDefault(d.flash),
+            // "FLASH" (plain flash, since removed) becomes Focus-flash.
+            flash = when (val f = p.getString("flash", null)) {
+                "FLASH" -> FlashMode.FOCUS_FLASH
+                else -> runCatching { FlashMode.valueOf(f!!) }.getOrDefault(d.flash)
+            },
         )
         if (!always.rememberLast) return always
         return always.copy(

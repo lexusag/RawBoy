@@ -460,7 +460,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setShowHistogram(on: Boolean) = change { it.copy(showHistogram = on) }
     fun setMergeBurst(on: Boolean) = change { it.copy(mergeBurst = on) }
 
-    /** Off -> Flash -> Focus-flash -> Off. */
+    /** Off <-> Focus-flash. */
     fun cycleFlash() = change { it.copy(flash = FlashMode.entries[(it.flash.ordinal + 1) % FlashMode.entries.size]) }
 
     fun setCompare(on: Boolean) {

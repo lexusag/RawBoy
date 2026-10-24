@@ -554,12 +554,11 @@ private fun BurstButton(on: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** Off -> Flash -> Focus-flash (the bolt with "AF": the light comes on to focus and meter first). */
+/** Off <-> Focus-flash (the bolt with "AF": the light comes on to focus and meter first, then the flash fires). */
 @Composable
 private fun FlashButton(mode: FlashMode, onClick: () -> Unit) {
     val description = when (mode) {
         FlashMode.OFF -> "Flash off"
-        FlashMode.FLASH -> "Flash"
         FlashMode.FOCUS_FLASH -> "Flash with focus light"
     }
     IconButton(onClick = onClick) {

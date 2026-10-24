@@ -60,9 +60,6 @@ import kotlin.math.sqrt
 enum class FlashMode {
     OFF,
 
-    /** Fire the flash with the shot, at once: exposure as metered without it. */
-    FLASH,
-
     /** As Google Camera does it: the light comes on, the camera focuses and meters with it, then the flash fires. */
     FOCUS_FLASH,
 }
