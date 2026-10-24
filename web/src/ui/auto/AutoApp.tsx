@@ -570,6 +570,12 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
         go(e.key === ' ' ? 1 : -1);
         return;
       }
+      // C: Copy previous. By key position (code), so it works on any layout (e.g. Ukrainian).
+      if (e.code === 'KeyC' && !e.shiftKey) {
+        e.preventDefault();
+        store.copyPrevious(id);
+        return;
+      }
       if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         // A slider reached with Tab keeps its arrows; one just dragged gives them back to the photos.
         const t = e.target;
@@ -731,7 +737,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
                 type="button"
                 className="text copy-previous"
                 disabled={state.export != null || index < 1}
-                title={index > 0 ? `Copy the look and settings of ${pages[index - 1].name}` : 'Copy the look and settings of the photo before this one'}
+                title={index > 0 ? `Copy the look and settings of ${pages[index - 1].name} (C)` : 'Copy the look and settings of the photo before this one (C)'}
                 onClick={() => store.copyPrevious(id)}
               >
                 Copy previous

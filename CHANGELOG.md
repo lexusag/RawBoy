@@ -1,5 +1,10 @@
 # Changelog
 
+**Auto web: C for Copy previous (2026-10-24)**
+
+- RawBoy Auto (web): in the photo view, **C** does Copy previous (shown in the button's tooltip and the **?** help).
+  It goes by key position, so it works with any keyboard layout (e.g. Ukrainian).
+
 **Camera and Auto: JPEGs keep shutter speed, aperture, ISO and focal length (2026-10-24)**
 
 - RawBoy Camera's JPEGs, and JPEG or TIFF exports from Auto and RawBoy (Android) of RawBoy Camera's DNGs, came out
