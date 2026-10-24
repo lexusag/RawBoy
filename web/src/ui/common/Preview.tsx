@@ -140,8 +140,25 @@ export function Preview({ session, params, frame, frameGrey, margin = 0, clipWar
   }, [session.zoomCenter]);
   const touch = typeof matchMedia === 'function' && matchMedia('(hover: none)').matches;
 
-  // Pointer gestures: drag pans when zoomed; press and hold compares; double click toggles 100%; the wheel zooms.
-  const gesture = useRef<{ x: number; y: number; moved: boolean; timer: number; comparing: boolean } | null>(null);
+  // Pointer gestures: drag pans when zoomed; press and hold compares; double click toggles 100%; the wheel zooms. One
+  // finger only: a second one (a pinch) ends the gesture, compare included, and nothing starts again until every
+  // finger is up.
+  // Before, the second finger replaced the first's gesture and left its compare timer running, so a pinch could
+  // switch to the as-shot render with nothing left to switch it back.
+  const gesture = useRef<{ id: number; x: number; y: number; moved: boolean; timer: number; comparing: boolean } | null>(null);
+  const pointers = useRef(new Set<number>());
+  const endGesture = () => {
+    const g = gesture.current;
+    gesture.current = null;
+    if (!g) return;
+    clearTimeout(g.timer);
+    if (g.comparing) callbacks.current.onCompare(false);
+  };
+  const pointerGone = (id: number) => {
+    pointers.current.delete(id);
+    if (gesture.current?.id === id) endGesture();
+  };
+  useEffect(() => () => endGesture(), []);
   const toDevice = (e: { clientX: number; clientY: number }) => {
     const r = boxRef.current!.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
@@ -153,11 +170,18 @@ export function Preview({ session, params, frame, frameGrey, margin = 0, clipWar
       ref={boxRef}
       className="preview"
       onPointerDown={(e) => {
-        if (e.button !== 0) return;
+        // A primary pointer means no other finger is down: forget any whose up we missed.
+        if (e.isPrimary) pointers.current.clear();
+        pointers.current.add(e.pointerId);
         (e.target as Element).setPointerCapture?.(e.pointerId);
-        const g = { x: e.clientX, y: e.clientY, moved: false, comparing: false, timer: 0 };
+        if (pointers.current.size > 1) {
+          endGesture();
+          return;
+        }
+        if (e.button !== 0) return;
+        const g = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, comparing: false, timer: 0 };
         g.timer = window.setTimeout(() => {
-          if (!g.moved) {
+          if (!g.moved && gesture.current === g) {
             g.comparing = true;
             callbacks.current.onCompare(true);
           }
@@ -167,7 +191,7 @@ export function Preview({ session, params, frame, frameGrey, margin = 0, clipWar
       onPointerMove={(e) => {
         callbacks.current.onPointerAt?.([...toDevice(e)]);
         const g = gesture.current;
-        if (!g) return;
+        if (!g || g.id !== e.pointerId) return;
         const dx = e.clientX - g.x;
         const dy = e.clientY - g.y;
         if (!g.moved && Math.hypot(dx, dy) < 4) return;
@@ -181,9 +205,10 @@ export function Preview({ session, params, frame, frameGrey, margin = 0, clipWar
         g.y = e.clientY;
       }}
       onPointerUp={(e) => {
+        pointers.current.delete(e.pointerId);
         const g = gesture.current;
+        if (!g || g.id !== e.pointerId) return;
         gesture.current = null;
-        if (!g) return;
         clearTimeout(g.timer);
         if (g.comparing) callbacks.current.onCompare(false);
         else if (!g.moved) {
@@ -191,14 +216,8 @@ export function Preview({ session, params, frame, frameGrey, margin = 0, clipWar
           callbacks.current.onClick?.(x, y);
         }
       }}
-      onPointerCancel={() => {
-        const g = gesture.current;
-        gesture.current = null;
-        if (g) {
-          clearTimeout(g.timer);
-          if (g.comparing) callbacks.current.onCompare(false);
-        }
-      }}
+      onPointerCancel={(e) => pointerGone(e.pointerId)}
+      onLostPointerCapture={(e) => pointerGone(e.pointerId)}
       onPointerLeave={() => callbacks.current.onPointerAt?.(null)}
       onDoubleClick={(e) => {
         const [x, y] = toDevice(e);
