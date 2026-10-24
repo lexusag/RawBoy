@@ -1,5 +1,12 @@
 # Changelog
 
+**Camera and Auto: JPEGs keep shutter speed, aperture, ISO and focal length (2026-10-24)**
+
+- RawBoy Camera's JPEGs, and JPEG or TIFF exports from Auto and RawBoy (Android) of RawBoy Camera's DNGs, came out
+  with only the camera make and model: no shutter speed, aperture, ISO, focal length or capture date. Android's DNG
+  writer keeps these in the DNG's main tag list rather than in the EXIF section, where the metadata copy looked for
+  them. Exports now read them from there too. The DNGs themselves always had them.
+
 **Auto and Browser: photos in shoot-date order (2026-10-24)**
 
 - RawBoy Auto (Android, iOS, web) and RawBoy Browser (web) now show photos in the order they were shot, from each
