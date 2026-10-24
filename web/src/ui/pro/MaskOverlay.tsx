@@ -48,6 +48,8 @@ interface Props {
   frame: number;
   /** Centre of the 100% view (output pixels), or null for the fit view. */
   zoomCenter: [number, number] | null;
+  /** Device pixels per image pixel while zoomed. */
+  zoomScale: number;
   tool: MaskTool;
   brush: BrushSettings;
   /** Space held: presses go to the preview (pan). */
@@ -90,7 +92,7 @@ const path = (pts: Pt[], close = false) => (pts.length ? `M${pts.map((p) => `${p
  * they stay reachable when a shape extends past its edges. Presses that hit nothing (Move) fall through to the preview: pan at 100%, press and hold compares.
  */
 export function MaskOverlay(props: Props) {
-  const { lens, layers, selectedId, frame, zoomCenter, tool, brush, passThrough, onSelect, onChange } = props;
+  const { lens, layers, selectedId, frame, zoomCenter, zoomScale, tool, brush, passThrough, onSelect, onChange } = props;
   const [box, setBox] = useState<{ w: number; h: number } | null>(null);
   const [hover, setHover] = useState<Handle | 'pin' | null>(null);
   const [cursorAt, setCursorAt] = useState<Pt | null>(null);
@@ -100,7 +102,7 @@ export function MaskOverlay(props: Props) {
   let r: number[] | null = null;
   if (box) {
     if (zoomCenter) {
-      const z = ZoomMath.zoomedRect(zoomCenter[0], zoomCenter[1], box.w * dpr, box.h * dpr, lens.outputWidth, lens.outputHeight);
+      const z = ZoomMath.zoomedRect(zoomCenter[0], zoomCenter[1], box.w * dpr, box.h * dpr, lens.outputWidth, lens.outputHeight, zoomScale);
       r = z.map((v) => v / dpr);
     } else {
       r = ZoomMath.fitRect(box.w, box.h, lens.outputWidth, lens.outputHeight, frame);

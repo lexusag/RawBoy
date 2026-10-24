@@ -2,7 +2,7 @@ import { DevelopInputs, DevelopProgram, FullscreenQuad, SampleGeometry, createTe
 import type { PreviewImage } from './PreviewImage';
 import type { ShaderParams } from './ShaderParams';
 import { WaveletDenoise } from './WaveletDenoise';
-import { ZoomMath, rect, type DetailTile } from './Zoom';
+import { ZoomMath, contains, rect, type DetailTile } from './Zoom';
 
 /** Frame colours around the photo, cycled by clicking outside it. Levels are display-encoded (sRGB). */
 export const FrameColors = [
@@ -13,7 +13,7 @@ export const FrameColors = [
 
 /**
  * Renders the developed image into a canvas (port of gl/DevelopRenderer.kt): either the whole downscaled preview
- * (aspect-fit) or, when zoomed, a 1:1 window into a full-resolution tile. Draws on the next animation frame
+ * (aspect-fit) or, when zoomed, a window into a full-resolution tile (1:1, or any scale with the web's wheel zoom). Draws on the next animation frame
  * after any change.
  */
 export class DevelopRenderer {
@@ -42,8 +42,10 @@ export class DevelopRenderer {
   frameGrey: number = FrameColors[0].level;
   /** Paints clipped highlights red and crushed shadows blue (Pro's histogram, clipWarning in develop.glsl). */
   clipWarning = false;
-  /** Centre of the 100% view in full-resolution pixels, or null for fit-to-view. */
+  /** Centre of the zoomed view in full-resolution pixels, or null for fit-to-view. */
   zoomCenter: [number, number] | null = null;
+  /** Device pixels per full-resolution pixel while zoomed (1 = 100%). */
+  zoomScale = 1;
   viewWidth = 1;
   viewHeight = 1;
 
@@ -115,7 +117,7 @@ export class DevelopRenderer {
     gl.activeTexture(gl.TEXTURE0);
     const center = this.zoomCenter;
     const tile = this.uploadedDetail;
-    if (center && tile) this.drawZoomed(p, img, tile, center);
+    if (center) this.drawZoomed(p, img, tile, center, this.zoomScale);
     else this.drawFit(p, img);
     this.program.setClipWarning(this.clipWarning);
     this.program.setDenoisePre(this.denoisedInput);
@@ -148,15 +150,31 @@ export class DevelopRenderer {
     this.program.bind(p, geometry, r[2] / this.viewWidth, r[3] / this.viewHeight, true);
   }
 
-  private drawZoomed(p: ShaderParams, img: PreviewImage, tile: DetailTile, center: [number, number]) {
+  private drawZoomed(p: ShaderParams, img: PreviewImage, tile: DetailTile | null, center: [number, number], scale: number) {
     const gl = this.gl;
     // Output = what's on screen; input = the loaded full-resolution tile. If the lens moves pixels outside the
-    // tile while a new one loads, edges smear briefly.
-    const view = ZoomMath.viewRect(center[0], center[1], this.viewWidth, this.viewHeight, p.lens.outputWidth, p.lens.outputHeight);
-    const input = this.denoised(p, this.detailTexture, `d${this.detailVersion}`, tile.rect.width, tile.rect.height, 1);
-    gl.bindTexture(gl.TEXTURE_2D, input);
-    const geometry = new SampleGeometry(tile.rect.width, tile.rect.height, tile.rect, view, img.fullWidth, img.fullHeight);
-    this.program.bind(p, geometry, view.width / this.viewWidth, view.height / this.viewHeight, true);
+    // tile while a new one loads, edges smear briefly. Between fit and 100% (wheel zoom) the preview may be
+    // enough, and it stands in while a tile for a new region or scale loads.
+    const view = ZoomMath.viewRect(center[0], center[1], this.viewWidth, this.viewHeight, p.lens.outputWidth, p.lens.outputHeight, scale);
+    const useTile = tile != null && !ZoomMath.previewSuffices(scale, img.width, img.fullWidth) &&
+      (scale === 1 || contains(tile.rect, p.lens.sourceBounds(view, 0)));
+    let geometry: SampleGeometry;
+    if (useTile) {
+      const input = this.denoised(p, this.detailTexture, `d${this.detailVersion}`, tile.rect.width, tile.rect.height, 1);
+      gl.bindTexture(gl.TEXTURE_2D, input);
+      if (input === this.detailTexture) {
+        // Pixels stay crisp from 100% up; below it, smooth. (The denoise output, shared with the fit view, stays linear.)
+        const filter = scale >= 1 ? gl.NEAREST : gl.LINEAR;
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+      }
+      geometry = new SampleGeometry(tile.rect.width, tile.rect.height, tile.rect, view, img.fullWidth, img.fullHeight);
+    } else {
+      const input = this.denoised(p, this.previewTexture, `p${this.previewVersion}`, img.width, img.height, img.width / img.fullWidth);
+      gl.bindTexture(gl.TEXTURE_2D, input);
+      geometry = new SampleGeometry(img.width, img.height, rect(0, 0, img.fullWidth, img.fullHeight), view, img.fullWidth, img.fullHeight);
+    }
+    this.program.bind(p, geometry, (view.width * scale) / this.viewWidth, (view.height * scale) / this.viewHeight, true);
   }
 
   /** [texture], or its copy through the wavelet denoise pre-pass when denoise is on (see WaveletDenoise). */

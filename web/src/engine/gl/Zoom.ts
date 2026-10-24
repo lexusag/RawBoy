@@ -22,22 +22,33 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
 /** Kotlin's coerceIn: lo wins when lo > hi, so the result never passes it. */
 const coerceIn = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(v, hi));
 
-/** Geometry of the 100% view: one full-resolution pixel per screen pixel, centred on (cx, cy). */
+/**
+ * Geometry of the zoomed view, centred on (cx, cy): [scale] device pixels per full-resolution pixel, 1 = the 100% view
+ * (the only one the apps have; the web's mouse-wheel zoom on desktop uses other scales).
+ */
 export const ZoomMath = {
+  /** Wheel zoom's limits, device pixels per full-resolution pixel (out past the fit view goes back to it). */
+  MAX_SCALE: 4,
   /** Margin kept around the visible region so denoise has real neighbours. */
   HALO: 16,
   MIN_TILE: 2048,
   TILE_SLACK: 512,
 
   /** Keeps the visible region inside the image. */
-  clampCenter(cx: number, cy: number, viewW: number, viewH: number, imgW: number, imgH: number): [number, number] {
-    const halfW = Math.min(viewW, imgW) / 2;
-    const halfH = Math.min(viewH, imgH) / 2;
+  clampCenter(cx: number, cy: number, viewW: number, viewH: number, imgW: number, imgH: number, scale = 1): [number, number] {
+    const halfW = Math.min(viewW / scale, imgW) / 2;
+    const halfH = Math.min(viewH / scale, imgH) / 2;
     return [clamp(cx, halfW, imgW - halfW), clamp(cy, halfH, imgH - halfH)];
   },
 
   /** The full-resolution region visible on screen. */
-  viewRect(cx: number, cy: number, viewW: number, viewH: number, imgW: number, imgH: number): PixelRect {
+  viewRect(cx: number, cy: number, viewW: number, viewH: number, imgW: number, imgH: number, scale = 1): PixelRect {
+    if (scale !== 1) {
+      // Fractional pixels: whole ones would make panning jump [scale] device pixels at a time.
+      const w = Math.min(viewW / scale, imgW);
+      const h = Math.min(viewH / scale, imgH);
+      return rect(coerceIn(cx - w / 2, 0, imgW - w), coerceIn(cy - h / 2, 0, imgH - h), w, h);
+    }
     const w = Math.min(viewW, imgW);
     const h = Math.min(viewH, imgH);
     const x = coerceIn(Math.round(cx - w / 2), 0, imgW - w);
@@ -46,12 +57,25 @@ export const ZoomMath = {
   },
 
   /**
-   * Where the whole output image sits in the 100% view (one image pixel per device pixel), as [left, top, width,
-   * height] in device pixels: the visible region is centred like DevelopRenderer.drawZoomed's quad.
+   * Where the whole output image sits in the zoomed view ([scale] device pixels per image pixel), as [left, top,
+   * width, height] in device pixels: the visible region is centred like DevelopRenderer.drawZoomed's quad.
    */
-  zoomedRect(cx: number, cy: number, viewW: number, viewH: number, imgW: number, imgH: number): number[] {
-    const v = ZoomMath.viewRect(cx, cy, viewW, viewH, imgW, imgH);
-    return [(viewW - v.width) / 2 - v.x, (viewH - v.height) / 2 - v.y, imgW, imgH];
+  zoomedRect(cx: number, cy: number, viewW: number, viewH: number, imgW: number, imgH: number, scale = 1): number[] {
+    const v = ZoomMath.viewRect(cx, cy, viewW, viewH, imgW, imgH, scale);
+    return [(viewW - v.width * scale) / 2 - v.x * scale, (viewH - v.height * scale) / 2 - v.y * scale, imgW * scale, imgH * scale];
+  },
+
+  /** The fit view's scale: device pixels per full-resolution pixel. */
+  fitScale(viewW: number, viewH: number, imgW: number, imgH: number, frame: number): number {
+    return ZoomMath.fitRect(viewW, viewH, imgW, imgH, frame)[2] / imgW;
+  },
+
+  /**
+   * Whether the downscaled preview is sharp enough at [scale] (a wheel zoom between fit and 100%): at most a quarter
+   * upsampled. Above it the view needs a full-resolution tile.
+   */
+  previewSuffices(scale: number, previewWidth: number, fullWidth: number): boolean {
+    return scale <= (1.25 * previewWidth) / fullWidth;
   },
 
   /** A tile around [needed] (source pixels), large enough that panning rarely reloads. */

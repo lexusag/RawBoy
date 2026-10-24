@@ -16,11 +16,14 @@ let lastPageScroll = -Infinity;
 window.addEventListener('wheel', (e) => { if (!e.defaultPrevented) lastPageScroll = e.timeStamp; }, { passive: true });
 window.addEventListener('scroll', (e) => { lastPageScroll = e.timeStamp; }, { passive: true, capture: true });
 
+/** Whether this wheel event continues a page (or panel) scroll, which other wheel gestures should leave alone. */
+export const continuesPageScroll = (e: WheelEvent) => e.timeStamp - lastPageScroll < SCROLL_GRACE;
+
 /**
  * Wheel notches in a wheel event, positive for up. A mouse wheel gives one per click (100 px in Chrome, ~50 in
  * Firefox, 3 lines in line mode); a trackpad gives fractions. Shift turns the wheel horizontal in most browsers.
  */
-function wheelNotches(e: WheelEvent): number {
+export function wheelNotches(e: WheelEvent): number {
   const d = e.deltaY !== 0 ? e.deltaY : e.shiftKey ? e.deltaX : 0;
   if (d === 0) return 0;
   if (e.deltaMode === WheelEvent.DOM_DELTA_LINE) return -d / 3;
@@ -91,7 +94,7 @@ export function ParamSlider({ label, value, min, max, defaultValue, step, format
     // Not React's onWheel: that listener is passive, so it couldn't stop the page from scrolling.
     const onWheel = (e: WheelEvent) => {
       const { value, min, max, s, disabled, onChange } = live.current;
-      if (disabled || e.timeStamp - lastPageScroll < SCROLL_GRACE) return;
+      if (disabled || continuesPageScroll(e)) return;
       const notches = wheelNotches(e);
       if (notches === 0) return;
       e.preventDefault(); // also keeps Ctrl+wheel from zooming the page

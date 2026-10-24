@@ -7,6 +7,9 @@ blemish removal use the same MediaPipe models in the browser.
 
 - Open: **Open** / **Add** or drag and drop (RAW files; `.cube` / HaldCLUT `.png` files go to *Your LUTs*).
 - Double-click the photo or press **Z** for 100% (Z zooms at the pointer, or the middle when the pointer is off the photo; works in every mode except Crop & rotate), drag to pan, press and hold to compare (or the **Compare** button and `\` to keep the as-shot render on), click outside the photo to change the frame.
+  With a mouse or trackpad, the wheel over the photo zooms in and out around the pointer, from the whole photo up to
+  400% (it stops once at 100% on the way; a trackpad pinch zooms too), and drag pans. Close to the whole photo the
+  view comes from the preview, further in from full-resolution tiles. Touch screens are unchanged.
   A hint at the bottom of the photo says so for a few seconds after each photo opens, until you have zoomed once.
 - Export: JPEG (jpegli, quality 1–100, 4:4:4) or TIFF 8/16-bit (LZW), full size or a smaller long side, saved as a
   download. Auto's **Export all** writes `<name>-auto.jpg` (or `.tif`, see Auto's export options) into a folder you pick
