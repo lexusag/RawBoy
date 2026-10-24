@@ -1,5 +1,12 @@
 # Changelog
 
+**Color and black & white sections in look and preset lists (2026-10-24)**
+
+- RawBoy, Auto and Camera (Android, web): look and preset pickers list black and white ones apart from the colour ones,
+  under **Color** and **Black & white** headings: Auto's look strip (a divider between the two in the phone's row),
+  Camera's Look menu, RawBoy's included LUTs, the Presets panel and Auto's preset picker. A preset counts as black and
+  white with Saturation -100 or a black and white LUT at full strength. Not on iOS yet.
+
 **Bloom glows from highlights only (2026-10-24)**
 
 - RawBoy, Auto and Camera (Android, iOS, web): Bloom used to mix the whole picture with its blur, so at higher values

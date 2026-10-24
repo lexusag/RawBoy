@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { DEFAULT_PRESET_GROUPS, PRESET_GROUPS, type Preset, type PresetGroup } from '../../engine/develop/Presets';
+import { DEFAULT_PRESET_GROUPS, PRESET_GROUPS, presetSections, type Preset, type PresetGroup } from '../../engine/develop/Presets';
 import { pickFiles } from '../common/files';
-import { Note } from './Controls';
+import { Note, SectionLabel } from './Controls';
 
 /** What the Presets panel can do (port of app-pro's PresetActions). */
 export interface PresetActions {
@@ -57,31 +57,36 @@ export function PresetsPanel({ presets, actions, onDone, hasStrokes = false }: {
           part of a preset.
         </Note>
       )}
-      {presets.map((p) => (
-        <div key={p.id} className="preset-row">
-          <button type="button" className="preset-apply" onClick={() => actions.apply(p)} title="Apply">
-            <span className="preset-name">{p.name}</span>
-            <span className="preset-groups">{groupSummary(p)}</span>
-          </button>
-          <div className="preset-menu">
-            <button type="button" className="icon" title="Preset options" onClick={() => setMenu(menu === p.id ? null : p.id)}>⋮</button>
-            {menu === p.id && (
-              <div className="menu" onMouseLeave={() => setMenu(null)}>
-                <button type="button" onClick={() => { setMenu(null); actions.update(p); }}>Update from current</button>
-                <button type="button" onClick={() => { setMenu(null); setRenaming(p); }}>Rename</button>
-                <button type="button" onClick={() => { setMenu(null); actions.export([p]); }}>Export</button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setMenu(null);
-                    if (window.confirm(`Delete “${p.name}”?`)) actions.delete(p);
-                  }}
-                >
-                  Delete
-                </button>
+      {presetSections(presets).map((section) => (
+        <div key={section.label ?? 'all'}>
+          {section.label && <SectionLabel>{section.label}</SectionLabel>}
+          {section.presets.map((p) => (
+            <div key={p.id} className="preset-row">
+              <button type="button" className="preset-apply" onClick={() => actions.apply(p)} title="Apply">
+                <span className="preset-name">{p.name}</span>
+                <span className="preset-groups">{groupSummary(p)}</span>
+              </button>
+              <div className="preset-menu">
+                <button type="button" className="icon" title="Preset options" onClick={() => setMenu(menu === p.id ? null : p.id)}>⋮</button>
+                {menu === p.id && (
+                  <div className="menu" onMouseLeave={() => setMenu(null)}>
+                    <button type="button" onClick={() => { setMenu(null); actions.update(p); }}>Update from current</button>
+                    <button type="button" onClick={() => { setMenu(null); setRenaming(p); }}>Rename</button>
+                    <button type="button" onClick={() => { setMenu(null); actions.export([p]); }}>Export</button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setMenu(null);
+                        if (window.confirm(`Delete “${p.name}”?`)) actions.delete(p);
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </div>
+          ))}
         </div>
       ))}
       {saving && (

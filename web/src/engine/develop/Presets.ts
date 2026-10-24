@@ -1,3 +1,4 @@
+import { isMonochromeLut } from '../auto/looks/Look';
 import { RetiredLooks } from '../auto/looks/RetiredLooks';
 import { TONE_MAPPERS, type DevelopParams } from './DevelopParams';
 import { forPreset, parseLayers, type MaskLayer } from './Masks';
@@ -57,6 +58,30 @@ export interface Preset {
  * (or RawBoy preset), changing only the lens corrections.
  */
 export const isLensPreset = (p: Preset): boolean => p.groups.length === 1 && p.groups[0] === 'lens';
+
+/**
+ * The preset makes photos black and white: Saturation -100, or a bundled monochrome LUT at full strength (and no film
+ * stock, which drops the LUT). Preset lists show these in their own section (port of Preset.isMonochrome).
+ */
+export function isMonochromePreset(p: Preset): boolean {
+  const { saturation, lut, lutAmount, film } = p.values;
+  if (typeof saturation === 'number' && saturation <= -100) return true;
+  return film == null && typeof lut === 'string' && isMonochromeLut(lut) && (typeof lutAmount === 'number' ? lutAmount : 100) >= 100;
+}
+
+/**
+ * Presets in sections for a list: colour ones, then black and white ones (isMonochromePreset) under their own
+ * heading. With no black and white preset there is one section without a heading (port of Presets.sections).
+ */
+export function presetSections(presets: readonly Preset[]): { label: string | null; presets: Preset[] }[] {
+  const mono = presets.filter(isMonochromePreset);
+  if (mono.length === 0) return [{ label: null, presets: [...presets] }];
+  const color = presets.filter((p) => !isMonochromePreset(p));
+  return [
+    ...(color.length > 0 ? [{ label: 'Color', presets: color }] : []),
+    { label: 'Black & white', presets: mono },
+  ];
+}
 
 export const PRESET_FORMAT = 'rawboy-preset';
 export const PRESET_VERSION = 1;

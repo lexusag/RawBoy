@@ -1,5 +1,6 @@
 package app.rawboy.develop
 
+import app.rawboy.auto.looks.Looks
 import app.rawboy.auto.looks.RetiredLooks
 import org.json.JSONArray
 import org.json.JSONObject
@@ -59,6 +60,16 @@ data class Preset(
      * of their look (or RawBoy preset), changing only the lens corrections.
      */
     val isLensPreset: Boolean get() = groups == setOf(PresetGroup.LENS)
+
+    /**
+     * The preset makes photos black and white: Saturation -100, or a bundled monochrome LUT at full strength (and no
+     * film stock, which drops the LUT). Preset lists show these in their own section.
+     */
+    val isMonochrome: Boolean get() {
+        if ((values["saturation"] as? Float ?: 0f) <= -100f) return true
+        return values["film"] == null && Looks.isMonochromeLut(values["lut"] as? String) &&
+            (values["lutAmount"] as? Float ?: 100f) >= 100f
+    }
 }
 
 /** Capturing, applying and the JSON file format of [Preset]s (mirrored in web's Presets.ts). */
@@ -83,6 +94,16 @@ object Presets {
     /** Whether [preset] was made for the lens named [lens]: same name, ignoring case and outer spaces; never a blank one. */
     fun isFor(preset: Preset, lens: String): Boolean =
         lens.isNotBlank() && preset.lens?.trim().equals(lens.trim(), ignoreCase = true)
+
+    /**
+     * [presets] in sections for a list: colour ones, then black and white ones ([Preset.isMonochrome]) under their own
+     * heading. With no black and white preset there is one section without a heading (null).
+     */
+    fun sections(presets: List<Preset>): List<Pair<String?, List<Preset>>> {
+        val (mono, color) = presets.partition { it.isMonochrome }
+        if (mono.isEmpty()) return listOf(null to presets)
+        return listOfNotNull(if (color.isEmpty()) null else "Color" to color, "Black & white" to mono)
+    }
 
     /**
      * The lens preset among [presets] for the lens named [lens] (the last one when there are several); null if none or
