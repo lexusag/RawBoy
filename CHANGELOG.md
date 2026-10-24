@@ -1,5 +1,11 @@
 # Changelog
 
+**Web: pinching the photo no longer leaves it on the original (2026-10-24)**
+
+- RawBoy and Auto (web, touch screens): a two-finger pinch on the photo could switch it to the as-shot render
+  (Original, or Auto without its look) and leave it there until the next press and hold. A second finger now ends
+  press-and-hold compare and dragging, and nothing starts again until every finger is lifted.
+
 **Pro on phones: the shot info line scrolls sideways (2026-10-24)**
 
 - RawBoy (Android, web on phones): the file name and shot info under the tools used to end in an ellipsis when they
