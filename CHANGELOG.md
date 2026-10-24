@@ -1,5 +1,12 @@
 # Changelog
 
+**Web: shortcuts work in Ukrainian and other non-Latin layouts (2026-10-24)**
+
+- RawBoy Web (Pro, Auto, Browser): letter shortcuts (Z zoom, Ctrl/⌘+Z undo, P / X / U flags, B / E / V mask tools,
+  [ ] brush size, \\ compare, Ctrl/⌘+A select all, …) did nothing while a Ukrainian, Russian or other non-Latin
+  keyboard layout was active, because the key then types a Cyrillic letter. They now go by the physical key, as in
+  Lightroom. Latin layouts (AZERTY, Dvorak) keep following the letter printed on the key.
+
 **Camera and Auto: JPEGs keep shutter speed, aperture, ISO and focal length (2026-10-24)**
 
 - RawBoy Camera's JPEGs, and JPEG or TIFF exports from Auto and RawBoy (Android) of RawBoy Camera's DNGs, came out
