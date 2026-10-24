@@ -182,6 +182,11 @@ export class DevelopProgram {
     gl.uniform4fv(this.loc('uLayerColor'), layers.color);
     gl.uniformMatrix3fv(this.loc('uLayerWb'), false, layers.whiteBalance);
     this.i1('uMaskView', layers.view);
+    const leaks = p.leaks;
+    this.i1('uLeakCount', leaks.count);
+    gl.uniform4fv(this.loc('uLeakGeom'), leaks.geom);
+    gl.uniform4fv(this.loc('uLeakShape'), leaks.shape);
+    gl.uniform4fv(this.loc('uLeakColor'), leaks.color);
     // Painted masks: slot i of the 2x2 brush atlas (see BrushTexture); zero size = no strokes.
     this.i1('uBrushMask', Units.BRUSH);
     const slots = new Float32Array(4 * 4);

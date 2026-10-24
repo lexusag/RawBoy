@@ -1,5 +1,14 @@
 # Changelog
 
+**RawBoy: light leaks (2026-10-24)**
+
+- RawBoy (Android, web): a new **Light leaks** tool in the top bar adds film-style light (orange by default,
+  magenta-red to amber) that you drag around the photo: **streaks**, straight beams across the frame with a
+  white-hot middle and coloured edges, or round **glows**. Intensity, Width and Length (streak) or Size and Stretch
+  (glow), Rotation, Softness and Colour. At full intensity a leak's middle hides what is under it, so it can tastefully cover part of a nude; lower,
+  it is a glow laid over the picture like light on film. Up to 4 per photo; they follow crop and rotation, reset for
+  the next photo and aren't saved in presets. On Android, Reset all moved next to Undo and Redo to make room.
+
 **Web: pinching the photo no longer leaves it on the original (2026-10-24)**
 
 - RawBoy and Auto (web, touch screens): a two-finger pinch on the photo could switch it to the as-shot render

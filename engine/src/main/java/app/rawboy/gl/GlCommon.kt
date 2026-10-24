@@ -2,6 +2,8 @@ package app.rawboy.gl
 
 import android.opengl.GLES30
 import app.rawboy.develop.BrushRaster
+import app.rawboy.develop.LeakUniforms
+import app.rawboy.develop.LightLeaks
 import app.rawboy.develop.Masks
 import app.rawboy.develop.ToneCurves
 import app.rawboy.film.FilmData
@@ -183,6 +185,10 @@ internal class DevelopProgram(forExport: Boolean) {
     private val uLayerColor = GLES30.glGetUniformLocation(id, "uLayerColor")
     private val uLayerWb = GLES30.glGetUniformLocation(id, "uLayerWb")
     private val uMaskView = GLES30.glGetUniformLocation(id, "uMaskView")
+    private val uLeakCount = GLES30.glGetUniformLocation(id, "uLeakCount")
+    private val uLeakGeom = GLES30.glGetUniformLocation(id, "uLeakGeom")
+    private val uLeakShape = GLES30.glGetUniformLocation(id, "uLeakShape")
+    private val uLeakColor = GLES30.glGetUniformLocation(id, "uLeakColor")
     private val uClipWarn = GLES30.glGetUniformLocation(id, "uClipWarn")
     private val uBrushMask = GLES30.glGetUniformLocation(id, "uBrushMask")
     private val uBrushSlot = GLES30.glGetUniformLocation(id, "uBrushSlot")
@@ -275,6 +281,7 @@ internal class DevelopProgram(forExport: Boolean) {
         GLES30.glUniform2f(uOutSpan, g.output.width.toFloat(), g.output.height.toFloat())
         bindLens(p.lens)
         bindLayers(p.layers)
+        bindLeaks(p.leaks)
         bindFilm(p, g)
     }
 
@@ -333,6 +340,14 @@ internal class DevelopProgram(forExport: Boolean) {
         GLES30.glUniform1f(uFormHaloUm, form.haloRadiusUm)
         vec3(uFormScatter, form.scatter, optics.coerceAtMost(1f))
         GLES30.glUniform1f(uFormScatterUm, form.scatterUm)
+    }
+
+    private fun bindLeaks(l: LeakUniforms) {
+        val n = LightLeaks.MAX_LEAKS
+        GLES30.glUniform1i(uLeakCount, l.count)
+        GLES30.glUniform4fv(uLeakGeom, n, l.geom, 0)
+        GLES30.glUniform4fv(uLeakShape, n, l.shape, 0)
+        GLES30.glUniform4fv(uLeakColor, n, l.color, 0)
     }
 
     private fun bindLayers(l: LayerUniforms) {

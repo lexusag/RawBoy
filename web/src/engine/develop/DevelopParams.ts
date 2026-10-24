@@ -1,4 +1,5 @@
 import type { MaskLayer } from './Masks';
+import type { LightLeak } from './LightLeaks';
 import { DEFAULT_CURVES, type ToneCurves } from './ToneCurve';
 
 /**
@@ -49,6 +50,7 @@ export const toneMapperId = (t: ToneMapper): number => TONE_MAPPERS.find((m) => 
  *   Rotation, flips, straighten and crop are per photo: they reset when another file is opened.
  *
  * - masks: up to MAX_LAYERS gradient layers with local adjustments (see Masks.ts); per photo, like the crop.
+ * - leaks: up to MAX_LEAKS light leaks over the finished picture (see LightLeaks.ts); per photo, like the masks.
  *
  * Whites/Blacks follow Lightroom: Blacks < 0 raises the black point (deeper blacks), Blacks > 0 lifts/fades
  * them; Whites > 0 lowers the white point (brighter whites), Whites < 0 dims them.
@@ -104,6 +106,7 @@ export interface DevelopParams {
   cropRight: number;
   cropBottom: number;
   masks: readonly MaskLayer[];
+  leaks: readonly LightLeak[];
   /**
    * The photo is display-referred (JPEG, HEIC: see display_inverse.cpp), rendered with AgX per channel. Set only on
    * a photo's as-shot defaults, from the decoder; never a slider or preset value.
@@ -167,6 +170,7 @@ export const DEFAULT_PARAMS: Readonly<DevelopParams> = Object.freeze({
   cropRight: 1,
   cropBottom: 1,
   masks: [],
+  leaks: [],
 });
 
 /** The colour denoise in effect: colorDenoise, or denoise while it isn't set. */

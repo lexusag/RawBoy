@@ -87,6 +87,8 @@ data class DevelopParams(
     val cropBottom: Float = 1f,
     /** Up to [Masks.MAX_LAYERS] mask layers with local adjustments (see Masks.kt); per photo, like the crop. */
     val masks: List<MaskLayer> = emptyList(),
+    /** Up to [LightLeaks.MAX_LEAKS] light leaks over the finished picture (see LightLeaks.kt); per photo, like the masks. */
+    val leaks: List<LightLeak> = emptyList(),
     /**
      * The photo is display-referred (JPEG, HEIC: see display_inverse.cpp), rendered with AgX per channel. Set only on
      * a photo's as-shot defaults, from the decoder; never a slider or preset value.

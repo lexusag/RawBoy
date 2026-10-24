@@ -67,7 +67,12 @@ const newId = (): string =>
 export function capturePreset(name: string, params: DevelopParams, groups: readonly PresetGroup[], lens?: string): Preset {
   const values: Preset['values'] = {};
   const chosen = PRESET_GROUPS.filter((g) => groups.includes(g.key));
-  for (const g of chosen) for (const f of g.fields) values[f] = f === 'masks' ? forPreset(params.masks) : params[f]; // strokes stay with the photo
+  for (const g of chosen) {
+    for (const f of g.fields) {
+      if (f === 'leaks') continue; // in no group: light leaks stay with the photo
+      values[f] = f === 'masks' ? forPreset(params.masks) : params[f]; // strokes stay with the photo
+    }
+  }
   const preset: Preset = { id: newId(), name: name.trim(), groups: chosen.map((g) => g.key), values };
   if (lens !== undefined) preset.lens = lens.trim();
   return preset;

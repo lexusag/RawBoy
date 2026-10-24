@@ -1,4 +1,5 @@
 import type { DevelopParams } from './DevelopParams';
+import { parseLeaks, type LightLeak } from './LightLeaks';
 import { parseLayers, type MaskLayer } from './Masks';
 import { applyPreset } from './Presets';
 
@@ -22,6 +23,7 @@ const valuesOf = (params: DevelopParams): Record<string, unknown> => {
       ...l,
       strokes: l.strokes.map(({ id: _sid, ...s }) => ({ ...s, points: s.points.map(round) })),
     })),
+    leaks: params.leaks.map(({ id: _id, ...l }: LightLeak) => l),
   };
 };
 
@@ -46,7 +48,7 @@ export function decodeEdits(text: string, defaults: DevelopParams): DevelopParam
   }
   if (!parsed || typeof parsed !== 'object' || (parsed as { format?: unknown }).format !== EDITS_FORMAT) return null;
   const raw = (parsed as { values?: unknown }).values;
-  const { masks, flipHorizontal, flipVertical, ...values } = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const { masks, leaks, flipHorizontal, flipVertical, ...values } = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const p = applyPreset({ id: '', name: '', groups: [], values: values as never }, defaults);
   return {
     ...p,
@@ -54,5 +56,6 @@ export function decodeEdits(text: string, defaults: DevelopParams): DevelopParam
     flipHorizontal: typeof flipHorizontal === 'boolean' ? flipHorizontal : defaults.flipHorizontal,
     flipVertical: typeof flipVertical === 'boolean' ? flipVertical : defaults.flipVertical,
     masks: masks === undefined ? defaults.masks : parseLayers(masks, true),
+    leaks: leaks === undefined ? defaults.leaks : parseLeaks(leaks),
   };
 }

@@ -8,6 +8,9 @@ import { ControlsPanel, GeometryPanel } from './Controls';
 import { CropOverlay } from './CropOverlay';
 import { MaskOverlay, type BrushSettings, type MaskTool } from './MaskOverlay';
 import { MasksPanel, radiusToSize, sizeToRadius } from './MasksPanel';
+import { LeaksPanel } from './LeaksPanel';
+import type { LightLeak } from '../../engine/develop/LightLeaks';
+import type { MaskShape } from '../../engine/develop/Masks';
 import { PresetsPanel, type PresetActions } from './PresetsPanel';
 import { ExportDialog } from './ExportDialog';
 import type { ProStore } from './ProStore';
@@ -23,7 +26,7 @@ import { shortcutKey } from '../common/shortcutKey';
 /** Frame around the photo in the fit view, CSS pixels (click outside the photo to change its colour). */
 const FRAME_WIDTH = 12;
 /**
- * Empty space around the frame while the mask tool is open, so handles beyond the photo stay visible and reachable.
+ * Empty space around the frame while the mask or light leak tool is open, so handles beyond the photo stay visible and reachable.
  * Phones get Android's 16 px: 72 left the photo ~60% of the screen's width.
  */
 const MASK_MARGIN = 72;
@@ -74,9 +77,10 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   const [geometryMode, setGeometryMode] = useState(false);
   const [presetsMode, setPresetsMode] = useState(false);
   const [masksMode, setMasksMode] = useState(false);
+  const [leaksMode, setLeaksMode] = useState(false);
   // White balance picker: armed from the Color tab, the next click on the photo picks.
   const [pickingWhite, setPickingWhite] = useState(false);
-  useEffect(() => setPickingWhite(false), [geometryMode, masksMode, presetsMode, state.fileName]);
+  useEffect(() => setPickingWhite(false), [geometryMode, masksMode, leaksMode, presetsMode, state.fileName]);
   const [maskTool, setMaskTool] = useState<MaskTool>('move');
   const [brush, setBrushState] = useState<BrushSettings>(loadBrush);
   const setBrush = (b: BrushSettings) => {
@@ -88,6 +92,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   const pointer = useRef<[number, number] | null>(null);
   const viewSize = useRef<[number, number]>([0, 0]);
   const [selectedLayer, setSelectedLayer] = useState<string | null>(null);
+  const [selectedLeak, setSelectedLeak] = useState<string | null>(null);
   const [showMask, setShowMask] = useState(false);
   const [showExport, setShowExport] = useState(false);
   // Crop shape lock (UI only; the crop itself is in the params). Portrait null = follow the frame.
@@ -97,15 +102,20 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
     setCropAspect('free');
     setCropPortrait(null);
     setSelectedLayer(null);
+    setSelectedLeak(null);
   }, [state.fileName]);
   // Keep a layer selected while there are any (after a delete, or a preset brought new ones).
   const layers = state.params.masks;
   const selectedId = layers.some((l) => l.id === selectedLayer) ? selectedLayer : (layers[0]?.id ?? null);
+  const leaks = state.params.leaks;
+  const leakId = leaks.some((l) => l.id === selectedLeak) ? selectedLeak : (leaks[leaks.length - 1]?.id ?? null);
+  // Overlay handles, also beyond the photo, in either tool.
+  const shapesMode = masksMode || leaksMode;
   // Crop works on the fit view only; masks work at 100% too (frame-colour clicks stay off while masking).
   const zoomable = !geometryMode;
   const maskMargin = useMediaQuery('(max-width: 560px)') ? MASK_MARGIN_NARROW : MASK_MARGIN;
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
-  const zoomExtra = masksMode ? maskMargin * dpr : 0;
+  const zoomExtra = shapesMode ? maskMargin * dpr : 0;
   const hasImage = store.hasImage;
   const busy = store.busy;
   const skinMask = session.skin.kind === 'ready' ? session.skin.mask : null;
@@ -291,6 +301,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
             setGeometryMode(!geometryMode);
             setPresetsMode(false);
             setMasksMode(false);
+            setLeaksMode(false);
           }} disabled={!hasImage || busy}>
           <CropRotateIcon />
           <span className="tool-label">Crop</span>
@@ -303,6 +314,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
             setPresetsMode(!presetsMode);
             setGeometryMode(false);
             setMasksMode(false);
+            setLeaksMode(false);
           }}
           disabled={!hasImage || busy}
         >
@@ -317,11 +329,27 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
             setMasksMode(!masksMode);
             setGeometryMode(false);
             setPresetsMode(false);
+            setLeaksMode(false);
           }}
           disabled={!hasImage || busy}
         >
           <MasksIcon />
           <span className="tool-label">Masks</span>
+        </button>
+        <button
+          type="button"
+          className={`icon${leaksMode ? ' active' : ''}`}
+          title="Light leaks"
+          onClick={() => {
+            setLeaksMode(!leaksMode);
+            setGeometryMode(false);
+            setPresetsMode(false);
+            setMasksMode(false);
+          }}
+          disabled={!hasImage || busy}
+        >
+          <LeakIcon />
+          <span className="tool-label">Leaks</span>
         </button>
         <button type="button" className="icon" title="Undo (Ctrl/⌘ Z)" aria-label="Undo" onClick={store.undo} disabled={!state.canUndo || busy}>
           <UndoIcon />
@@ -335,7 +363,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
           <ResetIcon />
           <span className="tool-label">Reset</span>
         </button>
-        <button type="button" title="Auto light and colour (keeps the LUT)" onClick={store.applyAuto} disabled={!hasImage || busy}>Auto</button>
+        <button type="button" className="auto-button" title="Auto light and colour (keeps the LUT)" onClick={store.applyAuto} disabled={!hasImage || busy}>Auto</button>
         <span className="row-break" />
         <button
           type="button"
@@ -356,7 +384,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
           frame={FRAME_WIDTH}
           frameGrey={FrameColors[state.frameColor].level}
           clipWarning={clipWarning && !showOriginal}
-          margin={masksMode ? maskMargin : 0}
+          margin={shapesMode ? maskMargin : 0}
           onViewSize={(w, h, f) => {
             viewSize.current = [w, h];
             store.setViewSize(w, h, f);
@@ -367,7 +395,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
           // Zoom and frame colour work on the cropped view; the crop tool shows the whole frame.
           onToggleZoom={(x, y) => zoomable && store.toggleZoom(x, y, zoomExtra)}
           onClick={(x, y) => {
-            if (!zoomable || masksMode) return;
+            if (!zoomable || shapesMode) return;
             if (pickingWhite) {
               setPickingWhite(false);
               void store.pickWhite(x, y);
@@ -404,6 +432,24 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
               onStrokeBegin={store.beginStroke}
               onStrokeExtend={store.extendStroke}
               onStrokeEnd={store.endStroke}
+            />
+          )}
+          {leaksMode && !showOriginal && shaderParams && (
+            <MaskOverlay
+              lens={shaderParams.lens}
+              layers={leaks.map(leakLayer)}
+              selectedId={leakId}
+              frame={FRAME_WIDTH + maskMargin}
+              zoomCenter={session.zoomCenter}
+              tool="move"
+              brush={brush}
+              passThrough={spaceHeld}
+              grabInside
+              onSelect={setSelectedLeak}
+              onChange={(id, shape) => store.updateLeak(id, (l) => withLeakShape(l, shape))}
+              onStrokeBegin={() => {}}
+              onStrokeExtend={() => {}}
+              onStrokeEnd={() => {}}
             />
           )}
           {maskView && !session.zoomCenter && <PreviewLabel>Mask</PreviewLabel>}
@@ -472,6 +518,19 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
                 onBrush={setBrush}
                 onUndoStroke={store.undoStroke}
                 onClearBrush={store.clearBrush}
+              />
+            ) : leaksMode ? (
+              <LeaksPanel
+                leaks={leaks}
+                selectedId={leakId}
+                onSelect={setSelectedLeak}
+                onAdd={(kind) => {
+                  const id = store.addLeak(kind);
+                  if (id) setSelectedLeak(id);
+                }}
+                onUpdate={store.updateLeak}
+                onRemove={store.removeLeak}
+                onDone={() => setLeaksMode(false)}
               />
             ) : presetsMode ? (
               <PresetsPanel
@@ -544,6 +603,28 @@ function ResetIcon() {
   return (
     <svg width={20} height={20} viewBox="0 0 24 24" fill="currentColor" style={{ display: 'block' }} aria-hidden="true">
       <path d="M14,12c0,-1.1 -0.9,-2 -2,-2s-2,0.9 -2,2 0.9,2 2,2 2,-0.9 2,-2zM12,3c-4.97,0 -9,4.03 -9,9H0l4,4 4,-4H5c0,-3.87 3.13,-7 7,-7s7,3.13 7,7 -3.13,7 -7,7c-1.51,0 -2.91,-0.49 -4.06,-1.3l-1.42,1.44C8.04,20.3 9.94,21 12,21c4.97,0 9,-4.03 9,-9s-4.03,-9 -9,-9z" />
+    </svg>
+  );
+}
+
+/** A light leak as the overlay draws it: a radial shape whose feather is the leak's softness (a streak: a band). */
+const leakLayer = (l: LightLeak) => ({
+  id: l.id,
+  enabled: l.enabled,
+  strokes: [],
+  band: l.kind === 'streak',
+  shape: { kind: 'radial' as const, cx: l.cx, cy: l.cy, rx: l.rx, ry: l.ry, angle: l.angle, feather: Math.max(1, l.softness) },
+});
+
+const withLeakShape = (l: LightLeak, s: MaskShape): LightLeak =>
+  s.kind === 'radial' ? { ...l, cx: s.cx, cy: s.cy, rx: s.rx, ry: s.ry, angle: s.angle } : l;
+
+/** Light leaks: a diagonal beam of light with a glow either side, film-burn style. */
+function LeakIcon() {
+  return (
+    <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" style={{ display: 'block' }} aria-hidden="true">
+      <path d="M3 17L21 7" strokeWidth={8} strokeOpacity={0.3} />
+      <path d="M3 17L21 7" strokeWidth={3} />
     </svg>
   );
 }

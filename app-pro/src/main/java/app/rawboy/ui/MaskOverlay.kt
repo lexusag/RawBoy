@@ -105,7 +105,8 @@ private class MaskGeometry(val lens: LensTransform, val view: IntSize, frame: In
     ) : Shape
     class BrushShape(override val pin: Offset?) : Shape
 
-    fun shape(l: MaskLayer): Shape = when (val s = l.shape) {
+    /** [band]: a radial shape drawn as a straight band (a streak light leak: rx = half length, ry = half width). */
+    fun shape(l: MaskLayer, band: Boolean = false): Shape = when (val s = l.shape) {
         MaskShape.Brush -> {
             val p = l.strokes.firstOrNull()?.points
             BrushShape(if (p != null && p.size >= 2) toScreen(p[0] * w, p[1] * h) else null)
@@ -133,13 +134,20 @@ private class MaskGeometry(val lens: LensTransform, val view: IntSize, frame: In
             val cx = s.cx * w
             val cy = s.cy * h
             fun at(u: Float, v: Float) = toScreen(cx + c * u - sn * v, cy + sn * u + c * v)
-            fun ellipse(k: Float) = List(STEPS) {
-                val t = it.toFloat() / STEPS * 2 * Math.PI.toFloat()
-                at(k * rx * cos(t), k * ry * sin(t))
+            fun ellipse(k: Float) = if (band) {
+                // The band's two long edges at k x its half width, as one closed outline (bent by the lens like the shader).
+                listOf(-1f, 1f).flatMap { side -> List(STEPS + 1) { at(side * rx * (1f - 2f * it / STEPS), side * k * ry) } }
+            } else {
+                List(STEPS) {
+                    val t = it.toFloat() / STEPS * 2 * Math.PI.toFloat()
+                    at(k * rx * cos(t), k * ry * sin(t))
+                }
             }
+            // A thin band's knob keeps clear of its width handles.
+            val knob = if (band) max(ry * KNOB, ry + 0.06f * long) else ry * KNOB
             RadialShape(
                 ellipse(1f), ellipse(1f - (s.feather / 100f).coerceAtLeast(0.01f)), at(0f, 0f),
-                listOf(at(rx, 0f), at(-rx, 0f)), listOf(at(0f, ry), at(0f, -ry)), at(0f, -ry * KNOB), at(0f, -ry),
+                listOf(at(rx, 0f), at(-rx, 0f)), listOf(at(0f, ry), at(0f, -ry)), at(0f, -knob), at(0f, -ry),
             )
         }
     }
@@ -205,15 +213,35 @@ private fun dist2ToSegment(p: Offset, a: Offset, b: Offset): Float {
 private fun nearLine(p: Offset, line: List<Offset>, d: Float) = (1 until line.size).any { dist2ToSegment(p, line[it - 1], line[it]) < d * d }
 private fun near(p: Offset, q: Offset, d: Float) = (p - q).getDistanceSquared() < d * d
 
-private fun hit(g: MaskGeometry, layers: List<MaskLayer>, selectedId: String?, p: Offset, grab: Float): Pair<String, Handle>? {
+/** Preview point [p] lies inside a radial shape's outer ellipse (a band: its rectangle). */
+private fun inside(g: MaskGeometry, l: MaskLayer, p: Offset, band: Boolean): Boolean {
+    val s = l.shape as? MaskShape.Radial ?: return false
+    val q = g.toImage(p)
+    val a = Math.toRadians(s.angle.toDouble())
+    val dx = q.x - s.cx * g.w
+    val dy = q.y - s.cy * g.h
+    val u = (cos(a) * dx + sin(a) * dy) / (s.rx * g.long)
+    val v = (-sin(a) * dx + cos(a) * dy) / (s.ry * g.long)
+    return if (band) abs(u) < 1 && abs(v) < 1 else u * u + v * v < 1
+}
+
+/**
+ * [grabInside]: a touch anywhere inside a radial shape grabs it (light leaks), not only its centre pin. [bands]: ids
+ * of radial shapes shown as straight bands.
+ */
+private fun hit(
+    g: MaskGeometry, layers: List<MaskLayer>, selectedId: String?, p: Offset, grab: Float, grabInside: Boolean = false,
+    bands: Set<String> = emptySet(),
+): Pair<String, Handle>? {
     val selected = layers.firstOrNull { it.id == selectedId }
     if (selected != null) {
-        when (val s = g.shape(selected)) {
+        when (val s = g.shape(selected, selected.id in bands)) {
             is MaskGeometry.RadialShape -> {
                 if (near(p, s.knob, grab)) return selected.id to Handle.ROTATE
                 if (s.rx.any { near(p, it, grab) }) return selected.id to Handle.RX
                 if (s.ry.any { near(p, it, grab) }) return selected.id to Handle.RY
                 if (near(p, s.pin, grab * 1.5f)) return selected.id to Handle.MOVE
+                if (grabInside && inside(g, selected, p, selected.id in bands)) return selected.id to Handle.MOVE
             }
             is MaskGeometry.LinearShape -> {
                 if (near(p, s.curve, grab)) return selected.id to Handle.CURVE
@@ -226,8 +254,12 @@ private fun hit(g: MaskGeometry, layers: List<MaskLayer>, selectedId: String?, p
     }
     for (l in layers) {
         if (l.id == selectedId) continue
-        val pin = g.shape(l).pin ?: continue
+        val pin = g.shape(l, l.id in bands).pin ?: continue
         if (near(p, pin, grab)) return l.id to Handle.PIN
+    }
+    if (grabInside) {
+        // Topmost (last drawn in the shader) first; a touch inside another shape selects it and starts moving it.
+        layers.lastOrNull { it.id != selectedId && inside(g, it, p, it.id in bands) }?.let { return it.id to Handle.MOVE }
     }
     return null
 }
@@ -248,7 +280,9 @@ class MaskActions(
  * sees each touch first. Move: a finger on a handle drags it (or on another layer's pin selects it); anywhere else
  * nothing is consumed, so double-tap zoom, pan and press-and-hold compare keep working. Brush / Erase: one finger
  * paints, two fingers pan the 100% view. [onPaintAt] gets the finger while painting (for the brush circle).
- * The inputs are read fresh for every touch, so the modifier is never restarted mid-gesture.
+ * The inputs are read fresh for every touch, so the modifier is never restarted mid-gesture. [grabInside]: a finger
+ * anywhere inside a radial shape moves it (the light leaks tool, which shows its leaks as radial shapes); [bands]:
+ * ids of radial shapes shown as straight bands (streak leaks).
  */
 @Composable
 fun rememberMaskGestures(
@@ -261,21 +295,24 @@ fun rememberMaskGestures(
     brush: BrushSettings,
     actions: MaskActions,
     onPaintAt: (Offset?) -> Unit,
+    grabInside: Boolean = false,
+    bands: Set<String> = emptySet(),
 ): Modifier {
     val grab = with(LocalDensity.current) { 24.dp.toPx() }
-    val current = rememberUpdatedState(GestureInputs(lens, layers, selectedId, frame, zoomCenter, tool, brush, actions, onPaintAt))
+    val current = rememberUpdatedState(GestureInputs(lens, layers, selectedId, frame, zoomCenter, tool, brush, actions, onPaintAt, grabInside, bands))
     return Modifier.pointerInput(Unit) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
             val inp = current.value
             val g = MaskGeometry(inp.lens, size, inp.frame, inp.zoomCenter)
             if (inp.tool == MaskTool.MOVE) {
-                val (id, handle) = hit(g, inp.layers, inp.selectedId, down.position, grab) ?: return@awaitEachGesture
+                val (id, handle) = hit(g, inp.layers, inp.selectedId, down.position, grab, inp.grabInside, inp.bands) ?: return@awaitEachGesture
                 down.consume()
                 if (handle == Handle.PIN) {
                     inp.actions.onSelect(id)
                     return@awaitEachGesture
                 }
+                if (id != inp.selectedId) inp.actions.onSelect(id)
                 val start = inp.layers.firstOrNull { it.id == id }?.shape ?: return@awaitEachGesture
                 val from = g.toImage(down.position)
                 while (true) {
@@ -344,6 +381,8 @@ private class GestureInputs(
     val brush: BrushSettings,
     val actions: MaskActions,
     val onPaintAt: (Offset?) -> Unit,
+    val grabInside: Boolean,
+    val bands: Set<String>,
 )
 
 /** Image point -> stroke point (image fractions, rounded: strokes stay small in memory). */
@@ -353,7 +392,8 @@ private fun fraction(p: Offset, g: MaskGeometry) = listOf((p.x / g.w * 1e5f).rou
  * Draws the masks over the preview (fit or 100% view), Capture One style. Linear: the full-effect, centre and
  * no-effect lines across the whole preview, the curvature square; radial: the ellipse, its feather ring, centre,
  * radius dots and rotation knob; other layers: a pin. While painting the shapes are dimmed and a circle follows the
- * finger; [sizeRing] shows the brush size in the middle (while its slider moves).
+ * finger; [sizeRing] shows the brush size in the middle (while its slider moves). [bands]: ids of radial shapes drawn
+ * as straight bands (streak leaks).
  */
 @Composable
 fun MaskOverlay(
@@ -367,6 +407,7 @@ fun MaskOverlay(
     paintAt: Offset?,
     sizeRing: Boolean,
     modifier: Modifier = Modifier,
+    bands: Set<String> = emptySet(),
 ) {
     val density = LocalDensity.current
     Canvas(modifier) {
@@ -374,7 +415,7 @@ fun MaskOverlay(
         val px = density.density
         val dim = if (tool == MaskTool.MOVE) 1f else 0.4f
         for (l in layers) {
-            val s = g.shape(l)
+            val s = g.shape(l, l.id in bands)
             if (l.id != selectedId) {
                 s.pin?.let { dot(it, 6 * px, filled = false, alpha = if (l.enabled) dim else dim * 0.5f) }
                 continue

@@ -17,6 +17,9 @@ import app.rawboy.develop.BrushRaster
 import app.rawboy.develop.BrushStroke
 import app.rawboy.develop.DevelopParams
 import app.rawboy.develop.Histogram
+import app.rawboy.develop.LeakKind
+import app.rawboy.develop.LightLeak
+import app.rawboy.develop.LightLeaks
 import app.rawboy.develop.MaskLayer
 import app.rawboy.develop.MaskShape
 import app.rawboy.develop.Masks
@@ -240,7 +243,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
      */
     private fun carryOverEdits(previous: EditorState, newDefaults: DevelopParams): DevelopParams {
         if (previous.fileName == null) return newDefaults
-        // Rotation, flips, straightening, crop and masks belong to one photo.
+        // Rotation, flips, straightening, crop, masks and light leaks belong to one photo.
         val p = previous.params
             .copy(
                 rotation = newDefaults.rotation,
@@ -248,6 +251,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 flipVertical = newDefaults.flipVertical,
                 straighten = newDefaults.straighten,
                 masks = newDefaults.masks,
+                leaks = newDefaults.leaks,
             )
             .withCrop(newDefaults.crop)
         val wbEdited = p.temperature != previous.defaults.temperature || p.tint != previous.defaults.tint
@@ -334,6 +338,28 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 _state.update { it.copy(autoRunning = false, message = "Auto failed: ${e.message ?: e.javaClass.simpleName}") }
             }
         }
+    }
+
+    // Light leaks (see LightLeaks.kt).
+
+    /** Adds a light leak (up to LightLeaks.MAX_LEAKS) in the middle; returns its id, or null when full. */
+    fun addLeak(kind: LeakKind = LeakKind.STREAK): String? {
+        val p = _state.value.params
+        if (p.leaks.size >= LightLeaks.MAX_LEAKS) return null
+        val leak = LightLeaks.newLeak(kind)
+        commit(p.copy(leaks = p.leaks + leak), force = true)
+        return leak.id
+    }
+
+    /** A leak's slider or drag; [force] for a button (new shape, show/hide). */
+    fun updateLeak(id: String, force: Boolean = false, change: (LightLeak) -> LightLeak) {
+        val p = _state.value.params
+        commit(p.copy(leaks = p.leaks.map { if (it.id == id) change(it) else it }), force)
+    }
+
+    fun removeLeak(id: String) {
+        val p = _state.value.params
+        commit(p.copy(leaks = p.leaks.filter { it.id != id }), force = true)
     }
 
     // Mask layers (see Masks.kt).
