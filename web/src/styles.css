@@ -1302,6 +1302,23 @@ select {
 
 .auto-grid .cell .thumb img {
   object-fit: cover;
+  transition: filter 0.6s ease-out;
+}
+
+/* Cells are disabled while exporting: kept at full opacity, so the waiting ones' grey shows the batch's progress. */
+.auto-grid .cell:disabled {
+  opacity: 1;
+}
+
+/* Still to be saved by "Export all": grey, turning to colour once saved. */
+.auto-grid .cell .thumb img.export-waiting {
+  filter: grayscale(1) brightness(0.8);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auto-grid .cell .thumb img {
+    transition: none;
+  }
 }
 
 .cell-caption {

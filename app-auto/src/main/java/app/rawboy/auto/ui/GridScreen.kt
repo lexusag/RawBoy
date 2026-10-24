@@ -36,7 +36,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.ColorMatrix
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -303,6 +307,7 @@ fun GridScreen(vm: AutoViewModel, snackbar: SnackbarHostState, pickPhotos: () ->
                                     PhotoCell(
                                         photo,
                                         next = photo.id == opening,
+                                        waiting = export?.let { photo.id in it.waiting } == true,
                                         selected = selected,
                                         enabled = !exporting,
                                         onClick = {
@@ -351,6 +356,8 @@ private fun PhotoCell(
     photo: AutoPhoto,
     /** Tapped while waiting: analysed next, then opened. */
     next: Boolean,
+    /** Still to be saved by the running "Export all": shown desaturated. */
+    waiting: Boolean,
     selected: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
@@ -365,8 +372,16 @@ private fun PhotoCell(
                 .then(if (selected) Modifier.border(3.dp, MaterialTheme.colorScheme.primary) else Modifier),
             contentAlignment = Alignment.Center,
         ) {
+            // Grey while it waits to be exported, turning to colour once saved.
+            val colour by animateFloatAsState(if (waiting) 0f else 1f, tween(600), label = "colour")
             photo.thumbnail?.let {
-                Image(it.asImageBitmap(), contentDescription = photo.name, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                Image(
+                    it.asImageBitmap(),
+                    contentDescription = photo.name,
+                    contentScale = ContentScale.Crop,
+                    colorFilter = if (colour < 1f) waitingFilter(colour) else null,
+                    modifier = Modifier.fillMaxSize(),
+                )
             }
             when (photo.status) {
                 PhotoStatus.QUEUED -> Badge(if (next) "Next" else "Waiting")
@@ -467,4 +482,12 @@ private val PresetsIcon: ImageVector by lazy {
             fill = SolidColor(Color.Black),
         )
         .build()
+}
+
+/** [colour] 0 = grey and a little darker (a photo still waiting to be exported), 1 = as it is. */
+private fun waitingFilter(colour: Float): ColorFilter {
+    val m = ColorMatrix().apply { setToSaturation(colour) }
+    val dim = 0.8f + 0.2f * colour
+    m *= ColorMatrix().apply { setToScale(dim, dim, dim, 1f) }
+    return ColorFilter.colorMatrix(m)
 }

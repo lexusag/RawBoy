@@ -1,5 +1,10 @@
 # Changelog
 
+**Auto: Export all shows its progress in the grid (2026-10-24)**
+
+- RawBoy Auto (Android, iOS, web): while Export all runs, the photos still to be saved show in grey, and each fades
+  to full colour once it's saved. The grid is no longer dimmed as a whole during an export on the web.
+
 **Android: dragging the crop no longer swipes back (2026-10-24)**
 
 - RawBoy (Android): on a landscape photo the crop frame's left and right handles sit at the screen's edges, so
