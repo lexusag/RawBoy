@@ -1,5 +1,13 @@
 # Changelog
 
+**Auto and Browser: photos in shoot-date order (2026-10-24)**
+
+- RawBoy Auto (Android, iOS, web) and RawBoy Browser (web) now show photos in the order they were shot, from each
+  file's EXIF capture date (DateTimeOriginal; CR3 included), read from the metadata without decoding the raw. A photo
+  without one goes by its file's modified date. **Sort: Shoot date / File name** next to Auto's *Import as* (the
+  Browser: a menu next to the filters) switches to file-name order (IMG_9 before IMG_10); the choice is remembered.
+  Auto's photo view, Copy previous and Export all follow the grid's order.
+
 **Denoise: no more blotchy texture on flat surfaces (2026-10-24)**
 
 - All apps (Android, iOS, web): Luma denoise is now multi-scale. Camera noise isn't only fine grain: demosaicing

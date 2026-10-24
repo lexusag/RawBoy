@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import type { PhotoSort } from '../../engine/auto/PhotoOrder';
 import { PHOTO_ACCEPT, pickFiles, saveBlob } from '../common/files';
 import { isApple } from '../common/HelpDialog';
 import { AppSwitcher, HelpButton } from '../common/AppNav';
@@ -353,6 +354,10 @@ function GridView({ store, active, scroll, selection, onSelection, onBin, onSend
           <select value={state.minStars} aria-label="Stars" onChange={(e) => store.setMinStars(Number(e.target.value))}>
             <option value={0}>Any stars</option>
             {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{'★'.repeat(n)}{n < 5 ? ' or more' : ''}</option>)}
+          </select>
+          <select value={state.sort} aria-label="Sort" title="Order of the grid: when the photos were shot (photos without a date by their file's), or file name" onChange={(e) => store.setSort(e.target.value as PhotoSort)}>
+            <option value="date">Shoot date</option>
+            <option value="name">File name</option>
           </select>
           <label className="auto-advance" title="After rating in the photo view, go to the next photo">
             <input type="checkbox" checked={state.autoAdvance} onChange={(e) => store.setAutoAdvance(e.target.checked)} />

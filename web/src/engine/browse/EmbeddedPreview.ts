@@ -98,7 +98,7 @@ async function view(file: Blob, offset: number, length: number): Promise<DataVie
 }
 
 /** II/MM followed by 42, or the magics Olympus (ORF: "RO", "RS") and Panasonic (RW2: 0x55) use instead. */
-function isTiff(b: Uint8Array): boolean {
+export function isTiff(b: Uint8Array): boolean {
   const le = b[0] === 0x49 && b[1] === 0x49;
   const be = b[0] === 0x4d && b[1] === 0x4d;
   if (!le && !be) return false;
@@ -230,7 +230,7 @@ export async function findJxlPreview(file: Blob, maxSide: number): Promise<JxlPr
 const CANON_UUID = '85c0b687820f11e08111f4ce462b6a48';
 const CANON_PREVIEW_UUID = 'eaf42b5e1c984b88b9fbb7dc406e4d16';
 
-interface Box {
+export interface Box {
   type: string;
   /** Start of the box's payload (after the header and, for uuid boxes, the 16-byte uuid). */
   start: number;
@@ -239,7 +239,7 @@ interface Box {
 }
 
 /** The boxes of an ISO base media file between [from] and [to]. */
-async function boxes(file: Blob, from: number, to: number): Promise<Box[]> {
+export async function boxes(file: Blob, from: number, to: number): Promise<Box[]> {
   const out: Box[] = [];
   let at = from;
   while (at + 8 <= to && out.length < 256) {

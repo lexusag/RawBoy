@@ -68,6 +68,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.rawboy.auto.AutoPhoto
 import app.rawboy.auto.AutoViewModel
 import app.rawboy.auto.LookMode
+import app.rawboy.auto.PhotoSort
 import app.rawboy.auto.PhotoStatus
 import app.rawboy.develop.Presets
 import app.rawboy.view.HelpButton
@@ -83,6 +84,7 @@ fun GridScreen(vm: AutoViewModel, snackbar: SnackbarHostState, pickPhotos: () ->
     val preset by vm.preset.collectAsStateWithLifecycle()
     val lensPresets by vm.lensPresets.collectAsStateWithLifecycle()
     val lensChoice by vm.lensChoice.collectAsStateWithLifecycle()
+    val sort by vm.sort.collectAsStateWithLifecycle()
     // The lens preset picker: null = closed, empty = the whole batch, else the selection as it was when it opened.
     var lensPresetsFor by remember { mutableStateOf<Set<String>?>(null) }
     val exporting = export != null
@@ -197,6 +199,15 @@ fun GridScreen(vm: AutoViewModel, snackbar: SnackbarHostState, pickPhotos: () ->
                     } else {
                         TextButton(onClick = { pickPreset(null) }, enabled = !exporting, modifier = Modifier.align(Alignment.CenterVertically)) {
                             Text("Apply RawBoy preset…")
+                        }
+                    }
+                    // The batch's order: by shoot date (photos without one by their file's date), or by file name.
+                    if (photos.isNotEmpty()) {
+                        TextButton(
+                            onClick = { vm.setSort(if (sort == PhotoSort.DATE) PhotoSort.NAME else PhotoSort.DATE) },
+                            modifier = Modifier.align(Alignment.CenterVertically),
+                        ) {
+                            Text(if (sort == PhotoSort.DATE) "Sort: Shoot date" else "Sort: File name", maxLines = 1)
                         }
                     }
                     // Lens presets from RawBoy: by lens they correct every photo taken with their lens, whatever its

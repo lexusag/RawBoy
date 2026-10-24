@@ -103,6 +103,10 @@ those added later: **By lens** (the default), **None**, or a named preset. Manua
 presets (and lens-only presets saved before RawBoy recorded the lens) never match by lens: pick them by name, for the
 whole batch or for a selection (**Lens** in the selection bar). **Remove** forgets a preset. **One preset per scene:** select a scene's photos and
 tap **Preset** (the bookmarks icon) in the selection bar to develop just those with a preset; the rest keep theirs.
+**Order:** the grid shows photos in the order they were shot (oldest first), from each file's EXIF capture date
+(read from its metadata, without decoding it; a photo without one goes by its file's modified date). **Sort: Shoot
+date** next to *Import as* switches to **Sort: File name** (IMG_9 before IMG_10) and back; remembered. Swiping in
+the photo view, Copy previous and Export all follow the same order (Android, iOS and web).
 **Opening a photo that's still waiting:** tap (web: click) a photo marked *Waiting* and it's analysed next, ahead of
 the rest of the batch (its badge reads *Next*), then opens once it's ready, unless another photo was opened meanwhile.
 **Rotating, removing and exporting photos:** long-press a photo in the grid to start selecting, tap others to add them

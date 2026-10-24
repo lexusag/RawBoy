@@ -21,6 +21,8 @@ import { quickImageOf, thumbnailOf } from '../browser/Previews';
 import { EditHistory } from '../common/EditHistory';
 import { imageUrl, saveBlob, writeUnique, zipFiles } from '../common/files';
 import type { EditsSidecar } from '../../engine/browse/XmpSidecar';
+import { findCaptureDate } from '../../engine/browse/CaptureDate';
+import { fileDate, saveSort, savedSort, sortPhotos, type PhotoSort } from '../../engine/auto/PhotoOrder';
 import { decodeAuto, encodeAuto } from './AutoSidecar';
 import { PreviewCache } from './PreviewCache';
 
@@ -41,6 +43,8 @@ export interface AutoPhoto {
   id: string;
   file: File;
   name: string;
+  /** When it was shot, else the file's date, as an EXIF date (CaptureDate); null if unknown. Orders the batch. */
+  date: string | null;
   status: PhotoStatus;
   error: string | null;
   analysis: Analysis | null;
@@ -166,6 +170,8 @@ export interface AutoState {
   cachedPreview: { id: string; image: PreviewImage } | null;
   /** The mode photos are added in, chosen in the grid before importing (remembered in this browser). */
   importMode: ImportMode;
+  /** How the batch is ordered: by shoot date (the default) or file name (remembered in this browser). */
+  sort: PhotoSort;
   /** Format, JPEG quality, TIFF bit depth and size of exports, chosen in the grid (remembered in this browser). */
   exportSettings: ExportSettings;
   /** The RawBoy preset applied to the whole batch, which photos added later get too; null = looks. */
@@ -184,6 +190,7 @@ export interface AutoState {
 }
 
 const IMPORT_MODE_KEY = 'rawboy.auto.importMode';
+const SORT_KEY = 'rawboy.auto.sort';
 const FRAME_KEY = 'rawboy.auto.frame';
 
 /** Auto's own export choice, apart from RawBoy's; defaults are SETTINGS' (JPEG 92, 16-bit TIFF, full size). */
@@ -225,7 +232,7 @@ class Lock {
 
 /** RawBoy Auto's batch, look and export logic (port of AutoViewModel.kt). */
 export class AutoStore {
-  private _state: AutoState = { photos: [], export: null, message: null, selected: null, sessionReady: null, cachedPreview: null, importMode: savedImportMode(),
+  private _state: AutoState = { photos: [], export: null, message: null, selected: null, sessionReady: null, cachedPreview: null, importMode: savedImportMode(), sort: savedSort(SORT_KEY),
     exportSettings: savedExportSettings(), preset: null, lensPresets: PresetStore.load().filter(isLensPreset), lensChoice: null, frameColor: savedFrame(),
     opening: null };
   /**
@@ -304,7 +311,7 @@ export class AutoStore {
       if (known.has(fileKey(file))) continue;
       known.add(fileKey(file));
       fresh.push({ sidecar: sidecars[i] ?? null,
-        id: String(this.nextId++), file, name: file.name, status: 'queued', error: null, analysis: null,
+        id: String(this.nextId++), file, name: file.name, date: fileDate(file.lastModified), status: 'queued', error: null, analysis: null,
         look: Looks.NATURAL, suggested: Looks.NATURAL, mode, plain, filmLook: FilmLooks.PORTRA_400,
         suggestedFilm: FilmLooks.PORTRA_400, strength: DEFAULT_STRENGTH, adjust: NO_ADJUSTMENTS, preset: this._state.preset, edits: null,
         lensChoice: this._state.lensChoice, lensPreset: null, looksApplied: false,
@@ -314,12 +321,34 @@ export class AutoStore {
     if (!fresh.length) return 0;
     // "As is" is for finished files: no note that they aren't raws.
     const note = plain ? null : nonRawNote(fresh.map((p) => p.name));
-    this.update({ photos: [...this._state.photos, ...fresh], ...(note ? { message: note } : {}) });
+    this.update({ photos: sortPhotos([...this._state.photos, ...fresh], this._state.sort), ...(note ? { message: note } : {}) });
+    void this.readDates(fresh);
     for (const p of fresh) this.quickThumbs = this.quickThumbs.then(() => this.quickThumbnail(p.id)).catch(() => undefined);
     const restore = Promise.all(fresh.filter((p) => p.sidecar).map((p) => this.restoreSaved(p.id, p.sidecar!)));
     this.restoring = Promise.all([this.restoring, restore]);
     void this.processQueue();
     return fresh.length;
+  }
+
+  /**
+   * Gives [photos] their capture dates (they start with their files' dates) and reorders the batch once for all of
+   * them, so a big import moves at most once.
+   */
+  private async readDates(photos: AutoPhoto[]) {
+    const dates = new Map<string, string>();
+    for (const p of photos) {
+      const date = await findCaptureDate(p.file);
+      if (date && date !== p.date) dates.set(p.id, date);
+    }
+    if (!dates.size) return;
+    const photosNow = this._state.photos.map((p) => (dates.has(p.id) ? { ...p, date: dates.get(p.id)! } : p));
+    this.update({ photos: sortPhotos(photosNow, this._state.sort) });
+  }
+
+  /** Orders the batch by [sort] from now on (remembered in this browser). */
+  setSort(sort: PhotoSort) {
+    saveSort(SORT_KEY, sort);
+    this.update({ sort, photos: sortPhotos(this._state.photos, sort) });
   }
 
   /** Gives photo [id] the settings kept in its sidecar, if any (they count as given, so analysis keeps the look). */

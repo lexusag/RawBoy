@@ -212,6 +212,17 @@ function GridView({ store, scroll, lastViewed }: {
             ) : (
               <button type="button" className="text" disabled={exporting} onClick={() => setChoosingPreset('all')}>Apply RawBoy preset…</button>
             )}
+            {state.photos.length > 0 && (
+              // The batch's order: by shoot date (photos without one by their file's date), or by file name.
+              <button
+                type="button"
+                className="text"
+                title={state.sort === 'date' ? 'Photos in the order they were shot. Click to sort by file name.' : 'Photos by file name. Click to sort by shoot date.'}
+                onClick={() => store.setSort(state.sort === 'date' ? 'name' : 'date')}
+              >
+                Sort: {state.sort === 'date' ? 'Shoot date' : 'File name'}
+              </button>
+            )}
             {state.lensPresets.length > 0 && (
               // Lens presets saved in the RawBoy tab's Lens tab: by lens they correct every photo taken with their lens,
               // whatever its look; a named one (manual lenses) is picked for the batch here or for a selection.

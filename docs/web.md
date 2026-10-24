@@ -50,7 +50,9 @@ blemish removal use the same MediaPipe models in the browser.
   RAW + JPEG pair is one photo.
   Keys: **1–5** stars, **P** pick, **X** reject, **U** unflag, **Mod+Z** undo, arrows to move, Enter to open, Esc back,
   **Z** or double-click for 1:1 of the preview, **E** to edit in RawBoy; **Auto-advance** goes on to the next photo
-  after rating. Filters: All / Picks / Unflagged / Rejects and minimum stars. Ratings are written as you go into XMP
+  after rating. Filters: All / Picks / Unflagged / Rejects and minimum stars. The grid is in shoot-date order (EXIF
+  capture date, else the file's date; read after the folder shows, so it may reorder once), or **File name** order
+  from the menu next to the filters (remembered). Ratings are written as you go into XMP
   sidecars next to the raws (`NAME.xmp`; darktable's `NAME.CR2.xmp` and its duplicates' `NAME_01.CR2.xmp` are updated when present), which Lightroom,
   Capture One and darktable read: `xmp:Rating` 0–5, −1 for rejects; picks go in RawBoy's own `rawboy:Pick` (XMP has
   no standard pick). Existing sidecars keep everything else byte for byte. **Move rejects to bin** moves the rejects,
