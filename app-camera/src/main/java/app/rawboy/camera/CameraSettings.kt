@@ -27,6 +27,8 @@ data class CameraSettings(
     val showHistogram: Boolean = false,
     /** Each shot (without flash) takes [BURST_FRAMES] raws and merges them into one: less noise. */
     val mergeBurst: Boolean = false,
+    /** Play the camera shutter click on each shot. Where the law requires it, Android plays it regardless (ShutterSound). */
+    val shutterSound: Boolean = false,
     /**
      * Per camera ([lensKey]): gain from the linearised preview to raw units (1.0 = sensor clip), learned
      * from each shot (raw key / viewfinder key), so the viewfinder's auto exposure matches the final.
@@ -97,6 +99,7 @@ object CameraSettingsStore {
             rememberLast = p.getBoolean("rememberLast", d.rememberLast),
             showHistogram = p.getBoolean("showHistogram", d.showHistogram),
             mergeBurst = p.getBoolean("mergeBurst", d.mergeBurst),
+            shutterSound = p.getBoolean("shutterSound", d.shutterSound),
             previewScales = parseScales(p.getString(SCALES_KEY, null)),
             flashGuides = parseScales(p.getString(FLASH_GUIDES_KEY, null), min = 1e-2f, max = 1e4f),
             flash = runCatching { FlashMode.valueOf(p.getString("flash", null)!!) }.getOrDefault(d.flash),
@@ -125,6 +128,7 @@ object CameraSettingsStore {
             .putBoolean("rememberLast", s.rememberLast)
             .putBoolean("showHistogram", s.showHistogram)
             .putBoolean("mergeBurst", s.mergeBurst)
+            .putBoolean("shutterSound", s.shutterSound)
             .putBoolean("front", s.front)
             .putString("lens", s.lens)
             .putString("flash", s.flash.name)

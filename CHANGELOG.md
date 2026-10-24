@@ -1,5 +1,12 @@
 # Changelog
 
+**Camera: optional shutter sound (2026-10-24)**
+
+- RawBoy Camera (Android): Settings has a **Shutter sound** switch, off by default, that plays the system's camera
+  click on each shot. Where the law requires the sound (Japan, Korea…), Android says so
+  (`MediaActionSound.mustPlayShutterSound`, or a camera that can't disable it before Android 13): the click always
+  plays there and the switch shows on and greyed out.
+
 **Auto: Export all shows its progress in the grid (2026-10-24)**
 
 - RawBoy Auto (Android, iOS, web): while Export all runs, the photos still to be saved show in grey, and each fades

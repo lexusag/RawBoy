@@ -38,7 +38,9 @@ shows them.
   setting as in Settings.
 - **Settings:** JPEG quality; whether to keep the DNG (off by default: only the JPEG is saved); **Smaller photos**
   (on by default: 3000 px on the long side, area-downscaled from the full-resolution develop, with the grain sized to
-  the smaller photo; off saves full resolution); **Merge 8 frames** (see above); **Remember camera & settings** (off by default: each start uses the
+  the smaller photo; off saves full resolution); **Merge 8 frames** (see above); **Shutter sound** (off by default: a click on each
+  shot; where the law requires it, such as Japan and Korea, Android reports so and it is always on and greyed out);
+  **Remember camera & settings** (off by default: each start uses the
   back W lens, Yellow Portrait 400 and default sliders; on keeps lens, side, look and sliders).
 - **How the viewfinder matches the final:** the camera's preview stream is asked for the plain sRGB tone curve, so
   the viewfinder can turn it back into linear light and run the same develop shader on it. The auto develop is
