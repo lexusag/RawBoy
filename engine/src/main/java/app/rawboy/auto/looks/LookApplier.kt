@@ -4,13 +4,15 @@ import app.rawboy.auto.analysis.Warmth
 import app.rawboy.develop.DevelopParams
 import app.rawboy.develop.Preset
 import app.rawboy.develop.Presets
+import kotlin.math.abs
 import kotlin.math.pow
 
 /**
  * The user's controls on top of the auto develop and the look; all 0 = as suggested. [brightness] -100..100 shifts
  * exposure; [warmth] -100..100 warms or cools; [tint] -50..50 (+ = magenta), [contrast] -50..50, [saturation]
- * -100..100, [grain] -50..50 and [denoise] -100..100 are added to the slider values the auto develop and the look arrive at,
- * except negative [saturation], which moves the saturation they arrive at towards -100 (-100 = black and white).
+ * -100..100 and [grain] -50..50 are added to the slider values the auto develop and the look arrive at, except negative
+ * [saturation], which moves the saturation they arrive at towards -100 (-100 = black and white). [denoise] -100..100
+ * shifts the auto luma and colour denoise, colour first (see [LookApplier.denoise]).
  * [rotation] is clockwise quarter turns (0..3) on top of the photo's own orientation.
  */
 data class Adjustments(
@@ -38,6 +40,24 @@ object LookApplier {
     /** Warmth ±100 = temperature x2 / ÷2 on top of the auto white balance (tint follows, see [Warmth]). */
     private const val WARMTH_RANGE = 2f
 
+    /** The most Denoise +100 adds to the auto luma denoise (colour denoise gets +100). */
+    private const val LUMA_DENOISE_MAX_SHIFT = 60f
+
+    /**
+     * (luma, colour) denoise for [p]'s auto values with the Denoise adjustment [adjust] -100..100 on top. Colour noise
+     * (blotches) goes first, as it costs little detail: above 0 colour denoise rises fast (ease-out, +100 at the top) and luma
+     * slowly (t², +[LUMA_DENOISE_MAX_SHIFT] at the top); below 0 luma drops fast and colour slowly, both off at -100.
+     * A colour denoise that follows luma (null) gets its own value once Denoise moves.
+     */
+    internal fun denoise(p: DevelopParams, adjust: Float): Pair<Float, Float?> {
+        if (adjust == 0f) return p.denoise to p.colorDenoise
+        val t = (abs(adjust) / 100f).coerceAtMost(1f)
+        val fast = 1f - (1f - t) * (1f - t)
+        val slow = t * t
+        val (luma, color) = if (adjust > 0f) LUMA_DENOISE_MAX_SHIFT * slow to 100f * fast else -100f * fast to -100f * slow
+        return (p.denoise + luma).coerceIn(0f, 100f) to ((p.colorDenoise ?: p.denoise) + color).coerceIn(0f, 100f)
+    }
+
     /**
      * [strength] 0..100 scales the LUT and every adjustment of [look] (0 = the auto
      * develop alone); [adjust] comes on top, at full strength.
@@ -50,14 +70,14 @@ object LookApplier {
         hasFace: Boolean,
     ): DevelopParams {
         val k = strength / 100f
+        val (lumaDenoise, colorDenoise) = denoise(base, adjust.denoise)
         fun add(value: Float, delta: Float, min: Float = -100f, max: Float = 100f) = (value + delta * k).coerceIn(min, max)
         val developed = base.copy(
             exposure = (base.exposure + look.exposure * k + adjust.brightness / 100f * BRIGHTNESS_EV).coerceIn(-5f, 5f),
             contrast = (base.contrast + look.contrast * k + adjust.contrast).coerceIn(-100f, 100f),
             saturation = saturation(base.saturation + look.saturation * k, adjust.saturation),
-            denoise = (base.denoise + adjust.denoise).coerceIn(0f, 100f),
-            // A measured colour denoise (AutoTone) moves with Denoise too; null keeps following it.
-            colorDenoise = base.colorDenoise?.let { (it + adjust.denoise).coerceIn(0f, 100f) },
+            denoise = lumaDenoise,
+            colorDenoise = colorDenoise,
             highlights = add(base.highlights, look.highlights),
             blacks = add(base.blacks, look.blacks),
             whites = add(base.whites, look.whites),
@@ -90,12 +110,13 @@ object LookApplier {
      */
     fun applyPreset(base: DevelopParams, preset: Preset, adjust: Adjustments): DevelopParams {
         val p = Presets.apply(preset, base)
+        val (lumaDenoise, colorDenoise) = denoise(base, adjust.denoise)
         val developed = p.copy(
             exposure = (p.exposure + adjust.brightness / 100f * BRIGHTNESS_EV).coerceIn(-5f, 5f),
             contrast = (p.contrast + adjust.contrast).coerceIn(-100f, 100f),
             saturation = saturation(p.saturation, adjust.saturation),
-            denoise = (base.denoise + adjust.denoise).coerceIn(0f, 100f),
-            colorDenoise = base.colorDenoise?.let { (it + adjust.denoise).coerceIn(0f, 100f) },
+            denoise = lumaDenoise,
+            colorDenoise = colorDenoise,
             sharpening = base.sharpening,
             // With a film stock its grain is the one rendered, so Grain scales that one, as in Film mode.
             grain = if (p.film != null) p.grain else (p.grain + adjust.grain).coerceIn(0f, 100f),

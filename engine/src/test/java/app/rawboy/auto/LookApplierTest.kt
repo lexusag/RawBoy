@@ -52,8 +52,31 @@ class LookApplierTest {
         assertEquals(6f, p.sharpening, 1e-6f)
         assertEquals(30f, p.localContrast, 1e-6f) // the rest of Detail still comes from the preset
         val less = LookApplier.applyPreset(base, preset, Adjustments(denoise = -20f))
-        assertEquals(40f, less.denoise, 1e-6f)
-        assertEquals(55f, less.colorDenoise!!, 1e-6f)
+        assertEquals(24f, less.denoise, 1e-4f) // luma goes first when lowering Denoise
+        assertEquals(74f, less.colorDenoise!!, 1e-4f)
+    }
+
+    @Test
+    fun denoiseMovesColourFirstAndLumaLaterAndGently() {
+        // The same cases as web's engine.test.ts.
+        val base = DevelopParams(denoise = 20f, colorDenoise = 30f)
+        fun check(denoise: Float, luma: Float, color: Float) {
+            val p = LookApplier.apply(base, Looks.NATURAL, 100f, Adjustments(denoise = denoise), hasFace = false)
+            assertEquals(luma, p.denoise, 1e-4f)
+            assertEquals(color, p.colorDenoise!!, 1e-4f)
+        }
+        check(0f, 20f, 30f)
+        check(25f, 23.75f, 73.75f)
+        check(50f, 35f, 100f)
+        check(100f, 80f, 100f)
+        check(-20f, 0f, 26f)
+        check(-100f, 0f, 0f)
+        // A colour denoise that follows luma gets its own value once Denoise moves.
+        val iso = DevelopParams(denoise = 20f, colorDenoise = null)
+        val p = LookApplier.apply(iso, Looks.NATURAL, 100f, Adjustments(denoise = 50f), hasFace = false)
+        assertEquals(35f, p.denoise, 1e-4f)
+        assertEquals(95f, p.colorDenoise!!, 1e-4f)
+        assertEquals(null, LookApplier.apply(iso, Looks.NATURAL, 100f, Adjustments.NONE, hasFace = false).colorDenoise)
     }
 
     @Test

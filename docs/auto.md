@@ -61,8 +61,9 @@ of warming, green when cooling), so warming doesn't leave the green/teal cast of
 the **Look** tab. The **Adjust** tab has every adjustment, Brightness next to Contrast and Warmth next to Tint, then
 the other auto develop sliders (0 = as Auto set them): **Contrast** (±50),
 **Saturation** (±100; −100 is black and white, the film look keeps its tone curve but loses its colour cast), **Tint** (±50, + = magenta, on top of what Warmth adds), **Grain** (±50, on top of the base
-grain and the look's) and **Denoise** (±100, on top of the measured luma and colour denoise; below 0 it takes the auto denoise away,
-down to none, e.g. to keep fine detail at high ISO). Press and hold the photo to see it without the look. As in RawBoy, a thin frame around the photo (neutral
+grain and the look's) and **Denoise** (±100, on top of the measured luma and colour denoise, colour first: raising it clears colour noise fast
+and smooths luma later and gently, at most +60; below 0 it takes the luma denoise away first, then the colour denoise,
+down to none at −100, e.g. to keep fine detail at high ISO). Press and hold the photo to see it without the look. As in RawBoy, a thin frame around the photo (neutral
 grey by default) helps judge exposure; tap (click) outside the photo to cycle it through grey, white and black.
 **Swipe left or right** on the photo to move to the previous or next photo in the batch (each keeps its own
 settings; swiping is off while zoomed to 100% or exporting).
