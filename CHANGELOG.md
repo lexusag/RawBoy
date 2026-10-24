@@ -1,5 +1,13 @@
 # Changelog
 
+**Camera: geotagging (2026-10-24)**
+
+- RawBoy Camera (Android, iOS): a **Geotag** switch in Settings, off by default. On, each JPEG and DNG records where
+  it was taken (GPS latitude, longitude, altitude and the fix's UTC date and time). Location access is asked for only
+  when you turn it on, and the location service runs only while the camera is open.
+- RawBoy, Auto and Camera (Android, iOS, web): exports keep the GPS time and date stamps too, next to the position
+  and altitude they already kept.
+
 **Bloom glows from highlights only (2026-10-24)**
 
 - RawBoy, Auto and Camera (Android, iOS, web): Bloom used to mix the whole picture with its blur, so at higher values

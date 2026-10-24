@@ -120,7 +120,11 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   with per-lens keys (`setPhysicalCameraKey`) and per-lens results/characteristics for DngCreator; fallback: open the
   physical id directly), `CameraViewModel.kt` (live auto develop, capture → DNG →
   one-at-a-time develop → jpegli JPEG, `previewScale` calibration from raw key / viewfinder key),
-  `CameraSettings.kt`, `ui/`.
+  `CameraSettings.kt`, `ui/`. Geotag (off by default; location permission asked only when switched on):
+  `capture/LocationTracker.kt` (platform LocationManager, fused else GPS + network; iOS `capture/LocationTracker.swift`,
+  Core Location) → `DngCreator.setLocation` (no altitude) → `export/DngGps.kt` appends a full GPS IFD to the DNG and
+  repoints IFD0's GPSInfo; the JPEG copies it via `Exporter.EXIF_TAGS`. iOS: `replacementMetadata` adds ImageIO's GPS
+  dictionary to the DNG. GPS time/date stamps: `PhotoMetadata.gpsTimeStamp`/`gpsDateStamp` (`readGpsStamps` after LibRaw, which keeps no date).
 - `luts/` — bundled LUTs, copied into the engine's assets by the `copyLuts` Gradle task.
   User-visible look/stock names and bundled LUT file names are RawBoy's own (Yellow/Green families, 2026-10-18): no
   film makers' brand or product names; old LUT file ids map to the new ones in `RetiredLooks` (all ports).

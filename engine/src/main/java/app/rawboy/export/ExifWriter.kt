@@ -30,7 +30,10 @@ data class ExifMetadata(
     val iso: Double = Double.NaN,
     val gps: Gps? = null,
 ) {
-    /** [latitude]/[longitude] as degrees, minutes, seconds; [altitude] in metres (NaN if unknown). */
+    /**
+     * [latitude]/[longitude] as degrees, minutes, seconds; [altitude] in metres (NaN if unknown); the fix's UTC time as
+     * [timeStamp] (hours, minutes, seconds; null if unknown) and [dateStamp] ("YYYY:MM:DD", empty if unknown).
+     */
     data class Gps(
         val latitude: DoubleArray,
         val latitudeRef: String,
@@ -38,21 +41,39 @@ data class ExifMetadata(
         val longitudeRef: String,
         val altitude: Double,
         val belowSeaLevel: Boolean,
-    )
+        val timeStamp: DoubleArray? = null,
+        val dateStamp: String = "",
+    ) {
+        companion object {
+            /** A position in signed degrees, [altitude] in metres above sea level (NaN if unknown), fixed at [utcMillis]. */
+            fun of(latitude: Double, longitude: Double, altitude: Double, utcMillis: Long): Gps {
+                val day = utcMillis.floorDiv(DAY_MS)
+                val ms = utcMillis - day * DAY_MS
+                val date = java.time.LocalDate.ofEpochDay(day)
+                return Gps(
+                    dms(latitude), if (latitude < 0) "S" else "N", dms(longitude), if (longitude < 0) "W" else "E",
+                    abs(altitude), altitude < 0,
+                    doubleArrayOf((ms / 3_600_000).toDouble(), (ms / 60_000 % 60).toDouble(), ms % 60_000 / 1000.0),
+                    "%04d:%02d:%02d".format(java.util.Locale.ROOT, date.year, date.monthValue, date.dayOfMonth),
+                )
+            }
+
+            private const val DAY_MS = 86_400_000L
+        }
+    }
 
     companion object {
         fun from(exif: ExifInterface): ExifMetadata {
             fun text(tag: String) = exif.getAttribute(tag).orEmpty()
             fun number(tag: String) = exif.getAttributeDouble(tag, Double.NaN)
-            fun dms(degrees: Double): DoubleArray {
-                val a = abs(degrees)
-                val d = floor(a)
-                val m = floor((a - d) * 60)
-                return doubleArrayOf(d, m, ((a - d) * 60 - m) * 60)
-            }
             val gps = exif.latLong?.let { (lat, lon) ->
                 val alt = exif.getAltitude(Double.NaN)
-                Gps(dms(lat), if (lat < 0) "S" else "N", dms(lon), if (lon < 0) "W" else "E", abs(alt), alt < 0)
+                // ExifInterface gives the time stamp as "hh:mm:ss".
+                val time = text(ExifInterface.TAG_GPS_TIMESTAMP).split(':').mapNotNull { it.trim().toDoubleOrNull() }
+                Gps(
+                    dms(lat), if (lat < 0) "S" else "N", dms(lon), if (lon < 0) "W" else "E", abs(alt), alt < 0,
+                    time.takeIf { it.size == 3 }?.toDoubleArray(), text(ExifInterface.TAG_GPS_DATESTAMP).trim(),
+                )
             }
             return ExifMetadata(
                 make = text(ExifInterface.TAG_MAKE),
@@ -72,6 +93,14 @@ data class ExifMetadata(
                 iso = number(ExifInterface.TAG_PHOTOGRAPHIC_SENSITIVITY),
                 gps = gps,
             )
+        }
+
+        /** Signed degrees as degrees, minutes, seconds (of the absolute value). */
+        private fun dms(degrees: Double): DoubleArray {
+            val a = abs(degrees)
+            val d = floor(a)
+            val m = floor((a - d) * 60)
+            return doubleArrayOf(d, m, ((a - d) * 60 - m) * 60)
         }
     }
 }
@@ -143,6 +172,24 @@ internal object ExifWriter {
 
     private fun dms(v: DoubleArray) = arrayOf(rational(v[0], 1), rational(v[1], 1), rational(v[2], 10000))
 
+    private fun gpsEntries(g: ExifMetadata.Gps): List<Entry> {
+        val gps = ArrayList<Entry>()
+        gps += undefined(0, byteArrayOf(2, 3, 0, 0))
+        gps += ascii(1, g.latitudeRef)
+        gps += rationals(2, *dms(g.latitude))
+        gps += ascii(3, g.longitudeRef)
+        gps += rationals(4, *dms(g.longitude))
+        if (g.altitude.isFinite()) {
+            gps += undefined(5, byteArrayOf(if (g.belowSeaLevel) 1 else 0))
+            gps += rationals(6, rational(g.altitude, 100))
+        }
+        g.timeStamp?.takeIf { t -> t.size == 3 && t.all { it.isFinite() && it >= 0 } }?.let { t ->
+            gps += rationals(7, rational(t[0], 1), rational(t[1], 1), rational(t[2], 1000))
+        }
+        if (Regex("""^\d{4}:\d\d:\d\d$""").matches(g.dateStamp)) gps += ascii(29, g.dateStamp)
+        return gps
+    }
+
     private fun ifds(m: ExifMetadata): Triple<List<Entry>, List<Entry>, List<Entry>> {
         val ifd0 = ArrayList<Entry>()
         if (m.make.isNotBlank()) ifd0 += ascii(MAKE, m.make.trim())
@@ -167,19 +214,7 @@ internal object ExifWriter {
         if (m.lensMake.isNotBlank()) exif += ascii(0xa433, m.lensMake.trim())
         if (m.lensModel.isNotBlank()) exif += ascii(0xa434, m.lensModel.trim())
 
-        val gps = ArrayList<Entry>()
-        m.gps?.let { g ->
-            gps += undefined(0, byteArrayOf(2, 3, 0, 0))
-            gps += ascii(1, g.latitudeRef)
-            gps += rationals(2, *dms(g.latitude))
-            gps += ascii(3, g.longitudeRef)
-            gps += rationals(4, *dms(g.longitude))
-            if (g.altitude.isFinite()) {
-                gps += undefined(5, byteArrayOf(if (g.belowSeaLevel) 1 else 0))
-                gps += rationals(6, rational(g.altitude, 100))
-            }
-        }
-        return Triple(ifd0, exif, gps)
+        return Triple(ifd0, exif, m.gps?.let(::gpsEntries).orEmpty())
     }
 
     private fun valueSize(e: Entry) = typeSize(e.type) * e.count
@@ -209,6 +244,17 @@ internal object ExifWriter {
             p += 12
         }
         b.putInt(p, 0) // no next IFD
+    }
+
+    /**
+     * [g] as a GPS IFD of its own that will sit at [at] in a little-endian TIFF file (its values follow it, offsets
+     * from the file's start): appended to a DNG by [DngGps].
+     */
+    fun gpsIfd(g: ExifMetadata.Gps, at: Int): ByteArray {
+        val entries = gpsEntries(g)
+        val b = ByteBuffer.allocate(ifdSize(entries)).order(ByteOrder.LITTLE_ENDIAN)
+        writeIfd(b, -at, at, entries) // base -at: the IFD's first byte is the buffer's first
+        return b.array()
     }
 
     /**

@@ -93,6 +93,7 @@ enum ExifWriter {
         static let lensMake: UInt16 = 0xa433, lensModel: UInt16 = 0xa434
         static let gpsVersion: UInt16 = 0, gpsLatRef: UInt16 = 1, gpsLat: UInt16 = 2, gpsLonRef: UInt16 = 3
         static let gpsLon: UInt16 = 4, gpsAltRef: UInt16 = 5, gpsAlt: UInt16 = 6
+        static let gpsTimeStamp: UInt16 = 7, gpsDateStamp: UInt16 = 29
     }
 
     private static func dms(_ v: [Double]) -> [(UInt32, UInt32)] {
@@ -142,6 +143,10 @@ enum ExifWriter {
                 gps.append(undefinedEntry(T.gpsAltRef, [g.belowSeaLevel ? 1 : 0]))
                 gps.append(rationals(T.gpsAlt, [rationalOf(abs(g.altitude), 100)]))
             }
+            if let t = g.timeStamp, t.count == 3, t.allSatisfy({ $0.isFinite && $0 >= 0 }) {
+                gps.append(rationals(T.gpsTimeStamp, [rationalOf(t[0], 1), rationalOf(t[1], 1), rationalOf(t[2], 1000)]))
+            }
+            if matches(g.dateStamp, #"^\d{4}:\d\d:\d\d$"#) { gps.append(asciiEntry(T.gpsDateStamp, g.dateStamp)) }
         }
         return (ifd0, exif, gps)
     }
