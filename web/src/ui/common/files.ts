@@ -30,6 +30,58 @@ export function saveBlob(name: string, blob: Blob) {
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
+/**
+ * iPhone and iPad Safari (and the home-screen app) put downloads in Files, so exports go through the share sheet
+ * there instead, whose Save Image puts them in Photos. iPadOS reports itself as a Mac; touch tells them apart.
+ */
+export const savesToPhotos = (() => {
+  let cached: boolean | undefined;
+  return () => (cached ??= (() => {
+    if (typeof navigator === 'undefined' || typeof navigator.canShare !== 'function') return false;
+    const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    try {
+      return ios && navigator.canShare({ files: [new File([''], 'photo.jpg', { type: 'image/jpeg' })] });
+    } catch {
+      return false;
+    }
+  })());
+})();
+
+/** Exports waiting for the tap that opens the share sheet (SaveToPhotosSheet): iOS only lets a tap open it. */
+let pendingExports: File[] | null = null;
+const pendingListeners = new Set<() => void>();
+
+export const pendingPhotos = {
+  get: () => pendingExports,
+  subscribe: (l: () => void) => {
+    pendingListeners.add(l);
+    return () => pendingListeners.delete(l);
+  },
+  set(files: File[] | null) {
+    pendingExports = files;
+    pendingListeners.forEach((l) => l());
+  },
+};
+
+/**
+ * Saves exported photos: on iOS they wait for Save to Photos (pendingPhotos), elsewhere one is a download and
+ * several are one ZIP named [zipName].
+ */
+export async function saveExports(files: { name: string; blob: Blob }[], zipName: string) {
+  if (!files.length) return;
+  if (savesToPhotos()) {
+    pendingPhotos.set([...(pendingExports ?? []), ...files.map((f) => new File([f.blob], f.name, { type: f.blob.type }))]);
+    return;
+  }
+  await downloadExports(files, zipName);
+}
+
+/** One file as a download, several as one ZIP. */
+export async function downloadExports(files: { name: string; blob: Blob }[], zipName: string) {
+  if (files.length === 1) saveBlob(files[0].name, files[0].blob);
+  else saveBlob(zipName, await zipFiles(files));
+}
+
 /** One ZIP of already-compressed files (stored, not deflated again). */
 export async function zipFiles(files: { name: string; blob: Blob }[]): Promise<Blob> {
   const entries: Record<string, [Uint8Array, { level: 0 }]> = {};
