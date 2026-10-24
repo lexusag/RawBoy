@@ -10,6 +10,9 @@ import RawBoyJpeg
  * Samples are interleaved RGB, unsigned 16-bit, as Exporter renders them. Feed input rows top
  * to bottom with [push] (at most [maxRowsPerPush] per call), then call [finish]; finished output rows go to
  * [emit] (first output row, row count, samples; the buffer is reused).
+ *
+ * [sharpen] > 0 adds a light luma unsharp mask after the downscale (`band_ops.h`; RawBoy Camera's small photos use
+ * ExportSettings.downscaleSharpen). It holds one output row back, so the last rows come from [finish].
  */
 final class BandDownscaler {
     let outWidth: Int
@@ -19,13 +22,13 @@ final class BandDownscaler {
     private var outY = 0
     private let emit: (Int, Int, UnsafePointer<UInt16>) throws -> Void
 
-    init(inWidth: Int, inHeight: Int, outWidth: Int, outHeight: Int, maxRowsPerPush: Int,
+    init(inWidth: Int, inHeight: Int, outWidth: Int, outHeight: Int, maxRowsPerPush: Int, sharpen: Float = 0,
          emit: @escaping (Int, Int, UnsafePointer<UInt16>) throws -> Void) {
         precondition((1...inWidth).contains(outWidth) && (1...inHeight).contains(outHeight), "only downscaling")
         self.outWidth = outWidth
         self.outHeight = outHeight
         self.emit = emit
-        handle = rb_downscaler_create(Int32(inWidth), Int32(inHeight), Int32(outWidth), Int32(outHeight))
+        handle = rb_downscaler_create(Int32(inWidth), Int32(inHeight), Int32(outWidth), Int32(outHeight), sharpen)
         out = [UInt16](repeating: 0,
                        count: Int(rb_downscaler_max_output_rows(handle, Int32(maxRowsPerPush))) * outWidth * 3)
     }

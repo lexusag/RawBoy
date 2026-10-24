@@ -6,6 +6,24 @@
   (Original, or Auto without its look) and leave it there until the next press and hold. A second finger now ends
   press-and-hold compare and dragging, and nothing starts again until every finger is lifted.
 
+**Pro on phones: the shot info line scrolls sideways (2026-10-24)**
+
+- RawBoy (Android, web on phones): the file name and shot info under the tools used to end in an ellipsis when they
+  didn't fit. The line now scrolls sideways with a finger, so the whole of it can be read. Android also shows the
+  full file name instead of shortening it in the middle.
+
+**Camera: smaller photos get a light sharpening (2026-10-24)**
+
+- RawBoy Camera (Android, iOS): with Smaller photos on (the default, 3000 px), the JPEG gets a light sharpening after
+  the downscale, so it looks a little crisper. It works on brightness only (no coloured edges), and strong edges such
+  as lights and window frames are capped so they don't get halos. Full-size photos are unchanged.
+
+**Camera: only Focus-flash (2026-10-24)**
+
+- RawBoy Camera (Android): the plain Flash mode is gone. The bolt button now turns Focus-flash on or off (the light
+  comes on, the camera focuses with it, then the flash fires). If Flash was the remembered choice, it becomes
+  Focus-flash.
+
 **Camera: optional shutter sound (2026-10-24)**
 
 - RawBoy Camera (Android): Settings has a **Shutter sound** switch, off by default, that plays the system's camera

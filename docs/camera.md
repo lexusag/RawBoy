@@ -11,9 +11,8 @@ Google Camera (each lens that can deliver RAW is offered). The button right of t
 **selfie camera**, shown only when the front camera delivers RAW; selfies are saved mirrored, as the viewfinder
 shows them.
 
-- **Flash:** the bolt button in the top bar (shown when the lens has a flash; usually not the selfie camera) cycles
-  **Off**, **Flash** and **Focus-flash** (bolt with "AF"). Flash fires at once with the shot. Focus-flash works like
-  Google Camera's: the light comes on, the camera focuses with it (unless focus is locked), then the flash fires.
+- **Flash:** the bolt button in the top bar (shown when the lens has a flash; usually not the selfie camera) turns
+  **Focus-flash** (bolt with "AF") on or off. It works like Google Camera's: the light comes on, the camera focuses with it (unless focus is locked), then the flash fires.
   Exposure works like a flash guide number: the photo is exposed for the distance the lens is focused at (the flash's
   light falls off with its square), never brighter than without flash, and each lens learns its flash strength from
   its flash shots (the camera's own flash metering left the raw several stops overexposed). Flash shots don't
@@ -38,7 +37,7 @@ shows them.
   setting as in Settings.
 - **Settings:** JPEG quality; whether to keep the DNG (off by default: only the JPEG is saved); **Smaller photos**
   (on by default: 3000 px on the long side, area-downscaled from the full-resolution develop, with the grain sized to
-  the smaller photo; off saves full resolution); **Merge 8 frames** (see above); **Shutter sound** (off by default: a click on each
+  the smaller photo and a light sharpening after the downscale; off saves full resolution, unsharpened); **Merge 8 frames** (see above); **Shutter sound** (off by default: a click on each
   shot; where the law requires it, such as Japan and Korea, Android reports so and it is always on and greyed out);
   **Remember camera & settings** (off by default: each start uses the
   back W lens, Yellow Portrait 400 and default sliders; on keeps lens, side, look and sliders).

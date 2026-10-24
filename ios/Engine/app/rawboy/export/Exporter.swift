@@ -74,13 +74,13 @@ public final class Exporter {
             switch settings.format {
             case .jpeg:
                 if settings.jpegEncoder == .jpegli {
-                    try writeJpegli(image, url, params, size, settings.jpegQuality, onProgress)
+                    try writeJpegli(image, url, params, size, settings.jpegQuality, settings.downscaleSharpen, onProgress)
                 } else {
-                    try writeSystemJpeg(image, url, params, size, settings.jpegQuality, onProgress)
+                    try writeSystemJpeg(image, url, params, size, settings.jpegQuality, settings.downscaleSharpen, onProgress)
                 }
                 ExifWriter.addExif(to: url, metadata: image.metadata)
             case .tiff:
-                try writeTiff(image, url, params, size, settings.tiffBits, onProgress)
+                try writeTiff(image, url, params, size, settings.tiffBits, settings.downscaleSharpen, onProgress)
             }
             return url
         } catch {
@@ -91,10 +91,10 @@ public final class Exporter {
 
     /** ImageIO's JPEG: 8-bit input, so the whole image is held as 8-bit RGBA. */
     private func writeSystemJpeg(_ image: RawImage, _ url: URL, _ params: ShaderParams, _ size: (Int, Int),
-                                 _ quality: Int, _ onProgress: (Float) -> Void) throws {
+                                 _ quality: Int, _ sharpen: Float, _ onProgress: (Float) -> Void) throws {
         let (w, h) = size
         var rgba = [UInt8](repeating: 255, count: w * h * 4)
-        try renderOutput(image, params, size, onProgress) { y, rows, band in
+        try renderOutput(image, params, size, sharpen, onProgress) { y, rows, band in
             rgba.withUnsafeMutableBufferPointer { dst in
                 for i in 0..<(w * rows) {
                     let o = (y * w + i) * 4
@@ -114,12 +114,12 @@ public final class Exporter {
 
     /** jpegli streams each band as it is developed, at full 16-bit precision, so no full-size image is held. */
     private func writeJpegli(_ image: RawImage, _ url: URL, _ params: ShaderParams, _ size: (Int, Int), _ quality: Int,
-                             _ onProgress: (Float) -> Void) throws {
+                             _ sharpen: Float, _ onProgress: (Float) -> Void) throws {
         var error = [CChar](repeating: 0, count: 256)
         guard let encoder = rb_jpeg_begin(url.path, Int32(size.0), Int32(size.1), Int32(quality), &error, error.count)
         else { throw MetalError(message: String(cString: error)) }
         do {
-            try renderOutput(image, params, size, onProgress) { _, rows, band in
+            try renderOutput(image, params, size, sharpen, onProgress) { _, rows, band in
                 if !rb_jpeg_write_rows(encoder, band, Int32(rows), &error, error.count) {
                     throw MetalError(message: String(cString: error))
                 }
@@ -132,28 +132,29 @@ public final class Exporter {
     }
 
     private func writeTiff(_ image: RawImage, _ url: URL, _ params: ShaderParams, _ size: (Int, Int), _ bits: Int,
-                           _ onProgress: (Float) -> Void) throws {
+                           _ sharpen: Float, _ onProgress: (Float) -> Void) throws {
         FileManager.default.createFile(atPath: url.path, contents: nil)
         let handle = try FileHandle(forWritingTo: url)
         defer { try? handle.close() }
         let writer = try TiffWriter(handle, width: size.0, height: size.1, bitsPerSample: bits,
                                    metadata: image.metadata)
-        try renderOutput(image, params, size, onProgress) { _, rows, band in try writer.writeRows(band, rows: rows) }
+        try renderOutput(image, params, size, sharpen, onProgress) { _, rows, band in try writer.writeRows(band, rows: rows) }
         try writer.finish()
     }
 
     /**
      * Renders the image at [size] (the full output size, or smaller: then the full-resolution bands are
-     * area-downscaled as they stream, and the grain is sized to the smaller output). Same callback as renderBands.
+     * area-downscaled as they stream, then sharpened by [sharpen], and the grain is sized to the smaller output).
+     * Same callback as renderBands.
      */
-    private func renderOutput(_ image: RawImage, _ params: ShaderParams, _ size: (Int, Int),
+    private func renderOutput(_ image: RawImage, _ params: ShaderParams, _ size: (Int, Int), _ sharpen: Float,
                               _ onProgress: (Float) -> Void,
                               _ consume: @escaping (Int, Int, UnsafePointer<UInt16>) throws -> Void) throws {
         let w = params.lens.outputWidth
         let h = params.lens.outputHeight
         if size.0 == w && size.1 == h { return try renderBands(image, params, 1, onProgress, consume) }
         let scaler = BandDownscaler(inWidth: w, inHeight: h, outWidth: size.0, outHeight: size.1,
-                                    maxRowsPerPush: Self.tileHeight, emit: consume)
+                                    maxRowsPerPush: Self.tileHeight, sharpen: sharpen, emit: consume)
         // A grain cell at least one output pixel, as a full-size render of the smaller image would have.
         let minGrain = Float(max(w, h)) / Float(max(size.0, size.1))
         try renderBands(image, params, minGrain, onProgress) { _, rows, band in try scaler.push(rows, band) }

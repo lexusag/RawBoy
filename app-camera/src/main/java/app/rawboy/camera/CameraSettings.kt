@@ -66,6 +66,8 @@ data class CameraSettings(
     companion object {
         const val MIN_QUALITY = 70
         const val SMALL_LONG_SIDE = 3000
+        /** Light sharpening after the downscale to [SMALL_LONG_SIDE] (luma unsharp mask, `band_ops.h`); full size gets none. */
+        const val SMALL_SHARPEN = 0.5f
         /** Raws merged per shot with [mergeBurst]: noise about 1/sqrt of it where nothing moves (~2.8x less). */
         const val BURST_FRAMES = 8
 
@@ -102,7 +104,11 @@ object CameraSettingsStore {
             shutterSound = p.getBoolean("shutterSound", d.shutterSound),
             previewScales = parseScales(p.getString(SCALES_KEY, null)),
             flashGuides = parseScales(p.getString(FLASH_GUIDES_KEY, null), min = 1e-2f, max = 1e4f),
-            flash = runCatching { FlashMode.valueOf(p.getString("flash", null)!!) }.getOrDefault(d.flash),
+            // "FLASH" (plain flash, since removed) becomes Focus-flash.
+            flash = when (val f = p.getString("flash", null)) {
+                "FLASH" -> FlashMode.FOCUS_FLASH
+                else -> runCatching { FlashMode.valueOf(f!!) }.getOrDefault(d.flash)
+            },
         )
         if (!always.rememberLast) return always
         return always.copy(

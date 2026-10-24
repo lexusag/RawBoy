@@ -528,7 +528,8 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   every frame** (lens and logical result, even AF-locked at ~1 m; it claims APPROXIMATE calibration): exactly 0 = unknown,
   not infinity, and then a separate per-lens gain `"<lens>?"` (`FlashGuides.noDistance`, default 4) is used and learned
   (UW converged towards ~18-20 on a room shot). Pixel W: guide ≈ 18 (desk at 0.3 m:
-  ISO ~50, 0.01% clipped). Focus-flash = `torchFocus`: AE_MODE_ON + FLASH_MODE_TORCH, 300 ms, then an AF trigger,
+  ISO ~50, 0.01% clipped). Focus-flash is the only flash mode (plain Flash was removed; a saved `"FLASH"` loads as
+  `FOCUS_FLASH`): `torchFocus`: AE_MODE_ON + FLASH_MODE_TORCH, 300 ms, then an AF trigger,
   waiting for AF locked on frames **after** the trigger's frame number (`triggerAndWait` logs every AE/AF/flash state
   change). `aeMode`/`flashMode` go through `setCommon`; `endFlashSequence` restores them and cancels AF. Flash stills:
   ZSL off, no viewfinder calibration (the viewfinder never saw the flash).
@@ -578,7 +579,11 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
 - Smaller export: `ExportSettings.maxLongSide` → `export/BandDownscaler.kt` (exact area average, streamed per band;
   native in `cpp/band_ops.cpp` with the tile repack, in librawboyjpeg; host-tested against a whole-image resize:
   ±0.51 of a 16-bit level). The grain gets `minGrainPx` = full/out
-  long side, so a grain cell is at least one output pixel. The `export WxH` log line shows the full render size.
+  long side, so a grain cell is at least one output pixel. `ExportSettings.downscaleSharpen` (Camera only:
+  `CameraSettings.SMALL_SHARPEN` 0.5, small photos; Android/iOS, the web has no camera) runs a luma unsharp mask in the
+  same `Downscaler` after the area average: 3x3 binomial blur of (R+2G+B)/4, detail capped at ±4% so lights don't halo,
+  added to all three channels; one output row is held back (`finish` flushes it, `maxOutputRows` +1). 0 = byte-identical
+  to before. Host-tested: same output for any push size, matches a numpy reference within 1 of 65535. The `export WxH` log line shows the full render size.
 - TIFF export: `TiffWriter` (Kotlin/Swift/TS, byte-identical output) writes LZW + Predictor 2 strips after a gap and
   the header last, so it needs a seekable output (Android: the MediaStore entry opened `"rw"` as a `FileChannel`; iOS:
   `FileHandle.seek`; web: Blob parts). LZW code widths follow libtiff's "early change" (a code is one bit wider once

@@ -471,7 +471,8 @@ final class CameraViewModel: ObservableObject {
                                                    grainSizeScale: Self.grainSizeScale, grainStrength: Self.grainStrength(s),
                                                    film: film)
                     let export = ExportSettings(format: .jpeg, jpegQuality: s.jpegQuality, jpegEncoder: .jpegli,
-                                                maxLongSide: s.maxLongSide)
+                                                maxLongSide: s.maxLongSide,
+                                                downscaleSharpen: CameraSettings.smallSharpen)
                     let exportStart = Date()
                     let file = try Exporter().export(img, sourceName: shot.name, params: shader, settings: export,
                                                      naming: Self.jpegNaming, gpu: gpu)

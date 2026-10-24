@@ -4,6 +4,7 @@ package app.rawboy.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -36,7 +38,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -51,7 +52,7 @@ enum class EditorMode { NONE, GEOMETRY, MASKS, PRESETS }
  * Two short rows instead of a 64dp app bar: every action as an icon with a word under it (long-press for the full
  * name), then the file name and the shot info
  * (camera, ISO, shutter, aperture, focal length) in small type, with Undo and Redo at its end (the first row is
- * full on a 360dp phone).
+ * full on a 360dp phone). The second line scrolls sideways when it doesn't fit, rather than ending in an ellipsis.
  */
 @Composable
 fun EditorTopBar(
@@ -91,15 +92,15 @@ fun EditorTopBar(
         Row(Modifier.fillMaxWidth().padding(end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 buildAnnotatedString {
-                    append(fileName?.let(::shortName) ?: "RawBoy")
+                    append(fileName ?: "RawBoy")
                     if (!info.isNullOrEmpty()) {
                         withStyle(SpanStyle(color = secondary)) { append("  ·  $info") }
                     }
                 },
                 style = MaterialTheme.typography.labelSmall,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f).padding(start = 16.dp, end = 8.dp),
+                softWrap = false,
+                modifier = Modifier.weight(1f).horizontalScroll(rememberScrollState()).padding(start = 16.dp, end = 8.dp),
             )
             IconButton(onClick = onUndo, enabled = enabled && canUndo, modifier = Modifier.size(40.dp)) {
                 Icon(UndoIcon, contentDescription = "Undo")
@@ -110,9 +111,6 @@ fun EditorTopBar(
         }
     }
 }
-
-/** Long file names shortened in the middle (start and extension stay), leaving the line to the shot info. */
-internal fun shortName(name: String): String = if (name.length <= 14) name else name.take(7) + "…" + name.takeLast(6)
 
 @Composable
 private fun ModeButton(
