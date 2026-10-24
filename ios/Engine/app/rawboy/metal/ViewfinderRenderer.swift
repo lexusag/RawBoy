@@ -222,7 +222,7 @@ public final class ViewfinderRenderer: NSObject, MTKViewDelegate, @unchecked Sen
         draw(commands, boxDownPipeline, into: tailRaw, from: halo) { e in
             e.setFragmentBytes(&texel, length: MemoryLayout<SIMD2<Float>>.stride, index: 0)
         }
-        let tail = target(&self.tail, tw, th, mipmapped: false)
+        let tail = target(&self.tail, tw, th * BloomTail.bands, mipmapped: false)
         var tailTexel = SIMD2<Float>(1 / Float(tw), 1 / Float(th))
         draw(commands, tailScatterPipeline, into: tail, from: tailRaw) { e in
             e.setFragmentBytes(&tailTexel, length: MemoryLayout<SIMD2<Float>>.stride, index: 0)

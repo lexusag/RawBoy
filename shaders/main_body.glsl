@@ -31,7 +31,7 @@ void main() {
     clarity = clamp(clarity, -1.0, 1.0);
     if (clarity != 0.0) g *= clarityGain(lum(x), srcG, clarity);
     x *= g;
-    if (uBloom > 0.0) x = mix(x, bloomScatter(uvG, srcG), uBloom);
+    if (uBloom > 0.0) x = bloom(x, uvG, srcG);
     if (uFilmAmount > 0.0) x = filmOptics(x, uvG, srcG);
     x *= lensGain(sG, srcG);
     vec3 c = develop(max(x, 0.0), outPx, lm);

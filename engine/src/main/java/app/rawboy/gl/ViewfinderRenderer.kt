@@ -202,7 +202,7 @@ class ViewfinderRenderer(
         val output = PixelRect(0, 0, outW, outH)
         val geometry = SampleGeometry(w, h, input, output, f.fullWidth, f.fullHeight)
         develop!!.bind(p, geometry, r[2] / viewWidth, r[3] / viewHeight, flipY = true)
-        develop!!.bindLiveCopies(p, sw, sh, tw, th)
+        develop!!.bindLiveCopies(p, sw, sh, tw, th * BloomTail.BANDS)
         quad!!.draw()
         stats.frame(SystemClock.uptimeMillis() - now)
     }
@@ -217,7 +217,7 @@ class ViewfinderRenderer(
     /**
      * The copies a decoded raw gets from PhotoSession (base, bloomSourcesOf), from the linear frame: [small] the
      * ~512 px base (trilinear, from mipmaps), [halo] the same highlight-boosted, [tail] that box-filtered to ~64 px
-     * and scattered by [BloomTail]'s kernel.
+     * and its highlights scattered by [BloomTail]'s kernel, one band per exposure.
      */
     private fun makeCopies(sw: Int, sh: Int, tw: Int, th: Int) {
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, linear.texture)
@@ -231,7 +231,7 @@ class ViewfinderRenderer(
         tailRaw.ensure(tw, th, mipmapped = false)
         tailRaw.bindForDrawing()
         boxDown!!.draw(quad!!, halo.texture, sw, sh)
-        tail.ensure(tw, th, mipmapped = false)
+        tail.ensure(tw, th * BloomTail.BANDS, mipmapped = false)
         tail.bindForDrawing()
         tailScatter!!.draw(quad!!, tailRaw.texture, tw, th)
     }
@@ -584,7 +584,10 @@ void main() {
     fragColor = vec4(s * 0.0625, 1.0);
 }
 """
-            /** Same-size pass: BloomTail's kernel (keep the two in step), edges clamped by the sampler. */
+            /**
+             * BloomTail's kernel and bands (keep the two in step): the target is the source's size x 6 bands high,
+             * band k kneed at exposure 2^k; edges clamped by the sampler.
+             */
             const val TAIL_SCATTER = """#version 300 es
 precision highp float;
 uniform sampler2D uSource;
@@ -592,6 +595,9 @@ uniform vec2 uSourceTexel;
 in vec2 vUp;
 out vec4 fragColor;
 void main() {
+    float band = floor(vUp.y * 6.0);
+    vec2 uv = vec2(vUp.x, vUp.y * 6.0 - band);
+    float gain = exp2(band);
     vec3 s = vec3(0.0);
     float ws = 0.0;
     for (int j = -6; j <= 6; ++j) {
@@ -600,7 +606,8 @@ void main() {
             float rim = 1.0 - r2 / 49.0;
             if (rim <= 0.0) continue;
             float w = pow(1.0 + sqrt(r2) / 0.6, -2.2) * rim * rim;
-            s += w * texture(uSource, vUp + vec2(i, j) * uSourceTexel).rgb;
+            vec3 c = texture(uSource, uv + vec2(i, j) * uSourceTexel).rgb;
+            s += w * smoothstep(0.36, 1.44, max(c.r, max(c.g, c.b)) * gain) * c; // develop.glsl's bloomKnee
             ws += w;
         }
     }
