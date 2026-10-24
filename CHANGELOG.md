@@ -11,6 +11,37 @@
   which with infrared multipliers (blue x3.7) took the colour out of light far below clipping: a green blotch beside
   the bulb, and in compressed DNGs flat yellow highlights. Compressed and uncompressed DNGs of a shot now match.
 
+**Web: mouse wheel moves sliders (2026-10-24)**
+
+- RawBoy and Auto (web): as in darktable, turning the mouse wheel over a slider moves it, no click needed: 1/200 of
+  its range per notch (1 on a −100…100 slider, 0.05 EV on Exposure), Shift for 10× bigger steps, Ctrl/⌘ for 10×
+  finer ones. A wheel that is scrolling the panel keeps scrolling it when a slider passes under the pointer; the
+  wheel takes the slider once the panel has been still for a moment. A run of wheel steps is one undo step.
+
+**Web: shortcuts work in Ukrainian and other non-Latin layouts (2026-10-24)**
+
+- RawBoy Web (Pro, Auto, Browser): letter shortcuts (Z zoom, Ctrl/⌘+Z undo, P / X / U flags, B / E / V mask tools,
+  [ ] brush size, \\ compare, Ctrl/⌘+A select all, …) did nothing while a Ukrainian, Russian or other non-Latin
+  keyboard layout was active, because the key then types a Cyrillic letter. They now go by the physical key, as in
+  Lightroom. Latin layouts (AZERTY, Dvorak) keep following the letter printed on the key.
+
+**Auto: finer film grain in Film mode (2026-10-24)**
+
+- RawBoy Auto (Android, iOS, web): the film stocks in Film mode start with 20% less grain than before. The Grain
+  slider still scales it from none (−50) to double (+50). RawBoy's own Film grain slider is unchanged.
+
+**Auto web: C for Copy previous (2026-10-24)**
+
+- RawBoy Auto (web): in the photo view, **C** does Copy previous (shown in the button's tooltip and the **?** help).
+  It goes by key position, so it works with any keyboard layout (e.g. Ukrainian).
+
+**Camera and Auto: JPEGs keep shutter speed, aperture, ISO and focal length (2026-10-24)**
+
+- RawBoy Camera's JPEGs, and JPEG or TIFF exports from Auto and RawBoy (Android) of RawBoy Camera's DNGs, came out
+  with only the camera make and model: no shutter speed, aperture, ISO, focal length or capture date. Android's DNG
+  writer keeps these in the DNG's main tag list rather than in the EXIF section, where the metadata copy looked for
+  them. Exports now read them from there too. The DNGs themselves always had them.
+
 **Auto and Browser: photos in shoot-date order (2026-10-24)**
 
 - RawBoy Auto (Android, iOS, web) and RawBoy Browser (web) now show photos in the order they were shot, from each

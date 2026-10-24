@@ -49,8 +49,8 @@ film. The scene light exposes the negative, which is printed and the print scann
 Everyday 400, Yellow Cine 250D/500T, Green Vivid Slide 100, Green Slide 100, Yellow Slide 100, Yellow Classic 64) and spektrafilm's film and print LUTs. The
 grain (in film density, sized on a 36 mm frame), halation (the reddish glow around bright light) and scatter are
 RawBoy's own (`shaders/film_form.glsl`), fitted to RawBoy Film's renders. A stock is suggested per photo (tungsten
-light: Yellow Cine 500T); Strength blends the film with the AgX develop; Grain (±50) scales the stock's grain from none to
-double. Each photo keeps one pick per mode, and the Pro tab (web) shows a photo handed over in Film mode with its
+light: Yellow Cine 500T); the grain starts at 80% of the stock's; Strength blends the film with the AgX develop; Grain (±50)
+scales it from none to double. Each photo keeps one pick per mode, and the Pro tab (web) shows a photo handed over in Film mode with its
 stock. Whites reach the print's paper white (about 0.85), not 1.0.
 
 Each look is a LUT plus small adjustments (grain, bloom, vignette, warmth, and skin retouch when there's a

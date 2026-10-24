@@ -18,6 +18,7 @@ import { HistogramView } from '../common/HistogramView';
 import { PresetsIcon } from '../common/PresetsIcon';
 import { histogramFromRgba, type Histogram } from '../../engine/develop/Histogram';
 import { renderThumbnail } from '../../engine/gl/ThumbnailRenderer';
+import { shortcutKey } from '../common/shortcutKey';
 
 /** Frame around the photo in the fit view, CSS pixels (click outside the photo to change its colour). */
 const FRAME_WIDTH = 12;
@@ -60,7 +61,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   useEffect(() => setCompareLatched(false), [state.fileName]);
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (e.key !== '\\' || e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+      if (shortcutKey(e) !== '\\' || e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
       const t = e.target;
       if (t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && t.type !== 'range' && t.type !== 'checkbox')) return;
       if (!isTabShown('pro')) return;
@@ -171,7 +172,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   zoomKey.current = { zoomable, zoomExtra, hasImage };
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (!isTabShown('pro') || e.key.toLowerCase() !== 'z' || e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+      if (!isTabShown('pro') || shortcutKey(e) !== 'z' || e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
       const t = e.target;
       if (t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && t.type !== 'range' && t.type !== 'checkbox')) return;
       const k = zoomKey.current;
@@ -195,7 +196,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
       if (!isTabShown('pro') || !(e.metaKey || e.ctrlKey) || e.altKey) return;
       const t = e.target;
       if (t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && t.type !== 'range' && t.type !== 'checkbox')) return;
-      const key = e.key.toLowerCase();
+      const key = shortcutKey(e);
       if (key === 'z' && !e.shiftKey) store.undo();
       else if ((key === 'z' && e.shiftKey) || (key === 'y' && e.ctrlKey)) store.redo();
       else return;
@@ -215,7 +216,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
     const down = (e: KeyboardEvent) => {
       if (!isTabShown('pro') || typing(e.target)) return;
       const k = keys.current;
-      const key = e.key.toLowerCase();
+      const key = shortcutKey(e);
       if (e.metaKey || e.ctrlKey || e.altKey) {
         return;
       } else if (key === ' ') {

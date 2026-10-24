@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { NO_ADJUSTMENTS, applyEditsDevelop, applyLook, developAuto } from '../auto/looks/LookApplier';
-import { ALL_FILM_LOOKS, FilmLooks, filmLookById } from '../auto/looks/FilmLooks';
+import { ALL_FILM_LOOKS, FILM_GRAIN, FilmLooks, filmLookById } from '../auto/looks/FilmLooks';
 import { ALL_LOOKS, Looks, lookById, lutIdOf } from '../auto/looks/Look';
 import { applyAuto, measuredNoiseSettings } from '../auto/analysis/AutoTone';
 import { Warmth } from '../auto/analysis/Warmth';
@@ -575,7 +575,7 @@ describe('auto looks', () => {
 
   it('Grain scales a film look\'s grain 0..2x', () => {
     const grain = (g: number) => applyLook(developParams(), FilmLooks.PORTRA_400, 100, { ...NO_ADJUSTMENTS, grain: g }, false).filmGrain;
-    expect([grain(-50), grain(0), grain(50)]).toEqual([0, 100, 200]);
+    expect([grain(-50), grain(0), grain(50)]).toEqual([0, FILM_GRAIN, 2 * FILM_GRAIN]);
   });
 
   it('renders no film until the stock is loaded', () => {
