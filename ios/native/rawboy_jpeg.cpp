@@ -45,8 +45,8 @@ struct RBJpegEncoder {
 
 extern "C" {
 
-RBDownscaler* rb_downscaler_create(int inWidth, int inHeight, int outWidth, int outHeight) {
-    return new RBDownscaler{rawboy::Downscaler(inWidth, inHeight, outWidth, outHeight)};
+RBDownscaler* rb_downscaler_create(int inWidth, int inHeight, int outWidth, int outHeight, float sharpen) {
+    return new RBDownscaler{rawboy::Downscaler(inWidth, inHeight, outWidth, outHeight, sharpen)};
 }
 
 int rb_downscaler_max_output_rows(const RBDownscaler* d, int inputRows) { return d->impl.maxOutputRows(inputRows); }

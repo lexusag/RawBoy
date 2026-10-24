@@ -58,6 +58,8 @@ struct CameraSettings: Equatable {
 
     static let minQuality = 70
     static let smallLongSide = 3000
+    /** Light sharpening after the downscale to smallLongSide (luma unsharp mask, `band_ops.h`); full size gets none. */
+    static let smallSharpen: Float = 0.5
     /** First guess before a lens's first shot: an sRGB preview's middle grey (0.18) at a camera raw's key (~0.06). */
     static let defaultScale: Float = 0.35
     static let minScale: Float = 1.0 / 32

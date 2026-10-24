@@ -579,7 +579,11 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
 - Smaller export: `ExportSettings.maxLongSide` → `export/BandDownscaler.kt` (exact area average, streamed per band;
   native in `cpp/band_ops.cpp` with the tile repack, in librawboyjpeg; host-tested against a whole-image resize:
   ±0.51 of a 16-bit level). The grain gets `minGrainPx` = full/out
-  long side, so a grain cell is at least one output pixel. The `export WxH` log line shows the full render size.
+  long side, so a grain cell is at least one output pixel. `ExportSettings.downscaleSharpen` (Camera only:
+  `CameraSettings.SMALL_SHARPEN` 0.5, small photos; Android/iOS, the web has no camera) runs a luma unsharp mask in the
+  same `Downscaler` after the area average: 3x3 binomial blur of (R+2G+B)/4, detail capped at ±4% so lights don't halo,
+  added to all three channels; one output row is held back (`finish` flushes it, `maxOutputRows` +1). 0 = byte-identical
+  to before. Host-tested: same output for any push size, matches a numpy reference within 1 of 65535. The `export WxH` log line shows the full render size.
 - TIFF export: `TiffWriter` (Kotlin/Swift/TS, byte-identical output) writes LZW + Predictor 2 strips after a gap and
   the header last, so it needs a seekable output (Android: the MediaStore entry opened `"rw"` as a `FileChannel`; iOS:
   `FileHandle.seek`; web: Blob parts). LZW code widths follow libtiff's "early change" (a code is one bit wider once

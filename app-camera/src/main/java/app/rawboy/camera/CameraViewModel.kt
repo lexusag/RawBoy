@@ -608,6 +608,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     jpegQuality = s.jpegQuality,
                     jpegEncoder = JpegEncoder.JPEGLI,
                     maxLongSide = s.maxLongSide,
+                    downscaleSharpen = CameraSettings.SMALL_SHARPEN,
                 )
                 val exportStart = System.nanoTime()
                 val saved = Exporter(app).export(img, shot.dng, shot.name, shader, export, JPEG_NAMING, exportGpu) {}

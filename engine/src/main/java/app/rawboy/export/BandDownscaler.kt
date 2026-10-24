@@ -11,6 +11,9 @@ import kotlin.math.roundToInt
  * Samples are interleaved RGB, unsigned 16-bit in shorts, as [Exporter] renders them. Feed input rows top
  * to bottom with [push] (at most [maxRowsPerPush] per call), then call [finish]; finished output rows go to
  * [emit] (first output row, row count, samples; the array is reused). Close it afterwards.
+ *
+ * [sharpen] > 0 adds a light luma unsharp mask after the downscale (`band_ops.h`; RawBoy Camera's small photos use
+ * [ExportSettings.downscaleSharpen]). It holds one output row back, so the last rows come from [finish].
  */
 internal class BandDownscaler(
     inWidth: Int,
@@ -18,13 +21,14 @@ internal class BandDownscaler(
     val outWidth: Int,
     val outHeight: Int,
     maxRowsPerPush: Int,
+    sharpen: Float = 0f,
     private val emit: (y: Int, rows: Int, band: ShortArray) -> Unit,
 ) : AutoCloseable {
     init {
         require(outWidth in 1..inWidth && outHeight in 1..inHeight) { "only downscaling" }
     }
 
-    private var handle = BandNative.createDownscaler(inWidth, inHeight, outWidth, outHeight)
+    private var handle = BandNative.createDownscaler(inWidth, inHeight, outWidth, outHeight, sharpen)
     private val out = ShortArray(BandNative.maxOutputRows(handle, maxRowsPerPush) * outWidth * 3)
     private var outY = 0
 
