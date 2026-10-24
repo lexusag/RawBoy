@@ -427,6 +427,7 @@ export class AutoStore {
   }
 
   toggleZoom = (x: number, y: number) => this.session.toggleZoom(x, y, this.frameWidth);
+  zoomBy = (x: number, y: number, factor: number) => this.session.zoomBy(x, y, factor, this.frameWidth);
 
   /** Single click in the detail preview: outside the photo (fit view) cycles the frame colour, as in RawBoy. Remembered. */
   onPreviewClick(x: number, y: number) {

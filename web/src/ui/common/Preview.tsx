@@ -2,11 +2,14 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { DevelopRenderer } from '../../engine/gl/DevelopRenderer';
 import type { ShaderParams } from '../../engine/gl/ShaderParams';
 import type { SessionState } from '../../engine/session/PhotoSession';
+import { continuesPageScroll, wheelNotches } from './ParamSlider';
 
 /** Delay before press-and-hold shows the comparison, so clicks and drags don't flash it. */
 const COMPARE_DELAY_MS = 250;
 /** How long the "double-click for 100%" hint stays up after a photo opens. */
 const ZOOM_HINT_MS = 4000;
+/** Wheel zoom per notch of a mouse wheel. */
+const WHEEL_ZOOM_STEP = 1.25;
 /** Set once the user has zoomed: the hint has done its job and stops showing. */
 const ZOOM_HINT_KEY = 'rawboy.zoomHintSeen';
 
@@ -31,8 +34,13 @@ interface Props {
   onToggleZoom: (x: number, y: number) => void;
   /** Single click (device pixels), e.g. to cycle the frame colour. */
   onClick?: (x: number, y: number) => void;
-  /** Drag in the 100% view, in device pixels. */
+  /** Drag in the zoomed view, in device pixels. */
   onPan: (dx: number, dy: number) => void;
+  /**
+   * Mouse wheel over the photo (desktop pointers only): zoom by [factor] around a device-pixel position. Left out,
+   * the wheel does nothing here.
+   */
+  onZoomBy?: (x: number, y: number, factor: number) => void;
   /** Press and hold: true while held. */
   onCompare: (on: boolean) => void;
   /** Clipped highlights red, crushed shadows blue (Pro's histogram). */
@@ -48,12 +56,12 @@ interface Props {
  * The develop preview (port of view/DevelopPreview.kt plus the editor's gestures): a canvas at device resolution, so
  * the 100% view shows one image pixel per screen pixel.
  */
-export function Preview({ session, params, frame, frameGrey, margin = 0, clipWarning = false, onViewSize, onToggleZoom, onClick, onPan, onCompare, onPointerAt, zoomHint = true, children }: Props) {
+export function Preview({ session, params, frame, frameGrey, margin = 0, clipWarning = false, onViewSize, onToggleZoom, onClick, onPan, onZoomBy, onCompare, onPointerAt, zoomHint = true, children }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<DevelopRenderer | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
-  const callbacks = useRef({ onViewSize, onToggleZoom, onClick, onPan, onCompare, onPointerAt, frame });
-  callbacks.current = { onViewSize, onToggleZoom, onClick, onPan, onCompare, onPointerAt, frame };
+  const callbacks = useRef({ onViewSize, onToggleZoom, onClick, onPan, onZoomBy, onCompare, onPointerAt, frame });
+  callbacks.current = { onViewSize, onToggleZoom, onClick, onPan, onZoomBy, onCompare, onPointerAt, frame };
 
   useLayoutEffect(() => {
     const renderer = new DevelopRenderer(canvasRef.current!);
@@ -83,10 +91,31 @@ export function Preview({ session, params, frame, frameGrey, margin = 0, clipWar
     r.clipWarning = clipWarning;
     r.margin = Math.round(margin * (window.devicePixelRatio || 1));
     r.zoomCenter = session.zoomCenter;
+    r.zoomScale = session.zoomScale;
     r.setImage(session.preview);
     r.setDetail(session.detail);
     r.invalidate();
-  }, [params, frame, frameGrey, margin, clipWarning, session.zoomCenter, session.preview, session.detail]);
+  }, [params, frame, frameGrey, margin, clipWarning, session.zoomCenter, session.zoomScale, session.preview, session.detail]);
+
+  // Mouse wheel zooms around the cursor, desktop only (a mouse or trackpad; Ctrl+wheel is a trackpad pinch). Not
+  // React's onWheel: that listener is passive, so it couldn't keep the page from scrolling or zooming.
+  useEffect(() => {
+    const box = boxRef.current!;
+    const onWheel = (e: WheelEvent) => {
+      const zoomBy = callbacks.current.onZoomBy;
+      // A slider over the photo took it, or the wheel is still scrolling the page past the photo.
+      if (!zoomBy || e.defaultPrevented || continuesPageScroll(e) || !matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+      const pinch = e.ctrlKey && e.deltaMode === WheelEvent.DOM_DELTA_PIXEL;
+      const factor = pinch ? Math.exp(-e.deltaY / 100) : WHEEL_ZOOM_STEP ** wheelNotches(e);
+      e.preventDefault();
+      if (factor === 1) return;
+      const r = box.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      zoomBy((e.clientX - r.left) * dpr, (e.clientY - r.top) * dpr, factor);
+    };
+    box.addEventListener('wheel', onWheel, { passive: false });
+    return () => box.removeEventListener('wheel', onWheel);
+  }, []);
 
   // Zoom hint: shown for a few seconds on each new photo until the user has zoomed once.
   const [hint, setHint] = useState(false);
@@ -111,7 +140,7 @@ export function Preview({ session, params, frame, frameGrey, margin = 0, clipWar
   }, [session.zoomCenter]);
   const touch = typeof matchMedia === 'function' && matchMedia('(hover: none)').matches;
 
-  // Pointer gestures: drag pans when zoomed; press and hold compares; double click toggles 100%.
+  // Pointer gestures: drag pans when zoomed; press and hold compares; double click toggles 100%; the wheel zooms.
   const gesture = useRef<{ x: number; y: number; moved: boolean; timer: number; comparing: boolean } | null>(null);
   const toDevice = (e: { clientX: number; clientY: number }) => {
     const r = boxRef.current!.getBoundingClientRect();
@@ -178,10 +207,13 @@ export function Preview({ session, params, frame, frameGrey, margin = 0, clipWar
     >
       <canvas ref={canvasRef} />
       {children}
-      <div className={hint ? 'zoom-hint show' : 'zoom-hint'}>{touch ? 'Double-tap' : 'Double-click'} for 100% · drag to pan</div>
+      <div className={hint ? 'zoom-hint show' : 'zoom-hint'}>{touch ? 'Double-tap for 100%' : onZoomBy ? 'Double-click for 100% · scroll to zoom' : 'Double-click for 100%'} · drag to pan</div>
     </div>
   );
 }
+
+/** The zoomed view's label: "100%", or the wheel zoom's scale. */
+export const zoomLabel = (scale: number) => `${Math.round(scale * 100)}%`;
 
 /** Small label over the preview ("100%", "Original"). */
 export function PreviewLabel({ children }: { children: ReactNode }) {

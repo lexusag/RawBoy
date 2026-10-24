@@ -47,6 +47,8 @@ export interface SessionState {
   blemish: BlemishState;
   /** Centre of the 100% view in full-resolution pixels; null = fit to view. */
   zoomCenter: [number, number] | null;
+  /** Device pixels per full-resolution pixel while zoomed: 1 = 100%, others from the web's wheel zoom. */
+  zoomScale: number;
   /** Full-resolution region around the zoom centre, uploaded for the 100% view. */
   detail: DetailTile | null;
   lensInfo: LensInfo;
@@ -93,6 +95,7 @@ export class PhotoSession {
     skin: { kind: 'notComputed' },
     blemish: { working: false, healed: 0, detected: 0 },
     zoomCenter: null,
+    zoomScale: 1,
     detail: null,
     lensInfo: LensInfo.none(),
     lutData: null,
@@ -297,7 +300,7 @@ export class PhotoSession {
     const h = lens.outputHeight;
     const zoom = this._state.zoomCenter;
     const r = zoom
-      ? ZoomMath.zoomedRect(zoom[0], zoom[1], this.viewWidth, this.viewHeight, w, h)
+      ? ZoomMath.zoomedRect(zoom[0], zoom[1], this.viewWidth, this.viewHeight, w, h, this._state.zoomScale)
       : ZoomMath.fitRect(this.viewWidth, this.viewHeight, w, h, frameWidth);
     const outX = ((viewX - r[0]) / r[2]) * w;
     const outY = ((viewY - r[1]) / r[3]) * h;
@@ -317,36 +320,72 @@ export class PhotoSession {
       return;
     }
     const p = this.fitToImage(viewX, viewY, frameWidth);
-    if (p) this.setZoomCenter(p[0], p[1]);
+    if (p) this.setZoomCenter(p[0], p[1], 1);
   }
 
-  /** Drag in the 100% view; [dx], [dy] are device pixels = full-resolution pixels. */
+  /**
+   * Mouse-wheel zoom (web, desktop): scales the view by [factor] keeping the photo point under ([viewX], [viewY])
+   * in place, from the fit view up to ZoomMath.MAX_SCALE. Passing 100% stops there once; zooming out past the fit
+   * view returns to it.
+   */
+  zoomBy(viewX: number, viewY: number, factor: number, frameWidth: number) {
+    const vw = this.viewWidth;
+    const vh = this.viewHeight;
+    if (!this.image || vw <= 0 || vh <= 0) return;
+    const lens = this.lensFor(this.params);
+    const w = lens.outputWidth;
+    const h = lens.outputHeight;
+    const fit = ZoomMath.fitScale(vw, vh, w, h, frameWidth);
+    const c = this._state.zoomCenter;
+    const from = c ? this._state.zoomScale : fit;
+    const r = c ? ZoomMath.zoomedRect(c[0], c[1], vw, vh, w, h, from) : ZoomMath.fitRect(vw, vh, w, h, frameWidth);
+    const x = ((viewX - r[0]) / r[2]) * w;
+    const y = ((viewY - r[1]) / r[3]) * h;
+    let to = Math.min(ZoomMath.MAX_SCALE, from * factor);
+    if ((from < 1 && to > 1) || (from > 1 && to < 1)) to = 1;
+    if (to <= fit * 1.001) {
+      this.exitZoom();
+      return;
+    }
+    if (c && to === from) return;
+    this.setZoomCenter(x - (viewX - vw / 2) / to, y - (viewY - vh / 2) / to, to);
+  }
+
+  /** Drag in the zoomed view, in device pixels. */
   pan(dx: number, dy: number) {
     const c = this._state.zoomCenter;
-    if (c) this.setZoomCenter(c[0] - dx, c[1] - dy);
+    const s = this._state.zoomScale;
+    if (c) this.setZoomCenter(c[0] - dx / s, c[1] - dy / s);
   }
 
   exitZoom() {
     this.tileLoading = false;
-    if (this._state.zoomCenter || this._state.detail) this.update({ zoomCenter: null, detail: null });
+    if (this._state.zoomCenter || this._state.detail) this.update({ zoomCenter: null, zoomScale: 1, detail: null });
   }
 
-  private setZoomCenter(cx: number, cy: number) {
+  private setZoomCenter(cx: number, cy: number, scale = this._state.zoomScale) {
     const img = this.image;
     if (!img) return;
     const lens = this.lensFor(this.params);
-    const c = ZoomMath.clampCenter(cx, cy, this.viewWidth, this.viewHeight, lens.outputWidth, lens.outputHeight);
-    this.update({ zoomCenter: c });
+    const c = ZoomMath.clampCenter(cx, cy, this.viewWidth, this.viewHeight, lens.outputWidth, lens.outputHeight, scale);
+    this.update({ zoomCenter: c, zoomScale: scale });
     this.ensureDetail(img, c);
   }
 
-  /** Loads a new tile only when the visible region leaves the current one. */
+  /** Loads a new tile only when the visible region leaves the current one (none while the preview is enough). */
   private ensureDetail(img: RawImage, c: [number, number]) {
     if (this.tileLoading) return;
+    const scale = this._state.zoomScale;
+    const preview = this._state.preview;
+    if (preview && ZoomMath.previewSuffices(scale, preview.width, preview.fullWidth)) return;
     const lens = this.lensFor(this.params);
-    const view = ZoomMath.viewRect(c[0], c[1], this.viewWidth, this.viewHeight, lens.outputWidth, lens.outputHeight);
-    // Source pixels the view needs, through rotation and lens geometry, plus the denoise halo.
-    const needed = lens.sourceBounds(view, this.spatialMargin(this.params));
+    const view = ZoomMath.viewRect(c[0], c[1], this.viewWidth, this.viewHeight, lens.outputWidth, lens.outputHeight, scale);
+    // Source pixels the view needs, through rotation and lens geometry, plus the denoise halo (whole pixels: the
+    // wheel zoom's view has fractional edges).
+    const b = lens.sourceBounds(view, this.spatialMargin(this.params));
+    const x0 = Math.max(0, Math.floor(b.x));
+    const y0 = Math.max(0, Math.floor(b.y));
+    const needed = rect(x0, y0, Math.min(img.width, Math.ceil(b.x + b.width)) - x0, Math.min(img.height, Math.ceil(b.y + b.height)) - y0);
     const current = this._state.detail;
     if (current && contains(current.rect, needed)) return;
 

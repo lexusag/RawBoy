@@ -8,7 +8,7 @@ import { canPickOutputFolder, PHOTO_ACCEPT, pickFiles, pickOutputFolder, savesTo
 import { isTabShown } from '../common/tabs';
 import { ParamSlider, formatPlain, formatSigned } from '../common/ParamSlider';
 import { isPressedSlider } from '../common/sliderFocus';
-import { Preview, PreviewLabel } from '../common/Preview';
+import { Preview, PreviewLabel, zoomLabel } from '../common/Preview';
 import { useTabScroll } from '../common/useTabScroll';
 import { ALL_FILM_LOOKS } from '../../engine/auto/looks/FilmLooks';
 import { isLensPreset, NO_LENS_PRESET, replacesLook, type Preset } from '../../engine/develop/Presets';
@@ -671,6 +671,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
             onToggleZoom={(x, y) => loaded && store.toggleZoom(x, y)}
             onClick={(x, y) => loaded && store.onPreviewClick(x, y)}
             onPan={(dx, dy) => store.session.pan(dx, dy)}
+            onZoomBy={(x, y, f) => loaded && store.zoomBy(x, y, f)}
             onCompare={setShowAuto}
             zoomHint={loaded}
           >
@@ -683,7 +684,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
               </>
             )}
             {isoLabel(photo) && <div className="preview-iso">{isoLabel(photo)}</div>}
-            {loaded && (showAuto || zoomed) && <PreviewLabel>{showAuto ? `Without ${develop}` : '100%'}</PreviewLabel>}
+            {loaded && (showAuto || zoomed) && <PreviewLabel>{showAuto ? `Without ${develop}` : zoomLabel(session.zoomScale)}</PreviewLabel>}
             {state.export && <progress className="export-progress" value={state.export.current} max={1} />}
           </Preview>
           {index > 0 && !zoomed && <button type="button" className="nav prev" onClick={() => go(-1)} title="Previous (← or Backspace)">‹</button>}

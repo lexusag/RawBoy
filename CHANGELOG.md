@@ -1,5 +1,13 @@
 # Changelog
 
+**Web: mouse wheel zooms the photo (2026-10-24)**
+
+- RawBoy and Auto (web, desktop): the mouse wheel over the photo zooms in and out around the pointer, from the whole
+  photo up to 400%, stopping once at 100% on the way; zooming out past the whole photo returns to it. Drag pans at
+  any zoom, the label in the corner shows the scale, and a trackpad pinch zooms too. Double-click and Z still toggle
+  100%. The wheel over sliders still moves them, and a wheel that is scrolling a panel keeps scrolling it. Touch
+  screens are unchanged.
+
 **Pro on phones: the shot info line scrolls sideways (2026-10-24)**
 
 - RawBoy (Android, web on phones): the file name and shot info under the tools used to end in an ellipsis when they

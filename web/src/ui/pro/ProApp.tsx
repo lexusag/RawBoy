@@ -3,7 +3,7 @@ import { FrameColors } from '../../engine/gl/DevelopRenderer';
 import { cropAspectRatio, cropOf, withCrop, withoutCrop, FULL_CROP, cropWithAspect, type CropAspect } from '../../engine/develop/CropMath';
 import { pickFiles } from '../common/files';
 import { isTabShown } from '../common/tabs';
-import { Preview, PreviewLabel } from '../common/Preview';
+import { Preview, PreviewLabel, zoomLabel } from '../common/Preview';
 import { ControlsPanel, GeometryPanel } from './Controls';
 import { CropOverlay } from './CropOverlay';
 import { MaskOverlay, type BrushSettings, type MaskTool } from './MaskOverlay';
@@ -376,6 +376,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
             }
           }}
           onPan={(dx, dy) => zoomable && store.pan(dx, dy)}
+          onZoomBy={(x, y, f) => zoomable && store.zoomBy(x, y, f, zoomExtra)}
           onCompare={setComparing}
           zoomHint={zoomable}
         >
@@ -396,6 +397,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
               selectedId={selectedId}
               frame={FRAME_WIDTH + maskMargin}
               zoomCenter={session.zoomCenter}
+              zoomScale={session.zoomScale}
               tool={selectedId ? maskTool : 'move'}
               brush={brush}
               passThrough={spaceHeld}
@@ -414,7 +416,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
               <p>or drop one here. Double-click the photo (or press Z) for 100%, drag to pan; press and hold to compare with the as-shot render.</p>
             </div>
           )}
-          {session.zoomCenter && !showOriginal && <PreviewLabel>{maskView ? '100% · Mask' : '100%'}</PreviewLabel>}
+          {session.zoomCenter && !showOriginal && <PreviewLabel>{maskView ? `${zoomLabel(session.zoomScale)} · Mask` : zoomLabel(session.zoomScale)}</PreviewLabel>}
           {showOriginal && session.preview && <PreviewLabel>Original</PreviewLabel>}
           {session.preview && !state.loading && (
             <button

@@ -186,6 +186,7 @@ export class ProStore {
   /** [extra]: device pixels around the frame in the fit view (the mask tool's margin). */
   toggleZoom = (x: number, y: number, extra = 0) => this.session.toggleZoom(x, y, this.frameWidth + extra);
   pan = (dx: number, dy: number) => this.session.pan(dx, dy);
+  zoomBy = (x: number, y: number, factor: number, extra = 0) => this.session.zoomBy(x, y, factor, this.frameWidth + extra);
 
   /** A slider or drag: quick changes in a row are one undo step. */
   update = (params: DevelopParams) => this.commit(params, false);

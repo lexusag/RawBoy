@@ -419,6 +419,10 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   showed the coarse texels as bands and squares.
 - Texture units: 0 image, 1 LUT (3D), 2 lens shading, 3 base (512), 4 bloom halo, 5 bloom tail, 6 skin mask, 7 brush atlas,
   8 film LUT, 9 print LUT (film looks: RawBoy Film and Auto's Film mode, all platforms).
+- Web wheel zoom (web only, desktop pointers: `Preview`'s `onZoomBy`, `PhotoSession.zoomBy`): `SessionState.zoomScale`
+  (device px per full-res px; 1 = 100%, the apps' only zoomed scale) goes through `ZoomMath`'s `scale` parameters
+  (fractional view rects when ≠ 1). Up to `ZoomMath.previewSuffices` the zoomed view draws from the preview texture
+  (also while a tile for a new region or scale loads); above it from a full-res tile (linear filtering below 100%).
 - Mask layers (`develop/Masks.ts`, web only so far): `DevelopParams.masks`, positions in fractions of the decoded image,
   evaluated in the shader at `srcG` (the sampled image pixel), so they stay on the content through crop/lens. Analytic
   gradients only (no texture, no neighbourhood, so no `spatialMargin`); packed by `ShaderParams.packLayers` into
