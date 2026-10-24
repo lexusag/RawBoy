@@ -316,6 +316,8 @@ describe('Edits in sidecars', () => {
 
   it('keeps nothing for an unedited photo and ignores what it can not read', () => {
     expect(encodeEdits(defaults, defaults)).toBeNull();
+    // Properties of the file, not edits: never written, even when the defaults lack them.
+    expect(encodeEdits({ ...defaults, clipLevel: 0.7, displaySource: true }, defaults)).toBeNull();
     expect(decodeEdits('{"format":"rawboy-preset"}', defaults)).toBeNull();
     expect(decodeEdits('not json', defaults)).toBeNull();
     const partial = decodeEdits('{"format":"rawboy-edit","version":1,"values":{"exposure":2,"contrast":"x","future":1}}', defaults)!;

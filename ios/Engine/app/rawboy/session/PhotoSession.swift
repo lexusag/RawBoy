@@ -489,6 +489,7 @@ public final class PhotoSession: ObservableObject {
         p.temperature = Float(tt[0])
         p.tint = Float(tt[1])
         p.displaySource = image.displayReferred
+        p.clipLevel = image.clipLevel
         return p
     }
 

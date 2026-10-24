@@ -8,6 +8,7 @@ uniform float uSaturation;  // 1 = neutral
 uniform float uGamutSoft;   // 1 = purity-limited saturation + soft Rec.709 gamut compression, 0 = hard clipping
 uniform int uToneMapper;    // 0 = AgX, 1 = filmic, 2 = sigmoid
 uniform float uDisplaySource; // 1 = a JPEG/HEIC decoded by display_inverse.cpp: AgX per channel, no gamut compression
+uniform float uClipLevel;     // decoded value of blown highlights (DecodedImage::clipLevel), 0 = unknown
 uniform float uShadows;     // -1..1
 uniform float uHighlights;  // -1..1
 uniform float uBlacks;      // -1..1
@@ -737,13 +738,28 @@ vec3 applyLevels(vec3 c) {
     return mix(vec3(outBlack), vec3(outWhite), c);
 }
 
+// White balance [wb] (a re-balance from the as-shot white) on [c]. The decoder blends blown highlights to neutral at
+// the as-shot white, so a re-balance would tint them with the opposite of the cast it takes out: neutralising an
+// infrared photo turned its blown highlights yellow-green. Towards the clip level ([clipped] 0..1) that tint is
+// divided back out, so they stay white as when white balance is set before clipping (in the raw).
+vec3 balanceWhite(mat3 wb, vec3 c, float clipped) {
+    vec3 b = wb * c;
+    if (clipped > 0.0) {
+        vec3 white = wb * vec3(1.0);
+        b /= mix(vec3(1.0), white / max(dot(white, LUMA_REC2020), 1e-6), clipped);
+    }
+    return max(b, 0.0);
+}
+
 vec3 develop(vec3 c, vec2 fullPx, float lm[MAX_LAYERS]) {
-    c = max(uWhiteBalance * c, 0.0) * uExposure;
+    // All channels near the clip level: a blown highlight (with one channel clipped the lowest is about half of it).
+    float clipped = uClipLevel > 0.0 ? smoothstep(0.5, 1.0, min(min(c.r, c.g), c.b) / uClipLevel) : 0.0;
+    c = balanceWhite(uWhiteBalance, c, clipped) * uExposure;
     float layerEv = 0.0, layerContrast = 0.0, layerHighlights = 0.0, layerShadows = 0.0, layerSat = 1.0;
     for (int i = 0; i < uLayerCount; ++i) {
         float m = lm[i];
         if (m <= 0.0) continue;
-        c = mix(c, max(uLayerWb[i] * c, 0.0), m);
+        c = mix(c, balanceWhite(uLayerWb[i], c, clipped), m);
         vec4 t = uLayerTone[i];
         layerEv += m * t.x;
         layerContrast += m * t.y;

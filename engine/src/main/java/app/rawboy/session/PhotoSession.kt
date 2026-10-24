@@ -529,7 +529,10 @@ class PhotoSession(
         fun asShotDefaults(image: RawImage): DevelopParams {
             val white = image.asShotWhite
             val (kelvin, tint) = WhiteBalance.tempTintFromXY(white[0], white[1]).let { it[0] to it[1] }
-            return DevelopParams(temperature = kelvin.toFloat(), tint = tint.toFloat(), displaySource = image.displayReferred)
+            return DevelopParams(
+                temperature = kelvin.toFloat(), tint = tint.toFloat(), displaySource = image.displayReferred,
+                clipLevel = image.clipLevel,
+            )
         }
 
         /** The highlight-boosted halo (512 px) and tail (64 px, already scattered) copies bloom scatters light from. */

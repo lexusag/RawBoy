@@ -66,7 +66,7 @@ export interface Opened {
 /** The file's own white balance as slider defaults; everything else untouched. */
 export function asShotDefaults(image: RawImage): DevelopParams {
   const [kelvin, tint] = WhiteBalance.tempTintFromXY(image.asShotWhite[0], image.asShotWhite[1]);
-  return developParams({ temperature: kelvin, tint, displaySource: image.displayReferred });
+  return developParams({ temperature: kelvin, tint, displaySource: image.displayReferred, clipLevel: image.clipLevel });
 }
 
 /** The highlight-boosted halo (512 px) and tail (64 px, already scattered) copies bloom scatters light from. */

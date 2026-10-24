@@ -38,6 +38,7 @@ function opened(handle: number): [OpenResult, Transferable[]] {
     camera: m.camera(handle),
     iso: m.iso(handle),
     baselineExposure: m.baselineExposure(handle),
+    clipLevel: m.clipLevel(handle),
     displayReferred: m.displayReferred(handle),
     asShotWhite: Array.from(m.asShotWhite(handle) as Float64Array),
     lensName: m.lensName(handle),

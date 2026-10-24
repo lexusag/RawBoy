@@ -167,6 +167,7 @@ int width(uintptr_t h) { return fromHandle(h)->width; }
 int height(uintptr_t h) { return fromHandle(h)->height; }
 float iso(uintptr_t h) { return fromHandle(h)->iso; }
 float baselineExposure(uintptr_t h) { return fromHandle(h)->baselineExposure; }
+float clipLevel(uintptr_t h) { return fromHandle(h)->clipLevel; }
 bool displayReferred(uintptr_t h) { return fromHandle(h)->displayReferred; }
 std::string lensName(uintptr_t h) { return fromHandle(h)->lensName; }
 std::string camera(uintptr_t h) { return fromHandle(h)->camera; }
@@ -389,6 +390,7 @@ EMSCRIPTEN_BINDINGS(rawboy) {
     function("height", &height);
     function("iso", &iso);
     function("baselineExposure", &baselineExposure);
+    function("clipLevel", &clipLevel);
     function("lensName", &lensName);
     function("camera", &camera);
     function("asShotWhite", &asShotWhite);

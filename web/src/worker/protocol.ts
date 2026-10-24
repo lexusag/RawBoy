@@ -40,6 +40,8 @@ export interface OpenResult {
   iso: number;
   /** DNG BaselineExposure in EV, already applied to the pixels; NaN if the file has none. */
   baselineExposure: number;
+  /** Pixel value of blown highlights, 0 if unknown (see DevelopParams.clipLevel). */
+  clipLevel: number;
   /** A JPEG/HEIC, not a raw (see DevelopParams.displaySource). */
   displayReferred: boolean;
   asShotWhite: number[];

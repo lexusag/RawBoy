@@ -74,6 +74,8 @@ class ShaderParams(
     val halation: Float = 1f,
     /** `uCurve`: DevelopParams.curves as [app.rawboy.develop.ToneCurves.table], or null when they are all the identity. */
     val curve: FloatArray? = null,
+    /** `uClipLevel`: DevelopParams.clipLevel of the as-shot defaults (blown highlights), 0 = unknown. */
+    val clipLevel: Float = 0f,
 ) {
     /**
      * Extra source pixels needed around an output region for the spatial effects
@@ -172,6 +174,7 @@ class ShaderParams(
                 filmGrain = p.filmGrain / 100f,
                 halation = p.halation / 100f,
                 curve = p.curves.table(),
+                clipLevel = asShot.clipLevel,
             )
         }
 

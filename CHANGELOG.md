@@ -1,5 +1,16 @@
 # Changelog
 
+**Blown highlights stay white when white balance changes; infrared highlights no longer go yellow (2026-10-24)**
+
+- All apps (Android, iOS, web): blown highlights (a bulb's filament, the sun) were made neutral at the photo's as-shot
+  white balance, so moving Temperature/Tint tinted them with the opposite of the change: neutralising an infrared
+  photo turned them yellow-green. They now stay white under any white balance (also in mask layers), as when white
+  balance is set before clipping. Unclipped pixels are unchanged.
+- Highlights are blended to neutral only where the sensor actually clipped. Before, bright light was blended (LibRaw)
+  or cut (JPEG XL / DNG 1.7 files through the DNG SDK) wherever one white balanced channel passed the lowest clip,
+  which with infrared multipliers (blue x3.7) took the colour out of light far below clipping: a green blotch beside
+  the bulb, and in compressed DNGs flat yellow highlights. Compressed and uncompressed DNGs of a shot now match.
+
 **Web: mouse wheel moves sliders (2026-10-24)**
 
 - RawBoy and Auto (web): as in darktable, turning the mouse wheel over a slider moves it, no click needed: 1/200 of
