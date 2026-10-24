@@ -502,6 +502,15 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel) {
             onChange = vm::setMergeBurst,
         )
         Spacer(Modifier.height(16.dp))
+        // Where the law requires the click, Android plays it anyway: shown on and locked.
+        SettingSwitch(
+            title = "Shutter sound",
+            subtitle = if (vm.shutterSoundRequired) "Required by law in this region; always on" else "A click on each shot",
+            checked = settings.shutterSound || vm.shutterSoundRequired,
+            enabled = !vm.shutterSoundRequired,
+            onChange = vm::setShutterSound,
+        )
+        Spacer(Modifier.height(16.dp))
         SettingSwitch(
             title = "Histogram",
             subtitle = "A live RGB histogram in a corner of the viewfinder",
@@ -617,13 +626,13 @@ private val FlashOffIcon: ImageVector by lazy {
 }
 
 @Composable
-private fun SettingSwitch(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun SettingSwitch(title: String, subtitle: String, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyMedium)
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Switch(checked = checked, onCheckedChange = onChange)
+        Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
     }
 }
 

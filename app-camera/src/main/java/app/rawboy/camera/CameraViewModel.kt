@@ -21,6 +21,7 @@ import app.rawboy.auto.looks.Adjustments
 import app.rawboy.auto.looks.LookApplier
 import app.rawboy.camera.capture.CameraController
 import app.rawboy.camera.capture.FlashMode
+import app.rawboy.camera.capture.ShutterSound
 import app.rawboy.develop.DevelopParams
 import app.rawboy.develop.Histogram
 import app.rawboy.export.ExportFormat
@@ -149,6 +150,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     /** One event per capture, as the request goes to the camera: the UI's shutter feedback. */
     private val _shutterEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
     val shutterEvents = _shutterEvents.asSharedFlow()
+
+    private val shutterSound = ShutterSound()
+    /** The law here requires the shutter sound (Japan, Korea…): it plays whatever the setting says. */
+    val shutterSoundRequired = ShutterSound.required()
 
     /** The settings or help sheet is open: the volume keys shouldn't take photos then. */
     @Volatile
@@ -459,6 +464,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setRememberLast(on: Boolean) = change { it.copy(rememberLast = on) }
     fun setShowHistogram(on: Boolean) = change { it.copy(showHistogram = on) }
     fun setMergeBurst(on: Boolean) = change { it.copy(mergeBurst = on) }
+    fun setShutterSound(on: Boolean) = change { it.copy(shutterSound = on) }
 
     /** Off -> Flash -> Focus-flash -> Off. */
     fun cycleFlash() = change { it.copy(flash = FlashMode.entries[(it.flash.ordinal + 1) % FlashMode.entries.size]) }
@@ -524,6 +530,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /** As the request goes to the camera: the click (if on, or required here) and the UI's shutter feedback. */
+    private fun onShutter() {
+        if (_settings.value.shutterSound || shutterSoundRequired) shutterSound.play()
+        _shutterEvents.tryEmit(Unit)
+    }
+
     /** Captures a raw and saves it as DNG (in Pictures/<Edition.FOLDER>/RAW, or a temporary file). */
     private suspend fun capture(settings: CameraSettings, viewfinderKey: Float?, flash: FlashMode): Shot {
         val resolver = app.contentResolver
@@ -540,7 +552,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             val result = try {
                 withContext(Dispatchers.IO) {
                     val out = resolver.openOutputStream(uri, "w") ?: throw java.io.IOException("Cannot write $name")
-                    val result = out.buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide, settings.burstFrames) { _shutterEvents.tryEmit(Unit) } }
+                    val result = out.buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide, settings.burstFrames) { onShutter() } }
                     MediaStoreOutput.publish(resolver, uri)
                     result
                 }
@@ -553,7 +565,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         } else {
             val file = File(app.cacheDir, "$baseName.dng")
             val result = try {
-                withContext(Dispatchers.IO) { file.outputStream().buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide, settings.burstFrames) { _shutterEvents.tryEmit(Unit) } } }
+                withContext(Dispatchers.IO) { file.outputStream().buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide, settings.burstFrames) { onShutter() } } }
             } catch (t: Throwable) {
                 file.delete()
                 throw t
@@ -678,6 +690,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             CameraSettingsStore.save(app, _settings.value) // still pending: save now
         }
         shots.close()
+        shutterSound.release()
         controller.close()
         histogramRenderer.close()
         // The export GL context belongs to the develop thread: release it there, after any queued work.
