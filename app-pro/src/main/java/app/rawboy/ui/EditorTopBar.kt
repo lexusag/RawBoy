@@ -232,14 +232,16 @@ private val PresetsIcon: ImageVector by lazy {
     )
 }
 
-/** Light leaks (same as RawBoy Web's): a glow with rays, film-burn style. */
+/** Light leaks (same as RawBoy Web's): a diagonal beam of light with a glow either side, film-burn style. */
 private val LeakIcon: ImageVector by lazy {
     ImageVector.Builder("LightLeak", 24.dp, 24.dp, 24f, 24f)
-        .addPath(pathData = addPathNodes("M10,8a6,6 0,1 1,0 12a6,6 0,1 1,0 -12z"), fill = SolidColor(Color.Black), fillAlpha = 0.35f)
-        .addPath(pathData = addPathNodes("M10,11a3,3 0,1 1,0 6a3,3 0,1 1,0 -6z"), fill = SolidColor(Color.Black))
         .addPath(
-            pathData = addPathNodes("M17,7l3,-3M14,5V2M19,10h3"),
-            stroke = SolidColor(Color.Black), strokeLineWidth = 2f, strokeLineCap = StrokeCap.Round,
+            pathData = addPathNodes("M3,17L21,7"),
+            stroke = SolidColor(Color.Black), strokeAlpha = 0.3f, strokeLineWidth = 8f, strokeLineCap = StrokeCap.Round,
+        )
+        .addPath(
+            pathData = addPathNodes("M3,17L21,7"),
+            stroke = SolidColor(Color.Black), strokeLineWidth = 3f, strokeLineCap = StrokeCap.Round,
         )
         .build()
 }
