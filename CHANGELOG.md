@@ -7,6 +7,16 @@
   keyboard layout was active, because the key then types a Cyrillic letter. They now go by the physical key, as in
   Lightroom. Latin layouts (AZERTY, Dvorak) keep following the letter printed on the key.
 
+**Auto: finer film grain in Film mode (2026-10-24)**
+
+- RawBoy Auto (Android, iOS, web): the film stocks in Film mode start with 20% less grain than before. The Grain
+  slider still scales it from none (−50) to double (+50). RawBoy's own Film grain slider is unchanged.
+
+**Auto web: C for Copy previous (2026-10-24)**
+
+- RawBoy Auto (web): in the photo view, **C** does Copy previous (shown in the button's tooltip and the **?** help).
+  It goes by key position, so it works with any keyboard layout (e.g. Ukrainian).
+
 **Camera and Auto: JPEGs keep shutter speed, aperture, ISO and focal length (2026-10-24)**
 
 - RawBoy Camera's JPEGs, and JPEG or TIFF exports from Auto and RawBoy (Android) of RawBoy Camera's DNGs, came out
