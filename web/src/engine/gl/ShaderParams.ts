@@ -10,6 +10,7 @@ import type { LensTransform } from '../lens/LensTransform';
 import type { LutData } from '../lut/LutData';
 import type { SkinMask } from '../retouch/SkinMask';
 import type { BloomSources, PreviewImage } from './PreviewImage';
+import { WAVELET_DENOISE_MARGIN } from './WaveletDenoise';
 import { ZoomMath } from './Zoom';
 
 /**
@@ -179,7 +180,9 @@ export class ShaderParams {
     const skin = this.skinMask;
     const retouch = this.skinRetouch > 0 && skin?.hasSkin ? Math.trunc(skin.sigmaPx * 2.4) + 4 : 0;
     const wide = this.denoiseWide > 0 || this.colorDenoiseWide > 0 ? WIDE_DENOISE_MARGIN : 0;
-    return Math.max(ZoomMath.HALO, retouch, wide);
+    // The wavelet denoise pre-pass runs before the shader, so its reach adds to the shader's.
+    const prePass = this.denoise > 0 || this.colorDenoise > 0 ? WAVELET_DENOISE_MARGIN : 0;
+    return Math.max(ZoomMath.HALO, retouch, wide) + prePass;
   }
 
   /** Grain Size slider -> cell size factor: 1 at 25, doubling every 25 (0.5..8). */

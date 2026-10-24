@@ -1,6 +1,7 @@
 import { DevelopInputs, DevelopProgram, FullscreenQuad, SampleGeometry, createTexture, uploadHalfRgb } from './GlCommon';
 import type { PreviewImage } from './PreviewImage';
 import type { ShaderParams } from './ShaderParams';
+import { WaveletDenoise } from './WaveletDenoise';
 import { ZoomMath, rect, type DetailTile } from './Zoom';
 
 /** Frame colours around the photo, cycled by clicking outside it. Levels are display-encoded (sRGB). */
@@ -27,6 +28,11 @@ export class DevelopRenderer {
   private detail: DetailTile | null = null;
   private uploadedDetail: DetailTile | null = null;
   private frameRequest = 0;
+  private readonly denoiser: WaveletDenoise;
+  /** Upload counters: the denoise pre-pass caches by them. */
+  private previewVersion = 0;
+  private detailVersion = 0;
+  private denoisedInput = false;
 
   params: ShaderParams | null = null;
   /** Frame around the photo in the fit view: width in device pixels and its grey level. */
@@ -50,6 +56,7 @@ export class DevelopRenderer {
     this.inputs = new DevelopInputs(gl);
     this.previewTexture = createTexture(gl, gl.LINEAR);
     this.detailTexture = createTexture(gl, gl.NEAREST); // 1:1, keep pixels crisp
+    this.denoiser = new WaveletDenoise(gl, this.quad);
   }
 
   setImage(image: PreviewImage | null) {
@@ -86,12 +93,14 @@ export class DevelopRenderer {
       gl.bindTexture(gl.TEXTURE_2D, this.previewTexture);
       uploadHalfRgb(gl, img.width, img.height, img.pixels);
       this.uploadedImage = img;
+      this.previewVersion++;
     }
     if (this.detail !== this.uploadedDetail) {
       const t = this.detail;
       if (t) {
         gl.bindTexture(gl.TEXTURE_2D, this.detailTexture);
         uploadHalfRgb(gl, t.rect.width, t.rect.height, t.pixels);
+        this.detailVersion++;
       }
       this.uploadedDetail = t;
     }
@@ -109,6 +118,7 @@ export class DevelopRenderer {
     if (center && tile) this.drawZoomed(p, img, tile, center);
     else this.drawFit(p, img);
     this.program.setClipWarning(this.clipWarning);
+    this.program.setDenoisePre(this.denoisedInput);
     this.quad.draw();
   }
 
@@ -118,6 +128,7 @@ export class DevelopRenderer {
     const outH = p.lens.outputHeight;
     const frame = this.frameWidth;
     const r = ZoomMath.fitRect(this.viewWidth, this.viewHeight, outW, outH, frame + this.margin);
+    const input = this.denoised(p, this.previewTexture, `p${this.previewVersion}`, img.width, img.height, img.width / img.fullWidth);
 
     // Frame: a band of neutral grey / white / black around the photo, for judging exposure.
     if (frame > 0) {
@@ -132,7 +143,7 @@ export class DevelopRenderer {
       gl.disable(gl.SCISSOR_TEST);
     }
 
-    gl.bindTexture(gl.TEXTURE_2D, this.previewTexture);
+    gl.bindTexture(gl.TEXTURE_2D, input);
     const geometry = new SampleGeometry(img.width, img.height, rect(0, 0, img.fullWidth, img.fullHeight), rect(0, 0, outW, outH), img.fullWidth, img.fullHeight);
     this.program.bind(p, geometry, r[2] / this.viewWidth, r[3] / this.viewHeight, true);
   }
@@ -142,9 +153,19 @@ export class DevelopRenderer {
     // Output = what's on screen; input = the loaded full-resolution tile. If the lens moves pixels outside the
     // tile while a new one loads, edges smear briefly.
     const view = ZoomMath.viewRect(center[0], center[1], this.viewWidth, this.viewHeight, p.lens.outputWidth, p.lens.outputHeight);
-    gl.bindTexture(gl.TEXTURE_2D, this.detailTexture);
+    const input = this.denoised(p, this.detailTexture, `d${this.detailVersion}`, tile.rect.width, tile.rect.height, 1);
+    gl.bindTexture(gl.TEXTURE_2D, input);
     const geometry = new SampleGeometry(tile.rect.width, tile.rect.height, tile.rect, view, img.fullWidth, img.fullHeight);
     this.program.bind(p, geometry, view.width / this.viewWidth, view.height / this.viewHeight, true);
+  }
+
+  /** [texture], or its copy through the wavelet denoise pre-pass when denoise is on (see WaveletDenoise). */
+  private denoised(p: ShaderParams, texture: WebGLTexture, key: string, width: number, height: number, pixelScale: number): WebGLTexture {
+    this.denoisedInput = this.denoiser.active(p.denoise, p.colorDenoise);
+    if (!this.denoisedInput) return texture;
+    const out = this.denoiser.apply(texture, key, width, height, pixelScale, p.denoise, p.colorDenoise);
+    this.gl.viewport(0, 0, this.viewWidth, this.viewHeight);
+    return out;
   }
 
   release() {
@@ -152,6 +173,7 @@ export class DevelopRenderer {
     const gl = this.gl;
     gl.deleteTexture(this.previewTexture);
     gl.deleteTexture(this.detailTexture);
+    this.denoiser.release();
     this.inputs.release();
     this.quad.release();
     this.program.release();

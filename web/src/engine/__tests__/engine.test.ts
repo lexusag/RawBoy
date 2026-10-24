@@ -31,7 +31,8 @@ import { applyPreset, captureLensPreset, capturePreset, chosenLensPreset, decode
 import { BandDownscaler } from '../export/BandDownscaler';
 import { FilmStocks } from '../film/FilmStocks';
 import { baseNameOf, fileName } from '../export/ExportSettings';
-import { NO_LAYERS, ShaderParams, packLayers } from '../gl/ShaderParams';
+import { NO_LAYERS, ShaderParams, WIDE_DENOISE_MARGIN, packLayers } from '../gl/ShaderParams';
+import { WAVELET_DENOISE_MARGIN, denoiseLevels } from '../gl/WaveletDenoise';
 import { ZoomMath, rect } from '../gl/Zoom';
 import { LensInfo } from '../lens/LensInfo';
 import { LensTransform } from '../lens/LensTransform';
@@ -96,7 +97,25 @@ describe('shader params', () => {
     const d = developParams({ denoise: 100 });
     const p = ShaderParams.from(d, d, null, new LensTransform(LensInfo.none(100, 100), d), null, null, null);
     expect(p.denoiseWide).toBe(1);
-    expect(p.spatialMargin).toBe(20);
+    // The wavelet pre-pass's reach adds to the shader's.
+    expect(p.spatialMargin).toBe(WIDE_DENOISE_MARGIN + WAVELET_DENOISE_MARGIN);
+  });
+
+  it('any denoise adds the wavelet pre-pass margin', () => {
+    const d = developParams({ denoise: 10 });
+    const p = ShaderParams.from(d, d, null, new LensTransform(LensInfo.none(100, 100), d), null, null, null);
+    expect(p.spatialMargin).toBe(ZoomMath.HALO + WAVELET_DENOISE_MARGIN);
+  });
+
+  it('wavelet denoise: full-res bands at any preview scale, fine chroma left to the shader', () => {
+    const full = denoiseLevels(1, 0.01, 0.01);
+    expect(full.map((l) => l.stride)).toEqual([1, 2, 4, 8, 16]);
+    expect(full.map((l) => l.chromaThreshold > 0)).toEqual([false, false, true, true, true]);
+    // A quarter-size preview: its band 0 is full-res band 2, and three levels reach as far as five at full size.
+    const quarter = denoiseLevels(0.25, 0.01, 0.01);
+    expect(quarter.length).toBe(3);
+    expect(quarter[0].lumaThreshold).toBeCloseTo(full[2].lumaThreshold);
+    expect(quarter[0].chromaThreshold).toBeCloseTo(full[2].chromaThreshold);
   });
 
   it('colour denoise follows luma denoise until set, and has its own coarse stage', () => {
@@ -107,7 +126,7 @@ describe('shader params', () => {
     const split = developParams({ denoise: 0, colorDenoise: 100 });
     const q = ShaderParams.from(split, split, null, lens(split), null, null, null);
     expect([q.denoise, q.denoiseWide, q.colorDenoise, q.colorDenoiseWide]).toEqual([0, 0, 1, 1]);
-    expect(q.spatialMargin).toBe(20);
+    expect(q.spatialMargin).toBe(WIDE_DENOISE_MARGIN + WAVELET_DENOISE_MARGIN);
   });
 });
 

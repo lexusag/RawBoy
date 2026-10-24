@@ -120,6 +120,11 @@ export class DevelopProgram {
     this.gl.uniform3f(this.loc(name), v[0] * k, v[1] * k, v[2] * k);
   }
 
+  /** After bind, with the program in use: the bound image went through the wavelet denoise pre-pass (WaveletDenoise). */
+  setDenoisePre(on: boolean) {
+    this.f1('uDenoisePre', on ? 1 : 0);
+  }
+
   /** Preview only (the export shader has no warning): after bind, with the program in use. */
   setClipWarning(on: boolean) {
     this.f1('uClipWarn', on ? 1 : 0);
@@ -147,6 +152,7 @@ export class DevelopProgram {
     this.f1('uDenoiseWide', p.denoiseWide);
     this.f1('uColorDenoise', p.colorDenoise);
     this.f1('uColorDenoiseWide', p.colorDenoiseWide);
+    this.f1('uDenoisePre', 0);
     this.f1('uGrain', p.grain);
     this.f1('uGrainSize', g.grainSize * p.grainSizeScale);
     this.f1('uGrainRoughness', p.grainRoughness);

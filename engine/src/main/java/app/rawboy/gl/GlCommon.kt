@@ -122,6 +122,7 @@ internal class DevelopProgram(forExport: Boolean) {
     private val uDenoiseWide = GLES30.glGetUniformLocation(id, "uDenoiseWide")
     private val uColorDenoise = GLES30.glGetUniformLocation(id, "uColorDenoise")
     private val uColorDenoiseWide = GLES30.glGetUniformLocation(id, "uColorDenoiseWide")
+    private val uDenoisePre = GLES30.glGetUniformLocation(id, "uDenoisePre")
     private val uGrain = GLES30.glGetUniformLocation(id, "uGrain")
     private val uGrainSize = GLES30.glGetUniformLocation(id, "uGrainSize")
     private val uGrainRoughness = GLES30.glGetUniformLocation(id, "uGrainRoughness")
@@ -238,6 +239,7 @@ internal class DevelopProgram(forExport: Boolean) {
         GLES30.glUniform1f(uDenoiseWide, p.denoiseWide)
         GLES30.glUniform1f(uColorDenoise, p.colorDenoise)
         GLES30.glUniform1f(uColorDenoiseWide, p.colorDenoiseWide)
+        GLES30.glUniform1f(uDenoisePre, 0f)
         GLES30.glUniform1f(uGrain, p.grain)
         GLES30.glUniform1f(uGrainSize, g.grainSize * p.grainSizeScale)
         GLES30.glUniform1f(uGrainRoughness, p.grainRoughness)
@@ -272,6 +274,11 @@ internal class DevelopProgram(forExport: Boolean) {
         bindLens(p.lens)
         bindLayers(p.layers)
         bindFilm(p, g)
+    }
+
+    /** After [bind], with the program in use: the bound image went through the wavelet denoise pre-pass (WaveletDenoise). */
+    fun setDenoisePre(on: Boolean) {
+        GLES30.glUniform1f(uDenoisePre, if (on) 1f else 0f)
     }
 
     /** Preview only (the export shader has no warning): after [bind], with the program in use. */

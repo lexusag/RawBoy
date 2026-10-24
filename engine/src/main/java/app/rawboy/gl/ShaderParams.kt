@@ -83,7 +83,9 @@ class ShaderParams(
         get() {
             val retouch = if (skinRetouch > 0f && skinMask?.hasSkin == true) (skinMask.sigmaPx * 2.4f).toInt() + 4 else 0
             val wide = if (denoiseWide > 0f || colorDenoiseWide > 0f) WIDE_DENOISE_MARGIN else 0
-            return maxOf(ZoomMath.HALO, retouch, wide)
+            // The wavelet denoise pre-pass runs before the shader, so its reach adds to the shader's.
+            val prePass = if (denoise > 0f || colorDenoise > 0f) WaveletDenoise.MARGIN else 0
+            return maxOf(ZoomMath.HALO, retouch, wide) + prePass
         }
 
     companion object {
