@@ -528,7 +528,8 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   every frame** (lens and logical result, even AF-locked at ~1 m; it claims APPROXIMATE calibration): exactly 0 = unknown,
   not infinity, and then a separate per-lens gain `"<lens>?"` (`FlashGuides.noDistance`, default 4) is used and learned
   (UW converged towards ~18-20 on a room shot). Pixel W: guide ≈ 18 (desk at 0.3 m:
-  ISO ~50, 0.01% clipped). Focus-flash = `torchFocus`: AE_MODE_ON + FLASH_MODE_TORCH, 300 ms, then an AF trigger,
+  ISO ~50, 0.01% clipped). Focus-flash is the only flash mode (plain Flash was removed; a saved `"FLASH"` loads as
+  `FOCUS_FLASH`): `torchFocus`: AE_MODE_ON + FLASH_MODE_TORCH, 300 ms, then an AF trigger,
   waiting for AF locked on frames **after** the trigger's frame number (`triggerAndWait` logs every AE/AF/flash state
   change). `aeMode`/`flashMode` go through `setCommon`; `endFlashSequence` restores them and cancels AF. Flash stills:
   ZSL off, no viewfinder calibration (the viewfinder never saw the flash).
