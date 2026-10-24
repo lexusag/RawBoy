@@ -11,9 +11,8 @@ Google Camera (each lens that can deliver RAW is offered). The button right of t
 **selfie camera**, shown only when the front camera delivers RAW; selfies are saved mirrored, as the viewfinder
 shows them.
 
-- **Flash:** the bolt button in the top bar (shown when the lens has a flash; usually not the selfie camera) cycles
-  **Off**, **Flash** and **Focus-flash** (bolt with "AF"). Flash fires at once with the shot. Focus-flash works like
-  Google Camera's: the light comes on, the camera focuses with it (unless focus is locked), then the flash fires.
+- **Flash:** the bolt button in the top bar (shown when the lens has a flash; usually not the selfie camera) turns
+  **Focus-flash** (bolt with "AF") on or off. It works like Google Camera's: the light comes on, the camera focuses with it (unless focus is locked), then the flash fires.
   Exposure works like a flash guide number: the photo is exposed for the distance the lens is focused at (the flash's
   light falls off with its square), never brighter than without flash, and each lens learns its flash strength from
   its flash shots (the camera's own flash metering left the raw several stops overexposed). Flash shots don't

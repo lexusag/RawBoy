@@ -1,5 +1,11 @@
 # Changelog
 
+**Camera: only Focus-flash (2026-10-24)**
+
+- RawBoy Camera (Android): the plain Flash mode is gone. The bolt button now turns Focus-flash on or off (the light
+  comes on, the camera focuses with it, then the flash fires). If Flash was the remembered choice, it becomes
+  Focus-flash.
+
 **Camera: optional shutter sound (2026-10-24)**
 
 - RawBoy Camera (Android): Settings has a **Shutter sound** switch, off by default, that plays the system's camera
