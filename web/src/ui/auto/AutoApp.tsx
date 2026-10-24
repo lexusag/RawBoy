@@ -276,6 +276,7 @@ function GridView({ store, scroll, lastViewed }: {
               key={p.id}
               photo={p}
               next={state.opening === p.id}
+              waiting={state.export?.waiting?.has(p.id) ?? false}
               selected={selection.has(p.id)}
               disabled={exporting}
               onClick={(e) => {
@@ -433,10 +434,12 @@ function isTextEntry(target: EventTarget | null): boolean {
   return target instanceof HTMLInputElement && !['button', 'checkbox', 'radio', 'range', 'submit', 'reset', 'file', 'color'].includes(target.type);
 }
 
-function PhotoCell({ photo, next, selected, disabled, onClick, onLongPress }: {
+function PhotoCell({ photo, next, waiting, selected, disabled, onClick, onLongPress }: {
   photo: AutoPhoto;
   /** Clicked while waiting: analysed next, then opened. */
   next: boolean;
+  /** Still to be saved by the running "Export all": shown desaturated. */
+  waiting: boolean;
   selected: boolean;
   disabled: boolean;
   onClick: (e: React.MouseEvent) => void;
@@ -473,6 +476,7 @@ function PhotoCell({ photo, next, selected, disabled, onClick, onLongPress }: {
           <img
             src={photo.thumbnail}
             alt={photo.name}
+            className={waiting ? 'export-waiting' : undefined}
             onLoad={(e) => {
               const img = e.currentTarget;
               if (img.naturalWidth && img.naturalHeight) setAspect(img.naturalWidth / img.naturalHeight);

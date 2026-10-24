@@ -1,5 +1,10 @@
 # Changelog
 
+**Auto: Export all shows its progress in the grid (2026-10-24)**
+
+- RawBoy Auto (Android, iOS, web): while Export all runs, the photos still to be saved show in grey, and each fades
+  to full colour once it's saved. The grid is no longer dimmed as a whole during an export on the web.
+
 **Web on iPhone and iPad: exports go to Photos (2026-10-24)**
 
 - RawBoy and Auto (web, Safari and the home-screen app on iOS/iPadOS): exports used to land in Files as downloads

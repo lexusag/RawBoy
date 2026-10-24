@@ -197,7 +197,8 @@ struct GridScreen: View {
     }
 
     private func cell(_ photo: AutoPhoto) -> some View {
-        PhotoCell(photo: photo, next: vm.opening == photo.id, selected: selection.contains(photo.id))
+        PhotoCell(photo: photo, next: vm.opening == photo.id, waiting: vm.export?.waiting.contains(photo.id) ?? false,
+                  selected: selection.contains(photo.id))
             .onTapGesture {
                 guard !exporting else { return }
                 if selecting {
@@ -269,6 +270,8 @@ private struct PhotoCell: View {
     let photo: AutoPhoto
     /** Tapped while waiting: analysed next, then opened. */
     let next: Bool
+    /** Still to be saved by the running "Export all": shown desaturated. */
+    let waiting: Bool
     let selected: Bool
 
     var body: some View {
@@ -276,7 +279,11 @@ private struct PhotoCell: View {
             ZStack {
                 Color(white: 0.12)
                 if let t = photo.thumbnail {
+                    // Grey while it waits to be exported, turning to colour once saved.
                     Image(decorative: t, scale: 1).resizable().scaledToFill()
+                        .saturation(waiting ? 0 : 1)
+                        .brightness(waiting ? -0.12 : 0)
+                        .animation(.easeOut(duration: 0.6), value: waiting)
                 }
                 switch photo.status {
                 case .queued: Badge(text: next ? "Next" : "Waiting")

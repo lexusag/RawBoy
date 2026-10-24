@@ -136,7 +136,18 @@ data class UndoState(val canUndo: Boolean = false, val canRedo: Boolean = false)
 
 /** Progress of "Export all". */
 /** Progress of "Export all"; [stopping]: Stop was pressed, the photo being exported finishes and the rest are left. */
-data class BatchExport(val done: Int, val total: Int, val failed: Int, val current: Float = 0f, val stopping: Boolean = false)
+data class BatchExport(
+    val done: Int,
+    val total: Int,
+    val failed: Int,
+    val current: Float = 0f,
+    val stopping: Boolean = false,
+    /**
+     * "Export all": the photos not yet done, the one being exported included. The grid shows them desaturated, so the
+     * batch can be followed as each turns to colour once saved.
+     */
+    val waiting: Set<String> = emptySet(),
+)
 
 class AutoViewModel(application: Application) : AndroidViewModel(application) {
     private val _photos = MutableStateFlow<List<AutoPhoto>>(emptyList())
@@ -803,7 +814,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
         // The detail view's full-resolution image would double the memory each export needs.
         session.close()
         _sessionReady.value = null
-        _export.value = BatchExport(done = 0, total = todo.size, failed = 0)
+        _export.value = BatchExport(done = 0, total = todo.size, failed = 0, waiting = todo.map { it.id }.toSet())
         val settings = _exportSettings.value
         exportJob = viewModelScope.launch {
             var failed = 0
@@ -825,7 +836,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
                     false
                 }
                 updatePhoto(p.id) { it.copy(status = if (ok) PhotoStatus.EXPORTED else PhotoStatus.FAILED) }
-                _export.update { it?.copy(done = index + 1, failed = failed, current = 0f) }
+                _export.update { it?.copy(done = index + 1, failed = failed, current = 0f, waiting = it.waiting - p.id) }
             }
             val saved = attempted - failed
             _message.value = buildString {

@@ -108,6 +108,9 @@ struct BatchExport: Equatable {
     var current: Float = 0
     /// Stop was pressed: the photo being exported finishes, the rest are left as they are.
     var stopping = false
+    /// "Export all": the photos not yet done, the one being exported included. The grid shows them desaturated, so the
+    /// batch can be followed as each turns to colour once saved.
+    var waiting: Set<String> = []
 }
 
 @MainActor
@@ -787,7 +790,7 @@ final class AutoViewModel: ObservableObject {
         // The detail view's full-resolution image would double the memory each export needs.
         session.close()
         sessionReady = nil
-        export = BatchExport(done: 0, total: todo.count, failed: 0)
+        export = BatchExport(done: 0, total: todo.count, failed: 0, waiting: Set(todo.map(\.id)))
         let settings = exportSettings
         keepAwake(true)
         Task {
@@ -809,6 +812,7 @@ final class AutoViewModel: ObservableObject {
                     updatePhoto(p.id) { $0.error = error.localizedDescription }
                 }
                 updatePhoto(p.id) { $0.status = ok ? .exported : .failed }
+                export?.waiting.remove(p.id)
                 export?.done = index + 1
                 export?.failed = failed
                 export?.current = 0

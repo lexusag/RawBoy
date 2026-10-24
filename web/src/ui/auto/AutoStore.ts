@@ -148,6 +148,11 @@ export interface BatchExport {
   current: number;
   /** Stop was pressed: the photo being exported finishes, the rest are left as they are. */
   stopping?: boolean;
+  /**
+   * "Export all": the photos not yet done, the one being exported included. The grid shows them desaturated, so the
+   * batch can be followed as each turns to colour once saved.
+   */
+  waiting?: ReadonlySet<string>;
 }
 
 export const NAMING: OutputNaming = { suffix: 'auto' };
@@ -981,7 +986,7 @@ export class AutoStore {
     this.closeDetail();
     // The detail view's full-resolution image would double the memory each export needs.
     this.session.close();
-    this.update({ sessionReady: null, export: { done: 0, total: todo.length, failed: 0, current: 0 } });
+    this.update({ sessionReady: null, export: { done: 0, total: todo.length, failed: 0, current: 0, waiting: new Set(todo.map((p) => p.id)) } });
     let failed = 0;
     const settings = this._state.exportSettings;
     const zipped: { name: string; blob: Blob }[] = [];
@@ -1008,7 +1013,9 @@ export class AutoStore {
         this.updatePhoto(p.id, (q) => ({ ...q, error: e instanceof Error ? e.message : String(e) }));
       }
       this.updatePhoto(p.id, (q) => ({ ...q, status: ok ? 'exported' : 'failed' }));
-      this.update({ export: { ...this._state.export!, done: index + 1, failed, current: 0 } });
+      const waiting = new Set(this._state.export!.waiting);
+      waiting.delete(p.id);
+      this.update({ export: { ...this._state.export!, done: index + 1, failed, current: 0, waiting } });
     }
     const saved = attempted - failed;
     // Photos finished before Stop are kept: written to the folder already, or still zipped.
