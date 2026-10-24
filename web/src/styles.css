@@ -478,7 +478,6 @@ main {
     padding-left: 9px;
     padding-right: 9px;
   }
-
 }
 
 /* Touch screens: tool bar buttons at least 44 px, the minimum comfortable target. */
@@ -496,13 +495,30 @@ main {
   }
 }
 
-/* 360 px phones: seven labelled tools and Auto on one line. */
+/* Phones: eight labelled tools and Auto on one line (390 px). */
 @media (max-width: 440px) {
   .pro-toolbar button.icon,
   .pro-toolbar button.open {
-    min-width: 38px;
+    min-width: 36px;
     padding-left: 2px;
     padding-right: 2px;
+  }
+}
+
+/* 360 px phones: narrower still. */
+@media (max-width: 380px) {
+  .pro-toolbar {
+    column-gap: 0;
+  }
+
+  .pro-toolbar button.icon,
+  .pro-toolbar button.open {
+    min-width: 34px;
+  }
+
+  .pro-toolbar button.auto-button {
+    padding-left: 6px;
+    padding-right: 6px;
   }
 }
 
@@ -1706,6 +1722,15 @@ line.curve-grid {
 
 .mask-row.active {
   background: var(--surface-2);
+}
+
+.leak-swatch {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: -1px;
 }
 
 .mask-name {

@@ -33,10 +33,16 @@ export interface BrushSettings {
   auto: boolean;
 }
 
+/**
+ * What the overlay draws of a layer: also light leaks, as radial shapes (LeaksPanel). [band]: a radial shape drawn and
+ * hit-tested as a straight band (rectangle) instead of an ellipse: a streak leak, rx = half length, ry = half width.
+ */
+export type OverlayLayer = Pick<MaskLayer, 'id' | 'enabled' | 'shape' | 'strokes'> & { band?: boolean };
+
 interface Props {
   /** Geometry of the view the preview shows (with the crop). */
   lens: LensTransform;
-  layers: readonly MaskLayer[];
+  layers: readonly OverlayLayer[];
   selectedId: string | null;
   /** Frame (plus margin) around the photo in the fit view, CSS pixels. */
   frame: number;
@@ -48,6 +54,8 @@ interface Props {
   brush: BrushSettings;
   /** Space held: presses go to the preview (pan). */
   passThrough: boolean;
+  /** A press anywhere inside a radial shape grabs it (light leaks), not only its centre pin. */
+  grabInside?: boolean;
   onSelect: (id: string) => void;
   onChange: (id: string, shape: MaskShape) => void;
   onStrokeBegin: (layerId: string, stroke: BrushStroke) => void;
@@ -140,7 +148,7 @@ export function MaskOverlay(props: Props) {
   };
 
   /** Lines (linear), ellipses (radial) or just a pin (brush) of one layer, in overlay pixels. */
-  const geometry = (l: MaskLayer) => {
+  const geometry = (l: OverlayLayer) => {
     const s = l.shape;
     if (s.kind === 'brush') {
       const p = l.strokes[0]?.points;
@@ -177,10 +185,15 @@ export function MaskOverlay(props: Props) {
     const cy = s.cy * H;
     const at = (u: number, v: number): Pt => toScreen(cx + c * u - sn * v, cy + sn * u + c * v);
     const ellipse = (k: number): Pt[] =>
-      Array.from({ length: STEPS }, (_, i) => {
-        const t = (i / STEPS) * 2 * Math.PI;
-        return at(k * rx * Math.cos(t), k * ry * Math.sin(t));
-      });
+      l.band
+        ? // The band's two long edges at k x its half width, as one closed outline (bent by the lens like the shader).
+          [-1, 1].flatMap((side) =>
+            Array.from({ length: STEPS + 1 }, (_, i) => at(side * rx * (1 - (2 * i) / STEPS), side * k * ry)),
+          )
+        : Array.from({ length: STEPS }, (_, i) => {
+            const t = (i / STEPS) * 2 * Math.PI;
+            return at(k * rx * Math.cos(t), k * ry * Math.sin(t));
+          });
     return {
       kind: 'radial' as const,
       outer: ellipse(1),
@@ -188,12 +201,26 @@ export function MaskOverlay(props: Props) {
       pin: at(0, 0) as Pt | null,
       rx: [at(rx, 0), at(-rx, 0)],
       ry: [at(0, ry), at(0, -ry)],
-      knob: at(0, -ry * KNOB),
+      // A thin band's knob keeps clear of its width handles.
+      knob: at(0, -(l.band ? Math.max(ry * KNOB, ry + 0.06 * long) : ry * KNOB)),
       knobBase: at(0, -ry),
     };
   };
 
   const selected = layers.find((l) => l.id === selectedId) ?? null;
+
+  /** Overlay point [p] lies inside a radial shape's outer ellipse (a band: its rectangle). */
+  const inside = (l: OverlayLayer, p: Pt): boolean => {
+    const s = l.shape;
+    if (s.kind !== 'radial') return false;
+    const [x, y] = toImage(p[0], p[1]);
+    const a = (s.angle * Math.PI) / 180;
+    const dx = x - s.cx * W;
+    const dy = y - s.cy * H;
+    const u = (Math.cos(a) * dx + Math.sin(a) * dy) / (s.rx * long);
+    const v = (-Math.sin(a) * dx + Math.cos(a) * dy) / (s.ry * long);
+    return l.band ? Math.abs(u) < 1 && Math.abs(v) < 1 : u * u + v * v < 1;
+  };
 
   const hit = (p: Pt): { id: string; handle: Handle | 'pin' } | null => {
     if (!r) return null;
@@ -204,6 +231,7 @@ export function MaskOverlay(props: Props) {
         if (g.rx.some((q) => near(p, q, GRAB))) return { id: selected.id, handle: 'rx' };
         if (g.ry.some((q) => near(p, q, GRAB))) return { id: selected.id, handle: 'ry' };
         if (near(p, g.pin!, GRAB * 1.5)) return { id: selected.id, handle: 'move' };
+        if (props.grabInside && inside(selected, p)) return { id: selected.id, handle: 'move' };
       } else if (g.kind === 'linear') {
         if (near(p, g.curve, GRAB)) return { id: selected.id, handle: 'curve' };
         if (nearPolyline(p, g.start, GRAB)) return { id: selected.id, handle: 'start' };
@@ -215,6 +243,10 @@ export function MaskOverlay(props: Props) {
       if (l.id === selectedId) continue;
       const pin = geometry(l).pin;
       if (pin && near(p, pin, GRAB)) return { id: l.id, handle: 'pin' };
+    }
+    if (props.grabInside) {
+      // Topmost (last drawn in the shader) first; a press inside another shape selects it and starts moving it.
+      for (const l of [...layers].reverse()) if (l.id !== selectedId && inside(l, p)) return { id: l.id, handle: 'move' };
     }
     return null;
   };
@@ -386,6 +418,7 @@ export function MaskOverlay(props: Props) {
         }
         const layer = layers.find((l) => l.id === h.id);
         if (!layer) return;
+        if (h.id !== selectedId) onSelect(h.id);
         e.currentTarget.setPointerCapture(e.pointerId);
         drag.current = { id: h.id, handle: h.handle, start: layer.shape, from: toImage(p[0], p[1]) };
       }}

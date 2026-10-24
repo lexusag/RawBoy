@@ -32,6 +32,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.semantics.Role
@@ -46,13 +47,14 @@ import app.rawboy.view.RedoIcon
 import app.rawboy.view.UndoIcon
 
 /** The editor's top-bar tools; at most one replaces the slider tabs. */
-enum class EditorMode { NONE, GEOMETRY, MASKS, PRESETS }
+enum class EditorMode { NONE, GEOMETRY, MASKS, LEAKS, PRESETS }
 
 /**
  * Two short rows instead of a 64dp app bar: every action as an icon with a word under it (long-press for the full
  * name), then the file name and the shot info
- * (camera, ISO, shutter, aperture, focal length) in small type, with Undo and Redo at its end (the first row is
- * full on a 360dp phone). The second line scrolls sideways when it doesn't fit, rather than ending in an ellipsis.
+ * (camera, ISO, shutter, aperture, focal length) in small type, with Undo, Redo and Reset all at its end (the first
+ * row is full on a 360dp phone; Reset moved down when Light leaks joined it). The second line scrolls sideways when
+ * it doesn't fit, rather than ending in an ellipsis.
  */
 @Composable
 fun EditorTopBar(
@@ -81,8 +83,8 @@ fun EditorTopBar(
             ToolButton(OpenIcon, "Open", "Open", canOpen, onOpen)
             ModeButton(EditorMode.GEOMETRY, CropRotateIcon, "Crop", "Crop & rotate", mode, enabled, onMode)
             ModeButton(EditorMode.MASKS, MasksIcon, "Masks", "Masks", mode, enabled, onMode)
+            ModeButton(EditorMode.LEAKS, LeakIcon, "Leaks", "Light leaks", mode, enabled, onMode)
             ModeButton(EditorMode.PRESETS, PresetsIcon, "Presets", "Presets", mode, enabled, onMode)
-            ToolButton(ResetIcon, "Reset", "Reset all", enabled, onReset)
             ToolButton(AutoIcon, "Auto", "Auto light and colour (keeps the LUT)", enabled, onAuto)
             Spacer(Modifier.weight(1f))
             ToolButton(ExportIcon, "Export", "Export", enabled, onExport, tint = MaterialTheme.colorScheme.primary)
@@ -107,6 +109,9 @@ fun EditorTopBar(
             }
             IconButton(onClick = onRedo, enabled = enabled && canRedo, modifier = Modifier.size(40.dp)) {
                 Icon(RedoIcon, contentDescription = "Redo")
+            }
+            IconButton(onClick = onReset, enabled = enabled, modifier = Modifier.size(40.dp)) {
+                Icon(ResetIcon, contentDescription = "Reset all", modifier = Modifier.size(22.dp))
             }
         }
     }
@@ -225,6 +230,20 @@ private val PresetsIcon: ImageVector by lazy {
         "M19,18l2,1V3c0,-1.1 -0.9,-2 -2,-2H8.99C7.89,1 7,1.9 7,3h10c1.1,0 2,0.9 2,2v13z" +
             "M15,5H5c-1.1,0 -2,0.9 -2,2v16l7,-3 7,3V7c0,-1.1 -0.9,-2 -2,-2z",
     )
+}
+
+/** Light leaks (same as RawBoy Web's): a diagonal beam of light with a glow either side, film-burn style. */
+private val LeakIcon: ImageVector by lazy {
+    ImageVector.Builder("LightLeak", 24.dp, 24.dp, 24f, 24f)
+        .addPath(
+            pathData = addPathNodes("M3,17L21,7"),
+            stroke = SolidColor(Color.Black), strokeAlpha = 0.3f, strokeLineWidth = 8f, strokeLineCap = StrokeCap.Round,
+        )
+        .addPath(
+            pathData = addPathNodes("M3,17L21,7"),
+            stroke = SolidColor(Color.Black), strokeLineWidth = 3f, strokeLineCap = StrokeCap.Round,
+        )
+        .build()
 }
 
 /** Masks (same as RawBoy Web's): a frame with lines fading downwards and a soft disc. */
