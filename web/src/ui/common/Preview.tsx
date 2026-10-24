@@ -29,6 +29,8 @@ interface Props {
   frameGrey: number;
   /** Empty space around the frame in the fit view, CSS pixels (the mask tool's room for handles). */
   margin?: number;
+  /** While there is nothing to develop: size of the photo coming, to keep its frame on screen (DevelopRenderer). */
+  placeholderSize?: [number, number] | null;
   onViewSize: (width: number, height: number, frameDevicePx: number) => void;
   /** Double click at a device-pixel position of the view. */
   onToggleZoom: (x: number, y: number) => void;
@@ -56,7 +58,7 @@ interface Props {
  * The develop preview (port of view/DevelopPreview.kt plus the editor's gestures): a canvas at device resolution, so
  * the 100% view shows one image pixel per screen pixel.
  */
-export function Preview({ session, params, frame, frameGrey, margin = 0, clipWarning = false, onViewSize, onToggleZoom, onClick, onPan, onZoomBy, onCompare, onPointerAt, zoomHint = true, children }: Props) {
+export function Preview({ session, params, frame, frameGrey, margin = 0, placeholderSize = null, clipWarning = false, onViewSize, onToggleZoom, onClick, onPan, onZoomBy, onCompare, onPointerAt, zoomHint = true, children }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const rendererRef = useRef<DevelopRenderer | null>(null);
   const boxRef = useRef<HTMLDivElement>(null);
@@ -90,12 +92,13 @@ export function Preview({ session, params, frame, frameGrey, margin = 0, clipWar
     r.frameGrey = frameGrey;
     r.clipWarning = clipWarning;
     r.margin = Math.round(margin * (window.devicePixelRatio || 1));
+    r.placeholderSize = placeholderSize;
     r.zoomCenter = session.zoomCenter;
     r.zoomScale = session.zoomScale;
     r.setImage(session.preview);
     r.setDetail(session.detail);
     r.invalidate();
-  }, [params, frame, frameGrey, margin, clipWarning, session.zoomCenter, session.zoomScale, session.preview, session.detail]);
+  }, [params, frame, frameGrey, margin, placeholderSize, clipWarning, session.zoomCenter, session.zoomScale, session.preview, session.detail]);
 
   // Mouse wheel zooms around the cursor, desktop only (a mouse or trackpad; Ctrl+wheel is a trackpad pinch). Not
   // React's onWheel: that listener is passive, so it couldn't keep the page from scrolling or zooming.

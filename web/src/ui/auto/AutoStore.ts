@@ -429,7 +429,7 @@ export class AutoStore {
 
   setViewSize(width: number, height: number, frame: number) {
     this.frameWidth = frame;
-    this.session.setViewSize(width, height);
+    this.session.setViewSize(width, height, frame);
   }
 
   toggleZoom = (x: number, y: number) => this.session.toggleZoom(x, y, this.frameWidth);

@@ -1,5 +1,6 @@
 package app.rawboy.develop
 
+import app.rawboy.gl.PixelRect
 import app.rawboy.gl.ShaderParams
 import app.rawboy.gl.ZoomMath
 import app.rawboy.lens.LensInfo
@@ -160,6 +161,15 @@ class MasksTest {
         assertEquals(0f, z[0] + v.x, 0f)
         assertEquals(0f, z[1] + v.y, 0f)
         assertEquals(4000f, z[2], 0f)
+    }
+
+    @Test
+    fun zoomedViewKeepsTheFrameAndReachesThePhotoEdges() {
+        assertEquals(PixelRect(0, 0, 776, 576), ZoomMath.viewRect(0f, 0f, 800, 600, 4000, 3000, frame = 12))
+        val z = ZoomMath.zoomedRect(0f, 0f, 800, 600, 4000, 3000, frame = 12)
+        assertEquals(12f, z[0], 0f) // the photo's corner just inside the frame
+        assertEquals(12f, z[1], 0f)
+        assertEquals(4000f - 388f to 3000f - 288f, ZoomMath.clampCenter(4000f, 3000f, 800, 600, 4000, 3000, frame = 12))
     }
 
     @Test

@@ -501,6 +501,14 @@ describe('brush', () => {
     expect(left + v.x).toBe(0); // the visible region's left edge at the view's left edge
     expect(top + v.y).toBe(0);
   });
+
+  it('keeps the frame around the zoomed view, and the photo edges reachable inside it', () => {
+    const v = ZoomMath.viewRect(0, 0, 800, 600, 4000, 3000, 1, 12);
+    expect(v).toEqual({ x: 0, y: 0, width: 776, height: 576 });
+    const [left, top] = ZoomMath.zoomedRect(0, 0, 800, 600, 4000, 3000, 1, 12);
+    expect([left, top]).toEqual([12, 12]); // the photo's corner just inside the frame
+    expect(ZoomMath.clampCenter(4000, 3000, 800, 600, 4000, 3000, 1, 12)).toEqual([4000 - 388, 3000 - 288]);
+  });
 });
 
 describe('lens output', () => {

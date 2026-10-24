@@ -210,7 +210,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setViewSize(width: Int, height: Int, frame: Int) {
         frameWidth = frame
-        session.setViewSize(width, height)
+        session.setViewSize(width, height, frame)
     }
 
     /** Double tap: zoom to 100% at the tapped point of the fit view, or back out. [extra]: margin around the frame. */

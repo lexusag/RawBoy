@@ -1,5 +1,12 @@
 # Changelog
 
+**The frame around the photo stays (2026-10-24)**
+
+- RawBoy Auto (Android, web): switching to a photo that is still rendering kept its thumbnail but dropped the grey /
+  white / black frame around it, so the frame blinked out and back. The frame now stays around the thumbnail too.
+- RawBoy and Auto (Android, web): the 100% view (and the web's wheel zoom) keeps the frame along the edges, with the
+  photo inside it; panning still reaches the photo's edges and corners.
+
 **Auto batch-exports photos with their full RawBoy edits (2026-10-24)**
 
 - RawBoy → Auto (Android): **Export › Send to Auto** in RawBoy hands the open photo to RawBoy Auto with every edit:

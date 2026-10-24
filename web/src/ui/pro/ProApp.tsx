@@ -424,6 +424,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
               layers={layers}
               selectedId={selectedId}
               frame={FRAME_WIDTH + maskMargin}
+              zoomFrame={FRAME_WIDTH}
               zoomCenter={session.zoomCenter}
               zoomScale={session.zoomScale}
               tool={selectedId ? maskTool : 'move'}
@@ -442,6 +443,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
               layers={leaks.map(leakLayer)}
               selectedId={leakId}
               frame={FRAME_WIDTH + maskMargin}
+              zoomFrame={FRAME_WIDTH}
               zoomCenter={session.zoomCenter}
               zoomScale={session.zoomScale}
               tool="move"

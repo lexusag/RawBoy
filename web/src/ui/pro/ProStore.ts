@@ -153,7 +153,7 @@ export class ProStore {
 
   setViewSize(width: number, height: number, frame: number) {
     this.frameWidth = frame;
-    this.session.setViewSize(width, height);
+    this.session.setViewSize(width, height, frame);
   }
 
   /** Single click in the preview: outside the photo (fit view) cycles the frame colour. Remembered. */
