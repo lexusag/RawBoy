@@ -33,6 +33,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import app.rawboy.develop.Preset
 import app.rawboy.develop.PresetGroup
+import app.rawboy.develop.Presets
 
 /** What the Presets panel can do; the editor screen wires these to the view model and the file pickers. */
 class PresetActions(
@@ -88,16 +89,19 @@ private fun PresetsContent(presets: List<Preset>, actions: PresetActions, hasStr
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
-    for (p in presets) {
-        PresetRow(
-            p,
-            onApply = { actions.apply(p) },
-            onUpdate = { actions.update(p) },
-            onRename = { renaming = p },
-            onExport = { actions.export(listOf(p)) },
-            onSendToAuto = { actions.sendToAuto(p) },
-            onDelete = { deleting = p },
-        )
+    for ((label, section) in Presets.sections(presets)) {
+        if (label != null) SectionLabel(label)
+        for (p in section) {
+            PresetRow(
+                p,
+                onApply = { actions.apply(p) },
+                onUpdate = { actions.update(p) },
+                onRename = { renaming = p },
+                onExport = { actions.export(listOf(p)) },
+                onSendToAuto = { actions.sendToAuto(p) },
+                onDelete = { deleting = p },
+            )
+        }
     }
 
     if (saving) {

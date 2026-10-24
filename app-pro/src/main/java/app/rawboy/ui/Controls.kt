@@ -53,6 +53,7 @@ import app.rawboy.develop.CropAspect
 import app.rawboy.develop.DevelopParams
 import app.rawboy.develop.ToneMapper
 import app.rawboy.auto.looks.FilmLooks
+import app.rawboy.auto.looks.Looks
 import app.rawboy.develop.crop
 import app.rawboy.session.BlemishState
 import app.rawboy.session.SkinState
@@ -350,8 +351,11 @@ private fun LutPanel(
     }
     LutRow("No LUT", selected = params.lut == null, loading = false) { onSelect(null) }
 
-    SectionLabel("Included")
-    luts.bundled.forEach { LutItem(it, params, loading, onSelect) }
+    val (monoLuts, colorLuts) = luts.bundled.partition { Looks.isMonochromeLut(it.id) }
+    SectionLabel("Included · Color")
+    colorLuts.forEach { LutItem(it, params, loading, onSelect) }
+    SectionLabel("Included · Black & white")
+    monoLuts.forEach { LutItem(it, params, loading, onSelect) }
 
     SectionLabel("Your LUTs · Documents/luts")
     if (!luts.userFolderGranted) {
