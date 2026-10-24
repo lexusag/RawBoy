@@ -64,6 +64,8 @@ data class CameraSettings(
     companion object {
         const val MIN_QUALITY = 70
         const val SMALL_LONG_SIDE = 3000
+        /** Light sharpening after the downscale to [SMALL_LONG_SIDE] (luma unsharp mask, `band_ops.h`); full size gets none. */
+        const val SMALL_SHARPEN = 0.5f
         /** Raws merged per shot with [mergeBurst]: noise about 1/sqrt of it where nothing moves (~2.8x less). */
         const val BURST_FRAMES = 8
 

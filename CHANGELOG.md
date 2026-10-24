@@ -1,5 +1,11 @@
 # Changelog
 
+**Camera: smaller photos get a light sharpening (2026-10-24)**
+
+- RawBoy Camera (Android, iOS): with Smaller photos on (the default, 3000 px), the JPEG gets a light sharpening after
+  the downscale, so it looks a little crisper. It works on brightness only (no coloured edges), and strong edges such
+  as lights and window frames are capped so they don't get halos. Full-size photos are unchanged.
+
 **Auto: Export all shows its progress in the grid (2026-10-24)**
 
 - RawBoy Auto (Android, iOS, web): while Export all runs, the photos still to be saved show in grey, and each fades

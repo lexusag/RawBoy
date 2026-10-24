@@ -63,11 +63,11 @@ class Exporter(private val context: Context) {
         try {
             when (settings.format) {
                 ExportFormat.JPEG -> if (settings.jpegEncoder == JpegEncoder.JPEGLI) {
-                    writeJpegli(image, uri, params, size, settings.jpegQuality, onProgress)
+                    writeJpegli(image, uri, params, size, settings.jpegQuality, settings.downscaleSharpen, onProgress)
                 } else {
-                    writeJpeg(image, uri, params, size, settings.jpegQuality, onProgress)
+                    writeJpeg(image, uri, params, size, settings.jpegQuality, settings.downscaleSharpen, onProgress)
                 }
-                ExportFormat.TIFF -> writeTiff(image, uri, params, size, settings.tiffBits, source?.let(::readExif), onProgress)
+                ExportFormat.TIFF -> writeTiff(image, uri, params, size, settings.tiffBits, source?.let(::readExif), settings.downscaleSharpen, onProgress)
             }
             val t = System.nanoTime()
             if (settings.format == ExportFormat.JPEG && source != null) copyExif(source, uri)
@@ -80,12 +80,12 @@ class Exporter(private val context: Context) {
         }
     }
 
-    private fun writeJpeg(image: RawImage, uri: Uri, params: ShaderParams, size: Pair<Int, Int>, quality: Int, onProgress: (Float) -> Unit) {
+    private fun writeJpeg(image: RawImage, uri: Uri, params: ShaderParams, size: Pair<Int, Int>, quality: Int, sharpen: Float, onProgress: (Float) -> Unit) {
         val w = size.first
         val bitmap = Bitmap.createBitmap(w, size.second, Bitmap.Config.ARGB_8888)
         try {
             var argb = IntArray(0)
-            renderOutput(image, params, size, onProgress) { y, rows, band ->
+            renderOutput(image, params, size, sharpen, onProgress) { y, rows, band ->
                 val n = w * rows
                 if (argb.size < n) argb = IntArray(n)
                 for (i in 0 until n) {
@@ -103,12 +103,12 @@ class Exporter(private val context: Context) {
     }
 
     /** jpegli streams each band as it is developed, at full 16-bit precision, so no full-size bitmap is held. */
-    private fun writeJpegli(image: RawImage, uri: Uri, params: ShaderParams, size: Pair<Int, Int>, quality: Int, onProgress: (Float) -> Unit) {
+    private fun writeJpegli(image: RawImage, uri: Uri, params: ShaderParams, size: Pair<Int, Int>, quality: Int, sharpen: Float, onProgress: (Float) -> Unit) {
         val pfd = context.contentResolver.openFileDescriptor(uri, "w") ?: throw IOException("Cannot write $uri")
         pfd.use {
             val handle = JpegNative.begin(it.fd, size.first, size.second, quality)
             try {
-                renderOutput(image, params, size, onProgress) { _, rows, band -> JpegNative.writeRows(handle, band, rows) }
+                renderOutput(image, params, size, sharpen, onProgress) { _, rows, band -> JpegNative.writeRows(handle, band, rows) }
             } catch (t: Throwable) {
                 JpegNative.abort(handle)
                 throw t
@@ -124,6 +124,7 @@ class Exporter(private val context: Context) {
         size: Pair<Int, Int>,
         bits: Int,
         exif: ExifMetadata?,
+        sharpen: Float,
         onProgress: (Float) -> Unit,
     ) {
         // Read-write: the header goes in last, in front of the compressed strips.
@@ -131,19 +132,21 @@ class Exporter(private val context: Context) {
         pfd.use {
             // The stream doesn't own the descriptor; closing pfd closes it.
             val writer = TiffWriter(FileOutputStream(it.fileDescriptor).channel, size.first, size.second, bits, exif)
-            renderOutput(image, params, size, onProgress) { _, rows, band -> writer.writeRows(band, rows) }
+            renderOutput(image, params, size, sharpen, onProgress) { _, rows, band -> writer.writeRows(band, rows) }
             writer.finish()
         }
     }
 
     /**
      * Renders the image at [size] (the full output size, or smaller: then the full-resolution bands are
-     * area-downscaled as they stream, and the grain is sized to the smaller output). Same callback as [renderBands].
+     * area-downscaled as they stream, then sharpened by [sharpen], and the grain is sized to the smaller output).
+     * Same callback as [renderBands].
      */
     private fun renderOutput(
         image: RawImage,
         params: ShaderParams,
         size: Pair<Int, Int>,
+        sharpen: Float,
         onProgress: (Float) -> Unit,
         consume: (y: Int, rows: Int, band: ShortArray) -> Unit,
     ) {
@@ -152,7 +155,7 @@ class Exporter(private val context: Context) {
         if (size.first == w && size.second == h) return renderBands(image, params, 1f, onProgress, consume)
         var encodeNs = 0L
         var scaleNs = 0L
-        BandDownscaler(w, h, size.first, size.second, TILE_HEIGHT) { y, rows, band ->
+        BandDownscaler(w, h, size.first, size.second, TILE_HEIGHT, sharpen) { y, rows, band ->
             val t = System.nanoTime()
             consume(y, rows, band)
             encodeNs += System.nanoTime() - t
