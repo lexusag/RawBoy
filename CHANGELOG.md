@@ -1,5 +1,10 @@
 # Changelog
 
+**RawBoy: select or deselect all groups when saving a preset (2026-10-25)**
+
+- RawBoy (Android, iOS, web): the **Save preset** dialog has a **Select all** / **Deselect all** button beside
+  Include, so a preset with every group, or with just one or two, takes one tap instead of ticking each box.
+
 **RawBoy: light leaks rebuilt like a Photoshop light leak (2026-10-25)**
 
 - RawBoy (Android, web): light leaks are now made the way a Photoshop or Affinity light leak is: a white shape,
