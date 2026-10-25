@@ -58,6 +58,14 @@ Production is `https://app.rawboy.link`, a custom domain on the Pages project `r
 
 Custom domain, caching, and getting the site into Google and Bing: [Cloudflare and search engines](../docs/cloudflare.md).
 
+### Google Drive
+
+Opening from and exporting to Google Drive needs a Google Cloud OAuth client ID, an API key and the project number,
+built in through `VITE_GOOGLE_CLIENT_ID`, `VITE_GOOGLE_API_KEY` and `VITE_GOOGLE_APP_ID` (GitHub repository variables
+in CI, `web/.env.local` locally). Without them the app has no Drive buttons. The Drive window, `drive.html`, must be
+served **without** the isolation headers (`_headers`, `nginx.conf` and `vite.config.ts` already do that). Setup steps:
+[Google Drive](../docs/google-drive.md).
+
 ### Search engines
 
 `index.html` carries the title, description, canonical URL, Open Graph / Twitter card (`public/og-image.png`, 1200×630,
@@ -88,7 +96,8 @@ variants; the first build also downloads LibRaw and jpegli.
 
 ## Differences from Android
 
-- Files come from the picker or drag and drop; exports are downloads (or a picked folder), not `Pictures/`.
+- Files come from the picker, drag and drop or Google Drive; exports are downloads, a picked folder or a Google Drive
+  folder, not `Pictures/`.
 - Auto's photo view has **Edit in RawBoy**: the photo opens in the RawBoy tab with Auto's settings (both apps share
   one page; on Android they're separate apps).
 - Double-click = double tap; drag pans the 100% view; press and hold compares; ←/→ move through Auto's batch.

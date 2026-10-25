@@ -4,7 +4,10 @@ import { DEFAULT_STRENGTH, type Adjustments } from '../../engine/auto/looks/Look
 import { FrameColors } from '../../engine/gl/DevelopRenderer';
 import type { PreviewImage } from '../../engine/gl/PreviewImage';
 import type { ShaderParams } from '../../engine/gl/ShaderParams';
-import { canPickOutputFolder, PHOTO_ACCEPT, pickFiles, pickOutputFolder, savesToPhotos } from '../common/files';
+import { canPickOutputFolder, localFolder, PHOTO_ACCEPT, pickFiles, pickOutputFolder, savesToPhotos, type OutputFolder } from '../common/files';
+import { SourceMenu } from '../common/SourceMenu';
+import { useExportDestination, type ExportDestination } from '../common/ExportDestination';
+import { driveConfigured, openFromDrive, pickDriveFolder } from '../../drive/Drive';
 import { isTabShown } from '../common/tabs';
 import { ParamSlider, formatPlain, formatSigned } from '../common/ParamSlider';
 import { isPressedSlider } from '../common/sliderFocus';
@@ -38,13 +41,35 @@ export function AutoApp({ store, onEditInRawBoy }: { store: AutoStore; onEditInR
     : <GridView store={store} scroll={gridScroll} lastViewed={lastViewed} />;
 }
 
-/** Asks where to save when the browser can write to a folder; null = downloads / ZIP. */
-async function outputFolder(): Promise<FileSystemDirectoryHandle | null | undefined> {
+/**
+ * Asks for a Google Drive folder, or where to save when the browser can write to a folder; null = downloads / ZIP,
+ * undefined = cancelled. Call from the Export click: the Drive window is opened before the first await.
+ */
+async function outputFolder(store: AutoStore, destination: ExportDestination): Promise<OutputFolder | null | undefined> {
+  if (destination === 'drive') {
+    try {
+      return (await pickDriveFolder()) ?? undefined;
+    } catch (e) {
+      store.showMessage(e instanceof Error ? e.message : String(e));
+      return undefined;
+    }
+  }
   if (!canPickOutputFolder()) return null;
   try {
-    return await pickOutputFolder();
+    const dir = await pickOutputFolder();
+    return dir && localFolder(dir);
   } catch {
     return undefined; // cancelled
+  }
+}
+
+/** Downloads photos picked in Google Drive and adds them to the batch. */
+async function addFromDrive(store: AutoStore) {
+  try {
+    const files = await openFromDrive(true, (m) => store.showMessage(m));
+    if (files.length) store.add(files);
+  } catch (e) {
+    store.showMessage(e instanceof Error ? e.message : String(e));
   }
 }
 
@@ -192,7 +217,7 @@ function GridView({ store, scroll, lastViewed }: {
           <>
             <AppSwitcher />
             <div className="title" />
-            <button type="button" className="text" onClick={add} disabled={exporting}>Add</button>
+            <SourceMenu className="text" onDevice={add} onDrive={() => void addFromDrive(store)} disabled={exporting}>Add</SourceMenu>
             <button
               type="button"
               className="primary"
@@ -291,6 +316,7 @@ function GridView({ store, scroll, lastViewed }: {
             {state.importMode !== 'plain' && ' JPEG, HEIC, PNG and TIFF work too, at lower quality.'}
           </p>
           <button type="button" className="primary" onClick={add}>Choose photos</button>
+          {driveConfigured() && <button type="button" className="text" onClick={() => void addFromDrive(store)}>Choose from Google Drive</button>}
           <p>or drop them here.</p>
         </div>
       ) : (
@@ -318,10 +344,10 @@ function GridView({ store, scroll, lastViewed }: {
           store={store}
           count={exportSheet === 'all' ? exportable : photos.filter((p) => p.analysis && exportSheet.has(p.id)).length}
           onDismiss={() => setExportSheet(null)}
-          onExport={async () => {
+          onExport={async (destination) => {
             const ids = exportSheet === 'all' ? undefined : exportSheet;
             setExportSheet(null);
-            const folder = await outputFolder();
+            const folder = await outputFolder(store, destination);
             if (folder === undefined) return;
             if (ids) setSelection(new Set()); // the grid's badges then show each photo's export
             void store.exportAll(folder, ids);
@@ -752,9 +778,9 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
           store={store}
           count={1}
           onDismiss={() => setExportOpen(false)}
-          onExport={async () => {
+          onExport={async (destination) => {
             setExportOpen(false);
-            const folder = await outputFolder();
+            const folder = await outputFolder(store, destination);
             if (folder !== undefined) void store.exportSelected(folder);
           }}
         />
@@ -921,8 +947,17 @@ export function ModeSwitch<M extends string>({ modes, mode, onChange, disabled, 
  * Asked on Export all and the photo view's Export: format, quality or bit depth, and size, kept for the next
  * exports (as RawBoy's export dialog).
  */
-function ExportSheet({ store, count, onDismiss, onExport }: { store: AutoStore; count: number; onDismiss: () => void; onExport: () => void }) {
-  const where = canPickOutputFolder()
+function ExportSheet({ store, count, onDismiss, onExport }: {
+  store: AutoStore;
+  count: number;
+  onDismiss: () => void;
+  /** Called from the Export click (Google Drive opens its folder picker from it). */
+  onExport: (destination: ExportDestination) => void;
+}) {
+  const [destination, destinationRow] = useExportDestination(false);
+  const where = destination === 'drive'
+    ? 'You pick the Google Drive folder next.'
+    : canPickOutputFolder()
     ? 'You pick the folder next.'
     : savesToPhotos()
       ? `When it’s done, tap Save to Photos to add ${count > 1 ? 'them' : 'it'} to your gallery.`
@@ -935,10 +970,11 @@ function ExportSheet({ store, count, onDismiss, onExport }: { store: AutoStore; 
       <div className="dialog auto-export" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Export">
         <h2>{count > 1 ? `Export ${count} photos` : 'Export'}</h2>
         <ExportOptions store={store} disabled={false} />
+        {destinationRow}
         <small className="muted">{where}</small>
         <div className="dialog-actions">
           <button type="button" className="text" onClick={onDismiss}>Cancel</button>
-          <button type="button" className="primary" onClick={onExport}>Export</button>
+          <button type="button" className="primary" onClick={() => onExport(destination)}>Export</button>
         </div>
       </div>
     </div>

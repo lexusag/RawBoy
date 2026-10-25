@@ -24,7 +24,7 @@ import { segmentSkin } from '../../engine/retouch/SkinSegmenter';
 import type { BrushLookup } from '../../engine/gl/ShaderParams';
 import { quickImageOf, thumbnailOf } from '../browser/Previews';
 import { EditHistory } from '../common/EditHistory';
-import { imageUrl, saveExports, savesToPhotos, writeUnique } from '../common/files';
+import { imageUrl, saveExports, savesToPhotos, type OutputFolder } from '../common/files';
 import type { EditsSidecar } from '../../engine/browse/XmpSidecar';
 import { findCaptureDate } from '../../engine/browse/CaptureDate';
 import { fileDate, saveSort, savedSort, sortPhotos, type PhotoSort } from '../../engine/auto/PhotoOrder';
@@ -1038,7 +1038,7 @@ export class AutoStore {
   // ---- Export ----
 
   /** Exports the detail view's photo from the already decoded image. */
-  async exportSelected(folder: FileSystemDirectoryHandle | null) {
+  async exportSelected(folder: OutputFolder | null) {
     const id = this._state.sessionReady;
     const p = id ? this.photo(id) : null;
     const a = p?.analysis;
@@ -1064,10 +1064,10 @@ export class AutoStore {
 
   /**
    * Exports every analysed photo in turn (only those in [ids] when given: the grid's selection), decoding each again;
-   * a failure skips to the next. With a [folder] the files are written there; otherwise they're collected into one
+   * a failure skips to the next. With a [folder] (this device's or Google Drive's) the files are written there; otherwise they're collected into one
    * ZIP download (on iOS, for Save to Photos).
    */
-  async exportAll(folder: FileSystemDirectoryHandle | null, ids?: ReadonlySet<string>) {
+  async exportAll(folder: OutputFolder | null, ids?: ReadonlySet<string>) {
     if (this._state.export) return;
     const todo = this._state.photos.filter((p) => p.analysis && (!ids || ids.has(p.id)));
     if (!todo.length) return;
@@ -1148,10 +1148,10 @@ export class AutoStore {
     }
   }
 
-  private async save(p: AutoPhoto, blob: Blob, folder: FileSystemDirectoryHandle | null, settings: ExportSettings): Promise<string> {
+  private async save(p: AutoPhoto, blob: Blob, folder: OutputFolder | null, settings: ExportSettings): Promise<string> {
     const base = baseNameOf(p.name);
     const ext = EXTENSIONS[settings.format];
-    if (folder) return writeUnique(folder, (c) => fileName(base, ext, c, NAMING), blob);
+    if (folder) return folder.write((c) => fileName(base, ext, c, NAMING), blob);
     const name = fileName(base, ext, 0, NAMING);
     await saveExports([{ name, blob }], name);
     return name;

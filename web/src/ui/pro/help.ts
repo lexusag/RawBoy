@@ -1,4 +1,5 @@
 import type { HelpSection } from '../common/HelpDialog';
+import { driveConfigured } from '../../drive/protocol';
 
 /** The RawBoy tab's "?" sheet. Keep it in step with the controls (Readme's Controls table). */
 export const PRO_HELP: HelpSection[] = [
@@ -7,6 +8,7 @@ export const PRO_HELP: HelpSection[] = [
     items: [
       { how: 'RawBoy · Auto · Browser', text: 'Switch between the apps (top left; top of the screen on phones).' },
       { how: 'Open, or drop a file', text: 'Opens a RAW file, or a JPEG, HEIC, PNG or TIFF (lower quality than RAW). Dropped .cube and HaldCLUT .png files go to Your LUTs.' },
+      ...(driveConfigured() ? [{ how: 'Google Drive', text: 'Open › From Google Drive picks a photo in your Drive; Export › Save to Google Drive puts the export in a Drive folder you pick. RawBoy only sees the files you pick and the ones it saves.' }] : []),
       { how: 'Tabs', text: 'Light, Color, Detail, LUTs and Lens hold the sliders. Edits carry over to the next photo; crop, rotation and flips don\'t.' },
       { how: 'Lens preset', text: 'Lens tab: name it (the lens by default) and Save lens preset keeps its settings for this photo\'s lens; the Auto tab corrects every photo taken with that lens with it, on top of its look. Manual lenses record no lens: the Auto tab lets you pick their presets by name.' },
       { how: 'Top bar', text: 'Crop & rotate (turn, flip, straighten, crop), Presets, Masks, Light leaks, Undo and Redo (Ctrl/⌘ Z, Shift Ctrl/⌘ Z), Reset all, Auto (automatic light and colour, keeps the LUT) and Export.' },

@@ -1,4 +1,5 @@
 import type { HelpSection } from '../common/HelpDialog';
+import { driveConfigured } from '../../drive/protocol';
 
 /** The Auto tab's "?" sheet. Keep it in step with the controls (Readme's RawBoy Auto section). */
 export const AUTO_HELP: HelpSection[] = [
@@ -6,6 +7,7 @@ export const AUTO_HELP: HelpSection[] = [
     title: 'Basics',
     items: [
       { how: 'Add, or drop files', text: 'Each photo is developed automatically and gets a film look. JPEG, HEIC, PNG and TIFF work too, at lower quality.' },
+      ...(driveConfigured() ? [{ how: 'Google Drive', text: 'Add › From Google Drive adds photos from your Drive; Save to Google Drive in the export options saves into a Drive folder you pick. RawBoy only sees the files you pick and the ones it saves.' }] : []),
       { how: 'Import as', text: 'Looks (a film LUT on the auto develop), Film (developed as film) or As is (no automatic edits and no look, a faster import for finished files such as TIFFs: add only a preset, e.g. grain), for photos added from now on.' },
       { how: 'Export', text: 'JPEG or TIFF and the size, asked when you press Export all, Export on a selection or the photo view\'s Export; remembered.' },
       { how: 'Apply RawBoy preset…', text: 'Develop every photo with a RawBoy preset instead of a look. A preset without Light (e.g. only Detail) changes just its own settings, on top of each photo\'s look, preset or RawBoy edits. Remove goes back to the looks.' },

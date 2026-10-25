@@ -61,11 +61,28 @@ const isolation = {
   'Cross-Origin-Embedder-Policy': 'require-corp',
 };
 
+/**
+ * Sends the isolation headers on every page but the Google Drive window (drive.html), whose Picker iframes
+ * require-corp would block (as public/_headers and nginx.conf do in production).
+ */
+function isolationHeaders(): Plugin {
+  const middleware = (req: { url?: string }, res: { setHeader(k: string, v: string): void }, next: () => void) => {
+    if (!/^\/drive(\.html)?([?#]|$)/.test(req.url ?? '')) for (const [k, v] of Object.entries(isolation)) res.setHeader(k, v);
+    next();
+  };
+  return {
+    name: 'rawboy-isolation-headers',
+    configureServer: (server) => void server.middlewares.use(middleware),
+    configurePreviewServer: (server) => void server.middlewares.use(middleware),
+  };
+}
+
 export default defineConfig({
   base: './',
-  plugins: [react(), copyModels(), seo()],
-  server: { headers: isolation, fs: { allow: [repo] } },
-  preview: { headers: isolation },
+  plugins: [react(), copyModels(), seo(), isolationHeaders()],
+  server: { fs: { allow: [repo] } },
+  // The app, and the Google Drive window (src/drive/popup.ts).
+  build: { rollupOptions: { input: { main: resolve(__dirname, 'index.html'), drive: resolve(__dirname, 'drive.html') } } },
   worker: { format: 'es' },
   define: { __RAWBOY_VERSION__: JSON.stringify(version) },
 });

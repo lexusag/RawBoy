@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { BandDownscaler } from '../../engine/export/BandDownscaler';
 import { DEFAULT_EXPORT, EXTENSIONS, baseNameOf, fileName, type ExportSettings } from '../../engine/export/ExportSettings';
 import { ParamSlider, formatPlain } from '../common/ParamSlider';
+import { useExportDestination, type ExportDestination } from '../common/ExportDestination';
 
 const SIZES: (number | null)[] = [null, 6000, 4000, 3000, 2048];
 
@@ -12,9 +13,11 @@ export function ExportDialog({ initial, sourceName, outputSize, onDismiss, onExp
   /** Full output size (after rotation). */
   outputSize: [number, number];
   onDismiss: () => void;
-  onExport: (s: ExportSettings) => void;
+  /** Called from the Export click (Google Drive opens its folder picker from it). */
+  onExport: (s: ExportSettings, destination: ExportDestination) => void;
 }) {
   const [s, setS] = useState(initial);
+  const [destination, destinationRow] = useExportDestination(true);
   const [w, h] = BandDownscaler.outputSize(outputSize[0], outputSize[1], s.maxLongSide);
   return (
     <div className="dialog-backdrop" onClick={onDismiss}>
@@ -64,10 +67,14 @@ export function ExportDialog({ initial, sourceName, outputSize, onDismiss, onExp
           </select>
           <small>{w} × {h}</small>
         </label>
-        <small className="muted">{fileName(baseNameOf(sourceName), EXTENSIONS[s.format], 0, { suffix: 'rawboy' })}</small>
+        {destinationRow}
+        <small className="muted">
+          {fileName(baseNameOf(sourceName), EXTENSIONS[s.format], 0, { suffix: 'rawboy' })}
+          {destination === 'drive' && ', in a Google Drive folder you pick next'}
+        </small>
         <div className="dialog-actions">
           <button type="button" className="text" onClick={onDismiss}>Cancel</button>
-          <button type="button" className="primary" onClick={() => onExport(s)}>Export</button>
+          <button type="button" className="primary" onClick={() => onExport(s, destination)}>Export</button>
         </div>
       </div>
     </div>

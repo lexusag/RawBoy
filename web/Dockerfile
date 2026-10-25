@@ -29,6 +29,10 @@ COPY web/ ./
 COPY --from=wasm /src/web/public/wasm public/wasm
 # The site's main address for the canonical URL and sitemap (vite.config.ts): --build-arg SITE_URL=https://...
 ARG SITE_URL
+# Google Drive (docs/google-drive.md); left empty, the app has no Drive buttons.
+ARG VITE_GOOGLE_CLIENT_ID
+ARG VITE_GOOGLE_API_KEY
+ARG VITE_GOOGLE_APP_ID
 # Same as `npm run build:public`, minus the WASM step done above.
 RUN npx tsc --noEmit && npx vite build
 

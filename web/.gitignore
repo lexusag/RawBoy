@@ -6,3 +6,5 @@ public/models/
 public/mediapipe/
 public/coi-serviceworker.min.js
 public/third_party_notices.txt
+# Local settings such as the Google Drive client ID (docs/google-drive.md).
+.env.local
