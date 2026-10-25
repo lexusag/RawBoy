@@ -1,5 +1,12 @@
 # Changelog
 
+**RGB primaries: wider hue and purity (2026-10-25)**
+
+- RawBoy (Android, iOS, web): the RGB primaries hue sliders reach ±45° (were ±30°) and the purity sliders ×0.5–×2
+  (were ×0.71–×1.41, now -200..200 on the same scale, so earlier edits and presets look the same). Hue stops at 45°
+  because past it two primaries can be turned onto almost the same hue and the matrix blows up (entries up to ~29 at
+  ±60° against ~2.3 at ±45°).
+
 **RawBoy: select or deselect all groups when saving a preset (2026-10-25)**
 
 - RawBoy (Android, iOS, web): the **Save preset** dialog has a **Select all** / **Deselect all** button beside

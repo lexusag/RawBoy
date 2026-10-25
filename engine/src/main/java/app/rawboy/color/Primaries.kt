@@ -32,7 +32,7 @@ object Primaries {
     /** Slider values -> primaries matrix (identity when untouched). */
     fun fromParams(p: DevelopParams): DoubleArray {
         val hues = doubleArrayOf(p.redHue.toDouble(), p.greenHue.toDouble(), p.blueHue.toDouble()).map { Math.toRadians(it) }.toDoubleArray()
-        // -100..100 -> purity x0.71 .. x1.41 (exponential, so +/- feel symmetric). Rec.2020's
+        // -200..200 -> purity x0.5 .. x2 (exponential, so +/- feel symmetric). Rec.2020's
         // primaries sit near the spectral locus, so small changes already move a lot.
         val purities = doubleArrayOf(p.redPurity.toDouble(), p.greenPurity.toDouble(), p.bluePurity.toDouble())
             .map { 2.0.pow(it / 200.0) }.toDoubleArray()

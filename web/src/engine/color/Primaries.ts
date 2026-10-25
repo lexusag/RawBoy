@@ -64,7 +64,7 @@ export const Primaries = {
   /** Slider values -> primaries matrix (identity when untouched). */
   fromParams(p: DevelopParams): M3 {
     const hues = [p.redHue, p.greenHue, p.blueHue].map(rad);
-    // -100..100 -> purity x0.71 .. x1.41 (exponential, so +/- feel symmetric).
+    // -200..200 -> purity x0.5 .. x2 (exponential, so +/- feel symmetric).
     const purities = [p.redPurity, p.greenPurity, p.bluePurity].map((v) => 2 ** (v / 200));
     const tintPurity = (p.tintPurity / 100) * 0.1; // full slider = 10% towards the gamut edge
     if (Primaries.isIdentity(hues, purities, tintPurity)) return Mat3.diagonal(1, 1, 1);
