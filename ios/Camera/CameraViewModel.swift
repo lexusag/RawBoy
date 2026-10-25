@@ -38,6 +38,8 @@ final class CameraViewModel: ObservableObject {
     @Published private(set) var lenses: [CameraController.Info] = []
     @Published private(set) var frontAvailable = false
     @Published private(set) var flashAvailable = false
+    /** The shutter sound can't be turned off here (the law, or before iOS 18): it plays whatever the setting says. */
+    @Published private(set) var shutterSoundRequired = false
     /** Focus lock point (upright normalised, as shown), or nil for continuous autofocus. */
     @Published private(set) var focusPoint: CGPoint?
     /** Counts captures: the UI's shutter feedback. */
@@ -180,6 +182,7 @@ final class CameraViewModel: ObservableObject {
                 flashAvailable = lens.hasFlash
                 recording = try await controller.start(lens, format: settings.rawFormat)
                 guard !Task.isCancelled else { return }
+                shutterSoundRequired = controller.shutterSoundRequired
                 let size = controller.rawSize
                 aspect = size.width / size.height
                 renderer.frame = ViewfinderRenderer.Frame(fullWidth: Int(size.width), fullHeight: Int(size.height),
@@ -289,7 +292,9 @@ final class CameraViewModel: ObservableObject {
             }
             let skin = state.faces.isEmpty ? nil : Self.faceMask(state.faces, base)
             let stats = SceneAnalyzer.analyze(base, skin: skin, iso: state.iso, meter: meter)
-            let auto = AutoTone.develop(stats, asShot: defaults)
+            // The phone's auto exposure set the frame (and the shot's raw): keep it, lifted where it went dark, as the
+            // shot does (see develop).
+            let auto = AutoTone.develop(stats, asShot: defaults, phoneAe: true)
             await MainActor.run {
                 guard let self else { return }
                 self.analysing = false
@@ -363,6 +368,7 @@ final class CameraViewModel: ObservableObject {
     func setKeepDng(_ keep: Bool) { change { $0.keepDng = keep } }
     func setSmallExport(_ on: Bool) { change { $0.smallExport = on } }
     func setRememberLast(_ on: Bool) { change { $0.rememberLast = on } }
+    func setShutterSound(_ on: Bool) { change { $0.shutterSound = on } }
     func setShowHistogram(_ on: Bool) {
         change { $0.showHistogram = on }
         if !on { histogram = nil }
@@ -429,7 +435,7 @@ final class CameraViewModel: ObservableObject {
         pending += 1
         Task {
             do {
-                let result = try await controller.captureDng(flash: flash, gps: gps) { [weak self] in
+                let result = try await controller.captureDng(flash: flash, shutterSound: s.shutterSound, gps: gps) { [weak self] in
                     Task { @MainActor in self?.shutterCount += 1 }
                 }
                 shots.append(Shot(dng: result.dng, name: name, settings: s, viewfinderKey: viewfinderKey,
@@ -490,8 +496,13 @@ final class CameraViewModel: ObservableObject {
                     defer { img.close() }
                     let decodeMs = Int(Date().timeIntervalSince(decodeStart) * 1000)
                     let noiseScale = s.front ? Self.frontNoiseIsoScale : Self.phoneNoiseIsoScale
+                    // The phone's auto exposure already metered the raw (ProRAW's or Bayer's BaselineExposure carries
+                    // its boost): keep it, but lift it where the AE protected a highlight and took the scene down
+                    // (AutoTone.phoneKey). Re-metering it to Auto's camera-raw target put ordinary rooms 1-2 EV under
+                    // the phone's camera. Flash shots too: unlike the Pixel's manual flash, the iPhone's flash is
+                    // exposed by its own AE.
                     let a = AutoAnalysis.analyze(img, label: shot.name, noiseIsoScale: noiseScale, fallbackIso: shot.iso,
-                                                 detectSkin: shot.mayHaveFace, meter: shot.meter)
+                                                 detectSkin: shot.mayHaveFace, meter: shot.meter, phoneAe: true)
                     var params = LookApplier.apply(a.autoBase, look: look, strength: s.strength,
                                                    adjust: Adjustments(brightness: s.brightness, warmth: s.warmth),
                                                    hasFace: a.stats.hasFace)
