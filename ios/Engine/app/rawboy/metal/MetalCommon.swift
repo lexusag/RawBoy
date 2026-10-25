@@ -35,6 +35,8 @@ struct SampleGeometry {
     let imageHeight: Int
     /** Smallest grain cell in full-resolution pixels: more than 1 when the export is saved smaller. */
     var minGrainPx: Float = 1
+    /** [output] with fractional edges, [x, y, width, height] (a pinch zoom's view, ZoomMath.viewRectF); nil = [output]. */
+    var outputF: [Float]? = nil
 
     /** Grain cell in full-resolution pixels: ~1/3200 of the long edge (fine-grain film). */
     var grainSize: Float { max(minGrainPx, Float(max(imageWidth, imageHeight)) / 3200) }
@@ -266,8 +268,9 @@ struct DevelopProgram {
         u.float("uPixelScale", Float(g.textureWidth) / Float(g.input.width))
         u.vec2("uInOrigin", Float(g.input.x), Float(g.input.y))
         u.vec2("uInSpan", Float(g.input.width), Float(g.input.height))
-        u.vec2("uOutOrigin", Float(g.output.x), Float(g.output.y))
-        u.vec2("uOutSpan", Float(g.output.width), Float(g.output.height))
+        let out = g.outputF ?? [Float(g.output.x), Float(g.output.y), Float(g.output.width), Float(g.output.height)]
+        u.vec2("uOutOrigin", out[0], out[1])
+        u.vec2("uOutSpan", out[2], out[3])
         bindLens(&u, p.lens)
         bindLayers(&u, p.layers)
         bindLeaks(&u, p.leaks)

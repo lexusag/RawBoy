@@ -66,7 +66,7 @@ and smooths luma later and gently, at most +60; below 0 it takes the luma denois
 down to none at −100, e.g. to keep fine detail at high ISO). Press and hold the photo to see it without the look. As in RawBoy, a thin frame around the photo (neutral
 grey by default) helps judge exposure; tap (click) outside the photo to cycle it through grey, white and black.
 **Swipe left or right** on the photo to move to the previous or next photo in the batch (each keeps its own
-settings; swiping is off while zoomed or exporting). Pinch with two fingers to zoom around them, up to 400% (Android, web on touch screens).
+settings; swiping is off while zoomed or exporting). Pinch with two fingers to zoom around them, up to 400% (iOS, Android, web on touch screens).
 **Remove from batch** (the bin in the web's top bar, the ⋮ menu on Android; **Delete** on the web) takes the open photo
 out of the batch, the file stays, and goes on to the next photo (the one before it at the batch's end; back to the
 grid when it was the last).

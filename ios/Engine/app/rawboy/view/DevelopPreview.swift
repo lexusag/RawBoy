@@ -16,10 +16,12 @@ public struct DevelopPreview: UIViewRepresentable {
     public var margin: Int = 0
     /** Marks clipped highlights red and crushed shadows blue (Pro's histogram toggles it). */
     public var clipWarning = false
+    /** View pixels per full-resolution pixel while zoomed (1 = 100%; a pinch sets others). */
+    public var zoomScale: Float = 1
 
     public init(image: PreviewImage?, params: ShaderParams?, zoomCenter: (Float, Float)? = nil,
                 detail: DetailTile? = nil, frameWidth: Int = 0, frameColor: FrameColor = .grey, margin: Int = 0,
-                clipWarning: Bool = false) {
+                clipWarning: Bool = false, zoomScale: Float = 1) {
         self.image = image
         self.params = params
         self.zoomCenter = zoomCenter
@@ -28,6 +30,7 @@ public struct DevelopPreview: UIViewRepresentable {
         self.frameColor = frameColor
         self.margin = margin
         self.clipWarning = clipWarning
+        self.zoomScale = zoomScale
     }
 
     public func makeCoordinator() -> DevelopRenderer { DevelopRenderer() }
@@ -46,6 +49,7 @@ public struct DevelopPreview: UIViewRepresentable {
         r.params = params
         r.detail = detail
         r.zoomCenter = zoomCenter
+        r.zoomScale = zoomScale
         r.frameWidth = frameWidth
         r.frameGrey = frameColor.level
         r.margin = margin

@@ -187,6 +187,8 @@ private struct PhotoPage: View {
     @State private var showAuto = false
     /** The drag's previous translation; a local var would reset on every redraw and make pans accelerate. */
     @State private var panLast = CGSize.zero
+    /** The pinch's magnification at its last change, while two fingers zoom. */
+    @State private var pinchLast: CGFloat?
     @Environment(\.displayScale) private var scale
     private var framePx: Int { Int(frameWidthPt * scale) }
 
@@ -207,12 +209,14 @@ private struct PhotoPage: View {
                                                    film: shown.film != nil ? session.filmData : nil)
                             : vm.cachedShaderParams(photo.id, shown),
                         zoomCenter: live ? session.zoomCenter : nil, detail: live ? session.detail : nil,
-                        frameWidth: framePx, frameColor: vm.frameColor)
+                        frameWidth: framePx, frameColor: vm.frameColor, zoomScale: live ? session.zoomScale : 1)
                     .gesture(previewGestures(live: live))
-                    .onAppear { session.setViewSize(Int(geo.size.width * scale), Int(geo.size.height * scale)) }
-                    .onChange(of: geo.size) { _, s in session.setViewSize(Int(s.width * scale), Int(s.height * scale)) }
+                    .onAppear { session.setViewSize(Int(geo.size.width * scale), Int(geo.size.height * scale), frame: framePx) }
+                    .onChange(of: geo.size) { _, s in
+                        session.setViewSize(Int(s.width * scale), Int(s.height * scale), frame: framePx)
+                    }
                     if live, showAuto || session.zoomCenter != nil {
-                        OverlayLabel(!showAuto ? "100%" : photo.preset != nil ? "Without preset" : "Without look")
+                        OverlayLabel(!showAuto ? ZoomMath.label(session.zoomScale) : photo.preset != nil ? "Without preset" : "Without look")
                             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                     }
                     if !live {
@@ -243,17 +247,30 @@ private struct PhotoPage: View {
             vm.onPreviewTap(Float(e.location.x * scale), Float(e.location.y * scale), frameWidth: framePx)
         }
         let hold = LongPressGesture(minimumDuration: 0.25)
-            .onEnded { _ in if live { showAuto = true } }
+            .onEnded { _ in if live && pinchLast == nil { showAuto = true } }
             .sequenced(before: DragGesture(minimumDistance: 0).onEnded { _ in showAuto = false })
         let pan = DragGesture(minimumDistance: 1)
             .onChanged { v in
                 guard session.zoomCenter != nil else { return }
                 let d = CGSize(width: v.translation.width - panLast.width, height: v.translation.height - panLast.height)
                 panLast = v.translation
-                session.pan(Float(d.width * scale), Float(d.height * scale))
+                // While pinching, the zoom keeps the photo under the fingers; a drag's single finger would fight it.
+                if pinchLast == nil { session.pan(Float(d.width * scale), Float(d.height * scale)) }
             }
             .onEnded { _ in panLast = .zero }
+        // Pinch: zoom from fit up to 400% around where it started, stopping once at 100%.
+        let pinch = MagnifyGesture()
+            .onChanged { v in
+                guard live else { return }
+                showAuto = false
+                let factor = v.magnification / (pinchLast ?? 1)
+                pinchLast = v.magnification
+                session.zoomBy(Float(v.startLocation.x * scale), Float(v.startLocation.y * scale), factor: Float(factor),
+                               frameWidth: framePx)
+            }
+            .onEnded { _ in pinchLast = nil }
         return doubleTap.exclusively(before: tap).simultaneously(with: hold.simultaneously(with: pan))
+            .simultaneously(with: pinch)
     }
 }
 

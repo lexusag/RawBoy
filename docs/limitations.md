@@ -2,7 +2,6 @@
 
 - Grain and the fine colour denoise are sized in full-resolution pixels, so the fit-to-screen preview shows them weaker than the exported file (the multi-scale luma denoise follows the preview's scale). Judge them in the 100% view.
 - Shadows/Highlights are per-pixel tone curves. A local (guided-filter) version would keep more micro-contrast.
-- iOS: zoom is fit or 100% only, with no pinch zoom yet (Android and the web pinch up to 400%).
 - Press-and-hold compare shows healed blemishes as healed (healing changes the image data itself).
 - Very large files (≥100 MP) export JPEG through a full-size Bitmap and may run out of memory (RawBoy and Auto;
   Camera's jpegli path streams and has no such limit).

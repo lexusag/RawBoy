@@ -165,11 +165,16 @@ final class EditorViewModel: ObservableObject {
 
     func setViewSize(_ width: Int, _ height: Int, frame: Int) {
         frameWidth = frame
-        session.setViewSize(width, height)
+        session.setViewSize(width, height, frame: frame)
     }
 
     /** Double tap: zoom to 100% at the tapped point of the fit view, or back out. [extra]: margin around the frame. */
     func toggleZoom(_ x: Float, _ y: Float, extra: Int = 0) { session.toggleZoom(x, y, frameWidth: frameWidth + extra) }
+
+    /** Pinch: zoom by [factor] around (x, y) in view pixels. [extra]: margin around the frame, as for [toggleZoom]. */
+    func zoomBy(_ x: Float, _ y: Float, factor: Float, extra: Int = 0) {
+        session.zoomBy(x, y, factor: factor, frameWidth: frameWidth + extra)
+    }
 
     /**
      * White balance picker: sets temperature and tint so the tapped spot of the preview (fit or 100% view) renders
@@ -190,7 +195,7 @@ final class EditorViewModel: ObservableObject {
         }
     }
 
-    /** Drag in the 100% view; [dx], [dy] are view pixels = full-resolution pixels. */
+    /** Drag in the zoomed view, in view pixels. */
     func pan(_ dx: Float, _ dy: Float) { session.pan(dx, dy) }
 
     func exitZoom() { session.exitZoom() }

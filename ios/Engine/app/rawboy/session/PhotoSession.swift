@@ -57,8 +57,10 @@ public final class PhotoSession: ObservableObject {
     @Published public private(set) var blemish = BlemishState()
     /** Highlight-boosted small copies that bloom scatters light from. */
     @Published public private(set) var bloomSources: BloomSources?
-    /** Centre of the 100% view in full-resolution pixels; nil = fit to view. */
+    /** Centre of the zoomed view in full-resolution pixels; nil = fit to view. */
     @Published public private(set) var zoomCenter: (Float, Float)?
+    /** View pixels per full-resolution pixel while zoomed: 1 = 100% (double tap), others from a pinch. */
+    @Published public private(set) var zoomScale: Float = 1
     /** Full-resolution region around the zoom centre, uploaded for the 100% view. */
     @Published public private(set) var detail: DetailTile?
     @Published public private(set) var lensInfo = LensInfo.none()
@@ -87,6 +89,8 @@ public final class PhotoSession: ObservableObject {
     private var params = DevelopParams()
     private var viewWidth = 0
     private var viewHeight = 0
+    /** The frame the zoomed view keeps around the photo, pixels (ZoomMath's [frame]). */
+    private var viewFrame = 0
     /** Painted masks by layer id (see brushRaster). */
     private var brushes: [String: BrushRaster] = [:]
     private var guide: BrushGuide?
@@ -206,9 +210,10 @@ public final class PhotoSession: ObservableObject {
         return g
     }
 
-    public func setViewSize(_ width: Int, _ height: Int) {
+    public func setViewSize(_ width: Int, _ height: Int, frame: Int = 0) {
         viewWidth = width
         viewHeight = height
+        viewFrame = frame
         if let c = zoomCenter { setZoomCenter(c.0, c.1) }
     }
 
@@ -232,7 +237,8 @@ public final class PhotoSession: ObservableObject {
         let h = lens.outputHeight
         let r: [Float]
         if let z = zoomCenter {
-            r = ZoomMath.zoomedRect(cx: z.0, cy: z.1, viewW: viewWidth, viewH: viewHeight, imgW: w, imgH: h)
+            r = ZoomMath.zoomedRect(cx: z.0, cy: z.1, viewW: viewWidth, viewH: viewHeight, imgW: w, imgH: h,
+                                    scale: zoomScale, frame: viewFrame)
         } else {
             r = ZoomMath.fitRect(viewW: viewWidth, viewH: viewHeight, imgW: w, imgH: h, frame: frameWidth)
         }
@@ -261,37 +267,74 @@ public final class PhotoSession: ObservableObject {
             return
         }
         guard let p = fitToImage(viewX, viewY, frameWidth: frameWidth) else { return }
-        setZoomCenter(p.0, p.1)
+        setZoomCenter(p.0, p.1, scale: 1)
     }
 
-    /** Drag in the 100% view; [dx], [dy] are view pixels = full-resolution pixels. */
+    /**
+     * Pinch: scales the view by [factor] keeping the photo point under ([viewX], [viewY]) in place, from the fit view
+     * up to ZoomMath.maxScale. Passing 100% stops there once; zooming out past the fit view returns to it. Port of
+     * Android's PhotoSession.zoomBy.
+     */
+    public func zoomBy(_ viewX: Float, _ viewY: Float, factor: Float, frameWidth: Int) {
+        let vw = viewWidth
+        let vh = viewHeight
+        guard image != nil, vw > 0, vh > 0 else { return }
+        let lens = lensFor(params)
+        let w = lens.outputWidth
+        let h = lens.outputHeight
+        let fit = ZoomMath.fitScale(viewW: vw, viewH: vh, imgW: w, imgH: h, frame: frameWidth)
+        let c = zoomCenter
+        let from = c != nil ? zoomScale : fit
+        let r = c.map {
+            ZoomMath.zoomedRect(cx: $0.0, cy: $0.1, viewW: vw, viewH: vh, imgW: w, imgH: h, scale: from, frame: viewFrame)
+        } ?? ZoomMath.fitRect(viewW: vw, viewH: vh, imgW: w, imgH: h, frame: frameWidth)
+        let x = (viewX - r[0]) / r[2] * Float(w)
+        let y = (viewY - r[1]) / r[3] * Float(h)
+        var to = min(ZoomMath.maxScale, from * factor)
+        if (from < 1 && to > 1) || (from > 1 && to < 1) { to = 1 }
+        if to <= fit * 1.001 {
+            exitZoom()
+            return
+        }
+        if c != nil && to == from { return }
+        setZoomCenter(x - (viewX - Float(vw) / 2) / to, y - (viewY - Float(vh) / 2) / to, scale: to)
+    }
+
+    /** Drag in the zoomed view, in view pixels. */
     public func pan(_ dx: Float, _ dy: Float) {
         guard let c = zoomCenter else { return }
-        setZoomCenter(c.0 - dx, c.1 - dy)
+        let s = zoomScale
+        setZoomCenter(c.0 - dx / s, c.1 - dy / s)
     }
 
     public func exitZoom() {
         tileTask?.cancel()
         tileTask = nil
         zoomCenter = nil
+        zoomScale = 1
         detail = nil
     }
 
-    private func setZoomCenter(_ cx: Float, _ cy: Float) {
+    private func setZoomCenter(_ cx: Float, _ cy: Float, scale: Float? = nil) {
         guard let img = image else { return }
+        let s = scale ?? zoomScale
         let lens = lensFor(params)
         let c = ZoomMath.clampCenter(cx: cx, cy: cy, viewW: viewWidth, viewH: viewHeight, imgW: lens.outputWidth,
-                                     imgH: lens.outputHeight)
+                                     imgH: lens.outputHeight, scale: s, frame: viewFrame)
+        if zoomScale != s { zoomScale = s }
         zoomCenter = c
         ensureDetail(img, c)
     }
 
-    /** Loads a new tile only when the visible region leaves the current one. */
+    /** Loads a new tile only when the visible region leaves the current one (none while the preview is enough). */
     private func ensureDetail(_ img: RawImage, _ c: (Float, Float)) {
         if tileTask != nil { return }
+        if let preview, ZoomMath.previewSuffices(zoomScale, previewWidth: preview.width, fullWidth: preview.fullWidth) {
+            return
+        }
         let lens = lensFor(params)
         let view = ZoomMath.viewRect(cx: c.0, cy: c.1, viewW: viewWidth, viewH: viewHeight, imgW: lens.outputWidth,
-                                     imgH: lens.outputHeight)
+                                     imgH: lens.outputHeight, scale: zoomScale, frame: viewFrame)
         // Source pixels the view needs, through rotation and lens geometry, plus the denoise halo.
         let needed = lens.sourceBounds(view, margin: spatialMargin(params))
         if let current = detail, current.rect.contains(needed) { return }

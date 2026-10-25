@@ -23,7 +23,7 @@ public enum FrameColor: CaseIterable, Sendable {
 
 /**
  * Renders the developed image into an MTKView: either the whole downscaled
- * preview (aspect-fit) or, when zoomed, a 1:1 window into a full-resolution tile.
+ * preview (aspect-fit) or, when zoomed, a window into a full-resolution tile (1:1 at 100%, any scale with a pinch).
  * Draws on demand (the view is paused; setNeedsDisplay after each change). Main thread only.
  */
 public final class DevelopRenderer: NSObject, MTKViewDelegate {
@@ -40,15 +40,17 @@ public final class DevelopRenderer: NSObject, MTKViewDelegate {
     public var image: PreviewImage?
     public var detail: DetailTile?
     public var params: ShaderParams?
-    /** Frame around the photo in the fit view: width in pixels and its grey level (display-encoded). */
+    /** Frame around the photo in the fit and zoomed views: width in pixels and its grey level (display-encoded). */
     public var frameWidth = 0
     public var frameGrey: Float = FrameColor.grey.level
     /** Extra empty space around the frame in the fit view, pixels (room for the mask tool's handles). */
     public var margin = 0
     /** Paints clipped highlights red and crushed shadows blue (Pro's histogram, `clipWarning` in develop.glsl). */
     public var clipWarning = false
-    /** Centre of the 100% view in full-resolution pixels, or nil for fit-to-view. */
+    /** Centre of the zoomed view in full-resolution pixels, or nil for fit-to-view. */
     public var zoomCenter: (Float, Float)?
+    /** View pixels per full-resolution pixel while zoomed: 1 = 100%, others from a pinch. */
+    public var zoomScale: Float = 1
 
     public override init() {
         let d = MTLRenderPipelineDescriptor()
@@ -84,12 +86,16 @@ public final class DevelopRenderer: NSObject, MTKViewDelegate {
 
         guard let pass = view.currentRenderPassDescriptor, let drawable = view.currentDrawable,
               let commands = ctx.queue.makeCommandBuffer() else { return }
+        let viewWidth = max(1, Int(view.drawableSize.width))
+        let viewHeight = max(1, Int(view.drawableSize.height))
         // The denoise pre-pass renders into its own targets, so it is encoded before the view's pass.
         var source: MTLTexture?
         var denoised = false
-        if let p = params, image != nil, let preview = previewTexture {
-            let zoomed = zoomCenter != nil && uploadedDetail != nil
-            let texture = zoomed ? uploadedDetail!.texture : preview
+        var tile: DetailTile?
+        if let p = params, let img = image, let preview = previewTexture {
+            if let c = zoomCenter { tile = usableTile(p, img, c, viewWidth, viewHeight) }
+            let zoomed = tile != nil
+            let texture = zoomed ? tile!.texture : preview
             source = texture
             if WaveletDenoise.active(p.denoise, p.colorDenoise) {
                 let key: AnyHashable = zoomed ? "tile" : AnyHashable(previewVersion)
@@ -100,12 +106,10 @@ public final class DevelopRenderer: NSObject, MTKViewDelegate {
             }
         }
         guard let encoder = commands.makeRenderCommandEncoder(descriptor: pass) else { return }
-        let viewWidth = max(1, Int(view.drawableSize.width))
-        let viewHeight = max(1, Int(view.drawableSize.height))
         if let p = params, let img = image, let input = source {
             textures.bind(p)
             let configure = uniforms(denoised: denoised)
-            if let center = zoomCenter, let tile = uploadedDetail {
+            if let center = zoomCenter {
                 drawZoomed(encoder, p, img, tile, input, center, viewWidth, viewHeight, configure)
             } else {
                 drawFit(encoder, p, img, input, viewWidth, viewHeight, configure)
@@ -124,21 +128,7 @@ public final class DevelopRenderer: NSObject, MTKViewDelegate {
         let frame = frameWidth
         let r = ZoomMath.fitRect(viewW: viewWidth, viewH: viewHeight, imgW: outW, imgH: outH, frame: frame + margin)
 
-        // Frame: a band of neutral grey / white / black around the photo, for judging exposure.
-        if frame > 0 {
-            let x0 = max(0, Int(r[0]) - frame)
-            let y0 = max(0, Int(r[1]) - frame)
-            let x1 = min(viewWidth, Int(r[0] + r[2]) + frame)
-            let y1 = min(viewHeight, Int(r[1] + r[3]) + frame)
-            if x1 > x0 && y1 > y0 {
-                var color = SIMD4<Float>(frameGrey, frameGrey, frameGrey, 1)
-                encoder.setScissorRect(MTLScissorRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0))
-                encoder.setRenderPipelineState(solidPipeline)
-                encoder.setFragmentBytes(&color, length: MemoryLayout<SIMD4<Float>>.stride, index: 0)
-                encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
-                encoder.setScissorRect(MTLScissorRect(x: 0, y: 0, width: viewWidth, height: viewHeight))
-            }
-        }
+        clearFrame(encoder, r[0], r[1], r[2], r[3], viewWidth, viewHeight)
 
         let sx = r[2] / Float(viewWidth)
         let sy = r[3] / Float(viewHeight)
@@ -151,19 +141,73 @@ public final class DevelopRenderer: NSObject, MTKViewDelegate {
                             inputs: textures, scaleX: sx, scaleY: sy, flipY: true, configure: configure)
     }
 
-    private func drawZoomed(_ encoder: MTLRenderCommandEncoder, _ p: ShaderParams, _ img: PreviewImage,
-                            _ tile: DetailTile, _ texture: MTLTexture, _ center: (Float, Float), _ viewWidth: Int,
-                            _ viewHeight: Int, _ configure: @escaping (inout UniformBlock) -> Void) {
-        let t = tile.rect
-        // Output = what's on screen; input = the loaded full-resolution tile. If the
-        // lens moves pixels outside the tile while a new one loads, edges smear briefly.
+    /**
+     * The loaded full-resolution tile when the zoomed view needs it and it covers the view; nil draws from the preview:
+     * between fit and 100% (pinch) the preview may be enough, and it stands in while a tile for a new region or scale
+     * loads.
+     */
+    private func usableTile(_ p: ShaderParams, _ img: PreviewImage, _ center: (Float, Float), _ viewWidth: Int,
+                            _ viewHeight: Int) -> DetailTile? {
+        guard let tile = uploadedDetail,
+              !ZoomMath.previewSuffices(zoomScale, previewWidth: img.width, fullWidth: img.fullWidth) else { return nil }
+        if zoomScale == 1 { return tile }
         let view = ZoomMath.viewRect(cx: center.0, cy: center.1, viewW: viewWidth, viewH: viewHeight,
-                                     imgW: p.lens.outputWidth, imgH: p.lens.outputHeight)
-        let geometry = SampleGeometry(textureWidth: t.width, textureHeight: t.height, input: t, output: view,
+                                     imgW: p.lens.outputWidth, imgH: p.lens.outputHeight, scale: zoomScale, frame: frameWidth)
+        return tile.rect.contains(p.lens.sourceBounds(view, margin: 0)) ? tile : nil
+    }
+
+    /**
+     * [tile] nil: [texture] is the (denoised) preview. Output = what's on screen; input = the loaded full-resolution
+     * tile. If the lens moves pixels outside the tile while a new one loads, edges smear briefly.
+     */
+    private func drawZoomed(_ encoder: MTLRenderCommandEncoder, _ p: ShaderParams, _ img: PreviewImage,
+                            _ tile: DetailTile?, _ texture: MTLTexture, _ center: (Float, Float), _ viewWidth: Int,
+                            _ viewHeight: Int, _ configure: @escaping (inout UniformBlock) -> Void) {
+        let outW = p.lens.outputWidth
+        let outH = p.lens.outputHeight
+        let scale = zoomScale
+        let viewF = ZoomMath.viewRectF(cx: center.0, cy: center.1, viewW: viewWidth, viewH: viewHeight, imgW: outW,
+                                       imgH: outH, scale: scale, frame: frameWidth)
+        let view = ZoomMath.viewRect(cx: center.0, cy: center.1, viewW: viewWidth, viewH: viewHeight, imgW: outW,
+                                     imgH: outH, scale: scale, frame: frameWidth)
+        let w = viewF[2] * scale
+        let h = viewF[3] * scale
+        // The frame stays while zoomed: the photo shows inside it, like in the fit view.
+        clearFrame(encoder, (Float(viewWidth) - w) / 2, (Float(viewHeight) - h) / 2, w, h, viewWidth, viewHeight)
+        var geometry: SampleGeometry
+        if let t = tile?.rect {
+            geometry = SampleGeometry(textureWidth: t.width, textureHeight: t.height, input: t, output: view,
                                       imageWidth: img.fullWidth, imageHeight: img.fullHeight)
+        } else {
+            let input = PixelRect(x: 0, y: 0, width: img.fullWidth, height: img.fullHeight)
+            geometry = SampleGeometry(textureWidth: img.width, textureHeight: img.height, input: input, output: view,
+                                      imageWidth: img.fullWidth, imageHeight: img.fullHeight)
+        }
+        geometry.outputF = viewF
         DevelopProgram.draw(encoder, pipeline: ctx.previewPipeline, params: p, geometry: geometry, image: texture,
-                            inputs: textures, scaleX: Float(view.width) / Float(viewWidth),
-                            scaleY: Float(view.height) / Float(viewHeight), flipY: true, configure: configure)
+                            inputs: textures, scaleX: w / Float(viewWidth), scaleY: h / Float(viewHeight), flipY: true,
+                            configure: configure)
+    }
+
+    /**
+     * Frame: a band of neutral grey / white / black around the photo at ([left], [top], [width], [height]) (view
+     * pixels, top-left origin), for judging exposure.
+     */
+    private func clearFrame(_ encoder: MTLRenderCommandEncoder, _ left: Float, _ top: Float, _ width: Float,
+                            _ height: Float, _ viewWidth: Int, _ viewHeight: Int) {
+        let frame = frameWidth
+        guard frame > 0 else { return }
+        let x0 = max(0, Int(left) - frame)
+        let y0 = max(0, Int(top) - frame)
+        let x1 = min(viewWidth, Int(left + width) + frame)
+        let y1 = min(viewHeight, Int(top + height) + frame)
+        guard x1 > x0 && y1 > y0 else { return }
+        var color = SIMD4<Float>(frameGrey, frameGrey, frameGrey, 1)
+        encoder.setScissorRect(MTLScissorRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0))
+        encoder.setRenderPipelineState(solidPipeline)
+        encoder.setFragmentBytes(&color, length: MemoryLayout<SIMD4<Float>>.stride, index: 0)
+        encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+        encoder.setScissorRect(MTLScissorRect(x: 0, y: 0, width: viewWidth, height: viewHeight))
     }
 
     /** Preview-only uniforms: the clip warning, and whether the image went through the denoise pre-pass. */

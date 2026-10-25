@@ -445,12 +445,15 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
 - Texture units: 0 image, 1 LUT (3D), 2 lens shading, 3 base (512), 4 bloom halo, 5 bloom tail, 6 skin mask, 7 brush atlas,
   8 film LUT, 9 print LUT (film looks: RawBoy Film and Auto's Film mode, all platforms), 10–11 the wavelet denoise
   passes, 12 the lens blur result (`uBokeh`), 13 the lens blur's own passes.
-- Pinch and wheel zoom (`PhotoSession.zoomBy`, Android and web; iOS has 100% only): the web's mouse wheel on desktop
+- Pinch and wheel zoom (`PhotoSession.zoomBy`, all platforms): the web's mouse wheel on desktop
   and its two-finger pinch (`Preview`'s `onZoomBy`, pointer events; `MaskOverlay` lets a second finger through),
   Android's pinch (`view/PanAndPinch.kt`: `rememberPanAndPinch` in the preview's gesture layer between the tap
-  detector and the mask gestures, which pinch themselves while painting). `zoomScale` (device px per full-res px;
+  detector and the mask gestures, which pinch themselves while painting), iOS's `MagnifyGesture` in the Pro and Auto
+  preview gestures (zooms around where the pinch started; the drag doesn't pan meanwhile) and `MaskTouchView`'s
+  two-finger pan, which pinches too (`MaskActions.onZoom`). `zoomScale` (device px per full-res px;
   1 = 100%, double tap's scale) goes through `ZoomMath`'s `scale` parameters (fractional view rects when ≠ 1; Kotlin:
-  `viewRectF`, `SampleGeometry.outputF`; `DevelopRenderer.zoom` sets centre and scale together). Up to `ZoomMath.previewSuffices` the zoomed view draws from the preview texture
+  `viewRectF`, `SampleGeometry.outputF`; `DevelopRenderer.zoom` sets centre and scale together; Swift: `zoomCenter` and
+  `zoomScale`, main thread only). Up to `ZoomMath.previewSuffices` the zoomed view draws from the preview texture
   (also while a tile for a new region or scale loads); above it from a full-res tile (linear filtering below 100%).
 - Lens blur (mask layers' `lensBlur`, Android and web; `gl/BokehTexture.kt/.ts`): bloom-style, a small whole-image
   texture, so preview, 100% and export match with no `spatialMargin`. From a highlight-boosted 1536 px copy
