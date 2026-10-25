@@ -74,6 +74,12 @@ object AutoTone {
      */
     private const val LUMA_DENOISE_SCALE = 0.8f
 
+    /**
+     * Then this much less, down to 0: what Auto's Denoise -5 took away, where the owner liked it better (2026-10-25). Colour
+     * denoise lost only 0.25 there, so it stays.
+     */
+    private const val LUMA_DENOISE_OFFSET = 10
+
     /** Scene-linear value AgX maps to display white (0.18 * 2^4.03). */
     private const val DISPLAY_WHITE = 2.95f
 
@@ -177,7 +183,7 @@ object AutoTone {
             full <= 65f -> 10f - (full - 45f) / 20f * 5f
             else -> 5f
         }.roundToInt().toFloat()
-        return Triple((full * LUMA_DENOISE_SCALE).roundToInt().toFloat(), color, sharpening)
+        return Triple(((full * LUMA_DENOISE_SCALE).roundToInt() - LUMA_DENOISE_OFFSET).coerceAtLeast(0).toFloat(), color, sharpening)
     }
 
     /** (denoise, colour denoise = null: follows denoise, sharpening) by ISO, interpolated between measured points; ISO 0 = unknown. */
