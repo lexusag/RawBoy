@@ -1,5 +1,11 @@
 # Changelog
 
+**RawBoy remembers its open tab (2026-10-25)**
+
+- RawBoy (Android, web): the editor's tab (Light, Color, Detail, LUTs, Lens) stays where you left it after going to
+  Auto and back, opening a photo with Edit in RawBoy, opening Presets, Masks or Crop, or restarting the app. It used
+  to jump back to Light.
+
 **Smooth halation (2026-10-25)**
 
 - RawBoy (Film tone mapper) and Auto's Film mode (Android, iOS, web): at high Halation the glow around small lights

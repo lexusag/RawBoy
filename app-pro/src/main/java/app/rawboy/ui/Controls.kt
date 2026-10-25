@@ -38,7 +38,6 @@ import app.rawboy.lens.LensInfo
 import app.rawboy.lut.LutEntry
 import app.rawboy.lut.LutLibrary
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -87,12 +86,15 @@ fun ControlsPanel(
     onPickWhite: () -> Unit = {},
     /** Lens tab: saves its settings as the lens preset for this lens; with true, also sends it to RawBoy Auto. */
     onSaveLensPreset: (name: String, sendToAuto: Boolean) -> Unit = { _, _ -> },
+    /** The tab the user chose, kept by the view model so it survives this panel leaving composition. */
+    chosenTab: Int = 0,
+    onTab: (Int) -> Unit = {},
 ) {
-    var chosenTab by rememberSaveable { mutableIntStateOf(0) }
     // Film replaces the tone mapper and the user LUT (which is kept, but not rendered), so the LUTs tab
     // hides while Film is on. Tabs keep their index (TAB_NAMES) whether or not LUTs is shown.
     val filmOn = params.film != null
-    val tab = if (filmOn && chosenTab == TAB_LUTS) 0 else chosenTab
+    val chosen = chosenTab.coerceIn(TAB_NAMES.indices)
+    val tab = if (filmOn && chosen == TAB_LUTS) 0 else chosen
     val shownTabs = TAB_NAMES.indices.filter { !(filmOn && it == TAB_LUTS) }
     // One scroll position per tab (Light, Color, Detail, LUTs, Lens), kept across rotation.
     val scrollStates = List(TAB_NAMES.size) { rememberScrollState() }
@@ -100,7 +102,7 @@ fun ControlsPanel(
     Column(modifier) {
         PrimaryTabRow(selectedTabIndex = shownTabs.indexOf(tab)) {
             for (i in shownTabs) {
-                SmallTab(TAB_NAMES[i], tab == i) { chosenTab = i }
+                SmallTab(TAB_NAMES[i], tab == i) { onTab(i) }
             }
         }
         Column(

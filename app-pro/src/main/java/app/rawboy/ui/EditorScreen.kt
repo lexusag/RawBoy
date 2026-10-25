@@ -123,6 +123,7 @@ fun EditorScreen(vm: EditorViewModel) {
     }
     val scope = rememberCoroutineScope()
     val frameColor by vm.frameColor.collectAsStateWithLifecycle()
+    val controlsTab by vm.controlsTab.collectAsStateWithLifecycle()
     val framePx = with(LocalDensity.current) { FRAME_WIDTH.roundToPx() }
 
     var showExport by remember { mutableStateOf(false) }
@@ -517,6 +518,8 @@ fun EditorScreen(vm: EditorViewModel) {
                     pickingWhite = pickingWhite,
                     onPickWhite = { pickingWhite = !pickingWhite },
                     onSaveLensPreset = { name, send -> vm.saveLensPreset(name).let { if (send) vm.sendPresetToAuto(it) } },
+                    chosenTab = controlsTab,
+                    onTab = vm::setControlsTab,
                 )
             }
         }
