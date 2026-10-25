@@ -344,11 +344,11 @@ export class AutoStore {
   /**
    * Adds photos; files already listed (same name, size and date) are skipped. Returns how many were added. [sidecars]
    * (same order as [files]; RawBoy Browser's): photos come back with the Auto settings kept there, and keep them there.
+   * [importMode]: how they're added (RawBoy Browser's Send to Auto asks), else the batch's Import as.
    */
-  add(files: File[], sidecars: readonly (EditsSidecar | null)[] = []): number {
+  add(files: File[], sidecars: readonly (EditsSidecar | null)[] = [], importMode: ImportMode = this._state.importMode): number {
     const known = new Set(this._state.photos.map((p) => fileKey(p.file)));
     const fresh: AutoPhoto[] = [];
-    const importMode = this._state.importMode;
     const plain = importMode === 'plain';
     const mode: LookMode = importMode === 'plain' ? 'looks' : importMode;
     for (const [i, file] of files.entries()) {

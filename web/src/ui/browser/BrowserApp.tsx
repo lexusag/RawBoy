@@ -7,6 +7,8 @@ import { BIN, isArc, photosToSend, type BrowsePhoto, type BrowserStore, type Fil
 import type { ViewImage } from './Previews';
 import type { EditsSidecar, Flag, Rating } from '../../engine/browse/XmpSidecar';
 import { shortcutKey } from '../common/shortcutKey';
+import type { ImportMode } from '../auto/AutoStore';
+import { IMPORT_MODES, ModeSwitch } from '../auto/AutoApp';
 
 type DirectoryPicker = (o?: object) => Promise<FileSystemDirectoryHandle>;
 const directoryPicker = () => (window as unknown as { showDirectoryPicker?: DirectoryPicker }).showDirectoryPicker;
@@ -55,35 +57,38 @@ const isTextEntry = (t: EventTarget | null) => t instanceof HTMLInputElement || 
  * RawBoy Browser: a folder's photos in a grid and one at a time, for culling: stars, pick and reject, written to XMP
  * sidecars; rejects move to a bin folder. [active]: the tab is shown (keyboard shortcuts only work then).
  */
-export function BrowserApp({ store, active, onEditInRawBoy, onSendToAuto }: {
+export function BrowserApp({ store, active, autoImportMode, onEditInRawBoy, onSendToAuto }: {
   store: BrowserStore;
   active: boolean;
+  /** Auto's Import as: what Send to Auto offers until a choice is made here. */
+  autoImportMode: ImportMode;
   /** [sidecar]: where RawBoy keeps the photo's edits (Edits in sidecars on), else null. */
   onEditInRawBoy: (file: File, sidecar: EditsSidecar | null) => void;
-  /** [sidecars]: where Auto keeps each photo's settings (Edits in sidecars on), else nulls. */
-  onSendToAuto: (files: File[], sidecars: (EditsSidecar | null)[]) => void;
+  /**
+   * [sidecars]: where Auto keeps each photo's settings (Edits in sidecars on), else nulls. [mode]: what the photos get
+   * (a suggested look, a film stock, or nothing: As is).
+   */
+  onSendToAuto: (files: File[], sidecars: (EditsSidecar | null)[], mode: ImportMode) => void;
 }) {
   const state = useSyncExternalStore(store.subscribe, () => store.state);
   const [confirmBin, setConfirmBin] = useState<'move' | 'restore' | null>(null);
   // Long-press (or Ctrl/Cmd-click) a photo to start selecting, as in Auto; the selection is rated, or goes to Auto, in one go.
   const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
-  const [sending, setSending] = useState(false);
-  // What Send to Auto offers first: the last choice, else the picks when there are any.
+  // Send to Auto's dialog: which photos ('criteria') or the selection's, and what they get.
+  const [sending, setSending] = useState<'criteria' | 'selection' | null>(null);
+  // What Send to Auto offers first: the last choice, else the picks when there are any; the mode, else Auto's Import as.
   const [criteria, setCriteria] = useState<SendCriteria | null>(null);
+  const [mode, setMode] = useState<ImportMode | null>(null);
   const gridScroll = useRef(0);
   const current = state.photos.find((p) => p.id === state.current) ?? null;
 
   const edit = async (id: string) => onEditInRawBoy(await store.file(id), store.editsSidecar(id));
-  const send = async (photos: BrowsePhoto[]) => {
+  const send = async (photos: BrowsePhoto[], mode: ImportMode) => {
     try {
-      onSendToAuto(await Promise.all(photos.map((p) => store.file(p.id))), photos.map((p) => store.editsSidecar(p.id)));
+      onSendToAuto(await Promise.all(photos.map((p) => store.file(p.id))), photos.map((p) => store.editsSidecar(p.id)), mode);
     } catch (e) {
       store.showMessage(`Couldn't read the photos: ${(e as Error)?.message ?? e}`);
     }
-  };
-  const sendSelection = () => {
-    void send(state.photos.filter((p) => selection.has(p.id)));
-    setSelection(new Set());
   };
 
   // A selection only holds photos the grid shows: a filter change or a move to the bin drops the others.
@@ -136,19 +141,23 @@ export function BrowserApp({ store, active, onEditInRawBoy, onSendToAuto }: {
             selection={selection}
             onSelection={setSelection}
             onBin={setConfirmBin}
-            onSendToAuto={() => setSending(true)}
-            onSendSelection={sendSelection}
+            onSendToAuto={() => setSending('criteria')}
+            onSendSelection={() => setSending('selection')}
           />
         )}
       {sending && (
         <SendToAutoDialog
           store={store}
           initial={criteria ?? (state.photos.some((p) => p.rating.flag === 'pick') ? { kind: 'picks' } : { kind: 'stars', stars: 5, exact: false })}
-          onDismiss={() => setSending(false)}
-          onSend={(c, photos) => {
-            setCriteria(c);
-            setSending(false);
-            void send(photos);
+          initialMode={mode ?? autoImportMode}
+          selected={sending === 'selection' ? state.photos.filter((p) => selection.has(p.id)) : null}
+          onDismiss={() => setSending(null)}
+          onSend={(c, m, photos) => {
+            if (sending === 'selection') setSelection(new Set());
+            else setCriteria(c);
+            setMode(m);
+            setSending(null);
+            void send(photos, m);
           }}
         />
       )}
@@ -447,20 +456,33 @@ function RatingBar({ ratings, onStars, onFlag }: {
   );
 }
 
-/** Send to Auto: picks which photos join Auto's batch (photos already there are skipped by Auto). */
-function SendToAutoDialog({ store, initial, onDismiss, onSend }: {
+/** What each mode of Send to Auto gives the photos, under the switch. */
+const SEND_MODE_NOTES: Record<ImportMode, string> = {
+  looks: 'Auto develop and a suggested colour look.',
+  film: 'Auto develop as film on a suggested stock, with grain and halation.',
+  plain: 'No automatic edits and no look: each photo stays as the file is.',
+};
+
+/**
+ * Send to Auto: picks which photos join Auto's batch (photos already there are skipped by Auto), or takes the grid's
+ * [selected] photos, and what they get: Looks, Film or As is (Auto's Import as modes).
+ */
+function SendToAutoDialog({ store, initial, initialMode, selected, onDismiss, onSend }: {
   store: BrowserStore;
   initial: SendCriteria;
+  initialMode: ImportMode;
+  selected: BrowsePhoto[] | null;
   onDismiss: () => void;
-  onSend: (criteria: SendCriteria, photos: BrowsePhoto[]) => void;
+  onSend: (criteria: SendCriteria, mode: ImportMode, photos: BrowsePhoto[]) => void;
 }) {
   const state = useSyncExternalStore(store.subscribe, () => store.state);
+  const [mode, setMode] = useState(initialMode);
   const [kind, setKind] = useState<SendCriteria['kind']>(initial.kind);
   const [stars, setStars] = useState(initial.kind === 'stars' ? initial.stars : 5);
   const [exact, setExact] = useState(initial.kind === 'stars' ? initial.exact : false);
   const criteriaOf = (k: SendCriteria['kind']): SendCriteria => (k === 'stars' ? { kind: k, stars, exact } : { kind: k });
   const count = (k: SendCriteria['kind']) => photosToSend(state.photos, criteriaOf(k), state.filter, state.minStars).length;
-  const chosen = photosToSend(state.photos, criteriaOf(kind), state.filter, state.minStars);
+  const chosen = selected ?? photosToSend(state.photos, criteriaOf(kind), state.filter, state.minStars);
   const filtered = state.filter !== 'all' || state.minStars > 0;
 
   useEffect(() => {
@@ -473,6 +495,10 @@ function SendToAutoDialog({ store, initial, onDismiss, onSend }: {
     <div className="dialog-backdrop" onClick={onDismiss}>
       <div className="dialog send-to-auto" role="dialog" aria-label="Send to Auto" onClick={(e) => e.stopPropagation()}>
         <h2>Send to Auto</h2>
+        {selected ? (
+          <p className="send-selected">The {selected.length} selected photo{selected.length === 1 ? '' : 's'}</p>
+        ) : (
+        <>
         <div className="send-options" role="radiogroup">
           <label className="send-option">
             <input type="radio" name="send" checked={kind === 'picks'} onChange={() => setKind('picks')} />
@@ -516,9 +542,16 @@ function SendToAutoDialog({ store, initial, onDismiss, onSend }: {
           {kind === 'stars' ? 'Rejects are left out. ' : ''}
           To send a hand-picked set, long-press a photo (or {isApple ? '⌘' : 'Ctrl+'}click) to select, then Send to Auto.
         </small>
+        </>
+        )}
+        <div className="send-mode">
+          <span className="send-mode-label">Develop as</span>
+          <ModeSwitch modes={IMPORT_MODES} mode={mode} onChange={setMode} />
+          <small className="muted">{SEND_MODE_NOTES[mode]} Each photo can switch later in Auto.</small>
+        </div>
         <div className="dialog-actions">
           <button type="button" className="text" onClick={onDismiss}>Cancel</button>
-          <button type="button" className="primary" disabled={chosen.length === 0} onClick={() => onSend(criteriaOf(kind), chosen)}>
+          <button type="button" className="primary" disabled={chosen.length === 0} onClick={() => onSend(criteriaOf(kind), mode, chosen)}>
             Add {chosen.length} to Auto
           </button>
         </div>

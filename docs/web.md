@@ -64,7 +64,10 @@ blemish removal use the same MediaPipe models in the browser.
   **Bin (n)** moves them back, and nothing is ever deleted. **Send to Auto** adds photos to Auto's batch: the
   picks, those with at least or exactly N stars (rejects left out), or what the grid shows now; photos already in Auto
   are skipped. To send a hand-picked set, long-press a photo (or Ctrl/⌘-click) to select, click more, Shift-click for
-  a range, Ctrl/⌘+A for all shown, then **Send to Auto** in the selection bar. A selection is rated in one go too:
+  a range, Ctrl/⌘+A for all shown, then **Send to Auto** in the selection bar. Either way the dialog's **Develop as**
+  picks what the photos get: **Looks** (auto develop + a suggested colour look), **Film** (auto develop on a suggested
+  film stock) or **As is** (no automatic edits and no look), as Auto's Import as does; it starts at Auto's choice and
+  then remembers the last one. Photos coming back with Auto settings in their sidecars keep those. A selection is rated in one go too:
   the stars and Pick / Reject bar under the grid, or the same keys, set the rating on every selected photo (pressing
   what they all have already clears it), each sidecar is written, and one **Undo** takes it back.
   Writing to a folder needs Chrome or Edge (File System Access API); Safari (all iPad browsers) and Firefox pick
