@@ -360,7 +360,7 @@ fun EditorScreen(vm: EditorViewModel) {
                 when {
                     state.loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
                     preview == null -> Button(onClick = openFile, modifier = Modifier.align(Alignment.Center)) {
-                        Text("Open a RAW file")
+                        Text("Open a photo")
                     }
                 }
                 if ((zoomCenter != null || maskView != null) && !showOriginal) {

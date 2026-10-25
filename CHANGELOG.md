@@ -1,5 +1,11 @@
 # Changelog
 
+**RawBoy opens JPEG, HEIC, PNG and TIFF (2026-10-25)**
+
+- RawBoy (Android, iOS, web): Open takes JPEG, HEIC, PNG and TIFF as well as RAW, as Auto does, with the same
+  lower-quality-than-RAW decoding. Android: RawBoy also shows up under "Open with" and Share for them. iPhone: picking
+  a photo without a RAW version in Photos now opens its HEIC or JPEG instead of saying it has no RAW version.
+
 **RawBoy and Auto on iPhone: pinch to zoom (2026-10-25)**
 
 - RawBoy and RawBoy Auto (iOS): pinch the photo with two fingers to zoom from the whole photo up to 400% (it stops

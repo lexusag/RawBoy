@@ -3,7 +3,7 @@ import RawBoyEngine
 /** RawBoy's "?" sheet. Keep it in step with the controls (Readme's Controls table) and Android's ui/Help.kt. */
 let proHelp = [
     HelpSection("Basics", [
-        HelpItem("Open", "Opens a RAW file from Photos or Files."),
+        HelpItem("Open", "Opens a RAW file from Photos or Files, or a HEIC, JPEG, PNG or TIFF (lower quality than RAW)."),
         HelpItem("Tabs", "Light, Color, Detail, LUTs and Lens hold the sliders. Edits carry over to the next photo; crop, rotation and flips don't."),
         HelpItem("Lens preset", "Lens tab: name it (the lens by default) and Save lens preset keeps its settings for this photo's lens; Send to Auto also hands it to RawBoy Auto, which corrects every photo taken with that lens on top of its look. Manual lenses record no lens: Auto lets you pick their presets by name."),
         HelpItem("Top bar", "Crop & rotate (turn, flip, straighten, crop), Masks, Light leaks, Presets, Auto (automatic light and colour, keeps the LUT) and Export; Reset all, Undo and Redo under them. Long-press a tool for its full name."),

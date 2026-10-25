@@ -38,6 +38,8 @@
 
 The **?** button in the top bar of every app (Ctrl+/ or ⌘/ on the web) shows the basics and gestures in a short sheet.
 
+RawBoy opens RAW files and, like Auto, JPEG, HEIC, PNG and TIFF (from the Open button, Photos on iPhone, "Open with" on Android, or a drop on the web). Those are already processed by the camera, so they give lower-quality results than RAW; with no edits a photo exports as itself (see [JPEG, HEIC, PNG and TIFF](auto.md#jpeg-heic-png-and-tiff)).
+
 Edits carry over when you open the next file, except rotation, flips, straightening and crop, which reset per photo. White balance carries over only if you changed it; otherwise each file uses its own as-shot white balance. Reset returns to the file's as-shot defaults. Double-tap a slider (or tap its value) to reset it. On the web, the mouse wheel over a slider moves it without clicking (Shift: big steps, Ctrl/⌘: fine steps). Double-tap the image for a 100% view at that point, drag to pan, and double-tap again to go back. Pinch with two fingers to zoom around them, from the whole photo up to 400% (it stops once at 100%), panning with the fingers; on the web the mouse wheel does the same. Press and hold the image to compare with the as-shot render. A thin frame around the photo (neutral grey by default) helps judge exposure, also in the 100% view; tap outside the photo to cycle it through grey, white and black.
 
 ## LUTs

@@ -33,13 +33,13 @@ struct ProRoot: View {
             .sheet(isPresented: $pickingPhotos) {
                 PhotoPicker(selectionLimit: 1) { results in
                     Task {
-                        let (urls, skipped) = await Imports.load(results)
-                        if let url = urls.first { vm.open(url) } else if skipped > 0 { vm.message = "This photo has no RAW version" }
+                        let (urls, skipped) = await Imports.load(results, acceptDisplay: true)
+                        if let url = urls.first { vm.open(url) } else if skipped > 0 { vm.message = "This photo is not RAW, HEIC, JPEG, PNG or TIFF" }
                     }
                 }
                 .ignoresSafeArea()
             }
-            .fileImporter(isPresented: $pickingFiles, allowedContentTypes: rawFileTypes) { result in
+            .fileImporter(isPresented: $pickingFiles, allowedContentTypes: photoFileTypes) { result in
                 if case let .success(url) = result, let copy = try? Imports.copy(url) { vm.open(copy) }
             }
     }
