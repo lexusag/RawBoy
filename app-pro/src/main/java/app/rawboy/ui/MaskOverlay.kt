@@ -54,9 +54,9 @@ private enum class Handle { MOVE, START, END, RX, RY, ROTATE, CURVE, PIN }
  * Where masks sit on screen: image pixels (display orientation, full resolution) <-> preview pixels, through the
  * lens transform and the fit or 100% placement the renderer uses. Port of web's MaskOverlay geometry.
  */
-private class MaskGeometry(val lens: LensTransform, val view: IntSize, frame: Int, zoomCenter: Pair<Float, Float>?) {
+private class MaskGeometry(val lens: LensTransform, val view: IntSize, frame: Int, zoomFrame: Int, zoomCenter: Pair<Float, Float>?) {
     val r: FloatArray = if (zoomCenter != null) {
-        ZoomMath.zoomedRect(zoomCenter.first, zoomCenter.second, view.width, view.height, lens.outputWidth, lens.outputHeight)
+        ZoomMath.zoomedRect(zoomCenter.first, zoomCenter.second, view.width, view.height, lens.outputWidth, lens.outputHeight, zoomFrame)
     } else {
         ZoomMath.fitRect(view.width, view.height, lens.outputWidth, lens.outputHeight, frame)
     }
@@ -290,6 +290,7 @@ fun rememberMaskGestures(
     layers: List<MaskLayer>,
     selectedId: String?,
     frame: Int,
+    zoomFrame: Int,
     zoomCenter: Pair<Float, Float>?,
     tool: MaskTool,
     brush: BrushSettings,
@@ -299,12 +300,12 @@ fun rememberMaskGestures(
     bands: Set<String> = emptySet(),
 ): Modifier {
     val grab = with(LocalDensity.current) { 24.dp.toPx() }
-    val current = rememberUpdatedState(GestureInputs(lens, layers, selectedId, frame, zoomCenter, tool, brush, actions, onPaintAt, grabInside, bands))
+    val current = rememberUpdatedState(GestureInputs(lens, layers, selectedId, frame, zoomFrame, zoomCenter, tool, brush, actions, onPaintAt, grabInside, bands))
     return Modifier.pointerInput(Unit) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
             val inp = current.value
-            val g = MaskGeometry(inp.lens, size, inp.frame, inp.zoomCenter)
+            val g = MaskGeometry(inp.lens, size, inp.frame, inp.zoomFrame, inp.zoomCenter)
             if (inp.tool == MaskTool.MOVE) {
                 val (id, handle) = hit(g, inp.layers, inp.selectedId, down.position, grab, inp.grabInside, inp.bands) ?: return@awaitEachGesture
                 down.consume()
@@ -376,6 +377,7 @@ private class GestureInputs(
     val layers: List<MaskLayer>,
     val selectedId: String?,
     val frame: Int,
+    val zoomFrame: Int,
     val zoomCenter: Pair<Float, Float>?,
     val tool: MaskTool,
     val brush: BrushSettings,
@@ -401,6 +403,7 @@ fun MaskOverlay(
     layers: List<MaskLayer>,
     selectedId: String?,
     frame: Int,
+    zoomFrame: Int,
     zoomCenter: Pair<Float, Float>?,
     tool: MaskTool,
     brush: BrushSettings,
@@ -411,7 +414,7 @@ fun MaskOverlay(
 ) {
     val density = LocalDensity.current
     Canvas(modifier) {
-        val g = MaskGeometry(lens, IntSize(size.width.roundToInt(), size.height.roundToInt()), frame, zoomCenter)
+        val g = MaskGeometry(lens, IntSize(size.width.roundToInt(), size.height.roundToInt()), frame, zoomFrame, zoomCenter)
         val px = density.density
         val dim = if (tool == MaskTool.MOVE) 1f else 0.4f
         for (l in layers) {

@@ -125,6 +125,9 @@ class PhotoSession(
     private var params = DevelopParams()
     private var viewWidth = 0
     private var viewHeight = 0
+
+    /** The frame the 100% view keeps around the photo, pixels (ZoomMath's [frame]). */
+    private var viewFrame = 0
     /** Painted masks by layer id (see [brushRaster]); UI thread only. */
     private val brushes = HashMap<String, BrushRaster>()
     private var guide: BrushGuide? = null
@@ -261,9 +264,10 @@ class PhotoSession(
         }
     }
 
-    fun setViewSize(width: Int, height: Int) {
+    fun setViewSize(width: Int, height: Int, frame: Int = 0) {
         viewWidth = width
         viewHeight = height
+        viewFrame = frame
         _zoomCenter.value?.let { setZoomCenter(it.first, it.second) }
     }
 
@@ -287,7 +291,7 @@ class PhotoSession(
         val h = lens.outputHeight
         val zoom = _zoomCenter.value
         val r = if (zoom != null) {
-            ZoomMath.zoomedRect(zoom.first, zoom.second, viewWidth, viewHeight, w, h)
+            ZoomMath.zoomedRect(zoom.first, zoom.second, viewWidth, viewHeight, w, h, viewFrame)
         } else {
             ZoomMath.fitRect(viewWidth, viewHeight, w, h, frameWidth)
         }
@@ -334,7 +338,7 @@ class PhotoSession(
     private fun setZoomCenter(cx: Float, cy: Float) {
         val img = image ?: return
         val lens = lensFor(params)
-        val c = ZoomMath.clampCenter(cx, cy, viewWidth, viewHeight, lens.outputWidth, lens.outputHeight)
+        val c = ZoomMath.clampCenter(cx, cy, viewWidth, viewHeight, lens.outputWidth, lens.outputHeight, viewFrame)
         _zoomCenter.value = c
         ensureDetail(img, c)
     }
@@ -343,7 +347,7 @@ class PhotoSession(
     private fun ensureDetail(img: RawImage, c: Pair<Float, Float>) {
         if (tileJob?.isActive == true) return
         val lens = lensFor(params)
-        val view = ZoomMath.viewRect(c.first, c.second, viewWidth, viewHeight, lens.outputWidth, lens.outputHeight)
+        val view = ZoomMath.viewRect(c.first, c.second, viewWidth, viewHeight, lens.outputWidth, lens.outputHeight, viewFrame)
         // Source pixels the view needs, through rotation and lens geometry, plus the denoise halo.
         val needed = lens.sourceBounds(view, spatialMargin(params))
         val current = _detail.value
@@ -591,6 +595,37 @@ class PhotoSession(
             }
         }
     }
+}
+
+/**
+ * Painted masks of [layers] rasterised on [image] (a whole-image copy) for a develop outside a session: Auto's grid
+ * thumbnails (its 512 px base) and batch export (the session preview's size, see [editTexturesOf]). Each layer with
+ * strokes gets its raster once; the Auto mask guide is made from [image] the first time a stroke needs it.
+ */
+fun brushLookup(image: PreviewImage, layers: List<MaskLayer>): (MaskLayer) -> BrushRaster? {
+    var guide: BrushGuide? = null
+    val rasters = HashMap<String, BrushRaster>()
+    for (l in layers) {
+        if (l.strokes.isEmpty()) continue
+        rasters[l.id] = BrushRaster(image.width, image.height) { guide ?: BrushGuide.of(image).also { guide = it } }
+            .apply { sync(l.strokes) }
+    }
+    return { rasters[it.id] }
+}
+
+/** What exporting RawBoy edits needs besides the analysis's small copies (see [editTexturesOf]). */
+class EditTextures(val brushFor: (MaskLayer) -> BrushRaster?, val bokehSource: PreviewImage?)
+
+/**
+ * The painted masks and the lens blur source for exporting [p] from [image] without a session (Auto's batch export),
+ * made as [PhotoSession] makes them (brush rasters at the preview's size, the boosted bokeh copy), so the export
+ * matches what RawBoy showed. Call after any blemish healing: the session makes them from the healed image too.
+ */
+fun editTexturesOf(image: RawImage, p: DevelopParams): EditTextures {
+    val blurs = p.masks.any { it.enabled && it.opacity > 0f && it.adjust.lensBlur > 0f }
+    val bokehSource = if (blurs) image.createPreview(BokehTexture.SOURCE_MAX_DIMENSION, boostHighlights = true) else null
+    if (p.masks.none { it.strokes.isNotEmpty() }) return EditTextures({ null }, bokehSource)
+    return EditTextures(brushLookup(image.createPreview(PhotoSession.PREVIEW_MAX_DIMENSION), p.masks), bokehSource)
 }
 
 /** Everything decoded for one photo, swapped in together. */

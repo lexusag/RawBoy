@@ -95,6 +95,13 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   `AutoTone`: exposure/tone/noise as ordinary `DevelopParams`), `looks/` (`Looks` catalogue on the bundled
   LUTs, `LookApplier` = auto base + look × Strength + the user's `Adjustments`, `LookSuggester`).
 - `app-auto/src/main/java/app/rawboy/auto/` — `AutoViewModel.kt` (batch queue, export all), `ui/` (grid, detail).
+  RawBoy edits in Auto (Android + web: `AutoPhoto.edits`, `LookApplier.applyEdits`/`applyEditsDevelop`): one photo's whole
+  develop in place of its look. Android: Pro's Export › Send to Auto → `Edits.ACTION_SEND_TO_AUTO` with the photo and an
+  `Edits.kt` JSON file (same format as web's `Edits.ts`; strokes and leaks kept) as extras, read grants via ClipData;
+  Auto decodes it against the analysis's as-shot defaults (`pendingEdits` until then). Batch export builds the brush
+  rasters and the bokeh source itself (`editTexturesOf` in `PhotoSession.kt/.ts`); thumbnails and the cached preview
+  rasterise strokes on the 512 px base (`brushLookup`) and blur from the bloom halo copy. Apply to all, Copy previous
+  and full presets replace edits (they hold one photo's crop, strokes and leaks).
   A waiting photo tapped in the grid (`openFromGrid` → `opening`) is analysed next (`nextQueued`) and opened when done
   (`openIfWaiting`, only while the grid shows; all ports).
   Batch order (all ports, and the web's Browser): `auto/PhotoOrder.kt/.swift/.ts` (`PhotoSort` DATE default / NAME,
@@ -120,7 +127,11 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   with per-lens keys (`setPhysicalCameraKey`) and per-lens results/characteristics for DngCreator; fallback: open the
   physical id directly), `CameraViewModel.kt` (live auto develop, capture → DNG →
   one-at-a-time develop → jpegli JPEG, `previewScale` calibration from raw key / viewfinder key),
-  `CameraSettings.kt`, `ui/`.
+  `CameraSettings.kt`, `ui/`. Geotag (off by default; location permission asked only when switched on):
+  `capture/LocationTracker.kt` (platform LocationManager, fused else GPS + network; iOS `capture/LocationTracker.swift`,
+  Core Location) → `DngCreator.setLocation` (no altitude) → `export/DngGps.kt` appends a full GPS IFD to the DNG and
+  repoints IFD0's GPSInfo; the JPEG copies it via `Exporter.EXIF_TAGS`. iOS: `replacementMetadata` adds ImageIO's GPS
+  dictionary to the DNG. GPS time/date stamps: `PhotoMetadata.gpsTimeStamp`/`gpsDateStamp` (`readGpsStamps` after LibRaw, which keeps no date).
 - `luts/` — bundled LUTs, copied into the engine's assets by the `copyLuts` Gradle task.
   User-visible look/stock names and bundled LUT file names are RawBoy's own (Yellow/Green families, 2026-10-18): no
   film makers' brand or product names; old LUT file ids map to the new ones in `RetiredLooks` (all ports).
@@ -153,7 +164,9 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   grain → print LUT. Grain: Selwyn's law from an RMS granularity at 48 um, density dependence D(1 − D/Dsat), per-pixel
   Gaussian with half-weight neighbours, footprint-scaled. Halation: a Gaussian of half the base-reflection disc radius
   from the **highlight-boosted bloom copy** (`uBloomHalo`; `uBase` without one; light sources sit far above clip and
-  only they halate visibly), mixed in per channel. Scatter: 4 diagonal taps. Parameters: `luts/spektrafilm/
+  only they halate visibly), weighed by `bloomKnee` at `uExposure` like bloom: the highlights give up `uFormHalation`
+  of their light and it returns around them (midtones untouched). Slider: `ShaderParams.halationGain` (linear to 1 at
+  100, then doubling every 25: 16 at 200; all ports). Scatter: 4 diagonal taps. Parameters: `luts/spektrafilm/
   formation.json` (`FilmStock.formation`; uniforms `uForm*`), fitted to RawBoy Film's renders with
   `tools/film_eval/compare.mjs` (renders both shaders through the web dev server; reports formation dE2000, grain
   std per tone band, halation's added light). **Clean-room rule:** never read or copy `film/film.glsl` or spektrafilm's
@@ -419,8 +432,8 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   showed the coarse texels as bands and squares. Bloom scatters highlights only: `bloomKnee` (smoothstep 0.36..1.44
   on the brightest channel x `uExposure`) weighs every core/halo tap and what `bloom()` takes from the pixel. The
   knee follows exposure, so the tail is scattered for 6 exposures (2^0..2^5), stacked as bands in one texture, and
-  the shader blends the two either side of `uExposure`. The boosted halo copy itself is unchanged (Film's halation reads
-  it whole); keep the knee's constants in step in all those places.
+  the shader blends the two either side of `uExposure`. The boosted halo copy itself is unchanged (Film's halation knees
+  its taps the same way); keep the knee's constants in step in all those places.
 - Texture units: 0 image, 1 LUT (3D), 2 lens shading, 3 base (512), 4 bloom halo, 5 bloom tail, 6 skin mask, 7 brush atlas,
   8 film LUT, 9 print LUT (film looks: RawBoy Film and Auto's Film mode, all platforms), 10–11 the wavelet denoise
   passes, 12 the lens blur result (`uBokeh`), 13 the lens blur's own passes.

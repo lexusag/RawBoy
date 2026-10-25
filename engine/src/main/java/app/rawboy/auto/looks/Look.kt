@@ -119,4 +119,10 @@ object Looks {
     )
 
     fun byId(id: String): Look = RetiredLooks.look(id).let { key -> ALL.firstOrNull { it.id == key } } ?: NATURAL
+
+    /** Bundled LUT ids of the monochrome looks: the LUT alone makes a photo black and white. */
+    private val MONOCHROME_LUTS: Set<String> = ALL.filter { it.monochrome }.mapNotNull { it.lutId }.toSet()
+
+    /** True for a bundled black and white LUT (retired ids too); pickers list these in their own section. */
+    fun isMonochromeLut(id: String?): Boolean = id != null && RetiredLooks.lut(id) in MONOCHROME_LUTS
 }

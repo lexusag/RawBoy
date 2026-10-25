@@ -11,7 +11,7 @@ import { scatterBloomTail } from '../gl/BloomTail';
 import { BOKEH_SOURCE_MAX_DIMENSION } from '../gl/BokehTexture';
 import type { BloomSources, PreviewImage } from '../gl/PreviewImage';
 import { WAVELET_DENOISE_MARGIN } from '../gl/WaveletDenoise';
-import { ShaderParams, WIDE_DENOISE_MARGIN, wideDenoise } from '../gl/ShaderParams';
+import { ShaderParams, WIDE_DENOISE_MARGIN, wideDenoise, type BrushLookup } from '../gl/ShaderParams';
 import { ZoomMath, contains, rect, type DetailTile } from '../gl/Zoom';
 import { LensInfo } from '../lens/LensInfo';
 import { LensTransform } from '../lens/LensTransform';
@@ -114,6 +114,8 @@ export class PhotoSession {
   private bokehJob: Promise<void> | null = null;
   private viewWidth = 0;
   private viewHeight = 0;
+  /** The frame the zoomed view keeps around the photo, device pixels (ZoomMath's [frame]). */
+  private viewFrame = 0;
   private tileLoading = false;
   private selectedLut: string | null = null;
   private selectedFilm: string | null = null;
@@ -300,9 +302,10 @@ export class PhotoSession {
     })();
   }
 
-  setViewSize(width: number, height: number) {
+  setViewSize(width: number, height: number, frame = 0) {
     this.viewWidth = width;
     this.viewHeight = height;
+    this.viewFrame = frame;
     const c = this._state.zoomCenter;
     if (c) this.setZoomCenter(c[0], c[1]);
   }
@@ -327,7 +330,7 @@ export class PhotoSession {
     const h = lens.outputHeight;
     const zoom = this._state.zoomCenter;
     const r = zoom
-      ? ZoomMath.zoomedRect(zoom[0], zoom[1], this.viewWidth, this.viewHeight, w, h, this._state.zoomScale)
+      ? ZoomMath.zoomedRect(zoom[0], zoom[1], this.viewWidth, this.viewHeight, w, h, this._state.zoomScale, this.viewFrame)
       : ZoomMath.fitRect(this.viewWidth, this.viewHeight, w, h, frameWidth);
     const outX = ((viewX - r[0]) / r[2]) * w;
     const outY = ((viewY - r[1]) / r[3]) * h;
@@ -365,7 +368,7 @@ export class PhotoSession {
     const fit = ZoomMath.fitScale(vw, vh, w, h, frameWidth);
     const c = this._state.zoomCenter;
     const from = c ? this._state.zoomScale : fit;
-    const r = c ? ZoomMath.zoomedRect(c[0], c[1], vw, vh, w, h, from) : ZoomMath.fitRect(vw, vh, w, h, frameWidth);
+    const r = c ? ZoomMath.zoomedRect(c[0], c[1], vw, vh, w, h, from, this.viewFrame) : ZoomMath.fitRect(vw, vh, w, h, frameWidth);
     const x = ((viewX - r[0]) / r[2]) * w;
     const y = ((viewY - r[1]) / r[3]) * h;
     let to = Math.min(ZoomMath.MAX_SCALE, from * factor);
@@ -394,7 +397,7 @@ export class PhotoSession {
     const img = this.image;
     if (!img) return;
     const lens = this.lensFor(this.params);
-    const c = ZoomMath.clampCenter(cx, cy, this.viewWidth, this.viewHeight, lens.outputWidth, lens.outputHeight, scale);
+    const c = ZoomMath.clampCenter(cx, cy, this.viewWidth, this.viewHeight, lens.outputWidth, lens.outputHeight, scale, this.viewFrame);
     this.update({ zoomCenter: c, zoomScale: scale });
     this.ensureDetail(img, c);
   }
@@ -406,7 +409,7 @@ export class PhotoSession {
     const preview = this._state.preview;
     if (preview && ZoomMath.previewSuffices(scale, preview.width, preview.fullWidth)) return;
     const lens = this.lensFor(this.params);
-    const view = ZoomMath.viewRect(c[0], c[1], this.viewWidth, this.viewHeight, lens.outputWidth, lens.outputHeight, scale);
+    const view = ZoomMath.viewRect(c[0], c[1], this.viewWidth, this.viewHeight, lens.outputWidth, lens.outputHeight, scale, this.viewFrame);
     // Source pixels the view needs, through rotation and lens geometry, plus the denoise halo (whole pixels: the
     // wheel zoom's view has fractional edges).
     const b = lens.sourceBounds(view, this.spatialMargin(this.params));
@@ -600,4 +603,40 @@ export function blemishesToHeal(spots: Float32Array, level: number): Float32Arra
   let count = 0;
   for (let i = 0; i < spots.length / 4; i++) if (spots[i * 4 + 3] >= minScore) count++;
   return spots.slice(0, count * 4);
+}
+
+/**
+ * Painted masks of [layers] rasterised on [image] (a whole-image copy) for a develop outside a session: Auto's grid
+ * thumbnails (its 512 px base) and batch export (the session preview's size, see editTexturesOf). Each layer with
+ * strokes gets its raster once; the Auto mask guide is made from [image] the first time a stroke needs it.
+ */
+export function brushLookup(image: PreviewImage, layers: readonly MaskLayer[]): BrushLookup {
+  let guide: BrushGuide | null = null;
+  const rasters = new Map<string, BrushRaster>();
+  for (const l of layers) {
+    if (!l.strokes.length) continue;
+    const r = new BrushRaster(image.width, image.height, () => (guide ??= makeGuide(image)));
+    r.sync(l.strokes);
+    rasters.set(l.id, r);
+  }
+  return (l) => rasters.get(l.id) ?? null;
+}
+
+/** What exporting RawBoy edits needs besides the analysis's small copies (see editTexturesOf). */
+export interface EditTextures {
+  brushFor: BrushLookup;
+  /** The lens blur's source copy, or null when no layer blurs. */
+  bokehSource: PreviewImage | null;
+}
+
+/**
+ * The painted masks and the lens blur source for exporting [p] from [image] without a session (Auto's batch export),
+ * made as the session makes them (brush rasters at the preview's size, the boosted bokeh copy), so the export matches
+ * what RawBoy showed. Call after any blemish healing: the session makes them from the healed image too.
+ */
+export async function editTexturesOf(image: RawImage, p: DevelopParams): Promise<EditTextures> {
+  const blurs = p.masks.some((l) => l.enabled && l.opacity > 0 && l.adjust.lensBlur > 0);
+  const bokehSource = blurs ? await image.createPreview(BOKEH_SOURCE_MAX_DIMENSION, true) : null;
+  if (!p.masks.some((l) => l.strokes.length)) return { brushFor: () => null, bokehSource };
+  return { brushFor: brushLookup(await image.createPreview(PREVIEW_MAX_DIMENSION), p.masks), bokehSource };
 }

@@ -24,6 +24,11 @@ class CameraActivity : ComponentActivity() {
         viewModel.onPermission(granted)
     }
 
+    /** Asked only when geotagging is turned on. Approximate location (coarse only) is enough too. */
+    private val locationPermission = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
+        viewModel.onLocationPermission(granted.values.any { it })
+    }
+
     /** The UI stays portrait; the device's rotation only sets each photo's orientation. */
     private val orientation by lazy {
         object : OrientationEventListener(this) {
@@ -40,7 +45,13 @@ class CameraActivity : ComponentActivity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContent {
             MaterialTheme(colorScheme = CameraColors) {
-                CameraScreen(viewModel, requestPermission = { permission.launch(Manifest.permission.CAMERA) })
+                CameraScreen(
+                    viewModel,
+                    requestPermission = { permission.launch(Manifest.permission.CAMERA) },
+                    requestLocation = {
+                        locationPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+                    },
+                )
             }
         }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {

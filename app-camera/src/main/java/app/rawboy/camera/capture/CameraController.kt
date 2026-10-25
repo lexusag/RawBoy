@@ -21,6 +21,7 @@ import android.hardware.camera2.params.MeteringRectangle
 import android.hardware.camera2.params.OutputConfiguration
 import android.hardware.camera2.params.SessionConfiguration
 import android.hardware.camera2.params.TonemapCurve
+import android.location.Location
 import android.media.Image
 import android.media.ImageReader
 import android.os.Handler
@@ -508,7 +509,8 @@ class CameraController(context: Context) : AutoCloseable {
     }
 
     /**
-     * Captures one raw frame and writes it as DNG to [out], tagged with [exifOrientation].
+     * Captures one raw frame and writes it as DNG to [out], tagged with [exifOrientation] and [location] (if any;
+     * DngCreator writes no altitude, see DngGps).
      * One capture at a time. [flash] is ignored without a flash unit; [guides]: see [flashExposure], learned per lens
      * by the caller. [burstFrames] > 1 (without flash): that many frames, merged into the one raw ([burstDng]).
      */
@@ -518,13 +520,14 @@ class CameraController(context: Context) : AutoCloseable {
         flash: FlashMode = FlashMode.OFF,
         guides: FlashGuides = FlashGuides(),
         burstFrames: Int = 1,
+        location: Location? = null,
         onSubmitted: () -> Unit = {},
     ): Still = captureLock.withLock {
         val s = session ?: throw IOException("Camera not ready")
         val inf = info ?: throw IOException("Camera not ready")
         val reader = rawReader ?: throw IOException("Camera not ready")
         val mode = if (inf.hasFlash) flash else FlashMode.OFF
-        if (mode == FlashMode.OFF && burstFrames > 1) return@withLock burstDng(s, inf, burstFrames, exifOrientation, out, onSubmitted)
+        if (mode == FlashMode.OFF && burstFrames > 1) return@withLock burstDng(s, inf, burstFrames, exifOrientation, location, out, onSubmitted)
         // Ambient exposure before any light comes on: the flash still never needs more.
         val ambient = _frames.value
         var focused = false
@@ -532,7 +535,7 @@ class CameraController(context: Context) : AutoCloseable {
             if (mode == FlashMode.FOCUS_FLASH) focused = torchFocus(s, inf)
             val diopters = _frames.value?.focusDiopters
             val exposure = if (mode == FlashMode.OFF) null else flashExposure(inf, ambient, diopters, guides)
-            val result = stillDng(s, inf, reader, mode, exposure?.first, exifOrientation, out, onSubmitted)
+            val result = stillDng(s, inf, reader, mode, exposure?.first, exifOrientation, location, out, onSubmitted)
             Still(result, exposure?.second, distanceKnown = diopters != null && diopters > 0f)
         } finally {
             if (mode != FlashMode.OFF) endFlashSequence(inf, focused)
@@ -547,6 +550,7 @@ class CameraController(context: Context) : AutoCloseable {
         /** Manual (exposure ns, ISO) for a flash still, or null for AE's. */
         manual: Pair<Long, Int>?,
         exifOrientation: Int,
+        location: Location?,
         out: OutputStream,
         onSubmitted: () -> Unit,
     ): CaptureResult {
@@ -602,6 +606,7 @@ class CameraController(context: Context) : AutoCloseable {
             // The lens's own characteristics and result: colour matrices, shading map and sizes are per lens.
             DngCreator(inf.characteristics, captureResult).use { dng ->
                 dng.setOrientation(exifOrientation)
+                location?.let(dng::setLocation)
                 dng.writeImage(out, img)
             }
         }
@@ -619,6 +624,7 @@ class CameraController(context: Context) : AutoCloseable {
         inf: Info,
         frames: Int,
         exifOrientation: Int,
+        location: Location?,
         out: OutputStream,
         onSubmitted: () -> Unit,
     ): Still {
@@ -726,6 +732,7 @@ class CameraController(context: Context) : AutoCloseable {
                 "noise ${noiseModel(reference).let { "${it.first} ${it.second}" }}")
             DngCreator(inf.characteristics, reference).use { dng ->
                 dng.setOrientation(exifOrientation)
+                location?.let(dng::setLocation)
                 dng.writeByteBuffer(out, Size(width, height), merged, 0)
             }
             return Still(reference, null, effectiveFrames = 1f + weights.sum())

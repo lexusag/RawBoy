@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -22,8 +23,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentWidth
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -50,6 +51,7 @@ import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -64,6 +66,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
@@ -82,6 +87,9 @@ import app.rawboy.auto.looks.FilmLooks
 import app.rawboy.auto.looks.Look
 import app.rawboy.auto.looks.LookApplier
 import app.rawboy.auto.looks.Looks
+import app.rawboy.develop.CropMath
+import app.rawboy.develop.DevelopParams
+import app.rawboy.develop.crop
 import app.rawboy.gl.ShaderParams
 import app.rawboy.session.SkinState
 import app.rawboy.view.CompactSlider
@@ -114,6 +122,7 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
     val lensInfo by session.lensInfo.collectAsStateWithLifecycle()
     val base by session.base.collectAsStateWithLifecycle()
     val bloomSources by session.bloomSources.collectAsStateWithLifecycle()
+    val bokehSource by session.bokehSource.collectAsStateWithLifecycle()
     val skin by session.skin.collectAsStateWithLifecycle()
     val skinMask = (skin as? SkinState.Ready)?.mask
     val undoStates by vm.undoStates.collectAsStateWithLifecycle()
@@ -211,7 +220,7 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
                     .weight(1f)
                     .fillMaxWidth()
                     .background(Color(0xFF121212))
-                    .onSizeChanged { session.setViewSize(it.width, it.height) },
+                    .onSizeChanged { session.setViewSize(it.width, it.height, framePx) },
             ) {
                 HorizontalPager(
                     state = pagerState,
@@ -235,7 +244,7 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
                             val shaderParams = if (live) {
                                 // Press and hold shows the auto develop without the look.
                                 val shown = shownParams
-                                remember(shown, lutData, filmData, lensInfo, base, bloomSources, skinMask) {
+                                remember(shown, lutData, filmData, lensInfo, base, bloomSources, bokehSource, skinMask) {
                                     session.shaderParams(
                                         shown, analysis.defaults, lutData.takeIf { shown.lut != null },
                                         film = filmData.takeIf { shown.film != null },
@@ -288,7 +297,15 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
                                     },
                             )
                             if (showAuto || zoomed) {
-                                Label(if (!showAuto) "100%" else if (photo.preset != null) "Without preset" else "Without look", Modifier.align(Alignment.TopStart))
+                                Label(
+                                    when {
+                                        !showAuto -> "100%"
+                                        photo.edits != null -> "Without edits"
+                                        photo.preset != null -> "Without preset"
+                                        else -> "Without look"
+                                    },
+                                    Modifier.align(Alignment.TopStart),
+                                )
                             }
                             // Qualified: inside this Box the ColumnScope overload would win.
                             androidx.compose.animation.AnimatedVisibility(
@@ -302,8 +319,23 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
                         } else {
                             // Until the raw is decoded, show the grid thumbnail.
                             pagePhoto.thumbnail?.let {
-                                // Inset by the frame so the photo doesn't move when the decoded preview replaces it.
-                                Image(it.asImageBitmap(), pagePhoto.name, Modifier.fillMaxSize().padding(FRAME_WIDTH), contentScale = ContentScale.Fit)
+                                // Inset by the frame so the photo doesn't move when the decoded preview replaces it,
+                                // and framed as the preview will be, so the frame doesn't blink out while it renders.
+                                Box(Modifier.fillMaxSize().padding(FRAME_WIDTH), contentAlignment = Alignment.Center) {
+                                    Image(
+                                        it.asImageBitmap(), pagePhoto.name,
+                                        Modifier
+                                            .aspectRatio(it.width.toFloat() / it.height)
+                                            .drawBehind {
+                                                val f = framePx.toFloat()
+                                                drawRect(
+                                                    Color(frameColor.level, frameColor.level, frameColor.level),
+                                                    topLeft = Offset(-f, -f), size = Size(size.width + 2 * f, size.height + 2 * f),
+                                                )
+                                            },
+                                        contentScale = ContentScale.Fit,
+                                    )
+                                }
                             }
                             if (pagePhoto.id == id) CircularProgressIndicator(Modifier.align(Alignment.Center))
                         }
@@ -320,26 +352,14 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
             }
 
             val preset = photo.preset
-            if (preset != null) {
+            if (photo.edits != null) {
+                // RawBoy's own develop of this photo, crop, masks and light leaks included, in place of the look strip.
+                ReplacedLook(AutoPhoto.EDITS_NAME, "Sent from RawBoy · ${editsSummary(photo.edits)}") {
+                    TextButton(onClick = { vm.removeEdits(id) }, enabled = export == null) { Text("Use a look") }
+                }
+            } else if (preset != null) {
                 // A RawBoy preset develops this photo in place of the look strip.
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(start = 12.dp, end = 12.dp, top = 8.dp)
-                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.small)
-                        .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Column(Modifier.weight(1f)) {
-                        Text(preset.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(
-                            "RawBoy preset · ${groupSummary(preset)}",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
+                ReplacedLook(preset.name, "RawBoy preset · ${groupSummary(preset)}") {
                     TextButton(onClick = { vm.removePhotoPreset(id) }, enabled = export == null) { Text("Use a look") }
                 }
             } else {
@@ -379,7 +399,7 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
             ) {
                 val a = photo.adjust
                 if (tab == 0) {
-                    if (preset == null) {
+                    if (preset == null && photo.edits == null) {
                         AutoSlider("Strength", photo.strength, 0f..100f, LookApplier.DEFAULT_STRENGTH) { vm.setStrength(id, it) }
                     }
                     AutoSlider("Brightness", a.brightness, -100f..100f, 0f) { v -> vm.setAdjust(id) { it.copy(brightness = v) } }
@@ -416,26 +436,80 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
     }
 }
 
+/** What develops the photo in place of the look strip (a RawBoy preset or RawBoy edits): [name], [detail], and [action]. */
+@Composable
+private fun ReplacedLook(name: String, detail: String, action: @Composable () -> Unit) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(start = 12.dp, end = 12.dp, top = 8.dp)
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, MaterialTheme.shapes.small)
+            .padding(start = 12.dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                detail,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        action()
+    }
+}
+
+/** The photo-specific parts RawBoy edits carry, for the edits card ("crop, 2 masks, 1 light leak"). */
+private fun editsSummary(e: DevelopParams): String {
+    fun count(n: Int, one: String) = if (n == 1) "1 $one" else "$n ${one}s"
+    val parts = buildList {
+        if (e.crop != CropMath.FULL || e.straighten != 0f) add("crop")
+        val masks = e.masks.count { !it.isIdentity && it.hasMask }
+        if (masks > 0) add(count(masks, "mask"))
+        if (e.masks.any { it.enabled && it.opacity > 0f && it.adjust.lensBlur > 0f }) add("lens blur")
+        val leaks = e.leaks.count { !it.isIdentity }
+        if (leaks > 0) add(count(leaks, "light leak"))
+    }
+    return parts.joinToString().ifEmpty { "every slider as set there" }
+}
+
 @Composable
 private fun LookStrip(vm: AutoViewModel, photo: AutoPhoto) {
     val state = rememberLazyListState()
     val looks = if (photo.mode == LookMode.FILM) FilmLooks.ALL else Looks.ALL
+    // Colour and black and white looks in sections (the list has colour first): the first chip of each carries the
+    // section's heading, and a divider stands between them.
+    val sectioned = looks.any { it.monochrome } && looks.any { !it.monochrome }
     LaunchedEffect(photo.id, photo.mode) {
-        state.scrollToItem(looks.indexOf(photo.activeLook).coerceAtLeast(0))
+        val i = looks.indexOf(photo.activeLook).coerceAtLeast(0)
+        state.scrollToItem(if (sectioned && looks[i].monochrome) i + 1 else i)
     }
     LazyRow(
         state = state,
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        items(looks, key = { it.id }) { look ->
-            LookChip(vm, photo, look)
+        looks.forEachIndexed { i, look ->
+            val starts = sectioned && (i == 0 || look.monochrome != looks[i - 1].monochrome)
+            if (starts && i > 0) {
+                item(key = "divider") { VerticalDivider(Modifier.height(LOOK_SIZE + LOOK_HEADING + 32.dp)) }
+            }
+            val heading = when {
+                !sectioned -> null
+                !starts -> ""
+                look.monochrome -> "Black & white"
+                else -> "Color"
+            }
+            item(key = look.id) { LookChip(vm, photo, look, heading) }
         }
     }
 }
 
+/** [heading]: the section's name above the first chip of a section, "" above the others, null with no sections. */
 @Composable
-private fun LookChip(vm: AutoViewModel, photo: AutoPhoto, look: Look) {
+private fun LookChip(vm: AutoViewModel, photo: AutoPhoto, look: Look, heading: String? = null) {
     // Keeps showing the previous thumbnail while a slider moves; re-renders once it rests.
     val thumb by produceState<Bitmap?>(null, photo.id, look.id, photo.adjust) {
         if (!vm.hasCurrentLookThumbnail(photo.id, look)) delay(400)
@@ -448,6 +522,19 @@ private fun LookChip(vm: AutoViewModel, photo: AutoPhoto, look: Look) {
             .clickable { vm.setLook(photo.id, look) },
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        if (heading != null) {
+            // Wider than the chip: drawn on past its right edge, over the next chips' empty headings.
+            Box(Modifier.fillMaxWidth().height(LOOK_HEADING)) {
+                Text(
+                    heading,
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    softWrap = false,
+                    modifier = Modifier.wrapContentWidth(Alignment.Start, unbounded = true),
+                )
+            }
+        }
         Box(
             Modifier
                 .size(LOOK_SIZE)
@@ -535,6 +622,7 @@ private fun Label(text: String, modifier: Modifier) {
 /** The frame around the photo in the fit view, as RawBoy's (grey, white or black: tap outside the photo). */
 private val FRAME_WIDTH = 12.dp
 private val LOOK_SIZE = 64.dp
+private val LOOK_HEADING = 16.dp
 private val SLIDER_ROW = 40.dp
 private val SLIDER_PAIR_ROW = 48.dp
 private const val COMPARE_DELAY_MS = 250L

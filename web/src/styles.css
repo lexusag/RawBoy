@@ -1442,15 +1442,33 @@ select {
   right: 8px;
 }
 
-/* Desktop sidebar: every look visible in a grid. Narrow screens: one scrolling row (see the media query). */
+/*
+ * Desktop sidebar: every look visible in a grid, colour and black and white looks under their own headings. Narrow
+ * screens: one scrolling row, the sections side by side with a divider (see the media query).
+ */
 .look-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px;
+  flex: none;
+  border-bottom: 1px solid var(--border);
+}
+
+.look-chips {
   display: grid;
   grid-template-columns: repeat(auto-fill, 72px);
   justify-content: space-between;
   gap: 10px 8px;
-  padding: 10px 12px;
-  flex: none;
-  border-bottom: 1px solid var(--border);
+}
+
+/* As Pro's .section-label. */
+.look-section-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+  margin-bottom: 6px;
+  white-space: nowrap;
 }
 
 .look {
@@ -1522,9 +1540,29 @@ select {
   }
 
   .look-strip {
-    display: flex;
+    flex-direction: row;
+    gap: 0;
     overflow-x: auto;
     overscroll-behavior-x: contain;
+  }
+
+  .look-section {
+    flex: none;
+  }
+
+  .look-section + .look-section {
+    margin-left: 10px;
+    padding-left: 10px;
+    border-left: 1px solid var(--border);
+  }
+
+  .look-section-label {
+    margin-bottom: 4px;
+  }
+
+  .look-chips {
+    display: flex;
+    gap: 8px;
   }
 
   .sidebar {

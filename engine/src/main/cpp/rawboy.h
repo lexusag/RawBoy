@@ -38,6 +38,8 @@ struct PhotoMetadata {
     char gpsLatitudeRef = 'N', gpsLongitudeRef = 'E';
     double gpsAltitude = NAN;  // metres
     bool gpsBelowSeaLevel = false;
+    double gpsTimeStamp[3] = {NAN, NAN, NAN};  // the fix's UTC hours, minutes, seconds
+    std::string gpsDateStamp;                  // the fix's UTC date, "YYYY:MM:DD"
 };
 
 // Scene-referred image handed to the GPU pipeline.

@@ -1,13 +1,62 @@
 # Changelog
 
-**Auto: Auto denoise all (2026-10-24)**
+**Auto: Auto denoise all (2026-10-25)**
 
 - RawBoy Auto (Android, web): **Auto denoise all** in the grid's top row gives every photo of the batch its own
   measured denoise, colour denoise and sharpening, for when a series is finished with its presets and lens
-  corrections. The Denoise slider goes back to 0; on the web presets lose their Denoise & sharpening group and RawBoy
-  edits take the measured values (photos added "As is" use the ISO table). Looks, presets, lens corrections and the
+  corrections. The Denoise slider goes back to 0 and RawBoy edits take the measured values; on the web presets also
+  lose their Denoise & sharpening group (photos added "As is" use the ISO table). Looks, presets, lens corrections and the
   other settings stay; Undo in a photo takes it back. With photos selected, the selection bar's Auto denoise (dots
   icon) does it for those photos only. Not on iOS yet.
+
+**Halation: stronger top of the slider, follows Exposure (2026-10-25)**
+
+- RawBoy (Film tone mapper, Android, iOS, web): Halation 100 is still the stock's own glow, which is faint (as on
+  real film, only light sources and blown highlights halate). Above 100 the slider now doubles the glow every 25, up
+  to 16x at 200 (it was 2x), so strong red halos around lights are possible. Halation also follows Exposure
+  like Bloom: only the highlights at the current exposure send light back, so a dark raw brightened with Exposure
+  halates like one shot brighter, and midtones are no longer touched. Auto's film looks (Halation 100) are unchanged.
+
+**The frame around the photo stays (2026-10-24)**
+
+- RawBoy Auto (Android, web): switching to a photo that is still rendering kept its thumbnail but dropped the grey /
+  white / black frame around it, so the frame blinked out and back. The frame now stays around the thumbnail too.
+- RawBoy and Auto (Android, web): the 100% view (and the web's wheel zoom) keeps the frame along the edges, with the
+  photo inside it; panning still reaches the photo's edges and corners.
+
+**Color and black & white sections in look and preset lists (2026-10-24)**
+
+- RawBoy, Auto and Camera (Android, web): look and preset pickers list black and white ones apart from the colour ones,
+  under **Color** and **Black & white** headings: Auto's look strip (a divider between the two in the phone's row),
+  Camera's Look menu, RawBoy's included LUTs, the Presets panel and Auto's preset picker. A preset counts as black and
+  white with Saturation -100 or a black and white LUT at full strength. Not on iOS yet.
+
+**Auto: Denoise favours colour noise (2026-10-24)**
+
+- RawBoy Auto (Android, iOS, web): the Denoise adjustment used to add the same amount to luma and colour denoise.
+  Raising it now clears colour noise (blotches) first and fast, and smooths luma later and gently: at +25 colour
+  denoise rises by 44 and luma by 4, at +50 by 75 and 15, at +100 by 100 and 60. Lowering it takes luma denoise away
+  first, colour later; -100 still turns both off. Photos with Denoise at 0 look as before.
+
+**Camera: geotagging (2026-10-24)**
+
+- RawBoy Camera (Android, iOS): a **Geotag** switch in Settings, off by default. On, each JPEG and DNG records where
+  it was taken (GPS latitude, longitude, altitude and the fix's UTC date and time). Location access is asked for only
+  when you turn it on, and the location service runs only while the camera is open.
+- RawBoy, Auto and Camera (Android, iOS, web): exports keep the GPS time and date stamps too, next to the position
+  and altitude they already kept.
+
+**Auto batch-exports photos with their full RawBoy edits (2026-10-24)**
+
+- RawBoy → Auto (Android): **Export › Send to Auto** in RawBoy hands the open photo to RawBoy Auto with every edit:
+  crop, rotation and flips, mask layers with their brush strokes and Lens blur, light leaks, curves, film or LUT,
+  denoise. Auto shows it as *RawBoy edits* in place of the look (with what it carries), its sliders adjust on top,
+  **Use a look** drops the edits, and Export all renders them. Until now Android could only send presets, which never
+  hold a photo's crop, strokes or leaks. The edits travel as the same JSON as the web's sidecar edits.
+- Auto (Android, web): batch export and the grid thumbnails now render RawBoy edits' painted (brush) masks and Lens
+  blur. Before, only the photo view and its single Export did: Export all dropped brush masks and lens blur (web), so
+  a photo sent back from the RawBoy tab came out differently. Photos added As is (web) get the skin mask RawBoy edits'
+  skin retouch and blemish removal need.
 
 **Bloom glows from highlights only (2026-10-24)**
 

@@ -1,5 +1,7 @@
 package app.rawboy.develop
 
+import org.json.JSONArray
+import org.json.JSONObject
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.max
@@ -65,6 +67,48 @@ object LightLeaks {
     /** A warm orange leak, solid enough to cover what is under its core. */
     fun newLeak(kind: LeakKind = LeakKind.STREAK, cx: Float = 0.5f, cy: Float = 0.5f) =
         LightLeak(Masks.newId(), kind = kind, cx = cx, cy = cy, seed = newSeed())
+
+    // A photo's edits ([Edits]; the same JSON as web's LightLeaks.ts: kind "streak" or "glow").
+
+    fun toJson(leaks: List<LightLeak>): JSONArray = JSONArray(
+        leaks.map { l ->
+            JSONObject().apply {
+                put("enabled", l.enabled); put("kind", l.kind.name.lowercase())
+                put("cx", num(l.cx)); put("cy", num(l.cy)); put("rx", num(l.rx)); put("ry", num(l.ry))
+                put("angle", num(l.angle)); put("softness", num(l.softness)); put("intensity", num(l.intensity))
+                put("hue", num(l.hue)); put("seed", num(l.seed))
+            }
+        },
+    )
+
+    /** Leaks from untrusted JSON, each with a fresh id: invalid ones are dropped, ranges clamped, at most [MAX_LEAKS]. */
+    fun parseLeaks(v: Any?): List<LightLeak> {
+        val a = v as? JSONArray ?: return emptyList()
+        return (0 until a.length()).mapNotNull { parseLeak(a.opt(it)) }.take(MAX_LEAKS)
+    }
+
+    private fun parseLeak(v: Any?): LightLeak? {
+        val o = v as? JSONObject ?: return null
+        fun f(k: String, min: Float, max: Float) = (o.opt(k) as? Number)?.toFloat()?.takeIf { it.isFinite() }?.coerceIn(min, max)
+        val kind = if (o.optString("kind") == "streak") LeakKind.STREAK else LeakKind.GLOW // leaks saved before streaks were glows
+        return LightLeak(
+            id = Masks.newId(),
+            enabled = o.opt("enabled") as? Boolean ?: true,
+            kind = kind,
+            cx = f("cx", -1f, 2f) ?: return null,
+            cy = f("cy", -1f, 2f) ?: return null,
+            rx = f("rx", 0.005f, 3f) ?: return null,
+            ry = f("ry", 0.005f, 3f) ?: return null,
+            angle = f("angle", -360f, 360f) ?: 0f,
+            softness = f("softness", 0f, 100f) ?: 50f,
+            intensity = f("intensity", 0f, 100f) ?: 100f,
+            hue = f("hue", HUE_MIN, HUE_MAX) ?: 22f,
+            seed = f("seed", 0f, 1f) ?: 0f,
+        )
+    }
+
+    /** Floats via their shortest decimal, so 0.1 is written as 0.1. */
+    private fun num(f: Float): Double = f.toString().toDouble()
 
     /** The rim colour for [hue] (display RGB 0..1): fully saturated warm light, brightest at yellow. */
     fun color(hue: Float): FloatArray {

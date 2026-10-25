@@ -90,7 +90,29 @@ private:
     bool le_;
 };
 
+/** GPSTimeStamp (7) and GPSDateStamp (29); false for other tags. */
+bool gpsStamp(const Tiff& t, const Tiff::Entry& e, PhotoMetadata& m) {
+    switch (e.tag) {
+        case 7:
+            if (e.count == 3)
+                for (uint32_t i = 0; i < 3; ++i) m.gpsTimeStamp[i] = t.number(e, i);
+            return true;
+        case 29: m.gpsDateStamp = t.ascii(e); return true;
+        default: return false;
+    }
+}
+
 }  // namespace
+
+void readGpsStamps(const uint8_t* data, size_t size, PhotoMetadata& m) {
+    const Tiff t(data, size);
+    if (!t.valid()) return;
+    size_t gpsIfd = 0;
+    t.forEach(t.u32(4), [&](const Tiff::Entry& e) {
+        if (e.tag == 0x8825) gpsIfd = size_t(t.number(e));
+    });
+    t.forEach(gpsIfd, [&](const Tiff::Entry& e) { gpsStamp(t, e, m); });
+}
 
 bool readExif(const uint8_t* data, size_t size, PhotoMetadata& m, int& orientation) {
     orientation = 1;
@@ -143,6 +165,7 @@ bool readExif(const uint8_t* data, size_t size, PhotoMetadata& m, int& orientati
                 break;
             case 5: m.gpsBelowSeaLevel = t.byte(e) == 1; break;
             case 6: m.gpsAltitude = t.number(e); break;
+            default: gpsStamp(t, e, m);
         }
     });
     m.hasGps = lat && lon && (m.gpsLatitudeRef == 'N' || m.gpsLatitudeRef == 'S') &&

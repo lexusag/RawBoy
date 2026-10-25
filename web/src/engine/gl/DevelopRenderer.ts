@@ -35,8 +35,13 @@ export class DevelopRenderer {
   private denoisedInput = false;
 
   params: ShaderParams | null = null;
-  /** Frame around the photo in the fit view: width in device pixels and its grey level. */
+  /** Frame around the photo in the fit and zoomed views: width in device pixels and its grey level. */
   frameWidth = 0;
+  /**
+   * Output size (or aspect) of the photo about to show, while there is nothing to develop yet (e.g. switching photos):
+   * the frame is drawn around where it will sit, so it doesn't blink out. Null draws nothing until then.
+   */
+  placeholderSize: [number, number] | null = null;
   /** Extra empty space around the frame in the fit view, device pixels (room for the mask handles). */
   margin = 0;
   frameGrey: number = FrameColors[0].level;
@@ -111,7 +116,10 @@ export class DevelopRenderer {
     gl.clearColor(0.07, 0.07, 0.07, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
     const p = this.params;
-    if (!p || !img) return;
+    if (!p || !img) {
+      this.drawPlaceholder();
+      return;
+    }
 
     this.inputs.bind(p);
     gl.activeTexture(gl.TEXTURE0);
@@ -132,19 +140,7 @@ export class DevelopRenderer {
     const r = ZoomMath.fitRect(this.viewWidth, this.viewHeight, outW, outH, frame + this.margin);
     const input = this.denoised(p, this.previewTexture, `p${this.previewVersion}`, img.width, img.height, img.width / img.fullWidth);
 
-    // Frame: a band of neutral grey / white / black around the photo, for judging exposure.
-    if (frame > 0) {
-      const g = this.frameGrey;
-      gl.enable(gl.SCISSOR_TEST);
-      gl.scissor(
-        Math.trunc(r[0] - frame), Math.trunc(this.viewHeight - (r[1] + r[3] + frame)), // GL origin is bottom-left
-        Math.trunc(r[2] + 2 * frame), Math.trunc(r[3] + 2 * frame),
-      );
-      gl.clearColor(g, g, g, 1);
-      gl.clear(gl.COLOR_BUFFER_BIT);
-      gl.disable(gl.SCISSOR_TEST);
-    }
-
+    this.clearFrame(r[0], r[1], r[2], r[3]);
     gl.bindTexture(gl.TEXTURE_2D, input);
     const geometry = new SampleGeometry(img.width, img.height, rect(0, 0, img.fullWidth, img.fullHeight), rect(0, 0, outW, outH), img.fullWidth, img.fullHeight);
     this.program.bind(p, geometry, r[2] / this.viewWidth, r[3] / this.viewHeight, true);
@@ -155,7 +151,11 @@ export class DevelopRenderer {
     // Output = what's on screen; input = the loaded full-resolution tile. If the lens moves pixels outside the
     // tile while a new one loads, edges smear briefly. Between fit and 100% (wheel zoom) the preview may be
     // enough, and it stands in while a tile for a new region or scale loads.
-    const view = ZoomMath.viewRect(center[0], center[1], this.viewWidth, this.viewHeight, p.lens.outputWidth, p.lens.outputHeight, scale);
+    const view = ZoomMath.viewRect(center[0], center[1], this.viewWidth, this.viewHeight, p.lens.outputWidth, p.lens.outputHeight, scale, this.frameWidth);
+    // The frame stays while zoomed: the photo shows inside it, like in the fit view.
+    const w = view.width * scale;
+    const h = view.height * scale;
+    this.clearFrame((this.viewWidth - w) / 2, (this.viewHeight - h) / 2, w, h);
     const useTile = tile != null && !ZoomMath.previewSuffices(scale, img.width, img.fullWidth) &&
       (scale === 1 || contains(tile.rect, p.lens.sourceBounds(view, 0)));
     let geometry: SampleGeometry;
@@ -175,6 +175,39 @@ export class DevelopRenderer {
       geometry = new SampleGeometry(img.width, img.height, rect(0, 0, img.fullWidth, img.fullHeight), view, img.fullWidth, img.fullHeight);
     }
     this.program.bind(p, geometry, (view.width * scale) / this.viewWidth, (view.height * scale) / this.viewHeight, true);
+  }
+
+  /** The frame alone, around an empty photo area of [placeholderSize] (the app draws a thumbnail over it). */
+  private drawPlaceholder() {
+    const size = this.placeholderSize;
+    if (!size || this.frameWidth <= 0) return;
+    const gl = this.gl;
+    const r = ZoomMath.fitRect(this.viewWidth, this.viewHeight, size[0], size[1], this.frameWidth + this.margin);
+    this.clearFrame(r[0], r[1], r[2], r[3]);
+    gl.enable(gl.SCISSOR_TEST);
+    gl.scissor(Math.trunc(r[0]), Math.trunc(this.viewHeight - (r[1] + r[3])), Math.trunc(r[2]), Math.trunc(r[3]));
+    gl.clearColor(0.07, 0.07, 0.07, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.disable(gl.SCISSOR_TEST);
+  }
+
+  /**
+   * Frame: a band of neutral grey / white / black around the photo at ([left], [top], [width], [height]) (device
+   * pixels, top-left origin), for judging exposure.
+   */
+  private clearFrame(left: number, top: number, width: number, height: number) {
+    const frame = this.frameWidth;
+    if (frame <= 0) return;
+    const gl = this.gl;
+    const g = this.frameGrey;
+    gl.enable(gl.SCISSOR_TEST);
+    gl.scissor(
+      Math.trunc(left - frame), Math.trunc(this.viewHeight - (top + height + frame)), // GL origin is bottom-left
+      Math.trunc(width + 2 * frame), Math.trunc(height + 2 * frame),
+    );
+    gl.clearColor(g, g, g, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.disable(gl.SCISSOR_TEST);
   }
 
   /** [texture], or its copy through the wavelet denoise pre-pass when denoise is on (see WaveletDenoise). */

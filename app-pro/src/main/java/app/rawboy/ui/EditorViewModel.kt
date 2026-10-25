@@ -2,6 +2,7 @@ package app.rawboy.ui
 
 import android.app.Application
 import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -16,6 +17,7 @@ import app.rawboy.develop.CropRect
 import app.rawboy.develop.BrushRaster
 import app.rawboy.develop.BrushStroke
 import app.rawboy.develop.DevelopParams
+import app.rawboy.develop.Edits
 import app.rawboy.develop.Histogram
 import app.rawboy.develop.LeakKind
 import app.rawboy.develop.LightLeak
@@ -54,6 +56,9 @@ import java.io.File
 
 /** RawBoy Auto's package: "Send to Auto" opens it with a preset file. */
 private const val AUTO_PACKAGE = "app.rawboy.auto"
+
+/** Edits files sent to Auto are kept a day (Auto reads them when it gets the photo), then cleared on the next send. */
+private const val EDITS_FILE_AGE_MS = 24L * 60 * 60 * 1000
 
 data class EditorState(
     val loading: Boolean = false,
@@ -205,7 +210,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setViewSize(width: Int, height: Int, frame: Int) {
         frameWidth = frame
-        session.setViewSize(width, height)
+        session.setViewSize(width, height, frame)
     }
 
     /** Double tap: zoom to 100% at the tapped point of the fit view, or back out. [extra]: margin around the frame. */
@@ -597,6 +602,45 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 app.startActivity(intent)
             } catch (e: ActivityNotFoundException) {
                 _state.update { it.copy(message = "RawBoy Auto isn't installed") }
+            }
+        }
+    }
+
+    /**
+     * Opens RawBoy Auto with this photo and its edits ([Edits], shared through this app's FileProvider, the photo's read
+     * access passed on): Auto develops it with every edit, crop, masks with their strokes and lens blur and light leaks
+     * included, in place of a look, so its batch export renders the photo as here.
+     */
+    fun sendPhotoToAuto() {
+        val uri = sourceUri ?: return
+        val s = _state.value
+        if (!s.hasImage) return
+        viewModelScope.launch {
+            val app = getApplication<Application>()
+            val edits = runCatching {
+                withContext(Dispatchers.IO) {
+                    val dir = File(app.cacheDir, "edits").apply { mkdirs() }
+                    // One file per send: Auto may read it after the next one is written.
+                    val file = File(dir, "${System.currentTimeMillis()}.rawboy-edit.json")
+                    dir.listFiles()?.filter { it.lastModified() < System.currentTimeMillis() - EDITS_FILE_AGE_MS }?.forEach { it.delete() }
+                    file.writeText(Edits.encode(s.params, s.defaults, keepEmpty = true)!!)
+                    FileProvider.getUriForFile(app, "${app.packageName}.presets", file)
+                }
+            }.getOrElse {
+                _state.update { it.copy(message = "Could not send the photo") }
+                return@launch
+            }
+            val intent = Intent(Edits.ACTION_SEND_TO_AUTO)
+                .setPackage(AUTO_PACKAGE)
+                .putExtra(Edits.EXTRA_PHOTO, uri)
+                .putExtra(Edits.EXTRA_EDITS, edits)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
+            // Grants reach only URIs in the data or the clip, not plain extras.
+            intent.clipData = ClipData.newRawUri(null, uri).apply { addItem(ClipData.Item(edits)) }
+            try {
+                app.startActivity(intent)
+            } catch (e: ActivityNotFoundException) {
+                _state.update { it.copy(message = "RawBoy Auto isn't installed (or is too old for photos with edits)") }
             }
         }
     }

@@ -113,6 +113,9 @@ class ShaderParams(
         /** Grain Size slider -> cell size factor: 1 at 25, doubling every 25 (0.5..8). */
         fun grainSizeFactor(size: Float): Float = 2f.pow((size - 25f) / 25f)
 
+        /** Halation slider -> amount: the stock's own at 100 (0..1 below it), above it doubling every 25 (16 at 200). */
+        fun halationGain(halation: Float): Float = if (halation <= 100f) halation / 100f else 2f.pow((halation - 100f) / 25f)
+
         fun wideDenoise(denoise: Float): Float = ((denoise - WIDE_DENOISE_FROM) / (100f - WIDE_DENOISE_FROM)).coerceIn(0f, 1f)
 
         /** [asShot] holds the defaults the image was decoded with (its as-shot temperature/tint). */
@@ -180,7 +183,7 @@ class ShaderParams(
                 film = filmUsed,
                 filmAmount = if (filmUsed != null) (p.filmAmount / 100f).coerceIn(0f, 1f) else 0f,
                 filmGrain = p.filmGrain / 100f,
-                halation = p.halation / 100f,
+                halation = halationGain(p.halation),
                 curve = p.curves.table(),
                 clipLevel = asShot.clipLevel,
                 leaks = LightLeaks.pack(p.leaks, lens.width, lens.height),

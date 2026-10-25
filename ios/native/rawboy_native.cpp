@@ -112,6 +112,8 @@ void rb_metadata(const RBImage* image, RBMetadata* out) {
     out->gpsLongitudeRef = m.gpsLongitudeRef;
     out->gpsAltitude = m.gpsAltitude;
     out->gpsBelowSeaLevel = m.gpsBelowSeaLevel;
+    std::memcpy(out->gpsTimeStamp, m.gpsTimeStamp, sizeof m.gpsTimeStamp);
+    out->gpsDateStamp = m.gpsDateStamp.c_str();
 }
 
 // Same layout as jni_bridge.cpp's lensInfo.

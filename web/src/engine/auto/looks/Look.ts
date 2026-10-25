@@ -78,6 +78,12 @@ export const ALL_LOOKS: Look[] = [
   Looks.TRIX_400, Looks.TRIX_PUSH, Looks.TRIX_HARD, Looks.DOUBLE_X, Looks.DOUBLE_X_SOFT,
 ];
 
+/** Bundled LUT ids of the monochrome looks: the LUT alone makes a photo black and white. */
+const MONOCHROME_LUTS = new Set(ALL_LOOKS.filter((l) => l.monochrome).map(lutIdOf).filter((id) => id != null));
+
+/** True for a bundled black and white LUT (retired ids too); pickers list these in their own section. */
+export const isMonochromeLut = (id: string | null | undefined): boolean => id != null && MONOCHROME_LUTS.has(RetiredLooks.lut(id));
+
 export const lookById = (id: string): Look => {
   const key = RetiredLooks.look(id);
   return ALL_LOOKS.find((l) => l.id === key) ?? Looks.NATURAL;

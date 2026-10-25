@@ -263,7 +263,7 @@ fun EditorScreen(vm: EditorViewModel) {
                     vm.updateHistogram(params, b)
                 }
                 val maskGestures = rememberMaskGestures(
-                    shaderParams.lens, layers, selectedId, framePx + marginPx, zoomCenter,
+                    shaderParams.lens, layers, selectedId, framePx + marginPx, framePx, zoomCenter,
                     if (selectedId != null) maskTool else MaskTool.MOVE, brush,
                     MaskActions(
                         onSelect = { selectedLayer = it },
@@ -276,7 +276,7 @@ fun EditorScreen(vm: EditorViewModel) {
                     onPaintAt = { paintAt = it },
                 )
                 val leakGestures = rememberMaskGestures(
-                    shaderParams.lens, leakShapes, selectedLeak, framePx + marginPx, zoomCenter, MaskTool.MOVE, brush,
+                    shaderParams.lens, leakShapes, selectedLeak, framePx + marginPx, framePx, zoomCenter, MaskTool.MOVE, brush,
                     MaskActions(
                         onSelect = { selectedLeakState = it },
                         onChange = { id, shape -> if (shape is MaskShape.Radial) vm.updateLeak(id) { it.withShape(shape) } },
@@ -334,14 +334,14 @@ fun EditorScreen(vm: EditorViewModel) {
                 )
                 if (masksMode && preview != null && !showOriginal) {
                     MaskOverlay(
-                        shaderParams.lens, layers, selectedId, framePx + marginPx, zoomCenter,
+                        shaderParams.lens, layers, selectedId, framePx + marginPx, framePx, zoomCenter,
                         if (selectedId != null) maskTool else MaskTool.MOVE, brush, paintAt, sizeRing,
                         Modifier.matchParentSize(),
                     )
                 }
                 if (leaksMode && preview != null && !showOriginal) {
                     MaskOverlay(
-                        shaderParams.lens, leakShapes, selectedLeak, framePx + marginPx, zoomCenter,
+                        shaderParams.lens, leakShapes, selectedLeak, framePx + marginPx, framePx, zoomCenter,
                         MaskTool.MOVE, brush, null, false, Modifier.matchParentSize(), bands = leakBands,
                     )
                 }
@@ -526,6 +526,10 @@ fun EditorScreen(vm: EditorViewModel) {
             onExport = { settings ->
                 showExport = false
                 vm.export(settings)
+            },
+            onSendToAuto = {
+                showExport = false
+                vm.sendPhotoToAuto()
             },
         )
     }

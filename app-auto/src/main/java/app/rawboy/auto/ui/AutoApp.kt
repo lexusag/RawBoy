@@ -88,19 +88,29 @@ private fun PresetChoiceDialog(presets: List<Preset>, onChoose: (Preset?) -> Uni
         title = { Text("Apply a RawBoy preset") },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                for (p in presets) {
-                    Column(
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable { onChoose(p) }
-                            .padding(vertical = 8.dp),
-                    ) {
-                        Text(p.name)
+                for ((label, section) in Presets.sections(presets)) {
+                    if (label != null) {
                         Text(
-                            groupSummary(p),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            label,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(top = 12.dp, bottom = 2.dp),
                         )
+                    }
+                    for (p in section) {
+                        Column(
+                            Modifier
+                                .fillMaxWidth()
+                                .clickable { onChoose(p) }
+                                .padding(vertical = 8.dp),
+                        ) {
+                            Text(p.name)
+                            Text(
+                                groupSummary(p),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }

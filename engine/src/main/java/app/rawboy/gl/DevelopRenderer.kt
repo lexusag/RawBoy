@@ -19,7 +19,7 @@ class DevelopRenderer : GLSurfaceView.Renderer {
     @Volatile
     var params: ShaderParams? = null
 
-    /** Frame around the photo in the fit view: width in pixels and its grey level (display-encoded). */
+    /** Frame around the photo in the fit and 100% views: width in pixels and its grey level (display-encoded). */
     @Volatile
     var frameWidth: Int = 0
 
@@ -162,18 +162,7 @@ class DevelopRenderer : GLSurfaceView.Renderer {
         val r = ZoomMath.fitRect(viewWidth, viewHeight, outW, outH, frame + margin)
         val texture = denoised(p, previewTexture, "p$previewVersion", img.width, img.height, img.width.toFloat() / img.fullWidth)
 
-        // Frame: a band of neutral grey / white / black around the photo, for judging exposure.
-        if (frame > 0) {
-            val g = frameGrey
-            GLES30.glEnable(GLES30.GL_SCISSOR_TEST)
-            GLES30.glScissor(
-                (r[0] - frame).toInt(), (viewHeight - (r[1] + r[3] + frame)).toInt(), // GL origin is bottom-left
-                (r[2] + 2 * frame).toInt(), (r[3] + 2 * frame).toInt(),
-            )
-            GLES30.glClearColor(g, g, g, 1f)
-            GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
-            GLES30.glDisable(GLES30.GL_SCISSOR_TEST)
-        }
+        clearFrame(r[0], r[1], r[2], r[3])
 
         val sx = r[2] / viewWidth
         val sy = r[3] / viewHeight
@@ -189,8 +178,10 @@ class DevelopRenderer : GLSurfaceView.Renderer {
         // Output = what's on screen; input = the loaded full-resolution tile. If the
         // lens moves pixels outside the tile while a new one loads, edges smear briefly.
         val view = ZoomMath.viewRect(
-            center.first, center.second, viewWidth, viewHeight, p.lens.outputWidth, p.lens.outputHeight,
+            center.first, center.second, viewWidth, viewHeight, p.lens.outputWidth, p.lens.outputHeight, frameWidth,
         )
+        // The frame stays at 100%: the photo shows inside it, like in the fit view.
+        clearFrame((viewWidth - view.width) / 2f, (viewHeight - view.height) / 2f, view.width.toFloat(), view.height.toFloat())
         val texture = denoised(p, detailTexture, "d$detailVersion", t.width, t.height, 1f)
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, texture)
         val geometry = SampleGeometry(t.width, t.height, t, view, img.fullWidth, img.fullHeight)
@@ -200,6 +191,24 @@ class DevelopRenderer : GLSurfaceView.Renderer {
             scaleY = view.height.toFloat() / viewHeight,
             flipY = true,
         )
+    }
+
+    /**
+     * Frame: a band of neutral grey / white / black around the photo at ([left], [top], [width], [height]) (view
+     * pixels, top-left origin), for judging exposure.
+     */
+    private fun clearFrame(left: Float, top: Float, width: Float, height: Float) {
+        val frame = frameWidth
+        if (frame <= 0) return
+        val g = frameGrey
+        GLES30.glEnable(GLES30.GL_SCISSOR_TEST)
+        GLES30.glScissor(
+            (left - frame).toInt(), (viewHeight - (top + height + frame)).toInt(), // GL origin is bottom-left
+            (width + 2 * frame).toInt(), (height + 2 * frame).toInt(),
+        )
+        GLES30.glClearColor(g, g, g, 1f)
+        GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
+        GLES30.glDisable(GLES30.GL_SCISSOR_TEST)
     }
 
     /** [texture], or its copy through the wavelet denoise pre-pass when denoise is on (see WaveletDenoise). */
