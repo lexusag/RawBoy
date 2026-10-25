@@ -10,6 +10,10 @@ import Foundation
  *   lines into arcs: + pulls their ends towards the full-effect side (a dome over a horizon), 0 = straight.
  * - radial: centre (cx, cy), radii rx/ry as fractions of the image's long side (circles stay round),
  *   angle in degrees (clockwise), feather 0..100 = the outer part of the radius over which the effect fades.
+ * - stripe: a band (light leaks' streak) with a radial's geometry: centre (cx, cy), half length rx and half width ry
+ *   (fractions of the long side), angle in degrees (clockwise). feather 0..100 = the outer part of the half width over
+ *   which the effect fades (the ends fade over the same distance); bend -100..100 curves it along its length (100: its
+ *   ends move one half length sideways), taper -100..100 narrows it towards one end, as a light leak's.
  * - brush: no gradient; the mask is only what is painted.
  *
  * Any layer can also be painted on: strokes add to its mask (brush) or take away from it (erase, also from the
@@ -21,6 +25,7 @@ import Foundation
 public enum MaskShape: Equatable, Sendable {
     case linear(x0: Float, y0: Float, x1: Float, y1: Float, curve: Float = 0)
     case radial(cx: Float, cy: Float, rx: Float, ry: Float, angle: Float, feather: Float)
+    case stripe(cx: Float, cy: Float, rx: Float, ry: Float, angle: Float, feather: Float, bend: Float = 0, taper: Float = 0)
     case brush
 
     public var isBrush: Bool { if case .brush = self { true } else { false } }
@@ -132,6 +137,7 @@ public enum Masks {
         switch shape {
         case .linear: "Linear"
         case .radial: "Radial"
+        case .stripe: "Stripe"
         case .brush: "Brush"
         }
     }
@@ -144,6 +150,11 @@ public enum Masks {
     /** A centred ellipse with a soft edge. */
     public static func newRadial(name: String = "Radial") -> MaskLayer {
         MaskLayer(id: newId(), name: name, shape: .radial(cx: 0.5, cy: 0.5, rx: 0.25, ry: 0.18, angle: 0, feather: 50))
+    }
+
+    /** A soft horizontal band across the middle, a little longer than the photo is wide (its length handles just past the edges). */
+    public static func newStripe(name: String = "Stripe") -> MaskLayer {
+        MaskLayer(id: newId(), name: name, shape: .stripe(cx: 0.5, cy: 0.5, rx: 0.55, ry: 0.08, angle: 0, feather: 50))
     }
 
     /** Nothing until painted. */
@@ -168,6 +179,9 @@ public enum Masks {
         case let .radial(cx, cy, rx, ry, angle, feather):
             shape = ["kind": "radial", "cx": num(cx), "cy": num(cy), "rx": num(rx), "ry": num(ry),
                      "angle": num(angle), "feather": num(feather)]
+        case let .stripe(cx, cy, rx, ry, angle, feather, bend, taper):
+            shape = ["kind": "stripe", "cx": num(cx), "cy": num(cy), "rx": num(rx), "ry": num(ry),
+                     "angle": num(angle), "feather": num(feather), "bend": num(bend), "taper": num(taper)]
         case .brush:
             shape = ["kind": "brush"]
         }
@@ -223,6 +237,11 @@ public enum Masks {
             guard let cx = f("cx"), let cy = f("cy"), let rx = f("rx", 0.005, 3), let ry = f("ry", 0.005, 3),
                   let angle = f("angle", -360, 360), let feather = f("feather", 0, 100) else { return nil }
             return .radial(cx: cx, cy: cy, rx: rx, ry: ry, angle: angle, feather: feather)
+        case "stripe":
+            guard let cx = f("cx"), let cy = f("cy"), let rx = f("rx", 0.005, 3), let ry = f("ry", 0.002, 3),
+                  let angle = f("angle", -360, 360), let feather = f("feather", 0, 100) else { return nil }
+            return .stripe(cx: cx, cy: cy, rx: rx, ry: ry, angle: angle, feather: feather, bend: f("bend", -100, 100) ?? 0,
+                           taper: f("taper", -100, 100) ?? 0)
         default:
             return nil
         }

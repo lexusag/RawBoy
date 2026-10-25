@@ -30,7 +30,7 @@ struct BrushSettings: Equatable {
 }
 
 /** Which kind of mask layer to add. */
-enum MaskKind { case linear, radial, brush }
+enum MaskKind { case linear, radial, stripe, brush }
 
 @MainActor
 final class EditorViewModel: ObservableObject {
@@ -337,14 +337,23 @@ final class EditorViewModel: ObservableObject {
         if p.masks.count >= Masks.maxLayers { return nil }
         let same = p.masks.filter {
             switch ($0.shape, kind) {
-            case (.linear, .linear), (.radial, .radial), (.brush, .brush): true
+            case (.linear, .linear), (.radial, .radial), (.stripe, .stripe), (.brush, .brush): true
             default: false
             }
         }.count
-        let base = kind == .linear ? "Linear" : kind == .radial ? "Radial" : "Brush"
+        let base = switch kind {
+        case .linear: "Linear"
+        case .radial: "Radial"
+        case .stripe: "Stripe"
+        case .brush: "Brush"
+        }
         let name = "\(base) \(same + 1)"
-        let layer = kind == .linear ? Masks.newLinear(name: name)
-            : kind == .radial ? Masks.newRadial(name: name) : Masks.newBrush(name: name)
+        let layer = switch kind {
+        case .linear: Masks.newLinear(name: name)
+        case .radial: Masks.newRadial(name: name)
+        case .stripe: Masks.newStripe(name: name)
+        case .brush: Masks.newBrush(name: name)
+        }
         edit(force: true) { $0.masks.append(layer) }
         return layer.id
     }

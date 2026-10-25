@@ -103,9 +103,17 @@ struct MaskGeometry {
         }
     }
 
-    /** [leak]: a radial shape drawn as that light leak's outline (glow, streak or triangle, bent and tapered like the shader). */
-    func shape(_ l: MaskLayer, leak: LeakForm? = nil) -> Shape {
+    /**
+     * [leak]: a radial shape drawn as that light leak's outline (glow, streak or triangle, bent and tapered like the
+     * shader). [stripe]: it is a stripe mask, whose ends fade over the same distance as its sides.
+     */
+    func shape(_ l: MaskLayer, leak: LeakForm? = nil, stripe: Bool = false) -> Shape {
         switch l.shape {
+        case let .stripe(cx, cy, rx, ry, angle, feather, bend, taper):
+            // Drawn, hit and dragged as a radial shape with a light leak streak's form.
+            var radial = l
+            radial.shape = .radial(cx: cx, cy: cy, rx: rx, ry: ry, angle: angle, feather: feather)
+            return shape(radial, leak: LeakForm(kind: .streak, bend: bend, taper: taper), stripe: true)
         case .brush:
             if let p = l.strokes.first?.points, p.count >= 2 { return .brush(pin: toScreen(CGFloat(p[0]) * w, CGFloat(p[1]) * h)) }
             return .brush(pin: nil)
@@ -148,7 +156,10 @@ struct MaskGeometry {
             }
             func outline(_ sc: CGFloat) -> [CGPoint] {
                 switch leak?.kind {
-                case .some(.streak): return polygon([(1, sc), (-1, sc), (-1, -sc), (1, -sc)], steps)
+                case .some(.streak):
+                    // Edges at sc x the half width; a stripe mask's ends fade over the same distance as its sides.
+                    let ex = stripe ? max(0, 1 - (1 - sc) * ry / rx) : 1
+                    return polygon([(ex, sc), (-ex, sc), (-ex, -sc), (ex, -sc)], steps)
                 case .some(.triangle): return polygon([(sc, 0), (-sc, sc), (-sc, -sc)], steps)
                 default:
                     return (0..<steps).map {
@@ -169,7 +180,12 @@ struct MaskGeometry {
 
     /** The bend (-100..100) that puts a leak's axis through image point [to], or nil too near its middle. */
     func bendAt(_ shape: MaskShape, _ to: CGPoint) -> Float? {
-        guard case let .radial(cx, cy, rx, _, angle, _) = shape else { return nil }
+        let axis: (Float, Float, Float, Float)
+        switch shape {
+        case let .radial(x, y, r, _, a, _), let .stripe(x, y, r, _, a, _, _, _): axis = (x, y, r, a)
+        default: return nil
+        }
+        let (cx, cy, rx, angle) = axis
         let a = Double(angle) * .pi / 180
         let dx = Double(to.x - CGFloat(cx) * w)
         let dy = Double(to.y - CGFloat(cy) * h)
@@ -183,6 +199,11 @@ struct MaskGeometry {
 
     /** Preview point [p] lies inside a radial shape's outer ellipse (a leak: its outline). */
     func inside(_ l: MaskLayer, _ p: CGPoint, _ leak: LeakForm?) -> Bool {
+        if case let .stripe(cx, cy, rx, ry, angle, feather, bend, taper) = l.shape {
+            var radial = l
+            radial.shape = .radial(cx: cx, cy: cy, rx: rx, ry: ry, angle: angle, feather: feather)
+            return inside(radial, p, LeakForm(kind: .streak, bend: bend, taper: taper))
+        }
         guard case let .radial(cx, cy, srx, sry, angle, _) = l.shape else { return false }
         let q = toImage(p)
         let a = Double(angle) * .pi / 180
@@ -206,6 +227,10 @@ struct MaskGeometry {
         switch s {
         case .brush:
             return s
+        case let .stripe(cx, cy, rx, ry, angle, feather, bend, taper):
+            guard case let .radial(ncx, ncy, nrx, nry, nangle, _) =
+                    drag(.radial(cx: cx, cy: cy, rx: rx, ry: ry, angle: angle, feather: feather), handle, from, to) else { return s }
+            return .stripe(cx: ncx, cy: ncy, rx: nrx, ry: nry, angle: nangle, feather: feather, bend: bend, taper: taper)
         case let .linear(x0, y0, x1, y1, curve):
             switch handle {
             case .curve:
@@ -453,7 +478,13 @@ final class MaskTouchView: UIView {
         let p = px(t.location(in: self))
         if let id = dragLayer, let handle = dragHandle, let start = dragStart {
             if handle == .bend {
-                if let bend = g.bendAt(start, g.toImage(p)) { inp.onBend(id, bend) }
+                guard let bend = g.bendAt(start, g.toImage(p)) else { return }
+                if case let .stripe(cx, cy, rx, ry, angle, feather, _, taper) = start {
+                    inp.actions.onChange(id, .stripe(cx: cx, cy: cy, rx: rx, ry: ry, angle: angle, feather: feather, bend: bend,
+                                                     taper: taper))
+                } else {
+                    inp.onBend(id, bend)
+                }
                 return
             }
             inp.actions.onChange(id, g.drag(start, handle, dragFrom, g.toImage(p)))
