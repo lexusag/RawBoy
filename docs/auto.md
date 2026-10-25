@@ -79,7 +79,8 @@ brightness, from the photo before this one in the batch to this photo only (deno
 develop one shot of a scene, swipe to the next and tap it. **Auto denoise all** (in the grid's top row, Android and
 web) is for a finished series: every photo gets the denoise, colour denoise and sharpening the auto develop measured on
 it (its noise, ISO and exposure), in place of its Denoise slider and RawBoy edits' own values (and, on the web, a preset's
-Denoise & sharpening group, the batch preset's too; Android presets never set denoise). Looks, presets, lens corrections and the other sliders
+Denoise & sharpening group, the batch preset's too; Android presets never set denoise). Photos added As is, which
+skip the noise measurement, get the ISO table's values. Looks, presets, lens corrections and the other sliders
 stay; it is one undo step per photo. With photos selected, the selection bar's **Auto denoise** (dots icon) does the same
 for those photos only (the batch preset stays as it is). **Export all** saves every photo
 to `Pictures/RawBoy Auto/<name>-auto.jpg` (or `.tif`), one photo at a time, keeping the screen on. **Stop**, next to the progress bar, ends the export after the

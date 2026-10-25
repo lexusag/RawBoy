@@ -356,13 +356,15 @@ describe('Edits in sidecars', () => {
     const saved = {
       mode: 'film' as const, look: Looks.NATURAL, filmLook: FilmLooks.PORTRA_400, strength: 70,
       adjust: { ...NO_ADJUSTMENTS, brightness: 12, contrast: -8, rotation: 1 }, preset, edits: edited,
-      lensChoice: null, lensPreset: null, plain: false,
+      lensChoice: null, lensPreset: null, plain: false, autoDenoise: false,
     };
     const back = decodeAuto(encodeAuto(saved))!;
     expect({ ...back, preset: { ...back.preset!, id: '' }, edits: { ...back.edits!, masks: [] } })
       .toEqual({ ...saved, preset: { ...preset, id: '' }, edits: { ...edited, masks: [] } });
     expect(back.edits!.masks).toHaveLength(2);
     expect(decodeAuto(encodeAuto({ ...saved, preset: null, edits: null }))).toEqual({ ...saved, preset: null, edits: null });
+    const plain = { ...saved, preset: null, edits: null, plain: true, autoDenoise: true };
+    expect(decodeAuto(encodeAuto(plain))).toEqual(plain);
     // Edits that equal the defaults are still edits.
     expect(decodeAuto(encodeAuto({ ...saved, edits: developParams() }))!.edits).toEqual(developParams());
     expect(decodeAuto('{"format":"rawboy-edit"}')).toBeNull();
@@ -375,7 +377,7 @@ describe('Edits in sidecars', () => {
   it("keeps a photo's picked lens preset, or None; by lens isn't stored", () => {
     const base = decodeAuto(encodeAuto({
       mode: 'looks', look: Looks.NATURAL, filmLook: FilmLooks.PORTRA_400, strength: 100, adjust: NO_ADJUSTMENTS,
-      preset: null, edits: null, lensChoice: null, lensPreset: null, plain: false,
+      preset: null, edits: null, lensChoice: null, lensPreset: null, plain: false, autoDenoise: false,
     }))!;
     expect(base.lensChoice).toBeNull();
     // An "As is" photo comes back as one; others don't store it.

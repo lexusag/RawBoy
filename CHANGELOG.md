@@ -1,5 +1,11 @@
 # Changelog
 
+**Auto: Auto denoise works on "As is" photos (2026-10-25)**
+
+- RawBoy Auto (web): photos added **As is** have no auto develop, so Auto denoise found nothing to change and their
+  denoise stayed at 0 under a preset. Now it gives them the denoise, colour denoise and sharpening of the ISO table
+  (they skip the noise measurement), kept with the photo (sidecar too) and undoable.
+
 **RawBoy Web: findable in search engines (2026-10-25)**
 
 - RawBoy Web now has a proper title and description, a link preview card (the app icons) when the address is shared
