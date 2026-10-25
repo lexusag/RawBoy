@@ -7,7 +7,7 @@ import javax.microedition.khronos.opengles.GL10
 
 /**
  * Renders the developed image into a GLSurfaceView: either the whole downscaled
- * preview (aspect-fit) or, when zoomed, a 1:1 window into a full-resolution tile.
+ * preview (aspect-fit) or, when zoomed, a window into a full-resolution tile (1:1 at 100%, any scale with a pinch).
  */
 class DevelopRenderer : GLSurfaceView.Renderer {
     private val lock = Any()
@@ -34,9 +34,12 @@ class DevelopRenderer : GLSurfaceView.Renderer {
     @Volatile
     var clipWarning: Boolean = false
 
-    /** Centre of the 100% view in full-resolution pixels, or null for fit-to-view. */
+    /**
+     * The zoomed view's centre (full-resolution pixels) and scale (view pixels per full-resolution pixel, 1 = 100%),
+     * set together so a frame never mixes them; null for fit-to-view.
+     */
     @Volatile
-    var zoomCenter: Pair<Float, Float>? = null
+    var zoom: Pair<Pair<Float, Float>, Float>? = null
 
     private var program: DevelopProgram? = null
     private var quad: FullscreenQuad? = null
@@ -143,10 +146,9 @@ class DevelopRenderer : GLSurfaceView.Renderer {
         filmTextures!!.bind(p.film)
         bokehTexture!!.bind(p) // after the brush atlas: its mask pass reads it
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
-        val center = zoomCenter
-        val detailTile = uploadedDetail
-        if (center != null && detailTile != null) {
-            drawZoomed(p, img, detailTile, center)
+        val z = zoom
+        if (z != null) {
+            drawZoomed(p, img, uploadedDetail, z.first, z.second)
         } else {
             drawFit(p, img)
         }
@@ -173,24 +175,38 @@ class DevelopRenderer : GLSurfaceView.Renderer {
         program!!.bind(p, geometry, sx, sy, flipY = true)
     }
 
-    private fun drawZoomed(p: ShaderParams, img: PreviewImage, tile: DetailTile, center: Pair<Float, Float>) {
-        val t = tile.rect
-        // Output = what's on screen; input = the loaded full-resolution tile. If the
-        // lens moves pixels outside the tile while a new one loads, edges smear briefly.
-        val view = ZoomMath.viewRect(
-            center.first, center.second, viewWidth, viewHeight, p.lens.outputWidth, p.lens.outputHeight, frameWidth,
-        )
-        // The frame stays at 100%: the photo shows inside it, like in the fit view.
-        clearFrame((viewWidth - view.width) / 2f, (viewHeight - view.height) / 2f, view.width.toFloat(), view.height.toFloat())
-        val texture = denoised(p, detailTexture, "d$detailVersion", t.width, t.height, 1f)
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, texture)
-        val geometry = SampleGeometry(t.width, t.height, t, view, img.fullWidth, img.fullHeight)
-        program!!.bind(
-            p, geometry,
-            scaleX = view.width.toFloat() / viewWidth,
-            scaleY = view.height.toFloat() / viewHeight,
-            flipY = true,
-        )
+    private fun drawZoomed(p: ShaderParams, img: PreviewImage, tile: DetailTile?, center: Pair<Float, Float>, scale: Float) {
+        // Output = what's on screen; input = the loaded full-resolution tile. If the lens moves pixels outside the
+        // tile while a new one loads, edges smear briefly. Between fit and 100% (pinch) the preview may be enough,
+        // and it stands in while a tile for a new region or scale loads.
+        val outW = p.lens.outputWidth
+        val outH = p.lens.outputHeight
+        val viewF = ZoomMath.viewRectF(center.first, center.second, viewWidth, viewHeight, outW, outH, scale, frameWidth)
+        val view = ZoomMath.viewRect(center.first, center.second, viewWidth, viewHeight, outW, outH, scale, frameWidth)
+        // The frame stays while zoomed: the photo shows inside it, like in the fit view.
+        val w = viewF[2] * scale
+        val h = viewF[3] * scale
+        clearFrame((viewWidth - w) / 2f, (viewHeight - h) / 2f, w, h)
+        val useTile = tile != null && !ZoomMath.previewSuffices(scale, img.width, img.fullWidth) &&
+            (scale == 1f || tile.rect.contains(p.lens.sourceBounds(view, 0)))
+        val geometry = if (useTile) {
+            val t = tile!!.rect
+            val texture = denoised(p, detailTexture, "d$detailVersion", t.width, t.height, 1f)
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, texture)
+            if (texture == detailTexture) {
+                // Pixels stay crisp from 100% up; below it, smooth. (The denoise output, shared with the fit view, stays linear.)
+                val filter = if (scale >= 1f) GLES30.GL_NEAREST else GLES30.GL_LINEAR
+                GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, filter)
+                GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, filter)
+            }
+            SampleGeometry(t.width, t.height, t, view, img.fullWidth, img.fullHeight, outputF = viewF)
+        } else {
+            val texture = denoised(p, previewTexture, "p$previewVersion", img.width, img.height, img.width.toFloat() / img.fullWidth)
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, texture)
+            val input = PixelRect(0, 0, img.fullWidth, img.fullHeight)
+            SampleGeometry(img.width, img.height, input, view, img.fullWidth, img.fullHeight, outputF = viewF)
+        }
+        program!!.bind(p, geometry, scaleX = w / viewWidth, scaleY = h / viewHeight, flipY = true)
     }
 
     /**

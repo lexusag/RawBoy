@@ -435,6 +435,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
               onStrokeBegin={store.beginStroke}
               onStrokeExtend={store.extendStroke}
               onStrokeEnd={store.endStroke}
+              onStrokeCancel={store.cancelStroke}
             />
           )}
           {leaksMode && !showOriginal && shaderParams && (

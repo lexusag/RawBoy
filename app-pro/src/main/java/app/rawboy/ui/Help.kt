@@ -18,6 +18,10 @@ internal val PRO_HELP = listOf(
         "Photo",
         listOf(
             HelpItem("Double-tap", "100% view at that point; drag to pan, double-tap again to go back."),
+            HelpItem(
+                "Pinch",
+                "Two fingers zoom around their middle, up to 400% (stops once at 100%), and pan with it; the finger left keeps panning. Out past the whole photo goes back to it.",
+            ),
             HelpItem("Press and hold", "Compare with the as-shot render."),
             HelpItem("Tap outside the photo", "Change the frame around it: grey, white or black."),
             HelpItem("Histogram", "Above the tabs: red, green and blue levels of the developed photo, with the share of crushed shadows (left) and clipped highlights (right). Tap it to mark clipped highlights red and crushed shadows blue on the photo."),

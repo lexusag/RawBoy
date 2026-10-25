@@ -3,6 +3,9 @@ package app.rawboy.ui
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateCentroid
+import androidx.compose.foundation.gestures.calculatePan
+import androidx.compose.foundation.gestures.calculateZoom
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,11 +55,15 @@ private enum class Handle { MOVE, START, END, RX, RY, ROTATE, CURVE, PIN }
 
 /**
  * Where masks sit on screen: image pixels (display orientation, full resolution) <-> preview pixels, through the
- * lens transform and the fit or 100% placement the renderer uses. Port of web's MaskOverlay geometry.
+ * lens transform and the fit or zoomed placement the renderer uses. Port of web's MaskOverlay geometry.
  */
-private class MaskGeometry(val lens: LensTransform, val view: IntSize, frame: Int, zoomFrame: Int, zoomCenter: Pair<Float, Float>?) {
+private class MaskGeometry(
+    val lens: LensTransform, val view: IntSize, frame: Int, zoomFrame: Int, zoomCenter: Pair<Float, Float>?, zoomScale: Float,
+) {
     val r: FloatArray = if (zoomCenter != null) {
-        ZoomMath.zoomedRect(zoomCenter.first, zoomCenter.second, view.width, view.height, lens.outputWidth, lens.outputHeight, zoomFrame)
+        ZoomMath.zoomedRect(
+            zoomCenter.first, zoomCenter.second, view.width, view.height, lens.outputWidth, lens.outputHeight, zoomScale, zoomFrame,
+        )
     } else {
         ZoomMath.fitRect(view.width, view.height, lens.outputWidth, lens.outputHeight, frame)
     }
@@ -273,13 +280,16 @@ class MaskActions(
     /** The stroke just begun turned out to be a two-finger pan: drop it. */
     val onStrokeCancel: (String) -> Unit,
     val onPan: (Float, Float) -> Unit,
+    /** Two fingers while painting pinch too: zoom by a factor around a view position. */
+    val onZoomBy: (Float, Float, Float) -> Unit = { _, _, _ -> },
 )
 
 /**
  * Mask gestures for the preview's gesture layer: apply the returned modifier **last** in that layer's chain so it
  * sees each touch first. Move: a finger on a handle drags it (or on another layer's pin selects it); anywhere else
- * nothing is consumed, so double-tap zoom, pan and press-and-hold compare keep working. Brush / Erase: one finger
- * paints, two fingers pan the 100% view. [onPaintAt] gets the finger while painting (for the brush circle).
+ * nothing is consumed, so double-tap zoom, pan, pinch and press-and-hold compare keep working; a second finger
+ * during a handle drag puts the shape back and leaves both fingers to the pinch. Brush / Erase: one finger paints,
+ * two fingers pan and pinch-zoom the view. [onPaintAt] gets the finger while painting (for the brush circle).
  * The inputs are read fresh for every touch, so the modifier is never restarted mid-gesture. [grabInside]: a finger
  * anywhere inside a radial shape moves it (the light leaks tool, which shows its leaks as radial shapes); [bands]:
  * ids of radial shapes shown as straight bands (streak leaks).
@@ -298,14 +308,17 @@ fun rememberMaskGestures(
     onPaintAt: (Offset?) -> Unit,
     grabInside: Boolean = false,
     bands: Set<String> = emptySet(),
+    zoomScale: Float = 1f,
 ): Modifier {
     val grab = with(LocalDensity.current) { 24.dp.toPx() }
-    val current = rememberUpdatedState(GestureInputs(lens, layers, selectedId, frame, zoomFrame, zoomCenter, tool, brush, actions, onPaintAt, grabInside, bands))
+    val current = rememberUpdatedState(
+        GestureInputs(lens, layers, selectedId, frame, zoomFrame, zoomCenter, zoomScale, tool, brush, actions, onPaintAt, grabInside, bands),
+    )
     return Modifier.pointerInput(Unit) {
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false)
             val inp = current.value
-            val g = MaskGeometry(inp.lens, size, inp.frame, inp.zoomFrame, inp.zoomCenter)
+            val g = MaskGeometry(inp.lens, size, inp.frame, inp.zoomFrame, inp.zoomCenter, inp.zoomScale)
             if (inp.tool == MaskTool.MOVE) {
                 val (id, handle) = hit(g, inp.layers, inp.selectedId, down.position, grab, inp.grabInside, inp.bands) ?: return@awaitEachGesture
                 down.consume()
@@ -320,6 +333,11 @@ fun rememberMaskGestures(
                     val ev = awaitPointerEvent()
                     val c = ev.changes.firstOrNull { it.id == down.id } ?: break
                     if (!c.pressed) break
+                    if (ev.changes.count { it.pressed } >= 2) {
+                        // A pinch, not a drag: put the shape back and leave the fingers to the preview's pinch.
+                        inp.actions.onChange(id, start)
+                        break
+                    }
                     c.consume()
                     inp.actions.onChange(id, g.drag(start, handle, from, g.toImage(c.position)))
                 }
@@ -352,9 +370,15 @@ fun rememberMaskGestures(
                         if (ev.changes[0].uptimeMillis - down.uptimeMillis < PAN_GRACE_MS) inp.actions.onStrokeCancel(layer.id)
                     }
                     if (pressed.size >= 2) {
-                        val prev = pressed.fold(Offset.Zero) { a, c -> a + c.previousPosition } / pressed.size.toFloat()
-                        val now = pressed.fold(Offset.Zero) { a, c -> a + c.position } / pressed.size.toFloat()
-                        inp.actions.onPan(now.x - prev.x, now.y - prev.y)
+                        val move = ev.calculatePan()
+                        val factor = ev.calculateZoom()
+                        val centre = ev.calculateCentroid(useCurrent = true)
+                        if (move != Offset.Zero) inp.actions.onPan(move.x, move.y)
+                        if (factor != 1f && centre != Offset.Unspecified) inp.actions.onZoomBy(centre.x, centre.y, factor)
+                    } else {
+                        // The finger left after a pinch keeps panning.
+                        val c = pressed[0]
+                        inp.actions.onPan(c.position.x - c.previousPosition.x, c.position.y - c.previousPosition.y)
                     }
                     ev.changes.forEach { it.consume() }
                     continue
@@ -379,6 +403,7 @@ private class GestureInputs(
     val frame: Int,
     val zoomFrame: Int,
     val zoomCenter: Pair<Float, Float>?,
+    val zoomScale: Float,
     val tool: MaskTool,
     val brush: BrushSettings,
     val actions: MaskActions,
@@ -411,10 +436,11 @@ fun MaskOverlay(
     sizeRing: Boolean,
     modifier: Modifier = Modifier,
     bands: Set<String> = emptySet(),
+    zoomScale: Float = 1f,
 ) {
     val density = LocalDensity.current
     Canvas(modifier) {
-        val g = MaskGeometry(lens, IntSize(size.width.roundToInt(), size.height.roundToInt()), frame, zoomFrame, zoomCenter)
+        val g = MaskGeometry(lens, IntSize(size.width.roundToInt(), size.height.roundToInt()), frame, zoomFrame, zoomCenter, zoomScale)
         val px = density.density
         val dim = if (tool == MaskTool.MOVE) 1f else 0.4f
         for (l in layers) {

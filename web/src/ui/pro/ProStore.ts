@@ -378,6 +378,13 @@ export class ProStore {
     });
   }
 
+  /** Drops the stroke just begun, with no redo step (a second finger turned it into a pinch; EditorViewModel.cancelStroke). */
+  cancelStroke = () => {
+    this.flushStroke();
+    const p = this.history.drop();
+    if (p) this.show(p);
+  };
+
   undoStroke = (layerId: string) => {
     this.flushStroke();
     this.updateLayer(layerId, (l) => ({ ...l, strokes: l.strokes.slice(0, -1) }), true);

@@ -762,7 +762,8 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
       <div className="workspace auto">
         <div
           className="preview-wrap"
-          onTouchStart={(e) => (swipe.current = { x: e.touches[0].clientX, y: e.touches[0].clientY })}
+          // One finger swipes; a second one is a pinch and cancels the swipe.
+          onTouchStart={(e) => (swipe.current = e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null)}
           onTouchEnd={(e) => {
             const s = swipe.current;
             swipe.current = null;

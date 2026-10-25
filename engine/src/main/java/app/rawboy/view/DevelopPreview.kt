@@ -32,6 +32,8 @@ fun DevelopPreview(
     margin: Int = 0,
     /** Marks clipped highlights red and crushed shadows blue (Pro's histogram toggles it). */
     clipWarning: Boolean = false,
+    /** View pixels per full-resolution pixel while zoomed (1 = 100%; a pinch sets others). */
+    zoomScale: Float = 1f,
 ) {
     val renderer = remember { DevelopRenderer() }
     var view by remember { mutableStateOf<GLSurfaceView?>(null) }
@@ -70,8 +72,8 @@ fun DevelopPreview(
         renderer.clipWarning = clipWarning
         view?.requestRender()
     }
-    LaunchedEffect(zoomCenter, view) {
-        renderer.zoomCenter = zoomCenter
+    LaunchedEffect(zoomCenter, zoomScale, view) {
+        renderer.zoom = zoomCenter?.let { it to zoomScale }
         view?.requestRender()
     }
 

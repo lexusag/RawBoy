@@ -107,6 +107,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     val bloomSources = session.bloomSources
     val bokehSource = session.bokehSource
     val zoomCenter = session.zoomCenter
+    val zoomScale = session.zoomScale
     val detail = session.detail
     val lensInfo = session.lensInfo
     val lutData = session.lutData
@@ -238,8 +239,11 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    /** Drag in the 100% view; [dx], [dy] are screen pixels = full-resolution pixels. */
+    /** Drag in the zoomed view, in screen pixels. */
     fun pan(dx: Float, dy: Float) = session.pan(dx, dy)
+
+    /** Pinch: zoom by [factor] around a view position. [extra]: margin around the frame, as for [toggleZoom]. */
+    fun zoomBy(viewX: Float, viewY: Float, factor: Float, extra: Int = 0) = session.zoomBy(viewX, viewY, factor, frameWidth + extra)
 
     fun exitZoom() = session.exitZoom()
 

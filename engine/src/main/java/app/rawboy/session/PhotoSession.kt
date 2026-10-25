@@ -32,6 +32,7 @@ import app.rawboy.lut.LutLoader
 import app.rawboy.raw.RawImage
 import app.rawboy.retouch.SkinMask
 import app.rawboy.retouch.SkinSegmenter
+import kotlin.math.min
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -95,9 +96,13 @@ class PhotoSession(
     val bokehSource = _bokehSource.asStateFlow()
     private var bokehJob: Job? = null
 
-    /** Centre of the 100% view in full-resolution pixels; null = fit to view. */
+    /** Centre of the zoomed view in full-resolution pixels; null = fit to view. */
     private val _zoomCenter = MutableStateFlow<Pair<Float, Float>?>(null)
     val zoomCenter = _zoomCenter.asStateFlow()
+
+    /** View pixels per full-resolution pixel while zoomed: 1 = 100% (double tap), others from a pinch. */
+    private val _zoomScale = MutableStateFlow(1f)
+    val zoomScale = _zoomScale.asStateFlow()
 
     /** Full-resolution region around the zoom centre, uploaded for the 100% view. */
     private val _detail = MutableStateFlow<DetailTile?>(null)
@@ -291,7 +296,7 @@ class PhotoSession(
         val h = lens.outputHeight
         val zoom = _zoomCenter.value
         val r = if (zoom != null) {
-            ZoomMath.zoomedRect(zoom.first, zoom.second, viewWidth, viewHeight, w, h, viewFrame)
+            ZoomMath.zoomedRect(zoom.first, zoom.second, viewWidth, viewHeight, w, h, _zoomScale.value, viewFrame)
         } else {
             ZoomMath.fitRect(viewWidth, viewHeight, w, h, frameWidth)
         }
@@ -319,35 +324,69 @@ class PhotoSession(
             return
         }
         val p = fitToImage(viewX, viewY, frameWidth) ?: return
-        setZoomCenter(p.first, p.second)
+        setZoomCenter(p.first, p.second, 1f)
     }
 
-    /** Drag in the 100% view; [dx], [dy] are screen pixels = full-resolution pixels. */
+    /**
+     * Pinch: scales the view by [factor] keeping the photo point under ([viewX], [viewY]) in place, from the fit view
+     * up to ZoomMath.MAX_SCALE. Passing 100% stops there once; zooming out past the fit view returns to it. Port of
+     * the web's wheel zoom (PhotoSession.ts zoomBy).
+     */
+    fun zoomBy(viewX: Float, viewY: Float, factor: Float, frameWidth: Int) {
+        val vw = viewWidth
+        val vh = viewHeight
+        if (image == null || vw <= 0 || vh <= 0) return
+        val lens = lensFor(params)
+        val w = lens.outputWidth
+        val h = lens.outputHeight
+        val fit = ZoomMath.fitScale(vw, vh, w, h, frameWidth)
+        val c = _zoomCenter.value
+        val from = if (c != null) _zoomScale.value else fit
+        val r = if (c != null) ZoomMath.zoomedRect(c.first, c.second, vw, vh, w, h, from, viewFrame) else ZoomMath.fitRect(vw, vh, w, h, frameWidth)
+        val x = (viewX - r[0]) / r[2] * w
+        val y = (viewY - r[1]) / r[3] * h
+        var to = min(ZoomMath.MAX_SCALE, from * factor)
+        if ((from < 1f && to > 1f) || (from > 1f && to < 1f)) to = 1f
+        if (to <= fit * 1.001f) {
+            exitZoom()
+            return
+        }
+        if (c != null && to == from) return
+        setZoomCenter(x - (viewX - vw / 2f) / to, y - (viewY - vh / 2f) / to, to)
+    }
+
+    /** Drag in the zoomed view, in screen pixels. */
     fun pan(dx: Float, dy: Float) {
         val c = _zoomCenter.value ?: return
-        setZoomCenter(c.first - dx, c.second - dy)
+        val s = _zoomScale.value
+        setZoomCenter(c.first - dx / s, c.second - dy / s)
     }
 
     fun exitZoom() {
         tileJob?.cancel()
         tileJob = null
         _zoomCenter.value = null
+        _zoomScale.value = 1f
         _detail.value = null
     }
 
-    private fun setZoomCenter(cx: Float, cy: Float) {
+    private fun setZoomCenter(cx: Float, cy: Float, scale: Float = _zoomScale.value) {
         val img = image ?: return
         val lens = lensFor(params)
-        val c = ZoomMath.clampCenter(cx, cy, viewWidth, viewHeight, lens.outputWidth, lens.outputHeight, viewFrame)
+        val c = ZoomMath.clampCenter(cx, cy, viewWidth, viewHeight, lens.outputWidth, lens.outputHeight, scale, viewFrame)
+        _zoomScale.value = scale
         _zoomCenter.value = c
         ensureDetail(img, c)
     }
 
-    /** Loads a new tile only when the visible region leaves the current one. */
+    /** Loads a new tile only when the visible region leaves the current one (none while the preview is enough). */
     private fun ensureDetail(img: RawImage, c: Pair<Float, Float>) {
         if (tileJob?.isActive == true) return
+        val scale = _zoomScale.value
+        val preview = _preview.value
+        if (preview != null && ZoomMath.previewSuffices(scale, preview.width, preview.fullWidth)) return
         val lens = lensFor(params)
-        val view = ZoomMath.viewRect(c.first, c.second, viewWidth, viewHeight, lens.outputWidth, lens.outputHeight, viewFrame)
+        val view = ZoomMath.viewRect(c.first, c.second, viewWidth, viewHeight, lens.outputWidth, lens.outputHeight, scale, viewFrame)
         // Source pixels the view needs, through rotation and lens geometry, plus the denoise halo.
         val needed = lens.sourceBounds(view, spatialMargin(params))
         val current = _detail.value

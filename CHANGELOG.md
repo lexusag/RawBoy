@@ -1,5 +1,15 @@
 # Changelog
 
+**Pinch to zoom on phones (2026-10-25)**
+
+- RawBoy and Auto (Android, and the web on phones and tablets): two fingers zoom the photo smoothly around their
+  middle, from the whole photo up to 400% (it stops once at 100% on the way), and pan with it; the finger left after a
+  pinch keeps panning, and one finger pans as before while zoomed. Pinching out past the whole photo goes back to it.
+  Close to the whole photo the view comes from the preview, further in from full-resolution tiles. The frame stays
+  around the photo, mask and light-leak handles follow the zoom, and a pinch never starts press-and-hold compare. A
+  second finger that lands on a mask or leak handle puts it back and pinches instead; a brush stroke just begun is
+  dropped (Android already did this). Auto's swipe to the next photo ignores two-finger touches. Double-tap still
+  toggles 100%. Not on iOS yet.
 **Auto: Auto denoise works on "As is" photos (2026-10-25)**
 
 - RawBoy Auto (web): photos added **As is** have no auto develop, so Auto denoise found nothing to change and their

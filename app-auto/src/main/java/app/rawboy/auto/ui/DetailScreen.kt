@@ -8,7 +8,6 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -98,7 +97,9 @@ import app.rawboy.view.HelpButton
 import app.rawboy.view.RedoIcon
 import app.rawboy.view.UndoIcon
 import app.rawboy.view.ZOOM_HINT_TEXT
+import app.rawboy.view.rememberPanAndPinch
 import app.rawboy.view.rememberZoomHint
+import app.rawboy.view.zoomLabel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -116,6 +117,7 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
     val session = vm.session
     val preview by session.preview.collectAsStateWithLifecycle()
     val zoomCenter by session.zoomCenter.collectAsStateWithLifecycle()
+    val zoomScale by session.zoomScale.collectAsStateWithLifecycle()
     val detail by session.detail.collectAsStateWithLifecycle()
     val lutData by session.lutData.collectAsStateWithLifecycle()
     val filmData by session.filmData.collectAsStateWithLifecycle()
@@ -225,7 +227,7 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
                 HorizontalPager(
                     state = pagerState,
                     modifier = Modifier.fillMaxSize(),
-                    // Drags pan the 100% view; an export holds the photo still.
+                    // Drags pan the zoomed view; an export holds the photo still.
                     userScrollEnabled = zoomCenter == null && export == null,
                     key = { currentPages.getOrNull(it)?.id ?: it },
                 ) { page ->
@@ -255,7 +257,7 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
                             }
                             DevelopPreview(
                                 if (live) preview else cachedImage, shaderParams, zoomCenter.takeIf { live }, detail.takeIf { live },
-                                framePx, frameColor, Modifier.fillMaxSize(),
+                                framePx, frameColor, Modifier.fillMaxSize(), zoomScale = zoomScale,
                             )
                         }
                         if (!live && quickParams != null) {
@@ -268,6 +270,9 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
                             )
                         } else if (live) {
                             val zoomed = zoomCenter != null
+                            // One finger pans only while zoomed: otherwise the drag belongs to the pager. Two fingers
+                            // pinch-zoom from the whole photo too.
+                            val panAndPinch = rememberPanAndPinch(zoomed, session::pan) { x, y, f -> session.zoomBy(x, y, f, framePx) }
                             Box(
                                 Modifier
                                     .matchParentSize()
@@ -286,20 +291,12 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
                                             },
                                         )
                                     }
-                                    .pointerInput(zoomed) {
-                                        // Only while zoomed: otherwise the drag belongs to the pager.
-                                        if (zoomed) {
-                                            detectDragGestures { change, drag ->
-                                                change.consume()
-                                                session.pan(drag.x, drag.y)
-                                            }
-                                        }
-                                    },
+                                    .then(panAndPinch),
                             )
                             if (showAuto || zoomed) {
                                 Label(
                                     when {
-                                        !showAuto -> "100%"
+                                        !showAuto -> zoomLabel(zoomScale)
                                         photo.edits != null -> "Without edits"
                                         photo.preset != null -> "Without preset"
                                         else -> "Without look"
