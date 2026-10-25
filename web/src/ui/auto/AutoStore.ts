@@ -83,13 +83,18 @@ export interface AutoPhoto {
    * starts as the file itself, Natural with nothing added; a preset, look or slider is all it gets.
    */
   plain: boolean;
+  /**
+   * "Auto denoise" was pressed on a photo added "As is": its analysis has no auto develop, so it gets the denoise,
+   * colour denoise and sharpening of the ISO table (autoNoiseOf) under its look or preset. Ignored for other photos.
+   */
+  autoDenoise: boolean;
 }
 
 /** A photo's edits, as Undo and Redo bring them back. */
-type Develop = Pick<AutoPhoto, 'look' | 'mode' | 'filmLook' | 'strength' | 'adjust' | 'preset' | 'edits' | 'looksApplied'>;
+type Develop = Pick<AutoPhoto, 'look' | 'mode' | 'filmLook' | 'strength' | 'adjust' | 'preset' | 'edits' | 'looksApplied' | 'autoDenoise'>;
 
-const developOf = ({ look, mode, filmLook, strength, adjust, preset, edits, looksApplied }: AutoPhoto): Develop =>
-  ({ look, mode, filmLook, strength, adjust, preset, edits, looksApplied });
+const developOf = ({ look, mode, filmLook, strength, adjust, preset, edits, looksApplied, autoDenoise }: AutoPhoto): Develop =>
+  ({ look, mode, filmLook, strength, adjust, preset, edits, looksApplied, autoDenoise });
 
 /**
  * [p] with the look (or preset), strength, warmth, tint, contrast, saturation and grain of [source] ("Apply to all", "Copy previous");
@@ -164,7 +169,12 @@ export function paramsOf(p: AutoPhoto): DevelopParams | null {
   if (!a) return null;
   // Edits read back from a sidecar don't know the photo is display-referred; the analysis does.
   if (p.edits) return applyEditsDevelop({ ...p.edits, displaySource: a.defaults.displaySource }, p.adjust);
-  return developAuto(a.autoBase, activeLook(p), p.strength, p.adjust, a.stats.hasFace, p.preset, p.lensPreset);
+  return developAuto(autoBaseOf(p, a), activeLook(p), p.strength, p.adjust, a.stats.hasFace, p.preset, p.lensPreset);
+}
+
+/** The auto develop under [p]'s look or preset: [a]'s, with the ISO table's denoise on a plain photo given Auto denoise. */
+function autoBaseOf(p: AutoPhoto, a: Analysis): DevelopParams {
+  return p.plain && p.autoDenoise ? { ...a.autoBase, ...autoNoiseOf(a, true) } : a.autoBase;
 }
 
 /** Progress of "Export all". */
@@ -348,7 +358,7 @@ export class AutoStore {
         id: String(this.nextId++), file, name: file.name, date: fileDate(file.lastModified), status: 'queued', error: null, analysis: null,
         look: Looks.NATURAL, suggested: Looks.NATURAL, mode, plain, filmLook: FilmLooks.PORTRA_400,
         suggestedFilm: FilmLooks.PORTRA_400, strength: DEFAULT_STRENGTH, adjust: NO_ADJUSTMENTS, preset: this._state.preset, edits: null,
-        lensChoice: this._state.lensChoice, lensPreset: null, looksApplied: false,
+        lensChoice: this._state.lensChoice, lensPreset: null, looksApplied: false, autoDenoise: false,
         thumbnail: null,
       });
     }
@@ -809,7 +819,8 @@ export class AutoStore {
    * "Auto denoise all", for a batch that's otherwise done: every photo gets the denoise, colour denoise and sharpening
    * the auto develop measured on it, whatever else develops it. The Denoise slider goes back to 0, presets (the batch's
    * too, for photos added later) lose their Denoise & sharpening group, and RawBoy edits take the auto values in place
-   * of their own; looks, presets, lens corrections and the other sliders stay. One undo step per photo; RawBoy edits of
+   * of their own; a photo added "As is" (no auto develop) gets the ISO table's (autoDenoise); looks, presets, lens
+   * corrections and the other sliders stay. One undo step per photo; RawBoy edits of
    * photos still being analysed are left as they are. [ids] (the grid's selection): only those photos, and the batch
    * preset stays as it is. Not while exporting.
    */
@@ -828,8 +839,10 @@ export class AutoStore {
       const noise = p.edits && p.analysis ? autoNoiseOf(p.analysis, p.plain) : null;
       const edits = p.edits && noise && DENOISE_FIELDS.some((f) => p.edits![f] !== noise[f as keyof typeof noise]) ? { ...p.edits, ...noise } : p.edits;
       const preset = strip(p.preset);
-      if (p.adjust.denoise === 0 && edits === p.edits && preset === p.preset) continue;
-      this.changeDevelop(p.id, (q) => ({ ...q, adjust: { ...q.adjust, denoise: 0 }, preset, edits }), true);
+      // "As is" skipped the auto develop: the photo keeps the ISO table's denoise from now on (autoBaseOf).
+      const autoDenoise = p.autoDenoise || p.plain;
+      if (p.adjust.denoise === 0 && edits === p.edits && preset === p.preset && autoDenoise === p.autoDenoise) continue;
+      this.changeDevelop(p.id, (q) => ({ ...q, adjust: { ...q.adjust, denoise: 0 }, preset, edits, autoDenoise }), true);
       count++;
     }
     const none = !ids ? 'Every photo already has its auto denoise'
@@ -890,7 +903,7 @@ export class AutoStore {
     const key = thumbKey(id, look);
     const hit = this.lookThumbs.get(key);
     if (hit && sameAdjustments(hit.adjust, p.adjust) && hit.lensPreset === p.lensPreset) return hit.url;
-    const params = developAuto(a.autoBase, look, DEFAULT_STRENGTH, p.adjust, a.stats.hasFace, null, p.lensPreset);
+    const params = developAuto(autoBaseOf(p, a), look, DEFAULT_STRENGTH, p.adjust, a.stats.hasFace, null, p.lensPreset);
     try {
       const url = await imageUrl(await this.render(p, params, LOOK_THUMBNAIL));
       if (hit) URL.revokeObjectURL(hit.url);

@@ -25,6 +25,8 @@ export interface SavedAuto {
   lensPreset: Preset | null;
   /** Added "As is" (AutoPhoto.plain): analysed again without the auto develop. */
   plain: boolean;
+  /** Auto denoise given to a photo added "As is" (AutoPhoto.autoDenoise). */
+  autoDenoise: boolean;
 }
 
 export const AUTO_FORMAT = 'rawboy-auto';
@@ -37,6 +39,7 @@ export function encodeAuto(s: SavedAuto): string {
     adjust: s.adjust, preset: s.preset ? JSON.parse(encodePresets([s.preset])) : null, edits,
     // By lens is the default and isn't kept: the photo's lens finds its preset again.
     plain: s.plain || undefined,
+    autoDenoise: s.autoDenoise || undefined,
     lens: s.lensChoice === NO_LENS_PRESET ? NO_LENS_PRESET : s.lensChoice !== null && s.lensPreset ? JSON.parse(encodePresets([s.lensPreset])) : undefined,
   });
 }
@@ -80,5 +83,6 @@ export function decodeAuto(text: string): SavedAuto | null {
     lensChoice: o.lens === NO_LENS_PRESET ? NO_LENS_PRESET : lensPreset?.id ?? null,
     lensPreset,
     plain: o.plain === true,
+    autoDenoise: o.autoDenoise === true,
   };
 }

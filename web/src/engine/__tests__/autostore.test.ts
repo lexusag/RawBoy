@@ -372,3 +372,34 @@ describe('Auto denoise on a selection', () => {
     expect(b.id).toBe(b2.id);
   });
 });
+
+describe('Auto denoise on "As is" photos', () => {
+  it('gives a plain photo the ISO table\'s denoise under its preset, kept in the sidecar and undoable', async () => {
+    vi.stubGlobal('window', { setTimeout: () => 0 });
+    const { developParams } = await import('../develop/DevelopParams');
+    const { capturePreset } = await import('../develop/Presets');
+    const { paramsOf } = await import('../../ui/auto/AutoStore');
+    const { encodeAuto, decodeAuto } = await import('../../ui/auto/AutoSidecar');
+    const store = new AutoStore();
+    store.setImportMode('plain');
+    store.add([new File(['a'], 'a.RAF')]);
+    // A plain analysis: autoBase = the as-shot defaults (no denoise); stats enough for AutoTone's ISO table.
+    const defaults = developParams();
+    const stats = { hasFace: false, iso: 3200, key: 0.04, p5: -5, p98: -1, dynamicRange: 9, skinLuminance: 0, faceArea: 0, fractionAbove: () => 0 };
+    const look = capturePreset('marfilm1', developParams({ contrast: 20, grain: 30 }), ['light', 'detail']);
+    const s = store as unknown as { _state: { photos: object[] } };
+    s._state.photos = s._state.photos.map((p) => ({ ...p, analysis: { defaults, autoBase: defaults, stats }, preset: look }));
+    expect(paramsOf(store.state.photos[0])!.denoise).toBe(0);
+    store.autoDenoiseAll();
+    expect(store.state.message).toBe('Auto denoise on 1 photo');
+    const p = store.state.photos[0];
+    expect(p.autoDenoise).toBe(true);
+    // ISO 3200 sits halfway (in stops) between the table's 1600 (20, sharpening 15) and 6400 (45, 10).
+    expect(paramsOf(p)).toMatchObject({ denoise: 33, sharpening: 13, contrast: 20, grain: 30 });
+    expect(decodeAuto(encodeAuto(p))!.autoDenoise).toBe(true);
+    store.autoDenoiseAll();
+    expect(store.state.message).toBe('Every photo already has its auto denoise');
+    store.undo(p.id);
+    expect(paramsOf(store.state.photos[0])!.denoise).toBe(0);
+  });
+});

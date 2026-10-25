@@ -1,5 +1,11 @@
 # Changelog
 
+**Auto: Auto denoise works on "As is" photos (2026-10-25)**
+
+- RawBoy Auto (web): photos added **As is** have no auto develop, so Auto denoise found nothing to change and their
+  denoise stayed at 0 under a preset. Now it gives them the denoise, colour denoise and sharpening of the ISO table
+  (they skip the noise measurement), kept with the photo (sidecar too) and undoable.
+
 **Web: fits regular iPhones (2026-10-25)**
 
 - RawBoy Web on phones with up to 720 px of page height (iPhone SE to 16 Pro in Safari; Plus and Max are unchanged):
