@@ -164,7 +164,9 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   grain → print LUT. Grain: Selwyn's law from an RMS granularity at 48 um, density dependence D(1 − D/Dsat), per-pixel
   Gaussian with half-weight neighbours, footprint-scaled. Halation: a Gaussian of half the base-reflection disc radius
   from the **highlight-boosted bloom copy** (`uBloomHalo`; `uBase` without one; light sources sit far above clip and
-  only they halate visibly), mixed in per channel. Scatter: 4 diagonal taps. Parameters: `luts/spektrafilm/
+  only they halate visibly), weighed by `bloomKnee` at `uExposure` like bloom: the highlights give up `uFormHalation`
+  of their light and it returns around them (midtones untouched). Slider: `ShaderParams.halationGain` (linear to 1 at
+  100, then doubling every 25: 16 at 200; all ports). Scatter: 4 diagonal taps. Parameters: `luts/spektrafilm/
   formation.json` (`FilmStock.formation`; uniforms `uForm*`), fitted to RawBoy Film's renders with
   `tools/film_eval/compare.mjs` (renders both shaders through the web dev server; reports formation dE2000, grain
   std per tone band, halation's added light). **Clean-room rule:** never read or copy `film/film.glsl` or spektrafilm's
@@ -430,8 +432,8 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   showed the coarse texels as bands and squares. Bloom scatters highlights only: `bloomKnee` (smoothstep 0.36..1.44
   on the brightest channel x `uExposure`) weighs every core/halo tap and what `bloom()` takes from the pixel. The
   knee follows exposure, so the tail is scattered for 6 exposures (2^0..2^5), stacked as bands in one texture, and
-  the shader blends the two either side of `uExposure`. The boosted halo copy itself is unchanged (Film's halation reads
-  it whole); keep the knee's constants in step in all those places.
+  the shader blends the two either side of `uExposure`. The boosted halo copy itself is unchanged (Film's halation knees
+  its taps the same way); keep the knee's constants in step in all those places.
 - Texture units: 0 image, 1 LUT (3D), 2 lens shading, 3 base (512), 4 bloom halo, 5 bloom tail, 6 skin mask, 7 brush atlas,
   8 film LUT, 9 print LUT (film looks: RawBoy Film and Auto's Film mode, all platforms), 10–11 the wavelet denoise
   passes, 12 the lens blur result (`uBokeh`), 13 the lens blur's own passes.

@@ -202,6 +202,11 @@ export class ShaderParams {
     return 2 ** ((size - 25) / 25);
   }
 
+  /** Halation slider -> amount: the stock's own at 100 (0..1 below it), above it doubling every 25 (16 at 200). */
+  static halationGain(halation: number): number {
+    return halation <= 100 ? halation / 100 : 2 ** ((halation - 100) / 25);
+  }
+
   /** [asShot] holds the defaults the image was decoded with (its as-shot temperature/tint). */
   static from(
     p: DevelopParams,
@@ -262,7 +267,7 @@ export class ShaderParams {
       filmUsed,
       filmUsed ? Math.min(1, Math.max(0, p.filmAmount / 100)) : 0,
       p.filmGrain / 100,
-      p.halation / 100,
+      ShaderParams.halationGain(p.halation),
       curveTable(p.curves),
       asShot.clipLevel ?? 0,
       packLeaks(p.leaks, lens.width, lens.height),
