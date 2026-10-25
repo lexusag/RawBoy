@@ -131,6 +131,9 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   Auto): the phone's AE is kept, but lifted to `PHONE_KEY` (0.06) when it put the metered key below it (the Pixel's AE
   protects highlights: a white pigeon or a window in the box took the frame 1-2 EV down), never darker, max +2 EV.
   Re-metering to `AutoTone.TARGET_KEY` put rooms 1-2 EV under the Pixel's camera; plain AE (#87) still went dark on highlights.
+  iOS: the same (`AutoTone.exposure(phoneAe:)`, viewfinder and shots), flash shots included (the iPhone's flash is
+  exposed by its own AE, no flash guide). Shutter sound: iOS 18's `isShutterSoundSuppressionEnabled` where
+  `isShutterSoundSuppressionSupported` (not in Japan/Korea; before iOS 18 the click always plays).
   Geotag (off by default; location permission asked only when switched on):
   `capture/LocationTracker.kt` (platform LocationManager, fused else GPS + network; iOS `capture/LocationTracker.swift`,
   Core Location) → `DngCreator.setLocation` (no altitude) → `export/DngGps.kt` appends a full GPS IFD to the DNG and

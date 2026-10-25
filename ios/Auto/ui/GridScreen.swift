@@ -36,6 +36,7 @@ struct GridScreen: View {
                             presetControl
                             sortControl
                             lensPresetsControl
+                            autoDenoiseControl
                             Spacer(minLength: 0)
                         }
                         VStack(alignment: .leading, spacing: 4) {
@@ -43,6 +44,7 @@ struct GridScreen: View {
                             presetControl
                             sortControl
                             lensPresetsControl
+                            autoDenoiseControl
                         }
                     }
                     .disabled(exporting)
@@ -154,6 +156,13 @@ struct GridScreen: View {
         }
     }
 
+    /** For a finished series: each photo's own measured denoise in place of its Denoise slider. */
+    @ViewBuilder private var autoDenoiseControl: some View {
+        if !vm.photos.isEmpty {
+            Button("Auto denoise all") { vm.autoDenoiseAll() }.font(.subheadline).lineLimit(1)
+        }
+    }
+
     private var empty: some View {
         VStack(spacing: 16) {
             Spacer()
@@ -223,6 +232,9 @@ struct GridScreen: View {
                     Button("Lens preset", systemImage: "camera.aperture") { lensPresetsFor = selection }
                         .disabled(exporting)
                 }
+                // Each selected photo's own measured denoise in place of its Denoise slider.
+                Button("Auto denoise", systemImage: "aqi.medium") { vm.autoDenoiseAll(selection) }
+                    .disabled(exporting)
                 Button("Rotate left", systemImage: "rotate.left") { vm.rotate(selection, by: -1) }
                     .disabled(exporting)
                 Button("Rotate right", systemImage: "rotate.right") { vm.rotate(selection, by: 1) }

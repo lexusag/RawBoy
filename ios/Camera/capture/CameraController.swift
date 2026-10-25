@@ -54,6 +54,11 @@ final class CameraController: NSObject, @unchecked Sendable {
     private var input: AVCaptureDeviceInput?
     private var rotation: AVCaptureDevice.RotationCoordinator?
     private var rawType: OSType?
+    /**
+     * The shutter sound can't be turned off: before iOS 18, or where the law requires it (Japan, Korea…), which
+     * AVFoundation reports as no shutter sound suppression. Set by start.
+     */
+    private(set) var shutterSoundRequired = true
     private var current: Info?
     private var captures: [Int64: PhotoDelegate] = [:]
     private let stateLock = NSLock()
@@ -173,6 +178,9 @@ final class CameraController: NSObject, @unchecked Sendable {
             let d = photoOutput.maxPhotoDimensions
             rawSize = CGSize(width: Int(min(d.width, d.height)), height: Int(max(d.width, d.height)))
         }
+        if #available(iOS 18.0, *) {
+            shutterSoundRequired = !photoOutput.isShutterSoundSuppressionSupported
+        }
         current = lens
         logNextFrame = true
         Self.log.notice("camera \(lens.label) (\(device.localizedName)): \(used.rawValue), raw \(Int(self.rawSize.width))x\(Int(self.rawSize.height))")
@@ -245,9 +253,10 @@ final class CameraController: NSObject, @unchecked Sendable {
 
     /**
      * Takes a raw still; [onShutter] runs when the camera captures it (shutter feedback). [gps]: ImageIO's GPS
-     * dictionary for the DNG (LocationTracker.gpsMetadata), or nil.
+     * dictionary for the DNG (LocationTracker.gpsMetadata), or nil. [shutterSound] false silences the system's click
+     * where that is allowed (shutterSoundRequired).
      */
-    func captureDng(flash: FlashMode, gps: [String: Any]? = nil,
+    func captureDng(flash: FlashMode, shutterSound: Bool, gps: [String: Any]? = nil,
                     onShutter: @escaping @Sendable () -> Void) async throws -> CaptureResult {
         try await withCheckedThrowingContinuation { (c: CheckedContinuation<CaptureResult, Error>) in
             queue.async {
@@ -259,6 +268,9 @@ final class CameraController: NSObject, @unchecked Sendable {
                 settings.maxPhotoDimensions = self.photoOutput.maxPhotoDimensions
                 if self.current?.hasFlash == true, self.photoOutput.supportedFlashModes.contains(.on) {
                     settings.flashMode = flash == .on ? .on : .off
+                }
+                if #available(iOS 18.0, *), self.photoOutput.isShutterSoundSuppressionSupported {
+                    settings.isShutterSoundSuppressionEnabled = !shutterSound
                 }
                 // The photo's orientation: how the phone is held, level with the horizon.
                 if let angle = self.rotation?.videoRotationAngleForHorizonLevelCapture,

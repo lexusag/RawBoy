@@ -100,6 +100,15 @@ public enum Looks {
         let key = RetiredLooks.look(id)
         return all.first { $0.id == key } ?? natural
     }
+
+    /** Bundled LUT ids of the monochrome looks: the LUT alone makes a photo black and white. */
+    private static let monochromeLuts: Set<String> = Set(all.filter(\.monochrome).compactMap(\.lutId))
+
+    /** True for a bundled black and white LUT (retired ids too); pickers list these in their own section. */
+    public static func isMonochromeLut(_ id: String?) -> Bool {
+        guard let id else { return false }
+        return monochromeLuts.contains(RetiredLooks.lut(id))
+    }
 }
 
 /**

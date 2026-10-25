@@ -71,7 +71,10 @@ struct AutoRoot: View {
         .confirmationDialog("Apply a RawBoy preset",
                             isPresented: Binding(get: { !vm.presetChoices.isEmpty }, set: { if !$0 { vm.presetChoices = [] } }),
                             titleVisibility: .visible) {
-            ForEach(vm.presetChoices) { p in Button(p.name) { vm.choosePreset(p) } }
+            // Colour ones first, then black and white ones (a dialog has no headings: they say so in their name).
+            ForEach(Presets.sections(vm.presetChoices).flatMap(\.presets)) { p in
+                Button(p.isMonochrome ? "B&W · \(p.name)" : p.name) { vm.choosePreset(p) }
+            }
             Button("Cancel", role: .cancel) { vm.presetChoices = [] }
         }
     }

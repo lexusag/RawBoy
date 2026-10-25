@@ -235,8 +235,12 @@ private struct LutPanel: View {
             }
         }
         LutRow(name: "No LUT", selected: params.lut == nil, loading: false) { onSelect(nil) }
-        SectionLabel("Included")
-        ForEach(luts.bundled, id: \.id) { e in
+        SectionLabel("Included · Color")
+        ForEach(luts.bundled.filter { !Looks.isMonochromeLut($0.id) }, id: \.id) { e in
+            LutRow(name: e.name, selected: params.lut == e.id, loading: loading && params.lut == e.id) { onSelect(e.id) }
+        }
+        SectionLabel("Included · Black & white")
+        ForEach(luts.bundled.filter { Looks.isMonochromeLut($0.id) }, id: \.id) { e in
             LutRow(name: e.name, selected: params.lut == e.id, loading: loading && params.lut == e.id) { onSelect(e.id) }
         }
         SectionLabel("Your LUTs · Files › RawBoy › LUTs")
