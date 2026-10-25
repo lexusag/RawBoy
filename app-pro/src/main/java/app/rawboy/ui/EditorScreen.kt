@@ -41,7 +41,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.IntSize
-import app.rawboy.develop.LeakKind
 import app.rawboy.develop.MaskLayer
 import app.rawboy.develop.MaskShape
 import androidx.compose.runtime.setValue
@@ -161,7 +160,7 @@ fun EditorScreen(vm: EditorViewModel) {
     val leaks = state.params.leaks
     val selectedLeak = selectedLeakState?.takeIf { id -> leaks.any { it.id == id } } ?: leaks.lastOrNull()?.id
     val leakShapes = remember(leaks) { leaks.map { MaskLayer(it.id, "", enabled = it.enabled, shape = it.shape) } }
-    val leakBands = remember(leaks) { leaks.filter { it.kind == LeakKind.STREAK }.map { it.id }.toSet() }
+    val leakForms = remember(leaks) { leaks.associate { it.id to LeakForm(it.kind, it.bend, it.taper) } }
     val marginPx = with(LocalDensity.current) { if (shapesMode) MASK_MARGIN.roundToPx() else 0 }
     var viewSize by remember { mutableStateOf(IntSize.Zero) }
     // Crop shape lock (UI only; the crop itself is in the params). Portrait null = follow the frame.
@@ -293,7 +292,8 @@ fun EditorScreen(vm: EditorViewModel) {
                     ),
                     onPaintAt = {},
                     grabInside = true,
-                    bands = leakBands,
+                    leaks = leakForms,
+                    onBend = { id, bend -> vm.updateLeak(id) { it.copy(bend = bend) } },
                     zoomScale = zoomScale,
                 )
                 // Zoom and frame colour work on the cropped view; the crop tool shows the whole frame.
@@ -346,7 +346,7 @@ fun EditorScreen(vm: EditorViewModel) {
                 if (leaksMode && preview != null && !showOriginal) {
                     MaskOverlay(
                         shaderParams.lens, leakShapes, selectedLeak, framePx + marginPx, framePx, zoomCenter,
-                        MaskTool.MOVE, brush, null, false, Modifier.matchParentSize(), bands = leakBands, zoomScale = zoomScale,
+                        MaskTool.MOVE, brush, null, false, Modifier.matchParentSize(), leaks = leakForms, zoomScale = zoomScale,
                     )
                 }
                 if (geometryMode && zoomCenter == null && preview != null) {

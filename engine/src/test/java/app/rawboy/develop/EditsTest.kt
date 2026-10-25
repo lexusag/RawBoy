@@ -20,7 +20,7 @@ class EditsTest {
                 adjust = LayerAdjust(saturation = -30f),
             ),
         ),
-        leaks = listOf(LightLeaks.newLeak(LeakKind.STREAK, 0.2f, 0.3f).copy(intensity = 90f, hue = 10f, seed = 0.5f)),
+        leaks = listOf(LightLeaks.newLeak(LeakKind.TRIANGLE, 0.2f, 0.3f).copy(intensity = 90f, hue = 10f, seed = 0.5f, bend = 30f, taper = -20f, warp = 40f, glow = 70f)),
     )
 
     /** [p] with fresh-id fields blanked, to compare decoded edits with the originals. */

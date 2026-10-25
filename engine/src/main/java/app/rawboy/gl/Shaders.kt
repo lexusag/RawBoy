@@ -48,7 +48,7 @@ internal object Shaders {
         append(MAIN_BODY)
         append("    if (uLutAmount > 0.0) c = clamp(applyLut(c), 0.0, 1.0);\n")
         append("    if (uCurveOn > 0.0) c = applyCurves(c);\n")
-        append("    if (uLeakCount > 0) c = applyLeaks(c, srcG);\n")
+        append("    if (uLeakCount > 0) c = applyLeaks(c, srcG, outPx);\n")
         if (forExport) {
             // 16-bit unsigned integer target: exact, core in GLES 3.0, no float-buffer extension needed.
             append("    fragColor = uvec4(uvec3(c * 65535.0 + 0.5), 65535u);\n")

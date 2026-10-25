@@ -453,6 +453,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
               grabInside
               onSelect={setSelectedLeak}
               onChange={(id, shape) => store.updateLeak(id, (l) => withLeakShape(l, shape))}
+              onBend={(id, bend) => store.updateLeak(id, (l) => ({ ...l, bend }))}
               onStrokeBegin={() => {}}
               onStrokeExtend={() => {}}
               onStrokeEnd={() => {}}
@@ -613,13 +614,16 @@ function ResetIcon() {
   );
 }
 
-/** A light leak as the overlay draws it: a radial shape whose feather is the leak's softness (a streak: a band). */
+/**
+ * A light leak as the overlay draws it: a radial shape with the leak's form; its feather ring marks where the blurred
+ * core is fully white (the shader's blur, 0.03 + 0.6 x softness, in shape radii).
+ */
 const leakLayer = (l: LightLeak) => ({
   id: l.id,
   enabled: l.enabled,
   strokes: [],
-  band: l.kind === 'streak',
-  shape: { kind: 'radial' as const, cx: l.cx, cy: l.cy, rx: l.rx, ry: l.ry, angle: l.angle, feather: Math.max(1, l.softness) },
+  leak: { kind: l.kind, bend: l.bend, taper: l.taper },
+  shape: { kind: 'radial' as const, cx: l.cx, cy: l.cy, rx: l.rx, ry: l.ry, angle: l.angle, feather: 3 + 0.6 * l.softness },
 });
 
 const withLeakShape = (l: LightLeak, s: MaskShape): LightLeak =>

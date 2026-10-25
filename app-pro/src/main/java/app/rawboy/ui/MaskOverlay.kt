@@ -25,6 +25,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import app.rawboy.develop.BrushStroke
+import app.rawboy.develop.LeakKind
+import app.rawboy.develop.LightLeaks
 import app.rawboy.develop.MaskLayer
 import app.rawboy.develop.MaskShape
 import app.rawboy.develop.Masks
@@ -51,7 +53,10 @@ private const val POINT_STEP = 0.15f
 /** A second finger this soon after the first turns the touch into a pan and drops the stroke just started. */
 private const val PAN_GRACE_MS = 150L
 
-private enum class Handle { MOVE, START, END, RX, RY, ROTATE, CURVE, PIN }
+private enum class Handle { MOVE, START, END, RX, RY, ROTATE, CURVE, BEND, PIN }
+
+/** A light leak's form, for a radial shape that is one (rx, ry = its length and width radii). */
+data class LeakForm(val kind: LeakKind, val bend: Float, val taper: Float)
 
 /**
  * Where masks sit on screen: image pixels (display orientation, full resolution) <-> preview pixels, through the
@@ -108,12 +113,12 @@ private class MaskGeometry(
     class LinearShape(val start: List<Offset>, val centre: List<Offset>, val end: List<Offset>, override val pin: Offset, val curve: Offset) : Shape
     class RadialShape(
         val outer: List<Offset>, val inner: List<Offset>, override val pin: Offset,
-        val rx: List<Offset>, val ry: List<Offset>, val knob: Offset, val knobBase: Offset,
+        val rx: List<Offset>, val ry: List<Offset>, val knob: Offset, val knobBase: Offset, val bend: Offset? = null,
     ) : Shape
     class BrushShape(override val pin: Offset?) : Shape
 
-    /** [band]: a radial shape drawn as a straight band (a streak light leak: rx = half length, ry = half width). */
-    fun shape(l: MaskLayer, band: Boolean = false): Shape = when (val s = l.shape) {
+    /** [leak]: a radial shape drawn as that light leak's outline (glow, streak or triangle, bent and tapered like the shader). */
+    fun shape(l: MaskLayer, leak: LeakForm? = null): Shape = when (val s = l.shape) {
         MaskShape.Brush -> {
             val p = l.strokes.firstOrNull()?.points
             BrushShape(if (p != null && p.size >= 2) toScreen(p[0] * w, p[1] * h) else null)
@@ -141,22 +146,50 @@ private class MaskGeometry(
             val cx = s.cx * w
             val cy = s.cy * h
             fun at(u: Float, v: Float) = toScreen(cx + c * u - sn * v, cy + sn * u + c * v)
-            fun ellipse(k: Float) = if (band) {
-                // The band's two long edges at k x its half width, as one closed outline (bent by the lens like the shader).
-                listOf(-1f, 1f).flatMap { side -> List(STEPS + 1) { at(side * rx * (1f - 2f * it / STEPS), side * k * ry) } }
-            } else {
-                List(STEPS) {
+            val k = if (leak != null) LightLeaks.bendCurvature(leak.bend, rx) else 0f
+            // A point in the leak's own frame (q: 1 = its radii) through its taper and bend, like the shader.
+            fun atQ(qx: Float, qy: Float): Offset {
+                val u = qx * rx
+                return at(u, qy * ry * (if (leak != null) LightLeaks.taperWidth(leak.taper, qx) else 1f) + k * u * u)
+            }
+            fun polygon(corners: List<Pair<Float, Float>>, n: Int) = corners.indices.flatMap { i ->
+                val (ax, ay) = corners[i]
+                val (bx, by) = corners[(i + 1) % corners.size]
+                List(n) { j -> atQ(ax + (bx - ax) * j / n, ay + (by - ay) * j / n) }
+            }
+            fun outline(sc: Float) = when (leak?.kind) {
+                LeakKind.STREAK -> polygon(listOf(1f to sc, -1f to sc, -1f to -sc, 1f to -sc), STEPS) // edges at sc x the half width
+                LeakKind.TRIANGLE -> polygon(listOf(sc to 0f, -sc to sc, -sc to -sc), STEPS)
+                else -> List(STEPS) {
                     val t = it.toFloat() / STEPS * 2 * Math.PI.toFloat()
-                    at(k * rx * cos(t), k * ry * sin(t))
+                    atQ(sc * cos(t), sc * sin(t))
                 }
             }
-            // A thin band's knob keeps clear of its width handles.
-            val knob = if (band) max(ry * KNOB, ry + 0.06f * long) else ry * KNOB
+            // A thin leak's knob keeps clear of its width handles.
+            val knob = if (leak != null) max(ry * KNOB, ry + 0.06f * long) else ry * KNOB
             RadialShape(
-                ellipse(1f), ellipse(1f - (s.feather / 100f).coerceAtLeast(0.01f)), at(0f, 0f),
-                listOf(at(rx, 0f), at(-rx, 0f)), listOf(at(0f, ry), at(0f, -ry)), at(0f, -knob), at(0f, -ry),
+                outline(1f), outline(1f - (s.feather / 100f).coerceIn(0.01f, 0.95f)), at(0f, 0f),
+                listOf(atQ(1f, 0f), atQ(-1f, 0f)),
+                // A triangle's width handles: its base corners.
+                if (leak?.kind == LeakKind.TRIANGLE) listOf(atQ(-1f, 1f), atQ(-1f, -1f)) else listOf(at(0f, ry), at(0f, -ry)),
+                at(0f, -knob), at(0f, -ry),
+                if (leak != null) atQ(0.5f, 0f) else null,
             )
         }
+    }
+
+    /** The bend (-100..100) that puts a leak's axis through image point [to], or null too near its middle. */
+    fun bendAt(s: MaskShape, to: Offset): Float? {
+        if (s !is MaskShape.Radial) return null
+        val a = Math.toRadians(s.angle.toDouble())
+        val dx = to.x - s.cx * w
+        val dy = to.y - s.cy * h
+        val rx = s.rx * long
+        val u = (cos(a) * dx + sin(a) * dy).toFloat()
+        val v = (-sin(a) * dx + cos(a) * dy).toFloat()
+        if (abs(u) < rx * 0.15f) return null
+        // v = k u², k = bend / 100 / rx.
+        return ((100f * v * rx / (u * u)).coerceIn(-100f, 100f) * 10).roundToInt() / 10f
     }
 
     /** The shape after dragging [handle] from image point [from] to [to]. */
@@ -220,35 +253,41 @@ private fun dist2ToSegment(p: Offset, a: Offset, b: Offset): Float {
 private fun nearLine(p: Offset, line: List<Offset>, d: Float) = (1 until line.size).any { dist2ToSegment(p, line[it - 1], line[it]) < d * d }
 private fun near(p: Offset, q: Offset, d: Float) = (p - q).getDistanceSquared() < d * d
 
-/** Preview point [p] lies inside a radial shape's outer ellipse (a band: its rectangle). */
-private fun inside(g: MaskGeometry, l: MaskLayer, p: Offset, band: Boolean): Boolean {
+/** Preview point [p] lies inside a radial shape's outer ellipse (a leak: its outline). */
+private fun inside(g: MaskGeometry, l: MaskLayer, p: Offset, leak: LeakForm?): Boolean {
     val s = l.shape as? MaskShape.Radial ?: return false
     val q = g.toImage(p)
     val a = Math.toRadians(s.angle.toDouble())
     val dx = q.x - s.cx * g.w
     val dy = q.y - s.cy * g.h
-    val u = (cos(a) * dx + sin(a) * dy) / (s.rx * g.long)
-    val v = (-sin(a) * dx + cos(a) * dy) / (s.ry * g.long)
-    return if (band) abs(u) < 1 && abs(v) < 1 else u * u + v * v < 1
+    val rx = s.rx * g.long
+    val pu = (cos(a) * dx + sin(a) * dy).toFloat()
+    var pv = (-sin(a) * dx + cos(a) * dy).toFloat()
+    if (leak == null) return (pu / rx) * (pu / rx) + (pv / (s.ry * g.long)) * (pv / (s.ry * g.long)) < 1
+    pv -= LightLeaks.bendCurvature(leak.bend, rx) * pu * pu
+    val qx = pu / rx
+    val qy = pv / (s.ry * g.long * LightLeaks.taperWidth(leak.taper, qx))
+    return LightLeaks.edge(leak.kind, qx, qy) < 0 && (leak.kind != LeakKind.STREAK || abs(qx) < 1)
 }
 
 /**
- * [grabInside]: a touch anywhere inside a radial shape grabs it (light leaks), not only its centre pin. [bands]: ids
- * of radial shapes shown as straight bands.
+ * [grabInside]: a touch anywhere inside a radial shape grabs it (light leaks), not only its centre pin. [leaks]: the
+ * forms of radial shapes that are light leaks, by id.
  */
 private fun hit(
     g: MaskGeometry, layers: List<MaskLayer>, selectedId: String?, p: Offset, grab: Float, grabInside: Boolean = false,
-    bands: Set<String> = emptySet(),
+    leaks: Map<String, LeakForm> = emptyMap(),
 ): Pair<String, Handle>? {
     val selected = layers.firstOrNull { it.id == selectedId }
     if (selected != null) {
-        when (val s = g.shape(selected, selected.id in bands)) {
+        when (val s = g.shape(selected, leaks[selected.id])) {
             is MaskGeometry.RadialShape -> {
                 if (near(p, s.knob, grab)) return selected.id to Handle.ROTATE
+                if (s.bend != null && near(p, s.bend, grab)) return selected.id to Handle.BEND
                 if (s.rx.any { near(p, it, grab) }) return selected.id to Handle.RX
                 if (s.ry.any { near(p, it, grab) }) return selected.id to Handle.RY
                 if (near(p, s.pin, grab * 1.5f)) return selected.id to Handle.MOVE
-                if (grabInside && inside(g, selected, p, selected.id in bands)) return selected.id to Handle.MOVE
+                if (grabInside && inside(g, selected, p, leaks[selected.id])) return selected.id to Handle.MOVE
             }
             is MaskGeometry.LinearShape -> {
                 if (near(p, s.curve, grab)) return selected.id to Handle.CURVE
@@ -261,12 +300,12 @@ private fun hit(
     }
     for (l in layers) {
         if (l.id == selectedId) continue
-        val pin = g.shape(l, l.id in bands).pin ?: continue
+        val pin = g.shape(l, leaks[l.id]).pin ?: continue
         if (near(p, pin, grab)) return l.id to Handle.PIN
     }
     if (grabInside) {
         // Topmost (last drawn in the shader) first; a touch inside another shape selects it and starts moving it.
-        layers.lastOrNull { it.id != selectedId && inside(g, it, p, it.id in bands) }?.let { return it.id to Handle.MOVE }
+        layers.lastOrNull { it.id != selectedId && inside(g, it, p, leaks[it.id]) }?.let { return it.id to Handle.MOVE }
     }
     return null
 }
@@ -291,8 +330,8 @@ class MaskActions(
  * during a handle drag puts the shape back and leaves both fingers to the pinch. Brush / Erase: one finger paints,
  * two fingers pan and pinch-zoom the view. [onPaintAt] gets the finger while painting (for the brush circle).
  * The inputs are read fresh for every touch, so the modifier is never restarted mid-gesture. [grabInside]: a finger
- * anywhere inside a radial shape moves it (the light leaks tool, which shows its leaks as radial shapes); [bands]:
- * ids of radial shapes shown as straight bands (streak leaks).
+ * anywhere inside a radial shape moves it (the light leaks tool, which shows its leaks as radial shapes); [leaks]:
+ * their forms by id; [onBend] gets a leak's bend handle.
  */
 @Composable
 fun rememberMaskGestures(
@@ -307,12 +346,13 @@ fun rememberMaskGestures(
     actions: MaskActions,
     onPaintAt: (Offset?) -> Unit,
     grabInside: Boolean = false,
-    bands: Set<String> = emptySet(),
+    leaks: Map<String, LeakForm> = emptyMap(),
+    onBend: (String, Float) -> Unit = { _, _ -> },
     zoomScale: Float = 1f,
 ): Modifier {
     val grab = with(LocalDensity.current) { 24.dp.toPx() }
     val current = rememberUpdatedState(
-        GestureInputs(lens, layers, selectedId, frame, zoomFrame, zoomCenter, zoomScale, tool, brush, actions, onPaintAt, grabInside, bands),
+        GestureInputs(lens, layers, selectedId, frame, zoomFrame, zoomCenter, zoomScale, tool, brush, actions, onPaintAt, grabInside, leaks, onBend),
     )
     return Modifier.pointerInput(Unit) {
         awaitEachGesture {
@@ -320,7 +360,7 @@ fun rememberMaskGestures(
             val inp = current.value
             val g = MaskGeometry(inp.lens, size, inp.frame, inp.zoomFrame, inp.zoomCenter, inp.zoomScale)
             if (inp.tool == MaskTool.MOVE) {
-                val (id, handle) = hit(g, inp.layers, inp.selectedId, down.position, grab, inp.grabInside, inp.bands) ?: return@awaitEachGesture
+                val (id, handle) = hit(g, inp.layers, inp.selectedId, down.position, grab, inp.grabInside, inp.leaks) ?: return@awaitEachGesture
                 down.consume()
                 if (handle == Handle.PIN) {
                     inp.actions.onSelect(id)
@@ -339,6 +379,10 @@ fun rememberMaskGestures(
                         break
                     }
                     c.consume()
+                    if (handle == Handle.BEND) {
+                        g.bendAt(start, g.toImage(c.position))?.let { inp.onBend(id, it) }
+                        continue
+                    }
                     inp.actions.onChange(id, g.drag(start, handle, from, g.toImage(c.position)))
                 }
                 return@awaitEachGesture
@@ -409,7 +453,8 @@ private class GestureInputs(
     val actions: MaskActions,
     val onPaintAt: (Offset?) -> Unit,
     val grabInside: Boolean,
-    val bands: Set<String>,
+    val leaks: Map<String, LeakForm>,
+    val onBend: (String, Float) -> Unit,
 )
 
 /** Image point -> stroke point (image fractions, rounded: strokes stay small in memory). */
@@ -419,8 +464,8 @@ private fun fraction(p: Offset, g: MaskGeometry) = listOf((p.x / g.w * 1e5f).rou
  * Draws the masks over the preview (fit or 100% view), Capture One style. Linear: the full-effect, centre and
  * no-effect lines across the whole preview, the curvature square; radial: the ellipse, its feather ring, centre,
  * radius dots and rotation knob; other layers: a pin. While painting the shapes are dimmed and a circle follows the
- * finger; [sizeRing] shows the brush size in the middle (while its slider moves). [bands]: ids of radial shapes drawn
- * as straight bands (streak leaks).
+ * finger; [sizeRing] shows the brush size in the middle (while its slider moves). [leaks]: forms of radial shapes
+ * that are light leaks, by id (drawn as their outlines, with a bend square).
  */
 @Composable
 fun MaskOverlay(
@@ -435,7 +480,7 @@ fun MaskOverlay(
     paintAt: Offset?,
     sizeRing: Boolean,
     modifier: Modifier = Modifier,
-    bands: Set<String> = emptySet(),
+    leaks: Map<String, LeakForm> = emptyMap(),
     zoomScale: Float = 1f,
 ) {
     val density = LocalDensity.current
@@ -444,7 +489,7 @@ fun MaskOverlay(
         val px = density.density
         val dim = if (tool == MaskTool.MOVE) 1f else 0.4f
         for (l in layers) {
-            val s = g.shape(l, l.id in bands)
+            val s = g.shape(l, leaks[l.id])
             if (l.id != selectedId) {
                 s.pin?.let { dot(it, 6 * px, filled = false, alpha = if (l.enabled) dim else dim * 0.5f) }
                 continue
@@ -465,6 +510,11 @@ fun MaskOverlay(
                     line(listOf(s.knobBase, s.knob), 1.2f * px, dim)
                     dot(s.knob, 7 * px, filled = false, alpha = dim)
                     (s.rx + s.ry).forEach { dot(it, 6 * px, filled = true, alpha = dim) }
+                    s.bend?.let {
+                        val half = 6 * px
+                        drawRect(Color.Black.copy(alpha = 0.35f * dim), Offset(it.x - half, it.y - half), Size(2 * half, 2 * half))
+                        drawRect(Color.White.copy(alpha = dim), Offset(it.x - half, it.y - half), Size(2 * half, 2 * half), style = Stroke(1.5f * px))
+                    }
                     dot(s.pin, 8 * px, filled = true, alpha = dim)
                 }
                 is MaskGeometry.BrushShape -> Unit

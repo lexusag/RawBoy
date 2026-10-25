@@ -44,29 +44,27 @@ import kotlin.math.pow
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
-/** Size slider 0..100 <-> the leak's mean radius (fraction of the long side), exponential so small leaks are easy to set. */
-private const val MIN_SIZE = 0.02f
-private const val MAX_SIZE = 0.8f
-private fun sizeOf(l: LightLeak) = sqrt(l.rx * l.ry)
-private fun sizeToSlider(r: Float) = (100 * ln(r.coerceIn(MIN_SIZE, MAX_SIZE) / MIN_SIZE) / ln(MAX_SIZE / MIN_SIZE))
-private fun sliderToSize(v: Float) = MIN_SIZE * (MAX_SIZE / MIN_SIZE).pow(v / 100f)
-
-/** Stretch slider -100..100 <-> width / height, 1/4..4. */
-private fun stretchOf(l: LightLeak) = (100 * ln(l.rx / l.ry) / ln(4f))
-
-/** Exponential slider 0..100 <-> [min]..[max], for a streak's width and length. */
+/** Exponential slider 0..100 <-> [min]..[max], so small sizes are easy to set. */
 private class ExpSlider(val min: Float, val max: Float) {
     fun to(r: Float) = 100 * ln(r.coerceIn(min, max) / min) / ln(max / min)
     fun from(v: Float) = min * (max / min).pow(v / 100f)
 }
 
-/** A streak's half width and half length, fractions of the long side. */
-private val WIDTH = ExpSlider(0.005f, 0.3f)
+/** A glow's or triangle's mean radius; a streak's half width and half length (fractions of the long side). */
+private val SIZE = ExpSlider(0.02f, 0.8f)
+private val WIDTH = ExpSlider(0.003f, 0.3f)
 private val LENGTH = ExpSlider(0.1f, 1.5f)
+private fun sizeOf(l: LightLeak) = sqrt(l.rx * l.ry)
+
+/** Stretch slider -100..100 <-> rx / ry, 1/4..4. */
+private fun stretchOf(rx: Float, ry: Float) = (100 * ln(rx / ry) / ln(4f))
+
+private fun percent(r: Float) = String.format(Locale.ROOT, if (r < 0.05f) "%.1f%%" else "%.0f%%", r * 200)
+private fun signed(v: Float) = v.roundToInt().let { if (it > 0) "+$it" else "$it" }
 
 private fun leakColor(hue: Float) = LightLeaks.color(hue).let { Color(it[0], it[1], it[2]) }
 
-/** Rim colours across the Colour slider. */
+/** Inner glow colours across the Colour slider. */
 private val HUE_TRACK: Brush by lazy {
     Brush.horizontalGradient(listOf(LightLeaks.HUE_MIN, -20f, 0f, 20f, 40f, LightLeaks.HUE_MAX).map(::leakColor))
 }
@@ -74,14 +72,14 @@ private val HUE_TRACK: Brush by lazy {
 private fun hueName(h: Float) = when {
     h < -15f -> "Magenta"
     h < 10f -> "Red"
-    h < 38f -> "Orange"
+    h < 45f -> "Orange"
     else -> "Amber"
 }
 
 /**
- * Light leaks (mirrors RawBoy Web's LeaksPanel): film-style streaks of light or glows dragged into place on the photo, e.g. to
- * tastefully cover part of a nude. A top-bar mode like Masks: leak chips (tap a selected chip to hide or delete it),
- * then the selected leak's sliders; the shape is also moved and sized on the photo.
+ * Light leaks (mirrors RawBoy Web's LeaksPanel): film-style light (streaks, glows, triangles) dragged into place on
+ * the photo, e.g. to tastefully cover part of a nude. A top-bar mode like Masks: leak chips (tap a selected chip to
+ * hide or delete it), then the selected leak's sliders; the shape is also moved, sized, turned and bent on the photo.
  */
 @Composable
 fun LeaksPanel(
@@ -128,16 +126,15 @@ fun LeaksPanel(
                 }
             }
             if (leaks.size < LightLeaks.MAX_LEAKS) {
-                FilterChip(selected = false, onClick = { onAdd(LeakKind.STREAK) }, label = { Text("+ Streak") })
-                FilterChip(selected = false, onClick = { onAdd(LeakKind.GLOW) }, label = { Text("+ Glow") })
+                LeakKind.entries.forEach { k -> FilterChip(selected = false, onClick = { onAdd(k) }, label = { Text("+ ${k.label}") }) }
             }
         }
         val leak = selected ?: run {
             LeakNote(
-                "Add a film-style light leak, a streak (a beam of light across the photo) or a glow, then drag it over " +
-                    "the photo. At full intensity its solid middle (inside the dashed lines) hides what is under it, so " +
-                    "it can cover part of a photo; lower, it is light added to the picture. " +
-                    "Up to ${LightLeaks.MAX_LEAKS}; leaks reset for each new photo.",
+                "Add a film-style light leak (a streak of light, a round glow or a triangle), then drag it over the " +
+                    "photo. It is added in Screen mode, so the photo shows through its glow; at full intensity its white " +
+                    "middle (inside the dashed line) hides what is under it, so it can cover part of a photo. The grain " +
+                    "stays on top. Up to ${LightLeaks.MAX_LEAKS}; leaks reset for each new photo.",
                 Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
             return@Column
@@ -160,25 +157,23 @@ fun LeaksPanel(
             }
             if (leak.kind == LeakKind.STREAK) {
                 ParamSlider(
-                    "Width", WIDTH.to(leak.ry), 0f..100f, WIDTH.to(LeakKind.STREAK.ry),
-                    format = { WIDTH.from(it).let { r -> String.format(Locale.ROOT, if (r < 0.05f) "%.1f%%" else "%.0f%%", r * 200) } },
+                    "Width", WIDTH.to(leak.ry), 0f..100f, WIDTH.to(LeakKind.STREAK.ry), format = { percent(WIDTH.from(it)) },
                 ) { v -> set { it.copy(ry = WIDTH.from(v)) } }
                 ParamSlider(
-                    "Length", LENGTH.to(leak.rx), 0f..100f, LENGTH.to(LeakKind.STREAK.rx),
-                    format = { "${(LENGTH.from(it) * 200).roundToInt()}%" },
+                    "Length", LENGTH.to(leak.rx), 0f..100f, LENGTH.to(LeakKind.STREAK.rx), format = { percent(LENGTH.from(it)) },
                 ) { v -> set { it.copy(rx = LENGTH.from(v)) } }
             } else {
                 ParamSlider(
-                    "Size", sizeToSlider(sizeOf(leak)), 0f..100f, sizeToSlider(sqrt(0.16f * 0.11f)),
-                    format = { "${(sliderToSize(it) * 200).roundToInt()}%" },
+                    "Size", SIZE.to(sizeOf(leak)), 0f..100f, SIZE.to(sqrt(leak.kind.rx * leak.kind.ry)),
+                    format = { percent(SIZE.from(it)) },
                 ) { v ->
                     set {
-                        val k = sliderToSize(v) / sizeOf(it)
+                        val k = SIZE.from(v) / sizeOf(it)
                         it.copy(rx = it.rx * k, ry = it.ry * k)
                     }
                 }
                 ParamSlider(
-                    "Stretch", stretchOf(leak), -100f..100f, 0f,
+                    "Stretch", stretchOf(leak.rx, leak.ry), -100f..100f, stretchOf(leak.kind.rx, leak.kind.ry),
                     format = { String.format(Locale.ROOT, "%.2f:1", 4f.pow(it / 100f)) },
                 ) { v ->
                     set {
@@ -188,25 +183,28 @@ fun LeaksPanel(
                     }
                 }
             }
-            ParamSlider("Rotation", leak.angle, -180f..180f, 0f, format = { "${it.roundToInt()}°" }) { v ->
+            ParamSlider("Rotation", leak.angle, -180f..180f, leak.kind.angle, format = { "${it.roundToInt()}°" }) { v ->
                 set { it.copy(angle = v) }
             }
-            ParamSlider("Softness", leak.softness, 0f..100f, leak.kind.softness, format = ::formatPlain) { v -> set { it.copy(softness = v) } }
+            ParamSlider("Bend", leak.bend, -100f..100f, 0f, format = ::signed) { v -> set { it.copy(bend = v) } }
+            ParamSlider("Taper", leak.taper, -100f..100f, 0f, format = ::signed) { v -> set { it.copy(taper = v) } }
+            ParamSlider("Warp", leak.warp, 0f..100f, 0f, format = ::formatPlain) { v -> set { it.copy(warp = v) } }
+            ParamSlider("Softness", leak.softness, 0f..100f, leak.kind.softness, format = ::formatPlain) { v ->
+                set { it.copy(softness = v) }
+            }
+            ParamSlider("Glow", leak.glow, 0f..100f, leak.kind.glow, format = ::formatPlain) { v -> set { it.copy(glow = v) } }
             ParamSlider(
-                "Colour", leak.hue, LightLeaks.HUE_MIN..LightLeaks.HUE_MAX, 22f, format = ::hueName, trackBrush = HUE_TRACK,
+                "Colour", leak.hue, LightLeaks.HUE_MIN..LightLeaks.HUE_MAX, LightLeaks.HUE, format = ::hueName, trackBrush = HUE_TRACK,
             ) { v -> set { it.copy(hue = v) } }
-            TextButton(onClick = { set(force = true) { it.copy(seed = LightLeaks.newSeed()) } }) { Text("New shape") }
+            if (leak.warp > 0f) {
+                TextButton(onClick = { set(force = true) { it.copy(seed = LightLeaks.newSeed()) } }) { Text("New warp") }
+            }
             LeakNote(
-                (
-                    if (leak.kind == LeakKind.STREAK) {
-                        "Drag the streak to move it, the side dots to change its width, the end dots its length, the " +
-                            "knob to turn it. Between the dashed lines it is solid at 100% intensity; it fades towards " +
-                            "the solid lines and past its ends. "
-                    } else {
-                        "Drag the leak to move it, the dots to resize, the outer knob to rotate. Inside the dashed ring " +
-                            "it is solid at 100% intensity; it fades out towards the solid ring. "
-                    }
-                    ) + "Several streaks side by side make a wider burn. Leaks aren't saved in presets: they belong to this photo.",
+                "Drag the leak to move it, the dots to resize (" +
+                    (if (leak.kind == LeakKind.STREAK) "side dots: width, end dots: length" else "along and across") +
+                    "), the round knob to turn it, the square to bend it. Inside the dashed line it is pure white at full " +
+                    "intensity; the glow around it is added in Screen mode. Leaks aren't saved in presets: they belong to " +
+                    "this photo.",
             )
         }
     }

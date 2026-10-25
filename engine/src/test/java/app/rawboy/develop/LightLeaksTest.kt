@@ -8,7 +8,10 @@ import org.junit.Test
 class LightLeaksTest {
     @Test
     fun packsShownLeaksIntoImagePixelsAndSkipsHiddenOrTransparentOnes() {
-        val a = LightLeaks.newLeak(LeakKind.GLOW, 0.25f, 0.5f).copy(rx = 0.1f, ry = 0.05f, angle = 90f, softness = 40f, intensity = 80f, hue = 0f, seed = 0.3f)
+        val a = LightLeaks.newLeak(LeakKind.GLOW, 0.25f, 0.5f).copy(
+            rx = 0.1f, ry = 0.05f, angle = 90f, softness = 40f, glow = 50f, bend = 50f, warp = 20f, taper = -30f,
+            intensity = 80f, hue = 0f, seed = 0.3f,
+        )
         val hidden = LightLeaks.newLeak().copy(enabled = false)
         val clear = LightLeaks.newLeak().copy(intensity = 0f)
         val u = LightLeaks.pack(listOf(hidden, a, clear), 4000, 3000)
@@ -20,35 +23,50 @@ class LightLeaksTest {
         assertEquals(0f, u.shape[0], 1e-6f)
         assertEquals(1f, u.shape[1], 1e-6f)
         assertEquals(0.4f, u.shape[2], 1e-6f)
-        assertEquals(0.3f, u.shape[3], 1e-6f)
+        assertEquals(LightLeaks.glowReach(50f), u.shape[3], 1e-6f)
         assertEquals(0.8f, u.color[3], 1e-6f)
+        assertEquals(0.3f, u.outer[3], 1e-6f)
+        assertEquals(0f, u.form[0], 0f) // glow
+        assertEquals(0.5f / 400f, u.form[1], 1e-9f) // bend 50: the ends move half a length radius over 400 px
+        assertEquals(0.2f, u.form[2], 1e-6f)
+        assertEquals(-0.3f, u.form[3], 1e-6f)
         assertEquals(0, LightLeaks.pack(emptyList(), 4000, 3000).count)
     }
 
     @Test
-    fun marksStreaksInTheSeedSlotAndStartsThemAsALongThinBeam() {
-        val s = LightLeaks.newLeak().copy(seed = 0.25f)
+    fun numbersTheKindsAndStartsAStreakAsALongThinBeam() {
+        val s = LightLeaks.newLeak()
         assertEquals(LeakKind.STREAK, s.kind)
         assertTrue(s.rx / s.ry > 5f)
-        assertEquals(2.25f, LightLeaks.pack(listOf(s), 4000, 3000).shape[3], 1e-6f)
-        val g = s.copy(angle = 30f, hue = 0f).withKind(LeakKind.GLOW)
+        assertEquals(1f, LightLeaks.pack(listOf(s), 4000, 3000).form[0], 0f)
+        assertEquals(2f, LightLeaks.pack(listOf(LightLeaks.newLeak(LeakKind.TRIANGLE)), 4000, 3000).form[0], 0f)
+        val g = s.copy(bend = 30f, hue = 0f).withKind(LeakKind.GLOW)
         assertEquals(LeakKind.GLOW.rx, g.rx, 0f)
-        assertEquals(LeakKind.GLOW.softness, g.softness, 0f)
-        assertEquals(30f, g.angle, 0f)
+        assertEquals(LeakKind.GLOW.glow, g.glow, 0f)
+        assertEquals(30f, g.bend, 0f)
         assertEquals(0.5f, g.cx, 0f)
-        assertEquals(0.25f, LightLeaks.pack(listOf(g), 4000, 3000).shape[3], 1e-6f)
     }
 
     @Test
-    fun makesWarmColours() {
-        val red = LightLeaks.color(0f)
-        assertEquals(1f, red[0], 0f)
-        assertEquals(0.08f, red[1], 1e-6f)
-        assertEquals(0.08f, red[2], 1e-6f)
-        val orange = LightLeaks.color(30f)
-        assertEquals(1f, orange[0], 0f)
-        assertTrue(orange[1] > 0.4f && orange[1] < 0.6f)
-        assertEquals(0.08f, orange[2], 1e-6f)
+    fun measuresEdgesInShapeRadii() {
+        assertEquals(-1f, LightLeaks.edge(LeakKind.GLOW, 0f, 0f), 0f)
+        assertEquals(0f, LightLeaks.edge(LeakKind.GLOW, 0.6f, 0.8f), 1e-6f)
+        assertEquals(0f, LightLeaks.edge(LeakKind.STREAK, 5f, 1f), 0f)
+        assertEquals(0f, LightLeaks.edge(LeakKind.TRIANGLE, 1f, 0f), 1e-6f) // apex
+        assertEquals(0f, LightLeaks.edge(LeakKind.TRIANGLE, -1f, 1f), 1e-6f) // base corner
+        assertTrue(LightLeaks.edge(LeakKind.TRIANGLE, 0f, 0f) < 0f)
+        assertTrue(LightLeaks.edge(LeakKind.TRIANGLE, 0f, 0.6f) > 0f)
+    }
+
+    @Test
+    fun makesPhotoshopsColours() {
+        val inner = LightLeaks.color(LightLeaks.HUE) // (255, 156, 0)
+        assertEquals(1f, inner[0], 0f)
+        assertEquals(156f / 255f, inner[1], 0.02f)
+        assertEquals(0f, inner[2], 1e-6f)
+        val outer = LightLeaks.outerColor(LightLeaks.HUE) // (255, 5, 5)
+        assertEquals(1f, outer[0], 0f)
+        assertTrue(outer[1] < 0.05f && outer[2] < 0.05f)
         assertTrue(LightLeaks.color(-40f)[2] > 0.5f) // magenta-red: some blue
     }
 

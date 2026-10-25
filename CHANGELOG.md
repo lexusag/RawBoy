@@ -1,5 +1,14 @@
 # Changelog
 
+**RawBoy: light leaks rebuilt like a Photoshop light leak (2026-10-25)**
+
+- RawBoy (Android, web): light leaks are now made the way a Photoshop or Affinity light leak is: a white shape,
+  blurred, with an orange glow and a wider red glow around it, all in Screen mode. The photo shows through the glow,
+  the white middle still hides what is under it at full intensity, and the grain now lies on top of the leak instead
+  of stopping at it. New **Triangle** shape beside Streak and Glow, and every shape can be **bent** (a square handle on
+  the photo or the Bend slider), **tapered** and **warped**. A new **Glow** slider sets how far the coloured light
+  reaches. Edits saved with the earlier leaks open as plain round glows.
+
 **Auto: gentler measured luma denoise (2026-10-25)**
 
 - RawBoy Auto and RawBoy's Auto button (Android, iOS, web): the luma Denoise Auto measures is 10 lower (down to 0),
