@@ -5,6 +5,12 @@
 - RawBoy (Android, iOS, web): the **Save preset** dialog has a **Select all** / **Deselect all** button beside
   Include, so a preset with every group, or with just one or two, takes one tap instead of ticking each box.
 
+**Auto: half the measured luma denoise (2026-10-25)**
+
+- RawBoy Auto and RawBoy's Auto button (Android, iOS, web): the luma Denoise Auto measures is halved again, about one
+  part luma to two parts colour (a noisy Canon G9 shot: 34 → 17, colour 93). Colour denoise and sharpening are
+  unchanged, and the Denoise slider keeps its range on top.
+
 **RawBoy: light leaks rebuilt like a Photoshop light leak (2026-10-25)**
 
 - RawBoy (Android, web): light leaks are now made the way a Photoshop or Affinity light leak is: a white shape,
