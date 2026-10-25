@@ -1,5 +1,13 @@
 # Changelog
 
+**RawBoy: Stripe masks (2026-10-25)**
+
+- RawBoy (Android, web): a new **Stripe** mask layer beside Linear, Radial and Brush: a soft band, shaped like the
+  light leaks' Streak, for a horizon, a road, a river or a beam of light. Drag its centre to move it, the dots to set
+  its length and width, the knob to turn it and the square to bend it; Feather, Bend and Taper sliders as the light
+  leaks have. Like the gradients it can be painted on or erased from, inverted and kept in presets. Not on iOS yet
+  (a stripe in edits or a preset opened there is skipped).
+
 **RawBoy remembers its open tab (2026-10-25)**
 
 - RawBoy (Android, web): the editor's tab (Light, Color, Detail, LUTs, Lens) stays where you left it after going to

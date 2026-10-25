@@ -57,6 +57,7 @@ private fun subtitle(l: MaskLayer) = when (l.shape) {
     MaskShape.Brush -> "Brush"
     is MaskShape.Linear -> "Linear"
     is MaskShape.Radial -> "Radial"
+    is MaskShape.Stripe -> "Stripe"
 } + if (l.strokes.isNotEmpty() && l.shape != MaskShape.Brush) " + brush" else ""
 
 /** What the masks panel can do; mask layers live in the params, the rest is UI state. */
@@ -132,6 +133,7 @@ fun MasksPanel(
                     DropdownMenu(expanded = adding, onDismissRequest = { adding = false }) {
                         DropdownMenuItem(text = { Text("Linear gradient") }, onClick = { adding = false; actions.onAdd(Masks.newLinear().shape) })
                         DropdownMenuItem(text = { Text("Radial gradient") }, onClick = { adding = false; actions.onAdd(Masks.newRadial().shape) })
+                        DropdownMenuItem(text = { Text("Stripe") }, onClick = { adding = false; actions.onAdd(Masks.newStripe().shape) })
                         DropdownMenuItem(text = { Text("Brush") }, onClick = { adding = false; actions.onAdd(MaskShape.Brush) })
                     }
                 }
@@ -218,6 +220,13 @@ private fun MaskTab(layer: MaskLayer, tool: MaskTool, brush: BrushSettings, show
         is MaskShape.Radial -> ParamSlider("Feather", s.feather, 0f..100f, 50f, format = ::formatPlain) { v ->
             actions.onUpdate(layer.id) { l -> (l.shape as? MaskShape.Radial)?.let { l.copy(shape = it.copy(feather = v)) } ?: l }
         }
+        is MaskShape.Stripe -> {
+            fun set(change: (MaskShape.Stripe) -> MaskShape.Stripe) =
+                actions.onUpdate(layer.id) { l -> (l.shape as? MaskShape.Stripe)?.let { l.copy(shape = change(it)) } ?: l }
+            ParamSlider("Feather", s.feather, 0f..100f, 50f, format = ::formatPlain) { v -> set { it.copy(feather = v) } }
+            ParamSlider("Bend", s.bend, -100f..100f, 0f) { v -> set { it.copy(bend = v) } }
+            ParamSlider("Taper", s.taper, -100f..100f, 0f) { v -> set { it.copy(taper = v) } }
+        }
         MaskShape.Brush -> Unit
     }
     Note(
@@ -229,6 +238,9 @@ private fun MaskTab(layer: MaskLayer, tool: MaskTool, brush: BrushSettings, show
             layer.shape is MaskShape.Radial ->
                 "Drag the centre to move, the dots to resize, the outer knob to rotate. The effect fades between the " +
                     "dashed and the solid ellipse."
+            layer.shape is MaskShape.Stripe ->
+                "Drag the centre to move, the dots to change its length and width, the outer knob to rotate, the " +
+                    "square to bend it. The effect fades between the dashed and the solid outline."
             else -> "Pick Brush to paint this layer's mask."
         },
     )

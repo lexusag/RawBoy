@@ -48,6 +48,10 @@ export interface LeakForm {
  */
 export type OverlayLayer = Pick<MaskLayer, 'id' | 'enabled' | 'shape' | 'strokes'> & { leak?: LeakForm };
 
+/** The leak form a layer is drawn with: a leak's own, a stripe mask's streak, else none (an ellipse). */
+const formOf = (l: OverlayLayer): LeakForm | undefined =>
+  l.leak ?? (l.shape.kind === 'stripe' ? { kind: 'streak', bend: l.shape.bend, taper: l.shape.taper } : undefined);
+
 interface Props {
   /** Geometry of the view the preview shows (with the crop). */
   lens: LensTransform;
@@ -102,7 +106,8 @@ const path = (pts: Pt[], close = false) => (pts.length ? `M${pts.map((p) => `${p
  *
  * Move: gradient handles. Linear: the full-effect, centre and no-effect lines; drag the centre to move, an outer line
  * to change the width and angle, the square to bend them (curvature). Radial: the ellipse, its feather ring, a centre
- * pin, radius handles and a rotation knob. Other layers show a pin that selects them.
+ * pin, radius handles and a rotation knob. Stripe: the band (drawn like a light leak's streak), its feather outline, the
+ * same handles and a bend square. Other layers show a pin that selects them.
  *
  * Brush / Erase: paint on the selected layer (Alt erases while brushing); a circle shows the brush and its hard core.
  *
@@ -204,7 +209,7 @@ export function MaskOverlay(props: Props) {
     const ry = s.ry * long;
     const cx = s.cx * W;
     const cy = s.cy * H;
-    const leak = l.leak;
+    const leak = formOf(l);
     const k = leak ? bendCurvature(leak.bend, rx) : 0;
     const at = (u: number, v: number): Pt => toScreen(cx + c * u - sn * v, cy + sn * u + c * v);
     /** A point in the leak's own frame (q: 1 = its radii) through its taper and bend, like the shader. */
@@ -219,7 +224,11 @@ export function MaskOverlay(props: Props) {
         return Array.from({ length: n }, (_, j) => atQ(a[0] + ((b[0] - a[0]) * j) / n, a[1] + ((b[1] - a[1]) * j) / n));
       });
     const outline = (sc: number): Pt[] => {
-      if (leak?.kind === 'streak') return polygon([[1, sc], [-1, sc], [-1, -sc], [1, -sc]], STEPS); // edges at sc x the half width
+      if (leak?.kind === 'streak') {
+        // Edges at sc x the half width; a stripe mask's ends fade over the same distance as its sides.
+        const ex = s.kind === 'stripe' ? Math.max(0, 1 - ((1 - sc) * ry) / rx) : 1;
+        return polygon([[ex, sc], [-ex, sc], [-ex, -sc], [ex, -sc]], STEPS);
+      }
       if (leak?.kind === 'triangle') return polygon([[sc, 0], [-sc, sc], [-sc, -sc]], STEPS);
       return Array.from({ length: STEPS }, (_, i) => {
         const t = (i / STEPS) * 2 * Math.PI;
@@ -245,7 +254,7 @@ export function MaskOverlay(props: Props) {
   /** Overlay point [p] lies inside a radial shape's outer ellipse (a leak: its outline). */
   const inside = (l: OverlayLayer, p: Pt): boolean => {
     const s = l.shape;
-    if (s.kind !== 'radial') return false;
+    if (s.kind !== 'radial' && s.kind !== 'stripe') return false;
     const [x, y] = toImage(p[0], p[1]);
     const a = (s.angle * Math.PI) / 180;
     const dx = x - s.cx * W;
@@ -253,7 +262,7 @@ export function MaskOverlay(props: Props) {
     const rx = s.rx * long;
     const pu = Math.cos(a) * dx + Math.sin(a) * dy;
     let pv = -Math.sin(a) * dx + Math.cos(a) * dy;
-    const leak = l.leak;
+    const leak = formOf(l);
     if (!leak) return (pu / rx) ** 2 + (pv / (s.ry * long)) ** 2 < 1;
     pv -= bendCurvature(leak.bend, rx) * pu * pu;
     const qx = pu / rx;
@@ -293,7 +302,7 @@ export function MaskOverlay(props: Props) {
 
   /** The bend (-100..100) that puts a leak's axis through image point [to], or null too near its middle. */
   const bendAt = (s: MaskShape, to: Pt): number | null => {
-    if (s.kind !== 'radial') return null;
+    if (s.kind !== 'radial' && s.kind !== 'stripe') return null;
     const a = (s.angle * Math.PI) / 180;
     const dx = to[0] - s.cx * W;
     const dy = to[1] - s.cy * H;
@@ -514,7 +523,9 @@ export function MaskOverlay(props: Props) {
         e.stopPropagation();
         if (d.handle === 'bend') {
           const b = bendAt(d.start, toImage(p[0], p[1]));
-          if (b != null) props.onBend?.(d.id, b);
+          if (b == null) return;
+          if (d.start.kind === 'stripe') onChange(d.id, { ...d.start, bend: b });
+          else props.onBend?.(d.id, b);
           return;
         }
         onChange(d.id, dragShape(d.start, d.handle, d.from, toImage(p[0], p[1])));

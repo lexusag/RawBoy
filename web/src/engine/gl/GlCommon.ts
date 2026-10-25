@@ -206,6 +206,7 @@ export class DevelopProgram {
     this.i1('uLayerCount', layers.count);
     gl.uniform4fv(this.loc('uMaskGeom'), layers.geom);
     gl.uniform4fv(this.loc('uMaskShape'), layers.shape);
+    gl.uniform4fv(this.loc('uMaskForm'), layers.form);
     gl.uniform4fv(this.loc('uLayerTone'), layers.tone);
     gl.uniform4fv(this.loc('uLayerColor'), layers.color);
     gl.uniformMatrix3fv(this.loc('uLayerWb'), false, layers.whiteBalance);

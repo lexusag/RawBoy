@@ -12,7 +12,7 @@ import { WhiteBalance } from '../color/WhiteBalance';
 import { cropHandleAt, cropWithAspect, dragCrop, FULL_CROP, flipped, rotateCrop, withCrop } from '../develop/CropMath';
 import { developParams, effectiveColorDenoise } from '../develop/DevelopParams';
 import { BrushRaster, type BrushGuide } from '../develop/BrushRaster';
-import { MAX_LENS_BLUR, NO_ADJUST, curveOffset, forPreset, newBrushLayer, newLinearLayer, newRadialLayer, parseLayers, type BrushStroke, type MaskLayer } from '../develop/Masks';
+import { MAX_LENS_BLUR, NO_ADJUST, curveOffset, forPreset, newBrushLayer, newLinearLayer, newRadialLayer, newStripeLayer, parseLayers, type BrushStroke, type MaskLayer } from '../develop/Masks';
 import {
   CURVE_MIN_GAP,
   CURVE_SIZE,
@@ -392,6 +392,23 @@ describe('mask layers', () => {
     const s = (d[0] * -g[3] + d[1] * g[2]) / n;
     expect(t + u.shape[1] * s * s).toBeCloseTo(0.5, 6);
     expect(packLayers([{ ...bent, shape: { ...bent.shape, curve: 0 } }], 4000, 3000, 5500, 0, true).shape[1]).toBe(0);
+  });
+
+  it('packs a stripe like a light leak streak and keeps it through presets', () => {
+    const band = { ...newStripeLayer(), adjust: { ...NO_ADJUST, exposure: 1 } };
+    const bent = { ...band, shape: { ...band.shape, angle: 90, bend: 50, taper: -40, feather: 20 } };
+    const u = packLayers([bent], 4000, 3000, 5500, 0, true);
+    close([...u.geom.slice(0, 4)], [2000, 1500, 1 / 2200, 1 / 320], 1e-6);
+    close([...u.shape.slice(0, 4)], [3, 0, 1, 0.2], 1e-6);
+    // bend 50 over a 2200 px half length; the ends fade over the sides' 64 px
+    close([...u.form.slice(0, 4)], [0.5 / 2200, -0.4, 64 / 2200, 0], 1e-7);
+    const [p] = decodePresets(encodePresets([capturePreset('S', developParams({ masks: [bent] }), ['masks'])]));
+    const out = applyPreset(p, developParams()).masks[0];
+    expect(out.shape).toEqual(bent.shape);
+    // Older or partial stripes: straight and even.
+    const [plain] = parseLayers([{ shape: { kind: 'stripe', cx: 0.5, cy: 0.5, rx: 0.5, ry: 0.05, angle: 0, feather: 50 } }]);
+    expect(plain.shape).toMatchObject({ kind: 'stripe', bend: 0, taper: 0 });
+    expect(plain.name).toBe('Stripe');
   });
 
   it('round-trips through presets with fresh ids and drops broken layers', () => {

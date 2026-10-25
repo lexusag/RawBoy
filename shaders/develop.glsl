@@ -52,7 +52,8 @@ vec3 applyFilm(vec3 c, vec2 fullPx, float contrast);
 #define MAX_LAYERS 4
 uniform int uLayerCount;
 uniform vec4 uMaskGeom[MAX_LAYERS];   // linear: p0.xy, (p1 - p0) / |p1 - p0|^2; radial: centre.xy, 1/rx, 1/ry
-uniform vec4 uMaskShape[MAX_LAYERS];  // linear: 0, curvature (1/px^2, over the length); radial: 1, cos(angle), sin(angle), feather 0..1; brush only: 2
+uniform vec4 uMaskShape[MAX_LAYERS];  // linear: 0, curvature (1/px^2, over the length); radial: 1, cos(angle), sin(angle), feather 0..1; brush only: 2; stripe: 3, as radial (geom: 1/half length, 1/half width)
+uniform vec4 uMaskForm[MAX_LAYERS];   // stripe: bend (1/px), taper -1..1, end feather (in half lengths), 0
 uniform vec4 uLayerTone[MAX_LAYERS];  // exposure EV, log2 contrast slope, highlights, shadows
 uniform vec4 uLayerColor[MAX_LAYERS]; // saturation factor, clarity, opacity, invert
 uniform mat3 uLayerWb[MAX_LAYERS];    // global target white -> layer white
@@ -767,6 +768,16 @@ float layerMask(int i, vec2 p) {
         vec2 d = p - g.xy;
         vec2 r = vec2(k.y * d.x + k.z * d.y, -k.z * d.x + k.y * d.y) * g.zw;
         m = 1.0 - smoothstep(1.0 - k.w, 1.0, length(r));
+    } else if (k.x > 2.5) {
+        // Stripe: a band like a light leak's streak (light_leak.glsl), bent and tapered the same way.
+        vec4 f = uMaskForm[i];
+        vec2 d = p - g.xy;
+        float u = k.y * d.x + k.z * d.y;
+        float v = -k.z * d.x + k.y * d.y - f.x * u * u;
+        float qx = u * g.z;
+        float width = max(1.0 + f.y * clamp(qx, -1.0, 1.0), 0.05);
+        float qy = abs(v * g.w / width);
+        m = (1.0 - smoothstep(1.0 - k.w, 1.0, qy)) * (1.0 - smoothstep(1.0 - f.z, 1.0, abs(qx)));
     }
     vec4 b = uBrushSlot[i];
     if (b.z > 0.0) {
