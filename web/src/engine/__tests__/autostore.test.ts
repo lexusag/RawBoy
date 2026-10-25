@@ -297,3 +297,78 @@ describe('Auto: opening a waiting photo', () => {
     expect(store.state.opening).toBeNull();
   });
 });
+
+describe('Auto denoise all', () => {
+  it('gives every photo its own auto denoise over the slider, presets and RawBoy edits; the rest stays', async () => {
+    vi.stubGlobal('window', { setTimeout: () => 0 }); // thumbnails aren't rendered here
+    const { developParams } = await import('../develop/DevelopParams');
+    const { capturePreset } = await import('../develop/Presets');
+    const { paramsOf } = await import('../../ui/auto/AutoStore');
+    const store = new AutoStore();
+    store.add([new File(['a'], 'a.CR2'), new File(['b'], 'b.CR2'), new File(['c'], 'c.CR2'), new File(['d'], 'd.CR2')]);
+    const analysis = (denoise: number) => ({
+      defaults: developParams(),
+      autoBase: developParams({ denoise, colorDenoise: denoise + 10, sharpening: 12 }),
+      stats: { hasFace: false },
+    });
+    // Look + Grain + Denoise preset (both groups); Denoise-only preset; RawBoy edits; plain slider.
+    const mixed = capturePreset('Mixed', developParams({ grain: 40, denoise: 70, colorDenoise: 70, sharpening: 30 }), ['detail', 'denoise']);
+    const onlyDenoise = capturePreset('Smooth', developParams({ denoise: 90 }), ['denoise']);
+    const edits = developParams({ exposure: 1.5, denoise: 80, colorDenoise: 80, sharpening: 40 });
+    const s = store as unknown as { _state: { photos: object[]; preset: unknown } };
+    s._state.preset = mixed;
+    s._state.photos = s._state.photos.map((p, i) => ({
+      ...p,
+      analysis: analysis(10 * (i + 1)),
+      preset: i === 0 ? mixed : i === 1 ? onlyDenoise : null,
+      edits: i === 2 ? edits : null,
+      adjust: { ...(p as { adjust: object }).adjust, denoise: 25, grain: 7 },
+    }));
+    store.autoDenoiseAll();
+    const photos = store.state.photos;
+    expect(store.state.message).toBe('Auto denoise on 4 photos');
+    // Each photo's own measured values (10/20, 20/30, ...), sharpening included.
+    expect(photos.map((p) => { const d = paramsOf(p)!; return [d.denoise, d.colorDenoise, d.sharpening]; }))
+      .toEqual([[10, 20, 12], [20, 30, 12], [30, 40, 12], [40, 50, 12]]);
+    expect(photos.every((p) => p.adjust.denoise === 0 && p.adjust.grain === 7)).toBe(true);
+    // The preset keeps its other groups (shared with the batch's, still one object), a denoise-only preset is gone.
+    expect(photos[0].preset).toMatchObject({ name: 'Mixed', groups: ['detail'] });
+    expect(photos[0].preset!.values).not.toHaveProperty('denoise');
+    expect(store.state.preset).toBe(photos[0].preset);
+    expect(paramsOf(photos[0])!.grain).toBe(Math.min(100, 40 + 7));
+    expect(photos[1].preset).toBeNull();
+    expect(photos[2].edits).toMatchObject({ exposure: 1.5, denoise: 30, colorDenoise: 40, sharpening: 12 });
+    // Undo takes it back per photo; a second run has nothing left to do.
+    store.autoDenoiseAll();
+    expect(store.state.message).toBe('Every photo already has its auto denoise');
+    store.undo(photos[1].id);
+    expect(store.state.photos[1].preset).toBe(onlyDenoise);
+  });
+});
+
+describe('Auto denoise on a selection', () => {
+  it('changes only the selected photos and leaves the batch preset as it is', async () => {
+    vi.stubGlobal('window', { setTimeout: () => 0 });
+    const { developParams } = await import('../develop/DevelopParams');
+    const { capturePreset } = await import('../develop/Presets');
+    const store = new AutoStore();
+    store.add([new File(['a'], 'a.CR2'), new File(['b'], 'b.CR2'), new File(['c'], 'c.CR2')]);
+    const batch = capturePreset('Smooth', developParams({ grain: 20, denoise: 90 }), ['detail', 'denoise']);
+    const analysis = { defaults: developParams(), autoBase: developParams({ denoise: 15 }), stats: { hasFace: false } };
+    const s = store as unknown as { _state: { photos: object[]; preset: unknown } };
+    s._state.preset = batch;
+    s._state.photos = s._state.photos.map((p) => ({ ...p, analysis, preset: batch, adjust: { ...(p as { adjust: object }).adjust, denoise: 30 } }));
+    const [a, b, c] = store.state.photos;
+    store.autoDenoiseAll(new Set([a.id, c.id]));
+    const [a2, b2, c2] = store.state.photos;
+    expect(store.state.message).toBe('Auto denoise on 2 photos');
+    expect([a2.adjust.denoise, b2.adjust.denoise, c2.adjust.denoise]).toEqual([0, 30, 0]);
+    expect(a2.preset!.groups).toEqual(['detail']);
+    expect(c2.preset).toBe(a2.preset);
+    expect(b2.preset).toBe(batch);
+    expect(store.state.preset).toBe(batch);
+    store.autoDenoiseAll(new Set([a.id]));
+    expect(store.state.message).toBe('This photo already has its auto denoise');
+    expect(b.id).toBe(b2.id);
+  });
+});

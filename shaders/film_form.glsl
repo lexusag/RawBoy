@@ -55,7 +55,9 @@ vec3 filmOptics(vec3 x, vec2 uvG, vec2 imagePx) {
     }
     // Halation: the disc, as a Gaussian of half its radius, from a ~512 px copy (no copy: texel 1, skip). The
     // highlight-boosted bloom copy when there is one: light sources sit far above the sensor clip, and only they
-    // halate visibly.
+    // halate visibly. Like bloom, only the highlights at the current exposure (bloomKnee) send light back: they give
+    // up uFormHalation of it, and it returns spread around them, so midtones stay clean and an underexposed raw
+    // pushed with Exposure halates like one shot brighter.
     bool boosted = uBloomHaloTexel.x < 1.0;
     vec2 texel = boosted ? uBloomHaloTexel : uBaseTexel;
     if (texel.x < 1.0 && dot(uFormHalation, uFormHalation) > 0.0) {
@@ -69,12 +71,12 @@ vec3 filmOptics(vec3 x, vec2 uvG, vec2 imagePx) {
                 vec2 o = vec2(i, j) * 0.8;
                 float w = exp(-0.5 * dot(o, o));
                 vec2 at = uv + o * sigma * texel;
-                halo += w * (boosted ? texture(uBloomHalo, at).rgb : texture(uBase, at).rgb);
+                vec3 c = boosted ? texture(uBloomHalo, at).rgb : texture(uBase, at).rgb;
+                halo += w * bloomKnee(c, uExposure) * c;
                 wsum += w;
             }
         }
-        // The returned light is spread around its source: a mix keeps a uniform field unchanged.
-        x = mix(x, halo / wsum, uFormHalation);
+        x += uFormHalation * (halo / wsum - bloomKnee(x, uExposure) * x);
     }
     return x;
 }

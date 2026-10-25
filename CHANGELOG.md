@@ -7,6 +7,23 @@
   squircle masks, and follow Android 13+ themed icons. RawBoy Web gets a favicon, a home-screen icon and a web app
   manifest, so it can be installed from the browser.
 
+**Auto: Auto denoise all (2026-10-25)**
+
+- RawBoy Auto (Android, web): **Auto denoise all** in the grid's top row gives every photo of the batch its own
+  measured denoise, colour denoise and sharpening, for when a series is finished with its presets and lens
+  corrections. The Denoise slider goes back to 0 and RawBoy edits take the measured values; on the web presets also
+  lose their Denoise & sharpening group (photos added "As is" use the ISO table). Looks, presets, lens corrections and the
+  other settings stay; Undo in a photo takes it back. With photos selected, the selection bar's Auto denoise (dots
+  icon) does it for those photos only. Not on iOS yet.
+
+**Halation: stronger top of the slider, follows Exposure (2026-10-25)**
+
+- RawBoy (Film tone mapper, Android, iOS, web): Halation 100 is still the stock's own glow, which is faint (as on
+  real film, only light sources and blown highlights halate). Above 100 the slider now doubles the glow every 25, up
+  to 16x at 200 (it was 2x), so strong red halos around lights are possible. Halation also follows Exposure
+  like Bloom: only the highlights at the current exposure send light back, so a dark raw brightened with Exposure
+  halates like one shot brighter, and midtones are no longer touched. Auto's film looks (Halation 100) are unchanged.
+
 **The frame around the photo stays (2026-10-24)**
 
 - RawBoy Auto (Android, web): switching to a photo that is still rendering kept its thumbnail but dropped the grey /
