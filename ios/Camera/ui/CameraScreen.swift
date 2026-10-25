@@ -238,7 +238,15 @@ private struct LookPicker: View {
         HStack(spacing: 8) {
             Text("Look").font(.subheadline).frame(width: 88, alignment: .leading)
             Picker("Look", selection: Binding(get: { selectedId }, set: { onSelect($0) })) {
-                ForEach(Edition.looks) { Text($0.name).tag($0.id) }
+                // Colour and black and white looks under their own headings, when the list has both.
+                let mono = Edition.looks.filter(\.monochrome)
+                let color = Edition.looks.filter { !$0.monochrome }
+                if mono.isEmpty || color.isEmpty {
+                    ForEach(Edition.looks) { Text($0.name).tag($0.id) }
+                } else {
+                    Section("Color") { ForEach(color) { Text($0.name).tag($0.id) } }
+                    Section("Black & white") { ForEach(mono) { Text($0.name).tag($0.id) } }
+                }
             }
             .pickerStyle(.menu)
             .tint(Color.cameraAccent)

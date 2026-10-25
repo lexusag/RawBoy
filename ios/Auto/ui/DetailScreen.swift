@@ -163,8 +163,14 @@ struct DetailScreen: View {
             }
         }
         ToolbarItemGroup(placement: .topBarTrailing) {
-            Button("Apply to all") { vm.applyLookToAll(id) }
-                .disabled(vm.export != nil || vm.photos.count < 2)
+            // Apply to all and Remove share a menu: the bar is full on phones and the name needs the room.
+            Menu {
+                Button("Apply to all") { vm.applyLookToAll(id) }
+                    .disabled(vm.export != nil || vm.photos.count < 2)
+                Button("Remove from batch", systemImage: "trash") { vm.removeOpened(id) }
+                    .disabled(vm.export != nil)
+            } label: { Image(systemName: "ellipsis.circle") }
+                .accessibilityLabel("More")
             Button("Export") { showExport = true }
                 .buttonStyle(.borderedProminent)
                 .disabled(vm.sessionReady != id || vm.export != nil)
@@ -223,8 +229,13 @@ private struct PhotoPage: View {
                     }
                 } else {
                     // Until the raw is decoded, show the grid thumbnail.
-                    // Inset by the frame so the photo doesn't move when the decoded preview replaces it.
-                    if let t = photo.thumbnail { Image(decorative: t, scale: 1).resizable().scaledToFit().padding(frameWidthPt) }
+                    // Inset by the frame so the photo doesn't move when the decoded preview replaces it, and framed as
+                    // the preview will be, so the frame doesn't blink out while it renders.
+                    if let t = photo.thumbnail {
+                        Image(decorative: t, scale: 1).resizable().scaledToFit()
+                            .background(Color(white: Double(vm.frameColor.level)).padding(-frameWidthPt))
+                            .padding(frameWidthPt)
+                    }
                     if current { ProgressView() }
                 }
             }
@@ -262,11 +273,23 @@ private struct LookStrip: View {
     let photo: AutoPhoto
 
     var body: some View {
+        // Colour and black and white looks in sections (the list has colour first): a heading over each, a divider
+        // between them.
+        let looks = photo.mode == .film ? FilmLooks.all : Looks.all
+        let color = looks.filter { !$0.monochrome }
+        let mono = looks.filter(\.monochrome)
+        let sectioned = !color.isEmpty && !mono.isEmpty
         ScrollViewReader { proxy in
             ScrollView(.horizontal) {
-                LazyHStack(spacing: 8) {
-                    ForEach(photo.mode == .film ? FilmLooks.all : Looks.all) { look in
-                        LookChip(vm: vm, photo: photo, look: look).id(look.id)
+                LazyHStack(alignment: .top, spacing: 8) {
+                    if !sectioned {
+                        ForEach(looks) { look in
+                            LookChip(vm: vm, photo: photo, look: look).id(look.id)
+                        }
+                    } else {
+                        section("Color", color)
+                        Divider()
+                        section("Black & white", mono)
                     }
                 }
                 .padding(.horizontal, 12)
@@ -277,7 +300,22 @@ private struct LookStrip: View {
             .onChange(of: photo.id) { _, _ in proxy.scrollTo(photo.activeLook.id, anchor: .leading) }
             .onChange(of: photo.mode) { _, _ in proxy.scrollTo(photo.activeLook.id, anchor: .leading) }
         }
-        .frame(height: 92)
+        .frame(height: 92 + (sectioned ? Self.headingHeight : 0))
+    }
+
+    private static let headingHeight: CGFloat = 16
+
+    /** A section's heading and its chips. */
+    private func section(_ title: String, _ looks: [Look]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text(title).font(.caption.weight(.semibold)).foregroundStyle(Color.accentColor)
+                .frame(height: Self.headingHeight)
+            HStack(spacing: 8) {
+                ForEach(looks) { look in
+                    LookChip(vm: vm, photo: photo, look: look).id(look.id)
+                }
+            }
+        }
     }
 }
 

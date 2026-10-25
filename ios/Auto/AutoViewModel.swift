@@ -684,6 +684,40 @@ final class AutoViewModel: ObservableObject {
         }
     }
 
+    /**
+     * "Auto denoise all", for a batch that's otherwise done: every photo gets the denoise, colour denoise and sharpening
+     * the auto develop measured on it, so its Denoise slider goes back to 0 (presets never override those here); looks,
+     * presets, lens corrections and the other sliders stay. One undo step per photo. [ids] (the grid's selection): only
+     * those photos. Not while exporting.
+     */
+    func autoDenoiseAll(_ ids: Set<String>? = nil) {
+        guard export == nil else { return }
+        let changed = photos.filter { (ids == nil || ids!.contains($0.id)) && $0.adjust.denoise != 0 }
+        for p in changed { changeDevelop(p.id, force: true) { $0.adjust.denoise = 0 } }
+        switch changed.count {
+        case 0:
+            message = ids == nil ? "Every photo already has its auto denoise"
+                : ids!.count == 1 ? "This photo already has its auto denoise" : "These photos already have their auto denoise"
+        case 1: message = "Auto denoise on 1 photo"
+        default: message = "Auto denoise on \(changed.count) photos"
+        }
+    }
+
+    /**
+     * Takes the detail view's photo [id] out of the batch (nothing is deleted from the library) and opens the next
+     * analysed photo, or the one before it at the batch's end; back to the grid when it was the last one.
+     */
+    func removeOpened(_ id: String) {
+        guard let p = photo(id), export == nil else { return }
+        let pages = photos.filter { $0.analysis != nil }
+        let next: AutoPhoto? = pages.firstIndex { $0.id == id }.flatMap { i in
+            i + 1 < pages.count ? pages[i + 1] : i > 0 ? pages[i - 1] : nil
+        }
+        remove([id])
+        if let next { openDetail(next.id) }
+        message = "\(p.name) removed from the batch"
+    }
+
     func openDetail(_ id: String) {
         guard let p = photo(id), p.analysis != nil, export == nil else { return }
         selected = id
