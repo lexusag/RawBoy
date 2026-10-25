@@ -214,6 +214,8 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   `web/src/engine/` is a file-for-file TS port of the Kotlin engine (same names; keep both in step: a change to
   ShaderParams, LensTransform, WhiteBalance, AutoTone, Looks… needs the same change in the `.ts`). `src/worker/` hosts
   the WASM; `src/ui/pro` and `src/ui/auto` port the two apps' view models (`ProStore`, `AutoStore`) and screens.
+  SEO: `index.html` (meta, JSON-LD, static text in `#root` that React replaces) + the `seo` plugin in `vite.config.ts`
+  (`SITE_URL` → canonical/OG URLs, `robots.txt`, `sitemap.xml`); hosting and Search Console in `docs/cloudflare.md`.
   `src/ui/browser` is web-only (no Kotlin/Swift counterpart): RawBoy Browser, culling a folder. Previews come from
   `engine/browse/EmbeddedPreview.ts` (the cameras' embedded JPEGs found by walking TIFF IFDs/SubIFDs, CR3 boxes and
   the RAF header with `Blob.slice`, never the raw decoder; a scan for JPEG streams is the fallback, and lossless JPEG

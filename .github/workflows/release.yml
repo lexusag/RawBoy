@@ -2,6 +2,8 @@
 # and deploys the public web build to Cloudflare Pages (project "rawboy").
 # Secrets: KEYSTORE_FILE (base64 of the .jks), KEYSTORE_PASS (store and key password; key alias "rawboy"),
 # CLOUDFLARE_API_TOKEN (Account > Cloudflare Pages > Edit), CLOUDFLARE_ACCOUNT_ID.
+# Variable (optional): SITE_URL, the web app's main address for search engines (default https://rawboy.pages.dev;
+# see docs/cloudflare.md).
 # The web deploy is skipped when nothing the web build reads changed since the commit the live site was built from
 # (dist/deployed-commit.txt); run the workflow by hand with "Deploy the web build even if unchanged" to force it.
 # Publishing a release only dispatches this workflow on the default branch: caches saved by a run on a tag
@@ -169,7 +171,7 @@ jobs:
         run: |
           deploy() { echo "$1"; echo "deploy=$2" >> "$GITHUB_OUTPUT"; exit 0; }
           [ "$FORCE" = true ] && deploy "Forced deploy" true
-          base=$(curl -fsS --max-time 30 "$SITE/deployed-commit.txt" | tr -d '[:space:]') || true
+          base=$(curl -fsSL --max-time 30 "$SITE/deployed-commit.txt" | tr -d '[:space:]') || true
           [[ "$base" =~ ^[0-9a-f]{40}$ ]] || deploy "No deployed commit on the live site" true
           git fetch --quiet --depth 1 origin "$base" || deploy "Deployed commit $base not found" true
           changed=$(git diff --name-only "$base" HEAD -- $WEB_PATHS)
@@ -241,6 +243,8 @@ jobs:
           EM_COMPILER_WRAPPER: ccache
           CCACHE_BASEDIR: ${{ github.workspace }}
           CCACHE_NOHASHDIR: "true"
+          # Canonical URL, sitemap and link previews (vite.config.ts); empty = rawboy.pages.dev.
+          SITE_URL: ${{ vars.SITE_URL }}
         run: |
           source ~/emsdk/emsdk_env.sh > /dev/null
           npm ci && npm run build:public

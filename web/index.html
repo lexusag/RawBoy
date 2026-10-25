@@ -4,7 +4,49 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark" />
-    <title>RawBoy Web</title>
+    <meta name="theme-color" content="#121212" />
+    <title>RawBoy Web: free raw photo editor in your browser</title>
+    <!-- Search and link previews. The site URL below is filled in by vite.config.ts (seo plugin, SITE_URL). -->
+    <meta name="description" content="Develop RAW photos in the browser with AgX tone mapping, film looks and batch export. Opens CR2, CR3, NEF, ARW, RAF, RW2, ORF and DNG. Free, nothing to install, photos never leave your device." />
+    <link rel="canonical" href="%SITE_URL%/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="RawBoy" />
+    <meta property="og:title" content="RawBoy Web: free raw photo editor in your browser" />
+    <meta property="og:description" content="AgX tone mapping, film looks, batch develop and culling for RAW photos. Runs locally in the browser: no upload." />
+    <meta property="og:url" content="%SITE_URL%/" />
+    <meta property="og:image" content="%SITE_URL%/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="The RawBoy, Auto, Camera and Film app icons next to the words RawBoy Web" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="RawBoy Web: free raw photo editor in your browser" />
+    <meta name="twitter:description" content="AgX tone mapping, film looks, batch develop and culling for RAW photos. Runs locally in the browser: no upload." />
+    <meta name="twitter:image" content="%SITE_URL%/og-image.png" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "RawBoy Web",
+        "url": "%SITE_URL%/",
+        "image": "%SITE_URL%/og-image.png",
+        "description": "Raw photo developer in the browser: AgX tone mapping, film looks, batch develop with RawBoy Auto and culling with RawBoy Browser. Photos are processed locally and never uploaded.",
+        "applicationCategory": "MultimediaApplication",
+        "applicationSubCategory": "Photo editor",
+        "operatingSystem": "Any (a browser with WebGL2)",
+        "browserRequirements": "Requires WebGL2 and JavaScript",
+        "isAccessibleForFree": true,
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "featureList": [
+          "RAW decoding with LibRaw and the Adobe DNG SDK (CR2, CR3, NEF, ARW, RAF, RW2, ORF, PEF, DNG, JPEG XL DNG)",
+          "AgX, filmic and sigmoid tone mapping",
+          "Film looks, LUTs, grain, halation and bloom",
+          "Automatic develop and batch export",
+          "Culling with star ratings and XMP sidecars",
+          "JPEG (jpegli) and 16-bit TIFF export"
+        ],
+        "sameAs": ["https://github.com/lexusag/RawBoy"]
+      }
+    </script>
     <!-- Cross-origin isolation (threads in the WASM decoder) on hosts that can't set COOP/COEP headers. -->
     <script src="coi-serviceworker.min.js"></script>
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
@@ -13,7 +55,36 @@
     <link rel="manifest" href="manifest.webmanifest" />
   </head>
   <body>
-    <div id="root"></div>
+    <!-- What crawlers without JavaScript and link previews read; also shown while the app loads. React replaces it. -->
+    <div id="root">
+      <main style="max-width: 640px; margin: 0 auto; padding: 48px 16px; color: #ececec; font: 16px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif">
+        <h1 style="font-size: 28px; margin: 0 0 12px">RawBoy Web: raw photo editor in your browser</h1>
+        <p>
+          RawBoy develops RAW photos with an AgX tone mapper, film looks and real-time sliders, right in the browser.
+          The decoder (LibRaw and the Adobe DNG SDK) runs locally as WebAssembly and the develop shader runs on your
+          GPU with WebGL2, so photos are never uploaded.
+        </p>
+        <h2 style="font-size: 20px">Three tools in one page</h2>
+        <ul>
+          <li><strong>RawBoy</strong>: every control. Exposure, white balance, AgX, filmic or sigmoid tone mapping,
+            curves, colour grading, LUTs, lens corrections, masks, denoise, grain, halation, bloom and light leaks.</li>
+          <li><strong>RawBoy Auto</strong>: develops a whole batch automatically into a film look, with presets and
+            one-click export of every photo.</li>
+          <li><strong>RawBoy Browser</strong>: culls a folder of raws from their embedded previews, with stars, picks and
+            rejects written to XMP sidecars that Lightroom, Capture One and darktable read.</li>
+        </ul>
+        <h2 style="font-size: 20px">Formats</h2>
+        <p>
+          Opens Canon CR2 and CR3, Nikon NEF, Sony ARW, Fujifilm RAF, Panasonic RW2, Olympus ORF, Pentax PEF and DNG,
+          including DNG 1.7 with JPEG XL, plus JPEG, PNG and TIFF (HEIC in Safari). Exports JPEG (jpegli, 4:4:4) or 8/16-bit TIFF.
+        </p>
+        <p>
+          Works best in Chrome or Edge on a computer; needs WebGL2. RawBoy is also an Android app;
+          source and releases are on <a href="https://github.com/lexusag/RawBoy" style="color: #e8a33d">GitHub</a>.
+        </p>
+        <noscript><p><strong>RawBoy Web needs JavaScript to run.</strong></p></noscript>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
