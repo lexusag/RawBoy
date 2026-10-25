@@ -24,6 +24,8 @@ struct EditorScreen: View {
     @State private var showOriginal = false
     /** The drag's previous translation; a local var would reset on every redraw and make pans accelerate. */
     @State private var panLast = CGSize.zero
+    /** The pinch's magnification at its last change, while two fingers zoom. */
+    @State private var pinchLast: CGFloat?
     @State private var mode = EditorMode.none
     /** White balance picker: armed from the Color tab, the next tap on the photo picks. */
     @State private var pickingWhite = false
@@ -108,36 +110,41 @@ struct EditorScreen: View {
             ZStack {
                 DevelopPreview(image: session.preview, params: shader, zoomCenter: session.zoomCenter,
                                detail: session.detail, frameWidth: framePx, frameColor: vm.frameColor, margin: marginPx,
-                               clipWarning: vm.clipWarning && !showOriginal && maskView == nil)
+                               clipWarning: vm.clipWarning && !showOriginal && maskView == nil,
+                               zoomScale: session.zoomScale)
                     .gesture(previewGestures)
                 if let shader, mode == .masks, session.preview != nil, !showOriginal {
                     let frame = framePx + marginPx
                     MaskOverlay(lens: shader.lens, layers: layers, selectedId: selectedId, frame: frame,
-                                zoomCenter: session.zoomCenter, tool: selectedId != nil ? maskTool : .move,
-                                brush: vm.brush, paintAt: paintAt, sizeRing: Date().timeIntervalSince(sizeRingAt) < 0.9)
+                                zoomCenter: session.zoomCenter, zoomScale: session.zoomScale, zoomFrame: framePx,
+                                tool: selectedId != nil ? maskTool : .move, brush: vm.brush, paintAt: paintAt,
+                                sizeRing: Date().timeIntervalSince(sizeRingAt) < 0.9)
                     MaskTouchLayer(inputs: MaskInputs(
                         lens: shader.lens, layers: layers, selectedId: selectedId, frame: frame,
-                        zoomCenter: session.zoomCenter, tool: selectedId != nil ? maskTool : .move, brush: vm.brush,
+                        zoomCenter: session.zoomCenter, zoomScale: session.zoomScale, zoomFrame: framePx,
+                        tool: selectedId != nil ? maskTool : .move, brush: vm.brush,
                         actions: MaskActions(
                             onSelect: { selectedLayer = $0 },
                             onChange: { id, shape in vm.updateLayer(id) { $0.shape = shape } },
                             onStrokeBegin: vm.beginStroke, onStrokeExtend: vm.extendStroke,
-                            onStrokeCancel: vm.cancelStroke, onPan: vm.pan),
+                            onStrokeCancel: vm.cancelStroke, onPan: vm.pan, onZoom: pinchZoom),
                         onPaintAt: { paintAt = $0 }))
                 }
                 if let shader, mode == .leaks, session.preview != nil, !showOriginal {
                     let frame = framePx + marginPx
                     MaskOverlay(lens: shader.lens, layers: leakShapes, selectedId: selectedLeakId, frame: frame,
-                                zoomCenter: session.zoomCenter, tool: .move, brush: vm.brush, paintAt: nil, sizeRing: false,
+                                zoomCenter: session.zoomCenter, zoomScale: session.zoomScale, zoomFrame: framePx,
+                                tool: .move, brush: vm.brush, paintAt: nil, sizeRing: false,
                                 leaks: leakForms)
                     MaskTouchLayer(inputs: MaskInputs(
                         lens: shader.lens, layers: leakShapes, selectedId: selectedLeakId, frame: frame,
-                        zoomCenter: session.zoomCenter, tool: .move, brush: vm.brush,
+                        zoomCenter: session.zoomCenter, zoomScale: session.zoomScale, zoomFrame: framePx,
+                        tool: .move, brush: vm.brush,
                         actions: MaskActions(
                             onSelect: { selectedLeak = $0 },
                             onChange: { id, shape in vm.updateLeak(id) { $0 = $0.withShape(shape) } },
                             onStrokeBegin: { _, _ in }, onStrokeExtend: { _, _, _ in }, onStrokeCancel: { _ in },
-                            onPan: vm.pan),
+                            onPan: vm.pan, onZoom: pinchZoom),
                         onPaintAt: { _ in },
                         grabInside: true, leaks: leakForms,
                         onBend: { id, bend in vm.updateLeak(id) { $0.bend = bend } }))
@@ -170,10 +177,15 @@ struct EditorScreen: View {
     @ViewBuilder
     private func labels(maskView: String?) -> some View {
         let text = showOriginal && session.preview != nil ? "Original"
-            : [session.zoomCenter != nil ? "100%" : nil, maskView != nil ? "Mask" : nil].compactMap { $0 }.joined(separator: " · ")
+            : [session.zoomCenter != nil ? ZoomMath.label(session.zoomScale) : nil, maskView != nil ? "Mask" : nil].compactMap { $0 }.joined(separator: " · ")
         if !text.isEmpty {
             OverlayLabel(text).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).allowsHitTesting(false)
         }
+    }
+
+    /** Two fingers on the mask or leak handles' layer pinched (view pixels). */
+    private func pinchZoom(_ x: Float, _ y: Float, _ factor: Float) {
+        vm.zoomBy(x, y, factor: factor, extra: marginPx)
     }
 
     private func updateViewSize(_ s: CGSize) {
@@ -182,8 +194,9 @@ struct EditorScreen: View {
     }
 
     /**
-     * Double tap: 100% at that point / back to fit. Tap outside the photo: frame colour. Drag: pan at 100%.
-     * Press and hold: compare with the as-shot render (delayed so taps and drags don't flash it).
+     * Double tap: 100% at that point / back to fit. Pinch: zoom from fit up to 400% around where it started (stopping
+     * once at 100%). Tap outside the photo: frame colour. Drag: pan while zoomed. Press and hold: compare with the
+     * as-shot render (delayed so taps and drags don't flash it; never during a pinch).
      */
     private var previewGestures: some Gesture {
         let doubleTap = SpatialTapGesture(count: 2).onEnded { e in
@@ -202,16 +215,29 @@ struct EditorScreen: View {
             }
         }
         let hold = LongPressGesture(minimumDuration: 0.25)
-            .onEnded { _ in showOriginal = true }
+            .onEnded { _ in if pinchLast == nil { showOriginal = true } }
             .sequenced(before: DragGesture(minimumDistance: 0).onEnded { _ in showOriginal = false })
         let pan = DragGesture(minimumDistance: 1)
             .onChanged { v in
                 let d = CGSize(width: v.translation.width - panLast.width, height: v.translation.height - panLast.height)
                 panLast = v.translation
-                vm.pan(Float(d.width * scale), Float(d.height * scale))
+                // While pinching, the zoom keeps the photo under the fingers; a drag's single finger would fight it.
+                if pinchLast == nil { vm.pan(Float(d.width * scale), Float(d.height * scale)) }
             }
             .onEnded { _ in panLast = .zero }
+        let pinch = MagnifyGesture()
+            .onChanged { v in
+                // Zoom works on the cropped view; the crop tool shows the whole frame.
+                guard mode != .geometry else { return }
+                showOriginal = false
+                let factor = v.magnification / (pinchLast ?? 1)
+                pinchLast = v.magnification
+                vm.zoomBy(Float(v.startLocation.x * scale), Float(v.startLocation.y * scale), factor: Float(factor),
+                          extra: marginPx)
+            }
+            .onEnded { _ in pinchLast = nil }
         return doubleTap.exclusively(before: tap).simultaneously(with: hold.simultaneously(with: pan))
+            .simultaneously(with: pinch)
     }
 
     // MARK: - Panels

@@ -38,12 +38,18 @@ struct MaskGeometry {
     let h: CGFloat
     let long: CGFloat
 
-    init(lens: LensTransform, viewW: Int, viewH: Int, frame: Int, zoomCenter: (Float, Float)?) {
+    /**
+     * [frame]: the fit view's frame plus margin; [zoomFrame]: the frame the zoomed view keeps, [zoomScale] its view
+     * pixels per image pixel (as the renderer's).
+     */
+    init(lens: LensTransform, viewW: Int, viewH: Int, frame: Int, zoomCenter: (Float, Float)?, zoomScale: Float = 1,
+         zoomFrame: Int = 0) {
         self.lens = lens
         self.viewW = CGFloat(viewW)
         self.viewH = CGFloat(viewH)
         let rect = zoomCenter.map {
-            ZoomMath.zoomedRect(cx: $0.0, cy: $0.1, viewW: viewW, viewH: viewH, imgW: lens.outputWidth, imgH: lens.outputHeight)
+            ZoomMath.zoomedRect(cx: $0.0, cy: $0.1, viewW: viewW, viewH: viewH, imgW: lens.outputWidth,
+                                imgH: lens.outputHeight, scale: zoomScale, frame: zoomFrame)
         } ?? ZoomMath.fitRect(viewW: viewW, viewH: viewH, imgW: lens.outputWidth, imgH: lens.outputHeight, frame: frame)
         r = rect.map { CGFloat($0) }
         w = CGFloat(lens.width)
@@ -334,6 +340,8 @@ struct MaskActions {
     /** The stroke just begun turned out to be a two-finger pan: drop it. */
     let onStrokeCancel: (String) -> Void
     let onPan: (Float, Float) -> Void
+    /** Two fingers pinched: zoom by the factor around that view point (view pixels). */
+    var onZoom: (Float, Float, Float) -> Void = { _, _, _ in }
 }
 
 /** Everything the touch layer needs, read fresh for every touch. */
@@ -343,6 +351,9 @@ struct MaskInputs {
     var selectedId: String?
     var frame: Int
     var zoomCenter: (Float, Float)?
+    var zoomScale: Float = 1
+    /** The frame the zoomed view keeps around the photo (without the fit view's margin). */
+    var zoomFrame = 0
     var tool: MaskTool
     var brush: BrushSettings
     var actions: MaskActions
@@ -390,12 +401,14 @@ final class MaskTouchView: UIView {
     private var last: CGPoint = .zero
     private var panning = false
     private var lastCentroid: CGPoint?
+    /** The fingers' mean distance from their centroid at the last move, for a pinch. */
+    private var lastSpread: CGFloat?
 
     private var scale: CGFloat { window?.screen.scale ?? traitCollection.displayScale }
 
     private func makeGeometry(_ inp: MaskInputs) -> MaskGeometry {
         MaskGeometry(lens: inp.lens, viewW: Int(bounds.width * scale), viewH: Int(bounds.height * scale), frame: inp.frame,
-                     zoomCenter: inp.zoomCenter)
+                     zoomCenter: inp.zoomCenter, zoomScale: inp.zoomScale, zoomFrame: inp.zoomFrame)
     }
 
     private func px(_ p: CGPoint) -> CGPoint { CGPoint(x: p.x * scale, y: p.y * scale) }
@@ -456,6 +469,12 @@ final class MaskTouchView: UIView {
             dragLayer = nil
         }
         lastCentroid = centroid(touches)
+        lastSpread = touches.count >= 2 ? spread(touches, lastCentroid!) : nil
+    }
+
+    private func spread(_ touches: Set<UITouch>, _ c: CGPoint) -> CGFloat {
+        let pts = touches.map { $0.location(in: self) }
+        return pts.map { hypot($0.x - c.x, $0.y - c.y) }.reduce(0, +) / CGFloat(pts.count)
     }
 
     private func centroid(_ touches: Set<UITouch>) -> CGPoint {
@@ -468,10 +487,16 @@ final class MaskTouchView: UIView {
         let active = event?.allTouches?.filter { $0.phase != .ended && $0.phase != .cancelled } ?? touches
         if panning {
             let c = centroid(active)
+            let d = active.count >= 2 ? spread(active, c) : nil
             if active.count >= 2, let prev = lastCentroid {
+                // Pinch around where the fingers were, then follow them.
+                if let d, let before = lastSpread, before > 0, d > 0, abs(d / before - 1) > 0.001 {
+                    inp.actions.onZoom(Float(prev.x * scale), Float(prev.y * scale), Float(d / before))
+                }
                 inp.actions.onPan(Float((c.x - prev.x) * scale), Float((c.y - prev.y) * scale))
             }
             lastCentroid = c
+            lastSpread = d
             return
         }
         guard let t = touches.first else { return }
@@ -514,6 +539,7 @@ final class MaskTouchView: UIView {
         strokeId = nil
         panning = false
         lastCentroid = nil
+        lastSpread = nil
     }
 }
 
@@ -529,6 +555,9 @@ struct MaskOverlay: View {
     let selectedId: String?
     let frame: Int
     let zoomCenter: (Float, Float)?
+    var zoomScale: Float = 1
+    /** The frame the zoomed view keeps around the photo (without the fit view's margin). */
+    var zoomFrame = 0
     let tool: MaskTool
     let brush: BrushSettings
     /** Finger position in points, while painting. */
@@ -542,7 +571,7 @@ struct MaskOverlay: View {
     var body: some View {
         Canvas { ctx, size in
             let g = MaskGeometry(lens: lens, viewW: Int(size.width * scale), viewH: Int(size.height * scale), frame: frame,
-                                 zoomCenter: zoomCenter)
+                                 zoomCenter: zoomCenter, zoomScale: zoomScale, zoomFrame: zoomFrame)
             func pt(_ p: CGPoint) -> CGPoint { CGPoint(x: p.x / scale, y: p.y / scale) }
             func line(_ pts: [CGPoint], _ width: CGFloat, _ alpha: Double, dashed: Bool = false, closed: Bool = false) {
                 guard pts.count >= 2 else { return }

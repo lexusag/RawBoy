@@ -24,6 +24,7 @@ let autoHelp = [
         HelpItem("Swipe left or right", "Previous or next photo"),
         HelpItem("Undo, Redo", "The arrows in the top bar take this photo's last edit back, or bring it again."),
         HelpItem("Double-tap", "100% view; drag to pan, double-tap again to go back."),
+        HelpItem("Pinch", "Two fingers zoom around where they started, up to 400% (stops once at 100%); drag to pan. Out past the whole photo goes back to it."),
         HelpItem("Tap outside the photo", "Change the frame around it: grey, white or black."),
         HelpItem("Press and hold", "See the photo without the look."),
         HelpItem("Look, Adjust", "Look, Strength, Brightness and Warmth; Adjust has the auto develop's own sliders."),

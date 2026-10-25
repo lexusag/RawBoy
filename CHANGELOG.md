@@ -1,5 +1,12 @@
 # Changelog
 
+**RawBoy and Auto on iPhone: pinch to zoom (2026-10-25)**
+
+- RawBoy and RawBoy Auto (iOS): pinch the photo with two fingers to zoom from the whole photo up to 400% (it stops
+  once at 100%), as on Android and the web; drag to pan, zoom out past the whole photo to go back. Between the whole
+  photo and 100% the preview shows at once while the full-resolution part loads. Mask and leak handles follow the
+  zoom, and two fingers on them pinch too. The frame around the photo now stays in the zoomed view.
+
 **RawBoy on iPhone: Stripe masks (2026-10-25)**
 
 - RawBoy (iOS): the **Stripe** mask layer from Android and the web, under Masks › + Add: a soft band shaped like the
