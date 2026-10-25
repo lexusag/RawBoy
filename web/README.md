@@ -53,7 +53,7 @@ npx wrangler pages deploy dist --project-name rawboy   # first run asks to log i
 Publishing a GitHub release does the same in CI (`web` job in `.github/workflows/release.yml`), using the
 `CLOUDFLARE_API_TOKEN` (Account → Cloudflare Pages → Edit) and `CLOUDFLARE_ACCOUNT_ID` repository secrets.
 
-Production is `rawboy.pages.dev` (a custom domain's CNAME points there); each deploy also gets its own
+Production is `https://app.rawboy.link`, a custom domain on the Pages project `rawboy.pages.dev`; each deploy also gets its own
 `<hash>.rawboy.pages.dev` URL. Some networks' DNS filters block `*.pages.dev`.
 
 Custom domain, caching, and getting the site into Google and Bing: [Cloudflare and search engines](../docs/cloudflare.md).
@@ -63,7 +63,7 @@ Custom domain, caching, and getting the site into Google and Bing: [Cloudflare a
 `index.html` carries the title, description, canonical URL, Open Graph / Twitter card (`public/og-image.png`, 1200×630,
 the four app icons) and JSON-LD (`WebApplication`), and a static description of the app inside `#root` that crawlers
 without JavaScript read and React replaces on start. The `seo` plugin in `vite.config.ts` fills in the site's address
-(`SITE_URL`, default `https://rawboy.pages.dev`) and writes `robots.txt` and `sitemap.xml` into `dist/`. When the app
+(`SITE_URL`, default `https://app.rawboy.link`) and writes `robots.txt` and `sitemap.xml` into `dist/`. When the app
 gains features, keep that static text and the JSON-LD `featureList` roughly in step.
 
 ## Docker

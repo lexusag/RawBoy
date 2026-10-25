@@ -14,7 +14,7 @@ Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and
   [Film looks](docs/camera.md#film-looks-spektrafilm)). Licensed GPLv3 and developed in its own repository (see [Licence](#licence));
   installs next to RawBoy Camera. On iOS it is the `RawBoyFilm` target (same bundle id), on the `RawBoyFilmEngine` framework.
 - **RawBoy Web** (`web/`): RawBoy and RawBoy Auto in the browser, plus **RawBoy Browser** for culling a folder of
-  raws, as three tabs (see [RawBoy Web](docs/web.md)).
+  raws, as three tabs (see [RawBoy Web](docs/web.md)). Try it at **[app.rawboy.link](https://app.rawboy.link)**.
 
 - Decoding: **LibRaw 0.21** (CR2/CR3/NEF/ARW/RAF/RW2/ORF/DNG…), with the **Adobe DNG SDK 1.7.1** as fallback for DNGs LibRaw can't read — notably DNG 1.7 with JPEG XL compression (setup: [third_party/README.md](third_party/README.md)). RawBoy Film is built without the DNG SDK (see [Licence](#licence)), so JPEG XL DNGs don't open in it (its own Pixel/iPhone DNGs go through LibRaw).
 - Develop pipeline: GLES 3.0 fragment shader, so the preview updates in real time while sliders move.

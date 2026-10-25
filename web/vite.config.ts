@@ -31,11 +31,10 @@ function copyModels(): Plugin {
 
 /**
  * Search engines and link previews: fills %SITE_URL% in index.html (canonical, Open Graph, JSON-LD) and writes
- * robots.txt and sitemap.xml into the build. SITE_URL is the production origin; set it when a custom domain is the
- * main address (see docs/cloudflare.md).
+ * robots.txt and sitemap.xml into the build. SITE_URL overrides the main address (see docs/cloudflare.md).
  */
 function seo(): Plugin {
-  const site = (process.env.SITE_URL || 'https://rawboy.pages.dev').replace(/\/+$/, '');
+  const site = (process.env.SITE_URL || 'https://app.rawboy.link').replace(/\/+$/, '');
   return {
     name: 'rawboy-seo',
     // 'pre': before Vite parses the HTML, which rejects the placeholder in URLs.

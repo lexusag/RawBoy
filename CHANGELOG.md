@@ -4,8 +4,8 @@
 
 - RawBoy Web now has a proper title and description, a link preview card (the app icons) when the address is shared
   in chats and social media, a description of the app that search engines read, `robots.txt` and `sitemap.xml`.
-  The address used for search engines is `rawboy.pages.dev` until a custom domain is set (`SITE_URL`).
-  [Cloudflare and search engines](docs/cloudflare.md) covers the custom domain, caching and Google / Bing setup.
+  Its main address is `https://app.rawboy.link`. [Cloudflare and search engines](docs/cloudflare.md) covers the
+  domain, caching and Google / Bing setup.
 
 **New app icons (2026-10-25)**
 
