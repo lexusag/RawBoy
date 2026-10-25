@@ -10,6 +10,7 @@ import { ParamSlider, formatPlain, formatSigned } from '../common/ParamSlider';
 import { isPressedSlider } from '../common/sliderFocus';
 import { Preview, PreviewLabel, zoomLabel } from '../common/Preview';
 import { useTabScroll } from '../common/useTabScroll';
+import { SHORT_SCREEN, useMediaQuery } from '../common/useMediaQuery';
 import { ALL_FILM_LOOKS } from '../../engine/auto/looks/FilmLooks';
 import { isLensPreset, NO_LENS_PRESET, presetSections, replacesLook, type Preset } from '../../engine/develop/Presets';
 import { groupSummary } from '../pro/PresetsPanel';
@@ -542,6 +543,8 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
   // Look: the look and the two everyday controls; Adjust: every adjustment (those two again, then the offsets from the auto develop).
   const [tab, setTab] = useState<'Look' | 'Adjust'>('Look');
   const scroll = useTabScroll(tab);
+  // Regular iPhones in Safari: the tabs go on top and the look strip into the Look tab, so Adjust gets the whole panel.
+  const short = useMediaQuery(SHORT_SCREEN);
   const photo = state.photos.find((p) => p.id === id);
   const analysis = photo?.analysis;
   const loaded = state.sessionReady === id;
@@ -637,6 +640,83 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
     <ParamSlider label={label} value={photo.adjust[key]} min={-range} max={range} defaultValue={0} format={formatSigned} onChange={(v) => store.setAdjust(id, { [key]: v })} />
   );
 
+  const lookControls = (
+    <>
+      {photo.edits ? (
+        <div className="photo-preset">
+          <div className="title">
+            <div className="name">{EDITS_NAME}</div>
+            <div className="info">From the RawBoy tab · the sliders below adjust on top</div>
+          </div>
+          <button type="button" className="text" disabled={state.export != null} onClick={() => store.removeEdits(photo.id)}>
+            Use {photo.preset ? 'the preset' : 'a look'}
+          </button>
+        </div>
+      ) : photo.preset && replacesLook(photo.preset) ? (
+        <div className="photo-preset">
+          <div className="title">
+            <div className="name">{photo.preset.name}</div>
+            <div className="info">RawBoy preset · {groupSummary(photo.preset)}</div>
+          </div>
+          <button type="button" className="text" disabled={state.export != null} onClick={() => store.removePhotoPreset(photo.id)}>Use a look</button>
+        </div>
+      ) : (
+        <>
+          {photo.preset && (
+            // A preset without Light changes only its groups, on top of the look below.
+            <div className="photo-preset">
+              <div className="title">
+                <div className="name">{photo.preset.name}</div>
+                <div className="info">RawBoy preset · {groupSummary(photo.preset)} · on top of the look</div>
+              </div>
+              <button type="button" className="text" disabled={state.export != null} onClick={() => store.removePhotoPreset(photo.id)}>Remove</button>
+            </div>
+          )}
+          <ModeSwitch modes={LOOK_MODES} mode={photo.mode} onChange={(m) => store.setMode(photo.id, m)} className="look-mode" />
+          <LookStrip store={store} photo={photo} />
+        </>
+      )}
+      {state.lensPresets.length > 0 && (
+        // This photo's lens preset, to check or change it photo by photo.
+        <div className="photo-lens">
+          <LensPresetSelect
+            presets={state.lensPresets}
+            choice={photo.lensChoice}
+            disabled={state.export != null}
+            title={photo.lensPreset ? `Lens preset: ${photo.lensPreset.name}` : 'No lens preset on this photo'}
+            onChange={(c) => store.chooseLensPreset(c, new Set([photo.id]))}
+          />
+          {photo.lensChoice === null && (
+            <span className="muted">{photo.lensPreset ? photo.lensPreset.name : 'none for this lens'}</span>
+          )}
+        </div>
+      )}
+    </>
+  );
+  const tabs = (
+    <nav className="tabs small">
+      {(['Look', 'Adjust'] as const).map((t) => (
+        <button key={t} type="button" className={t === tab ? 'active' : ''} onClick={() => setTab(t)}>
+          {t}
+        </button>
+      ))}
+      {/* By the controls it changes; the top bar is full on phones. */}
+      <button
+        type="button"
+        className="text copy-previous"
+        disabled={state.export != null || index < 1}
+        title={index > 0 ? `Copy the look and settings of ${pages[index - 1].name} (C)` : 'Copy the look and settings of the photo before this one (C)'}
+        onClick={() => store.copyPrevious(id)}
+      >
+        Copy previous
+      </button>
+      {/* The top bar has no room for it on short phones. */}
+      <button type="button" className="text short-only" disabled={state.export != null || state.photos.length < 2} onClick={() => store.applyLookToAll(id)}>
+        Apply to all
+      </button>
+    </nav>
+  );
+
   return (
     <div className="editor">
       <header className="toolbar">
@@ -655,7 +735,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
         <button type="button" className="icon" title="Remove from the batch (Delete); the file stays" aria-label="Remove from batch" disabled={state.export != null} onClick={() => store.removeOpened(id)}>
           <DeleteIcon />
         </button>
-        <button type="button" className="text" disabled={state.export != null || state.photos.length < 2} onClick={() => store.applyLookToAll(id)}>Apply to all</button>
+        <button type="button" className="text short-hide" disabled={state.export != null || state.photos.length < 2} onClick={() => store.applyLookToAll(id)}>Apply to all</button>
         <button type="button" className="text" disabled={state.export != null} title="Open in the RawBoy tab with these settings" onClick={() => onEditInRawBoy(id)}>Edit<span className="wide-only"> in RawBoy</span></button>
         <button
           type="button"
@@ -730,73 +810,10 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
           {index < pages.length - 1 && !zoomed && <button type="button" className="nav next" onClick={() => go(1)} title="Next (→ or Space)">›</button>}
         </div>
         <aside className="sidebar auto-controls">
-          {photo.edits ? (
-            <div className="photo-preset">
-              <div className="title">
-                <div className="name">{EDITS_NAME}</div>
-                <div className="info">From the RawBoy tab · the sliders below adjust on top</div>
-              </div>
-              <button type="button" className="text" disabled={state.export != null} onClick={() => store.removeEdits(photo.id)}>
-                Use {photo.preset ? 'the preset' : 'a look'}
-              </button>
-            </div>
-          ) : photo.preset && replacesLook(photo.preset) ? (
-            <div className="photo-preset">
-              <div className="title">
-                <div className="name">{photo.preset.name}</div>
-                <div className="info">RawBoy preset · {groupSummary(photo.preset)}</div>
-              </div>
-              <button type="button" className="text" disabled={state.export != null} onClick={() => store.removePhotoPreset(photo.id)}>Use a look</button>
-            </div>
-          ) : (
-            <>
-              {photo.preset && (
-                // A preset without Light changes only its groups, on top of the look below.
-                <div className="photo-preset">
-                  <div className="title">
-                    <div className="name">{photo.preset.name}</div>
-                    <div className="info">RawBoy preset · {groupSummary(photo.preset)} · on top of the look</div>
-                  </div>
-                  <button type="button" className="text" disabled={state.export != null} onClick={() => store.removePhotoPreset(photo.id)}>Remove</button>
-                </div>
-              )}
-              <ModeSwitch modes={LOOK_MODES} mode={photo.mode} onChange={(m) => store.setMode(photo.id, m)} className="look-mode" />
-              <LookStrip store={store} photo={photo} />
-            </>
-          )}
-          {state.lensPresets.length > 0 && (
-            // This photo's lens preset, to check or change it photo by photo.
-            <div className="photo-lens">
-              <LensPresetSelect
-                presets={state.lensPresets}
-                choice={photo.lensChoice}
-                disabled={state.export != null}
-                title={photo.lensPreset ? `Lens preset: ${photo.lensPreset.name}` : 'No lens preset on this photo'}
-                onChange={(c) => store.chooseLensPreset(c, new Set([photo.id]))}
-              />
-              {photo.lensChoice === null && (
-                <span className="muted">{photo.lensPreset ? photo.lensPreset.name : 'none for this lens'}</span>
-              )}
-            </div>
-          )}
+          {short ? tabs : lookControls}
           <div className="controls-body" ref={scroll.ref} onScroll={scroll.onScroll}>
-            <nav className="tabs small">
-              {(['Look', 'Adjust'] as const).map((t) => (
-                <button key={t} type="button" className={t === tab ? 'active' : ''} onClick={() => setTab(t)}>
-                  {t}
-                </button>
-              ))}
-              {/* By the controls it changes; the top bar is full on phones. */}
-              <button
-                type="button"
-                className="text copy-previous"
-                disabled={state.export != null || index < 1}
-                title={index > 0 ? `Copy the look and settings of ${pages[index - 1].name} (C)` : 'Copy the look and settings of the photo before this one (C)'}
-                onClick={() => store.copyPrevious(id)}
-              >
-                Copy previous
-              </button>
-            </nav>
+            {!short && tabs}
+            {short && tab === 'Look' && <div className="look-controls">{lookControls}</div>}
             {tab === 'Look' ? (
               <>
                 {!(photo.preset && replacesLook(photo.preset)) && !photo.edits && <ParamSlider label="Strength" value={photo.strength} min={0} max={100} defaultValue={DEFAULT_STRENGTH} format={formatPlain} onChange={(v) => store.setStrength(id, v)} />}

@@ -2102,3 +2102,99 @@ line.curve-grid {
   display: flex;
   gap: 6px;
 }
+
+/*
+ * Regular iPhones in Safari (SHORT_SCREEN in useMediaQuery.ts): the page gets 550–700 px of height, and the panel
+ * under the photo held one slider in RawBoy and none in Auto (whose page ran off the bottom). The bars get tighter,
+ * the photo keeps 45% of the height and the panel takes the rest, however much its tab holds.
+ */
+.short-only {
+  display: none;
+}
+
+@media (max-width: 760px) and (max-height: 720px) {
+  .short-hide {
+    display: none;
+  }
+
+  .short-only {
+    display: revert;
+  }
+
+  .workspace > .preview,
+  .workspace > .preview-wrap {
+    min-height: 45%;
+  }
+
+  .sidebar {
+    max-height: none;
+    flex: 0 1 auto;
+  }
+
+  .histogram {
+    height: 32px;
+    margin-top: 6px;
+  }
+
+  .tabs button {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  /* Auto: the tabs sit on top of the panel (AutoApp), the look strip scrolls with the Look tab's sliders. */
+  .auto-controls > .tabs.small {
+    padding: 0 8px;
+  }
+
+  .look-controls {
+    margin: -8px -16px 4px;
+  }
+
+  .segmented.look-mode button {
+    padding-top: 4px;
+    padding-bottom: 4px;
+  }
+
+  .look-strip {
+    padding: 8px 12px;
+  }
+}
+
+/* The tool bars on those phones: a slimmer app switcher and 40 px buttons (36 for text) instead of 44. */
+@media (max-width: 560px) and (max-height: 720px) {
+  .toolbar {
+    padding-top: 2px;
+    padding-bottom: 4px;
+    min-height: 0;
+  }
+
+  .toolbar .app-switcher {
+    margin-bottom: 2px;
+  }
+
+  .toolbar .app-switcher button {
+    min-height: 28px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+  }
+
+  .toolbar button {
+    min-height: 36px;
+  }
+
+  .toolbar button.icon,
+  .toolbar button.open {
+    min-height: 40px;
+  }
+
+  .pro-toolbar button.icon,
+  .pro-toolbar button.open {
+    padding-top: 2px;
+    padding-bottom: 2px;
+  }
+
+  /* Auto's photo view: the back arrow, name, undo, redo, remove, Edit and Export on one line at 375 px. */
+  .toolbar:not(.pro-toolbar) {
+    column-gap: 4px;
+  }
+}
