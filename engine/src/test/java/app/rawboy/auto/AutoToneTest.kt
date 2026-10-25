@@ -2,6 +2,7 @@ package app.rawboy.auto
 
 import app.rawboy.auto.analysis.AutoTone
 import app.rawboy.auto.analysis.NoiseLevel
+import app.rawboy.auto.analysis.SceneStats
 import app.rawboy.develop.DevelopParams
 import app.rawboy.develop.ToneMapper
 import org.junit.Assert.assertEquals
@@ -28,5 +29,20 @@ class AutoToneTest {
         assertEquals(Triple(0f, 6f, 15f), AutoTone.measuredNoiseSettings(NoiseLevel(0.0023f, 0.0019f), 0f))
         // Very noisy: capped at 100.
         assertEquals(100f, AutoTone.measuredNoiseSettings(NoiseLevel(0.05f, 0.05f), 0f).second)
+    }
+
+    @Test
+    fun phoneAeIsKeptUnlessItWentDark() {
+        fun stats(key: Float, p98: Float) = SceneStats(
+            key, -8f, -7f, -4f, p98, p98 + 0.2f, 0f, 0.1f, 0f, 0f, 0f, 0f, 100f, IntArray(1),
+        )
+        // A normal or bright scene (a white wardrobe): the phone's exposure, even with highlights near clip.
+        assertEquals(0f, AutoTone.exposure(stats(0.06f, -1f), phoneAe = true), 1e-6f)
+        assertEquals(0f, AutoTone.exposure(stats(0.15f, -0.2f), phoneAe = true), 1e-6f)
+        // The AE took the scene down for a white bird or a window: lifted back to the phone's normal key, highlights
+        // near clip don't hold it down.
+        assertEquals(1.5f, AutoTone.exposure(stats(0.06f / 2.8284271f, -0.1f), phoneAe = true), 1e-4f)
+        // Capped at +2 EV.
+        assertEquals(2f, AutoTone.exposure(stats(0.001f, -3f), phoneAe = true), 1e-6f)
     }
 }

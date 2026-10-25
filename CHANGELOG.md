@@ -1,5 +1,12 @@
 # Changelog
 
+**Camera: no more dark frames when something bright is in the middle (2026-10-25)**
+
+- RawBoy Camera and RawBoy Film (Android): the Pixel's own auto exposure protects highlights, so a white pigeon or a
+  window in the middle of the frame took the whole picture 1-2 EV down. The viewfinder and the photo now lift the
+  frame back to a normal brightness when that happens (up to +2 EV; AgX and Highlights roll the bright part off).
+  Scenes the phone already exposes normally are unchanged.
+
 **Camera: photos and viewfinder as bright as the phone's own camera (2026-10-25)**
 
 - RawBoy Camera and RawBoy Film (Android): ordinary scenes came out 1-2 EV darker than the Pixel's camera app, in the
