@@ -1,5 +1,11 @@
 # Changelog
 
+**Auto: gentler measured luma denoise (2026-10-25)**
+
+- RawBoy Auto and RawBoy's Auto button (Android, iOS, web): the luma Denoise Auto measures is 10 lower (down to 0),
+  so Auto's Denoise at 0 now looks like -5 did before; clean photos get no luma denoise. Colour denoise and sharpening
+  are unchanged, and the Denoise slider keeps its range on top.
+
 **Pinch to zoom on phones (2026-10-25)**
 
 - RawBoy and Auto (Android, and the web on phones and tablets): two fingers zoom the photo smoothly around their
