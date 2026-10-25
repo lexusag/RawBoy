@@ -116,6 +116,14 @@ data class AutoPhoto(
     }
 }
 
+/** The photo with the auto develop's denoise, colour denoise and sharpening in its RawBoy edits (itself without either). */
+private fun AutoPhoto.withAutoNoise(): AutoPhoto {
+    val e = edits ?: return this
+    val auto = analysis?.autoBase ?: return this
+    val noise = e.copy(denoise = auto.denoise, colorDenoise = auto.colorDenoise, sharpening = auto.sharpening)
+    return if (noise == e) this else copy(edits = noise)
+}
+
 /** A photo's edits, as Undo and Redo bring them back. */
 private data class Develop(
     val look: Look,
@@ -686,6 +694,30 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
             p.withLookOf(source).let { it.copy(adjust = it.adjust.copy(brightness = source.adjust.brightness)) }
         }
         _message.value = "Copied from ${source.name}"
+    }
+
+    /**
+     * "Auto denoise all", for a batch that's otherwise done: every photo gets the denoise, colour denoise and sharpening
+     * the auto develop measured on it (presets never override those here), so the Denoise slider goes back to 0 and
+     * RawBoy edits take the measured values in place of their own (those of photos still being analysed stay); looks,
+     * presets, lens corrections and the other sliders stay. One undo step per photo. [ids] (the grid's selection): only
+     * those photos. Not while exporting.
+     */
+    fun autoDenoiseAll(ids: Set<String>? = null) {
+        if (_export.value != null) return
+        val changed = _photos.value.filter { p ->
+            (ids == null || p.id in ids) && (p.adjust.denoise != 0f || p.withAutoNoise().edits != p.edits)
+        }
+        changed.forEach { p -> changeDevelop(p.id, force = true) { it.withAutoNoise().copy(adjust = it.adjust.copy(denoise = 0f)) } }
+        _message.value = when (changed.size) {
+            0 -> when {
+                ids == null -> "Every photo already has its auto denoise"
+                ids.size == 1 -> "This photo already has its auto denoise"
+                else -> "These photos already have their auto denoise"
+            }
+            1 -> "Auto denoise on 1 photo"
+            else -> "Auto denoise on ${changed.size} photos"
+        }
     }
 
     /** [force]: its own undo step (false: a slider, coalesced; null: Undo or Redo itself, not recorded). */

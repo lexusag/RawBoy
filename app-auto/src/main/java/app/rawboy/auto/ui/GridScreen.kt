@@ -130,6 +130,10 @@ fun GridScreen(vm: AutoViewModel, snackbar: SnackbarHostState, pickPhotos: () ->
                         IconButton(onClick = { vm.rotate(selection, 1) }, enabled = !exporting) {
                             Text("↻", style = MaterialTheme.typography.titleLarge, modifier = Modifier.semantics { contentDescription = "Rotate right" })
                         }
+                        // Each selected photo's own measured denoise in place of its Denoise slider.
+                        IconButton(onClick = { vm.autoDenoiseAll(selection) }, enabled = !exporting) {
+                            Icon(DenoiseIcon, contentDescription = "Auto denoise")
+                        }
                         // A preset file for just these photos (one scene); the rest of the batch keeps its own.
                         IconButton(
                             onClick = {
@@ -212,6 +216,12 @@ fun GridScreen(vm: AutoViewModel, snackbar: SnackbarHostState, pickPhotos: () ->
                             modifier = Modifier.align(Alignment.CenterVertically),
                         ) {
                             Text(if (sort == PhotoSort.DATE) "Sort: Shoot date" else "Sort: File name", maxLines = 1)
+                        }
+                    }
+                    // For a finished series: each photo's own measured denoise in place of its Denoise slider.
+                    if (photos.isNotEmpty()) {
+                        TextButton(onClick = vm::autoDenoiseAll, enabled = !exporting, modifier = Modifier.align(Alignment.CenterVertically)) {
+                            Text("Auto denoise all", maxLines = 1)
                         }
                     }
                     // Lens presets from RawBoy: by lens they correct every photo taken with their lens, whatever its
@@ -478,6 +488,41 @@ private val PresetsIcon: ImageVector by lazy {
             pathData = addPathNodes(
                 "M19,18l2,1V3c0,-1.1 -0.9,-2 -2,-2H8.99C7.89,1 7,1.9 7,3h10c1.1,0 2,0.9 2,2v13z" +
                     "M15,5H5c-1.1,0 -2,0.9 -2,2v16l7,-3 7,3V7c0,-1.1 -0.9,-2 -2,-2z",
+            ),
+            fill = SolidColor(Color.Black),
+        )
+        .build()
+}
+
+/** Material "blur_on" icon (Apache 2.0), as the web's Auto denoise button. */
+private val DenoiseIcon: ImageVector by lazy {
+    ImageVector.Builder("BlurOn", 24.dp, 24.dp, 24f, 24f)
+        .addPath(
+            pathData = addPathNodes(
+                "M6 13c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z" +
+                    "m0 4c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z" +
+                    "m0-8c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z" +
+                    "m-3 .5c-.28 0-.5.22-.5.5s.22.5.5.5.5-.22.5-.5-.22-.5-.5-.5z" +
+                    "M6 5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z" +
+                    "m15 5.5c.28 0 .5-.22.5-.5s-.22-.5-.5-.5-.5.22-.5.5.22.5.5.5z" +
+                    "M14 7c.55 0 1-.45 1-1s-.45-1-1-1-1 .45-1 1 .45 1 1 1z" +
+                    "m0-3.5c.28 0 .5-.22.5-.5s-.22-.5-.5-.5-.5.22-.5.5.22.5.5.5z" +
+                    "m-11 10c-.28 0-.5.22-.5.5s.22.5.5.5.5-.22.5-.5-.22-.5-.5-.5z" +
+                    "m7 7c-.28 0-.5.22-.5.5s.22.5.5.5.5-.22.5-.5-.22-.5-.5-.5z" +
+                    "m0-17c.28 0 .5-.22.5-.5s-.22-.5-.5-.5-.5.22-.5.5.22.5.5.5z" +
+                    "M10 7c.55 0 1-.45 1-1s-.45-1-1-1-1 .45-1 1 .45 1 1 1z" +
+                    "m0 5.5c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5 1.5-.67 1.5-1.5-.67-1.5-1.5-1.5z" +
+                    "m8 .5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z" +
+                    "m0 4c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z" +
+                    "m0-8c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z" +
+                    "m0-4c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z" +
+                    "m3 8.5c-.28 0-.5.22-.5.5s.22.5.5.5.5-.22.5-.5-.22-.5-.5-.5z" +
+                    "M14 17c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z" +
+                    "m0 3.5c-.28 0-.5.22-.5.5s.22.5.5.5.5-.22.5-.5-.22-.5-.5-.5z" +
+                    "m-4-12c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5 1.5-.67 1.5-1.5-.67-1.5-1.5-1.5z" +
+                    "m0 8.5c-.55 0-1 .45-1 1s.45 1 1 1 1-.45 1-1-.45-1-1-1z" +
+                    "m4-4.5c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5 1.5-.67 1.5-1.5-.67-1.5-1.5-1.5z" +
+                    "m0-4c-.83 0-1.5.67-1.5 1.5s.67 1.5 1.5 1.5 1.5-.67 1.5-1.5-.67-1.5-1.5-1.5z",
             ),
             fill = SolidColor(Color.Black),
         )

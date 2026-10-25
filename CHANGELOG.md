@@ -1,5 +1,14 @@
 # Changelog
 
+**Auto: Auto denoise all (2026-10-25)**
+
+- RawBoy Auto (Android, web): **Auto denoise all** in the grid's top row gives every photo of the batch its own
+  measured denoise, colour denoise and sharpening, for when a series is finished with its presets and lens
+  corrections. The Denoise slider goes back to 0 and RawBoy edits take the measured values; on the web presets also
+  lose their Denoise & sharpening group (photos added "As is" use the ISO table). Looks, presets, lens corrections and the
+  other settings stay; Undo in a photo takes it back. With photos selected, the selection bar's Auto denoise (dots
+  icon) does it for those photos only. Not on iOS yet.
+
 **Halation: stronger top of the slider, follows Exposure (2026-10-25)**
 
 - RawBoy (Film tone mapper, Android, iOS, web): Halation 100 is still the stock's own glow, which is faint (as on

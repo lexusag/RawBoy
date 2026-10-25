@@ -16,6 +16,7 @@ import { groupSummary } from '../pro/PresetsPanel';
 import { PresetStore } from '../pro/PresetStore';
 import { PresetsIcon } from '../common/PresetsIcon';
 import { DeleteIcon } from '../common/DeleteIcon';
+import { DenoiseIcon } from '../common/DenoiseIcon';
 import { UndoIcon } from '../common/UndoIcon';
 import { AppSwitcher, HelpButton } from '../common/AppNav';
 import { activeLook, EDITS_NAME, EXPORT_SIZES, lookName, paramsOf, SETTINGS, type AutoPhoto, type AutoStore, type ImportMode, type LookMode } from './AutoStore';
@@ -146,6 +147,16 @@ function GridView({ store, scroll, lastViewed }: {
             <button
               type="button"
               className="icon"
+              title="Auto denoise: the denoise and sharpening measured on each selected photo, in place of what presets, RawBoy edits or the Denoise slider set"
+              aria-label="Auto denoise"
+              disabled={exporting}
+              onClick={() => store.autoDenoiseAll(new Set(selection))}
+            >
+              <DenoiseIcon />
+            </button>
+            <button
+              type="button"
+              className="icon"
               title="RawBoy preset for these photos (one per scene)"
               aria-label="Preset"
               disabled={exporting}
@@ -222,6 +233,18 @@ function GridView({ store, scroll, lastViewed }: {
                 onClick={() => store.setSort(state.sort === 'date' ? 'name' : 'date')}
               >
                 Sort: {state.sort === 'date' ? 'Shoot date' : 'File name'}
+              </button>
+            )}
+            {state.photos.length > 0 && (
+              // For a finished series: each photo's own measured denoise, over presets, RawBoy edits and the slider.
+              <button
+                type="button"
+                className="text"
+                disabled={exporting}
+                title="Give every photo the denoise and sharpening measured on it (its noise and ISO), in place of what presets, RawBoy edits or the Denoise slider set. Looks, presets, lens corrections and other settings stay."
+                onClick={() => store.autoDenoiseAll()}
+              >
+                Auto denoise all
               </button>
             )}
             {state.lensPresets.length > 0 && (
