@@ -6,6 +6,24 @@
   showed as a checkered square, from the coarse copy of the photo it is made from. The glow is now round and smooth
   at any zoom, with the same overall strength.
 
+**RGB primaries: wider hue and purity (2026-10-25)**
+
+- RawBoy (Android, iOS, web): the RGB primaries hue sliders reach ±45° (were ±30°) and the purity sliders ×0.5–×2
+  (were ×0.71–×1.41, now -200..200 on the same scale, so earlier edits and presets look the same). Hue stops at 45°
+  because past it two primaries can be turned onto almost the same hue and the matrix blows up (entries up to ~29 at
+  ±60° against ~2.3 at ±45°).
+
+**RawBoy: select or deselect all groups when saving a preset (2026-10-25)**
+
+- RawBoy (Android, iOS, web): the **Save preset** dialog has a **Select all** / **Deselect all** button beside
+  Include, so a preset with every group, or with just one or two, takes one tap instead of ticking each box.
+
+**Auto: half the measured luma denoise (2026-10-25)**
+
+- RawBoy Auto and RawBoy's Auto button (Android, iOS, web): the luma Denoise Auto measures is halved again, about one
+  part luma to two parts colour (a noisy Canon G9 shot: 34 → 17, colour 93). Colour denoise and sharpening are
+  unchanged, and the Denoise slider keeps its range on top.
+
 **RawBoy: light leaks rebuilt like a Photoshop light leak (2026-10-25)**
 
 - RawBoy (Android, web): light leaks are now made the way a Photoshop or Affinity light leak is: a white shape,
@@ -31,6 +49,7 @@
   second finger that lands on a mask or leak handle puts it back and pinches instead; a brush stroke just begun is
   dropped (Android already did this). Auto's swipe to the next photo ignores two-finger touches. Double-tap still
   toggles 100%. Not on iOS yet.
+
 **Auto: Auto denoise works on "As is" photos (2026-10-25)**
 
 - RawBoy Auto (web): photos added **As is** have no auto develop, so Auto denoise found nothing to change and their
