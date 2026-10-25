@@ -80,12 +80,35 @@ public struct Preset: Identifiable, Equatable, Sendable {
      * of their look (or RawBoy preset), changing only the lens corrections.
      */
     public var isLensPreset: Bool { groups == [.lens] }
+
+    /**
+     * The preset makes photos black and white: Saturation -100, or a bundled monochrome LUT at full strength (and no
+     * film stock, which drops the LUT). Preset lists show these in their own section.
+     */
+    public var isMonochrome: Bool {
+        if case let .number(s) = values["saturation"], s <= -100 { return true }
+        if case let .text(film) = values["film"], film != nil { return false }
+        guard case let .text(lut) = values["lut"], Looks.isMonochromeLut(lut) else { return false }
+        if case let .number(amount) = values["lutAmount"] { return amount >= 100 }
+        return true
+    }
 }
 
 /** Capturing, applying and the JSON file format of Presets (mirrored in Android's Presets.kt and web's Presets.ts). */
 public enum Presets {
     public static let format = "rawboy-preset"
     public static let version = 1
+
+    /**
+     * [presets] in sections for a list: colour ones, then black and white ones (Preset.isMonochrome) under their own
+     * heading. With no black and white preset there is one section without a heading (nil).
+     */
+    public static func sections(_ presets: [Preset]) -> [(label: String?, presets: [Preset])] {
+        let mono = presets.filter(\.isMonochrome)
+        if mono.isEmpty { return [(nil, presets)] }
+        let color = presets.filter { !$0.isMonochrome }
+        return (color.isEmpty ? [] : [("Color", color)]) + [("Black & white", mono)]
+    }
 
     public static func capture(_ name: String, _ params: DevelopParams, _ groups: Set<PresetGroup>, lens: String? = nil) -> Preset {
         var values: [String: PresetValue] = [:]

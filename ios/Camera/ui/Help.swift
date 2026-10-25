@@ -20,6 +20,6 @@ let cameraHelp = [
     HelpSection("Top bar", [
         HelpItem("RAW", "Keep the DNG next to the JPEG (lit) or not (struck through)."),
         HelpItem("Flash", "Turns the flash on or off."),
-        HelpItem("Settings", "JPEG quality, Smaller photos, Geotag (saves where each photo was taken; asks for location access when turned on), Histogram (live red, green and blue levels in a corner of the viewfinder), Remember camera & settings and the licences."),
+        HelpItem("Settings", "JPEG quality, Smaller photos, Geotag (saves where each photo was taken; asks for location access when turned on), Shutter sound (a click on each shot, off by default; always on where the law requires it), Histogram (live red, green and blue levels in a corner of the viewfinder), Remember camera & settings and the licences."),
     ]),
 ]

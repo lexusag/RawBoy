@@ -22,6 +22,28 @@
   with the knob and bent with the square; Intensity, Width and Length or Size and Stretch, Rotation, Bend, Taper,
   Warp, Softness, Glow and Colour. They export with the photo, reset for the next one and aren't kept in presets.
 
+**iOS catches up: colour and black & white sections, Auto denoise all, Remove from batch (2026-10-25)**
+
+- RawBoy, Auto and Camera (iOS): look and preset pickers list black and white ones apart from the colour ones, as on
+  Android and the web: RawBoy's included LUTs and Presets panel, Auto's look strip (Color and Black & white headings
+  with a divider), Camera's Look menu. Auto's preset dialog lists colour presets first, then black and white ones
+  marked B&W.
+- RawBoy Auto (iOS): **Auto denoise all** in the grid's top row, and **Auto denoise** (dots) in the selection bar,
+  give photos their own measured denoise in place of the Denoise slider, as on Android and the web.
+- RawBoy Auto (iOS): **Remove from batch** in a new … menu in the photo view's top bar (with Apply to all) takes the
+  open photo out of the batch and goes on to the next.
+- RawBoy Auto (iOS): the frame around a photo that is still rendering stays, instead of blinking out.
+- RawBoy (iOS): the file name and shot info line scrolls sideways instead of shortening the name.
+
+**Camera on iPhone: as bright as the phone's camera, optional shutter sound (2026-10-25)**
+
+- RawBoy Camera (iOS): the exposure fixes Android got today. The viewfinder and the photos keep the iPhone's own auto
+  exposure instead of metering the raw again to Auto's darker target, and lift the frame back to a normal brightness
+  (up to +2 EV) when the AE took it down to protect something bright, such as a window or a white bird. Faces still
+  steer it. Flash shots keep the iPhone's flash exposure too.
+- RawBoy Camera (iOS): Settings has a **Shutter sound** switch, off by default, as on Android. Where the iPhone can't
+  silence it (the law in Japan and Korea, or iOS before 18) it shows on and greyed out.
+
 **Camera: no more dark frames when something bright is in the middle (2026-10-25)**
 
 - RawBoy Camera and RawBoy Film (Android): the Pixel's own auto exposure protects highlights, so a white pigeon or a

@@ -238,7 +238,15 @@ private struct LookPicker: View {
         HStack(spacing: 8) {
             Text("Look").font(.subheadline).frame(width: 88, alignment: .leading)
             Picker("Look", selection: Binding(get: { selectedId }, set: { onSelect($0) })) {
-                ForEach(Edition.looks) { Text($0.name).tag($0.id) }
+                // Colour and black and white looks under their own headings, when the list has both.
+                let mono = Edition.looks.filter(\.monochrome)
+                let color = Edition.looks.filter { !$0.monochrome }
+                if mono.isEmpty || color.isEmpty {
+                    ForEach(Edition.looks) { Text($0.name).tag($0.id) }
+                } else {
+                    Section("Color") { ForEach(color) { Text($0.name).tag($0.id) } }
+                    Section("Black & white") { ForEach(mono) { Text($0.name).tag($0.id) } }
+                }
             }
             .pickerStyle(.menu)
             .tint(Color.cameraAccent)
@@ -292,6 +300,15 @@ private struct SettingsSheet: View {
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
+                    // Where the law requires the click, iOS plays it anyway: shown on and locked.
+                    Toggle(isOn: Binding(get: { vm.settings.shutterSound || vm.shutterSoundRequired }, set: vm.setShutterSound)) {
+                        VStack(alignment: .leading) {
+                            Text("Shutter sound")
+                            Text(vm.shutterSoundRequired ? "Can't be turned off on this iPhone; always on" : "A click on each shot")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    .disabled(vm.shutterSoundRequired)
                     Toggle(isOn: Binding(get: { vm.settings.showHistogram }, set: vm.setShowHistogram)) {
                         VStack(alignment: .leading) {
                             Text("Histogram")
