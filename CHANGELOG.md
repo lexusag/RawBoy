@@ -1,5 +1,14 @@
 # Changelog
 
+**Camera: photos and viewfinder as bright as the phone's own camera (2026-10-25)**
+
+- RawBoy Camera and RawBoy Film (Android): ordinary scenes came out 1-2 EV darker than the Pixel's camera app, in the
+  viewfinder and in the saved photos (a white wardrobe turned grey, a room with a window went nearly black). The
+  phone's auto exposure had already exposed the raw, but the auto develop metered it again to the target Auto uses
+  for camera raws, which sits well below a phone's, and bright windows in the metered box pulled it down further.
+  Camera now keeps the phone's exposure, as Auto already does for Pixel DNGs; faces still steer it. Flash shots
+  (exposed manually) are metered as before.
+
 **Browser: choose the look when sending to Auto (2026-10-25)**
 
 - RawBoy Browser (web): **Send to Auto** now asks what the photos get: **Looks** (a suggested colour look), **Film**

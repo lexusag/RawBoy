@@ -52,7 +52,8 @@ object AutoAnalysis {
      * The same for an already decoded [image] (kept open, e.g. to export it next). Blocking.
      * [noiseIsoScale]: see [AutoTone.develop]. [fallbackIso] is used when the file has no ISO (e.g. from the capture).
      * [detectSkin] false skips skin detection (face metering, skin retouch): the camera saw no face.
-     * [meter]: see [SceneAnalyzer.analyze].
+     * [meter]: see [SceneAnalyzer.analyze]. [cameraMetered]: keep the raw's own exposure (see [AutoTone.cameraMetered]):
+     * RawBoy Camera's raws are exposed by the phone's auto exposure.
      */
     fun analyze(
         context: Context,
@@ -62,17 +63,18 @@ object AutoAnalysis {
         fallbackIso: Float = 0f,
         detectSkin: Boolean = true,
         meter: MeterArea? = null,
+        cameraMetered: Boolean = false,
     ): Analysis {
         val t0 = System.nanoTime()
         val (base, bloom) = copiesOf(image)
         Log.d(TAG, "small copies: ${(System.nanoTime() - t0) / 1_000_000} ms")
-        val info = Info.of(image).let { if (it.iso > 0f) it else Info(it.lens, fallbackIso, it.defaults) }
+        val info = Info.of(image).let { Info(it.lens, if (it.iso > 0f) it.iso else fallbackIso, it.defaults, cameraMetered) }
         return analyze(context, base, bloom, info, label, noiseIsoScale, detectSkin, meter)
     }
 
     /**
-     * [cameraMetered]: see [AutoTone.cameraMetered]; [noise]: the measured noise. Only Auto uses them (Camera meters
-     * the scene live itself and keeps its ISO-based denoise, which has no time cost per shot).
+     * [cameraMetered]: see [AutoTone.cameraMetered]; [noise]: the measured noise, only Auto's (Camera keeps its ISO-based
+     * denoise, which has no time cost per shot).
      */
     private class Info(
         val lens: LensInfo,
