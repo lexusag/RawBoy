@@ -127,7 +127,9 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   with per-lens keys (`setPhysicalCameraKey`) and per-lens results/characteristics for DngCreator; fallback: open the
   physical id directly), `CameraViewModel.kt` (live auto develop, capture → DNG →
   one-at-a-time develop → jpegli JPEG, `previewScale` calibration from raw key / viewfinder key),
-  `CameraSettings.kt`, `ui/`. Geotag (off by default; location permission asked only when switched on):
+  `CameraSettings.kt`, `ui/`. Exposure: the viewfinder and shots keep the phone's AE (`cameraMetered = true`; flash
+  shots, AE off, are re-metered): re-metering to `AutoTone.TARGET_KEY` put rooms 1-2 EV under the Pixel's camera.
+  Geotag (off by default; location permission asked only when switched on):
   `capture/LocationTracker.kt` (platform LocationManager, fused else GPS + network; iOS `capture/LocationTracker.swift`,
   Core Location) → `DngCreator.setLocation` (no altitude) → `export/DngGps.kt` appends a full GPS IFD to the DNG and
   repoints IFD0's GPSInfo; the JPEG copies it via `Exporter.EXIF_TAGS`. iOS: `replacementMetadata` adds ImageIO's GPS

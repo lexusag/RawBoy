@@ -19,8 +19,9 @@ shows them.
   recalibrate the viewfinder's exposure. The choice is remembered.
 - **Shooting:** each shot is one raw frame from the selected lens (Camera2 `RAW_SENSOR`, 12 MP on the Pixel's main lens), saved as DNG to
   `Pictures/RawBoy Camera/RAW/IMG_<date>_<time>.dng`. It is then developed in the background exactly as RawBoy Auto
-  develops a raw (auto exposure, tone and noise from the raw itself, then the look with the controls as they were at
-  the shutter) and saved as `Pictures/RawBoy Camera/IMG_<date>_<time>-camera.jpg`. You can keep shooting meanwhile;
+  develops a raw (tone and noise from the raw itself, then the look with the controls as they were at the shutter)
+  and saved as `Pictures/RawBoy Camera/IMG_<date>_<time>-camera.jpg`. The exposure is the phone's own auto exposure,
+  kept rather than metered again (flash shots, exposed manually, are metered by RawBoy). You can keep shooting meanwhile;
   "Saving N…" shows the queue. The thumbnail opens the last photo. Exposure is metered on the middle half of the
   frame (width and height); a focus lock meters at its point instead.
 - **Merge 8 frames** (the burst button in the top bar, or Settings; off by default): each shot without flash takes 8 raw frames in a quick burst and

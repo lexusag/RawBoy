@@ -412,7 +412,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             } ?: DevelopParams()
             val skin = state?.faces?.takeIf { it.isNotEmpty() }?.let { faceMask(it, base) }
             val stats = SceneAnalyzer.analyze(base.base, skin, state?.iso ?: 0f, meterArea())
-            live = Live(base, stats, defaults, AutoTone.develop(stats, defaults))
+            // The phone's auto exposure set the frame (and the shot's raw): keep it, as the shot does (see develop).
+            live = Live(base, stats, defaults, AutoTone.develop(stats, defaults, cameraMetered = true))
             publish()
         }
     }
@@ -672,8 +673,13 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 val analysisStart = System.nanoTime()
                 // A merged burst is as clean as one frame at 1/frames the ISO: denoise for that.
                 val noiseScale = (if (s.front) FRONT_NOISE_ISO_SCALE else PHONE_NOISE_ISO_SCALE) / shot.effectiveFrames
+                // The phone's auto exposure already metered the raw (Camera2 AE on the same box, its post-raw boost in
+                // the DNG's BaselineExposure): keep it. Re-metering it to Auto's camera-raw target pulled ordinary rooms
+                // 1-2 EV darker than the phone's camera, as it did Pixel DNGs in Auto. Flash shots are exposed manually
+                // (AE off), so they are metered here, which also calibrates the flash guide.
                 val a = AutoAnalysis.analyze(
                     app, img, shot.name, noiseScale, shot.iso, detectSkin = shot.mayHaveFace, meter = shot.meter,
+                    cameraMetered = shot.flashGuide == null,
                 )
                 val analysisMs = ms(analysisStart)
                 val looked = LookApplier.apply(a.autoBase, look, s.strength, Adjustments(brightness = s.brightness, warmth = s.warmth), a.stats.hasFace)
