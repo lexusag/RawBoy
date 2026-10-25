@@ -8,6 +8,15 @@
   with the knob and bent with the square; Intensity, Width and Length or Size and Stretch, Rotation, Bend, Taper,
   Warp, Softness, Glow and Colour. They export with the photo, reset for the next one and aren't kept in presets.
 
+**Camera on iPhone: as bright as the phone's camera, optional shutter sound (2026-10-25)**
+
+- RawBoy Camera (iOS): the exposure fixes Android got today. The viewfinder and the photos keep the iPhone's own auto
+  exposure instead of metering the raw again to Auto's darker target, and lift the frame back to a normal brightness
+  (up to +2 EV) when the AE took it down to protect something bright, such as a window or a white bird. Faces still
+  steer it. Flash shots keep the iPhone's flash exposure too.
+- RawBoy Camera (iOS): Settings has a **Shutter sound** switch, off by default, as on Android. Where the iPhone can't
+  silence it (the law in Japan and Korea, or iOS before 18) it shows on and greyed out.
+
 **Camera: no more dark frames when something bright is in the middle (2026-10-25)**
 
 - RawBoy Camera and RawBoy Film (Android): the Pixel's own auto exposure protects highlights, so a white pigeon or a

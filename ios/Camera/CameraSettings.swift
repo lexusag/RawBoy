@@ -40,6 +40,8 @@ struct CameraSettings: Equatable {
     var showHistogram = false
     /** Save where each photo was taken (GPS tags in the JPEG and DNG). Location access is asked for when turned on. */
     var geotag = false
+    /** Play the camera shutter click on each shot. Where the law requires it, iOS plays it regardless. */
+    var shutterSound = false
     /**
      * Per camera (lensKey): gain from the linearised preview to raw units (1.0 = sensor clip), learned
      * from each shot (raw key / viewfinder key), so the viewfinder's auto exposure matches the final.
@@ -84,6 +86,7 @@ enum CameraSettingsStore {
         s.rememberLast = d.bool(forKey: "camera.rememberLast")
         s.showHistogram = d.object(forKey: "camera.showHistogram") as? Bool ?? def.showHistogram
         s.geotag = d.object(forKey: "camera.geotag") as? Bool ?? def.geotag
+        s.shutterSound = d.object(forKey: "camera.shutterSound") as? Bool ?? def.shutterSound
         s.previewScales = parseScales(d.string(forKey: "camera.previewScales"))
         s.flash = d.string(forKey: "camera.flash").flatMap(FlashMode.init(rawValue:)) ?? def.flash
         s.rawFormat = d.string(forKey: "camera.rawFormat").flatMap(RawFormat.init(rawValue:)) ?? def.rawFormat
@@ -109,6 +112,7 @@ enum CameraSettingsStore {
         d.set(s.rememberLast, forKey: "camera.rememberLast")
         d.set(s.showHistogram, forKey: "camera.showHistogram")
         d.set(s.geotag, forKey: "camera.geotag")
+        d.set(s.shutterSound, forKey: "camera.shutterSound")
         d.set(s.front, forKey: "camera.front")
         d.set(s.lens, forKey: "camera.lens")
         d.set(s.flash.rawValue, forKey: "camera.flash")
