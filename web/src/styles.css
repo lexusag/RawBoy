@@ -2109,6 +2109,22 @@ line.curve-grid {
   gap: 6px;
 }
 
+.send-selected {
+  margin: 0;
+}
+
+/* What the sent photos get: Looks, Film or As is (Auto's Import as). */
+.send-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.send-mode-label {
+  font-weight: 600;
+}
+
 /*
  * Regular iPhones in Safari (SHORT_SCREEN in useMediaQuery.ts): the page gets 550–700 px of height, and the panel
  * under the photo held one slider in RawBoy and none in Auto (whose page ran off the bottom). The bars get tighter,

@@ -1,5 +1,12 @@
 # Changelog
 
+**Browser: choose the look when sending to Auto (2026-10-25)**
+
+- RawBoy Browser (web): **Send to Auto** now asks what the photos get: **Looks** (a suggested colour look), **Film**
+  (a suggested film stock) or **As is** (no automatic edits, no look), the same choice as Auto's Import as. The
+  selection bar's Send to Auto opens the dialog too, so a hand-picked set gets the choice as well. It used to follow
+  whatever Auto's Import as was set to.
+
 **RawBoy: Stripe masks (2026-10-25)**
 
 - RawBoy (Android, web): a new **Stripe** mask layer beside Linear, Radial and Brush: a soft band, shaped like the

@@ -892,13 +892,13 @@ function importModeHint(mode: ImportMode): string {
 
 const LOOK_MODES: readonly [LookMode, string][] = [['looks', 'Looks'], ['film', 'Film']];
 /** Import adds "As is": no auto develop, no look (finished files that only want a preset, e.g. grain). */
-const IMPORT_MODES: readonly [ImportMode, string][] = [...LOOK_MODES, ['plain', 'As is']];
+export const IMPORT_MODES: readonly [ImportMode, string][] = [...LOOK_MODES, ['plain', 'As is']];
 
 /**
  * Looks (LUTs on the AgX develop) or Film (stocks rendered as negative + print), plus As is when importing: a
  * segmented switch, as in the apps, so it doesn't read as another row of tabs.
  */
-function ModeSwitch<M extends string>({ modes, mode, onChange, disabled, className, title }: {
+export function ModeSwitch<M extends string>({ modes, mode, onChange, disabled, className, title }: {
   modes: readonly [M, string][];
   mode: M;
   onChange: (m: M) => void;

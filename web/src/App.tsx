@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 import { rawWorker } from './engine/raw/RawWorker';
 import { LutRepository } from './engine/lut/LutRepository';
 import { AutoApp } from './ui/auto/AutoApp';
-import { AutoStore } from './ui/auto/AutoStore';
+import { AutoStore, type ImportMode } from './ui/auto/AutoStore';
 import { ProApp } from './ui/pro/ProApp';
 import { ProStore } from './ui/pro/ProStore';
 import { isLensPreset } from './engine/develop/Presets';
@@ -157,9 +157,9 @@ export function App() {
     void pro.open(file, undefined, sidecar);
     setTab('pro');
   };
-  const browserToAuto = (files: File[], sidecars: (EditsSidecar | null)[] = []) => {
+  const browserToAuto = (files: File[], sidecars: (EditsSidecar | null)[], mode: ImportMode) => {
     const note = auto.state.message;
-    const added = auto.add(files, sidecars);
+    const added = auto.add(files, sidecars, mode);
     const skipped = files.length - added;
     // Auto's own note (such as JPEGs being lower quality than raws) wins over the count.
     if (auto.state.message === note) {
@@ -202,7 +202,7 @@ export function App() {
             <AutoApp store={auto} onEditInRawBoy={editInRawBoy} />
           </section>
           <section className={tab === 'browser' ? 'page' : 'page hidden'}>
-            <BrowserApp store={browser} active={tab === 'browser' && !showHelp && !showLicenses} onEditInRawBoy={browserEdit} onSendToAuto={browserToAuto} />
+            <BrowserApp store={browser} active={tab === 'browser' && !showHelp && !showLicenses} autoImportMode={autoState.importMode} onEditInRawBoy={browserEdit} onSendToAuto={browserToAuto} />
           </section>
         </main>
         {message && <Toast message={message} onDismiss={() => stores[tab].consumeMessage()} />}
