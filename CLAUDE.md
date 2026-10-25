@@ -401,8 +401,8 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   launch --console --environment-variables '{"OS_ACTIVITY_DT_MODE": "enable"}' app.rawboy.camera` (log at `.notice`;
   debug lines don't show). Debug builds keep each shot's JPEG, viewfinder PNG and DNG in Documents/debug
   (`DebugSnapshots`): `xcrun devicectl device copy from --domain-type appDataContainer --domain-identifier
-  app.rawboy.camera --source Documents/debug --destination …`. Icons: `python3 ios/icons/gen.py` from the Android
-  vectors. Signing: owner's free Personal Team (apps expire after 7 days: rebuild and reinstall).
+  app.rawboy.camera --source Documents/debug --destination …`. Icons: `node tools/icons/gen.mjs` from the logos in
+  `branding/` (also Android's adaptive icons and the web's). Signing: owner's free Personal Team (apps expire after 7 days: rebuild and reinstall).
 
 ## Coordinate spaces and pipeline
 

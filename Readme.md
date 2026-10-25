@@ -1,3 +1,5 @@
+<p align="center"><img src="branding/camera.svg" alt="RawBoy logo" width="160"></p>
+
 # RawBoy
 
 Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and Sigmoid). Three apps share one engine:
