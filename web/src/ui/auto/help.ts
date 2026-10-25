@@ -25,6 +25,7 @@ export const AUTO_HELP: HelpSection[] = [
       { keys: ['Mod+A'], text: 'Select all' },
       { keys: ['Esc'], text: 'Clear the selection' },
       { how: '↺ ↻, Remove (bin)', text: 'Turn the selected photos 90° or take them out of the batch (the files stay).' },
+      { how: 'Auto denoise (dots)', text: 'Give only the selected photos their measured denoise, as Auto denoise all does for the batch.' },
       { how: 'Preset (bookmarks)', text: 'Develop the selected photos with their own RawBoy preset, e.g. one per scene; the rest keep theirs.' },
       { how: 'Export', text: 'Save only the selected photos, with the same format and size choices as Export all.' },
     ],

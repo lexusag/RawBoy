@@ -804,9 +804,10 @@ export class AutoStore {
    * the auto develop measured on it, whatever else develops it. The Denoise slider goes back to 0, presets (the batch's
    * too, for photos added later) lose their Denoise & sharpening group, and RawBoy edits take the auto values in place
    * of their own; looks, presets, lens corrections and the other sliders stay. One undo step per photo; RawBoy edits of
-   * photos still being analysed are left as they are. Not while exporting.
+   * photos still being analysed are left as they are. [ids] (the grid's selection): only those photos, and the batch
+   * preset stays as it is. Not while exporting.
    */
-  autoDenoiseAll() {
+  autoDenoiseAll(ids?: ReadonlySet<string>) {
     if (this._state.export) return;
     const stripped = new Map<Preset, Preset | null>();
     const strip = (preset: Preset | null) => {
@@ -814,9 +815,10 @@ export class AutoStore {
       if (!stripped.has(preset)) stripped.set(preset, withoutDenoise(preset));
       return stripped.get(preset)!;
     };
-    if (this._state.preset) this.update({ preset: strip(this._state.preset) });
+    if (this._state.preset && !ids) this.update({ preset: strip(this._state.preset) });
     let count = 0;
     for (const p of this._state.photos) {
+      if (ids && !ids.has(p.id)) continue;
       const noise = p.edits && p.analysis ? autoNoiseOf(p.analysis, p.plain) : null;
       const edits = p.edits && noise && DENOISE_FIELDS.some((f) => p.edits![f] !== noise[f as keyof typeof noise]) ? { ...p.edits, ...noise } : p.edits;
       const preset = strip(p.preset);
@@ -824,7 +826,9 @@ export class AutoStore {
       this.changeDevelop(p.id, (q) => ({ ...q, adjust: { ...q.adjust, denoise: 0 }, preset, edits }), true);
       count++;
     }
-    this.update({ message: count === 0 ? 'Every photo already has its auto denoise' : `Auto denoise on ${count === 1 ? '1 photo' : `${count} photos`}` });
+    const none = !ids ? 'Every photo already has its auto denoise'
+      : ids.size === 1 ? 'This photo already has its auto denoise' : 'These photos already have their auto denoise';
+    this.update({ message: count === 0 ? none : `Auto denoise on ${count === 1 ? '1 photo' : `${count} photos`}` });
   }
 
   /** [force]: its own undo step (false: a slider, coalesced; null: Undo or Redo itself, not recorded). */

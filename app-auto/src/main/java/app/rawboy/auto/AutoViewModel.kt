@@ -624,14 +624,19 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
     /**
      * "Auto denoise all", for a batch that's otherwise done: every photo gets the denoise, colour denoise and sharpening
      * the auto develop measured on it (presets never override those here), so the Denoise slider goes back to 0; looks,
-     * presets, lens corrections and the other sliders stay. One undo step per photo. Not while exporting.
+     * presets, lens corrections and the other sliders stay. One undo step per photo. [ids] (the grid's selection): only
+     * those photos. Not while exporting.
      */
-    fun autoDenoiseAll() {
+    fun autoDenoiseAll(ids: Set<String>? = null) {
         if (_export.value != null) return
-        val changed = _photos.value.filter { it.adjust.denoise != 0f }
+        val changed = _photos.value.filter { (ids == null || it.id in ids) && it.adjust.denoise != 0f }
         changed.forEach { p -> changeDevelop(p.id, force = true) { it.copy(adjust = it.adjust.copy(denoise = 0f)) } }
         _message.value = when (changed.size) {
-            0 -> "Every photo already has its auto denoise"
+            0 -> when {
+                ids == null -> "Every photo already has its auto denoise"
+                ids.size == 1 -> "This photo already has its auto denoise"
+                else -> "These photos already have their auto denoise"
+            }
             1 -> "Auto denoise on 1 photo"
             else -> "Auto denoise on ${changed.size} photos"
         }

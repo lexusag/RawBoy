@@ -343,3 +343,30 @@ describe('Auto denoise all', () => {
     expect(store.state.photos[1].preset).toBe(onlyDenoise);
   });
 });
+
+describe('Auto denoise on a selection', () => {
+  it('changes only the selected photos and leaves the batch preset as it is', async () => {
+    vi.stubGlobal('window', { setTimeout: () => 0 });
+    const { developParams } = await import('../develop/DevelopParams');
+    const { capturePreset } = await import('../develop/Presets');
+    const store = new AutoStore();
+    store.add([new File(['a'], 'a.CR2'), new File(['b'], 'b.CR2'), new File(['c'], 'c.CR2')]);
+    const batch = capturePreset('Smooth', developParams({ grain: 20, denoise: 90 }), ['detail', 'denoise']);
+    const analysis = { defaults: developParams(), autoBase: developParams({ denoise: 15 }), stats: { hasFace: false } };
+    const s = store as unknown as { _state: { photos: object[]; preset: unknown } };
+    s._state.preset = batch;
+    s._state.photos = s._state.photos.map((p) => ({ ...p, analysis, preset: batch, adjust: { ...(p as { adjust: object }).adjust, denoise: 30 } }));
+    const [a, b, c] = store.state.photos;
+    store.autoDenoiseAll(new Set([a.id, c.id]));
+    const [a2, b2, c2] = store.state.photos;
+    expect(store.state.message).toBe('Auto denoise on 2 photos');
+    expect([a2.adjust.denoise, b2.adjust.denoise, c2.adjust.denoise]).toEqual([0, 30, 0]);
+    expect(a2.preset!.groups).toEqual(['detail']);
+    expect(c2.preset).toBe(a2.preset);
+    expect(b2.preset).toBe(batch);
+    expect(store.state.preset).toBe(batch);
+    store.autoDenoiseAll(new Set([a.id]));
+    expect(store.state.message).toBe('This photo already has its auto denoise');
+    expect(b.id).toBe(b2.id);
+  });
+});

@@ -16,6 +16,7 @@ import { groupSummary } from '../pro/PresetsPanel';
 import { PresetStore } from '../pro/PresetStore';
 import { PresetsIcon } from '../common/PresetsIcon';
 import { DeleteIcon } from '../common/DeleteIcon';
+import { DenoiseIcon } from '../common/DenoiseIcon';
 import { UndoIcon } from '../common/UndoIcon';
 import { AppSwitcher, HelpButton } from '../common/AppNav';
 import { activeLook, EDITS_NAME, EXPORT_SIZES, lookName, paramsOf, SETTINGS, type AutoPhoto, type AutoStore, type ImportMode, type LookMode } from './AutoStore';
@@ -143,6 +144,16 @@ function GridView({ store, scroll, lastViewed }: {
             )}
             <button type="button" className="icon" title="Rotate left" disabled={exporting} onClick={() => store.rotate(selection, -1)}>↺</button>
             <button type="button" className="icon" title="Rotate right" disabled={exporting} onClick={() => store.rotate(selection, 1)}>↻</button>
+            <button
+              type="button"
+              className="icon"
+              title="Auto denoise: the denoise and sharpening measured on each selected photo, in place of what presets, RawBoy edits or the Denoise slider set"
+              aria-label="Auto denoise"
+              disabled={exporting}
+              onClick={() => store.autoDenoiseAll(new Set(selection))}
+            >
+              <DenoiseIcon />
+            </button>
             <button
               type="button"
               className="icon"

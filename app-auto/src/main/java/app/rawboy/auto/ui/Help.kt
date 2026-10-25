@@ -24,6 +24,7 @@ internal val AUTO_HELP = listOf(
         listOf(
             HelpItem("Long-press a photo", "Start selecting; then tap others to add or remove them, or All."),
             HelpItem("↺ ↻, Remove (bin)", "Turn the selected photos 90° or take them out of the batch (the files stay)."),
+            HelpItem("Auto denoise (dots)", "Give only the selected photos their measured denoise, as Auto denoise all does for the batch."),
             HelpItem("Preset (bookmarks)", "Develop the selected photos with their own RawBoy preset file, e.g. one per scene; the rest keep theirs."),
             HelpItem("Export", "Save only the selected photos, with the same format and size choices as Export all."),
         ),
