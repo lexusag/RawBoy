@@ -6,6 +6,15 @@
   denoise stayed at 0 under a preset. Now it gives them the denoise, colour denoise and sharpening of the ISO table
   (they skip the noise measurement), kept with the photo (sidecar too) and undoable.
 
+**Web: fits regular iPhones (2026-10-25)**
+
+- RawBoy Web on phones with up to 720 px of page height (iPhone SE to 16 Pro in Safari; Plus and Max are unchanged):
+  the panel under the photo had room for one slider in RawBoy and none in Auto, whose photo page ran off the bottom.
+  The tool bars are slimmer (a shorter app switcher, 40 px tools), the histogram is shorter, and the photo keeps 45%
+  of the height while the panel takes the rest. In Auto's photo view the Look / Adjust tabs move to the top of the
+  panel, the look strip scrolls inside the Look tab (so Adjust gets the whole panel) and Apply to all moves next to
+  Copy previous, so the top bar is one line.
+
 **RawBoy Web: findable in search engines (2026-10-25)**
 
 - RawBoy Web now has a proper title and description, a link preview card (the app icons) when the address is shared
