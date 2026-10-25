@@ -1,5 +1,11 @@
 # Changelog
 
+**Smooth halation (2026-10-25)**
+
+- RawBoy (Film tone mapper) and Auto's Film mode (Android, iOS, web): at high Halation the glow around small lights
+  showed as a checkered square, from the coarse copy of the photo it is made from. The glow is now round and smooth
+  at any zoom, with the same overall strength.
+
 **RGB primaries: wider hue and purity (2026-10-25)**
 
 - RawBoy (Android, iOS, web): the RGB primaries hue sliders reach ±45° (were ±30°) and the purity sliders ×0.5–×2
@@ -43,6 +49,7 @@
   second finger that lands on a mask or leak handle puts it back and pinches instead; a brush stroke just begun is
   dropped (Android already did this). Auto's swipe to the next photo ignores two-finger touches. Double-tap still
   toggles 100%. Not on iOS yet.
+
 **Auto: Auto denoise works on "As is" photos (2026-10-25)**
 
 - RawBoy Auto (web): photos added **As is** have no auto develop, so Auto denoise found nothing to change and their
