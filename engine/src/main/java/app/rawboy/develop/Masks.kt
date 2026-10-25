@@ -14,6 +14,10 @@ import java.util.UUID
  *   lines into arcs: + pulls their ends towards the full-effect side (a dome over a horizon), 0 = straight.
  * - [MaskShape.Radial]: centre (cx, cy), radii rx/ry as fractions of the image's long side (circles stay round),
  *   angle in degrees (clockwise), feather 0..100 = the outer part of the radius over which the effect fades.
+ * - [MaskShape.Stripe]: a band (light leaks' streak) with a radial's geometry: centre (cx, cy), half length rx and half
+ *   width ry (fractions of the long side), angle in degrees (clockwise). feather 0..100 = the outer part of the half
+ *   width over which the effect fades (the ends fade over the same distance); bend -100..100 curves it along its length
+ *   (100: its ends move one half length sideways), taper -100..100 narrows it towards one end, as a light leak's.
  * - [MaskShape.Brush]: no gradient; the mask is only what is painted.
  *
  * Any layer can also be painted on: strokes add to its mask (brush) or take away from it (erase, also from the
@@ -27,6 +31,10 @@ import java.util.UUID
 sealed interface MaskShape {
     data class Linear(val x0: Float, val y0: Float, val x1: Float, val y1: Float, val curve: Float = 0f) : MaskShape
     data class Radial(val cx: Float, val cy: Float, val rx: Float, val ry: Float, val angle: Float, val feather: Float) : MaskShape
+    data class Stripe(
+        val cx: Float, val cy: Float, val rx: Float, val ry: Float, val angle: Float, val feather: Float,
+        val bend: Float = 0f, val taper: Float = 0f,
+    ) : MaskShape
     data object Brush : MaskShape
 }
 
@@ -104,6 +112,7 @@ object Masks {
     fun name(shape: MaskShape): String = when (shape) {
         is MaskShape.Linear -> "Linear"
         is MaskShape.Radial -> "Radial"
+        is MaskShape.Stripe -> "Stripe"
         MaskShape.Brush -> "Brush"
     }
 
@@ -113,6 +122,10 @@ object Masks {
     /** A centred ellipse with a soft edge. */
     fun newRadial(name: String = "Radial") =
         MaskLayer(newId(), name, shape = MaskShape.Radial(0.5f, 0.5f, 0.25f, 0.18f, 0f, 50f))
+
+    /** A soft horizontal band across the middle, a little longer than the photo is wide (its length handles just past the edges). */
+    fun newStripe(name: String = "Stripe") =
+        MaskLayer(newId(), name, shape = MaskShape.Stripe(0.5f, 0.5f, 0.55f, 0.08f, 0f, 50f))
 
     /** Nothing until painted. */
     fun newBrush(name: String = "Brush") = MaskLayer(newId(), name, shape = MaskShape.Brush)
@@ -143,6 +156,10 @@ object Masks {
                 is MaskShape.Radial -> JSONObject().apply {
                     put("kind", "radial"); put("cx", num(s.cx)); put("cy", num(s.cy)); put("rx", num(s.rx)); put("ry", num(s.ry))
                     put("angle", num(s.angle)); put("feather", num(s.feather))
+                }
+                is MaskShape.Stripe -> JSONObject().apply {
+                    put("kind", "stripe"); put("cx", num(s.cx)); put("cy", num(s.cy)); put("rx", num(s.rx)); put("ry", num(s.ry))
+                    put("angle", num(s.angle)); put("feather", num(s.feather)); put("bend", num(s.bend)); put("taper", num(s.taper))
                 }
                 MaskShape.Brush -> JSONObject().put("kind", "brush")
             },
@@ -231,6 +248,11 @@ object Masks {
             "radial" -> MaskShape.Radial(
                 f("cx") ?: return null, f("cy") ?: return null, f("rx", 0.005f, 3f) ?: return null, f("ry", 0.005f, 3f) ?: return null,
                 f("angle", -360f, 360f) ?: return null, f("feather", 0f, 100f) ?: return null,
+            )
+            "stripe" -> MaskShape.Stripe(
+                f("cx") ?: return null, f("cy") ?: return null, f("rx", 0.005f, 3f) ?: return null, f("ry", 0.002f, 3f) ?: return null,
+                f("angle", -360f, 360f) ?: return null, f("feather", 0f, 100f) ?: return null,
+                f("bend", -100f, 100f) ?: 0f, f("taper", -100f, 100f) ?: 0f,
             )
             "brush" -> if (brush) MaskShape.Brush else null
             else -> null

@@ -41,7 +41,7 @@ export const PRO_HELP: HelpSection[] = [
     items: [
       { keys: ['B'], text: 'Brush (adds a brush layer if none is selected)' },
       { keys: ['E'], text: 'Erase' },
-      { keys: ['V'], text: 'Move: drag a gradient\'s lines and handles' },
+      { keys: ['V'], text: 'Move: drag a gradient\'s or stripe\'s lines and handles' },
       { keys: ['[', ']'], text: 'Smaller or larger brush' },
       { keys: ['Space'], text: 'Hold to pan while zoomed' },
       { keys: ['Mod+Z'], text: 'Undo (each stroke is one step); with Shift, Redo' },

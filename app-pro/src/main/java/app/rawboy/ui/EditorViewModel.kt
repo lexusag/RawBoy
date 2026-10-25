@@ -385,6 +385,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         val layer = when (kind) {
             is MaskShape.Linear -> Masks.newLinear(name)
             is MaskShape.Radial -> Masks.newRadial(name)
+            is MaskShape.Stripe -> Masks.newStripe(name)
             MaskShape.Brush -> Masks.newBrush(name)
         }
         commit(p.copy(masks = p.masks + layer), force = true)

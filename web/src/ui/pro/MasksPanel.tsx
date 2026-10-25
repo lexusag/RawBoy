@@ -11,7 +11,7 @@ export const radiusToSize = (r: number) => (100 * Math.log(r / MIN_BRUSH_RADIUS)
 
 const TOOL_KEYS: Record<MaskTool, string> = { move: 'V', brush: 'B', erase: 'E' };
 
-const KIND_LABEL: Record<MaskLayer['shape']['kind'], string> = { linear: 'Linear gradient', radial: 'Radial gradient', brush: 'Brush' };
+const KIND_LABEL: Record<MaskLayer['shape']['kind'], string> = { linear: 'Linear gradient', radial: 'Radial gradient', stripe: 'Stripe', brush: 'Brush' };
 const subtitle = (l: MaskLayer) =>
   l.shape.kind === 'brush' ? `Brush · ${l.strokes.length} stroke${l.strokes.length === 1 ? '' : 's'}` : `${KIND_LABEL[l.shape.kind]}${l.strokes.length ? ' + brush' : ''}`;
 
@@ -63,6 +63,7 @@ export function MasksPanel(props: Props) {
     <div className="button-row mask-add">
       <button type="button" onClick={() => onAdd('linear')} disabled={full}>+ Linear</button>
       <button type="button" onClick={() => onAdd('radial')} disabled={full}>+ Radial</button>
+      <button type="button" onClick={() => onAdd('stripe')} disabled={full}>+ Stripe</button>
       <button type="button" onClick={() => onAdd('brush')} disabled={full}>+ Brush</button>
     </div>
   );
@@ -79,7 +80,7 @@ export function MasksPanel(props: Props) {
       {!narrow && addButtons}
       {layers.length === 0 && (
         <Note>
-          Add a linear gradient (a graduated filter, e.g. for the sky), a radial one (a soft ellipse) or a brush layer, then shape it on the photo
+          Add a linear gradient (a graduated filter, e.g. for the sky), a radial one (a soft ellipse), a stripe (a soft band, e.g. for a horizon or a road) or a brush layer, then shape it on the photo
           and adjust only that area. Any layer can be painted on or erased from. Up to {MAX_LAYERS} layers; masks reset for each new photo.
         </Note>
       )}
@@ -191,7 +192,7 @@ export function MasksPanel(props: Props) {
               onChange={(v) => onUpdate(layer.id, (l) => (l.shape.kind === 'linear' ? { ...l, shape: { ...l.shape, curve: v } } : l))}
             />
           )}
-          {layer.shape.kind === 'radial' && (
+          {(layer.shape.kind === 'radial' || layer.shape.kind === 'stripe') && (
             <ParamSlider
               label="Feather"
               value={layer.shape.feather}
@@ -199,8 +200,28 @@ export function MasksPanel(props: Props) {
               max={100}
               defaultValue={50}
               format={(v) => String(Math.round(v))}
-              onChange={(v) => onUpdate(layer.id, (l) => (l.shape.kind === 'radial' ? { ...l, shape: { ...l.shape, feather: v } } : l))}
+              onChange={(v) => onUpdate(layer.id, (l) => (l.shape.kind === 'radial' || l.shape.kind === 'stripe' ? { ...l, shape: { ...l.shape, feather: v } } : l))}
             />
+          )}
+          {layer.shape.kind === 'stripe' && (
+            <>
+              <ParamSlider
+                label="Bend"
+                value={layer.shape.bend}
+                min={-100}
+                max={100}
+                defaultValue={0}
+                onChange={(v) => onUpdate(layer.id, (l) => (l.shape.kind === 'stripe' ? { ...l, shape: { ...l.shape, bend: v } } : l))}
+              />
+              <ParamSlider
+                label="Taper"
+                value={layer.shape.taper}
+                min={-100}
+                max={100}
+                defaultValue={0}
+                onChange={(v) => onUpdate(layer.id, (l) => (l.shape.kind === 'stripe' ? { ...l, shape: { ...l.shape, taper: v } } : l))}
+              />
+            </>
           )}
         </>
       )}
@@ -230,6 +251,8 @@ export function MasksPanel(props: Props) {
                 ? 'Solid line: full effect. Dashed line: no effect. Drag the middle line to move the gradient, an outer line to change its width and angle, the square to bend it.'
                 : layer.shape.kind === 'radial'
                   ? 'Drag the centre to move, the dots to resize, the outer knob to rotate. The effect fades between the dashed and the solid ellipse.'
+                  : layer.shape.kind === 'stripe'
+                    ? 'Drag the centre to move, the dots to change its length and width, the outer knob to rotate, the square to bend it. The effect fades between the dashed and the solid outline.'
                   : 'Pick Brush to paint this layer’s mask.'}
           </Note>
           {layer.strokes.length > 0 && <Note>Brush strokes belong to this photo: presets keep gradients only.</Note>}

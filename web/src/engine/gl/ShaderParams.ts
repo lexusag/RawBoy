@@ -5,7 +5,7 @@ import { effectiveColorDenoise, toneMapperId, type DevelopParams } from '../deve
 import type { BrushRaster } from '../develop/BrushRaster';
 import { curveTable } from '../develop/ToneCurve';
 import { CURVE_SCALE, MAX_LAYERS, MAX_LENS_BLUR, layerIsIdentity, type MaskLayer } from '../develop/Masks';
-import { NO_LEAKS, packLeaks, type LeakUniforms } from '../develop/LightLeaks';
+import { NO_LEAKS, bendCurvature, packLeaks, type LeakUniforms } from '../develop/LightLeaks';
 import type { FilmData } from '../film/FilmStocks';
 import type { LensTransform } from '../lens/LensTransform';
 import type { LutData } from '../lut/LutData';
@@ -37,6 +37,8 @@ export interface LayerUniforms {
   count: number;
   geom: Float32Array; // MAX_LAYERS x vec4
   shape: Float32Array; // MAX_LAYERS x vec4
+  /** Stripe only: bend curvature (1/px), taper -1..1, end feather (in half lengths), 0. */
+  form: Float32Array; // MAX_LAYERS x vec4
   tone: Float32Array; // MAX_LAYERS x vec4
   color: Float32Array; // MAX_LAYERS x vec4
   whiteBalance: Float32Array; // MAX_LAYERS x mat3, column-major
@@ -55,6 +57,7 @@ export const NO_LAYERS: LayerUniforms = {
   count: 0,
   geom: new Float32Array(MAX_LAYERS * 4),
   shape: new Float32Array(MAX_LAYERS * 4),
+  form: new Float32Array(MAX_LAYERS * 4),
   tone: new Float32Array(MAX_LAYERS * 4),
   color: new Float32Array(MAX_LAYERS * 4),
   whiteBalance: new Float32Array(MAX_LAYERS * 9),
@@ -85,6 +88,7 @@ export function packLayers(
     count: used.length,
     geom: new Float32Array(MAX_LAYERS * 4),
     shape: new Float32Array(MAX_LAYERS * 4),
+    form: new Float32Array(MAX_LAYERS * 4),
     tone: new Float32Array(MAX_LAYERS * 4),
     color: new Float32Array(MAX_LAYERS * 4),
     whiteBalance: new Float32Array(MAX_LAYERS * 9),
@@ -108,6 +112,15 @@ export function packLayers(
       u.shape.set([0, ((s.curve / 100) * CURVE_SCALE * 4) / (long * Math.sqrt(len2)), 0, 0], o);
     } else if (s.kind === 'brush') {
       u.shape.set([2, 0, 0, 0], o); // only the painted mask
+    } else if (s.kind === 'stripe') {
+      const a = rad(s.angle);
+      const rxPx = Math.max(s.rx * long, 1);
+      const ryPx = Math.max(s.ry * long, 1);
+      const feather = Math.min(1, Math.max(0.01, s.feather / 100));
+      u.geom.set([s.cx * imageWidth, s.cy * imageHeight, 1 / rxPx, 1 / ryPx], o);
+      u.shape.set([3, Math.cos(a), Math.sin(a), feather], o);
+      // The ends fade over the same pixels as the sides.
+      u.form.set([bendCurvature(s.bend, rxPx), Math.min(1, Math.max(-1, s.taper / 100)), Math.min(1, (feather * ryPx) / rxPx), 0], o);
     } else {
       const a = rad(s.angle);
       u.geom.set([s.cx * imageWidth, s.cy * imageHeight, 1 / Math.max(s.rx * long, 1), 1 / Math.max(s.ry * long, 1)], o);

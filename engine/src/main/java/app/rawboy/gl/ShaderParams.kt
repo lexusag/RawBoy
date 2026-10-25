@@ -16,6 +16,7 @@ import app.rawboy.lut.LutData
 import app.rawboy.retouch.SkinMask
 import kotlin.math.cos
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.pow
 import kotlin.math.sin
 import kotlin.math.sqrt
@@ -215,6 +216,7 @@ class ShaderParams(
             val n = Masks.MAX_LAYERS
             val geom = FloatArray(n * 4)
             val shape = FloatArray(n * 4)
+            val form = FloatArray(n * 4)
             val tone = FloatArray(n * 4)
             val color = FloatArray(n * 4)
             val wbs = FloatArray(n * 9)
@@ -243,6 +245,18 @@ class ShaderParams(
                         floatArrayOf(s.cx * w, s.cy * h, 1f / max(s.rx * long, 1f), 1f / max(s.ry * long, 1f)).copyInto(geom, o)
                         floatArrayOf(1f, cos(a).toFloat(), sin(a).toFloat(), (s.feather / 100f).coerceIn(0.01f, 1f)).copyInto(shape, o)
                     }
+                    is MaskShape.Stripe -> {
+                        val a = Math.toRadians(s.angle.toDouble())
+                        val rxPx = max(s.rx * long, 1f)
+                        val ryPx = max(s.ry * long, 1f)
+                        val feather = (s.feather / 100f).coerceIn(0.01f, 1f)
+                        floatArrayOf(s.cx * w, s.cy * h, 1f / rxPx, 1f / ryPx).copyInto(geom, o)
+                        floatArrayOf(3f, cos(a).toFloat(), sin(a).toFloat(), feather).copyInto(shape, o)
+                        // The ends fade over the same pixels as the sides.
+                        floatArrayOf(
+                            LightLeaks.bendCurvature(s.bend, rxPx), (s.taper / 100f).coerceIn(-1f, 1f), min(1f, feather * ryPx / rxPx), 0f,
+                        ).copyInto(form, o)
+                    }
                     MaskShape.Brush -> floatArrayOf(2f, 0f, 0f, 0f).copyInto(shape, o) // only the painted mask
                 }
                 val a = l.adjust
@@ -259,7 +273,7 @@ class ShaderParams(
                 if (l.id == viewId) view = i + 1
                 if (l.strokes.isNotEmpty()) brush[i] = brushFor(l)
             }
-            return LayerUniforms(used.size, geom, shape, tone, color, wbs, view, brush.toList(), blur)
+            return LayerUniforms(used.size, geom, shape, tone, color, wbs, view, brush.toList(), blur, form)
         }
     }
 }
@@ -282,6 +296,8 @@ class LayerUniforms(
     val brush: List<BrushRaster?>,
     /** Lens blur radius of each packed layer at full mask, full-resolution pixels (`uLayerBlur`); 0 = none. */
     val blur: FloatArray = FloatArray(4),
+    /** Stripe only: bend curvature (1/px), taper -1..1, end feather (in half lengths), 0 (`uMaskForm`). */
+    val form: FloatArray = FloatArray(16),
 ) {
     companion object {
         val NONE = LayerUniforms(

@@ -58,6 +58,11 @@ private enum class Handle { MOVE, START, END, RX, RY, ROTATE, CURVE, BEND, PIN }
 /** A light leak's form, for a radial shape that is one (rx, ry = its length and width radii). */
 data class LeakForm(val kind: LeakKind, val bend: Float, val taper: Float)
 
+/** A stripe mask is drawn, hit and dragged as a radial shape with a light leak streak's form. */
+private fun MaskShape.Stripe.asRadial() = MaskShape.Radial(cx, cy, rx, ry, angle, feather)
+private val MaskShape.Stripe.form get() = LeakForm(LeakKind.STREAK, bend, taper)
+private fun MaskShape.Stripe.withRadial(r: MaskShape.Radial) = copy(cx = r.cx, cy = r.cy, rx = r.rx, ry = r.ry, angle = r.angle)
+
 /**
  * Where masks sit on screen: image pixels (display orientation, full resolution) <-> preview pixels, through the
  * lens transform and the fit or zoomed placement the renderer uses. Port of web's MaskOverlay geometry.
@@ -117,8 +122,12 @@ private class MaskGeometry(
     ) : Shape
     class BrushShape(override val pin: Offset?) : Shape
 
-    /** [leak]: a radial shape drawn as that light leak's outline (glow, streak or triangle, bent and tapered like the shader). */
-    fun shape(l: MaskLayer, leak: LeakForm? = null): Shape = when (val s = l.shape) {
+    /**
+     * [leak]: a radial shape drawn as that light leak's outline (glow, streak or triangle, bent and tapered like the
+     * shader). [stripe]: it is a stripe mask, whose ends fade over the same distance as its sides.
+     */
+    fun shape(l: MaskLayer, leak: LeakForm? = null, stripe: Boolean = false): Shape = when (val s = l.shape) {
+        is MaskShape.Stripe -> shape(l.copy(shape = s.asRadial()), s.form, stripe = true)
         MaskShape.Brush -> {
             val p = l.strokes.firstOrNull()?.points
             BrushShape(if (p != null && p.size >= 2) toScreen(p[0] * w, p[1] * h) else null)
@@ -158,7 +167,11 @@ private class MaskGeometry(
                 List(n) { j -> atQ(ax + (bx - ax) * j / n, ay + (by - ay) * j / n) }
             }
             fun outline(sc: Float) = when (leak?.kind) {
-                LeakKind.STREAK -> polygon(listOf(1f to sc, -1f to sc, -1f to -sc, 1f to -sc), STEPS) // edges at sc x the half width
+                LeakKind.STREAK -> {
+                    // Edges at sc x the half width; a stripe mask's ends fade over the same distance as its sides.
+                    val ex = if (stripe) max(0f, 1f - (1f - sc) * ry / rx) else 1f
+                    polygon(listOf(ex to sc, -ex to sc, -ex to -sc, ex to -sc), STEPS)
+                }
                 LeakKind.TRIANGLE -> polygon(listOf(sc to 0f, -sc to sc, -sc to -sc), STEPS)
                 else -> List(STEPS) {
                     val t = it.toFloat() / STEPS * 2 * Math.PI.toFloat()
@@ -179,8 +192,8 @@ private class MaskGeometry(
     }
 
     /** The bend (-100..100) that puts a leak's axis through image point [to], or null too near its middle. */
-    fun bendAt(s: MaskShape, to: Offset): Float? {
-        if (s !is MaskShape.Radial) return null
+    fun bendAt(shape: MaskShape, to: Offset): Float? {
+        val s = (shape as? MaskShape.Stripe)?.asRadial() ?: shape as? MaskShape.Radial ?: return null
         val a = Math.toRadians(s.angle.toDouble())
         val dx = to.x - s.cx * w
         val dy = to.y - s.cy * h
@@ -198,6 +211,7 @@ private class MaskGeometry(
         val dy = (to.y - from.y) / h
         return when (s) {
             MaskShape.Brush -> s
+            is MaskShape.Stripe -> s.withRadial(drag(s.asRadial(), handle, from, to) as MaskShape.Radial)
             is MaskShape.Linear -> when (handle) {
                 Handle.CURVE -> {
                     // The bend that puts the centre line through the finger.
@@ -254,8 +268,10 @@ private fun nearLine(p: Offset, line: List<Offset>, d: Float) = (1 until line.si
 private fun near(p: Offset, q: Offset, d: Float) = (p - q).getDistanceSquared() < d * d
 
 /** Preview point [p] lies inside a radial shape's outer ellipse (a leak: its outline). */
-private fun inside(g: MaskGeometry, l: MaskLayer, p: Offset, leak: LeakForm?): Boolean {
-    val s = l.shape as? MaskShape.Radial ?: return false
+private fun inside(g: MaskGeometry, l: MaskLayer, p: Offset, form: LeakForm?): Boolean {
+    val stripe = l.shape as? MaskShape.Stripe
+    val s = stripe?.asRadial() ?: l.shape as? MaskShape.Radial ?: return false
+    val leak = form ?: stripe?.form
     val q = g.toImage(p)
     val a = Math.toRadians(s.angle.toDouble())
     val dx = q.x - s.cx * g.w
@@ -380,7 +396,9 @@ fun rememberMaskGestures(
                     }
                     c.consume()
                     if (handle == Handle.BEND) {
-                        g.bendAt(start, g.toImage(c.position))?.let { inp.onBend(id, it) }
+                        g.bendAt(start, g.toImage(c.position))?.let {
+                            if (start is MaskShape.Stripe) inp.actions.onChange(id, start.copy(bend = it)) else inp.onBend(id, it)
+                        }
                         continue
                     }
                     inp.actions.onChange(id, g.drag(start, handle, from, g.toImage(c.position)))

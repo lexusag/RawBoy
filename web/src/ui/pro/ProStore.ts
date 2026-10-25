@@ -4,7 +4,7 @@ import { cropOf, flipped, rotateCrop, withCrop, type CropRect } from '../../engi
 import type { EditsSidecar } from '../../engine/browse/XmpSidecar';
 import { developParams, type DevelopParams } from '../../engine/develop/DevelopParams';
 import { decodeEdits, encodeEdits } from '../../engine/develop/Edits';
-import { MAX_LAYERS, SHAPE_NAMES, newBrushLayer, newLinearLayer, newRadialLayer, type BrushStroke, type MaskLayer } from '../../engine/develop/Masks';
+import { MAX_LAYERS, SHAPE_NAMES, newBrushLayer, newLinearLayer, newRadialLayer, newStripeLayer, type BrushStroke, type MaskLayer } from '../../engine/develop/Masks';
 import { MAX_LEAKS, newLightLeak, type LeakKind, type LightLeak } from '../../engine/develop/LightLeaks';
 import { applyPreset, captureLensPreset, capturePreset, decodePresets, encodePresets, putLensPreset, type Preset, type PresetGroup } from '../../engine/develop/Presets';
 import { EXTENSIONS, ExportSettingsStore, baseNameOf, fileName, type ExportSettings } from '../../engine/export/ExportSettings';
@@ -306,7 +306,7 @@ export class ProStore {
     const p = this._state.params;
     if (p.masks.length >= MAX_LAYERS) return null;
     const name = `${SHAPE_NAMES[kind]} ${p.masks.filter((l) => l.shape.kind === kind).length + 1}`;
-    const layer = kind === 'linear' ? newLinearLayer(name) : kind === 'radial' ? newRadialLayer(name) : newBrushLayer(name);
+    const layer = kind === 'linear' ? newLinearLayer(name) : kind === 'radial' ? newRadialLayer(name) : kind === 'stripe' ? newStripeLayer(name) : newBrushLayer(name);
     this.commit({ ...p, masks: [...p.masks, layer] }, true);
     return layer.id;
   };

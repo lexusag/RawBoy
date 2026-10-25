@@ -100,6 +100,30 @@ class MasksTest {
     }
 
     @Test
+    fun packsAStripeLikeALeakStreak() {
+        val band = Masks.newStripe().copy(adjust = LayerAdjust(exposure = 1f))
+        val bent = band.copy(shape = (band.shape as MaskShape.Stripe).copy(angle = 90f, bend = 50f, taper = -40f, feather = 20f))
+        val u = ShaderParams.packLayers(listOf(bent), 4000, 3000, 5500f, 0f, true)
+        val expectGeom = floatArrayOf(2000f, 1500f, 1f / 2200f, 1f / 320f)
+        for (i in 0 until 4) assertEquals(expectGeom[i], u.geom[i], 1e-6f)
+        assertEquals(3f, u.shape[0])
+        assertEquals(0f, u.shape[1], 1e-6f)
+        assertEquals(1f, u.shape[2], 1e-6f)
+        assertEquals(0.2f, u.shape[3], 1e-6f)
+        // bend 50 over a 2200 px half length; the ends fade over the sides' 64 px
+        val expectForm = floatArrayOf(0.5f / 2200f, -0.4f, 64f / 2200f, 0f)
+        for (i in 0 until 4) assertEquals(expectForm[i], u.form[i], 1e-7f)
+        // Through a preset and the web's JSON; older or partial stripes come back straight and even.
+        val p = Presets.capture("S", DevelopParams(masks = listOf(bent)), setOf(PresetGroup.MASKS))
+        assertEquals(bent.shape, Presets.apply(Presets.decode(Presets.encode(listOf(p))).single(), DevelopParams()).masks.single().shape)
+        val plain = Masks.parseLayers(
+            org.json.JSONArray("""[{"shape":{"kind":"stripe","cx":0.5,"cy":0.5,"rx":0.5,"ry":0.05,"angle":0,"feather":50}}]"""),
+        ).single()
+        assertEquals(MaskShape.Stripe(0.5f, 0.5f, 0.5f, 0.05f, 0f, 50f), plain.shape)
+        assertEquals("Stripe", plain.name)
+    }
+
+    @Test
     fun packsLensBlurAsARadius() {
         val blurred = Masks.newRadial().copy(adjust = LayerAdjust(lensBlur = 50f))
         val u = ShaderParams.packLayers(listOf(blurred), 6000, 4000, 5500f, 0f, true)

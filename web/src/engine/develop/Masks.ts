@@ -7,6 +7,10 @@
  *   + pulls their ends towards the full-effect side (a dome over a horizon), 0 = straight.
  * - radial: centre (cx, cy), radii rx/ry as fractions of the image's long side (circles stay round), angle in
  *   degrees (clockwise), feather 0..100 = the outer part of the radius over which the effect fades.
+ * - stripe: a band (light leaks' streak) with a radial's geometry: centre (cx, cy), half length rx and half width ry
+ *   (fractions of the long side), angle in degrees (clockwise). feather 0..100 = the outer part of the half width over
+ *   which the effect fades (the ends fade over the same distance); bend -100..100 curves it along its length (100: its
+ *   ends move one half length sideways), taper -100..100 narrows it towards one end, as a light leak's.
  * - brush: no gradient; the mask is only what is painted.
  *
  * Any layer can also be painted on: strokes add to its mask (brush) or take away from it (erase, also from the
@@ -18,6 +22,7 @@
 export type MaskShape =
   | { kind: 'linear'; x0: number; y0: number; x1: number; y1: number; curve: number }
   | { kind: 'radial'; cx: number; cy: number; rx: number; ry: number; angle: number; feather: number }
+  | { kind: 'stripe'; cx: number; cy: number; rx: number; ry: number; angle: number; feather: number; bend: number; taper: number }
   | { kind: 'brush' };
 
 /** One brush or erase stroke. Positions are image fractions, like gradient positions. */
@@ -103,6 +108,14 @@ export const newRadialLayer = (name = 'Radial'): MaskLayer => ({
   strokes: [],
 });
 
+/** A soft horizontal band across the middle, a little longer than the photo is wide (its length handles just past the edges). */
+export const newStripeLayer = (name = 'Stripe'): MaskLayer => ({
+  id: newId(), name, enabled: true, opacity: 100, invert: false,
+  shape: { kind: 'stripe', cx: 0.5, cy: 0.5, rx: 0.55, ry: 0.08, angle: 0, feather: 50, bend: 0, taper: 0 },
+  adjust: { ...NO_ADJUST },
+  strokes: [],
+});
+
 /** Nothing until painted. */
 export const newBrushLayer = (name = 'Brush'): MaskLayer => ({
   id: newId(), name, enabled: true, opacity: 100, invert: false,
@@ -111,7 +124,7 @@ export const newBrushLayer = (name = 'Brush'): MaskLayer => ({
   strokes: [],
 });
 
-export const SHAPE_NAMES: Record<MaskShape['kind'], string> = { linear: 'Linear', radial: 'Radial', brush: 'Brush' };
+export const SHAPE_NAMES: Record<MaskShape['kind'], string> = { linear: 'Linear', radial: 'Radial', stripe: 'Stripe', brush: 'Brush' };
 
 /** Brush radius limits, fractions of the long side (the upper one bounds the cost of one dab). */
 export const MIN_BRUSH_RADIUS = 0.002;
@@ -147,6 +160,11 @@ function parseShape(o: unknown, brush: boolean): MaskShape | null {
     const [cx, cy, rx, ry, angle, feather] = [f('cx'), f('cy'), f('rx', 0.005, 3), f('ry', 0.005, 3), f('angle', -360, 360), f('feather', 0, 100)];
     if (cx == null || cy == null || rx == null || ry == null || angle == null || feather == null) return null;
     return { kind: 'radial', cx, cy, rx, ry, angle, feather };
+  }
+  if (s.kind === 'stripe') {
+    const [cx, cy, rx, ry, angle, feather] = [f('cx'), f('cy'), f('rx', 0.005, 3), f('ry', 0.002, 3), f('angle', -360, 360), f('feather', 0, 100)];
+    if (cx == null || cy == null || rx == null || ry == null || angle == null || feather == null) return null;
+    return { kind: 'stripe', cx, cy, rx, ry, angle, feather, bend: f('bend', -100, 100) ?? 0, taper: f('taper', -100, 100) ?? 0 };
   }
   return null;
 }
