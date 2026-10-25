@@ -200,6 +200,18 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
         FrameColor.valueOf(getApplication<Application>().getSharedPreferences("display", 0).getString("frame", null)!!)
     }.getOrDefault(FrameColor.GREY)
 
+    /**
+     * The editor's open tab (Light, Color…, Controls.kt's index): here rather than in the panel so it survives the panel
+     * leaving (Presets, a photo loading after RawBoy Auto's Edit in RawBoy) and the app's process going. Remembered.
+     */
+    private val _controlsTab = MutableStateFlow(getApplication<Application>().getSharedPreferences("display", 0).getInt("controlsTab", 0))
+    val controlsTab = _controlsTab.asStateFlow()
+
+    fun setControlsTab(tab: Int) {
+        _controlsTab.value = tab
+        getApplication<Application>().getSharedPreferences("display", 0).edit().putInt("controlsTab", tab).apply()
+    }
+
     /** Single tap in the preview: outside the photo (fit view) cycles the frame colour. */
     fun onPreviewTap(x: Float, y: Float) {
         if (zoomCenter.value != null || !session.hasImage) return

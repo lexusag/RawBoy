@@ -13,12 +13,11 @@ import { pickFiles } from '../common/files';
 import { ParamSlider, formatDegrees, formatEv, formatPlain } from '../common/ParamSlider';
 import { useTabScroll } from '../common/useTabScroll';
 import { CurvesPanel } from './CurvesPanel';
+import { CONTROLS_TABS as TABS, type ControlsTab as Tab } from './ProStore';
 
-const TABS = ['Light', 'Color', 'Detail', 'LUTs', 'Lens'] as const;
 
 /** The Film tone mapper's stocks (Auto's film looks without Natural). */
 const FILM_STOCKS = ALL_FILM_LOOKS.filter((l) => l.film != null);
-type Tab = (typeof TABS)[number];
 
 interface Props {
   params: DevelopParams;
@@ -38,14 +37,16 @@ interface Props {
   onPickWhite: () => void;
   /** Lens tab: saves its settings as the lens preset for this lens. */
   onSaveLensPreset: (name: string) => void;
+  /** The tab the user chose, kept by the store so it survives this panel leaving (Auto, Presets, a photo loading). */
+  chosenTab: Tab;
+  onTab: (tab: Tab) => void;
 }
 
 /** The editor's tabs Light, Color, Detail, LUTs, Lens (port of app-pro's Controls.kt). */
 export function ControlsPanel({
   params, defaults, onChange, lutLoading, onSelectLut, filmLoading, onToneMapper, onFilm, onSelectFilm, lens, skin, blemish,
-  pickingWhite, onPickWhite, onSaveLensPreset,
+  pickingWhite, onPickWhite, onSaveLensPreset, chosenTab, onTab: setTab,
 }: Props) {
-  const [chosenTab, setTab] = useState<Tab>('Light');
   // Film replaces the tone mapper and the user LUT (kept, but not rendered), so the LUTs tab hides while Film is on.
   const filmOn = params.film != null;
   const tab: Tab = filmOn && chosenTab === 'LUTs' ? 'Light' : chosenTab;

@@ -27,11 +27,25 @@ export interface EditorState {
   defaults: DevelopParams;
   message: string | null;
   frameColor: number;
+  /** The editor's open tab (Light, Color…): kept while the panel is away (Auto, Presets, a photo loading). Remembered. */
+  controlsTab: ControlsTab;
   exportSettings: ExportSettings;
   presets: Preset[];
   canUndo: boolean;
   canRedo: boolean;
 }
+
+export const CONTROLS_TABS = ['Light', 'Color', 'Detail', 'LUTs', 'Lens'] as const;
+export type ControlsTab = (typeof CONTROLS_TABS)[number];
+const CONTROLS_TAB_KEY = 'rawboy.pro.tab';
+const loadControlsTab = (): ControlsTab => {
+  try {
+    const t = localStorage.getItem(CONTROLS_TAB_KEY) as ControlsTab;
+    return CONTROLS_TABS.includes(t) ? t : 'Light';
+  } catch {
+    return 'Light';
+  }
+};
 
 const FRAME_KEY = 'rawboy.frame';
 const loadFrame = () => {
@@ -47,7 +61,7 @@ const loadFrame = () => {
 export class ProStore {
   private _state: EditorState = {
     loading: false, exporting: false, autoRunning: false, exportProgress: 0, fileName: null, info: null,
-    params: developParams(), defaults: developParams(), message: null, frameColor: loadFrame(),
+    params: developParams(), defaults: developParams(), message: null, frameColor: loadFrame(), controlsTab: loadControlsTab(),
     exportSettings: ExportSettingsStore.load(),
     presets: PresetStore.load(),
     canUndo: false,
@@ -168,6 +182,15 @@ export class ProStore {
     }
     this.set({ frameColor: next });
   }
+
+  setControlsTab = (tab: ControlsTab) => {
+    try {
+      localStorage.setItem(CONTROLS_TAB_KEY, tab);
+    } catch {
+      // not remembered
+    }
+    this.set({ controlsTab: tab });
+  };
 
   /** White balance picker: sets temperature and tint so the clicked spot of the preview (fit or 100% view) renders neutral grey. */
   pickWhite = async (x: number, y: number) => {

@@ -1,5 +1,11 @@
 # Changelog
 
+**RawBoy remembers its open tab (2026-10-25)**
+
+- RawBoy (Android, web): the editor's tab (Light, Color, Detail, LUTs, Lens) stays where you left it after going to
+  Auto and back, opening a photo with Edit in RawBoy, opening Presets, Masks or Crop, or restarting the app. It used
+  to jump back to Light.
+
 **RawBoy: select or deselect all groups when saving a preset (2026-10-25)**
 
 - RawBoy (Android, iOS, web): the **Save preset** dialog has a **Select all** / **Deselect all** button beside

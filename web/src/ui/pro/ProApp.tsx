@@ -565,6 +565,8 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
                   pickingWhite={pickingWhite}
                   onPickWhite={() => setPickingWhite(!pickingWhite)}
                   onSaveLensPreset={store.saveLensPreset}
+                  chosenTab={state.controlsTab}
+                  onTab={store.setControlsTab}
                 />
               </>
             )}
