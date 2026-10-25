@@ -144,12 +144,12 @@ export function ControlsPanel({
             {slider('Tint', 'tint', -WhiteBalance.MAX_TINT, WhiteBalance.MAX_TINT)}
             {slider('Saturation', 'saturation', -100, 100)}
             <SectionLabel>RGB primaries</SectionLabel>
-            {primaries('Red hue', 'redHue', -30, 30, formatDegrees)}
-            {primaries('Red purity', 'redPurity', -100, 100)}
-            {primaries('Green hue', 'greenHue', -30, 30, formatDegrees)}
-            {primaries('Green purity', 'greenPurity', -100, 100)}
-            {primaries('Blue hue', 'blueHue', -30, 30, formatDegrees)}
-            {primaries('Blue purity', 'bluePurity', -100, 100)}
+            {primaries('Red hue', 'redHue', -45, 45, formatDegrees)}
+            {primaries('Red purity', 'redPurity', -200, 200)}
+            {primaries('Green hue', 'greenHue', -45, 45, formatDegrees)}
+            {primaries('Green purity', 'greenPurity', -200, 200)}
+            {primaries('Blue hue', 'blueHue', -45, 45, formatDegrees)}
+            {primaries('Blue purity', 'bluePurity', -200, 200)}
             {primaries('Tint hue', 'tintHue', -180, 180, formatDegrees)}
             {primaries('Tint purity', 'tintPurity', 0, 100, formatPlain)}
             <Note>Hue: red → yellow, green → cyan, blue → magenta for positive values.</Note>
