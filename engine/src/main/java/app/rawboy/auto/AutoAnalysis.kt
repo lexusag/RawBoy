@@ -52,8 +52,8 @@ object AutoAnalysis {
      * The same for an already decoded [image] (kept open, e.g. to export it next). Blocking.
      * [noiseIsoScale]: see [AutoTone.develop]. [fallbackIso] is used when the file has no ISO (e.g. from the capture).
      * [detectSkin] false skips skin detection (face metering, skin retouch): the camera saw no face.
-     * [meter]: see [SceneAnalyzer.analyze]. [cameraMetered]: keep the raw's own exposure (see [AutoTone.cameraMetered]):
-     * RawBoy Camera's raws are exposed by the phone's auto exposure.
+     * [meter]: see [SceneAnalyzer.analyze]. [phoneAe]: RawBoy Camera's raw, exposed by the phone's auto exposure (see
+     * [AutoTone.exposure]).
      */
     fun analyze(
         context: Context,
@@ -63,18 +63,18 @@ object AutoAnalysis {
         fallbackIso: Float = 0f,
         detectSkin: Boolean = true,
         meter: MeterArea? = null,
-        cameraMetered: Boolean = false,
+        phoneAe: Boolean = false,
     ): Analysis {
         val t0 = System.nanoTime()
         val (base, bloom) = copiesOf(image)
         Log.d(TAG, "small copies: ${(System.nanoTime() - t0) / 1_000_000} ms")
-        val info = Info.of(image).let { Info(it.lens, if (it.iso > 0f) it.iso else fallbackIso, it.defaults, cameraMetered) }
+        val info = Info.of(image).let { Info(it.lens, if (it.iso > 0f) it.iso else fallbackIso, it.defaults, phoneAe = phoneAe) }
         return analyze(context, base, bloom, info, label, noiseIsoScale, detectSkin, meter)
     }
 
     /**
      * [cameraMetered]: see [AutoTone.cameraMetered]; [noise]: the measured noise, only Auto's (Camera keeps its ISO-based
-     * denoise, which has no time cost per shot).
+     * denoise, which has no time cost per shot); [phoneAe]: see [AutoTone.exposure].
      */
     private class Info(
         val lens: LensInfo,
@@ -82,6 +82,7 @@ object AutoAnalysis {
         val defaults: DevelopParams,
         val cameraMetered: Boolean = false,
         val noise: NoiseLevel = NoiseLevel.NONE,
+        val phoneAe: Boolean = false,
     ) {
         companion object {
             fun of(img: RawImage, auto: Boolean = false) = Info(
@@ -114,9 +115,10 @@ object AutoAnalysis {
         cameraMetered: Boolean,
         meter: MeterArea?,
         noise: NoiseLevel = NoiseLevel.NONE,
+        phoneAe: Boolean = false,
     ): Pair<SceneStats, DevelopParams> {
         val stats = SceneAnalyzer.analyze(base, skin, iso, meter)
-        return stats to AutoTone.develop(stats, defaults, noiseIsoScale, cameraMetered, noise)
+        return stats to AutoTone.develop(stats, defaults, noiseIsoScale, cameraMetered, noise, phoneAe)
     }
 
     private fun copiesOf(img: RawImage) = img.createPreview(PhotoSession.BASE_MAX_DIMENSION) to PhotoSession.bloomSourcesOf(img)
@@ -139,10 +141,10 @@ object AutoAnalysis {
         }
         Log.d(TAG, "skin detection: ${(System.nanoTime() - t0) / 1_000_000} ms")
         val defaults = info.defaults
-        val (stats, auto) = develop(base, skin, info.iso, defaults, noiseIsoScale, info.cameraMetered, meter, info.noise)
+        val (stats, auto) = develop(base, skin, info.iso, defaults, noiseIsoScale, info.cameraMetered, meter, info.noise, info.phoneAe)
         Log.d(TAG, "analysis $label: key=${stats.key} p1=${stats.p1} p5=${stats.p5} p50=${stats.p50} p98=${stats.p98} " +
             "p99=${stats.p99} clipped=${stats.clipped} chroma=${stats.chroma} face=${stats.faceArea} " +
-            "skin=${stats.skinLuminance} iso=${info.iso} cameraMetered=${info.cameraMetered} noise=${info.noise.luma}/${info.noise.chroma} " +
+            "skin=${stats.skinLuminance} iso=${info.iso} cameraMetered=${info.cameraMetered} phoneAe=${info.phoneAe} noise=${info.noise.luma}/${info.noise.chroma} " +
             "-> exposure=${auto.exposure} hl=${auto.highlights} denoise=${auto.denoise}/${auto.colorDenoise} " +
             "sh=${auto.shadows} contrast=${auto.contrast} wb=${defaults.temperature.toInt()}K/${defaults.tint.toInt()} -> ${auto.temperature.toInt()}K/${auto.tint.toInt()}")
         return Analysis(defaults, auto, stats, info.lens, base, bloom, skin)

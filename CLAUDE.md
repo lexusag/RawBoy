@@ -127,8 +127,10 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   with per-lens keys (`setPhysicalCameraKey`) and per-lens results/characteristics for DngCreator; fallback: open the
   physical id directly), `CameraViewModel.kt` (live auto develop, capture → DNG →
   one-at-a-time develop → jpegli JPEG, `previewScale` calibration from raw key / viewfinder key),
-  `CameraSettings.kt`, `ui/`. Exposure: the viewfinder and shots keep the phone's AE (`cameraMetered = true`; flash
-  shots, AE off, are re-metered): re-metering to `AutoTone.TARGET_KEY` put rooms 1-2 EV under the Pixel's camera.
+  `CameraSettings.kt`, `ui/`. Exposure (`AutoTone.develop(phoneAe = true)`; flash shots, AE off, are re-metered as
+  Auto): the phone's AE is kept, but lifted to `PHONE_KEY` (0.06) when it put the metered key below it (the Pixel's AE
+  protects highlights: a white pigeon or a window in the box took the frame 1-2 EV down), never darker, max +2 EV.
+  Re-metering to `AutoTone.TARGET_KEY` put rooms 1-2 EV under the Pixel's camera; plain AE (#87) still went dark on highlights.
   Geotag (off by default; location permission asked only when switched on):
   `capture/LocationTracker.kt` (platform LocationManager, fused else GPS + network; iOS `capture/LocationTracker.swift`,
   Core Location) → `DngCreator.setLocation` (no altitude) → `export/DngGps.kt` appends a full GPS IFD to the DNG and
@@ -536,7 +538,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   loads; Auto shares one cache with its `PhotoSession`). Heap limit on the emulator is 192 MB.
 - Auto exposure targets are in decoded units (1.0 = sensor clip): cameras meter a normal scene's key to
   ~0.06, not 0.18; Auto aims at 0.043 (owner prefers darker, punchier film renders). Phone DNGs (`AutoTone.cameraMetered`:
-  Google/Apple/Samsung with BaselineExposure) skip that and keep the phone's exposure, Auto only (Camera meters live).
+  Google/Apple/Samsung with BaselineExposure) skip that and keep the phone's exposure (Camera: `phoneAe`, see the camera section).
   Face area counts face-skin confidence > 0.5 only (summing raw confidences gave every photo a ~2% "face"); faces steer
   exposure on a 0.3%→2% ramp. The segmenter still finds "skin" on cats (cat faces measure 1–11%), and the Face
   Landmarker is no filter: it missed most small human faces and found one on a cat. `AutoViewModel` logs each photo's

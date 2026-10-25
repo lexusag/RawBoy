@@ -23,6 +23,13 @@ object AutoTone {
      */
     private const val TARGET_KEY = 0.043f
 
+    /**
+     * RawBoy Camera ([phoneAe]): the key a phone's AE gives a normal scene, the neutral camera key above. The Pixel's AE
+     * protects highlights for its own local tone mapping: a white bird or a window in the metered box took the whole
+     * frame 1-2 EV down. A key below this is lifted back up to it; a brighter one is kept.
+     */
+    private const val PHONE_KEY = 0.06f
+
     /** Where the brightest 2% should sit, in EV below sensor clip, before exposure is raised. */
     private const val TARGET_P98 = -1.3f
 
@@ -92,6 +99,7 @@ object AutoTone {
      * camera raws, and a small phone sensor is about as noisy as those at a few times its ISO.
      * A display source (JPEG, HEIC: [DevelopParams.displaySource]) is already exposed, toned, denoised and sharpened
      * by the camera, and its neutral render is the file itself: it gets only the base grain.
+     * [phoneAe]: RawBoy Camera's raw, exposed by the phone's AE (see [exposure]).
      */
     fun develop(
         stats: SceneStats,
@@ -99,9 +107,10 @@ object AutoTone {
         noiseIsoScale: Float = 1f,
         cameraMetered: Boolean = false,
         noise: NoiseLevel = NoiseLevel.NONE,
+        phoneAe: Boolean = false,
     ): DevelopParams {
         if (asShot.displaySource) return asShot.copy(grain = BASE_GRAIN)
-        val exposure = exposure(stats, cameraMetered)
+        val exposure = exposure(stats, cameraMetered, phoneAe)
         val gainEv = exposure + BASE_EXPOSURE_EV
 
         // Highlights: recover when a noticeable part of the frame lands in AgX's top stop.
@@ -134,10 +143,15 @@ object AutoTone {
      * EV that brings the key to its target, but never brighter than what puts the scene's
      * highlights near the top: so dark interiors and night scenes stay dark, while a frame the
      * camera underexposed (highlights far below clip) is lifted. [cameraMetered]: the camera's own
-     * exposure is kept instead (see [cameraMetered]). With a face, mostly the skin decides.
+     * exposure is kept instead (see [cameraMetered]). [phoneAe]: the phone's exposure is kept unless it put the key
+     * below [PHONE_KEY], which is then lifted to it (never darker than the phone's). With a face, mostly the skin decides.
      */
-    fun exposure(stats: SceneStats, cameraMetered: Boolean = false): Float {
-        var ev = if (cameraMetered) 0f else min(log2(TARGET_KEY / stats.key), TARGET_P98 - stats.p98)
+    fun exposure(stats: SceneStats, cameraMetered: Boolean = false, phoneAe: Boolean = false): Float {
+        var ev = when {
+            phoneAe -> max(0f, log2(PHONE_KEY / stats.key))
+            cameraMetered -> 0f
+            else -> min(log2(TARGET_KEY / stats.key), TARGET_P98 - stats.p98)
+        }
         if (stats.skinLuminance > 0f) {
             val t = ((stats.faceArea - FACE_AREA_FROM) / (FACE_AREA_FULL - FACE_AREA_FROM)).coerceIn(0f, 1f)
             val w = SKIN_WEIGHT * t * t * (3f - 2f * t)
