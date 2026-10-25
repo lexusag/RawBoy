@@ -1,5 +1,12 @@
 # Changelog
 
+**New app icons (2026-10-25)**
+
+- RawBoy, Auto, Camera and RawBoy Film (Android, iOS) and RawBoy Web: new logo, a photographer with a camera, one
+  colour per app (RawBoy coral red, Auto teal, Camera yellow, Film orange). Android icons are adaptive, fit round and
+  squircle masks, and follow Android 13+ themed icons. RawBoy Web gets a favicon, a home-screen icon and a web app
+  manifest, so it can be installed from the browser.
+
 **Auto: Auto denoise all (2026-10-25)**
 
 - RawBoy Auto (Android, web): **Auto denoise all** in the grid's top row gives every photo of the batch its own
