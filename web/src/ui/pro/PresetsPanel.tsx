@@ -132,6 +132,7 @@ function PresetDialog({ title, confirm, initialName, withGroups, hasStrokes = fa
   const [name, setName] = useState(initialName);
   const [groups, setGroups] = useState<PresetGroup[]>([...DEFAULT_PRESET_GROUPS]);
   const valid = name.trim() !== '' && (!withGroups || groups.length > 0);
+  const allGroups = groups.length === PRESET_GROUPS.length;
   const submit = () => valid && onConfirm(name, groups);
   return (
     <div className="dialog-backdrop" onClick={onDismiss}>
@@ -143,7 +144,12 @@ function PresetDialog({ title, confirm, initialName, withGroups, hasStrokes = fa
         </label>
         {withGroups && (
           <div className="field">
-            <span>Include</span>
+            <div className="preset-include">
+              <span>Include</span>
+              <button type="button" className="text" onClick={() => setGroups(allGroups ? [] : PRESET_GROUPS.map((g) => g.key))}>
+                {allGroups ? 'Deselect all' : 'Select all'}
+              </button>
+            </div>
             {PRESET_GROUPS.map((g) => (
               <label key={g.key} className="preset-group">
                 <input

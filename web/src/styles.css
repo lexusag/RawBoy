@@ -1746,6 +1746,12 @@ line.curve-grid {
   background: var(--surface-2);
 }
 
+.preset-include {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
 .preset-group {
   display: flex;
   align-items: center;

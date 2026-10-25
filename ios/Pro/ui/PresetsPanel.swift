@@ -102,7 +102,7 @@ private struct SavePresetSheet: View {
         NavigationStack {
             Form {
                 TextField("Name", text: $name)
-                Section("Include") {
+                Section {
                     ForEach(PresetGroup.allCases, id: \.self) { g in
                         Toggle(g.label, isOn: Binding(get: { groups.contains(g) }, set: { on in
                             if on { groups.insert(g) } else { groups.remove(g) }
@@ -110,6 +110,16 @@ private struct SavePresetSheet: View {
                     }
                     if hasStrokes && groups.contains(.masks) {
                         Note("Brush strokes aren't saved in presets: they belong to this photo.")
+                    }
+                } header: {
+                    let all = groups.count == PresetGroup.allCases.count
+                    HStack {
+                        Text("Include")
+                        Spacer()
+                        Button(all ? "Deselect all" : "Select all") {
+                            groups = all ? [] : Set(PresetGroup.allCases)
+                        }
+                        .textCase(nil)
                     }
                 }
             }
