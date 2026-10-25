@@ -292,6 +292,15 @@ private struct SettingsSheet: View {
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
+                    // Where the law requires the click, iOS plays it anyway: shown on and locked.
+                    Toggle(isOn: Binding(get: { vm.settings.shutterSound || vm.shutterSoundRequired }, set: vm.setShutterSound)) {
+                        VStack(alignment: .leading) {
+                            Text("Shutter sound")
+                            Text(vm.shutterSoundRequired ? "Can't be turned off on this iPhone; always on" : "A click on each shot")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    .disabled(vm.shutterSoundRequired)
                     Toggle(isOn: Binding(get: { vm.settings.showHistogram }, set: vm.setShowHistogram)) {
                         VStack(alignment: .leading) {
                             Text("Histogram")
