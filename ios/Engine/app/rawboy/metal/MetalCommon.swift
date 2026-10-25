@@ -328,6 +328,7 @@ struct DevelopProgram {
         u.int("uLayerCount", l.count)
         u.array("uMaskGeom", l.geom, components: 4)
         u.array("uMaskShape", l.shape, components: 4)
+        u.array("uMaskForm", l.form, components: 4)
         u.array("uLayerTone", l.tone, components: 4)
         u.array("uLayerColor", l.color, components: 4)
         u.mat3("uLayerWb", l.whiteBalance)

@@ -227,6 +227,7 @@ public final class ShaderParams: @unchecked Sendable {
         let n = Masks.maxLayers
         var geom = [Float](repeating: 0, count: n * 4)
         var shape = [Float](repeating: 0, count: n * 4)
+        var form = [Float](repeating: 0, count: n * 4)
         var tone = [Float](repeating: 0, count: n * 4)
         var color = [Float](repeating: 0, count: n * 4)
         var wbs = [Float](repeating: 0, count: n * 9)
@@ -255,6 +256,16 @@ public final class ShaderParams: @unchecked Sendable {
                 let a = Double(angle) * .pi / 180
                 put([cx * w, cy * h, 1 / max(rx * long, 1), 1 / max(ry * long, 1)], into: &geom, at: o)
                 put([1, Float(cos(a)), Float(sin(a)), (feather / 100).clamped(0.01, 1)], into: &shape, at: o)
+            case let .stripe(cx, cy, rx, ry, angle, feather, bend, taper):
+                let a = Double(angle) * .pi / 180
+                let rxPx = max(rx * long, 1)
+                let ryPx = max(ry * long, 1)
+                let f = (feather / 100).clamped(0.01, 1)
+                put([cx * w, cy * h, 1 / rxPx, 1 / ryPx], into: &geom, at: o)
+                put([3, Float(cos(a)), Float(sin(a)), f], into: &shape, at: o)
+                // The ends fade over the same pixels as the sides.
+                put([LightLeaks.bendCurvature(bend, rxPx: rxPx), (taper / 100).clamped(-1, 1), min(1, f * ryPx / rxPx), 0],
+                    into: &form, at: o)
             case .brush:
                 put([2, 0, 0, 0], into: &shape, at: o)  // only the painted mask
             }
@@ -272,7 +283,7 @@ public final class ShaderParams: @unchecked Sendable {
             if !l.strokes.isEmpty { brush[i] = brushFor(l) }
         }
         return LayerUniforms(count: used.count, geom: geom, shape: shape, tone: tone, color: color, whiteBalance: wbs,
-                             view: view, brush: brush)
+                             view: view, brush: brush, form: form)
     }
 }
 
@@ -300,6 +311,8 @@ public struct LayerUniforms: @unchecked Sendable {
     public let view: Int
     /** Painted mask of each packed layer (nil = no strokes); slot i of the brush atlas. */
     public let brush: [BrushRaster?]
+    /** Stripe only: bend curvature (1/px), taper -1..1, end feather (in half lengths), 0 (`uMaskForm`). */
+    public var form: [Float] = [Float](repeating: 0, count: 16)
 
     public static let none = LayerUniforms(
         count: 0, geom: [Float](repeating: 0, count: 16), shape: [Float](repeating: 0, count: 16),

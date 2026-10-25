@@ -1,5 +1,12 @@
 # Changelog
 
+**RawBoy on iPhone: Stripe masks (2026-10-25)**
+
+- RawBoy (iOS): the **Stripe** mask layer from Android and the web, under Masks › + Add: a soft band shaped like the
+  light leaks' Streak, for a horizon, a road, a river or a beam of light. Drag its centre to move it, the dots to set
+  its length and width, the knob to turn it and the square to bend it; Feather, Bend and Taper sliders. Stripes in
+  presets made on Android or the web now open on iOS too (they were skipped).
+
 **RawBoy on iPhone: light leaks (2026-10-25)**
 
 - RawBoy (iOS): the **Light leaks** tool from Android and the web, in the top bar (Reset all moved down next to Undo

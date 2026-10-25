@@ -66,6 +66,7 @@ struct MasksPanel: View {
                         Menu {
                             Button("Linear gradient") { actions.onAdd(.linear) }
                             Button("Radial gradient") { actions.onAdd(.radial) }
+                            Button("Stripe") { actions.onAdd(.stripe) }
                             Button("Brush") { actions.onAdd(.brush) }
                         } label: {
                             Text("+ Add").font(.subheadline).padding(.horizontal, 10).padding(.vertical, 6)
@@ -90,7 +91,7 @@ struct MasksPanel: View {
                     .padding(.horizontal, 16)
                 }
             } else {
-                Note("Add a linear gradient (a graduated filter, e.g. for the sky), a radial one (a soft ellipse) or a brush layer, then shape it on the photo and adjust only that area. Up to \(Masks.maxLayers) layers; masks reset for each new photo.")
+                Note("Add a linear gradient (a graduated filter, e.g. for the sky), a radial one (a soft ellipse), a stripe (a soft band, for a horizon, a road or a beam of light) or a brush layer, then shape it on the photo and adjust only that area. Up to \(Masks.maxLayers) layers; masks reset for each new photo.")
                     .padding(.horizontal, 16)
             }
         }
@@ -186,11 +187,31 @@ struct MasksPanel: View {
                     }
                 }
             }
+        case let .stripe(_, _, _, _, _, feather, bend, taper):
+            ParamSlider(label: "Feather", value: feather, range: 0...100, defaultValue: 50, format: formatPlain) { v in
+                updateStripe(layer.id) { f, _, _ in f = v }
+            }
+            ParamSlider(label: "Bend", value: bend, range: -100...100, defaultValue: 0) { v in
+                updateStripe(layer.id) { _, b, _ in b = v }
+            }
+            ParamSlider(label: "Taper", value: taper, range: -100...100, defaultValue: 0) { v in
+                updateStripe(layer.id) { _, _, t in t = v }
+            }
         case .brush:
             EmptyView()
         }
         Note(hint(layer))
         if !layer.strokes.isEmpty { Note("Brush strokes belong to this photo: presets keep gradients only.") }
+    }
+
+    /** A stripe layer's feather, bend and taper. */
+    private func updateStripe(_ id: String, _ change: (inout Float, inout Float, inout Float) -> Void) {
+        actions.onUpdate(id) { l in
+            if case .stripe(let cx, let cy, let rx, let ry, let angle, var f, var b, var t) = l.shape {
+                change(&f, &b, &t)
+                l.shape = .stripe(cx: cx, cy: cy, rx: rx, ry: ry, angle: angle, feather: f, bend: b, taper: t)
+            }
+        }
     }
 
     private func hint(_ layer: MaskLayer) -> String {
@@ -200,6 +221,8 @@ struct MasksPanel: View {
             return "Solid line: full effect. Dashed line: no effect. Drag the middle line to move the gradient, an outer line to change its width and angle, the square to bend it."
         case .radial:
             return "Drag the centre to move, the dots to resize, the outer knob to rotate. The effect fades between the dashed and the solid ellipse."
+        case .stripe:
+            return "Drag the centre to move it, the end dots to set its length, the side dots its width, the knob to turn it and the square to bend it. The effect fades between the dashed and the solid outline."
         case .brush:
             return "Pick Brush to paint this layer's mask."
         }

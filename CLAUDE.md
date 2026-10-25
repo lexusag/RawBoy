@@ -470,7 +470,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   saturation, clarity amount, a WB matrix) by the mask weight in `develop()`. Every mask uniform is "off" at 0
   (`uMaskView` = layer + 1), so Android, which doesn't bind them yet, renders as before. `LensTransform.output` (Newton
   inverse of `source`) draws the handles. Masks don't carry over to the next photo; presets have a `masks` group.
-- Stripe masks (`MaskShape` `stripe`, Android + web; iOS parses past them): a light leak streak's band as a mask, with a
+- Stripe masks (`MaskShape` `stripe`, Android, iOS, web): a light leak streak's band as a mask, with a
   radial's fields plus bend and taper (leaks' `bendCurvature`/`taperWidth`). `uMaskShape.x` = 3, the extra form in
   `uMaskForm` (bend 1/px, taper, end feather in half lengths); the ends fade over the same pixels as the sides. The
   overlays draw, hit and drag a stripe as a radial shape with a streak `LeakForm` (`formOf` on web, `asRadial` on
