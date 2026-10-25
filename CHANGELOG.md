@@ -1,5 +1,13 @@
 # Changelog
 
+**RawBoy on iPhone: light leaks (2026-10-25)**
+
+- RawBoy (iOS): the **Light leaks** tool from Android and the web, in the top bar (Reset all moved down next to Undo
+  and Redo to make room). Up to 4 streaks, glows or triangles, made like a Photoshop light leak (a white shape with an
+  orange and a red glow, in Screen mode, grain on top), dragged anywhere inside to move, resized with the dots, turned
+  with the knob and bent with the square; Intensity, Width and Length or Size and Stretch, Rotation, Bend, Taper,
+  Warp, Softness, Glow and Colour. They export with the photo, reset for the next one and aren't kept in presets.
+
 **iOS catches up: colour and black & white sections, Auto denoise all, Remove from batch (2026-10-25)**
 
 - RawBoy, Auto and Camera (iOS): look and preset pickers list black and white ones apart from the colour ones, as on

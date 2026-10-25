@@ -201,13 +201,14 @@ final class EditorViewModel: ObservableObject {
      */
     private func carryOverEdits(_ previous: EditorState, _ newDefaults: DevelopParams) -> DevelopParams {
         if previous.fileName == nil { return newDefaults }
-        // Rotation, flips, straightening, crop and masks belong to one photo.
+        // Rotation, flips, straightening, crop, masks and light leaks belong to one photo.
         var p = previous.params
         p.rotation = newDefaults.rotation
         p.flipHorizontal = newDefaults.flipHorizontal
         p.flipVertical = newDefaults.flipVertical
         p.straighten = newDefaults.straighten
         p.masks = newDefaults.masks
+        p.leaks = newDefaults.leaks
         p = p.withCrop(newDefaults.crop)
         let wbEdited = p.temperature != previous.defaults.temperature || p.tint != previous.defaults.tint
         if !wbEdited {
@@ -358,6 +359,28 @@ final class EditorViewModel: ObservableObject {
     func removeLayer(_ id: String) {
         edit(force: true) { $0.masks.removeAll { $0.id == id } }
         session.dropBrush(id)
+    }
+
+    // MARK: - Light leaks (see LightLeaks.swift)
+
+    /** Adds a light leak (up to LightLeaks.maxLeaks) in the middle; returns its id, or nil when full. */
+    @discardableResult
+    func addLeak(_ kind: LeakKind = .streak) -> String? {
+        if state.params.leaks.count >= LightLeaks.maxLeaks { return nil }
+        let leak = LightLeaks.newLeak(kind)
+        edit(force: true) { $0.leaks.append(leak) }
+        return leak.id
+    }
+
+    /** A leak's slider or drag; [force] for a button (new shape, show/hide). */
+    func updateLeak(_ id: String, force: Bool = false, _ change: (inout LightLeak) -> Void) {
+        edit(force: force) { p in
+            if let i = p.leaks.firstIndex(where: { $0.id == id }) { change(&p.leaks[i]) }
+        }
+    }
+
+    func removeLeak(_ id: String) {
+        edit(force: true) { $0.leaks.removeAll { $0.id == id } }
     }
 
     func beginStroke(_ layerId: String, _ stroke: BrushStroke) {
