@@ -41,7 +41,7 @@ export const toneMapperId = (t: ToneMapper): number => TONE_MAPPERS.find((m) => 
  * - lensDistortion: -100..100, + removes barrel distortion; auto crop/scale follows
  * - vignetteAmount: -100..100, + brightens corners; vignetteMidpoint: 0..100 (higher = only the corners)
  * - curves: point curves (RGB, then red, green, blue) on the final display-encoded image (see ToneCurve.ts)
- * - RGB primaries (after darktable): red/green/blueHue in degrees (-30..30), red/green/bluePurity -100..100,
+ * - RGB primaries (after darktable): red/green/blueHue in degrees (-45..45), red/green/bluePurity -200..200,
  *   tintHue degrees (-180..180), tintPurity 0..100
  * - rotation: clockwise quarter turns; straighten: degrees -45..45, + turns clockwise (auto crop).
  * - flipHorizontal/flipVertical: mirror the photo (display orientation, before rotation) left-right / top-bottom.

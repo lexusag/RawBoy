@@ -192,12 +192,12 @@ fun ControlsPanel(
 
                 SectionLabel("RGB primaries")
                 val degrees = { v: Float -> String.format(Locale.ROOT, "%+.1f°", v) }
-                PrimariesParamSlider("Red hue", params, PrimariesSlider.RED_HUE, params.redHue, -30f..30f, degrees) { onChange(params.copy(redHue = it)) }
-                PrimariesParamSlider("Red purity", params, PrimariesSlider.RED_PURITY, params.redPurity, -100f..100f) { onChange(params.copy(redPurity = it)) }
-                PrimariesParamSlider("Green hue", params, PrimariesSlider.GREEN_HUE, params.greenHue, -30f..30f, degrees) { onChange(params.copy(greenHue = it)) }
-                PrimariesParamSlider("Green purity", params, PrimariesSlider.GREEN_PURITY, params.greenPurity, -100f..100f) { onChange(params.copy(greenPurity = it)) }
-                PrimariesParamSlider("Blue hue", params, PrimariesSlider.BLUE_HUE, params.blueHue, -30f..30f, degrees) { onChange(params.copy(blueHue = it)) }
-                PrimariesParamSlider("Blue purity", params, PrimariesSlider.BLUE_PURITY, params.bluePurity, -100f..100f) { onChange(params.copy(bluePurity = it)) }
+                PrimariesParamSlider("Red hue", params, PrimariesSlider.RED_HUE, params.redHue, -45f..45f, degrees) { onChange(params.copy(redHue = it)) }
+                PrimariesParamSlider("Red purity", params, PrimariesSlider.RED_PURITY, params.redPurity, -200f..200f) { onChange(params.copy(redPurity = it)) }
+                PrimariesParamSlider("Green hue", params, PrimariesSlider.GREEN_HUE, params.greenHue, -45f..45f, degrees) { onChange(params.copy(greenHue = it)) }
+                PrimariesParamSlider("Green purity", params, PrimariesSlider.GREEN_PURITY, params.greenPurity, -200f..200f) { onChange(params.copy(greenPurity = it)) }
+                PrimariesParamSlider("Blue hue", params, PrimariesSlider.BLUE_HUE, params.blueHue, -45f..45f, degrees) { onChange(params.copy(blueHue = it)) }
+                PrimariesParamSlider("Blue purity", params, PrimariesSlider.BLUE_PURITY, params.bluePurity, -200f..200f) { onChange(params.copy(bluePurity = it)) }
                 PrimariesParamSlider("Tint hue", params, PrimariesSlider.TINT_HUE, params.tintHue, -180f..180f, degrees) { onChange(params.copy(tintHue = it)) }
                 PrimariesParamSlider("Tint purity", params, PrimariesSlider.TINT_PURITY, params.tintPurity, 0f..100f, ::formatPlain) { onChange(params.copy(tintPurity = it)) }
                 Text(

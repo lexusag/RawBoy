@@ -22,7 +22,7 @@ public enum Primaries {
     /** Slider values -> primaries matrix (identity when untouched). */
     public static func fromParams(_ p: DevelopParams) -> [Double] {
         let hues = [p.redHue, p.greenHue, p.blueHue].map { Double($0) * .pi / 180 }
-        // -100..100 -> purity x0.71 .. x1.41 (exponential, so +/- feel symmetric). Rec.2020's
+        // -200..200 -> purity x0.5 .. x2 (exponential, so +/- feel symmetric). Rec.2020's
         // primaries sit near the spectral locus, so small changes already move a lot.
         let purities = [p.redPurity, p.greenPurity, p.bluePurity].map { pow(2.0, Double($0) / 200) }
         let tintPurity = Double(p.tintPurity) / 100 * 0.1  // full slider = 10% towards the gamut edge
