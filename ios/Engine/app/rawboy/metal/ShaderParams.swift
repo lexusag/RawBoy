@@ -136,6 +136,11 @@ public final class ShaderParams: @unchecked Sendable {
     /** Grain Size slider -> cell size factor: 1 at 25, doubling every 25 (0.5..8). */
     public static func grainSizeFactor(_ size: Float) -> Float { powf(2, (size - 25) / 25) }
 
+    /** Halation slider -> amount: the stock's own at 100 (0..1 below it), above it doubling every 25 (16 at 200). */
+    public static func halationGain(_ halation: Float) -> Float {
+        halation <= 100 ? halation / 100 : powf(2, (halation - 100) / 25)
+    }
+
     public static func wideDenoise(_ denoise: Float) -> Float {
         ((denoise - wideDenoiseFrom) / (100 - wideDenoiseFrom)).clamped(0, 1)
     }
@@ -194,7 +199,7 @@ public final class ShaderParams: @unchecked Sendable {
             film: filmUsed,
             filmAmount: filmUsed != nil ? (p.filmAmount / 100).clamped(0, 1) : 0,
             filmGrain: p.filmGrain / 100,
-            halation: p.halation / 100,
+            halation: halationGain(p.halation),
             curve: p.curves.table(),
             clipLevel: asShot.clipLevel)
     }

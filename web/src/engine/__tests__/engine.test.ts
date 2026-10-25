@@ -701,6 +701,16 @@ describe('Pro Auto button', () => {
   });
 });
 
+describe('Halation slider', () => {
+  it('is the stock\'s own at 100, linear below and doubling every 25 above', () => {
+    expect(ShaderParams.halationGain(0)).toBe(0);
+    expect(ShaderParams.halationGain(50)).toBeCloseTo(0.5);
+    expect(ShaderParams.halationGain(100)).toBeCloseTo(1);
+    expect(ShaderParams.halationGain(125)).toBeCloseTo(2);
+    expect(ShaderParams.halationGain(200)).toBeCloseTo(16);
+  });
+});
+
 describe('Film tone mapper in presets', () => {
   it('the Light group carries the film, and old presets leave it alone', () => {
     const film = developParams({ film: 'ektar100', filmAmount: 70, filmGrain: 150, halation: 50 });

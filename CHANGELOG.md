@@ -1,5 +1,13 @@
 # Changelog
 
+**Halation: stronger top of the slider, follows Exposure (2026-10-25)**
+
+- RawBoy (Film tone mapper, Android, iOS, web): Halation 100 is still the stock's own glow, which is faint (as on
+  real film, only light sources and blown highlights halate). Above 100 the slider now doubles the glow every 25, up
+  to 16x at 200 (it was 2x), so strong red halos around lights are possible. Halation also follows Exposure
+  like Bloom: only the highlights at the current exposure send light back, so a dark raw brightened with Exposure
+  halates like one shot brighter, and midtones are no longer touched. Auto's film looks (Halation 100) are unchanged.
+
 **The frame around the photo stays (2026-10-24)**
 
 - RawBoy Auto (Android, web): switching to a photo that is still rendering kept its thumbnail but dropped the grey /
