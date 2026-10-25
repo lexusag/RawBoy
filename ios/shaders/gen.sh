@@ -35,12 +35,12 @@ body() {  # develop.glsl, the film formation (film edition: spektrafilm's), ligh
 }
 
 { header "out vec4 fragColor;"; body
-  printf '    if (uLutAmount > 0.0) c = clamp(applyLut(c), 0.0, 1.0);\n    if (uCurveOn > 0.0) c = applyCurves(c);\n    if (uLeakCount > 0) c = applyLeaks(c, srcG);\n'
+  printf '    if (uLutAmount > 0.0) c = clamp(applyLut(c), 0.0, 1.0);\n    if (uCurveOn > 0.0) c = applyCurves(c);\n    if (uLeakCount > 0) c = applyLeaks(c, srcG, outPx);\n'
   printf '    if (uClipWarn > 0.0) c = clipWarning(c);\n    fragColor = vec4(c, 1.0);\n}\n'
 } > "$TMP/develop_frag.frag"
 
 { header "out uvec4 fragColor;"; body
-  printf '    if (uLutAmount > 0.0) c = clamp(applyLut(c), 0.0, 1.0);\n    if (uCurveOn > 0.0) c = applyCurves(c);\n    if (uLeakCount > 0) c = applyLeaks(c, srcG);\n'
+  printf '    if (uLutAmount > 0.0) c = clamp(applyLut(c), 0.0, 1.0);\n    if (uCurveOn > 0.0) c = applyCurves(c);\n    if (uLeakCount > 0) c = applyLeaks(c, srcG, outPx);\n'
   # 16-bit unsigned integer target, as Android's export: exact, no float rounding of the output.
   printf '    fragColor = uvec4(uvec3(c * 65535.0 + 0.5), 65535u);\n}\n'
 } > "$TMP/develop_export.frag"

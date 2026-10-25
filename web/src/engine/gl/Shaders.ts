@@ -20,7 +20,7 @@ export const Shaders = {
     s += MAIN_BODY;
     s += '    if (uLutAmount > 0.0) c = clamp(applyLut(c), 0.0, 1.0);\n';
     s += '    if (uCurveOn > 0.0) c = applyCurves(c);\n';
-    s += '    if (uLeakCount > 0) c = applyLeaks(c, srcG);\n';
+    s += '    if (uLeakCount > 0) c = applyLeaks(c, srcG, outPx);\n';
     // 16-bit unsigned integer target for export: exact, core in WebGL2.
     s += forExport
       ? '    fragColor = uvec4(uvec3(c * 65535.0 + 0.5), 65535u);\n'

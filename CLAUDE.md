@@ -468,15 +468,19 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   preview's gesture layer: Compose siblings don't share touches, so the mask gestures live on that layer and consume
   only handles/strokes). `EditorTopBar.kt` holds the top bar and `EditorMode`.
 - Light leaks (Pro, Android + web; `develop/LightLeaks.kt/.ts`, `shaders/light_leak.glsl`): `DevelopParams.leaks`, up to
-  `MAX_LEAKS` (4) leaks in image fractions, each a streak (beam: rx = half length, ry = half width, solid between the
-  length handles and fading over 0.6 rx past them; kind packed as seed + 2 in `uLeakShape.w`) or a glow (ellipse), applied by each shader assembly **after** the curves line
-  (`applyLeaks(c, srcG)`; iOS gen.sh includes the file but binds nothing, so count 0 = off). Display-space screen blend
-  plus a cover term (core² × smoothstep(0.4, 1, intensity)), so at 100 the core replaces the picture (the tool's purpose:
-  covering parts of a nude). The rim wobble only enlarges the glow, so the overlay's dashed ring is always fully covered.
-  UI reuses the mask overlay with the leaks as radial shapes and `grabInside` (drag anywhere inside); streaks are
-  drawn and hit-tested as bands (`band` on web's `OverlayLayer`, `bands` ids on Android). Older sidecar leaks without
-  `kind` parse as glows. Per photo, not in
-  presets (web edits sidecar keeps them).
+  `MAX_LEAKS` (4) per photo, in image fractions. Built like the owner's Photoshop action (`light leak.atn`: white
+  ellipse, Gaussian blur 78 px, outer glows (255, 156, 0) then (255, 5, 5) at 58%, layer in Screen) and Affinity macro
+  (same idea, HSL hues ~34° / ~30° / ~358°): a white core blurred over the softness, an inner glow in the chosen hue and
+  an outer one 37° redder reaching twice as far, all **screen** blended, no cover term: the white core alone covers at
+  100. Kinds: glow (ellipse), streak (|q.y|, fades over 0.6 rx past its ends), triangle (exact SDF outside, scaled by
+  the inradius inside; a max-of-half-planes metric spiked the glow past the corners). Bend (v −= k u², k = bend/100/rx),
+  taper (width × 1 + taper·q.x) and warp (edge wobble, only outward) apply to all; `uLeakForm` = kind, k, warp, taper;
+  seed in `uLeakOuter.w`. Applied by each shader assembly **after** the curves line (`applyLeaks(c, srcG, outPx)`; iOS
+  gen.sh includes the file but binds nothing, so count 0 = off). The grain lives in `develop()` (log domain), so the
+  leak would flatten it: `applyLeaks` adds `grainNoise` back × how much the leaks replaced (display units, ~mid-tone
+  strength). UI reuses the mask overlay (`leak` form on web's `OverlayLayer`, `leaks` map on Android): outlines bent and
+  tapered like the shader, `grabInside`, a bend square at q = (0.5, 0). Older edits without kind/bend/… parse as plain
+  glows. Not in presets (edits sidecars keep them).
 - Engine JVM tests: `./gradlew :engine:testStandardDebugUnitTest` (`engine/src/test`, junit + org.json; `retouch/Filters.kt`
   keeps `box` out of `SkinSegmenter`, which loads MediaPipe).
 - Brush masks (`develop/BrushRaster.ts`): strokes are vectors in `MaskLayer.strokes` (image fractions), rasterised on

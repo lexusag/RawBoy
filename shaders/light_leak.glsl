@@ -1,67 +1,92 @@
 
-// Light leaks (see develop/LightLeaks.kt): film-style warm light laid over the finished, display-encoded picture,
-// after the LUT and curves, so at full intensity their core hides what is under it (Pro's tool for covering parts of
-// a photo). Two kinds: a glow (an ellipse in image pixels like a radial mask) and a streak (a straight beam with a
-// white-hot middle line and coloured edges, as light through a gap in the camera back). Both are placed in image
-// pixels, so they stay on the same content through crop, rotation and lens corrections. Every uniform is "off" at 0,
-// so programs that don't bind them render as before.
+// Light leaks (see develop/LightLeaks.kt): film-style light laid over the finished, display-encoded picture, after
+// the LUT and curves, built like the owner's Photoshop action: a white shape, Gaussian-blurred, with an orange then a
+// red outer glow, all screen-blended. Screen only ever brightens, so the photo shows through the glow, and the white
+// core turns what is under it white (at full intensity it hides it: Pro's tool for covering parts of a photo).
+// Shapes: a glow (ellipse), a streak (a straight beam fading out past its ends) and a triangle (apex along +x), each
+// bendable (an arc along its length), taperable and warpable (an uneven edge). Placed in image pixels, so they stay on
+// the same content through crop, rotation and lens corrections. The photo's grain is laid over them again, so a leak
+// sits under the grain like light on the film. Every uniform is "off" at 0, so programs that don't bind them render
+// as before.
 #define MAX_LEAKS 4
 uniform int uLeakCount;
-uniform vec4 uLeakGeom[MAX_LEAKS];  // centre.xy (image px), 1/rx, 1/ry (streak: half length, half width)
-uniform vec4 uLeakShape[MAX_LEAKS]; // cos(angle), sin(angle), softness 0..1, shape seed 0..1 (+ 2 for a streak)
-uniform vec4 uLeakColor[MAX_LEAKS]; // rim colour (display RGB), intensity 0..1
+uniform vec4 uLeakGeom[MAX_LEAKS];  // centre.xy (image px), 1/rx, 1/ry (image px; streak: half length, half width)
+uniform vec4 uLeakShape[MAX_LEAKS]; // cos(angle), sin(angle), softness 0..1, glow size (in shape radii)
+uniform vec4 uLeakColor[MAX_LEAKS]; // inner glow colour (display RGB), intensity 0..1
+uniform vec4 uLeakOuter[MAX_LEAKS]; // outer glow colour (display RGB), shape seed 0..1
+uniform vec4 uLeakForm[MAX_LEAKS];  // kind (0 glow, 1 streak, 2 triangle), bend (1/px), warp 0..1, taper -1..1
 
-// The leak's hot middle: a pale warm white, as where a real leak burns the film most.
-const vec3 LEAK_HOT = vec3(1.0, 0.94, 0.80);
+// Signed edge distance in shape radii (0 on the outline, negative inside) of point q in the shape's own frame.
+// Triangle: apex (1, 0), base corners (-1, +-1); exact Euclidean distance outside (so the glow keeps an even width and
+// doesn't spike past the corners), inside scaled by the inradius so its middle is -1 like the other shapes'.
+float leakEdge(vec2 q, float kind) {
+    if (kind > 1.5) {
+        vec2 a = vec2(1.0, 0.0);
+        vec2 b = vec2(-1.0, 1.0);
+        vec2 c = vec2(-1.0, -1.0);
+        vec2 e0 = b - a, e1 = c - b, e2 = a - c;
+        vec2 v0 = q - a, v1 = q - b, v2 = q - c;
+        vec2 p0 = v0 - e0 * clamp(dot(v0, e0) / dot(e0, e0), 0.0, 1.0);
+        vec2 p1 = v1 - e1 * clamp(dot(v1, e1) / dot(e1, e1), 0.0, 1.0);
+        vec2 p2 = v2 - e2 * clamp(dot(v2, e2) / dot(e2, e2), 0.0, 1.0);
+        float sd = sign(e0.x * e2.y - e0.y * e2.x);
+        vec2 m = min(min(vec2(dot(p0, p0), sd * (v0.x * e0.y - v0.y * e0.x)),
+                         vec2(dot(p1, p1), sd * (v1.x * e1.y - v1.y * e1.x))),
+                     vec2(dot(p2, p2), sd * (v2.x * e2.y - v2.y * e2.x)));
+        float d = -sqrt(m.x) * sign(m.y);
+        return d < 0.0 ? d / 0.618 : d; // 0.618: the inradius
+    }
+    if (kind > 0.5) return abs(q.y) - 1.0; // streak
+    return length(q) - 1.0;                // glow
+}
 
-vec3 applyLeaks(vec3 c, vec2 p) {
+vec3 applyLeaks(vec3 c, vec2 p, vec2 fullPx) {
+    float covered = 0.0; // how much of the picture the leaks replaced, for the grain laid back over them
     for (int i = 0; i < MAX_LEAKS; ++i) {
         if (i >= uLeakCount) break;
         vec4 g = uLeakGeom[i];
         vec4 s = uLeakShape[i];
-        vec4 col = uLeakColor[i];
+        vec4 f = uLeakForm[i];
+        vec4 tintIn = uLeakColor[i];
+        vec4 tintOut = uLeakOuter[i];
         vec2 d = p - g.xy;
-        vec2 q = vec2(s.x * d.x + s.y * d.y, -s.y * d.x + s.x * d.y) * g.zw; // 1 on the ellipse / band edge
-        bool streak = s.w >= 2.0;
-        float seed = (streak ? s.w - 2.0 : s.w) * 6.2832;
-        float soft = max(s.z, 0.02);
-        float core, glow, r;
-        if (streak) {
-            // Across the beam: 1 at its edge. The width breathes a little along the length, only ever wider than
-            // the band the handles show, so the solid part they mark is always covered.
-            float u = abs(q.x);
-            float wob = 0.5 + 0.3 * sin(1.7 * q.x + seed) + 0.2 * sin(4.3 * q.x + 5.0 * seed);
-            r = abs(q.y) / (1.0 + 0.2 * wob);
-            // Along it: full strength between the length handles, fading out beyond them.
-            float along = 1.0 - smoothstep(1.0, 1.6, u);
-            core = (1.0 - smoothstep(1.0 - soft, 1.0, r)) * along;
-            // Faint parallel striations in the fading edges, as light spilling past the film's edge.
-            float striae = 0.8 + 0.2 * sin(11.0 * q.y + 3.0 * seed) * sin(5.0 * q.y - 7.0 * seed);
-            glow = core * mix(1.0, striae, smoothstep(1.0 - soft, 1.0, r));
-            // A wide soft halo either side of the beam.
-            glow = max(glow, exp(-1.6 * max(r - 1.0, 0.0)) * (0.2 + 0.25 * soft) * along);
-        } else {
-            r = length(q);
-            // Uneven, organic rim: the glow only ever reaches further than the ellipse (never less), so the solid
-            // core the handles show is always covered.
-            float th = atan(q.y, q.x + 1e-6); // never atan(0, 0), undefined on some GPUs
-            float wob = 0.5 + 0.25 * sin(2.0 * th + seed) + 0.15 * sin(3.0 * th + 7.0 * seed) + 0.1 * sin(5.0 * th + 13.0 * seed);
-            r /= 1.0 + 0.18 * wob;
-            core = 1.0 - smoothstep(1.0 - soft, 1.0, r);
-            // Faint streaks in the fading part, as light fanning out through the gap.
-            float rays = 0.8 + 0.2 * sin(7.0 * th + 3.0 * seed) * sin(3.0 * th - 5.0 * seed);
-            glow = core * mix(1.0, rays, smoothstep(1.0 - soft, 1.0, r));
-            // A long faint tail beyond the rim, as light spreading through the film base (max: no step at the rim).
-            glow = max(glow, exp(-3.0 * max(r - 1.0, 0.0)) * 0.15 * soft);
+        float u = s.x * d.x + s.y * d.y;
+        float v = -s.y * d.x + s.x * d.y;
+        v -= f.y * u * u;                                     // bend: the axis becomes an arc
+        float qx = u * g.z;
+        float width = max(1.0 + f.w * clamp(qx, -1.0, 1.0), 0.05); // taper: wider towards one end
+        vec2 q = vec2(qx, v * g.w / width);
+        float e = leakEdge(q, f.x);
+        float along = 1.0;
+        if (f.x > 0.5 && f.x < 1.5) along = 1.0 - smoothstep(1.0, 1.6, abs(q.x)); // a streak fades past its ends
+        if (f.z > 0.0) {
+            // Warp: an uneven, organic edge that only ever reaches further out.
+            float seed = tintOut.a * 6.2832;
+            float t = f.x > 0.5 && f.x < 1.5 ? q.x * 2.0 : atan(q.y, q.x + 1e-6); // never atan(0, 0)
+            float wob = 0.5 + 0.25 * sin(2.0 * t + seed) + 0.15 * sin(3.0 * t + 7.0 * seed) + 0.1 * sin(5.0 * t + 13.0 * seed);
+            e -= f.z * 0.6 * wob;
         }
-        // Hot and pale in the middle, the chosen colour towards the rim (a streak's white line is narrower).
-        vec3 tint = mix(LEAK_HOT, col.rgb, smoothstep(0.0, streak ? 0.55 : 0.75, r));
-        float a = col.a;
-        // Glow: a screen blend, as light added to the film; it saturates by about half intensity.
-        c = 1.0 - (1.0 - c) * (1.0 - tint * min(glow, 1.0) * min(1.0, a * 1.6));
-        // Cover: from half intensity the leak also replaces the picture, fully in its core at 100. Squared, so the
-        // fading part stays a glow (a straight mix there dulled light colours into a grey ring).
-        c = mix(c, tint, core * core * smoothstep(0.4, 1.0, a));
+        // Core: the white shape, Gaussian-blurred over the softness (half covered on the outline).
+        float blur = 0.03 + 0.6 * s.z;
+        float core = 1.0 - smoothstep(-blur, blur, e);
+        // Outer glows: the inner colour hugging the shape, the outer one reaching twice as far (Photoshop's two outer
+        // glows at 58%).
+        float o = max(e, 0.0) / max(s.w, 0.01);
+        float glowIn = 0.58 * exp(-4.0 * o * o);
+        float glowOut = 0.58 * exp(-o * o);
+        float a = tintIn.a * along;
+        vec3 before = c;
+        c = 1.0 - (1.0 - c) * (1.0 - tintOut.rgb * glowOut * a);
+        c = 1.0 - (1.0 - c) * (1.0 - tintIn.rgb * glowIn * a);
+        c = 1.0 - (1.0 - c) * (1.0 - vec3(core * a));
+        float lit = max(max(c.r - before.r, c.g - before.g), c.b - before.b) / max(1.0 - min(min(before.r, before.g), before.b), 1e-3);
+        covered = 1.0 - (1.0 - covered) * (1.0 - clamp(lit, 0.0, 1.0));
+    }
+    if (uGrain > 0.0 && covered > 0.0) {
+        // Screen flattens the grain under the light; lay it back as much as the leaks took away (display units, about
+        // the grain's mid-tone strength), so the leak sits under the grain.
+        float footprint = max(max(fwidth(fullPx.x), fwidth(fullPx.y)), 1.0);
+        c += grainNoise(fullPx) * (uGrain * 0.03 * min(1.0, uGrainSize / footprint) * covered);
     }
     return clamp(c, 0.0, 1.0);
 }

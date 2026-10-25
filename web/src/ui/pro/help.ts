@@ -50,9 +50,10 @@ export const PRO_HELP: HelpSection[] = [
   {
     title: 'Light leaks',
     items: [
-      { how: '+ Streak, + Glow', text: 'Adds a film-style leak (up to 4): a streak is a beam of light across the photo, white-hot in the middle with coloured edges; a glow is a round blob. Drag it anywhere inside to move it, the dots to resize (a streak: side dots width, end dots length), the knob to rotate. The Streak / Glow switch changes the selected one.' },
-      { how: 'Intensity', text: 'A glow at low values; from about 60% it also covers the photo, and at 100% its middle (inside the dashed lines) hides what is under it: a tasteful way to cover part of a nude.' },
-      { how: 'Width, Length / Size, Stretch, Rotation, Softness, Colour', text: 'Shape and colour, from magenta-red to amber. Several streaks side by side make a wider burn. New shape picks another uneven edge. Leaks belong to the photo: presets don\'t keep them.' },
+      { how: '+ Streak, + Glow, + Triangle', text: 'Adds a film-style light leak (up to 4), made like a Photoshop one: a white shape with an orange and a red glow, in Screen mode, so the photo shows through the glow and the grain stays on top. Drag it anywhere inside to move it, the dots to resize, the round knob to turn it, the square to bend it. The switch changes the selected leak\'s shape.' },
+      { how: 'Intensity', text: 'At 100% the white middle (inside the dashed line) hides what is under it: a tasteful way to cover part of a nude. Lower, the light lets the photo through.' },
+      { how: 'Bend, Taper, Warp', text: 'Bend curves the leak into an arc, Taper narrows it towards one end, Warp makes its edge uneven (New warp picks another).' },
+      { how: 'Softness, Glow, Colour', text: 'Softness blurs the white core, Glow sets how far the coloured light reaches, Colour goes from magenta-red to amber. Leaks belong to the photo: presets don\'t keep them.' },
     ],
   },
 ];
