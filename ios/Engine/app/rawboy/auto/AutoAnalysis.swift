@@ -37,21 +37,23 @@ public enum AutoAnalysis {
      * The same for an already decoded [image] (kept open, e.g. to export it next). Blocking.
      * [noiseIsoScale]: see AutoTone.develop. [fallbackIso] is used when the file has no ISO (e.g. from the capture).
      * [detectSkin] false skips skin detection (face metering, skin retouch): the camera saw no face.
-     * [meter]: see SceneAnalyzer.analyze.
+     * [meter]: see SceneAnalyzer.analyze. [phoneAe]: RawBoy Camera's raw, exposed by the phone's auto exposure (see
+     * AutoTone.exposure).
      */
     public static func analyze(_ image: RawImage, label: String, noiseIsoScale: Float = 1, fallbackIso: Float = 0,
-                               detectSkin: Bool = true, meter: MeterArea? = nil) -> Analysis {
+                               detectSkin: Bool = true, meter: MeterArea? = nil, phoneAe: Bool = false) -> Analysis {
         let start = Date()
         let (base, bloom) = copiesOf(image)
         log.notice("small copies: \(Int(Date().timeIntervalSince(start) * 1000)) ms")
         var info = Info.of(image)
         if info.iso <= 0 { info = Info(lens: info.lens, iso: fallbackIso, defaults: info.defaults) }
+        info.phoneAe = phoneAe
         return analyze(base, bloom, info, label, noiseIsoScale, detectSkin, meter)
     }
 
     /**
-     * [cameraMetered]: see AutoTone.cameraMetered; [noise]: the measured noise. Only Auto uses them (Camera meters the
-     * scene live itself and keeps its ISO-based denoise, which has no time cost per shot).
+     * [cameraMetered]: see AutoTone.cameraMetered; [noise]: the measured noise, only Auto's (Camera keeps its ISO-based
+     * denoise, which has no time cost per shot); [phoneAe]: see AutoTone.exposure.
      */
     private struct Info {
         let lens: LensInfo
@@ -59,6 +61,7 @@ public enum AutoAnalysis {
         let defaults: DevelopParams
         var cameraMetered = false
         var noise = NoiseLevel.none
+        var phoneAe = false
 
         static func of(_ img: RawImage, auto: Bool = false) -> Info {
             Info(lens: img.lens, iso: img.iso, defaults: PhotoSession.asShotDefaults(img),
@@ -78,10 +81,11 @@ public enum AutoAnalysis {
 
     private static func develop(_ base: PreviewImage, _ skin: SkinMask?, _ iso: Float, _ defaults: DevelopParams,
                                 _ noiseIsoScale: Float, _ cameraMetered: Bool,
-                                _ meter: MeterArea?, _ noise: NoiseLevel = .none) -> (SceneStats, DevelopParams) {
+                                _ meter: MeterArea?, _ noise: NoiseLevel = .none,
+                                _ phoneAe: Bool = false) -> (SceneStats, DevelopParams) {
         let stats = SceneAnalyzer.analyze(base, skin: skin, iso: iso, meter: meter)
         return (stats, AutoTone.develop(stats, asShot: defaults, noiseIsoScale: noiseIsoScale, cameraMetered: cameraMetered,
-                                        noise: noise))
+                                        noise: noise, phoneAe: phoneAe))
     }
 
     private static func copiesOf(_ img: RawImage) -> (PreviewImage, BloomSources) {
@@ -96,11 +100,12 @@ public enum AutoAnalysis {
         let skin = detectSkin ? try? SkinSegmenter.segment(base, fullWidth: base.fullWidth, fullHeight: base.fullHeight) : nil
         log.notice("skin detection: \(Int(Date().timeIntervalSince(start) * 1000)) ms")
         let defaults = info.defaults
-        let (stats, auto) = develop(base, skin, info.iso, defaults, noiseIsoScale, info.cameraMetered, meter, info.noise)
+        let (stats, auto) = develop(base, skin, info.iso, defaults, noiseIsoScale, info.cameraMetered, meter, info.noise,
+                                    info.phoneAe)
         log.notice("""
             analysis \(label): key=\(stats.key) p1=\(stats.p1) p5=\(stats.p5) p50=\(stats.p50) p98=\(stats.p98) \
             p99=\(stats.p99) clipped=\(stats.clipped) chroma=\(stats.chroma) face=\(stats.faceArea) \
-            skin=\(stats.skinLuminance) iso=\(info.iso) cameraMetered=\(info.cameraMetered) \
+            skin=\(stats.skinLuminance) iso=\(info.iso) cameraMetered=\(info.cameraMetered) phoneAe=\(info.phoneAe) \
             noise=\(info.noise.luma)/\(info.noise.chroma) -> exposure=\(auto.exposure) \
             hl=\(auto.highlights) sh=\(auto.shadows) contrast=\(auto.contrast) \
             denoise=\(auto.denoise)/\(auto.colorDenoise.map { "\($0)" } ?? "-") \

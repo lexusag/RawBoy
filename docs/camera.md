@@ -22,7 +22,7 @@ shows them.
   develops a raw (tone and noise from the raw itself, then the look with the controls as they were at the shutter)
   and saved as `Pictures/RawBoy Camera/IMG_<date>_<time>-camera.jpg`. The exposure is the phone's own auto exposure,
   lifted when it darkened the frame to protect something bright (a white bird, a window); flash shots, exposed
-  manually, are metered by RawBoy. You can keep shooting meanwhile;
+  manually on the Pixel, are metered by RawBoy (the iPhone's flash is exposed by its own AE, so it is kept too). You can keep shooting meanwhile;
   "Saving N…" shows the queue. The thumbnail opens the last photo. Exposure is metered on the middle half of the
   frame (width and height); a focus lock meters at its point instead.
 - **Merge 8 frames** (the burst button in the top bar, or Settings; off by default): each shot without flash takes 8 raw frames in a quick burst and
@@ -40,7 +40,8 @@ shows them.
 - **Settings:** JPEG quality; whether to keep the DNG (off by default: only the JPEG is saved); **Smaller photos**
   (on by default: 3000 px on the long side, area-downscaled from the full-resolution develop, with the grain sized to
   the smaller photo and a light sharpening after the downscale; off saves full resolution, unsharpened); **Merge 8 frames** (see above); **Shutter sound** (off by default: a click on each
-  shot; where the law requires it, such as Japan and Korea, Android reports so and it is always on and greyed out);
+  shot; where the law requires it, such as Japan and Korea, Android or iOS reports so and it is always on and greyed out,
+  as it is on iPhones before iOS 18);
   **Geotag** (off by default; see below);
   **Remember camera & settings** (off by default: each start uses the
   back W lens, Yellow Portrait 400 and default sliders; on keeps lens, side, look and sliders).

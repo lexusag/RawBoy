@@ -17,6 +17,13 @@ public enum AutoTone {
      */
     private static let targetKey: Float = 0.043
 
+    /**
+     * RawBoy Camera ([phoneAe]): the key a phone's AE gives a normal scene, the neutral camera key above. A phone's AE
+     * protects highlights for its own local tone mapping: a white bird or a window in the metered box took the whole
+     * frame 1-2 EV down. A key below this is lifted back up to it; a brighter one is kept.
+     */
+    private static let phoneKey: Float = 0.06
+
     /** Where the brightest 2% should sit, in EV below sensor clip, before exposure is raised. */
     private static let targetP98: Float = -1.3
 
@@ -73,15 +80,17 @@ public enum AutoTone {
      * camera raws, and a small phone sensor is about as noisy as those at a few times its ISO.
      * A display source (JPEG, HEIC: DevelopParams.displaySource) is already exposed, toned, denoised and sharpened
      * by the camera, and its neutral render is the file itself: it gets only the base grain.
+     * [phoneAe]: RawBoy Camera's raw, exposed by the phone's AE (see exposure).
      */
     public static func develop(_ stats: SceneStats, asShot: DevelopParams, noiseIsoScale: Float = 1,
-                               cameraMetered: Bool = false, noise: NoiseLevel = .none) -> DevelopParams {
+                               cameraMetered: Bool = false, noise: NoiseLevel = .none,
+                               phoneAe: Bool = false) -> DevelopParams {
         if asShot.displaySource {
             var p = asShot
             p.grain = baseGrain
             return p
         }
-        let exposure = exposure(stats, cameraMetered: cameraMetered)
+        let exposure = exposure(stats, cameraMetered: cameraMetered, phoneAe: phoneAe)
         let gainEv = exposure + baseExposureEv
 
         // Highlights: recover when a noticeable part of the frame lands in AgX's top stop.
@@ -114,10 +123,19 @@ public enum AutoTone {
      * EV that brings the key to its target, but never brighter than what puts the scene's
      * highlights near the top: so dark interiors and night scenes stay dark, while a frame the
      * camera underexposed (highlights far below clip) is lifted. [cameraMetered]: the camera's own
-     * exposure is kept instead (see cameraMetered(make:baselineExposure:)). With a face, mostly the skin decides.
+     * exposure is kept instead (see cameraMetered(make:baselineExposure:)). [phoneAe]: the phone's exposure is kept
+     * unless it put the key below [phoneKey], which is then lifted to it (never darker than the phone's). With a face,
+     * mostly the skin decides.
      */
-    public static func exposure(_ stats: SceneStats, cameraMetered: Bool = false) -> Float {
-        var ev = cameraMetered ? 0 : min(log2f(targetKey / stats.key), targetP98 - stats.p98)
+    public static func exposure(_ stats: SceneStats, cameraMetered: Bool = false, phoneAe: Bool = false) -> Float {
+        var ev: Float
+        if phoneAe {
+            ev = max(0, log2f(phoneKey / stats.key))
+        } else if cameraMetered {
+            ev = 0
+        } else {
+            ev = min(log2f(targetKey / stats.key), targetP98 - stats.p98)
+        }
         if stats.skinLuminance > 0 {
             let t = ((stats.faceArea - faceAreaFrom) / (faceAreaFull - faceAreaFrom)).clamped(0, 1)
             let w = skinWeight * t * t * (3 - 2 * t)
