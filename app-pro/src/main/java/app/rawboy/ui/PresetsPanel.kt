@@ -190,12 +190,23 @@ private fun SavePresetDialog(hasStrokes: Boolean, onDismiss: () -> Unit, onSave:
         text = {
             Column {
                 OutlinedTextField(name, { name = it }, label = { Text("Name") }, singleLine = true)
-                Text(
-                    "Include",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(top = 12.dp),
-                )
+                val all = groups.size == PresetGroup.entries.size
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                ) {
+                    Text(
+                        "Include",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    TextButton(onClick = { groups = if (all) emptySet() else PresetGroup.entries.toSet() }) {
+                        Text(if (all) "Deselect all" else "Select all")
+                    }
+                }
                 for (g in PresetGroup.entries) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,

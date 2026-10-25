@@ -1,5 +1,10 @@
 # Changelog
 
+**RawBoy: select or deselect all groups when saving a preset (2026-10-25)**
+
+- RawBoy (Android, iOS, web): the **Save preset** dialog has a **Select all** / **Deselect all** button beside
+  Include, so a preset with every group, or with just one or two, takes one tap instead of ticking each box.
+
 **Auto: half the measured luma denoise (2026-10-25)**
 
 - RawBoy Auto and RawBoy's Auto button (Android, iOS, web): the luma Denoise Auto measures is halved again, about one
