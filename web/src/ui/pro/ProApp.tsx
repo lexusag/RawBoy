@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { FrameColors } from '../../engine/gl/DevelopRenderer';
 import { cropAspectRatio, cropOf, withCrop, withoutCrop, FULL_CROP, cropWithAspect, type CropAspect } from '../../engine/develop/CropMath';
-import { pickFiles } from '../common/files';
+import { PHOTO_ACCEPT, pickFiles } from '../common/files';
 import { isTabShown } from '../common/tabs';
 import { Preview, PreviewLabel, zoomLabel } from '../common/Preview';
 import { ControlsPanel, GeometryPanel } from './Controls';
@@ -278,7 +278,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   );
 
   const open = async () => {
-    const [file] = await pickFiles(false);
+    const [file] = await pickFiles(false, PHOTO_ACCEPT);
     if (file) void store.open(file);
   };
 
@@ -463,7 +463,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
           {state.loading && <div className="center"><span className="spinner" /></div>}
           {!session.preview && !state.loading && (
             <div className="center empty">
-              <button type="button" className="primary" onClick={open}>Open a RAW file</button>
+              <button type="button" className="primary" onClick={open}>Open a photo</button>
               <p>or drop one here. Double-click the photo (or press Z) for 100%, drag to pan; press and hold to compare with the as-shot render.</p>
             </div>
           )}

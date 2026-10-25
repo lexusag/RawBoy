@@ -104,7 +104,7 @@ export function App() {
     return () => clearTimeout(t);
   }, [message, tab]);
 
-  // Drop raws onto the window: Pro opens the first, Auto adds them all; LUT files go to "Your LUTs".
+  // Drop photos onto the window: Pro opens the first, Auto adds them all; LUT files go to "Your LUTs".
   useEffect(() => {
     const over = (e: DragEvent) => {
       if (!e.dataTransfer?.types.includes('Files')) return;

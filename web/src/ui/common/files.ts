@@ -3,7 +3,7 @@ import { zipSync } from 'fflate';
 /** Raw extensions the decoders handle (LibRaw's common ones plus DNG); anything else is still tried when picked. */
 export const RAW_ACCEPT = '.dng,.cr2,.cr3,.crw,.nef,.nrw,.arw,.srf,.sr2,.raf,.rw2,.orf,.pef,.srw,.x3f,.3fr,.fff,.iiq,.mos,.mrw,.erf,.kdc,.dcr,.rwl,.raw';
 
-/** RawBoy Auto's picker: raws plus JPEG, HEIC, PNG and TIFF (decoded as display sources; HEIC needs Safari). */
+/** RawBoy's and Auto's picker: raws plus JPEG, HEIC, PNG and TIFF (decoded as display sources; HEIC needs Safari). */
 export const PHOTO_ACCEPT = `${RAW_ACCEPT},.jpg,.jpeg,.heic,.heif,.png,.tif,.tiff`;
 
 /** Opens the file picker. */

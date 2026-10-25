@@ -20,7 +20,7 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- "Open with RawBoy" from file managers / galleries -->
+            <!-- "Open with RawBoy" from file managers / galleries: raws, JPEGs, HEICs, PNGs or TIFFs -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <action android:name="android.intent.action.SEND" />
@@ -36,6 +36,11 @@
                 <data android:mimeType="image/x-olympus-orf" />
                 <data android:mimeType="image/x-pentax-pef" />
                 <data android:mimeType="image/x-samsung-srw" />
+                <data android:mimeType="image/jpeg" />
+                <data android:mimeType="image/heic" />
+                <data android:mimeType="image/heif" />
+                <data android:mimeType="image/png" />
+                <data android:mimeType="image/tiff" />
             </intent-filter>
         </activity>
 

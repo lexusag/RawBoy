@@ -33,7 +33,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   - `lens_opcodes.cpp` — our own DNG OpcodeList2/3 parser (GainMap, WarpRectilinear, FixVignetteRadial).
   - `blemish.cpp` — blemish detection + spot healing on the full-res image (undoable via backups).
   - `jni_bridge.cpp` — decoder order (JPEG by magic, else LibRaw first, SDK fallback for TIFF-magic files), JNI API.
-  - **Display sources** (JPEG/HEIC/PNG/TIFF, Auto's intake): `decoder_display.cpp` parses JPEG markers (EXIF via
+  - **Display sources** (JPEG/HEIC/PNG/TIFF, Auto's and Pro's intake: `PHOTO_ACCEPT` / `photoFileTypes`, Pro's manifest): `decoder_display.cpp` parses JPEG markers (EXIF via
     `exif_reader.cpp`, ICC via `display_profile.cpp`, MPF → Ultra HDR gain map, XMP `hdrgm` / ISO 21496-1; the gain is
     applied per channel only within 0.5 EV of scene white, so the default render stays the SDR picture) and decodes
     with jpegli through `rb_jpeg_decode` (`jpeg_decode.cpp`, built into the **JPEG** library: librawboy links librawboyjpeg,

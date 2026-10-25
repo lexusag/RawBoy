@@ -38,7 +38,7 @@ public enum Imports {
 
     /**
      * The raw files behind photos picked in the Photos picker, copied in. Photos without a raw representation are
-     * skipped and counted in the returned [skipped], unless [acceptDisplay] (RawBoy Auto): then their HEIC, JPEG, PNG
+     * skipped and counted in the returned [skipped], unless [acceptDisplay] (RawBoy and Auto): then their HEIC, JPEG, PNG
      * or TIFF is taken (the raw is still preferred).
      */
     public static func load(_ results: [PHPickerResult], acceptDisplay: Bool = false) async -> (urls: [URL], skipped: Int) {
@@ -120,5 +120,5 @@ public struct PhotoPicker: UIViewControllerRepresentable {
 /** Raw file types for the Files importer: every raw UTI plus DNG; some providers report raws as plain data. */
 public let rawFileTypes: [UTType] = [.rawImage, UTType("com.adobe.raw-image") ?? .rawImage, .data]
 
-/** RawBoy Auto's Files importer: raws plus JPEG, HEIC, PNG and TIFF (decoded as display sources). */
+/** RawBoy's and Auto's Files importer: raws plus JPEG, HEIC, PNG and TIFF (decoded as display sources). */
 public let photoFileTypes: [UTType] = rawFileTypes + [.jpeg, .heic, .heif, .png, .tiff]

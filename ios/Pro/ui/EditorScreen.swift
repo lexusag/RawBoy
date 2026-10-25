@@ -160,7 +160,7 @@ struct EditorScreen: View {
                         Button("From Photos", systemImage: "photo.on.rectangle", action: openFromPhotos)
                         Button("From Files", systemImage: "folder", action: openFromFiles)
                     } label: {
-                        Text("Open a RAW file").padding(.horizontal, 20).padding(.vertical, 10)
+                        Text("Open a photo").padding(.horizontal, 20).padding(.vertical, 10)
                             .background(Capsule().fill(Color.accentColor)).foregroundStyle(.black)
                     }
                 }
