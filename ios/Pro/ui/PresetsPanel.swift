@@ -36,7 +36,11 @@ struct PresetsPanel: View {
                     if vm.presets.isEmpty {
                         Note("No presets yet. Save the current edits (any groups of sliders) to reuse them on other photos. Rotation, flips, straightening and crop are never part of a preset.")
                     }
-                    ForEach(vm.presets) { p in row(p) }
+                    // Colour ones, then black and white ones under their own heading.
+                    ForEach(Array(Presets.sections(vm.presets).enumerated()), id: \.offset) { _, section in
+                        if let label = section.label { SectionLabel(label) }
+                        ForEach(section.presets) { p in row(p) }
+                    }
                 }
             }
         }

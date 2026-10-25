@@ -1,5 +1,18 @@
 # Changelog
 
+**iOS catches up: colour and black & white sections, Auto denoise all, Remove from batch (2026-10-25)**
+
+- RawBoy, Auto and Camera (iOS): look and preset pickers list black and white ones apart from the colour ones, as on
+  Android and the web: RawBoy's included LUTs and Presets panel, Auto's look strip (Color and Black & white headings
+  with a divider), Camera's Look menu. Auto's preset dialog lists colour presets first, then black and white ones
+  marked B&W.
+- RawBoy Auto (iOS): **Auto denoise all** in the grid's top row, and **Auto denoise** (dots) in the selection bar,
+  give photos their own measured denoise in place of the Denoise slider, as on Android and the web.
+- RawBoy Auto (iOS): **Remove from batch** in a new … menu in the photo view's top bar (with Apply to all) takes the
+  open photo out of the batch and goes on to the next.
+- RawBoy Auto (iOS): the frame around a photo that is still rendering stays, instead of blinking out.
+- RawBoy (iOS): the file name and shot info line scrolls sideways instead of shortening the name.
+
 **Camera on iPhone: as bright as the phone's camera, optional shutter sound (2026-10-25)**
 
 - RawBoy Camera (iOS): the exposure fixes Android got today. The viewfinder and the photos keep the iPhone's own auto
