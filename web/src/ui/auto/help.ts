@@ -42,6 +42,7 @@ export const AUTO_HELP: HelpSection[] = [
       { keys: ['Mod+Z'], text: 'Undo this photo\'s last edit; with Shift, Redo (also the arrows in the top bar)' },
       { how: 'Double-click', text: '100% view; drag to pan, double-click again to go back.' },
       { how: 'Mouse wheel over the photo', text: 'Zoom in and out around the pointer, up to 400%; out past the whole photo goes back to it.' },
+      { how: 'Pinch (touch screens)', text: 'Two fingers zoom around their middle, up to 400%, and pan with it; out past the whole photo goes back to it.' },
       { how: 'Click outside the photo', text: 'Change the frame around it: grey, white or black.' },
       { how: 'Press and hold', text: 'See the photo without the look.' },
       { how: 'Look, Adjust', text: 'Look, Strength, Brightness and Warmth; Adjust has the auto develop\'s own sliders.' },

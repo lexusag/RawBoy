@@ -41,6 +41,8 @@ internal class SampleGeometry(
     val imageHeight: Int,
     /** Smallest grain cell in full-resolution pixels: more than 1 when the export is saved smaller. */
     val minGrainPx: Float = 1f,
+    /** [output] with fractional edges, [x, y, width, height] (a pinch zoom's view, ZoomMath.viewRectF). */
+    val outputF: FloatArray = floatArrayOf(output.x.toFloat(), output.y.toFloat(), output.width.toFloat(), output.height.toFloat()),
 ) {
     /** Grain cell in full-resolution pixels: ~1/3200 of the long edge (fine-grain film). */
     val grainSize: Float get() = maxOf(minGrainPx, maxOf(imageWidth, imageHeight) / 3200f)
@@ -284,8 +286,8 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
         GLES30.glUniform1f(uPixelScale, g.textureWidth.toFloat() / g.input.width)
         GLES30.glUniform2f(uInOrigin, g.input.x.toFloat(), g.input.y.toFloat())
         GLES30.glUniform2f(uInSpan, g.input.width.toFloat(), g.input.height.toFloat())
-        GLES30.glUniform2f(uOutOrigin, g.output.x.toFloat(), g.output.y.toFloat())
-        GLES30.glUniform2f(uOutSpan, g.output.width.toFloat(), g.output.height.toFloat())
+        GLES30.glUniform2f(uOutOrigin, g.outputF[0], g.outputF[1])
+        GLES30.glUniform2f(uOutSpan, g.outputF[2], g.outputF[3])
         bindLens(p.lens)
         bindLayers(p.layers)
         bindLeaks(p.leaks)

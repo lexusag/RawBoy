@@ -63,9 +63,14 @@ interface Props {
   onStrokeBegin: (layerId: string, stroke: BrushStroke) => void;
   onStrokeExtend: (layerId: string, strokeId: string, points: number[]) => void;
   onStrokeEnd: () => void;
+  /** The stroke being painted is dropped: a second finger came down to pinch-zoom. */
+  onStrokeCancel?: (layerId: string) => void;
 }
 
 type Pt = [number, number];
+
+/** A second finger this soon after a stroke began makes it the start of a pinch, not paint. */
+const PINCH_GRACE_MS = 150;
 
 const dist2ToSegment = (p: Pt, a: Pt, b: Pt) => {
   const dx = b[0] - a[0];
@@ -99,7 +104,10 @@ export function MaskOverlay(props: Props) {
   const [hover, setHover] = useState<Handle | 'pin' | null>(null);
   const [cursorAt, setCursorAt] = useState<Pt | null>(null);
   const drag = useRef<{ id: string; handle: Handle; start: MaskShape; from: Pt } | null>(null);
-  const painting = useRef<{ layerId: string; strokeId: string; last: Pt } | null>(null);
+  const painting = useRef<{ layerId: string; strokeId: string; last: Pt; at: number } | null>(null);
+  /** Pointers down over the overlay: a second one is a pinch for the preview, never a handle or a stroke. */
+  const down = useRef(new Set<number>());
+  const pointerUp = (id: number) => down.current.delete(id);
   const dpr = window.devicePixelRatio || 1;
   let r: number[] | null = null;
   if (box) {
@@ -391,6 +399,22 @@ export function MaskOverlay(props: Props) {
         if (!box || box.w !== b.width || box.h !== b.height) setBox({ w: b.width, h: b.height });
       }}
       onPointerDown={(e) => {
+        if (e.isPrimary) down.current.clear();
+        down.current.add(e.pointerId);
+        if (down.current.size > 1) {
+          // Pinch: give up the first finger's stroke or drag and let the preview have both fingers. A stroke just
+          // begun is dropped (the first finger of the pinch), a longer one kept (MaskOverlay.kt's PAN_GRACE_MS).
+          const pt = painting.current;
+          const d = drag.current;
+          painting.current = null;
+          drag.current = null;
+          if (pt) {
+            props.onStrokeEnd();
+            if (e.timeStamp - pt.at < PINCH_GRACE_MS) props.onStrokeCancel?.(pt.layerId);
+          }
+          if (d) onChange(d.id, d.start);
+          return;
+        }
         if (e.button !== 0 || !r) return;
         const p = local(e);
         if (painter) {
@@ -407,7 +431,7 @@ export function MaskOverlay(props: Props) {
             flow: brush.flow,
             points: fraction(img),
           };
-          painting.current = { layerId: selected.id, strokeId: s.id, last: img };
+          painting.current = { layerId: selected.id, strokeId: s.id, last: img, at: e.timeStamp };
           props.onStrokeBegin(selected.id, s);
           return;
         }
@@ -446,6 +470,7 @@ export function MaskOverlay(props: Props) {
         onChange(d.id, dragShape(d.start, d.handle, d.from, toImage(p[0], p[1])));
       }}
       onPointerUp={(e) => {
+        pointerUp(e.pointerId);
         if (painting.current) {
           e.stopPropagation();
           painting.current = null;
@@ -456,7 +481,8 @@ export function MaskOverlay(props: Props) {
         e.stopPropagation();
         drag.current = null;
       }}
-      onPointerCancel={() => {
+      onPointerCancel={(e) => {
+        pointerUp(e.pointerId);
         if (painting.current) props.onStrokeEnd();
         painting.current = null;
         drag.current = null;

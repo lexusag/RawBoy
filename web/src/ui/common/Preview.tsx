@@ -143,13 +143,17 @@ export function Preview({ session, params, frame, frameGrey, margin = 0, placeho
   }, [session.zoomCenter]);
   const touch = typeof matchMedia === 'function' && matchMedia('(hover: none)').matches;
 
-  // Pointer gestures: drag pans when zoomed; press and hold compares; double click toggles 100%; the wheel zooms. One
-  // finger only: a second one (a pinch) ends the gesture, compare included, and nothing starts again until every
-  // finger is up.
+  // Pointer gestures: drag pans when zoomed; press and hold compares; double click toggles 100%; the wheel zooms; two
+  // fingers pinch-zoom around their middle and pan with it (when [onZoomBy] is given). Press and hold, clicks and
+  // double clicks are one finger only: a second one ends that gesture, compare included, and the fingers left after a
+  // pinch only pan.
   // Before, the second finger replaced the first's gesture and left its compare timer running, so a pinch could
   // switch to the as-shot render with nothing left to switch it back.
   const gesture = useRef<{ id: number; x: number; y: number; moved: boolean; timer: number; comparing: boolean } | null>(null);
-  const pointers = useRef(new Set<number>());
+  /** Fingers (and other pointers) down, at their last client positions. */
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  /** The pinch: its two pointers and their last middle and distance (client pixels). */
+  const pinch = useRef<{ a: number; b: number; cx: number; cy: number; dist: number } | null>(null);
   const endGesture = () => {
     const g = gesture.current;
     gesture.current = null;
@@ -157,15 +161,46 @@ export function Preview({ session, params, frame, frameGrey, margin = 0, placeho
     clearTimeout(g.timer);
     if (g.comparing) callbacks.current.onCompare(false);
   };
+  /** Starts a pinch on the first two pointers down, or, after one, lets the finger left pan. */
+  const settlePinch = () => {
+    const was = pinch.current;
+    pinch.current = null;
+    const down = [...pointers.current];
+    if (down.length >= 2 && callbacks.current.onZoomBy) {
+      const [[a, p], [b, q]] = down;
+      pinch.current = { a, b, cx: (p.x + q.x) / 2, cy: (p.y + q.y) / 2, dist: Math.hypot(q.x - p.x, q.y - p.y) };
+    } else if (down.length === 1 && was) {
+      const [[id, p]] = down;
+      gesture.current = { id, x: p.x, y: p.y, moved: true, comparing: false, timer: 0 };
+    }
+  };
   const pointerGone = (id: number) => {
-    pointers.current.delete(id);
+    if (!pointers.current.delete(id)) return;
     if (gesture.current?.id === id) endGesture();
+    if (pinch.current) settlePinch();
   };
   useEffect(() => () => endGesture(), []);
   const toDevice = (e: { clientX: number; clientY: number }) => {
     const r = boxRef.current!.getBoundingClientRect();
     const dpr = window.devicePixelRatio || 1;
     return [(e.clientX - r.left) * dpr, (e.clientY - r.top) * dpr] as const;
+  };
+  /** A pinch finger moved: pan by the middle's move, then zoom by the change in distance around the new middle. */
+  const movePinch = () => {
+    const pi = pinch.current!;
+    const p = pointers.current.get(pi.a);
+    const q = pointers.current.get(pi.b);
+    if (!p || !q) return;
+    const cx = (p.x + q.x) / 2;
+    const cy = (p.y + q.y) / 2;
+    const dist = Math.hypot(q.x - p.x, q.y - p.y);
+    const dpr = window.devicePixelRatio || 1;
+    if (cx !== pi.cx || cy !== pi.cy) callbacks.current.onPan((cx - pi.cx) * dpr, (cy - pi.cy) * dpr);
+    if (pi.dist > 0 && dist > 0 && dist !== pi.dist) {
+      const [x, y] = toDevice({ clientX: cx, clientY: cy });
+      callbacks.current.onZoomBy?.(x, y, dist / pi.dist);
+    }
+    pinch.current = { ...pi, cx, cy, dist };
   };
 
   return (
@@ -174,11 +209,15 @@ export function Preview({ session, params, frame, frameGrey, margin = 0, placeho
       className="preview"
       onPointerDown={(e) => {
         // A primary pointer means no other finger is down: forget any whose up we missed.
-        if (e.isPrimary) pointers.current.clear();
-        pointers.current.add(e.pointerId);
+        if (e.isPrimary) {
+          pointers.current.clear();
+          pinch.current = null;
+        }
+        pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
         (e.target as Element).setPointerCapture?.(e.pointerId);
         if (pointers.current.size > 1) {
           endGesture();
+          if (!pinch.current) settlePinch();
           return;
         }
         if (e.button !== 0) return;
@@ -193,6 +232,11 @@ export function Preview({ session, params, frame, frameGrey, margin = 0, placeho
       }}
       onPointerMove={(e) => {
         callbacks.current.onPointerAt?.([...toDevice(e)]);
+        if (pointers.current.has(e.pointerId)) pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (pinch.current) {
+          if (e.pointerId === pinch.current.a || e.pointerId === pinch.current.b) movePinch();
+          return;
+        }
         const g = gesture.current;
         if (!g || g.id !== e.pointerId) return;
         const dx = e.clientX - g.x;
@@ -209,6 +253,10 @@ export function Preview({ session, params, frame, frameGrey, margin = 0, placeho
       }}
       onPointerUp={(e) => {
         pointers.current.delete(e.pointerId);
+        if (pinch.current) {
+          settlePinch();
+          return;
+        }
         const g = gesture.current;
         if (!g || g.id !== e.pointerId) return;
         gesture.current = null;
@@ -229,7 +277,7 @@ export function Preview({ session, params, frame, frameGrey, margin = 0, placeho
     >
       <canvas ref={canvasRef} />
       {children}
-      <div className={hint ? 'zoom-hint show' : 'zoom-hint'}>{touch ? 'Double-tap for 100%' : onZoomBy ? 'Double-click for 100% · scroll to zoom' : 'Double-click for 100%'} · drag to pan</div>
+      <div className={hint ? 'zoom-hint show' : 'zoom-hint'}>{touch ? (onZoomBy ? 'Double-tap for 100% · pinch to zoom' : 'Double-tap for 100%') : onZoomBy ? 'Double-click for 100% · scroll to zoom' : 'Double-click for 100%'} · drag to pan</div>
     </div>
   );
 }

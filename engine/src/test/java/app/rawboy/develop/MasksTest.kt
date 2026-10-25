@@ -173,6 +173,24 @@ class MasksTest {
     }
 
     @Test
+    fun pinchZoomKeepsTheCentreInTheMiddle() {
+        // Scale 2: half the region, with fractional edges so panning moves by less than a pixel.
+        val v = ZoomMath.viewRectF(1000.3f, 800f, 800, 600, 4000, 3000, 2f)
+        assertEquals(400f, v[2], 1e-3f)
+        assertEquals(800.3f, v[0], 1e-3f)
+        val z = ZoomMath.zoomedRect(1000.3f, 800f, 800, 600, 4000, 3000, 2f)
+        assertEquals(400f, z[0] + 1000.3f * 2, 1e-2f)
+        assertEquals(300f, z[1] + 800f * 2, 1e-2f)
+        assertEquals(8000f, z[2], 0f)
+        // Whole pixels covering it, for the tile.
+        val r = ZoomMath.viewRect(1000.3f, 800f, 800, 600, 4000, 3000, 2f)
+        assertEquals(PixelRect(800, 650, 401, 300), r)
+        // Below 100% the view reaches the photo's edges.
+        assertEquals(800f to 600f, ZoomMath.clampCenter(0f, 0f, 800, 600, 4000, 3000, 0.5f))
+        assertEquals(0.2f, ZoomMath.fitScale(800, 600, 4000, 3000, 0), 1e-6f)
+    }
+
+    @Test
     fun shotInfoLine() {
         assertEquals(
             "GFX 50R · ISO 6400 · 1/60 s · f/2.8 · 63 mm (50 mm eq.)",

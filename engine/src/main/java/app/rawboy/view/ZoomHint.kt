@@ -18,7 +18,7 @@ private const val PREFS = "display"
 private const val KEY_SEEN = "zoomHintSeen"
 
 /** Text of the zoom hint shown over the preview. */
-const val ZOOM_HINT_TEXT = "Double-tap for 100% · drag to pan"
+const val ZOOM_HINT_TEXT = "Double-tap for 100% · pinch to zoom · drag to pan"
 
 /**
  * Whether to show the zoom hint: for a few seconds after each new photo appears, until the user has zoomed once

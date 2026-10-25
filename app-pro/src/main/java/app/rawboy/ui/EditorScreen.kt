@@ -7,7 +7,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -69,7 +68,9 @@ import app.rawboy.lut.LutRepository
 import app.rawboy.view.DevelopPreview
 import app.rawboy.view.HistogramView
 import app.rawboy.view.ZOOM_HINT_TEXT
+import app.rawboy.view.rememberPanAndPinch
 import app.rawboy.view.rememberZoomHint
+import app.rawboy.view.zoomLabel
 import app.rawboy.session.SkinState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -80,6 +81,7 @@ fun EditorScreen(vm: EditorViewModel) {
     val preview by vm.preview.collectAsStateWithLifecycle()
     val exportSettings by vm.exportSettings.collectAsStateWithLifecycle()
     val zoomCenter by vm.zoomCenter.collectAsStateWithLifecycle()
+    val zoomScale by vm.zoomScale.collectAsStateWithLifecycle()
     val detail by vm.detail.collectAsStateWithLifecycle()
     val lutData by vm.lutData.collectAsStateWithLifecycle()
     val filmData by vm.filmData.collectAsStateWithLifecycle()
@@ -249,6 +251,7 @@ fun EditorScreen(vm: EditorViewModel) {
                 DevelopPreview(
                     preview, shaderParams, zoomCenter, detail, framePx, frameColor, Modifier.fillMaxSize(), marginPx,
                     clipWarning = clipWarning && histogramShown && !showOriginal,
+                    zoomScale = zoomScale,
                 )
                 // Histogram of the whole edit (crop applied, no mask view) from the 512 px base copy, once the
                 // params rest for a moment: a slider drag would otherwise queue a render per step.
@@ -272,8 +275,10 @@ fun EditorScreen(vm: EditorViewModel) {
                         onStrokeExtend = vm::extendStroke,
                         onStrokeCancel = vm::cancelStroke,
                         onPan = vm::pan,
+                        onZoomBy = { x, y, f -> vm.zoomBy(x, y, f, marginPx) },
                     ),
                     onPaintAt = { paintAt = it },
+                    zoomScale = zoomScale,
                 )
                 val leakGestures = rememberMaskGestures(
                     shaderParams.lens, leakShapes, selectedLeak, framePx + marginPx, framePx, zoomCenter, MaskTool.MOVE, brush,
@@ -284,15 +289,19 @@ fun EditorScreen(vm: EditorViewModel) {
                         onStrokeExtend = { _, _, _ -> },
                         onStrokeCancel = {},
                         onPan = vm::pan,
+                        onZoomBy = { x, y, f -> vm.zoomBy(x, y, f, marginPx) },
                     ),
                     onPaintAt = {},
                     grabInside = true,
                     bands = leakBands,
+                    zoomScale = zoomScale,
                 )
+                // Zoom and frame colour work on the cropped view; the crop tool shows the whole frame.
+                val panAndPinch = rememberPanAndPinch(true, vm::pan) { x, y, f -> if (!geometryMode) vm.zoomBy(x, y, f, marginPx) }
 
-                // Double tap: 100% at that point / back to fit. Drag: pan at 100%.
-                // Press and hold: compare with the as-shot render (delayed so taps
-                // and drags don't flash it).
+                // Double tap: 100% at that point / back to fit. Drag: pan when zoomed. Pinch: zoom around the
+                // fingers, up to 400%. Press and hold: compare with the as-shot render (delayed so taps and drags
+                // don't flash it; a second finger ends it).
                 Box(
                     Modifier
                         .matchParentSize()
@@ -322,12 +331,7 @@ fun EditorScreen(vm: EditorViewModel) {
                                 },
                             )
                         }
-                        .pointerInput(Unit) {
-                            detectDragGestures { change, drag ->
-                                change.consume()
-                                vm.pan(drag.x, drag.y)
-                            }
-                        }
+                        .then(panAndPinch)
                         // Last, so it sees each touch first and takes only handles and paint strokes.
                         .then(if (masksMode && preview != null) maskGestures else Modifier)
                         .then(if (leaksMode && preview != null) leakGestures else Modifier),
@@ -336,13 +340,13 @@ fun EditorScreen(vm: EditorViewModel) {
                     MaskOverlay(
                         shaderParams.lens, layers, selectedId, framePx + marginPx, framePx, zoomCenter,
                         if (selectedId != null) maskTool else MaskTool.MOVE, brush, paintAt, sizeRing,
-                        Modifier.matchParentSize(),
+                        Modifier.matchParentSize(), zoomScale = zoomScale,
                     )
                 }
                 if (leaksMode && preview != null && !showOriginal) {
                     MaskOverlay(
                         shaderParams.lens, leakShapes, selectedLeak, framePx + marginPx, framePx, zoomCenter,
-                        MaskTool.MOVE, brush, null, false, Modifier.matchParentSize(), bands = leakBands,
+                        MaskTool.MOVE, brush, null, false, Modifier.matchParentSize(), bands = leakBands, zoomScale = zoomScale,
                     )
                 }
                 if (geometryMode && zoomCenter == null && preview != null) {
@@ -360,7 +364,7 @@ fun EditorScreen(vm: EditorViewModel) {
                 }
                 if ((zoomCenter != null || maskView != null) && !showOriginal) {
                     Text(
-                        listOfNotNull("100%".takeIf { zoomCenter != null }, "Mask".takeIf { maskView != null }).joinToString(" · "),
+                        listOfNotNull(zoomLabel(zoomScale).takeIf { zoomCenter != null }, "Mask".takeIf { maskView != null }).joinToString(" · "),
                         style = MaterialTheme.typography.labelMedium,
                         modifier = Modifier
                             .align(Alignment.TopStart)
