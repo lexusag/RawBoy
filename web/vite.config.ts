@@ -29,6 +29,30 @@ function copyModels(): Plugin {
   };
 }
 
+/**
+ * Search engines and link previews: fills %SITE_URL% in index.html (canonical, Open Graph, JSON-LD) and writes
+ * robots.txt and sitemap.xml into the build. SITE_URL overrides the main address (see docs/cloudflare.md).
+ */
+function seo(): Plugin {
+  const site = (process.env.SITE_URL || 'https://app.rawboy.link').replace(/\/+$/, '');
+  return {
+    name: 'rawboy-seo',
+    // 'pre': before Vite parses the HTML, which rejects the placeholder in URLs.
+    transformIndexHtml: { order: 'pre', handler: (html) => html.replaceAll('%SITE_URL%', site) },
+    generateBundle() {
+      const today = new Date().toISOString().slice(0, 10);
+      this.emitFile({ type: 'asset', fileName: 'robots.txt', source: `User-agent: *\nAllow: /\n\nSitemap: ${site}/sitemap.xml\n` });
+      this.emitFile({
+        type: 'asset',
+        fileName: 'sitemap.xml',
+        source:
+          '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
+          `  <url><loc>${site}/</loc><lastmod>${today}</lastmod></url>\n</urlset>\n`,
+      });
+    },
+  };
+}
+
 const version = (JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf8')) as { version: string }).version;
 
 // Threads in the WASM decoder need SharedArrayBuffer, i.e. a cross-origin isolated page.
@@ -39,7 +63,7 @@ const isolation = {
 
 export default defineConfig({
   base: './',
-  plugins: [react(), copyModels()],
+  plugins: [react(), copyModels(), seo()],
   server: { headers: isolation, fs: { allow: [repo] } },
   preview: { headers: isolation },
   worker: { format: 'es' },

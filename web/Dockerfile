@@ -27,6 +27,8 @@ COPY licenses /src/licenses
 COPY engine/src/main/assets/models /src/engine/src/main/assets/models
 COPY web/ ./
 COPY --from=wasm /src/web/public/wasm public/wasm
+# The site's main address for the canonical URL and sitemap (vite.config.ts): --build-arg SITE_URL=https://...
+ARG SITE_URL
 # Same as `npm run build:public`, minus the WASM step done above.
 RUN npx tsc --noEmit && npx vite build
 
