@@ -478,7 +478,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   UI: `app-pro/.../ui/MasksPanel.kt`, `MaskOverlay.kt` (drawing + `rememberMaskGestures`, applied **last** on the
   preview's gesture layer: Compose siblings don't share touches, so the mask gestures live on that layer and consume
   only handles/strokes). `EditorTopBar.kt` holds the top bar and `EditorMode`.
-- Light leaks (Pro, Android + web; `develop/LightLeaks.kt/.ts`, `shaders/light_leak.glsl`): `DevelopParams.leaks`, up to
+- Light leaks (Pro, Android, iOS, web; `develop/LightLeaks.kt/.ts/.swift`, `shaders/light_leak.glsl`): `DevelopParams.leaks`, up to
   `MAX_LEAKS` (4) per photo, in image fractions. Built like the owner's Photoshop action (`light leak.atn`: white
   ellipse, Gaussian blur 78 px, outer glows (255, 156, 0) then (255, 5, 5) at 58%, layer in Screen) and Affinity macro
   (same idea, HSL hues ~34° / ~30° / ~358°): a white core blurred over the softness, an inner glow in the chosen hue and
@@ -487,9 +487,10 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   the inradius inside; a max-of-half-planes metric spiked the glow past the corners). Bend (v −= k u², k = bend/100/rx),
   taper (width × 1 + taper·q.x) and warp (edge wobble, only outward) apply to all; `uLeakForm` = kind, k, warp, taper;
   seed in `uLeakOuter.w`. Applied by each shader assembly **after** the curves line (`applyLeaks(c, srcG, outPx)`; iOS
-  gen.sh includes the file but binds nothing, so count 0 = off). The grain lives in `develop()` (log domain), so the
+  binds them by name in `MetalCommon.bindLeaks`). The grain lives in `develop()` (log domain), so the
   leak would flatten it: `applyLeaks` adds `grainNoise` back × how much the leaks replaced (display units, ~mid-tone
-  strength). UI reuses the mask overlay (`leak` form on web's `OverlayLayer`, `leaks` map on Android): outlines bent and
+  strength). UI reuses the mask overlay (`leak` form on web's `OverlayLayer`, `leaks` map on Android and iOS, `LeaksPanel.swift`; iOS's Reset
+  all moved next to Undo/Redo, as Android's): outlines bent and
   tapered like the shader, `grabInside`, a bend square at q = (0.5, 0). Older edits without kind/bend/… parse as plain
   glows. Not in presets (edits sidecars keep them).
 - Engine JVM tests: `./gradlew :engine:testStandardDebugUnitTest` (`engine/src/test`, junit + org.json; `retouch/Filters.kt`

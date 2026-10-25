@@ -270,6 +270,7 @@ struct DevelopProgram {
         u.vec2("uOutSpan", Float(g.output.width), Float(g.output.height))
         bindLens(&u, p.lens)
         bindLayers(&u, p.layers)
+        bindLeaks(&u, p.leaks)
         bindFilm(&u, p, g)
         return u
     }
@@ -310,6 +311,16 @@ struct DevelopProgram {
         u.float("uFormHaloUm", form.haloRadiusUm)
         u.vec3("uFormScatter", form.scatter, min(optics, 1))
         u.float("uFormScatterUm", form.scatterUm)
+    }
+
+    /** Light leaks (shaders/light_leak.glsl): count 0 = off. */
+    private static func bindLeaks(_ u: inout UniformBlock, _ l: LeakUniforms) {
+        u.int("uLeakCount", l.count)
+        u.array("uLeakGeom", l.geom, components: 4)
+        u.array("uLeakShape", l.shape, components: 4)
+        u.array("uLeakColor", l.color, components: 4)
+        u.array("uLeakOuter", l.outer, components: 4)
+        u.array("uLeakForm", l.form, components: 4)
     }
 
     private static func bindLayers(_ u: inout UniformBlock, _ l: LayerUniforms) {

@@ -2,11 +2,11 @@ import RawBoyEngine
 import SwiftUI
 
 /** The editor's top-bar tools; at most one replaces the slider tabs. */
-enum EditorMode { case none, geometry, masks, presets }
+enum EditorMode { case none, geometry, masks, leaks, presets }
 
 /** Frame around the photo in the fit view, points (tap outside the photo to change its colour). */
 private let frameWidthPt: CGFloat = 12
-/** Empty space around the frame while masking: handles can sit beyond the photo. */
+/** Empty space around the frame while masking or placing light leaks: handles can sit beyond the photo. */
 private let maskMarginPt: CGFloat = 16
 /** Slider panels' height cap: the rest of the screen goes to the photo. */
 private let panelMax: CGFloat = 320
@@ -33,6 +33,8 @@ struct EditorScreen: View {
     @State private var showMask = false
     @State private var paintAt: CGPoint?
     @State private var sizeRingAt = Date.distantPast
+    // Light leaks (UI state; the leaks are in the params). The overlay draws and drags them as radial shapes.
+    @State private var selectedLeak: String?
     // Crop shape lock (UI only; the crop itself is in the params). Portrait nil = follow the frame.
     @State private var cropAspect = CropAspect.free
     @State private var cropPortrait: Bool?
@@ -43,8 +45,16 @@ struct EditorScreen: View {
     private var selectedId: String? {
         selectedLayer.flatMap { id in layers.contains { $0.id == id } ? id : nil } ?? layers.first?.id
     }
+    private var leaks: [LightLeak] { state.params.leaks }
+    private var selectedLeakId: String? {
+        selectedLeak.flatMap { id in leaks.contains { $0.id == id } ? id : nil } ?? leaks.last?.id
+    }
+    private var leakShapes: [MaskLayer] { leaks.map { MaskLayer(id: $0.id, name: "", enabled: $0.enabled, shape: $0.shape) } }
+    private var leakForms: [String: LeakForm] {
+        Dictionary(uniqueKeysWithValues: leaks.map { ($0.id, LeakForm(kind: $0.kind, bend: $0.bend, taper: $0.taper)) })
+    }
     private var framePx: Int { Int(frameWidthPt * scale) }
-    private var marginPx: Int { mode == .masks ? Int(maskMarginPt * scale) : 0 }
+    private var marginPx: Int { mode == .masks || mode == .leaks ? Int(maskMarginPt * scale) : 0 }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -69,6 +79,7 @@ struct EditorScreen: View {
             cropAspect = .free
             cropPortrait = nil
             selectedLayer = nil
+            selectedLeak = nil
             pickingWhite = false
         }
     }
@@ -113,6 +124,23 @@ struct EditorScreen: View {
                             onStrokeBegin: vm.beginStroke, onStrokeExtend: vm.extendStroke,
                             onStrokeCancel: vm.cancelStroke, onPan: vm.pan),
                         onPaintAt: { paintAt = $0 }))
+                }
+                if let shader, mode == .leaks, session.preview != nil, !showOriginal {
+                    let frame = framePx + marginPx
+                    MaskOverlay(lens: shader.lens, layers: leakShapes, selectedId: selectedLeakId, frame: frame,
+                                zoomCenter: session.zoomCenter, tool: .move, brush: vm.brush, paintAt: nil, sizeRing: false,
+                                leaks: leakForms)
+                    MaskTouchLayer(inputs: MaskInputs(
+                        lens: shader.lens, layers: leakShapes, selectedId: selectedLeakId, frame: frame,
+                        zoomCenter: session.zoomCenter, tool: .move, brush: vm.brush,
+                        actions: MaskActions(
+                            onSelect: { selectedLeak = $0 },
+                            onChange: { id, shape in vm.updateLeak(id) { $0 = $0.withShape(shape) } },
+                            onStrokeBegin: { _, _ in }, onStrokeExtend: { _, _, _ in }, onStrokeCancel: { _ in },
+                            onPan: vm.pan),
+                        onPaintAt: { _ in },
+                        grabInside: true, leaks: leakForms,
+                        onBend: { id, bend in vm.updateLeak(id) { $0.bend = bend } }))
                 }
                 if let shader, mode == .geometry, session.zoomCenter == nil, session.preview != nil {
                     CropOverlay(frameWidth: shader.lens.outputWidth, frameHeight: shader.lens.outputHeight,
@@ -163,7 +191,7 @@ struct EditorScreen: View {
             if mode != .geometry { vm.toggleZoom(Float(e.location.x * scale), Float(e.location.y * scale), extra: marginPx) }
         }
         let tap = SpatialTapGesture().onEnded { e in
-            guard mode != .geometry && mode != .masks else { return }
+            guard mode != .geometry && mode != .masks && mode != .leaks else { return }
             let x = Float(e.location.x * scale)
             let y = Float(e.location.y * scale)
             if pickingWhite {
@@ -248,6 +276,23 @@ struct EditorScreen: View {
                         },
                         onDone: { mode = .none }))
                 .frame(maxHeight: panelMax)
+            case .leaks:
+                LeaksPanel(
+                    leaks: leaks, selectedId: selectedLeakId, zoomed: session.zoomCenter != nil,
+                    actions: LeakPanelActions(
+                        onSelect: { selectedLeak = $0 },
+                        onAdd: { kind in if let id = vm.addLeak(kind) { selectedLeak = id } },
+                        onUpdate: { id, force, change in vm.updateLeak(id, force: force, change) },
+                        onRemove: vm.removeLeak,
+                        onToggleZoom: {
+                            if session.zoomCenter != nil {
+                                vm.exitZoom()
+                            } else {
+                                vm.toggleZoom(Float(viewSize.width * scale / 2), Float(viewSize.height * scale / 2), extra: marginPx)
+                            }
+                        },
+                        onDone: { mode = .none }))
+                .frame(maxHeight: panelMax)
             case .presets:
                 PresetsPanel(vm: vm, onDone: { mode = .none }, hasStrokes: layers.contains { !$0.strokes.isEmpty })
                     .frame(maxHeight: panelMax)
@@ -278,7 +323,7 @@ struct EditorScreen: View {
 
 /**
  * Two short rows: every action as an icon, then the file name and the shot info (camera, ISO, shutter, aperture,
- * focal length) in small type, with Undo and Redo at its end (the first row is full on a small iPhone).
+ * focal length) in small type, with Reset all, Undo and Redo at its end (the first row is full on a small iPhone).
  */
 struct EditorTopBar: View {
     let fileName: String?
@@ -312,8 +357,8 @@ struct EditorTopBar: View {
                 .buttonStyle(BarButtonStyle())
                 modeButton(.geometry, "crop.rotate", "Crop", "Crop & rotate")
                 modeButton(.masks, "square.stack.3d.down.forward", "Masks", "Masks")
+                modeButton(.leaks, "rays", "Leaks", "Light leaks")
                 modeButton(.presets, "bookmark", "Presets", "Presets")
-                tool("clock.arrow.circlepath", "Reset", "Reset all", action: onReset)
                 tool("wand.and.stars", "Auto", "Auto light and colour (keeps the LUT)", action: onAuto)
                 Spacer(minLength: 0)
                 tool("square.and.arrow.down", "Export", "Export", action: onExport)
@@ -329,6 +374,10 @@ struct EditorTopBar: View {
                     .font(.caption2)
                     .lineLimit(1)
                 Spacer(minLength: 0)
+                // Reset all sits here since Light leaks joined the full row above.
+                Button(action: onReset) { Image(systemName: "clock.arrow.circlepath") }
+                    .disabled(!enabled)
+                    .accessibilityLabel("Reset all")
                 Button(action: onUndo) { Image(systemName: "arrow.uturn.backward") }
                     .disabled(!enabled || !canUndo)
                     .accessibilityLabel("Undo")

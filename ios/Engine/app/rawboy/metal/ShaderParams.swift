@@ -46,6 +46,8 @@ public final class ShaderParams: @unchecked Sendable {
     public let displaySource: Float
     /** Mask layers packed for the shader (see packLayers). */
     public let layers: LayerUniforms
+    /** Light leaks over the finished picture (shaders/light_leak.glsl). */
+    public let leaks: LeakUniforms
     /** spektrafilm film stock (shaders/film/film.glsl) matching DevelopParams.film, or nil for none. */
     public let film: FilmData?
     /** 0..1 blend of the film render over AgX; 0 = off. */
@@ -65,7 +67,8 @@ public final class ShaderParams: @unchecked Sendable {
                 highpassContrast: Float,
                 base: PreviewImage?, bloom: Float, bloomHalo: PreviewImage?, bloomTail: PreviewImage?,
                 skinRetouch: Float, skinMask: SkinMask?, grainSizeScale: Float = 1, gamutSoft: Float = 1,
-                toneMapper: Int = 0, displaySource: Float = 0, layers: LayerUniforms = .none, film: FilmData? = nil, filmAmount: Float = 0,
+                toneMapper: Int = 0, displaySource: Float = 0, layers: LayerUniforms = .none, leaks: LeakUniforms = .none,
+                film: FilmData? = nil, filmAmount: Float = 0,
                 filmGrain: Float = 1, halation: Float = 1, curve: [Float]? = nil, clipLevel: Float = 0) {
         self.whiteBalance = whiteBalance
         self.exposure = exposure
@@ -99,6 +102,7 @@ public final class ShaderParams: @unchecked Sendable {
         self.toneMapper = toneMapper
         self.displaySource = displaySource
         self.layers = layers
+        self.leaks = leaks
         self.film = film
         self.filmAmount = filmAmount
         self.filmGrain = filmGrain
@@ -196,6 +200,7 @@ public final class ShaderParams: @unchecked Sendable {
             displaySource: asShot.displaySource ? 1 : 0,
             layers: packLayers(p.masks, imageWidth: lens.width, imageHeight: lens.height, kelvin: p.temperature,
                                tint: p.tint, clarityReady: base != nil, viewId: maskView, brushFor: brushFor),
+            leaks: LightLeaks.pack(p.leaks, imageWidth: lens.width, imageHeight: lens.height),
             film: filmUsed,
             filmAmount: filmUsed != nil ? (p.filmAmount / 100).clamped(0, 1) : 0,
             filmGrain: p.filmGrain / 100,
