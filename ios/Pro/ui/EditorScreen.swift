@@ -324,11 +324,15 @@ struct EditorTopBar: View {
             .menuStyle(.button)
             .frame(height: 44)
             HStack(spacing: 18) {
-                (Text(fileName.map(Self.shortName) ?? "RawBoy")
-                    + Text(info.map { $0.isEmpty ? "" : "  ·  \($0)" } ?? "").foregroundColor(.secondary))
-                    .font(.caption2)
-                    .lineLimit(1)
-                Spacer(minLength: 0)
+                // Scrolls sideways when it doesn't fit, rather than ending in an ellipsis.
+                ScrollView(.horizontal, showsIndicators: false) {
+                    (Text(fileName ?? "RawBoy")
+                        + Text(info.map { $0.isEmpty ? "" : "  ·  \($0)" } ?? "").foregroundColor(.secondary))
+                        .font(.caption2)
+                        .lineLimit(1)
+                        .fixedSize()
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 Button(action: onUndo) { Image(systemName: "arrow.uturn.backward") }
                     .disabled(!enabled || !canUndo)
                     .accessibilityLabel("Undo")
@@ -428,10 +432,5 @@ struct EditorTopBar: View {
                 .opacity(!enabled ? 0.35 : configuration.isPressed ? 0.5 : 1)
                 .contentShape(Rectangle())
         }
-    }
-
-    /** Long file names shortened in the middle (start and extension stay), leaving the line to the shot info. */
-    static func shortName(_ name: String) -> String {
-        name.count <= 14 ? name : String(name.prefix(7)) + "…" + String(name.suffix(6))
     }
 }
