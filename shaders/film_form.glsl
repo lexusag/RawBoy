@@ -62,15 +62,26 @@ vec3 filmOptics(vec3 x, vec2 uvG, vec2 imagePx) {
     vec2 texel = boosted ? uBloomHaloTexel : uBaseTexel;
     if (texel.x < 1.0 && dot(uFormHalation, uFormHalation) > 0.0) {
         float copyPerPx = 1.0 / (texel.x * uImageSize.x);
-        float sigma = 0.5 * uFormHaloUm / uFilmUmPerPx * copyPerPx; // copy pixels
-        vec2 uv = imagePx / uImageSize;
+        float sigma = 0.5 * uFormHaloUm / uFilmUmPerPx * copyPerPx; // copy pixels, ~1.6 for any image
+        // The disc is only a few copy texels wide, so it is summed over the copy's texels themselves, each weighed
+        // by a smooth function of its exact distance from this pixel: interpolated taps (bilinear, even B-spline
+        // ones spaced over a texel apart) drew the coarse texels as a checkered square around small lights. The
+        // window falls smoothly to zero at its rim, so texels enter and leave the sum without steps. 1/6 adds what
+        // the bilinear taps used to blur.
+        float s2 = sigma * sigma + 1.0 / 6.0;
+        float rim2 = min(6.25 * s2, 12.25); // 2.5 sigma, at most the 3.5 texels the 9 x 9 read reaches all round
+        vec2 st = imagePx / uImageSize / texel - 0.5; // in texels, centres on whole numbers
+        vec2 t0 = floor(st + 0.5); // the nearest texel
         vec3 halo = vec3(0.0);
         float wsum = 0.0;
-        for (int j = -2; j <= 2; ++j) {
-            for (int i = -2; i <= 2; ++i) {
-                vec2 o = vec2(i, j) * 0.8;
-                float w = exp(-0.5 * dot(o, o));
-                vec2 at = uv + o * sigma * texel;
+        for (int j = -4; j <= 4; ++j) {
+            for (int i = -4; i <= 4; ++i) {
+                vec2 d = t0 + vec2(i, j) - st;
+                float r2 = dot(d, d);
+                float rim = max(1.0 - r2 / rim2, 0.0);
+                if (rim <= 0.0) continue;
+                float w = exp(-0.5 * r2 / s2) * rim * rim;
+                vec2 at = (t0 + vec2(i, j) + 0.5) * texel;
                 vec3 c = boosted ? texture(uBloomHalo, at).rgb : texture(uBase, at).rgb;
                 halo += w * bloomKnee(c, uExposure) * c;
                 wsum += w;

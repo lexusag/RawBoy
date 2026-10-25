@@ -1,5 +1,11 @@
 # Changelog
 
+**Smooth halation (2026-10-25)**
+
+- RawBoy (Film tone mapper) and Auto's Film mode (Android, iOS, web): at high Halation the glow around small lights
+  showed as a checkered square, from the coarse copy of the photo it is made from. The glow is now round and smooth
+  at any zoom, with the same overall strength.
+
 **RawBoy: light leaks rebuilt like a Photoshop light leak (2026-10-25)**
 
 - RawBoy (Android, web): light leaks are now made the way a Photoshop or Affinity light leak is: a white shape,

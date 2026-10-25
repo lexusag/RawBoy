@@ -165,7 +165,9 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   Gaussian with half-weight neighbours, footprint-scaled. Halation: a Gaussian of half the base-reflection disc radius
   from the **highlight-boosted bloom copy** (`uBloomHalo`; `uBase` without one; light sources sit far above clip and
   only they halate visibly), weighed by `bloomKnee` at `uExposure` like bloom: the highlights give up `uFormHalation`
-  of their light and it returns around them (midtones untouched). Slider: `ShaderParams.halationGain` (linear to 1 at
+  of their light and it returns around them (midtones untouched). The disc is ~1.6 copy texels (σ), so it sums the copy's
+  texels within 3.5 texels, each weighed by a Gaussian × round rim of its exact distance: bilinear (and B-spline) taps
+  spaced over a texel apart drew checkered squares around small lights. Slider: `ShaderParams.halationGain` (linear to 1 at
   100, then doubling every 25: 16 at 200; all ports). Scatter: 4 diagonal taps. Parameters: `luts/spektrafilm/
   formation.json` (`FilmStock.formation`; uniforms `uForm*`), fitted to RawBoy Film's renders with
   `tools/film_eval/compare.mjs` (renders both shaders through the web dev server; reports formation dE2000, grain
