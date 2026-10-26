@@ -17,7 +17,7 @@ const halfToFloat = (h) => {
 
 for (const file of files) {
   const t = performance.now();
-  const h = m.open(readFileSync(file), 0);
+  const h = m.open(readFileSync(file), 0, false);
   if (!h) { console.log(basename(file), 'FAILED:', m.lastError()); continue; }
   const ms = Math.round(performance.now() - t);
   const lens = m.lensInfo(h);

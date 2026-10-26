@@ -37,8 +37,12 @@ export interface PhotoMetadata {
 
 export interface OpenResult {
   handle: number;
+  /** Size of the decoded pixels: about half of fullWidth x fullHeight for a draft. */
   width: number;
   height: number;
+  /** The photo's size at full resolution. */
+  fullWidth: number;
+  fullHeight: number;
   description: string;
   camera: string;
   iso: number;
@@ -57,7 +61,7 @@ export interface OpenResult {
 
 export type Request =
   | { op: 'init'; wasmBase: string }
-  | { op: 'open'; bytes: ArrayBuffer; extraBlack: number }
+  | { op: 'open'; bytes: ArrayBuffer; extraBlack: number; draft: boolean }
   /** A HEIC or PNG decoded by the browser: canvas RGBA bytes (sRGB or Display P3) plus the file, for its EXIF. */
   | { op: 'openPixels'; rgba: ArrayBuffer; width: number; height: number; p3: boolean; bytes: ArrayBuffer }
   /** A JPEG XL image (a DNG's preview) to 8-bit sRGB RGBA: answers {@link JxlPixels}. */

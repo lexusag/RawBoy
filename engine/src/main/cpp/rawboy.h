@@ -68,6 +68,11 @@ struct DecodedImage {
     int sensorWidth = 0;
     int sensorHeight = 0;
     int orientation = 1;  // TIFF orientation applied to reach width x height
+    // A draft decode (decodeAny's draft: LibRaw's half size, no demosaic) holds rgb at about half the photo's size;
+    // these are the photo's oriented size at full resolution, and sensorWidth/Height stay full resolution too.
+    // 0 = rgb is full size. Small copies and the noise level only: no tiles, healing or export from a draft.
+    int fullWidth = 0;
+    int fullHeight = 0;
 
     // Embedded lens corrections. Gain maps are already applied to rgb; the warp,
     // radial vignette and luminance shading are applied (or undone) on the GPU.
@@ -150,14 +155,17 @@ inline float halfToFloat(uint16_t h) {
 }
 
 // extraBlack: black to subtract beyond the file's, as a fraction of the white range (0 = none).
-bool decodeWithLibRaw(const uint8_t* data, size_t size, DecodedImage& out, std::string& error, float extraBlack = 0.0f);
+// draft: half size without demosaic, about 2-4x faster (see DecodedImage::fullWidth).
+bool decodeWithLibRaw(const uint8_t* data, size_t size, DecodedImage& out, std::string& error, float extraBlack = 0.0f,
+                      bool draft = false);
 
 /**
  * Decodes a JPEG (decodeJpeg), or a raw with LibRaw, falling back to the Adobe DNG SDK (when built in) for DNGs
  * LibRaw can't read, and to decodeTiff for TIFFs neither takes.
  * On failure, [error] holds both decoders' reasons.
  */
-bool decodeAny(const uint8_t* data, size_t size, DecodedImage& out, std::string& error, float extraBlack = 0.0f);
+bool decodeAny(const uint8_t* data, size_t size, DecodedImage& out, std::string& error, float extraBlack = 0.0f,
+               bool draft = false);
 
 bool looksLikeJpeg(const uint8_t* data, size_t size);
 
@@ -206,7 +214,10 @@ struct NoiseLevel {
     float chroma = 0.0f;
 };
 
-/** Measures luma and colour noise on the full-resolution image (noise.cpp); zeros for display sources. */
+/**
+ * Measures luma and colour noise on the full-resolution image (noise.cpp); zeros for display sources. A draft reads as
+ * its full decode would, through fitted factors.
+ */
 NoiseLevel estimateNoise(const DecodedImage& img);
 
 // Applies a TIFF/EXIF orientation (1..8) in place.

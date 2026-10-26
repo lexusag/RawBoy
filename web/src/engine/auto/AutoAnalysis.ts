@@ -24,54 +24,85 @@ export interface Analysis {
 const TAG = 'RawBoyAuto';
 
 /**
- * Decodes [file], keeps its small whole-image copies and works out the auto develop (port of AutoAnalysis.kt).
- * Memory hungry (a full-resolution decode): one at a time. The raw is closed before segmentation, which needs
- * only the 512 px copy. [onPreview], if given, gets the detail view's preview (PREVIEW_MAX_DIMENSION) made from the
- * same decode, so RawBoy Auto can show the photo before decoding it again. [plain] (Auto's "As is" import): no auto
- * develop (autoBase = the as-shot defaults), and the noise measurement and skin segmentation it needs are skipped, so
- * already finished files (TIFFs from another editor...) import fast and stay as they are.
+ * Decodes [file], keeps its small whole-image copies and works out the auto develop (port of AutoAnalysis.kt):
+ * [decodeForAnalysis], then [finishAnalysis]. [onPreview], if given, gets the detail view's preview
+ * (PREVIEW_MAX_DIMENSION) made from the same decode, so RawBoy Auto can show the photo before decoding it again.
+ * [plain] (Auto's "As is" import): no auto develop (autoBase = the as-shot defaults), and the noise measurement and
+ * skin segmentation it needs are skipped, so already finished files (TIFFs from another editor...) import fast and
+ * stay as they are.
  */
 export async function analyzeFile(file: Blob, label: string, onPreview?: (preview: PreviewImage) => void, plain = false): Promise<Analysis> {
-  const img = await RawImage.open(file);
-  let base: PreviewImage;
-  let bloom: BloomSources;
-  let noise: NoiseLevel = NO_NOISE;
-  const info = {
-    lens: img.lens,
-    iso: img.iso,
-    defaults: asShotDefaults(img),
-    description: img.description,
-    cameraMetered: cameraMetered(img.metadata.make, img.baselineExposure),
-  };
+  return finishAnalysis(await decodeForAnalysis(file, onPreview, plain), label);
+}
+
+/** What [decodeForAnalysis] keeps of a photo: its small copies and what the file says. */
+export interface DecodedForAnalysis {
+  defaults: DevelopParams;
+  lens: LensInfo;
+  iso: number;
+  description: string;
+  cameraMetered: boolean;
+  base: PreviewImage;
+  bloom: BloomSources;
+  noise: NoiseLevel;
+  plain: boolean;
+}
+
+/**
+ * The decode half of [analyzeFile]: memory hungry (a whole decode), so one at a time; the raw is closed before it
+ * returns. Raws are decoded as drafts (half size, no demosaic: 2-4x faster); the copies kept are small and the noise
+ * level is measured as the full decode would read it.
+ */
+export async function decodeForAnalysis(file: Blob, onPreview?: (preview: PreviewImage) => void, plain = false): Promise<DecodedForAnalysis> {
+  const img = await RawImage.open(file, 0, true);
   try {
     if (onPreview) onPreview(await img.createPreview(PREVIEW_MAX_DIMENSION));
     const t0 = performance.now();
-    base = await img.createPreview(BASE_MAX_DIMENSION);
-    bloom = await bloomSourcesOf(img);
-    if (!plain) noise = await img.measureNoise();
+    const base = await img.createPreview(BASE_MAX_DIMENSION);
+    const bloom = await bloomSourcesOf(img);
+    const noise = plain ? NO_NOISE : await img.measureNoise();
     console.debug(`${TAG} small copies: ${Math.round(performance.now() - t0)} ms`);
+    return {
+      defaults: asShotDefaults(img),
+      lens: img.lens,
+      iso: img.iso,
+      description: img.description,
+      cameraMetered: cameraMetered(img.metadata.make, img.baselineExposure),
+      base,
+      bloom,
+      noise,
+      plain,
+    };
   } finally {
     img.close();
   }
+}
+
+/**
+ * The rest of [analyzeFile], from the small copies alone: skin segmentation (in its worker, so RawBoy Auto decodes the
+ * next photo meanwhile), scene stats and the auto develop.
+ */
+export async function finishAnalysis(d: DecodedForAnalysis, label: string): Promise<Analysis> {
   const t0 = performance.now();
   let skin: SkinMask | null = null;
-  if (!plain) {
+  if (!d.plain) {
     try {
-      skin = await segmentSkin(base, base.fullWidth, base.fullHeight);
+      skin = await segmentSkin(d.base, d.base.fullWidth, d.base.fullHeight);
     } catch {
       // MediaPipe can fail; the photo is then treated as having no face.
     }
   }
   console.debug(`${TAG} skin detection: ${Math.round(performance.now() - t0)} ms`);
-  const stats = analyzeScene(base, skin, info.iso);
-  const auto = plain ? info.defaults : autoDevelop(stats, info.defaults, 1, info.cameraMetered, noise);
+  const stats = analyzeScene(d.base, skin, d.iso);
+  const noise = d.noise;
+  const auto = d.plain ? d.defaults : autoDevelop(stats, d.defaults, 1, d.cameraMetered, noise);
   console.debug(
     `${TAG} analysis ${label}: key=${stats.key} p1=${stats.p1} p5=${stats.p5} p50=${stats.p50} p98=${stats.p98} p99=${stats.p99} ` +
-      `clipped=${stats.clipped} chroma=${stats.chroma} face=${stats.faceArea} skin=${stats.skinLuminance} iso=${info.iso} cameraMetered=${info.cameraMetered} ` +
+      `clipped=${stats.clipped} chroma=${stats.chroma} face=${stats.faceArea} skin=${stats.skinLuminance} iso=${d.iso} cameraMetered=${d.cameraMetered} ` +
       `noise=${noise.luma}/${noise.chroma} -> exposure=${auto.exposure} hl=${auto.highlights} denoise=${auto.denoise}/${auto.colorDenoise} sh=${auto.shadows} contrast=${auto.contrast} ` +
-      `wb=${Math.trunc(info.defaults.temperature)}K/${Math.trunc(info.defaults.tint)} -> ${Math.trunc(auto.temperature)}K/${Math.trunc(auto.tint)}`,
+      `wb=${Math.trunc(d.defaults.temperature)}K/${Math.trunc(d.defaults.tint)} -> ${Math.trunc(auto.temperature)}K/${Math.trunc(auto.tint)}`,
   );
-  return { defaults: info.defaults, autoBase: auto, stats, lens: info.lens, base, bloom, skin, description: info.description };
+  return { defaults: d.defaults, autoBase: auto, stats, lens: d.lens, base: d.base, bloom: d.bloom, skin, description: d.description };
 }
 
 /**

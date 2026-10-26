@@ -1,5 +1,17 @@
 # Changelog
 
+**RawBoy Auto (web): the grid develops about twice as fast (2026-10-26)**
+
+- RawBoy Auto (web): each photo's analysis decodes the RAW at half size without demosaicing (a draft, enough for the
+  grid's thumbnails, the look suggestions and the auto develop), and skin detection runs in its own worker while the
+  next photo decodes. A batch of 12 photos (GFX 50R, Sony NEX-3, Pixel 9 Pro) went from 85 s to 40 s on a 4-core test
+  machine, and the first developed thumbnail from 22 s to 11 s; a 51 MP GFX RAF decodes in 5 s instead of 15 s. The
+  photo view, 100% zoom and export still decode at full resolution. The photo view's preview shown while the full
+  decode runs comes from the draft, so it is a little softer for that moment.
+- Auto denoise reads the same from the draft as from the full decode (within 3% on the test files): the noise
+  measurement is scaled for drafts.
+- RawBoy and Auto (web): skin detection no longer blocks the page while it runs.
+
 **RawBoy Camera: more precise tap to focus (2026-10-26)**
 
 - RawBoy Camera (Android, iOS): a tap focuses on a small square (5% of the frame's short side) inside the ring, while

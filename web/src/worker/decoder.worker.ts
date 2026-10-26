@@ -34,6 +34,8 @@ function opened(handle: number): [OpenResult, Transferable[]] {
     handle,
     width: m.width(handle),
     height: m.height(handle),
+    fullWidth: m.fullWidth(handle),
+    fullHeight: m.fullHeight(handle),
     description: m.describe(handle),
     camera: m.camera(handle),
     iso: m.iso(handle),
@@ -54,7 +56,7 @@ function run(req: Request): [unknown, Transferable[]] {
   switch (req.op) {
     case 'open': {
       const bytes = new Uint8Array(req.bytes);
-      const handle = m.open(bytes, req.extraBlack) as number;
+      const handle = m.open(bytes, req.extraBlack, req.draft) as number;
       if (!handle) {
         // DNG 1.7 (JPEG XL) and other DNGs LibRaw can't read need the Adobe DNG SDK (rawboy-full).
         const hint = !m.hasDngSdk() && looksLikeTiff(bytes) ? ' This DNG may need a build with the Adobe DNG SDK (e.g. JPEG XL compression).' : '';

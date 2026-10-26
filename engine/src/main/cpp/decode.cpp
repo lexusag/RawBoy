@@ -12,13 +12,13 @@ bool looksLikeTiff(const uint8_t* d, size_t size) {
 
 }  // namespace
 
-bool decodeAny(const uint8_t* data, size_t size, DecodedImage& out, std::string& error, float extraBlack) {
+bool decodeAny(const uint8_t* data, size_t size, DecodedImage& out, std::string& error, float extraBlack, bool draft) {
     // JPEGs first: LibRaw would refuse them (or misread a camera's embedded preview structure).
     if (looksLikeJpeg(data, size)) return decodeJpeg(data, size, out, error);
     // LibRaw first: it handles every camera raw and most DNGs, and its path carries
     // RawBoy's own lens-correction handling. DNGs it can't read (DNG 1.7 JPEG XL,
     // and other newer encodings) fall back to the Adobe DNG SDK.
-    bool ok = decodeWithLibRaw(data, size, out, error, extraBlack);
+    bool ok = decodeWithLibRaw(data, size, out, error, extraBlack, draft);
     if (ok && out.metadata.hasGps && looksLikeTiff(data, size)) readGpsStamps(data, size, out.metadata);
     std::string dngError;
 #if RAWBOY_WITH_DNG_SDK

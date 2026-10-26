@@ -44,8 +44,11 @@ val toTyped(const T* data, size_t n) {
     return val(emscripten::typed_memory_view(n, data)).call<val>("slice");
 }
 
-/** Decodes the file bytes; returns a handle, or 0 with the reason in lastError(). */
-uintptr_t open(const val& bytes, float extraBlack) {
+/**
+ * Decodes the file bytes; returns a handle, or 0 with the reason in lastError(). [draft]: a half-size decode for small
+ * copies and the noise level only (DecodedImage::fullWidth).
+ */
+uintptr_t open(const val& bytes, float extraBlack, bool draft) {
     lastError.clear();
     try {
         const std::vector<uint8_t> data = fromTyped<uint8_t>(bytes);
@@ -55,7 +58,7 @@ uintptr_t open(const val& bytes, float extraBlack) {
         }
         auto image = std::make_unique<DecodedImage>();
         std::string error;
-        if (!rawboy::decodeAny(data.data(), data.size(), *image, error, extraBlack)) {
+        if (!rawboy::decodeAny(data.data(), data.size(), *image, error, extraBlack, draft)) {
             lastError = "Cannot decode file: " + error;
             return 0;
         }
@@ -99,6 +102,7 @@ uintptr_t openPixels(const val& rgba, int w, int h, bool p3, const val& file) {
 }
 
 void close(uintptr_t h) { delete fromHandle(h); }
+
 std::string getLastError() { return lastError; }
 bool hasDngSdk() { return RAWBOY_WITH_DNG_SDK != 0; }
 
@@ -165,6 +169,9 @@ val decodeJxl(const val& bytes) {
 }
 int width(uintptr_t h) { return fromHandle(h)->width; }
 int height(uintptr_t h) { return fromHandle(h)->height; }
+/** The photo's size at full resolution: width/height unless the handle is a draft. */
+int fullWidth(uintptr_t h) { return fromHandle(h)->fullWidth ? fromHandle(h)->fullWidth : fromHandle(h)->width; }
+int fullHeight(uintptr_t h) { return fromHandle(h)->fullHeight ? fromHandle(h)->fullHeight : fromHandle(h)->height; }
 float iso(uintptr_t h) { return fromHandle(h)->iso; }
 float baselineExposure(uintptr_t h) { return fromHandle(h)->baselineExposure; }
 float clipLevel(uintptr_t h) { return fromHandle(h)->clipLevel; }
@@ -180,7 +187,7 @@ val asShotWhite(uintptr_t h) {
 
 std::string describe(uintptr_t h) {
     const DecodedImage* img = fromHandle(h);
-    return img->camera + " · " + std::to_string(img->width) + "×" + std::to_string(img->height) + " · " + img->decoder;
+    return img->camera + " · " + std::to_string(fullWidth(h)) + "×" + std::to_string(fullHeight(h)) + " · " + img->decoder;
 }
 
 /** The photo's EXIF essentials (PhotoMetadata) as a plain object; unknown numbers are NaN, unknown strings empty. */
@@ -391,6 +398,8 @@ EMSCRIPTEN_BINDINGS(rawboy) {
     function("decodeJxl", &decodeJxl);
     function("width", &width);
     function("height", &height);
+    function("fullWidth", &fullWidth);
+    function("fullHeight", &fullHeight);
     function("iso", &iso);
     function("baselineExposure", &baselineExposure);
     function("clipLevel", &clipLevel);

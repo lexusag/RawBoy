@@ -109,6 +109,16 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   its own CR3 box reader, iOS ImageIO, web `engine/browse/CaptureDate.ts` with `Blob.slice`; fallback the file's
   modified date). Android/iOS read dates before photos join the batch; the web adds them at once (`add` is sync) and
   reorders once when the dates are in.
+  Web analysis (2026-10-26): `decodeForAnalysis` opens raws as **drafts** (`RawImage.open(file, 0, true)` → wasm
+  `open(bytes, extraBlack, draft)` → `decodeWithLibRaw(draft)`: LibRaw `half_size`, no demosaic, 2-4x faster;
+  `DecodedImage::fullWidth/Height` = the photo's size, `sensorWidth/Height` stay full resolution for LensInfo, so
+  `RawImage.width/height` are the full size; tiles and blemish healing refuse a draft). Lens gain maps are matched to
+  CFA colours *before* `dcraw_process()` (half size clears `filters`). `estimateNoise` scales a draft by fitted factors
+  (`kDraftChroma` 0.64, `kDraftLuma` 1.38, 1.0 for phone DNGs, whose burst-merged noise is already correlated): refit
+  them if the estimator changes. `finishAnalysis` (skin, stats, auto develop) runs while the next photo decodes
+  (`AutoStore.processQueue`, at most one behind). Skin segmentation runs in `worker/skin.worker.ts` for all web callers
+  (MediaPipe's `importScripts` is shimmed with a synchronous fetch + global eval in the module worker; main-thread
+  fallback when the worker can't start). Android/iOS analysis still decodes in full.
   `PreviewCache.kt` (ports: `ios/Auto/PreviewCache.swift`, `web/src/ui/auto/PreviewCache.ts`, OPFS or a few in memory):
   the analysis hands it the session-size preview (`AutoAnalysis.analyze(onPreview)`), stored on disk (cap 1.5 GB,
   emptied on launch); `openDetail` publishes it as `cachedPreview` while the session decodes, and the detail page
