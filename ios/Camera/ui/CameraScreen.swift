@@ -14,6 +14,16 @@ struct CameraScreen: View {
     @State private var blink = 0.0
     @State private var shutterScale = 1.0
     @State private var holding = false
+    /** The focus point when the ring's drag began. */
+    @State private var dragStart: CGPoint?
+
+    private static let viewfinderSpace = "viewfinder"
+    /** Grab area around the focus ring (the ring is 72 pt). */
+    private static let focusHandleSize: CGFloat = 96
+    /** Focus loupe: its side, its distance from the point (clear of the finger) and its magnification. */
+    private static let loupeSize: CGFloat = 128
+    private static let loupeGap: CGFloat = 64
+    private static let loupeZoom: Float = 3
 
     var body: some View {
         VStack(spacing: 0) {
@@ -71,6 +81,52 @@ struct CameraScreen: View {
         .frame(height: 44)
     }
 
+    /**
+     * Where the focus ring at `p` can be grabbed: a drag moves the point (with a loupe) and focuses there on release, a
+     * tap focuses at the tap as anywhere else. It sits above the viewfinder's own gestures, so a drag here doesn't also
+     * start the press-and-hold comparison.
+     */
+    private func focusHandle(_ p: CGPoint, _ size: CGSize) -> some View {
+        Color.clear
+            .frame(width: Self.focusHandleSize, height: Self.focusHandleSize)
+            .contentShape(Circle())
+            .gesture(SpatialTapGesture(coordinateSpace: .named(Self.viewfinderSpace)).onEnded { tap in
+                vm.focusAt(tap.location.x / size.width, tap.location.y / size.height)
+            })
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 4, coordinateSpace: .named(Self.viewfinderSpace))
+                    .onChanged { drag in
+                        // From where the point was, not where the finger landed on the ring.
+                        guard let start = dragStart ?? vm.focusPoint else { return }
+                        if dragStart == nil { dragStart = start }
+                        let point = CGPoint(x: start.x + drag.translation.width / size.width,
+                                            y: start.y + drag.translation.height / size.height)
+                        vm.dragFocus(point.x, point.y, loupe: Self.loupe(at: point, in: size))
+                    }
+                    .onEnded { _ in
+                        dragStart = nil
+                        vm.endDragFocus()
+                    }
+            )
+            .position(x: p.x * size.width, y: p.y * size.height)
+    }
+
+    /**
+     * The loupe for a drag at `p` (normalised) of a viewfinder of `size`: a square loupeGap above the point (under the
+     * finger otherwise), or below it near the top, kept inside the view.
+     */
+    private static func loupe(at p: CGPoint, in size: CGSize) -> ViewfinderRenderer.Loupe? {
+        guard size.width > 0, size.height > 0 else { return nil }
+        let s = min(loupeSize, size.width, size.height)
+        let above = p.y * size.height - loupeGap - s / 2
+        let cy = above >= s / 2 ? above : p.y * size.height + loupeGap + s / 2
+        let cx = min(max(p.x * size.width, s / 2), size.width - s / 2)
+        return ViewfinderRenderer.Loupe(
+            x: Float(p.x), y: Float(p.y), centerX: Float(cx / size.width),
+            centerY: Float(min(max(cy, s / 2), size.height - s / 2) / size.height), size: Float(s / size.width),
+            zoom: loupeZoom)
+    }
+
     // Viewfinder, at the raw's aspect ratio, in whatever height the controls leave.
     private var viewfinder: some View {
         ZStack {
@@ -95,11 +151,22 @@ struct CameraScreen: View {
                                 if vm.compare { vm.setCompare(false) }
                             }
                         })
-                    if let p = vm.focusPoint {
-                        FocusRing(scanning: vm.controller.frames.focusing)
+                    // While the ring is dragged it shows there, with a loupe; it focuses on release.
+                    if let p = vm.dragPoint ?? vm.focusPoint {
+                        let state = vm.controller.frames
+                        FocusRing(scanning: vm.dragPoint == nil && state.focusing,
+                                  box: CGFloat(state.focusBox) * min(geo.size.width, geo.size.height))
                             .position(x: p.x * geo.size.width, y: p.y * geo.size.height)
+                        focusHandle(p, geo.size)
+                        if vm.dragPoint != nil, let l = Self.loupe(at: p, in: geo.size) {
+                            let side = CGFloat(l.size) * geo.size.width
+                            LoupeFrame(box: CGFloat(state.focusBox) * min(geo.size.width, geo.size.height) * CGFloat(l.zoom))
+                                .frame(width: side, height: side)
+                                .position(x: CGFloat(l.centerX) * geo.size.width, y: CGFloat(l.centerY) * geo.size.height)
+                        }
                     }
                 }
+                .coordinateSpace(.named(Self.viewfinderSpace))
                 switch vm.status {
                 case .needsPermission:
                     Button("Allow camera") { vm.openSettingsApp() }.buttonStyle(.borderedProminent)
@@ -213,18 +280,39 @@ private struct LensSelector: View {
     }
 }
 
-/** Focus lock ring: pulsing while focusing. */
+/**
+ * Focus lock ring: pulsing while focusing. The ring is about the metered spot; the square inside it is the AF box
+ * (`box` points: the focus rectangle on iOS 26); a dot when AF uses about the ring's area.
+ */
 private struct FocusRing: View {
     let scanning: Bool
+    let box: CGFloat
     @State private var pulse = false
 
     var body: some View {
         ZStack {
             Circle().stroke(Color.white, lineWidth: 2).frame(width: 72, height: 72)
-            Circle().fill(Color.white).frame(width: 6, height: 6)
+            if box < 56 {
+                Rectangle().stroke(Color.white, lineWidth: 1.5).frame(width: box, height: box)
+            } else {
+                Circle().fill(Color.white).frame(width: 6, height: 6)  // AF uses about the ring
+            }
         }
         .opacity(scanning && pulse ? 0.4 : 1)
         .onAppear { withAnimation(.easeInOut(duration: 0.35).repeatForever()) { pulse = true } }
+        .allowsHitTesting(false)
+    }
+}
+
+/** The focus loupe's frame (the renderer draws the image inside it), with the AF box magnified at its centre. */
+private struct LoupeFrame: View {
+    let box: CGFloat
+
+    var body: some View {
+        ZStack {
+            Rectangle().stroke(Color.white, lineWidth: 2)
+            Rectangle().stroke(Color.white, lineWidth: 1).frame(width: box, height: box)
+        }
         .allowsHitTesting(false)
     }
 }

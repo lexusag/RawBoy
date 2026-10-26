@@ -639,6 +639,13 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   ~320 MB; no apps killed, 2.1–3.1 s to DNG. Next if needed: request the burst in groups of 2–3 frames to cap the queue.
 - Camera focus lock: `CameraController.focusPoint`; `setCommon` puts AF_MODE_AUTO + regions on **every** request
   while locked, including the still capture (with CONTINUOUS_PICTURE there, the camera refocused at the shutter).
+  AF and AE regions differ: AF a `FOCUS_SIZE` (5% of the short side) square, AE the 16% `MeterArea.Spot`; on
+  NOT_FOCUSED_LOCKED `watchFocus` retries once with the 16% box (the ring only turns red after that). iOS: the same 5%
+  as `focusRectOfInterest` (iOS 26, never under `minFocusRectOfInterestSize`; device coordinates are landscape, so the
+  square is `size / aspect` wide), else `focusPointOfInterest`; face-driven AF off while locked. Dragging the ring
+  (`dragFocus`/`endDragFocus`) shows a loupe: `ViewfinderRenderer.loupe` re-runs the develop into a square viewport
+  with `uvRect` set to the region around the point (main_body's `outPx` follows `vUv`, so grain and lens effects stay
+  put). Untested on the phones when added (2026-10-26): tune `FOCUS_SIZE` per lens if a HAL widens small regions.
 - Selfie camera: front lenses with RAW only. Viewfinder mirrored (`Frame.mirror`; the shader mirrors only when the
   SurfaceTexture matrix doesn't already: its 2×2 determinant is < 0 without a mirror). Tap regions and face rects map
   through `uprightToBuffer`/`bufferToUpright(mirrored = true)`. Saved mirrored through the DNG's EXIF orientation:

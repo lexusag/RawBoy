@@ -45,6 +45,29 @@ public final class ViewfinderRenderer: NSObject, MTKViewDelegate, @unchecked Sen
         }
     }
 
+    /**
+     * A magnified inset over the viewfinder (the camera's focus loupe): the image around (x, y) drawn `zoom` times
+     * larger in a square `size` of the view's width, centred at (centerX, centerY). All in fractions of the view
+     * (upright, y down); the square is kept inside the view. Port of ViewfinderRenderer.Loupe.
+     */
+    public struct Loupe: Equatable, Sendable {
+        public var x: Float
+        public var y: Float
+        public var centerX: Float
+        public var centerY: Float
+        public var size: Float
+        public var zoom: Float
+
+        public init(x: Float, y: Float, centerX: Float, centerY: Float, size: Float, zoom: Float) {
+            self.x = x
+            self.y = y
+            self.centerX = centerX
+            self.centerY = centerY
+            self.size = size
+            self.zoom = zoom
+        }
+    }
+
     public static let baseMaxDimension = 512
     /** The linear frame's long side: plenty for a phone screen, and a quarter of a 48 MP frame's work. */
     private static let linearMaxDimension = 1920
@@ -64,6 +87,7 @@ public final class ViewfinderRenderer: NSObject, MTKViewDelegate, @unchecked Sen
     private var pendingBuffer: CVPixelBuffer?
     private var frameValue: Frame?
     private var paramsValue: ShaderParams?
+    private var loupeValue: Loupe?
     private var linear: MTLTexture?
     private var small: MTLTexture?
     private var halo: MTLTexture?
@@ -88,6 +112,11 @@ public final class ViewfinderRenderer: NSObject, MTKViewDelegate, @unchecked Sen
     public var params: ShaderParams? {
         get { lock.withLock { paramsValue } }
         set { lock.withLock { paramsValue = newValue } }
+    }
+
+    public var loupe: Loupe? {
+        get { lock.withLock { loupeValue } }
+        set { lock.withLock { loupeValue = newValue } }
     }
 
     public override init() {
@@ -136,10 +165,10 @@ public final class ViewfinderRenderer: NSObject, MTKViewDelegate, @unchecked Sen
 
     public func draw(in view: MTKView) {
         let start = Date()
-        let (buffer, f, p): (CVPixelBuffer?, Frame?, ShaderParams?) = lock.withLock {
+        let (buffer, f, p, loupe): (CVPixelBuffer?, Frame?, ShaderParams?, Loupe?) = lock.withLock {
             let b = pendingBuffer
             pendingBuffer = nil
-            return (b, frameValue, paramsValue)
+            return (b, frameValue, paramsValue, loupeValue)
         }
         guard let commands = ctx.queue.makeCommandBuffer() else { return }
         if let buffer, let f, let camera = cameraTexture(buffer) {
@@ -163,12 +192,29 @@ public final class ViewfinderRenderer: NSObject, MTKViewDelegate, @unchecked Sen
                 input: PixelRect(x: 0, y: 0, width: f.fullWidth, height: f.fullHeight),
                 output: PixelRect(x: 0, y: 0, width: outW, height: outH),
                 imageWidth: f.fullWidth, imageHeight: f.fullHeight)
-            DevelopProgram.draw(
-                encoder, pipeline: ctx.previewPipeline, params: p, geometry: geometry, image: linear, inputs: textures,
-                scaleX: r[2] / Float(viewW), scaleY: r[3] / Float(viewH), flipY: true,
-                overrides: ["uBase": small, "uBloomHalo": halo, "uBloomTail": tail]) { u in
+            let liveCopies: (inout UniformBlock) -> Void = { u in
                 DevelopProgram.liveCopies(&u, p, baseWidth: small.width, baseHeight: small.height,
                                           tailWidth: tail.width, tailHeight: tail.height)
+            }
+            let overrides = ["uBase": small, "uBloomHalo": halo, "uBloomTail": tail]
+            DevelopProgram.draw(
+                encoder, pipeline: ctx.previewPipeline, params: p, geometry: geometry, image: linear, inputs: textures,
+                scaleX: r[2] / Float(viewW), scaleY: r[3] / Float(viewH), flipY: true, overrides: overrides,
+                configure: liveCopies)
+            if let l = loupe {
+                // The same develop again, into a square viewport, sampling only the region around the point.
+                let side = min(max(1, (l.size * Float(viewW)).rounded()), Float(min(viewW, viewH)))
+                let x0 = min(max(0, l.centerX * Float(viewW) - side / 2), Float(viewW) - side)
+                let y0 = min(max(0, l.centerY * Float(viewH) - side / 2), Float(viewH) - side)
+                let uw = min(1, side / (l.zoom * r[2]))
+                let uh = min(1, side / (l.zoom * r[3]))
+                let uv = [min(max(0, l.x - uw / 2), 1 - uw), min(max(0, l.y - uh / 2), 1 - uh), uw, uh]
+                // Metal's viewport origin is the top left.
+                encoder.setViewport(MTLViewport(originX: Double(x0), originY: Double(y0), width: Double(side),
+                                                height: Double(side), znear: 0, zfar: 1))
+                DevelopProgram.draw(
+                    encoder, pipeline: ctx.previewPipeline, params: p, geometry: geometry, image: linear, inputs: textures,
+                    flipY: true, uvRect: uv, overrides: overrides, configure: liveCopies)
             }
         }
         encoder.endEncoding()

@@ -9,6 +9,7 @@ let cameraHelp = [
     HelpSection("Shooting", [
         HelpItem("Shutter, volume buttons or Camera Control", "Take a photo. It is saved as a JPEG developed with the look (and the DNG, if RAW is on)."),
         HelpItem("Tap the viewfinder", "Lock focus and exposure at that point. AF LOCK ✕ or a tap elsewhere releases it."),
+        HelpItem("Drag the focus ring", "Moves the focus point, with a magnified loupe; it focuses there when you let go."),
         HelpItem("Press and hold", "See the photo without the look."),
         HelpItem("UW · W · T", "Switch between the ultrawide, wide and telephoto lenses. The button next to the shutter switches to the selfie camera."),
         HelpItem("Thumbnail", "Opens Photos."),
