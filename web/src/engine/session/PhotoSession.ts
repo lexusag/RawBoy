@@ -70,8 +70,13 @@ export interface Opened {
 
 /** The file's own white balance as slider defaults; everything else untouched. */
 export function asShotDefaults(image: RawImage): DevelopParams {
-  const [kelvin, tint] = WhiteBalance.tempTintFromXY(image.asShotWhite[0], image.asShotWhite[1]);
-  return developParams({ temperature: kelvin, tint, displaySource: image.displayReferred, clipLevel: image.clipLevel });
+  return asShotDefaultsOf(image.asShotWhite, image.displayReferred, image.clipLevel);
+}
+
+/** [asShotDefaults] from what it reads of the image (RawBoy Auto keeps these for photos it analysed before). */
+export function asShotDefaultsOf(asShotWhite: readonly number[], displayReferred: boolean, clipLevel: number): DevelopParams {
+  const [kelvin, tint] = WhiteBalance.tempTintFromXY(asShotWhite[0], asShotWhite[1]);
+  return developParams({ temperature: kelvin, tint, displaySource: displayReferred, clipLevel });
 }
 
 /** The highlight-boosted halo (512 px) and tail (64 px, already scattered) copies bloom scatters light from. */

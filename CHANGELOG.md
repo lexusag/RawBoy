@@ -1,5 +1,14 @@
 # Changelog
 
+**RawBoy Auto (web): several photos analysed at once, and a reopened batch develops at once (2026-10-26)**
+
+- RawBoy Auto (web): on computers with enough cores, photos are analysed on up to 3 decoder workers at once (one per
+  three cores; phones and devices reporting under 8 GB keep one). A batch of 12 photos took 28 s instead of 45 s on a
+  4-core test machine with two at once; a Mac with 9 or more cores uses three.
+- Each photo's analysis (its small copies, noise level and skin mask, about 3 MB) is kept in the browser across visits,
+  up to about 1 GB, by file name, size and date: the same folder opened again showed all 12 developed thumbnails in
+  9 s instead of 28 s, with no decoding. The photo view still decodes the RAW when you open a photo.
+
 **RawBoy Auto (web): the grid develops about twice as fast (2026-10-26)**
 
 - RawBoy Auto (web): each photo's analysis decodes the RAW at half size without demosaicing (a draft, enough for the

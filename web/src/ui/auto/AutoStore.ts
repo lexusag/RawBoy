@@ -17,6 +17,8 @@ import { renderThumbnail } from '../../engine/gl/ThumbnailRenderer';
 import { LensTransform } from '../../engine/lens/LensTransform';
 import { loadLutCached } from '../../engine/lut/LutRepository';
 import { RawImage } from '../../engine/raw/RawImage';
+import { analysisLanes, analysisWorker } from '../../engine/raw/RawWorker';
+import type { SkinMask } from '../../engine/retouch/SkinMask';
 import type { PreviewImage } from '../../engine/gl/PreviewImage';
 import { blemishesToHeal, brushLookup, editTexturesOf, PhotoSession } from '../../engine/session/PhotoSession';
 import type { MaskLayer } from '../../engine/develop/Masks';
@@ -29,6 +31,7 @@ import type { EditsSidecar } from '../../engine/browse/XmpSidecar';
 import { findCaptureDate } from '../../engine/browse/CaptureDate';
 import { fileDate, saveSort, savedSort, sortPhotos, type PhotoSort } from '../../engine/auto/PhotoOrder';
 import { decodeAuto, encodeAuto } from './AutoSidecar';
+import { AnalysisCache } from './AnalysisCache';
 import { PreviewCache } from './PreviewCache';
 
 /** Where a photo is in the batch. */
@@ -290,6 +293,8 @@ export class AutoStore {
   private readonly decodeLock = new Lock();
   /** Each analysed photo's detail preview, so a photo shows at once while [session] decodes it. */
   private readonly previews = new PreviewCache();
+  /** Each analysed photo's small copies and skin mask, kept across visits. */
+  private readonly analyses = new AnalysisCache();
   /** The open photo's full-resolution image was freed for the RawBoy tab ([editInRawBoy]); [resume] decodes it again. */
   private released = false;
   /** The detail preview's frame width in device pixels. */
@@ -698,40 +703,62 @@ export class AutoStore {
   }
 
   /**
-   * Analyses queued photos: decodes one at a time (each decode needs the whole raw in memory), and finishes each
-   * photo's analysis (skin detection in its worker) while the next one decodes.
+   * Analyses queued photos on [analysisLanes] lanes at once, each with its own decoder worker (one lane: the page's,
+   * one decode at a time with the open photo's). Photos analysed in an earlier visit come back from [analyses] without
+   * a decode.
    */
   private async processQueue() {
     if (this.analyzing) return;
     this.analyzing = true;
-    let finishing: Promise<void> = Promise.resolve();
     try {
-      for (;;) {
-        await this.restoring;
-        const next = this.nextQueued();
-        if (!next) break;
-        this.updatePhoto(next.id, (p) => ({ ...p, status: 'analyzing' }));
-        let decoded: DecodedForAnalysis;
+      const lanes = analysisLanes();
+      await Promise.all(Array.from({ length: lanes }, (_, lane) => this.analysisLane(lane, lanes)));
+    } finally {
+      this.analyzing = false;
+    }
+    // Photos added while the last ones were finishing.
+    if (this.nextQueued()) void this.processQueue();
+  }
+
+  /**
+   * One lane of [processQueue]: decodes waiting photos one at a time (each decode needs the whole raw in memory) and
+   * finishes each one's analysis (skin detection in its worker) while the next one decodes.
+   */
+  private async analysisLane(lane: number, lanes: number) {
+    let finishing: Promise<void> = Promise.resolve();
+    for (;;) {
+      await this.restoring;
+      const next = this.nextQueued();
+      if (!next) break;
+      this.updatePhoto(next.id, (p) => ({ ...p, status: 'analyzing' }));
+      const key = `${fileKey(next.file)}|${next.plain ? 'plain' : 'auto'}`;
+      const kept = await this.analyses.get(key);
+      let decoded: DecodedForAnalysis;
+      if (kept) {
+        decoded = kept.decoded;
+      } else {
         try {
-          decoded = await this.decodeLock.run(() => decodeForAnalysis(next.file, (preview) => void this.previews.put(next.id, preview), next.plain));
+          const decode = () =>
+            decodeForAnalysis(next.file, (preview) => void this.previews.put(next.id, preview), next.plain, analysisWorker(lane, lanes));
+          decoded = await (lanes > 1 ? decode() : this.decodeLock.run(decode));
         } catch (e) {
           this.analysisFailed(next.id, e);
           continue;
         }
-        // At most one photo finishes behind the decodes, so a slow finish holds the queue rather than piling up.
-        const before = finishing;
-        finishing = before.then(() => this.finishAnalysis(next, decoded));
-        await before;
       }
-      await finishing;
-    } finally {
-      this.analyzing = false;
+      // At most one photo finishes behind the decodes, so a slow finish holds the lane rather than piling up.
+      const before = finishing;
+      finishing = before.then(() => (kept ? this.finishAnalysis(next, decoded, kept.skin) : this.finishAnalysis(next, decoded, undefined, key)));
+      await before;
     }
+    await finishing;
   }
 
-  private async finishAnalysis(next: AutoPhoto, decoded: DecodedForAnalysis) {
+  /** [knownSkin]: the mask kept with an earlier analysis; [saveAs]: the key to keep this one under. */
+  private async finishAnalysis(next: AutoPhoto, decoded: DecodedForAnalysis, knownSkin?: SkinMask | null, saveAs?: string) {
     try {
-      const analysis = await finishAnalysis(decoded, next.name);
+      const analysis = await finishAnalysis(decoded, next.name, knownSkin);
+      if (saveAs) void this.analyses.put(saveAs, decoded, analysis.skin);
       if (!this.photo(next.id)) void this.previews.remove(next.id); // removed while it was analysed
       const look = suggestLook(analysis.stats, analysis.defaults.temperature);
       const filmLook = suggestFilm(analysis.stats, analysis.defaults.temperature);

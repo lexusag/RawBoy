@@ -119,6 +119,12 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   (`AutoStore.processQueue`, at most one behind). Skin segmentation runs in `worker/skin.worker.ts` for all web callers
   (MediaPipe's `importScripts` is shimmed with a synchronous fetch + global eval in the module worker; main-thread
   fallback when the worker can't start). Android/iOS analysis still decodes in full.
+  Lanes (web): `processQueue` runs `analysisLanes()` lanes (`RawWorker.ts`: cores / 3, max 3; 1 on phones, under 8 GB
+  `deviceMemory`, or without Worker), each with its own decoder worker (`analysisWorker`; one lane = the page worker and
+  `decodeLock`, as before). A `RawImage` keeps the worker that decoded it. `ui/auto/AnalysisCache.ts` (IndexedDB
+  `rawboy-auto-analysis`, ~1 GB LRU) keeps each photo's `DecodedForAnalysis` + skin mask by `fileKey` + plain/auto; the
+  as-shot defaults and the auto develop are worked out again on load (`finishAnalysis(d, label, knownSkin)`), so only
+  changes to the decode, copies, noise or segmentation need its `VERSION` bumped.
   `PreviewCache.kt` (ports: `ios/Auto/PreviewCache.swift`, `web/src/ui/auto/PreviewCache.ts`, OPFS or a few in memory):
   the analysis hands it the session-size preview (`AutoAnalysis.analyze(onPreview)`), stored on disk (cap 1.5 GB,
   emptied on launch); `openDetail` publishes it as `cachedPreview` while the session decodes, and the detail page

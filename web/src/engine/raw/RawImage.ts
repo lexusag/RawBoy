@@ -4,7 +4,7 @@ import type { DetailTile, PixelRect } from '../gl/Zoom';
 import { LensInfo } from '../lens/LensInfo';
 import type { SkinMask } from '../retouch/SkinMask';
 import type { OpenResult, PhotoMetadata } from '../../worker/protocol';
-import { rawWorker } from './RawWorker';
+import { rawWorker, type RawWorker } from './RawWorker';
 
 /**
  * A decoded raw file held in the decoder worker as linear Rec.2020 half floats, white balanced for the as-shot
@@ -38,7 +38,7 @@ export class RawImage {
   /** EXIF essentials, written into exported JPEGs. */
   readonly metadata: PhotoMetadata;
 
-  private constructor(private readonly handle: number, r: OpenResult) {
+  private constructor(private readonly worker: RawWorker, private readonly handle: number, r: OpenResult) {
     this.width = r.fullWidth;
     this.height = r.fullHeight;
     this.pixelWidth = r.width;
@@ -57,19 +57,20 @@ export class RawImage {
   /**
    * [extraBlack]: black to take off beyond the file's, as a fraction of the white range (LibRaw path only). [draft]: a
    * half-size decode without demosaic, 2-4x faster, for RawBoy Auto's analysis (raws with a CFA; others decode in full).
+   * [worker]: the decoder worker that holds the image (the page's by default).
    */
-  static async open(file: Blob, extraBlack = 0, draft = false): Promise<RawImage> {
+  static async open(file: Blob, extraBlack = 0, draft = false, worker: RawWorker = rawWorker()): Promise<RawImage> {
     const bytes = await file.arrayBuffer();
-    if (isHeif(bytes) || isPng(bytes)) return RawImage.openWithBrowser(file, bytes, isHeif(bytes) ? 'HEIC' : 'PNG');
-    const r = await rawWorker().call<OpenResult>({ op: 'open', bytes, extraBlack, draft }, [bytes]);
-    return new RawImage(r.handle, r);
+    if (isHeif(bytes) || isPng(bytes)) return RawImage.openWithBrowser(file, bytes, isHeif(bytes) ? 'HEIC' : 'PNG', worker);
+    const r = await worker.call<OpenResult>({ op: 'open', bytes, extraBlack, draft }, [bytes]);
+    return new RawImage(worker, r.handle, r);
   }
 
   /**
    * HEIC and PNG through the browser's own decoder (HEIC: Safari has one; there is no HEVC decoder of our own), read
    * back from a canvas in Display P3 where the browser supports it. createImageBitmap already applies the orientation.
    */
-  private static async openWithBrowser(file: Blob, bytes: ArrayBuffer, kind: string): Promise<RawImage> {
+  private static async openWithBrowser(file: Blob, bytes: ArrayBuffer, kind: string, worker: RawWorker): Promise<RawImage> {
     let bitmap: ImageBitmap;
     try {
       bitmap = await createImageBitmap(file);
@@ -87,9 +88,9 @@ export class RawImage {
     const image = ctx.getImageData(0, 0, width, height, { colorSpace: 'display-p3' });
     const p3 = image.colorSpace === 'display-p3';
     const rgba = image.data.buffer;
-    const r = await rawWorker().call<OpenResult>(
+    const r = await worker.call<OpenResult>(
       { op: 'openPixels', rgba, width, height, p3, bytes }, [rgba, bytes]);
-    return new RawImage(r.handle, r);
+    return new RawImage(worker, r.handle, r);
   }
 
   private check(full = false) {
@@ -103,14 +104,14 @@ export class RawImage {
     const scale = Math.min(1, maxDimension / Math.max(this.width, this.height), this.pixelWidth / this.width);
     const w = Math.max(1, Math.round(this.width * scale));
     const h = Math.max(1, Math.round(this.height * scale));
-    const pixels = await rawWorker().call<Uint16Array>({ op: 'downsample', handle: this.handle, width: w, height: h, boost: boostHighlights });
+    const pixels = await this.worker.call<Uint16Array>({ op: 'downsample', handle: this.handle, width: w, height: h, boost: boostHighlights });
     return { width: w, height: h, pixels, fullWidth: this.width, fullHeight: this.height };
   }
 
   /** A full-resolution region as tightly packed RGB half floats. */
   async copyTile(r: PixelRect): Promise<Uint16Array> {
     this.check(true);
-    return rawWorker().call<Uint16Array>({ op: 'copyTile', handle: this.handle, x: r.x, y: r.y, width: r.width, height: r.height });
+    return this.worker.call<Uint16Array>({ op: 'copyTile', handle: this.handle, x: r.x, y: r.y, width: r.width, height: r.height });
   }
 
   async createTile(r: PixelRect): Promise<DetailTile> {
@@ -120,14 +121,14 @@ export class RawImage {
   /** Measures the photo's noise on the full-resolution pixels (~30 ms); NO_NOISE for JPEG/HEIC. */
   async measureNoise(): Promise<NoiseLevel> {
     this.check();
-    const [luma, chroma] = await rawWorker().call<[number, number]>({ op: 'noiseLevel', handle: this.handle });
+    const [luma, chroma] = await this.worker.call<[number, number]>({ op: 'noiseLevel', handle: this.handle });
     return { luma, chroma };
   }
 
   /** Blemish candidates on [mask]: (x, y, radius, score) per spot, most obvious first. */
   async detectBlemishes(mask: SkinMask): Promise<Float32Array> {
     this.check(true);
-    return rawWorker().call<Float32Array>({
+    return this.worker.call<Float32Array>({
       op: 'detectBlemishes', handle: this.handle, mask: mask.data, maskW: mask.width, maskH: mask.height, faceDiameter: mask.faceDiameterPx,
     });
   }
@@ -135,13 +136,13 @@ export class RawImage {
   /** Replaces any earlier healing with healing of exactly [spots]. Previews must be rebuilt afterwards. */
   async healBlemishes(spots: Float32Array): Promise<void> {
     this.check(true);
-    await rawWorker().call({ op: 'healBlemishes', handle: this.handle, spots });
+    await this.worker.call({ op: 'healBlemishes', handle: this.handle, spots });
   }
 
   close() {
     if (this.closed) return;
     this.closed = true;
-    void rawWorker().call({ op: 'close', handle: this.handle });
+    void this.worker.call({ op: 'close', handle: this.handle });
   }
 }
 
