@@ -13,6 +13,7 @@ let cameraHelp = [
         HelpItem("Press and hold", "See the photo without the look."),
         HelpItem("UW · W · T", "Switch between the ultrawide, wide and telephoto lenses. The button next to the shutter switches to the selfie camera."),
         HelpItem("Thumbnail", "Opens Photos."),
+        HelpItem("QR codes", "Point the camera at one: a bar above the lenses shows what it holds. Tap it to open the link or copy the text (for Wi-Fi, the password); ✕ hides it. Settings › QR codes turns it off."),
     ]),
     HelpSection("Look", [
         HelpItem("Look menu", "The film look the viewfinder shows and the photo gets."),
@@ -21,6 +22,6 @@ let cameraHelp = [
     HelpSection("Top bar", [
         HelpItem("RAW", "Keep the DNG next to the JPEG (lit) or not (struck through)."),
         HelpItem("Flash", "Turns the flash on or off."),
-        HelpItem("Settings", "JPEG quality, Smaller photos, Geotag (saves where each photo was taken; asks for location access when turned on), Shutter sound (a click on each shot, off by default; always on where the law requires it), Histogram (live red, green and blue levels in a corner of the viewfinder), Remember camera & settings and the licences."),
+        HelpItem("Settings", "JPEG quality, Smaller photos, Geotag (saves where each photo was taken; asks for location access when turned on), Shutter sound (a click on each shot, off by default; always on where the law requires it), QR codes (on by default), Histogram (live red, green and blue levels in a corner of the viewfinder), Remember camera & settings and the licences."),
     ]),
 ]

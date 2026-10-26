@@ -52,6 +52,9 @@ final class CameraViewModel: ObservableObject {
     @Published private(set) var aspect: CGFloat = 3.0 / 4.0
     /** RGB levels of the live develop (settings.showHistogram), nil when off or before the first one. */
     @Published private(set) var histogram: Histogram?
+    /** The QR code in the viewfinder (settings.scanQr), or nil. */
+    @Published private(set) var qrCode: QrPayload?
+    private var qrTracker = QrTracker()
 
     private var info: CameraController.Info?
     private var startTask: Task<Void, Never>?
@@ -121,6 +124,10 @@ final class CameraViewModel: ObservableObject {
         renderer.onBase = { [weak self] base in
             Task { @MainActor in self?.onViewfinderBase(base) }
         }
+        controller.onQr = { [weak self] text in
+            Task { @MainActor in self?.qrSeen(text) }
+        }
+        controller.setScanQr(settings.scanQr)
     }
 
     // MARK: - Lifecycle
@@ -160,6 +167,7 @@ final class CameraViewModel: ObservableObject {
         controller.stop()
         focusPoint = nil
         endDrag()
+        clearQr()
         if status == .ready { status = .opening }
     }
 
@@ -287,6 +295,7 @@ final class CameraViewModel: ObservableObject {
         // The live develop belongs to the old lens: start the new one fresh.
         live = nil
         renderer.params = nil
+        clearQr()
         startTask?.cancel()
         startTask = nil
         startIfReady()
@@ -296,6 +305,8 @@ final class CameraViewModel: ObservableObject {
 
     /** A small copy of the viewfinder frame: analyse it unless the last one is still running. */
     private func onViewfinderBase(_ base: PreviewImage) {
+        // The QR detector reports only codes it sees: these few frames a second let a code that left the view go.
+        qrSeen(nil)
         guard !analysing, status == .ready else { return }
         // The frame's scale follows the lens's calibration.
         let scale = settings.previewScale
@@ -420,6 +431,87 @@ final class CameraViewModel: ObservableObject {
     }
 
     func toggleFlash() { change { $0.flash = $0.flash == .off ? .on : .off } }
+
+    // MARK: - QR codes
+
+    func setScanQr(_ on: Bool) {
+        change { $0.scanQr = on }
+        controller.setScanQr(on)
+        if !on { clearQr() }
+    }
+
+    /** A sighting of a code (text) or a frame without one (nil). */
+    private func qrSeen(_ text: String?) {
+        guard settings.scanQr, status == .ready else { return }
+        if qrTracker.update(text, now: ProcessInfo.processInfo.systemUptime) { qrCode = qrTracker.shown }
+    }
+
+    /** The bar's ✕: hides the code until it has left the view. */
+    func dismissQr() {
+        qrTracker.dismiss(now: ProcessInfo.processInfo.systemUptime)
+        qrCode = nil
+    }
+
+    private func clearQr() {
+        qrTracker.clear()
+        qrCode = nil
+    }
+
+    /**
+     * A tap on the bar: opens the link (or mail, phone, messages, maps) in its app, or copies the text. Wi-Fi: the
+     * password is copied (joining a network needs Apple's Hotspot Configuration entitlement).
+     */
+    func openQr(_ code: QrPayload) {
+        switch code {
+        case let .link(_, url, _):
+            open(URL(string: url), orCopy: url)
+        case let .action(text, uri, _, _, body):
+            open(Self.appURL(uri, body: body), orCopy: text)
+        case let .wifi(_, ssid, password, _, _):
+            UIPasteboard.general.string = password ?? ssid
+            message = password != nil ? "Password copied: choose \(ssid) in Settings › Wi-Fi" : "Choose \(ssid) in Settings › Wi-Fi"
+        case let .text(text):
+            UIPasteboard.general.string = text
+            message = "Copied"
+        }
+    }
+
+    private func open(_ url: URL?, orCopy text: String) {
+        guard let url else {
+            UIPasteboard.general.string = text
+            message = "Copied"
+            return
+        }
+        UIApplication.shared.open(url) { [weak self] opened in
+            guard !opened else { return }
+            Task { @MainActor in
+                UIPasteboard.general.string = text
+                self?.message = "No app opens it: copied"
+            }
+        }
+    }
+
+    /** Android-style QR addresses (smsto:, geo:) as iOS's apps take them: sms:…&body=, Apple Maps. */
+    nonisolated static func appURL(_ uri: String, body: String?) -> URL? {
+        let allowed = CharacterSet.urlQueryAllowed.subtracting(CharacterSet(charactersIn: "&=+"))
+        if uri.hasPrefix("smsto:") {
+            let number = String(uri.dropFirst(6)).filter { !$0.isWhitespace }
+            let encoded = body?.addingPercentEncoding(withAllowedCharacters: allowed)
+            return URL(string: "sms:\(number)" + (encoded.map { "&body=\($0)" } ?? ""))
+        }
+        if uri.hasPrefix("geo:") {
+            // geo:lat,lon[,alt][;u=…][?q=…]
+            let rest = uri.dropFirst(4)
+            let point = rest.prefix { $0 != ";" && $0 != "?" }.split(separator: ",").prefix(2).joined(separator: ",")
+            var url = "https://maps.apple.com/?ll=\(point)"
+            if let q = rest.range(of: "q=").map({ String(rest[$0.upperBound...]) }), !q.isEmpty {
+                url += "&q=" + ((q.removingPercentEncoding ?? q).addingPercentEncoding(withAllowedCharacters: allowed) ?? "")
+            }
+            return URL(string: url)
+        }
+        if uri.hasPrefix("tel:") { return URL(string: "tel:" + uri.dropFirst(4).filter { !$0.isWhitespace }) }
+        return URL(string: uri) ?? uri.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed).flatMap(URL.init(string:))
+    }
 
     func setCompare(_ on: Bool) {
         compare = on

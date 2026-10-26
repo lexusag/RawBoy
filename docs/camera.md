@@ -25,6 +25,15 @@ Google Camera (each lens that can deliver RAW is offered). The button right of t
 **selfie camera**, shown only when the front camera delivers RAW; selfies are saved mirrored, as the viewfinder
 shows them.
 
+- **QR codes:** point the camera at a QR code and a bar above the lens buttons shows what it holds and what a tap
+  does, as the phone's own camera does: **Open** a link (the site's name is shown, so you see where it goes before
+  tapping), **Join** a Wi-Fi network (Android 11+: the system's "save this network?" sheet; on iPhones, and for WEP
+  networks or older Android, the password is copied instead), **Email**, **Call** (the dialler opens with the number,
+  nothing is dialled), **Message** or **Map**, or **Copy** the text. **✕** hides the bar until the code leaves the
+  view. Nothing happens on its own: only a tap acts. On a locked phone, anything that leaves the camera asks to
+  unlock first. Shooting isn't affected: Android reads a 1280 px greyscale copy of the viewfinder about three times
+  a second with ZXing on a background thread (skipped while a burst merges); the iPhone uses AVFoundation's own QR
+  detector next to its face detection. On by default; **Settings → QR codes** turns it off.
 - **Flash:** the bolt button in the top bar (shown when the lens has a flash; usually not the selfie camera) turns
   **Focus-flash** (bolt with "AF") on or off. It works like Google Camera's: the light comes on, the camera focuses with it (unless focus is locked), then the flash fires.
   Exposure works like a flash guide number: the photo is exposed for the distance the lens is focused at (the flash's
@@ -56,7 +65,7 @@ shows them.
   the smaller photo and a light sharpening after the downscale; off saves full resolution, unsharpened); **Merge 8 frames** (see above); **Shutter sound** (off by default: a click on each
   shot; where the law requires it, such as Japan and Korea, Android or iOS reports so and it is always on and greyed out,
   as it is on iPhones before iOS 18);
-  **Geotag** (off by default; see below);
+  **Geotag** (off by default; see below); **QR codes** (on by default; see above);
   **Remember camera & settings** (off by default: each start uses the
   back W lens, Yellow Portrait 400 and default sliders; on keeps lens, side, look and sliders).
 - **Geotag:** with it on, each JPEG and DNG gets the GPS tags of where it was taken: latitude, longitude, altitude

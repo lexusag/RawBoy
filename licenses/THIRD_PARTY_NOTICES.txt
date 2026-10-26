@@ -1901,6 +1901,15 @@ Licensed under the Apache License, Version 2.0; see the full text above under
 "MediaPipe".
 
 ================================================================================
+ZXing core 3.5.3 (QR codes in RawBoy Camera, Android)
+================================================================================
+
+Copyright the ZXing authors.
+
+Licensed under the Apache License, Version 2.0; see the full text above under
+"MediaPipe".
+
+================================================================================
 spectral_film_lut (used to generate the bundled film LUTs)
 ================================================================================
 

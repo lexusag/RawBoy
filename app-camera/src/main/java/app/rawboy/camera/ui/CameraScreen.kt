@@ -12,6 +12,9 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
 import app.rawboy.camera.capture.FlashMode
+import app.rawboy.camera.qr.QrPayload
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.ui.text.style.TextOverflow
 import app.rawboy.view.HistogramView
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -120,6 +123,7 @@ fun CameraScreen(
     requestPermission: () -> Unit,
     requestLocation: () -> Unit,
     openPhoto: (Uri) -> Unit,
+    openQr: (QrPayload) -> Unit,
 ) {
     val status by vm.status.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
@@ -137,6 +141,7 @@ fun CameraScreen(
     val focusSize by vm.controller.focusSize.collectAsStateWithLifecycle()
     val flashAvailable by vm.flashAvailable.collectAsStateWithLifecycle()
     val histogram by vm.histogram.collectAsStateWithLifecycle()
+    val qrCode by vm.qrCode.collectAsStateWithLifecycle()
     // Only the AF state of the camera's per-frame metadata, so the screen doesn't recompose 30 times a second.
     val afState by remember(vm) { vm.controller.frames.map { it?.afState }.distinctUntilChanged() }
         .collectAsStateWithLifecycle(null)
@@ -231,7 +236,10 @@ fun CameraScreen(
                     .onSizeChanged { viewSize = it },
                 contentAlignment = Alignment.Center,
             ) {
-                Viewfinder(f, params, vm::onSurfaceTexture, vm::onViewfinderBase, Modifier.fillMaxSize(), loupe)
+                Viewfinder(
+                    f, params, vm::onSurfaceTexture, vm::onViewfinderBase, Modifier.fillMaxSize(), loupe,
+                    onLuma = if (settings.scanQr) vm::onViewfinderLuma else null,
+                )
                 Box(
                     Modifier
                         .matchParentSize()
@@ -269,6 +277,17 @@ fun CameraScreen(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .padding(bottom = 16.dp),
+                    )
+                }
+                // Above the lens selector, out of the way of the focus ring and the top badges.
+                qrCode?.let { code ->
+                    QrChip(
+                        code,
+                        onOpen = { openQr(code) },
+                        onDismiss = vm::dismissQr,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(start = 16.dp, end = 16.dp, bottom = if (lenses.size > 1) 84.dp else 16.dp),
                     )
                 }
                 shownFocus?.let { (x, y) -> FocusRing(x, y, if (dragPoint != null) null else afState, focusSize) }
@@ -389,6 +408,44 @@ fun CameraScreen(
     if (showSettings) {
         ModalBottomSheet(onDismissRequest = { showSettings = false }) {
             SettingsContent(settings, vm, requestLocation)
+        }
+    }
+}
+
+/**
+ * A QR code the viewfinder sees, as Google Camera shows it: what it holds and what a tap does ("example.com  Open"),
+ * with ✕ to hide it until the code leaves the view.
+ */
+@Composable
+private fun QrChip(code: QrPayload, onOpen: () -> Unit, onDismiss: () -> Unit, modifier: Modifier) {
+    Row(
+        modifier
+            .widthIn(max = 360.dp)
+            .clip(RoundedCornerShape(24.dp))
+            .background(Color(0xCC000000))
+            .clickable(onClick = onOpen)
+            .padding(start = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(QrCodeIcon, contentDescription = "QR code", modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(8.dp))
+        Text(
+            code.label,
+            style = MaterialTheme.typography.bodyMedium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false),
+        )
+        Spacer(Modifier.width(10.dp))
+        Text(code.verb, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+        Box(
+            Modifier
+                .size(44.dp)
+                .clickable(onClick = onDismiss)
+                .semantics { contentDescription = "Hide QR code" },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("✕", style = MaterialTheme.typography.labelLarge, color = Color.White.copy(alpha = 0.7f))
         }
     }
 }
@@ -629,6 +686,13 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
         )
         Spacer(Modifier.height(16.dp))
         SettingSwitch(
+            title = "QR codes",
+            subtitle = "Show what a QR code in the viewfinder holds; tap to open the link, join the Wi-Fi or copy the text",
+            checked = settings.scanQr,
+            onChange = vm::setScanQr,
+        )
+        Spacer(Modifier.height(16.dp))
+        SettingSwitch(
             title = "Histogram",
             subtitle = "A live RGB histogram in a corner of the viewfinder",
             checked = settings.showHistogram,
@@ -735,6 +799,16 @@ private val BurstIcon: ImageVector by lazy {
         "BurstMode",
         "M1,5h2v14H1zM5,5h2v14H5zM22,5H10c-0.55,0 -1,0.45 -1,1v12c0,0.55 0.45,1 1,1h12c0.55,0 1,-0.45 1,-1V6" +
             "c0,-0.55 -0.45,-1 -1,-1zM11,17l2.5,-3.15L15.29,16l2.5,-3.22L21,17H11z",
+    )
+}
+
+/** Material "qr_code" icon (Apache 2.0). */
+private val QrCodeIcon: ImageVector by lazy {
+    icon(
+        "QrCode",
+        "M3,11h8V3H3V11zM5,5h4v4H5V5zM3,21h8v-8H3V21zM5,15h4v4H5V15zM13,3v8h8V3H13zM19,9h-4V5h4V9z" +
+            "M19,19h2v2h-2V19zM13,13h2v2h-2V13zM15,15h2v2h-2V15zM13,17h2v2h-2V17zM15,19h2v2h-2V19z" +
+            "M17,17h2v2h-2V17zM17,13h2v2h-2V13zM19,15h2v2h-2V15z",
     )
 }
 

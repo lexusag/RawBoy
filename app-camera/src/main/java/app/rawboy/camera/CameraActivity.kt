@@ -2,12 +2,19 @@ package app.rawboy.camera
 
 import android.Manifest
 import android.app.KeyguardManager
+import android.content.ClipData
+import android.content.ClipDescription
+import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.net.wifi.WifiNetworkSuggestion
+import android.os.Build
 import android.os.Bundle
+import android.os.PersistableBundle
 import android.os.PowerManager
 import android.provider.MediaStore
+import android.provider.Settings
 import android.view.KeyEvent
 import android.view.OrientationEventListener
 import android.view.WindowManager
@@ -20,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.ui.graphics.Color
 import androidx.core.content.ContextCompat
+import app.rawboy.camera.qr.QrPayload
 import app.rawboy.camera.ui.CameraScreen
 
 class CameraActivity : ComponentActivity() {
@@ -33,6 +41,9 @@ class CameraActivity : ComponentActivity() {
     private val locationPermission = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
         viewModel.onLocationPermission(granted.values.any { it })
     }
+
+    /** Android's "add this network?" sheet for a Wi-Fi QR code; it saves the network itself, nothing comes back to us. */
+    private val addWifi = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {}
 
     /** The UI stays portrait; the device's rotation only sets each photo's orientation. */
     private val orientation by lazy {
@@ -65,6 +76,7 @@ class CameraActivity : ComponentActivity() {
                         locationPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
                     },
                     openPhoto = ::openPhoto,
+                    openQr = ::openQr,
                 )
             }
         }
@@ -91,23 +103,88 @@ class CameraActivity : ComponentActivity() {
     }
 
     /** The thumbnail: opens the photo in the phone's viewer, after unlocking when the phone is locked. */
-    private fun openPhoto(uri: Uri) {
-        val view = {
-            val intent = Intent(Intent.ACTION_VIEW)
-                .setDataAndType(uri, "image/jpeg")
-                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            runCatching { startActivity(intent) }
+    private fun openPhoto(uri: Uri) = whenUnlocked {
+        val intent = Intent(Intent.ACTION_VIEW)
+            .setDataAndType(uri, "image/jpeg")
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        runCatching { startActivity(intent) }
+    }
+
+    /**
+     * The viewfinder's QR chip: opens the link (or mail, call, message, map), offers to join the Wi-Fi network, or
+     * copies the text. Anything that leaves the camera asks to unlock first, so a locked phone can't be used to
+     * open a link.
+     */
+    private fun openQr(code: QrPayload) {
+        when (code) {
+            is QrPayload.Text -> copy("QR code", code.text)
+            is QrPayload.Link -> whenUnlocked {
+                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(code.url)).addCategory(Intent.CATEGORY_BROWSABLE)
+                if (runCatching { startActivity(intent) }.isFailure) copy("Link", code.url)
+            }
+            is QrPayload.Action -> whenUnlocked {
+                val uri = Uri.parse(code.uri)
+                val intent = when (uri.scheme) {
+                    "tel" -> Intent(Intent.ACTION_DIAL, uri) // the dialler with the number, never a call straight away
+                    "smsto" -> Intent(Intent.ACTION_SENDTO, uri).apply { code.body?.let { putExtra("sms_body", it) } }
+                    else -> Intent(Intent.ACTION_VIEW, uri)
+                }
+                if (runCatching { startActivity(intent) }.isFailure) copy("QR code", code.text)
+            }
+            is QrPayload.Wifi -> whenUnlocked { joinWifi(code) }
         }
+    }
+
+    /**
+     * Android 11+: the system sheet that adds the network (apps can't join one themselves since Android 10). WEP,
+     * which that sheet doesn't take, and older Android: the password is copied and Wi-Fi settings open.
+     */
+    private fun joinWifi(w: QrPayload.Wifi) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val suggestion = runCatching {
+                WifiNetworkSuggestion.Builder().setSsid(w.ssid).setIsHiddenSsid(w.hidden).apply {
+                    when (w.security) {
+                        "" -> Unit
+                        "WPA" -> setWpa2Passphrase(requireNotNull(w.password))
+                        "SAE" -> setWpa3Passphrase(requireNotNull(w.password))
+                        else -> error("${w.security} networks can't be suggested")
+                    }
+                }.build() // also throws for a passphrase of the wrong length
+            }.getOrNull()
+            if (suggestion != null) {
+                val intent = Intent(Settings.ACTION_WIFI_ADD_NETWORKS)
+                    .putParcelableArrayListExtra(Settings.EXTRA_WIFI_NETWORK_LIST, arrayListOf(suggestion))
+                if (runCatching { addWifi.launch(intent) }.isSuccess) return
+            }
+        }
+        w.password?.let { copy("Wi-Fi password", it, sensitive = true) }
+        viewModel.showMessage(if (w.password != null) "Password copied: choose ${w.ssid} in Wi-Fi settings" else "Choose ${w.ssid} in Wi-Fi settings")
+        runCatching { startActivity(Intent(Settings.ACTION_WIFI_SETTINGS)) }
+    }
+
+    private fun copy(label: String, text: String, sensitive: Boolean = false) {
+        val clip = ClipData.newPlainText(label, text)
+        if (sensitive && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // Kept out of the clipboard preview Android shows.
+            clip.description.extras = PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true) }
+        }
+        getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
+        // Android 13+ confirms copies itself.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) viewModel.showMessage("Copied")
+    }
+
+    /** Runs [action] now, or after the user unlocks the phone when the camera is over the lock screen. */
+    private fun whenUnlocked(action: () -> Unit) {
         val keyguard = getSystemService(KeyguardManager::class.java)
         if (!keyguard.isKeyguardLocked) {
             leaveLockScreen()
-            view()
+            action()
             return
         }
         keyguard.requestDismissKeyguard(this, object : KeyguardManager.KeyguardDismissCallback() {
             override fun onDismissSucceeded() {
                 leaveLockScreen()
-                view()
+                action()
             }
         })
     }

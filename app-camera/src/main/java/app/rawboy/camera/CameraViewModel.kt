@@ -11,6 +11,7 @@ import android.location.altitude.AltitudeConverter
 import android.net.Uri
 import android.os.Build
 import android.os.Process
+import android.os.SystemClock
 import android.provider.MediaStore
 import android.system.Os
 import android.util.Log
@@ -27,6 +28,9 @@ import app.rawboy.camera.capture.CameraController
 import app.rawboy.camera.capture.FlashMode
 import app.rawboy.camera.capture.LocationTracker
 import app.rawboy.camera.capture.ShutterSound
+import app.rawboy.camera.qr.QrPayload
+import app.rawboy.camera.qr.QrReader
+import app.rawboy.camera.qr.QrTracker
 import app.rawboy.develop.DevelopParams
 import app.rawboy.develop.Histogram
 import app.rawboy.export.DngGps
@@ -68,6 +72,7 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.text.SimpleDateFormat
@@ -135,6 +140,23 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     /** Renders the histogram's small copy of the live develop; its own GL context and thread. */
     private val histogramRenderer = ThumbnailRenderer()
     private var histogramJob: Job? = null
+
+    /** The QR code in the viewfinder ([CameraSettings.scanQr]), or null. */
+    private val _qrCode = MutableStateFlow<QrPayload?>(null)
+    val qrCode = _qrCode.asStateFlow()
+    private val qrTracker = QrTracker()
+    private val qrBusy = AtomicBoolean(false)
+
+    /**
+     * QR codes are read on a thread of their own at background priority (the little cores are plenty for a few
+     * reads a second), never holding up the GL thread or a shot's develop.
+     */
+    private val qrExecutor = Executors.newSingleThreadExecutor { r ->
+        Thread({
+            Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND)
+            r.run()
+        }, "RawBoy-qr")
+    }
 
     /** Press and hold: show the auto develop without the look. */
     private val _compare = MutableStateFlow(false)
@@ -291,6 +313,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         controller.stop() // also ends a focus lock
         _focusPoint.value = null
         _dragPoint.value = null
+        clearQr()
         if (hasPermission) _status.value = CameraStatus.OPENING
     }
 
@@ -406,6 +429,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         _dragPoint.value = null
         // The live develop belongs to the old lens: start the new one fresh.
         live = null
+        clearQr()
         _shaderParams.value = null
         startJob?.cancel()
         startJob = null
@@ -440,6 +464,39 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             // shot does (see develop).
             live = Live(base, stats, defaults, AutoTone.develop(stats, defaults, phoneAe = true))
             publish()
+        }
+    }
+
+    /**
+     * A greyscale copy of the viewfinder frame (GL thread), while [CameraSettings.scanQr] is on: look for a QR code
+     * unless the last read is still running. Skipped while a burst merges, which needs the CPU and memory.
+     */
+    fun onViewfinderLuma(width: Int, height: Int, luma: ByteArray) {
+        if (_merging.value || !qrBusy.compareAndSet(false, true)) return
+        qrExecutor.execute {
+            try {
+                val text = runCatching { QrReader.read(width, height, luma) }.getOrNull()
+                synchronized(qrTracker) {
+                    if (qrTracker.update(text, SystemClock.uptimeMillis()) && _settings.value.scanQr) _qrCode.value = qrTracker.shown
+                }
+            } finally {
+                qrBusy.set(false)
+            }
+        }
+    }
+
+    /** The chip's ✕: hides the code until it has left the view. */
+    fun dismissQr() {
+        synchronized(qrTracker) {
+            qrTracker.dismiss(SystemClock.uptimeMillis())
+            _qrCode.value = null
+        }
+    }
+
+    private fun clearQr() {
+        synchronized(qrTracker) {
+            qrTracker.clear()
+            _qrCode.value = null
         }
     }
 
@@ -508,6 +565,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setShowHistogram(on: Boolean) = change { it.copy(showHistogram = on) }
     fun setMergeBurst(on: Boolean) = change { it.copy(mergeBurst = on) }
     fun setShutterSound(on: Boolean) = change { it.copy(shutterSound = on) }
+    fun setScanQr(on: Boolean) {
+        change { it.copy(scanQr = on) }
+        if (!on) clearQr()
+    }
 
     /** Turning it on needs location access first: the UI asks for it, then calls [onLocationPermission]. */
     fun setGeotag(on: Boolean) {
@@ -547,6 +608,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     fun consumeMessage() {
         _message.value = null
+    }
+
+    fun showMessage(text: String) {
+        _message.value = text
     }
 
     // ---- Capture ----
@@ -815,6 +880,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         // The export GL context belongs to the develop thread: release it there, after any queued work.
         developExecutor.execute { exportGpu.close() }
         developExecutor.shutdown()
+        qrExecutor.shutdown()
     }
 
     companion object {
