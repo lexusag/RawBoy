@@ -10,7 +10,9 @@
 #include "rawboy.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
+#include <string>
 #include <vector>
 
 namespace rawboy {
@@ -23,6 +25,20 @@ constexpr int kMargin = 18;                      // 3 sigma of the chroma blur
 constexpr int kPatch = kInner + 2 * kMargin;     // 84
 constexpr float kLumaSigma = 1.5f;
 constexpr float kChromaSigma = 6.0f;
+// A draft (half size, no demosaic: DecodedImage::fullWidth) measured as if it were the full decode. Its pixels hold
+// one undemosaiced sample per colour, so colour noise reads higher and luma noise lower than after AHD. Fitted
+// 2026-10-26 on a GFX 50R RAF, a Sony NEX-3 ARW and a Pixel 9 Pro DNG (full / draft): colour 0.653, 0.635, 0.640;
+// luma 1.351, 1.414, but 0.994 on the Pixel, whose merged-burst DNG already has smooth, correlated noise.
+constexpr float kDraftChroma = 0.64f;
+constexpr float kDraftLuma = 1.38f;
+constexpr float kDraftLumaPhone = 1.0f;
+
+/** A phone's computational DNG (AutoTone's cameraMetered: Google, Apple or Samsung with a BaselineExposure). */
+bool phoneDng(const DecodedImage& img) {
+    std::string make = img.metadata.make;
+    std::transform(make.begin(), make.end(), make.begin(), [](unsigned char c) { return std::tolower(c); });
+    return !std::isnan(img.baselineExposure) && (make == "google" || make == "apple" || make == "samsung");
+}
 constexpr float kMinLevel = 0.0005f;  // blocks darker than this are mostly black clipping
 constexpr float kMaxValue = 0.95f;    // blocks touching sensor clip have no noise left
 constexpr int kMinBlocksPerBand = 8;
@@ -165,7 +181,12 @@ NoiseLevel estimateNoise(const DecodedImage& img) {
     });
     std::vector<BlockStat> blocks;
     for (const auto& r : perRow) blocks.insert(blocks.end(), r.begin(), r.end());
-    return {bandedFloor(blocks, &BlockStat::luma), bandedFloor(blocks, &BlockStat::chroma)};
+    NoiseLevel n{bandedFloor(blocks, &BlockStat::luma), bandedFloor(blocks, &BlockStat::chroma)};
+    if (img.fullWidth) {
+        n.luma *= phoneDng(img) ? kDraftLumaPhone : kDraftLuma;
+        n.chroma *= kDraftChroma;
+    }
+    return n;
 }
 
 }  // namespace rawboy

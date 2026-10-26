@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 // The store's analysis needs the WASM decoder; these tests only add photos, so it is stubbed out.
-vi.mock('../auto/AutoAnalysis', () => ({ analyzeFile: () => new Promise(() => {}) }));
+vi.mock('../auto/AutoAnalysis', () => ({ decodeForAnalysis: () => new Promise(() => {}), finishAnalysis: () => new Promise(() => {}) }));
 
 const { AutoStore, nonRawNote } = await import('../../ui/auto/AutoStore');
 

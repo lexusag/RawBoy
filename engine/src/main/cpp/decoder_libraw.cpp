@@ -695,7 +695,8 @@ public:
 
 }  // namespace
 
-bool decodeWithLibRaw(const uint8_t* data, size_t size, DecodedImage& out, std::string& error, float extraBlack) {
+bool decodeWithLibRaw(const uint8_t* data, size_t size, DecodedImage& out, std::string& error, float extraBlack,
+                      bool draft) {
     auto raw = std::make_unique<RawBoyLibRaw>();  // LibRaw is large; keep it off the stack
 
     auto& p = raw->imgdata.params;
@@ -710,6 +711,7 @@ bool decodeWithLibRaw(const uint8_t* data, size_t size, DecodedImage& out, std::
     p.user_flip = 0;        // stay in sensor orientation; we rotate after lens shading
     p.highlight = 1;        // unclipped; blown highlights are blended below, only near the clip (blendClipped)
     p.user_qual = 3;        // AHD demosaic (Markesteijn 3-pass for X-Trans)
+    p.half_size = draft;    // one pixel per CFA block, no demosaic (see DecodedImage::fullWidth)
 
     const auto t0 = std::chrono::steady_clock::now();
     int rc = raw->open_buffer(data, size);
@@ -731,6 +733,27 @@ bool decodeWithLibRaw(const uint8_t* data, size_t size, DecodedImage& out, std::
     const int fileFlip = raw->imgdata.sizes.flip;
     const int defectColumns = rc == LIBRAW_SUCCESS ? removeColumnDefects(*raw) : 0;
     const int hotPixels = rc == LIBRAW_SUCCESS ? removeHotPixels(*raw) : 0;
+    // The frame at full resolution (sensor orientation): a half-size dcraw_process() shrinks sizes to the draft's.
+    const int fullW = raw->imgdata.sizes.width;
+    const int fullH = raw->imgdata.sizes.height;
+    // Embedded DNG lens corrections, matched to CFA colours now: a half-size dcraw_process() clears the CFA pattern.
+    // Gain maps (lens + colour shading) are applied per camera channel below; the GPU can take the luminance part
+    // back out.
+    LensOpcodes lens;
+    parseDngOpcodes(data, size, lens);
+    std::vector<MapPlane> channelMaps[3];
+    const bool cfa = raw->imgdata.idata.filters != 0;
+    for (const GainMap& g : lens.gainMaps) {
+        if (cfa && g.list == 2) {
+            // Pixel: one map per CFA site, applied to that site's colour.
+            const int c = raw->COLOR(static_cast<int>(g.top), static_cast<int>(g.left));
+            channelMaps[c == 3 ? 1 : std::clamp(c, 0, 2)].push_back({&g, 0});
+        } else {
+            // Demosaiced planes (OpcodeList3, e.g. iPhone Bayer DNGs: one map, a gain plane per colour) or linear raws.
+            // Before, every such map went to its first plane's colour only: red edges on iPhone telephoto shots.
+            for (uint32_t p2 = g.plane; p2 < g.plane + g.planes && p2 < 3; ++p2) channelMaps[p2].push_back({&g, p2 - g.plane});
+        }
+    }
     const auto t1b = std::chrono::steady_clock::now();
     if (rc == LIBRAW_SUCCESS) rc = raw->dcraw_process();
     const auto t2 = std::chrono::steady_clock::now();
@@ -785,23 +808,6 @@ bool decodeWithLibRaw(const uint8_t* data, size_t size, DecodedImage& out, std::
     for (int c = 0; c < 3; ++c) clip[c] = 65535.0f * color.pre_mul[c] - blackOut[c];
     out.clipLevel = (clip[0] + clip[1] + clip[2]) / 3.0f * scale;
 
-    // Embedded DNG lens corrections. Gain maps (lens + colour shading) are applied
-    // per camera channel here; the GPU can take the luminance part back out.
-    LensOpcodes lens;
-    parseDngOpcodes(data, size, lens);
-    std::vector<MapPlane> channelMaps[3];
-    const bool cfa = raw->imgdata.idata.filters != 0;
-    for (const GainMap& g : lens.gainMaps) {
-        if (cfa && g.list == 2) {
-            // Pixel: one map per CFA site, applied to that site's colour.
-            const int c = raw->COLOR(static_cast<int>(g.top), static_cast<int>(g.left));
-            channelMaps[c == 3 ? 1 : std::clamp(c, 0, 2)].push_back({&g, 0});
-        } else {
-            // Demosaiced planes (OpcodeList3, e.g. iPhone Bayer DNGs: one map, a gain plane per colour) or linear raws.
-            // Before, every such map went to its first plane's colour only: red edges on iPhone telephoto shots.
-            for (uint32_t p2 = g.plane; p2 < g.plane + g.planes && p2 < 3; ++p2) channelMaps[p2].push_back({&g, p2 - g.plane});
-        }
-    }
     const GainEvaluator gains[3] = {GainEvaluator(channelMaps[0], w), GainEvaluator(channelMaps[1], w),
                                     GainEvaluator(channelMaps[2], w)};
 
@@ -828,8 +834,15 @@ bool decodeWithLibRaw(const uint8_t* data, size_t size, DecodedImage& out, std::
 
     out.shading = averageGrid(channelMaps[1]);
     out.lens = std::move(lens);
-    out.sensorWidth = w;
-    out.sensorHeight = h;
+    // A draft keeps full-resolution geometry for the lens corrections and the photo's size (LensInfo works in pixels).
+    // LibRaw ignores half_size for some files (no CFA): those come back full size and are no draft.
+    const bool shrunk = draft && w * 3 < fullW * 2 && h * 3 < fullH * 2;
+    out.sensorWidth = shrunk ? fullW : w;
+    out.sensorHeight = shrunk ? fullH : h;
+    if (shrunk) {
+        out.fullWidth = swap ? fullH : fullW;
+        out.fullHeight = swap ? fullW : fullH;
+    }
     out.orientation = orientation; // already applied above
     const auto t3 = std::chrono::steady_clock::now();
     auto ms = [](auto a, auto b) { return static_cast<long>(std::chrono::duration_cast<std::chrono::milliseconds>(b - a).count()); };

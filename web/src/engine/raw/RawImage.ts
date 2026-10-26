@@ -12,8 +12,16 @@ import { rawWorker } from './RawWorker';
  */
 export class RawImage {
   private closed = false;
+  /** The photo's size at full resolution (a draft's pixels are about half of it). */
   readonly width: number;
   readonly height: number;
+  /**
+   * A draft decode (see [open]): small copies and the noise level only; full-resolution tiles and blemish healing need
+   * a full decode.
+   */
+  readonly draft: boolean;
+  /** Width of the decoded pixels. */
+  private readonly pixelWidth: number;
   readonly description: string;
   readonly camera: string;
   /** ISO speed from the file's metadata, 0 if unknown. */
@@ -31,8 +39,10 @@ export class RawImage {
   readonly metadata: PhotoMetadata;
 
   private constructor(private readonly handle: number, r: OpenResult) {
-    this.width = r.width;
-    this.height = r.height;
+    this.width = r.fullWidth;
+    this.height = r.fullHeight;
+    this.pixelWidth = r.width;
+    this.draft = r.width !== r.fullWidth;
     this.description = r.description;
     this.camera = r.camera;
     this.iso = r.iso;
@@ -40,15 +50,18 @@ export class RawImage {
     this.clipLevel = r.clipLevel;
     this.displayReferred = r.displayReferred;
     this.asShotWhite = r.asShotWhite;
-    this.lens = LensInfo.fromNative(r.lensName, r.width, r.height, r.lensInfo, r.lensShading);
+    this.lens = LensInfo.fromNative(r.lensName, r.fullWidth, r.fullHeight, r.lensInfo, r.lensShading);
     this.metadata = r.metadata;
   }
 
-  /** [extraBlack]: black to take off beyond the file's, as a fraction of the white range (LibRaw path only). */
-  static async open(file: Blob, extraBlack = 0): Promise<RawImage> {
+  /**
+   * [extraBlack]: black to take off beyond the file's, as a fraction of the white range (LibRaw path only). [draft]: a
+   * half-size decode without demosaic, 2-4x faster, for RawBoy Auto's analysis (raws with a CFA; others decode in full).
+   */
+  static async open(file: Blob, extraBlack = 0, draft = false): Promise<RawImage> {
     const bytes = await file.arrayBuffer();
     if (isHeif(bytes) || isPng(bytes)) return RawImage.openWithBrowser(file, bytes, isHeif(bytes) ? 'HEIC' : 'PNG');
-    const r = await rawWorker().call<OpenResult>({ op: 'open', bytes, extraBlack }, [bytes]);
+    const r = await rawWorker().call<OpenResult>({ op: 'open', bytes, extraBlack, draft }, [bytes]);
     return new RawImage(r.handle, r);
   }
 
@@ -79,14 +92,15 @@ export class RawImage {
     return new RawImage(r.handle, r);
   }
 
-  private check() {
+  private check(full = false) {
     if (this.closed) throw new Error('image closed');
+    if (full && this.draft) throw new Error('needs a full decode, not a draft');
   }
 
-  /** Downscaled copy; [boostHighlights] makes it a bloom source. */
+  /** Downscaled copy (no larger than the decoded pixels); [boostHighlights] makes it a bloom source. */
   async createPreview(maxDimension: number, boostHighlights = false): Promise<PreviewImage> {
     this.check();
-    const scale = Math.min(1, maxDimension / Math.max(this.width, this.height));
+    const scale = Math.min(1, maxDimension / Math.max(this.width, this.height), this.pixelWidth / this.width);
     const w = Math.max(1, Math.round(this.width * scale));
     const h = Math.max(1, Math.round(this.height * scale));
     const pixels = await rawWorker().call<Uint16Array>({ op: 'downsample', handle: this.handle, width: w, height: h, boost: boostHighlights });
@@ -95,7 +109,7 @@ export class RawImage {
 
   /** A full-resolution region as tightly packed RGB half floats. */
   async copyTile(r: PixelRect): Promise<Uint16Array> {
-    this.check();
+    this.check(true);
     return rawWorker().call<Uint16Array>({ op: 'copyTile', handle: this.handle, x: r.x, y: r.y, width: r.width, height: r.height });
   }
 
@@ -112,7 +126,7 @@ export class RawImage {
 
   /** Blemish candidates on [mask]: (x, y, radius, score) per spot, most obvious first. */
   async detectBlemishes(mask: SkinMask): Promise<Float32Array> {
-    this.check();
+    this.check(true);
     return rawWorker().call<Float32Array>({
       op: 'detectBlemishes', handle: this.handle, mask: mask.data, maskW: mask.width, maskH: mask.height, faceDiameter: mask.faceDiameterPx,
     });
@@ -120,7 +134,7 @@ export class RawImage {
 
   /** Replaces any earlier healing with healing of exactly [spots]. Previews must be rebuilt afterwards. */
   async healBlemishes(spots: Float32Array): Promise<void> {
-    this.check();
+    this.check(true);
     await rawWorker().call({ op: 'healBlemishes', handle: this.handle, spots });
   }
 

@@ -8,7 +8,9 @@ import type { SkinMask } from './SkinMask';
 /**
  * Finds skin with MediaPipe's selfie multiclass segmentation model (Apache 2.0), port of retouch/SkinSegmenter.kt:
  * categories 0 background, 1 hair, 2 body-skin, 3 face-skin, 4 clothes, 5 others. Same models as Android, run by
- * @mediapipe/tasks-vision (WASM, CPU delegate).
+ * @mediapipe/tasks-vision (WASM, CPU delegate) in its own worker (worker/skin.worker.ts): about a second of CPU per
+ * photo that froze the page, and RawBoy Auto decodes the next photo meanwhile. The main thread runs it only where
+ * the worker can't start.
  */
 const MODEL = 'models/selfie_multiclass_256x256.tflite';
 const LANDMARK_MODEL = 'models/face_landmarker.task';
@@ -34,7 +36,9 @@ let landmarker: Promise<FaceLandmarker> | null = null;
 /** MediaPipe tasks aren't re-entrant: one segment() at a time. */
 let queue: Promise<unknown> = Promise.resolve();
 
-const assetUrl = (path: string) => new URL(path, document.baseURI).href;
+/** Base URL of the page's assets (models/, mediapipe/): the document's, or what the worker was given. */
+let assetBase = typeof document !== 'undefined' ? document.baseURI : '';
+const assetUrl = (path: string) => new URL(path, assetBase).href;
 
 function vision(): Promise<WasmFileset> {
   return (fileset ??= FilesetResolver.forVisionTasks(assetUrl('mediapipe')));
@@ -65,9 +69,66 @@ function getLandmarker(): Promise<FaceLandmarker> {
 
 /** [image]: the small linear Rec.2020 copy of the photo; [fullWidth]/[fullHeight]: full-resolution size. */
 export function segmentSkin(image: PreviewImage, fullWidth: number, fullHeight: number): Promise<SkinMask> {
+  const worker = skinWorker();
+  if (worker) {
+    return worker.segment(image, fullWidth, fullHeight).catch((e: unknown) => {
+      if (broken) return segmentHere(image, fullWidth, fullHeight);
+      throw e;
+    });
+  }
+  return segmentHere(image, fullWidth, fullHeight);
+}
+
+/** Segments on this thread (the skin worker's, or the page's when the worker can't start); [base]: assets' URL. */
+export function segmentHere(image: PreviewImage, fullWidth: number, fullHeight: number, base?: string): Promise<SkinMask> {
+  if (base) assetBase = base;
   const run = queue.then(() => segment(image, fullWidth, fullHeight));
   queue = run.catch(() => undefined);
   return run;
+}
+
+/** The skin worker and a promise-based call into it (calls run one at a time there, as segmentHere's queue). */
+class SkinWorker {
+  private readonly worker = new Worker(new URL('../../worker/skin.worker.ts', import.meta.url), { type: 'module' });
+  private nextId = 1;
+  private readonly pending = new Map<number, { resolve: (m: SkinMask) => void; reject: (e: Error) => void }>();
+
+  constructor() {
+    this.worker.onmessage = (ev: MessageEvent<{ id: number; mask?: SkinMask; error?: string }>) => {
+      const p = this.pending.get(ev.data.id);
+      if (!p) return;
+      this.pending.delete(ev.data.id);
+      if (ev.data.mask) p.resolve(ev.data.mask);
+      else p.reject(new Error(ev.data.error));
+    };
+    this.worker.onerror = () => {
+      // Failed to load: every waiting call (and later ones) falls back to the main thread.
+      broken = true;
+      for (const p of this.pending.values()) p.reject(new Error('skin worker failed'));
+      this.pending.clear();
+    };
+  }
+
+  segment(image: PreviewImage, fullWidth: number, fullHeight: number): Promise<SkinMask> {
+    const id = this.nextId++;
+    return new Promise((resolve, reject) => {
+      this.pending.set(id, { resolve, reject });
+      // A copy goes over: the caller keeps its image (the analysis's base).
+      this.worker.postMessage({ id, image, fullWidth, fullHeight, base: document.baseURI });
+    });
+  }
+}
+
+let worker: SkinWorker | null = null;
+let broken = false;
+function skinWorker(): SkinWorker | null {
+  if (broken || typeof Worker === 'undefined') return null;
+  try {
+    return (worker ??= new SkinWorker());
+  } catch {
+    broken = true;
+    return null;
+  }
 }
 
 async function segment(image: PreviewImage, fullWidth: number, fullHeight: number): Promise<SkinMask> {

@@ -1,4 +1,4 @@
-import { analyzeFile, type Analysis } from '../../engine/auto/AutoAnalysis';
+import { decodeForAnalysis, finishAnalysis, type Analysis, type DecodedForAnalysis } from '../../engine/auto/AutoAnalysis';
 import { ALL_LOOKS, Looks, type Look } from '../../engine/auto/looks/Look';
 import { DEFAULT_STRENGTH, NO_ADJUSTMENTS, applyEditsDevelop, developAuto, sameAdjustments, type Adjustments } from '../../engine/auto/looks/LookApplier';
 import { ALL_FILM_LOOKS, FilmLooks } from '../../engine/auto/looks/FilmLooks';
@@ -697,38 +697,61 @@ export class AutoStore {
     this.showMessage(`${p.name} removed from the batch`);
   }
 
-  /** Analyses queued photos one at a time (each decode needs the full raw in memory). */
+  /**
+   * Analyses queued photos: decodes one at a time (each decode needs the whole raw in memory), and finishes each
+   * photo's analysis (skin detection in its worker) while the next one decodes.
+   */
   private async processQueue() {
     if (this.analyzing) return;
     this.analyzing = true;
+    let finishing: Promise<void> = Promise.resolve();
     try {
       for (;;) {
         await this.restoring;
         const next = this.nextQueued();
         if (!next) break;
         this.updatePhoto(next.id, (p) => ({ ...p, status: 'analyzing' }));
+        let decoded: DecodedForAnalysis;
         try {
-          const analysis = await this.decodeLock.run(() => analyzeFile(next.file, next.name, (preview) => void this.previews.put(next.id, preview), next.plain));
-          if (!this.photo(next.id)) void this.previews.remove(next.id); // removed while it was analysed
-          const look = suggestLook(analysis.stats, analysis.defaults.temperature);
-          const filmLook = suggestFilm(analysis.stats, analysis.defaults.temperature);
-          this.updatePhoto(next.id, (p) => ({
-            ...p, status: 'ready', analysis, suggested: look, suggestedFilm: filmLook,
-            lensPreset: chosenLensPreset(this._state.lensPresets, p.lensChoice, analysis.lens.lensName),
-            // A plain photo stays Natural (nothing added); its film suggestion is there if it switches to Film.
-            look: p.looksApplied || p.plain ? p.look : look, filmLook: p.looksApplied ? p.filmLook : filmLook,
-          }));
-          this.refreshThumbnail(next.id, true);
-          this.openIfWaiting(next.id);
+          decoded = await this.decodeLock.run(() => decodeForAnalysis(next.file, (preview) => void this.previews.put(next.id, preview), next.plain));
         } catch (e) {
-          // Mark this photo and go on with the rest.
-          this.updatePhoto(next.id, (p) => ({ ...p, status: 'failed', error: e instanceof Error ? e.message : String(e) }));
-          if (this._state.opening === next.id) this.update({ opening: null });
+          this.analysisFailed(next.id, e);
+          continue;
         }
+        // At most one photo finishes behind the decodes, so a slow finish holds the queue rather than piling up.
+        const before = finishing;
+        finishing = before.then(() => this.finishAnalysis(next, decoded));
+        await before;
       }
+      await finishing;
     } finally {
       this.analyzing = false;
     }
+  }
+
+  private async finishAnalysis(next: AutoPhoto, decoded: DecodedForAnalysis) {
+    try {
+      const analysis = await finishAnalysis(decoded, next.name);
+      if (!this.photo(next.id)) void this.previews.remove(next.id); // removed while it was analysed
+      const look = suggestLook(analysis.stats, analysis.defaults.temperature);
+      const filmLook = suggestFilm(analysis.stats, analysis.defaults.temperature);
+      this.updatePhoto(next.id, (p) => ({
+        ...p, status: 'ready', analysis, suggested: look, suggestedFilm: filmLook,
+        lensPreset: chosenLensPreset(this._state.lensPresets, p.lensChoice, analysis.lens.lensName),
+        // A plain photo stays Natural (nothing added); its film suggestion is there if it switches to Film.
+        look: p.looksApplied || p.plain ? p.look : look, filmLook: p.looksApplied ? p.filmLook : filmLook,
+      }));
+      this.refreshThumbnail(next.id, true);
+      this.openIfWaiting(next.id);
+    } catch (e) {
+      this.analysisFailed(next.id, e);
+    }
+  }
+
+  /** Marks photo [id] failed; the queue goes on with the rest. */
+  private analysisFailed(id: string, e: unknown) {
+    this.updatePhoto(id, (p) => ({ ...p, status: 'failed', error: e instanceof Error ? e.message : String(e) }));
+    if (this._state.opening === id) this.update({ opening: null });
   }
 
   /** The photo to analyse next: the one clicked to open ([opening]) if it's still waiting, else the first waiting. */
