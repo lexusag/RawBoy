@@ -13,11 +13,12 @@ point precisely: a 3× loupe shows what's under it, clear of your finger, and it
 **volume buttons** take a photo too; the viewfinder blinks and the phone ticks on each shot.
 **Power button double press** (Android): RawBoy Camera can be the phone's default camera, so pressing the power
 button twice opens it, also on a locked phone. Turn on *Settings → System → Gestures → Quickly open camera*. Android
-keeps two separate choices: the first double press on an unlocked phone asks which camera to use (pick RawBoy Camera
-and **Always**); for the locked phone, open RawBoy Camera's Settings and tap **Choose** next to *Lock screen camera*,
-then pick RawBoy Camera and **Always**. Until that second choice is made, a double press on a locked phone asks for
-the passcode first. If another camera was set to always open, clear it first (*Settings → Apps → that camera → Open
-by default*). On a locked phone it opens over the lock screen without the photos taken before: the thumbnail shows
+keeps two separate choices, both in RawBoy Camera's Settings: tap **Choose** next to *Unlocked camera* and next to
+*Lock screen camera*, and pick RawBoy Camera and **Always** each time (a row without Choose is already set). Until the
+lock screen one is set, a double press on a locked phone asks for the passcode first and then shows a black screen.
+Turning on or installing another camera app (Pixel Camera, say) clears both choices: set them again, or keep Pixel
+Camera disabled. If another camera was set to always open, clear it first (*Settings → Apps → that camera → Open by
+default*). On a locked phone it opens over the lock screen without the photos taken before: the thumbnail shows
 only the new shots and asks to unlock before opening one, and the camera closes when the screen turns off. Unlocked
 while it is open, it carries on as the ordinary camera.
 **UW · W · T** at the bottom of the viewfinder switches between the ultrawide, wide and telephoto lenses, as in

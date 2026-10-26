@@ -1,5 +1,11 @@
 # Changelog
 
+**RawBoy Camera (Android): Unlocked camera row in Settings (2026-10-26)**
+
+- Settings has an **Unlocked camera** row next to *Lock screen camera*: both show whether the power button's double
+  press opens RawBoy Camera and offer **Choose** when it doesn't. Turning Pixel Camera back on clears both choices;
+  the rows make them quick to set again.
+
 **RawBoy Camera: reads QR codes (2026-10-26)**
 
 - RawBoy Camera (Android, iOS): a QR code in the viewfinder shows a bar above the lens buttons with what it holds and
