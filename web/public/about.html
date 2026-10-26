@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="dark" />
     <meta name="theme-color" content="#121212" />
-    <title>About RawBoy Web: raw photo editor in your browser</title>
+    <title>RawBoy: raw photo editor in your browser</title>
     <meta name="description" content="RawBoy Web develops RAW photos from your camera in the browser: exposure, colour, film looks and batch export. Optional Google Drive access opens the photos you pick and saves your exports." />
     <link rel="icon" href="favicon.svg" type="image/svg+xml" />
     <!-- The app's homepage for Google's OAuth consent screen (docs/google-drive.md): what the app is for and how it uses
@@ -21,9 +21,11 @@
     </style>
   </head>
   <body>
-    <h1>RawBoy Web</h1>
+    <h1>RawBoy</h1>
+    <p><strong>RawBoy is a free photo editor for photographers. Its purpose is to turn the RAW files from your camera
+      into finished photos.</strong></p>
     <p>
-      RawBoy Web is a free photo editor for photographers. It develops the RAW files that digital cameras record
+      RawBoy Web is the browser version of RawBoy. It develops the RAW files that digital cameras record
       (Canon, Nikon, Sony, Fujifilm, Panasonic, Olympus, Pentax, DNG) into finished JPEG or TIFF photos, in the same way
       as Lightroom or darktable: exposure, white balance, contrast, colour, curves, lens corrections, noise reduction,
       and film looks. JPEG, PNG, TIFF and HEIC photos work too. Everything runs inside your browser on your own computer
@@ -40,7 +42,11 @@
       <li><strong>RawBoy Browser</strong>: go through a folder of raws, rate them with stars and pick or reject them.</li>
     </ul>
 
-    <h2>How it uses Google Drive</h2>
+    <h2>How RawBoy uses Google APIs</h2>
+    <p>
+      RawBoy uses two Google APIs, the <strong>Google Drive API</strong> and the <strong>Google Picker API</strong>, for
+      one purpose only: letting you open your own photos from Google Drive and save the photos you edit back to it.
+    </p>
     <p>Google Drive is optional. Photographers who keep their photos in Drive can use it instead of local files:</p>
     <ul>
       <li><strong>Open from Google Drive</strong>: you pick photos in Google's own file picker; RawBoy downloads only
@@ -55,7 +61,11 @@
       <a href="privacy.html">privacy policy</a>.
     </p>
 
-    <h2>No generative AI</h2>
+    <h2>No generative AI, no AI NCII</h2>
+    <p>
+      <strong>RawBoy does not use Google APIs, or Google user data, for AI-generated non-consensual intimate imagery
+      (AI NCII), or to generate, edit or manipulate images of people with AI in any way.</strong>
+    </p>
     <p>
       RawBoy is a conventional photo developer. It does not generate, synthesise or alter people's likeness, and it
       cannot create AI-generated imagery of any kind, including intimate or sexual imagery. It only adjusts the
