@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.MediaStore
 import android.view.KeyEvent
 import android.view.OrientationEventListener
@@ -81,7 +82,9 @@ class CameraActivity : ComponentActivity() {
     }
 
     private fun onLaunch(intent: Intent?, fresh: Boolean) {
-        overLockScreen = intent?.action == MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE
+        // The secure action on an unlocked phone (Settings' "Lock screen camera" choice) is an ordinary launch.
+        overLockScreen = intent?.action == MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE &&
+            getSystemService(KeyguardManager::class.java).isKeyguardLocked
         setShowWhenLocked(overLockScreen)
         setTurnScreenOn(overLockScreen)
         if (overLockScreen && fresh) viewModel.forgetLastShot()
@@ -143,9 +146,19 @@ class CameraActivity : ComponentActivity() {
         super.onPause()
     }
 
+    /**
+     * Over the lock screen, only the screen turning off closes the camera, so it can't be left there for the next
+     * person. Finishing on any stop also closed it during the unlock and left a black screen after the passcode.
+     */
     override fun onStop() {
         super.onStop()
-        if (overLockScreen && !isChangingConfigurations) finish()
+        if (overLockScreen && !isChangingConfigurations && !getSystemService(PowerManager::class.java).isInteractive) finish()
+    }
+
+    /** Unlocked while it was open: from now on an ordinary camera. */
+    override fun onStart() {
+        super.onStart()
+        if (overLockScreen && !getSystemService(KeyguardManager::class.java).isKeyguardLocked) leaveLockScreen()
     }
 }
 

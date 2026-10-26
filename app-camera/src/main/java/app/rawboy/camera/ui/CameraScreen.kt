@@ -13,7 +13,11 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
 import app.rawboy.camera.capture.FlashMode
 import app.rawboy.view.HistogramView
+import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.provider.MediaStore
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import android.hardware.camera2.CameraMetadata
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.RepeatMode
@@ -631,6 +635,8 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             onChange = vm::setShowHistogram,
         )
         Spacer(Modifier.height(16.dp))
+        LockScreenCamera()
+        Spacer(Modifier.height(16.dp))
         SettingSwitch(
             title = "Remember camera & settings",
             subtitle = "Otherwise each start uses W, Yellow Portrait 400 and default sliders",
@@ -735,6 +741,36 @@ private val BurstIcon: ImageVector by lazy {
 /** Material "flash_off" icon (Apache 2.0). */
 private val FlashOffIcon: ImageVector by lazy {
     icon("FlashOff", "M3.27,3L2,4.27l5,5V13h3v9l3.58,-6.14L17.73,20 19,18.73 3.27,3zM17,10h-4l4,-8H7v2.18l8.46,8.46L17,10z")
+}
+
+/**
+ * The power button's double press on a locked phone opens the default handler of the *secure* camera action, a
+ * separate choice from the unlocked one: while none is set, Android asks for the passcode first. "Choose" fires that
+ * action on the unlocked phone, so Android's chooser can set RawBoy Camera with Always.
+ */
+@Composable
+private fun LockScreenCamera() {
+    val context = LocalContext.current
+    val intent = remember { Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE) }
+    var isDefault by remember { mutableStateOf(false) }
+    // Re-checked whenever the sheet comes back from the chooser.
+    LifecycleResumeEffect(Unit) {
+        isDefault = context.packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
+            ?.activityInfo?.packageName == context.packageName
+        onPauseOrDispose {}
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("Lock screen camera", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                if (isDefault) "The power button's double press opens RawBoy Camera on a locked phone"
+                else "Choose RawBoy Camera, then Always, so a double press on a locked phone opens it without the passcode",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        if (!isDefault) TextButton(onClick = { runCatching { context.startActivity(intent) } }) { Text("Choose") }
+    }
 }
 
 @Composable
