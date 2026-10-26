@@ -119,6 +119,8 @@ function loadPicker(): Promise<GooglePicker> {
   });
 }
 
+const tipHeight = () => document.getElementById('tip')?.offsetHeight ?? 0;
+
 async function showPicker(r: DriveRequest, token: DriveToken) {
   show('Opening Google Drive…');
   const picker = await loadPicker();
@@ -140,7 +142,8 @@ async function showPicker(r: DriveRequest, token: DriveToken) {
     .setDeveloperKey(DRIVE_CONFIG.apiKey)
     .setOrigin(location.origin)
     .setTitle(folders ? 'Save exports to' : r.multiple ? 'Add photos' : 'Open a photo')
-    .setSize(Math.max(320, innerWidth), Math.max(320, innerHeight))
+    // Leaves room for the cookie tip under it (drive.html); the Picker centres itself.
+    .setSize(Math.max(320, innerWidth), Math.max(320, innerHeight - 2 * tipHeight()))
     .enableFeature(picker.Feature.SUPPORT_DRIVES)
     .setCallback((data) => {
       if (data.action === picker.Action.PICKED) {
