@@ -13,8 +13,11 @@
     <!-- Develop pipeline runs as GLES 3.0 shaders (float textures, integer render targets). -->
     <uses-feature android:glEsVersion="0x00030000" android:required="true" />
 
-    <!-- Settings checks whether RawBoy Camera is the lock screen camera, which needs the other cameras visible. -->
+    <!-- Settings checks whether RawBoy Camera is the default camera, which needs the other cameras visible. -->
     <queries>
+        <intent>
+            <action android:name="android.media.action.STILL_IMAGE_CAMERA" />
+        </intent>
         <intent>
             <action android:name="android.media.action.STILL_IMAGE_CAMERA_SECURE" />
         </intent>

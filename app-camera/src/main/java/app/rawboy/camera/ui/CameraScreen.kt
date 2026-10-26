@@ -699,7 +699,19 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             onChange = vm::setShowHistogram,
         )
         Spacer(Modifier.height(16.dp))
-        LockScreenCamera()
+        DefaultCameraChoice(
+            MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA,
+            title = "Unlocked camera",
+            whenSet = "The power button's double press opens RawBoy Camera",
+            whenNotSet = "Choose RawBoy Camera, then Always, so the power button's double press opens it",
+        )
+        Spacer(Modifier.height(16.dp))
+        DefaultCameraChoice(
+            MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE,
+            title = "Lock screen camera",
+            whenSet = "The power button's double press opens RawBoy Camera on a locked phone",
+            whenNotSet = "Choose RawBoy Camera, then Always, so a double press on a locked phone opens it without the passcode",
+        )
         Spacer(Modifier.height(16.dp))
         SettingSwitch(
             title = "Remember camera & settings",
@@ -818,27 +830,27 @@ private val FlashOffIcon: ImageVector by lazy {
 }
 
 /**
- * The power button's double press on a locked phone opens the default handler of the *secure* camera action, a
- * separate choice from the unlocked one: while none is set, Android asks for the passcode first. "Choose" fires that
- * action on the unlocked phone, so Android's chooser can set RawBoy Camera with Always.
+ * The power button's double press opens the default handler of the still-camera action, and on a locked phone that
+ * of the *secure* one, a separate choice: while none is set there, Android asks for the passcode first. Enabling or
+ * installing another camera app clears both. "Choose" fires the action on the unlocked phone, so Android's chooser
+ * can set RawBoy Camera with Always.
  */
 @Composable
-private fun LockScreenCamera() {
+private fun DefaultCameraChoice(action: String, title: String, whenSet: String, whenNotSet: String) {
     val context = LocalContext.current
-    val intent = remember { Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE) }
+    val intent = remember(action) { Intent(action) }
     var isDefault by remember { mutableStateOf(false) }
     // Re-checked whenever the sheet comes back from the chooser.
-    LifecycleResumeEffect(Unit) {
+    LifecycleResumeEffect(action) {
         isDefault = context.packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
             ?.activityInfo?.packageName == context.packageName
         onPauseOrDispose {}
     }
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text("Lock screen camera", style = MaterialTheme.typography.bodyMedium)
+            Text(title, style = MaterialTheme.typography.bodyMedium)
             Text(
-                if (isDefault) "The power button's double press opens RawBoy Camera on a locked phone"
-                else "Choose RawBoy Camera, then Always, so a double press on a locked phone opens it without the passcode",
+                if (isDefault) whenSet else whenNotSet,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
