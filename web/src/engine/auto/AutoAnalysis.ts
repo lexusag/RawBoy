@@ -4,7 +4,8 @@ import type { LensInfo } from '../lens/LensInfo';
 import { RawImage } from '../raw/RawImage';
 import { segmentSkin } from '../retouch/SkinSegmenter';
 import type { SkinMask } from '../retouch/SkinMask';
-import { BASE_MAX_DIMENSION, PREVIEW_MAX_DIMENSION, asShotDefaults, bloomSourcesOf } from '../session/PhotoSession';
+import type { RawWorker } from '../raw/RawWorker';
+import { BASE_MAX_DIMENSION, PREVIEW_MAX_DIMENSION, asShotDefaultsOf, bloomSourcesOf } from '../session/PhotoSession';
 import { NO_NOISE, autoDevelop, cameraMetered, type NoiseLevel } from './analysis/AutoTone';
 import { analyzeScene, type SceneStats } from './analysis/SceneAnalyzer';
 
@@ -37,7 +38,10 @@ export async function analyzeFile(file: Blob, label: string, onPreview?: (previe
 
 /** What [decodeForAnalysis] keeps of a photo: its small copies and what the file says. */
 export interface DecodedForAnalysis {
-  defaults: DevelopParams;
+  /** As-shot white (CIE xy), display-referred, clip level: what the as-shot defaults are made from. */
+  asShotWhite: number[];
+  displayReferred: boolean;
+  clipLevel: number;
   lens: LensInfo;
   iso: number;
   description: string;
@@ -49,12 +53,14 @@ export interface DecodedForAnalysis {
 }
 
 /**
- * The decode half of [analyzeFile]: memory hungry (a whole decode), so one at a time; the raw is closed before it
- * returns. Raws are decoded as drafts (half size, no demosaic: 2-4x faster); the copies kept are small and the noise
- * level is measured as the full decode would read it.
+ * The decode half of [analyzeFile]: memory hungry (a whole decode), so one at a time per decoder [worker]; the raw is
+ * closed before it returns. Raws are decoded as drafts (half size, no demosaic: 2-4x faster); the copies kept are
+ * small and the noise level is measured as the full decode would read it.
  */
-export async function decodeForAnalysis(file: Blob, onPreview?: (preview: PreviewImage) => void, plain = false): Promise<DecodedForAnalysis> {
-  const img = await RawImage.open(file, 0, true);
+export async function decodeForAnalysis(
+  file: Blob, onPreview?: (preview: PreviewImage) => void, plain = false, worker?: RawWorker,
+): Promise<DecodedForAnalysis> {
+  const img = await RawImage.open(file, 0, true, worker);
   try {
     if (onPreview) onPreview(await img.createPreview(PREVIEW_MAX_DIMENSION));
     const t0 = performance.now();
@@ -63,7 +69,9 @@ export async function decodeForAnalysis(file: Blob, onPreview?: (preview: Previe
     const noise = plain ? NO_NOISE : await img.measureNoise();
     console.debug(`${TAG} small copies: ${Math.round(performance.now() - t0)} ms`);
     return {
-      defaults: asShotDefaults(img),
+      asShotWhite: img.asShotWhite,
+      displayReferred: img.displayReferred,
+      clipLevel: img.clipLevel,
       lens: img.lens,
       iso: img.iso,
       description: img.description,
@@ -80,12 +88,14 @@ export async function decodeForAnalysis(file: Blob, onPreview?: (preview: Previe
 
 /**
  * The rest of [analyzeFile], from the small copies alone: skin segmentation (in its worker, so RawBoy Auto decodes the
- * next photo meanwhile), scene stats and the auto develop.
+ * next photo meanwhile), scene stats and the auto develop. [knownSkin]: a mask found before (null: none), so the
+ * segmentation is skipped.
  */
-export async function finishAnalysis(d: DecodedForAnalysis, label: string): Promise<Analysis> {
+export async function finishAnalysis(d: DecodedForAnalysis, label: string, knownSkin?: SkinMask | null): Promise<Analysis> {
   const t0 = performance.now();
-  let skin: SkinMask | null = null;
-  if (!d.plain) {
+  const defaults = asShotDefaultsOf(d.asShotWhite, d.displayReferred, d.clipLevel);
+  let skin: SkinMask | null = knownSkin ?? null;
+  if (!d.plain && knownSkin === undefined) {
     try {
       skin = await segmentSkin(d.base, d.base.fullWidth, d.base.fullHeight);
     } catch {
@@ -95,14 +105,14 @@ export async function finishAnalysis(d: DecodedForAnalysis, label: string): Prom
   console.debug(`${TAG} skin detection: ${Math.round(performance.now() - t0)} ms`);
   const stats = analyzeScene(d.base, skin, d.iso);
   const noise = d.noise;
-  const auto = d.plain ? d.defaults : autoDevelop(stats, d.defaults, 1, d.cameraMetered, noise);
+  const auto = d.plain ? defaults : autoDevelop(stats, defaults, 1, d.cameraMetered, noise);
   console.debug(
     `${TAG} analysis ${label}: key=${stats.key} p1=${stats.p1} p5=${stats.p5} p50=${stats.p50} p98=${stats.p98} p99=${stats.p99} ` +
       `clipped=${stats.clipped} chroma=${stats.chroma} face=${stats.faceArea} skin=${stats.skinLuminance} iso=${d.iso} cameraMetered=${d.cameraMetered} ` +
       `noise=${noise.luma}/${noise.chroma} -> exposure=${auto.exposure} hl=${auto.highlights} denoise=${auto.denoise}/${auto.colorDenoise} sh=${auto.shadows} contrast=${auto.contrast} ` +
-      `wb=${Math.trunc(d.defaults.temperature)}K/${Math.trunc(d.defaults.tint)} -> ${Math.trunc(auto.temperature)}K/${Math.trunc(auto.tint)}`,
+      `wb=${Math.trunc(defaults.temperature)}K/${Math.trunc(defaults.tint)} -> ${Math.trunc(auto.temperature)}K/${Math.trunc(auto.tint)}`,
   );
-  return { defaults: d.defaults, autoBase: auto, stats, lens: d.lens, base: d.base, bloom: d.bloom, skin, description: d.description };
+  return { defaults, autoBase: auto, stats, lens: d.lens, base: d.base, bloom: d.bloom, skin, description: d.description };
 }
 
 /**
