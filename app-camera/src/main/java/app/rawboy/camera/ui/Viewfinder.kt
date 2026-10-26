@@ -15,7 +15,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.rawboy.gl.ShaderParams
 import app.rawboy.gl.ViewfinderRenderer
 
-/** The live camera preview, developed with [params] (see [ViewfinderRenderer]). */
+/** The live camera preview, developed with [params] (see [ViewfinderRenderer]), with an optional focus [loupe]. */
 @Composable
 fun Viewfinder(
     frame: ViewfinderRenderer.Frame?,
@@ -23,6 +23,7 @@ fun Viewfinder(
     onSurfaceTexture: (SurfaceTexture) -> Unit,
     onBase: (width: Int, height: Int, rgba: FloatArray) -> Unit,
     modifier: Modifier = Modifier,
+    loupe: ViewfinderRenderer.Loupe? = null,
 ) {
     val surfaceCallback = rememberUpdatedState(onSurfaceTexture)
     val baseCallback = rememberUpdatedState(onBase)
@@ -54,6 +55,10 @@ fun Viewfinder(
     }
     LaunchedEffect(params) {
         renderer.params = params
+        view[0]?.requestRender()
+    }
+    LaunchedEffect(loupe) {
+        renderer.loupe = loupe
         view[0]?.requestRender()
     }
 

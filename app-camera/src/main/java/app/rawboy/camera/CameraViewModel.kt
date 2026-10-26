@@ -154,6 +154,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private val _focusPoint = MutableStateFlow<Pair<Float, Float>?>(null)
     val focusPoint = _focusPoint.asStateFlow()
 
+    /** Where the focus ring is being dragged (upright normalised, as shown), or null; it focuses there on release. */
+    private val _dragPoint = MutableStateFlow<Pair<Float, Float>?>(null)
+    val dragPoint = _dragPoint.asStateFlow()
+
     /** One event per capture, as the request goes to the camera: the UI's shutter feedback. */
     private val _shutterEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
     val shutterEvents = _shutterEvents.asSharedFlow()
@@ -281,6 +285,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         startJob = null
         controller.stop() // also ends a focus lock
         _focusPoint.value = null
+        _dragPoint.value = null
         if (hasPermission) _status.value = CameraStatus.OPENING
     }
 
@@ -350,7 +355,20 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     fun releaseFocus() {
         _focusPoint.value = null
+        _dragPoint.value = null
         controller.releaseFocus()
+    }
+
+    /** The focus ring follows a drag to ([x], [y]); [endDragFocus] focuses there. */
+    fun dragFocus(x: Float, y: Float) {
+        if (_focusPoint.value == null) return
+        _dragPoint.value = x.coerceIn(0f, 1f) to y.coerceIn(0f, 1f)
+    }
+
+    fun endDragFocus() {
+        val (x, y) = _dragPoint.value ?: return
+        _dragPoint.value = null
+        focusAt(x, y)
     }
 
     /**
@@ -380,6 +398,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private fun switchTo(lens: CameraController.Info) {
         info = lens
         _focusPoint.value = null // the restart ends any focus lock
+        _dragPoint.value = null
         // The live develop belongs to the old lens: start the new one fresh.
         live = null
         _shaderParams.value = null

@@ -13,6 +13,7 @@ import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 /**
@@ -68,6 +69,16 @@ class ViewfinderRenderer(
 
     @Volatile
     var params: ShaderParams? = null
+
+    /**
+     * A magnified inset over the viewfinder (the camera's focus loupe): the image around ([x], [y]) drawn [zoom] times
+     * larger in a square [size] of the view's width, centred at ([centerX], [centerY]). All in fractions of the view
+     * (upright, y down); the square is kept inside the view.
+     */
+    data class Loupe(val x: Float, val y: Float, val centerX: Float, val centerY: Float, val size: Float, val zoom: Float)
+
+    @Volatile
+    var loupe: Loupe? = null
 
     @Volatile
     var baseIntervalMs: Long = 300
@@ -204,6 +215,20 @@ class ViewfinderRenderer(
         develop!!.bind(p, geometry, r[2] / viewWidth, r[3] / viewHeight, flipY = true)
         develop!!.bindLiveCopies(p, sw, sh, tw, th * BloomTail.BANDS)
         quad!!.draw()
+        loupe?.let { l ->
+            // The same develop again, into a square viewport, sampling only the region around the point.
+            val side = (l.size * viewWidth).roundToInt().coerceIn(1, min(viewWidth, viewHeight))
+            val x0 = (l.centerX * viewWidth - side / 2f).roundToInt().coerceIn(0, viewWidth - side)
+            val y0 = (l.centerY * viewHeight - side / 2f).roundToInt().coerceIn(0, viewHeight - side)
+            val uw = min(1f, side / (l.zoom * r[2]))
+            val uh = min(1f, side / (l.zoom * r[3]))
+            val uv = floatArrayOf((l.x - uw / 2f).coerceIn(0f, 1f - uw), (l.y - uh / 2f).coerceIn(0f, 1f - uh), uw, uh)
+            GLES30.glViewport(x0, viewHeight - y0 - side, side, side) // GL's origin is the bottom left
+            develop!!.bind(p, geometry, 1f, 1f, flipY = true, uvRect = uv)
+            develop!!.bindLiveCopies(p, sw, sh, tw, th * BloomTail.BANDS)
+            quad!!.draw()
+            GLES30.glViewport(0, 0, viewWidth, viewHeight)
+        }
         stats.frame(SystemClock.uptimeMillis() - now)
     }
 

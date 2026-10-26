@@ -222,6 +222,16 @@ class CameraController(context: Context) : AutoCloseable {
     @Volatile
     private var focusPoint: Pair<Float, Float>? = null
 
+    /**
+     * Side of the focus lock's AF box, as a share of the sensor's short side: [FOCUS_SIZE], or [MeterArea.SPOT_SIZE]
+     * once the small box couldn't find focus (see [watchFocus]). Metering always uses the larger spot.
+     */
+    private val _focusSize = MutableStateFlow(FOCUS_SIZE)
+    val focusSize = _focusSize.asStateFlow()
+
+    /** Gets each preview result (the streamed lens's) after a focus lock's AF trigger ([watchFocus]); camera thread only. */
+    private var focusWatch: ((CaptureResult) -> Unit)? = null
+
     /** The physical lens the session streams from the logical camera, or null. */
     @Volatile
     private var streamingPhysical: String? = null
@@ -455,8 +465,10 @@ class CameraController(context: Context) : AutoCloseable {
         }.build()
         s.setRepeatingRequest(request, object : CameraCaptureSession.CaptureCallback() {
             override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
-                _frames.value = frameState(inf, lensResult(result))
+                val lens = lensResult(result)
+                _frames.value = frameState(inf, lens)
                 precaptureWatch?.invoke(result)
+                focusWatch?.invoke(lens)
             }
         }, handler)
     }
@@ -469,22 +481,62 @@ class CameraController(context: Context) : AutoCloseable {
         handler.post {
             val s = session ?: return@post
             focusPoint = x to y
+            _focusSize.value = FOCUS_SIZE
             val inf = info ?: return@post
-            runCatching {
-                // Cancel any scan in progress, then scan once at the new point; AF_MODE_AUTO then holds it.
-                val cancel = request(s, CameraDevice.TEMPLATE_PREVIEW).apply {
-                    addTarget(previewSurface ?: return@post)
-                    setCommon(inf)
-                    set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_CANCEL)
-                }.build()
-                val trigger = request(s, CameraDevice.TEMPLATE_PREVIEW).apply {
-                    addTarget(previewSurface ?: return@post)
-                    setCommon(inf)
-                    set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_START)
-                }.build()
-                repeatPreview()
-                s.capture(cancel, null, handler)
-                s.capture(trigger, null, handler)
+            triggerFocus(s, inf)
+        }
+    }
+
+    /**
+     * Cancels any scan in progress (an earlier tap's too), then scans once at [focusPoint] with the current AF box;
+     * AF_MODE_AUTO then holds it. Camera thread.
+     */
+    private fun triggerFocus(s: CameraCaptureSession, inf: Info) {
+        focusWatch = null
+        runCatching {
+            val surface = previewSurface ?: return
+            val cancel = request(s, CameraDevice.TEMPLATE_PREVIEW).apply {
+                addTarget(surface)
+                setCommon(inf)
+                set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_CANCEL)
+            }.build()
+            val trigger = request(s, CameraDevice.TEMPLATE_PREVIEW).apply {
+                addTarget(surface)
+                setCommon(inf)
+                set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_START)
+            }.build()
+            repeatPreview()
+            s.capture(cancel, null, handler)
+            s.capture(trigger, object : CameraCaptureSession.CaptureCallback() {
+                override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, r: TotalCaptureResult) {
+                    watchFocus(s, inf, r.frameNumber)
+                }
+            }, handler)
+        }
+    }
+
+    /**
+     * Waits for the scan the trigger in frame [after] started. If the small AF box finds no focus (too little detail
+     * in it: a plain wall, a face in shade), scans once more with the metering spot's larger box before giving up.
+     */
+    private fun watchFocus(s: CameraCaptureSession, inf: Info, after: Long) {
+        val point = focusPoint ?: return
+        focusWatch = { r ->
+            // Only frames after the trigger's own count; a new tap or a release ends this watch.
+            if (focusPoint !== point) {
+                focusWatch = null
+            } else if (r.frameNumber > after) {
+                when (r.get(CaptureResult.CONTROL_AF_STATE)) {
+                    CaptureResult.CONTROL_AF_STATE_FOCUSED_LOCKED -> focusWatch = null
+                    CaptureResult.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED -> {
+                        focusWatch = null
+                        if (_focusSize.value < MeterArea.SPOT_SIZE) {
+                            Log.d(TAG, "focus: nothing found in the small box, retrying with the spot")
+                            _focusSize.value = MeterArea.SPOT_SIZE
+                            triggerFocus(s, inf)
+                        }
+                    }
+                }
             }
         }
     }
@@ -494,6 +546,8 @@ class CameraController(context: Context) : AutoCloseable {
         handler.post {
             if (focusPoint == null) return@post
             focusPoint = null
+            focusWatch = null
+            _focusSize.value = FOCUS_SIZE
             val s = session ?: return@post
             val inf = info ?: return@post
             runCatching {
@@ -924,6 +978,8 @@ class CameraController(context: Context) : AutoCloseable {
         session = null
         streamingPhysical = null
         focusPoint = null
+        focusWatch = null
+        _focusSize.value = FOCUS_SIZE
         device?.close()
         device = null
         rawReader?.close()
@@ -1004,15 +1060,20 @@ class CameraController(context: Context) : AutoCloseable {
         val bx = 0.5f + (px - 0.5f) * inf.previewCropX
         val by = 0.5f + (py - 0.5f) * inf.previewCropY
         val a = if (streamingPhysical != null) inf.regionArray else inf.activeArray
-        // The auto develop's tap spot (MeterArea.Spot), moved inside the sensor near an edge rather than cut off,
-        // so AE always meters a reasonable box.
-        val (x0, x1, y0, y1) = MeterArea.Spot(bx, by).box(a.width(), a.height())
-        val region = MeteringRectangle(
-            Rect(a.left + x0, a.top + y0, a.left + x1, a.top + y1),
-            MeteringRectangle.METERING_WEIGHT_MAX - 1,
-        )
-        set(CaptureRequest.CONTROL_AF_REGIONS, arrayOf(region))
-        set(CaptureRequest.CONTROL_AE_REGIONS, arrayOf(region))
+        // Squares around the point (MeterArea.Spot), moved inside the sensor near an edge rather than cut off.
+        fun region(size: Float): MeteringRectangle {
+            val (x0, x1, y0, y1) = MeterArea.Spot(bx, by, size).box(a.width(), a.height())
+            return MeteringRectangle(Rect(a.left + x0, a.top + y0, a.left + x1, a.top + y1), MeteringRectangle.METERING_WEIGHT_MAX - 1)
+        }
+        val c = characteristicsOf(inf)
+        // Focus on a small box, so a thin subject (a twig, an eyelash) isn't outvoted by the background around it; AE
+        // meters the auto develop's larger tap spot, which a few pixels of subject would make jumpy.
+        if ((c.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AF) ?: 0) > 0) {
+            set(CaptureRequest.CONTROL_AF_REGIONS, arrayOf(region(_focusSize.value)))
+        }
+        if ((c.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AE) ?: 0) > 0) {
+            set(CaptureRequest.CONTROL_AE_REGIONS, arrayOf(region(MeterArea.SPOT_SIZE)))
+        }
     }
 
     private fun frameState(inf: Info, r: CaptureResult): FrameState {
@@ -1057,6 +1118,12 @@ class CameraController(context: Context) : AutoCloseable {
         private const val BURST_TIMEOUT_MS = 2000L
         private const val BURST_FRAME_TIMEOUT_MS = 250L
         private const val FOCUS_TIMEOUT_MS = 1500L
+
+        /**
+         * Tap focus: side of the AF box as a share of the sensor's short side (5%: about the reticle's square). Some
+         * HALs widen a small region to their own phase-detect grid; tune per lens on the phone if the square misleads.
+         */
+        const val FOCUS_SIZE = 0.05f
 
 
         /** Flash still: exposure time and the frame duration it needs at least. */

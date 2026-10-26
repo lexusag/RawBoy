@@ -42,6 +42,8 @@ final class CameraViewModel: ObservableObject {
     @Published private(set) var shutterSoundRequired = false
     /** Focus lock point (upright normalised, as shown), or nil for continuous autofocus. */
     @Published private(set) var focusPoint: CGPoint?
+    /** Where the focus ring is being dragged (upright normalised, as shown), or nil; it focuses there on release. */
+    @Published private(set) var dragPoint: CGPoint?
     /** Counts captures: the UI's shutter feedback. */
     @Published private(set) var shutterCount = 0
     /** The raw format the current lens records (ProRAW when Bayer isn't available). */
@@ -157,6 +159,7 @@ final class CameraViewModel: ObservableObject {
         startTask = nil
         controller.stop()
         focusPoint = nil
+        endDrag()
         if status == .ready { status = .opening }
     }
 
@@ -210,7 +213,26 @@ final class CameraViewModel: ObservableObject {
 
     func releaseFocus() {
         focusPoint = nil
+        endDrag()
         controller.releaseFocus()
+    }
+
+    /** The focus ring follows a drag to (x, y), with `loupe` over the viewfinder; endDragFocus focuses there. */
+    func dragFocus(_ x: Double, _ y: Double, loupe: ViewfinderRenderer.Loupe?) {
+        guard focusPoint != nil else { return }
+        dragPoint = CGPoint(x: min(max(x, 0), 1), y: min(max(y, 0), 1))
+        renderer.loupe = loupe
+    }
+
+    func endDragFocus() {
+        guard let p = dragPoint else { return }
+        endDrag()
+        focusAt(p.x, p.y)
+    }
+
+    private func endDrag() {
+        dragPoint = nil
+        renderer.loupe = nil
     }
 
     /**
@@ -261,6 +283,7 @@ final class CameraViewModel: ObservableObject {
     private func switchTo(_ lens: CameraController.Info) {
         info = lens
         focusPoint = nil  // the restart ends any focus lock
+        endDrag()
         // The live develop belongs to the old lens: start the new one fresh.
         live = nil
         renderer.params = nil

@@ -31,6 +31,11 @@ final class CameraController: NSObject, @unchecked Sendable {
         /** Faces in upright normalised coordinates (as shown). */
         var faces: [CGRect] = []
         var focusing = false
+        /**
+         * Side of the focus lock's AF box as a share of the short side: focusSize where the device takes a focus
+         * rectangle (iOS 26), else the area Apple picks around the point (about the metering spot).
+         */
+        var focusBox = CameraController.spotSize
     }
 
     struct CaptureResult {
@@ -213,6 +218,14 @@ final class CameraController: NSObject, @unchecked Sendable {
 
     // MARK: - Focus
 
+    /**
+     * Tap focus: side of the AF box as a share of the short side, where the device takes a focus rectangle (5%, as
+     * Android's CameraController.FOCUS_SIZE; never under the device's minimum).
+     */
+    static let focusSize = 0.05
+    /** The metering spot's side (MeterArea.spotSize), about the focus ring and Apple's own area around a point. */
+    static let spotSize = 0.16
+
     /** Focus (and meter) at a point of the viewfinder (upright normalised, as shown) and keep it there. */
     func focusAt(_ x: Double, _ y: Double) {
         queue.async {
@@ -222,17 +235,54 @@ final class CameraController: NSObject, @unchecked Sendable {
             let point = lens.isFront ? CGPoint(x: y, y: x) : CGPoint(x: y, y: 1 - x)
             do {
                 try device.lockForConfiguration()
-                if device.isFocusPointOfInterestSupported { device.focusPointOfInterest = point }
+                var box = Self.spotSize
+                if #available(iOS 26.0, *), device.isFocusRectOfInterestSupported {
+                    // A small box, so a thin subject isn't outvoted by the background around it; exposure keeps its
+                    // own (larger) area around the point.
+                    let rect = Self.focusRect(around: point, device: device)
+                    device.focusRectOfInterest = rect
+                    box = Self.shortSideShare(rect, device: device)
+                } else if device.isFocusPointOfInterestSupported {
+                    device.focusPointOfInterest = point
+                }
+                // Faces would pull focus away from the tapped point (iOS 15.4+); back to automatic on release.
+                device.automaticallyAdjustsFaceDrivenAutoFocusEnabled = false
+                device.isFaceDrivenAutoFocusEnabled = false
                 if device.isFocusModeSupported(.autoFocus) { device.focusMode = .autoFocus }
                 if device.isExposurePointOfInterestSupported {
                     device.exposurePointOfInterest = point
                     device.exposureMode = .continuousAutoExposure
                 }
                 device.unlockForConfiguration()
+                self.stateLock.withLock { self.state.focusBox = box }
             } catch {
                 Self.log.error("focus: \(error.localizedDescription)")
             }
         }
+    }
+
+    /**
+     * A box Self.focusSize of the short side around `point` (device coordinates, 0...1 across the landscape frame,
+     * so a square is narrower than it is tall there), at least the device's minimum and moved inside the frame.
+     */
+    @available(iOS 26.0, *)
+    private static func focusRect(around point: CGPoint, device: AVCaptureDevice) -> CGRect {
+        let aspect = landscapeAspect(device)
+        let minimum = device.minFocusRectOfInterestSize
+        let w = min(1, max(CGFloat(focusSize / aspect), minimum.width))
+        let h = min(1, max(CGFloat(focusSize), minimum.height))
+        return CGRect(x: min(max(point.x - w / 2, 0), 1 - w), y: min(max(point.y - h / 2, 0), 1 - h), width: w, height: h)
+    }
+
+    /** The side of a square as large as [rect] (device coordinates), as a share of the short side. */
+    private static func shortSideShare(_ rect: CGRect, device: AVCaptureDevice) -> Double {
+        max(Double(rect.width) * landscapeAspect(device), Double(rect.height))
+    }
+
+    /** Long side over short side of the device's frames. */
+    private static func landscapeAspect(_ device: AVCaptureDevice) -> Double {
+        let d = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription)
+        return Double(max(d.width, d.height)) / Double(max(1, min(d.width, d.height)))
     }
 
     func releaseFocus() {
@@ -241,7 +291,9 @@ final class CameraController: NSObject, @unchecked Sendable {
             do {
                 try device.lockForConfiguration()
                 let centre = CGPoint(x: 0.5, y: 0.5)
+                // Also resets a focus rectangle to the default one around the centre.
                 if device.isFocusPointOfInterestSupported { device.focusPointOfInterest = centre }
+                device.automaticallyAdjustsFaceDrivenAutoFocusEnabled = true
                 if device.isExposurePointOfInterestSupported { device.exposurePointOfInterest = centre }
                 if device.isFocusModeSupported(.continuousAutoFocus) { device.focusMode = .continuousAutoFocus }
                 device.unlockForConfiguration()

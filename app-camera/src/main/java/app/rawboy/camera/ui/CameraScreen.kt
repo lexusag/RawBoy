@@ -35,6 +35,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -81,6 +82,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.runtime.rememberUpdatedState
+import app.rawboy.auto.analysis.MeterArea
+import app.rawboy.gl.ViewfinderRenderer
+import kotlin.math.min
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -114,6 +124,8 @@ fun CameraScreen(vm: CameraViewModel, requestPermission: () -> Unit, requestLoca
     val lenses by vm.lenses.collectAsStateWithLifecycle()
     val frontAvailable by vm.frontAvailable.collectAsStateWithLifecycle()
     val focusPoint by vm.focusPoint.collectAsStateWithLifecycle()
+    val dragPoint by vm.dragPoint.collectAsStateWithLifecycle()
+    val focusSize by vm.controller.focusSize.collectAsStateWithLifecycle()
     val flashAvailable by vm.flashAvailable.collectAsStateWithLifecycle()
     val histogram by vm.histogram.collectAsStateWithLifecycle()
     // Only the AF state of the camera's per-frame metadata, so the screen doesn't recompose 30 times a second.
@@ -190,6 +202,13 @@ fun CameraScreen(vm: CameraViewModel, requestPermission: () -> Unit, requestLoca
 
             // Viewfinder, at the raw's aspect ratio, in whatever height the controls leave.
             val f = frame
+            var viewSize by remember { mutableStateOf(IntSize.Zero) }
+            val density = LocalDensity.current
+            // While the focus ring is dragged it shows there, with a loupe; it focuses on release.
+            val shownFocus = dragPoint ?: focusPoint
+            val loupe = dragPoint?.let { (x, y) ->
+                with(density) { loupeAt(x, y, viewSize, LOUPE_SIZE.toPx(), LOUPE_GAP.toPx()) }
+            }
             Box(
                 Modifier
                     .weight(1f)
@@ -199,10 +218,11 @@ fun CameraScreen(vm: CameraViewModel, requestPermission: () -> Unit, requestLoca
             Box(
                 Modifier
                     .aspectRatio(f?.let { it.fullWidth.toFloat() / it.fullHeight } ?: (3f / 4f))
-                    .background(Color(0xFF0A0A0A)),
+                    .background(Color(0xFF0A0A0A))
+                    .onSizeChanged { viewSize = it },
                 contentAlignment = Alignment.Center,
             ) {
-                Viewfinder(f, params, vm::onSurfaceTexture, vm::onViewfinderBase, Modifier.fillMaxSize())
+                Viewfinder(f, params, vm::onSurfaceTexture, vm::onViewfinderBase, Modifier.fillMaxSize(), loupe)
                 Box(
                     Modifier
                         .matchParentSize()
@@ -224,6 +244,8 @@ fun CameraScreen(vm: CameraViewModel, requestPermission: () -> Unit, requestLoca
                             )
                         },
                 )
+                // Over the tap area, under the lens selector and the AF LOCK badge.
+                shownFocus?.let { (x, y) -> FocusHandle(x, y, viewSize, vm::focusAt, vm::dragFocus, vm::endDragFocus) }
                 when (status) {
                     CameraStatus.NEEDS_PERMISSION -> Button(onClick = requestPermission) { Text("Allow camera") }
                     CameraStatus.OPENING -> CircularProgressIndicator()
@@ -240,7 +262,8 @@ fun CameraScreen(vm: CameraViewModel, requestPermission: () -> Unit, requestLoca
                             .padding(bottom = 16.dp),
                     )
                 }
-                focusPoint?.let { (x, y) -> FocusRing(x, y, afState) }
+                shownFocus?.let { (x, y) -> FocusRing(x, y, if (dragPoint != null) null else afState, focusSize) }
+                loupe?.let { LoupeFrame(it, focusSize) }
                 if (focusPoint != null) {
                     Text(
                         "AF LOCK  ✕",
@@ -399,10 +422,11 @@ private fun LensSelector(labels: List<String>, selected: String, onSelect: (Stri
 
 /**
  * Focus lock ring at ([x], [y]) of the viewfinder (normalised): pulsing while focusing, white once
- * focus is locked, red when the camera couldn't find focus there.
+ * focus is locked, red when the camera couldn't find focus there. The ring is about the metered spot; the square
+ * inside it is the AF box ([focusSize] of the short side); a dot once AF falls back to the ring's area.
  */
 @Composable
-private fun BoxScope.FocusRing(x: Float, y: Float, afState: Int?) {
+private fun BoxScope.FocusRing(x: Float, y: Float, afState: Int?, focusSize: Float) {
     val scanning = afState == CameraMetadata.CONTROL_AF_STATE_ACTIVE_SCAN || afState == CameraMetadata.CONTROL_AF_STATE_PASSIVE_SCAN
     val pulse by rememberInfiniteTransition(label = "focus").animateFloat(
         initialValue = 0.4f,
@@ -410,10 +434,9 @@ private fun BoxScope.FocusRing(x: Float, y: Float, afState: Int?) {
         animationSpec = infiniteRepeatable(tween(350), RepeatMode.Reverse),
         label = "focus pulse",
     )
-    val color = when (afState) {
-        CameraMetadata.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED -> Color(0xFFFF5252)
-        else -> Color.White
-    }
+    // The small box's miss isn't shown: CameraController retries with the spot first.
+    val failed = afState == CameraMetadata.CONTROL_AF_STATE_NOT_FOCUSED_LOCKED && focusSize >= MeterArea.SPOT_SIZE
+    val color = if (failed) Color(0xFFFF5252) else Color.White
     val ringSize = 72.dp
     Canvas(
         Modifier
@@ -421,9 +444,92 @@ private fun BoxScope.FocusRing(x: Float, y: Float, afState: Int?) {
             .graphicsLayer { alpha = if (scanning) pulse else 1f },
     ) {
         val radius = ringSize.toPx() / 2
-        drawCircle(color, radius, Offset(x * size.width, y * size.height), style = Stroke(width = 2.dp.toPx()))
-        drawCircle(color, 3.dp.toPx(), Offset(x * size.width, y * size.height))
+        val center = Offset(x * size.width, y * size.height)
+        drawCircle(color, radius, center, style = Stroke(width = 2.dp.toPx()))
+        if (focusSize < MeterArea.SPOT_SIZE) {
+            val box = focusSize * min(size.width, size.height)
+            drawRect(color, center - Offset(box / 2, box / 2), Size(box, box), style = Stroke(width = 1.5.dp.toPx()))
+        } else {
+            drawCircle(color, 3.dp.toPx(), center) // AF uses the ring's area
+        }
     }
+}
+
+/**
+ * Where the focus ring can be grabbed, around ([x], [y]) of a [view]-sized viewfinder (normalised): a drag moves the
+ * point ([onDrag], then [onDragEnd] focuses there), a tap focuses at the tap as anywhere else ([onTap]). It sits above
+ * the viewfinder's own gestures, so a drag here doesn't also start the press-and-hold comparison.
+ */
+@Composable
+private fun BoxScope.FocusHandle(
+    x: Float,
+    y: Float,
+    view: IntSize,
+    onTap: (Float, Float) -> Unit,
+    onDrag: (Float, Float) -> Unit,
+    onDragEnd: () -> Unit,
+) {
+    // The gesture code outlives recompositions: it reads the latest point and size.
+    val point by rememberUpdatedState(x to y)
+    val viewNow by rememberUpdatedState(view)
+    val half = with(LocalDensity.current) { FOCUS_HANDLE_SIZE.toPx() / 2 }
+    if (view.width == 0 || view.height == 0) return
+    Box(
+        Modifier
+            .align(Alignment.TopStart)
+            .offset { IntOffset((x * view.width - half).roundToInt(), (y * view.height - half).roundToInt()) }
+            .size(FOCUS_HANDLE_SIZE)
+            .pointerInput(Unit) {
+                // Summed from the drag's start: several moves can come before the point recomposes.
+                var start = point
+                var moved = Offset.Zero
+                detectDragGestures(
+                    onDragStart = {
+                        start = point
+                        moved = Offset.Zero
+                    },
+                    onDragEnd = onDragEnd,
+                    onDragCancel = onDragEnd,
+                ) { change, amount ->
+                    change.consume()
+                    moved += amount
+                    onDrag(start.first + moved.x / viewNow.width, start.second + moved.y / viewNow.height)
+                }
+            }
+            .pointerInput(Unit) {
+                detectTapGestures { o ->
+                    val (px, py) = point
+                    onTap(px + (o.x - half) / viewNow.width, py + (o.y - half) / viewNow.height)
+                }
+            },
+    )
+}
+
+/** The loupe's frame (the renderer draws the image inside it), with the AF box magnified at its centre. */
+@Composable
+private fun BoxScope.LoupeFrame(l: ViewfinderRenderer.Loupe, focusSize: Float) {
+    Canvas(Modifier.matchParentSize()) {
+        val side = l.size * size.width
+        val center = Offset(l.centerX * size.width, l.centerY * size.height)
+        drawRect(Color.White, center - Offset(side / 2, side / 2), Size(side, side), style = Stroke(width = 2.dp.toPx()))
+        val box = focusSize * min(size.width, size.height) * l.zoom
+        drawRect(Color.White, center - Offset(box / 2, box / 2), Size(box, box), style = Stroke(width = 1.dp.toPx()))
+    }
+}
+
+/**
+ * The loupe for a drag at ([x], [y]) of a [view]-sized viewfinder: a [side] px square [gap] px above the point (under
+ * the finger otherwise), or below it near the top, kept inside the view.
+ */
+private fun loupeAt(x: Float, y: Float, view: IntSize, side: Float, gap: Float): ViewfinderRenderer.Loupe? {
+    if (view.width == 0 || view.height == 0) return null
+    val w = view.width.toFloat()
+    val h = view.height.toFloat()
+    val s = min(side, min(w, h))
+    val above = y * h - gap - s / 2
+    val cy = if (above >= s / 2) above else y * h + gap + s / 2
+    val cx = (x * w).coerceIn(s / 2, w - s / 2)
+    return ViewfinderRenderer.Loupe(x, y, cx / w, cy.coerceIn(s / 2, h - s / 2) / h, s / w, LOUPE_ZOOM)
 }
 
 @Composable
@@ -643,3 +749,11 @@ private fun SettingSwitch(title: String, subtitle: String, checked: Boolean, ena
 }
 
 private const val COMPARE_DELAY_MS = 250L
+
+/** Grab area around the focus ring (the ring is 72 dp). */
+private val FOCUS_HANDLE_SIZE = 96.dp
+
+/** Focus loupe: its side, its distance from the point (clear of the finger) and its magnification. */
+private val LOUPE_SIZE = 128.dp
+private val LOUPE_GAP = 64.dp
+private const val LOUPE_ZOOM = 3f

@@ -1,5 +1,15 @@
 # Changelog
 
+**RawBoy Camera: more precise tap to focus (2026-10-26)**
+
+- RawBoy Camera (Android, iOS): a tap focuses on a small square (5% of the frame's short side) inside the ring, while
+  exposure is still metered on the ring's area, so a thin or small subject in front of a busy background gets the
+  focus. Android: when the square finds nothing to focus on, the camera tries once more with the ring's area before
+  the ring turns red. iPhone: the square needs iOS 26 (the focus rectangle of interest); face detection no longer pulls
+  focus away from a tapped point while it is locked.
+- Drag the focus ring to move the point: a 3× loupe above your finger shows what's under it, and the camera focuses
+  there when you let go. A tap on the ring focuses at the tap, as anywhere else.
+
 **RawBoy Web: Google Drive (2026-10-25)**
 
 - RawBoy and RawBoy Auto (web only): **Open › From Google Drive** and **Add › From Google Drive** open photos (RAW,

@@ -2,9 +2,14 @@
 
 A camera for the back lenses (made for the Pixel 9 Pro; any phone whose camera offers RAW works). The
 viewfinder shows the photo developed live: RawBoy Auto's automatic develop plus the **look** chosen from the
-**Look** menu under the viewfinder, with **Strength**, **Brightness** and **Warmth** as in Auto (one thin row each). **Tap** to lock focus and exposure at that point (metered on a box about the ring's size around it): a ring
+**Look** menu under the viewfinder, with **Strength**, **Brightness** and **Warmth** as in Auto (one thin row each). **Tap** to lock focus and exposure at that point: a ring
 shows it (pulsing while focusing, white when locked, red when focus wasn't found) and stays locked, also for the
-shot, until you tap **AF LOCK ✕** or tap somewhere else. Press and hold to see the photo without the look. The
+shot, until you tap **AF LOCK ✕** or tap somewhere else. Exposure is metered on a box about the ring's size; focus
+uses the small square inside it (5% of the frame's short side), so a thin subject in front of a busy background
+gets the focus. If the square finds nothing to focus on (a plain wall), the Android app tries again with the ring's
+area before turning red; on the iPhone the square needs iOS 26 (before that the iPhone picks its own area around the
+point, shown as a dot), and faces in the frame no longer pull focus away from the point. **Drag the ring** to move the
+point precisely: a 3× loupe shows what's under it, clear of your finger, and it focuses there when you let go. Press and hold to see the photo without the look. The
 **volume buttons** take a photo too; the viewfinder blinks and the phone ticks on each shot.
 **UW · W · T** at the bottom of the viewfinder switches between the ultrawide, wide and telephoto lenses, as in
 Google Camera (each lens that can deliver RAW is offered). The button right of the shutter switches to the
