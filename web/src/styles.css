@@ -1118,6 +1118,11 @@ input[type='range'] {
   min-width: 0;
 }
 
+.help-about a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
 .help-footer {
   margin: 0;
   font-size: 12px;
@@ -1743,6 +1748,43 @@ line.curve-grid {
 }
 
 .preset-menu .menu button:hover {
+  background: var(--surface-2);
+}
+
+.source-menu {
+  position: relative;
+  display: flex;
+}
+
+.source-menu .menu {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  min-width: 180px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.source-menu .menu.align-left {
+  left: 0;
+  right: auto;
+}
+
+.source-menu .menu button {
+  background: none;
+  border: none;
+  color: var(--text);
+  text-align: left;
+  padding: 8px 10px;
+  white-space: nowrap;
+}
+
+.source-menu .menu button:hover {
   background: var(--surface-2);
 }
 

@@ -1,5 +1,14 @@
 # Changelog
 
+**RawBoy Web: Google Drive (2026-10-25)**
+
+- RawBoy and RawBoy Auto (web only): **Open › From Google Drive** and **Add › From Google Drive** open photos (RAW,
+  JPEG, HEIC, PNG, TIFF) from Google Drive, and the export options have **Save to: Google Drive**, which saves into a
+  Drive folder you pick. RawBoy only gets access to the files you pick and the ones it saves (`drive.file`). It needs a
+  Google Cloud client ID and API key built into the site; see [Google Drive](docs/google-drive.md).
+- RawBoy Web: a privacy policy page (`/privacy`) and an About page (`/about`: what the app is for, how it uses Google
+  Drive, no generative AI), linked from the help sheet and the start page.
+
 **RawBoy opens JPEG, HEIC, PNG and TIFF (2026-10-25)**
 
 - RawBoy (Android, iOS, web): Open takes JPEG, HEIC, PNG and TIFF as well as RAW, as Auto does, with the same

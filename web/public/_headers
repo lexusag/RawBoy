@@ -5,3 +5,13 @@
 
 /assets/*
   Cache-Control: public, max-age=31536000, immutable
+
+# The Google Drive window: Google's Picker runs in iframes that require-corp would block. Pages serves drive.html
+# at /drive. "! Name" takes off a header the /* rule set.
+/drive
+  ! Cross-Origin-Opener-Policy
+  ! Cross-Origin-Embedder-Policy
+
+/drive.html
+  ! Cross-Origin-Opener-Policy
+  ! Cross-Origin-Embedder-Policy

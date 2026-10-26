@@ -27,6 +27,7 @@ Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and
 - [RawBoy Auto](docs/auto.md)
 - [RawBoy Camera](docs/camera.md), including RawBoy Film's film looks
 - [RawBoy Web](docs/web.md)
+- [Google Drive in RawBoy Web](docs/google-drive.md): setting up opening from and saving to Drive
 - [Pipeline](docs/pipeline.md): how a raw is developed
 - [Building](docs/building.md), including release builds
 - [Installing on your iPhone](docs/ios-install.md): build the iOS apps and sideload them with your Apple ID

@@ -100,6 +100,19 @@ export async function pickOutputFolder(): Promise<FileSystemDirectoryHandle | nu
 
 export const canPickOutputFolder = () => 'showDirectoryPicker' in window;
 
+/** Where exports are written: a folder on this device or in Google Drive. */
+export interface OutputFolder {
+  name: string;
+  /** Writes [blob] under the first free name from [nameFor] (counter 0, 1, ...); returns the name used. */
+  write(nameFor: (counter: number) => string, blob: Blob): Promise<string>;
+}
+
+/** A folder picked on this device as an OutputFolder. */
+export const localFolder = (dir: FileSystemDirectoryHandle): OutputFolder => ({
+  name: dir.name,
+  write: (nameFor, blob) => writeUnique(dir, nameFor, blob),
+});
+
 /** Writes [blob] into [dir] under the first free name from [nameFor] (counter 0, 1, ...), like MediaStoreOutput. */
 export async function writeUnique(dir: FileSystemDirectoryHandle, nameFor: (counter: number) => string, blob: Blob): Promise<string> {
   for (let counter = 0; counter <= 999; counter++) {

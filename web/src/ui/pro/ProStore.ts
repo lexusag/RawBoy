@@ -11,7 +11,7 @@ import { EXTENSIONS, ExportSettingsStore, baseNameOf, fileName, type ExportSetti
 import { FrameColors } from '../../engine/gl/DevelopRenderer';
 import { PhotoSession } from '../../engine/session/PhotoSession';
 import { EditHistory } from '../common/EditHistory';
-import { saveBlob, saveExports, savesToPhotos } from '../common/files';
+import { saveBlob, saveExports, savesToPhotos, type OutputFolder } from '../common/files';
 import { PresetStore } from './PresetStore';
 
 export interface EditorState {
@@ -477,14 +477,20 @@ export class ProStore {
     this.set({ params: p.lut === id ? { ...p, lut: null } : p, message });
   }
 
-  async export(settings: ExportSettings) {
+  /** Saves as a download (Photos on iOS), or into [folder] (Google Drive). */
+  async export(settings: ExportSettings, folder: OutputFolder | null = null) {
     if (!this.session.hasImage || this.busy) return;
     const current = this._state;
     ExportSettingsStore.save(settings);
     this.set({ exporting: true, exportProgress: 0, exportSettings: settings });
     try {
       const blob = await this.session.export(current.params, current.defaults, settings, (f) => this.set({ exportProgress: f }));
-      const name = fileName(baseNameOf(current.fileName ?? 'image'), EXTENSIONS[settings.format], 0, { suffix: 'rawboy' });
+      const nameFor = (counter: number) => fileName(baseNameOf(current.fileName ?? 'image'), EXTENSIONS[settings.format], counter, { suffix: 'rawboy' });
+      if (folder) {
+        const name = await folder.write(nameFor, blob);
+        return this.set({ exporting: false, message: `Saved ${name} to ${folder.name}` });
+      }
+      const name = nameFor(0);
       await saveExports([{ name, blob }], name);
       // On iOS the Save to Photos sheet comes up instead.
       this.set({ exporting: false, message: savesToPhotos() ? null : `Saved ${name}` });

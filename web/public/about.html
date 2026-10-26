@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#121212" />
+    <title>About RawBoy Web: raw photo editor in your browser</title>
+    <meta name="description" content="RawBoy Web develops RAW photos from your camera in the browser: exposure, colour, film looks and batch export. Optional Google Drive access opens the photos you pick and saves your exports." />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <!-- The app's homepage for Google's OAuth consent screen (docs/google-drive.md): what the app is for and how it uses
+         Google Drive, readable without JavaScript. Keep it in step with the app and privacy.html. -->
+    <style>
+      html { background: #121212; }
+      body { max-width: 720px; margin: 0 auto; padding: 40px 16px 64px; color: #ececec; font: 16px/1.6 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+      h1 { font-size: 28px; margin: 0 0 12px; }
+      h2 { font-size: 20px; margin: 32px 0 8px; }
+      a { color: #e8a33d; }
+      li { margin: 4px 0; }
+      .cta { display: inline-block; margin: 8px 0 0; padding: 8px 16px; border-radius: 8px; background: #e8a33d; color: #1a1206; font-weight: 600; text-decoration: none; }
+    </style>
+  </head>
+  <body>
+    <h1>RawBoy Web</h1>
+    <p>
+      RawBoy Web is a free photo editor for photographers. It develops the RAW files that digital cameras record
+      (Canon, Nikon, Sony, Fujifilm, Panasonic, Olympus, Pentax, DNG) into finished JPEG or TIFF photos, in the same way
+      as Lightroom or darktable: exposure, white balance, contrast, colour, curves, lens corrections, noise reduction,
+      and film looks. JPEG, PNG, TIFF and HEIC photos work too. Everything runs inside your browser on your own computer
+      or phone.
+    </p>
+    <p><a class="cta" href="./">Open RawBoy Web</a></p>
+
+    <h2>What it does</h2>
+    <ul>
+      <li><strong>RawBoy</strong>: develop one photo with every control (tone mapping, white balance, colour, curves,
+        LUTs, masks, crop and rotate, grain, light leaks).</li>
+      <li><strong>RawBoy Auto</strong>: develop a whole batch of photos automatically into a film look, then export
+        them all.</li>
+      <li><strong>RawBoy Browser</strong>: go through a folder of raws, rate them with stars and pick or reject them.</li>
+    </ul>
+
+    <h2>How it uses Google Drive</h2>
+    <p>Google Drive is optional. Photographers who keep their photos in Drive can use it instead of local files:</p>
+    <ul>
+      <li><strong>Open from Google Drive</strong>: you pick photos in Google's own file picker; RawBoy downloads only
+        those files into your browser and develops them there.</li>
+      <li><strong>Save to Google Drive</strong>: you pick a Drive folder and RawBoy uploads the photos you export into
+        it.</li>
+    </ul>
+    <p>
+      RawBoy asks only for the <code>drive.file</code> permission, so it can reach only the files you pick and the
+      files it saves, nothing else in your Drive. Your Google data never goes to a RawBoy server (there is none), is
+      not shared, and is not used for advertising or to train AI models. Details are in the
+      <a href="privacy.html">privacy policy</a>.
+    </p>
+
+    <h2>No generative AI</h2>
+    <p>
+      RawBoy is a conventional photo developer. It does not generate, synthesise or alter people's likeness, and it
+      cannot create AI-generated imagery of any kind, including intimate or sexual imagery. It only adjusts the
+      tones, colours and detail of photos you took. The one machine-learning feature, skin retouching, uses Google's
+      MediaPipe models on your device to find skin so it can be smoothed slightly; nothing is generated and nothing is
+      sent anywhere.
+    </p>
+
+    <h2>Who makes it</h2>
+    <p>
+      RawBoy is made by an independent photographer and developer. It is also an Android app, and its source and
+      releases are on <a href="https://github.com/lexusag/RawBoy">GitHub</a>. Questions:
+      <a href="https://github.com/lexusag/RawBoy/issues">GitHub issues</a>.
+    </p>
+
+    <p><a href="./">Open RawBoy Web</a> · <a href="privacy.html">Privacy policy</a></p>
+  </body>
+</html>

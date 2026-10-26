@@ -315,6 +315,13 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   byte-swaps big-endian data in place (`swab(p, p, n)`), which musl's `swab` corrupts (iPhone ProRAW is `MM`: garbage
   LinearizationTable, white posterised image). macOS libc and bionic happen to cope. When web and native decodes
   differ, compile a harness with `em++` (same flags, `-sNODERAWFS=1`) and run it in Node next to the clang one.
+- Google Drive (`src/drive/`, `drive.html`, docs/google-drive.md): Google's Picker iframes don't load under COEP
+  `require-corp`, and COOP `same-origin` cuts `window.opener`, so sign-in and the Picker run in `drive.html`, served
+  **without** the isolation headers (vite.config.ts' `isolationHeaders`, `_headers` with `! Name`, nginx), and talk to
+  the app over a `BroadcastChannel`. A blocked pop-up can't be seen through COOP, so the app waits for the window's
+  `hello`. Downloads and uploads are plain CORS `fetch` from the app page. Scope `drive.file` only; the Picker needs
+  `setAppId` (the project number) for picked files to be readable. Tested with Playwright routes faking
+  accounts.google.com, apis.google.com/js/api.js and googleapis.com.
 - Web EXIF: `DecodedImage::metadata` (filled by both decoders, unused on Android) → `ExifWriter.ts`. LibRaw quirks:
   for Canon `other.artist` is the makernote owner name (left out); ApertureValue 0 becomes f/1.0 (dropped when the
   focal length is unknown too); no exposure compensation, OffsetTime or original make/model strings. Checked with

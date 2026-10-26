@@ -56,6 +56,7 @@ After the next deploy, check: `curl -s https://app.rawboy.link/ | grep canonical
 | everything | `Cross-Origin-Opener-Policy: same-origin`, `Cross-Origin-Embedder-Policy: require-corp` | The WASM decoder uses threads (SharedArrayBuffer), which only work on a cross-origin isolated page |
 | everything | `Cache-Control: no-cache` | Browsers revalidate (a cheap 304 with Pages' ETags), so a deploy shows up at once. Covers `index.html`, `wasm/`, `models/`, `mediapipe/`: their names have no hash, so a long cache would mix old WASM with new JavaScript |
 | `/assets/*` | `Cache-Control: public, max-age=31536000, immutable` | Vite's bundles have content hashes in their names; they never change |
+| `/drive`, `/drive.html` | isolation headers taken off (`! Name`) | The Google Drive window: Google's Picker iframes don't load under `require-corp` (see [Google Drive](google-drive.md)) |
 
 Pages serves every file from Cloudflare's edge and compresses it (Brotli/gzip) by itself. In the `rawboy.link` zone,
 keep these in mind:

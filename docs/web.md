@@ -5,7 +5,9 @@ looks and export. Same pipeline: the engine's C++ (LibRaw, lens opcodes, blemish
 WebAssembly, the same develop shader in WebGL2, and the Kotlin engine ported to TypeScript. Skin retouch and
 blemish removal use the same MediaPipe models in the browser.
 
-- Open: **Open** / **Add** or drag and drop (RAW files; `.cube` / HaldCLUT `.png` files go to *Your LUTs*).
+- Open: **Open** / **Add** or drag and drop (RAW files; `.cube` / HaldCLUT `.png` files go to *Your LUTs*). Where the
+  site is set up for it, **Open** / **Add** also offer **From Google Drive**, and the export options have **Save to:
+  Google Drive** (see [Google Drive](google-drive.md)).
 - Double-click the photo or press **Z** for 100% (Z zooms at the pointer, or the middle when the pointer is off the photo; works in every mode except Crop & rotate), drag to pan, press and hold to compare (or the **Compare** button and `\` to keep the as-shot render on), click outside the photo to change the frame.
   With a mouse or trackpad, the wheel over the photo zooms in and out around the pointer, from the whole photo up to
   400% (it stops once at 100% on the way; a trackpad pinch zooms too), and drag pans. Close to the whole photo the

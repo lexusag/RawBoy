@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="robots" content="noindex" />
+    <title>RawBoy · Google Drive</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <!-- Served without the cross-origin isolation headers (public/_headers, nginx.conf, vite.config.ts): Google's
+         Picker runs in iframes that a require-corp page would block. See src/drive/popup.ts. -->
+    <style>
+      html, body { margin: 0; height: 100%; background: #121212; color: #ececec; font: 16px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+      main { display: flex; align-items: center; justify-content: center; height: 100%; padding: 0 16px; box-sizing: border-box; text-align: center; }
+      .error { color: #ff8a80; }
+    </style>
+  </head>
+  <body>
+    <main><p id="status">Connecting to Google Drive…</p></main>
+    <script type="module" src="/src/drive/popup.ts"></script>
+  </body>
+</html>

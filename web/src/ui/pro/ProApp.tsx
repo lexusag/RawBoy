@@ -13,6 +13,8 @@ import type { LightLeak } from '../../engine/develop/LightLeaks';
 import type { MaskShape } from '../../engine/develop/Masks';
 import { PresetsPanel, type PresetActions } from './PresetsPanel';
 import { ExportDialog } from './ExportDialog';
+import { SourceMenu } from '../common/SourceMenu';
+import { driveConfigured, openFromDrive, pickDriveFolder } from '../../drive/Drive';
 import type { ProStore } from './ProStore';
 import { UndoIcon } from '../common/UndoIcon';
 import { AppSwitcher, HelpButton } from '../common/AppNav';
@@ -281,6 +283,14 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
     const [file] = await pickFiles(false, PHOTO_ACCEPT);
     if (file) void store.open(file);
   };
+  const openFromGoogleDrive = async () => {
+    try {
+      const [file] = await openFromDrive(false, store.showMessage);
+      if (file) void store.open(file);
+    } catch (e) {
+      store.showMessage(e instanceof Error ? e.message : String(e));
+    }
+  };
 
   return (
     <div className="editor">
@@ -290,11 +300,11 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
           <div className="name">{state.fileName ?? 'RawBoy'}</div>
           {state.info && <div className="info">{state.info}</div>}
         </div>
-        <button type="button" className="text open" title="Open" aria-label="Open" onClick={open} disabled={busy}>
+        <SourceMenu className="text open" title="Open" label="Open" onDevice={open} onDrive={openFromGoogleDrive} disabled={busy} alignLeft>
           <span className="label-wide">Open</span>
           <span className="icon-narrow"><OpenIcon /></span>
           <span className="tool-label">Open</span>
-        </button>
+        </SourceMenu>
         <button type="button" className={`icon${geometryMode ? ' active' : ''}`} title="Crop & rotate"
           onClick={() => {
             if (!geometryMode && session.zoomCenter) store.session.exitZoom(); // the crop tool works on the fit view
@@ -464,6 +474,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
           {!session.preview && !state.loading && (
             <div className="center empty">
               <button type="button" className="primary" onClick={open}>Open a photo</button>
+              {driveConfigured() && <button type="button" className="text" onClick={openFromGoogleDrive}>Open from Google Drive</button>}
               <p>or drop one here. Double-click the photo (or press Z) for 100%, drag to pan; press and hold to compare with the as-shot render.</p>
             </div>
           )}
@@ -579,9 +590,15 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
           sourceName={state.fileName ?? 'image'}
           outputSize={[shaderParams.lens.outputWidth, shaderParams.lens.outputHeight]}
           onDismiss={() => setShowExport(false)}
-          onExport={(s) => {
+          onExport={async (s, destination) => {
             setShowExport(false);
-            void store.export(s);
+            if (destination === 'device') return void store.export(s);
+            try {
+              const folder = await pickDriveFolder();
+              if (folder) void store.export(s, folder);
+            } catch (e) {
+              store.showMessage(e instanceof Error ? e.message : String(e));
+            }
           }}
         />
       )}

@@ -245,6 +245,10 @@ jobs:
           CCACHE_NOHASHDIR: "true"
           # Canonical URL, sitemap and link previews (vite.config.ts); empty = app.rawboy.link.
           SITE_URL: ${{ vars.SITE_URL }}
+          # Google Drive (docs/google-drive.md): public values, so repository variables. Unset = no Drive buttons.
+          VITE_GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          VITE_GOOGLE_API_KEY: ${{ vars.GOOGLE_API_KEY }}
+          VITE_GOOGLE_APP_ID: ${{ vars.GOOGLE_APP_ID }}
         run: |
           source ~/emsdk/emsdk_env.sh > /dev/null
           npm ci && npm run build:public
