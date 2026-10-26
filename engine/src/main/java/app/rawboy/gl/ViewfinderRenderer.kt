@@ -12,6 +12,7 @@ import java.nio.ByteOrder
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 import kotlin.math.abs
+import kotlin.math.log2
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
@@ -25,7 +26,7 @@ import kotlin.math.roundToInt
  * so the linearisation is exact up to a gain; [Frame.scale] brings the result to raw units
  * (1.0 = sensor clip). The whole-image effects (high-pass contrast, bloom) sample small copies
  * made on the GPU from every frame; every [baseIntervalMs] the 512 px one is also read back for
- * analysis, see [onBase].
+ * analysis, see [onBase]. While [onLuma] is set, a larger greyscale copy is read back too (QR codes).
  */
 class ViewfinderRenderer(
     /** The camera's output texture; called on the GL thread whenever the GL context is (re)created. */
@@ -83,6 +84,17 @@ class ViewfinderRenderer(
     @Volatile
     var baseIntervalMs: Long = 300
 
+    /**
+     * While set: every [lumaIntervalMs], a greyscale copy of the frame at most [LUMA_MAX_DIMENSION] px on the long side
+     * (one byte per pixel, row 0 = top, width a multiple of 4), on the GL thread; hand it off quickly. The array is not
+     * reused. Null makes none, so it costs nothing while QR codes aren't looked for.
+     */
+    @Volatile
+    var onLuma: ((width: Int, height: Int, luma: ByteArray) -> Unit)? = null
+
+    @Volatile
+    var lumaIntervalMs: Long = 300
+
     private var surfaceTexture: SurfaceTexture? = null
     private var cameraTexture = 0
     private val texMatrix = FloatArray(16)
@@ -92,6 +104,7 @@ class ViewfinderRenderer(
     private var boost: PassProgram? = null
     private var boxDown: PassProgram? = null
     private var tailScatter: PassProgram? = null
+    private var lumaProgram: LumaProgram? = null
     private var develop: DevelopProgram? = null
     private var quad: FullscreenQuad? = null
     private var lutTexture: LutTexture? = null
@@ -104,7 +117,10 @@ class ViewfinderRenderer(
     private val halo = Target()
     private val tailRaw = Target()
     private val tail = Target()
+    private val lumaTarget = Target(bytes = true)
+    private val luma = LumaRead()
     private var lastBase = 0L
+    private var lastLuma = 0L
     private var viewWidth = 1
     private var viewHeight = 1
 
@@ -115,6 +131,8 @@ class ViewfinderRenderer(
         halo.reset()
         tailRaw.reset()
         tail.reset()
+        lumaTarget.reset()
+        luma.reset()
         pending = null
         pixelBuffer = 0
         pixelBufferSize = 0
@@ -125,6 +143,7 @@ class ViewfinderRenderer(
         boost = PassProgram(PassProgram.BOOST, trilinear = false)
         boxDown = PassProgram(PassProgram.BOX_DOWN, trilinear = false)
         tailScatter = PassProgram(PassProgram.TAIL_SCATTER, trilinear = false)
+        lumaProgram = LumaProgram()
         develop = DevelopProgram(forExport = false)
         quad = FullscreenQuad()
         lutTexture = LutTexture()
@@ -191,6 +210,13 @@ class ViewfinderRenderer(
         if (pending == null && now - lastBase >= baseIntervalMs) {
             lastBase = now
             startBase(sw, sh)
+        }
+        // QR codes need more pixels than the base has: a greyscale copy, read back the same way.
+        val lumaListener = onLuma
+        luma.collect()?.let { (lw, lh, bytes) -> lumaListener?.invoke(lw, lh, bytes) }
+        if (lumaListener != null && !luma.busy && now - lastLuma >= lumaIntervalMs) {
+            lastLuma = now
+            startLuma(w, h)
         }
 
         // Pass 2: develop to the screen, aspect-fit. The first params come from the first readback above.
@@ -297,6 +323,80 @@ class ViewfinderRenderer(
         pending = PendingRead(pixelBuffer, fence, sw, sh, SystemClock.uptimeMillis())
     }
 
+    /** Draws the greyscale copy of the [w] x [h] linear frame (its mipmaps are current) and starts reading it back. */
+    private fun startLuma(w: Int, h: Int) {
+        val scale = min(1f, LUMA_MAX_DIMENSION.toFloat() / max(w, h))
+        val lw = max(4, (w * scale).roundToInt() / 4 * 4)
+        val lh = max(1, (h * scale).roundToInt())
+        lumaTarget.ensure(lw / 4, lh, mipmapped = false)
+        lumaTarget.bindForDrawing()
+        lumaProgram!!.draw(quad!!, linear.texture, lw, max(0f, log2(max(w, h).toFloat() / max(lw, lh))))
+        luma.start(lw, lh)
+    }
+
+    /**
+     * [onLuma]'s readback in flight, as the base's (pixel buffer + fence, collected on a later frame): [lumaTarget]
+     * holds 4 grey pixels per RGBA8 texel, so the bytes come back in pixel order.
+     */
+    private class LumaRead {
+        private var buffer = 0
+        private var size = 0
+        private var fence = 0L
+        private var width = 0
+        private var height = 0
+        val busy get() = fence != 0L
+
+        fun reset() {
+            buffer = 0
+            size = 0
+            fence = 0L
+        }
+
+        /** Reads the bound [width] x [height] grey target (a quarter as wide in texels) into the buffer, no wait. */
+        fun start(width: Int, height: Int) {
+            val bytes = width * height
+            if (buffer == 0) {
+                val ids = IntArray(1)
+                GLES30.glGenBuffers(1, ids, 0)
+                buffer = ids[0]
+                size = 0
+            }
+            GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, buffer)
+            if (size < bytes) {
+                GLES30.glBufferData(GLES30.GL_PIXEL_PACK_BUFFER, bytes, null, GLES30.GL_STREAM_READ)
+                size = bytes
+            }
+            GLES30.glReadPixels(0, 0, width / 4, height, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, 0)
+            GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, 0)
+            val f = GLES30.glFenceSync(GLES30.GL_SYNC_GPU_COMMANDS_COMPLETE, 0)
+            GLES30.glFlush()
+            if (GLES30.glGetError() != GLES30.GL_NO_ERROR) {
+                GLES30.glDeleteSync(f)
+                return
+            }
+            fence = f
+            this.width = width
+            this.height = height
+        }
+
+        /** The finished copy (width, height, pixels), or null while none is ready. */
+        fun collect(): Triple<Int, Int, ByteArray>? {
+            if (fence == 0L) return null
+            val status = GLES30.glClientWaitSync(fence, 0, 0)
+            if (status == GLES30.GL_TIMEOUT_EXPIRED) return null
+            GLES30.glDeleteSync(fence)
+            fence = 0L
+            if (status == GLES30.GL_WAIT_FAILED) return null
+            val n = width * height
+            GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, buffer)
+            val mapped = GLES30.glMapBufferRange(GLES30.GL_PIXEL_PACK_BUFFER, 0, n, GLES30.GL_MAP_READ_BIT) as? ByteBuffer
+            val out = mapped?.let { ByteArray(n).also { bytes -> it.get(bytes) } }
+            GLES30.glUnmapBuffer(GLES30.GL_PIXEL_PACK_BUFFER)
+            GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, 0)
+            return out?.let { Triple(width, height, it) }
+        }
+    }
+
     /** Hands over the readback once the GPU has finished it; returns at once otherwise. */
     private fun collectBase() {
         val read = pending ?: return
@@ -361,8 +461,8 @@ class ViewfinderRenderer(
         surfaceTexture?.setOnFrameAvailableListener(null)
     }
 
-    /** A half-float colour target; row 0 = top of the image. */
-    private class Target {
+    /** A half-float colour target (RGBA8 with [bytes]); row 0 = top of the image. */
+    private class Target(private val bytes: Boolean = false) {
         var texture = 0
         private var framebuffer = 0
         private var width = 0
@@ -392,8 +492,8 @@ class ViewfinderRenderer(
             var lh = h
             for (level in 0 until levels) {
                 GLES30.glTexImage2D(
-                    GLES30.GL_TEXTURE_2D, level, GLES30.GL_RGBA16F, lw, lh, 0,
-                    GLES30.GL_RGBA, GLES30.GL_HALF_FLOAT, null,
+                    GLES30.GL_TEXTURE_2D, level, if (bytes) GLES30.GL_RGBA8 else GLES30.GL_RGBA16F, lw, lh, 0,
+                    GLES30.GL_RGBA, if (bytes) GLES30.GL_UNSIGNED_BYTE else GLES30.GL_HALF_FLOAT, null,
                 )
                 lw = max(1, lw / 2)
                 lh = max(1, lh / 2)
@@ -642,7 +742,56 @@ void main() {
         }
     }
 
+    /**
+     * The linear frame -> grey for reading QR codes, 4 pixels per RGBA8 texel (a quarter of the bytes an RGBA readback
+     * would move), each sampled from the mip level of the copy's scale.
+     */
+    private class LumaProgram {
+        private val id = GlUtil.createProgram(LinearizeProgram.VERTEX, FRAGMENT)
+        private val uSource = GLES30.glGetUniformLocation(id, "uSource")
+        private val uWidth = GLES30.glGetUniformLocation(id, "uWidth")
+        private val uLod = GLES30.glGetUniformLocation(id, "uLod")
+
+        fun draw(quad: FullscreenQuad, texture: Int, width: Int, lod: Float) {
+            GLES30.glUseProgram(id)
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, texture)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR_MIPMAP_LINEAR)
+            GLES30.glUniform1i(uSource, 0)
+            GLES30.glUniform1f(uWidth, width.toFloat())
+            GLES30.glUniform1f(uLod, lod)
+            quad.draw()
+            // The develop pass samples level 0 only.
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
+        }
+
+        companion object {
+            // y / (y + 0.06): raw units put a normal scene's key (~0.06) at mid grey; QR reading thresholds locally,
+            // so any rising curve that keeps shadows and highlights apart will do.
+            const val FRAGMENT = """#version 300 es
+precision highp float;
+uniform sampler2D uSource;
+uniform float uWidth; // grey pixels across: 4 per texel
+uniform float uLod;
+in vec2 vUp;
+out vec4 fragColor;
+float grey(float px) {
+    vec3 c = max(textureLod(uSource, vec2((px + 0.5) / uWidth, vUp.y), uLod).rgb, 0.0);
+    float y = dot(c, vec3(0.2627, 0.6780, 0.0593)); // Rec.2020 luminance
+    return y / (y + 0.06);
+}
+void main() {
+    float x = floor(gl_FragCoord.x) * 4.0;
+    fragColor = vec4(grey(x), grey(x + 1.0), grey(x + 2.0), grey(x + 3.0));
+}
+"""
+        }
+    }
+
     companion object {
         const val BASE_MAX_DIMENSION = 512
+
+        /** Long side of [onLuma]'s copies: a QR code a twentieth of the frame wide still gets ~2 px per module. */
+        const val LUMA_MAX_DIMENSION = 1280
     }
 }

@@ -99,5 +99,9 @@ dependencies {
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.core)
     implementation(libs.androidx.exifinterface)
+    // QR codes in the viewfinder: pure Java, no Google Play services (Apache 2.0, as the notices say).
+    implementation(libs.zxing.core)
     debugImplementation(libs.androidx.compose.ui.tooling)
+    // JVM unit tests (./gradlew :app-camera:testStandardDebugUnitTest).
+    testImplementation(libs.junit)
 }

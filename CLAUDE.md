@@ -425,6 +425,14 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   `startRunning` only after `commitConfiguration` (else an exception). As-shot white from `deviceWhiteBalanceGains` →
   `chromaticityValues`. None of the Pixel workarounds (YUV matrix, tone curve, EXTRA_BLACK, manual flash) is ported;
   the camera's own flash exposure works on the iPhone.
+- Camera QR codes (`CameraSettings.scanQr`, on by default): Android `ViewfinderRenderer.onLuma` (set only while on) draws a
+  ≤1280 px grey copy (`LumaProgram`: y/(y+0.06) of raw units, 4 pixels per RGBA8 texel, textureLod at the copy's
+  scale) and reads it back asynchronously like the base, every 300 ms → `qr/QrReader` (ZXing core, TRY_HARDER: needed
+  under ~3 px/module) on a background-priority thread → `QrTracker` (1.5 s hold, ✕ until out of view) →
+  `QrPayload` → the chip; `CameraActivity.openQr` acts (behind `whenUnlocked`; Wi-Fi via `ACTION_WIFI_ADD_NETWORKS`).
+  iOS: `.qr` on the existing `AVCaptureMetadataOutput` (`setScanQr`), `capture/QrPayload.swift` (port, keep in step);
+  the viewfinder base ticks the tracker, since the detector reports only codes it sees. JVM tests:
+  `app-camera/src/test` (QR decoding from synthetic grey frames, payload parsing).
 - Camera hardware shutter: volume up/down and the Camera Control click take a photo (`HardwareShutter`,
   `onCameraCaptureEvent`, iOS 18+), as Android's volume keys. Launching RawBoy Camera from Camera Control would need a
   LockedCameraCapture extension (not done).

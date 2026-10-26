@@ -15,7 +15,10 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.rawboy.gl.ShaderParams
 import app.rawboy.gl.ViewfinderRenderer
 
-/** The live camera preview, developed with [params] (see [ViewfinderRenderer]), with an optional focus [loupe]. */
+/**
+ * The live camera preview, developed with [params] (see [ViewfinderRenderer]), with an optional focus [loupe]. While
+ * [onLuma] is set it gets the renderer's greyscale copies (QR codes).
+ */
 @Composable
 fun Viewfinder(
     frame: ViewfinderRenderer.Frame?,
@@ -24,9 +27,11 @@ fun Viewfinder(
     onBase: (width: Int, height: Int, rgba: FloatArray) -> Unit,
     modifier: Modifier = Modifier,
     loupe: ViewfinderRenderer.Loupe? = null,
+    onLuma: ((width: Int, height: Int, luma: ByteArray) -> Unit)? = null,
 ) {
     val surfaceCallback = rememberUpdatedState(onSurfaceTexture)
     val baseCallback = rememberUpdatedState(onBase)
+    val lumaCallback = rememberUpdatedState(onLuma)
     val view = remember { arrayOfNulls<GLSurfaceView>(1) }
     val renderer = remember {
         ViewfinderRenderer(
@@ -56,6 +61,11 @@ fun Viewfinder(
     LaunchedEffect(params) {
         renderer.params = params
         view[0]?.requestRender()
+    }
+    // Keyed on on/off only: a new lambda each recomposition mustn't restart it.
+    LaunchedEffect(onLuma != null) {
+        val forward: (Int, Int, ByteArray) -> Unit = { w, h, luma -> lumaCallback.value?.invoke(w, h, luma) }
+        renderer.onLuma = forward.takeIf { onLuma != null }
     }
     LaunchedEffect(loupe) {
         renderer.loupe = loupe

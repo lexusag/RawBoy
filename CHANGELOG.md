@@ -1,5 +1,14 @@
 # Changelog
 
+**RawBoy Camera: reads QR codes (2026-10-26)**
+
+- RawBoy Camera (Android, iOS): a QR code in the viewfinder shows a bar above the lens buttons with what it holds and
+  what a tap does, as the phone's own camera: open a link (the site's name shown first), join a Wi-Fi network
+  (Android 11+; the iPhone copies the password), email, call (the dialler only), message, map, or copy the text. ✕
+  hides it until the code leaves the view; a locked phone asks to unlock before anything opens. Android reads a
+  1280 px greyscale copy of the viewfinder about three times a second with ZXing (Apache 2.0, new dependency) on a
+  background thread; iOS uses AVFoundation's QR detector. On by default; Settings → QR codes turns it off.
+
 **RawBoy Camera (Android): lock screen camera without the passcode (2026-10-26)**
 
 - Settings has a **Lock screen camera** row: Android keeps the locked phone's camera as a separate choice, and until

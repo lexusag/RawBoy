@@ -31,6 +31,8 @@ data class CameraSettings(
     val shutterSound: Boolean = false,
     /** Save where each photo was taken (GPS tags in the JPEG and DNG). Needs location permission, asked when turned on. */
     val geotag: Boolean = false,
+    /** Look for QR codes in the viewfinder and offer to open them, as the phone's own camera does. */
+    val scanQr: Boolean = true,
     /**
      * Per camera ([lensKey]): gain from the linearised preview to raw units (1.0 = sensor clip), learned
      * from each shot (raw key / viewfinder key), so the viewfinder's auto exposure matches the final.
@@ -105,6 +107,7 @@ object CameraSettingsStore {
             mergeBurst = p.getBoolean("mergeBurst", d.mergeBurst),
             shutterSound = p.getBoolean("shutterSound", d.shutterSound),
             geotag = p.getBoolean("geotag", d.geotag),
+            scanQr = p.getBoolean("scanQr", d.scanQr),
             previewScales = parseScales(p.getString(SCALES_KEY, null)),
             flashGuides = parseScales(p.getString(FLASH_GUIDES_KEY, null), min = 1e-2f, max = 1e4f),
             // "FLASH" (plain flash, since removed) becomes Focus-flash.
@@ -139,6 +142,7 @@ object CameraSettingsStore {
             .putBoolean("mergeBurst", s.mergeBurst)
             .putBoolean("shutterSound", s.shutterSound)
             .putBoolean("geotag", s.geotag)
+            .putBoolean("scanQr", s.scanQr)
             .putBoolean("front", s.front)
             .putString("lens", s.lens)
             .putString("flash", s.flash.name)

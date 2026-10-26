@@ -14,6 +14,7 @@ internal val CAMERA_HELP = listOf(
             HelpItem("Press and hold", "See the photo without the look."),
             HelpItem("UW · W · T", "Switch between the ultrawide, wide and telephoto lenses. The button next to the shutter switches to the selfie camera."),
             HelpItem("Thumbnail", "Opens the last photo."),
+            HelpItem("QR codes", "Point the camera at one: a bar above the lenses shows what it holds. Tap it to open the link, join the Wi-Fi network or copy the text; ✕ hides it. Settings › QR codes turns it off."),
         ),
     ),
     HelpSection(
@@ -29,7 +30,7 @@ internal val CAMERA_HELP = listOf(
             HelpItem("RAW", "Keep the DNG next to the JPEG (lit) or not (struck through)."),
             HelpItem("Burst (stacked frames)", "Merge 8 frames into each shot without flash for less noise (lit) or take one frame (dimmed). Same as the Settings switch."),
             HelpItem("Flash", "Turns Focus-flash on or off: the light comes on to help focusing, then the flash fires."),
-            HelpItem("Settings", "JPEG quality, Smaller photos, Merge 8 frames (each shot merges a burst of raws: less noise; hold still), Geotag (saves where each photo was taken; asks for location access when turned on), Histogram (live red, green and blue levels in a corner of the viewfinder), Remember camera & settings and the licences."),
+            HelpItem("Settings", "JPEG quality, Smaller photos, Merge 8 frames (each shot merges a burst of raws: less noise; hold still), Geotag (saves where each photo was taken; asks for location access when turned on), QR codes (on by default), Histogram (live red, green and blue levels in a corner of the viewfinder), Remember camera & settings and the licences."),
         ),
     ),
 )

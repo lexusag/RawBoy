@@ -182,6 +182,13 @@ struct CameraScreen: View {
                         .frame(maxHeight: .infinity, alignment: .bottom)
                         .padding(.bottom, 16)
                 }
+                // Above the lens selector, out of the way of the focus ring and the top badges.
+                if let code = vm.qrCode {
+                    QrBar(code: code, onOpen: { vm.openQr(code) }, onDismiss: vm.dismissQr)
+                        .frame(maxHeight: .infinity, alignment: .bottom)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, vm.lenses.count > 1 ? 84 : 16)
+                }
                 if vm.focusPoint != nil {
                     Button { vm.releaseFocus() } label: {
                         Text("AF LOCK  ✕").font(.caption.weight(.semibold)).foregroundStyle(.black)
@@ -258,6 +265,43 @@ struct CameraScreen: View {
 }
 
 /** UW · W · T: the selected lens in a filled circle. */
+/**
+ * A QR code the viewfinder sees, as the system camera shows it: what it holds and what a tap does
+ * ("example.com  Open"), with ✕ to hide it until the code leaves the view.
+ */
+private struct QrBar: View {
+    let code: QrPayload
+    let onOpen: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Button(action: onOpen) {
+                HStack(spacing: 8) {
+                    Image(systemName: "qrcode").font(.subheadline)
+                    Text(code.label).font(.subheadline).lineLimit(1).truncationMode(.tail)
+                    Text(code.verb).font(.subheadline.weight(.semibold)).foregroundStyle(Color.accentColor)
+                }
+                .padding(.leading, 14)
+                .padding(.vertical, 10)
+                .contentShape(Rectangle())
+            }
+            .accessibilityLabel("QR code: \(code.label), \(code.verb)")
+            Button(action: onDismiss) {
+                Text("✕").font(.subheadline).foregroundStyle(.white.opacity(0.7))
+                    .frame(width: 44, height: 40)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel("Hide QR code")
+        }
+        // Plain: Button Shapes would draw a capsule behind each half.
+        .buttonStyle(.plain)
+        .foregroundStyle(.white)
+        .background(Capsule().fill(Color.black.opacity(0.8)))
+        .frame(maxWidth: 360)
+    }
+}
+
 private struct LensSelector: View {
     let labels: [String]
     let selected: String
@@ -397,6 +441,13 @@ private struct SettingsSheet: View {
                         }
                     }
                     .disabled(vm.shutterSoundRequired)
+                    Toggle(isOn: Binding(get: { vm.settings.scanQr }, set: vm.setScanQr)) {
+                        VStack(alignment: .leading) {
+                            Text("QR codes")
+                            Text("Show what a QR code in the viewfinder holds; tap to open the link or copy the text or Wi-Fi password")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
                     Toggle(isOn: Binding(get: { vm.settings.showHistogram }, set: vm.setShowHistogram)) {
                         VStack(alignment: .leading) {
                             Text("Histogram")

@@ -75,6 +75,11 @@ final class CameraController: NSObject, @unchecked Sendable {
     /** Each viewfinder frame (frame queue). */
     var onFrame: ((CVPixelBuffer) -> Void)?
 
+    /** The text of a QR code the camera sees (frame queue), while setScanQr is on. */
+    var onQr: ((String) -> Void)?
+    /** Guarded by queue. */
+    private var scanQr = false
+
     /** The camera's latest frame metadata. */
     var frames: FrameState { stateLock.withLock { state } }
 
@@ -146,7 +151,7 @@ final class CameraController: NSObject, @unchecked Sendable {
             }
             configured = true
         }
-        if metadataOutput.availableMetadataObjectTypes.contains(.face) { metadataOutput.metadataObjectTypes = [.face] }
+        updateMetadataTypes()
         try device.lockForConfiguration()
         if device.activeColorSpace != .sRGB, device.activeFormat.supportedColorSpaces.contains(.sRGB) {
             device.activeColorSpace = .sRGB
@@ -205,6 +210,24 @@ final class CameraController: NSObject, @unchecked Sendable {
         }
         if c.isVideoRotationAngleSupported(0) { c.videoRotationAngle = 0 }
         Self.log.notice("viewfinder connection: rotation \(c.videoRotationAngle), mirrored \(c.isVideoMirrored)")
+    }
+
+    /**
+     * Look for QR codes too: AVFoundation's own detector, as the system camera's (no frames copied for it). Applied
+     * now if the camera runs, else at the next start.
+     */
+    func setScanQr(_ on: Bool) {
+        queue.async {
+            self.scanQr = on
+            if self.configured { self.updateMetadataTypes() }
+        }
+    }
+
+    /** Faces (always, they steer exposure) and QR codes (scanQr), as far as the current camera offers them. */
+    private func updateMetadataTypes() {
+        let available = metadataOutput.availableMetadataObjectTypes
+        let wanted: [AVMetadataObject.ObjectType] = scanQr ? [.face, .qr] : [.face]
+        metadataOutput.metadataObjectTypes = wanted.filter { available.contains($0) }
     }
 
     /** Clockwise quarter turns from a sensor-oriented buffer to the portrait UI: the 90° AVFoundation uses. */
@@ -418,6 +441,9 @@ extension CameraController: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
     func metadataOutput(_ output: AVCaptureMetadataOutput, didOutput objects: [AVMetadataObject],
                         from connection: AVCaptureConnection) {
         let front = current?.isFront == true
+        if let qr = objects.lazy.compactMap({ ($0 as? AVMetadataMachineReadableCodeObject)?.stringValue }).first {
+            onQr?(qr)
+        }
         // Face bounds are in the sensor's landscape frame (0..1); turn them upright as shown.
         let faces = objects.compactMap { ($0 as? AVMetadataFaceObject)?.bounds }.map { b -> CGRect in
             let x = 1 - b.maxY
