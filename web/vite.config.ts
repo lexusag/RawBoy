@@ -47,7 +47,8 @@ function seo(): Plugin {
         fileName: 'sitemap.xml',
         source:
           '<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n' +
-          `  <url><loc>${site}/</loc><lastmod>${today}</lastmod></url>\n</urlset>\n`,
+          [`${site}/`, `${site}/about`, `${site}/privacy`].map((u) => `  <url><loc>${u}</loc><lastmod>${today}</lastmod></url>\n`).join('') +
+          '</urlset>\n',
       });
     },
   };

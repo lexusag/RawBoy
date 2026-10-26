@@ -53,12 +53,21 @@ You need a Google account. Everything below is free.
 1. **Branding**:
    - App name: `RawBoy`.
    - User support email: your address.
-   - App home page: `https://app.rawboy.link`.
+   - App home page: `https://app.rawboy.link/about` (`web/public/about.html`: what the app is for, how it uses
+     Drive, and that it has no generative AI, readable without JavaScript; Google's review asks for exactly that).
+     The domain must be verified to the same Google account first, see below.
    - Authorized domain: `rawboy.link` (add `pages.dev` only if you'll use `rawboy.pages.dev` directly).
    - Developer contact: your address.
    - Privacy policy link: `https://app.rawboy.link/privacy` (`web/public/privacy.html`, also linked from the app's
      help and its start page). Needed before you publish to everyone (step 4). Keep it in step if Drive access
      changes.
+   - **Verify the domain** (Google: "The website of your homepage URL is not registered to you"): in
+     [Google Search Console](https://search.google.com/search-console), signed in with the **same Google account that
+     owns the Cloud project**, add a *Domain* property `rawboy.link` and verify it with the DNS TXT record
+     (`google-site-verification=…` on `rawboy.link`, in Cloudflare's DNS; Google can add it for you through
+     Cloudflare). If `rawboy.link` is already verified under another account, add the Cloud project's account as an
+     *Owner* in Search Console (Settings → Users and permissions). Then wait about 24 hours before resubmitting. Same
+     property as for search (see [Cloudflare and search engines](cloudflare.md)).
 2. **Audience**: *External*.
 3. **Data access**: *Add or remove scopes*, then tick `.../auth/drive.file` ("See, edit, create and delete only the
    specific Google Drive files you use with this app"). Don't add any other Drive scope.
