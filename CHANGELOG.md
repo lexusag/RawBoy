@@ -1,5 +1,12 @@
 # Changelog
 
+**RawBoy Camera (Android): lock screen camera without the passcode (2026-10-26)**
+
+- Settings has a **Lock screen camera** row: Android keeps the locked phone's camera as a separate choice, and until
+  RawBoy Camera is picked there (Choose, then Always) the power button's double press asked for the passcode first.
+- Unlocking while the camera is open over the lock screen no longer closes it (it left a black screen after the
+  passcode); it stays open as the ordinary camera. The screen turning off still closes it.
+
 **RawBoy Camera (Android): opens with the power button's double press (2026-10-26)**
 
 - RawBoy Camera can be chosen as the phone's default camera (the still-camera and secure still-camera intents), so
