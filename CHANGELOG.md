@@ -1,5 +1,11 @@
 # Changelog
 
+**RawBoy Camera (Android): opens with the power button's double press (2026-10-26)**
+
+- RawBoy Camera can be chosen as the phone's default camera (the still-camera and secure still-camera intents), so
+  the power button's double press opens it. On a locked phone it opens over the lock screen; photos from before the
+  lock aren't shown, opening a new one asks to unlock, and the camera closes when it goes to the background.
+
 **RawBoy Auto (web): several photos analysed at once, and a reopened batch develops at once (2026-10-26)**
 
 - RawBoy Auto (web): on computers with enough cores, photos are analysed on up to 3 decoder workers at once (one per

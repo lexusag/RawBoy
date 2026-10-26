@@ -1,8 +1,12 @@
 package app.rawboy.camera
 
 import android.Manifest
+import android.app.KeyguardManager
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
+import android.provider.MediaStore
 import android.view.KeyEvent
 import android.view.OrientationEventListener
 import android.view.WindowManager
@@ -39,8 +43,16 @@ class CameraActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Opened from the lock screen (the power button's double press on a locked phone, with RawBoy Camera as the
+     * default camera): shown over the lock screen, and closed when it goes to the background, so locking the phone
+     * again doesn't leave it there. Viewing photos asks to unlock first.
+     */
+    private var overLockScreen = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        onLaunch(intent, fresh = savedInstanceState == null)
         enableEdgeToEdge()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContent {
@@ -51,6 +63,7 @@ class CameraActivity : ComponentActivity() {
                     requestLocation = {
                         locationPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
                     },
+                    openPhoto = ::openPhoto,
                 )
             }
         }
@@ -59,6 +72,49 @@ class CameraActivity : ComponentActivity() {
         } else {
             permission.launch(Manifest.permission.CAMERA)
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        onLaunch(intent, fresh = true)
+    }
+
+    private fun onLaunch(intent: Intent?, fresh: Boolean) {
+        overLockScreen = intent?.action == MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE
+        setShowWhenLocked(overLockScreen)
+        setTurnScreenOn(overLockScreen)
+        if (overLockScreen && fresh) viewModel.forgetLastShot()
+    }
+
+    /** The thumbnail: opens the photo in the phone's viewer, after unlocking when the phone is locked. */
+    private fun openPhoto(uri: Uri) {
+        val view = {
+            val intent = Intent(Intent.ACTION_VIEW)
+                .setDataAndType(uri, "image/jpeg")
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            runCatching { startActivity(intent) }
+        }
+        val keyguard = getSystemService(KeyguardManager::class.java)
+        if (!keyguard.isKeyguardLocked) {
+            leaveLockScreen()
+            view()
+            return
+        }
+        keyguard.requestDismissKeyguard(this, object : KeyguardManager.KeyguardDismissCallback() {
+            override fun onDismissSucceeded() {
+                leaveLockScreen()
+                view()
+            }
+        })
+    }
+
+    /** Unlocked: from now on an ordinary camera, which stays open in the background. */
+    private fun leaveLockScreen() {
+        if (!overLockScreen) return
+        overLockScreen = false
+        setShowWhenLocked(false)
+        setTurnScreenOn(false)
     }
 
     /** Volume up / down take a photo (one per press; holding doesn't repeat), as in Google Camera. */
@@ -85,6 +141,11 @@ class CameraActivity : ComponentActivity() {
         orientation.disable()
         viewModel.onPause()
         super.onPause()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (overLockScreen && !isChangingConfigurations) finish()
     }
 }
 

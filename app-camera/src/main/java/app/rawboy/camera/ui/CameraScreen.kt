@@ -13,7 +13,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
 import app.rawboy.camera.capture.FlashMode
 import app.rawboy.view.HistogramView
-import android.content.Intent
+import android.net.Uri
 import android.hardware.camera2.CameraMetadata
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.RepeatMode
@@ -111,7 +111,12 @@ import kotlin.math.roundToInt
 /** Viewfinder with the look controls, shutter and the last photo. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CameraScreen(vm: CameraViewModel, requestPermission: () -> Unit, requestLocation: () -> Unit) {
+fun CameraScreen(
+    vm: CameraViewModel,
+    requestPermission: () -> Unit,
+    requestLocation: () -> Unit,
+    openPhoto: (Uri) -> Unit,
+) {
     val status by vm.status.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
     val frame by vm.frame.collectAsStateWithLifecycle()
@@ -340,12 +345,7 @@ fun CameraScreen(vm: CameraViewModel, requestPermission: () -> Unit, requestLoca
                             modifier = Modifier
                                 .fillMaxSize()
                                 .clip(RoundedCornerShape(8.dp))
-                                .clickable {
-                                    val intent = Intent(Intent.ACTION_VIEW)
-                                        .setDataAndType(shot.uri, "image/jpeg")
-                                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                    runCatching { context.startActivity(intent) }
-                                },
+                                .clickable { openPhoto(shot.uri) },
                         )
                     }
                 }
