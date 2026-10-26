@@ -112,6 +112,11 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private val _lastShot = MutableStateFlow<LastShot?>(null)
     val lastShot = _lastShot.asStateFlow()
 
+    /** Opened over the lock screen: a photo taken before the phone was locked isn't shown. */
+    fun forgetLastShot() {
+        _lastShot.value = null
+    }
+
     private val _message = MutableStateFlow<String?>(null)
     val message = _message.asStateFlow()
 

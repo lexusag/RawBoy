@@ -11,6 +11,12 @@ area before turning red; on the iPhone the square needs iOS 26 (before that the 
 point, shown as a dot), and faces in the frame no longer pull focus away from the point. **Drag the ring** to move the
 point precisely: a 3× loupe shows what's under it, clear of your finger, and it focuses there when you let go. Press and hold to see the photo without the look. The
 **volume buttons** take a photo too; the viewfinder blinks and the phone ticks on each shot.
+**Power button double press** (Android): RawBoy Camera can be the phone's default camera, so pressing the power
+button twice opens it, also on a locked phone. Turn on *Settings → System → Gestures → Quickly open camera*; the
+first double press on an unlocked phone asks which camera to use: pick RawBoy Camera and **Always**. If another
+camera was set to always open, clear it first (*Settings → Apps → that camera → Open by default*). On a locked
+phone it opens over the lock screen without the photos taken before: the thumbnail shows only the new shots and
+asks to unlock before opening one, and the camera closes when the screen turns off.
 **UW · W · T** at the bottom of the viewfinder switches between the ultrawide, wide and telephoto lenses, as in
 Google Camera (each lens that can deliver RAW is offered). The button right of the shutter switches to the
 **selfie camera**, shown only when the front camera delivers RAW; selfies are saved mirrored, as the viewfinder
