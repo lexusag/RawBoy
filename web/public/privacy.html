@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#121212" />
+    <title>Privacy policy · RawBoy Web</title>
+    <meta name="description" content="How RawBoy Web handles your photos and data: everything is developed in your browser; Google Drive access is limited to files you pick or save." />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <!-- Static page served as is (public/), linked from the app's help and the OAuth consent screen (docs/google-drive.md). -->
+    <style>
+      html { background: #121212; }
+      body { max-width: 720px; margin: 0 auto; padding: 40px 16px 64px; color: #ececec; font: 16px/1.6 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+      h1 { font-size: 28px; margin: 0 0 4px; }
+      h2 { font-size: 20px; margin: 32px 0 8px; }
+      a { color: #e8a33d; }
+      .muted { color: #9a9aa2; }
+      li { margin: 4px 0; }
+    </style>
+  </head>
+  <body>
+    <h1>Privacy policy</h1>
+    <p class="muted">RawBoy Web (app.rawboy.link) · Last updated 26 October 2026</p>
+
+    <p>
+      RawBoy Web is a free raw photo editor that runs in your browser. It is made by an independent developer, not a
+      company, and has no accounts, no ads and no analytics. This page explains what happens to your photos and data.
+    </p>
+
+    <h2>Your photos stay in your browser</h2>
+    <ul>
+      <li>Photos you open (from your device or from Google Drive) are decoded and developed inside your browser, with
+        WebAssembly and your GPU. They are never uploaded to RawBoy or to any server run by RawBoy. There is no such
+        server: the site is only static files.</li>
+      <li>Exports are saved where you choose: a download, a folder on your device, your photo library (iPhone and iPad),
+        or a Google Drive folder you pick.</li>
+    </ul>
+
+    <h2>What is stored on your device</h2>
+    <p>
+      To remember your settings between visits, RawBoy keeps a few things in your browser's own storage (local storage,
+      IndexedDB and the origin private file system) on your device only:
+    </p>
+    <ul>
+      <li>preferences such as the last tab, export format and sort order, and your presets;</li>
+      <li>access to folders you opened, so they can be reopened (only if you allow it in the browser);</li>
+      <li>a temporary cache of photo previews, emptied when the app starts again.</li>
+    </ul>
+    <p>
+      None of this is sent anywhere. You can delete it at any time by clearing this site's data in your browser.
+      RawBoy sets no cookies.
+    </p>
+
+    <h2>Google Drive</h2>
+    <p>If you choose <em>From Google Drive</em> or <em>Save to: Google Drive</em>, and only then:</p>
+    <ul>
+      <li>You sign in with Google in a window run by Google, and grant RawBoy the
+        <code>drive.file</code> permission. With it, RawBoy can only see and change the files you pick in Google's file
+        picker and the files RawBoy itself saves to your Drive. It cannot list, read or change anything else in your
+        Drive.</li>
+      <li>Files you pick are downloaded straight from Google into your browser to be developed. Exports you save to
+        Drive are uploaded straight from your browser to the folder you pick. Nothing passes through any other server.</li>
+      <li>RawBoy uses this access only to open the photos you pick and to save your exports. It does not store your
+        Google data on any server, does not share it with anyone, does not use it for advertising and does not use it
+        to train AI or machine learning models.</li>
+      <li>The sign-in token Google gives RawBoy is kept only in the page's memory and expires after an hour; it is gone
+        when you close or reload the page. You can remove RawBoy's access at any time at
+        <a href="https://myaccount.google.com/connections">myaccount.google.com/connections</a>.</li>
+    </ul>
+    <p>
+      RawBoy's use and transfer of information received from Google APIs adheres to the
+      <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>,
+      including the Limited Use requirements.
+    </p>
+
+    <h2>Hosting</h2>
+    <p>
+      The site is served by Cloudflare Pages. Like any web host, Cloudflare processes technical request data (such as
+      your IP address and browser type) to deliver the pages and protect them from abuse, under
+      <a href="https://www.cloudflare.com/privacypolicy/">Cloudflare's privacy policy</a>. RawBoy does not receive or
+      use this data. When you use Google Drive, Google's
+      <a href="https://policies.google.com/privacy">privacy policy</a> applies to your Google account.
+    </p>
+
+    <h2>Changes and contact</h2>
+    <p>
+      If this policy changes, the new version will be posted on this page with a new date. Questions or requests:
+      open an issue at <a href="https://github.com/lexusag/RawBoy/issues">github.com/lexusag/RawBoy/issues</a>.
+    </p>
+
+    <p><a href="./">Back to RawBoy Web</a></p>
+  </body>
+</html>

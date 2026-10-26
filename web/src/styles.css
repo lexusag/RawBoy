@@ -1118,6 +1118,11 @@ input[type='range'] {
   min-width: 0;
 }
 
+.help-about a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
 .help-footer {
   margin: 0;
   font-size: 12px;

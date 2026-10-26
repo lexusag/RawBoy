@@ -56,8 +56,9 @@ You need a Google account. Everything below is free.
    - App home page: `https://app.rawboy.link`.
    - Authorized domain: `rawboy.link` (add `pages.dev` only if you'll use `rawboy.pages.dev` directly).
    - Developer contact: your address.
-   - A privacy policy URL is needed before you publish to everyone (step 4). A short page saying that photos are
-     processed in the browser and only the files you pick or save are accessed is enough.
+   - Privacy policy link: `https://app.rawboy.link/privacy` (`web/public/privacy.html`, also linked from the app's
+     help and its start page). Needed before you publish to everyone (step 4). Keep it in step if Drive access
+     changes.
 2. **Audience**: *External*.
 3. **Data access**: *Add or remove scopes*, then tick `.../auth/drive.file` ("See, edit, create and delete only the
    specific Google Drive files you use with this app"). Don't add any other Drive scope.

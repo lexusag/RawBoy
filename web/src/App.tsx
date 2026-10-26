@@ -226,6 +226,7 @@ export function App() {
                 >
                   Licences
                 </button>
+                <a className="text" href="privacy.html" target="_blank" rel="noopener">Privacy</a>
               </>
             }
           />
