@@ -11,7 +11,9 @@ headers do, and how to get it into Google and Bing. Building and the deploy comm
 - **Deploys** run from `.github/workflows/release.yml` when a GitHub release is published (job `web`). The
   `web-changes` job skips the deploy when nothing the web build reads changed since the commit the live site was
   built from (`/deployed-commit.txt` on the site). To deploy without a new release: Actions → *Release RawBoy* →
-  *Run workflow*, enter an existing tag and tick *Deploy the web build even if unchanged*.
+  *Run workflow*, enter an existing tag and tick *Deploy the web build even if unchanged* (and *Skip building the
+  APKs* to leave the apps alone). The `apk-changes` job likewise skips the APK build when nothing the apps read changed
+  since the last release with APKs, and attaches that release's APKs instead.
 - Repository secrets `CLOUDFLARE_API_TOKEN` (token with *Account → Cloudflare Pages → Edit*) and
   `CLOUDFLARE_ACCOUNT_ID`.
 - **SEO in the build**: title, description, canonical URL, Open Graph / Twitter card, JSON-LD, a static description of

@@ -7,6 +7,8 @@
 # The web deploy is skipped when nothing the web build reads changed since the commit the live site was built from
 # (dist/deployed-commit.txt); run the workflow by hand with "Deploy the web build even if unchanged" to force it,
 # and tick "Skip building the APKs" to only redeploy the website.
+# The APK build is skipped likewise when nothing the apps read changed since the last release with APKs; that
+# release's APKs (named with its own tag) are then attached to this one. "Build the APKs even if unchanged" forces it.
 # Publishing a release only dispatches this workflow on the default branch: caches saved by a run on a tag
 # can't be restored by later tags, so the builds run on main (sources still come from the tag).
 name: Release RawBoy
@@ -25,6 +27,10 @@ on:
         default: false
       skip_apks:
         description: Skip building the APKs (web deploy only)
+        type: boolean
+        default: false
+      force_apks:
+        description: Build the APKs even if unchanged
         type: boolean
         default: false
 
@@ -46,8 +52,65 @@ jobs:
           gh workflow run release.yml --repo "$GITHUB_REPOSITORY"
           --ref "${{ github.event.repository.default_branch }}" -f tag="$TAG"
 
-  apks:
+  # Compares the tag with the newest other release that has APKs. No such release counts as changed. Paths only the
+  # web, iOS or docs read are left out, so anything new counts as an app change.
+  apk-changes:
     if: github.event_name == 'workflow_dispatch' && !inputs.skip_apks
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.check.outputs.build }}
+      base: ${{ steps.check.outputs.base }}
+    env:
+      TAG: ${{ inputs.tag }}
+      FORCE: ${{ inputs.force_apks }}
+      GH_TOKEN: ${{ github.token }}
+      NOT_APP_PATHS: >-
+        :!web :!ios :!docs :!tools :!branding :!*.md :!.dockerignore :!.github/workflows/sync-film.yml
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Check for app changes
+        id: check
+        run: |
+          build() { echo "$1"; echo "build=$2" >> "$GITHUB_OUTPUT"; exit 0; }
+          [ "$FORCE" = true ] && build "Forced build" true
+          base=
+          for t in $(gh release list --exclude-drafts --limit 50 --json tagName -q '.[].tagName'); do
+            [ "$t" = "$TAG" ] && continue
+            n=$(gh release view "$t" --json assets -q '[.assets[].name | select(endswith(".apk"))] | length')
+            [ "$n" -gt 0 ] && { base=$t; break; }
+          done
+          [ -n "$base" ] || build "No earlier release with APKs" true
+          echo "base=$base" >> "$GITHUB_OUTPUT"
+          git fetch --quiet --depth 1 origin tag "$base" || build "Tag $base not found" true
+          changed=$(git diff --name-only "$base" HEAD -- . $NOT_APP_PATHS)
+          [ -n "$changed" ] || build "No app changes since $base" false
+          echo "Changed since $base:"
+          build "$changed" true
+
+  # Unchanged apps: attach the last build's APKs, unless this release already has some.
+  apks-reuse:
+    needs: apk-changes
+    if: needs.apk-changes.outputs.build == 'false'
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag }}
+      BASE: ${{ needs.apk-changes.outputs.base }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Copy APKs from ${{ needs.apk-changes.outputs.base }}
+        run: |
+          have=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets \
+            -q '[.assets[].name | select(endswith(".apk"))] | length')
+          [ "$have" -eq 0 ] || { echo "$TAG already has APKs"; exit 0; }
+          gh release download "$BASE" --repo "$GITHUB_REPOSITORY" --pattern '*.apk' --dir dist
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" dist/*.apk
+
+  apks:
+    needs: apk-changes
+    if: needs.apk-changes.outputs.build == 'true'
     runs-on: ubuntu-latest
     env:
       TAG: ${{ inputs.tag }}
