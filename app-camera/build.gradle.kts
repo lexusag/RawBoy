@@ -20,14 +20,14 @@ val keystoreProperties = Properties().apply {
 
 android {
     namespace = "app.rawboy.camera"
-    compileSdk = 35
+    compileSdk = 36
     // Needed to strip the engine's native library when packaging (unstripped it is ~9x larger).
     ndkVersion = "27.2.12479018"
 
     defaultConfig {
         applicationId = "app.rawboy.camera"
         minSdk = 29
-        targetSdk = 35
+        targetSdk = 36
         versionCode = providers.gradleProperty("rawboy.versionCode").get().toInt()
         versionName = providers.gradleProperty("rawboy.versionName").get()
 
