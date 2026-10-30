@@ -81,6 +81,8 @@ internal data class Shot(
     val meter: MeterArea = CameraViewModel.METER_CENTRE,
     /** A merged burst: frames the raw is worth ([app.rawboy.camera.capture.Still.effectiveFrames]); 1 = one frame. */
     val effectiveFrames: Float = 1f,
+    /** Whether the lens captured this raw in its maximum-resolution sensor mode, for per-mode calibration. */
+    val hiRes: Boolean = false,
 )
 
 /** A finished shot and the sequence number assigned at its shutter, so lock screen launches hide earlier ones. */
@@ -286,8 +288,9 @@ internal object ShotSaver {
             }
         }
         Log.d(TAG, "saved $name in ${ms(started)} ms")
-        shot.viewfinderKey?.let { calibrate(app, rawKey, it, s.lensKey, s.previewScale) }
-        shot.flashGuide?.let { calibrateFlash(app, autoEv, it, CameraSettings.flashGuideKey(s.lensKey, shot.flashDistanceKnown)) }
+        val key = s.lensKey(shot.hiRes)
+        shot.viewfinderKey?.let { calibrate(app, rawKey, it, key, s.previewScale(shot.hiRes)) }
+        shot.flashGuide?.let { calibrateFlash(app, autoEv, it, CameraSettings.flashGuideKey(key, shot.flashDistanceKnown)) }
         withContext(Dispatchers.IO) { findJpeg(app, name) }?.let { uri ->
             withContext(Dispatchers.IO) { thumbnail(app, uri) }?.let { _lastShot.value = SavedShot(shot.id, LastShot(uri, it)) }
         }

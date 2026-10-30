@@ -1,5 +1,11 @@
 # Changelog
 
+**RawBoy Camera (Android): full-resolution option (2026-10-30)**
+
+- New switch in Settings (labelled with the megapixels, e.g. **50 MP** on a Pixel 9 Pro): shoots the raw (and DNG) in
+  the sensor's maximum-resolution mode on lenses that have one. Shown only on phones that offer it. One raw per shot (no
+  frame merging); the viewfinder pauses while it shoots.
+
 **Crop & rotate: smooth straighten slider (2026-10-30)**
 
 - Crop & rotate (Android, iOS, web): the Straighten slider now rotates smoothly instead of snapping in 0.1° steps,

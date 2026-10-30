@@ -164,7 +164,15 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private val _lenses = MutableStateFlow<List<CameraController.Info>>(emptyList())
     val lenses = _lenses.asStateFlow()
 
-    /** Lenses per side (true = front), discovered once. */
+    /** Megapixels of the largest maximum-resolution sensor mode offered by any lens, 0 if none: the setting shows only then. */
+    private val _maxResMp = MutableStateFlow(0)
+    val maxResMp = _maxResMp.asStateFlow()
+
+    /** Whether the current lens shoots in its maximum-resolution sensor mode (burst merging isn't used then). */
+    private val _hiRes = MutableStateFlow(false)
+    val hiRes = _hiRes.asStateFlow()
+
+    /** Lenses per side (true = front), discovered once (again when the maximum-resolution setting changes). */
     private var lensesBySide: Map<Boolean, List<CameraController.Info>>? = null
 
     /** Whether the front camera can deliver RAW (the selfie flip button shows only then). */
@@ -297,8 +305,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 val inf = info ?: run {
                     val sides = lensesBySide ?: withContext(Dispatchers.Default) {
                         mapOf(
-                            false to controller.lenses(CameraMetadata.LENS_FACING_BACK),
-                            true to controller.lenses(CameraMetadata.LENS_FACING_FRONT),
+                            false to controller.lenses(CameraMetadata.LENS_FACING_BACK, _settings.value.maxRes),
+                            true to controller.lenses(CameraMetadata.LENS_FACING_FRONT, _settings.value.maxRes),
                         )
                     }.also { lensesBySide = it }
                     _frontAvailable.value = sides[true].orEmpty().isNotEmpty()
@@ -307,10 +315,13 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     val front = _settings.value.front && _frontAvailable.value
                     val all = sides.getValue(front)
                     _lenses.value = all
+                    _maxResMp.value = sides.values.flatten().mapNotNull { it.maxResSize }
+                        .maxOfOrNull { Math.round(it.width.toLong() * it.height / 1e6f) } ?: 0
                     if (front != _settings.value.front) change { it.copy(front = front) }
                     (all.firstOrNull { it.label == _settings.value.lens } ?: all.first { it.label == "W" }).also { info = it }
                 }
                 _flashAvailable.value = inf.hasFlash
+                _hiRes.value = inf.hiRes
                 controller.start(inf, st)
                 _frame.value = ViewfinderRenderer.Frame(
                     bufferWidth = inf.previewSize.width,
@@ -319,7 +330,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     fullWidth = inf.viewfinderWidth,
                     fullHeight = inf.viewfinderHeight,
                     gamma = inf.previewGamma,
-                    scale = _settings.value.previewScale,
+                    scale = _settings.value.previewScale(inf.hiRes),
                     mirror = inf.isFront,
                 )
                 _status.value = CameraStatus.READY
@@ -386,6 +397,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun switchTo(lens: CameraController.Info) {
         info = lens
+        _hiRes.value = lens.hiRes
         _focusPoint.value = null // the restart ends any focus lock
         _dragPoint.value = null
         // The live develop belongs to the old lens: start the new one fresh.
@@ -406,7 +418,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val state = controller.frames.value
         val boost = state?.postRawBoost ?: 1f
         val stillGain = state?.let { controller.stillGain(it) } ?: 1f
-        val scale = _settings.value.previewScale / boost * stillGain
+        val scale = _settings.value.previewScale(info?.hiRes == true) / boost * stillGain
         // The raw's colours for the ISP's current white balance and colour matrix (they follow AWB).
         val color = state?.previewColor
         if (scale != f.scale || !color.contentEquals(f.color)) _frame.value = f.copy(scale = scale, color = color)
@@ -520,6 +532,17 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setJpegQuality(q: Int) = change { it.copy(jpegQuality = q.coerceIn(CameraSettings.MIN_QUALITY, 100)) }
     fun setKeepDng(keep: Boolean) = change { it.copy(keepDng = keep) }
     fun setSmallExport(on: Boolean) = change { it.copy(smallExport = on) }
+
+    /** Switches to the maximum-resolution sensor mode (or back); the lenses are listed again with the new size and the camera restarts. */
+    fun setMaxRes(on: Boolean) {
+        if (on == _settings.value.maxRes) return
+        change { it.copy(maxRes = on) }
+        lensesBySide = null
+        info = null
+        live = null
+        _shaderParams.value = null
+        if (activeCaptures == 0) restartCamera() else restartAfterCapture = true
+    }
     fun setRememberLast(on: Boolean) = change { it.copy(rememberLast = on) }
     fun setShowHistogram(on: Boolean) = change { it.copy(showHistogram = on) }
     fun setBurstMode(mode: BurstMode) = change { it.copy(burstMode = mode) }
@@ -579,16 +602,17 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun shutter() {
         if (!resumed || _status.value != CameraStatus.READY || _merging.value) return
         val settings = _settings.value
+        val hiRes = info?.hiRes == true
         val flash = settings.flash.takeIf { info?.hasFlash == true } ?: FlashMode.OFF
-        // Flash shots are single frames (CameraController.captureDng).
-        val burstFrames = settings.burstFrames(lowLight.value)
+        // Flash and maximum-resolution shots are single frames (CameraController.captureDng).
+        val burstFrames = if (hiRes) 1 else settings.burstFrames(lowLight.value)
         val burst = burstFrames > 1 && flash == FlashMode.OFF
         // A flash shot's raw is lit by the flash, the viewfinder wasn't: no calibration from it.
         val viewfinderKey = if (flash == FlashMode.OFF) live?.stats?.key else null
         val mayHaveFace = info?.hasFaceDetection != true || controller.frames.value?.faces?.isNotEmpty() != false
         controller.frames.value?.let { f ->
-            Log.d(TAG, "shutter ${settings.lensKey}: preview ISO ${f.iso.toInt()}, ${f.exposureNs / 1000} µs, boost ${f.postRawBoost}, " +
-                "tonemap ${f.tonemapMode}, viewfinder key $viewfinderKey, preview scale ${settings.previewScale}, " +
+            Log.d(TAG, "shutter ${settings.lensKey(hiRes)}: preview ISO ${f.iso.toInt()}, ${f.exposureNs / 1000} µs, boost ${f.postRawBoost}, " +
+                "tonemap ${f.tonemapMode}, viewfinder key $viewfinderKey, preview scale ${settings.previewScale(hiRes)}, " +
                 "colour ${f.previewColor?.joinToString(" ") { "%.3f".format(it) } ?: "sRGB"}, " +
                 "wb ${live?.defaults?.let { "${it.temperature.toInt()}K/${it.tint.toInt()}" }} -> " +
                 "${live?.auto?.let { "${it.temperature.toInt()}K/${it.tint.toInt()}" }}")
@@ -600,7 +624,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         // Runs in ShotSaver.scope so finishing LockScreenCameraActivity never cancels an in-flight capture.
         ShotSaver.scope.launch {
             try {
-                val shot = capture(shotId, settings, viewfinderKey, flash, burstFrames).copy(mayHaveFace = mayHaveFace)
+                val shot = capture(shotId, settings, hiRes, viewfinderKey, flash, burstFrames).copy(mayHaveFace = mayHaveFace)
                 ShotSaver.enqueue(app, shot)
             } catch (e: Throwable) {
                 Log.w(TAG, "capture", e)
@@ -626,7 +650,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /** Captures a raw and saves it as DNG (in Pictures/<Edition.FOLDER>/RAW, or a temporary file). */
-    private suspend fun capture(shotId: Long, settings: CameraSettings, viewfinderKey: Float?, flash: FlashMode, burstFrames: Int): Shot {
+    private suspend fun capture(shotId: Long, settings: CameraSettings, hiRes: Boolean, viewfinderKey: Float?, flash: FlashMode, burstFrames: Int): Shot {
         val resolver = app.contentResolver
         val baseName = "IMG_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ROOT).format(Date())
         val degrees = deviceDegrees
@@ -642,7 +666,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             val result = try {
                 withContext(Dispatchers.IO) {
                     val out = resolver.openOutputStream(uri, "w") ?: throw java.io.IOException("Cannot write $name")
-                    val result = out.buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide, burstFrames, fix) { onShutter() } }
+                    val result = out.buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix) { onShutter() } }
                     fix?.let { addGps(uri, it) }
                     MediaStoreOutput.publish(resolver, uri)
                     result
@@ -652,12 +676,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 throw t
             }
             Log.d(TAG, "$name: capture + DNG write ${(System.nanoTime() - dngStart) / 1_000_000} ms")
-            Shot(shotId, uri, name, null, settings, viewfinderKey, isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames)
+            Shot(shotId, uri, name, null, settings, viewfinderKey, isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes)
         } else {
             val file = File(app.cacheDir, "$baseName-$shotId.dng")
             val result = try {
                 withContext(Dispatchers.IO) {
-                    val result = file.outputStream().buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide, burstFrames, fix) { onShutter() } }
+                    val result = file.outputStream().buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix) { onShutter() } }
                     fix?.let { addGps(Uri.fromFile(file), it) }
                     result
                 }
@@ -665,7 +689,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 file.delete()
                 throw t
             }
-            Shot(shotId, Uri.fromFile(file), "$baseName.dng", file, settings, viewfinderKey, isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames)
+            Shot(shotId, Uri.fromFile(file), "$baseName.dng", file, settings, viewfinderKey, isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes)
         }
     }
 

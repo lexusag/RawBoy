@@ -73,7 +73,8 @@ shows them.
   setting as in Settings.
 - **Settings:** JPEG quality; whether to keep the DNG (off by default: only the JPEG is saved); **Smaller photos**
   (on by default: 3000 px on the long side, area-downscaled from the full-resolution develop, with the grain sized to
-  the smaller photo and a light sharpening after the downscale; off saves full resolution, unsharpened); **Merge 8 frames** (see above); **Shutter sound** (off by default: a click on each
+  the smaller photo and a light sharpening after the downscale; off saves full resolution, unsharpened); **50 MP / 48 MP**
+  (shown when a lens offers a maximum-resolution raw stream of the same field of view, such as 50 MP `RAW10` on the Pixel 9 Pro's main `W` lens: writes a 16-bit Bayer DNG via `MaxResDngWriter` — remosaicing 4×4 Quad-Bayer streams into standard 2×2 Bayer — and develops the JPEG from it, while keeping normal resolution on virtual crop lenses; frame merging is off on full-resolution lenses); **Merge 8 frames** (see above); **Shutter sound** (off by default: a click on each
   shot; where the law requires it, such as Japan and Korea, Android or iOS reports so and it is always on and greyed out,
   as it is on iPhones before iOS 18);
   **Geotag** (off by default; see below); **QR codes** (on by default; see above);

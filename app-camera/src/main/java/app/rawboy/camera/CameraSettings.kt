@@ -19,6 +19,11 @@ data class CameraSettings(
     /** Save photos at [SMALL_LONG_SIDE] px on the long side instead of full size. */
     val smallExport: Boolean = true,
     /**
+     * Shoot at the lens's maximum-resolution sensor mode (50 MP on a Pixel 9 Pro) on lenses that have one; others keep
+     * their normal size. One raw per shot: no frame merging.
+     */
+    val maxRes: Boolean = false,
+    /**
      * Keep the camera (facing, lens), look and sliders between launches. Off: each launch starts on the back
      * W lens with the default look and sliders. Output settings and calibration are always kept.
      */
@@ -50,16 +55,22 @@ data class CameraSettings(
     /** Flash for the next shots (used only on lenses with a flash). */
     val flash: FlashMode = FlashMode.OFF,
 ) {
-    /** The lens's key for per-lens values: the label, prefixed with "F" on the front side. */
-    val lensKey: String get() = lensKey(front, lens)
+    /** The lens's key for per-lens values: the label, prefixed with "H" in maximum-resolution mode, "F" on the front side. */
+    fun lensKey(hiRes: Boolean = false): String = lensKey(front, lens, hiRes)
+    val lensKey: String get() = lensKey(false)
 
-    val previewScale: Float get() = previewScales[lensKey] ?: 1f
+    fun previewScale(hiRes: Boolean = false): Float = previewScales[lensKey(hiRes)] ?: previewScales[lensKey] ?: 1f
+    val previewScale: Float get() = previewScale(false)
 
     /** The current lens's flash guides; the one for shots without a focus distance is kept under "<lens>?". */
-    val flashGuide: FlashGuides get() = FlashGuides(
-        flashGuides[lensKey] ?: CameraController.DEFAULT_FLASH_GUIDE,
-        flashGuides[flashGuideKey(lensKey, distanceKnown = false)] ?: CameraController.DEFAULT_FLASH_GAIN_NO_DISTANCE,
-    )
+    fun flashGuide(hiRes: Boolean = false): FlashGuides {
+        val k = lensKey(hiRes)
+        return FlashGuides(
+            flashGuides[k] ?: flashGuides[lensKey] ?: CameraController.DEFAULT_FLASH_GUIDE,
+            flashGuides[flashGuideKey(k, distanceKnown = false)] ?: flashGuides[flashGuideKey(lensKey, distanceKnown = false)] ?: CameraController.DEFAULT_FLASH_GAIN_NO_DISTANCE,
+        )
+    }
+    val flashGuide: FlashGuides get() = flashGuide(false)
 
     /** The long side to save at, or null for full size. */
     val maxLongSide: Int? get() = if (smallExport) SMALL_LONG_SIDE else null
@@ -79,7 +90,8 @@ data class CameraSettings(
         const val MIN_SCALE = 1f / 32
         const val MAX_SCALE = 32f
 
-        fun lensKey(front: Boolean, lens: String) = if (front) "F$lens" else lens
+        fun lensKey(front: Boolean, lens: String, hiRes: Boolean = false) =
+            (if (hiRes) "H" else "") + (if (front) "F" else "") + lens
 
         fun flashGuideKey(lensKey: String, distanceKnown: Boolean) = if (distanceKnown) lensKey else "$lensKey?"
     }
@@ -103,6 +115,7 @@ object CameraSettingsStore {
             jpegQuality = p.getInt("jpegQuality", d.jpegQuality).coerceIn(CameraSettings.MIN_QUALITY, 100),
             keepDng = p.getBoolean("keepDng", d.keepDng),
             smallExport = p.getBoolean("smallExport", d.smallExport),
+            maxRes = p.getBoolean("maxRes", d.maxRes),
             rememberLast = p.getBoolean("rememberLast", d.rememberLast),
             showHistogram = p.getBoolean("showHistogram", d.showHistogram),
             burstMode = runCatching { BurstMode.valueOf(p.getString("burstMode", null)!!) }.getOrDefault(d.burstMode),
@@ -143,6 +156,7 @@ object CameraSettingsStore {
             .putInt("jpegQuality", s.jpegQuality)
             .putBoolean("keepDng", s.keepDng)
             .putBoolean("smallExport", s.smallExport)
+            .putBoolean("maxRes", s.maxRes)
             .putBoolean("rememberLast", s.rememberLast)
             .putBoolean("showHistogram", s.showHistogram)
             .putString("burstMode", s.burstMode.name)

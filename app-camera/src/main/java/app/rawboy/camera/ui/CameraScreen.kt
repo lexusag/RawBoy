@@ -78,8 +78,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -143,6 +146,7 @@ fun CameraScreen(
     val dragPoint by vm.dragPoint.collectAsStateWithLifecycle()
     val focusSize by vm.controller.focusSize.collectAsStateWithLifecycle()
     val flashAvailable by vm.flashAvailable.collectAsStateWithLifecycle()
+    val hiRes by vm.hiRes.collectAsStateWithLifecycle()
     val histogram by vm.histogram.collectAsStateWithLifecycle()
     val lowLight by vm.lowLight.collectAsStateWithLifecycle()
     val qrCode by vm.qrCode.collectAsStateWithLifecycle()
@@ -210,7 +214,7 @@ fun CameraScreen(
                         .padding(start = 12.dp),
                 )
                 RawButton(settings.keepDng) { vm.setKeepDng(!settings.keepDng) }
-                BurstButton(settings.burstMode, lowLight) { vm.setBurstMode(settings.burstMode.next()) }
+                BurstButton(settings.burstMode, lowLight, hiRes) { vm.setBurstMode(settings.burstMode.next()) }
                 if (flashAvailable) FlashButton(settings.flash, vm::cycleFlash)
                 HelpButton(appName, CAMERA_HELP, onOpenChange = { showHelp = it })
                 IconButton(onClick = { showSettings = true }) {
@@ -634,8 +638,10 @@ private fun LookSlider(
 
 @Composable
 private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, requestLocation: () -> Unit) {
+    val maxResMp by vm.maxResMp.collectAsState()
     Column(
         Modifier
+            .verticalScroll(rememberScrollState())
             .padding(horizontal = 24.dp)
             .padding(bottom = 32.dp),
     ) {
@@ -675,6 +681,15 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             checked = settings.smallExport,
             onChange = vm::setSmallExport,
         )
+        if (maxResMp > 0) {
+            Spacer(Modifier.height(16.dp))
+            SettingSwitch(
+                title = "$maxResMp MP",
+                subtitle = "Full sensor resolution on lenses that have it. Slower to save, no frame merging, no live viewfinder while it shoots",
+                checked = settings.maxRes,
+                onChange = vm::setMaxRes,
+            )
+        }
         Spacer(Modifier.height(16.dp))
         Text("Merge ${CameraSettings.BURST_FRAMES} frames", style = MaterialTheme.typography.bodyMedium)
         Text(
@@ -775,12 +790,13 @@ private fun RawButton(keep: Boolean, onClick: () -> Unit) {
  * shot (On, or Auto in low light), gray otherwise; Auto carries a small "A".
  */
 @Composable
-private fun BurstButton(mode: BurstMode, lowLight: Boolean, onClick: () -> Unit) {
-    val active = mode.merges(lowLight)
-    val state = when (mode) {
-        BurstMode.ON -> "On"
-        BurstMode.AUTO -> if (active) "Auto, merging (low light)" else "Auto, not merging (enough light)"
-        BurstMode.OFF -> "Off"
+private fun BurstButton(mode: BurstMode, lowLight: Boolean, hiRes: Boolean, onClick: () -> Unit) {
+    val active = !hiRes && mode.merges(lowLight)
+    val state = when {
+        hiRes -> "Inactive (full sensor resolution)"
+        mode == BurstMode.ON -> "On"
+        mode == BurstMode.AUTO -> if (active) "Auto, merging (low light)" else "Auto, not merging (enough light)"
+        else -> "Off"
     }
     val tint = if (active) MaterialTheme.colorScheme.primary else LocalContentColor.current.copy(alpha = 0.6f)
     IconButton(onClick = onClick, modifier = Modifier.semantics { stateDescription = state }) {
