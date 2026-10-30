@@ -37,37 +37,35 @@
             android:name=".CameraActivity"
             android:exported="true"
             android:screenOrientation="portrait"
-            android:launchMode="singleTop">
+            android:launchMode="singleTop"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <!-- Lets the camera be picked as the default camera, which the power button's double press opens on an
-                 unlocked phone (STILL_IMAGE_CAMERA). -->
+            <!-- Lets the camera be picked as the default camera, which the power button's double press opens.
+                 Unlocked phone: STILL_IMAGE_CAMERA; locked: STILL_IMAGE_CAMERA_SECURE, shown over the lock screen. -->
             <intent-filter>
                 <action android:name="android.media.action.STILL_IMAGE_CAMERA" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
-        </activity>
-
-        <!-- The double press on a locked phone (STILL_IMAGE_CAMERA_SECURE): its own task, apart from the ordinary
-             camera's, and closed when the screen turns off, so each locked launch is a fresh camera over the lock
-             screen. Sharing the ordinary task brought back whatever was on top of it (the photo viewer, or the
-             camera from before the lock, neither allowed over the lock screen): a black screen. -->
-        <activity
-            android:name=".LockScreenCameraActivity"
-            android:exported="true"
-            android:screenOrientation="portrait"
-            android:launchMode="singleTop"
-            android:taskAffinity=":lockscreen"
-            android:excludeFromRecents="true"
-            android:showWhenLocked="true"
-            android:turnScreenOn="true">
             <intent-filter>
                 <action android:name="android.media.action.STILL_IMAGE_CAMERA_SECURE" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+
+        <!-- Alias in case the system remembered LockScreenCameraActivity from a previous build. -->
+        <activity-alias
+            android:name=".LockScreenCameraActivity"
+            android:targetActivity=".CameraActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.media.action.STILL_IMAGE_CAMERA_SECURE" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity-alias>
 
         <!-- Keeps the process and CPU awake while queued shots finish developing after the camera closes. -->
         <service

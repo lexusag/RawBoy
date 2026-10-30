@@ -2,13 +2,11 @@ package app.rawboy.camera
 
 import android.Manifest
 import android.app.KeyguardManager
-import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.net.wifi.WifiNetworkSuggestion
@@ -34,9 +32,6 @@ import androidx.lifecycle.lifecycleScope
 import app.rawboy.camera.qr.QrPayload
 import app.rawboy.camera.ui.CameraScreen
 import kotlinx.coroutines.launch
-
-/** The lock screen camera: [CameraActivity] in its own task (see the manifest). */
-class LockScreenCameraActivity : CameraActivity()
 
 open class CameraActivity : ComponentActivity() {
     private val viewModel: CameraViewModel by viewModels()
@@ -69,13 +64,6 @@ open class CameraActivity : ComponentActivity() {
      * again doesn't leave it there. Viewing photos asks to unlock first.
      */
     private var overLockScreen = false
-
-    /**
-     * Launched by the lock screen action, even if unlocked since: closes with its task when the screen turns off, also
-     * from the background (behind the photo viewer, say), so the next locked double press starts a fresh camera
-     * instead of bringing back one that can't show over the lock screen.
-     */
-    private var closeOnScreenOff: BroadcastReceiver? = null
 
     /** Screen turned off while Camera2 was still reading a shot: close as soon as the raw is captured. */
     private var closeAfterCapture = false
@@ -121,16 +109,9 @@ open class CameraActivity : ComponentActivity() {
         val secure = intent?.action == MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE
         // The secure action on an unlocked phone (Settings' "Lock screen camera" choice) is an ordinary launch.
         overLockScreen = secure && getSystemService(KeyguardManager::class.java).isKeyguardLocked
-        setShowWhenLocked(overLockScreen)
-        setTurnScreenOn(overLockScreen)
+        setShowWhenLocked(true)
+        setTurnScreenOn(true)
         if (overLockScreen && fresh) viewModel.forgetLastShot()
-        if (secure && closeOnScreenOff == null) {
-            val receiver = object : BroadcastReceiver() {
-                override fun onReceive(context: Context, intent: Intent) = closeWhenCaptured()
-            }
-            ContextCompat.registerReceiver(this, receiver, IntentFilter(Intent.ACTION_SCREEN_OFF), ContextCompat.RECEIVER_NOT_EXPORTED)
-            closeOnScreenOff = receiver
-        }
     }
 
     /**
@@ -139,12 +120,6 @@ open class CameraActivity : ComponentActivity() {
      */
     private fun closeWhenCaptured() {
         if (viewModel.capturing.value == 0) finishAndRemoveTask() else closeAfterCapture = true
-    }
-
-    override fun onDestroy() {
-        closeOnScreenOff?.let { unregisterReceiver(it) }
-        closeOnScreenOff = null
-        super.onDestroy()
     }
 
     /**
@@ -244,8 +219,6 @@ open class CameraActivity : ComponentActivity() {
     private fun leaveLockScreen() {
         if (!overLockScreen) return
         overLockScreen = false
-        setShowWhenLocked(false)
-        setTurnScreenOn(false)
     }
 
     /** Volume up / down take a photo (one per press; holding doesn't repeat), as in Google Camera. */
