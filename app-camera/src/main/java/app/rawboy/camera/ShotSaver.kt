@@ -35,6 +35,7 @@ import app.rawboy.gl.ShaderParams
 import app.rawboy.lens.LensTransform
 import app.rawboy.lut.LutData
 import app.rawboy.lut.LutLoader
+import app.rawboy.raw.DngJxlNative
 import app.rawboy.raw.RawImage
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -293,6 +294,20 @@ internal object ShotSaver {
         shot.flashGuide?.let { calibrateFlash(app, autoEv, it, CameraSettings.flashGuideKey(key, shot.flashDistanceKnown)) }
         withContext(Dispatchers.IO) { findJpeg(app, name) }?.let { uri ->
             withContext(Dispatchers.IO) { thumbnail(app, uri) }?.let { _lastShot.value = SavedShot(shot.id, LastShot(uri, it)) }
+        }
+        // The JPEG came from the uncompressed raw; now the kept DNG shrinks to a lossy JPEG XL one.
+        if (s.keepDng && s.lossyDng && shot.temporary == null) withContext(Dispatchers.IO) { compressDng(app, shot) }
+    }
+
+    /** Re-saves the kept DNG as a lossy JPEG XL DNG, in place. Best effort: the uncompressed DNG stays if it fails. IO thread. */
+    private fun compressDng(app: Context, shot: Shot) {
+        val start = System.nanoTime()
+        try {
+            val result = app.contentResolver.openFileDescriptor(shot.dng, "rw")?.use { DngJxlNative.transcode(it.fd) }
+            Log.d(TAG, "${shot.name}: lossy JPEG XL DNG $result in ${(System.nanoTime() - start) / 1_000_000} ms")
+        } catch (e: Throwable) {
+            Log.w(TAG, "lossy DNG ${shot.name}", e)
+            _errors.tryEmit("${shot.name}.dng stays uncompressed: ${e.message ?: e.javaClass.simpleName}")
         }
     }
 

@@ -32,7 +32,7 @@ JPEG XL DNGs then fail to open.
 How it's built (`engine/src/main/cpp/dng_sdk.cmake`, shared by Android and RawBoy Web's `web/native`):
 
 - libjxl: the copy bundled with the SDK (`jxl-static`, `jxl_threads-static`).
-- Read-only, without the XMP toolkit (`qDNGUseXMP=0`): `dng_validate`, `dng_xmp_sdk`
+- Reads, and writes lossy JPEG XL DNGs (`dng_transcode.cpp`, RawBoy Camera), without the XMP toolkit (`qDNGUseXMP=0`): `dng_validate`, `dng_xmp_sdk`
   and `dng_update_meta` are left out, and two unguarded XMP uses in `dng_jxl.cpp`
   are wrapped in `#if qDNGUseXMP` in a patched copy at configure time (the build
   stops with a clear error if a future SDK version changes that code).

@@ -1,0 +1,12 @@
+# Host test of the lossy JPEG XL DNG writer (engine/src/main/cpp/dng_transcode.cpp); see run.sh.
+cmake_minimum_required(VERSION 3.20)
+project(dng_jxl_test CXX C)
+set(CMAKE_CXX_STANDARD 17)
+set(cpp "${CMAKE_CURRENT_SOURCE_DIR}/../../engine/src/main/cpp")
+set(RAWBOY_DNG_SDK_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/dng_sdk")
+set(RAWBOY_DNG_PLATFORM qLinux=1)
+include("${cpp}/dng_sdk.cmake")
+add_executable(dng_jxl_test test.cpp "${cpp}/dng_transcode.cpp")
+target_compile_definitions(dng_jxl_test PRIVATE RAWBOY_WITH_DNG_SDK=1)
+target_include_directories(dng_jxl_test PRIVATE "${cpp}")
+target_link_libraries(dng_jxl_test PRIVATE dng_sdk)
