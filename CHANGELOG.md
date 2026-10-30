@@ -1,5 +1,12 @@
 # Changelog
 
+**RawBoy Camera (Android): lock screen camera always opens ready to shoot (2026-10-30)**
+
+- A double press on a locked phone after opening a photo from the lock screen camera (unlock, view, lock again) no
+  longer hangs on a black screen: the lock screen camera now has its own task, closes when the screen turns off
+  (also from the background and after unlocking), and the photo viewer, links and Wi-Fi settings open in their own
+  tasks. After updating, tap **Choose** next to *Lock screen camera* in Settings once more.
+
 **RawBoy Web: sliders work with a stylus on tablets (2026-10-30)**
 
 - RawBoy and Auto (web): sliders now respond to a stylus (such as the S Pen on a Samsung Galaxy Tab): horizontal drags

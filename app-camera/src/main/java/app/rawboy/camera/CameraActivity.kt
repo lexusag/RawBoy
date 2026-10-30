@@ -2,10 +2,13 @@ package app.rawboy.camera
 
 import android.Manifest
 import android.app.KeyguardManager
+import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipDescription
 import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.net.wifi.WifiNetworkSuggestion
@@ -30,7 +33,10 @@ import androidx.core.content.ContextCompat
 import app.rawboy.camera.qr.QrPayload
 import app.rawboy.camera.ui.CameraScreen
 
-class CameraActivity : ComponentActivity() {
+/** The lock screen camera: [CameraActivity] in its own task (see the manifest). */
+class LockScreenCameraActivity : CameraActivity()
+
+open class CameraActivity : ComponentActivity() {
     private val viewModel: CameraViewModel by viewModels()
 
     private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -57,10 +63,17 @@ class CameraActivity : ComponentActivity() {
 
     /**
      * Opened from the lock screen (the power button's double press on a locked phone, with RawBoy Camera as the
-     * default camera): shown over the lock screen, and closed when it goes to the background, so locking the phone
+     * default camera): shown over the lock screen, and closed when the screen turns off, so locking the phone
      * again doesn't leave it there. Viewing photos asks to unlock first.
      */
     private var overLockScreen = false
+
+    /**
+     * Launched by the lock screen action, even if unlocked since: closes with its task when the screen turns off, also
+     * from the background (behind the photo viewer, say), so the next locked double press starts a fresh camera
+     * instead of bringing back one that can't show over the lock screen.
+     */
+    private var closeOnScreenOff: BroadcastReceiver? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -94,20 +107,39 @@ class CameraActivity : ComponentActivity() {
     }
 
     private fun onLaunch(intent: Intent?, fresh: Boolean) {
+        val secure = intent?.action == MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE
         // The secure action on an unlocked phone (Settings' "Lock screen camera" choice) is an ordinary launch.
-        overLockScreen = intent?.action == MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE &&
-            getSystemService(KeyguardManager::class.java).isKeyguardLocked
+        overLockScreen = secure && getSystemService(KeyguardManager::class.java).isKeyguardLocked
         setShowWhenLocked(overLockScreen)
         setTurnScreenOn(overLockScreen)
         if (overLockScreen && fresh) viewModel.forgetLastShot()
+        if (secure && closeOnScreenOff == null) {
+            val receiver = object : BroadcastReceiver() {
+                override fun onReceive(context: Context, intent: Intent) = finishAndRemoveTask()
+            }
+            ContextCompat.registerReceiver(this, receiver, IntentFilter(Intent.ACTION_SCREEN_OFF), ContextCompat.RECEIVER_NOT_EXPORTED)
+            closeOnScreenOff = receiver
+        }
     }
+
+    override fun onDestroy() {
+        closeOnScreenOff?.let { unregisterReceiver(it) }
+        closeOnScreenOff = null
+        super.onDestroy()
+    }
+
+    /**
+     * Another app (photo viewer, browser, dialler, Wi-Fi settings) in its own task: in the camera's task it was what a
+     * later lock screen launch brought back, and it can't show over the lock screen.
+     */
+    private fun startOutside(intent: Intent) = startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
 
     /** The thumbnail: opens the photo in the phone's viewer, after unlocking when the phone is locked. */
     private fun openPhoto(uri: Uri) = whenUnlocked {
         val intent = Intent(Intent.ACTION_VIEW)
             .setDataAndType(uri, "image/jpeg")
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        runCatching { startActivity(intent) }
+        runCatching { startOutside(intent) }
     }
 
     /**
@@ -120,7 +152,7 @@ class CameraActivity : ComponentActivity() {
             is QrPayload.Text -> copy("QR code", code.text)
             is QrPayload.Link -> whenUnlocked {
                 val intent = Intent(Intent.ACTION_VIEW, Uri.parse(code.url)).addCategory(Intent.CATEGORY_BROWSABLE)
-                if (runCatching { startActivity(intent) }.isFailure) copy("Link", code.url)
+                if (runCatching { startOutside(intent) }.isFailure) copy("Link", code.url)
             }
             is QrPayload.Action -> whenUnlocked {
                 val uri = Uri.parse(code.uri)
@@ -129,7 +161,7 @@ class CameraActivity : ComponentActivity() {
                     "smsto" -> Intent(Intent.ACTION_SENDTO, uri).apply { code.body?.let { putExtra("sms_body", it) } }
                     else -> Intent(Intent.ACTION_VIEW, uri)
                 }
-                if (runCatching { startActivity(intent) }.isFailure) copy("QR code", code.text)
+                if (runCatching { startOutside(intent) }.isFailure) copy("QR code", code.text)
             }
             is QrPayload.Wifi -> whenUnlocked { joinWifi(code) }
         }
@@ -159,7 +191,7 @@ class CameraActivity : ComponentActivity() {
         }
         w.password?.let { copy("Wi-Fi password", it, sensitive = true) }
         viewModel.showMessage(if (w.password != null) "Password copied: choose ${w.ssid} in Wi-Fi settings" else "Choose ${w.ssid} in Wi-Fi settings")
-        runCatching { startActivity(Intent(Settings.ACTION_WIFI_SETTINGS)) }
+        runCatching { startOutside(Intent(Settings.ACTION_WIFI_SETTINGS)) }
     }
 
     private fun copy(label: String, text: String, sensitive: Boolean = false) {
@@ -229,7 +261,7 @@ class CameraActivity : ComponentActivity() {
      */
     override fun onStop() {
         super.onStop()
-        if (overLockScreen && !isChangingConfigurations && !getSystemService(PowerManager::class.java).isInteractive) finish()
+        if (overLockScreen && !isChangingConfigurations && !getSystemService(PowerManager::class.java).isInteractive) finishAndRemoveTask()
     }
 
     /** Unlocked while it was open: from now on an ordinary camera. */
