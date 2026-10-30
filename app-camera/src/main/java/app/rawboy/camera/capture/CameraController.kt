@@ -24,6 +24,7 @@ import android.hardware.camera2.params.TonemapCurve
 import android.location.Location
 import android.media.Image
 import android.media.ImageReader
+import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.util.Size
@@ -132,6 +133,12 @@ class CameraController(context: Context) : AutoCloseable {
         val cameraToSrgb: DoubleArray?,
         /** The camera (the logical one when a lens is streamed from it) has a flash unit. */
         val hasFlash: Boolean,
+        /** The lens's largest RAW_SENSOR size in its maximum-resolution sensor mode (50 MP on a Pixel 9 Pro), or null. */
+        val maxResSize: Size? = null,
+        /** ImageFormat of the maximum-resolution raw: RAW_SENSOR, or RAW10 where that is all the lens offers (Pixel 9 Pro). */
+        val maxResFormat: Int = ImageFormat.RAW_SENSOR,
+        /** [rawSize] is the [maxResSize]: the raw stream and its stills use the maximum-resolution sensor mode. */
+        val hiRes: Boolean = false,
     ) {
         /** The lens can focus (a fixed-focus lens reports a minimum focus distance of 0). */
         val canFocus get() = (characteristics.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f) > 0f
@@ -162,7 +169,7 @@ class CameraController(context: Context) : AutoCloseable {
         fun labelled(label: String) = Info(
             openId, physicalId, label, facing, equivalentFocal, characteristics, regionArray, rawSize, previewSize,
             sensorOrientation, previewGamma, toneMapModes, shadingMapModes, faceModes, activeArray, xyzToCamera,
-            cameraToSrgb, hasFlash,
+            cameraToSrgb, hasFlash, maxResSize, maxResFormat, hiRes,
         )
 
         /**
@@ -257,18 +264,18 @@ class CameraController(context: Context) : AutoCloseable {
      * most complete 3A. Lenses are logged under RawBoyCamera for diagnosing other phones.
      * [facing]: CameraMetadata.LENS_FACING_BACK or LENS_FACING_FRONT; empty when that side has no RAW.
      */
-    fun lenses(facing: Int = CameraMetadata.LENS_FACING_BACK): List<Info> {
+    fun lenses(facing: Int = CameraMetadata.LENS_FACING_BACK, preferMaxRes: Boolean = false): List<Info> {
         val found = ArrayList<Info>()
         for (id in manager.cameraIdList) {
             val c = manager.getCameraCharacteristics(id)
             if (c.get(CameraCharacteristics.LENS_FACING) != facing) continue
             val region = c.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE) ?: Rect()
-            infoFor(id, null, c, region)?.let(found::add)
+            infoFor(id, null, c, region, preferMaxRes)?.let(found::add)
             val caps = c.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES) ?: IntArray(0)
             if (CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA in caps) {
                 for (physical in c.physicalCameraIds) {
                     val pc = runCatching { manager.getCameraCharacteristics(physical) }.getOrNull() ?: continue
-                    val lens = infoFor(id, physical, pc, region)
+                    val lens = infoFor(id, physical, pc, region, preferMaxRes)
                     lens?.let { Log.d(TAG, "camera $id/$physical: RAW ${it.rawSize}, preview ${it.previewSize}, ${it.equivalentFocal.toInt()} mm") }
                     lens?.let(found::add)
                 }
@@ -299,7 +306,7 @@ class CameraController(context: Context) : AutoCloseable {
         }
     }
 
-    private fun infoFor(openId: String, physicalId: String?, c: CameraCharacteristics, regionArray: Rect): Info? {
+    private fun infoFor(openId: String, physicalId: String?, c: CameraCharacteristics, regionArray: Rect, preferMaxRes: Boolean): Info? {
         val name = physicalId?.let { "$openId/$it" } ?: openId
         fun reject(why: String): Info? {
             Log.d(TAG, "camera $name: $why")
@@ -308,9 +315,14 @@ class CameraController(context: Context) : AutoCloseable {
         val caps = c.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES) ?: return reject("no capabilities")
         if (CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_RAW !in caps) return reject("no RAW")
         val map = c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP) ?: return reject("no stream map")
-        val raw = map.getOutputSizes(ImageFormat.RAW_SENSOR)?.maxByOrNull { it.width.toLong() * it.height }
+        val defaultRaw = map.getOutputSizes(ImageFormat.RAW_SENSOR)?.maxByOrNull { it.width.toLong() * it.height }
             ?: return reject("no RAW_SENSOR size")
-        val aspect = raw.width.toFloat() / raw.height
+        val maxRes = maxResRaw(c, defaultRaw)
+        val maxResFormat = maxRes?.second ?: ImageFormat.RAW_SENSOR
+        val hiRes = preferMaxRes && maxRes != null
+        val raw = if (hiRes) maxRes!!.first else defaultRaw
+        // The previews belong to the default sensor mode, whose raw has the aspect the preview is matched to.
+        val aspect = defaultRaw.width.toFloat() / defaultRaw.height
         // The raw's aspect if a preview has it (the viewfinder then shows the whole frame), else the closest
         // (Pixel selfie: raw 1.40:1, previews 4:3); ~1440 px is plenty.
         val candidates = map.getOutputSizes(SurfaceTexture::class.java)?.filter { it.width <= MAX_PREVIEW_WIDTH }.orEmpty()
@@ -347,6 +359,9 @@ class CameraController(context: Context) : AutoCloseable {
             xyzToCamera = d65ColorMatrix(c),
             cameraToSrgb = rawCameraToSrgb(c),
             hasFlash = opened.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) == true,
+            maxResSize = maxRes?.first,
+            maxResFormat = maxResFormat,
+            hiRes = hiRes,
         )
     }
 
@@ -356,7 +371,9 @@ class CameraController(context: Context) : AutoCloseable {
         this.info = info
         surfaceTexture.setDefaultBufferSize(info.previewSize.width, info.previewSize.height)
         val preview = Surface(surfaceTexture).also { previewSurface = it }
-        val reader = ImageReader.newInstance(info.rawSize.width, info.rawSize.height, ImageFormat.RAW_SENSOR, 2)
+        val reader = ImageReader.newInstance(
+            info.rawSize.width, info.rawSize.height, if (info.hiRes) info.maxResFormat else ImageFormat.RAW_SENSOR, if (info.hiRes) 1 else 2,
+        )
         reader.setOnImageAvailableListener({ r ->
             val image = r.acquireNextImage() ?: return@setOnImageAvailableListener
             burstSink?.let { sink ->
@@ -375,7 +392,7 @@ class CameraController(context: Context) : AutoCloseable {
         val physical = info.physicalId
         if (physical != null) {
             val camera = open(info.openId)
-            val outputs = outputs(preview, reader, physical)
+            val outputs = outputs(preview, reader, physical, info.hiRes)
             val supported = runCatching {
                 camera.isSessionConfigurationSupported(SessionConfiguration(SessionConfiguration.SESSION_REGULAR, outputs, executor, NO_SESSION))
             }.getOrDefault(true) // not answered: just try
@@ -401,7 +418,7 @@ class CameraController(context: Context) : AutoCloseable {
         }
         val camera = open(physical ?: info.openId)
         device = camera
-        session = createSession(camera, outputs(preview, reader, null))
+        session = createSession(camera, outputs(preview, reader, null, info.hiRes))
         streamingPhysical = null
         repeatPreview()
     }
@@ -432,10 +449,16 @@ class CameraController(context: Context) : AutoCloseable {
         }
     }
 
-    private fun outputs(preview: Surface, reader: ImageReader, physicalId: String?) =
-        listOf(OutputConfiguration(preview), OutputConfiguration(reader.surface)).onEach { o ->
-            physicalId?.let { o.setPhysicalCameraId(it) }
-        }
+    private fun outputs(preview: Surface, reader: ImageReader, physicalId: String?, hiRes: Boolean) =
+        listOf(
+            OutputConfiguration(preview),
+            // The raw stream alone uses the maximum-resolution sensor mode; the preview keeps the default one.
+            OutputConfiguration(reader.surface).also { o ->
+                if (hiRes && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                    o.addSensorPixelModeUsed(CameraMetadata.SENSOR_PIXEL_MODE_MAXIMUM_RESOLUTION)
+                }
+            },
+        ).onEach { o -> physicalId?.let { o.setPhysicalCameraId(it) } }
 
     private suspend fun createSession(camera: CameraDevice, outputs: List<OutputConfiguration>): CameraCaptureSession =
         suspendCancellableCoroutine { cont ->
@@ -588,7 +611,7 @@ class CameraController(context: Context) : AutoCloseable {
             val inf = info ?: throw IOException("Camera not ready")
             val reader = rawReader ?: throw IOException("Camera not ready")
             val mode = if (inf.hasFlash) flash else FlashMode.OFF
-            if (mode == FlashMode.OFF && burstFrames > 1) return@withLock burstDng(s, inf, burstFrames, exifOrientation, location, out, onSubmitted)
+            if (mode == FlashMode.OFF && burstFrames > 1 && !inf.hiRes) return@withLock burstDng(s, inf, burstFrames, exifOrientation, location, out, onSubmitted)
             // Ambient exposure before any light comes on: the flash still never needs more.
             val ambient = _frames.value
             var focused = false
@@ -625,8 +648,10 @@ class CameraController(context: Context) : AutoCloseable {
     ): CaptureResult {
         val request = request(s, CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
             addTarget(reader.surface)
-            addTarget(previewSurface ?: throw IOException("Camera not ready"))
+            // A request uses one sensor mode: the maximum-resolution still can't also feed the (default mode) preview.
+            if (!inf.hiRes) addTarget(previewSurface ?: throw IOException("Camera not ready"))
             setCommon(inf)
+            if (inf.hiRes) setMaxResolution(inf)
             if (flash == FlashMode.OFF) {
                 // Low light: the preview is held at 30 fps for a smooth viewfinder; let AE give the still the longer
                 // exposure it used to choose (its full range down to 15 fps).
@@ -677,13 +702,18 @@ class CameraController(context: Context) : AutoCloseable {
                 "${captureResult.get(CaptureResult.SENSOR_SENSITIVITY)}, boost ${captureResult.get(CaptureResult.CONTROL_POST_RAW_SENSITIVITY_BOOST)}, " +
                 "black ${captureResult.get(CaptureResult.SENSOR_DYNAMIC_BLACK_LEVEL)?.joinToString()} " +
                 "(static ${inf.characteristics.get(CameraCharacteristics.SENSOR_BLACK_LEVEL_PATTERN)}), " +
-                "white ${captureResult.get(CaptureResult.SENSOR_DYNAMIC_WHITE_LEVEL)}")
+                "white ${captureResult.get(CaptureResult.SENSOR_DYNAMIC_WHITE_LEVEL)}" +
+                if (inf.hiRes && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) ", pixelMode ${captureResult.get(CaptureResult.SENSOR_PIXEL_MODE)}" else "")
             image.await().use { img ->
                 // The lens's own characteristics and result: colour matrices, shading map and sizes are per lens.
-                DngCreator(inf.characteristics, captureResult).use { dng ->
-                    dng.setOrientation(exifOrientation)
-                    location?.let(dng::setLocation)
-                    dng.writeImage(out, img)
+                if (inf.hiRes || img.format == ImageFormat.RAW10) {
+                    MaxResDngWriter.write(inf.characteristics, captureResult, img, exifOrientation, location, out)
+                } else {
+                    DngCreator(inf.characteristics, captureResult).use { dng ->
+                        dng.setOrientation(exifOrientation)
+                        location?.let(dng::setLocation)
+                        dng.writeImage(out, img)
+                    }
                 }
             }
             return captureResult
@@ -1099,6 +1129,33 @@ class CameraController(context: Context) : AutoCloseable {
         }
     }
 
+    /**
+     * Switches the request to the maximum-resolution sensor mode. Its metering regions are then in the maximum-resolution
+     * active array's coordinates, so the ones [setCommon] set are scaled over.
+     */
+    private fun CaptureRequest.Builder.setMaxResolution(inf: Info) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return
+        set(CaptureRequest.SENSOR_PIXEL_MODE, CameraMetadata.SENSOR_PIXEL_MODE_MAXIMUM_RESOLUTION)
+        val c = characteristicsOf(inf)
+        val normal = (if (streamingPhysical != null) inf.regionArray else inf.activeArray)
+        val max = c.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE_MAXIMUM_RESOLUTION) ?: return
+        if (normal.width() == 0 || normal.height() == 0) return
+        val sx = max.width().toFloat() / normal.width()
+        val sy = max.height().toFloat() / normal.height()
+        fun scaled(key: CaptureRequest.Key<Array<MeteringRectangle>>) {
+            val regions = get(key) ?: return
+            set(key, Array(regions.size) { i ->
+                val r = regions[i]
+                MeteringRectangle(
+                    Rect((r.rect.left * sx).toInt(), (r.rect.top * sy).toInt(), (r.rect.right * sx).toInt(), (r.rect.bottom * sy).toInt()),
+                    r.meteringWeight,
+                )
+            })
+        }
+        scaled(CaptureRequest.CONTROL_AE_REGIONS)
+        scaled(CaptureRequest.CONTROL_AF_REGIONS)
+    }
+
     /** Sets [key] on the request and, when a physical lens is streamed, on that lens too (where it's allowed). */
     private fun <T> CaptureRequest.Builder.setForLens(key: CaptureRequest.Key<T>, value: T) {
         set(key, value)
@@ -1208,6 +1265,30 @@ class CameraController(context: Context) : AutoCloseable {
         private const val MAX_FLASH_DISTANCE_M = 5f
 
         private const val MAX_PREVIEW_WIDTH = 1920
+
+        /**
+         * The lens's largest RAW size in the maximum-resolution sensor mode (Android 12+), if larger than [defaultRaw]
+         * and of the same field of view (virtual 2x in-sensor crop lenses on the Pixel 9 Pro inherit the parent
+         * sensor's uncropped 1x maximum-resolution stream, which would capture a wider frame than the preview).
+         */
+        fun maxResRaw(c: CameraCharacteristics, defaultRaw: Size): Pair<Size, Int>? {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
+            if (c.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE_MAXIMUM_RESOLUTION) == null) return null
+            val map = c.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP_MAXIMUM_RESOLUTION) ?: return null
+            for (format in intArrayOf(ImageFormat.RAW_SENSOR, ImageFormat.RAW10)) {
+                val sizes = map.getOutputSizes(format).orEmpty().toList() + map.getHighResolutionOutputSizes(format).orEmpty().toList()
+                val size = sizes.maxByOrNull { it.width.toLong() * it.height } ?: continue
+                if (size.width.toLong() * size.height <= defaultRaw.width.toLong() * defaultRaw.height) continue
+                val intr = c.get(CameraCharacteristics.LENS_INTRINSIC_CALIBRATION_MAXIMUM_RESOLUTION)
+                if (intr != null && intr.size >= 2 && intr[0] > 0f) {
+                    val maxEquiv = (intr[0] * 43.27 / kotlin.math.hypot(size.width.toDouble(), size.height.toDouble())).toFloat()
+                    val normalEquiv = equivalentFocal(c)
+                    if (abs(maxEquiv - normalEquiv) > 0.2f * normalEquiv) return null
+                }
+                return size to format
+            }
+            return null
+        }
 
         /** Only for asking whether a session configuration is supported. */
         private val NO_SESSION = object : CameraCaptureSession.StateCallback() {
