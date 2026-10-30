@@ -141,8 +141,10 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   `SENSOR_NEUTRAL_COLOR_POINT` + D65 ColorMatrix; `lenses()`: the logical back camera = W, its physical cameras with
   RAW = UW/T by 35 mm-equivalent focal; a physical lens is streamed via `OutputConfiguration.setPhysicalCameraId`,
   with per-lens keys (`setPhysicalCameraKey`) and per-lens results/characteristics for DngCreator; fallback: open the
-  physical id directly), `CameraViewModel.kt` (live auto develop, capture → DNG →
-  one-at-a-time develop → jpegli JPEG, `previewScale` calibration from raw key / viewfinder key),
+  physical id directly), `CameraViewModel.kt` (live auto develop, capture → DNG), `ShotSaver.kt` (application-scoped
+  one-at-a-time develop → jpegli JPEG, `previewScale` / `flashGuides` calibration, plus `SaveService` `shortService`
+  FGS + partial wake lock so locking immediately after shooting from `LockScreenCameraActivity` never cancels or
+  freezes a save; `CameraActivity` waits for `capturing == 0` before `finishAndRemoveTask()` on screen-off),
   `CameraSettings.kt`, `ui/`. Exposure (`AutoTone.develop(phoneAe = true)`; flash shots, AE off, are re-metered as
   Auto): the phone's AE is kept, but lifted to `PHONE_KEY` (0.06) when it put the metered key below it (the Pixel's AE
   protects highlights: a white pigeon or a window in the box took the frame 1-2 EV down), never darker, max +2 EV.

@@ -1,9 +1,7 @@
 package app.rawboy.camera
 
 import android.app.Application
-import android.content.ContentUris
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.CameraMetadata
 import android.location.Location
@@ -12,12 +10,10 @@ import android.net.Uri
 import android.os.Build
 import android.os.Process
 import android.os.SystemClock
-import android.provider.MediaStore
 import android.system.Os
 import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import app.rawboy.auto.AutoAnalysis
 import app.rawboy.auto.analysis.AutoTone
 import app.rawboy.auto.analysis.MeterArea
 import app.rawboy.auto.analysis.SceneAnalyzer
@@ -35,15 +31,8 @@ import app.rawboy.develop.DevelopParams
 import app.rawboy.develop.Histogram
 import app.rawboy.export.DngGps
 import app.rawboy.export.ExifMetadata
-import app.rawboy.export.ExportFormat
-import app.rawboy.export.ExportSettings
-import app.rawboy.export.ExportGpu
-import app.rawboy.export.Exporter
-import app.rawboy.export.JpegEncoder
 import app.rawboy.export.MediaStoreOutput
 import app.rawboy.export.OutputNaming
-import app.rawboy.film.FilmData
-import app.rawboy.film.FilmStocks
 import app.rawboy.gl.PreviewImage
 import app.rawboy.gl.ShaderParams
 import app.rawboy.gl.ThumbnailRenderer
@@ -51,24 +40,21 @@ import app.rawboy.gl.ViewfinderBase
 import app.rawboy.gl.ViewfinderRenderer
 import app.rawboy.lens.LensInfo
 import app.rawboy.lens.LensTransform
-import app.rawboy.lut.LutData
-import app.rawboy.lut.LutLoader
-import app.rawboy.raw.RawImage
 import app.rawboy.retouch.SkinMask
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.Executors
@@ -78,11 +64,8 @@ import java.nio.ByteOrder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.math.log2
 import kotlin.math.max
 import kotlin.math.pow
-import kotlin.math.roundToInt
-import kotlin.math.sqrt
 
 enum class CameraStatus { NEEDS_PERMISSION, OPENING, READY, FAILED }
 
@@ -103,9 +86,14 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private val _status = MutableStateFlow(CameraStatus.NEEDS_PERMISSION)
     val status = _status.asStateFlow()
 
-    /** Shots captured but not yet saved as JPEG. */
-    private val _pending = MutableStateFlow(0)
-    val pending = _pending.asStateFlow()
+    /** Shots being captured or developed as JPEG ("Saving N…"). */
+    val pending = ShotSaver.pending
+
+    /** Shots still reading a raw from Camera2; the camera and lock screen activity wait for 0 before closing. */
+    private var activeCaptures = 0
+    private val _capturing = MutableStateFlow(0)
+    val capturing = _capturing.asStateFlow()
+    private var restartAfterCapture = false
 
     /**
      * A burst is being captured and merged: the shutter waits for its DNG. Back-to-back bursts each held their own
@@ -114,12 +102,14 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private val _merging = MutableStateFlow(false)
     val merging = _merging.asStateFlow()
 
-    private val _lastShot = MutableStateFlow<LastShot?>(null)
-    val lastShot = _lastShot.asStateFlow()
+    private val hiddenUpToId = MutableStateFlow(0L)
+    val lastShot: StateFlow<LastShot?> = combine(ShotSaver.lastShot, hiddenUpToId) { saved, hidden ->
+        saved?.takeIf { it.id > hidden }?.shot
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
-    /** Opened over the lock screen: a photo taken before the phone was locked isn't shown. */
+    /** Opened over the lock screen: a photo taken before this launch (even one still saving) isn't shown. */
     fun forgetLastShot() {
-        _lastShot.value = null
+        hiddenUpToId.value = ShotSaver.latestId
     }
 
     private val _message = MutableStateFlow<String?>(null)
@@ -216,68 +206,19 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private var live: Live? = null
     private var liveJob: Job? = null
 
-    private val luts = HashMap<String, LutData>()
-    private val films = HashMap<String, FilmData>()
-    private val lutLock = Mutex()
-
-    /** A captured raw waiting to be developed, with the controls as they were at the shutter. */
-    private data class Shot(
-        val dng: Uri,
-        val name: String,
-        val temporary: File?,
-        val settings: CameraSettings,
-        /** The viewfinder's scene key at the shutter, for calibrating [CameraSettings.previewScale]. */
-        val viewfinderKey: Float?,
-        /** Sensor ISO from the capture, in case the DNG lacks it. */
-        val iso: Float,
-        /** The camera's face detection saw a face at the shutter (or can't tell): run skin detection. */
-        val mayHaveFace: Boolean = true,
-        /** Flash shot: the guide it was exposed with, for calibrating [CameraSettings.flashGuides]. */
-        val flashGuide: Float? = null,
-        /** The flash shot's lens reported a focus distance (which of the lens's guides [flashGuide] is). */
-        val flashDistanceKnown: Boolean = true,
-        /** Where the photo is metered, in the photo's own (level) orientation: see [meterArea]. */
-        val meter: MeterArea = METER_CENTRE,
-        /** A merged burst: frames the raw is worth ([app.rawboy.camera.capture.Still.effectiveFrames]); 1 = one frame. */
-        val effectiveFrames: Float = 1f,
-    )
-
-    private val shots = Channel<Shot>(Channel.UNLIMITED)
-
-    /**
-     * Shots develop on one thread of their own: it keeps the export GL context between shots, and runs a
-     * little below normal priority so the viewfinder stays smooth while a photo develops. (Not
-     * THREAD_PRIORITY_BACKGROUND: that moves a thread to the little cores.) Threads it starts for
-     * decoding (LibRaw's OpenMP, parallel rows) inherit the priority.
-     */
-    private val developExecutor = Executors.newSingleThreadExecutor { r ->
-        Thread({
-            Process.setThreadPriority(DEVELOP_THREAD_PRIORITY)
-            r.run()
-        }, "RawBoy-develop")
-    }
-    private val developDispatcher = developExecutor.asCoroutineDispatcher()
-
-    /** Used only on the develop thread; low GPU priority so the viewfinder's frames come first. */
-    private val exportGpu = ExportGpu(lowPriority = true)
-
     init {
-        // One shot at a time: each needs a full-resolution decode.
-        viewModelScope.launch {
-            for (shot in shots) {
-                try {
-                    develop(shot)
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Throwable) {
-                    Log.w(TAG, "develop ${shot.name}", e)
-                    _message.value = "Could not save ${shot.name}: " +
-                        if (e is OutOfMemoryError) "not enough memory" else e.message ?: e.javaClass.simpleName
-                } finally {
-                    shot.temporary?.delete()
-                    _pending.update { it - 1 }
+        ShotSaver.attachView()
+        viewModelScope.launch(Dispatchers.Main.immediate) {
+            ShotSaver.calibrations.collect { cal ->
+                _settings.value = when (cal) {
+                    is Calibration.PreviewScale -> _settings.value.let { it.copy(previewScales = it.previewScales + (cal.lensKey to cal.scale)) }
+                    is Calibration.FlashGuide -> _settings.value.let { it.copy(flashGuides = it.flashGuides + (cal.key to cal.guide)) }
                 }
+                republish()
             }
+        }
+        viewModelScope.launch(Dispatchers.Main.immediate) {
+            ShotSaver.errors.collect { _message.value = it }
         }
     }
 
@@ -308,6 +249,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             saveJob?.cancel()
             CameraSettingsStore.save(app, _settings.value)
         }
+        // Defer closing Camera2 until an in-flight capture has read its raw (e.g. locking right after the shutter).
+        if (activeCaptures == 0) stopCamera()
+    }
+
+    private fun stopCamera() {
+        restartAfterCapture = false
         startJob?.cancel()
         startJob = null
         controller.stop() // also ends a focus lock
@@ -317,13 +264,19 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         if (hasPermission) _status.value = CameraStatus.OPENING
     }
 
+    private fun restartCamera() {
+        restartAfterCapture = false
+        startJob?.cancel()
+        startJob = null
+        if (hasPermission) _status.value = CameraStatus.OPENING
+        startIfReady()
+    }
+
     /** The viewfinder's (new) camera texture; called whenever its GL context is created. */
     fun onSurfaceTexture(st: SurfaceTexture) {
         viewModelScope.launch {
             surfaceTexture = st
-            startJob?.cancel()
-            startJob = null
-            startIfReady()
+            if (activeCaptures == 0) restartCamera() else restartAfterCapture = true
         }
     }
 
@@ -431,9 +384,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         live = null
         clearQr()
         _shaderParams.value = null
-        startJob?.cancel()
-        startJob = null
-        startIfReady()
+        if (activeCaptures == 0) restartCamera() else restartAfterCapture = true
     }
 
     // ---- Live develop ----
@@ -509,8 +460,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val developed = if (_compare.value) l.auto else LookApplier.apply(l.auto, look, s.strength, Adjustments(brightness = s.brightness, warmth = s.warmth), l.stats.hasFace)
         // The ISP has already denoised and sharpened the preview stream.
         val p = developed.copy(denoise = 0f, sharpening = 0f, skinRetouch = 0f)
-        val lut = p.lut?.let { id -> runCatching { loadLut(id) }.getOrNull() }
-        val film = p.film?.let { id -> runCatching { loadFilm(id) }.getOrNull() }
+        val lut = p.lut?.let { id -> runCatching { ShotSaver.loadLut(app, id) }.getOrNull() }
+        val film = p.film?.let { id -> runCatching { ShotSaver.loadFilm(app, id) }.getOrNull() }
         val lens = LensTransform(LensInfo.none(f.fullWidth, f.fullHeight), p)
         val params = ShaderParams.from(
             p, l.defaults, lut, lens, l.base.base, null, null, GRAIN_SIZE_SCALE, grainStrength(s), film = film,
@@ -618,7 +569,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Takes a raw now; it is developed into a JPEG in the background. */
     fun shutter() {
-        if (_status.value != CameraStatus.READY || _merging.value) return
+        if (!resumed || _status.value != CameraStatus.READY || _merging.value) return
         val settings = _settings.value
         val flash = settings.flash.takeIf { info?.hasFlash == true } ?: FlashMode.OFF
         // Flash shots are single frames (CameraController.captureDng).
@@ -633,23 +584,29 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 "wb ${live?.defaults?.let { "${it.temperature.toInt()}K/${it.tint.toInt()}" }} -> " +
                 "${live?.auto?.let { "${it.temperature.toInt()}K/${it.tint.toInt()}" }}")
         }
-        _pending.update { it + 1 }
+        val shotId = ShotSaver.beginCapture(app)
+        activeCaptures++
+        _capturing.value = activeCaptures
         if (burst) _merging.value = true
-        viewModelScope.launch {
-            val shot = try {
-                capture(settings, viewfinderKey, flash).copy(mayHaveFace = mayHaveFace)
-            } catch (e: CancellationException) {
-                _pending.update { it - 1 }
-                throw e
-            } catch (e: Exception) {
+        // Runs in ShotSaver.scope so finishing LockScreenCameraActivity never cancels an in-flight capture.
+        ShotSaver.scope.launch {
+            try {
+                val shot = capture(shotId, settings, viewfinderKey, flash).copy(mayHaveFace = mayHaveFace)
+                ShotSaver.enqueue(app, shot)
+            } catch (e: Throwable) {
                 Log.w(TAG, "capture", e)
-                _message.value = "Capture failed: ${e.message ?: e.javaClass.simpleName}"
-                _pending.update { it - 1 }
-                return@launch
+                if (e !is CancellationException) {
+                    _message.value = "Capture failed: ${e.message ?: e.javaClass.simpleName}"
+                }
+                ShotSaver.cancelCapture()
             } finally {
                 if (burst) _merging.value = false
+                activeCaptures--
+                if (activeCaptures == 0) {
+                    if (!resumed) stopCamera() else if (restartAfterCapture) restartCamera()
+                }
+                _capturing.value = activeCaptures
             }
-            shots.send(shot)
         }
     }
 
@@ -660,7 +617,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /** Captures a raw and saves it as DNG (in Pictures/<Edition.FOLDER>/RAW, or a temporary file). */
-    private suspend fun capture(settings: CameraSettings, viewfinderKey: Float?, flash: FlashMode): Shot {
+    private suspend fun capture(shotId: Long, settings: CameraSettings, viewfinderKey: Float?, flash: FlashMode): Shot {
         val resolver = app.contentResolver
         val baseName = "IMG_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ROOT).format(Date())
         val degrees = deviceDegrees
@@ -682,13 +639,13 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     result
                 }
             } catch (t: Throwable) {
-                withContext(Dispatchers.IO + kotlinx.coroutines.NonCancellable) { resolver.delete(uri, null, null) }
+                withContext(Dispatchers.IO + NonCancellable) { resolver.delete(uri, null, null) }
                 throw t
             }
             Log.d(TAG, "$name: capture + DNG write ${(System.nanoTime() - dngStart) / 1_000_000} ms")
-            Shot(uri, name, null, settings, viewfinderKey, isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames)
+            Shot(shotId, uri, name, null, settings, viewfinderKey, isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames)
         } else {
-            val file = File(app.cacheDir, "$baseName.dng")
+            val file = File(app.cacheDir, "$baseName-$shotId.dng")
             val result = try {
                 withContext(Dispatchers.IO) {
                     val result = file.outputStream().buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide, settings.burstFrames, fix) { onShutter() } }
@@ -699,7 +656,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 file.delete()
                 throw t
             }
-            Shot(Uri.fromFile(file), file.name, file, settings, viewfinderKey, isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames)
+            Shot(shotId, Uri.fromFile(file), "$baseName.dng", file, settings, viewfinderKey, isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames)
         }
     }
 
@@ -750,204 +707,29 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         return ExifMetadata.Gps.of(fix.latitude, fix.longitude, altitude, fix.time)
     }
 
-    /** Raw -> auto develop + look -> JPEG (jpegli), as RawBoy Auto develops a photo. */
-    private suspend fun develop(shot: Shot) {
-        val s = shot.settings
-        val look = Edition.look(s.lookId)
-        val started = System.nanoTime()
-        fun ms(from: Long) = (System.nanoTime() - from) / 1_000_000
-        val (name, rawKey, autoEv) = withContext(developDispatcher) {
-            val decodeStart = System.nanoTime()
-            RawImage.open(app, shot.dng, EXTRA_BLACK).use { img ->
-                val decodeMs = ms(decodeStart)
-                val analysisStart = System.nanoTime()
-                // A merged burst is as clean as one frame at 1/frames the ISO: denoise for that.
-                val noiseScale = (if (s.front) FRONT_NOISE_ISO_SCALE else PHONE_NOISE_ISO_SCALE) / shot.effectiveFrames
-                // The phone's auto exposure already metered the raw (Camera2 AE on the same box, its post-raw boost in
-                // the DNG's BaselineExposure): keep it, but lift it where the AE protected a highlight and took the
-                // scene down (AutoTone.PHONE_KEY). Re-metering it to Auto's camera-raw target pulled ordinary rooms 1-2 EV
-                // darker than the phone's camera. Flash shots are exposed manually (AE off), so they are metered here,
-                // which also calibrates the flash guide.
-                val a = AutoAnalysis.analyze(
-                    app, img, shot.name, noiseScale, shot.iso, detectSkin = shot.mayHaveFace, meter = shot.meter,
-                    phoneAe = shot.flashGuide == null,
-                )
-                val analysisMs = ms(analysisStart)
-                val looked = LookApplier.apply(a.autoBase, look, s.strength, Adjustments(brightness = s.brightness, warmth = s.warmth), a.stats.hasFace)
-                // High ISO: more denoise than the auto develop's table, up to the coarse stage (denoise > 65).
-                val params = looked.copy(
-                    denoise = maxOf(looked.denoise, highIsoDenoise(a.stats.iso * noiseScale)),
-                    shadows = maxOf(looked.shadows, backlightShadows(a.stats)),
-                )
-                val lut = params.lut?.let { loadLut(it) }
-                val film = params.film?.let { loadFilm(it) }
-                val shader = ShaderParams.from(
-                    params, a.defaults, lut, LensTransform(img.lens, params), a.base, a.bloom, a.skin,
-                    GRAIN_SIZE_SCALE, grainStrength(s), film = film,
-                )
-                val export = ExportSettings(
-                    format = ExportFormat.JPEG,
-                    jpegQuality = s.jpegQuality,
-                    jpegEncoder = JpegEncoder.JPEGLI,
-                    maxLongSide = s.maxLongSide,
-                    downscaleSharpen = CameraSettings.SMALL_SHARPEN,
-                )
-                val exportStart = System.nanoTime()
-                val saved = Exporter(app).export(img, shot.dng, shot.name, shader, export, JPEG_NAMING, exportGpu) {}
-                Log.d(TAG, "${shot.name}: decode $decodeMs ms, analysis $analysisMs ms, develop + JPEG ${ms(exportStart)} ms")
-                Triple(saved, a.stats.key, a.autoBase.exposure)
-            }
-        }
-        Log.d(TAG, "saved $name in ${ms(started)} ms")
-        shot.viewfinderKey?.let { calibrate(rawKey, it, s.lensKey, s.previewScale) }
-        shot.flashGuide?.let { calibrateFlash(autoEv, it, CameraSettings.flashGuideKey(s.lensKey, shot.flashDistanceKnown)) }
-        withContext(Dispatchers.IO) { findJpeg(name) }?.let { uri ->
-            withContext(Dispatchers.IO) { thumbnail(uri) }?.let { _lastShot.value = LastShot(uri, it) }
-        }
-    }
-
-    /**
-     * Learns the viewfinder's preview gain for a lens from a shot: the raw's scene key over the viewfinder's.
-     * Each lens's preview pipeline has its own gain (on the Pixel 9 Pro 0.5 for the selfie camera up to ~9
-     * for T3), so a lens's first shot takes the full correction; later shots move halfway (in stops), which
-     * smooths out scene-to-scene noise (about ±0.3 stop between shots of the same view).
-     */
-    private fun calibrate(rawKey: Float, viewfinderKey: Float, lens: String, scaleAtShutter: Float) {
-        if (!(rawKey > 0f) || !(viewfinderKey > 0f)) return
-        // The gain that would have matched this shot. Judged against the gain in use at its shutter: shots taken
-        // back to back are calibrated after both were captured.
-        val estimate = (scaleAtShutter * (rawKey / viewfinderKey).coerceIn(1f / 16, 16f))
-        val known = _settings.value.previewScales[lens]
-        val scale = if (known == null) estimate else known * sqrt(estimate / known) // halfway in stops
-        val clamped = scale.coerceIn(CameraSettings.MIN_SCALE, CameraSettings.MAX_SCALE)
-        Log.d(TAG, "calibrate $lens: raw key $rawKey, viewfinder key $viewfinderKey (raw/viewfinder ${rawKey / viewfinderKey}) -> preview scale $clamped")
-        change { it.copy(previewScales = it.previewScales + (lens to clamped)) }
-    }
-
-    /**
-     * Learns a lens's flash exposure from a flash shot: the auto develop's exposure says how far the raw was from
-     * where it should be; aiming [FLASH_LIFT_EV] under it keeps highlights in the raw (dark raws are recoverable,
-     * clipped ones aren't). First flash shot on a lens takes the full correction, later ones move halfway.
-     */
-    private fun calibrateFlash(autoEv: Float, guideUsed: Float, lens: String) {
-        if (!(guideUsed > 0f)) return
-        val estimate = guideUsed * 2f.pow(autoEv - FLASH_LIFT_EV)
-        val known = _settings.value.flashGuides[lens]
-        val guide = (if (known == null) estimate else known * sqrt(estimate / known)).coerceIn(MIN_FLASH_GUIDE, MAX_FLASH_GUIDE)
-        Log.d(TAG, "calibrate flash $lens: auto exposure $autoEv EV at guide $guideUsed -> flash guide $guide")
-        change { it.copy(flashGuides = it.flashGuides + (lens to guide)) }
-    }
-
-    private suspend fun loadLut(id: String): LutData = lutLock.withLock {
-        luts[id] ?: withContext(Dispatchers.IO) { LutLoader.load(app, id) }.also { luts[id] = it }
-    }
-
-    /** A spektrafilm stock's two LUTs, loaded once (shares the LUT lock: loads are large and synchronized anyway). */
-    private suspend fun loadFilm(id: String): FilmData = lutLock.withLock {
-        films[id] ?: withContext(Dispatchers.IO) {
-            val stock = FilmStocks.byId(app, id) ?: throw IllegalArgumentException("Unknown film stock $id")
-            FilmStocks.load(app, stock)
-        }.also { films[id] = it }
-    }
-
-    private fun findJpeg(name: String): Uri? {
-        val collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-        return app.contentResolver.query(
-            collection,
-            arrayOf(MediaStore.MediaColumns._ID),
-            "${MediaStore.MediaColumns.DISPLAY_NAME} = ? AND ${MediaStore.MediaColumns.RELATIVE_PATH} = ?",
-            arrayOf(name, JPEG_NAMING.relativePath),
-            null,
-        )?.use { c -> if (c.moveToFirst()) ContentUris.withAppendedId(collection, c.getLong(0)) else null }
-    }
-
-    private fun thumbnail(uri: Uri): Bitmap? = runCatching {
-        app.contentResolver.openInputStream(uri)?.use { input ->
-            BitmapFactory.decodeStream(input, null, BitmapFactory.Options().apply { inSampleSize = 16 })
-        }
-    }.getOrNull()
-
     override fun onCleared() {
         if (saveJob?.isActive == true) {
             saveJob?.cancel()
             CameraSettingsStore.save(app, _settings.value) // still pending: save now
         }
-        shots.close()
         location.stop()
         shutterSound.release()
         controller.close()
         histogramRenderer.close()
-        // The export GL context belongs to the develop thread: release it there, after any queued work.
-        developExecutor.execute { exportGpu.close() }
-        developExecutor.shutdown()
         qrExecutor.shutdown()
+        ShotSaver.detachView()
     }
 
     companion object {
         private const val TAG = "RawBoyCamera"
-
-        /** Flash raws are aimed this far under the auto develop's target (it lifts them back; see [calibrateFlash]). */
-        private const val FLASH_LIFT_EV = 0.5f
-        private const val MIN_FLASH_GUIDE = 1e-2f
-        private const val MAX_FLASH_GUIDE = 1e4f
         private const val DNG_MIME = "image/x-adobe-dng"
-
-        /**
-         * A phone sensor is roughly as noisy as the camera raws the auto denoise was tuned on at
-         * ~4x (2 stops more) its ISO, so the develop picks denoise/sharpening for that ISO.
-         */
-        private const val PHONE_NOISE_ISO_SCALE = 4f
-
-        /**
-         * Black beyond the DNG's (a fraction of the white range, ~1.4 DN of 959 on the Pixel 9 Pro): the phone's ISP
-         * renders black that much deeper than the DNG's BlackLevel (which is the frame's dynamic black), measured
-         * against the viewfinder at ISO 170-250. Without it the photo's deepest shadows were lifted, and bluish
-         * after the white balance's blue gain, compared with the viewfinder.
-         */
-        private const val EXTRA_BLACK = 1.46e-3f
-
-        /** Selfie sensors are smaller still: a first guess, to tune on photos. */
-        private const val FRONT_NOISE_ISO_SCALE = 8f
-
-        /** Nice value of the develop thread: below the UI and GL threads (0), above the background group (10). */
-        private const val DEVELOP_THREAD_PRIORITY = 0
-
         private const val SAVE_DELAY_MS = 500L
 
-        /**
-         * Backlit scenes (a window, a lamp in frame): the phone's own preview lifts the dark parts locally, and the plain
-         * raw develop left them near black (owner preferred the preview). Shadows rise with the scene's range, p98 - p5:
-         * ordinary scenes span 3-5 stops (no change), a room against a window 7 (75, which matched the iPhone's
-         * viewfinder on that shot). Fades out from ISO 800 to 3200, where lifting would mostly lift noise. Shots only:
-         * the viewfinder's frames come already lifted.
-         */
-        private fun backlightShadows(s: SceneStats): Float {
-            val lift = ((s.p98 - s.p5 - 5f) * 37.5f).coerceIn(0f, 80f)
-            val t = ((s.iso - 800f) / 2400f).coerceIn(0f, 1f)
-            return (lift * (1f - t * t * (3f - 2f * t))).roundToInt().toFloat()
-        }
-
-        /**
-         * Denoise for a phone shot at high ISO, by "equivalent" ISO (shot ISO x noise scale): unchanged up to 3200
-         * (back ISO 800), then 6400 -> 60, 12800 -> 80, 25600 and up -> 100 (back ISO 1600 / 3200 / 6400; selfie
-         * 800 / 1600 / 3200), interpolated in stops. Above 65 the shader adds its coarse stage.
-         */
-        private fun highIsoDenoise(equivalentIso: Float): Float {
-            if (equivalentIso <= 3200f) return 0f
-            val stops = log2(equivalentIso / 3200f) // 1 at 6400, 2 at 12800, 3 at 25600
-            return when {
-                stops <= 1f -> 60f * stops // the auto table already gives ~45 at 6400; max() keeps the higher
-                stops <= 2f -> 60f + 20f * (stops - 1f)
-                stops <= 3f -> 80f + 20f * (stops - 2f)
-                else -> 100f
-            }.roundToInt().toFloat()
-        }
-
         /** Exposure is metered on the middle half of the frame's width and height (owner's choice), unless tapped. */
-        private val METER_CENTRE = MeterArea.Centre(0.5f)
+        internal val METER_CENTRE = MeterArea.Centre(0.5f)
 
         /** Camera grain is twice as fine as the film-scaled default (owner's preference). */
-        private const val GRAIN_SIZE_SCALE = 0.5f
+        internal const val GRAIN_SIZE_SCALE = 0.5f
 
         /** Long side of the live histogram's copy: enough pixels for 64 bins, cheap every update. */
         private const val HISTOGRAM_SIZE = 128
@@ -957,7 +739,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
          * std 0.83 -> 0.62 (simulation of the shader's grain), so it's raised to look as strong as before.
          * At full size each pixel is a point sample: no loss.
          */
-        private fun grainStrength(s: CameraSettings) = if (s.smallExport) 1.34f else 1f
+        internal fun grainStrength(s: CameraSettings) = if (s.smallExport) 1.34f else 1f
 
         private fun isoOf(r: android.hardware.camera2.CaptureResult): Float =
             (r.get(android.hardware.camera2.CaptureResult.SENSOR_SENSITIVITY) ?: 0).toFloat()

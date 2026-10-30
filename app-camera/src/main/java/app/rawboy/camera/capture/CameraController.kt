@@ -216,6 +216,10 @@ class CameraController(context: Context) : AutoCloseable {
     private var previewSurface: Surface? = null
     private var rawReader: ImageReader? = null
     private var pendingImage: CompletableDeferred<Image>? = null
+    private var pendingResult: CompletableDeferred<TotalCaptureResult>? = null
+    private var pendingBurst: CompletableDeferred<Unit>? = null
+    @Volatile
+    private var readerCloseDeferred = false
     /** Takes every raw image while a burst runs (camera thread; the image is closed after it returns). */
     private var burstSink: ((Image) -> Unit)? = null
     /** Locked focus (and metering) point, upright normalised as shown; null = continuous autofocus. */
@@ -348,7 +352,7 @@ class CameraController(context: Context) : AutoCloseable {
 
     /** Opens the camera and starts the preview into [surfaceTexture]. Requires the CAMERA permission. */
     suspend fun start(info: Info, surfaceTexture: SurfaceTexture) {
-        stop()
+        captureLock.withLock { stop() }
         this.info = info
         surfaceTexture.setDefaultBufferSize(info.previewSize.width, info.previewSize.height)
         val preview = Surface(surfaceTexture).also { previewSurface = it }
@@ -412,12 +416,14 @@ class CameraController(context: Context) : AutoCloseable {
 
                 override fun onDisconnected(camera: CameraDevice) {
                     camera.close()
-                    if (cont.isActive) cont.resumeWithException(IOException("Camera disconnected"))
+                    val err = IOException("Camera disconnected")
+                    if (cont.isActive) cont.resumeWithException(err) else failInFlight(camera, err)
                 }
 
                 override fun onError(camera: CameraDevice, error: Int) {
                     camera.close()
-                    if (cont.isActive) cont.resumeWithException(IOException("Camera $id error $error"))
+                    val err = IOException("Camera $id error $error")
+                    if (cont.isActive) cont.resumeWithException(err) else failInFlight(camera, err)
                 }
             })
         } catch (e: Exception) {
@@ -577,25 +583,34 @@ class CameraController(context: Context) : AutoCloseable {
         location: Location? = null,
         onSubmitted: () -> Unit = {},
     ): Still = captureLock.withLock {
-        val s = session ?: throw IOException("Camera not ready")
-        val inf = info ?: throw IOException("Camera not ready")
-        val reader = rawReader ?: throw IOException("Camera not ready")
-        val mode = if (inf.hasFlash) flash else FlashMode.OFF
-        if (mode == FlashMode.OFF && burstFrames > 1) return@withLock burstDng(s, inf, burstFrames, exifOrientation, location, out, onSubmitted)
-        // Ambient exposure before any light comes on: the flash still never needs more.
-        val ambient = _frames.value
-        var focused = false
         try {
-            if (mode == FlashMode.FOCUS_FLASH) focused = torchFocus(s, inf)
-            val diopters = _frames.value?.focusDiopters
-            val exposure = if (mode == FlashMode.OFF) null else flashExposure(inf, ambient, diopters, guides)
-            val result = stillDng(s, inf, reader, mode, exposure?.first, exifOrientation, location, out, onSubmitted)
-            Still(result, exposure?.second, distanceKnown = diopters != null && diopters > 0f)
+            val s = session ?: throw IOException("Camera not ready")
+            val inf = info ?: throw IOException("Camera not ready")
+            val reader = rawReader ?: throw IOException("Camera not ready")
+            val mode = if (inf.hasFlash) flash else FlashMode.OFF
+            if (mode == FlashMode.OFF && burstFrames > 1) return@withLock burstDng(s, inf, burstFrames, exifOrientation, location, out, onSubmitted)
+            // Ambient exposure before any light comes on: the flash still never needs more.
+            val ambient = _frames.value
+            var focused = false
+            try {
+                if (mode == FlashMode.FOCUS_FLASH) focused = torchFocus(s, inf)
+                val diopters = _frames.value?.focusDiopters
+                val exposure = if (mode == FlashMode.OFF) null else flashExposure(inf, ambient, diopters, guides)
+                val result = stillDng(s, inf, reader, mode, exposure?.first, exifOrientation, location, out, onSubmitted)
+                Still(result, exposure?.second, distanceKnown = diopters != null && diopters > 0f)
+            } finally {
+                if (mode != FlashMode.OFF) endFlashSequence(inf, focused)
+            }
         } finally {
-            if (mode != FlashMode.OFF) endFlashSequence(inf, focused)
+            if (readerCloseDeferred) {
+                readerCloseDeferred = false
+                rawReader?.close()
+                rawReader = null
+            }
         }
     }
 
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     private suspend fun stillDng(
         s: CameraCaptureSession,
         inf: Info,
@@ -608,9 +623,6 @@ class CameraController(context: Context) : AutoCloseable {
         out: OutputStream,
         onSubmitted: () -> Unit,
     ): CaptureResult {
-        val image = CompletableDeferred<Image>()
-        val result = CompletableDeferred<TotalCaptureResult>()
-        handler.post { pendingImage = image }
         val request = request(s, CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
             addTarget(reader.surface)
             addTarget(previewSurface ?: throw IOException("Camera not ready"))
@@ -639,32 +651,50 @@ class CameraController(context: Context) : AutoCloseable {
                 setForLens(CaptureRequest.STATISTICS_LENS_SHADING_MAP_MODE, CameraMetadata.STATISTICS_LENS_SHADING_MAP_MODE_ON)
             }
         }.build()
-        s.capture(request, object : CameraCaptureSession.CaptureCallback() {
-            override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, r: TotalCaptureResult) {
-                result.complete(r)
-            }
+        val image = CompletableDeferred<Image>()
+        val result = CompletableDeferred<TotalCaptureResult>()
+        if (!handler.post {
+            pendingImage = image
+            pendingResult = result
+        }) throw IOException("Camera closed")
+        try {
+            s.capture(request, object : CameraCaptureSession.CaptureCallback() {
+                override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, r: TotalCaptureResult) {
+                    if (pendingResult === result) pendingResult = null
+                    result.complete(r)
+                }
 
-            override fun onCaptureFailed(session: CameraCaptureSession, request: CaptureRequest, failure: CaptureFailure) {
-                result.completeExceptionally(IOException("Capture failed (${failure.reason})"))
-                image.completeExceptionally(IOException("Capture failed"))
+                override fun onCaptureFailed(session: CameraCaptureSession, request: CaptureRequest, failure: CaptureFailure) {
+                    if (pendingResult === result) pendingResult = null
+                    if (pendingImage === image) pendingImage = null
+                    result.completeExceptionally(IOException("Capture failed (${failure.reason})"))
+                    image.completeExceptionally(IOException("Capture failed"))
+                }
+            }, handler)
+            onSubmitted()
+            val captureResult = lensResult(result.await())
+            Log.d(TAG, "still (flash $flash${manual?.let { ", manual ${it.first / 1000} µs ISO ${it.second}" } ?: ""}, state ${captureResult.get(CaptureResult.FLASH_STATE)}, AE ${captureResult.get(CaptureResult.CONTROL_AE_STATE)}): ${(captureResult.get(CaptureResult.SENSOR_EXPOSURE_TIME) ?: 0L) / 1000} µs, ISO " +
+                "${captureResult.get(CaptureResult.SENSOR_SENSITIVITY)}, boost ${captureResult.get(CaptureResult.CONTROL_POST_RAW_SENSITIVITY_BOOST)}, " +
+                "black ${captureResult.get(CaptureResult.SENSOR_DYNAMIC_BLACK_LEVEL)?.joinToString()} " +
+                "(static ${inf.characteristics.get(CameraCharacteristics.SENSOR_BLACK_LEVEL_PATTERN)}), " +
+                "white ${captureResult.get(CaptureResult.SENSOR_DYNAMIC_WHITE_LEVEL)}")
+            image.await().use { img ->
+                // The lens's own characteristics and result: colour matrices, shading map and sizes are per lens.
+                DngCreator(inf.characteristics, captureResult).use { dng ->
+                    dng.setOrientation(exifOrientation)
+                    location?.let(dng::setLocation)
+                    dng.writeImage(out, img)
+                }
             }
-        }, handler)
-        onSubmitted()
-        val captureResult = lensResult(result.await())
-        Log.d(TAG, "still (flash $flash${manual?.let { ", manual ${it.first / 1000} µs ISO ${it.second}" } ?: ""}, state ${captureResult.get(CaptureResult.FLASH_STATE)}, AE ${captureResult.get(CaptureResult.CONTROL_AE_STATE)}): ${(captureResult.get(CaptureResult.SENSOR_EXPOSURE_TIME) ?: 0L) / 1000} µs, ISO " +
-            "${captureResult.get(CaptureResult.SENSOR_SENSITIVITY)}, boost ${captureResult.get(CaptureResult.CONTROL_POST_RAW_SENSITIVITY_BOOST)}, " +
-            "black ${captureResult.get(CaptureResult.SENSOR_DYNAMIC_BLACK_LEVEL)?.joinToString()} " +
-            "(static ${inf.characteristics.get(CameraCharacteristics.SENSOR_BLACK_LEVEL_PATTERN)}), " +
-            "white ${captureResult.get(CaptureResult.SENSOR_DYNAMIC_WHITE_LEVEL)}")
-        image.await().use { img ->
-            // The lens's own characteristics and result: colour matrices, shading map and sizes are per lens.
-            DngCreator(inf.characteristics, captureResult).use { dng ->
-                dng.setOrientation(exifOrientation)
-                location?.let(dng::setLocation)
-                dng.writeImage(out, img)
+            return captureResult
+        } catch (t: Throwable) {
+            handler.post {
+                if (pendingImage === image) pendingImage = null
+                if (pendingResult === result) pendingResult = null
             }
+            runCatching { if (image.isCompleted) image.getCompleted().close() }
+            throw t
         }
-        return captureResult
     }
 
     /**
@@ -724,6 +754,7 @@ class CameraController(context: Context) : AutoCloseable {
         }
         val started = System.nanoTime()
         handler.post {
+            pendingBurst = done
             burstSink = sink@{ img ->
                 if (done.isCompleted) return@sink
                 if (handle == 0L) {
@@ -763,6 +794,7 @@ class CameraController(context: Context) : AutoCloseable {
         } catch (e: CancellationException) {
             handler.post {
                 burstSink = null
+                if (pendingBurst === done) pendingBurst = null
                 closed = true
                 if (handle != 0L) BurstNative.destroy(handle)
             }
@@ -770,11 +802,12 @@ class CameraController(context: Context) : AutoCloseable {
         }
         // Stops taking frames; hands over what arrived (camera thread, where it was written).
         val state = CompletableDeferred<Pair<Long, CaptureResult?>>()
-        handler.post {
+        if (!handler.post {
             burstSink = null
+            if (pendingBurst === done) pendingBurst = null
             closed = true
             state.complete(handle to stamps.firstOrNull()?.let { results[it] })
-        }
+        }) state.completeExceptionally(IOException("Camera closed"))
         val (h, reference) = state.await()
         if (h == 0L) throw IOException("Burst: no frames")
         try {
@@ -880,7 +913,7 @@ class CameraController(context: Context) : AutoCloseable {
             runCatching {
                 repeatPreview()
                 val request = request(s, CameraDevice.TEMPLATE_PREVIEW).apply {
-                    addTarget(previewSurface ?: return@post)
+                    addTarget(previewSurface ?: error("Camera closed"))
                     setCommon(inf)
                     trigger()
                 }.build()
@@ -970,7 +1003,21 @@ class CameraController(context: Context) : AutoCloseable {
         }
     }
 
-    /** Closes the camera (on pause); [start] opens it again. */
+    /** Completes any capture waiting on [camera] when the system disconnects or errors it. Camera thread. */
+    private fun failInFlight(camera: CameraDevice, err: IOException) {
+        if (device === camera) {
+            device = null
+            session = null
+        }
+        pendingResult?.completeExceptionally(err)
+        pendingResult = null
+        pendingImage?.completeExceptionally(err)
+        pendingImage = null
+        pendingBurst?.complete(Unit)
+        pendingBurst = null
+    }
+
+    /** Closes the camera (on pause, after any in-flight capture); [start] opens it again. */
     fun stop() {
         aeMode = CameraMetadata.CONTROL_AE_MODE_ON
         flashMode = CameraMetadata.FLASH_MODE_OFF
@@ -982,12 +1029,29 @@ class CameraController(context: Context) : AutoCloseable {
         _focusSize.value = FOCUS_SIZE
         device?.close()
         device = null
-        rawReader?.close()
-        rawReader = null
+        if (captureLock.tryLock()) {
+            try {
+                readerCloseDeferred = false
+                rawReader?.close()
+                rawReader = null
+            } finally {
+                captureLock.unlock()
+            }
+        } else {
+            // DngCreator may still be reading an Image from rawReader: close it as soon as captureDng finishes.
+            readerCloseDeferred = true
+        }
         previewSurface?.release()
         previewSurface = null
-        pendingImage?.cancel()
-        pendingImage = null
+        val closed = IOException("Camera closed")
+        handler.post {
+            pendingResult?.completeExceptionally(closed)
+            pendingResult = null
+            pendingImage?.completeExceptionally(closed)
+            pendingImage = null
+            pendingBurst?.complete(Unit)
+            pendingBurst = null
+        }
     }
 
     override fun close() {
