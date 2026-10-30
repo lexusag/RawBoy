@@ -1,5 +1,11 @@
 # Changelog
 
+**RawBoy Camera: AF LOCK disable button is larger and easier to tap (2026-10-30)**
+
+- The yellow **AF LOCK ✕** badge above the viewfinder has a larger, clearer label (14sp/subheadline semibold, more
+  padding) and an expanded touch target (at least 44-48 pt/dp high), so releasing focus lock is effortless and misses
+  no longer fall through to set a new focus point on the viewfinder.
+
 **RawBoy Camera (Android): photos save when locking right after shooting (2026-10-30)**
 
 - Launching the camera from the lock screen, taking one or more photos (single RAW, flash, or 8-frame burst), and

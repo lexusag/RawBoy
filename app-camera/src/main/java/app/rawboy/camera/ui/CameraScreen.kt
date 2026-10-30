@@ -1,5 +1,6 @@
 package app.rawboy.camera.ui
 
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.semantics.semantics
@@ -293,18 +294,29 @@ fun CameraScreen(
                 shownFocus?.let { (x, y) -> FocusRing(x, y, if (dragPoint != null) null else afState, focusSize) }
                 loupe?.let { LoupeFrame(it, focusSize) }
                 if (focusPoint != null) {
-                    Text(
-                        "AF LOCK  ✕",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color.Black,
-                        modifier = Modifier
+                    Box(
+                        Modifier
                             .align(Alignment.TopCenter)
-                            .padding(top = 12.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(Color(0xFFFFD54F))
-                            .clickable { vm.releaseFocus() }
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
-                    )
+                            .padding(top = 4.dp)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = { vm.releaseFocus() },
+                            )
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            "AF LOCK  ✕",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                            color = Color.Black,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(Color(0xFFFFD54F))
+                                .clickable { vm.releaseFocus() }
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
+                    }
                 }
                 // Shutter blink over the viewfinder.
                 if (blink.value > 0f) {
