@@ -371,6 +371,11 @@ JNIEXPORT void JNICALL Java_app_rawboy_raw_BurstNative_destroy(JNIEnv*, jclass, 
 
 // ---- Lossy JPEG XL DNG (RawBoy Camera; DngJxlNative.kt) ----
 
+// Whether this build has the DNG SDK (RawBoy Film doesn't: its licence can't include it).
+extern "C" JNIEXPORT jboolean JNICALL Java_app_rawboy_raw_DngJxlNative_availableNative(JNIEnv*, jclass) {
+    return RAWBOY_WITH_DNG_SDK ? JNI_TRUE : JNI_FALSE;
+}
+
 // Re-saves the DNG behind fd (read and write access) as a lossy JPEG XL DNG, in place; the file is only touched once
 // the new one is complete. Returns 0 done, 1 left as it was (not a 2x2 mosaic, or already lossy), 2 build without
 // the DNG SDK; throws IOException on failure.

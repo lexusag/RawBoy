@@ -24,6 +24,11 @@ object DngJxlNative {
             else -> Result.UNAVAILABLE
         }
 
+    /** Whether this build can write lossy JPEG XL DNGs: false in RawBoy Film, which has no Adobe DNG SDK. */
+    val isAvailable: Boolean by lazy { availableNative() }
+
+    @JvmStatic private external fun availableNative(): Boolean
+
     @JvmStatic private external fun transcodeNative(fd: Int, distance: Float, effort: Int): Int
 
     const val DEFAULT_DISTANCE = 0.2f

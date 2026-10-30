@@ -16,6 +16,7 @@ import app.rawboy.camera.capture.FlashMode
 import app.rawboy.camera.qr.QrPayload
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.text.style.TextOverflow
+import app.rawboy.raw.DngJxlNative
 import app.rawboy.view.HistogramView
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -674,7 +675,7 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             }
             Switch(checked = settings.keepDng, onCheckedChange = vm::setKeepDng)
         }
-        if (settings.keepDng) {
+        if (settings.keepDng && DngJxlNative.isAvailable) {
             Spacer(Modifier.height(16.dp))
             SettingSwitch(
                 title = "Lossy JPEG XL DNG",
