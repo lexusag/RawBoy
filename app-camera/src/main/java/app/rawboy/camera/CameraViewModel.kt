@@ -53,6 +53,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -79,6 +81,12 @@ class LastShot(val uri: Uri, val thumbnail: Bitmap)
 class CameraViewModel(application: Application) : AndroidViewModel(application) {
     private val app get() = getApplication<Application>()
     val controller = CameraController(application)
+
+    /** The scene is dark enough for [BurstMode.AUTO] to merge frames ([LowLight]); follows the preview's exposure. */
+    val lowLight = controller.frames
+        .runningFold(false) { prev, f -> if (f == null) prev else LowLight.next(prev, f.iso, f.exposureNs, f.postRawBoost) }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
     private val _settings = MutableStateFlow(CameraSettingsStore.load(application))
     val settings = _settings.asStateFlow()
@@ -514,7 +522,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setSmallExport(on: Boolean) = change { it.copy(smallExport = on) }
     fun setRememberLast(on: Boolean) = change { it.copy(rememberLast = on) }
     fun setShowHistogram(on: Boolean) = change { it.copy(showHistogram = on) }
-    fun setMergeBurst(on: Boolean) = change { it.copy(mergeBurst = on) }
+    fun setBurstMode(mode: BurstMode) = change { it.copy(burstMode = mode) }
     fun setShutterSound(on: Boolean) = change { it.copy(shutterSound = on) }
     fun setScanQr(on: Boolean) {
         change { it.copy(scanQr = on) }
@@ -573,7 +581,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val settings = _settings.value
         val flash = settings.flash.takeIf { info?.hasFlash == true } ?: FlashMode.OFF
         // Flash shots are single frames (CameraController.captureDng).
-        val burst = settings.burstFrames > 1 && flash == FlashMode.OFF
+        val burstFrames = settings.burstFrames(lowLight.value)
+        val burst = burstFrames > 1 && flash == FlashMode.OFF
         // A flash shot's raw is lit by the flash, the viewfinder wasn't: no calibration from it.
         val viewfinderKey = if (flash == FlashMode.OFF) live?.stats?.key else null
         val mayHaveFace = info?.hasFaceDetection != true || controller.frames.value?.faces?.isNotEmpty() != false
@@ -591,7 +600,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         // Runs in ShotSaver.scope so finishing LockScreenCameraActivity never cancels an in-flight capture.
         ShotSaver.scope.launch {
             try {
-                val shot = capture(shotId, settings, viewfinderKey, flash).copy(mayHaveFace = mayHaveFace)
+                val shot = capture(shotId, settings, viewfinderKey, flash, burstFrames).copy(mayHaveFace = mayHaveFace)
                 ShotSaver.enqueue(app, shot)
             } catch (e: Throwable) {
                 Log.w(TAG, "capture", e)
@@ -617,7 +626,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /** Captures a raw and saves it as DNG (in Pictures/<Edition.FOLDER>/RAW, or a temporary file). */
-    private suspend fun capture(shotId: Long, settings: CameraSettings, viewfinderKey: Float?, flash: FlashMode): Shot {
+    private suspend fun capture(shotId: Long, settings: CameraSettings, viewfinderKey: Float?, flash: FlashMode, burstFrames: Int): Shot {
         val resolver = app.contentResolver
         val baseName = "IMG_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ROOT).format(Date())
         val degrees = deviceDegrees
@@ -633,7 +642,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             val result = try {
                 withContext(Dispatchers.IO) {
                     val out = resolver.openOutputStream(uri, "w") ?: throw java.io.IOException("Cannot write $name")
-                    val result = out.buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide, settings.burstFrames, fix) { onShutter() } }
+                    val result = out.buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide, burstFrames, fix) { onShutter() } }
                     fix?.let { addGps(uri, it) }
                     MediaStoreOutput.publish(resolver, uri)
                     result
@@ -648,7 +657,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             val file = File(app.cacheDir, "$baseName-$shotId.dng")
             val result = try {
                 withContext(Dispatchers.IO) {
-                    val result = file.outputStream().buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide, settings.burstFrames, fix) { onShutter() } }
+                    val result = file.outputStream().buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide, burstFrames, fix) { onShutter() } }
                     fix?.let { addGps(Uri.fromFile(file), it) }
                     result
                 }
