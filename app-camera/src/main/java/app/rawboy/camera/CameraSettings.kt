@@ -16,6 +16,8 @@ data class CameraSettings(
     val jpegQuality: Int = 95,
     /** Keep the raw as DNG in Pictures/<Edition.FOLDER>/RAW. */
     val keepDng: Boolean = false,
+    /** Save the kept raw as a lossy JPEG XL DNG (a fraction of the size) instead of an uncompressed one. */
+    val lossyDng: Boolean = false,
     /** Save photos at [SMALL_LONG_SIDE] px on the long side instead of full size. */
     val smallExport: Boolean = true,
     /**
@@ -114,6 +116,7 @@ object CameraSettingsStore {
         val always = CameraSettings(
             jpegQuality = p.getInt("jpegQuality", d.jpegQuality).coerceIn(CameraSettings.MIN_QUALITY, 100),
             keepDng = p.getBoolean("keepDng", d.keepDng),
+            lossyDng = p.getBoolean("lossyDng", d.lossyDng),
             smallExport = p.getBoolean("smallExport", d.smallExport),
             maxRes = p.getBoolean("maxRes", d.maxRes),
             rememberLast = p.getBoolean("rememberLast", d.rememberLast),
@@ -155,6 +158,7 @@ object CameraSettingsStore {
             .putFloat("warmth", s.warmth)
             .putInt("jpegQuality", s.jpegQuality)
             .putBoolean("keepDng", s.keepDng)
+            .putBoolean("lossyDng", s.lossyDng)
             .putBoolean("smallExport", s.smallExport)
             .putBoolean("maxRes", s.maxRes)
             .putBoolean("rememberLast", s.rememberLast)

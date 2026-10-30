@@ -368,3 +368,53 @@ JNIEXPORT void JNICALL Java_app_rawboy_raw_BurstNative_destroy(JNIEnv*, jclass, 
 }
 
 }  // extern "C"
+
+// ---- Lossy JPEG XL DNG (RawBoy Camera; DngJxlNative.kt) ----
+
+// Re-saves the DNG behind fd (read and write access) as a lossy JPEG XL DNG, in place; the file is only touched once
+// the new one is complete. Returns 0 done, 1 left as it was (not a 2x2 mosaic, or already lossy), 2 build without
+// the DNG SDK; throws IOException on failure.
+extern "C" JNIEXPORT jint JNICALL Java_app_rawboy_raw_DngJxlNative_transcodeNative(JNIEnv* env, jclass, jint fd,
+                                                                            jfloat distance, jint effort) {
+#if RAWBOY_WITH_DNG_SDK
+    try {
+        std::string error;
+        std::vector<uint8_t> result;
+        {
+            std::vector<uint8_t> data;
+            if (!readAll(fd, data, error)) {
+                throwJava(env, "java/io/IOException", error);
+                return 0;
+            }
+            const auto r = rawboy::transcodeToLossyJxlDng(data.data(), data.size(), distance, effort, result, error);
+            if (r == rawboy::TranscodeResult::NotApplicable) return 1;
+            if (r == rawboy::TranscodeResult::Failed) {
+                throwJava(env, "java/io/IOException", error);
+                return 0;
+            }
+        }
+        if (ftruncate(fd, 0) != 0 || lseek(fd, 0, SEEK_SET) < 0) {
+            throwJava(env, "java/io/IOException", "cannot rewrite the DNG");
+            return 0;
+        }
+        size_t done = 0;
+        while (done < result.size()) {
+            const ssize_t n = write(fd, result.data() + done, result.size() - done);
+            if (n <= 0) {
+                throwJava(env, "java/io/IOException", "cannot write the DNG");
+                return 0;
+            }
+            done += static_cast<size_t>(n);
+        }
+        return 0;
+    } catch (const std::bad_alloc&) {
+        throwJava(env, "java/lang/OutOfMemoryError", "Not enough memory to compress this DNG");
+    } catch (const std::exception& e) {
+        throwJava(env, "java/io/IOException", e.what());
+    }
+    return 0;
+#else
+    (void)env; (void)fd; (void)distance; (void)effort;
+    return 2;
+#endif
+}

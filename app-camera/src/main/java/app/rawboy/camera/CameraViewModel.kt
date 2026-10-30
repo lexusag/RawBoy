@@ -531,6 +531,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setWarmth(v: Float) = change { it.copy(warmth = v) }
     fun setJpegQuality(q: Int) = change { it.copy(jpegQuality = q.coerceIn(CameraSettings.MIN_QUALITY, 100)) }
     fun setKeepDng(keep: Boolean) = change { it.copy(keepDng = keep) }
+    fun setLossyDng(on: Boolean) = change { it.copy(lossyDng = on) }
     fun setSmallExport(on: Boolean) = change { it.copy(smallExport = on) }
 
     /** Switches to the maximum-resolution sensor mode (or back); the lenses are listed again with the new size and the camera restarts. */

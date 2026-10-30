@@ -196,6 +196,16 @@ bool decodeDisplayPixels(const void* pixels, DisplayPixels format, int width, in
 
 #if RAWBOY_WITH_DNG_SDK
 bool decodeWithDngSdk(const uint8_t* data, size_t size, DecodedImage& out, std::string& error);
+
+enum class TranscodeResult { Done, NotApplicable, Failed };
+
+/**
+ * Re-saves the DNG in [data] as a lossy JPEG XL DNG (DNG 1.7.1) into [out]. [distance]: libjxl's quality (0.2 is
+ * visually lossless, larger is smaller and lossier); [effort] 1..9. NotApplicable: the DNG isn't a 2x2 CFA mosaic or
+ * is already lossy JPEG XL; [out] is untouched. Failed: [error] says why.
+ */
+TranscodeResult transcodeToLossyJxlDng(const uint8_t* data, size_t size, float distance, int effort,
+                                       std::vector<uint8_t>& out, std::string& error);
 #endif
 
 /**

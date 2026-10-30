@@ -674,6 +674,15 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             }
             Switch(checked = settings.keepDng, onCheckedChange = vm::setKeepDng)
         }
+        if (settings.keepDng) {
+            Spacer(Modifier.height(16.dp))
+            SettingSwitch(
+                title = "Lossy JPEG XL DNG",
+                subtitle = "Compress the raw to a fraction of the size, visually lossless, instead of an uncompressed DNG. Takes a few seconds more to save",
+                checked = settings.lossyDng,
+                onChange = vm::setLossyDng,
+            )
+        }
         Spacer(Modifier.height(16.dp))
         SettingSwitch(
             title = "Smaller photos",

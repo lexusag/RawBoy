@@ -69,7 +69,7 @@ set(RAWBOY_SOURCES
     noise.cpp
     orientation.cpp)
 if(RAWBOY_WITH_DNG_SDK)
-    list(APPEND RAWBOY_SOURCES decoder_dng.cpp)
+    list(APPEND RAWBOY_SOURCES decoder_dng.cpp dng_transcode.cpp)
 endif()
 
 add_library(rawboy SHARED ${RAWBOY_SOURCES})

@@ -1,5 +1,13 @@
 # Changelog
 
+**RawBoy Camera (Android): lossy JPEG XL DNG (2026-10-30)**
+
+- New **Lossy JPEG XL DNG** switch in Settings (under Keep raw): the kept DNG is re-saved as a DNG 1.7.1 with lossy
+  JPEG XL compression (libjxl distance 0.2, visually lossless) through the Adobe DNG SDK, about a quarter of the size
+  of the uncompressed DNG (25 MB to 6 MB on a 12 MP shot). The JPEG is developed from the uncompressed raw first; if the
+  compression fails the uncompressed DNG stays. Orientation, shooting data and GPS are kept (host test:
+  `tools/dng_jxl/run.sh`). No embedded previews: the SDK build has no libjpeg.
+
 **RawBoy Camera (Android): fix launch from lock screen (2026-10-30)**
 
 - Double-pressing the power button to launch the camera from the lock screen now opens reliably: re-unified the secure
