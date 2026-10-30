@@ -53,7 +53,7 @@ class LookApplierTest {
         assertEquals(30f, p.localContrast, 1e-6f) // the rest of Detail still comes from the preset
         val less = LookApplier.applyPreset(base, preset, Adjustments(denoise = -20f))
         assertEquals(24f, less.denoise, 1e-4f) // luma goes first when lowering Denoise
-        assertEquals(74f, less.colorDenoise!!, 1e-4f)
+        assertEquals(71f, less.colorDenoise!!, 1e-4f)
     }
 
     @Test

@@ -60,6 +60,8 @@ export const Looks = {
   /** Slide film: vivid colour, deep shadows. */
   VELVIA_50: look('velvia50', 'Green Vivid Slide 50', 'Green Vivid Slide 50.cube', { grain: 8, vignette: -10 }),
   REDSCALE: look('redscale', 'Redscale', 'Redscale.png', { contrast: 5, grain: 30, vignette: -15 }),
+  /** Monochrome, soft: Tri-X on a soft paper grade, gentle highlights, open shadows. */
+  TRIX_SOFT: look('trixsoft', 'Yellow Mono Soft', 'Yellow Mono Soft.cube', { grain: 20, monochrome: true }),
   /** Monochrome, classic: Tri-X on a normal paper grade. */
   TRIX_400: look('trix400', 'Yellow Mono 400', 'Yellow Mono 400.cube', { grain: 25, monochrome: true }),
   /** Monochrome, Tri-X developed longer: harder and grainier. */
@@ -75,7 +77,7 @@ export const Looks = {
 export const ALL_LOOKS: Look[] = [
   Looks.NATURAL, Looks.PORTRA_400, Looks.PORTRA_800, Looks.EKTAR_100, Looks.GOLD_200,
   Looks.SUPERIA_400, Looks.FUJI_400H, Looks.VISION3_500T, Looks.VELVIA_50, Looks.REDSCALE,
-  Looks.TRIX_400, Looks.TRIX_PUSH, Looks.TRIX_HARD, Looks.DOUBLE_X, Looks.DOUBLE_X_SOFT,
+  Looks.TRIX_SOFT, Looks.TRIX_400, Looks.TRIX_PUSH, Looks.TRIX_HARD, Looks.DOUBLE_X, Looks.DOUBLE_X_SOFT,
 ];
 
 /** Bundled LUT ids of the monochrome looks: the LUT alone makes a photo black and white. */

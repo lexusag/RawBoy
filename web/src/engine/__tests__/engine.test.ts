@@ -276,6 +276,7 @@ describe('presets', () => {
     expect(presetSections([warm])).toEqual([{ label: null, presets: [warm] }]);
     expect(presetSections([mono])).toEqual([{ label: 'Black & white', presets: [mono] }]);
     expect(isMonochromeLut(lut)).toBe(true);
+    expect(isMonochromeLut('asset:luts/Yellow Mono Soft.cube')).toBe(true);
     expect(isMonochromeLut('asset:luts/Redscale.png')).toBe(false);
     expect(isMonochromeLut(null)).toBe(false);
   });

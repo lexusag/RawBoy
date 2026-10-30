@@ -29,7 +29,7 @@ TIFF work too, at lower quality (see *JPEG, HEIC, PNG and TIFF* below).
 | Yellow Cine 500T | tungsten-balanced cinema negative | — (grain and bloom) |
 | Green Vivid Slide 50 | slide film, vivid | — |
 | Redscale | Redscale | — (red/orange redscale film) |
-| Yellow Mono 400, Yellow Mono Push, Yellow Mono Hard | black-and-white negative on paper: normal; developed longer; developed longer on a hard grade | — (monochrome, rising contrast) |
+| Yellow Mono Soft, Yellow Mono 400, Yellow Mono Push, Yellow Mono Hard | black-and-white negative on paper: soft grade; normal; developed longer; developed longer on a hard grade | — (monochrome, rising contrast) |
 | Yellow Cine Mono, Yellow Cine Mono Soft | black-and-white cinema negative on print film; developed short on a soft paper grade | — (monochrome) |
 
 Look names are RawBoy's own: "Yellow" and "Green" are two families of film character, not products.

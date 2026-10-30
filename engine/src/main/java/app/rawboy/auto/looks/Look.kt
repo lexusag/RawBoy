@@ -87,6 +87,11 @@ object Looks {
         "redscale", "Redscale", "Redscale.png",
         contrast = 5f, grain = 30f, vignette = -15f,
     )
+    /** Monochrome, soft: Tri-X on a soft paper grade, gentle highlights, open shadows. */
+    val TRIX_SOFT = Look(
+        "trixsoft", "Yellow Mono Soft", "Yellow Mono Soft.cube",
+        grain = 20f, monochrome = true,
+    )
     /** Monochrome, classic: Tri-X on a normal paper grade. */
     val TRIX_400 = Look(
         "trix400", "Yellow Mono 400", "Yellow Mono 400.cube",
@@ -115,7 +120,7 @@ object Looks {
 
     val ALL = listOf(
         NATURAL, PORTRA_400, PORTRA_800, EKTAR_100, GOLD_200, SUPERIA_400, FUJI_400H,
-        VISION3_500T, VELVIA_50, REDSCALE, TRIX_400, TRIX_PUSH, TRIX_HARD, DOUBLE_X, DOUBLE_X_SOFT,
+        VISION3_500T, VELVIA_50, REDSCALE, TRIX_SOFT, TRIX_400, TRIX_PUSH, TRIX_HARD, DOUBLE_X, DOUBLE_X_SOFT,
     )
 
     fun byId(id: String): Look = RetiredLooks.look(id).let { key -> ALL.firstOrNull { it.id == key } } ?: NATURAL

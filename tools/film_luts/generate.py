@@ -63,6 +63,7 @@ STOCKS = [
     ("Yellow Cine 500T", "Kodak Vision3 500T 5219", SCAN, 2.46, 0.99),
     ("Green Vivid Slide 50", "Fuji Velvia 50", None, 0.0, 1.12),
     # Black and white: more development and harder paper grades for Push and Hard
+    ("Yellow Mono Soft", "Kodak Tri-X 400", "Kodak Polymax Fine-Art Paper Grade 0", 0.0, 1.0),
     ("Yellow Mono 400", "Kodak Tri-X 400", "Kodak Polymax Fine-Art Paper Grade 2", 0.0, 1.0),
     ("Yellow Mono Push", "Kodak Trix-X 400 Dev 9", "Kodak Polymax Fine-Art Paper Grade 2", 0.0, 1.0),
     ("Yellow Mono Hard", "Kodak Trix-X 400 Dev 11", "Kodak Polymax Fine-Art Paper Grade 3", 0.0, 1.0),
