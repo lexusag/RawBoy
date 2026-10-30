@@ -706,6 +706,8 @@ progress {
 
 .slider {
   padding: 4px 0;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 /* Two sliders sharing a row (Auto's Adjust tab). */
@@ -758,7 +760,7 @@ input[type='range'] {
   margin: 2px 0 0;
 }
 
-/* Keep vertical swipes as scrolls; ParamSlider handles horizontal touch drags itself. */
+/* Keep vertical swipes as scrolls; ParamSlider handles horizontal touch and pen drags itself. */
 .slider-track {
   touch-action: pan-y;
   padding: 4px 0;
