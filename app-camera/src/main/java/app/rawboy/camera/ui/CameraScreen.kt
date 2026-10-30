@@ -66,6 +66,7 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -104,6 +105,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.rawboy.auto.looks.LookApplier
+import app.rawboy.camera.BurstMode
 import app.rawboy.camera.CameraSettings
 import app.rawboy.camera.CameraStatus
 import app.rawboy.camera.CameraViewModel
@@ -142,6 +144,7 @@ fun CameraScreen(
     val focusSize by vm.controller.focusSize.collectAsStateWithLifecycle()
     val flashAvailable by vm.flashAvailable.collectAsStateWithLifecycle()
     val histogram by vm.histogram.collectAsStateWithLifecycle()
+    val lowLight by vm.lowLight.collectAsStateWithLifecycle()
     val qrCode by vm.qrCode.collectAsStateWithLifecycle()
     // Only the AF state of the camera's per-frame metadata, so the screen doesn't recompose 30 times a second.
     val afState by remember(vm) { vm.controller.frames.map { it?.afState }.distinctUntilChanged() }
@@ -207,7 +210,7 @@ fun CameraScreen(
                         .padding(start = 12.dp),
                 )
                 RawButton(settings.keepDng) { vm.setKeepDng(!settings.keepDng) }
-                BurstButton(settings.mergeBurst) { vm.setMergeBurst(!settings.mergeBurst) }
+                BurstButton(settings.burstMode, lowLight) { vm.setBurstMode(settings.burstMode.next()) }
                 if (flashAvailable) FlashButton(settings.flash, vm::cycleFlash)
                 HelpButton(appName, CAMERA_HELP, onOpenChange = { showHelp = it })
                 IconButton(onClick = { showSettings = true }) {
@@ -673,13 +676,22 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             onChange = vm::setSmallExport,
         )
         Spacer(Modifier.height(16.dp))
-        SettingSwitch(
-            title = "Merge ${CameraSettings.BURST_FRAMES} frames",
-            subtitle = "Each shot takes ${CameraSettings.BURST_FRAMES} raws and merges them into one: less noise, " +
-                "takes a little longer to save. Hold still; not used with flash",
-            checked = settings.mergeBurst,
-            onChange = vm::setMergeBurst,
+        Text("Merge ${CameraSettings.BURST_FRAMES} frames", style = MaterialTheme.typography.bodyMedium)
+        Text(
+            "Each shot takes ${CameraSettings.BURST_FRAMES} raws and merges them into one: less noise, takes a little " +
+                "longer to save. Auto does it in low light only. Hold still; not used with flash",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+            for (m in listOf(BurstMode.ON, BurstMode.AUTO, BurstMode.OFF)) {
+                FilterChip(
+                    selected = settings.burstMode == m,
+                    onClick = { vm.setBurstMode(m) },
+                    label = { Text(m.name.lowercase().replaceFirstChar { it.uppercase() }) },
+                )
+            }
+        }
         Spacer(Modifier.height(16.dp))
         // Where the law requires the click, Android plays it anyway: shown on and locked.
         SettingSwitch(
@@ -758,15 +770,31 @@ private fun RawButton(keep: Boolean, onClick: () -> Unit) {
     }
 }
 
-/** Merge 8 frames (the same setting as in Settings): the burst icon lit when on, dimmed when off. */
+/**
+ * Merge 8 frames, cycling On -> Auto -> Off (the same setting as in Settings). Coloured while it will merge the next
+ * shot (On, or Auto in low light), gray otherwise; Auto carries a small "A".
+ */
 @Composable
-private fun BurstButton(on: Boolean, onClick: () -> Unit) {
-    IconButton(onClick = onClick, modifier = Modifier.semantics { stateDescription = if (on) "On" else "Off" }) {
-        Icon(
-            BurstIcon,
-            contentDescription = "Merge 8 frames",
-            tint = if (on) MaterialTheme.colorScheme.primary else LocalContentColor.current.copy(alpha = 0.6f),
-        )
+private fun BurstButton(mode: BurstMode, lowLight: Boolean, onClick: () -> Unit) {
+    val active = mode.merges(lowLight)
+    val state = when (mode) {
+        BurstMode.ON -> "On"
+        BurstMode.AUTO -> if (active) "Auto, merging (low light)" else "Auto, not merging (enough light)"
+        BurstMode.OFF -> "Off"
+    }
+    val tint = if (active) MaterialTheme.colorScheme.primary else LocalContentColor.current.copy(alpha = 0.6f)
+    IconButton(onClick = onClick, modifier = Modifier.semantics { stateDescription = state }) {
+        Box {
+            Icon(BurstIcon, contentDescription = "Merge 8 frames", tint = tint)
+            if (mode == BurstMode.AUTO) {
+                Text(
+                    "A",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, lineHeight = 9.sp, fontWeight = FontWeight.Bold),
+                    color = tint,
+                    modifier = Modifier.align(Alignment.BottomEnd).offset(x = 5.dp, y = 2.dp),
+                )
+            }
+        }
     }
 }
 

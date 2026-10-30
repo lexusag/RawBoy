@@ -6,6 +6,13 @@
   padding) and an expanded touch target (at least 44-48 pt/dp high), so releasing focus lock is effortless and misses
   no longer fall through to set a new focus point on the viewfinder.
 
+**RawBoy Camera (Android): frame merging is Auto by default (2026-10-30)**
+
+- The burst button now cycles **On → Auto → Off** (also a choice in Settings) and starts on **Auto**: 8 frames are
+  merged only in low light (preview ISO × exposure time × boost ≥ 20, back to one frame below 12; `LowLight`, documented
+  in `docs/camera.md` for tuning). The icon is gray when the next shot won't merge, coloured when it will, and carries a
+  small "A" in Auto. The old on/off setting is not carried over.
+
 **RawBoy Camera (Android): photos save when locking right after shooting (2026-10-30)**
 
 - Launching the camera from the lock screen, taking one or more photos (single RAW, flash, or 8-frame burst), and
