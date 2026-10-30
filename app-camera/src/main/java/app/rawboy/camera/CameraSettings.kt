@@ -25,8 +25,8 @@ data class CameraSettings(
     val rememberLast: Boolean = false,
     /** A live RGB histogram in a corner of the viewfinder. */
     val showHistogram: Boolean = false,
-    /** Each shot (without flash) takes [BURST_FRAMES] raws and merges them into one: less noise. */
-    val mergeBurst: Boolean = false,
+    /** Whether each shot (without flash) takes [BURST_FRAMES] raws and merges them into one: see [BurstMode]. */
+    val burstMode: BurstMode = BurstMode.AUTO,
     /** Play the camera shutter click on each shot. Where the law requires it, Android plays it regardless (ShutterSound). */
     val shutterSound: Boolean = false,
     /** Save where each photo was taken (GPS tags in the JPEG and DNG). Needs location permission, asked when turned on. */
@@ -64,15 +64,15 @@ data class CameraSettings(
     /** The long side to save at, or null for full size. */
     val maxLongSide: Int? get() = if (smallExport) SMALL_LONG_SIDE else null
 
-    /** Raws per shot: [BURST_FRAMES] with [mergeBurst], else 1. */
-    val burstFrames: Int get() = if (mergeBurst) BURST_FRAMES else 1
+    /** Raws per shot: [BURST_FRAMES] when the mode merges (for AUTO: when [lowLight]), else 1. */
+    fun burstFrames(lowLight: Boolean): Int = if (burstMode.merges(lowLight)) BURST_FRAMES else 1
 
     companion object {
         const val MIN_QUALITY = 70
         const val SMALL_LONG_SIDE = 3000
         /** Light sharpening after the downscale to [SMALL_LONG_SIDE] (luma unsharp mask, `band_ops.h`); full size gets none. */
         const val SMALL_SHARPEN = 0.5f
-        /** Raws merged per shot with [mergeBurst]: noise about 1/sqrt of it where nothing moves (~2.8x less). */
+        /** Raws merged per shot with [BurstMode]: noise about 1/sqrt of it where nothing moves (~2.8x less). */
         const val BURST_FRAMES = 8
 
         /** Range of the preview calibration; the Pixel's lenses need 0.5 (selfie) to ~9 (T3). */
@@ -105,7 +105,7 @@ object CameraSettingsStore {
             smallExport = p.getBoolean("smallExport", d.smallExport),
             rememberLast = p.getBoolean("rememberLast", d.rememberLast),
             showHistogram = p.getBoolean("showHistogram", d.showHistogram),
-            mergeBurst = p.getBoolean("mergeBurst", d.mergeBurst),
+            burstMode = runCatching { BurstMode.valueOf(p.getString("burstMode", null)!!) }.getOrDefault(d.burstMode),
             shutterSound = p.getBoolean("shutterSound", d.shutterSound),
             geotag = p.getBoolean("geotag", d.geotag),
             scanQr = p.getBoolean("scanQr", d.scanQr),
@@ -145,7 +145,7 @@ object CameraSettingsStore {
             .putBoolean("smallExport", s.smallExport)
             .putBoolean("rememberLast", s.rememberLast)
             .putBoolean("showHistogram", s.showHistogram)
-            .putBoolean("mergeBurst", s.mergeBurst)
+            .putString("burstMode", s.burstMode.name)
             .putBoolean("shutterSound", s.shutterSound)
             .putBoolean("geotag", s.geotag)
             .putBoolean("scanQr", s.scanQr)
@@ -186,4 +186,49 @@ object CameraSettingsStore {
             val (key, value) = entry.split('=').takeIf { it.size == 2 } ?: return@mapNotNull null
             value.toFloatOrNull()?.takeIf { it > 0f }?.let { key to it.coerceIn(min, max) }
         }.toMap()
+}
+
+/** Frame merging for each shot (the burst button): cycles ON -> AUTO -> OFF. */
+enum class BurstMode {
+    /** Always merge [CameraSettings.BURST_FRAMES] frames. */
+    ON,
+
+    /** Merge only in low light ([LowLight]); one frame otherwise. The default: stacking is not obvious to users. */
+    AUTO,
+
+    /** Always one frame. */
+    OFF;
+
+    fun merges(lowLight: Boolean): Boolean = this == ON || (this == AUTO && lowLight)
+
+    fun next(): BurstMode = when (this) {
+        ON -> AUTO
+        AUTO -> OFF
+        OFF -> ON
+    }
+}
+
+/**
+ * Low-light criteria for [BurstMode.AUTO]. TUNE HERE.
+ *
+ * The measure is the preview's exposure product `ISO x exposure time (s) x postRawBoost` (what the camera's AE
+ * needed for the scene; higher = darker). Rough scale: sunny day ~0.1, bright indoors ~3, dim indoors ~15-30,
+ * night street 60+. A Schmitt trigger avoids flicker at the edge: low light switches ON at or above
+ * [ENTER_PRODUCT] and OFF again only below [EXIT_PRODUCT]. The values are first guesses (e.g. ISO 600 at 1/30 s
+ * enters; ISO 400 at 1/60 s, 6.7, does not): check the logcat line "shutter ..." (ISO, exposure, boost) in real
+ * scenes, and adjust. Flash shots never merge, whatever the light.
+ */
+object LowLight {
+    const val ENTER_PRODUCT = 20f
+    const val EXIT_PRODUCT = 12f
+
+    fun product(iso: Float, exposureNs: Long, postRawBoost: Float): Float =
+        iso * (exposureNs / 1e9f) * postRawBoost.coerceAtLeast(1f)
+
+    /** Next low-light state given the previous one (hysteresis). Unknown exposure keeps [previous]. */
+    fun next(previous: Boolean, iso: Float, exposureNs: Long, postRawBoost: Float): Boolean {
+        if (iso <= 0f || exposureNs <= 0L) return previous
+        val v = product(iso, exposureNs, postRawBoost)
+        return if (previous) v >= EXIT_PRODUCT else v >= ENTER_PRODUCT
+    }
 }

@@ -51,7 +51,7 @@ shows them.
   manually on the Pixel, are metered by RawBoy (the iPhone's flash is exposed by its own AE, so it is kept too). You can keep shooting meanwhile;
   "Saving N…" shows the queue. The thumbnail opens the last photo. Exposure is metered on the middle half of the
   frame (width and height); a focus lock meters at its point instead.
-- **Merge 8 frames** (the burst button in the top bar, or Settings; off by default): each shot without flash takes 8 raw frames in a quick burst and
+- **Merge 8 frames** (the burst button in the top bar, or Settings; **Auto** by default): each shot without flash takes 8 raw frames in a quick burst and
   merges them into one DNG before developing, as the phone's HDR+ does for its own JPEGs: each frame is aligned to the
   first (tile by tile, so hand shake is followed) and averaged in where it matches; where something moved, the first
   frame is kept, so moving things don't ghost. Noise drops by about 3× where nothing moves, so the develop picks
@@ -59,6 +59,14 @@ shows them.
   still coming in, so the DNG follows soon after the last frame; the JPEG comes out about as fast as from one frame
   (less denoise work). It needs ~200 MB of memory at its peak, so Android may close other apps to make room. The
   shutter greys out ("Merging frames…") until the merged DNG is written, so bursts never overlap.
+  The button cycles **On → Auto → Off**. **Auto** (small "A") merges only in low light; the icon is coloured when the
+  next shot will merge and gray when it won't (On is always coloured, Off always gray).
+  - *Low-light criteria (Auto), for tuning* (`LowLight` in `CameraSettings.kt`): the measure is the preview's
+    `ISO × exposure time (s) × post-raw boost`, the light the camera's auto exposure needs (higher = darker). Rough scale:
+    sunny day ≈ 0.1, bright indoors ≈ 3, dim indoors ≈ 15–30, night street 60+. Low light **starts at ≥ 20**
+    (`ENTER_PRODUCT`, e.g. ISO 600 at 1/30 s) and **ends below 12** (`EXIT_PRODUCT`), so it doesn't flicker at the
+    edge. The decision is read when the shutter is pressed. Values are first guesses: compare with the `shutter …`
+    logcat line (preview ISO, exposure, boost) in real scenes and adjust.
 - **JPEG:** encoded with Google's **jpegli** from 16-bit pixels, full-resolution colour (4:4:4), quality 95 by
   default (Settings: 70–100). jpegli's adaptive quantisation gives fewer artefacts per byte than libjpeg.
 - **RAW:** the **RAW** button in the top bar keeps the DNG next to the JPEG (lit) or not (struck through); the same
