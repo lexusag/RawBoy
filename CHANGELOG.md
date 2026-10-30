@@ -1,5 +1,10 @@
 # Changelog
 
+**Crop & rotate: smooth straighten slider (2026-10-30)**
+
+- Crop & rotate (Android, iOS, web): the Straighten slider now rotates smoothly instead of snapping in 0.1° steps,
+  giving fine sub-pixel control when aligning horizons and architectural verticals against the grid.
+
 **RawBoy Camera: AF LOCK disable button is larger and easier to tap (2026-10-30)**
 
 - The yellow **AF LOCK ✕** badge above the viewfinder has a larger, clearer label (14sp/subheadline semibold, more

@@ -470,8 +470,8 @@ fun GeometryPanel(
         }
         ParamSlider(
             "Straighten", params.straighten, -45f..45f, 0f,
-            format = { String.format(Locale.ROOT, "%+.1f°", it) },
-        ) { onChange(params.copy(straighten = (it * 10).roundToInt() / 10f)) }
+            format = { String.format(Locale.ROOT, "%+.1f°", if (kotlin.math.abs(it) < 0.05f) 0f else it) },
+        ) { onChange(params.copy(straighten = it)) }
         Text(
             "Drag the corners, edges or inside of the frame to crop. Straightening crops automatically so no " +
                 "empty corners show. Resets for each new photo.",

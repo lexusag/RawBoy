@@ -327,10 +327,10 @@ export function GeometryPanel({ params, onChange, onRotate, onFlip, aspect, port
         value={params.straighten}
         min={-45}
         max={45}
-        step={0.1}
+        step={0.01}
         defaultValue={0}
         format={formatDegrees}
-        onChange={(v) => onChange({ ...params, straighten: Math.round(v * 10) / 10 })}
+        onChange={(v) => onChange({ ...params, straighten: Math.round(v * 100) / 100 })}
       />
       <Note>Drag the corners, edges or inside of the frame to crop. Straightening crops automatically so no empty corners show. Resets for each new photo.</Note>
     </div>
