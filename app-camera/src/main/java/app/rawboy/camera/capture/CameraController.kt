@@ -367,7 +367,7 @@ class CameraController(context: Context) : AutoCloseable {
 
     /** Opens the camera and starts the preview into [surfaceTexture]. Requires the CAMERA permission. */
     suspend fun start(info: Info, surfaceTexture: SurfaceTexture) {
-        captureLock.withLock { stop() }
+        captureLock.withLock { stop(alreadyLocked = true) }
         this.info = info
         surfaceTexture.setDefaultBufferSize(info.previewSize.width, info.previewSize.height)
         val preview = Surface(surfaceTexture).also { previewSurface = it }
@@ -1048,7 +1048,9 @@ class CameraController(context: Context) : AutoCloseable {
     }
 
     /** Closes the camera (on pause, after any in-flight capture); [start] opens it again. */
-    fun stop() {
+    fun stop() = stop(alreadyLocked = false)
+
+    private fun stop(alreadyLocked: Boolean) {
         aeMode = CameraMetadata.CONTROL_AE_MODE_ON
         flashMode = CameraMetadata.FLASH_MODE_OFF
         runCatching { session?.close() }
@@ -1059,7 +1061,11 @@ class CameraController(context: Context) : AutoCloseable {
         _focusSize.value = FOCUS_SIZE
         device?.close()
         device = null
-        if (captureLock.tryLock()) {
+        if (alreadyLocked) {
+            readerCloseDeferred = false
+            rawReader?.close()
+            rawReader = null
+        } else if (captureLock.tryLock()) {
             try {
                 readerCloseDeferred = false
                 rawReader?.close()
