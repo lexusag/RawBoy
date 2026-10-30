@@ -78,6 +78,8 @@ public enum Looks {
     /** Slide film: vivid colour, deep shadows. */
     public static let velvia50 = Look("velvia50", "Green Vivid Slide 50", "Green Vivid Slide 50.cube", grain: 8, vignette: -10)
     public static let redscale = Look("redscale", "Redscale", "Redscale.png", contrast: 5, grain: 30, vignette: -15)
+    /** Monochrome, soft: Tri-X on a soft paper grade, gentle highlights, open shadows. */
+    public static let trixSoft = Look("trixsoft", "Yellow Mono Soft", "Yellow Mono Soft.cube", grain: 20, monochrome: true)
     /** Monochrome, classic: Tri-X on a normal paper grade. */
     public static let trix400 = Look("trix400", "Yellow Mono 400", "Yellow Mono 400.cube", grain: 25, monochrome: true)
     /** Monochrome, Tri-X developed longer: harder and grainier. */
@@ -93,7 +95,7 @@ public enum Looks {
 
     public static let all: [Look] = [
         natural, portra400, portra800, ektar100, gold200, superia400, fuji400h,
-        vision3500t, velvia50, redscale, trix400, trixPush, trixHard, doubleX, doubleXSoft,
+        vision3500t, velvia50, redscale, trixSoft, trix400, trixPush, trixHard, doubleX, doubleXSoft,
     ]
 
     public static func byId(_ id: String) -> Look {
