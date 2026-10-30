@@ -63,8 +63,8 @@ shows them.
   next shot will merge and gray when it won't (On is always coloured, Off always gray).
   - *Low-light criteria (Auto), for tuning* (`LowLight` in `CameraSettings.kt`): the measure is the preview's
     `ISO × exposure time (s) × post-raw boost`, the light the camera's auto exposure needs (higher = darker). Rough scale:
-    sunny day ≈ 0.1, bright indoors ≈ 3, dim indoors ≈ 15–30, night street 60+. Low light **starts at ≥ 20**
-    (`ENTER_PRODUCT`, e.g. ISO 600 at 1/30 s) and **ends below 12** (`EXIT_PRODUCT`), so it doesn't flicker at the
+    sunny day ≈ 0.1, bright indoors ≈ 3, dim indoors ≈ 15–30, night street 60+. Low light **starts at ≥ 6**
+    (`ENTER_PRODUCT`, e.g. ISO 400 at 1/60 s) and **ends below 4** (`EXIT_PRODUCT`), so it doesn't flicker at the
     edge. The decision is read when the shutter is pressed. Values are first guesses: compare with the `shutter …`
     logcat line (preview ISO, exposure, boost) in real scenes and adjust.
 - **JPEG:** encoded with Google's **jpegli** from 16-bit pixels, full-resolution colour (4:4:4), quality 95 by

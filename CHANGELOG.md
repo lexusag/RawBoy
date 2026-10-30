@@ -26,7 +26,7 @@
 **RawBoy Camera (Android): frame merging is Auto by default (2026-10-30)**
 
 - The burst button now cycles **On → Auto → Off** (also a choice in Settings) and starts on **Auto**: 8 frames are
-  merged only in low light (preview ISO × exposure time × boost ≥ 20, back to one frame below 12; `LowLight`, documented
+  merged only in low light (preview ISO × exposure time × boost ≥ 6, back to one frame below 4; `LowLight`, documented
   in `docs/camera.md` for tuning). The icon is gray when the next shot won't merge, coloured when it will, and carries a
   small "A" in Auto. The old on/off setting is not carried over.
 

@@ -228,13 +228,13 @@ enum class BurstMode {
  * The measure is the preview's exposure product `ISO x exposure time (s) x postRawBoost` (what the camera's AE
  * needed for the scene; higher = darker). Rough scale: sunny day ~0.1, bright indoors ~3, dim indoors ~15-30,
  * night street 60+. A Schmitt trigger avoids flicker at the edge: low light switches ON at or above
- * [ENTER_PRODUCT] and OFF again only below [EXIT_PRODUCT]. The values are first guesses (e.g. ISO 600 at 1/30 s
- * enters; ISO 400 at 1/60 s, 6.7, does not): check the logcat line "shutter ..." (ISO, exposure, boost) in real
- * scenes, and adjust. Flash shots never merge, whatever the light.
+ * [ENTER_PRODUCT] and OFF again only below [EXIT_PRODUCT] (e.g. ISO 400 at 1/60 s, 6.7, enters; bright indoors
+ * at ~3 does not): check the logcat line "shutter ..." (ISO, exposure, boost) in real scenes, and adjust. Flash
+ * shots never merge, whatever the light.
  */
 object LowLight {
-    const val ENTER_PRODUCT = 20f
-    const val EXIT_PRODUCT = 12f
+    const val ENTER_PRODUCT = 6f
+    const val EXIT_PRODUCT = 4f
 
     fun product(iso: Float, exposureNs: Long, postRawBoost: Float): Float =
         iso * (exposureNs / 1e9f) * postRawBoost.coerceAtLeast(1f)
