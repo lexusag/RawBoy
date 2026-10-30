@@ -335,9 +335,9 @@ struct GeometryPanel: View {
             }
             .scrollIndicators(.hidden)
             ParamSlider(label: "Straighten", value: params.straighten, range: -45...45, defaultValue: 0,
-                        format: { String(format: "%+.1f°", $0) }) { v in
+                        format: { String(format: "%+.1f°", abs($0) < 0.05 ? 0 : $0) }) { v in
                 var p = params
-                p.straighten = Float((v * 10).rounded()) / 10
+                p.straighten = v
                 onChange(p)
             }
             Note("Drag the corners, edges or inside of the frame to crop. Straightening crops automatically so no empty corners show. Resets for each new photo.")

@@ -3,7 +3,10 @@ import { useEffect, useRef, type CSSProperties } from 'react';
 export const formatSigned = (v: number) => `${Math.round(v) > 0 ? '+' : ''}${Math.round(v)}`;
 export const formatPlain = (v: number) => String(Math.round(v));
 export const formatEv = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(2)} EV`;
-export const formatDegrees = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}°`;
+export const formatDegrees = (v: number) => {
+  const rounded = Math.abs(v) < 0.05 ? 0 : v;
+  return `${rounded >= 0 ? '+' : ''}${rounded.toFixed(1)}°`;
+};
 
 /** Finger movement (px) before a gesture is judged a horizontal drag or a vertical scroll; finer for a stylus. */
 const TOUCH_SLOP = 8;
