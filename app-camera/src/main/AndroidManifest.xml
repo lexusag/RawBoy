@@ -5,6 +5,9 @@
     <!-- Geotagging (Settings, off by default): asked for only when it is turned on. -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <!-- Developing a shot takes ~3 s: keeps the process and CPU awake when the phone is locked right after shooting. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <uses-feature android:name="android.hardware.camera" android:required="true" />
     <!-- The location permissions would otherwise make GPS a required feature. -->
@@ -65,5 +68,11 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+
+        <!-- Keeps the process and CPU awake while queued shots finish developing after the camera closes. -->
+        <service
+            android:name=".SaveService"
+            android:exported="false"
+            android:foregroundServiceType="shortService" />
     </application>
 </manifest>

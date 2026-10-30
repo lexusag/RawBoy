@@ -20,7 +20,8 @@ Turning on or installing another camera app (Pixel Camera, say) clears both choi
 Camera disabled. If another camera was set to always open, clear it first (*Settings → Apps → that camera → Open by
 default*). On a locked phone it opens over the lock screen without the photos taken before: the thumbnail shows
 only the new shots and asks to unlock before opening one, and the camera closes when the screen turns off (also if
-it was unlocked since, so the next double press on a locked phone always starts a fresh camera). Unlocked
+it was unlocked since, so the next double press on a locked phone always starts a fresh camera; any shot just taken
+still finishes saving in the background). Unlocked
 while it is open, it carries on as the ordinary camera.
 **UW · W · T** at the bottom of the viewfinder switches between the ultrawide, wide and telephoto lenses, as in
 Google Camera (each lens that can deliver RAW is offered). The button right of the shutter switches to the

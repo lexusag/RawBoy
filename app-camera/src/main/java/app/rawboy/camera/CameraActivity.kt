@@ -30,8 +30,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.ui.graphics.Color
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import app.rawboy.camera.qr.QrPayload
 import app.rawboy.camera.ui.CameraScreen
+import kotlinx.coroutines.launch
 
 /** The lock screen camera: [CameraActivity] in its own task (see the manifest). */
 class LockScreenCameraActivity : CameraActivity()
@@ -75,9 +77,17 @@ open class CameraActivity : ComponentActivity() {
      */
     private var closeOnScreenOff: BroadcastReceiver? = null
 
+    /** Screen turned off while Camera2 was still reading a shot: close as soon as the raw is captured. */
+    private var closeAfterCapture = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         onLaunch(intent, fresh = savedInstanceState == null)
+        lifecycleScope.launch {
+            viewModel.capturing.collect { count ->
+                if (count == 0 && closeAfterCapture) finishAndRemoveTask()
+            }
+        }
         enableEdgeToEdge()
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContent {
@@ -107,6 +117,7 @@ open class CameraActivity : ComponentActivity() {
     }
 
     private fun onLaunch(intent: Intent?, fresh: Boolean) {
+        closeAfterCapture = false
         val secure = intent?.action == MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE
         // The secure action on an unlocked phone (Settings' "Lock screen camera" choice) is an ordinary launch.
         overLockScreen = secure && getSystemService(KeyguardManager::class.java).isKeyguardLocked
@@ -115,11 +126,19 @@ open class CameraActivity : ComponentActivity() {
         if (overLockScreen && fresh) viewModel.forgetLastShot()
         if (secure && closeOnScreenOff == null) {
             val receiver = object : BroadcastReceiver() {
-                override fun onReceive(context: Context, intent: Intent) = finishAndRemoveTask()
+                override fun onReceive(context: Context, intent: Intent) = closeWhenCaptured()
             }
             ContextCompat.registerReceiver(this, receiver, IntentFilter(Intent.ACTION_SCREEN_OFF), ContextCompat.RECEIVER_NOT_EXPORTED)
             closeOnScreenOff = receiver
         }
+    }
+
+    /**
+     * Closes the lock screen camera task, waiting only if Camera2 is still reading a shot just taken (the JPEG develop
+     * continues in [SaveService] after this activity finishes).
+     */
+    private fun closeWhenCaptured() {
+        if (viewModel.capturing.value == 0) finishAndRemoveTask() else closeAfterCapture = true
     }
 
     override fun onDestroy() {
@@ -245,6 +264,7 @@ open class CameraActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        if (getSystemService(PowerManager::class.java).isInteractive) closeAfterCapture = false
         orientation.enable()
         viewModel.onResume()
     }
@@ -261,7 +281,7 @@ open class CameraActivity : ComponentActivity() {
      */
     override fun onStop() {
         super.onStop()
-        if (overLockScreen && !isChangingConfigurations && !getSystemService(PowerManager::class.java).isInteractive) finishAndRemoveTask()
+        if (overLockScreen && !isChangingConfigurations && !getSystemService(PowerManager::class.java).isInteractive) closeWhenCaptured()
     }
 
     /** Unlocked while it was open: from now on an ordinary camera. */

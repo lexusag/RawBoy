@@ -1,5 +1,12 @@
 # Changelog
 
+**RawBoy Camera (Android): photos save when locking right after shooting (2026-10-30)**
+
+- Launching the camera from the lock screen, taking one or more photos (single RAW, flash, or 8-frame burst), and
+  pressing the power button right away to lock the phone back no longer loses the shot: Camera2 finishes reading the
+  raw before the lock screen camera closes, and the JPEG develop runs to completion in a short foreground service
+  with a wake lock.
+
 **RawBoy Camera (Android): lock screen camera always opens ready to shoot (2026-10-30)**
 
 - A double press on a locked phone after opening a photo from the lock screen camera (unlock, view, lock again) no

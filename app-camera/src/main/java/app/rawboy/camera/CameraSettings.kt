@@ -95,6 +95,7 @@ object CameraSettingsStore {
     private const val SCALES_KEY = "previewScales3"
     private const val FLASH_GUIDES_KEY = "flashGuides"
 
+    @Synchronized
     fun load(context: Context): CameraSettings {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val d = CameraSettings()
@@ -127,7 +128,12 @@ object CameraSettingsStore {
         )
     }
 
-    /** Saves everything, so switching [CameraSettings.rememberLast] on later starts from the current state. */
+    /**
+     * Saves user controls, so switching [CameraSettings.rememberLast] on later starts from the current state.
+     * Calibration maps are written by [updatePreviewScale] and [updateFlashGuide] so background develops never race a
+     * slider edit.
+     */
+    @Synchronized
     fun save(context: Context, s: CameraSettings) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putString("look", s.lookId)
@@ -146,9 +152,32 @@ object CameraSettingsStore {
             .putBoolean("front", s.front)
             .putString("lens", s.lens)
             .putString("flash", s.flash.name)
-            .putString(SCALES_KEY, s.previewScales.entries.joinToString(";") { "${it.key}=${it.value}" })
-            .putString(FLASH_GUIDES_KEY, s.flashGuides.entries.joinToString(";") { "${it.key}=${it.value}" })
             .apply()
+    }
+
+    /** Updates one lens's [CameraSettings.previewScales] entry in storage, returning the new scale. */
+    @Synchronized
+    fun updatePreviewScale(context: Context, lens: String, estimate: Float): Float {
+        val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val scales = parseScales(p.getString(SCALES_KEY, null))
+        val known = scales[lens]
+        val scale = if (known == null) estimate else known * kotlin.math.sqrt(estimate / known)
+        val clamped = scale.coerceIn(CameraSettings.MIN_SCALE, CameraSettings.MAX_SCALE)
+        val updated = scales + (lens to clamped)
+        p.edit().putString(SCALES_KEY, updated.entries.joinToString(";") { "${it.key}=${it.value}" }).apply()
+        return clamped
+    }
+
+    /** Updates one lens's [CameraSettings.flashGuides] entry in storage, returning the new guide. */
+    @Synchronized
+    fun updateFlashGuide(context: Context, key: String, estimate: Float, min: Float, max: Float): Float {
+        val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val guides = parseScales(p.getString(FLASH_GUIDES_KEY, null), min = min, max = max)
+        val known = guides[key]
+        val guide = (if (known == null) estimate else known * kotlin.math.sqrt(estimate / known)).coerceIn(min, max)
+        val updated = guides + (key to guide)
+        p.edit().putString(FLASH_GUIDES_KEY, updated.entries.joinToString(";") { "${it.key}=${it.value}" }).apply()
+        return guide
     }
 
     /** "W=1.1;T=0.95;FW=1.0" -> map; malformed entries are skipped. */
