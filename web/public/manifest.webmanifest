@@ -1,6 +1,6 @@
 {
   "name": "RawBoy Web",
-  "short_name": "RawBoy",
+  "short_name": "RawBoy Web",
   "description": "RawBoy and RawBoy Auto in the browser: develop raw photos with AgX and film looks.",
   "start_url": "./",
   "scope": "./",
