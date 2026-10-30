@@ -1,5 +1,11 @@
 # Changelog
 
+**RawBoy Camera (Android): fix launch from lock screen (2026-10-30)**
+
+- Double-pressing the power button to launch the camera from the lock screen now opens reliably: re-unified the secure
+  and unlocked camera intent filters on CameraActivity, removed the screen-off receiver race condition on launch, and
+  ensured lock-screen display flags remain active.
+
 **RawBoy Camera (Android): full-resolution option (2026-10-30)**
 
 - New switch in Settings (labelled with the megapixels, e.g. **50 MP** on a Pixel 9 Pro): shoots the raw (and DNG) in
