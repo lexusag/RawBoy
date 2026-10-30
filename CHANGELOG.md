@@ -1,5 +1,10 @@
 # Changelog
 
+**RawBoy Web: sliders work with a stylus on tablets (2026-10-30)**
+
+- RawBoy and Auto (web): sliders now respond to a stylus (such as the S Pen on a Samsung Galaxy Tab): horizontal drags
+  move the value and a double-tap resets it, while vertical swipes still scroll the panel.
+
 **RawBoy Camera (Android): Unlocked camera row in Settings (2026-10-26)**
 
 - Settings has an **Unlocked camera** row next to *Lock screen camera*: both show whether the power button's double
