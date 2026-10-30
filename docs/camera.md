@@ -19,7 +19,8 @@ lock screen one is set, a double press on a locked phone asks for the passcode f
 Turning on or installing another camera app (Pixel Camera, say) clears both choices: set them again, or keep Pixel
 Camera disabled. If another camera was set to always open, clear it first (*Settings → Apps → that camera → Open by
 default*). On a locked phone it opens over the lock screen without the photos taken before: the thumbnail shows
-only the new shots and asks to unlock before opening one, and the camera closes when the screen turns off. Unlocked
+only the new shots and asks to unlock before opening one, and the camera closes when the screen turns off (also if
+it was unlocked since, so the next double press on a locked phone always starts a fresh camera). Unlocked
 while it is open, it carries on as the ordinary camera.
 **UW · W · T** at the bottom of the viewfinder switches between the ultrawide, wide and telephoto lenses, as in
 Google Camera (each lens that can deliver RAW is offered). The button right of the shutter switches to the
