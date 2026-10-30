@@ -191,12 +191,18 @@ struct CameraScreen: View {
                 }
                 if vm.focusPoint != nil {
                     Button { vm.releaseFocus() } label: {
-                        Text("AF LOCK  ✕").font(.caption.weight(.semibold)).foregroundStyle(.black)
-                            .padding(.horizontal, 10).padding(.vertical, 4)
+                        Text("AF LOCK  ✕")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.black)
+                            .padding(.horizontal, 16)
+                            .padding(.vertical, 8)
                             .background(Capsule().fill(Color(red: 1, green: 0.84, blue: 0.31)))
+                            .frame(minWidth: 120, minHeight: 44)
+                            .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                     .frame(maxHeight: .infinity, alignment: .top)
-                    .padding(.top, 12)
+                    .padding(.top, 8)
                 }
                 if vm.compare {
                     OverlayLabel("Without look").frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
