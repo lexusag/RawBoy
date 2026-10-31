@@ -22,7 +22,7 @@ struct CameraSettings: Equatable {
     var brightness: Float = 0
     var warmth: Float = 0
     /**
-     * B&W mode (RawBoy Film, Edition.monoLooks): the photo is black and white, on monoLookId's stock seen through
+     * B&W mode (Edition.monoLooks): the photo is black and white, on monoLookId's stock seen through
      * filter. Colour mode keeps lookId and warmth, so switching back and forth keeps each mode's picks.
      */
     var mono = false
@@ -131,6 +131,12 @@ enum CameraSettingsStore {
         s.filter = BwFilter.fromKey(d.string(forKey: "camera.filter")) ?? def.filter
         s.front = d.bool(forKey: "camera.front")
         s.lens = d.string(forKey: "camera.lens") ?? def.lens
+        // A black and white look picked before RawBoy Camera had B&W mode now opens that mode on it.
+        if Edition.monoLooks.contains(where: { $0.id == s.lookId }) {
+            s.mono = true
+            s.monoLookId = s.lookId
+            s.lookId = def.lookId
+        }
         return s
     }
 

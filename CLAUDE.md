@@ -182,8 +182,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   Camera, `film` = **RawBoy Film** (`applicationIdSuffix ".film"`). The flavour source sets hold `Edition.kt` (looks,
   default look, Pictures folder, Settings credits) and Film's `app_name` and launcher icon; iOS: `Camera/standard/` vs
   `Camera/film/Edition.swift` + `Film.xcassets` (targets `RawBoyCamera`/`RawBoyFilm`, same `RawBoyEngine`). Film's
-  looks are `FilmLooks.ALL` rendered by `film_form.glsl`, exactly as Auto's Film mode. **B&W mode** (Film only:
-  `Edition.monoLooks` non-empty; standard's is empty and keeps its mono looks in the one list): `CameraSettings.mono`/
+  looks are `FilmLooks.ALL` rendered by `film_form.glsl`, exactly as Auto's Film mode. **B&W mode** (both editions: `Edition.monoLooks` = the mono looks; standard's colour `looks` leave them out, and a remembered mono `lookId` moves into B&W mode on load): `CameraSettings.mono`/
   `monoLookId`/`filter`, `CameraSettings.develop` (both platforms) = the mono stock (AgX + mono LUT, Auto's looks) +
   Saturation -100 + `DevelopParams.bwFilter` (`BwFilter`: luminance-normalised channel gains folded into the WB matrix in
   `ShaderParams.from`, all ports; identity by default). Saturation -100 makes the scene grey before the LUT, so the

@@ -1,5 +1,13 @@
 # Changelog
 
+**RawBoy Camera: black and white mode (2026-10-31)**
+
+- RawBoy Camera gets RawBoy Film's **B&W** button left of the shutter: black and white live in the viewfinder, the
+  black and white looks (Yellow Mono Soft, 400, Push, Hard, Yellow Cine Mono and Cine Mono Soft) in the Look menu,
+  **Filter** in Warmth's place, three times the grain, and the DNG stays in colour.
+- The colour Look menu no longer lists the black and white looks. A black and white look remembered from before
+  opens in B&W mode on that look.
+
 **RawBoy Film: grainier black and white (2026-10-31)**
 
 - B&W mode has three times the grain it had, in the viewfinder and in the photos. Colour looks are unchanged.
