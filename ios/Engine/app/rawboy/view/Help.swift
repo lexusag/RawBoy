@@ -56,6 +56,14 @@ private struct HelpView: View {
     let licences: Bool
     @Environment(\.dismiss) private var dismiss
 
+    /// The app's version (and build), as the bundle declares it.
+    private static var version: String {
+        let info = Bundle.main.infoDictionary
+        let short = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info?["CFBundleVersion"] as? String ?? "?"
+        return "\(short) (\(build))"
+    }
+
     var body: some View {
         NavigationStack {
             List {
@@ -72,6 +80,7 @@ private struct HelpView: View {
                 if licences {
                     Section { NavigationLink("Open-source licences") { LicensesView() } }
                 }
+                Section { Text("Version \(Self.version)").font(.footnote).foregroundStyle(.secondary) }
             }
             .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
