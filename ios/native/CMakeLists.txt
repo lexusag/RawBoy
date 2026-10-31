@@ -34,7 +34,7 @@ include("${ENGINE_CPP}/jpegli.cmake")
 # --- Adobe DNG SDK (optional): same setup as the engine's CMakeLists, iOS platform define ---
 set(RAWBOY_DNG_SDK_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../third_party/dng_sdk"
     CACHE PATH "Adobe DNG SDK root (directory containing dng_sdk/source)")
-# OFF for RawBoy Film (GPLv3): the SDK's licence terms aren't GPL-compatible.
+# OFF builds without it even when it is present (e.g. to check a build that lacks it).
 option(RAWBOY_USE_DNG_SDK "Build with the Adobe DNG SDK when it is present" ON)
 set(RAWBOY_WITH_DNG_SDK 0)
 if(RAWBOY_USE_DNG_SDK AND EXISTS "${RAWBOY_DNG_SDK_ROOT}/dng_sdk/source/dng_host.cpp")
