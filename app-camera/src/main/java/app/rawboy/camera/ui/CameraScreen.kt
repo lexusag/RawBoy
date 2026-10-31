@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
 import app.rawboy.camera.capture.FlashMode
 import app.rawboy.camera.qr.QrPayload
+import app.rawboy.raw.DngJxlNative
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.text.style.TextOverflow
 import app.rawboy.view.HistogramView
@@ -214,7 +215,7 @@ fun CameraScreen(
                         .padding(start = 12.dp),
                 )
                 RawButton(settings.keepDng) { vm.setKeepDng(!settings.keepDng) }
-                BurstButton(settings.burstMode, lowLight, hiRes) { vm.setBurstMode(settings.burstMode.next()) }
+                BurstButton(settings.burstMode, lowLight, hiRes, flashAvailable && settings.flash != FlashMode.OFF) { vm.setBurstMode(settings.burstMode.next()) }
                 if (flashAvailable) FlashButton(settings.flash, vm::cycleFlash)
                 HelpButton(appName, CAMERA_HELP, onOpenChange = { showHelp = it })
                 IconButton(onClick = { showSettings = true }) {
@@ -674,7 +675,8 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             }
             Switch(checked = settings.keepDng, onCheckedChange = vm::setKeepDng)
         }
-        if (settings.keepDng) {
+        // Needs the DNG SDK, which RawBoy Film doesn't have.
+        if (settings.keepDng && DngJxlNative.available) {
             Spacer(Modifier.height(16.dp))
             SettingSwitch(
                 title = "Lossy JPEG XL DNG",
@@ -796,13 +798,15 @@ private fun RawButton(keep: Boolean, onClick: () -> Unit) {
 
 /**
  * Merge 8 frames, cycling On -> Auto -> Off (the same setting as in Settings). Coloured while it will merge the next
- * shot (On, or Auto in low light), gray otherwise; Auto carries a small "A".
+ * shot (On, or Auto in low light; never with the flash or at full sensor resolution), gray otherwise; Auto carries a
+ * small "A".
  */
 @Composable
-private fun BurstButton(mode: BurstMode, lowLight: Boolean, hiRes: Boolean, onClick: () -> Unit) {
-    val active = !hiRes && mode.merges(lowLight)
+private fun BurstButton(mode: BurstMode, lowLight: Boolean, hiRes: Boolean, flash: Boolean, onClick: () -> Unit) {
+    val active = !hiRes && !flash && mode.merges(lowLight)
     val state = when {
         hiRes -> "Inactive (full sensor resolution)"
+        flash -> "Inactive (flash)"
         mode == BurstMode.ON -> "On"
         mode == BurstMode.AUTO -> if (active) "Auto, merging (low light)" else "Auto, not merging (enough light)"
         else -> "Off"

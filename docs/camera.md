@@ -71,7 +71,9 @@ shows them.
   default (Settings: 70–100). jpegli's adaptive quantisation gives fewer artefacts per byte than libjpeg.
 - **RAW:** the **RAW** button in the top bar keeps the DNG next to the JPEG (lit) or not (struck through); the same
   setting as in Settings.
-- **Settings:** JPEG quality; whether to keep the DNG (off by default: only the JPEG is saved); **Smaller photos**
+- **Settings:** JPEG quality; whether to keep the DNG (off by default: only the JPEG is saved); **Lossy JPEG XL DNG** (Android, shown while the DNG
+  is kept; off by default: once the JPEG is saved from the uncompressed raw, the DNG is re-saved as a DNG 1.7.1 with
+  lossy JPEG XL compression, visually lossless and about a quarter of the size; it stays uncompressed if that fails); **Smaller photos**
   (on by default: 3000 px on the long side, area-downscaled from the full-resolution develop, with the grain sized to
   the smaller photo and a light sharpening after the downscale; off saves full resolution, unsharpened); **50 MP / 48 MP**
   (shown when a lens offers a maximum-resolution raw stream of the same field of view, such as 50 MP `RAW10` on the Pixel 9 Pro's main `W` lens: writes a 16-bit Bayer DNG via `MaxResDngWriter` — remosaicing 4×4 Quad-Bayer streams into standard 2×2 Bayer — and develops the JPEG from it, while keeping normal resolution on virtual crop lenses; frame merging is off on full-resolution lenses); **Merge 8 frames** (see above); **Shutter sound** (off by default: a click on each
