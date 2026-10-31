@@ -1892,14 +1892,42 @@ Apache License 2.0 is given below.
    limitations under the License.
 
 ================================================================================
-AndroidX, Jetpack Compose, the Kotlin standard library and kotlinx.coroutines
-(Android apps)
+AndroidX and Jetpack Compose (Android apps)
 ================================================================================
 
-Copyright The Android Open Source Project and JetBrains s.r.o.
+Copyright The Android Open Source Project.
 
 Licensed under the Apache License, Version 2.0; see the full text above under
 "MediaPipe".
+
+================================================================================
+Kotlin standard library 2.1.0 (Android apps)
+================================================================================
+
+Copyright 2010-2024 JetBrains s.r.o. and Kotlin Programming Language
+contributors.
+
+Licensed under the Apache License, Version 2.0; see the full text above under
+"MediaPipe".
+
+Its NOTICE file (Apache License 2.0, section 4 d) reads:
+
+   Kotlin Compiler
+   Copyright 2010-2024 JetBrains s.r.o and respective authors and developers
+
+================================================================================
+kotlinx.coroutines 1.9.0 (Android apps)
+================================================================================
+
+Copyright 2016-2024 JetBrains s.r.o. and contributors.
+
+Licensed under the Apache License, Version 2.0; see the full text above under
+"MediaPipe".
+
+Its NOTICE file (Apache License 2.0, section 4 d) reads:
+
+   kotlinx.coroutines library.
+   Copyright 2016-2024 JetBrains s.r.o and contributors
 
 ================================================================================
 ZXing core 3.5.3 (QR codes in RawBoy Camera, Android)
