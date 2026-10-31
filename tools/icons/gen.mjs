@@ -6,7 +6,7 @@
 //   - iOS: ios/<App>/Assets.xcassets/AppIcon.appiconset/icon-1024.png (full bleed, no alpha: iOS rounds the corners).
 //   - Web (when web/ exists): favicon.svg, icon-192/512.png, icon-maskable-512.png (art in the 80% safe circle) and
 //     apple-touch-icon.png in web/public.
-//   - RawBoy Film (when app-camera/src/film exists, i.e. in its repository): the film flavour's resources in
+//   - RawBoy Film: the film flavour's resources in
 //     app-camera/src/film/res and the AppIconFilm set in ios/Camera/film/Film.xcassets.
 //
 //   node tools/icons/gen.mjs
@@ -159,13 +159,12 @@ const appIconSet = (dir) => {
   write(`${dirname(dir)}/Contents.json`, JSON.stringify({ info: { author: 'xcode', version: 1 } }, null, 2) + '\n');
 };
 
-const film = existsSync(join(ROOT, 'app-camera/src/film'));
 const apps = [
   { logo: 'pro', res: 'app-pro/src/main/res', ios: 'ios/Pro/Assets.xcassets/AppIcon.appiconset', adaptive: true },
   { logo: 'auto', res: 'app-auto/src/main/res', ios: 'ios/Auto/Assets.xcassets/AppIcon.appiconset', adaptive: true },
   { logo: 'camera', res: 'app-camera/src/main/res', ios: 'ios/Camera/Assets.xcassets/AppIcon.appiconset', adaptive: true },
   // The flavour inherits main's ic_launcher.xml and overrides its layers.
-  ...(film ? [{ logo: 'film', res: 'app-camera/src/film/res', ios: 'ios/Camera/film/Film.xcassets/AppIconFilm.appiconset' }] : []),
+  { logo: 'film', res: 'app-camera/src/film/res', ios: 'ios/Camera/film/Film.xcassets/AppIconFilm.appiconset' },
 ].filter((a) => existsSync(join(ROOT, a.res, '..')));
 
 const browser = await loadPlaywright()();
