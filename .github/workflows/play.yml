@@ -1,0 +1,243 @@
+# Builds signed Android App Bundles (.aab) of the chosen apps and uploads them to Google Play. Runs only by hand:
+# Actions → "Publish to Google Play" → Run workflow. Setup and first-time use: docs/google-play.md.
+#
+# Secrets: KEYSTORE_FILE and KEYSTORE_PASS (the same key as release.yml; Play App Signing signs with that same key,
+# so Play installs and the GitHub APKs update each other) and PLAY_SERVICE_ACCOUNT_JSON (the JSON key of a Google
+# Cloud service account invited in Play Console with release permissions for the apps).
+#
+# Version: versionName is what users see (1.6.2). versionCode is the number Play compares: every upload of an app
+# must be higher than any earlier upload of it. Left empty, it comes from the version name the way release.yml
+# derives it from a tag (X*10000 + Y*100 + Z), so a GitHub release and a Play upload of the same version match.
+name: Publish to Google Play
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: Version name shown to users, X.Y.Z (e.g. 1.6.2)
+        required: true
+      version_code:
+        description: Version code (leave empty to derive it from the version name)
+        required: false
+        default: ""
+      rawboy:
+        description: RawBoy (app.rawboy)
+        type: boolean
+        default: true
+      rawboy_auto:
+        description: RawBoy Auto (app.rawboy.auto)
+        type: boolean
+        default: true
+      rawboy_camera:
+        description: RawBoy Camera (app.rawboy.camera)
+        type: boolean
+        default: true
+      rawboy_film:
+        description: RawBoy Film (app.rawboy.camera.film)
+        type: boolean
+        default: true
+      track:
+        description: Play track
+        type: choice
+        default: internal
+        options:
+          - internal
+          - closed
+          - open
+          - production
+      status:
+        description: Release status (draft = you press "Start rollout" in Play Console; needed until an app is reviewed)
+        type: choice
+        default: completed
+        options:
+          - completed
+          - draft
+      release_notes:
+        description: What's new (English, up to 500 characters; empty = none)
+        required: false
+        default: ""
+      upload:
+        description: Upload to Play (untick to only build the bundles and download them from the run)
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+# One Play upload at a time: two runs editing the same app would conflict.
+concurrency:
+  group: google-play
+  cancel-in-progress: false
+
+jobs:
+  bundles:
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.inputs.outputs.packages }}
+    env:
+      VERSION_NAME: ${{ inputs.version_name }}
+      VERSION_CODE_INPUT: ${{ inputs.version_code }}
+    steps:
+      - name: Check the inputs
+        id: inputs
+        env:
+          PRO: ${{ inputs.rawboy }}
+          AUTO: ${{ inputs.rawboy_auto }}
+          CAMERA: ${{ inputs.rawboy_camera }}
+          FILM: ${{ inputs.rawboy_film }}
+          NOTES: ${{ inputs.release_notes }}
+        run: |
+          if [[ "$VERSION_NAME" =~ ^([0-9]+)\.([0-9]{1,2})\.([0-9]{1,2})$ ]]; then
+            derived=$(( 10#${BASH_REMATCH[1]} * 10000 + 10#${BASH_REMATCH[2]} * 100 + 10#${BASH_REMATCH[3]} ))
+          else
+            echo "::error::Version name '$VERSION_NAME' must be X.Y.Z with Y and Z below 100"; exit 1
+          fi
+          code="${VERSION_CODE_INPUT:-$derived}"
+          if ! [[ "$code" =~ ^[1-9][0-9]{0,9}$ ]] || [ "$code" -gt 2100000000 ]; then
+            echo "::error::Version code '$code' must be a whole number from 1 to 2100000000"; exit 1
+          fi
+          echo "VERSION_CODE=$code" >> "$GITHUB_ENV"
+          tasks= packages=
+          add() { tasks="$tasks $1"; packages="$packages${packages:+,}\"$2\""; }
+          [ "$PRO" = true ] && add :app-pro:bundleRelease app.rawboy
+          [ "$AUTO" = true ] && add :app-auto:bundleRelease app.rawboy.auto
+          [ "$CAMERA" = true ] && add :app-camera:bundleStandardRelease app.rawboy.camera
+          [ "$FILM" = true ] && add :app-camera:bundleFilmRelease app.rawboy.camera.film
+          [ -n "$tasks" ] || { echo "::error::Tick at least one app"; exit 1; }
+          [ "${#NOTES}" -le 500 ] || { echo "::error::Release notes are ${#NOTES} characters; Play allows 500"; exit 1; }
+          echo "TASKS=$tasks" >> "$GITHUB_ENV"
+          echo "packages=[$packages]" >> "$GITHUB_OUTPUT"
+          echo "versionName $VERSION_NAME, versionCode $code, apps: [$packages]"
+
+      # Builds the branch or tag picked in "Use workflow from".
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      # The action's default packages include "tools", which the SDK no longer has.
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools ndk;27.2.12479018 cmake;3.22.1
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      # Same cache key as release.yml, so a Play build after a GitHub release reuses its compiled C++.
+      - uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          key: android-ndk27
+          max-size: 1G
+          verbose: 1
+
+      # Release builds need the Adobe DNG SDK (git-ignored); see third_party/README.md.
+      - uses: actions/cache@v4
+        with:
+          path: third_party/dng_sdk_1_7_1.zip
+          key: dng_sdk_1_7_1.zip
+
+      - name: Download Adobe DNG SDK
+        run: |
+          cd third_party
+          [ -f dng_sdk_1_7_1.zip ] || curl -fsSLO https://download.adobe.com/pub/adobe/dng/dng_sdk_1_7_1.zip
+          unzip -q dng_sdk_1_7_1.zip && mv dng_sdk_1_7_1 dng_sdk
+
+      - name: Set up signing
+        env:
+          KEYSTORE_FILE: ${{ secrets.KEYSTORE_FILE }}
+          KEYSTORE_PASS: ${{ secrets.KEYSTORE_PASS }}
+        run: |
+          [ -n "$KEYSTORE_FILE" ] || { echo "::error::The KEYSTORE_FILE secret is missing"; exit 1; }
+          echo "$KEYSTORE_FILE" | base64 -d > "$RUNNER_TEMP/release.jks"
+          {
+            echo "storeFile=$RUNNER_TEMP/release.jks"
+            echo "storePassword=$KEYSTORE_PASS"
+            echo "keyAlias=rawboy"
+            echo "keyPassword=$KEYSTORE_PASS"
+          } > keystore.properties
+
+      # As release.yml: arm64 only (x86_64 is for emulators), lint vital skipped, more heap for the parallel R8 runs.
+      - name: Build release bundles
+        env:
+          CMAKE_C_COMPILER_LAUNCHER: ccache
+          CMAKE_CXX_COMPILER_LAUNCHER: ccache
+          CCACHE_BASEDIR: ${{ github.workspace }}
+          CCACHE_NOHASHDIR: "true"
+          CCACHE_COMPILERCHECK: content
+        run: >
+          ./gradlew --parallel -Dorg.gradle.jvmargs="-Xmx8g -Dfile.encoding=UTF-8"
+          -x lintVitalRelease -x lintVitalStandardRelease -x lintVitalFilmRelease
+          -Prawboy.versionName="$VERSION_NAME" -Prawboy.versionCode="$VERSION_CODE"
+          -Prawboy.abis=arm64-v8a $TASKS
+
+      # Each app's bundle and R8 mapping (Play uses it for readable crash reports) go under dist/<package>/.
+      # jarsigner stops the run here if a bundle came out unsigned.
+      - name: Collect bundles
+        run: |
+          collect() {  # collect <package> <bundle> <mapping>
+            [ -f "$2" ] || return 0
+            jarsigner -verify "$2" | grep -q "jar verified" || { echo "::error::$2 is not signed"; exit 1; }
+            mkdir -p "dist/$1"
+            cp "$2" "dist/$1/$1-$VERSION_NAME.aab"
+            if [ -f "$3" ]; then cp "$3" "dist/$1/mapping.txt"; fi
+            echo "$1: $(du -h "$2" | cut -f1)"
+          }
+          collect app.rawboy app-pro/build/outputs/bundle/release/app-pro-release.aab \
+            app-pro/build/outputs/mapping/release/mapping.txt
+          collect app.rawboy.auto app-auto/build/outputs/bundle/release/app-auto-release.aab \
+            app-auto/build/outputs/mapping/release/mapping.txt
+          collect app.rawboy.camera app-camera/build/outputs/bundle/standardRelease/app-camera-standard-release.aab \
+            app-camera/build/outputs/mapping/standardRelease/mapping.txt
+          collect app.rawboy.camera.film app-camera/build/outputs/bundle/filmRelease/app-camera-film-release.aab \
+            app-camera/build/outputs/mapping/filmRelease/mapping.txt
+
+      - name: Remove signing files
+        if: always()
+        run: rm -f keystore.properties "$RUNNER_TEMP/release.jks"
+
+      # Kept for a week: download them from the run's Summary page for a manual upload (an app's very first one).
+      - uses: actions/upload-artifact@v4
+        with:
+          name: play-bundles-${{ inputs.version_name }}
+          path: dist
+          retention-days: 7
+
+  upload:
+    needs: bundles
+    if: inputs.upload
+    runs-on: ubuntu-latest
+    strategy:
+      # One app failing (say, its version code was already used) doesn't stop the others.
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.bundles.outputs.packages) }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: play-bundles-${{ inputs.version_name }}
+          path: dist
+
+      # Play's own names for the testing tracks are "alpha" (closed) and "beta" (open).
+      - name: Prepare the release
+        env:
+          TRACK: ${{ inputs.track }}
+          NOTES: ${{ inputs.release_notes }}
+        run: |
+          case "$TRACK" in closed) TRACK=alpha ;; open) TRACK=beta ;; esac
+          echo "PLAY_TRACK=$TRACK" >> "$GITHUB_ENV"
+          if [ -n "$NOTES" ]; then
+            mkdir -p whatsnew && printf '%s' "$NOTES" > whatsnew/whatsnew-en-US
+          fi
+
+      - name: Upload ${{ matrix.package }}
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: ${{ matrix.package }}
+          releaseFiles: dist/${{ matrix.package }}/*.aab
+          mappingFile: dist/${{ matrix.package }}/mapping.txt
+          track: ${{ env.PLAY_TRACK }}
+          status: ${{ inputs.status }}
+          releaseName: ${{ inputs.version_name }}
+          whatsNewDirectory: ${{ inputs.release_notes != '' && 'whatsnew' || '' }}

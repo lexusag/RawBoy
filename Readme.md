@@ -29,6 +29,7 @@ Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and
 - [Google Drive in RawBoy Web](docs/google-drive.md): setting up opening from and saving to Drive
 - [Pipeline](docs/pipeline.md): how a raw is developed
 - [Building](docs/building.md), including release builds
+- [Publishing to Google Play](docs/google-play.md): the manual Play upload workflow and its one-time setup
 - [Installing on your iPhone](docs/ios-install.md): build the iOS apps and sideload them with your Apple ID
 - [Known limitations / next steps](docs/limitations.md)
 - [Third-party components](docs/third-party.md)
@@ -52,7 +53,7 @@ Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and
 | `third_party/` | Where the Adobe DNG SDK goes for builds (see [third_party/README.md](third_party/README.md)). |
 | `licenses/` | Third-party notices shipped with the apps. |
 | `gradle/`, `*.gradle.kts`, `gradlew` | The Gradle build for the Android modules. |
-| `.github/workflows/` | CI: `release.yml` (release APKs of all four apps, and the web deploy). |
+| `.github/workflows/` | CI: `release.yml` (release APKs of all four apps, and the web deploy) and `play.yml` (run by hand: signed bundles uploaded to Google Play). |
 
 Root files: [CHANGELOG.md](CHANGELOG.md), [CONTRIBUTING.md](CONTRIBUTING.md), [LICENSE.md](LICENSE.md),
 [UI.md](UI.md) (UI backlog) and [CLAUDE.md](CLAUDE.md) (notes on how the code fits together).

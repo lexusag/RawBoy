@@ -42,4 +42,5 @@ The iOS apps are built with Xcode on a Mac: see [Installing on your iPhone](ios-
    `KEYSTORE_FILE` (base64 .jks) and `KEYSTORE_PASS` secrets and attaches the APKs to the release. The version
    comes from the tag: `vX.Y.Z` → versionName `X.Y.Z`, versionCode `X*10000 + Y*100 + Z` (Y and Z below 100; each
    release's tag must be higher than the last). Local builds use `rawboy.versionName`/`rawboy.versionCode` from
-   `gradle.properties`.
+   `gradle.properties`. Google Play bundles are built and uploaded by a separate, manually started workflow: see
+   [Publishing to Google Play](google-play.md).
