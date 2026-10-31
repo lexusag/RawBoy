@@ -1,5 +1,7 @@
 package app.rawboy.develop
 
+import app.rawboy.color.BwFilter
+
 /**
  * Slider values as the user sees them.
  *
@@ -23,6 +25,8 @@ package app.rawboy.develop
  * - lensDistortion: -100..100, + removes barrel distortion; auto crop/scale follows
  * - vignetteAmount: -100..100, + brightens corners; vignetteMidpoint: 0..100 (higher = only the corners)
  * - curves: point curves (RGB, then red, green, blue) on the final display-encoded image (see [ToneCurves])
+ * - bwFilter: colour filter for black and white ([app.rawboy.color.BwFilter], RawBoy Film's B&W mode; NONE = identity),
+ *   channel gains after white balance and the RGB primaries
  * - RGB primaries (after darktable): redHue/greenHue/blueHue in degrees (-45..45),
  *   red/green/bluePurity -200..200 (0 = unchanged), tintHue degrees (-180..180), tintPurity 0..100
  * - rotation: clockwise quarter turns; straighten: degrees -45..45, + turns clockwise (auto crop).
@@ -54,6 +58,7 @@ data class DevelopParams(
     val bluePurity: Float = 0f,
     val tintHue: Float = 0f,
     val tintPurity: Float = 0f,
+    val bwFilter: BwFilter = BwFilter.NONE,
     val denoise: Float = 0f,
     val colorDenoise: Float? = null,
     val grain: Float = 0f,

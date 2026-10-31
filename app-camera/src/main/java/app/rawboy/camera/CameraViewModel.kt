@@ -18,7 +18,6 @@ import app.rawboy.auto.analysis.AutoTone
 import app.rawboy.auto.analysis.MeterArea
 import app.rawboy.auto.analysis.SceneAnalyzer
 import app.rawboy.auto.analysis.SceneStats
-import app.rawboy.auto.looks.Adjustments
 import app.rawboy.auto.looks.LookApplier
 import app.rawboy.camera.capture.CameraController
 import app.rawboy.camera.capture.FlashMode
@@ -27,6 +26,7 @@ import app.rawboy.camera.capture.ShutterSound
 import app.rawboy.camera.qr.QrPayload
 import app.rawboy.camera.qr.QrReader
 import app.rawboy.camera.qr.QrTracker
+import app.rawboy.color.BwFilter
 import app.rawboy.develop.DevelopParams
 import app.rawboy.develop.Histogram
 import app.rawboy.export.DngGps
@@ -588,8 +588,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val l = live ?: return
         val f = _frame.value ?: return
         val s = _settings.value
-        val look = Edition.look(s.lookId)
-        val developed = if (_compare.value) l.auto else LookApplier.apply(l.auto, look, s.strength, Adjustments(brightness = s.brightness, warmth = s.warmth), l.stats.hasFace)
+        val developed = if (_compare.value) l.auto else s.develop(l.auto, l.stats.hasFace)
         // The ISP has already denoised and sharpened the preview stream.
         val p = developed.copy(denoise = 0f, sharpening = 0f, skinRetouch = 0f)
         val lut = p.lut?.let { id -> runCatching { ShotSaver.loadLut(app, id) }.getOrNull() }
@@ -643,7 +642,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     // ---- Controls ----
 
-    fun setLook(id: String) = change { it.copy(lookId = id) }
+    /** Picks [id] for the current mode: B&W mode's stock or the colour look. */
+    fun setLook(id: String) = change { if (it.monoMode) it.copy(monoLookId = id) else it.copy(lookId = id) }
+    fun setMono(on: Boolean) = change { it.copy(mono = on) }
+    fun setFilter(f: BwFilter) = change { it.copy(filter = f) }
     fun setStrength(v: Float) = change { it.copy(strength = v) }
     fun setBrightness(v: Float) = change { it.copy(brightness = v) }
     fun setWarmth(v: Float) = change { it.copy(warmth = v) }

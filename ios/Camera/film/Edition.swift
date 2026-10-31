@@ -11,6 +11,15 @@ enum Edition {
 
     static func look(_ id: String) -> Look { FilmLooks.byId(id) }
 
+    /**
+     * B&W mode's stocks: the black and white looks RawBoy Auto has (AgX + mono LUT). Empty = no B&W mode (the
+     * standard camera lists its mono looks among the others).
+     */
+    static let monoLooks: [Look] = [Looks.trixSoft, Looks.trix400, Looks.trixPush, Looks.trixHard, Looks.doubleX, Looks.doubleXSoft]
+    static let defaultMonoLookId = Looks.trix400.id
+
+    static func monoLook(_ id: String) -> Look { monoLooks.first { $0.id == id } ?? Looks.trix400 }
+
     /** Photos albums for the JPEGs and the DNGs; JPEGs are named IMG_…-<jpegSuffix>.jpg. */
     static let album = "RawBoy Film"
     static let rawAlbum = "RawBoy Film RAW"

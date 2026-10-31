@@ -23,8 +23,6 @@ import app.rawboy.auto.AutoAnalysis
 import app.rawboy.auto.analysis.AutoTone
 import app.rawboy.auto.analysis.MeterArea
 import app.rawboy.auto.analysis.SceneStats
-import app.rawboy.auto.looks.Adjustments
-import app.rawboy.auto.looks.LookApplier
 import app.rawboy.export.ExportFormat
 import app.rawboy.export.ExportGpu
 import app.rawboy.export.ExportSettings
@@ -244,7 +242,6 @@ internal object ShotSaver {
     /** Raw -> auto develop + look -> JPEG (jpegli), as RawBoy Auto develops a photo. */
     private suspend fun develop(app: Application, shot: Shot) {
         val s = shot.settings
-        val look = Edition.look(s.lookId)
         val started = System.nanoTime()
         fun ms(from: Long) = (System.nanoTime() - from) / 1_000_000
         val (name, rawKey, autoEv) = withContext(developDispatcher) {
@@ -264,9 +261,7 @@ internal object ShotSaver {
                     phoneAe = shot.flashGuide == null, captureEv = shot.compensationEv,
                 )
                 val analysisMs = ms(analysisStart)
-                val looked = LookApplier.apply(
-                    a.autoBase, look, s.strength, Adjustments(brightness = s.brightness, warmth = s.warmth), a.stats.hasFace,
-                )
+                val looked = s.develop(a.autoBase, a.stats.hasFace)
                 // High ISO: more denoise than the auto develop's table, up to the coarse stage (denoise > 65).
                 val denoise = maxOf(looked.denoise, highIsoDenoise(a.stats.iso * noiseScale))
                 val params = looked.copy(

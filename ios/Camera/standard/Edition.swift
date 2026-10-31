@@ -7,6 +7,12 @@ enum Edition {
 
     static func look(_ id: String) -> Look { Looks.byId(id) }
 
+    /** No separate B&W mode: the mono looks are in `looks` (see the film target's Edition). */
+    static let monoLooks: [Look] = []
+    static let defaultMonoLookId = Looks.trix400.id
+
+    static func monoLook(_ id: String) -> Look { Looks.byId(id) }
+
     /** Photos albums for the JPEGs and the DNGs; JPEGs are named IMG_…-<jpegSuffix>.jpg. */
     static let album = "RawBoy Camera"
     static let rawAlbum = "RawBoy Camera RAW"

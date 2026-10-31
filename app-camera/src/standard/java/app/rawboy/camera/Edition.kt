@@ -10,6 +10,12 @@ internal object Edition {
 
     fun look(id: String): Look = Looks.byId(id)
 
+    /** No separate B&W mode: the mono looks are in [looks] (see the film flavour's Edition). */
+    val monoLooks: List<Look> = emptyList()
+    val defaultMonoLookId: String = Looks.TRIX_400.id
+
+    fun monoLook(id: String): Look = Looks.byId(id)
+
     /** Pictures/<FOLDER> (JPEGs) and Pictures/<FOLDER>/RAW (DNGs); JPEGs are named IMG_…-<JPEG_SUFFIX>.jpg. */
     const val FOLDER = "RawBoy Camera"
     const val JPEG_SUFFIX = "camera"

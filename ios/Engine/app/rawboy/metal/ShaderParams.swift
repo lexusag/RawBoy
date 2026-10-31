@@ -165,9 +165,10 @@ public final class ShaderParams: @unchecked Sendable {
         let sourceWhite = WhiteBalance.xyFromTempTint(Double(asShot.temperature), Double(asShot.tint))
         let targetWhite = WhiteBalance.xyFromTempTint(Double(p.temperature), Double(p.tint))
         return ShaderParams(
-            // White balance, then the RGB primaries adjustment; both are 3x3 in linear Rec.2020.
+            // White balance, then the RGB primaries adjustment, then the B&W filter; all 3x3 in linear Rec.2020.
             whiteBalance: Mat3.toGlColumnMajor(
-                Mat3.multiply(Primaries.fromParams(p), WhiteBalance.rebalanceMatrix(asShotXY: sourceWhite, targetXY: targetWhite))),
+                Mat3.multiply(p.bwFilter.matrix(),
+                              Mat3.multiply(Primaries.fromParams(p), WhiteBalance.rebalanceMatrix(asShotXY: sourceWhite, targetXY: targetWhite)))),
             exposure: powf(2, p.exposure + baseExposureEv),
             contrast: powf(2, p.contrast / 100 * 0.7),
             saturation: 1 + p.saturation / 100,

@@ -21,6 +21,14 @@ struct CameraSettings: Equatable {
     var strength: Float = LookApplier.defaultStrength
     var brightness: Float = 0
     var warmth: Float = 0
+    /**
+     * B&W mode (RawBoy Film, Edition.monoLooks): the photo is black and white, on monoLookId's stock seen through
+     * filter. Colour mode keeps lookId and warmth, so switching back and forth keeps each mode's picks.
+     */
+    var mono = false
+    var monoLookId = Edition.defaultMonoLookId
+    /** B&W mode's colour filter; Yellow, the classic default (it also keeps the noisy blue channel out of night shots). */
+    var filter = BwFilter.yellow
     /** JPEG quality, minQuality...100. */
     var jpegQuality = 95
     /** Keep the raw as DNG in Photos › RawBoy Camera RAW. */
@@ -57,6 +65,27 @@ struct CameraSettings: Equatable {
     /** The lens's key for per-lens values: the label, prefixed with "F" on the front side, "P" for ProRAW. */
     var lensKey: String { Self.lensKey(front, lens, rawFormat) }
     var previewScale: Float { previewScales[lensKey] ?? Self.defaultScale }
+    /** B&W mode is on and this edition has one. */
+    var monoMode: Bool { mono && !Edition.monoLooks.isEmpty }
+    /** The look in effect: B&W mode's stock or the colour look. */
+    var look: Look { monoMode ? Edition.monoLook(monoLookId) : Edition.look(lookId) }
+
+    /**
+     * base (the auto develop) with the look and the sliders, as the viewfinder shows it and the shot is saved. B&W mode:
+     * the filter, then grey (Saturation -100 makes the scene grey before the stock and keeps the stock's output grey, see
+     * `applyLut`), so Strength blends the stock's tones with plain AgX grey and the picture stays black and white;
+     * Warmth isn't shown there and doesn't apply. Mirrors Android's CameraSettings.develop.
+     */
+    func develop(_ base: DevelopParams, hasFace: Bool) -> DevelopParams {
+        var p = LookApplier.apply(base, look: look, strength: strength,
+                                  adjust: Adjustments(brightness: brightness, warmth: monoMode ? 0 : warmth), hasFace: hasFace)
+        if monoMode {
+            p.saturation = -100
+            p.bwFilter = filter
+        }
+        return p
+    }
+
     /** The long side to save at, or nil for full size. */
     var maxLongSide: Int? { smallExport ? Self.smallLongSide : nil }
 
@@ -97,6 +126,9 @@ enum CameraSettingsStore {
         s.strength = min(max(d.object(forKey: "camera.strength") as? Float ?? def.strength, 0), 100)
         s.brightness = min(max(d.object(forKey: "camera.brightness") as? Float ?? 0, -100), 100)
         s.warmth = min(max(d.object(forKey: "camera.warmth") as? Float ?? 0, -100), 100)
+        s.mono = d.bool(forKey: "camera.mono")
+        s.monoLookId = d.string(forKey: "camera.monoLook") ?? def.monoLookId
+        s.filter = BwFilter.fromKey(d.string(forKey: "camera.filter")) ?? def.filter
         s.front = d.bool(forKey: "camera.front")
         s.lens = d.string(forKey: "camera.lens") ?? def.lens
         return s
@@ -108,6 +140,9 @@ enum CameraSettingsStore {
         d.set(s.strength, forKey: "camera.strength")
         d.set(s.brightness, forKey: "camera.brightness")
         d.set(s.warmth, forKey: "camera.warmth")
+        d.set(s.mono, forKey: "camera.mono")
+        d.set(s.monoLookId, forKey: "camera.monoLook")
+        d.set(s.filter.key, forKey: "camera.filter")
         d.set(s.jpegQuality, forKey: "camera.jpegQuality")
         d.set(s.keepDng, forKey: "camera.keepDng")
         d.set(s.smallExport, forKey: "camera.smallExport")

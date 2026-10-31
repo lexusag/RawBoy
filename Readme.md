@@ -10,7 +10,7 @@ Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and
 - **RawBoy Camera** (`app-camera`): a camera that previews the film look live and saves each raw shot as a
   JPEG developed by the same engine (see [RawBoy Camera](docs/camera.md)).
 - **RawBoy Film** (`app-camera`, flavour `film`, `app.rawboy.camera.film`): the same camera, whose looks are the
-  film stocks of RawBoy Auto's Film mode (see [Film looks](docs/camera.md#film-looks)); installs next to RawBoy
+  film stocks of RawBoy Auto's Film mode, plus a black and white mode (see [Film looks](docs/camera.md#film-looks)); installs next to RawBoy
   Camera. On iOS it is the `RawBoyFilm` target (same bundle id).
 - **RawBoy Web** (`web/`): RawBoy and RawBoy Auto in the browser, plus **RawBoy Browser** for culling a folder of
   raws, as three tabs (see [RawBoy Web](docs/web.md)). Try it at **[app.rawboy.link](https://app.rawboy.link)**.
