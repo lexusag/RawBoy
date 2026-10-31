@@ -24,6 +24,13 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -43,10 +50,20 @@ fun LookDropdown(
     loading: Boolean = false,
     labelWidth: Dp = 96.dp,
     placeholder: String = "",
+    alignEnd: Boolean = false,
 ) {
     var open by remember { mutableStateOf(false) }
-    Row(verticalAlignment = Alignment.CenterVertically, modifier = modifier.fillMaxWidth()) {
-        Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(labelWidth))
+    // The menu scrolls, but Material sizes it to the whole window: turned sideways, edge to edge, its last items sat
+    // under the navigation bar. Keep it within the space between the system bars.
+    val bars = WindowInsets.systemBars.union(WindowInsets.displayCutout).asPaddingValues()
+    val windowHeight = LocalConfiguration.current.screenHeightDp.dp
+    val menuMax = (windowHeight - bars.calculateTopPadding() - bars.calculateBottomPadding() - 32.dp).coerceAtLeast(160.dp)
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = if (alignEnd) Arrangement.End else Arrangement.Start,
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        if (labelWidth > 0.dp) Text(label, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(labelWidth))
         Box {
             OutlinedButton(
                 onClick = { open = true },
@@ -56,7 +73,7 @@ fun LookDropdown(
                 Text(selected?.name ?: placeholder)
                 Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
             }
-            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.heightIn(max = menuMax)) {
                 // Colour and black and white looks under their own headings, when the list has both.
                 val sectioned = looks.any { it.monochrome } && looks.any { !it.monochrome }
                 for ((i, look) in looks.withIndex()) {

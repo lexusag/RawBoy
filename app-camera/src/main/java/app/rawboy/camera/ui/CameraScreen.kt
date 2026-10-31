@@ -481,15 +481,16 @@ fun CameraScreen(
                         onAdjust = { adjust = it },
                         // The stock menu across the column, the Film and B&W buttons under it.
                         lookRow = {
-                            Column {
+                            Column(horizontalAlignment = Alignment.End) {
                                 LookDropdown(
                                     label = "",
                                     looks = looks,
                                     selected = looks.firstOrNull { it.id == settings.look.id },
                                     onSelect = { vm.setLook(it.id) },
                                     labelWidth = 0.dp,
+                                    alignEnd = true,
                                 )
-                                Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                                     FilmToggle(settings.film, vm::setFilm)
                                     if (Edition.monoLooks.isNotEmpty()) MonoToggle(settings.monoMode, vm::setMono)
                                 }
@@ -515,7 +516,7 @@ fun CameraScreen(
                 if (landscape) {
                     // The switch above, the shutter at the middle of the edge, the last photo below.
                     Column(
-                        Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        Modifier.padding(start = 8.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
                         verticalArrangement = Arrangement.SpaceEvenly,
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
@@ -1161,7 +1162,7 @@ private val LOUPE_GAP = 64.dp
 private const val LOUPE_ZOOM = 3f
 
 /** Width of the landscape controls column (look menu, S/B/W picker and the tall slider) beside the shutter column. */
-private val LANDSCAPE_CONTROLS_WIDTH = 232.dp
+private val LANDSCAPE_CONTROLS_WIDTH = 200.dp
 
 /** What the landscape slider changes: Strength, Brightness, or Warmth (Filter in B&W mode). */
 private enum class Adjust { STRENGTH, BRIGHTNESS, WARMTH }
@@ -1181,7 +1182,11 @@ private fun LandscapeControls(
     vm: CameraViewModel,
 ) {
     val mono = settings.monoMode
-    Column(Modifier.fillMaxSize().padding(start = 4.dp, top = 4.dp, bottom = 8.dp)) {
+    // Packed against the shutter column: everything right-aligned, the chips right beside the slider.
+    Column(
+        Modifier.fillMaxSize().padding(start = 4.dp, top = 4.dp, bottom = 8.dp),
+        horizontalAlignment = Alignment.End,
+    ) {
         Text(
             status,
             style = MaterialTheme.typography.labelMedium,
@@ -1194,12 +1199,12 @@ private fun LandscapeControls(
             Modifier
                 .weight(1f)
                 .fillMaxWidth()
-                .padding(top = 8.dp),
+                .padding(top = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(
-                Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 AdjustChip("S", settings.strength.roundToInt().toString(), adjust == Adjust.STRENGTH,
@@ -1227,7 +1232,7 @@ private fun LandscapeControls(
                     VerticalSlider(
                         value, range, default, set,
                         modifier = Modifier
-                            .width(48.dp)
+                            .width(40.dp)
                             .fillMaxHeight(),
                         color = primary,
                         trackColor = track,
@@ -1251,7 +1256,7 @@ private fun AdjustChip(letter: String, value: String, selected: Boolean, onSelec
     val primary = MaterialTheme.colorScheme.primary
     Column(
         Modifier
-            .size(48.dp)
+            .size(44.dp)
             .clip(CircleShape)
             .background(if (selected) primary else Color(0xFF2A2A2A))
             .pointerInput(Unit) {
