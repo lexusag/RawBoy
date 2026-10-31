@@ -1,5 +1,13 @@
 # Changelog
 
+**Web: the "?" sheet shows the release version, commit and build time (2026-10-31)**
+
+- The web app always said "Version 0.1.0" (package.json's version, never bumped) in small grey text, so it didn't tell
+  which release was running. It now shows e.g. "Version 1.7.0 (8f37634), built 31 Oct 2026, 21:40" on its own line
+  above the decoder: the release tag (the release workflow passes it, as the APKs' versionName), the commit and the
+  build time, so an installed app shows whether a new deploy has reached it. The "New version available" banner names
+  the new version too. Docker builds take `--build-arg RAWBOY_VERSION=... RAWBOY_COMMIT=...`.
+
 **RawBoy Camera: landscape layout (2026-10-31)**
 
 - Held sideways, RawBoy Camera turns its controls to the right edge, under the right thumb: the shutter in the middle

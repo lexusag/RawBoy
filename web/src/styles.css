@@ -1195,14 +1195,16 @@ input[type='range'] {
 
 .help-about {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: 4px 12px;
   font-size: 12px;
   color: var(--muted);
 }
 
+/* The version and decoder; on a phone they take their own line above the links. */
 .help-about span {
-  flex: 1;
+  flex: 1 1 260px;
   min-width: 0;
 }
 

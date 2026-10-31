@@ -9,16 +9,17 @@ const CHECK_EVERY_MS = 30 * 60 * 1000;
  * reload. It never reloads by itself: photos open in the app would be closed.
  */
 export function UpdateBanner() {
-  const [stale, setStale] = useState(false);
+  // The newer build's version (version.json), '' when it doesn't say; null while this build is the newest.
+  const [stale, setStale] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState(false);
   useEffect(() => {
     if (import.meta.env.DEV) return;
     let stopped = false;
     const check = () => {
       fetch('version.json', { cache: 'no-store' })
-        .then((r) => (r.ok ? (r.json() as Promise<{ build?: string }>) : null))
+        .then((r) => (r.ok ? (r.json() as Promise<{ build?: string; version?: string }>) : null))
         .then((v) => {
-          if (!stopped && v?.build && v.build !== __RAWBOY_BUILD__) setStale(true);
+          if (!stopped && v?.build && v.build !== __RAWBOY_BUILD__) setStale(v.version && v.version !== __RAWBOY_VERSION__ ? v.version : '');
         })
         .catch(() => undefined); // offline, or a host without the file: try again later
     };
@@ -32,10 +33,10 @@ export function UpdateBanner() {
       window.clearInterval(timer);
     };
   }, []);
-  if (!stale || dismissed) return null;
+  if (stale === null || dismissed) return null;
   return (
     <div className="update-banner" role="status">
-      <span>New version available. Reloading closes the open photos.</span>
+      <span>{stale ? `Version ${stale} is available.` : 'New version available.'} Reloading closes the open photos.</span>
       <button type="button" className="primary" onClick={() => window.location.reload()}>Reload</button>
       <button type="button" className="text" onClick={() => setDismissed(true)}>Later</button>
     </div>
