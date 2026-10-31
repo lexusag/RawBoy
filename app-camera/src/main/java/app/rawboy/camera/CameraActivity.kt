@@ -73,18 +73,26 @@ class CameraActivity : ComponentActivity() {
     /**
      * Power pressed while the screensaver starts on sleep (charging, "When to start: while charging"): the phone dreams
      * instead of turning the screen off, so [PowerManager.isInteractive] stays true in [onStop]. The lock screen camera
-     * closes on this too. Only the dream start, not ACTION_SCREEN_OFF: a late screen-off closed a fresh launch (#116).
+     * closes on that too, but only if it was the lock screen camera when it left the screen ([stoppedOverLockScreen]):
+     * a process frozen in the background gets the dream broadcasts late, after a new secure launch has already arrived
+     * (as a late ACTION_SCREEN_OFF did in #116).
      */
+    private var dreaming = false
+
+    /** Stopped while it was the lock screen camera (by the dream, or by the passcode prompt), not started since. */
+    private var stoppedOverLockScreen = false
+
     private val onDream = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
-            if (overLockScreen) closeWhenCaptured()
+            dreaming = intent.action == Intent.ACTION_DREAMING_STARTED
+            if (dreaming && overLockScreen && stoppedOverLockScreen) closeWhenCaptured()
         }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         onLaunch(intent, fresh = savedInstanceState == null)
-        ContextCompat.registerReceiver(this, onDream, IntentFilter(Intent.ACTION_DREAMING_STARTED), ContextCompat.RECEIVER_NOT_EXPORTED)
+        ContextCompat.registerReceiver(this, onDream, IntentFilter(Intent.ACTION_DREAMING_STARTED).apply { addAction(Intent.ACTION_DREAMING_STOPPED) }, ContextCompat.RECEIVER_NOT_EXPORTED)
         lifecycleScope.launch {
             viewModel.capturing.collect { count ->
                 if (count == 0 && closeAfterCapture) finishAndRemoveTask()
@@ -120,6 +128,7 @@ class CameraActivity : ComponentActivity() {
 
     private fun onLaunch(intent: Intent?, fresh: Boolean) {
         closeAfterCapture = false
+        stoppedOverLockScreen = false
         val secure = intent?.action == MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE
         // The secure action on an unlocked phone (Settings' "Lock screen camera" choice) is an ordinary launch.
         overLockScreen = secure && getSystemService(KeyguardManager::class.java).isKeyguardLocked
@@ -277,8 +286,10 @@ class CameraActivity : ComponentActivity() {
             // with the last photo's thumbnail. Hidden anyway once stopped; a secure launch turns it on in onLaunch.
             setShowWhenLocked(false)
             setTurnScreenOn(false)
-        } else if (!getSystemService(PowerManager::class.java).isInteractive) {
+        } else if (dreaming || !getSystemService(PowerManager::class.java).isInteractive) {
             closeWhenCaptured()
+        } else {
+            stoppedOverLockScreen = true // the dream may start just after: onDream closes it then
         }
     }
 
@@ -290,6 +301,7 @@ class CameraActivity : ComponentActivity() {
     /** Unlocked while it was open: from now on an ordinary camera. */
     override fun onStart() {
         super.onStart()
+        stoppedOverLockScreen = false
         if (overLockScreen && !getSystemService(KeyguardManager::class.java).isKeyguardLocked) leaveLockScreen()
     }
 }
