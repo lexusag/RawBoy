@@ -115,7 +115,7 @@ shows them.
 
 ## Black and white
 
-The **B&W** button left of the shutter switches RawBoy Camera and RawBoy Film to black and white, and back. In B&W the **Look** menu
+The **B&W** button (left of the Look menu, next to the film strip) switches RawBoy Camera and RawBoy Film to black and white, and back. In B&W the **Look** menu
 lists the black and white films RawBoy Auto has: Yellow Mono Soft, Yellow Mono 400 (the default), Yellow Mono Push,
 Yellow Mono Hard, Yellow Cine Mono and Yellow Cine Mono Soft (AgX plus each film's LUT, with RawBoy's grain). The
 viewfinder shows black and white live. Each mode keeps its own pick, so switching back finds the colour look again.
@@ -133,9 +133,18 @@ viewfinder shows black and white live. Each mode keeps its own pick, so switchin
 - In RawBoy Camera the colour **Look** menu no longer lists the black and white looks; a black and white look remembered
   from before opens in B&W mode.
 
-## Film looks
+## Film mode and RawBoy Film
 
-**RawBoy Film** is RawBoy Camera with film stocks as its looks (everything else above applies): the same 12 stocks
+RawBoy Camera has a **Film** toggle, a film strip left of the Look menu: on (the default), the **Look** menu
+lists the film stocks below; off, the looks on RawBoy's film LUTs. Each keeps its own pick, and Strength, Brightness
+and Warmth are shared. The **B&W** button sits next to it, and each switches by itself: in B&W the menu lists only the black and white looks
+below, Film on or not, and switching B&W off comes back to Film if it is on. With both on, B&W is punchier: Contrast
++20 on top of the look's and 1.5 times B&W's grain (4.5 times the look's own). Photos save to `Pictures/RawBoy Camera` (`…-camera.jpg`, DNGs in `RAW/`) in both modes. The film and
+LUT looks share ids (`portra400` is both), so Film mode's pick is kept separately (`CameraSettings.film`/`filmLookId`,
+prefs `film`/`filmLook`).
+
+**RawBoy Film** is RawBoy Camera with only the film stocks as its looks and no toggle (everything else above applies;
+it is due to be retired in favour of RawBoy Camera's Film mode): the same 12 stocks
 as RawBoy Auto's Film mode, rendered the same way. Yellow Portrait 400/800, Yellow Vivid 100, Yellow Warm 200, Green
 Pastel 400, Green Everyday 400, Yellow Cine 250D and 500T (printed on cinema print film), and the slide films Green
 Vivid Slide 100, Green Slide 100, Yellow Slide 100 and Yellow Classic 64 (scanned, not printed). Colour negatives are

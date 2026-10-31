@@ -23,10 +23,19 @@ struct CameraSettings: Equatable {
     var warmth: Float = 0
     /**
      * B&W mode (Edition.monoLooks): the photo is black and white, on monoLookId's stock seen through
-     * filter. Colour mode keeps lookId and warmth, so switching back and forth keeps each mode's picks.
+     * filter, whether Film is on or not (only black and white looks in B&W: owner's choice, 2026-10-31). Colour mode
+     * keeps lookId and warmth, so switching back and forth keeps each mode's picks.
      */
     var mono = false
     var monoLookId = Edition.defaultMonoLookId
+    /**
+     * Film mode (the Film toggle, Edition.filmLooks): colour photos on filmLookId's film stock instead of
+     * lookId's LUT look. Each mode keeps its own pick; Strength, Brightness and Warmth are shared. B&W mode wins over
+     * it, but leaves it on, so leaving B&W comes back to it.
+     * On by default (owner's choice, 2026-10-31).
+     */
+    var film = true
+    var filmLookId = Edition.defaultFilmLookId
     /** B&W mode's colour filter; Yellow, the classic default (it also keeps the noisy blue channel out of night shots). */
     var filter = BwFilter.yellow
     /** JPEG quality, minQuality...100. */
@@ -67,18 +76,28 @@ struct CameraSettings: Equatable {
     var previewScale: Float { previewScales[lensKey] ?? Self.defaultScale }
     /** B&W mode is on and this edition has one. */
     var monoMode: Bool { mono && !Edition.monoLooks.isEmpty }
-    /** The look in effect: B&W mode's stock or the colour look. */
-    var look: Look { monoMode ? Edition.monoLook(monoLookId) : Edition.look(lookId) }
+    /** Film mode is on (and B&W mode isn't) and this edition has one. */
+    var filmMode: Bool { film && !monoMode && !Edition.filmLooks.isEmpty }
+    /** B&W with Film on too: the black and white looks with filmMonoContrast and more grain (see grainStrength). */
+    var filmMono: Bool { monoMode && film && !Edition.filmLooks.isEmpty }
+    /** The look in effect: B&W mode's stock, Film mode's stock or the colour look. */
+    var look: Look {
+        if monoMode { return Edition.monoLook(monoLookId) }
+        if filmMode { return Edition.filmLook(filmLookId) }
+        return Edition.look(lookId)
+    }
 
     /**
      * base (the auto develop) with the look and the sliders, as the viewfinder shows it and the shot is saved. B&W mode:
      * the filter, then grey (Saturation -100 makes the scene grey before the stock and keeps the stock's output grey, see
      * `applyLut`), so Strength blends the stock's tones with plain AgX grey and the picture stays black and white;
-     * Warmth isn't shown there and doesn't apply. Mirrors Android's CameraSettings.develop.
+     * Warmth isn't shown there and doesn't apply. With Film on too (filmMono) it has filmMonoContrast more contrast.
+     * Mirrors Android's CameraSettings.develop.
      */
     func develop(_ base: DevelopParams, hasFace: Bool) -> DevelopParams {
-        var p = LookApplier.apply(base, look: look, strength: strength,
-                                  adjust: Adjustments(brightness: brightness, warmth: monoMode ? 0 : warmth), hasFace: hasFace)
+        let adjust = Adjustments(brightness: brightness, warmth: monoMode ? 0 : warmth,
+                                 contrast: filmMono ? Self.filmMonoContrast : 0)
+        var p = LookApplier.apply(base, look: look, strength: strength, adjust: adjust, hasFace: hasFace)
         if monoMode {
             p.saturation = -100
             p.bwFilter = filter
@@ -91,6 +110,8 @@ struct CameraSettings: Equatable {
 
     static let minQuality = 70
     static let smallLongSide = 3000
+    /** Film + B&W: added to the Contrast slider's value (owner's choice, 2026-10-31: punchier than plain B&W). */
+    static let filmMonoContrast: Float = 20
     /** Light sharpening after the downscale to smallLongSide (luma unsharp mask, `band_ops.h`); full size gets none. */
     static let smallSharpen: Float = 0.5
     /** First guess before a lens's first shot: an sRGB preview's middle grey (0.18) at a camera raw's key (~0.06). */
@@ -128,6 +149,8 @@ enum CameraSettingsStore {
         s.warmth = min(max(d.object(forKey: "camera.warmth") as? Float ?? 0, -100), 100)
         s.mono = d.bool(forKey: "camera.mono")
         s.monoLookId = d.string(forKey: "camera.monoLook") ?? def.monoLookId
+        s.film = d.object(forKey: "camera.film") as? Bool ?? def.film
+        s.filmLookId = d.string(forKey: "camera.filmLook") ?? def.filmLookId
         s.filter = BwFilter.fromKey(d.string(forKey: "camera.filter")) ?? def.filter
         s.front = d.bool(forKey: "camera.front")
         s.lens = d.string(forKey: "camera.lens") ?? def.lens
@@ -148,6 +171,8 @@ enum CameraSettingsStore {
         d.set(s.warmth, forKey: "camera.warmth")
         d.set(s.mono, forKey: "camera.mono")
         d.set(s.monoLookId, forKey: "camera.monoLook")
+        d.set(s.film, forKey: "camera.film")
+        d.set(s.filmLookId, forKey: "camera.filmLook")
         d.set(s.filter.key, forKey: "camera.filter")
         d.set(s.jpegQuality, forKey: "camera.jpegQuality")
         d.set(s.keepDng, forKey: "camera.keepDng")

@@ -1,5 +1,12 @@
 # Changelog
 
+**RawBoy Camera: Film and B&W buttons side by side, RawBoy Film's icon (2026-10-31)**
+
+- The **Film** and **B&W** buttons sit side by side left of the Look menu and each switches by itself: B&W lists only
+  the black and white looks, Film on or not, and switching B&W off comes back to Film.
+- **Film + B&W** is punchier than B&W alone: Contrast +20 and 1.5 times B&W's grain, on the same black and white looks.
+- RawBoy Camera's app icon is now RawBoy Film's.
+
 **RawBoy (Android, iPhone): Curves end points easier to reach (2026-10-31)**
 
 - As on the web, the Curves box has a 14 dp/pt margin inside it, with the curve area outlined, so the end points sit
