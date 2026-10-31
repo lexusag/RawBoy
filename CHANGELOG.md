@@ -3,7 +3,7 @@
 **RawBoy Film: back in RawBoy, on Auto's film formation (2026-10-31)**
 
 - RawBoy Film is built from this repository again (Android `app-camera` flavour `film`, iOS target `RawBoyFilm`),
-  so it gets every RawBoy Camera fix at once, including the lock screen camera fix below.
+  so it gets every RawBoy Camera fix at once, including the lock screen camera fix further down.
 - Its looks now render exactly as RawBoy Auto's Film mode does: the same 12 stocks on spektrafilm's film and print
   LUTs, with RawBoy's own grain, halation and scatter (`shaders/film_form.glsl`). The grain and halation ported from
   spektrafilm's code are gone, so the film render can look slightly different from earlier Film versions.
