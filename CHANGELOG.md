@@ -1,5 +1,11 @@
 # Changelog
 
+**RawBoy Auto (web): lens blur shows in the photo view (2026-10-31)**
+
+- Photos sent from RawBoy with a mask's *Lens blur* showed the blur in the grid and in exported files, but Auto's
+  photo view dropped it once the RAW finished decoding. The photo view now redraws when the blur's source copy is
+  ready, so it shows the same develop as the export.
+
 **RawBoy Web and iPhone: RAW files open 2 to 3 times faster (2026-10-31)**
 
 - Opening a photo full size (RawBoy, Auto's photo view, export) decodes the RAW on all cores: the demosaic, the
