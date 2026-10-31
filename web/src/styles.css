@@ -1673,10 +1673,16 @@ select {
 }
 
 .curve-grid line,
-line.curve-grid {
+line.curve-grid,
+.curve-frame {
   stroke: var(--border);
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
+}
+
+.curve-frame {
+  display: none;
+  fill: none;
 }
 
 .curve-point {
@@ -1701,6 +1707,18 @@ line.curve-grid {
 
   .curve-box {
     aspect-ratio: 2;
+  }
+}
+
+/* Phones (either way round) and touch screens: the curve area sits inside padding, so its end points don't sit on
+   the panel's edges where a finger can't get at them (CurvesPanel maps presses against the content box). */
+@media (max-width: 760px), (pointer: coarse) {
+  .curve-box {
+    padding: 14px;
+  }
+
+  .curve-frame {
+    display: inline;
   }
 }
 

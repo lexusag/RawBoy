@@ -28,16 +28,18 @@ const DOUBLE_TAP_MS = 350;
  * the side panel and twice as wide as tall on phones (styles.css), so it leaves room for the rest of the panel.
  * Press on the curve box to add a point, drag a point to move it, double-click (double-tap) a point to remove it.
  * Touch only grabs near a point or the curve (adding the point on the curve); elsewhere it scrolls the panel.
+ * On phones and touch screens the box has padding (styles.css), so the curve area and its end points sit inside it,
+ * away from the panel's edges; the SVG draws into the content box, and presses map against it.
  */
 export function CurvesPanel({ curves, onChange }: { curves: ToneCurves; onChange: (c: ToneCurves) => void }) {
   const [channel, setChannel] = useState<CurveChannel>('rgb');
   const [selected, setSelected] = useState(-1);
   // The points being dragged, kept here so moves never act on a render that hasn't caught up with the last change.
-  // `rect` is the box's position at the press: moves map against it, so a layout shift mid-drag can't make the point jump.
-  const drag = useRef<{ id: number; index: number; points: readonly CurvePoint[]; rect: DOMRect } | null>(null);
+  // `rect` is the curve area's position at the press: moves map against it, so a layout shift mid-drag can't make the point jump.
+  const drag = useRef<{ id: number; index: number; points: readonly CurvePoint[]; rect: Area } | null>(null);
   const lastTap = useRef({ time: 0, index: -1 });
   const box = useRef<SVGSVGElement>(null);
-  // Height / width of the box, so the points stay round in a box that isn't square.
+  // Height / width of the curve area, so the points stay round in a box that isn't square.
   const [aspect, setAspect] = useState(1);
 
   // The box allows vertical panning (touch-action: pan-y) so touches off the curve scroll; once a press has grabbed
@@ -50,8 +52,9 @@ export function CurvesPanel({ curves, onChange }: { curves: ToneCurves; onChange
     };
     el.addEventListener('touchstart', hold, { passive: false });
     el.addEventListener('touchmove', hold, { passive: false });
-    const observer = new ResizeObserver(() => {
-      if (el.clientWidth > 0 && el.clientHeight > 0) setAspect(el.clientHeight / el.clientWidth);
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      if (width > 0 && height > 0) setAspect(height / width);
     });
     observer.observe(el);
     return () => {
@@ -63,13 +66,13 @@ export function CurvesPanel({ curves, onChange }: { curves: ToneCurves; onChange
   const points = curves[channel];
   const setPoints = (p: readonly CurvePoint[]) => onChange({ ...curves, [channel]: p });
 
-  const toCurve = (e: React.PointerEvent<SVGSVGElement>, r = e.currentTarget.getBoundingClientRect()) => {
+  const toCurve = (e: React.PointerEvent<SVGSVGElement>, r: Area) => {
     return { x: (e.clientX - r.left) / r.width, y: 1 - (e.clientY - r.top) / r.height, width: r.width, height: r.height };
   };
 
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     if (e.button !== 0) return;
-    const rect = e.currentTarget.getBoundingClientRect();
+    const rect = curveArea(e.currentTarget);
     const { x, y, width, height } = toCurve(e, rect);
     const touch = e.pointerType !== 'mouse';
     let next = points;
@@ -153,6 +156,8 @@ export function CurvesPanel({ curves, onChange }: { curves: ToneCurves; onChange
           </g>
         ))}
         <line className="curve-grid" x1={0} y1={1} x2={1} y2={0} />
+        {/* Outlines the curve area when the box is padded (phones, touch screens); hidden otherwise. */}
+        <rect className="curve-frame" x={0} y={0} width={1} height={1} />
         <path d={path} fill="none" stroke={CURVE_COLORS[channel]} strokeWidth={2} vectorEffect="non-scaling-stroke" />
         {points.map(([px, py], i) => (
           <ellipse
@@ -174,4 +179,18 @@ export function CurvesPanel({ curves, onChange }: { curves: ToneCurves; onChange
       </div>
     </div>
   );
+}
+
+type Area = { left: number; top: number; width: number; height: number };
+
+/** The box's content box (inside its border and padding) on screen: the area the curve's 0..1 range covers. */
+function curveArea(el: SVGSVGElement): Area {
+  const r = el.getBoundingClientRect();
+  const cs = getComputedStyle(el);
+  const px = (v: string) => parseFloat(v) || 0;
+  const left = px(cs.borderLeftWidth) + px(cs.paddingLeft);
+  const top = px(cs.borderTopWidth) + px(cs.paddingTop);
+  const right = px(cs.borderRightWidth) + px(cs.paddingRight);
+  const bottom = px(cs.borderBottomWidth) + px(cs.paddingBottom);
+  return { left: r.left + left, top: r.top + top, width: Math.max(1, r.width - left - right), height: Math.max(1, r.height - top - bottom) };
 }
