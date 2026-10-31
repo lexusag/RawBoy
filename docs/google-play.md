@@ -6,10 +6,12 @@ only when you start it from the Actions tab.
 
 ## How it fits together
 
-- **Signing.** Play re-signs every app before delivering it to phones ("Play App Signing"). RawBoy gives Play its
-  existing release key (the `rawboy` key in `KEYSTORE_FILE`, the one the GitHub APKs are signed with), so an app
-  installed from Play and one installed from a GitHub APK are the same app to Android and update each other. The
-  workflow signs the bundle with that same key; Play checks the signature and accepts the upload.
+- **Signing.** Play re-signs every app before delivering it to phones ("Play App Signing"). By default Google creates
+  that signing key itself when the first bundle of an app is uploaded, and the `rawboy` key (`KEYSTORE_FILE`, the one
+  the GitHub APKs are signed with) becomes the *upload key*: the workflow signs the bundle with it and Play checks the
+  signature. The apps work the same, but a GitHub APK and the Play version of an app have different signatures, so
+  neither updates over the other (switching needs an uninstall). To keep one signature, give Play the `rawboy` key
+  as its signing key instead; see step 1, and note it can only be chosen before the app's first upload.
 - **Uploading.** Play has an API for releases. The workflow logs in to it as a *service account*: a robot Google
   account whose JSON key is the `PLAY_SERVICE_ACCOUNT_JSON` secret, and which you invite into Play Console like a
   team member, allowed only to release.
@@ -26,7 +28,7 @@ only when you start it from the Actions tab.
 
 Play asks for a public privacy policy URL for every app. The four Android apps share one: `https://app.rawboy.link/privacy-android` (`web/public/privacy-android.html`, deployed with the website by `release.yml`). Update it, and the date on it, if the apps start collecting anything new or a library's data use changes.
 
-### 1. Play Console: the apps and their signing key
+### 1. Play Console: the apps and the first upload
 
 Each app must exist in Play Console before the workflow can upload to it, and its first bundle has to be uploaded
 by hand, in the browser:
@@ -34,16 +36,19 @@ by hand, in the browser:
 1. Play Console → **Create app** (name, default language, App, Free). Do this for each app.
 2. Run the workflow with **Upload to Play** unticked (see *Running it* below). When it finishes, open the run and
    download **play-bundles-&lt;version&gt;** at the bottom of its Summary page; it holds one folder per app.
-3. In the app: **Test and release → Testing → Internal testing → Create new release**. Under *App integrity*, choose
-   to sign with your own key: **Use a different key → Export and upload a key from Java keystore**. Play shows a
-   command for its `pepk.jar` tool and an encryption key to download. On your computer, with the `.jks` file:
+3. *(Optional, only before this app's first upload.)* To make Play sign with your own `rawboy` key, find **App
+   signing** in Play Console (search for "app signing" at the top). If it offers **Use a different key → Export and
+   upload a key from a Java keystore**, follow it: Play shows a command for its `pepk.jar` tool and an encryption key
+   to download. On your computer, with the `.jks` file:
    ```
    java -jar pepk.jar --keystore=rawboy-release.jks --alias=rawboy --output=rawboy-pepk.zip \
      --include-cert --rsa-aes-encryption --encryption-key-path=encryption_public_key.pem
    ```
    (It asks for the keystore and key passwords.) Upload `rawboy-pepk.zip`. Do this for each app: the encryption
-   key differs per app, so download it each time. **Play App Signing can't be changed afterwards.**
-4. Upload that app's `.aab` from the downloaded folder, save, and roll out the internal release.
+   key differs per app, so download it each time. **Play App Signing can't be changed afterwards.** Play Console's
+   layout changes, and for new apps the option is often missing; then skip this step and let Google sign.
+4. **Test and release → Testing → Internal testing → Create new release**: upload that app's `.aab` from the
+   downloaded folder, save, and roll out the internal release.
 
 ### 2. Google Cloud: the service account
 
