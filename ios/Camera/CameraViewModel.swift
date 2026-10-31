@@ -2,11 +2,7 @@ import AVFoundation
 import Foundation
 import os
 import Photos
-#if FILM_EDITION
-import RawBoyFilmEngine
-#else
 import RawBoyEngine
-#endif
 import UIKit
 
 enum CameraStatus { case needsPermission, opening, ready, failed }
@@ -762,7 +758,7 @@ final class CameraViewModel: ObservableObject {
         return data
     }
 
-    /** A spektrafilm stock's two LUTs, loaded once (RawBoy Film). */
+    /** A film stock's two LUTs, loaded once (RawBoy Film). */
     private func loadFilm(_ id: String) async throws -> FilmData {
         if let f = films[id] { return f }
         let data = try await Task.detached(priority: .userInitiated) {

@@ -1,4 +1,4 @@
-# Builds signed release APKs of all three apps and attaches them to the GitHub release,
+# Builds signed release APKs of all four apps (RawBoy, Auto, Camera, Film) and attaches them to the GitHub release,
 # and deploys the public web build to Cloudflare Pages (project "rawboy").
 # Secrets: KEYSTORE_FILE (base64 of the .jks), KEYSTORE_PASS (store and key password; key alias "rawboy"),
 # CLOUDFLARE_API_TOKEN (Account > Cloudflare Pages > Edit), CLOUDFLARE_ACCOUNT_ID.
@@ -65,7 +65,7 @@ jobs:
       FORCE: ${{ inputs.force_apks }}
       GH_TOKEN: ${{ github.token }}
       NOT_APP_PATHS: >-
-        :!web :!ios :!docs :!tools :!branding :!*.md :!.dockerignore :!.github/workflows/sync-film.yml
+        :!web :!ios :!docs :!tools :!branding :!*.md :!.dockerignore
     steps:
       - uses: actions/checkout@v4
         with:
@@ -179,7 +179,7 @@ jobs:
       # CMake reads the launcher from the environment; AGP's CMake inherits it through the Gradle daemon.
       # COMPILERCHECK=content: the NDK is unpacked afresh each run, so its mtime (ccache's default check) changes.
       # Release APKs are arm64 only (x86_64 is for emulators; local builds keep it). Lint vital is skipped and
-      # the three apps' R8 runs in parallel (more heap for that).
+      # the four apps' R8 runs in parallel (more heap for that).
       - name: Build release APKs
         env:
           CMAKE_C_COMPILER_LAUNCHER: ccache
@@ -189,10 +189,10 @@ jobs:
           CCACHE_COMPILERCHECK: content
         run: >
           ./gradlew --parallel -Dorg.gradle.jvmargs="-Xmx8g -Dfile.encoding=UTF-8"
-          -x lintVitalRelease -x lintVitalStandardRelease
+          -x lintVitalRelease -x lintVitalStandardRelease -x lintVitalFilmRelease
           -Prawboy.versionName="$VERSION_NAME" -Prawboy.versionCode="$VERSION_CODE"
           -Prawboy.abis=arm64-v8a :app-pro:assembleRelease :app-auto:assembleRelease
-          :app-camera:assembleStandardRelease
+          :app-camera:assembleStandardRelease :app-camera:assembleFilmRelease
 
       # Unsigned builds are named *-release-unsigned.apk, so a signing problem fails here.
       - name: Collect APKs
@@ -201,6 +201,7 @@ jobs:
           cp app-pro/build/outputs/apk/release/app-pro-release.apk "dist/RawBoy-$TAG.apk"
           cp app-auto/build/outputs/apk/release/app-auto-release.apk "dist/RawBoy-Auto-$TAG.apk"
           cp app-camera/build/outputs/apk/standard/release/app-camera-standard-release.apk "dist/RawBoy-Camera-$TAG.apk"
+          cp app-camera/build/outputs/apk/film/release/app-camera-film-release.apk "dist/RawBoy-Film-$TAG.apk"
 
       - name: Upload to release
         env:

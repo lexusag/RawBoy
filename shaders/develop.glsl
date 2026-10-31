@@ -43,7 +43,7 @@ uniform float uLutAmount;   // 0 = off, 1 = full LUT
 uniform float uCurveOn;             // 0 = off: no point curves
 uniform float uClipWarn;            // preview only, 1 = clipped highlights red, crushed shadows blue
 uniform vec3 uCurve[CURVE_SIZE];    // point curves (RGB, then per channel) sampled at i / (CURVE_SIZE - 1)
-// Film image formation, assembled after this file: film_form.glsl (standard) or film/film.glsl (film edition).
+// Film image formation, assembled after this file: film_form.glsl.
 uniform float uFilmAmount;  // 0 = off (AgX only) .. 1 = film only
 vec3 applyFilm(vec3 c, vec2 fullPx, float contrast);
 

@@ -37,15 +37,15 @@ android {
         }
     }
 
-    // Editions (src/standard, src/film: Edition.kt), matching the engine's by name. standard = RawBoy Camera, the
-    // looks on the bundled LUTs. film = RawBoy Film, spektrafilm film stocks; GPLv3 (no Adobe DNG SDK), with its own
-    // id so both install side by side. Film lives in its own repository: the flavour only exists where src/film does.
+    // Editions (src/standard, src/film: Edition.kt, plus Film's name and icon). standard = RawBoy Camera, the looks
+    // on the bundled LUTs. film = RawBoy Film, the film stocks of Auto's Film mode, with its own id so both install
+    // side by side. Both use the same engine.
     flavorDimensions += "edition"
     productFlavors {
         create("standard") {
             dimension = "edition"
         }
-        if (file("src/film").isDirectory) create("film") {
+        create("film") {
             dimension = "edition"
             applicationIdSuffix = ".film"
         }

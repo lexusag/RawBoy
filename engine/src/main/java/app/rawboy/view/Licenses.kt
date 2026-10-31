@@ -22,21 +22,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import app.rawboy.engine.BuildConfig
 
 /** The patent notice the DNG specification's licence requires in the product's documentation. */
 const val DNG_NOTICE = "This product includes DNG technology under license by Adobe."
-
-/**
- * The film edition's (RawBoy Film's) licence notice, shown first (GPLv3 section 5(d), "Appropriate Legal Notices").
- * That edition is built without the Adobe DNG SDK, so it has no DNG notice.
- */
-const val GPL_NOTICE = "Free software: you can redistribute it and/or modify it under the terms of the GNU General " +
-    "Public License, version 3 or (at your option) any later version. It comes with ABSOLUTELY NO WARRANTY. " +
-    "Source code: https://github.com/lexusag/RawBoyFILM. Film simulation powered by spektrafilm by Andrea Volpato."
-
-/** What the licences screen shows under the app's name: this edition's legal notice. */
-val EDITION_NOTICE: String get() = if (BuildConfig.FILM_EDITION) GPL_NOTICE else DNG_NOTICE
 
 /** <repo>/licenses/THIRD_PARTY_NOTICES.txt, packaged by the engine's copyNotices task. */
 private const val NOTICES_ASSET = "third_party_notices.txt"
@@ -62,7 +50,7 @@ private fun loadNotices(context: Context): List<String> =
         }
         .filter { it.isNotBlank() }
 
-/** Full-screen list of the app's version, its edition's notice (DNG or GPL) and every third-party licence. */
+/** Full-screen list of the app's version, the DNG notice and every third-party licence. */
 @Composable
 fun LicensesDialog(onDismiss: () -> Unit) {
     val context = LocalContext.current
@@ -87,7 +75,7 @@ fun LicensesDialog(onDismiss: () -> Unit) {
                 LazyColumn(Modifier.padding(horizontal = 24.dp)) {
                     item {
                         Text(title, style = MaterialTheme.typography.bodyMedium)
-                        Text(EDITION_NOTICE, style = MaterialTheme.typography.bodyMedium)
+                        Text(DNG_NOTICE, style = MaterialTheme.typography.bodyMedium)
                         Spacer(Modifier.height(16.dp))
                     }
                     items(blocks) { block ->

@@ -213,17 +213,7 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
     private val uFilmDMin = GLES30.glGetUniformLocation(id, "uFilmDMin")
     private val uFilmDMax = GLES30.glGetUniformLocation(id, "uFilmDMax")
     private val uFilmUmPerPx = GLES30.glGetUniformLocation(id, "uFilmUmPerPx")
-    private val uHalation = GLES30.glGetUniformLocation(id, "uHalation")
-    private val uHalationSigmaUm = GLES30.glGetUniformLocation(id, "uHalationSigmaUm")
-    private val uHalationDecay = GLES30.glGetUniformLocation(id, "uHalationDecay")
-    private val uScatterTailUm = GLES30.glGetUniformLocation(id, "uScatterTailUm")
-    private val uScatterWeight = GLES30.glGetUniformLocation(id, "uScatterWeight")
     private val uFilmGrain = GLES30.glGetUniformLocation(id, "uFilmGrain")
-    private val uGrainParticleUm2 = GLES30.glGetUniformLocation(id, "uGrainParticleUm2")
-    private val uGrainDMin = GLES30.glGetUniformLocation(id, "uGrainDMin")
-    private val uGrainDMax = GLES30.glGetUniformLocation(id, "uGrainDMax")
-    private val uGrainUniformity = GLES30.glGetUniformLocation(id, "uGrainUniformity")
-    private val uGrainBlurPx = GLES30.glGetUniformLocation(id, "uGrainBlurPx")
     private val uFormGrainRms = GLES30.glGetUniformLocation(id, "uFormGrainRms")
     private val uFormHalation = GLES30.glGetUniformLocation(id, "uFormHalation")
     private val uFormHaloUm = GLES30.glGetUniformLocation(id, "uFormHaloUm")
@@ -344,8 +334,8 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
     }
 
     /**
-     * Film look: shaders/film_form.glsl (standard) or film/film.glsl (film edition); each program finds only its own
-     * uniforms (the others' locations are -1, ignored). Everything 0 = off without one.
+     * Film look (shaders/film_form.glsl); programs without it find no locations (-1, ignored). Everything 0 = off
+     * without one.
      */
     private fun bindFilm(p: ShaderParams, g: SampleGeometry) {
         GLES30.glUniform1i(uFilmLut, FilmTextures.FILM_UNIT)
@@ -355,8 +345,6 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
         GLES30.glUniform1f(uFilmAmount, amount)
         if (f == null) {
             GLES30.glUniform1f(uFilmUmPerPx, 0f)
-            GLES30.glUniform3f(uHalation, 0f, 0f, 0f)
-            GLES30.glUniform3f(uScatterWeight, 0f, 0f, 0f)
             GLES30.glUniform1f(uFilmGrain, 0f)
             GLES30.glUniform3f(uFormHalation, 0f, 0f, 0f)
             GLES30.glUniform3f(uFormScatter, 0f, 0f, 0f)
@@ -371,17 +359,7 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
         GLES30.glUniform1f(uFilmUmPerPx, FilmTextures.FRAME_WIDTH_UM / maxOf(g.imageWidth, g.imageHeight))
         // Halation and scatter happen before the film, so Strength fades them with the film render.
         val optics = p.halation * amount
-        vec3(uHalation, s.halation.strength, optics)
-        GLES30.glUniform1f(uHalationSigmaUm, s.halation.firstSigmaUm)
-        GLES30.glUniform1f(uHalationDecay, s.halation.bounceDecay)
-        vec3(uScatterTailUm, s.halation.scatterTailUm)
-        vec3(uScatterWeight, s.halation.scatterTailWeight, optics.coerceAtMost(1f))
         GLES30.glUniform1f(uFilmGrain, p.filmGrain)
-        vec3(uGrainParticleUm2, s.grain.particleScale, s.grain.particleAreaUm2)
-        vec3(uGrainDMin, s.grain.densityMin)
-        vec3(uGrainDMax, s.grain.densityMax)
-        vec3(uGrainUniformity, s.grain.uniformity)
-        GLES30.glUniform1f(uGrainBlurPx, s.grain.blurPx)
         val form = s.formation
         vec3(uFormGrainRms, form.grainRms)
         vec3(uFormHalation, form.halation, optics)
@@ -684,7 +662,7 @@ internal class LutTexture(private val unit: Int = UNIT) {
     }
 }
 
-/** The film and print LUTs of a [FilmData] (shaders/film_form.glsl, film/film.glsl), each on its own unit. */
+/** The film and print LUTs of a [FilmData] (shaders/film_form.glsl), each on its own unit. */
 internal class FilmTextures {
     private val film = LutTexture(FILM_UNIT)
     private val print = LutTexture(PRINT_UNIT)

@@ -2,21 +2,20 @@
 
 # RawBoy
 
-Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and Sigmoid). Three apps share one engine:
+Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and Sigmoid). Four apps share one engine:
 
 - **RawBoy** (`app-pro`): every control (see [RawBoy controls](docs/rawboy.md)).
 - **RawBoy Auto** (`app-auto`): develops raws automatically into a film look, one photo or a whole batch
   (see [RawBoy Auto](docs/auto.md)).
 - **RawBoy Camera** (`app-camera`): a camera that previews the film look live and saves each raw shot as a
   JPEG developed by the same engine (see [RawBoy Camera](docs/camera.md)).
-- **RawBoy Film** (`app-camera`, flavour `film`, `app.rawboy.camera.film`): the same camera, whose looks are film
-  stocks simulated with [spektrafilm](https://github.com/andreavolpato/spektrafilm) (see
-  [Film looks](docs/camera.md#film-looks-spektrafilm)). Licensed GPLv3 and developed in its own repository (see [Licence](#licence));
-  installs next to RawBoy Camera. On iOS it is the `RawBoyFilm` target (same bundle id), on the `RawBoyFilmEngine` framework.
+- **RawBoy Film** (`app-camera`, flavour `film`, `app.rawboy.camera.film`): the same camera, whose looks are the
+  film stocks of RawBoy Auto's Film mode (see [Film looks](docs/camera.md#film-looks)); installs next to RawBoy
+  Camera. On iOS it is the `RawBoyFilm` target (same bundle id).
 - **RawBoy Web** (`web/`): RawBoy and RawBoy Auto in the browser, plus **RawBoy Browser** for culling a folder of
   raws, as three tabs (see [RawBoy Web](docs/web.md)). Try it at **[app.rawboy.link](https://app.rawboy.link)**.
 
-- Decoding: **LibRaw 0.21** (CR2/CR3/NEF/ARW/RAF/RW2/ORF/DNG…), with the **Adobe DNG SDK 1.7.1** as fallback for DNGs LibRaw can't read — notably DNG 1.7 with JPEG XL compression (setup: [third_party/README.md](third_party/README.md)). RawBoy Film is built without the DNG SDK (see [Licence](#licence)), so JPEG XL DNGs don't open in it (its own Pixel/iPhone DNGs go through LibRaw).
+- Decoding: **LibRaw 0.21** (CR2/CR3/NEF/ARW/RAF/RW2/ORF/DNG…), with the **Adobe DNG SDK 1.7.1** as fallback for DNGs LibRaw can't read — notably DNG 1.7 with JPEG XL compression (setup: [third_party/README.md](third_party/README.md)).
 - Develop pipeline: GLES 3.0 fragment shader, so the preview updates in real time while sliders move.
   Export runs the same shader on full-resolution tiles.
 - Export: JPEG (quality 1–100) or TIFF (8/16-bit, lossless LZW compression) to `Pictures/RawBoy/`.
@@ -42,9 +41,9 @@ Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and
 | `engine/` | Shared Android library (`:engine`): the native C++ decoder and exporter (`src/main/cpp/`: LibRaw, DNG SDK fallback, lens opcodes, blemish healing, jpegli) and the Kotlin engine (GL preview and export, lens math, presets, sessions, Auto's analysis and looks). Anything two apps need lives here. |
 | `app-pro/` | **RawBoy** for Android (`:app-pro`): the full editor UI. |
 | `app-auto/` | **RawBoy Auto** for Android (`:app-auto`): batch queue, grid and detail screens. |
-| `app-camera/` | **RawBoy Camera** for Android (`:app-camera`), with the `standard` flavour here; the `film` flavour builds only in RawBoy Film's repository. |
+| `app-camera/` | **RawBoy Camera** (`standard` flavour) and **RawBoy Film** (`film` flavour: `src/film/`, its looks, name and icon) for Android (`:app-camera`). |
 | `shaders/` | The develop GLSL (develop, denoise, bokeh, light leaks, film formation): the single source of truth for Android, iOS and the web (see [shaders/README.md](shaders/README.md)). |
-| `ios/` | The iOS apps, generated with XcodeGen from `project.yml`: `Pro/`, `Auto/` and `Camera/` app targets, `Engine/` (the Swift/Metal port of the engine), `EngineTests/`, `native/` (the C++ engine built as frameworks), `shaders/` (generates the Metal shaders from the root `shaders/`) and `mediapipe/` (model fetch). |
+| `ios/` | The iOS apps, generated with XcodeGen from `project.yml`: `Pro/`, `Auto/` and `Camera/` app targets (`Camera/` also builds RawBoy Film from `Camera/film/`), `Engine/` (the Swift/Metal port of the engine), `EngineTests/`, `native/` (the C++ engine built as frameworks), `shaders/` (generates the Metal shaders from the root `shaders/`) and `mediapipe/` (model fetch). |
 | `web/` | **RawBoy Web** (Vite + React + TypeScript): `src/engine/` is the TypeScript port of the Kotlin engine, `src/ui/` the RawBoy, Auto and Browser tabs, `src/worker/` the Web Workers, `src/drive/` Google Drive, and `native/` the C++ engine compiled to WebAssembly. Also its Dockerfile and nginx config (see [web/README.md](web/README.md)). |
 | `luts/` | Bundled `.cube` film-look LUTs, plus `spektrafilm/` (spektrafilm's film stock LUTs, CC BY-SA 4.0). |
 | `docs/` | User and developer documentation (see [Documentation](#documentation)). |
@@ -53,7 +52,7 @@ Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and
 | `third_party/` | Where the Adobe DNG SDK goes for builds (see [third_party/README.md](third_party/README.md)). |
 | `licenses/` | Third-party notices shipped with the apps. |
 | `gradle/`, `*.gradle.kts`, `gradlew` | The Gradle build for the Android modules. |
-| `.github/workflows/` | CI: `release.yml` (release APKs) and `sync-film.yml` (opens a PR in RawBoy Film's repository with the shared engine and camera files). |
+| `.github/workflows/` | CI: `release.yml` (release APKs of all four apps, and the web deploy). |
 
 Root files: [CHANGELOG.md](CHANGELOG.md), [CONTRIBUTING.md](CONTRIBUTING.md), [LICENSE.md](LICENSE.md),
 [UI.md](UI.md) (UI backlog) and [CLAUDE.md](CLAUDE.md) (notes on how the code fits together).
@@ -65,12 +64,11 @@ build, change and use it, but not to make a product that competes with RawBoy. T
 licences (see [Third-party components](docs/third-party.md)). Contributions come with the terms in
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
-**RawBoy Film** (RawBoy Camera on spektrafilm's film stocks) is free software under the **GNU General Public License
-version 3 or later**, because it includes code ported from spektrafilm (GPLv3). It lives in its own repository, which
-holds its complete source: this repository's engine and camera plus the film-only files (`shaders/film/`,
-`app-camera/src/film/`, `ios/Camera/film/`, `tools/spektrafilm_luts/`, its notices and the GPLv3 text). Those files
-build only there: here the `film` flavours and iOS film passes switch off when they are missing.
+This covers **RawBoy Film** too. None of the apps (RawBoy, RawBoy Auto, RawBoy Camera, RawBoy Film, RawBoy Web, iOS)
+contain spektrafilm code: they bundle spektrafilm's film and print LUTs (CC BY-SA 4.0, see
+[Third-party components](docs/third-party.md)), which RawBoy Film's looks and Auto's Film mode render with RawBoy's
+own `shaders/film_form.glsl`.
 
-The apps in this repository (RawBoy, RawBoy Auto, RawBoy Camera, RawBoy Web, iOS) contain no spektrafilm code; they
-bundle spektrafilm's LUTs (CC BY-SA 4.0, see [Third-party components](docs/third-party.md)) for Auto's Film mode, which runs on RawBoy's own
-`shaders/film_form.glsl`.
+Earlier RawBoy Film releases, built from `lexusag/RawBoyFilm`, included
+code ported from spektrafilm and were licensed GPLv3; their complete source stays in that repository, which is no
+longer developed.

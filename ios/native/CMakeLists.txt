@@ -5,8 +5,6 @@
 #   rawboy_jpeg    jpegli (export encoder, and rb_jpeg_decode for rawboy_native) + the export band operations
 # Two libraries, as on Android: jpegli and the DNG SDK's libjxl bundle different Highway versions. Each exports
 # only its rb_* C API (-exported_symbol), the counterpart of Android's --exclude-libs,ALL.
-# RawBoy Film (GPLv3) builds rawboy_native without the DNG SDK, as RawBoyNativeFilm (build.sh's film pass):
-#   -DRAWBOY_USE_DNG_SDK=OFF -DRAWBOY_NATIVE_NAME=RawBoyNativeFilm
 cmake_minimum_required(VERSION 3.22.1)
 project(rawboy_ios LANGUAGES C CXX)
 
@@ -76,7 +74,7 @@ if(RAWBOY_WITH_DNG_SDK)
     target_link_libraries(rawboy_native PRIVATE dng_sdk)
 endif()
 target_link_options(rawboy_native PRIVATE ${RAWBOY_IOS_LINK_OPTIONS})
-# Framework name: RawBoyNative, or RawBoyNativeFilm for RawBoy Film (its own name, so both can sit in one build).
+# Framework name (RawBoyNative).
 set(RAWBOY_NATIVE_NAME "RawBoyNative" CACHE STRING "Framework name of rawboy_native")
 set_target_properties(rawboy_native PROPERTIES OUTPUT_NAME ${RAWBOY_NATIVE_NAME} PREFIX "" SUFFIX ""
     INSTALL_NAME_DIR "@rpath/${RAWBOY_NATIVE_NAME}.framework" BUILD_WITH_INSTALL_NAME_DIR ON)

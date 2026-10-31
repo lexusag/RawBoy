@@ -2,8 +2,6 @@
 # Builds the engine's native code for iOS into ios/native/out/:
 #   RawBoyNative.xcframework  decoders (LibRaw, + Adobe DNG SDK when third_party/dng_sdk exists)
 #   RawBoyJpeg.xcframework    jpegli + export band operations
-#   RawBoyNativeFilm.xcframework  the decoders for RawBoy Film (GPLv3): LibRaw only, never the Adobe DNG SDK;
-#                                 only where shaders/film exists (RawBoy Film's own repository)
 # Each holds an iPhone (arm64) and a Simulator (arm64) slice. Needs Xcode and CMake; the first run downloads
 # LibRaw and jpegli. Usage: ios/native/build.sh
 set -e
@@ -31,17 +29,6 @@ build() {  # build <sdk>
     done
 }
 
-build_film() {  # build_film <sdk>: rawboy_native for RawBoy Film, without the DNG SDK, as RawBoyNativeFilm
-    sdk=$1
-    dir=build/film-$sdk
-    cmake -S . -B "$dir" -DCMAKE_BUILD_TYPE=Release \
-        -DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT="$sdk" -DCMAKE_OSX_ARCHITECTURES=arm64 \
-        -DCMAKE_OSX_DEPLOYMENT_TARGET=$DEPLOYMENT_TARGET -DCMAKE_POLICY_VERSION_MINIMUM=3.5 \
-        -DRAWBOY_USE_DNG_SDK=OFF -DRAWBOY_NATIVE_NAME=RawBoyNativeFilm > /dev/null
-    cmake --build "$dir" -j "$JOBS" --target rawboy_native
-    framework "$dir" RawBoyNativeFilm "$sdk"
-}
-
 framework() {  # framework <build dir> <name> <sdk>: wraps the dylib as <build dir>/frameworks/<name>.framework
     fw=$1/frameworks/$2.framework
     rm -rf "$fw"
@@ -51,7 +38,7 @@ framework() {  # framework <build dir> <name> <sdk>: wraps the dylib as <build d
     # The linker's ad-hoc signature names the binary "<name>-<hash>"; iOS refuses to install an embedded framework
     # whose signing identifier doesn't match its bundle id (Xcode keeps the identifier when it re-signs).
     codesign --force --sign - --identifier "app.rawboy.native.$2" "$fw/$2" 2> /dev/null
-    header=$(echo "$2" | sed 's/RawBoyNativeFilm/rawboy_native/; s/RawBoyNative/rawboy_native/; s/RawBoyJpeg/rawboy_jpeg/').h
+    header=$(echo "$2" | sed 's/RawBoyNative/rawboy_native/; s/RawBoyJpeg/rawboy_jpeg/').h
     cp "$header" "$fw/Headers/"
     cat > "$fw/Modules/module.modulemap" << EOF
 framework module $2 {
@@ -79,15 +66,8 @@ EOF
 EOF
 }
 
-FILM=0
-[ -d ../../shaders/film ] && FILM=1
-
 build iphoneos
 build iphonesimulator
-if [ "$FILM" = 1 ]; then
-    build_film iphoneos
-    build_film iphonesimulator
-fi
 
 mkdir -p "$OUT"
 xcframework() {  # xcframework <name> <build dir prefix>
@@ -99,5 +79,4 @@ xcframework() {  # xcframework <name> <build dir prefix>
 }
 xcframework RawBoyNative ""
 xcframework RawBoyJpeg ""
-if [ "$FILM" = 1 ]; then xcframework RawBoyNativeFilm film-; fi
 ls -la "$OUT"

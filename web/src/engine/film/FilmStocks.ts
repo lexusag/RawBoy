@@ -18,10 +18,10 @@ export interface Formation {
 }
 
 /**
- * A film stock simulated with spektrafilm (https://github.com/andreavolpato/spektrafilm, Andrea Volpato), as baked by
- * tools/spektrafilm_luts into luts/spektrafilm: a film LUT (Apple Log -> normalised film density) and a print LUT
- * (density -> sRGB), plus RawBoy's own grain, halation and scatter ([formation]). Port of FilmStocks.kt (the web has no
- * film edition, so spektrafilm's grain and halation parameters aren't read).
+ * A film stock simulated with spektrafilm (https://github.com/andreavolpato/spektrafilm, Andrea Volpato), as baked with
+ * spektrafilm's LUT creator into luts/spektrafilm (see CHANGELOG.txt there): a film LUT (Apple Log -> normalised film
+ * density) and a print LUT (density -> sRGB), plus RawBoy's own grain, halation and scatter ([formation]). Port of
+ * FilmStocks.kt.
  */
 export interface FilmStock {
   id: string;

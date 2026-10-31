@@ -4,7 +4,7 @@
 
 Needs Android Studio (Ladybug or newer) with **NDK 27.2** and **CMake 3.22.1** from the SDK Manager.
 Open the folder and let Gradle sync. The first native build downloads LibRaw and needs network access.
-Command line: `./gradlew :app-pro:assembleDebug` (RawBoy), `./gradlew :app-auto:assembleDebug` (RawBoy Auto), `./gradlew :app-camera:assembleStandardDebug` (RawBoy Camera) or `./gradlew :app-camera:assembleFilmDebug` (RawBoy Film). The engine has two editions (flavours `standard` and `film`); only RawBoy Film uses `film`. The Gradle daemon is pinned to JDK 21 (`gradle/gradle-daemon-jvm.properties`), because Gradle 8.11 can't run on the Java 25 that Android Studio bundles.
+Command line: `./gradlew :app-pro:assembleDebug` (RawBoy), `./gradlew :app-auto:assembleDebug` (RawBoy Auto), `./gradlew :app-camera:assembleStandardDebug` (RawBoy Camera) or `./gradlew :app-camera:assembleFilmDebug` (RawBoy Film). `app-camera` has two flavours, `standard` (RawBoy Camera) and `film` (RawBoy Film); they differ only in looks, name, icon and save folder, and use the same engine. The Gradle daemon is pinned to JDK 21 (`gradle/gradle-daemon-jvm.properties`), because Gradle 8.11 can't run on the Java 25 that Android Studio bundles.
 
 minSdk 29 (Android 10). No storage permissions needed: input comes through the system picker or "Open with",
 and output goes through MediaStore.

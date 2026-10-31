@@ -279,8 +279,8 @@ struct DevelopProgram {
     }
 
     /**
-     * Film look: shaders/film_form.glsl (RawBoyEngine) or film/film.glsl (RawBoyFilmEngine); each program's layout has
-     * only its own uniforms (the others are skipped by name). Everything 0 = off without one.
+     * Film look (shaders/film_form.glsl); a program's layout has only its own uniforms (the others are skipped by
+     * name). Everything 0 = off without one.
      */
     private static func bindFilm(_ u: inout UniformBlock, _ p: ShaderParams, _ g: SampleGeometry) {
         guard let f = p.film else {
@@ -297,17 +297,7 @@ struct DevelopProgram {
         u.float("uFilmUmPerPx", FilmStock.frameWidthUm / Float(max(g.imageWidth, g.imageHeight)))
         // Halation and scatter happen before the film, so Strength fades them with the film render.
         let optics = p.halation * amount
-        u.vec3("uHalation", s.halation.strength, optics)
-        u.float("uHalationSigmaUm", s.halation.firstSigmaUm)
-        u.float("uHalationDecay", s.halation.bounceDecay)
-        u.vec3("uScatterTailUm", s.halation.scatterTailUm)
-        u.vec3("uScatterWeight", s.halation.scatterTailWeight, min(optics, 1))
         u.float("uFilmGrain", p.filmGrain)
-        u.vec3("uGrainParticleUm2", s.grain.particleScale, s.grain.particleAreaUm2)
-        u.vec3("uGrainDMin", s.grain.densityMin)
-        u.vec3("uGrainDMax", s.grain.densityMax)
-        u.vec3("uGrainUniformity", s.grain.uniformity)
-        u.float("uGrainBlurPx", s.grain.blurPx)
         let form = s.formation
         u.vec3("uFormGrainRms", form.grainRms)
         u.vec3("uFormHalation", form.halation, optics)

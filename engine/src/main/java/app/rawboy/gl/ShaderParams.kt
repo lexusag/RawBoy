@@ -68,11 +68,11 @@ class ShaderParams(
     val displaySource: Float = 0f,
     /** Mask layers packed for the shader (see [packLayers]). */
     val layers: LayerUniforms = LayerUniforms.NONE,
-    /** spektrafilm film stock (shaders/film/film.glsl) matching DevelopParams.film, or null for none. */
+    /** Film stock (shaders/film_form.glsl) matching DevelopParams.film, or null for none. */
     val film: FilmData? = null,
     /** 0..1 blend of the film render over AgX; 0 = off. */
     val filmAmount: Float = 0f,
-    /** Film grain and halation/scatter amounts, 1 = as spektrafilm simulates the stock. */
+    /** Film grain and halation/scatter amounts, 1 = the stock as formation.json describes it. */
     val filmGrain: Float = 1f,
     val halation: Float = 1f,
     /** `uCurve`: DevelopParams.curves as [app.rawboy.develop.ToneCurves.table], or null when they are all the identity. */
