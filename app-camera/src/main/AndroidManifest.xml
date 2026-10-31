@@ -56,16 +56,14 @@
             </intent-filter>
         </activity>
 
-        <!-- Alias in case the system remembered LockScreenCameraActivity from a previous build. -->
+        <!-- Alias in case something still launches LockScreenCameraActivity (from a previous build) by name.
+             No intent filter: one for STILL_IMAGE_CAMERA_SECURE listed each camera twice in the lock screen
+             camera chooser. A default the system remembered for the alias no longer matches, so the chooser
+             asks once more and the user picks CameraActivity. -->
         <activity-alias
             android:name=".LockScreenCameraActivity"
             android:targetActivity=".CameraActivity"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.media.action.STILL_IMAGE_CAMERA_SECURE" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </activity-alias>
+            android:exported="true" />
 
         <!-- Keeps the process and CPU awake while queued shots finish developing after the camera closes. -->
         <service
