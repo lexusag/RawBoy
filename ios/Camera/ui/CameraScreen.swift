@@ -30,8 +30,14 @@ struct CameraScreen: View {
                 // B&W mode lists only the mono stocks and has Filter where Warmth is. Film mode lists the film stocks.
                 LookPicker(looks: vm.settings.monoMode ? Edition.monoLooks : vm.settings.filmMode ? Edition.filmLooks : Edition.looks,
                            selectedId: vm.settings.look.id, onSelect: vm.setLook,
-                           film: Edition.filmLooks.isEmpty || vm.settings.monoMode ? nil : vm.settings.filmMode,
-                           onFilm: vm.setFilm)
+                           film: Edition.filmLooks.isEmpty ? nil : vm.settings.filmMode,
+                           onFilm: { on in
+                               // Film on in B&W mode leaves B&W.
+                               if vm.settings.monoMode { vm.setMono(false) }
+                               vm.setFilm(on)
+                           },
+                           mono: Edition.monoLooks.isEmpty ? nil : vm.settings.monoMode,
+                           onMono: vm.setMono)
                 ValueSlider("Strength", value: vm.settings.strength, range: 0...100, defaultValue: LookApplier.defaultStrength,
                             onChange: vm.setStrength)
                 ValueSlider("Brightness", value: vm.settings.brightness, range: -100...100, defaultValue: 0, onChange: vm.setBrightness)
@@ -245,11 +251,6 @@ struct CameraScreen: View {
             }
             .frame(width: 56, height: 56)
             Spacer()
-            // B&W mode switch, centred between the last photo and the shutter.
-            if !Edition.monoLooks.isEmpty {
-                MonoToggle(on: vm.settings.monoMode, onChange: vm.setMono)
-                Spacer()
-            }
             Button(action: vm.shutter) {
                 Circle().fill(vm.status == .ready ? Color.white : .gray).padding(8)
                     .overlay(Circle().stroke(vm.status == .ready ? Color.white : .gray, lineWidth: 4))
@@ -386,10 +387,10 @@ private struct MonoToggle: View {
 
     var body: some View {
         Button { onChange(!on) } label: {
-            Text("B&W").font(.subheadline.weight(.semibold))
+            Text("B&W").font(.caption.weight(.semibold))
                 .foregroundStyle(on ? Color.black : Color.white)
-                .frame(width: 48, height: 48)
-                .background(RoundedRectangle(cornerRadius: 14).fill(on ? Color.white : Color(white: 0.16)))
+                .frame(width: 36, height: 36)
+                .background(RoundedRectangle(cornerRadius: 10).fill(on ? Color.white : Color(white: 0.16)))
         }
         .accessibilityLabel("Black and white")
         .accessibilityValue(on ? "On" : "Off")
@@ -398,8 +399,8 @@ private struct MonoToggle: View {
 
 /**
  * The Film toggle (a film strip, filled while Film mode is on): the film stocks or the LUT looks. Each mode keeps its own
- * pick, so the two can be swapped back and forth; B&W mode hides it (its mono stocks are the same in both). Mirrors
- * Android's FilmToggle.
+ * pick, so the two can be swapped back and forth. It sits next to B&W, left of the Look menu; turning it on in B&W mode
+ * leaves B&W. Mirrors Android's FilmToggle.
  */
 private struct FilmToggle: View {
     let on: Bool
@@ -464,16 +465,22 @@ private struct LookPicker: View {
     let looks: [Look]
     let selectedId: String
     let onSelect: (String) -> Void
-    /** The Film toggle's state, shown in the label's place; nil = no toggle (B&W mode, RawBoy Film). */
+    /** The Film and B&W toggles' states, side by side in the label's place; nil = no such toggle (RawBoy Film: no Film). */
     var film: Bool? = nil
     var onFilm: (Bool) -> Void = { _ in }
+    var mono: Bool? = nil
+    var onMono: (Bool) -> Void = { _ in }
 
     var body: some View {
         HStack(spacing: 8) {
-            if let film {
-                FilmToggle(on: film, onChange: onFilm).frame(width: 88, alignment: .leading)
-            } else {
+            if film == nil && mono == nil {
                 Text("Look").font(.subheadline).frame(width: 88, alignment: .leading)
+            } else {
+                HStack(spacing: 8) {
+                    if let film { FilmToggle(on: film, onChange: onFilm) }
+                    if let mono { MonoToggle(on: mono, onChange: onMono) }
+                }
+                .frame(width: 88, alignment: .leading)
             }
             Picker("Look", selection: Binding(get: { selectedId }, set: { onSelect($0) })) {
                 // Colour and black and white looks under their own headings, when the list has both.

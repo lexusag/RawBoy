@@ -191,7 +191,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   **Film mode** (standard edition, 2026-10-31; first step of merging RawBoy Film into RawBoy Camera): `Edition.filmLooks`
   (= `FilmLooks.ALL`; empty in the film edition, so no toggle there), `CameraSettings.film` (default **on**, owner's
   choice) / `filmLookId` (its own pick: LUT look and stock ids collide, `portra400` is both), `filmMode` = film && !mono.
-  UI: `FilmToggle` (Material "theaters" path; iOS SF Symbol `film`) in the Look row's label slot, hidden in B&W.
+  UI: `FilmToggle` (Material "theaters" path; iOS SF Symbol `film`) next to `MonoToggle` (B&W, moved up from the shutter row) in the Look row's label slot; Film on in B&W leaves B&W.
   One output folder for both modes (owner's choice). spektrafilm credit now in both editions' `Edition.credits`.
   History: until 2026-10-31 RawBoy Film lived in its own GPLv3 repository (`lexusag/RawBoyFilm`, kept for the source
   of those releases) with a GPL port of spektrafilm's grain/halation (`shaders/film/film.glsl`), an engine `film`

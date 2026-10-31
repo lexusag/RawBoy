@@ -372,26 +372,21 @@ fun CameraScreen(
                     else -> Edition.looks
                 }
                 val selected = looks.firstOrNull { it.id == settings.look.id }
-                if (Edition.filmLooks.isNotEmpty() && !settings.monoMode) {
-                    // The Film toggle takes the label's place: on = the film stocks, off = the LUT looks.
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(Modifier.width(88.dp)) { FilmToggle(settings.filmMode, vm::setFilm) }
-                        LookDropdown(
-                            label = "",
-                            looks = looks,
-                            selected = selected,
-                            onSelect = { vm.setLook(it.id) },
-                            labelWidth = 0.dp,
-                            modifier = Modifier.weight(1f),
-                        )
+                // The Film and B&W toggles side by side in the label's place. Film on in B&W mode leaves B&W.
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.width(88.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (Edition.filmLooks.isNotEmpty()) {
+                            FilmToggle(settings.filmMode, { on -> if (settings.monoMode) vm.setMono(false); vm.setFilm(on) })
+                        }
+                        if (Edition.monoLooks.isNotEmpty()) MonoToggle(settings.monoMode, vm::setMono)
                     }
-                } else {
                     LookDropdown(
-                        label = "Look",
+                        label = "",
                         looks = looks,
                         selected = selected,
                         onSelect = { vm.setLook(it.id) },
-                        labelWidth = 88.dp,
+                        labelWidth = 0.dp,
+                        modifier = Modifier.weight(1f),
                     )
                 }
                 LookSlider("Strength", settings.strength, 0f..100f, LookApplier.DEFAULT_STRENGTH, vm::setStrength)
@@ -422,10 +417,7 @@ fun CameraScreen(
                         )
                     }
                 }
-                // B&W mode switch, centred between the last photo and the shutter.
-                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
-                    if (Edition.monoLooks.isNotEmpty()) MonoToggle(settings.monoMode, vm::setMono)
-                }
+                Spacer(Modifier.weight(1f))
                 Shutter(
                     enabled = status == CameraStatus.READY && !merging,
                     onClick = vm::shutter,
@@ -668,8 +660,8 @@ private fun Shutter(enabled: Boolean, onClick: () -> Unit, modifier: Modifier = 
 private fun MonoToggle(on: Boolean, onChange: (Boolean) -> Unit) {
     Box(
         Modifier
-            .size(48.dp)
-            .clip(RoundedCornerShape(14.dp))
+            .size(36.dp)
+            .clip(RoundedCornerShape(10.dp))
             .background(if (on) Color.White else Color(0xFF2A2A2A))
             .clickable { onChange(!on) }
             .semantics {
@@ -678,13 +670,14 @@ private fun MonoToggle(on: Boolean, onChange: (Boolean) -> Unit) {
             },
         contentAlignment = Alignment.Center,
     ) {
-        Text("B&W", style = MaterialTheme.typography.labelLarge, color = if (on) Color.Black else Color.White)
+        Text("B&W", style = MaterialTheme.typography.labelMedium, color = if (on) Color.Black else Color.White)
     }
 }
 
 /**
  * The Film toggle (a film strip, filled while Film mode is on): the film stocks or the LUT looks. Each mode keeps its own
- * pick, so the two can be swapped back and forth; B&W mode hides it (its mono stocks are the same in both).
+ * pick, so the two can be swapped back and forth. It sits next to B&W, left of the Look menu; turning it on in B&W mode
+ * leaves B&W.
  */
 @Composable
 private fun FilmToggle(on: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
