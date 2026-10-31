@@ -51,6 +51,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.VerticalDivider
+import app.rawboy.view.PhotoWithControls
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -210,144 +211,146 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        Column(
-            Modifier
+        // The looks and sliders under the photo in portrait, beside it in landscape.
+        PhotoWithControls(
+            maxPanelHeight = SLIDER_ROW * 3 + 8.dp,
+            fixedPanelHeight = true,
+            modifier = Modifier
                 .padding(padding)
                 .fillMaxSize(),
-        ) {
-            // Swipe between the batch's photos. Only the shown photo is decoded (one GL surface);
-            // neighbours show their grid thumbnails until they settle and open.
-            Box(
-                Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .background(Color(0xFF121212))
-                    .onSizeChanged { session.setViewSize(it.width, it.height, framePx) },
-            ) {
-                HorizontalPager(
-                    state = pagerState,
-                    modifier = Modifier.fillMaxSize(),
-                    // Drags pan the zoomed view; an export holds the photo still.
-                    userScrollEnabled = zoomCenter == null && export == null,
-                    key = { currentPages.getOrNull(it)?.id ?: it },
-                ) { page ->
-                    val pagePhoto = currentPages.getOrNull(page) ?: return@HorizontalPager
-                    // Until the raw is decoded, the photo's cached preview shows its develop (no 100% view yet).
-                    val cachedImage = cached?.takeIf { pagePhoto.id == id && !loaded && it.first == id }?.second
-                    val shownParams = if (showAuto && loaded) analysis.autoBase else photo.params ?: analysis.autoBase
-                    val cachedParams by produceState<ShaderParams?>(null, cachedImage, shownParams) {
-                        value = cachedImage?.let { vm.cachedShaderParams(id, shownParams) }
-                    }
-                    Box(Modifier.fillMaxSize()) {
-                        val live = pagePhoto.id == id && loaded
-                        val quickParams = cachedParams.takeIf { cachedImage != null }
-                        if (live || quickParams != null) {
-                            // One call site for both, so the GL view stays when the decoded preview replaces the cached one.
-                            val shaderParams = if (live) {
-                                // Press and hold shows the auto develop without the look.
-                                val shown = shownParams
-                                remember(shown, lutData, filmData, lensInfo, base, bloomSources, bokehSource, skinMask) {
-                                    session.shaderParams(
-                                        shown, analysis.defaults, lutData.takeIf { shown.lut != null },
-                                        film = filmData.takeIf { shown.film != null },
-                                    )
-                                }
-                            } else {
-                                quickParams!!
-                            }
-                            DevelopPreview(
-                                if (live) preview else cachedImage, shaderParams, zoomCenter.takeIf { live }, detail.takeIf { live },
-                                framePx, frameColor, Modifier.fillMaxSize(), zoomScale = zoomScale,
-                            )
+            photo = { photoModifier ->
+                // Swipe between the batch's photos. Only the shown photo is decoded (one GL surface);
+                // neighbours show their grid thumbnails until they settle and open.
+                Box(
+                    photoModifier
+                        .background(Color(0xFF121212))
+                        .onSizeChanged { session.setViewSize(it.width, it.height, framePx) },
+                ) {
+                    HorizontalPager(
+                        state = pagerState,
+                        modifier = Modifier.fillMaxSize(),
+                        // Drags pan the zoomed view; an export holds the photo still.
+                        userScrollEnabled = zoomCenter == null && export == null,
+                        key = { currentPages.getOrNull(it)?.id ?: it },
+                    ) { page ->
+                        val pagePhoto = currentPages.getOrNull(page) ?: return@HorizontalPager
+                        // Until the raw is decoded, the photo's cached preview shows its develop (no 100% view yet).
+                        val cachedImage = cached?.takeIf { pagePhoto.id == id && !loaded && it.first == id }?.second
+                        val shownParams = if (showAuto && loaded) analysis.autoBase else photo.params ?: analysis.autoBase
+                        val cachedParams by produceState<ShaderParams?>(null, cachedImage, shownParams) {
+                            value = cachedImage?.let { vm.cachedShaderParams(id, shownParams) }
                         }
-                        if (!live && quickParams != null) {
-                            CircularProgressIndicator(
-                                Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(12.dp)
-                                    .size(20.dp),
-                                strokeWidth = 2.dp,
-                            )
-                        } else if (live) {
-                            val zoomed = zoomCenter != null
-                            // One finger pans only while zoomed: otherwise the drag belongs to the pager. Two fingers
-                            // pinch-zoom from the whole photo too.
-                            val panAndPinch = rememberPanAndPinch(zoomed, session::pan) { x, y, f -> session.zoomBy(x, y, f, framePx) }
-                            Box(
-                                Modifier
-                                    .matchParentSize()
-                                    .pointerInput(framePx) {
-                                        detectTapGestures(
-                                            onDoubleTap = { session.toggleZoom(it.x, it.y, framePx) },
-                                            onTap = { vm.onPreviewTap(it.x, it.y, framePx) },
-                                            onPress = {
-                                                val compare = scope.launch {
-                                                    delay(COMPARE_DELAY_MS)
-                                                    showAuto = true
-                                                }
-                                                tryAwaitRelease()
-                                                compare.cancel()
-                                                showAuto = false
-                                            },
+                        Box(Modifier.fillMaxSize()) {
+                            val live = pagePhoto.id == id && loaded
+                            val quickParams = cachedParams.takeIf { cachedImage != null }
+                            if (live || quickParams != null) {
+                                // One call site for both, so the GL view stays when the decoded preview replaces the cached one.
+                                val shaderParams = if (live) {
+                                    // Press and hold shows the auto develop without the look.
+                                    val shown = shownParams
+                                    remember(shown, lutData, filmData, lensInfo, base, bloomSources, bokehSource, skinMask) {
+                                        session.shaderParams(
+                                            shown, analysis.defaults, lutData.takeIf { shown.lut != null },
+                                            film = filmData.takeIf { shown.film != null },
                                         )
                                     }
-                                    .then(panAndPinch),
-                            )
-                            if (showAuto || zoomed) {
-                                Label(
-                                    when {
-                                        !showAuto -> zoomLabel(zoomScale)
-                                        photo.edits != null -> "Without edits"
-                                        photo.preset != null -> "Without preset"
-                                        else -> "Without look"
-                                    },
-                                    Modifier.align(Alignment.TopStart),
+                                } else {
+                                    quickParams!!
+                                }
+                                DevelopPreview(
+                                    if (live) preview else cachedImage, shaderParams, zoomCenter.takeIf { live }, detail.takeIf { live },
+                                    framePx, frameColor, Modifier.fillMaxSize(), zoomScale = zoomScale,
                                 )
                             }
-                            // Qualified: inside this Box the ColumnScope overload would win.
-                            androidx.compose.animation.AnimatedVisibility(
-                                rememberZoomHint(preview, zoomCenter),
-                                Modifier.align(Alignment.BottomCenter),
-                                enter = fadeIn(),
-                                exit = fadeOut(),
-                            ) {
-                                Label(ZOOM_HINT_TEXT, Modifier)
-                            }
-                        } else {
-                            // Until the raw is decoded, show the grid thumbnail.
-                            pagePhoto.thumbnail?.let {
-                                // Inset by the frame so the photo doesn't move when the decoded preview replaces it,
-                                // and framed as the preview will be, so the frame doesn't blink out while it renders.
-                                Box(Modifier.fillMaxSize().padding(FRAME_WIDTH), contentAlignment = Alignment.Center) {
-                                    Image(
-                                        it.asImageBitmap(), pagePhoto.name,
-                                        Modifier
-                                            .aspectRatio(it.width.toFloat() / it.height)
-                                            .drawBehind {
-                                                val f = framePx.toFloat()
-                                                drawRect(
-                                                    Color(frameColor.level, frameColor.level, frameColor.level),
-                                                    topLeft = Offset(-f, -f), size = Size(size.width + 2 * f, size.height + 2 * f),
-                                                )
-                                            },
-                                        contentScale = ContentScale.Fit,
+                            if (!live && quickParams != null) {
+                                CircularProgressIndicator(
+                                    Modifier
+                                        .align(Alignment.TopEnd)
+                                        .padding(12.dp)
+                                        .size(20.dp),
+                                    strokeWidth = 2.dp,
+                                )
+                            } else if (live) {
+                                val zoomed = zoomCenter != null
+                                // One finger pans only while zoomed: otherwise the drag belongs to the pager. Two fingers
+                                // pinch-zoom from the whole photo too.
+                                val panAndPinch = rememberPanAndPinch(zoomed, session::pan) { x, y, f -> session.zoomBy(x, y, f, framePx) }
+                                Box(
+                                    Modifier
+                                        .matchParentSize()
+                                        .pointerInput(framePx) {
+                                            detectTapGestures(
+                                                onDoubleTap = { session.toggleZoom(it.x, it.y, framePx) },
+                                                onTap = { vm.onPreviewTap(it.x, it.y, framePx) },
+                                                onPress = {
+                                                    val compare = scope.launch {
+                                                        delay(COMPARE_DELAY_MS)
+                                                        showAuto = true
+                                                    }
+                                                    tryAwaitRelease()
+                                                    compare.cancel()
+                                                    showAuto = false
+                                                },
+                                            )
+                                        }
+                                        .then(panAndPinch),
+                                )
+                                if (showAuto || zoomed) {
+                                    Label(
+                                        when {
+                                            !showAuto -> zoomLabel(zoomScale)
+                                            photo.edits != null -> "Without edits"
+                                            photo.preset != null -> "Without preset"
+                                            else -> "Without look"
+                                        },
+                                        Modifier.align(Alignment.TopStart),
                                     )
                                 }
+                                // Qualified: inside this Box the ColumnScope overload would win.
+                                androidx.compose.animation.AnimatedVisibility(
+                                    rememberZoomHint(preview, zoomCenter),
+                                    Modifier.align(Alignment.BottomCenter),
+                                    enter = fadeIn(),
+                                    exit = fadeOut(),
+                                ) {
+                                    Label(ZOOM_HINT_TEXT, Modifier)
+                                }
+                            } else {
+                                // Until the raw is decoded, show the grid thumbnail.
+                                pagePhoto.thumbnail?.let {
+                                    // Inset by the frame so the photo doesn't move when the decoded preview replaces it,
+                                    // and framed as the preview will be, so the frame doesn't blink out while it renders.
+                                    Box(Modifier.fillMaxSize().padding(FRAME_WIDTH), contentAlignment = Alignment.Center) {
+                                        Image(
+                                            it.asImageBitmap(), pagePhoto.name,
+                                            Modifier
+                                                .aspectRatio(it.width.toFloat() / it.height)
+                                                .drawBehind {
+                                                    val f = framePx.toFloat()
+                                                    drawRect(
+                                                        Color(frameColor.level, frameColor.level, frameColor.level),
+                                                        topLeft = Offset(-f, -f), size = Size(size.width + 2 * f, size.height + 2 * f),
+                                                    )
+                                                },
+                                            contentScale = ContentScale.Fit,
+                                        )
+                                    }
+                                }
+                                if (pagePhoto.id == id) CircularProgressIndicator(Modifier.align(Alignment.Center))
                             }
-                            if (pagePhoto.id == id) CircularProgressIndicator(Modifier.align(Alignment.Center))
                         }
                     }
+                    export?.let { e ->
+                        LinearProgressIndicator(
+                            progress = { e.current },
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth(),
+                        )
+                    }
                 }
-                export?.let { e ->
-                    LinearProgressIndicator(
-                        progress = { e.current },
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth(),
-                    )
-                }
-            }
-
+            },
+        ) { panel ->
             val preset = photo.preset
             if (photo.edits != null) {
                 // RawBoy's own develop of this photo, crop, masks and light leaks included, in place of the look strip.
@@ -385,12 +388,13 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
                     contentPadding = PaddingValues(horizontal = 12.dp),
                 ) { Text("Copy previous", style = MaterialTheme.typography.labelLarge) }
             }
-            // Room for three sliders (the Look tab); Adjust scrolls. The photo keeps the rest of the screen.
+            // Under the photo, room for three sliders (the Look tab); Adjust scrolls. The photo keeps the rest of the
+            // screen. Beside it, the rest of the panel's height.
             val scrollStates = List(2) { rememberScrollState() }
             Column(
                 Modifier
                     .navigationBarsPadding()
-                    .height(SLIDER_ROW * 3 + 8.dp)
+                    .then(panel)
                     .verticalScroll(scrollStates[tab])
                     .padding(horizontal = 16.dp, vertical = 4.dp),
             ) {

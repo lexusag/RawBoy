@@ -9,11 +9,9 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
@@ -66,6 +64,7 @@ import androidx.compose.ui.platform.LocalDensity
 import app.rawboy.lut.LutRepository
 import app.rawboy.view.DevelopPreview
 import app.rawboy.view.HistogramView
+import app.rawboy.view.PhotoWithControls
 import app.rawboy.view.ZOOM_HINT_TEXT
 import app.rawboy.view.rememberPanAndPinch
 import app.rawboy.view.rememberZoomHint
@@ -213,205 +212,206 @@ fun EditorScreen(vm: EditorViewModel) {
         },
         snackbarHost = { SnackbarHost(snackbar) },
     ) { padding ->
-        Column(
-            Modifier
+        // Controls under the photo in portrait, beside it in landscape.
+        PhotoWithControls(
+            maxPanelHeight = PANEL_MAX,
+            modifier = Modifier
                 .padding(padding)
                 .fillMaxSize(),
-        ) {
-            Box(
-                Modifier
-                    .weight(1f)
-                    .fillMaxWidth()
-                    .background(Color(0xFF121212))
-                    .onSizeChanged {
-                        viewSize = it
-                        vm.setViewSize(it.width, it.height, framePx)
-                    },
-            ) {
-                // Compare keeps the current rotation, flips and crop so the frame doesn't jump.
-                val edited = if (showOriginal) {
-                    state.defaults.copy(
-                        rotation = state.params.rotation,
-                        flipHorizontal = state.params.flipHorizontal,
-                        flipVertical = state.params.flipVertical,
-                        straighten = state.params.straighten,
-                    ).withCrop(state.params.crop)
-                } else {
-                    state.params
-                }
-                // The crop tool shows the whole frame with the crop drawn over it.
-                val shown = if (geometryMode) edited.withoutCrop() else edited
-                val maskView = if (masksMode && showMask && !showOriginal) selectedId else null
-                val shaderParams = remember(shown, state.defaults, lutData, filmData, lensInfo, base, bloomSources, skinMask, maskView, preview, bokehSource) {
-                    ShaderParams.from(
-                        shown, state.defaults, lutData, vm.lensFor(shown), base, bloomSources, skinMask,
-                        maskView = maskView, brushFor = vm::brushRaster, film = filmData, bokehSource = bokehSource,
-                    )
-                }
-                DevelopPreview(
-                    preview, shaderParams, zoomCenter, detail, framePx, frameColor, Modifier.fillMaxSize(), marginPx,
-                    clipWarning = clipWarning && histogramShown && !showOriginal,
-                    zoomScale = zoomScale,
-                )
-                // Histogram of the whole edit (crop applied, no mask view) from the 512 px base copy, once the
-                // params rest for a moment: a slider drag would otherwise queue a render per step.
-                val histogramBase = base.takeIf { histogramShown }
-                LaunchedEffect(edited, state.defaults, lutData, filmData, lensInfo, histogramBase, bloomSources, skinMask, bokehSource) {
-                    val b = histogramBase ?: return@LaunchedEffect
-                    delay(HISTOGRAM_DELAY_MS)
-                    val params = ShaderParams.from(
-                        edited, state.defaults, lutData, vm.lensFor(edited), b, bloomSources, skinMask,
-                        brushFor = vm::brushRaster, film = filmData, bokehSource = bokehSource,
-                    )
-                    vm.updateHistogram(params, b)
-                }
-                val maskGestures = rememberMaskGestures(
-                    shaderParams.lens, layers, selectedId, framePx + marginPx, framePx, zoomCenter,
-                    if (selectedId != null) maskTool else MaskTool.MOVE, brush,
-                    MaskActions(
-                        onSelect = { selectedLayer = it },
-                        onChange = { id, shape -> vm.updateLayer(id) { it.copy(shape = shape) } },
-                        onStrokeBegin = vm::beginStroke,
-                        onStrokeExtend = vm::extendStroke,
-                        onStrokeCancel = vm::cancelStroke,
-                        onPan = vm::pan,
-                        onZoomBy = { x, y, f -> vm.zoomBy(x, y, f, marginPx) },
-                    ),
-                    onPaintAt = { paintAt = it },
-                    zoomScale = zoomScale,
-                )
-                val leakGestures = rememberMaskGestures(
-                    shaderParams.lens, leakShapes, selectedLeak, framePx + marginPx, framePx, zoomCenter, MaskTool.MOVE, brush,
-                    MaskActions(
-                        onSelect = { selectedLeakState = it },
-                        onChange = { id, shape -> if (shape is MaskShape.Radial) vm.updateLeak(id) { it.withShape(shape) } },
-                        onStrokeBegin = { _, _ -> },
-                        onStrokeExtend = { _, _, _ -> },
-                        onStrokeCancel = {},
-                        onPan = vm::pan,
-                        onZoomBy = { x, y, f -> vm.zoomBy(x, y, f, marginPx) },
-                    ),
-                    onPaintAt = {},
-                    grabInside = true,
-                    leaks = leakForms,
-                    onBend = { id, bend -> vm.updateLeak(id) { it.copy(bend = bend) } },
-                    zoomScale = zoomScale,
-                )
-                // Zoom and frame colour work on the cropped view; the crop tool shows the whole frame.
-                val panAndPinch = rememberPanAndPinch(true, vm::pan) { x, y, f -> if (!geometryMode) vm.zoomBy(x, y, f, marginPx) }
-
-                // Double tap: 100% at that point / back to fit. Drag: pan when zoomed. Pinch: zoom around the
-                // fingers, up to 400%. Press and hold: compare with the as-shot render (delayed so taps and drags
-                // don't flash it; a second finger ends it).
+            photo = { photoModifier ->
                 Box(
-                    Modifier
-                        .matchParentSize()
-                        .pointerInput(geometryMode, shapesMode, marginPx) {
-                            detectTapGestures(
-                                // Zoom and frame colour work on the cropped view; the crop tool shows the whole frame.
-                                // Masks and leaks zoom too (frame-colour taps stay off while they are open).
-                                onDoubleTap = { if (!geometryMode) vm.toggleZoom(it.x, it.y, marginPx) },
-                                onTap = {
-                                    when {
-                                        geometryMode || shapesMode -> {}
-                                        pickingWhite -> {
-                                            pickingWhite = false
-                                            vm.pickWhite(it.x, it.y)
-                                        }
-                                        else -> vm.onPreviewTap(it.x, it.y)
-                                    }
-                                },
-                                onPress = {
-                                    val compare = scope.launch {
-                                        delay(COMPARE_DELAY_MS)
-                                        showOriginal = true
-                                    }
-                                    tryAwaitRelease()
-                                    compare.cancel()
-                                    showOriginal = false
-                                },
-                            )
-                        }
-                        .then(panAndPinch)
-                        // Last, so it sees each touch first and takes only handles and paint strokes.
-                        .then(if (masksMode && preview != null) maskGestures else Modifier)
-                        .then(if (leaksMode && preview != null) leakGestures else Modifier),
-                )
-                if (masksMode && preview != null && !showOriginal) {
-                    MaskOverlay(
+                    photoModifier
+                        .background(Color(0xFF121212))
+                        .onSizeChanged {
+                            viewSize = it
+                            vm.setViewSize(it.width, it.height, framePx)
+                        },
+                ) {
+                    // Compare keeps the current rotation, flips and crop so the frame doesn't jump.
+                    val edited = if (showOriginal) {
+                        state.defaults.copy(
+                            rotation = state.params.rotation,
+                            flipHorizontal = state.params.flipHorizontal,
+                            flipVertical = state.params.flipVertical,
+                            straighten = state.params.straighten,
+                        ).withCrop(state.params.crop)
+                    } else {
+                        state.params
+                    }
+                    // The crop tool shows the whole frame with the crop drawn over it.
+                    val shown = if (geometryMode) edited.withoutCrop() else edited
+                    val maskView = if (masksMode && showMask && !showOriginal) selectedId else null
+                    val shaderParams = remember(shown, state.defaults, lutData, filmData, lensInfo, base, bloomSources, skinMask, maskView, preview, bokehSource) {
+                        ShaderParams.from(
+                            shown, state.defaults, lutData, vm.lensFor(shown), base, bloomSources, skinMask,
+                            maskView = maskView, brushFor = vm::brushRaster, film = filmData, bokehSource = bokehSource,
+                        )
+                    }
+                    DevelopPreview(
+                        preview, shaderParams, zoomCenter, detail, framePx, frameColor, Modifier.fillMaxSize(), marginPx,
+                        clipWarning = clipWarning && histogramShown && !showOriginal,
+                        zoomScale = zoomScale,
+                    )
+                    // Histogram of the whole edit (crop applied, no mask view) from the 512 px base copy, once the
+                    // params rest for a moment: a slider drag would otherwise queue a render per step.
+                    val histogramBase = base.takeIf { histogramShown }
+                    LaunchedEffect(edited, state.defaults, lutData, filmData, lensInfo, histogramBase, bloomSources, skinMask, bokehSource) {
+                        val b = histogramBase ?: return@LaunchedEffect
+                        delay(HISTOGRAM_DELAY_MS)
+                        val params = ShaderParams.from(
+                            edited, state.defaults, lutData, vm.lensFor(edited), b, bloomSources, skinMask,
+                            brushFor = vm::brushRaster, film = filmData, bokehSource = bokehSource,
+                        )
+                        vm.updateHistogram(params, b)
+                    }
+                    val maskGestures = rememberMaskGestures(
                         shaderParams.lens, layers, selectedId, framePx + marginPx, framePx, zoomCenter,
-                        if (selectedId != null) maskTool else MaskTool.MOVE, brush, paintAt, sizeRing,
-                        Modifier.matchParentSize(), zoomScale = zoomScale,
+                        if (selectedId != null) maskTool else MaskTool.MOVE, brush,
+                        MaskActions(
+                            onSelect = { selectedLayer = it },
+                            onChange = { id, shape -> vm.updateLayer(id) { it.copy(shape = shape) } },
+                            onStrokeBegin = vm::beginStroke,
+                            onStrokeExtend = vm::extendStroke,
+                            onStrokeCancel = vm::cancelStroke,
+                            onPan = vm::pan,
+                            onZoomBy = { x, y, f -> vm.zoomBy(x, y, f, marginPx) },
+                        ),
+                        onPaintAt = { paintAt = it },
+                        zoomScale = zoomScale,
                     )
-                }
-                if (leaksMode && preview != null && !showOriginal) {
-                    MaskOverlay(
-                        shaderParams.lens, leakShapes, selectedLeak, framePx + marginPx, framePx, zoomCenter,
-                        MaskTool.MOVE, brush, null, false, Modifier.matchParentSize(), leaks = leakForms, zoomScale = zoomScale,
+                    val leakGestures = rememberMaskGestures(
+                        shaderParams.lens, leakShapes, selectedLeak, framePx + marginPx, framePx, zoomCenter, MaskTool.MOVE, brush,
+                        MaskActions(
+                            onSelect = { selectedLeakState = it },
+                            onChange = { id, shape -> if (shape is MaskShape.Radial) vm.updateLeak(id) { it.withShape(shape) } },
+                            onStrokeBegin = { _, _ -> },
+                            onStrokeExtend = { _, _, _ -> },
+                            onStrokeCancel = {},
+                            onPan = vm::pan,
+                            onZoomBy = { x, y, f -> vm.zoomBy(x, y, f, marginPx) },
+                        ),
+                        onPaintAt = {},
+                        grabInside = true,
+                        leaks = leakForms,
+                        onBend = { id, bend -> vm.updateLeak(id) { it.copy(bend = bend) } },
+                        zoomScale = zoomScale,
                     )
-                }
-                if (geometryMode && zoomCenter == null && preview != null) {
-                    CropOverlay(
-                        shaderParams.lens.outputWidth, shaderParams.lens.outputHeight, state.params.crop,
-                        cropRatio, framePx, vm::setCrop, Modifier.matchParentSize(),
-                    )
-                }
+                    // Zoom and frame colour work on the cropped view; the crop tool shows the whole frame.
+                    val panAndPinch = rememberPanAndPinch(true, vm::pan) { x, y, f -> if (!geometryMode) vm.zoomBy(x, y, f, marginPx) }
 
-                when {
-                    state.loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-                    preview == null -> Button(onClick = openFile, modifier = Modifier.align(Alignment.Center)) {
-                        Text("Open a photo")
+                    // Double tap: 100% at that point / back to fit. Drag: pan when zoomed. Pinch: zoom around the
+                    // fingers, up to 400%. Press and hold: compare with the as-shot render (delayed so taps and drags
+                    // don't flash it; a second finger ends it).
+                    Box(
+                        Modifier
+                            .matchParentSize()
+                            .pointerInput(geometryMode, shapesMode, marginPx) {
+                                detectTapGestures(
+                                    // Zoom and frame colour work on the cropped view; the crop tool shows the whole frame.
+                                    // Masks and leaks zoom too (frame-colour taps stay off while they are open).
+                                    onDoubleTap = { if (!geometryMode) vm.toggleZoom(it.x, it.y, marginPx) },
+                                    onTap = {
+                                        when {
+                                            geometryMode || shapesMode -> {}
+                                            pickingWhite -> {
+                                                pickingWhite = false
+                                                vm.pickWhite(it.x, it.y)
+                                            }
+                                            else -> vm.onPreviewTap(it.x, it.y)
+                                        }
+                                    },
+                                    onPress = {
+                                        val compare = scope.launch {
+                                            delay(COMPARE_DELAY_MS)
+                                            showOriginal = true
+                                        }
+                                        tryAwaitRelease()
+                                        compare.cancel()
+                                        showOriginal = false
+                                    },
+                                )
+                            }
+                            .then(panAndPinch)
+                            // Last, so it sees each touch first and takes only handles and paint strokes.
+                            .then(if (masksMode && preview != null) maskGestures else Modifier)
+                            .then(if (leaksMode && preview != null) leakGestures else Modifier),
+                    )
+                    if (masksMode && preview != null && !showOriginal) {
+                        MaskOverlay(
+                            shaderParams.lens, layers, selectedId, framePx + marginPx, framePx, zoomCenter,
+                            if (selectedId != null) maskTool else MaskTool.MOVE, brush, paintAt, sizeRing,
+                            Modifier.matchParentSize(), zoomScale = zoomScale,
+                        )
+                    }
+                    if (leaksMode && preview != null && !showOriginal) {
+                        MaskOverlay(
+                            shaderParams.lens, leakShapes, selectedLeak, framePx + marginPx, framePx, zoomCenter,
+                            MaskTool.MOVE, brush, null, false, Modifier.matchParentSize(), leaks = leakForms, zoomScale = zoomScale,
+                        )
+                    }
+                    if (geometryMode && zoomCenter == null && preview != null) {
+                        CropOverlay(
+                            shaderParams.lens.outputWidth, shaderParams.lens.outputHeight, state.params.crop,
+                            cropRatio, framePx, vm::setCrop, Modifier.matchParentSize(),
+                        )
+                    }
+
+                    when {
+                        state.loading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+                        preview == null -> Button(onClick = openFile, modifier = Modifier.align(Alignment.Center)) {
+                            Text("Open a photo")
+                        }
+                    }
+                    if ((zoomCenter != null || maskView != null) && !showOriginal) {
+                        Text(
+                            listOfNotNull(zoomLabel(zoomScale).takeIf { zoomCenter != null }, "Mask".takeIf { maskView != null }).joinToString(" · "),
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(12.dp)
+                                .background(Color(0x99000000))
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                        )
+                    }
+                    if (showOriginal && preview != null) {
+                        Text(
+                            "Original",
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(12.dp)
+                                .background(Color(0x99000000))
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                        )
+                    }
+                    // Zoom works on the cropped view only, so no hint while the crop tool is open.
+                    // Qualified: inside this Box the ColumnScope overload would win.
+                    androidx.compose.animation.AnimatedVisibility(
+                        rememberZoomHint(preview, zoomCenter, !geometryMode),
+                        Modifier.align(Alignment.BottomCenter),
+                        enter = fadeIn(),
+                        exit = fadeOut(),
+                    ) {
+                        Text(
+                            ZOOM_HINT_TEXT,
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier
+                                .padding(16.dp)
+                                .background(Color(0x99000000))
+                                .padding(horizontal = 10.dp, vertical = 4.dp),
+                        )
+                    }
+                    if (state.exporting) {
+                        LinearProgressIndicator(
+                            progress = { state.exportProgress },
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth(),
+                        )
                     }
                 }
-                if ((zoomCenter != null || maskView != null) && !showOriginal) {
-                    Text(
-                        listOfNotNull(zoomLabel(zoomScale).takeIf { zoomCenter != null }, "Mask".takeIf { maskView != null }).joinToString(" · "),
-                        style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(12.dp)
-                            .background(Color(0x99000000))
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                    )
-                }
-                if (showOriginal && preview != null) {
-                    Text(
-                        "Original",
-                        style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(12.dp)
-                            .background(Color(0x99000000))
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                    )
-                }
-                // Zoom works on the cropped view only, so no hint while the crop tool is open.
-                // Qualified: inside this Box the ColumnScope overload would win.
-                androidx.compose.animation.AnimatedVisibility(
-                    rememberZoomHint(preview, zoomCenter, !geometryMode),
-                    Modifier.align(Alignment.BottomCenter),
-                    enter = fadeIn(),
-                    exit = fadeOut(),
-                ) {
-                    Text(
-                        ZOOM_HINT_TEXT,
-                        style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier
-                            .padding(16.dp)
-                            .background(Color(0x99000000))
-                            .padding(horizontal = 10.dp, vertical = 4.dp),
-                    )
-                }
-                if (state.exporting) {
-                    LinearProgressIndicator(
-                        progress = { state.exportProgress },
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth(),
-                    )
-                }
-            }
-
+            },
+        ) { panel ->
             if (state.hasImage && geometryMode) {
                 GeometryPanel(
                     params = state.params,
@@ -463,7 +463,7 @@ fun EditorScreen(vm: EditorViewModel) {
                         },
                         onDone = { mode = EditorMode.NONE },
                     ),
-                    modifier = Modifier.heightIn(max = PANEL_MAX),
+                    modifier = panel,
                 )
             } else if (state.hasImage && leaksMode) {
                 LeaksPanel(
@@ -478,14 +478,14 @@ fun EditorScreen(vm: EditorViewModel) {
                         if (zoomCenter != null) vm.exitZoom() else vm.toggleZoom(viewSize.width / 2f, viewSize.height / 2f, marginPx)
                     },
                     onDone = { mode = EditorMode.NONE },
-                    modifier = Modifier.heightIn(max = PANEL_MAX),
+                    modifier = panel,
                 )
             } else if (state.hasImage && presetsMode) {
                 PresetsPanel(
                     presets = presets,
                     actions = presetActions,
                     onDone = { mode = EditorMode.NONE },
-                    modifier = Modifier.heightIn(max = PANEL_MAX),
+                    modifier = panel,
                     hasStrokes = layers.any { it.strokes.isNotEmpty() },
                 )
             } else if (state.hasImage) {
@@ -514,7 +514,7 @@ fun EditorScreen(vm: EditorViewModel) {
                     lens = lensInfo,
                     skin = skin,
                     blemish = blemish,
-                    modifier = Modifier.heightIn(max = PANEL_MAX),
+                    modifier = panel,
                     pickingWhite = pickingWhite,
                     onPickWhite = { pickingWhite = !pickingWhite },
                     onSaveLensPreset = { name, send -> vm.saveLensPreset(name).let { if (send) vm.sendPresetToAuto(it) } },
@@ -549,7 +549,7 @@ private const val HISTOGRAM_DELAY_MS = 150L
 
 private val HISTOGRAM_HEIGHT = 56.dp
 
-/** Slider panels' height cap: the rest of the screen goes to the photo. */
+/** Slider panels' height cap under the photo (portrait): the rest of the screen goes to the photo. */
 private val PANEL_MAX = 320.dp
 
 /** Empty space around the frame while masking: handles can sit beyond the photo (portrait screens have more). */

@@ -1,7 +1,7 @@
 import { MAX_BRUSH_RADIUS, MAX_LAYERS, MIN_BRUSH_RADIUS, SHAPE_NAMES, type LayerAdjust, type MaskLayer } from '../../engine/develop/Masks';
 import { useLayoutEffect, useRef, useState } from 'react';
 import { ParamSlider, formatEv } from '../common/ParamSlider';
-import { useMediaQuery } from '../common/useMediaQuery';
+import { STACKED, useMediaQuery } from '../common/useMediaQuery';
 import { Note, SectionLabel } from './Controls';
 import type { BrushSettings, MaskTool } from './MaskOverlay';
 
@@ -47,7 +47,7 @@ const ADJUST_SLIDERS: readonly { key: keyof LayerAdjust; label: string; min: num
 
 /**
  * Mask layers (gradients and brush), each with its own adjustments (Capture One style). A top-bar mode like Crop & rotate.
- * Narrow screens (the panel under the photo) split the selected layer into Mask and Adjust tabs, as the apps do, so the
+ * Short panels (under the photo, or a phone's sidebar in landscape) split the selected layer into Mask and Adjust tabs, as the apps do, so the
  * adjustments are one tap away instead of below the mask settings.
  */
 export function MasksPanel(props: Props) {
@@ -55,7 +55,8 @@ export function MasksPanel(props: Props) {
   const layer = layers.find((l) => l.id === selectedId) ?? null;
   const full = layers.length >= MAX_LAYERS;
   const adjust = (key: keyof LayerAdjust, v: number) => layer && onUpdate(layer.id, (l) => ({ ...l, adjust: { ...l.adjust, [key]: v } }));
-  const narrow = useMediaQuery('(max-width: 760px)');
+  // Mask and Adjust as two tabs where the panel is short: under the photo, or a phone's sidebar in landscape.
+  const narrow = useMediaQuery(`${STACKED}, (max-height: 560px)`);
   const [tab, setTab] = useState<'Mask' | 'Adjust'>('Mask');
   const maskPart = !narrow || tab === 'Mask';
   // The Mask / Adjust tabs stick just under the (sticky) heading with Done: its height, which depends on the add buttons.

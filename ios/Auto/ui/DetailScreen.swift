@@ -18,8 +18,8 @@ struct DetailScreen: View {
     var body: some View {
         if let photo = vm.photo(id), photo.analysis != nil {
             NavigationStack {
-                VStack(spacing: 0) {
-                    pager
+                // The looks and sliders under the photo in portrait, beside it in landscape.
+                PhotoWithControls { pager } controls: { beside in
                     if let preset = photo.preset {
                         // A RawBoy preset develops this photo in place of the look strip.
                         HStack {
@@ -60,12 +60,13 @@ struct DetailScreen: View {
                             .disabled(vm.export != nil || vm.previousPhoto(photo.id) == nil)
                     }
                     .padding(.horizontal, 16)
-                    // Room for three sliders (the Look tab); Adjust scrolls. The photo keeps the rest of the screen.
+                    // Under the photo, room for three sliders (the Look tab); Adjust scrolls. The photo keeps the rest
+                    // of the screen. Beside it, the rest of the panel's height.
                     ScrollView {
                         controls(photo).padding(.horizontal, 16).padding(.vertical, 4)
                     }
                     .id(tab)  // one scroll position per tab
-                    .frame(height: ValueSlider.rowHeight * 3 + 8)
+                    .frame(height: beside ? nil : ValueSlider.rowHeight * 3 + 8)
                 }
                 .toolbar { toolbar(photo) }
                 .sheet(isPresented: $showExport) {

@@ -14,6 +14,8 @@ blemish removal use the same MediaPipe models in the browser.
   view comes from the preview, further in from full-resolution tiles. On touch screens (phones, tablets) two
   fingers pinch-zoom the same way around their middle and pan with it; the finger left keeps panning.
   A hint at the bottom of the photo says so for a few seconds after each photo opens, until you have zoomed once.
+- Layout follows the window's shape: wider than tall (desktop, a tablet or phone turned sideways), the controls sit in
+  a panel on the right of the photo; taller than wide (a phone held upright, a portrait tablet), under it.
 - Export: JPEG (jpegli, quality 1–100, 4:4:4) or TIFF 8/16-bit (LZW), full size or a smaller long side, saved as a
   download. Auto's **Export all** writes `<name>-auto.jpg` (or `.tif`, see Auto's export options) into a folder you pick
   (Chrome/Edge), else one ZIP.

@@ -10,7 +10,7 @@ export default async function create() {
   const sample = (h, sx, sy) => { const f = handles.get(h)?.flip; const x = f ? W - 1 - sx : sx; return (sy * W + x) * 3; };
   const m = {
     hasDngSdk: () => false, lastError: () => 'stub', open, openPixels: open, close: (h) => handles.delete(h),
-    width: () => W, height: () => H, describe: () => 'Fujifilm X-T5 · RAF (stub)', camera: () => 'Fujifilm X-T5', iso: () => 400,
+    width: () => W, height: () => H, fullWidth: () => W, fullHeight: () => H, clipLevel: () => 0, describe: () => 'Fujifilm X-T5 · RAF (stub)', camera: () => 'Fujifilm X-T5', iso: () => 400,
     baselineExposure: () => NaN, displayReferred: () => false, asShotWhite: () => new Float64Array([0.3127, 0.329]),
     lensName: () => 'XF23mmF1.4 R LM WR', lensInfo: () => { const v = new Float64Array(41); v[0] = 1; v[1] = W; v[2] = H; return v; },
     lensShading: () => new Float32Array(0), metadata: md,

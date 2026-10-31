@@ -1,5 +1,18 @@
 # Changelog
 
+**RawBoy and RawBoy Auto: controls beside the photo in landscape (2026-10-31)**
+
+- Turn the phone sideways (or use a wide window or tablet) and the controls move to a panel on the right of the
+  photo; upright, they sit under the photo as before. Android, iPhone and the web: RawBoy's editor (sliders, crop,
+  masks, light leaks, presets) and Auto's photo view (looks and sliders). Beside the photo the panel uses the whole
+  height, so more sliders show at once.
+- iPhone: RawBoy and RawBoy Auto now turn with the phone (they were portrait only). RawBoy Camera stays portrait.
+- Web: the layout follows the window's shape instead of its width: a phone turned sideways gets the side panel (it
+  had the controls squeezed under a thin strip of photo), and a portrait tablet or tall window gets them under the
+  photo. RawBoy's tool bar no longer pushes Export and ? off the edge between 560 and 900 px wide, the Masks panel's
+  add buttons no longer run under Done in a narrow side panel, and Auto's Apply to all moves into the Look tab on a
+  phone turned sideways, as it does upright.
+
 **RawBoy Web: Curves end points easier to reach on phones (2026-10-31)**
 
 - On phones (upright or sideways) and touch screens the Curves box has a margin inside its frame, so the curve's

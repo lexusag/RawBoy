@@ -1051,7 +1051,7 @@ function ExportOptions({ store, disabled }: { store: AutoStore; disabled: boolea
 }
 
 /**
- * The looks: a grid in the desktop sidebar (all visible); a row on narrow screens, where a mouse wheel scrolls it
+ * The looks: a grid in the sidebar (landscape; all visible); a row under the photo (portrait), where a mouse wheel scrolls it
  * sideways and the selected look is kept in view.
  */
 function LookStrip({ store, photo }: { store: AutoStore; photo: AutoPhoto }) {
