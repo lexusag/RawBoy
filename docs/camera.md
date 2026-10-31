@@ -30,7 +30,8 @@ still finishes saving in the background). Unlocked
 while it is open, it carries on as the ordinary camera.
 **Held sideways** the controls move to the right edge, under your right thumb: the shutter in the middle of the
 edge (the selfie switch above it, the last photo below), one tall slider beside it, and round **S**, **B** and **W**
-buttons (Strength, Brightness, Warmth) to pick what the slider changes; each shows its value, Brightness is picked
+buttons (Strength, Brightness, Warmth) to pick what the slider changes, with the lens buttons in a column beside them
+(the longest lens at the top); each shows its value, Brightness is picked
 first, and a double tap on a letter or the slider resets it. In B&W mode **W** becomes **F** (the filter), which lists
 the filters beside the shutter. The Look menu is above them, with the Film and B&W buttons under it; RAW, Burst, Flash, ? and
 Settings move to a column at the left. The viewfinder stays upright and photos come out the right way round, as in

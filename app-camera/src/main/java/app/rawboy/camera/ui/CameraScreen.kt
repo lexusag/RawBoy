@@ -389,7 +389,8 @@ fun CameraScreen(
                         CameraStatus.FAILED -> Text("Camera unavailable", color = MaterialTheme.colorScheme.error)
                         CameraStatus.READY -> if (params == null) CircularProgressIndicator()
                     }
-                    if (lenses.size > 1) {
+                    // Landscape has them beside the S/B/W buttons, under the thumb.
+                    if (lenses.size > 1 && !landscape) {
                         LensSelector(
                             labels = lenses.map { it.label },
                             selected = settings.lens,
@@ -407,7 +408,7 @@ fun CameraScreen(
                             onDismiss = vm::dismissQr,
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
-                                .padding(start = 16.dp, end = 16.dp, bottom = if (lenses.size > 1) 84.dp else 16.dp),
+                                .padding(start = 16.dp, end = 16.dp, bottom = if (lenses.size > 1 && !landscape) 84.dp else 16.dp),
                         )
                     }
                     Box(Modifier.matchParentSize().turned(turns)) {
@@ -479,6 +480,19 @@ fun CameraScreen(
                         status = statusText,
                         adjust = adjust,
                         onAdjust = { adjust = it },
+                        lensColumn = if (lenses.size > 1) {
+                            {
+                                LensSelector(
+                                    labels = lenses.map { it.label },
+                                    selected = settings.lens,
+                                    onSelect = vm::selectLens,
+                                    modifier = Modifier,
+                                    vertical = true,
+                                )
+                            }
+                        } else {
+                            null
+                        },
                         // The stock menu across the column, the Film and B&W buttons under it.
                         lookRow = {
                             Column(horizontalAlignment = Alignment.End) {
@@ -592,20 +606,20 @@ private fun QrChip(code: QrPayload, onOpen: () -> Unit, onDismiss: () -> Unit, m
 
 /** UW · W · T, as Google Camera shows them: the selected lens in a filled circle. */
 @Composable
-private fun LensSelector(labels: List<String>, selected: String, onSelect: (String) -> Unit, modifier: Modifier) {
-    Row(
-        modifier
-            .clip(RoundedCornerShape(28.dp))
-            .background(Color(0x99000000))
-            .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        for (label in labels) {
+private fun LensSelector(
+    labels: List<String>,
+    selected: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier,
+    vertical: Boolean = false,
+) {
+    val buttons = @Composable {
+        // Upright: the longest lens at the top, as zooming in goes up.
+        for (label in if (vertical) labels.asReversed() else labels) {
             val isSelected = label == selected
             Box(
                 Modifier
-                    .size(48.dp)
+                    .size(if (vertical) 44.dp else 48.dp)
                     .clip(CircleShape)
                     .background(if (isSelected) Color(0xFFD0D0D0) else Color.Transparent)
                     .clickable { onSelect(label) },
@@ -618,6 +632,15 @@ private fun LensSelector(labels: List<String>, selected: String, onSelect: (Stri
                 )
             }
         }
+    }
+    val shape = modifier
+        .clip(RoundedCornerShape(28.dp))
+        .background(if (vertical) Color(0xFF1C1C1C) else Color(0x99000000))
+        .padding(4.dp)
+    if (vertical) {
+        Column(shape, verticalArrangement = Arrangement.spacedBy(4.dp), horizontalAlignment = Alignment.CenterHorizontally) { buttons() }
+    } else {
+        Row(shape, horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) { buttons() }
     }
 }
 
@@ -1162,14 +1185,14 @@ private val LOUPE_GAP = 64.dp
 private const val LOUPE_ZOOM = 3f
 
 /** Width of the landscape controls column (look menu, S/B/W picker and the tall slider) beside the shutter column. */
-private val LANDSCAPE_CONTROLS_WIDTH = 200.dp
+private val LANDSCAPE_CONTROLS_WIDTH = 216.dp
 
 /** What the landscape slider changes: Strength, Brightness, or Warmth (Filter in B&W mode). */
 private enum class Adjust { STRENGTH, BRIGHTNESS, WARMTH }
 
 /**
- * Landscape controls, all within the right thumb's reach: the status line and the look row on top; below, round S /
- * B / W chips (F, the filter, in B&W mode) pick what the tall slider beside the shutter changes. With F picked the
+ * Landscape controls, all within the right thumb's reach: the status line and the look row on top; below, the lens
+ * buttons in a column, then round S / B / W chips (F, the filter, in B&W mode) pick what the tall slider beside the shutter changes. With F picked the
  * filters stand there instead of the slider. A double tap on a chip or the slider resets that setting.
  */
 @Composable
@@ -1178,6 +1201,7 @@ private fun LandscapeControls(
     status: String,
     adjust: Adjust,
     onAdjust: (Adjust) -> Unit,
+    lensColumn: (@Composable () -> Unit)?,
     lookRow: @Composable () -> Unit,
     vm: CameraViewModel,
 ) {
@@ -1203,6 +1227,11 @@ private fun LandscapeControls(
             horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            // The lenses in the black space left of the picker, still under the thumb.
+            lensColumn?.let {
+                it()
+                Spacer(Modifier.width(2.dp))
+            }
             Column(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
