@@ -18,16 +18,15 @@ data class CameraSettings(
     val warmth: Float = 0f,
     /**
      * B&W mode ([Edition.monoLooks]): the photo is black and white, on [monoLookId]'s stock seen through
-     * [filter] (with Film mode on too: [filmLookId]'s film stock in black and white). Colour mode keeps [lookId] and
-     * [warmth], so switching back and forth keeps each mode's picks.
+     * [filter], whether Film is on or not (only black and white looks in B&W: owner's choice, 2026-10-31). Colour mode
+     * keeps [lookId] and [warmth], so switching back and forth keeps each mode's picks.
      */
     val mono: Boolean = false,
     val monoLookId: String = Edition.defaultMonoLookId,
     /**
      * Film mode (the Film toggle, [Edition.filmLooks]): colour photos on [filmLookId]'s film stock instead of
-     * [lookId]'s LUT look. Each mode keeps its own pick; Strength, Brightness and Warmth are shared. With B&W mode on too,
-     * the stock renders black and white: the film's contrast and grain, which the mono LUT looks lack (owner's choice,
-     * 2026-10-31). On by default (owner's choice, 2026-10-31).
+     * [lookId]'s LUT look. Each mode keeps its own pick; Strength, Brightness and Warmth are shared. B&W mode wins over it,
+     * but leaves it on, so leaving B&W comes back to it. On by default (owner's choice, 2026-10-31).
      */
     val film: Boolean = true,
     val filmLookId: String = Edition.defaultFilmLookId,
@@ -100,13 +99,13 @@ data class CameraSettings(
     /** B&W mode is on and this edition has one. */
     val monoMode: Boolean get() = mono && Edition.monoLooks.isNotEmpty()
 
-    /** Film mode is on and this edition has one; with [monoMode] too, the film stock in black and white. */
-    val filmMode: Boolean get() = film && Edition.filmLooks.isNotEmpty()
+    /** Film mode is on (and B&W mode isn't) and this edition has one. */
+    val filmMode: Boolean get() = film && !monoMode && Edition.filmLooks.isNotEmpty()
 
-    /** The look in effect: Film mode's stock (in colour or B&W), B&W mode's stock or the colour look. */
+    /** The look in effect: B&W mode's stock, Film mode's stock or the colour look. */
     val look: Look get() = when {
-        filmMode -> Edition.filmLook(filmLookId)
         monoMode -> Edition.monoLook(monoLookId)
+        filmMode -> Edition.filmLook(filmLookId)
         else -> Edition.look(lookId)
     }
 

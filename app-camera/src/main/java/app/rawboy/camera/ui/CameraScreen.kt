@@ -365,18 +365,18 @@ fun CameraScreen(
 
             // A menu instead of a strip of chips, and one thin row per slider: the viewfinder keeps the screen.
             Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp)) {
-                // Film mode lists the film stocks (in B&W too), B&W mode the mono stocks; B&W has Filter where Warmth is.
+                // B&W mode lists only the mono stocks (Film on or not) and has Filter where Warmth is. Film mode lists the film stocks.
                 val looks = when {
-                    settings.filmMode -> Edition.filmLooks
                     settings.monoMode -> Edition.monoLooks
+                    settings.filmMode -> Edition.filmLooks
                     else -> Edition.looks
                 }
                 val selected = looks.firstOrNull { it.id == settings.look.id }
-                // The Film and B&W toggles side by side in the label's place; both on = the film stock in B&W.
+                // The Film and B&W toggles side by side in the label's place, each on or off by itself; B&W wins while on.
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Row(Modifier.width(88.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         if (Edition.filmLooks.isNotEmpty()) {
-                            FilmToggle(settings.filmMode, vm::setFilm)
+                            FilmToggle(settings.film, vm::setFilm)
                         }
                         if (Edition.monoLooks.isNotEmpty()) MonoToggle(settings.monoMode, vm::setMono)
                     }

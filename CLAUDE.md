@@ -190,8 +190,8 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   `:app-camera:assembleStandardDebug` / `assembleFilmDebug`, engine tests `:engine:testDebugUnitTest`.
   **Film mode** (standard edition, 2026-10-31; first step of merging RawBoy Film into RawBoy Camera): `Edition.filmLooks`
   (= `FilmLooks.ALL`; empty in the film edition, so no toggle there), `CameraSettings.film` (default **on**, owner's
-  choice) / `filmLookId` (its own pick: LUT look and stock ids collide, `portra400` is both), `filmMode` = film (B&W on too = the film stock in black and white: Saturation -100 makes `film_form.glsl` take the print's luminance and one grain for all three layers, `filmColourKeep`; owner's choice, the mono LUT looks lacked the film's contrast and grain).
-  UI: `FilmToggle` (Material "theaters" path; iOS SF Symbol `film`) next to `MonoToggle` (B&W, moved up from the shutter row) in the Look row's label slot; both can be on. RawBoy Camera wears RawBoy Film's icon (`tools/icons/gen.mjs`).
+  choice) / `filmLookId` (its own pick: LUT look and stock ids collide, `portra400` is both), `filmMode` = film && !mono (B&W lists only the mono looks, owner's choice; `film` stays set, so the toggle stays lit).
+  UI: `FilmToggle` (Material "theaters" path; iOS SF Symbol `film`) next to `MonoToggle` (B&W, moved up from the shutter row) in the Look row's label slot; each toggles by itself (both can be lit; B&W wins). RawBoy Camera wears RawBoy Film's icon (`tools/icons/gen.mjs`).
   One output folder for both modes (owner's choice). spektrafilm credit now in both editions' `Edition.credits`.
   History: until 2026-10-31 RawBoy Film lived in its own GPLv3 repository (`lexusag/RawBoyFilm`, kept for the source
   of those releases) with a GPL port of spektrafilm's grain/halation (`shaders/film/film.glsl`), an engine `film`

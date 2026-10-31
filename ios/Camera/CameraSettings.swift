@@ -23,15 +23,15 @@ struct CameraSettings: Equatable {
     var warmth: Float = 0
     /**
      * B&W mode (Edition.monoLooks): the photo is black and white, on monoLookId's stock seen through
-     * filter (with Film mode on too: filmLookId's film stock in black and white). Colour mode keeps lookId and warmth,
-     * so switching back and forth keeps each mode's picks.
+     * filter, whether Film is on or not (only black and white looks in B&W: owner's choice, 2026-10-31). Colour mode
+     * keeps lookId and warmth, so switching back and forth keeps each mode's picks.
      */
     var mono = false
     var monoLookId = Edition.defaultMonoLookId
     /**
      * Film mode (the Film toggle, Edition.filmLooks): colour photos on filmLookId's film stock instead of
-     * lookId's LUT look. Each mode keeps its own pick; Strength, Brightness and Warmth are shared. With B&W mode on
-     * too, the stock renders black and white: the film's contrast and grain (owner's choice, 2026-10-31).
+     * lookId's LUT look. Each mode keeps its own pick; Strength, Brightness and Warmth are shared. B&W mode wins over
+     * it, but leaves it on, so leaving B&W comes back to it.
      * On by default (owner's choice, 2026-10-31).
      */
     var film = true
@@ -76,12 +76,12 @@ struct CameraSettings: Equatable {
     var previewScale: Float { previewScales[lensKey] ?? Self.defaultScale }
     /** B&W mode is on and this edition has one. */
     var monoMode: Bool { mono && !Edition.monoLooks.isEmpty }
-    /** Film mode is on and this edition has one; with monoMode too, the film stock in black and white. */
-    var filmMode: Bool { film && !Edition.filmLooks.isEmpty }
-    /** The look in effect: Film mode's stock (in colour or B&W), B&W mode's stock or the colour look. */
+    /** Film mode is on (and B&W mode isn't) and this edition has one. */
+    var filmMode: Bool { film && !monoMode && !Edition.filmLooks.isEmpty }
+    /** The look in effect: B&W mode's stock, Film mode's stock or the colour look. */
     var look: Look {
-        if filmMode { return Edition.filmLook(filmLookId) }
         if monoMode { return Edition.monoLook(monoLookId) }
+        if filmMode { return Edition.filmLook(filmLookId) }
         return Edition.look(lookId)
     }
 

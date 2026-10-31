@@ -119,8 +119,6 @@ The **B&W** button (left of the Look menu, next to the film strip) switches RawB
 lists the black and white films RawBoy Auto has: Yellow Mono Soft, Yellow Mono 400 (the default), Yellow Mono Push,
 Yellow Mono Hard, Yellow Cine Mono and Yellow Cine Mono Soft (AgX plus each film's LUT, with RawBoy's grain). The
 viewfinder shows black and white live. Each mode keeps its own pick, so switching back finds the colour look again.
-With **Film** on as well, RawBoy Camera's B&W menu lists the film stocks instead, developed in black and white (see
-Film mode below).
 
 - **Filter** takes Warmth's place: **None**, **Yellow** (the default), **Orange**, **Red** and **Green**, like a
   coloured filter on the lens. It lightens things of its own colour and darkens the others before the picture turns
@@ -139,9 +137,8 @@ Film mode below).
 
 RawBoy Camera has a **Film** toggle, a film strip left of the Look menu: on (the default), the **Look** menu
 lists the film stocks below; off, the looks on RawBoy's film LUTs. Each keeps its own pick, and Strength, Brightness
-and Warmth are shared. The **B&W** button sits next to it, and both can be on: the film stock then develops in black and white, with the
-film's own contrast and grain (the print's luminance, one grain for all three layers) and the B&W Filter. Off, B&W uses
-the black and white looks below. Photos save to `Pictures/RawBoy Camera` (`…-camera.jpg`, DNGs in `RAW/`) in both modes. The film and
+and Warmth are shared. The **B&W** button sits next to it, and each switches by itself: in B&W the menu lists only the black and white looks
+below, Film on or not, and switching B&W off comes back to Film if it is on. Photos save to `Pictures/RawBoy Camera` (`…-camera.jpg`, DNGs in `RAW/`) in both modes. The film and
 LUT looks share ids (`portra400` is both), so Film mode's pick is kept separately (`CameraSettings.film`/`filmLookId`,
 prefs `film`/`filmLook`).
 

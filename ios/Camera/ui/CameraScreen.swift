@@ -27,10 +27,10 @@ struct CameraScreen: View {
             viewfinder
             // A menu instead of a strip of chips, and one row per slider: the viewfinder keeps the screen.
             VStack(spacing: 0) {
-                // Film mode lists the film stocks (in B&W too), B&W mode the mono stocks; B&W has Filter where Warmth is.
-                LookPicker(looks: vm.settings.filmMode ? Edition.filmLooks : vm.settings.monoMode ? Edition.monoLooks : Edition.looks,
+                // B&W mode lists only the mono stocks (Film on or not) and has Filter where Warmth is. Film mode lists the film stocks.
+                LookPicker(looks: vm.settings.monoMode ? Edition.monoLooks : vm.settings.filmMode ? Edition.filmLooks : Edition.looks,
                            selectedId: vm.settings.look.id, onSelect: vm.setLook,
-                           film: Edition.filmLooks.isEmpty ? nil : vm.settings.filmMode,
+                           film: Edition.filmLooks.isEmpty ? nil : vm.settings.film,
                            onFilm: vm.setFilm,
                            mono: Edition.monoLooks.isEmpty ? nil : vm.settings.monoMode,
                            onMono: vm.setMono)

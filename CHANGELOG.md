@@ -1,13 +1,10 @@
 # Changelog
 
-**RawBoy Camera: Film and B&W together, RawBoy Film's icon (2026-10-31)**
+**RawBoy Camera: Film and B&W buttons side by side, RawBoy Film's icon (2026-10-31)**
 
-- The **Film** and **B&W** buttons sit side by side left of the Look menu, and both can be on: the film stock then
-  develops in black and white, with the film's contrast and grain and the B&W Filter. B&W with Film off keeps the black
-  and white looks.
+- The **Film** and **B&W** buttons sit side by side left of the Look menu and each switches by itself: B&W lists only
+  the black and white looks, Film on or not, and switching B&W off comes back to Film.
 - RawBoy Camera's app icon is now RawBoy Film's.
-- Engine (all ports, `film_form.glsl`): at Saturation -100 film formation takes the print's luminance and one grain for
-  all three layers, so a black and white film render has no tint or colour grain.
 
 **RawBoy (Android, iPhone): Curves end points easier to reach (2026-10-31)**
 
