@@ -35,6 +35,29 @@ Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and
 - [Third-party components](docs/third-party.md)
 - [Changelog](CHANGELOG.md)
 
+## Repository structure
+
+| Path | What it holds |
+| --- | --- |
+| `engine/` | Shared Android library (`:engine`): the native C++ decoder and exporter (`src/main/cpp/`: LibRaw, DNG SDK fallback, lens opcodes, blemish healing, jpegli) and the Kotlin engine (GL preview and export, lens math, presets, sessions, Auto's analysis and looks). Anything two apps need lives here. |
+| `app-pro/` | **RawBoy** for Android (`:app-pro`): the full editor UI. |
+| `app-auto/` | **RawBoy Auto** for Android (`:app-auto`): batch queue, grid and detail screens. |
+| `app-camera/` | **RawBoy Camera** for Android (`:app-camera`), with the `standard` flavour here; the `film` flavour builds only in RawBoy Film's repository. |
+| `shaders/` | The develop GLSL (develop, denoise, bokeh, light leaks, film formation): the single source of truth for Android, iOS and the web (see [shaders/README.md](shaders/README.md)). |
+| `ios/` | The iOS apps, generated with XcodeGen from `project.yml`: `Pro/`, `Auto/` and `Camera/` app targets, `Engine/` (the Swift/Metal port of the engine), `EngineTests/`, `native/` (the C++ engine built as frameworks), `shaders/` (generates the Metal shaders from the root `shaders/`) and `mediapipe/` (model fetch). |
+| `web/` | **RawBoy Web** (Vite + React + TypeScript): `src/engine/` is the TypeScript port of the Kotlin engine, `src/ui/` the RawBoy, Auto and Browser tabs, `src/worker/` the Web Workers, `src/drive/` Google Drive, and `native/` the C++ engine compiled to WebAssembly. Also its Dockerfile and nginx config (see [web/README.md](web/README.md)). |
+| `luts/` | Bundled `.cube` film-look LUTs, plus `spektrafilm/` (spektrafilm's film stock LUTs, CC BY-SA 4.0). |
+| `docs/` | User and developer documentation (see [Documentation](#documentation)). |
+| `tools/` | Developer tools: `auto-eval` (measuring Auto's defaults against a tagged dataset), `burst_merge` and `dng_jxl` (host tests for burst merging and lossy JPEG XL DNGs), `display_roundtrip` (display-source round-trip checks), `film_luts` (LUT generation), `icons` (app icons from `branding/`) and `web_ui_stub` (runs the web UI without the WASM build). |
+| `branding/` | App logos (SVG) for RawBoy, Auto, Camera and Film. |
+| `third_party/` | Where the Adobe DNG SDK goes for builds (see [third_party/README.md](third_party/README.md)). |
+| `licenses/` | Third-party notices shipped with the apps. |
+| `gradle/`, `*.gradle.kts`, `gradlew` | The Gradle build for the Android modules. |
+| `.github/workflows/` | CI: `release.yml` (release APKs) and `sync-film.yml` (opens a PR in RawBoy Film's repository with the shared engine and camera files). |
+
+Root files: [CHANGELOG.md](CHANGELOG.md), [CONTRIBUTING.md](CONTRIBUTING.md), [LICENSE.md](LICENSE.md),
+[UI.md](UI.md) (UI backlog) and [CLAUDE.md](CLAUDE.md) (notes on how the code fits together).
+
 ## Licence
 
 RawBoy's own code is licensed under the **PolyForm Shield License 1.0.0** ([LICENSE.md](LICENSE.md)): you can read,
