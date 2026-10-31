@@ -33,7 +33,7 @@ Build-time tools that ship nothing (glslang, SPIRV-Cross, CMake, Gradle) aren't 
 - [spektrafilm](https://github.com/andreavolpato/spektrafilm)'s methods (its code is GPLv3): the diffusion-filter
   bloom model, the log-domain grain and the pre-clip highlight reconstruction in the develop shader follow its
   published approach. Reimplemented, not copied.
-- AgX (Troy Sobotka), as in Blender 4, Filament and three.js: the tone mapper's constants. Apple's published *Apple Log
+- AgX (Troy Sobotka), as published in three.js (MIT, notice in THIRD_PARTY_NOTICES.txt), Blender 4 and Filament: the tone mapper's constants. Apple's published *Apple Log
   Profile* curve is used for the film LUTs' input encoding.
 
 RawBoy's rule (see CLAUDE.md): GPL and other copyleft code never goes into this repository, for any app including RawBoy
