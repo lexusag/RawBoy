@@ -1,10 +1,6 @@
 import CoreVideo
 import Foundation
-#if FILM_EDITION
-import RawBoyFilmEngine
-#else
 import RawBoyEngine
-#endif
 
 /**
  * Follows the tapped subject in the camera's video frames (Track subject after tap): a small upright grey copy of each

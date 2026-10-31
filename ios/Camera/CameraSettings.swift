@@ -1,9 +1,5 @@
 import Foundation
-#if FILM_EDITION
-import RawBoyFilmEngine
-#else
 import RawBoyEngine
-#endif
 
 /** Which raw the camera records (both at 12 MP). */
 enum RawFormat: String, CaseIterable {

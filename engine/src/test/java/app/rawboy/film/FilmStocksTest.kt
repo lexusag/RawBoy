@@ -26,8 +26,6 @@ class FilmStocksTest {
             assertTrue(s.id, dir.resolve(s.filmLut).isFile && dir.resolve(s.printLut).isFile)
             assertEquals(3, s.densityMin.size)
             for (c in 0 until 3) assertTrue(s.id, s.densityMax[c] > s.densityMin[c])
-            assertTrue(s.id, s.grain.particleAreaUm2 > 0f && s.grain.particleScale.all { it > 0f })
-            assertTrue(s.id, s.halation.firstSigmaUm > 0f)
             // CC BY-SA: every cube keeps spektrafilm's attribution header.
             val header = dir.resolve(s.filmLut).useLines { it.take(20).joinToString("\n") }
             assertTrue(s.id, "Andrea Volpato" in header && "CC BY-SA 4.0" in header)
@@ -69,7 +67,7 @@ class FilmStocksTest {
             assertTrue(s.id, f.halation.all { it in 0f..0.05f } && f.halation[0] >= f.halation[2])
             assertTrue(s.id, f.haloRadiusUm > 0f && f.scatterUm > 0f)
         }
-        // The consumer stocks halate redder than Portra (fitted to RawBoy Film's renders).
+        // The consumer stocks halate redder than Portra (fitted to the earlier spektrafilm-shader renders).
         val byId = stocks.associateBy { it.id }
         assertTrue(byId.getValue("gold200").formation.halation[0] > byId.getValue("portra400").formation.halation[0])
     }

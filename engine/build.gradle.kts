@@ -7,15 +7,9 @@ plugins {
 /**
  * The shared RawBoy engine: native decoding (LibRaw, DNG SDK, lens opcodes, blemish
  * healing), the develop shader, LUTs, MediaPipe skin detection and export.
- * Used by the apps (app-pro, app-auto, app-camera).
- *
- * Editions (flavour dimension "edition"):
- * - standard: every app, with the Adobe DNG SDK (when present) and licenses/THIRD_PARTY_NOTICES.txt.
- * - film: RawBoy Film, which lives in its own GPLv3 repository (RawBoy plus shaders/film, app-camera/src/film and
- *   licenses/THIRD_PARTY_NOTICES_FILM.txt). The flavour only exists where shaders/film does, so this repository
- *   builds the standard edition alone. Both editions bundle the stocks' LUTs (luts/spektrafilm, CC BY-SA 4.0).
+ * Used by the apps (app-pro, app-auto, app-camera and its RawBoy Film flavour), all with the same engine: the
+ * Adobe DNG SDK, licenses/THIRD_PARTY_NOTICES.txt and the film stocks' LUTs (luts/spektrafilm, CC BY-SA 4.0).
  */
-val hasFilmEdition = rootProject.file("shaders/film").isDirectory
 
 android {
     namespace = "app.rawboy.engine"
@@ -38,20 +32,6 @@ android {
         }
     }
 
-    flavorDimensions += "edition"
-    productFlavors {
-        create("standard") {
-            dimension = "edition"
-            buildConfigField("boolean", "FILM_EDITION", "false")
-        }
-        if (hasFilmEdition) create("film") {
-            dimension = "edition"
-            buildConfigField("boolean", "FILM_EDITION", "true")
-            // GPLv3: no Adobe DNG SDK (CMake option, see src/main/cpp/CMakeLists.txt).
-            externalNativeBuild { cmake { arguments += "-DRAWBOY_USE_DNG_SDK=OFF" } }
-        }
-    }
-
     externalNativeBuild {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
@@ -68,7 +48,6 @@ android {
     }
     buildFeatures {
         compose = true
-        buildConfig = true
     }
     androidResources {
         // MediaPipe memory-maps the model; it must be stored uncompressed.
@@ -122,7 +101,7 @@ val copyLuts = tasks.register<CopyLutsTask>("copyLuts") {
     lutDir.set(rootProject.layout.projectDirectory.dir("luts"))
 }
 
-/** Bundles the edition's notices (licenses/THIRD_PARTY_NOTICES*.txt) into the engine as assets/third_party_notices.txt. */
+/** Bundles the notices (licenses/THIRD_PARTY_NOTICES.txt) into the engine as assets/third_party_notices.txt. */
 abstract class CopyNoticesTask : DefaultTask() {
     @get:InputFile
     @get:PathSensitive(PathSensitivity.RELATIVE)
@@ -140,14 +119,11 @@ abstract class CopyNoticesTask : DefaultTask() {
 val copyNotices = tasks.register<CopyNoticesTask>("copyNotices") {
     notices.set(rootProject.layout.projectDirectory.file("licenses/THIRD_PARTY_NOTICES.txt"))
 }
-val copyNoticesFilm = tasks.register<CopyNoticesTask>("copyNoticesFilm") {
-    notices.set(rootProject.layout.projectDirectory.file("licenses/THIRD_PARTY_NOTICES_FILM.txt"))
-}
 
 /**
- * Standard release builds must include the Adobe DNG SDK (JPEG XL DNGs, and the notices assume it's there).
- * Standard debug builds need it too: CMAKE_BUILD_TYPE=Release makes them run the Release CMake tasks, which
- * depend on preStandardReleaseBuild. The film edition never has it.
+ * Release builds must include the Adobe DNG SDK (JPEG XL DNGs, and the notices assume it's there).
+ * Debug builds need it too: CMAKE_BUILD_TYPE=Release makes them run the Release CMake tasks, which
+ * depend on preReleaseBuild.
  */
 val checkDngSdk = tasks.register("checkDngSdk") {
     val sdk = rootProject.layout.projectDirectory.file("third_party/dng_sdk/dng_sdk/source/dng_host.cpp").asFile
@@ -157,21 +133,17 @@ val checkDngSdk = tasks.register("checkDngSdk") {
         }
     }
 }
-tasks.matching { it.name == "preStandardReleaseBuild" }.configureEach { dependsOn(checkDngSdk) }
+tasks.matching { it.name == "preReleaseBuild" }.configureEach { dependsOn(checkDngSdk) }
 
 /**
  * Turns <repo>/shaders into app/rawboy/gl/ShaderSources.kt: one `const val` per file, named after it
  * (develop.glsl -> DEVELOP, develop.vert -> DEVELOP_VERT). The .glsl files are the source of truth,
  * shared with the web build; generating Kotlin keeps shader setup free of Context and asset IO.
- * The film edition adds shaders/film (FILM); standard builds get an empty FILM, so no film code.
  */
 abstract class GenerateShaderSourcesTask : DefaultTask() {
     @get:InputDirectory
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val shaderDir: DirectoryProperty
-
-    @get:Input
-    abstract val withFilm: Property<Boolean>
 
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
@@ -183,7 +155,7 @@ abstract class GenerateShaderSourcesTask : DefaultTask() {
             ?.filter { it.isFile && it.extension in setOf("glsl", "vert", "frag") }
             ?.sortedBy { it.name }
             .orEmpty()
-        val files = shaders(dir) + if (withFilm.get()) shaders(dir.resolve("film")) else emptyList()
+        val files = shaders(dir)
         val out = outputDir.get().asFile.resolve("app/rawboy/gl")
         out.deleteRecursively()
         out.mkdirs()
@@ -200,28 +172,23 @@ abstract class GenerateShaderSourcesTask : DefaultTask() {
                 val escaped = source.replace("$", "\${'$'}")
                 append("    const val $name = \"\"\"$escaped\"\"\"\n\n")
             }
-            if (files.none { it.nameWithoutExtension == "film" }) append("    const val FILM = \"\"\n")
             append("}\n")
         }
         out.resolve("ShaderSources.kt").writeText(text)
     }
 }
 
-fun registerShaderSources(name: String, film: Boolean) = tasks.register<GenerateShaderSourcesTask>(name) {
+val generateShaderSources = tasks.register<GenerateShaderSourcesTask>("generateShaderSources") {
     shaderDir.set(rootProject.layout.projectDirectory.dir("shaders"))
-    withFilm.set(film)
 }
-val generateShaderSources = registerShaderSources("generateShaderSources", film = false)
-val generateShaderSourcesFilm = registerShaderSources("generateShaderSourcesFilm", film = true)
 
 androidComponents {
     onVariants { variant ->
-        val film = variant.flavorName == "film"
         variant.sources.assets?.addGeneratedSourceDirectory(copyLuts, CopyLutsTask::outputDir)
-        variant.sources.assets?.addGeneratedSourceDirectory(if (film) copyNoticesFilm else copyNotices, CopyNoticesTask::outputDir)
+        variant.sources.assets?.addGeneratedSourceDirectory(copyNotices, CopyNoticesTask::outputDir)
         // Registered as a java source dir: KGP 2.1 compiles .kt files there but not in AGP's kotlin sources.
         variant.sources.java?.addGeneratedSourceDirectory(
-            if (film) generateShaderSourcesFilm else generateShaderSources, GenerateShaderSourcesTask::outputDir,
+            generateShaderSources, GenerateShaderSourcesTask::outputDir,
         )
     }
 }

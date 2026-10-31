@@ -11,8 +11,7 @@ package app.rawboy.gl
  *        -> soft gamut compression -> Rec.709 / sRGB encoding -> optional 3D LUT (display-referred, like the film LUTs expect)
  *        -> point curves (Pro's Curves: RGB, then per channel) -> light leaks (Pro, shaders/light_leak.glsl).
  * Film looks: scatter + halation before the lens gains, and the film, grain and print in place of the tone mapper,
- *        blended with the AgX render by Strength. Standard builds use shaders/film_form.glsl (RawBoy's own); the film
- *        edition (RAWBOY_FILM) shaders/film/film.glsl (spektrafilm's, GPLv3) instead.
+ *        blended with the AgX render by Strength: shaders/film_form.glsl (RawBoy's own formation) in every app.
  *
  * AgX constants follow Blender 4 / Filament / three.js (Rec.2020 inset/outset).
  */
@@ -24,7 +23,6 @@ internal object Shaders {
     // from it at build time (engine/build.gradle.kts, generateShaderSources).
     private const val DEVELOP = ShaderSources.DEVELOP
     private const val MAIN_BODY = ShaderSources.MAIN_BODY
-    private const val FILM = ShaderSources.FILM
     private const val FILM_FORM = ShaderSources.FILM_FORM
     private const val LIGHT_LEAK = ShaderSources.LIGHT_LEAK
 
@@ -32,11 +30,9 @@ internal object Shaders {
         // highp int: fragment shaders default ints to mediump (16-bit on some GPUs),
         // which breaks the 32-bit grain hash.
         append("#version 300 es\nprecision highp float;\nprecision highp int;\nprecision highp sampler2D;\nprecision highp sampler3D;\n")
-        // Film edition only (engine flavour "film"): spektrafilm, shaders/film. Standard builds have an empty FILM.
-        if (FILM.isNotEmpty()) append("#define RAWBOY_FILM 1\n")
         append(out)
         append(DEVELOP)
-        append(FILM.ifEmpty { FILM_FORM })
+        append(FILM_FORM)
     }
 
     /** develop.glsl with its own [main] in place of main_body.glsl (the lens blur's mask pass, BokehTexture). */

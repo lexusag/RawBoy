@@ -48,11 +48,11 @@ public final class ShaderParams: @unchecked Sendable {
     public let layers: LayerUniforms
     /** Light leaks over the finished picture (shaders/light_leak.glsl). */
     public let leaks: LeakUniforms
-    /** spektrafilm film stock (shaders/film/film.glsl) matching DevelopParams.film, or nil for none. */
+    /** Film stock (shaders/film_form.glsl) matching DevelopParams.film, or nil for none. */
     public let film: FilmData?
     /** 0..1 blend of the film render over AgX; 0 = off. */
     public let filmAmount: Float
-    /** Film grain and halation/scatter amounts, 1 = as spektrafilm simulates the stock. */
+    /** Film grain and halation/scatter amounts, 1 = the stock as formation.json describes it. */
     public let filmGrain: Float
     public let halation: Float
     /** `uCurve`: DevelopParams.curves as ToneCurves.table(), or nil when they are all the identity. */
@@ -153,8 +153,8 @@ public final class ShaderParams: @unchecked Sendable {
      * [asShot] holds the defaults the image was decoded with (its as-shot temperature/tint).
      * [grainSizeScale] / [grainStrength]: grain cell size and amplitude factors, for apps that size grain
      * differently. [maskView]: mask layer whose mask is shown in red (Masks tool), or nil. [brushFor]: each layer's
-     * painted mask (the session's cache); none by default (Auto, Camera). [film]: the loaded spektrafilm stock for
-     * DevelopParams.film (RawBoy Film).
+     * painted mask (the session's cache); none by default (Auto, Camera). [film]: the loaded film stock for
+     * DevelopParams.film (Pro, Auto, RawBoy Film).
      */
     public static func from(_ p: DevelopParams, asShot: DevelopParams, lut: LutData?, lens: LensTransform,
                             base: PreviewImage?, bloomSources: BloomSources?, skinMask: SkinMask?,

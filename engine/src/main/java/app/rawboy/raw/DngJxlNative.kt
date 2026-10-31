@@ -1,7 +1,5 @@
 package app.rawboy.raw
 
-import app.rawboy.engine.BuildConfig
-
 /**
  * JNI surface of the lossy JPEG XL DNG writer (librawboy, engine/src/main/cpp/dng_transcode.cpp; needs the Adobe DNG
  * SDK build). RawBoy Camera uses it on the DNGs that Android's DngCreator writes.
@@ -10,9 +8,6 @@ object DngJxlNative {
     init {
         System.loadLibrary("rawboy")
     }
-
-    /** Whether this build can write them: the DNG SDK is in every standard build and never in RawBoy Film. */
-    val available: Boolean get() = !BuildConfig.FILM_EDITION
 
     /** Result of [transcode]. */
     enum class Result { DONE, UNCHANGED, UNAVAILABLE }

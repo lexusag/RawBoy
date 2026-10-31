@@ -1,7 +1,6 @@
 
-// Film image formation for the standard apps (Auto, Pro, Camera, web): the negative -> print model of RawBoy Film,
-// with RawBoy's own grain, halation and scatter. Assembled after develop.glsl in place of shaders/film/film.glsl
-// (film edition only, GPLv3), with the same entry points: filmOptics() and applyFilm().
+// Film image formation for every app (Auto, Pro, Camera, RawBoy Film, web): a negative -> print model with RawBoy's
+// own grain, halation and scatter. Assembled after develop.glsl; its entry points are filmOptics() and applyFilm().
 //
 // Written from the physics, not from spektrafilm's code:
 // - Formation: spektrafilm's baked 2-LUT bundles (luts/spektrafilm, CC BY-SA 4.0): Apple Log (BT.2020) in ->

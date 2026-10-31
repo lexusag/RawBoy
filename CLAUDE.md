@@ -9,9 +9,10 @@ to test, and the traps already found.
 Android raw developer (Kotlin + Jetpack Compose, minSdk 29) with an AgX tone mapper (Pro also has filmic and sigmoid).
 Native C++ decodes the raw into linear Rec.2020 half floats; a single GLES 3.0 fragment
 shader does all development, both for the live preview and for tiled full-resolution export.
-Three apps share one engine (plus **RawBoy Film**, a flavour of the camera kept in its own GPLv3 repository, see below): **RawBoy** (`app-pro`, package `app.rawboy`, full controls),
+Four apps share one engine: **RawBoy** (`app-pro`, package `app.rawboy`, full controls),
 **RawBoy Auto** (`app-auto`, `app.rawboy.auto`: automatic develop + film looks, batch export) and
-**RawBoy Camera** (`app-camera`, `app.rawboy.camera`: live film-look viewfinder, raw capture, jpegli JPEG).
+**RawBoy Camera** (`app-camera`, `app.rawboy.camera`: live film-look viewfinder, raw capture, jpegli JPEG) and
+**RawBoy Film** (`app-camera` flavour `film`, `app.rawboy.camera.film`: the camera with Auto's Film-mode stocks as looks).
 The owner tests on a Pixel 9 Pro.
 
 ## Layout
@@ -27,9 +28,9 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
     unrotated, applies DNG gain maps per camera channel, converts to Rec.2020, then rotates.
   - `decoder_dng.cpp` — Adobe DNG SDK fallback (DNG 1.7 / JPEG XL). Only compiled when
     `third_party/dng_sdk` exists (see `third_party/README.md`); standard builds, release and debug, fail
-    without it (`checkDngSdk`, on `preStandardReleaseBuild`): `-DCMAKE_BUILD_TYPE=Release` makes AGP run the Release
-    CMake tasks for debug variants too (`mergeStandardDebugNativeLibs` → `buildCMakeRelease`), which hang off that
-    task. The film edition never builds it (CMake `RAWBOY_USE_DNG_SDK=OFF`).
+    without it (`checkDngSdk`, on `preReleaseBuild`): `-DCMAKE_BUILD_TYPE=Release` makes AGP run the Release
+    CMake tasks for debug variants too (`mergeDebugNativeLibs` → `buildCMakeRelease`), which hang off that
+    task. Every app, RawBoy Film included, has it.
   - `lens_opcodes.cpp` — our own DNG OpcodeList2/3 parser (GainMap, WarpRectilinear, FixVignetteRadial).
   - `blemish.cpp` — blemish detection + spot healing on the full-res image (undoable via backups).
   - `jni_bridge.cpp` — decoder order (JPEG by magic, else LibRaw first, SDK fallback for TIFF-magic files), JNI API.
@@ -168,31 +169,21 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
 - `luts/` — bundled LUTs, copied into the engine's assets by the `copyLuts` Gradle task.
   User-visible look/stock names and bundled LUT file names are RawBoy's own (Yellow/Green families, 2026-10-18): no
   film makers' brand or product names; old LUT file ids map to the new ones in `RetiredLooks` (all ports).
-- `licenses/THIRD_PARTY_NOTICES.txt` — every third-party licence plus the DNG patent notice (RawBoy Film:
-  `THIRD_PARTY_NOTICES_FILM.txt`, its GPLv3 notice, the spektrafilm licences and the GPLv3 text, no Adobe sections;
-  `copyNoticesFilm`); packaged by the engine's
+- `licenses/THIRD_PARTY_NOTICES.txt` — every third-party licence plus the DNG patent notice (the same file for every
+  app, RawBoy Film included); packaged by the engine's
   `copyNotices` task (shown by `view/Licenses.kt`: at the end of Pro's/Auto's "?" help sheet, Camera's Settings) and copied
   into the web build (`ui/common/LicensesDialog.tsx`). Update it when adding or upgrading a dependency.
-- **Editions** (flavour dimension `edition` on `:engine` and `:app-camera`; Pro/Auto use
-  `missingDimensionStrategy("edition", "standard")`): `standard` = every app as before; `film` = **RawBoy Film**
-  (`app.rawboy.camera.film`, GPLv3). The film edition adds `shaders/film/` (generateShaderSourcesFilm; standard gets
-  an empty `ShaderSources.FILM`, and `Shaders.kt` defines `RAWBOY_FILM` and assembles `FILM` in place of `FILM_FORM`
-  only when it isn't empty), its notices and `BuildConfig.FILM_EDITION` (`Licenses.kt` shows `GPL_NOTICE` instead of
-  `DNG_NOTICE`). Both editions bundle `luts/spektrafilm` (`copyLuts`). The camera's flavour source sets hold
-  `Edition.kt` (looks, default look, Pictures folder, Settings
-  credits). Verified in the APKs: standard ones have no GPL film shader (check: no `GPL-3.0-or-later` in the dex) and
-  the DNG SDK; RawBoy Film the reverse. Tasks: `:app-camera:assembleStandardDebug` / `assembleFilmDebug`, engine tests
-  `:engine:testStandardDebugUnitTest`.
-  **RawBoy Film lives in its own repository** (GPLv3): this repo plus its film-only files (`shaders/film/`,
-  `app-camera/src/film/`, `ios/Camera/film/`, `ios/FilmEngineTests/`, `tools/spektrafilm_luts/`, `tools/film_eval/`,
-  `licenses/THIRD_PARTY_NOTICES_FILM.txt`, `licenses/GPL-3.0.txt`) and its iOS targets in `ios/project.yml`. Here the
-  `film` flavours, gen.sh's and native/build.sh's film passes only exist when `shaders/film` (or `app-camera/src/film`)
-  does, so this repo builds the standard edition alone. Keep the shared hooks (`ShaderSources.FILM`,
-  `BuildConfig.FILM_EDITION`, `GPL_NOTICE`, `#if FILM_EDITION`) so RawBoy Film merges this repo without conflicts.
-  Mentions of film-only files below describe RawBoy Film's repository.
-- **Auto's Film mode** (standard apps, Android/iOS/web, GPL-free): `shaders/film_form.glsl` is RawBoy's own film
-  formation with the same entry points as `film/film.glsl` (`filmOptics`, `applyFilm`), assembled in its place in
-  every standard build; `develop.glsl`/`main_body.glsl` call them unconditionally behind `uFilmAmount > 0`. Formation:
+- **Editions** (flavour dimension `edition` on `:app-camera` only; the engine has no flavours): `standard` = RawBoy
+  Camera, `film` = **RawBoy Film** (`applicationIdSuffix ".film"`). The flavour source sets hold `Edition.kt` (looks,
+  default look, Pictures folder, Settings credits) and Film's `app_name` and launcher icon; iOS: `Camera/standard/` vs
+  `Camera/film/Edition.swift` + `Film.xcassets` (targets `RawBoyCamera`/`RawBoyFilm`, same `RawBoyEngine`). Film's
+  looks are `FilmLooks.ALL` rendered by `film_form.glsl`, exactly as Auto's Film mode. Tasks:
+  `:app-camera:assembleStandardDebug` / `assembleFilmDebug`, engine tests `:engine:testDebugUnitTest`.
+  History: until 2026-10-31 RawBoy Film lived in its own GPLv3 repository (`lexusag/RawBoyFilm`, kept for the source
+  of those releases) with a GPL port of spektrafilm's grain/halation (`shaders/film/film.glsl`), an engine `film`
+  edition without the DNG SDK, and a "Sync RawBoy Film" workflow. All of that is gone: never bring GPL code back.
+- **Auto's Film mode and RawBoy Film** (Android/iOS/web, GPL-free): `shaders/film_form.glsl` is RawBoy's own film
+  formation (`filmOptics`, `applyFilm`), assembled after `develop.glsl` in every build; `develop.glsl`/`main_body.glsl` call them unconditionally behind `uFilmAmount > 0`. Formation:
   contrast as a log-exposure slope around 0.18 → Apple Log (Apple's published curve) → film LUT → density wire →
   grain → print LUT. Grain: Selwyn's law from an RMS granularity at 48 um, density dependence D(1 − D/Dsat), per-pixel
   Gaussian with half-weight neighbours, footprint-scaled. Halation: a Gaussian of half the base-reflection disc radius
@@ -202,10 +193,9 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   texels within 3.5 texels, each weighed by a Gaussian × round rim of its exact distance: bilinear (and B-spline) taps
   spaced over a texel apart drew checkered squares around small lights. Slider: `ShaderParams.halationGain` (linear to 1 at
   100, then doubling every 25: 16 at 200; all ports). Scatter: 4 diagonal taps. Parameters: `luts/spektrafilm/
-  formation.json` (`FilmStock.formation`; uniforms `uForm*`), fitted to RawBoy Film's renders with
-  `tools/film_eval/compare.mjs` (renders both shaders through the web dev server; reports formation dE2000, grain
-  std per tone band, halation's added light). **Clean-room rule:** never read or copy `film/film.glsl` or spektrafilm's
-  code into `film_form.glsl`; tune on output statistics only. Results (2026-10-13, IMG_0805/IMG_4239): formation dE
+  formation.json` (`FilmStock.formation`; uniforms `uForm*`), fitted on output statistics to the old GPL film shader's renders (with
+  `tools/film_eval/compare.mjs`, which stayed in the RawBoyFilm repository). **Clean-room rule:** never read or copy
+  spektrafilm's code into `film_form.glsl`; tune on output statistics only. Results (2026-10-13, IMG_0805/IMG_4239): formation dE
   median 0, grain within ~10% (slides' R/B within ~20%), halation red group (Gold, X-Tra,
   Kodachrome) vs neutral group. Auto keeps one pick per mode (`AutoPhoto.mode`, `filmLook`, `suggestedFilm`;
   `LookSuggester.suggestFilm`); removed looks/stocks/LUTs map to kept ones via `RetiredLooks` (all ports: `byId`,
@@ -217,25 +207,16 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   turning on) and load it through `PhotoSession.selectFilm` (Pro VMs pass a `filmLoader`; also on open, preset apply,
   Reset). Android's preview passes `film = filmData` to `ShaderParams.from` (EditorScreen). Film fields are in the
   Light preset group (`Presets.kt/.ts/.swift`; tests `PresetsTest.kt`, `engine.test.ts`). Vite doesn't
-  watch `<repo>/shaders`: restart the dev server after editing them (and before `film_eval`, whose page patch
-  otherwise reaches stale `?t=` module copies). Not tuned yet: Auto's exposure targets were set for AgX; the film
+  watch `<repo>/shaders`: restart the dev server after editing them. Not tuned yet: Auto's exposure targets were set for AgX; the film
   print renders darker shadows (owner to judge).
-- spektrafilm film looks (RawBoy Film; its LUTs are also Auto's Film mode):
-  `tools/spektrafilm_luts/generate.py` (uv; spektrafilm pinned at 500bc42) bakes each stock with spektrafilm's own
-  LUT creator, 2-LUT topology, Apple Log in → normalised film CMY density → sRGB, into `luts/spektrafilm/` with
-  `stocks.json` (density wire, grain and halation parameters after `digest_params`: per-stock halation differs).
-  Slides use `io.scan_film` (a `BundleBuilder` subclass). The bundle's input gain is 1, i.e. linear 0.18 = middle
-  grey, which is RawBoy's grey after `uExposure`, so no exposure anchor is needed. `shaders/film/film.glsl` (only with
-  `#define RAWBOY_FILM`: film edition only; everything else assembles `film_form.glsl` instead) ports halation + scatter
-  (`filmOptics`, before lens gains, halation from the 512 px base copy) and grain (`filmGrain`, Gaussian with
-  spektrafilm's Poisson-binomial mean/variance per output pixel + its 0.65 px blur). `develop()` branches after
-  saturation: `applyFilm` → `applyLevels`, mixed with the AgX render by `uFilmAmount` (Strength). LUTs on units
-  8/9 (`FilmTextures`), stock data `film/FilmStocks.kt`, looks `auto/looks/FilmLooks.kt`, `DevelopParams.film*`.
-  Paper white is ~0.85 sRGB (spektrafilm's print), not 1.0. spektrafilm's own LUT QA (`spektrafilm-lut build … --qa`)
-  on Portra 400: off-grid trilinear dE2000 median 0.11, p99 1.6, max 16 at saturated gamut edges.
-  Performance: Pixel 9 Pro viewfinder ~35 fps, GL thread 2.0 ms/frame. The emulator (SwiftShader, CPU) stalls on the
-  halation loop (49 base taps x 3 exp per pixel): test RawBoy Film's viewfinder on the phone, or precompute the halo
-  at 512 px per frame (bloom-style) if it ever matters on a device.
+- spektrafilm LUTs (`luts/spektrafilm/`, RawBoy Film's looks and Auto's Film mode): each stock baked with
+  spektrafilm's own LUT creator (pinned at 500bc42), 2-LUT topology, Apple Log in → normalised film CMY density →
+  sRGB, plus `stocks.json` (density wire; its grain/halation blocks are no longer read). Slides use `io.scan_film`.
+  The bundle's input gain is 1, i.e. linear 0.18 = middle grey, which is RawBoy's grey after `uExposure`. The
+  generator (`tools/spektrafilm_luts/generate.py`, which runs spektrafilm, GPLv3) stayed in the RawBoyFilm
+  repository: regenerating means running it there and copying the folder here. LUTs on units 8/9 (`FilmTextures`),
+  stock data `film/FilmStocks.kt`, looks `auto/looks/FilmLooks.kt`, `DevelopParams.film*`. Paper white is ~0.85
+  sRGB (spektrafilm's print), not 1.0.
 - `tools/film_luts/generate.py` — regenerates the film `.cube` LUTs with spectral_film_lut (`uv run …`). It contains
   the inverse of AgX from `shaders/develop.glsl`: a change to AgX's constants or curve needs the same change there and
   a regeneration. Colour negatives are scan-inverted (an RA-4 print was too contrasty on top of AgX); Aerochrome was
@@ -279,8 +260,8 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
 
 ## Build
 
-- `./gradlew :app-pro:assembleDebug` / `:app-auto:assembleDebug` / `:app-camera:assembleStandardDebug`
-  (`install…` likewise; RawBoy Film's repository adds `:app-camera:assembleFilmDebug`). Gradle daemon is pinned to JDK 21
+- `./gradlew :app-pro:assembleDebug` / `:app-auto:assembleDebug` / `:app-camera:assembleStandardDebug` /
+  `:app-camera:assembleFilmDebug` (`install…` likewise). Gradle daemon is pinned to JDK 21
   (`gradle/gradle-daemon-jvm.properties`): Gradle 8.11 can't run on Android Studio's bundled Java 25.
 - NDK 27.2, CMake 3.22.1 (avoid CMake ≥3.24-only options such as `DOWNLOAD_EXTRACT_TIMESTAMP`).
 - ABIs come from `rawboy.abis` (`gradle.properties`, read by the engine and all apps): arm64-v8a + x86_64 locally;
@@ -384,15 +365,10 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   gen.sh rounds up, or Metal API validation (on when run from Xcode, off in xctest) aborts every draw with
   "has space for 1384 bytes, but argument has a length(1392)". Test with `SIMCTL_CHILD_MTL_DEBUG_LAYER=1`.
   Metal render targets have row 0 at the top: export draws with `flipY` on (Android: off); on-screen both on.
-- **RawBoy Film on iOS** (RawBoy Film's repository; as Android's editions): `RawBoyFilmEngine` framework = the same `Engine` sources with
-  `FILM_EDITION`, `build/generated-film` (gen.sh's second pass: `#define RAWBOY_FILM 1` + `shaders/film/film.glsl`),
-  `../luts` incl. spektrafilm, `THIRD_PARTY_NOTICES_FILM.txt`, and `RawBoyNativeFilm.xcframework` (native/build.sh's
-  film pass: `-DRAWBOY_USE_DNG_SDK=OFF -DRAWBOY_NATIVE_NAME=RawBoyNativeFilm`, LibRaw only; a distinct framework name
-  so both natives can sit in one build). `RawBoyFilm` app (`app.rawboy.camera.film`) = `Camera` minus `standard/` plus
-  `film/Edition.swift`; `RawBoyCamera` excludes `film/`. Engine/Camera files import the edition's module under
-  `#if FILM_EDITION`. Film textures are reflected by name (`uFilmLut`/`uPrintLut` in `DevelopTextures`), uniforms by
-  `bindFilm` (`UniformBlock.vec3`). Both engines bundle `luts/spektrafilm` (Auto's Film mode). Tests:
-  `RawBoyFilmEngineTests` (`FilmEngineTests/`); the standard engine's film formation: `EngineTests/FilmFormationTests`.
+- **RawBoy Film on iOS**: the `RawBoyFilm` app (`app.rawboy.camera.film`) = `Camera` minus `standard/` plus
+  `film/Edition.swift` and `film/Film.xcassets` (`AppIconFilm`), on the same `RawBoyEngine` and natives as every app;
+  `RawBoyCamera` excludes `film/`. Film textures are reflected by name (`uFilmLut`/`uPrintLut` in `DevelopTextures`),
+  uniforms by `bindFilm` (`UniformBlock.vec3`). Film formation tests: `EngineTests/FilmFormationTests`.
   Build for a named simulator (`platform=iOS Simulator,name=…`): `generic/platform=iOS Simulator` also links x86_64,
   which the arm64-only native frameworks can't. A free Personal Team
   allows 3 sideloaded apps per device: remove Pro or Auto to have Camera and Film side by side.
@@ -550,7 +526,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   all moved next to Undo/Redo, as Android's): outlines bent and
   tapered like the shader, `grabInside`, a bend square at q = (0.5, 0). Older edits without kind/bend/… parse as plain
   glows. Not in presets (edits sidecars keep them).
-- Engine JVM tests: `./gradlew :engine:testStandardDebugUnitTest` (`engine/src/test`, junit + org.json; `retouch/Filters.kt`
+- Engine JVM tests: `./gradlew :engine:testDebugUnitTest` (`engine/src/test`, junit + org.json; `retouch/Filters.kt`
   keeps `box` out of `SkinSegmenter`, which loads MediaPipe).
 - Brush masks (`develop/BrushRaster.ts`): strokes are vectors in `MaskLayer.strokes` (image fractions), rasterised on
   the CPU at the session preview's size into paint/erase channels (stroke order matters; `sync` only adds new dabs
@@ -863,22 +839,14 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   on carry-over (edits carry to the next photo; rotation/straighten/crop don't; WB only if changed), and on
   presets (add it to a `PresetGroup` in `Presets.kt` and `Presets.ts`, plus the field mapping in `Presets.kt`).
 - Defaults must leave the image untouched (identity), and resets via double-tap must work.
-- GPL projects (darktable, spektrafilm) are inspiration only for the standard edition: reimplement the method,
-  never copy code. **RawBoy Film is GPL-3.0-or-later** (`licenses/GPL-3.0.txt`): spektrafilm code may be ported, but
-  only into film-edition-only places (`shaders/film/`, `tools/spektrafilm_luts/`, `app-camera/src/film/`), each file
-  naming the spektrafilm file and commit it follows, with an `SPDX-License-Identifier: GPL-3.0-or-later` header.
-  Never let ported code reach `src/main` or the shared shaders: standard apps must stay GPL-free (check the APKs).
-  Shared hooks (DevelopParams.film*, uniforms, the `applyFilm`/`filmOptics` calls, FilmStocks/FilmLooks,
-  `film_form.glsl`) are our own code.
-  None of that code is in this repository any more: it lives in RawBoy Film's own repository, whose complete
-  source (engine + camera) is published there under the GPL. Never add GPL code here.
-- LibRaw is used under the CDDL 1.0 (RawBoy Film: LGPL 2.1, GPL-compatible), unmodified: never patch its sources (a
+- GPL projects (darktable, spektrafilm) are inspiration only, for every app including RawBoy Film: reimplement the
+  method, never copy or port code, and never add GPL code to this repository. All apps are under RawBoy's PolyForm
+  Shield licence (`LICENSE.md`).
+- LibRaw is used under the CDDL 1.0, unmodified: never patch its sources (a
   modified LibRaw file would have to be published); work around it in our own files, as `decoder_libraw.cpp` does.
-- No Adobe DNG SDK in RawBoy Film (CMake `RAWBOY_USE_DNG_SDK=OFF` from the engine's film flavour): its licence and
-  Adobe's DNG patent licence aren't GPL-compatible. The web has no film edition (Auto's Film mode uses film_form.glsl).
 - spektrafilm LUTs are CC BY-SA 4.0: keep `luts/spektrafilm/SPEKTRAFILM_LICENSE.txt` unmodified and the LUT creator's
   `.cube` headers intact, record RawBoy's changes in `CHANGELOG.txt` (written by the generator), and don't use the
-  name "spektrafilm" in app branding (factual credit only, as Camera's Settings does).
+  name "spektrafilm" in app branding (factual credit only, as RawBoy Film's Settings does).
 - Update the docs with each user-visible change: the app's page in `docs/` (RawBoy's controls table is
   `docs/rawboy.md`) and a new entry at the top of `CHANGELOG.md`. The owner commits.
 - `UI.md` is the backlog of UI proposals not done yet (from the 2026-10-17 review); remove an item when it lands.

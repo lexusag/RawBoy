@@ -1,8 +1,4 @@
-#if FILM_EDITION
-import RawBoyFilmEngine
-#else
 import RawBoyEngine
-#endif
 import SwiftUI
 
 @main

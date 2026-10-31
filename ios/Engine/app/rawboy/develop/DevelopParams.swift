@@ -17,7 +17,7 @@ import Foundation
  * - skinRetouch: 0..100 smoothing of skin (found by a segmentation model), 0 = off
  * - blemishRemoval: 0..100 automatic spot healing on skin; higher heals fainter spots, 0 = off
  * - lut: LutEntry id or nil for "No LUT"; lutAmount: 0..100 strength
- * - film: spektrafilm stock id (FilmStocks) or nil for none (RawBoy Film only); filmAmount: 0..100 blend of the film
+ * - film: film stock id (FilmStocks) or nil for none (Pro, Auto, RawBoy Film); filmAmount: 0..100 blend of the film
  *   render over the AgX one; filmGrain, halation: 0..200, 100 = as spektrafilm simulates the stock
  * - lensProfile: apply the lens corrections embedded in the file (if any)
  * - lensDistortion: -100..100, + removes barrel distortion; auto crop/scale follows

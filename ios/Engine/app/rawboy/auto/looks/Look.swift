@@ -114,9 +114,9 @@ public enum Looks {
 }
 
 /**
- * Looks on spektrafilm stocks (luts/spektrafilm, see tools/spektrafilm_luts/generate.py; ids match its STOCKS): RawBoy
+ * Looks on spektrafilm stocks (luts/spektrafilm, ids as in its stocks.json): RawBoy
  * Film's looks and Auto's Film mode. The stock replaces AgX and the LUT: negative, print and scan (slides: scan only),
- * with grain and halation (RawBoy's own in the standard apps, spektrafilm's in RawBoy Film). Looks add only skin
+ * with RawBoy's own grain and halation (shaders/film_form.glsl). Looks add only skin
  * retouch on the portrait films. Mirrors Android's FilmLooks.
  */
 public enum FilmLooks {
