@@ -676,6 +676,16 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   (`dragFocus`/`endDragFocus`) shows a loupe: `ViewfinderRenderer.loupe` re-runs the develop into a square viewport
   with `uvRect` set to the region around the point (main_body's `outPx` follows `vUv`, so grain and lens effects stay
   put). Untested on the phones when added (2026-10-26): tune `FOCUS_SIZE` per lens if a HAL widens small regions.
+  Subject tracking (`CameraSettings.trackFocus`, off by default; 2026-10-31): `track/PatternTracker.kt/.swift`
+  (zero-mean NCC of a 24 px template, half-res search ±12 around the predicted spot then ±2 at full res, template
+  learns at score ≥ 0.85, lost after 400 ms below 0.6; host tests `PatternTrackerTest`/`PatternTrackerTests`, ~0.2 ms
+  per 320 px frame). Android: `ViewfinderRenderer.onTrackLuma` (a second `LumaProgram` copy, 320 px, every frame its
+  async readback finished; set only while a lock may be tracked) → `CameraViewModel.onTrackLuma` on `RawBoy-track`
+  (skipped while a burst merges) → `_focusPoint` + `CameraController.trackFocus`/`moveFocus` (≤ 10 Hz):
+  `tracking` makes `setCommon` use CONTINUOUS_PICTURE with the moving regions. iOS: `capture/SubjectTracker.swift`
+  makes the upright grey copy from the BGRA video frame on the CPU (linearizeFragment's turn/mirror rule, ~15 fps) →
+  `focusAt(follow: true)` (continuous AF at the new rect/point). A tap/release bumps a generation so stale results
+  are dropped. Untested on the phones when added.
 - Selfie camera: front lenses with RAW only. Viewfinder mirrored (`Frame.mirror`; the shader mirrors only when the
   SurfaceTexture matrix doesn't already: its 2×2 determinant is < 0 without a mirror). Tap regions and face rects map
   through `uprightToBuffer`/`bufferToUpright(mirrored = true)`. Saved mirrored through the DNG's EXIF orientation:

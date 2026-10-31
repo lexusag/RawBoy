@@ -145,6 +145,7 @@ fun CameraScreen(
     val frontAvailable by vm.frontAvailable.collectAsStateWithLifecycle()
     val focusPoint by vm.focusPoint.collectAsStateWithLifecycle()
     val dragPoint by vm.dragPoint.collectAsStateWithLifecycle()
+    val tracking by vm.tracking.collectAsStateWithLifecycle()
     val focusSize by vm.controller.focusSize.collectAsStateWithLifecycle()
     val flashAvailable by vm.flashAvailable.collectAsStateWithLifecycle()
     val hiRes by vm.hiRes.collectAsStateWithLifecycle()
@@ -248,6 +249,8 @@ fun CameraScreen(
                 Viewfinder(
                     f, params, vm::onSurfaceTexture, vm::onViewfinderBase, Modifier.fillMaxSize(), loupe,
                     onLuma = if (settings.scanQr) vm::onViewfinderLuma else null,
+                    // Only while a tap's focus may be tracked: the copies cost nothing otherwise.
+                    onTrackLuma = if (settings.trackFocus && focusPoint != null) vm::onTrackLuma else null,
                 )
                 Box(
                     Modifier
@@ -315,7 +318,7 @@ fun CameraScreen(
                         contentAlignment = Alignment.Center,
                     ) {
                         Text(
-                            "AF LOCK  ✕",
+                            if (tracking) "TRACKING  ✕" else "AF LOCK  ✕",
                             style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                             color = Color.Black,
                             modifier = Modifier
@@ -740,6 +743,13 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             subtitle = "Show what a QR code in the viewfinder holds; tap to open the link, join the Wi-Fi or copy the text",
             checked = settings.scanQr,
             onChange = vm::setScanQr,
+        )
+        Spacer(Modifier.height(16.dp))
+        SettingSwitch(
+            title = "Track subject after tap",
+            subtitle = "Focus follows what you tapped as it moves; back to autofocus when it's lost",
+            checked = settings.trackFocus,
+            onChange = vm::setTrackFocus,
         )
         Spacer(Modifier.height(16.dp))
         SettingSwitch(

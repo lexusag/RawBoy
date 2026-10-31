@@ -249,8 +249,12 @@ final class CameraController: NSObject, @unchecked Sendable {
     /** The metering spot's side (MeterArea.spotSize), about the focus ring and Apple's own area around a point. */
     static let spotSize = 0.16
 
-    /** Focus (and meter) at a point of the viewfinder (upright normalised, as shown) and keep it there. */
-    func focusAt(_ x: Double, _ y: Double) {
+    /**
+     * Focus (and meter) at a point of the viewfinder (upright normalised, as shown) and keep it there. `follow`: a
+     * tracked subject (SubjectTracker), which moves in depth too: continuous autofocus on the box instead of one
+     * scan held; called again with each move.
+     */
+    func focusAt(_ x: Double, _ y: Double, follow: Bool = false) {
         queue.async {
             guard let device = self.input?.device, let lens = self.current else { return }
             // Device coordinates are the sensor's landscape frame; the viewfinder shows it turned 90° (mirrored
@@ -271,7 +275,9 @@ final class CameraController: NSObject, @unchecked Sendable {
                 // Faces would pull focus away from the tapped point (iOS 15.4+); back to automatic on release.
                 device.automaticallyAdjustsFaceDrivenAutoFocusEnabled = false
                 device.isFaceDrivenAutoFocusEnabled = false
-                if device.isFocusModeSupported(.autoFocus) { device.focusMode = .autoFocus }
+                // Setting the mode is also what applies a new point or rectangle of interest.
+                let mode: AVCaptureDevice.FocusMode = follow ? .continuousAutoFocus : .autoFocus
+                if device.isFocusModeSupported(mode) { device.focusMode = mode }
                 if device.isExposurePointOfInterestSupported {
                     device.exposurePointOfInterest = point
                     device.exposureMode = .continuousAutoExposure

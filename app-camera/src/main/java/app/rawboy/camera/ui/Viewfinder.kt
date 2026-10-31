@@ -17,7 +17,8 @@ import app.rawboy.gl.ViewfinderRenderer
 
 /**
  * The live camera preview, developed with [params] (see [ViewfinderRenderer]), with an optional focus [loupe]. While
- * [onLuma] is set it gets the renderer's greyscale copies (QR codes).
+ * [onLuma] is set it gets the renderer's greyscale copies (QR codes), while [onTrackLuma] is the small ones every frame
+ * (the subject tracker).
  */
 @Composable
 fun Viewfinder(
@@ -28,10 +29,12 @@ fun Viewfinder(
     modifier: Modifier = Modifier,
     loupe: ViewfinderRenderer.Loupe? = null,
     onLuma: ((width: Int, height: Int, luma: ByteArray) -> Unit)? = null,
+    onTrackLuma: ((width: Int, height: Int, luma: ByteArray) -> Unit)? = null,
 ) {
     val surfaceCallback = rememberUpdatedState(onSurfaceTexture)
     val baseCallback = rememberUpdatedState(onBase)
     val lumaCallback = rememberUpdatedState(onLuma)
+    val trackCallback = rememberUpdatedState(onTrackLuma)
     val view = remember { arrayOfNulls<GLSurfaceView>(1) }
     val renderer = remember {
         ViewfinderRenderer(
@@ -66,6 +69,10 @@ fun Viewfinder(
     LaunchedEffect(onLuma != null) {
         val forward: (Int, Int, ByteArray) -> Unit = { w, h, luma -> lumaCallback.value?.invoke(w, h, luma) }
         renderer.onLuma = forward.takeIf { onLuma != null }
+    }
+    LaunchedEffect(onTrackLuma != null) {
+        val forward: (Int, Int, ByteArray) -> Unit = { w, h, luma -> trackCallback.value?.invoke(w, h, luma) }
+        renderer.onTrackLuma = forward.takeIf { onTrackLuma != null }
     }
     LaunchedEffect(loupe) {
         renderer.loupe = loupe

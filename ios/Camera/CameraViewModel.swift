@@ -44,6 +44,12 @@ final class CameraViewModel: ObservableObject {
     @Published private(set) var focusPoint: CGPoint?
     /** Where the focus ring is being dragged (upright normalised, as shown), or nil; it focuses there on release. */
     @Published private(set) var dragPoint: CGPoint?
+    /** focusPoint follows the tapped subject (settings.trackFocus); the lock ends by itself once it is lost. */
+    @Published private(set) var tracking = false
+    private let subject = SubjectTracker()
+    private var lastFocusMove: TimeInterval = 0
+    /** The point the camera last focused on while tracking. */
+    private var sentFocus: CGPoint?
     /** Counts captures: the UI's shutter feedback. */
     @Published private(set) var shutterCount = 0
     /** The raw format the current lens records (ProRAW when Bayer isn't available). */
@@ -120,7 +126,15 @@ final class CameraViewModel: ObservableObject {
 
     init() {
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
-        controller.onFrame = { [renderer] buffer in renderer.enqueue(buffer) }
+        controller.onFrame = { [renderer, subject] buffer in
+            renderer.enqueue(buffer)
+            let frame = renderer.frame
+            subject.feed(buffer, rotation: frame?.rotation ?? CameraController.viewfinderRotation,
+                         mirror: frame?.mirror ?? false)
+        }
+        subject.onResult = { [weak self] generation, event in
+            Task { @MainActor in self?.subjectTracked(generation, event) }
+        }
         renderer.onBase = { [weak self] base in
             Task { @MainActor in self?.onViewfinderBase(base) }
         }
@@ -166,6 +180,7 @@ final class CameraViewModel: ObservableObject {
         startTask = nil
         controller.stop()
         focusPoint = nil
+        stopTracking()
         endDrag()
         clearQr()
         if status == .ready { status = .opening }
@@ -216,14 +231,68 @@ final class CameraViewModel: ObservableObject {
     func focusAt(_ x: Double, _ y: Double) {
         guard status == .ready else { return }
         focusPoint = CGPoint(x: x, y: y)
+        stopTracking()
+        // Focus first scans at the tap as usual; the tracker takes over from the next frame.
+        if settings.trackFocus { subject.begin(x, y) }
         controller.focusAt(x, y)
     }
 
     func releaseFocus() {
         focusPoint = nil
+        stopTracking()
         endDrag()
         controller.releaseFocus()
     }
+
+    private func stopTracking() {
+        subject.end()
+        tracking = false
+        sentFocus = nil
+    }
+
+    /**
+     * The tracker's answer for the lock of `generation`: the focus point (and the camera's focus and exposure points)
+     * moves with the subject; a subject without enough detail keeps a plain lock; one lost for good releases focus.
+     */
+    private func subjectTracked(_ generation: Int, _ event: SubjectTracker.Event) {
+        guard generation == subject.currentGeneration, let point = focusPoint else { return }
+        switch event {
+        case .started(let ok):
+            tracking = ok
+            if ok {
+                sentFocus = point
+                lastFocusMove = ProcessInfo.processInfo.systemUptime
+                controller.focusAt(point.x, point.y, follow: true)
+            }
+        case .moved(let x, let y):
+            guard tracking else { return }
+            if abs(x - point.x) >= Self.minFocusMove || abs(y - point.y) >= Self.minFocusMove {
+                focusPoint = CGPoint(x: x, y: y)
+            }
+            // Each move reconfigures the device: a few a second keep the AF box on the subject, and the last one
+            // still goes out once the subject stops.
+            let now = ProcessInfo.processInfo.systemUptime
+            if let shown = focusPoint, shown != sentFocus, now - lastFocusMove >= Self.focusMoveInterval {
+                lastFocusMove = now
+                sentFocus = shown
+                controller.focusAt(shown.x, shown.y, follow: true)
+            }
+        case .lost:
+            releaseFocus()
+            message = "Subject lost: autofocus"
+        }
+    }
+
+    func setTrackFocus(_ on: Bool) {
+        change { $0.trackFocus = on }
+        // A subject being followed: a plain lock where it is now.
+        if !on, tracking, let p = focusPoint { focusAt(p.x, p.y) }
+    }
+
+    /** Smallest move of a tracked subject (share of the frame) that moves the focus point. */
+    private static let minFocusMove = 0.004
+    /** At most this often a tracked subject's move reconfigures the camera's focus. */
+    private static let focusMoveInterval: TimeInterval = 0.1
 
     /** The focus ring follows a drag to (x, y), with `loupe` over the viewfinder; endDragFocus focuses there. */
     func dragFocus(_ x: Double, _ y: Double, loupe: ViewfinderRenderer.Loupe?) {
@@ -291,6 +360,7 @@ final class CameraViewModel: ObservableObject {
     private func switchTo(_ lens: CameraController.Info) {
         info = lens
         focusPoint = nil  // the restart ends any focus lock
+        stopTracking()
         endDrag()
         // The live develop belongs to the old lens: start the new one fresh.
         live = nil

@@ -232,6 +232,9 @@ class CameraController(context: Context) : AutoCloseable {
     /** Locked focus (and metering) point, upright normalised as shown; null = continuous autofocus. */
     @Volatile
     private var focusPoint: Pair<Float, Float>? = null
+    /** Whether [focusPoint] follows a tracked subject ([trackFocus]): continuous AF there instead of a held scan. */
+    @Volatile
+    private var tracking = false
 
     /**
      * Side of the focus lock's AF box, as a share of the sensor's short side: [FOCUS_SIZE], or [MeterArea.SPOT_SIZE]
@@ -510,9 +513,44 @@ class CameraController(context: Context) : AutoCloseable {
         handler.post {
             val s = session ?: return@post
             focusPoint = x to y
+            tracking = false
             _focusSize.value = FOCUS_SIZE
             val inf = info ?: return@post
             triggerFocus(s, inf)
+        }
+    }
+
+    /**
+     * Focus follows a subject the caller tracks, starting at ([x], [y]) (upright normalised): continuous autofocus on
+     * the AF box there, which [moveFocus] moves along. A held scan (AF_MODE_AUTO) would keep the distance the subject
+     * had when it was tapped. [releaseFocus] or [focusAt] ends it.
+     */
+    fun trackFocus(x: Float, y: Float) {
+        handler.post {
+            val s = session ?: return@post
+            focusPoint = x to y
+            tracking = true
+            focusWatch = null
+            val inf = info ?: return@post
+            runCatching {
+                // Ends the tap's held scan, so continuous AF takes over.
+                val cancel = request(s, CameraDevice.TEMPLATE_PREVIEW).apply {
+                    addTarget(previewSurface ?: return@post)
+                    setCommon(inf)
+                    set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_CANCEL)
+                }.build()
+                s.capture(cancel, null, handler)
+                repeatPreview()
+            }
+        }
+    }
+
+    /** Moves a tracked focus point ([trackFocus]) to ([x], [y]); the caller limits how often. */
+    fun moveFocus(x: Float, y: Float) {
+        handler.post {
+            if (!tracking || session == null) return@post
+            focusPoint = x to y
+            runCatching { repeatPreview() }
         }
     }
 
@@ -575,6 +613,7 @@ class CameraController(context: Context) : AutoCloseable {
         handler.post {
             if (focusPoint == null) return@post
             focusPoint = null
+            tracking = false
             focusWatch = null
             _focusSize.value = FOCUS_SIZE
             val s = session ?: return@post
@@ -1057,6 +1096,7 @@ class CameraController(context: Context) : AutoCloseable {
         session = null
         streamingPhysical = null
         focusPoint = null
+        tracking = false
         focusWatch = null
         _focusSize.value = FOCUS_SIZE
         device?.close()
@@ -1100,8 +1140,12 @@ class CameraController(context: Context) : AutoCloseable {
         inf.previewFpsRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
         val lock = focusPoint
         if (lock != null) {
-            // Focus lock: AUTO holds the focus the trigger found, also for captures; meter there too.
-            set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_AUTO)
+            // Focus lock: AUTO holds the focus the trigger found, also for captures; meter there too. A tracked
+            // subject moves in depth as well, so continuous AF keeps focusing on it there.
+            set(
+                CaptureRequest.CONTROL_AF_MODE,
+                if (tracking) CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE else CameraMetadata.CONTROL_AF_MODE_AUTO,
+            )
             setRegions(inf, lock)
         } else {
             set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_PICTURE)

@@ -26,7 +26,8 @@ import kotlin.math.roundToInt
  * so the linearisation is exact up to a gain; [Frame.scale] brings the result to raw units
  * (1.0 = sensor clip). The whole-image effects (high-pass contrast, bloom) sample small copies
  * made on the GPU from every frame; every [baseIntervalMs] the 512 px one is also read back for
- * analysis, see [onBase]. While [onLuma] is set, a larger greyscale copy is read back too (QR codes).
+ * analysis, see [onBase]. While [onLuma] is set, a larger greyscale copy is read back too (QR codes), and while
+ * [onTrackLuma] is, a small one every frame (the subject tracker).
  */
 class ViewfinderRenderer(
     /** The camera's output texture; called on the GL thread whenever the GL context is (re)created. */
@@ -95,6 +96,13 @@ class ViewfinderRenderer(
     @Volatile
     var lumaIntervalMs: Long = 300
 
+    /**
+     * While set: a small greyscale copy (at most [TRACK_MAX_DIMENSION] px, otherwise as [onLuma]'s) for following the
+     * subject under the focus point, as often as the readbacks keep up (every frame or two). Null makes none.
+     */
+    @Volatile
+    var onTrackLuma: ((width: Int, height: Int, luma: ByteArray) -> Unit)? = null
+
     private var surfaceTexture: SurfaceTexture? = null
     private var cameraTexture = 0
     private val texMatrix = FloatArray(16)
@@ -119,6 +127,8 @@ class ViewfinderRenderer(
     private val tail = Target()
     private val lumaTarget = Target(bytes = true)
     private val luma = LumaRead()
+    private val trackTarget = Target(bytes = true)
+    private val track = LumaRead()
     private var lastBase = 0L
     private var lastLuma = 0L
     private var viewWidth = 1
@@ -133,6 +143,8 @@ class ViewfinderRenderer(
         tail.reset()
         lumaTarget.reset()
         luma.reset()
+        trackTarget.reset()
+        track.reset()
         pending = null
         pixelBuffer = 0
         pixelBufferSize = 0
@@ -216,8 +228,12 @@ class ViewfinderRenderer(
         luma.collect()?.let { (lw, lh, bytes) -> lumaListener?.invoke(lw, lh, bytes) }
         if (lumaListener != null && !luma.busy && now - lastLuma >= lumaIntervalMs) {
             lastLuma = now
-            startLuma(w, h)
+            startLuma(w, h, lumaTarget, luma, LUMA_MAX_DIMENSION)
         }
+        // The subject tracker: a smaller copy, every frame its last readback has finished.
+        val trackListener = onTrackLuma
+        track.collect()?.let { (tw, th, bytes) -> trackListener?.invoke(tw, th, bytes) }
+        if (trackListener != null && !track.busy) startLuma(w, h, trackTarget, track, TRACK_MAX_DIMENSION)
 
         // Pass 2: develop to the screen, aspect-fit. The first params come from the first readback above.
         val p = params ?: return
@@ -323,20 +339,23 @@ class ViewfinderRenderer(
         pending = PendingRead(pixelBuffer, fence, sw, sh, SystemClock.uptimeMillis())
     }
 
-    /** Draws the greyscale copy of the [w] x [h] linear frame (its mipmaps are current) and starts reading it back. */
-    private fun startLuma(w: Int, h: Int) {
-        val scale = min(1f, LUMA_MAX_DIMENSION.toFloat() / max(w, h))
+    /**
+     * Draws a greyscale copy of the [w] x [h] linear frame (its mipmaps are current), at most [maxDimension] px on the
+     * long side, into [target] and starts [read]ing it back.
+     */
+    private fun startLuma(w: Int, h: Int, target: Target, read: LumaRead, maxDimension: Int) {
+        val scale = min(1f, maxDimension.toFloat() / max(w, h))
         val lw = max(4, (w * scale).roundToInt() / 4 * 4)
         val lh = max(1, (h * scale).roundToInt())
-        lumaTarget.ensure(lw / 4, lh, mipmapped = false)
-        lumaTarget.bindForDrawing()
+        target.ensure(lw / 4, lh, mipmapped = false)
+        target.bindForDrawing()
         lumaProgram!!.draw(quad!!, linear.texture, lw, max(0f, log2(max(w, h).toFloat() / max(lw, lh))))
-        luma.start(lw, lh)
+        read.start(lw, lh)
     }
 
     /**
-     * [onLuma]'s readback in flight, as the base's (pixel buffer + fence, collected on a later frame): [lumaTarget]
-     * holds 4 grey pixels per RGBA8 texel, so the bytes come back in pixel order.
+     * A greyscale readback in flight ([onLuma]'s or [onTrackLuma]'s), as the base's (pixel buffer + fence, collected
+     * on a later frame): its target holds 4 grey pixels per RGBA8 texel, so the bytes come back in pixel order.
      */
     private class LumaRead {
         private var buffer = 0
@@ -793,5 +812,8 @@ void main() {
 
         /** Long side of [onLuma]'s copies: a QR code a twentieth of the frame wide still gets ~2 px per module. */
         const val LUMA_MAX_DIMENSION = 1280
+
+        /** Long side of [onTrackLuma]'s copies: enough for PatternTracker's 24 px template, ~0.2 ms a search. */
+        const val TRACK_MAX_DIMENSION = 320
     }
 }

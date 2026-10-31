@@ -1,5 +1,14 @@
 # Changelog
 
+**RawBoy Camera: track the subject after a tap (2026-10-31)**
+
+- New **Track subject after tap** setting (Android and iPhone, off by default): after a tap the focus ring follows what
+  was tapped as it moves, focus and metering go with it (continuous autofocus on the moving focus square), and the
+  badge reads **TRACKING ✕**. A subject hidden for a moment is held; one gone for about half a second ends the lock and
+  the camera returns to autofocus. A spot too plain to follow stays an ordinary focus lock.
+- Engine: `PatternTracker` (Kotlin and Swift, with unit tests) follows a patch in small greyscale frames by normalised
+  cross-correlation, about 0.2 ms a frame.
+
 **RawBoy Camera (Android): the camera no longer shows over the lock screen after locking (2026-10-31)**
 
 - A camera opened on the unlocked phone no longer comes back over the lock screen when the phone is locked and woken
