@@ -26,7 +26,7 @@ Grain and Denoise.
 In the photo view the name shrinks to "DSCF000…" behind Apply to all, Edit and Export.
 **Change:** on narrow screens put Apply to all and Edit in RawBoy in a ⋯ menu; keep Export visible.
 
-## RawBoy Camera (and RawBoy Film)
+## RawBoy Camera
 
 ### C2. Swipe the viewfinder to change look (High, M) — Android, iOS
 The look is a text dropdown under the viewfinder: two taps while framing, the menu covers the frame, and a look
@@ -48,7 +48,7 @@ straight (the orientation listener already exists for EXIF).
 The UI is portrait-locked (photos still come out right), so in landscape the RAW, flash and lens labels are sideways.
 **Change:** rotate the small icons and labels in place with the device orientation; the layout stays portrait.
 
-### F1. Group the film stocks and show which one is loaded (Medium, S) — RawBoy Film, Android, iOS
+### F1. Group the film stocks and show which one is loaded (Medium, S) — RawBoy Camera's Film mode, Android, iOS
 Twelve stocks plus Natural in one flat list; nothing says which are colour negative, cinema or slide, and the stock
 name is only in the small row under the viewfinder.
 **Change:** group the menu (Colour negative, Cinema on 2383, Slide, Natural) with a short note per stock, and show

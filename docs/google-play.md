@@ -87,7 +87,7 @@ Actions → **Publish to Google Play** → **Run workflow**:
 | Use workflow from | the branch or tag to build (`main`, or a release tag such as `v1.6.2`) |
 | Version name | `1.6.2`: three numbers, the second and third below 100 |
 | Version code | empty (derived from the version name), or a number to force one, e.g. a second upload of the same version |
-| RawBoy, Auto, Camera, Film | tick the apps to publish |
+| RawBoy, Auto, Camera | tick the apps to publish |
 | Play track | `internal` to try it yourself, `closed` for testers, `production` for everyone |
 | Release status | `completed` rolls it out; `draft` puts it in Play Console for you to send. Use `draft` while an app has never been through review: Play refuses `completed` then |
 | What's new | the release notes, English, up to 500 characters |

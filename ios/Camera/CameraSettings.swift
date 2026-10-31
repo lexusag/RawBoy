@@ -77,9 +77,9 @@ struct CameraSettings: Equatable {
     /** B&W mode is on and this edition has one. */
     var monoMode: Bool { mono && !Edition.monoLooks.isEmpty }
     /** Film mode is on (and B&W mode isn't) and this edition has one. */
-    var filmMode: Bool { film && !monoMode && !Edition.filmLooks.isEmpty }
+    var filmMode: Bool { film && !monoMode }
     /** B&W with Film on too: the black and white looks with filmMonoContrast and more grain (see grainStrength). */
-    var filmMono: Bool { monoMode && film && !Edition.filmLooks.isEmpty }
+    var filmMono: Bool { monoMode && film }
     /** The look in effect: B&W mode's stock, Film mode's stock or the colour look. */
     var look: Look {
         if monoMode { return Edition.monoLook(monoLookId) }

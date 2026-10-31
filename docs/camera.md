@@ -115,7 +115,7 @@ shows them.
 
 ## Black and white
 
-The **B&W** button (left of the Look menu, next to the film strip) switches RawBoy Camera and RawBoy Film to black and white, and back. In B&W the **Look** menu
+The **B&W** button (left of the Look menu, next to the film strip) switches RawBoy Camera to black and white, and back. In B&W the **Look** menu
 lists the black and white films RawBoy Auto has: Yellow Mono Soft, Yellow Mono 400 (the default), Yellow Mono Push,
 Yellow Mono Hard, Yellow Cine Mono and Yellow Cine Mono Soft (AgX plus each film's LUT, with RawBoy's grain). The
 viewfinder shows black and white live. Each mode keeps its own pick, so switching back finds the colour look again.
@@ -133,7 +133,7 @@ viewfinder shows black and white live. Each mode keeps its own pick, so switchin
 - In RawBoy Camera the colour **Look** menu no longer lists the black and white looks; a black and white look remembered
   from before opens in B&W mode.
 
-## Film mode and RawBoy Film
+## Film mode
 
 RawBoy Camera has a **Film** toggle, a film strip left of the Look menu: on (the default), the **Look** menu
 lists the film stocks below; off, the looks on RawBoy's film LUTs. Each keeps its own pick, and Strength, Brightness
@@ -143,15 +143,13 @@ below, Film on or not, and switching B&W off comes back to Film if it is on. Wit
 LUT looks share ids (`portra400` is both), so Film mode's pick is kept separately (`CameraSettings.film`/`filmLookId`,
 prefs `film`/`filmLook`).
 
-**RawBoy Film** is RawBoy Camera with only the film stocks as its looks and no toggle (everything else above applies;
-it is due to be retired in favour of RawBoy Camera's Film mode): the same 12 stocks
-as RawBoy Auto's Film mode, rendered the same way. Yellow Portrait 400/800, Yellow Vivid 100, Yellow Warm 200, Green
-Pastel 400, Green Everyday 400, Yellow Cine 250D and 500T (printed on cinema print film), and the slide films Green
-Vivid Slide 100, Green Slide 100, Yellow Slide 100 and Yellow Classic 64 (scanned, not printed). Colour negatives are
-printed on colour paper. **Natural** is the AgX develop alone. It saves to `Pictures/RawBoy Film` (`…-film.jpg`, DNGs
-in `RAW/`), so its photos stay apart from RawBoy Camera's. It is built from this repository (`app-camera` flavour
-`film`, iOS target `RawBoyFilm`) with the same engine as the other apps, so it opens JPEG XL DNGs and can save lossy
-JPEG XL DNGs like RawBoy Camera.
+The film stocks are the same 12 as RawBoy Auto's Film mode, rendered the same way: Yellow Portrait 400/800, Yellow
+Vivid 100, Yellow Warm 200, Green Pastel 400, Green Everyday 400, Yellow Cine 250D and 500T (printed on cinema print
+film), and the slide films Green Vivid Slide 100, Green Slide 100, Yellow Slide 100 and Yellow Classic 64 (scanned, not
+printed). Colour negatives are printed on colour paper. **Natural** is the AgX develop alone.
+
+RawBoy Film (`app.rawboy.camera.film`) used to be a separate app with only these stocks; since 2026-10-31 it is this
+Film mode, and its build is gone. Its old photos stay in `Pictures/RawBoy Film`.
 
 - The film replaces AgX: after white balance, exposure and Shadows/Highlights, the scene light exposes the negative,
   which is printed and the print scanned. The negative and the print are spektrafilm's 2-LUT bake of each stock

@@ -1,5 +1,12 @@
 # Changelog
 
+**RawBoy Film merged into RawBoy Camera (2026-10-31)**
+
+- RawBoy Film is now RawBoy Camera's Film mode, and its separate build is gone: no `film` flavour on Android, no
+  `RawBoyFilm` target on iOS, no RawBoy Film APK in releases and no RawBoy Film choice in the Google Play workflow.
+  Camera builds are `:app-camera:assembleDebug` / `assembleRelease` / `bundleRelease` again.
+- The Play listing `app.rawboy.camera.film` is no longer updated; installed copies keep working.
+
 **RawBoy Camera: Film and B&W buttons side by side, RawBoy Film's icon (2026-10-31)**
 
 - The **Film** and **B&W** buttons sit side by side left of the Look menu and each switches by itself: B&W lists only

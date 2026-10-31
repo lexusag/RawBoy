@@ -30,7 +30,7 @@ struct CameraScreen: View {
                 // B&W mode lists only the mono stocks (Film on or not) and has Filter where Warmth is. Film mode lists the film stocks.
                 LookPicker(looks: vm.settings.monoMode ? Edition.monoLooks : vm.settings.filmMode ? Edition.filmLooks : Edition.looks,
                            selectedId: vm.settings.look.id, onSelect: vm.setLook,
-                           film: Edition.filmLooks.isEmpty ? nil : vm.settings.film,
+                           film: vm.settings.film,
                            onFilm: vm.setFilm,
                            mono: Edition.monoLooks.isEmpty ? nil : vm.settings.monoMode,
                            onMono: vm.setMono)
@@ -461,7 +461,7 @@ private struct LookPicker: View {
     let looks: [Look]
     let selectedId: String
     let onSelect: (String) -> Void
-    /** The Film and B&W toggles' states, side by side in the label's place; nil = no such toggle (RawBoy Film: no Film). */
+    /** The Film and B&W toggles' states, side by side in the label's place; nil = no such toggle. */
     var film: Bool? = nil
     var onFilm: (Bool) -> Void = { _ in }
     var mono: Bool? = nil

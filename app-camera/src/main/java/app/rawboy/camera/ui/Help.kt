@@ -1,10 +1,9 @@
 package app.rawboy.camera.ui
 
-import app.rawboy.camera.Edition
 import app.rawboy.view.HelpItem
 import app.rawboy.view.HelpSection
 
-/** RawBoy Camera's and RawBoy Film's "?" sheet. Keep it in step with the Readme's RawBoy Camera section. */
+/** RawBoy Camera's "?" sheet. Keep it in step with the Readme's RawBoy Camera section. */
 internal val CAMERA_HELP = listOf(
     HelpSection(
         "Shooting",
@@ -21,9 +20,8 @@ internal val CAMERA_HELP = listOf(
     ),
     HelpSection(
         "Look",
-        listOfNotNull(
-            // RawBoy Camera only: RawBoy Film's looks are the film stocks already.
-            if (Edition.filmLooks.isEmpty()) null else HelpItem(
+        listOf(
+            HelpItem(
                 "Film button",
                 "The film strip left of the Look menu. On (the default), the menu lists film stocks, developed as the negative, its print and scan, with film grain and the red halation around bright lights; off, the looks on RawBoy's film LUTs. Each keeps its own pick. B&W uses only the black and white looks (with more contrast and grain while Film is on), and switching it off comes back to Film.",
             ),

@@ -4,7 +4,11 @@ import app.rawboy.auto.looks.FilmLooks
 import app.rawboy.auto.looks.Look
 import app.rawboy.auto.looks.Looks
 
-/** RawBoy Camera (flavour "standard"): the looks on the bundled film LUTs, as RawBoy Auto has them. */
+/**
+ * RawBoy Camera's look lists, output folder and credits: the looks on the bundled film LUTs, Film mode's film stocks
+ * and B&W mode's black and white looks, as RawBoy Auto has them. (Until 2026-10-31 a second edition, RawBoy Film, had
+ * its own copy of this object.)
+ */
 internal object Edition {
     /** Colour looks; the black and white ones are B&W mode's ([monoLooks]). */
     val looks: List<Look> = Looks.ALL.filter { !it.monochrome }
@@ -12,14 +16,14 @@ internal object Edition {
 
     fun look(id: String): Look = Looks.byId(id)
 
-    /** B&W mode's stocks: RawBoy Auto's black and white looks, as in RawBoy Film. */
+    /** B&W mode's stocks: RawBoy Auto's black and white looks. */
     val monoLooks: List<Look> = Looks.ALL.filter { it.monochrome }
     val defaultMonoLookId: String = Looks.TRIX_400.id
 
     fun monoLook(id: String): Look = monoLooks.firstOrNull { it.id == id } ?: Looks.TRIX_400
 
     /**
-     * Film mode's stocks (the Film toggle): the film stocks of RawBoy Auto's Film mode, as RawBoy Film has them.
+     * Film mode's stocks (the Film toggle): the film stocks of RawBoy Auto's Film mode.
      * Their ids overlap the LUT looks' ids (portra400 is both), so Film mode keeps its own pick (filmLookId).
      */
     val filmLooks: List<Look> = FilmLooks.ALL

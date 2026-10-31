@@ -7,7 +7,7 @@ plugins {
 /**
  * The shared RawBoy engine: native decoding (LibRaw, DNG SDK, lens opcodes, blemish
  * healing), the develop shader, LUTs, MediaPipe skin detection and export.
- * Used by the apps (app-pro, app-auto, app-camera and its RawBoy Film flavour), all with the same engine: the
+ * Used by the apps (app-pro, app-auto, app-camera), all with the same engine: the
  * Adobe DNG SDK, licenses/THIRD_PARTY_NOTICES.txt and the film stocks' LUTs (luts/spektrafilm, CC BY-SA 4.0).
  */
 
