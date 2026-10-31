@@ -1,5 +1,14 @@
 # Changelog
 
+**RawBoy Camera and Film: less colour speckle in night shadows and corners (2026-10-31)**
+
+- Low-ISO night shots (merged bursts at ISO 20-150) got no colour denoise from the ISO table, and their lifted shadows
+  showed red and blue speckle, worst in the corners. Each shot now measures its own colour noise (as RawBoy Auto does,
+  ~30 ms) and sets colour denoise from it; it never goes below what it was. Luma denoise is unchanged.
+- Colour denoise now grows towards the corners on phone RAWs: the phone's lens shading correction brightens the corners
+  up to 3.4x (and their noise with them), so the colour denoise follows that gain there. Applies to every app when
+  colour denoise is on, including RawBoy's own slider on phone DNGs. Colour detail in the centre keeps the old strength.
+
 **RawBoy Auto (web): lens blur shows in the photo view (2026-10-31)**
 
 - Photos sent from RawBoy with a mask's *Lens blur* showed the blur in the grid and in exported files, but Auto's

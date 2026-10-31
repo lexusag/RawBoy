@@ -707,6 +707,7 @@ final class CameraViewModel: ObservableObject {
                                                    hasFace: a.stats.hasFace)
                     // High ISO: more denoise than the auto develop's table, up to the coarse stage (denoise > 65).
                     params.denoise = max(params.denoise, Self.highIsoDenoise(a.stats.iso * noiseScale))
+                    params.colorDenoise = Self.measuredColorDenoise(img, exposure: params.exposure, denoise: params.denoise)
                     params.shadows = max(params.shadows, Self.backlightShadows(a.stats))
                     let shader = ShaderParams.from(params, asShot: a.defaults, lut: lut,
                                                    lens: LensTransform(info: img.lens, params: params), base: a.base,
@@ -787,6 +788,18 @@ final class CameraViewModel: ObservableObject {
      * then 6400 -> 60, 12800 -> 80, 25600 and up -> 100, interpolated in stops. Above 65 the shader adds its coarse
      * stage.
      */
+    /**
+     * Colour denoise from the shot's measured colour noise (Auto's calibration, AutoTone.measuredNoiseSettings at the
+     * develop's [exposure]), at least the luma [denoise] it used to follow; nil (follows denoise) when the raw can't be
+     * measured. See ShotSaver.measuredColorDenoise (Android): the ISO table gave low-ISO night shots no colour denoise.
+     * Luma stays on the ISO table. The shader scales this towards the corners by the lens shading gain.
+     */
+    private nonisolated static func measuredColorDenoise(_ img: RawImage, exposure: Float, denoise: Float) -> Float? {
+        let noise = img.measureNoise()
+        guard noise.measured else { return nil }
+        return max(AutoTone.measuredNoiseSettings(noise, exposure: exposure).1, denoise)
+    }
+
     private nonisolated static func highIsoDenoise(_ equivalentIso: Float) -> Float {
         if equivalentIso <= 3200 { return 0 }
         let stops = log2f(equivalentIso / 3200)

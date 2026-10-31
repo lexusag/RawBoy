@@ -20,6 +20,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import app.rawboy.auto.AutoAnalysis
+import app.rawboy.auto.analysis.AutoTone
 import app.rawboy.auto.analysis.MeterArea
 import app.rawboy.auto.analysis.SceneStats
 import app.rawboy.auto.looks.Adjustments
@@ -265,8 +266,10 @@ internal object ShotSaver {
                     a.autoBase, look, s.strength, Adjustments(brightness = s.brightness, warmth = s.warmth), a.stats.hasFace,
                 )
                 // High ISO: more denoise than the auto develop's table, up to the coarse stage (denoise > 65).
+                val denoise = maxOf(looked.denoise, highIsoDenoise(a.stats.iso * noiseScale))
                 val params = looked.copy(
-                    denoise = maxOf(looked.denoise, highIsoDenoise(a.stats.iso * noiseScale)),
+                    denoise = denoise,
+                    colorDenoise = measuredColorDenoise(img, looked.exposure, denoise),
                     shadows = maxOf(looked.shadows, backlightShadows(a.stats)),
                 )
                 val lut = params.lut?.let { loadLut(app, it) }
@@ -368,6 +371,20 @@ internal object ShotSaver {
         val lift = ((s.p98 - s.p5 - 5f) * 37.5f).coerceIn(0f, 80f)
         val t = ((s.iso - 800f) / 2400f).coerceIn(0f, 1f)
         return (lift * (1f - t * t * (3f - 2f * t))).roundToInt().toFloat()
+    }
+
+    /**
+     * Colour denoise from the shot's measured colour noise (~30 ms; Auto's calibration, [AutoTone.measuredNoiseSettings]
+     * at the develop's [exposure]), at least the luma [denoise] it used to follow; null (follows [denoise]) when the
+     * raw can't be measured. The ISO table under-rated low-ISO night shots: a merged burst at ISO 20-150 got no colour
+     * denoise, yet the phone's lens shading had lifted its corners up to 3.4x, and lifted shadows showed the colour
+     * speckle (Pixel 9 Pro test, 2026-10-30). Luma stays on the ISO table (the owner's call: luma noise is right).
+     * The shader scales this towards the corners by the shading gain (develop.glsl `colorNoiseScale`).
+     */
+    private fun measuredColorDenoise(img: RawImage, exposure: Float, denoise: Float): Float? {
+        val noise = img.measureNoise()
+        if (!noise.measured) return null
+        return maxOf(AutoTone.measuredNoiseSettings(noise, exposure).second, denoise)
     }
 
     /**

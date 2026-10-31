@@ -591,7 +591,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   on the emulator, so rotating by `SENSOR_ORIENTATION` as well turned it sideways and stretched it. The shader
   rotates only when the matrix doesn't (`ViewfinderRenderer`, off-diagonal check). Focus regions and face rects
   still map through the sensor orientation (they're in sensor coordinates).
-- **Measured auto denoise** (Pro's Auto button, Auto; not Camera): `noise.cpp` `estimateNoise` (JNI
+- **Measured auto denoise** (Pro's Auto button, Auto; Camera only for colour, see below): `noise.cpp` `estimateNoise` (JNI
   `RawNative.noiseLevel`, `rb_noise_level`, wasm `noiseLevel`) → `NoiseLevel` (luma, chroma std in the shader's sqrt
   domain) → `AutoTone.measuredNoiseSettings`: slider = 2000 (luma) / 2600 (colour) × std × 2^((exposure + 0.7) / 2),
   sharpening 15 → 5 as that luma value grows, then luma × 0.8 (`LUMA_DENOISE_SCALE`, 2026-10-18: the full fit read too smooth) − 10, min 0 (`LUMA_DENOISE_OFFSET`, 2026-10-25: what Auto's Denoise −5 gave), then × 0.5 (`LUMA_DENOISE_SHARE`, 2026-10-25: about 1 luma to 2 colour); sets `colorDenoise` explicitly (ISO fallback leaves it null). ~400 patches
@@ -600,6 +600,18 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   old Canon G9; a 2×2-binned one read texture on iPhone ProRAW as noise. Calibrated on `.raw/` with 100% crops through
   the web export (`PhotoSession.export` with a crop): 1× right, 1.6× softens fur. Auto's Denoise adjustment shifts
   `colorDenoise` too when set (`LookApplier`).
+- Camera colour denoise (2026-10-31): luma stays on the ISO table below, but `colorDenoise` = the measured chroma
+  through `AutoTone.measuredNoiseSettings` at the look's exposure, at least `denoise` (`ShotSaver.measuredColorDenoise`,
+  iOS `CameraViewModel.measuredColorDenoise`; null if unmeasured). Pixel 9 Pro night test: merged bursts at ISO 22-156
+  got colour 0 and speckled shadows; measured 18-38. Luma noise was the owner's "good now": ask before changing it.
+  Removing colour noise makes the remaining luma grain read a little stronger in Y (raw noise is anti-correlated across
+  channels after the colour matrix), with the luma setting unchanged.
+- Colour denoise follows the lens shading (`colorNoiseScale` in develop.glsl): sigmaC × max(gain, 1)^0.75, gain = the
+  decoder-applied DNG gain map (`uShading`, sensor coords, 1 without a map; luma not scaled). The Pixel's ISP shades
+  low-ISO frames up to 3.4× in the corners but only 1.2-1.7× at high ISO, so low-ISO night corners had ~2× the centre's
+  colour noise. Exponent 0.75: between sqrt(g) (shot noise) and g (read noise); fine colour noise corner/centre was
+  1.8-2.5× without it, 1.1-1.8× with it (1.0 barely differed).
+  The wavelet pre-pass's coarse chroma bands stay global (their corner excess was small once the fine stage scaled).
 - Camera denoise: `AutoTone.develop(noiseIsoScale)`; Camera passes 4 (phone sensors ≈ 2 stops noisier than the
   camera raws the ISO table was tuned on) and the capture result's ISO as fallback (DNGs may lack it).
 - Performance (camera): the viewfinder's 512 px readback is asynchronous (PBO + fence, collected on a later

@@ -74,7 +74,7 @@ object AutoAnalysis {
 
     /**
      * [cameraMetered]: see [AutoTone.cameraMetered]; [noise]: the measured noise, only Auto's (Camera keeps its ISO-based
-     * denoise, which has no time cost per shot); [phoneAe]: see [AutoTone.exposure].
+     * luma denoise and measures colour noise itself, ShotSaver.measuredColorDenoise); [phoneAe]: see [AutoTone.exposure].
      */
     private class Info(
         val lens: LensInfo,
