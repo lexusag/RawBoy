@@ -253,7 +253,16 @@ class CameraActivity : ComponentActivity() {
      */
     override fun onStop() {
         super.onStop()
-        if (overLockScreen && !isChangingConfigurations && !getSystemService(PowerManager::class.java).isInteractive) closeWhenCaptured()
+        if (isChangingConfigurations || getSystemService(PowerManager::class.java).isInteractive) return
+        if (overLockScreen) {
+            closeWhenCaptured()
+        } else {
+            // An ordinary camera (or one unlocked since): the manifest lets it show over the lock screen, so the next
+            // locked double press can bring it back. Don't show it there when the phone just wakes up; a secure launch
+            // turns it back on in onLaunch.
+            setShowWhenLocked(false)
+            setTurnScreenOn(false)
+        }
     }
 
     /** Unlocked while it was open: from now on an ordinary camera. */
