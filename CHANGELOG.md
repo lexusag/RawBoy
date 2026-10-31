@@ -1,5 +1,13 @@
 # Changelog
 
+**RawBoy Camera (Android): the camera no longer shows over the lock screen after locking (2026-10-31)**
+
+- A camera opened on the unlocked phone no longer comes back over the lock screen when the phone is locked and woken
+  (it showed without the passcode, with the last photo's thumbnail). Only the power button's double press on a locked
+  phone opens it there.
+- With the screensaver set to start while charging, locking the phone right after the lock screen camera now closes
+  it, as when the screen turns off.
+
 **RawBoy Camera (Android): small fixes (2026-10-31)**
 
 - The frame merging button turns gray while the flash is on, since flash shots are single frames.
