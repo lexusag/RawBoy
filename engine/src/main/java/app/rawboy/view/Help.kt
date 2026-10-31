@@ -27,6 +27,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -78,7 +79,13 @@ private fun HelpSheet(title: String, sections: List<HelpSection>, onLicences: ((
                 .navigationBarsPadding()
                 .padding(horizontal = 24.dp),
         ) {
-            item { Text(title, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 8.dp)) }
+            item {
+                Text(title, style = MaterialTheme.typography.titleLarge)
+                // The installed version, so it can be checked against the latest release.
+                val context = LocalContext.current
+                val version = remember { context.packageManager.getPackageInfo(context.packageName, 0).versionName }
+                Text("Version $version", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
+            }
             sections.forEach { section ->
                 item {
                     Text(

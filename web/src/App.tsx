@@ -215,7 +215,7 @@ export function App() {
             onDismiss={closeHelp}
             about={
               <>
-                <span>Decoder: {engine}</span>
+                <span>Version {__RAWBOY_VERSION__} · Decoder: {engine}</span>
                 <button
                   type="button"
                   className="text"
