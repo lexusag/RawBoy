@@ -1,5 +1,9 @@
 # Changelog
 
+**RawBoy Film: grainier black and white (2026-10-31)**
+
+- B&W mode has three times the grain it had, in the viewfinder and in the photos. Colour looks are unchanged.
+
 **RawBoy Film: black and white mode (2026-10-31)**
 
 - A **B&W** button left of the shutter switches RawBoy Film to black and white, live in the viewfinder. The Look menu
