@@ -54,6 +54,19 @@ function seo(): Plugin {
   };
 }
 
+// Identifies this build: the running app compares it with version.json on the server (src/ui/common/UpdateBanner.tsx).
+const build = new Date().toISOString();
+
+/** Writes version.json, which the installed app polls to learn that a newer build was deployed. */
+function versionFile(): Plugin {
+  return {
+    name: 'rawboy-version-file',
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ build }) + '\n' });
+    },
+  };
+}
+
 const version = (JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf8')) as { version: string }).version;
 
 // Threads in the WASM decoder need SharedArrayBuffer, i.e. a cross-origin isolated page.
@@ -80,10 +93,10 @@ function isolationHeaders(): Plugin {
 
 export default defineConfig({
   base: './',
-  plugins: [react(), copyModels(), seo(), isolationHeaders()],
+  plugins: [react(), copyModels(), seo(), versionFile(), isolationHeaders()],
   server: { fs: { allow: [repo] } },
   // The app, and the Google Drive window (src/drive/popup.ts).
   build: { rollupOptions: { input: { main: resolve(__dirname, 'index.html'), drive: resolve(__dirname, 'drive.html') } } },
   worker: { format: 'es' },
-  define: { __RAWBOY_VERSION__: JSON.stringify(version) },
+  define: { __RAWBOY_VERSION__: JSON.stringify(version), __RAWBOY_BUILD__: JSON.stringify(build) },
 });

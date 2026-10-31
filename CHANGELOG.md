@@ -1,5 +1,11 @@
 # Changelog
 
+**RawBoy Web: New version available (2026-10-31)**
+
+- An installed web app (home-screen icon) is resumed rather than reloaded, so it could run an old build for days. It
+  now checks `version.json` when it comes back to the foreground and every 30 minutes, and offers **Reload** when a
+  newer build is deployed. It never reloads by itself, because that closes the open photos; **Later** hides it.
+
 **RawBoy Web: Done always in view (2026-10-31)**
 
 - In Crop & rotate, Masks, Light leaks and Presets the heading with **Done** (and Reset crop, the add buttons) stays
