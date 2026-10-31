@@ -1,11 +1,7 @@
 import CoreGraphics
 import Foundation
 import ImageIO
-#if FILM_EDITION
-import RawBoyNativeFilm  // RawBoy Film: the same C API, built without the Adobe DNG SDK
-#else
 import RawBoyNative
-#endif
 
 /** Thrown when a raw file can't be read or decoded. */
 public struct RawImageError: LocalizedError {

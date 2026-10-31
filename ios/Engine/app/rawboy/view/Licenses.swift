@@ -1,9 +1,7 @@
 import SwiftUI
 
 /**
- * licenses/THIRD_PARTY_NOTICES.txt (bundled with the engine), including the DNG patent notice. RawBoyFilmEngine
- * (RawBoy Film, GPLv3) bundles licenses/THIRD_PARTY_NOTICES_FILM.txt instead: its GPL notice and source location
- * first, the spektrafilm licences and the GPLv3 text, no DNG SDK.
+ * licenses/THIRD_PARTY_NOTICES.txt (bundled with the engine, the same in every app), including the DNG patent notice.
  */
 public struct LicensesView: View {
     @Environment(\.dismiss) private var dismiss
@@ -25,12 +23,7 @@ public struct LicensesView: View {
     }
 
     static var notices: String {
-        #if FILM_EDITION
-        let name = "THIRD_PARTY_NOTICES_FILM"
-        #else
-        let name = "THIRD_PARTY_NOTICES"
-        #endif
-        guard let url = LutRepository.resourceBundle.url(forResource: name, withExtension: "txt"),
+        guard let url = LutRepository.resourceBundle.url(forResource: "THIRD_PARTY_NOTICES", withExtension: "txt"),
               let text = try? String(contentsOf: url, encoding: .utf8) else { return "Licences not found." }
         return text
     }

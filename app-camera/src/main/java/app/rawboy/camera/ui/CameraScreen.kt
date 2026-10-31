@@ -14,7 +14,6 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
 import app.rawboy.camera.capture.FlashMode
 import app.rawboy.camera.qr.QrPayload
-import app.rawboy.raw.DngJxlNative
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.text.style.TextOverflow
 import app.rawboy.view.HistogramView
@@ -678,8 +677,7 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             }
             Switch(checked = settings.keepDng, onCheckedChange = vm::setKeepDng)
         }
-        // Needs the DNG SDK, which RawBoy Film doesn't have.
-        if (settings.keepDng && DngJxlNative.available) {
+        if (settings.keepDng) {
             Spacer(Modifier.height(16.dp))
             SettingSwitch(
                 title = "Lossy JPEG XL DNG",

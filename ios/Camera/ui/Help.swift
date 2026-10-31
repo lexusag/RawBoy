@@ -1,8 +1,4 @@
-#if FILM_EDITION
-import RawBoyFilmEngine
-#else
 import RawBoyEngine
-#endif
 
 /** RawBoy Camera's and RawBoy Film's "?" sheet. Keep it in step with the Readme's RawBoy Camera section. */
 let cameraHelp = [

@@ -1,4 +1,4 @@
-RawBoy, RawBoy Auto, RawBoy Camera and RawBoy Web
+RawBoy, RawBoy Auto, RawBoy Camera, RawBoy Film and RawBoy Web
 Third-party software notices
 
 This product includes DNG technology under license by Adobe.
@@ -2086,7 +2086,7 @@ freely, subject to the following restrictions:
 3. This notice may not be removed or altered from any source distribution.
 
 ================================================================================
-spektrafilm film and print LUTs (Film looks: the stocks' negative and print)
+spektrafilm film and print LUTs (RawBoy Film and Film looks: negative and print)
 ================================================================================
 
 The LUTs only: the film grain, halation and scatter in the develop shader are

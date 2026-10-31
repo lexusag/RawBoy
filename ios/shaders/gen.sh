@@ -5,31 +5,26 @@
 # block) and translated to MSL by SPIRV-Cross. Outputs, in ios/build/generated/:
 #   develop_vert.metal, develop_frag.metal (preview, float out), develop_export.metal (16-bit unsigned out)
 #   DevelopLayout.swift: uniform offsets and texture/buffer indices from SPIRV-Cross's reflection
-# Where shaders/film exists (RawBoy Film's own repository, GPLv3), RawBoyFilmEngine gets the same files in
-# ios/build/generated-film/, assembled as Shaders.kt does for Android's film edition: "#define RAWBOY_FILM 1" and
-# shaders/film/film.glsl after develop.glsl.
 # Needs glslang and spirv-cross (brew install glslang spirv-cross). Run by xcodegen and by a pre-build phase.
 set -e
 cd "$(dirname "$0")/.."
 SRC=../shaders
 PATH="$PATH:/opt/homebrew/bin:/usr/local/bin"
 
-generate() {  # generate <out dir> <temp dir> <film: 0 or 1>
+generate() {  # generate <out dir> <temp dir>
 OUT=$1
 TMP=$2
-FILM=$3
 mkdir -p "$OUT" "$TMP"
 
 header() {  # header <out declaration>
     # GLSL ES 3.10 for SPIR-V (3.00 has no SPIR-V target); everything else as Shaders.kt.
     printf '#version 310 es\nprecision highp float;\nprecision highp int;\nprecision highp sampler2D;\nprecision highp sampler3D;\n'
-    if [ "$FILM" = 1 ]; then printf '#define RAWBOY_FILM 1\n'; fi
     printf '%s\n' "$1"
 }
 
-body() {  # develop.glsl, the film formation (film edition: spektrafilm's), light_leak.glsl, main_body.glsl
+body() {  # develop.glsl, the film formation, light_leak.glsl, main_body.glsl
     cat "$SRC/develop.glsl"
-    if [ "$FILM" = 1 ]; then cat "$SRC/film/film.glsl"; else cat "$SRC/film_form.glsl"; fi
+    cat "$SRC/film_form.glsl"
     cat "$SRC/light_leak.glsl"
     cat "$SRC/main_body.glsl"
 }
@@ -114,5 +109,4 @@ open(out, "w").write(swift)
 EOF
 }
 
-generate build/generated build/shaders 0
-if [ -d "$SRC/film" ]; then generate build/generated-film build/shaders-film 1; fi
+generate build/generated build/shaders

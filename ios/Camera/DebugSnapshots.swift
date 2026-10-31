@@ -1,11 +1,7 @@
 #if DEBUG
 import Foundation
 import ImageIO
-#if FILM_EDITION
-import RawBoyFilmEngine
-#else
 import RawBoyEngine
-#endif
 import UniformTypeIdentifiers
 
 /**

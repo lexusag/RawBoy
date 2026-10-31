@@ -6,6 +6,20 @@
   photo view dropped it once the RAW finished decoding. The photo view now redraws when the blur's source copy is
   ready, so it shows the same develop as the export.
 
+**RawBoy Film: back in RawBoy, on Auto's film formation (2026-10-31)**
+
+- RawBoy Film is built from this repository again (Android `app-camera` flavour `film`, iOS target `RawBoyFilm`),
+  so it gets every RawBoy Camera fix at once, including the lock screen camera fix further down.
+- Its looks now render exactly as RawBoy Auto's Film mode does: the same 12 stocks on spektrafilm's film and print
+  LUTs, with RawBoy's own grain, halation and scatter (`shaders/film_form.glsl`). The grain and halation ported from
+  spektrafilm's code are gone, so the film render can look slightly different from earlier Film versions.
+- RawBoy Film now uses the same engine as the other apps: it opens JPEG XL DNGs and can save lossy JPEG XL DNGs, like
+  RawBoy Camera.
+- Licence: RawBoy Film is now under RawBoy's PolyForm Shield licence like the other apps, and its Settings show the
+  same open-source licences (with the DNG notice). spektrafilm's LUTs stay CC BY-SA 4.0 and are credited in Settings.
+  Earlier Film releases were GPLv3; their source stays in the `RawBoyFilm` repository.
+- Releases attach `RawBoy-Film-<tag>.apk` with the other APKs; the "Sync RawBoy Film" workflow is gone.
+
 **RawBoy Web and iPhone: RAW files open 2 to 3 times faster (2026-10-31)**
 
 - Opening a photo full size (RawBoy, Auto's photo view, export) decodes the RAW on all cores: the demosaic, the

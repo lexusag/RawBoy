@@ -1,9 +1,5 @@
 import AVKit
-#if FILM_EDITION
-import RawBoyFilmEngine
-#else
 import RawBoyEngine
-#endif
 import SwiftUI
 
 /** Viewfinder with the look controls, shutter and the last photo. */

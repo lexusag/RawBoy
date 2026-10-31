@@ -296,7 +296,7 @@ internal object ShotSaver {
             withContext(Dispatchers.IO) { thumbnail(app, uri) }?.let { _lastShot.value = SavedShot(shot.id, LastShot(uri, it)) }
         }
         // The JPEG came from the uncompressed raw; now the kept DNG shrinks to a lossy JPEG XL one.
-        if (s.keepDng && s.lossyDng && DngJxlNative.available && shot.temporary == null) withContext(Dispatchers.IO) { compressDng(app, shot) }
+        if (s.keepDng && s.lossyDng && shot.temporary == null) withContext(Dispatchers.IO) { compressDng(app, shot) }
     }
 
     /** Re-saves the kept DNG as a lossy JPEG XL DNG, in place. Best effort: the uncompressed DNG stays if it fails. IO thread. */

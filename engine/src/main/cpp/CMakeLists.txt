@@ -39,7 +39,7 @@ target_link_libraries(libraw_static PUBLIC z)
 set(RAWBOY_DNG_SDK_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../../../third_party/dng_sdk"
     CACHE PATH "Adobe DNG SDK root (directory containing dng_sdk/source)")
 
-# OFF in the film edition (GPLv3; engine flavour "film" passes it): the SDK's licence terms aren't GPL-compatible.
+# OFF builds without it even when it is present (e.g. to check a build that lacks it).
 option(RAWBOY_USE_DNG_SDK "Build with the Adobe DNG SDK when it is present" ON)
 
 set(RAWBOY_WITH_DNG_SDK 0)

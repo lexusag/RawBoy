@@ -35,8 +35,6 @@ android {
             // Same ABIs as the engine, so other native dependencies don't add more.
             abiFilters += providers.gradleProperty("rawboy.abis").get().split(",")
         }
-        // The engine's standard edition (the film edition is RawBoy Film's only).
-        missingDimensionStrategy("edition", "standard")
     }
 
     signingConfigs {

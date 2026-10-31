@@ -9,11 +9,11 @@ Update it when a dependency is added or upgraded.
 - [spektrafilm](https://github.com/andreavolpato/spektrafilm) by Andrea Volpato (code GPLv3; profiles and LUTs
   CC BY-SA 4.0, [SPEKTRAFILM_LICENSE.txt](../luts/spektrafilm/SPEKTRAFILM_LICENSE.txt)): its film stocks. The film/print
   LUTs in `luts/spektrafilm/` are spektrafilm's own bake (attribution in every `.cube` header; RawBoy's changes in
-  [CHANGELOG.txt](../luts/spektrafilm/CHANGELOG.txt)), bundled with every app (Auto's Film mode, RawBoy Film). Only
-  RawBoy Film (its own repository) ports its code (grain, halation and scatter); the apps here use RawBoy's own
-  (`shaders/film_form.glsl`) and stay GPL-free. Film modeling powered by spektrafilm. As its author asks: don't sell the LUTs as a LUT pack,
+  [CHANGELOG.txt](../luts/spektrafilm/CHANGELOG.txt)), bundled with every app (Auto's Film mode, RawBoy Film). No
+  spektrafilm code is used: grain, halation and scatter are RawBoy's own (`shaders/film_form.glsl`), so every app
+  stays GPL-free. Film modeling powered by spektrafilm. As its author asks: don't sell the LUTs as a LUT pack,
   don't train commercial AI models on them or their output, and don't use the spektrafilm name in product branding.
-- [LibRaw](https://www.libraw.org/) (dual LGPL 2.1 / CDDL 1.0; RawBoy uses it under the **CDDL 1.0**, RawBoy Film under the **LGPL 2.1**; unmodified, source at
+- [LibRaw](https://www.libraw.org/) (dual LGPL 2.1 / CDDL 1.0; RawBoy uses it under the **CDDL 1.0** in every app; unmodified, source at
   [LibRaw 0.21.3](https://github.com/LibRaw/LibRaw/tree/0.21.3)) — raw decoding. Don't edit LibRaw's own files: under the CDDL,
   modified LibRaw files would have to be published.
 - [Adobe DNG SDK 1.7.1](https://helpx.adobe.com/camera-raw/digital-negative.html) ([DNG SDK License Agreement](../third_party/DNG_SDK_LICENSE.txt) and the DNG patent license) with its bundled libjxl (BSD-3-Clause), Brotli (MIT), Highway and skcms (BSD-3-Clause) — DNG 1.7 / JPEG XL DNGs; downloaded from Adobe, not committed, see third_party/README.md
