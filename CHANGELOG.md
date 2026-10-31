@@ -1,5 +1,11 @@
 # Changelog
 
+**RawBoy Web: Curves end points easier to reach on phones (2026-10-31)**
+
+- On phones (upright or sideways) and touch screens the Curves box has a margin inside its frame, so the curve's
+  end points sit away from the panel's edges where a finger can grab them, rather than half outside the box. Desktop is
+  unchanged.
+
 **RawBoy Web: New version available (2026-10-31)**
 
 - An installed web app (home-screen icon) is resumed rather than reloaded, so it could run an old build for days. It
