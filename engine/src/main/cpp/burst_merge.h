@@ -72,6 +72,8 @@ public:
     float tileK = 4.0f;
     /** Pixel weight: rejects where the 3x3 mean grey difference exceeds ~pixelSigmas x its noise. */
     float pixelSigmas = 3.0f;
+    /** Denoise the parts that got fewer frames than the rest (edges, moving things) in finish(): see denoiseUnderMerged. */
+    bool underMergedDenoise = true;
 
     static constexpr int MERGE_TILE = 32;              // raw px
     static constexpr int MERGE_STRIDE = MERGE_TILE / 2;
@@ -102,6 +104,7 @@ private:
     Plane grey(const std::vector<uint16_t>& raw, double gain) const;
     std::vector<Shift> align(const std::vector<Plane>& alt) const;
     float greyVar(float level) const;
+    void denoiseUnderMerged(std::vector<uint16_t>& raw);
 
     const int width_, height_;
     float black_[4];

@@ -17,8 +17,12 @@ constexpr float BLACK = 64.0f, WHITE = 1023.0f;
 // Noise in units of the white-black range (about a phone sensor at ISO ~800).
 constexpr float NOISE_S = 4e-4f, NOISE_O = 4e-6f;
 
+/** Test 6: a plain wall (slow shading only), where a noisy edge strip shows most. */
+bool flatScene = false;
+
 /** Scene light at a raw position (0..1 of the range, before the CFA's channel gains). */
 float scene(double x, double y) {
+    if (flatScene) return static_cast<float>(0.12 + 0.04 * std::sin(x * 0.01) * std::cos(y * 0.013));
     double v = 0.18 + 0.08 * std::sin(x * 0.05) * std::cos(y * 0.037) + 0.04 * std::sin((x + 2 * y) * 0.21);
     if (x > 600 && x < 900 && y > 80 && y < 300) v = 0.5 + 0.2 * std::sin(x * 0.4);  // fine stripes
     if ((x - 300) * (x - 300) + (y - 550) * (y - 550) < 60 * 60) v = 1.2;             // a clipped light
@@ -193,6 +197,49 @@ int main() {
                     m.frameWeights().size(), m.maxQueued());
         check(r > 1.8 && std::abs(a - b) < 1.0 && m.frameWeights().size() == N - 1,
               "streamed: late levels and exposures, all frames merged");
+    }
+
+    // 6. Strong hand shake: the strip along the edges that some frames don't have. Its noise should be close to the
+    // interior's (frames it does have averaged, the rest made up by the under-merged denoise), not one frame's.
+    {
+        flatScene = true;
+        std::uniform_real_distribution<double> big(-14.0, 14.0);
+        std::vector<std::vector<uint16_t>> fs;
+        for (int i = 0; i < N; ++i) fs.push_back(frame(i == 0 ? 0 : big(rng), i == 0 ? 0 : big(rng), nullptr, rng));
+        // RMS error in bands at a distance from the left and right edges (rows 40..380) and the top (columns 40..560).
+        const int bands[] = {0, 4, 8, 16, 32, 64, 128};
+        auto profile = [&](const std::vector<uint16_t>& f, std::vector<double>& out) {
+            out.clear();
+            for (int b = 0; b + 1 < 7; ++b) {
+                const int d0 = bands[b], d1 = bands[b + 1];
+                const double l = rmse(f, nullptr, d0, 40, d1, 380), r = rmse(f, nullptr, W - d1, 40, W - d0, 380);
+                const double t = rmse(f, nullptr, 40, d0, 560, d1);
+                out.push_back((l + r + t) / 3);
+            }
+        };
+        std::vector<double> ref, plain, mapped;
+        profile(fs[0], ref);
+        for (int pass = 0; pass < 2; ++pass) {
+            BurstMerger m(W, H, black, WHITE, NOISE_S, NOISE_O);
+            m.underMergedDenoise = pass == 1;
+            for (auto& f : fs) m.addFrame(reinterpret_cast<const uint8_t*>(f.data()), W * 2, 1.0);
+            const uint16_t* merged = m.finish();
+            profile(std::vector<uint16_t>(merged, merged + W * H), pass == 0 ? plain : mapped);
+        }
+        std::printf("edges: rmse by distance from the edge (0-4, 4-8, 8-16, 16-32, 32-64, 64-128 px)\n");
+        auto row = [](const char* name, const std::vector<double>& v) {
+            std::printf("  %-10s", name);
+            for (double x : v) std::printf(" %6.2f", x);
+            std::printf("\n");
+        };
+        row("reference", ref);
+        row("merged", plain);
+        row("+ map", mapped);
+        const double interior = mapped[5];
+        check(mapped[0] < 1.4 * interior && mapped[1] < 1.4 * interior && mapped[2] < 1.4 * interior,
+              "edges: strip noise within 1.4x of the interior's");
+        check(std::abs(mapped[5] - plain[5]) < 0.05 * plain[5], "edges: interior unchanged by the map");
+        flatScene = false;
     }
 
     std::printf(failures ? "%d FAILED\n" : "all passed\n", failures);
