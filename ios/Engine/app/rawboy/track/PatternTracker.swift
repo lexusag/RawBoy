@@ -4,7 +4,11 @@ import Foundation
  * Follows the patch under the camera's focus point from one greyscale frame to the next (one byte per pixel, row 0 =
  * top, upright as the viewfinder shows it; about 320 px on the long side). Zero-mean normalised cross-correlation of a
  * template: searched near where the patch should be at half resolution, then refined at full resolution. The template
- * slowly takes on the patch's new look while the match is good, so a turning subject keeps being found.
+ * slowly takes on the patch's new look while the match is good, so a turning subject keeps being found, but a match
+ * must still resemble the patch as first tapped (anchorScore), or the learning would let it drift onto whatever
+ * replaced the subject. Among similar matches (a striped door, tiles) the one nearest where the patch was expected
+ * wins (prior). A patch expected past the frame's edge counts as not found: what is left inside matches poorly
+ * anyway, and the search, kept inside the frame, would settle on the next thing there.
  *
  * Positions are fractions of the frame (x right, y down). update holds the last position while the match is poor
  * (a brief occlusion) and reports the patch lost once it has been poor for lostAfter, or the frame's size changed.
@@ -32,6 +36,15 @@ public final class PatternTracker {
     static let velocityKeep: Float = 0.5
     /** How long the patch may stay unfound (a hand passing in front) before it counts as lost, ms. */
     public static let lostAfterMs: Int64 = 400
+    /**
+     * Lowest correlation with the patch as first tapped: below it the learned template has wandered onto something
+     * else (the subject left, the next thing in the frame looked alike after a few blended frames).
+     */
+    public static let anchorScore: Float = 0.45
+    /** Score taken off a match at the edge of the search reach (less nearer the expected spot): repeated patterns. */
+    static let prior: Float = 0.2
+    /** How far (px) the expected top left may lie past the frame's edge before the patch counts as leaving it. */
+    private static let edge: Float = 2
     /** Grey levels (0...255) of spread a patch needs to be followed at all. */
     static let minStd: Float = 4
     private static let refine = 2
@@ -41,9 +54,10 @@ public final class PatternTracker {
     private let lostAfter: Int64
     private var width = 0
     private var height = 0
-    /** Zero-mean templates, full and half resolution. */
+    /** Zero-mean templates, full and half resolution, and the full one as first tapped. */
     private var full: [Float]?
     private var half: [Float]?
+    private var anchor: [Float]?
     /** Patch centre, full-resolution px, and its last move. */
     private var cx: Float = 0
     private var cy: Float = 0
@@ -78,6 +92,7 @@ public final class PatternTracker {
         self.width = width
         self.height = height
         full = Self.zeroMean(f)
+        anchor = full
         half = Self.zeroMean(Self.patch(h, width / 2, height / 2, hs, Int((px / 2 - Float(hs) / 2).rounded()),
                                         Int((py / 2 - Float(hs) / 2).rounded())))
         cx = px
@@ -90,7 +105,7 @@ public final class PatternTracker {
 
     /** Finds the patch in the next frame; nil when nothing is being followed. */
     public func update(width: Int, height: Int, grey: [UInt8], now: Int64) -> Result? {
-        guard var f = full, var hf = half else { return nil }
+        guard var f = full, var hf = half, let a = anchor else { return nil }
         guard width == self.width, height == self.height, grey.count >= width * height else {
             stop()
             return Result(x: cx / Float(max(1, self.width)), y: cy / Float(max(1, self.height)), score: 0, lost: true)
@@ -98,19 +113,25 @@ public final class PatternTracker {
         let hw = width / 2
         let hh = height / 2
         let hs = size / 2
-        let h = Self.halve(grey, width, height)
-        // Half resolution: around the predicted position, the patch's top left within reach.
-        let r = (reach + 1) / 2
-        let gx = Int(((cx + vx) / 2 - Float(hs) / 2).rounded())
-        let gy = Int(((cy + vy) / 2 - Float(hs) / 2).rounded())
-        let coarse = Self.best(h, hw, hh, hf, hs, gx - r, gx + r, gy - r, gy + r)
-        // Full resolution: a pixel or two around it.
-        let fx = coarse.x * 2
-        let fy = coarse.y * 2
-        let fine = Self.best(grey, width, height, f, size, fx - Self.refine, fx + Self.refine, fy - Self.refine,
-                             fy + Self.refine)
-        let score = fine.score
-        if score >= Self.minScore {
+        // Where the patch's top left should be now, full resolution.
+        let px = cx + vx - Float(size) / 2
+        let py = cy + vy - Float(size) / 2
+        let inside = px >= -Self.edge && py >= -Self.edge && px <= Float(width - size) + Self.edge
+            && py <= Float(height - size) + Self.edge
+        let h = inside ? Self.halve(grey, width, height) : nil
+        var found: (x: Int, y: Int, score: Float)?
+        if let h {
+            // Half resolution: around the predicted position, the patch's top left within reach.
+            let r = (reach + 1) / 2
+            let coarse = Self.best(h, hw, hh, hf, hs, px / 2, py / 2, r)
+            // Full resolution: a pixel or two around it.
+            let m = Self.best(grey, width, height, f, size, Float(coarse.x * 2), Float(coarse.y * 2), Self.refine)
+            // Still the tapped subject, not something the template has learned its way onto?
+            let first = Self.best(grey, width, height, a, size, Float(m.x), Float(m.y), 0)
+            found = first.score >= Self.anchorScore ? m : (x: m.x, y: m.y, score: min(m.score, first.score))
+        }
+        let score = found?.score ?? 0
+        if let fine = found, score >= Self.minScore {
             let nx = Float(fine.x) + Float(size) / 2
             let ny = Float(fine.y) + Float(size) / 2
             vx = (nx - cx) * Self.velocityKeep
@@ -118,14 +139,15 @@ public final class PatternTracker {
             cx = nx
             cy = ny
             lastGood = now
-            if score >= Self.updateScore {
+            if score >= Self.updateScore, let h {
                 Self.blend(&f, Self.zeroMean(Self.patch(grey, width, height, size, fine.x, fine.y)))
                 Self.blend(&hf, Self.zeroMean(Self.patch(h, hw, hh, hs, Int((cx / 2 - Float(hs) / 2).rounded()),
                                                          Int((cy / 2 - Float(hs) / 2).rounded()))))
                 full = f
                 half = hf
             }
-        } else {
+        } else if h != nil {
+            // Not found where it should be: look around where it was. Expected past the edge, it keeps going out.
             vx = 0
             vy = 0
         }
@@ -138,23 +160,28 @@ public final class PatternTracker {
     public func stop() {
         full = nil
         half = nil
+        anchor = nil
     }
 
     /**
-     * The best match of template t (s px square, zero mean) with its top left in x0...x1 x y0...y1 (kept inside the
-     * image), by normalised cross-correlation.
+     * The best match of template t (s px square, zero mean) with its top left within r px of (ex, ey) (kept inside
+     * the image), by normalised cross-correlation less `prior` at the edge of the reach; returns its plain score.
      */
     private static func best(_ img: [UInt8], _ w: Int, _ h: Int, _ t: [Float], _ s: Int,
-                             _ x0: Int, _ x1: Int, _ y0: Int, _ y1: Int) -> (x: Int, y: Int, score: Float) {
+                             _ ex: Float, _ ey: Float, _ r: Int) -> (x: Int, y: Int, score: Float) {
         let tNorm = sqrt(t.reduce(Float(0)) { $0 + $1 * $1 })
-        let ax = min(max(x0, 0), w - s)
-        let bx = min(max(x1, 0), w - s)
-        let ay = min(max(y0, 0), h - s)
-        let by = min(max(y1, 0), h - s)
+        let ix = Int(ex.rounded())
+        let iy = Int(ey.rounded())
+        let ax = min(max(ix - r, 0), w - s)
+        let bx = min(max(ix + r, 0), w - s)
+        let ay = min(max(iy - r, 0), h - s)
+        let by = min(max(iy + r, 0), h - s)
         let n = Float(s * s)
+        let weight = r > 0 ? prior / Float(r * r) : 0
         var bestX = ax
         var bestY = ay
         var bestScore: Float = -2
+        var bestRank: Float = -10
         img.withUnsafeBufferPointer { px in
             t.withUnsafeBufferPointer { tp in
                 for y in ay...by {
@@ -177,7 +204,11 @@ public final class PatternTracker {
                         // The template has zero mean, so the patch's mean drops out of the cross term.
                         let variance = sum2 - sum * sum / n
                         let score = variance <= 0 || tNorm <= 0 ? 0 : cross / (sqrt(variance) * tNorm)
-                        if score > bestScore {
+                        let dx = Float(x) - ex
+                        let dy = Float(y) - ey
+                        let rank = score - weight * (dx * dx + dy * dy)
+                        if rank > bestRank {
+                            bestRank = rank
                             bestScore = score
                             bestX = x
                             bestY = y

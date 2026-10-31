@@ -28,6 +28,27 @@ final class PatternTrackerTests: XCTestCase {
         }
     }
 
+    /** img box-blurred radius px each way (a box of that radius, twice: soft shading), stretched to full contrast. */
+    private func smooth(_ img: [Int], _ radius: Int) -> [Int] {
+        var cur = img
+        for _ in 0..<2 {
+            let prev = cur
+            cur = (0..<(w * h)).map { i in
+                let x = i % w, y = i / w
+                var s = 0, n = 0
+                for dy in -radius...radius {
+                    for dx in -radius...radius where (0..<w).contains(x + dx) && (0..<h).contains(y + dy) {
+                        s += prev[(y + dy) * w + x + dx]
+                        n += 1
+                    }
+                }
+                return s / n
+            }
+        }
+        let lo = cur.min() ?? 0, hi = cur.max() ?? 255
+        return cur.map { ($0 - lo) * 255 / max(1, hi - lo) }
+    }
+
     /** The background with the subject's top left at (sx, sy); gain scales the whole frame (exposure). */
     private func frame(_ sx: Int, _ sy: Int, gain: Float = 1, covered: Bool = false) -> [UInt8] {
         var out = [UInt8](repeating: 0, count: w * h)
@@ -85,6 +106,64 @@ final class PatternTrackerTests: XCTestCase {
         XCTAssertFalse(try XCTUnwrap(t.update(width: w, height: h, grey: frame(103, 80, covered: true), now: 400)).lost)
         XCTAssertTrue(try XCTUnwrap(t.update(width: w, height: h, grey: frame(103, 80, covered: true), now: 800)).lost)
         XCTAssertFalse(t.active)
+    }
+
+    func testASubjectLeavingTheFrameIsLostNotSwapped() throws {
+        // A smooth room the subject leaves by the left edge; once it's gone, something a bit like it (half its
+        // texture) sits where it was last seen.
+        let soft = smooth(texture(seed: 4, w, h), 6)
+        let other = texture(seed: 5, 40, 40)
+        func room(_ sx: Int, _ sy: Int) -> [UInt8] {
+            (0..<(w * h)).map { i in
+                let x = i % w, y = i / w
+                if (0..<40).contains(x - sx) && (0..<40).contains(y - sy) { return UInt8(subject[(y - sy) * 40 + x - sx]) }
+                if sx <= -40 && (0..<40).contains(x - 2) && (0..<40).contains(y - sy) {
+                    let k = (y - sy) * 40 + x - 2
+                    return UInt8((subject[k] * 3 + other[k] * 2) / 5)
+                }
+                return UInt8(soft[i])
+            }
+        }
+        let t = PatternTracker()
+        var sx = 40
+        let sy = 100
+        XCTAssertTrue(t.start(width: w, height: h, grey: room(sx, sy), x: Float(sx + 20) / Float(w),
+                              y: Float(sy + 20) / Float(h), now: 0))
+        var lost = false
+        for i in 1...30 {
+            sx -= 6
+            let r = try XCTUnwrap(t.update(width: w, height: h, grey: room(sx, sy), now: Int64(i) * 66))
+            if r.lost {
+                lost = true
+                break
+            }
+            // Followed while in view, then held near the edge: never on the background or the look-alike.
+            XCTAssertLessThanOrEqual(r.x * Float(w), max(Float(sx + 20), 12) + 3, "frame \(i)")
+            XCTAssertEqual(r.y, Float(sy + 20) / Float(h), accuracy: 3 / Float(h))
+            XCTAssertTrue(sx > -40 || r.score < PatternTracker.minScore, "frame \(i): following the look-alike")
+        }
+        XCTAssertTrue(lost)
+    }
+
+    func testARepeatingPatternIsFollowedWithoutSkipping() throws {
+        // A striped door: the same 16 px tile over and over (plus a little noise), panning 5 px a frame.
+        let tile = texture(seed: 3, 16, 16)
+        func striped(_ offset: Int, _ seed: UInt64) -> [UInt8] {
+            var state = seed &* 6364136223846793005 &+ 1442695040888963407
+            return (0..<(w * h)).map { i in
+                state = state &* 6364136223846793005 &+ 1442695040888963407
+                let x = i % w + offset, y = i / w
+                let v = Float(tile[(y % 16) * 16 + ((x % 16) + 16) % 16]) * 0.8 + 25 + Float(state >> 60)
+                return UInt8(min(max(Int(v), 0), 255))
+            }
+        }
+        let t = PatternTracker()
+        XCTAssertTrue(t.start(width: w, height: h, grey: striped(0, 0), x: 0.5, y: 0.5, now: 0))
+        for i in 1...20 {
+            let r = try XCTUnwrap(t.update(width: w, height: h, grey: striped(i * 5, UInt64(i)), now: Int64(i) * 66))
+            XCTAssertFalse(r.lost)
+            XCTAssertEqual(r.x, (Float(w) / 2 - Float(i * 5)) / Float(w), accuracy: 2 / Float(w))
+        }
     }
 
     func testADifferentFrameSizeIsLost() throws {
