@@ -20,12 +20,11 @@ Update it when a dependency is added or upgraded.
 - [Adobe DNG SDK 1.7.1](https://helpx.adobe.com/camera-raw/digital-negative.html) ([DNG SDK License Agreement](../third_party/DNG_SDK_LICENSE.txt) and the DNG patent license) with its bundled libjxl (BSD-3-Clause), Brotli (MIT), Highway and skcms (BSD-3-Clause) — DNG 1.7 / JPEG XL DNGs; downloaded from Adobe, not committed, see third_party/README.md
 - [jpegli](https://github.com/google/jpegli) (BSD-3-Clause) with [Highway](https://github.com/google/highway) (Apache 2.0 / BSD-3-Clause) and libjpeg-turbo's API headers (IJG / BSD-3-Clause) — RawBoy Camera's JPEG encoder; fetched at build time
 - [MediaPipe Tasks Vision](https://github.com/google-ai-edge/mediapipe) (Apache 2.0) and its *selfie multiclass segmentation* and *Face Landmarker* models (Apache 2.0, `engine/src/main/assets/models/`) — skin detection and facial-feature protection for Skin retouch and Blemish removal
-- [ZXing core](https://github.com/zxing/zxing) 3.5.3 (Apache 2.0) — QR codes in RawBoy Camera and RawBoy Film (Android)
-- AndroidX, Jetpack Compose, Kotlin and kotlinx.coroutines (Apache 2.0) — the Android apps
-- RawBoy Web: [React](https://react.dev) and React DOM with `scheduler` (MIT), [fflate](https://github.com/101arrowz/fflate) (MIT),
-  [coi-serviceworker](https://github.com/gzuidhof/coi-serviceworker) (MIT) and zlib (Emscripten port, zlib licence). Build and
-  test tools (Vite, TypeScript, Vitest) are not shipped.
-- Bundled LUTs in `luts/`: the film `.cube` files are generated with [spectral_film_lut](https://github.com/JanLohse/spectral_film_lut) (MIT) by `tools/film_luts/generate.py`; `Redscale.png` is RawBoy's own
+- Bundled LUTs in `luts/` (besides `luts/spektrafilm/`, above): the film `.cube` files are generated with [spectral_film_lut](https://github.com/JanLohse/spectral_film_lut) (MIT) by `tools/film_luts/generate.py`; `Redscale.png` is RawBoy's own
+- Android apps: [AndroidX and Jetpack Compose](https://developer.android.com/jetpack), the Kotlin standard library and [kotlinx.coroutines](https://github.com/Kotlin/kotlinx.coroutines) (Apache 2.0); [ZXing core](https://github.com/zxing/zxing) (Apache 2.0) — RawBoy Camera's QR codes. The iOS apps use only Apple's frameworks besides the native libraries above
+- RawBoy Web: [React and React DOM](https://react.dev/) with scheduler (MIT), [fflate](https://github.com/101arrowz/fflate) (MIT) — zip export, [coi-serviceworker](https://github.com/gzuidhof/coi-serviceworker) (MIT) — cross-origin isolation for multithreaded wasm, zlib (zlib licence, Emscripten port) and MediaPipe Tasks Vision (above)
+
+Build-time tools that ship nothing (glslang, SPIRV-Cross, CMake, Gradle) aren't listed.
 
 ## Used as inspiration only (no code copied)
 

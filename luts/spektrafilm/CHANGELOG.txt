@@ -12,7 +12,7 @@ modified files are licensed CC BY-SA 4.0 as well.
 - Files renamed: <id>.film.cube, <id>.print.cube, <id>.bundle.json.
 - Slide films (positive: Velvia 100, Provia 100F, Ektachrome 100, Kodachrome 64) are baked with spektrafilm's io.scan_film
   option, so their "print" LUT scans the slide instead of printing it.
-- stocks.json collects each bundle's density wire and spektrafilm's grain and
-  halation parameters; it is generated, not hand edited. RawBoy's shader reads
-  only the density wire (and formation.json, RawBoy's own data); the grain and
-  halation parameters are kept as they came from the bundles and are not used.
+- stocks.json collects each bundle's density wire (read by RawBoy) and
+  spektrafilm's grain and halation parameters (kept for reference, not used:
+  grain, halation and scatter are RawBoy's own, formation.json and
+  shaders/film_form.glsl); it is generated, not hand edited.
