@@ -129,7 +129,7 @@ val checkDngSdk = tasks.register("checkDngSdk") {
     val sdk = rootProject.layout.projectDirectory.file("third_party/dng_sdk/dng_sdk/source/dng_host.cpp").asFile
     doLast {
         if (!sdk.exists()) {
-            throw GradleException("Release builds need the Adobe DNG SDK in third_party/dng_sdk; see third_party/README.md")
+            throw GradleException("Android builds (debug and release) need the Adobe DNG SDK in third_party/dng_sdk; see third_party/README.md")
         }
     }
 }
