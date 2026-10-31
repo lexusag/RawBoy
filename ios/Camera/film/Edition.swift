@@ -20,6 +20,12 @@ enum Edition {
 
     static func monoLook(_ id: String) -> Look { monoLooks.first { $0.id == id } ?? Looks.trix400 }
 
+    /** No Film toggle: this edition's looks already are the film stocks. */
+    static let filmLooks: [Look] = []
+    static let defaultFilmLookId = FilmLooks.portra400.id
+
+    static func filmLook(_ id: String) -> Look { FilmLooks.byId(id) }
+
     /** Photos albums for the JPEGs and the DNGs; JPEGs are named IMG_…-<jpegSuffix>.jpg. */
     static let album = "RawBoy Film"
     static let rawAlbum = "RawBoy Film RAW"

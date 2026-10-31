@@ -133,9 +133,17 @@ viewfinder shows black and white live. Each mode keeps its own pick, so switchin
 - In RawBoy Camera the colour **Look** menu no longer lists the black and white looks; a black and white look remembered
   from before opens in B&W mode.
 
-## Film looks
+## Film mode and RawBoy Film
 
-**RawBoy Film** is RawBoy Camera with film stocks as its looks (everything else above applies): the same 12 stocks
+RawBoy Camera has a **Film** toggle, a film strip in place of the Look label: on (the default), the **Look** menu
+lists the film stocks below; off, the looks on RawBoy's film LUTs. Each keeps its own pick, and Strength, Brightness
+and Warmth are shared. B&W mode hides the toggle (its black and white films are the same either way) and comes back to
+the mode it left. Photos save to `Pictures/RawBoy Camera` (`…-camera.jpg`, DNGs in `RAW/`) in both modes. The film and
+LUT looks share ids (`portra400` is both), so Film mode's pick is kept separately (`CameraSettings.film`/`filmLookId`,
+prefs `film`/`filmLook`).
+
+**RawBoy Film** is RawBoy Camera with only the film stocks as its looks and no toggle (everything else above applies;
+it is due to be retired in favour of RawBoy Camera's Film mode): the same 12 stocks
 as RawBoy Auto's Film mode, rendered the same way. Yellow Portrait 400/800, Yellow Vivid 100, Yellow Warm 200, Green
 Pastel 400, Green Everyday 400, Yellow Cine 250D and 500T (printed on cinema print film), and the slide films Green
 Vivid Slide 100, Green Slide 100, Yellow Slide 100 and Yellow Classic 64 (scanned, not printed). Colour negatives are

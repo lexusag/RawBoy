@@ -482,8 +482,15 @@ final class CameraViewModel: ObservableObject {
     // MARK: - Controls
 
     /** Picks id for the current mode: B&W mode's stock or the colour look. */
-    func setLook(_ id: String) { change { if $0.monoMode { $0.monoLookId = id } else { $0.lookId = id } } }
+    /** Picks id for the current mode: B&W mode's stock, Film mode's stock or the colour look. */
+    func setLook(_ id: String) {
+        change {
+            if $0.monoMode { $0.monoLookId = id } else if $0.filmMode { $0.filmLookId = id } else { $0.lookId = id }
+        }
+    }
     func setMono(_ on: Bool) { change { $0.mono = on } }
+    /** The Film toggle: colour photos on the film stocks or on the LUT looks. */
+    func setFilm(_ on: Bool) { change { $0.film = on } }
     func setFilter(_ f: BwFilter) { change { $0.filter = f } }
     func setStrength(_ v: Float) { change { $0.strength = v } }
     func setBrightness(_ v: Float) {

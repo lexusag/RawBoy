@@ -22,6 +22,13 @@ data class CameraSettings(
      */
     val mono: Boolean = false,
     val monoLookId: String = Edition.defaultMonoLookId,
+    /**
+     * Film mode (the Film toggle, [Edition.filmLooks]): colour photos on [filmLookId]'s film stock instead of
+     * [lookId]'s LUT look. Each mode keeps its own pick; Strength, Brightness and Warmth are shared. B&W mode wins over it.
+     * On by default (owner's choice, 2026-10-31).
+     */
+    val film: Boolean = true,
+    val filmLookId: String = Edition.defaultFilmLookId,
     /** B&W mode's colour filter; Yellow, the classic default (it also keeps the noisy blue channel out of night shots). */
     val filter: BwFilter = BwFilter.YELLOW,
     /** JPEG quality, [MIN_QUALITY]..100. */
@@ -91,8 +98,15 @@ data class CameraSettings(
     /** B&W mode is on and this edition has one. */
     val monoMode: Boolean get() = mono && Edition.monoLooks.isNotEmpty()
 
-    /** The look in effect: B&W mode's stock or the colour look. */
-    val look: Look get() = if (monoMode) Edition.monoLook(monoLookId) else Edition.look(lookId)
+    /** Film mode is on (and B&W mode isn't) and this edition has one. */
+    val filmMode: Boolean get() = film && !monoMode && Edition.filmLooks.isNotEmpty()
+
+    /** The look in effect: B&W mode's stock, Film mode's stock or the colour look. */
+    val look: Look get() = when {
+        monoMode -> Edition.monoLook(monoLookId)
+        filmMode -> Edition.filmLook(filmLookId)
+        else -> Edition.look(lookId)
+    }
 
     /**
      * [base] (the auto develop) with the look and the sliders, as the viewfinder shows it and the shot is saved. B&W mode:
@@ -174,6 +188,8 @@ object CameraSettingsStore {
             warmth = p.getFloat("warmth", d.warmth).coerceIn(-100f, 100f),
             mono = p.getBoolean("mono", d.mono),
             monoLookId = p.getString("monoLook", d.monoLookId) ?: d.monoLookId,
+            film = p.getBoolean("film", d.film),
+            filmLookId = p.getString("filmLook", d.filmLookId) ?: d.filmLookId,
             filter = BwFilter.fromKey(p.getString("filter", null)) ?: d.filter,
             front = p.getBoolean("front", d.front),
             lens = p.getString("lens", d.lens) ?: d.lens,
@@ -197,6 +213,8 @@ object CameraSettingsStore {
             .putFloat("warmth", s.warmth)
             .putBoolean("mono", s.mono)
             .putString("monoLook", s.monoLookId)
+            .putBoolean("film", s.film)
+            .putString("filmLook", s.filmLookId)
             .putString("filter", s.filter.key)
             .putInt("jpegQuality", s.jpegQuality)
             .putBoolean("keepDng", s.keepDng)

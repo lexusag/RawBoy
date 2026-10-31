@@ -365,15 +365,35 @@ fun CameraScreen(
 
             // A menu instead of a strip of chips, and one thin row per slider: the viewfinder keeps the screen.
             Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp)) {
-                // B&W mode lists only the mono stocks and has Filter where Warmth is.
-                val looks = if (settings.monoMode) Edition.monoLooks else Edition.looks
-                LookDropdown(
-                    label = "Look",
-                    looks = looks,
-                    selected = looks.firstOrNull { it.id == settings.look.id },
-                    onSelect = { vm.setLook(it.id) },
-                    labelWidth = 88.dp,
-                )
+                // B&W mode lists only the mono stocks and has Filter where Warmth is. Film mode lists the film stocks.
+                val looks = when {
+                    settings.monoMode -> Edition.monoLooks
+                    settings.filmMode -> Edition.filmLooks
+                    else -> Edition.looks
+                }
+                val selected = looks.firstOrNull { it.id == settings.look.id }
+                if (Edition.filmLooks.isNotEmpty() && !settings.monoMode) {
+                    // The Film toggle takes the label's place: on = the film stocks, off = the LUT looks.
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(Modifier.width(88.dp)) { FilmToggle(settings.filmMode, vm::setFilm) }
+                        LookDropdown(
+                            label = "",
+                            looks = looks,
+                            selected = selected,
+                            onSelect = { vm.setLook(it.id) },
+                            labelWidth = 0.dp,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                } else {
+                    LookDropdown(
+                        label = "Look",
+                        looks = looks,
+                        selected = selected,
+                        onSelect = { vm.setLook(it.id) },
+                        labelWidth = 88.dp,
+                    )
+                }
                 LookSlider("Strength", settings.strength, 0f..100f, LookApplier.DEFAULT_STRENGTH, vm::setStrength)
                 LookSlider("Brightness", settings.brightness, -100f..100f, 0f, vm::setBrightness)
                 if (settings.monoMode) {
@@ -662,6 +682,28 @@ private fun MonoToggle(on: Boolean, onChange: (Boolean) -> Unit) {
     }
 }
 
+/**
+ * The Film toggle (a film strip, filled while Film mode is on): the film stocks or the LUT looks. Each mode keeps its own
+ * pick, so the two can be swapped back and forth; B&W mode hides it (its mono stocks are the same in both).
+ */
+@Composable
+private fun FilmToggle(on: Boolean, onChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+    Box(
+        modifier
+            .size(36.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (on) Color.White else Color(0xFF2A2A2A))
+            .clickable { onChange(!on) }
+            .semantics {
+                contentDescription = "Film stocks"
+                stateDescription = if (on) "On" else "Off"
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(FilmIcon, contentDescription = null, tint = if (on) Color.Black else Color.White, modifier = Modifier.size(22.dp))
+    }
+}
+
 /** B&W mode's colour filter: one chip per [BwFilter], a dot of its colour before the name; scrolls on narrow screens. */
 @Composable
 private fun FilterRow(selected: BwFilter, onSelect: (BwFilter) -> Unit) {
@@ -930,6 +972,14 @@ private fun FlashButton(mode: FlashMode, onClick: () -> Unit) {
 private fun icon(name: String, path: String) = ImageVector.Builder(name, 24.dp, 24.dp, 24f, 24f)
     .addPath(pathData = addPathNodes(path), fill = SolidColor(Color.Black))
     .build()
+
+/** Material "theaters" icon (Apache 2.0): a film strip, the Film toggle (iOS: SF Symbol "film"). */
+private val FilmIcon: ImageVector by lazy {
+    icon(
+        "Film",
+        "M18,3v2h-2L16,3L8,3v2L6,5L6,3L4,3v18h2v-2h2v2h8v-2h2v2h2L20,3h-2zM8,17L6,17v-2h2v2zM8,13L6,13v-2h2v2zM8,9L6,9L6,7h2v2zM18,17h-2v-2h2v2zM18,13h-2v-2h2v2zM18,9h-2L16,7h2v2z",
+    )
+}
 
 /** Material "flash_on" icon (Apache 2.0), built here because it isn't in material-icons-core. */
 private val FlashOnIcon: ImageVector by lazy { icon("FlashOn", "M7,2v11h3v9l7,-12h-4l4,-8z") }

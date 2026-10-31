@@ -26,6 +26,12 @@ internal object Edition {
 
     fun monoLook(id: String): Look = monoLooks.firstOrNull { it.id == id } ?: Looks.TRIX_400
 
+    /** No Film toggle: this edition's looks already are the film stocks. */
+    val filmLooks: List<Look> = emptyList()
+    val defaultFilmLookId: String = FilmLooks.PORTRA_400.id
+
+    fun filmLook(id: String): Look = FilmLooks.byId(id)
+
     /** Pictures/<FOLDER> (JPEGs) and Pictures/<FOLDER>/RAW (DNGs); JPEGs are named IMG_…-<JPEG_SUFFIX>.jpg. */
     const val FOLDER = "RawBoy Film"
     const val JPEG_SUFFIX = "film"

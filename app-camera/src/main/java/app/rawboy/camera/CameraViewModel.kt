@@ -642,9 +642,17 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     // ---- Controls ----
 
-    /** Picks [id] for the current mode: B&W mode's stock or the colour look. */
-    fun setLook(id: String) = change { if (it.monoMode) it.copy(monoLookId = id) else it.copy(lookId = id) }
+    /** Picks [id] for the current mode: B&W mode's stock, Film mode's stock or the colour look. */
+    fun setLook(id: String) = change {
+        when {
+            it.monoMode -> it.copy(monoLookId = id)
+            it.filmMode -> it.copy(filmLookId = id)
+            else -> it.copy(lookId = id)
+        }
+    }
     fun setMono(on: Boolean) = change { it.copy(mono = on) }
+    /** The Film toggle: colour photos on the film stocks or on the LUT looks. */
+    fun setFilm(on: Boolean) = change { it.copy(film = on) }
     fun setFilter(f: BwFilter) = change { it.copy(filter = f) }
     fun setStrength(v: Float) = change { it.copy(strength = v) }
     fun setBrightness(v: Float) = change { it.copy(brightness = v) }

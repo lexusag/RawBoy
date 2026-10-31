@@ -1,5 +1,6 @@
 package app.rawboy.camera.ui
 
+import app.rawboy.camera.Edition
 import app.rawboy.view.HelpItem
 import app.rawboy.view.HelpSection
 
@@ -20,7 +21,12 @@ internal val CAMERA_HELP = listOf(
     ),
     HelpSection(
         "Look",
-        listOf(
+        listOfNotNull(
+            // RawBoy Camera only: RawBoy Film's looks are the film stocks already.
+            if (Edition.filmLooks.isEmpty()) null else HelpItem(
+                "Film button",
+                "The film strip left of the Look menu. On (the default), the menu lists film stocks, developed as the negative, its print and scan, with film grain and the red halation around bright lights; off, the looks on RawBoy's film LUTs. Each keeps its own pick.",
+            ),
             HelpItem("Look menu", "The film look the viewfinder shows and the photo gets."),
             HelpItem("Strength, Brightness, Warmth", "How much of the look, brighter or darker, warmer or cooler. Double-tap a slider to reset it."),
             HelpItem("B&W", "The button left of the shutter switches to black and white: the menu lists the black and white films, and Filter (Yellow, Orange, Red, Green) takes Warmth's place. Like a coloured filter on the lens, it lightens its own colour and darkens the others: Red gives dark skies and smooth skin, Green darker skin and lighter leaves. The DNG stays in colour."),
