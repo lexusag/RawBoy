@@ -113,6 +113,26 @@ shows them.
   denoise and sharpening as for 4× the shot's ISO (2 stops): base ISO stays clean, ISO 400 gets Denoise 20,
   ISO 1600 gets 45, ISO 6400 and up 65.
 
+## Black and white
+
+The **B&W** button left of the shutter switches RawBoy Camera and RawBoy Film to black and white, and back. In B&W the **Look** menu
+lists the black and white films RawBoy Auto has: Yellow Mono Soft, Yellow Mono 400 (the default), Yellow Mono Push,
+Yellow Mono Hard, Yellow Cine Mono and Yellow Cine Mono Soft (AgX plus each film's LUT, with RawBoy's grain). The
+viewfinder shows black and white live. Each mode keeps its own pick, so switching back finds the colour look again.
+
+- **Filter** takes Warmth's place: **None**, **Yellow** (the default), **Orange**, **Red** and **Green**, like a
+  coloured filter on the lens. It lightens things of its own colour and darkens the others before the picture turns
+  grey: Yellow and Orange darken a blue sky a little and a lot, Red makes it nearly black and smooths skin, Green
+  darkens skin and lips and lightens leaves. Middle grey keeps its brightness with every filter, as a photographer
+  opens up by the filter factor. Blown highlights stay white. Technically: channel gains on linear Rec.2020 after white
+  balance (`DevelopParams.bwFilter`, `BwFilter.kt`), then the scene is made grey (Saturation -100) before the film's LUT.
+- **Strength** blends the film's tones with plain grey AgX: the picture stays black and white at any Strength.
+- The grain is three times the black and white look's own (as in RawBoy Auto), for a grainier, more filmic picture.
+- The JPEG is black and white; the **DNG stays in colour**, so the shot can still be developed in colour later.
+- Press and hold still shows the photo in colour, without the look.
+- In RawBoy Camera the colour **Look** menu no longer lists the black and white looks; a black and white look remembered
+  from before opens in B&W mode.
+
 ## Film looks
 
 **RawBoy Film** is RawBoy Camera with film stocks as its looks (everything else above applies): the same 12 stocks
@@ -134,21 +154,3 @@ JPEG XL DNGs like RawBoy Camera.
   downscaled photo shows the grain as a smaller scan would.
 - **Strength** blends the film render with the AgX one (grain and halation fade with it). Middle grey stays where
   AgX puts it, so exposure and Brightness behave as before. Whites reach the paper's white (about 0.85), not 1.0.
-
-### Black and white
-
-The **B&W** button left of the shutter switches RawBoy Film to black and white, and back. In B&W the **Look** menu
-lists the black and white films RawBoy Auto has: Yellow Mono Soft, Yellow Mono 400 (the default), Yellow Mono Push,
-Yellow Mono Hard, Yellow Cine Mono and Yellow Cine Mono Soft (AgX plus each film's LUT, with RawBoy's grain). The
-viewfinder shows black and white live. Each mode keeps its own pick, so switching back finds the colour look again.
-
-- **Filter** takes Warmth's place: **None**, **Yellow** (the default), **Orange**, **Red** and **Green**, like a
-  coloured filter on the lens. It lightens things of its own colour and darkens the others before the picture turns
-  grey: Yellow and Orange darken a blue sky a little and a lot, Red makes it nearly black and smooths skin, Green
-  darkens skin and lips and lightens leaves. Middle grey keeps its brightness with every filter, as a photographer
-  opens up by the filter factor. Blown highlights stay white. Technically: channel gains on linear Rec.2020 after white
-  balance (`DevelopParams.bwFilter`, `BwFilter.kt`), then the scene is made grey (Saturation -100) before the film's LUT.
-- **Strength** blends the film's tones with plain grey AgX: the picture stays black and white at any Strength.
-- The grain is three times the black and white look's own (as in RawBoy Auto), for a grainier, more filmic picture.
-- The JPEG is black and white; the **DNG stays in colour**, so the shot can still be developed in colour later.
-- Press and hold still shows the photo in colour, without the look.

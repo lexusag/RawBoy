@@ -17,7 +17,7 @@ data class CameraSettings(
     val brightness: Float = 0f,
     val warmth: Float = 0f,
     /**
-     * B&W mode (RawBoy Film, [Edition.monoLooks]): the photo is black and white, on [monoLookId]'s stock seen through
+     * B&W mode ([Edition.monoLooks]): the photo is black and white, on [monoLookId]'s stock seen through
      * [filter]. Colour mode keeps [lookId] and [warmth], so switching back and forth keeps each mode's picks.
      */
     val mono: Boolean = false,
@@ -167,7 +167,7 @@ object CameraSettingsStore {
             },
         )
         if (!always.rememberLast) return always
-        return always.copy(
+        val remembered = always.copy(
             lookId = p.getString("look", d.lookId) ?: d.lookId,
             strength = p.getFloat("strength", d.strength).coerceIn(0f, 100f),
             brightness = p.getFloat("brightness", d.brightness).coerceIn(-100f, 100f),
@@ -178,6 +178,9 @@ object CameraSettingsStore {
             front = p.getBoolean("front", d.front),
             lens = p.getString("lens", d.lens) ?: d.lens,
         )
+        // A black and white look picked before RawBoy Camera had B&W mode now opens that mode on it.
+        if (Edition.monoLooks.none { it.id == remembered.lookId }) return remembered
+        return remembered.copy(mono = true, monoLookId = remembered.lookId, lookId = d.lookId)
     }
 
     /**

@@ -402,7 +402,7 @@ fun CameraScreen(
                         )
                     }
                 }
-                // B&W mode switch (RawBoy Film), centred between the last photo and the shutter.
+                // B&W mode switch, centred between the last photo and the shutter.
                 Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
                     if (Edition.monoLooks.isNotEmpty()) MonoToggle(settings.monoMode, vm::setMono)
                 }

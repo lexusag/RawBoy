@@ -243,7 +243,7 @@ struct CameraScreen: View {
             }
             .frame(width: 56, height: 56)
             Spacer()
-            // B&W mode switch (RawBoy Film), centred between the last photo and the shutter.
+            // B&W mode switch, centred between the last photo and the shutter.
             if !Edition.monoLooks.isEmpty {
                 MonoToggle(on: vm.settings.monoMode, onChange: vm.setMono)
                 Spacer()

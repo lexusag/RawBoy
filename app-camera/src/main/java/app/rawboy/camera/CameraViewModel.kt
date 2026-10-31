@@ -905,7 +905,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         /**
          * Half-size grain partly averages out when the photo is saved at 3000 px (area downscale ×1.36): measured
          * std 0.83 -> 0.62 (simulation of the shader's grain), so it's raised to look as strong as before.
-         * At full size each pixel is a point sample: no loss. B&W mode (RawBoy Film) has [MONO_GRAIN] times the grain.
+         * At full size each pixel is a point sample: no loss. B&W mode has [MONO_GRAIN] times the grain.
          */
         internal fun grainStrength(s: CameraSettings) = (if (s.smallExport) 1.34f else 1f) * (if (s.monoMode) MONO_GRAIN else 1f)
 

@@ -5,16 +5,17 @@ import app.rawboy.auto.looks.Looks
 
 /** RawBoy Camera (flavour "standard"): the looks on the bundled film LUTs, as RawBoy Auto has them. */
 internal object Edition {
-    val looks: List<Look> = Looks.ALL
+    /** Colour looks; the black and white ones are B&W mode's ([monoLooks]). */
+    val looks: List<Look> = Looks.ALL.filter { !it.monochrome }
     val defaultLookId: String = Looks.PORTRA_400.id
 
     fun look(id: String): Look = Looks.byId(id)
 
-    /** No separate B&W mode: the mono looks are in [looks] (see the film flavour's Edition). */
-    val monoLooks: List<Look> = emptyList()
+    /** B&W mode's stocks: RawBoy Auto's black and white looks, as in RawBoy Film. */
+    val monoLooks: List<Look> = Looks.ALL.filter { it.monochrome }
     val defaultMonoLookId: String = Looks.TRIX_400.id
 
-    fun monoLook(id: String): Look = Looks.byId(id)
+    fun monoLook(id: String): Look = monoLooks.firstOrNull { it.id == id } ?: Looks.TRIX_400
 
     /** Pictures/<FOLDER> (JPEGs) and Pictures/<FOLDER>/RAW (DNGs); JPEGs are named IMG_…-<JPEG_SUFFIX>.jpg. */
     const val FOLDER = "RawBoy Camera"
