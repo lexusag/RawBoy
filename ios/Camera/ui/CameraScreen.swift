@@ -27,11 +27,17 @@ struct CameraScreen: View {
             viewfinder
             // A menu instead of a strip of chips, and one row per slider: the viewfinder keeps the screen.
             VStack(spacing: 0) {
-                LookPicker(selectedId: vm.settings.lookId, onSelect: vm.setLook)
+                // B&W mode lists only the mono stocks and has Filter where Warmth is.
+                LookPicker(looks: vm.settings.monoMode ? Edition.monoLooks : Edition.looks,
+                           selectedId: vm.settings.look.id, onSelect: vm.setLook)
                 ValueSlider("Strength", value: vm.settings.strength, range: 0...100, defaultValue: LookApplier.defaultStrength,
                             onChange: vm.setStrength)
                 ValueSlider("Brightness", value: vm.settings.brightness, range: -100...100, defaultValue: 0, onChange: vm.setBrightness)
-                ValueSlider("Warmth", value: vm.settings.warmth, range: -100...100, defaultValue: 0, onChange: vm.setWarmth)
+                if vm.settings.monoMode {
+                    FilterRow(selected: vm.settings.filter, onSelect: vm.setFilter)
+                } else {
+                    ValueSlider("Warmth", value: vm.settings.warmth, range: -100...100, defaultValue: 0, onChange: vm.setWarmth)
+                }
             }
             .padding(.horizontal, 16)
             .padding(.top, 4)
@@ -237,6 +243,11 @@ struct CameraScreen: View {
             }
             .frame(width: 56, height: 56)
             Spacer()
+            // B&W mode switch (RawBoy Film), centred between the last photo and the shutter.
+            if !Edition.monoLooks.isEmpty {
+                MonoToggle(on: vm.settings.monoMode, onChange: vm.setMono)
+                Spacer()
+            }
             Button(action: vm.shutter) {
                 Circle().fill(vm.status == .ready ? Color.white : .gray).padding(8)
                     .overlay(Circle().stroke(vm.status == .ready ? Color.white : .gray, lineWidth: 4))
@@ -363,8 +374,70 @@ private struct LoupeFrame: View {
     }
 }
 
+/**
+ * Colour / black and white switch: "B&W", filled while B&W mode is on. B&W mode keeps its own stock and filter, and
+ * colour mode its look and warmth, so the two can be swapped back and forth. Mirrors Android's MonoToggle.
+ */
+private struct MonoToggle: View {
+    let on: Bool
+    let onChange: (Bool) -> Void
+
+    var body: some View {
+        Button { onChange(!on) } label: {
+            Text("B&W").font(.subheadline.weight(.semibold))
+                .foregroundStyle(on ? Color.black : Color.white)
+                .frame(width: 48, height: 48)
+                .background(RoundedRectangle(cornerRadius: 14).fill(on ? Color.white : Color(white: 0.16)))
+        }
+        .accessibilityLabel("Black and white")
+        .accessibilityValue(on ? "On" : "Off")
+    }
+}
+
+/** B&W mode's colour filter: one capsule per BwFilter, a dot of its colour before the name; scrolls on narrow screens. */
+private struct FilterRow: View {
+    let selected: BwFilter
+    let onSelect: (BwFilter) -> Void
+
+    private static func dot(_ f: BwFilter) -> Color? {
+        switch f {
+        case .off: return nil
+        case .yellow: return Color(red: 0.91, green: 0.77, blue: 0)
+        case .orange: return Color(red: 0.94, green: 0.54, blue: 0)
+        case .red: return Color(red: 0.82, green: 0.13, blue: 0.13)
+        case .green: return Color(red: 0.13, green: 0.67, blue: 0.13)
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text("Filter").font(.subheadline).frame(width: 88, alignment: .leading)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 6) {
+                    ForEach(BwFilter.allCases, id: \.self) { f in
+                        let on = f == selected
+                        Button { onSelect(f) } label: {
+                            HStack(spacing: 4) {
+                                if let c = Self.dot(f) { Circle().fill(c).frame(width: 8, height: 8) }
+                                Text(f.label).font(.footnote)
+                            }
+                            .padding(.horizontal, 10)
+                            .frame(height: 28)
+                            .foregroundStyle(on ? Color.black : Color.white)
+                            .background(Capsule().fill(on ? Color.white : Color(white: 0.16)))
+                        }
+                        .accessibilityAddTraits(on ? .isSelected : [])
+                    }
+                }
+            }
+        }
+        .frame(height: ValueSlider.rowHeight)
+    }
+}
+
 /** The look, picked from a menu (Pro's stock picker). */
 private struct LookPicker: View {
+    let looks: [Look]
     let selectedId: String
     let onSelect: (String) -> Void
 
@@ -373,10 +446,10 @@ private struct LookPicker: View {
             Text("Look").font(.subheadline).frame(width: 88, alignment: .leading)
             Picker("Look", selection: Binding(get: { selectedId }, set: { onSelect($0) })) {
                 // Colour and black and white looks under their own headings, when the list has both.
-                let mono = Edition.looks.filter(\.monochrome)
-                let color = Edition.looks.filter { !$0.monochrome }
+                let mono = looks.filter(\.monochrome)
+                let color = looks.filter { !$0.monochrome }
                 if mono.isEmpty || color.isEmpty {
-                    ForEach(Edition.looks) { Text($0.name).tag($0.id) }
+                    ForEach(looks) { Text($0.name).tag($0.id) }
                 } else {
                     Section("Color") { ForEach(color) { Text($0.name).tag($0.id) } }
                     Section("Black & white") { ForEach(mono) { Text($0.name).tag($0.id) } }

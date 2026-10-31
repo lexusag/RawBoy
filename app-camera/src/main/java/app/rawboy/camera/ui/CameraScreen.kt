@@ -78,6 +78,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -108,6 +109,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.rawboy.auto.looks.LookApplier
+import app.rawboy.color.BwFilter
 import app.rawboy.camera.BurstMode
 import app.rawboy.camera.CameraSettings
 import app.rawboy.camera.CameraStatus
@@ -363,16 +365,22 @@ fun CameraScreen(
 
             // A menu instead of a strip of chips, and one thin row per slider: the viewfinder keeps the screen.
             Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp)) {
+                // B&W mode lists only the mono stocks and has Filter where Warmth is.
+                val looks = if (settings.monoMode) Edition.monoLooks else Edition.looks
                 LookDropdown(
                     label = "Look",
-                    looks = Edition.looks,
-                    selected = Edition.looks.firstOrNull { it.id == settings.lookId },
+                    looks = looks,
+                    selected = looks.firstOrNull { it.id == settings.look.id },
                     onSelect = { vm.setLook(it.id) },
                     labelWidth = 88.dp,
                 )
                 LookSlider("Strength", settings.strength, 0f..100f, LookApplier.DEFAULT_STRENGTH, vm::setStrength)
                 LookSlider("Brightness", settings.brightness, -100f..100f, 0f, vm::setBrightness)
-                LookSlider("Warmth", settings.warmth, -100f..100f, 0f, vm::setWarmth)
+                if (settings.monoMode) {
+                    FilterRow(settings.filter, vm::setFilter)
+                } else {
+                    LookSlider("Warmth", settings.warmth, -100f..100f, 0f, vm::setWarmth)
+                }
             }
 
             Row(
@@ -394,7 +402,10 @@ fun CameraScreen(
                         )
                     }
                 }
-                Spacer(Modifier.weight(1f))
+                // B&W mode switch (RawBoy Film), centred between the last photo and the shutter.
+                Box(Modifier.weight(1f), contentAlignment = Alignment.Center) {
+                    if (Edition.monoLooks.isNotEmpty()) MonoToggle(settings.monoMode, vm::setMono)
+                }
                 Shutter(
                     enabled = status == CameraStatus.READY && !merging,
                     onClick = vm::shutter,
@@ -628,6 +639,61 @@ private fun Shutter(enabled: Boolean, onClick: () -> Unit, modifier: Modifier = 
             .clickable(enabled = enabled, onClick = onClick),
     )
 }
+
+/**
+ * Colour / black and white switch: "B&W", filled while B&W mode is on. B&W mode keeps its own stock and filter, and
+ * colour mode its look and warmth, so the two can be swapped back and forth.
+ */
+@Composable
+private fun MonoToggle(on: Boolean, onChange: (Boolean) -> Unit) {
+    Box(
+        Modifier
+            .size(48.dp)
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (on) Color.White else Color(0xFF2A2A2A))
+            .clickable { onChange(!on) }
+            .semantics {
+                contentDescription = "Black and white"
+                stateDescription = if (on) "On" else "Off"
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text("B&W", style = MaterialTheme.typography.labelLarge, color = if (on) Color.Black else Color.White)
+    }
+}
+
+/** B&W mode's colour filter: one chip per [BwFilter], a dot of its colour before the name; scrolls on narrow screens. */
+@Composable
+private fun FilterRow(selected: BwFilter, onSelect: (BwFilter) -> Unit) {
+    Row(Modifier.height(36.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text("Filter", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(88.dp))
+        Row(
+            Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            for (f in BwFilter.entries) {
+                val dot = FILTER_COLORS[f]
+                FilterChip(
+                    selected = f == selected,
+                    onClick = { onSelect(f) },
+                    label = { Text(f.label) },
+                    leadingIcon = if (dot == null) null else {
+                        { Box(Modifier.size(8.dp).clip(CircleShape).background(dot)) }
+                    },
+                    modifier = Modifier.height(30.dp),
+                )
+            }
+        }
+    }
+}
+
+private val FILTER_COLORS = mapOf(
+    BwFilter.YELLOW to Color(0xFFE8C400),
+    BwFilter.ORANGE to Color(0xFFF08A00),
+    BwFilter.RED to Color(0xFFD22222),
+    BwFilter.GREEN to Color(0xFF22AA22),
+)
 
 /** Slider with its value; double-tap the slider or tap the value to reset. */
 @Composable

@@ -25,6 +25,8 @@ import Foundation
  * - curves: point curves (RGB, then red, green, blue) on the final display-encoded image (see ToneCurves)
  * - RGB primaries (after darktable): redHue/greenHue/blueHue in degrees (-45..45),
  *   red/green/bluePurity -200..200 (0 = unchanged), tintHue degrees (-180..180), tintPurity 0..100
+ * - bwFilter: colour filter for black and white (BwFilter, RawBoy Film's B&W mode; .off = identity), channel gains
+ *   after white balance and the RGB primaries
  * - rotation: clockwise quarter turns; straighten: degrees -45..45, + turns clockwise (auto crop).
  * - flipHorizontal/flipVertical: mirror the photo (display orientation, before rotation) left-right / top-bottom.
  * - cropLeft/Top/Right/Bottom: 0..1 edges of the user crop within the rotated + straightened frame
@@ -54,6 +56,7 @@ public struct DevelopParams: Equatable, Sendable {
     public var bluePurity: Float = 0
     public var tintHue: Float = 0
     public var tintPurity: Float = 0
+    public var bwFilter: BwFilter = .off
     public var denoise: Float = 0
     public var colorDenoise: Float? = nil
     public var grain: Float = 0

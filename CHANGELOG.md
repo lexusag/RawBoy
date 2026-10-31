@@ -1,5 +1,16 @@
 # Changelog
 
+**RawBoy Film: black and white mode (2026-10-31)**
+
+- A **B&W** button left of the shutter switches RawBoy Film to black and white, live in the viewfinder. The Look menu
+  then lists the black and white films from RawBoy Auto (Yellow Mono Soft, 400, Push, Hard, Yellow Cine Mono and Cine
+  Mono Soft), and **Filter** takes Warmth's place: None, Yellow (the default), Orange, Red or Green, like a coloured
+  filter on the lens (Red: dark skies, smooth skin; Green: darker skin, lighter leaves). Middle grey keeps its
+  brightness with every filter. Each mode remembers its own look, so switching back finds the colour look again.
+- The JPEG is black and white; the DNG stays in colour. Press and hold still shows the colour picture without the look.
+- Engine (all ports): `DevelopParams.bwFilter`, channel gains after white balance (`BwFilter.kt/.ts/.swift`); identity by
+  default, so nothing else changes.
+
 **RawBoy Camera and Film (Android): no noisy border on merged night shots (2026-10-31)**
 
 - Night shots merged from a burst could show a strip along the edges, about 20 pixels wide, with clearly more grain

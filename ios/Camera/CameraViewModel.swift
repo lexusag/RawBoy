@@ -429,10 +429,7 @@ final class CameraViewModel: ObservableObject {
     private func publish() {
         guard let l = live, let f = renderer.frame else { return }
         let s = settings
-        let look = Edition.look(s.lookId)
-        var p = compare ? l.auto : LookApplier.apply(l.auto, look: look, strength: s.strength,
-                                                      adjust: Adjustments(brightness: s.brightness, warmth: s.warmth),
-                                                      hasFace: l.stats.hasFace)
+        var p = compare ? l.auto : s.develop(l.auto, hasFace: l.stats.hasFace)
         // The camera has already denoised and sharpened the preview stream.
         p.denoise = 0
         p.sharpening = 0
@@ -481,7 +478,10 @@ final class CameraViewModel: ObservableObject {
 
     // MARK: - Controls
 
-    func setLook(_ id: String) { change { $0.lookId = id } }
+    /** Picks id for the current mode: B&W mode's stock or the colour look. */
+    func setLook(_ id: String) { change { if $0.monoMode { $0.monoLookId = id } else { $0.lookId = id } } }
+    func setMono(_ on: Bool) { change { $0.mono = on } }
+    func setFilter(_ f: BwFilter) { change { $0.filter = f } }
     func setStrength(_ v: Float) { change { $0.strength = v } }
     func setBrightness(_ v: Float) {
         change { $0.brightness = v }
@@ -685,7 +685,7 @@ final class CameraViewModel: ObservableObject {
     /** Raw -> auto develop + look -> JPEG (jpegli), as RawBoy Auto develops a photo. */
     private func develop(_ shot: Shot) async throws {
         let s = shot.settings
-        let look = Edition.look(s.lookId)
+        let look = s.look
         let started = Date()
         let tempDir = FileManager.default.temporaryDirectory
         let dngURL = tempDir.appendingPathComponent(shot.name + ".dng")
@@ -712,9 +712,7 @@ final class CameraViewModel: ObservableObject {
                     let a = AutoAnalysis.analyze(img, label: shot.name, noiseIsoScale: noiseScale, fallbackIso: shot.iso,
                                                  detectSkin: shot.mayHaveFace, meter: shot.meter, phoneAe: true,
                                                  captureEv: shot.compensationEv)
-                    var params = LookApplier.apply(a.autoBase, look: look, strength: s.strength,
-                                                   adjust: Adjustments(brightness: s.brightness, warmth: s.warmth),
-                                                   hasFace: a.stats.hasFace)
+                    var params = s.develop(a.autoBase, hasFace: a.stats.hasFace)
                     // High ISO: more denoise than the auto develop's table, up to the coarse stage (denoise > 65).
                     params.denoise = max(params.denoise, Self.highIsoDenoise(a.stats.iso * noiseScale))
                     params.colorDenoise = Self.measuredColorDenoise(img, exposure: params.exposure, denoise: params.denoise)

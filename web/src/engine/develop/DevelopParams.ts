@@ -1,3 +1,4 @@
+import type { BwFilter } from '../color/BwFilter';
 import type { MaskLayer } from './Masks';
 import type { LightLeak } from './LightLeaks';
 import { DEFAULT_CURVES, type ToneCurves } from './ToneCurve';
@@ -43,6 +44,8 @@ export const toneMapperId = (t: ToneMapper): number => TONE_MAPPERS.find((m) => 
  * - curves: point curves (RGB, then red, green, blue) on the final display-encoded image (see ToneCurve.ts)
  * - RGB primaries (after darktable): red/green/blueHue in degrees (-45..45), red/green/bluePurity -200..200,
  *   tintHue degrees (-180..180), tintPurity 0..100
+ * - bwFilter: colour filter for black and white (BwFilter.ts, RawBoy Film's B&W mode; 'none' = identity), channel gains
+ *   after white balance and the RGB primaries
  * - rotation: clockwise quarter turns; straighten: degrees -45..45, + turns clockwise (auto crop).
  * - flipHorizontal/flipVertical: mirror the photo (display orientation, before rotation) left-right / top-bottom.
  * - cropLeft/Top/Right/Bottom: 0..1 edges of the user crop within the rotated + straightened frame
@@ -74,6 +77,7 @@ export interface DevelopParams {
   bluePurity: number;
   tintHue: number;
   tintPurity: number;
+  bwFilter: BwFilter;
   denoise: number;
   colorDenoise: number | null;
   grain: number;
@@ -138,6 +142,7 @@ export const DEFAULT_PARAMS: Readonly<DevelopParams> = Object.freeze({
   bluePurity: 0,
   tintHue: 0,
   tintPurity: 0,
+  bwFilter: 'none',
   denoise: 0,
   colorDenoise: null,
   grain: 0,

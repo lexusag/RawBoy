@@ -1,4 +1,5 @@
 import { Mat3 } from '../color/Mat3';
+import { bwFilterMatrix } from '../color/BwFilter';
 import { Primaries } from '../color/Primaries';
 import { WhiteBalance } from '../color/WhiteBalance';
 import { effectiveColorDenoise, toneMapperId, type DevelopParams } from '../develop/DevelopParams';
@@ -243,8 +244,13 @@ export class ShaderParams {
     const sourceWhite = WhiteBalance.xyFromTempTint(asShot.temperature, asShot.tint);
     const targetWhite = WhiteBalance.xyFromTempTint(p.temperature, p.tint);
     return new ShaderParams(
-      // White balance, then the RGB primaries adjustment; both are 3x3 in linear Rec.2020.
-      Mat3.toGlColumnMajor(Mat3.multiply(Primaries.fromParams(p), WhiteBalance.rebalanceMatrix(sourceWhite, targetWhite))),
+      // White balance, then the RGB primaries adjustment, then the B&W filter; all 3x3 in linear Rec.2020.
+      Mat3.toGlColumnMajor(
+        Mat3.multiply(
+          bwFilterMatrix(p.bwFilter),
+          Mat3.multiply(Primaries.fromParams(p), WhiteBalance.rebalanceMatrix(sourceWhite, targetWhite)),
+        ),
+      ),
       2 ** (p.exposure + BASE_EXPOSURE_EV),
       2 ** ((p.contrast / 100) * 0.7),
       1 + p.saturation / 100,

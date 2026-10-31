@@ -144,9 +144,12 @@ class ShaderParams(
             val sourceWhite = WhiteBalance.xyFromTempTint(asShot.temperature.toDouble(), asShot.tint.toDouble())
             val targetWhite = WhiteBalance.xyFromTempTint(p.temperature.toDouble(), p.tint.toDouble())
             return ShaderParams(
-                // White balance, then the RGB primaries adjustment; both are 3x3 in linear Rec.2020.
+                // White balance, then the RGB primaries adjustment, then the B&W filter; all 3x3 in linear Rec.2020.
                 whiteBalance = Mat3.toGlColumnMajor(
-                    Mat3.multiply(Primaries.fromParams(p), WhiteBalance.rebalanceMatrix(sourceWhite, targetWhite)),
+                    Mat3.multiply(
+                        p.bwFilter.matrix(),
+                        Mat3.multiply(Primaries.fromParams(p), WhiteBalance.rebalanceMatrix(sourceWhite, targetWhite)),
+                    ),
                 ),
                 exposure = 2f.pow(p.exposure + BASE_EXPOSURE_EV),
                 contrast = 2f.pow(p.contrast / 100f * 0.7f),
