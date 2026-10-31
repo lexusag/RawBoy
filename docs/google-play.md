@@ -22,6 +22,10 @@ only when you start it from the Actions tab.
 
 ## One-time setup
 
+### 0. Privacy policy address
+
+Play asks for a public privacy policy URL for every app. The four Android apps share one: `https://app.rawboy.link/privacy-android` (`web/public/privacy-android.html`, deployed with the website by `release.yml`). Update it, and the date on it, if the apps start collecting anything new or a library's data use changes.
+
 ### 1. Play Console: the apps and their signing key
 
 Each app must exist in Play Console before the workflow can upload to it, and its first bundle has to be uploaded

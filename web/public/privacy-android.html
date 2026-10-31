@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <meta name="theme-color" content="#121212" />
+    <title>Privacy policy · RawBoy Android apps</title>
+    <meta name="description" content="How the RawBoy Android apps handle your photos and data: everything is developed on your phone, with no accounts, ads or analytics of our own." />
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <!-- Static page served as is (public/), the privacy policy link of the four Android apps on Google Play (docs/google-play.md). -->
+    <style>
+      html { background: #121212; }
+      body { max-width: 720px; margin: 0 auto; padding: 40px 16px 64px; color: #ececec; font: 16px/1.6 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+      h1 { font-size: 28px; margin: 0 0 4px; }
+      h2 { font-size: 20px; margin: 32px 0 8px; }
+      a { color: #e8a33d; }
+      .muted { color: #9a9aa2; }
+      li { margin: 4px 0; }
+    </style>
+  </head>
+  <body>
+    <h1>Privacy policy</h1>
+    <p class="muted">RawBoy, RawBoy Auto, RawBoy Camera and RawBoy Film for Android · Last updated 31 October 2026</p>
+    <p>
+      The RawBoy apps are free photo apps made by an independent developer, Oleksii Mitskevych, not a company. They
+      have no accounts, no ads, no in-app purchases and no analytics of their own. This page explains what happens to
+      your photos and data.
+    </p>
+
+    <h2>Your photos stay on your phone</h2>
+    <ul>
+      <li>Photos you open are decoded and developed on your phone, by the app itself. They are never uploaded to
+        RawBoy or to any server: RawBoy runs no server.</li>
+      <li>Exports and photos you take are saved in your phone's Pictures folder (for example <code>Pictures/RawBoy</code>),
+        where only you and the apps you allow can see them.</li>
+      <li>Faces and skin are found on the phone (for exposure, skin retouch and blemish removal) with Google's
+        MediaPipe library. The photo never leaves the phone for this.</li>
+    </ul>
+
+    <h2>Permissions</h2>
+    <ul>
+      <li><strong>Camera</strong> (RawBoy Camera and RawBoy Film): to show the viewfinder and take photos.</li>
+      <li><strong>Location</strong> (RawBoy Camera and RawBoy Film, only if you turn on Geotag): to write where a photo
+        was taken into that photo's own file. It is asked for only when you turn Geotag on, used only while the camera
+        is on screen, and never sent anywhere by the app.</li>
+      <li>RawBoy and RawBoy Auto ask for no permissions: you choose each photo with Android's own file picker or
+        "Open with".</li>
+    </ul>
+
+    <h2>What is stored on your phone</h2>
+    <p>
+      Your settings, presets, the batch you are working on and lens presets are kept in the app's private storage on
+      your phone. They are deleted when you uninstall the app or clear its data in Android's settings.
+    </p>
+
+    <h2>Usage statistics sent by Google's MediaPipe library</h2>
+    <p>
+      MediaPipe, the Google library that finds faces and skin on the phone, may send anonymous technical statistics
+      to Google: which of its features ran, how long it took, errors, the app's name and version, the phone model and
+      the Android version. It sends no photos, no images, no location and nothing that identifies you. RawBoy does not
+      receive this data. Google handles it under
+      <a href="https://policies.google.com/privacy">Google's privacy policy</a>.
+    </p>
+
+    <h2>Children</h2>
+    <p>The apps are not directed at children and collect no personal information from anyone.</p>
+
+    <h2>Changes and contact</h2>
+    <p>
+      If this policy changes, the new version will be posted on this page with a new date. Questions or requests:
+      <a href="mailto:lexusag@gmail.com">lexusag@gmail.com</a> or an issue at
+      <a href="https://github.com/lexusag/RawBoy/issues">github.com/lexusag/RawBoy/issues</a>.
+    </p>
+
+    <p><a href="privacy.html">Privacy policy of RawBoy Web</a> · <a href="./">Back to RawBoy Web</a></p>
+  </body>
+</html>
