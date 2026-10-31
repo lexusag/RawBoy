@@ -48,7 +48,7 @@ public final class FilmStock: @unchecked Sendable {
 
     static let assetDir = "luts/spektrafilm"
 
-    /** spektrafilm's default format: a 35 mm frame, 36 mm on the long side. Sizes grain and halation. */
+    /** The frame the film is sized on: a 35 mm frame, 36 mm on the long side. Sizes grain and halation. */
     public static let frameWidthUm: Float = 36000
 
     public var filmLutId: String { "asset:\(Self.assetDir)/\(filmLut)" }

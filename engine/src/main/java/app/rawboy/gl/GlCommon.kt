@@ -681,7 +681,7 @@ internal class FilmTextures {
         const val FILM_UNIT = 8
         const val PRINT_UNIT = 9
 
-        /** spektrafilm's default format: a 35 mm frame, 36 mm on the long side. Sizes grain and halation. */
+        /** The frame the film is sized on: a 35 mm frame, 36 mm on the long side. Sizes grain and halation. */
         const val FRAME_WIDTH_UM = 36000f
     }
 }

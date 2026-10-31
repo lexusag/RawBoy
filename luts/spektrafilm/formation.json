@@ -1,5 +1,5 @@
 {
-  "about": "RawBoy's own grain, halation and scatter for shaders/film_form.glsl (standard apps). Not spektrafilm data: RMS granularity and halation fractions are this model's parameters, fitted with tools/film_eval to RawBoy Film's renders by output statistics only (grain std by tone band, halation's added light). Scatter set by hand.",
+  "about": "RawBoy's own grain, halation and scatter for shaders/film_form.glsl (every app). Not spektrafilm data: RMS granularity and halation fractions are this model's parameters, fitted by output statistics only (grain std by tone band, halation's added light) to the renders of an earlier film shader. Scatter set by hand.",
   "defaults": {
     "layerGrain": [1.0, 0.9, 1.45],
     "halation": [0.003, 0.0022, 0.002],
