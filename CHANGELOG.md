@@ -1,5 +1,11 @@
 # Changelog
 
+**RawBoy Auto (web): lens blur shows in the photo view (2026-10-31)**
+
+- Photos sent from RawBoy with a mask's *Lens blur* showed the blur in the grid and in exported files, but Auto's
+  photo view dropped it once the RAW finished decoding. The photo view now redraws when the blur's source copy is
+  ready, so it shows the same develop as the export.
+
 **RawBoy Film: back in RawBoy, on Auto's film formation (2026-10-31)**
 
 - RawBoy Film is built from this repository again (Android `app-camera` flavour `film`, iOS target `RawBoyFilm`),

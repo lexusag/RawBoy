@@ -586,7 +586,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
       ? store.session.shaderParams(shown, analysis.defaults, shown.lut != null ? session.lutData : null, null, shown.film != null ? session.filmData : null)
       : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [loaded, shown, analysis, session.lutData, session.filmData, session.lensInfo, session.base, session.bloomSources, skinMask, session.preview],
+    [loaded, shown, analysis, session.lutData, session.filmData, session.lensInfo, session.base, session.bloomSources, session.bokehSource, skinMask, session.preview],
   );
   // Until the raw is decoded, the photo's cached preview shows its develop (no 100% view yet).
   const cached = !loaded && state.cachedPreview?.id === id ? state.cachedPreview.image : null;
