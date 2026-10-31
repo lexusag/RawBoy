@@ -1,8 +1,8 @@
 # Installing RawBoy on your iPhone
 
 RawBoy isn't on the App Store. You build it on a Mac and install it on your own iPhone with Xcode, signed with your
-Apple ID. The iOS apps are **RawBoy** (scheme `RawBoyPro`), **RawBoy Auto** (`RawBoyAuto`), **RawBoy Camera**
-(`RawBoyCamera`) and **RawBoy Film** (`RawBoyFilm`).
+Apple ID. The iOS apps are **RawBoy** (scheme `RawBoyPro`), **RawBoy Auto** (`RawBoyAuto`) and **RawBoy Camera**
+(`RawBoyCamera`).
 
 ## What you need
 
@@ -56,7 +56,7 @@ open RawBoy.xcodeproj
 1. Connect the iPhone with the cable, unlock it and tap **Trust** on "Trust This Computer?".
 2. Turn on **Developer Mode** on the iPhone: **Settings → Privacy & Security → Developer Mode**, then restart and
    confirm. The switch only appears after the iPhone has been connected to Xcode once.
-3. In Xcode, pick the scheme (`RawBoyPro`, `RawBoyAuto`, `RawBoyCamera` or `RawBoyFilm`) and your iPhone as the run destination at
+3. In Xcode, pick the scheme (`RawBoyPro`, `RawBoyAuto` or `RawBoyCamera`) and your iPhone as the run destination at
    the top of the window, then **Product → Run** (⌘R). The Debug build is what goes on the phone; the engine is
    compiled optimised in Debug too, so it isn't slower than a release build.
 4. With a free Apple ID, the first launch is refused as an "Untrusted Developer". On the iPhone, open **Settings →

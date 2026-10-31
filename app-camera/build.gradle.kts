@@ -37,20 +37,6 @@ android {
         }
     }
 
-    // Editions (src/standard, src/film: Edition.kt, plus Film's name and icon). standard = RawBoy Camera, the looks
-    // on the bundled LUTs. film = RawBoy Film, the film stocks of Auto's Film mode, with its own id so both install
-    // side by side. Both use the same engine.
-    flavorDimensions += "edition"
-    productFlavors {
-        create("standard") {
-            dimension = "edition"
-        }
-        create("film") {
-            dimension = "edition"
-            applicationIdSuffix = ".film"
-        }
-    }
-
     signingConfigs {
         if (!keystoreProperties.isEmpty) {
             create("release") {
@@ -102,6 +88,6 @@ dependencies {
     // QR codes in the viewfinder: pure Java, no Google Play services (Apache 2.0, as the notices say).
     implementation(libs.zxing.core)
     debugImplementation(libs.androidx.compose.ui.tooling)
-    // JVM unit tests (./gradlew :app-camera:testStandardDebugUnitTest).
+    // JVM unit tests (./gradlew :app-camera:testDebugUnitTest).
     testImplementation(libs.junit)
 }

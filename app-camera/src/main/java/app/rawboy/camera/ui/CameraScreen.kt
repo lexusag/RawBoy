@@ -375,9 +375,7 @@ fun CameraScreen(
                 // The Film and B&W toggles side by side in the label's place, each on or off by itself; B&W wins while on.
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Row(Modifier.width(88.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (Edition.filmLooks.isNotEmpty()) {
-                            FilmToggle(settings.film, vm::setFilm)
-                        }
+                        FilmToggle(settings.film, vm::setFilm)
                         if (Edition.monoLooks.isNotEmpty()) MonoToggle(settings.monoMode, vm::setMono)
                     }
                     LookDropdown(

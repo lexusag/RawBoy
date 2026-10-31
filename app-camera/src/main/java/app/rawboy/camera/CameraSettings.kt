@@ -100,10 +100,10 @@ data class CameraSettings(
     val monoMode: Boolean get() = mono && Edition.monoLooks.isNotEmpty()
 
     /** Film mode is on (and B&W mode isn't) and this edition has one. */
-    val filmMode: Boolean get() = film && !monoMode && Edition.filmLooks.isNotEmpty()
+    val filmMode: Boolean get() = film && !monoMode
 
     /** B&W with Film on too: the black and white looks with [FILM_MONO_CONTRAST] and more grain (see grainStrength). */
-    val filmMono: Boolean get() = monoMode && film && Edition.filmLooks.isNotEmpty()
+    val filmMono: Boolean get() = monoMode && film
 
     /** The look in effect: B&W mode's stock, Film mode's stock or the colour look. */
     val look: Look get() = when {

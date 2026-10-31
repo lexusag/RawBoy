@@ -781,7 +781,7 @@ final class CameraViewModel: ObservableObject {
         return data
     }
 
-    /** A film stock's two LUTs, loaded once (RawBoy Film). */
+    /** A film stock's two LUTs, loaded once (Film mode). */
     private func loadFilm(_ id: String) async throws -> FilmData {
         if let f = films[id] { return f }
         let data = try await Task.detached(priority: .userInitiated) {

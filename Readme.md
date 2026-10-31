@@ -2,7 +2,7 @@
 
 # RawBoy
 
-Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and Sigmoid). Four apps share one engine:
+Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and Sigmoid). Three apps share one engine:
 
 - **RawBoy** (`app-pro`): every control (see [RawBoy controls](docs/rawboy.md)).
 - **RawBoy Auto** (`app-auto`): develops raws automatically into a film look, one photo or a whole batch
@@ -10,9 +10,6 @@ Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and
 - **RawBoy Camera** (`app-camera`): a camera that previews the film look live and saves each raw shot as a
   JPEG developed by the same engine, with a Film mode (the film stocks of Auto's Film mode, the default) and a black
   and white mode (see [RawBoy Camera](docs/camera.md)).
-- **RawBoy Film** (`app-camera`, flavour `film`, `app.rawboy.camera.film`): the same camera, whose looks are the
-  film stocks of RawBoy Auto's Film mode, and the same black and white mode (see [Film looks](docs/camera.md#film-looks)); installs next to RawBoy
-  Camera. On iOS it is the `RawBoyFilm` target (same bundle id).
 - **RawBoy Web** (`web/`): RawBoy and RawBoy Auto in the browser, plus **RawBoy Browser** for culling a folder of
   raws, as three tabs (see [RawBoy Web](docs/web.md)). Try it at **[app.rawboy.link](https://app.rawboy.link)**.
 
@@ -25,7 +22,7 @@ Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and
 
 - [RawBoy controls](docs/rawboy.md): sliders, LUTs, lens corrections and output naming
 - [RawBoy Auto](docs/auto.md)
-- [RawBoy Camera](docs/camera.md), including RawBoy Film's film looks
+- [RawBoy Camera](docs/camera.md), including its Film mode
 - [RawBoy Web](docs/web.md)
 - [Google Drive in RawBoy Web](docs/google-drive.md): setting up opening from and saving to Drive
 - [Pipeline](docs/pipeline.md): how a raw is developed
@@ -43,9 +40,9 @@ Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and
 | `engine/` | Shared Android library (`:engine`): the native C++ decoder and exporter (`src/main/cpp/`: LibRaw, DNG SDK fallback, lens opcodes, blemish healing, jpegli) and the Kotlin engine (GL preview and export, lens math, presets, sessions, Auto's analysis and looks). Anything two apps need lives here. |
 | `app-pro/` | **RawBoy** for Android (`:app-pro`): the full editor UI. |
 | `app-auto/` | **RawBoy Auto** for Android (`:app-auto`): batch queue, grid and detail screens. |
-| `app-camera/` | **RawBoy Camera** (`standard` flavour) and **RawBoy Film** (`film` flavour: `src/film/`, its looks, name and icon) for Android (`:app-camera`). |
+| `app-camera/` | **RawBoy Camera** for Android (`:app-camera`). |
 | `shaders/` | The develop GLSL (develop, denoise, bokeh, light leaks, film formation): the single source of truth for Android, iOS and the web (see [shaders/README.md](shaders/README.md)). |
-| `ios/` | The iOS apps, generated with XcodeGen from `project.yml`: `Pro/`, `Auto/` and `Camera/` app targets (`Camera/` also builds RawBoy Film from `Camera/film/`), `Engine/` (the Swift/Metal port of the engine), `EngineTests/`, `native/` (the C++ engine built as frameworks), `shaders/` (generates the Metal shaders from the root `shaders/`) and `mediapipe/` (model fetch). |
+| `ios/` | The iOS apps, generated with XcodeGen from `project.yml`: `Pro/`, `Auto/` and `Camera/` app targets, `Engine/` (the Swift/Metal port of the engine), `EngineTests/`, `native/` (the C++ engine built as frameworks), `shaders/` (generates the Metal shaders from the root `shaders/`) and `mediapipe/` (model fetch). |
 | `web/` | **RawBoy Web** (Vite + React + TypeScript): `src/engine/` is the TypeScript port of the Kotlin engine, `src/ui/` the RawBoy, Auto and Browser tabs, `src/worker/` the Web Workers, `src/drive/` Google Drive, and `native/` the C++ engine compiled to WebAssembly. Also its Dockerfile and nginx config (see [web/README.md](web/README.md)). |
 | `luts/` | Bundled `.cube` film-look LUTs, plus `spektrafilm/` (spektrafilm's film stock LUTs, CC BY-SA 4.0). |
 | `docs/` | User and developer documentation (see [Documentation](#documentation)). |
@@ -54,7 +51,7 @@ Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and
 | `third_party/` | Where the Adobe DNG SDK goes for builds (see [third_party/README.md](third_party/README.md)). |
 | `licenses/` | Third-party notices shipped with the apps. |
 | `gradle/`, `*.gradle.kts`, `gradlew` | The Gradle build for the Android modules. |
-| `.github/workflows/` | CI: `release.yml` (release APKs of all four apps, and the web deploy) and `play.yml` (run by hand: signed bundles uploaded to Google Play). |
+| `.github/workflows/` | CI: `release.yml` (release APKs of all three apps, and the web deploy) and `play.yml` (run by hand: signed bundles uploaded to Google Play). |
 
 Root files: [CHANGELOG.md](CHANGELOG.md), [CONTRIBUTING.md](CONTRIBUTING.md), [LICENSE.md](LICENSE.md),
 [UI.md](UI.md) (UI backlog) and [CLAUDE.md](CLAUDE.md) (notes on how the code fits together).
@@ -66,11 +63,11 @@ build, change and use it, but not to make a product that competes with RawBoy. T
 licences (see [Third-party components](docs/third-party.md)). Contributions come with the terms in
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
-This covers **RawBoy Film** too. None of the apps (RawBoy, RawBoy Auto, RawBoy Camera, RawBoy Film, RawBoy Web, iOS)
+None of the apps (RawBoy, RawBoy Auto, RawBoy Camera, RawBoy Web, iOS)
 contain spektrafilm code: they bundle spektrafilm's film and print LUTs (CC BY-SA 4.0, see
-[Third-party components](docs/third-party.md)), which RawBoy Film's looks and Auto's Film mode render with RawBoy's
+[Third-party components](docs/third-party.md)), which Camera's and Auto's Film modes render with RawBoy's
 own `shaders/film_form.glsl`.
 
-Earlier RawBoy Film releases, built from `lexusag/RawBoyFilm`, included
+RawBoy Film, now RawBoy Camera's Film mode, was a separate app. Its earlier releases, built from `lexusag/RawBoyFilm`, included
 code ported from spektrafilm and were licensed GPLv3; their complete source stays in that repository, which is no
 longer developed.

@@ -32,10 +32,6 @@ on:
         description: RawBoy Camera (app.rawboy.camera)
         type: boolean
         default: true
-      rawboy_film:
-        description: RawBoy Film (app.rawboy.camera.film)
-        type: boolean
-        default: true
       track:
         description: Play track
         type: choice
@@ -84,7 +80,6 @@ jobs:
           PRO: ${{ inputs.rawboy }}
           AUTO: ${{ inputs.rawboy_auto }}
           CAMERA: ${{ inputs.rawboy_camera }}
-          FILM: ${{ inputs.rawboy_film }}
           NOTES: ${{ inputs.release_notes }}
         run: |
           if [[ "$VERSION_NAME" =~ ^([0-9]+)\.([0-9]{1,2})\.([0-9]{1,2})$ ]]; then
@@ -101,8 +96,7 @@ jobs:
           add() { tasks="$tasks $1"; packages="$packages${packages:+,}\"$2\""; }
           [ "$PRO" = true ] && add :app-pro:bundleRelease app.rawboy
           [ "$AUTO" = true ] && add :app-auto:bundleRelease app.rawboy.auto
-          [ "$CAMERA" = true ] && add :app-camera:bundleStandardRelease app.rawboy.camera
-          [ "$FILM" = true ] && add :app-camera:bundleFilmRelease app.rawboy.camera.film
+          [ "$CAMERA" = true ] && add :app-camera:bundleRelease app.rawboy.camera
           [ -n "$tasks" ] || { echo "::error::Tick at least one app"; exit 1; }
           [ "${#NOTES}" -le 500 ] || { echo "::error::Release notes are ${#NOTES} characters; Play allows 500"; exit 1; }
           echo "TASKS=$tasks" >> "$GITHUB_ENV"
@@ -167,7 +161,7 @@ jobs:
           CCACHE_COMPILERCHECK: content
         run: >
           ./gradlew --parallel -Dorg.gradle.jvmargs="-Xmx8g -Dfile.encoding=UTF-8"
-          -x lintVitalRelease -x lintVitalStandardRelease -x lintVitalFilmRelease
+          -x lintVitalRelease
           -Prawboy.versionName="$VERSION_NAME" -Prawboy.versionCode="$VERSION_CODE"
           -Prawboy.abis=arm64-v8a $TASKS
 
@@ -187,10 +181,8 @@ jobs:
             app-pro/build/outputs/mapping/release/mapping.txt
           collect app.rawboy.auto app-auto/build/outputs/bundle/release/app-auto-release.aab \
             app-auto/build/outputs/mapping/release/mapping.txt
-          collect app.rawboy.camera app-camera/build/outputs/bundle/standardRelease/app-camera-standard-release.aab \
-            app-camera/build/outputs/mapping/standardRelease/mapping.txt
-          collect app.rawboy.camera.film app-camera/build/outputs/bundle/filmRelease/app-camera-film-release.aab \
-            app-camera/build/outputs/mapping/filmRelease/mapping.txt
+          collect app.rawboy.camera app-camera/build/outputs/bundle/release/app-camera-release.aab \
+            app-camera/build/outputs/mapping/release/mapping.txt
 
       - name: Remove signing files
         if: always()

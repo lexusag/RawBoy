@@ -8,7 +8,7 @@ Update it when a dependency is added or upgraded.
 
 - [spektrafilm](https://github.com/andreavolpato/spektrafilm) by Andrea Volpato (its code is GPLv3; its profiles and
   LUTs are CC BY-SA 4.0, [SPEKTRAFILM_LICENSE.txt](../luts/spektrafilm/SPEKTRAFILM_LICENSE.txt)): the film and print
-  LUTs of RawBoy Film's looks and Auto's Film mode. The LUTs in `luts/spektrafilm/` are spektrafilm's own bake
+  LUTs of Camera's and Auto's Film modes. The LUTs in `luts/spektrafilm/` are spektrafilm's own bake
   (attribution in every `.cube` header; RawBoy's changes in [CHANGELOG.txt](../luts/spektrafilm/CHANGELOG.txt)) and stay
   CC BY-SA 4.0. **No spektrafilm code is used**: grain, halation and scatter are RawBoy's own
   (`shaders/film_form.glsl`, parameters in `formation.json`), so no app is GPL. As its author asks: credit it (RawBoy
@@ -36,6 +36,6 @@ Build-time tools that ship nothing (glslang, SPIRV-Cross, CMake, Gradle) aren't 
 - AgX (Troy Sobotka), as published in three.js (MIT, notice in THIRD_PARTY_NOTICES.txt), Blender 4 and Filament: the tone mapper's constants. Apple's published *Apple Log
   Profile* curve is used for the film LUTs' input encoding.
 
-RawBoy's rule (see CLAUDE.md): GPL and other copyleft code never goes into this repository, for any app including RawBoy
-Film. The earlier GPLv3 RawBoy Film releases were built from the separate `lexusag/RawBoyFilm` repository, which keeps
+RawBoy's rule (see CLAUDE.md): GPL and other copyleft code never goes into this repository, for any app. The earlier GPLv3
+RawBoy Film releases (RawBoy Film is now RawBoy Camera's Film mode) were built from the separate `lexusag/RawBoyFilm` repository, which keeps
 their source.

@@ -1,6 +1,10 @@
 import RawBoyEngine
 
-/** RawBoy Camera (target RawBoyCamera): the looks on the bundled film LUTs, as RawBoy Auto has them. */
+/**
+ * RawBoy Camera's look lists, albums and credits: the looks on the bundled film LUTs, Film mode's film stocks and B&W
+ * mode's black and white looks, as RawBoy Auto has them. Mirrors Android's Edition.kt. (Until 2026-10-31 a second
+ * target, RawBoy Film, had its own copy.)
+ */
 enum Edition {
     /** Colour looks; the black and white ones are B&W mode's (monoLooks). */
     static let looks: [Look] = Looks.all.filter { !$0.monochrome }
@@ -8,14 +12,14 @@ enum Edition {
 
     static func look(_ id: String) -> Look { Looks.byId(id) }
 
-    /** B&W mode's stocks: RawBoy Auto's black and white looks, as in RawBoy Film. */
+    /** B&W mode's stocks: RawBoy Auto's black and white looks. */
     static let monoLooks: [Look] = Looks.all.filter(\.monochrome)
     static let defaultMonoLookId = Looks.trix400.id
 
     static func monoLook(_ id: String) -> Look { monoLooks.first { $0.id == id } ?? Looks.trix400 }
 
     /**
-     * Film mode's stocks (the Film toggle): the film stocks of RawBoy Auto's Film mode, as RawBoy Film has them.
+     * Film mode's stocks (the Film toggle): the film stocks of RawBoy Auto's Film mode.
      * Their ids overlap the LUT looks' ids (portra400 is both), so Film mode keeps its own pick (filmLookId).
      */
     static let filmLooks: [Look] = FilmLooks.all

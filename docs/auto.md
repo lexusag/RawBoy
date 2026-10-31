@@ -48,7 +48,7 @@ replaced (measured on test photos: global contrast and mean colourfulness).
 a line under it says what each does; photos already in the batch keep their mode), or switch a photo in its detail view (the switch above the looks).
 Instead of a LUT on top of AgX, the photo is developed as
 film. The scene light exposes the negative, which is printed and the print scanned (slides: scanned), with the same
-12 stocks as RawBoy Film (Yellow Portrait 400/800, Yellow Vivid 100, Yellow Warm 200, Green Pastel 400, Green
+12 stocks as RawBoy Camera's Film mode (Yellow Portrait 400/800, Yellow Vivid 100, Yellow Warm 200, Green Pastel 400, Green
 Everyday 400, Yellow Cine 250D/500T, Green Vivid Slide 100, Green Slide 100, Yellow Slide 100, Yellow Classic 64) and spektrafilm's film and print LUTs. The
 grain (in film density, sized on a 36 mm frame), halation (the reddish glow around bright light) and scatter are
 RawBoy's own (`shaders/film_form.glsl`). A stock is suggested per photo (tungsten
