@@ -27,7 +27,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   - `decoder_libraw.cpp` — main decoder (LibRaw 0.21.3, fetched by CMake). Outputs camera RGB
     unrotated, applies DNG gain maps per camera channel, converts to Rec.2020, then rotates.
   - `decoder_dng.cpp` — Adobe DNG SDK fallback (DNG 1.7 / JPEG XL). Only compiled when
-    `third_party/dng_sdk` exists (see `third_party/README.md`); standard builds, release and debug, fail
+    `third_party/dng_sdk` exists (see `third_party/README.md`); Android builds, release and debug, fail
     without it (`checkDngSdk`, on `preReleaseBuild`): `-DCMAKE_BUILD_TYPE=Release` makes AGP run the Release
     CMake tasks for debug variants too (`mergeDebugNativeLibs` → `buildCMakeRelease`), which hang off that
     task. Every app, RawBoy Film included, has it.
@@ -357,7 +357,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
 ## iOS build (in progress; see ios/)
 
 - Native Swift port: `ios/project.yml` (XcodeGen; `RawBoy.xcodeproj` is generated, git-ignored). Targets `RawBoyEngine`
-  (framework), `RawBoyAuto`, `RawBoyPro`, `RawBoyCamera` (apps), `RawBoyEngineTests`. `ios/Engine/app/rawboy/` is a file-for-file
+  (framework), `RawBoyAuto`, `RawBoyPro`, `RawBoyCamera`, `RawBoyFilm` (apps), `RawBoyEngineTests`. `ios/Engine/app/rawboy/` is a file-for-file
   Swift port of the Kotlin engine (same names, `gl/` → `metal/`): a 4th copy to keep in step with Kotlin and TS.
 - Steps: `ios/native/build.sh` (C++ → `RawBoyNative.xcframework` + `RawBoyJpeg.xcframework`, engine sources in place,
   C APIs `rawboy_native.h` / `rawboy_jpeg.h`), then `cd ios && xcodegen`, then
