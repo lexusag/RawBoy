@@ -28,6 +28,8 @@ final class CameraController: NSObject, @unchecked Sendable {
         /** As-shot white (CIE xy) from the camera's white balance gains. */
         var whiteXY: [Double]?
         var iso: Float = 0
+        /** The exposure target bias the camera applies (EV), from Brightness: see setExposureBias. */
+        var compensationEv: Float = 0
         /** Faces in upright normalised coordinates (as shown). */
         var faces: [CGRect] = []
         var focusing = false
@@ -41,6 +43,37 @@ final class CameraController: NSObject, @unchecked Sendable {
     struct CaptureResult {
         let dng: Data
         let iso: Float
+        /** The exposure target bias the shot was taken with (EV): the develop takes it back out (AutoTone captureEv). */
+        let compensationEv: Float
+    }
+
+    /** Brightness as exposure compensation (EV), applied on every (re)configuration; the camera queue's own. */
+    private var exposureBiasEv: Float = 0
+
+    /**
+     * Shoot [ev] brighter or darker than the camera's AE: Brightness changes the capture (shutter, ISO), not only the
+     * develop, so a brighter setting gathers more light. The develop removes what was applied (AutoTone captureEv),
+     * so the picture's brightness still comes from the Brightness adjustment alone.
+     */
+    func setExposureBias(_ ev: Float) {
+        queue.async {
+            self.exposureBiasEv = ev
+            guard let device = self.input?.device else { return }
+            self.applyExposureBias(device)
+        }
+    }
+
+    /** Sets the device's exposure target bias within its range; call on the queue. */
+    private func applyExposureBias(_ device: AVCaptureDevice) {
+        let bias = min(max(exposureBiasEv, device.minExposureTargetBias), device.maxExposureTargetBias)
+        guard bias != device.exposureTargetBias else { return }
+        do {
+            try device.lockForConfiguration()
+            device.setExposureTargetBias(bias, completionHandler: nil)
+            device.unlockForConfiguration()
+        } catch {
+            Self.log.error("exposure bias: \(error.localizedDescription)")
+        }
     }
 
     struct Failure: LocalizedError {
@@ -163,6 +196,7 @@ final class CameraController: NSObject, @unchecked Sendable {
         }
         if device.isFocusModeSupported(.continuousAutoFocus) { device.focusMode = .continuousAutoFocus }
         device.unlockForConfiguration()
+        applyExposureBias(device)
 
         rotation = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: nil)
 
@@ -364,10 +398,11 @@ final class CameraController: NSObject, @unchecked Sendable {
                     }
                 }
                 let iso = self.input?.device.iso ?? 0
+                let bias = self.input?.device.exposureTargetBias ?? 0
                 let delegate = PhotoDelegate(gps: gps, onShutter: onShutter) { [weak self] result in
                     self?.queue.async { self?.captures[settings.uniqueID] = nil }
                     switch result {
-                    case let .success(data): c.resume(returning: CaptureResult(dng: data, iso: iso))
+                    case let .success(data): c.resume(returning: CaptureResult(dng: data, iso: iso, compensationEv: bias))
                     case let .failure(error): c.resume(throwing: error)
                     }
                 }
@@ -432,7 +467,9 @@ extension CameraController: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
             let xy = device.chromaticityValues(for: clamped)
             let iso = device.iso
             let focusing = device.isAdjustingFocus
+            let bias = device.exposureTargetBias
             stateLock.withLock {
+                state.compensationEv = bias
                 state.whiteXY = [Double(xy.x), Double(xy.y)]
                 state.iso = iso
                 state.focusing = focusing

@@ -56,6 +56,7 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /** The camera's flash for a shot. */
@@ -78,6 +79,8 @@ class Still(
      * misaligned parts fall back to the reference). 1 for a single frame. Noise is about 1/sqrt of it.
      */
     val effectiveFrames: Float = 1f,
+    /** AE compensation (EV) the raw was shot with ([CameraController.setExposureBias]); 0 for flash stills (AE off). */
+    val compensationEv: Float = 0f,
 )
 
 /** A lens's learned flash exposure (see [CameraController.flashExposure]). */
@@ -253,6 +256,10 @@ class CameraController(context: Context) : AutoCloseable {
     @Volatile
     private var streamingPhysical: String? = null
     private val captureLock = Mutex()
+
+    /** Exposure bias (EV) asked for by Camera's Brightness ([setExposureBias]); AE compensation on every request. */
+    @Volatile
+    private var exposureBiasEv = 0f
 
     /** AE and flash modes for every request; changed only while a flash shot runs (see [torchFocus]). */
     @Volatile
@@ -670,7 +677,10 @@ class CameraController(context: Context) : AutoCloseable {
                 val diopters = _frames.value?.focusDiopters
                 val exposure = if (mode == FlashMode.OFF) null else flashExposure(inf, ambient, diopters, guides)
                 val result = stillDng(s, inf, reader, mode, exposure?.first, exifOrientation, location, out, onSubmitted)
-                Still(result, exposure?.second, distanceKnown = diopters != null && diopters > 0f)
+                Still(
+                    result, exposure?.second, distanceKnown = diopters != null && diopters > 0f,
+                    compensationEv = if (exposure == null) compensationEv() else 0f,
+                )
             } finally {
                 if (mode != FlashMode.OFF) endFlashSequence(inf, focused)
             }
@@ -902,7 +912,7 @@ class CameraController(context: Context) : AutoCloseable {
                 location?.let(dng::setLocation)
                 dng.writeByteBuffer(out, Size(width, height), merged, 0)
             }
-            return Still(reference, null, effectiveFrames = 1f + weights.sum())
+            return Still(reference, null, effectiveFrames = 1f + weights.sum(), compensationEv = compensationEv())
         } finally {
             BurstNative.destroy(h)
         }
@@ -1166,6 +1176,7 @@ class CameraController(context: Context) : AutoCloseable {
             }
         }
         set(CaptureRequest.CONTROL_AE_MODE, aeMode)
+        set(CaptureRequest.CONTROL_AE_EXPOSURE_COMPENSATION, compensationSteps(inf))
         set(CaptureRequest.FLASH_MODE, flashMode)
         set(CaptureRequest.CONTROL_AWB_MODE, CameraMetadata.CONTROL_AWB_MODE_AUTO)
         // The Pixel's templates turn video stabilization on: it crops the preview ~20% (the raw isn't), so the
@@ -1230,6 +1241,37 @@ class CameraController(context: Context) : AutoCloseable {
             Rect(a.left + a.width() / 4, a.top + a.height() / 4, a.right - a.width() / 4, a.bottom - a.height() / 4),
             MeteringRectangle.METERING_WEIGHT_MAX - 1,
         )
+    }
+
+    /**
+     * Shoots with [ev] of AE compensation (Camera's Brightness): a brighter photo is exposed brighter, a longer
+     * exposure or more gain on the sensor, so its shadows carry less noise than when only the develop lifted them; a
+     * darker one keeps more highlights. The develop takes it back out ([Still.compensationEv], AutoTone's captureEv) and
+     * adds the Brightness itself, so the picture is the same. Rounded to the camera's step, within its range.
+     */
+    fun setExposureBias(ev: Float) {
+        handler.post {
+            val before = info?.let(::compensationSteps)
+            exposureBiasEv = ev
+            // A slider drag sends every frame: restart the preview only when the camera's step changes.
+            if (info?.let(::compensationSteps) != before) runCatching { repeatPreview() }
+        }
+    }
+
+    /** AE compensation steps [exposureBiasEv] rounds to on [inf]'s camera (0 if it has no compensation). */
+    private fun compensationSteps(inf: Info): Int {
+        val c = characteristicsOf(inf)
+        val range = c.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_RANGE) ?: return 0
+        val step = c.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP)?.toFloat() ?: return 0
+        if (step <= 0f) return 0
+        return (exposureBiasEv / step).roundToInt().coerceIn(range.lower, range.upper)
+    }
+
+    /** The EV of [compensationSteps]: what the preview and stills (without flash) are shot with. */
+    fun compensationEv(): Float {
+        val inf = info ?: return 0f
+        val step = characteristicsOf(inf).get(CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP)?.toFloat() ?: return 0f
+        return compensationSteps(inf) * step
     }
 
     /** The opened camera's characteristics (the logical camera when a physical lens is streamed). */

@@ -158,6 +158,11 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   Auto): the phone's AE is kept, but lifted to `PHONE_KEY` (0.06) when it put the metered key below it (the Pixel's AE
   protects highlights: a white pigeon or a window in the box took the frame 1-2 EV down), never darker, max +2 EV.
   Re-metering to `AutoTone.TARGET_KEY` put rooms 1-2 EV under the Pixel's camera; plain AE (#87) still went dark on highlights.
+  Brightness (2026-10-31) also goes into the capture as AE compensation (`CameraController.setExposureBias`: Camera2
+  `CONTROL_AE_EXPOSURE_COMPENSATION` in `setCommon`, rounded to the step and range; iOS `setExposureTargetBias`), and
+  `AutoTone.exposure(captureEv)` meters as if uncompensated, then subtracts it, so the picture equals the old
+  develop-only Brightness. The shot carries the bias in force at the shutter (`Still`/`CaptureResult.compensationEv`;
+  0 for Android's manual flash stills); a slider drag restarts the preview only when the step changes.
   iOS: the same (`AutoTone.exposure(phoneAe:)`, viewfinder and shots), flash shots included (the iPhone's flash is
   exposed by its own AE, no flash guide). Shutter sound: iOS 18's `isShutterSoundSuppressionEnabled` where
   `isShutterSoundSuppressionSupported` (not in Japan/Korea; before iOS 18 the click always plays).

@@ -1,5 +1,12 @@
 # Changelog
 
+**RawBoy Camera and Film: Brightness changes the exposure (2026-10-31)**
+
+- Brightness used to brighten or darken only the develop. It now also sets the camera's exposure compensation, so a
+  brighter setting takes the photo with a longer shutter or more gain (cleaner shadows) and a darker one keeps more
+  highlights. The developed picture looks as bright as before at each setting. Flash shots on Android keep their
+  own manual exposure.
+
 **RawBoy Auto (Android): no blank flash when swiping between photos (2026-10-31)**
 
 - Swiping to the next photo showed its thumbnail, then an empty dark frame for up to a second, then the photo. Each

@@ -92,6 +92,8 @@ final class CameraViewModel: ObservableObject {
         let viewfinderKey: Float?
         /** Sensor ISO from the capture, in case the DNG lacks it. */
         let iso: Float
+        /** Exposure target bias the shot was taken with (Brightness), taken back out by the develop. */
+        let compensationEv: Float
         /** The camera saw a face at the shutter: run skin detection. */
         let mayHaveFace: Bool
         /** The viewfinder's 512 px copy at the shutter (debug snapshots). */
@@ -205,6 +207,7 @@ final class CameraViewModel: ObservableObject {
                 let lens = info ?? all.first { $0.label == settings.lens } ?? all.first { $0.label == "W" } ?? all[0]
                 info = lens
                 flashAvailable = lens.hasFlash
+                controller.setExposureBias(Self.exposureBias(settings))
                 recording = try await controller.start(lens, format: settings.rawFormat)
                 guard !Task.isCancelled else { return }
                 shutterSoundRequired = controller.shutterSoundRequired
@@ -406,7 +409,7 @@ final class CameraViewModel: ObservableObject {
             let stats = SceneAnalyzer.analyze(base, skin: skin, iso: state.iso, meter: meter)
             // The phone's auto exposure set the frame (and the shot's raw): keep it, lifted where it went dark, as the
             // shot does (see develop).
-            let auto = AutoTone.develop(stats, asShot: defaults, phoneAe: true)
+            let auto = AutoTone.develop(stats, asShot: defaults, phoneAe: true, captureEv: state.compensationEv)
             await MainActor.run {
                 guard let self else { return }
                 self.analysing = false
@@ -480,7 +483,13 @@ final class CameraViewModel: ObservableObject {
 
     func setLook(_ id: String) { change { $0.lookId = id } }
     func setStrength(_ v: Float) { change { $0.strength = v } }
-    func setBrightness(_ v: Float) { change { $0.brightness = v } }
+    func setBrightness(_ v: Float) {
+        change { $0.brightness = v }
+        controller.setExposureBias(Self.exposureBias(settings))
+    }
+
+    /** Brightness also shoots brighter or darker (exposure target bias), as many stops as it adds to the develop. */
+    private static func exposureBias(_ s: CameraSettings) -> Float { s.brightness / 100 * LookApplier.brightnessEv }
     func setWarmth(_ v: Float) { change { $0.warmth = v } }
     func setJpegQuality(_ q: Int) { change { $0.jpegQuality = min(max(q, CameraSettings.minQuality), 100) } }
     func setKeepDng(_ keep: Bool) { change { $0.keepDng = keep } }
@@ -638,7 +647,7 @@ final class CameraViewModel: ObservableObject {
                     Task { @MainActor in self?.shutterCount += 1 }
                 }
                 shots.append(Shot(dng: result.dng, name: name, settings: s, viewfinderKey: viewfinderKey,
-                                  iso: result.iso, mayHaveFace: mayHaveFace, viewfinder: live?.base, meter: meter))
+                                  iso: result.iso, compensationEv: result.compensationEv, mayHaveFace: mayHaveFace, viewfinder: live?.base, meter: meter))
                 developNext()
             } catch {
                 Self.log.error("capture: \(error.localizedDescription)")
@@ -701,7 +710,8 @@ final class CameraViewModel: ObservableObject {
                     // the phone's camera. Flash shots too: unlike the Pixel's manual flash, the iPhone's flash is
                     // exposed by its own AE.
                     let a = AutoAnalysis.analyze(img, label: shot.name, noiseIsoScale: noiseScale, fallbackIso: shot.iso,
-                                                 detectSkin: shot.mayHaveFace, meter: shot.meter, phoneAe: true)
+                                                 detectSkin: shot.mayHaveFace, meter: shot.meter, phoneAe: true,
+                                                 captureEv: shot.compensationEv)
                     var params = LookApplier.apply(a.autoBase, look: look, strength: s.strength,
                                                    adjust: Adjustments(brightness: s.brightness, warmth: s.warmth),
                                                    hasFace: a.stats.hasFace)

@@ -349,6 +349,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 _flashAvailable.value = inf.hasFlash
                 _hiRes.value = inf.hiRes
+                controller.setExposureBias(exposureBias(_settings.value))
                 controller.start(inf, st)
                 _frame.value = ViewfinderRenderer.Frame(
                     bufferWidth = inf.previewSize.width,
@@ -539,7 +540,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             val stats = SceneAnalyzer.analyze(base.base, skin, state?.iso ?: 0f, meterArea())
             // The phone's auto exposure set the frame (and the shot's raw): keep it, lifted where it went dark, as the
             // shot does (see develop).
-            val auto = AutoTone.develop(stats, defaults, phoneAe = true)
+            val auto = AutoTone.develop(stats, defaults, phoneAe = true, captureEv = controller.compensationEv())
             // A new metering area (a tap, a release, a tracked subject hiding) can move the exposure by a stop at once;
             // the viewfinder eases there over a few updates instead of snapping.
             val last = live?.auto?.exposure
@@ -627,6 +628,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /**
+     * AE compensation for [s]'s Brightness: all of it goes into the capture (preview and stills), and the develop takes
+     * the applied part back out (AutoTone's captureEv), so Brightness looks the same and raises the shot's exposure.
+     */
+    private fun exposureBias(s: CameraSettings): Float = s.brightness / 100f * LookApplier.BRIGHTNESS_EV
+
     /** Only the newest control values matter: a newer publish replaces one still running. */
     private fun republish() {
         publishJob?.cancel()
@@ -696,6 +703,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private fun change(edit: (CameraSettings) -> CameraSettings) {
         val s = edit(_settings.value)
         _settings.value = s
+        controller.setExposureBias(exposureBias(s))
         // A slider drag changes settings every frame: save once it rests.
         saveJob?.cancel()
         saveJob = viewModelScope.launch {
@@ -794,7 +802,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 throw t
             }
             Log.d(TAG, "$name: capture + DNG write ${(System.nanoTime() - dngStart) / 1_000_000} ms")
-            Shot(shotId, uri, name, null, settings, viewfinderKey, isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes)
+            Shot(shotId, uri, name, null, settings, viewfinderKey, isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv)
         } else {
             val file = File(app.cacheDir, "$baseName-$shotId.dng")
             val result = try {
@@ -807,7 +815,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 file.delete()
                 throw t
             }
-            Shot(shotId, Uri.fromFile(file), "$baseName.dng", file, settings, viewfinderKey, isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes)
+            Shot(shotId, Uri.fromFile(file), "$baseName.dng", file, settings, viewfinderKey, isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv)
         }
     }
 

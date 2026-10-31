@@ -85,6 +85,8 @@ internal data class Shot(
     val effectiveFrames: Float = 1f,
     /** Whether the lens captured this raw in its maximum-resolution sensor mode, for per-mode calibration. */
     val hiRes: Boolean = false,
+    /** AE compensation (EV) the raw was shot with, from Brightness (CameraController.setExposureBias). */
+    val compensationEv: Float = 0f,
 )
 
 /** A finished shot and the sequence number assigned at its shutter, so lock screen launches hide earlier ones. */
@@ -259,7 +261,7 @@ internal object ShotSaver {
                 // which also calibrates the flash guide.
                 val a = AutoAnalysis.analyze(
                     app, img, shot.name, noiseScale, shot.iso, detectSkin = shot.mayHaveFace, meter = shot.meter,
-                    phoneAe = shot.flashGuide == null,
+                    phoneAe = shot.flashGuide == null, captureEv = shot.compensationEv,
                 )
                 val analysisMs = ms(analysisStart)
                 val looked = LookApplier.apply(

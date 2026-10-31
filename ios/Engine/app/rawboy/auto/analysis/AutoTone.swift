@@ -80,17 +80,18 @@ public enum AutoTone {
      * camera raws, and a small phone sensor is about as noisy as those at a few times its ISO.
      * A display source (JPEG, HEIC: DevelopParams.displaySource) is already exposed, toned, denoised and sharpened
      * by the camera, and its neutral render is the file itself: it gets only the base grain.
-     * [phoneAe]: RawBoy Camera's raw, exposed by the phone's AE (see exposure).
+     * [phoneAe]: RawBoy Camera's raw, exposed by the phone's AE (see exposure). [captureEv]: AE compensation the raw
+     * was shot with (Camera's Brightness, see exposure); 0 = none.
      */
     public static func develop(_ stats: SceneStats, asShot: DevelopParams, noiseIsoScale: Float = 1,
                                cameraMetered: Bool = false, noise: NoiseLevel = .none,
-                               phoneAe: Bool = false) -> DevelopParams {
+                               phoneAe: Bool = false, captureEv: Float = 0) -> DevelopParams {
         if asShot.displaySource {
             var p = asShot
             p.grain = baseGrain
             return p
         }
-        let exposure = exposure(stats, cameraMetered: cameraMetered, phoneAe: phoneAe)
+        let exposure = exposure(stats, cameraMetered: cameraMetered, phoneAe: phoneAe, captureEv: captureEv)
         let gainEv = exposure + baseExposureEv
 
         // Highlights: recover when a noticeable part of the frame lands in AgX's top stop.
@@ -127,10 +128,14 @@ public enum AutoTone {
      * unless it put the key below [phoneKey], which is then lifted to it (never darker than the phone's). With a face,
      * mostly the skin decides.
      */
-    public static func exposure(_ stats: SceneStats, cameraMetered: Bool = false, phoneAe: Bool = false) -> Float {
+    public static func exposure(_ stats: SceneStats, cameraMetered: Bool = false, phoneAe: Bool = false,
+                                captureEv: Float = 0) -> Float {
+        // [captureEv]: AE compensation the raw was shot with (Camera's Brightness moves the capture exposure too):
+        // worked out for the raw as it would be without it, then taken back out (see AutoTone.kt).
+        let uncompensated = exp2f(-captureEv)
         var ev: Float
         if phoneAe {
-            ev = max(0, log2f(phoneKey / stats.key))
+            ev = max(0, log2f(phoneKey / (stats.key * uncompensated)))
         } else if cameraMetered {
             ev = 0
         } else {
@@ -139,10 +144,10 @@ public enum AutoTone {
         if stats.skinLuminance > 0 {
             let t = ((stats.faceArea - faceAreaFrom) / (faceAreaFull - faceAreaFrom)).clamped(0, 1)
             let w = skinWeight * t * t * (3 - 2 * t)
-            let bySkin = log2f(targetSkin / stats.skinLuminance)
+            let bySkin = log2f(targetSkin / (stats.skinLuminance * uncompensated))
             ev = w * bySkin + (1 - w) * ev
         }
-        return ev.clamped(-2, 2)
+        return ev.clamped(-2, 2) - captureEv
     }
 
     /**
