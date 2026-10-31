@@ -17,8 +17,8 @@ so that `third_party/dng_sdk/dng_sdk/source/dng_host.cpp` and
 Release builds need it: Android `*Release` builds and RawBoy Web's `npm run build:public` fail without it (the
 Docker build downloads it itself). Android debug builds (Pro, Auto, Camera, RawBoy Film) need it too:
 the engine's C++ is always built in Release mode, so they run the Release CMake tasks and with them the release
-check (`checkDngSdk`). Local web builds still work without it;
-JPEG XL DNGs then fail to open.
+check (`checkDngSdk`). Local web builds and iOS builds (`ios/native/build.sh` links it into
+`RawBoyNative.xcframework` when it's there) still work without it; JPEG XL DNGs then fail to open.
 
 ## Licence
 

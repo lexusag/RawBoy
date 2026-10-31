@@ -1892,7 +1892,8 @@ Apache License 2.0 is given below.
    limitations under the License.
 
 ================================================================================
-AndroidX, Jetpack Compose and the Kotlin standard library (Android apps)
+AndroidX, Jetpack Compose, the Kotlin standard library and kotlinx.coroutines
+(Android apps)
 ================================================================================
 
 Copyright The Android Open Source Project and JetBrains s.r.o.
