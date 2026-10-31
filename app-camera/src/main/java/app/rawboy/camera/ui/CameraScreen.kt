@@ -1,5 +1,15 @@
 package app.rawboy.camera.ui
 
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.unit.Dp
+import app.rawboy.view.formatSliderValue
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -54,10 +64,8 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -162,6 +170,11 @@ fun CameraScreen(
     var showSettings by remember { mutableStateOf(false) }
     val appName = remember { context.applicationInfo.loadLabel(context.packageManager).toString() }
     var showHelp by remember { mutableStateOf(false) }
+    // Landscape: what the tall slider changes (S, B, W/F); Brightness first.
+    var adjust by rememberSaveable { mutableStateOf(Adjust.BRIGHTNESS) }
+    // Turned sideways the UI turns with the window, the viewfinder picture stays put on the glass.
+    val displayRotation = rememberDisplayRotation()
+    val turns = viewfinderTurns(displayRotation)
     // The volume keys don't shoot while a sheet is open.
     LaunchedEffect(showSettings, showHelp) { vm.settingsOpen = showSettings || showHelp }
 
@@ -192,257 +205,355 @@ fun CameraScreen(
     // A Surface, so text and icons get the theme's light content colour on black.
     Surface(color = Color.Black, contentColor = Color.White) {
     Box(Modifier.fillMaxSize()) {
-        Column(
+        // Portrait: the bar, viewfinder, controls and shutter row stacked. Landscape (the phone turned sideways):
+        // the bar's buttons in a column at the left, the viewfinder, then the S/B/W picker with one tall slider and
+        // the shutter column at the right edge, all under the right thumb.
+        BoxWithConstraints(
             Modifier
                 .fillMaxSize()
-                .statusBarsPadding()
-                .navigationBarsPadding(),
+                .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout)),
         ) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 4.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    when {
-                        merging -> "Merging frames…"
-                        pending > 0 -> "Saving $pending…"
-                        else -> ""
-                    },
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .weight(1f)
-                        .padding(start = 12.dp),
-                )
-                RawButton(settings.keepDng) { vm.setKeepDng(!settings.keepDng) }
-                BurstButton(settings.burstMode, lowLight, hiRes, flashAvailable && settings.flash != FlashMode.OFF) { vm.setBurstMode(settings.burstMode.next()) }
-                if (flashAvailable) FlashButton(settings.flash, vm::cycleFlash)
-                HelpButton(appName, CAMERA_HELP, onOpenChange = { showHelp = it })
-                IconButton(onClick = { showSettings = true }) {
-                    Icon(Icons.Filled.Settings, contentDescription = "Settings")
-                }
+        val landscape = maxWidth > maxHeight
+        val statusText = when {
+            merging -> "Merging frames…"
+            pending > 0 -> "Saving $pending…"
+            else -> ""
+        }
+        val barButtons = @Composable {
+            RawButton(settings.keepDng) { vm.setKeepDng(!settings.keepDng) }
+            BurstButton(settings.burstMode, lowLight, hiRes, flashAvailable && settings.flash != FlashMode.OFF) { vm.setBurstMode(settings.burstMode.next()) }
+            if (flashAvailable) FlashButton(settings.flash, vm::cycleFlash)
+            HelpButton(appName, CAMERA_HELP, onOpenChange = { showHelp = it })
+            IconButton(onClick = { showSettings = true }) {
+                Icon(Icons.Filled.Settings, contentDescription = "Settings")
             }
-
-            // Viewfinder, at the raw's aspect ratio, in whatever height the controls leave.
-            val f = frame
-            var viewSize by remember { mutableStateOf(IntSize.Zero) }
-            val density = LocalDensity.current
-            // While the focus ring is dragged it shows there, with a loupe; it focuses on release.
-            val shownFocus = dragPoint ?: focusPoint
-            val loupe = dragPoint?.let { (x, y) ->
-                with(density) { loupeAt(x, y, viewSize, LOUPE_SIZE.toPx(), LOUPE_GAP.toPx()) }
-            }
-            Box(
-                Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                contentAlignment = Alignment.Center,
-            ) {
-            Box(
-                Modifier
-                    .aspectRatio(f?.let { it.fullWidth.toFloat() / it.fullHeight } ?: (3f / 4f))
-                    .background(Color(0xFF0A0A0A))
-                    .onSizeChanged { viewSize = it },
-                contentAlignment = Alignment.Center,
-            ) {
-                Viewfinder(
-                    f, params, vm::onSurfaceTexture, vm::onViewfinderBase, Modifier.fillMaxSize(), loupe,
-                    onLuma = if (settings.scanQr) vm::onViewfinderLuma else null,
-                    // Only while a tap's focus may be tracked: the copies cost nothing otherwise.
-                    onTrackLuma = if (settings.trackFocus && focusPoint != null) vm::onTrackLuma else null,
-                )
-                Box(
-                    Modifier
-                        .matchParentSize()
-                        .pointerInput(Unit) {
-                            detectTapGestures(
-                                // Tap: focus lock at that point (a new tap moves it; the AF LOCK badge releases it).
-                                onTap = { vm.focusAt(it.x / size.width, it.y / size.height) },
-                                onLongPress = {}, // a hold compares (onPress); it mustn't also focus on release
-                                onPress = {
-                                    // Press and hold: the auto develop without the look.
-                                    val hold = scope.launch {
-                                        delay(COMPARE_DELAY_MS)
-                                        vm.setCompare(true)
-                                    }
-                                    tryAwaitRelease()
-                                    hold.cancel()
-                                    if (vm.compare.value) vm.setCompare(false)
-                                },
-                            )
-                        },
-                )
-                // Over the tap area, under the lens selector and the AF LOCK badge.
-                shownFocus?.let { (x, y) -> FocusHandle(x, y, viewSize, vm::focusAt, vm::dragFocus, vm::endDragFocus) }
-                when (status) {
-                    CameraStatus.NEEDS_PERMISSION -> Button(onClick = requestPermission) { Text("Allow camera") }
-                    CameraStatus.OPENING -> CircularProgressIndicator()
-                    CameraStatus.FAILED -> Text("Camera unavailable", color = MaterialTheme.colorScheme.error)
-                    CameraStatus.READY -> if (params == null) CircularProgressIndicator()
-                }
-                if (lenses.size > 1) {
-                    LensSelector(
-                        labels = lenses.map { it.label },
-                        selected = settings.lens,
-                        onSelect = vm::selectLens,
+        }
+        val lastPhoto = @Composable {
+            Box(Modifier.size(56.dp)) {
+                lastShot?.let { shot ->
+                    Image(
+                        shot.thumbnail.asImageBitmap(),
+                        contentDescription = "Last photo",
+                        contentScale = ContentScale.Crop,
                         modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = 16.dp),
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable { openPhoto(shot.uri) },
                     )
                 }
-                // Above the lens selector, out of the way of the focus ring and the top badges.
-                qrCode?.let { code ->
-                    QrChip(
-                        code,
-                        onOpen = { openQr(code) },
-                        onDismiss = vm::dismissQr,
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(start = 16.dp, end = 16.dp, bottom = if (lenses.size > 1) 84.dp else 16.dp),
-                    )
-                }
-                shownFocus?.let { (x, y) -> FocusRing(x, y, if (dragPoint != null) null else afState, focusSize) }
-                loupe?.let { LoupeFrame(it, focusSize) }
-                if (focusPoint != null) {
+            }
+        }
+        val shutterButton = @Composable {
+            Shutter(
+                enabled = status == CameraStatus.READY && !merging,
+                onClick = vm::shutter,
+                modifier = Modifier.graphicsLayer {
+                    scaleX = shutterScale.value
+                    scaleY = shutterScale.value
+                },
+            )
+        }
+        val switchButton = @Composable {
+            Box(Modifier.size(56.dp), contentAlignment = Alignment.Center) {
+                if (frontAvailable) {
                     Box(
                         Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(top = 4.dp)
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                onClick = { vm.releaseFocus() },
-                            )
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(14.dp))
+                            .background(Color(0xFF2A2A2A))
+                            .clickable(enabled = status != CameraStatus.OPENING) { vm.switchFacing() },
                         contentAlignment = Alignment.Center,
                     ) {
-                        Text(
-                            if (tracking) "TRACKING  ✕" else "AF LOCK  ✕",
-                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                            color = Color.Black,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(Color(0xFFFFD54F))
-                                .clickable { vm.releaseFocus() }
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                        Icon(
+                            CameraSwitchIcon,
+                            contentDescription = if (settings.front) "Back camera" else "Selfie camera",
                         )
                     }
                 }
-                // Shutter blink over the viewfinder.
-                if (blink.value > 0f) {
+            }
+        }
+        // B&W mode lists only the mono stocks (Film on or not) and has Filter where Warmth is. Film mode lists the film stocks.
+        val looks = when {
+            settings.monoMode -> Edition.monoLooks
+            settings.filmMode -> Edition.filmLooks
+            else -> Edition.looks
+        }
+        // The Film and B&W toggles side by side in the label's place, each on or off by itself; B&W wins while on.
+        val lookRow = @Composable { toggleWidth: Dp ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(Modifier.width(toggleWidth), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilmToggle(settings.film, vm::setFilm)
+                    if (Edition.monoLooks.isNotEmpty()) MonoToggle(settings.monoMode, vm::setMono)
+                }
+                LookDropdown(
+                    label = "",
+                    looks = looks,
+                    selected = looks.firstOrNull { it.id == settings.look.id },
+                    onSelect = { vm.setLook(it.id) },
+                    labelWidth = 0.dp,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+        }
+        CameraLayout(
+            landscape = landscape,
+            controlsWidth = LANDSCAPE_CONTROLS_WIDTH,
+            bar = {
+                if (landscape) {
+                    Column(
+                        Modifier.padding(horizontal = 4.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.SpaceEvenly,
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) { barButtons() }
+                } else {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            statusText,
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(start = 12.dp),
+                        )
+                        barButtons()
+                    }
+                }
+            },
+            viewfinder = {
+                // Viewfinder, at the raw's aspect ratio, in whatever height the controls leave.
+                val f = frame
+                val uprightAspect = f?.let { it.fullWidth.toFloat() / it.fullHeight } ?: (3f / 4f)
+                var viewSize by remember { mutableStateOf(IntSize.Zero) }
+                val density = LocalDensity.current
+                // While the focus ring is dragged it shows there, with a loupe; it focuses on release.
+                val shownFocus = dragPoint ?: focusPoint
+                val loupe = dragPoint?.let { (x, y) ->
+                    with(density) { loupeAt(x, y, viewSize, LOUPE_SIZE.toPx(), LOUPE_GAP.toPx()) }
+                }
+                Box(
+                    Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                Box(
+                    Modifier
+                        .aspectRatio(uprightAspect.let { if (turns % 2 == 1) 1f / it else it })
+                        .background(Color(0xFF0A0A0A)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Viewfinder(
+                        f, params, vm::onSurfaceTexture, vm::onViewfinderBase, Modifier.fillMaxSize(), loupe,
+                        onLuma = if (settings.scanQr) vm::onViewfinderLuma else null,
+                        // Only while a tap's focus may be tracked: the copies cost nothing otherwise.
+                        onTrackLuma = if (settings.trackFocus && focusPoint != null) vm::onTrackLuma else null,
+                        turns = turns,
+                    )
+                    // Taps, the focus handle, ring and loupe work in the upright picture's coordinates, turned with it.
                     Box(
                         Modifier
                             .matchParentSize()
-                            .background(Color.Black.copy(alpha = blink.value)),
-                    )
-                }
-                // Top right: "Without look" takes the left corner and AF LOCK the middle.
-                if (settings.showHistogram && params != null) {
-                    HistogramView(
-                        histogram,
-                        Modifier
-                            .align(Alignment.TopEnd)
-                            .padding(8.dp)
-                            .size(width = 120.dp, height = 48.dp),
-                        background = Color(0x99000000),
-                    )
-                }
-                if (compare) {
-                    Text(
-                        "Without look",
-                        style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier
-                            .align(Alignment.TopStart)
-                            .padding(12.dp)
-                            .background(Color(0x99000000))
-                            .padding(horizontal = 8.dp, vertical = 4.dp),
-                    )
-                }
-            }
-            }
-
-            // A menu instead of a strip of chips, and one thin row per slider: the viewfinder keeps the screen.
-            Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp)) {
-                // B&W mode lists only the mono stocks (Film on or not) and has Filter where Warmth is. Film mode lists the film stocks.
-                val looks = when {
-                    settings.monoMode -> Edition.monoLooks
-                    settings.filmMode -> Edition.filmLooks
-                    else -> Edition.looks
-                }
-                val selected = looks.firstOrNull { it.id == settings.look.id }
-                // The Film and B&W toggles side by side in the label's place, each on or off by itself; B&W wins while on.
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Row(Modifier.width(88.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        FilmToggle(settings.film, vm::setFilm)
-                        if (Edition.monoLooks.isNotEmpty()) MonoToggle(settings.monoMode, vm::setMono)
-                    }
-                    LookDropdown(
-                        label = "",
-                        looks = looks,
-                        selected = selected,
-                        onSelect = { vm.setLook(it.id) },
-                        labelWidth = 0.dp,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-                LookSlider("Strength", settings.strength, 0f..100f, LookApplier.DEFAULT_STRENGTH, vm::setStrength)
-                LookSlider("Brightness", settings.brightness, -100f..100f, 0f, vm::setBrightness)
-                if (settings.monoMode) {
-                    FilterRow(settings.filter, vm::setFilter)
-                } else {
-                    LookSlider("Warmth", settings.warmth, -100f..100f, 0f, vm::setWarmth)
-                }
-            }
-
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 8.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(Modifier.size(56.dp)) {
-                    lastShot?.let { shot ->
-                        Image(
-                            shot.thumbnail.asImageBitmap(),
-                            contentDescription = "Last photo",
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(RoundedCornerShape(8.dp))
-                                .clickable { openPhoto(shot.uri) },
-                        )
-                    }
-                }
-                Spacer(Modifier.weight(1f))
-                Shutter(
-                    enabled = status == CameraStatus.READY && !merging,
-                    onClick = vm::shutter,
-                    modifier = Modifier.graphicsLayer {
-                        scaleX = shutterScale.value
-                        scaleY = shutterScale.value
-                    },
-                )
-                Spacer(Modifier.weight(1f))
-                Box(Modifier.size(56.dp), contentAlignment = Alignment.Center) {
-                    if (frontAvailable) {
+                            .turned(turns)
+                            .onSizeChanged { viewSize = it },
+                    ) {
                         Box(
                             Modifier
-                                .fillMaxSize()
-                                .clip(RoundedCornerShape(14.dp))
-                                .background(Color(0xFF2A2A2A))
-                                .clickable(enabled = status != CameraStatus.OPENING) { vm.switchFacing() },
+                                .matchParentSize()
+                                .pointerInput(Unit) {
+                                    detectTapGestures(
+                                        // Tap: focus lock at that point (a new tap moves it; the AF LOCK badge releases it).
+                                        onTap = { vm.focusAt(it.x / size.width, it.y / size.height) },
+                                        onLongPress = {}, // a hold compares (onPress); it mustn't also focus on release
+                                        onPress = {
+                                            // Press and hold: the auto develop without the look.
+                                            val hold = scope.launch {
+                                                delay(COMPARE_DELAY_MS)
+                                                vm.setCompare(true)
+                                            }
+                                            tryAwaitRelease()
+                                            hold.cancel()
+                                            if (vm.compare.value) vm.setCompare(false)
+                                        },
+                                    )
+                                },
+                        )
+                        // Over the tap area, under the lens selector and the AF LOCK badge.
+                        shownFocus?.let { (x, y) -> FocusHandle(x, y, viewSize, vm::focusAt, vm::dragFocus, vm::endDragFocus) }
+                    }
+                    when (status) {
+                        CameraStatus.NEEDS_PERMISSION -> Button(onClick = requestPermission) { Text("Allow camera") }
+                        CameraStatus.OPENING -> CircularProgressIndicator()
+                        CameraStatus.FAILED -> Text("Camera unavailable", color = MaterialTheme.colorScheme.error)
+                        CameraStatus.READY -> if (params == null) CircularProgressIndicator()
+                    }
+                    // Landscape has them beside the S/B/W buttons, under the thumb.
+                    if (lenses.size > 1 && !landscape) {
+                        LensSelector(
+                            labels = lenses.map { it.label },
+                            selected = settings.lens,
+                            onSelect = vm::selectLens,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 16.dp),
+                        )
+                    }
+                    // Above the lens selector, out of the way of the focus ring and the top badges.
+                    qrCode?.let { code ->
+                        QrChip(
+                            code,
+                            onOpen = { openQr(code) },
+                            onDismiss = vm::dismissQr,
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .padding(start = 16.dp, end = 16.dp, bottom = if (lenses.size > 1 && !landscape) 84.dp else 16.dp),
+                        )
+                    }
+                    Box(Modifier.matchParentSize().turned(turns)) {
+                        shownFocus?.let { (x, y) -> FocusRing(x, y, if (dragPoint != null) null else afState, focusSize) }
+                        loupe?.let { LoupeFrame(it, focusSize) }
+                    }
+                    if (focusPoint != null) {
+                        Box(
+                            Modifier
+                                .align(Alignment.TopCenter)
+                                .padding(top = 4.dp)
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                    onClick = { vm.releaseFocus() },
+                                )
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(
-                                CameraSwitchIcon,
-                                contentDescription = if (settings.front) "Back camera" else "Selfie camera",
+                            Text(
+                                if (tracking) "TRACKING  ✕" else "AF LOCK  ✕",
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                                color = Color.Black,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(Color(0xFFFFD54F))
+                                    .clickable { vm.releaseFocus() }
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
                             )
                         }
                     }
+                    // Shutter blink over the viewfinder.
+                    if (blink.value > 0f) {
+                        Box(
+                            Modifier
+                                .matchParentSize()
+                                .background(Color.Black.copy(alpha = blink.value)),
+                        )
+                    }
+                    // Top right: "Without look" takes the left corner and AF LOCK the middle.
+                    if (settings.showHistogram && params != null) {
+                        HistogramView(
+                            histogram,
+                            Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(8.dp)
+                                .size(width = 120.dp, height = 48.dp),
+                            background = Color(0x99000000),
+                        )
+                    }
+                    if (compare) {
+                        Text(
+                            "Without look",
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier
+                                .align(Alignment.TopStart)
+                                .padding(12.dp)
+                                .background(Color(0x99000000))
+                                .padding(horizontal = 8.dp, vertical = 4.dp),
+                        )
+                    }
                 }
-            }
+                }
+            },
+            controls = {
+                if (landscape) {
+                    LandscapeControls(
+                        settings = settings,
+                        status = statusText,
+                        adjust = adjust,
+                        onAdjust = { adjust = it },
+                        lensColumn = if (lenses.size > 1) {
+                            {
+                                LensSelector(
+                                    labels = lenses.map { it.label },
+                                    selected = settings.lens,
+                                    onSelect = vm::selectLens,
+                                    modifier = Modifier,
+                                    vertical = true,
+                                )
+                            }
+                        } else {
+                            null
+                        },
+                        // The stock menu across the column, the Film and B&W buttons under it.
+                        lookRow = {
+                            Column(horizontalAlignment = Alignment.End) {
+                                LookDropdown(
+                                    label = "",
+                                    looks = looks,
+                                    selected = looks.firstOrNull { it.id == settings.look.id },
+                                    onSelect = { vm.setLook(it.id) },
+                                    labelWidth = 0.dp,
+                                    alignEnd = true,
+                                )
+                                Row(Modifier.padding(top = 4.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    FilmToggle(settings.film, vm::setFilm)
+                                    if (Edition.monoLooks.isNotEmpty()) MonoToggle(settings.monoMode, vm::setMono)
+                                }
+                            }
+                        },
+                        vm = vm,
+                    )
+                } else {
+                    // A menu instead of a strip of chips, and one thin row per slider: the viewfinder keeps the screen.
+                    Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp)) {
+                        lookRow(88.dp)
+                        LookSlider("Strength", settings.strength, 0f..100f, LookApplier.DEFAULT_STRENGTH, vm::setStrength)
+                        LookSlider("Brightness", settings.brightness, -100f..100f, 0f, vm::setBrightness)
+                        if (settings.monoMode) {
+                            FilterRow(settings.filter, vm::setFilter)
+                        } else {
+                            LookSlider("Warmth", settings.warmth, -100f..100f, 0f, vm::setWarmth)
+                        }
+                    }
+                }
+            },
+            shutter = {
+                if (landscape) {
+                    // The switch above, the shutter at the middle of the edge, the last photo below.
+                    Column(
+                        Modifier.padding(start = 8.dp, end = 12.dp, top = 8.dp, bottom = 8.dp),
+                        verticalArrangement = Arrangement.SpaceEvenly,
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        switchButton()
+                        shutterButton()
+                        lastPhoto()
+                    }
+                } else {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        lastPhoto()
+                        Spacer(Modifier.weight(1f))
+                        shutterButton()
+                        Spacer(Modifier.weight(1f))
+                        switchButton()
+                    }
+                }
+            },
+        )
         }
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter))
     }
@@ -495,20 +606,20 @@ private fun QrChip(code: QrPayload, onOpen: () -> Unit, onDismiss: () -> Unit, m
 
 /** UW · W · T, as Google Camera shows them: the selected lens in a filled circle. */
 @Composable
-private fun LensSelector(labels: List<String>, selected: String, onSelect: (String) -> Unit, modifier: Modifier) {
-    Row(
-        modifier
-            .clip(RoundedCornerShape(28.dp))
-            .background(Color(0x99000000))
-            .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        for (label in labels) {
+private fun LensSelector(
+    labels: List<String>,
+    selected: String,
+    onSelect: (String) -> Unit,
+    modifier: Modifier,
+    vertical: Boolean = false,
+) {
+    val buttons = @Composable {
+        // Upright: the longest lens at the top, as zooming in goes up.
+        for (label in if (vertical) labels.asReversed() else labels) {
             val isSelected = label == selected
             Box(
                 Modifier
-                    .size(48.dp)
+                    .size(if (vertical) 44.dp else 48.dp)
                     .clip(CircleShape)
                     .background(if (isSelected) Color(0xFFD0D0D0) else Color.Transparent)
                     .clickable { onSelect(label) },
@@ -521,6 +632,15 @@ private fun LensSelector(labels: List<String>, selected: String, onSelect: (Stri
                 )
             }
         }
+    }
+    val shape = modifier
+        .clip(RoundedCornerShape(28.dp))
+        .background(if (vertical) Color(0xFF1C1C1C) else Color(0x99000000))
+        .padding(4.dp)
+    if (vertical) {
+        Column(shape, verticalArrangement = Arrangement.spacedBy(4.dp), horizontalAlignment = Alignment.CenterHorizontally) { buttons() }
+    } else {
+        Row(shape, horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) { buttons() }
     }
 }
 
@@ -1063,3 +1183,148 @@ private val FOCUS_HANDLE_SIZE = 96.dp
 private val LOUPE_SIZE = 128.dp
 private val LOUPE_GAP = 64.dp
 private const val LOUPE_ZOOM = 3f
+
+/** Width of the landscape controls column (look menu, S/B/W picker and the tall slider) beside the shutter column. */
+private val LANDSCAPE_CONTROLS_WIDTH = 216.dp
+
+/** What the landscape slider changes: Strength, Brightness, or Warmth (Filter in B&W mode). */
+private enum class Adjust { STRENGTH, BRIGHTNESS, WARMTH }
+
+/**
+ * Landscape controls, all within the right thumb's reach: the status line and the look row on top; below, the lens
+ * buttons in a column, then round S / B / W chips (F, the filter, in B&W mode) pick what the tall slider beside the shutter changes. With F picked the
+ * filters stand there instead of the slider. A double tap on a chip or the slider resets that setting.
+ */
+@Composable
+private fun LandscapeControls(
+    settings: CameraSettings,
+    status: String,
+    adjust: Adjust,
+    onAdjust: (Adjust) -> Unit,
+    lensColumn: (@Composable () -> Unit)?,
+    lookRow: @Composable () -> Unit,
+    vm: CameraViewModel,
+) {
+    val mono = settings.monoMode
+    // Packed against the shutter column: everything right-aligned, the chips right beside the slider.
+    Column(
+        Modifier.fillMaxSize().padding(start = 4.dp, top = 4.dp, bottom = 8.dp),
+        horizontalAlignment = Alignment.End,
+    ) {
+        Text(
+            status,
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+            maxLines = 1,
+            modifier = Modifier.height(16.dp),
+        )
+        lookRow()
+        Row(
+            Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .padding(top = 6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // The lenses in the black space left of the picker, still under the thumb.
+            lensColumn?.let {
+                it()
+                Spacer(Modifier.width(2.dp))
+            }
+            Column(
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                AdjustChip("S", settings.strength.roundToInt().toString(), adjust == Adjust.STRENGTH,
+                    onSelect = { onAdjust(Adjust.STRENGTH) }, onReset = { vm.setStrength(LookApplier.DEFAULT_STRENGTH) })
+                AdjustChip("B", formatSliderValue(settings.brightness, -100f..100f), adjust == Adjust.BRIGHTNESS,
+                    onSelect = { onAdjust(Adjust.BRIGHTNESS) }, onReset = { vm.setBrightness(0f) })
+                if (mono) {
+                    AdjustChip("F", settings.filter.label, adjust == Adjust.WARMTH,
+                        onSelect = { onAdjust(Adjust.WARMTH) }, onReset = { vm.setFilter(BwFilter.NONE) })
+                } else {
+                    AdjustChip("W", formatSliderValue(settings.warmth, -100f..100f), adjust == Adjust.WARMTH,
+                        onSelect = { onAdjust(Adjust.WARMTH) }, onReset = { vm.setWarmth(0f) })
+                }
+            }
+            val primary = MaterialTheme.colorScheme.primary
+            val track = Color(0xFF555555)
+            when {
+                adjust == Adjust.WARMTH && mono -> FilterColumn(settings.filter, vm::setFilter)
+                else -> {
+                    val (value, range, default, set) = when (adjust) {
+                        Adjust.STRENGTH -> SliderSpec(settings.strength, 0f..100f, LookApplier.DEFAULT_STRENGTH, vm::setStrength)
+                        Adjust.BRIGHTNESS -> SliderSpec(settings.brightness, -100f..100f, 0f, vm::setBrightness)
+                        Adjust.WARMTH -> SliderSpec(settings.warmth, -100f..100f, 0f, vm::setWarmth)
+                    }
+                    VerticalSlider(
+                        value, range, default, set,
+                        modifier = Modifier
+                            .width(40.dp)
+                            .fillMaxHeight(),
+                        color = primary,
+                        trackColor = track,
+                    )
+                }
+            }
+        }
+    }
+}
+
+private data class SliderSpec(
+    val value: Float,
+    val range: ClosedFloatingPointRange<Float>,
+    val default: Float,
+    val onChange: (Float) -> Unit,
+)
+
+/** A round picker chip: the setting's letter with its value under it; filled while its setting is on the slider. */
+@Composable
+private fun AdjustChip(letter: String, value: String, selected: Boolean, onSelect: () -> Unit, onReset: () -> Unit) {
+    val primary = MaterialTheme.colorScheme.primary
+    Column(
+        Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(if (selected) primary else Color(0xFF2A2A2A))
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onTap = { onSelect() },
+                    onDoubleTap = {
+                        onSelect()
+                        onReset()
+                    },
+                )
+            }
+            .semantics { stateDescription = if (selected) "On the slider" else "" },
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        val ink = if (selected) Color.Black else Color.White
+        Text(letter, style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold), color = ink)
+        Text(value, style = MaterialTheme.typography.labelSmall, color = ink.copy(alpha = 0.8f), maxLines = 1)
+    }
+}
+
+/** B&W filters as a column beside the shutter (landscape's F): a dot of each filter's colour before its name. */
+@Composable
+private fun FilterColumn(selected: BwFilter, onSelect: (BwFilter) -> Unit) {
+    Column(
+        Modifier.width(96.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp, Alignment.CenterVertically),
+    ) {
+        for (f in BwFilter.entries) {
+            val dot = FILTER_COLORS[f]
+            FilterChip(
+                selected = f == selected,
+                onClick = { onSelect(f) },
+                label = { Text(f.label) },
+                leadingIcon = if (dot == null) null else {
+                    { Box(Modifier.size(8.dp).clip(CircleShape).background(dot)) }
+                },
+                modifier = Modifier.height(32.dp).fillMaxWidth(),
+            )
+        }
+    }
+}

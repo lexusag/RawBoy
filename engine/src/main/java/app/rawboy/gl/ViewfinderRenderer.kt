@@ -82,6 +82,15 @@ class ViewfinderRenderer(
     @Volatile
     var loupe: Loupe? = null
 
+    /**
+     * Clockwise quarter turns from the upright image to the window. 0 while the window is in the phone's natural
+     * orientation (portrait), as before. With the screen turned sideways the window turns but the camera image should
+     * stay put on the glass, so pass 2 (and the loupe) is drawn as in portrait into [screen] and turned onto the window
+     * ([TurnProgram]). Tap points and the loupe stay in the upright portrait coordinates either way.
+     */
+    @Volatile
+    var turns: Int = 0
+
     @Volatile
     var baseIntervalMs: Long = 300
 
@@ -129,6 +138,8 @@ class ViewfinderRenderer(
     private val luma = LumaRead()
     private val trackTarget = Target(bytes = true)
     private val track = LumaRead()
+    private val screen = Target(bytes = true)
+    private var turn: TurnProgram? = null
     private var lastBase = 0L
     private var lastLuma = 0L
     private var viewWidth = 1
@@ -145,6 +156,7 @@ class ViewfinderRenderer(
         luma.reset()
         trackTarget.reset()
         track.reset()
+        screen.reset()
         pending = null
         pixelBuffer = 0
         pixelBufferSize = 0
@@ -156,6 +168,7 @@ class ViewfinderRenderer(
         boxDown = PassProgram(PassProgram.BOX_DOWN, trilinear = false)
         tailScatter = PassProgram(PassProgram.TAIL_SCATTER, trilinear = false)
         lumaProgram = LumaProgram()
+        turn = TurnProgram()
         develop = DevelopProgram(forExport = false)
         quad = FullscreenQuad()
         lutTexture = LutTexture()
@@ -237,8 +250,18 @@ class ViewfinderRenderer(
 
         // Pass 2: develop to the screen, aspect-fit. The first params come from the first readback above.
         val p = params ?: return
-        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
-        GLES30.glViewport(0, 0, viewWidth, viewHeight)
+        // Turned: drawn upright at the window's size turned back, then turned onto the window.
+        val k = ((turns % 4) + 4) % 4
+        val viewWidth = if (k % 2 == 1) this.viewHeight else this.viewWidth
+        val viewHeight = if (k % 2 == 1) this.viewWidth else this.viewHeight
+        if (k != 0) {
+            screen.ensure(viewWidth, viewHeight, mipmapped = false)
+            screen.bindForDrawing()
+            GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
+        } else {
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+            GLES30.glViewport(0, 0, viewWidth, viewHeight)
+        }
         lutTexture!!.bind(p.lut)
         filmTextures!!.bind(p.film)
         shadingTexture!!.bind(p.lens.info.shading)
@@ -270,6 +293,11 @@ class ViewfinderRenderer(
             develop!!.bindLiveCopies(p, sw, sh, tw, th * BloomTail.BANDS)
             quad!!.draw()
             GLES30.glViewport(0, 0, viewWidth, viewHeight)
+        }
+        if (k != 0) {
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+            GLES30.glViewport(0, 0, this.viewWidth, this.viewHeight)
+            turn!!.draw(quad!!, screen.texture, k)
         }
         stats.frame(SystemClock.uptimeMillis() - now)
     }
@@ -756,6 +784,45 @@ void main() {
         }
     }
     fragColor = vec4(s / ws, 1.0);
+}
+"""
+        }
+    }
+
+    /**
+     * Copies the upright pass-2 picture onto the window turned clockwise by `turns` quarter turns. Window and texture
+     * coordinates both have y up here (the develop drew with flipY, so the picture's top is the texture's top).
+     */
+    private class TurnProgram {
+        private val id = GlUtil.createProgram(LinearizeProgram.VERTEX, FRAGMENT)
+        private val uSource = GLES30.glGetUniformLocation(id, "uSource")
+        private val uTurns = GLES30.glGetUniformLocation(id, "uTurns")
+
+        fun draw(quad: FullscreenQuad, texture: Int, turns: Int) {
+            GLES30.glUseProgram(id)
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, texture)
+            GLES30.glUniform1i(uSource, 0)
+            GLES30.glUniform1i(uTurns, turns)
+            quad.draw()
+        }
+
+        companion object {
+            const val FRAGMENT = """#version 300 es
+precision highp float;
+precision highp int;
+uniform sampler2D uSource;
+uniform int uTurns;
+in vec2 vUp;
+out vec4 fragColor;
+void main() {
+    // The picture point shown at window point vUp after turning the picture clockwise.
+    vec2 p;
+    if (uTurns == 1) p = vec2(1.0 - vUp.y, vUp.x);
+    else if (uTurns == 2) p = 1.0 - vUp;
+    else if (uTurns == 3) p = vec2(vUp.y, 1.0 - vUp.x);
+    else p = vUp;
+    fragColor = vec4(texture(uSource, p).rgb, 1.0);
 }
 """
         }

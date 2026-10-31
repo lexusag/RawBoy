@@ -12,6 +12,12 @@ struct CameraScreen: View {
     @State private var holding = false
     /** The focus point when the ring's drag began. */
     @State private var dragStart: CGPoint?
+    /** Landscape: what the tall slider changes; Brightness first. */
+    @State private var adjust: Adjust = .brightness
+    @StateObject private var orientation = InterfaceOrientation()
+
+    /** Width of the landscape controls column (look menu, S/B/W picker and the tall slider) beside the shutter column. */
+    private static let landscapeControlsWidth: CGFloat = 232
 
     private static let viewfinderSpace = "viewfinder"
     /** Grab area around the focus ring (the ring is 72 pt). */
@@ -22,31 +28,64 @@ struct CameraScreen: View {
     private static let loupeZoom: Float = 3
 
     var body: some View {
-        VStack(spacing: 0) {
-            topBar
-            viewfinder
-            // A menu instead of a strip of chips, and one row per slider: the viewfinder keeps the screen.
-            VStack(spacing: 0) {
-                // B&W mode lists only the mono stocks (Film on or not) and has Filter where Warmth is. Film mode lists the film stocks.
-                LookPicker(looks: vm.settings.monoMode ? Edition.monoLooks : vm.settings.filmMode ? Edition.filmLooks : Edition.looks,
-                           selectedId: vm.settings.look.id, onSelect: vm.setLook,
-                           film: vm.settings.film,
-                           onFilm: vm.setFilm,
-                           mono: Edition.monoLooks.isEmpty ? nil : vm.settings.monoMode,
-                           onMono: vm.setMono)
-                ValueSlider("Strength", value: vm.settings.strength, range: 0...100, defaultValue: LookApplier.defaultStrength,
-                            onChange: vm.setStrength)
-                ValueSlider("Brightness", value: vm.settings.brightness, range: -100...100, defaultValue: 0, onChange: vm.setBrightness)
-                if vm.settings.monoMode {
-                    FilterRow(selected: vm.settings.filter, onSelect: vm.setFilter)
-                } else {
-                    ValueSlider("Warmth", value: vm.settings.warmth, range: -100...100, defaultValue: 0, onChange: vm.setWarmth)
+        // Portrait: the bar, viewfinder, controls and shutter row stacked. Landscape (the phone turned sideways): the
+        // bar's buttons in a column at the left, the viewfinder, then the S/B/W picker with one tall slider and the
+        // shutter column at the right edge, all under the right thumb. One layout, so the Metal view stays on a turn.
+        GeometryReader { geo in
+            let landscape = geo.size.width > geo.size.height
+            let turns = viewfinderTurns(orientation.value)
+            CameraLayout(landscape: landscape, controlsWidth: Self.landscapeControlsWidth) {
+                Group {
+                    if landscape {
+                        VStack(spacing: 0) { barButtons.frame(maxHeight: .infinity) }
+                            .frame(width: 52)
+                            .padding(.vertical, 8)
+                    } else {
+                        topBar
+                    }
+                }
+                viewfinder(turns: turns)
+                Group {
+                    if landscape {
+                        landscapeControls
+                    } else {
+                        // A menu instead of a strip of chips, and one row per slider: the viewfinder keeps the screen.
+                        VStack(spacing: 0) {
+                            lookPicker
+                            ValueSlider("Strength", value: vm.settings.strength, range: 0...100,
+                                        defaultValue: LookApplier.defaultStrength, onChange: vm.setStrength)
+                            ValueSlider("Brightness", value: vm.settings.brightness, range: -100...100, defaultValue: 0,
+                                        onChange: vm.setBrightness)
+                            if vm.settings.monoMode {
+                                FilterRow(selected: vm.settings.filter, onSelect: vm.setFilter)
+                            } else {
+                                ValueSlider("Warmth", value: vm.settings.warmth, range: -100...100, defaultValue: 0,
+                                            onChange: vm.setWarmth)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 4)
+                    }
+                }
+                Group {
+                    if landscape {
+                        // The switch above, the shutter at the middle of the edge, the last photo below.
+                        VStack(spacing: 0) {
+                            switchButton
+                            Spacer()
+                            shutterButton
+                            Spacer()
+                            lastPhoto
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 8)
+                    } else {
+                        bottomBar
+                    }
                 }
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 4)
-            bottomBar
         }
+        .onAppear { orientation.start() }
         .background(Color.black)
         .foregroundStyle(.white)
         .toast($vm.message)
@@ -64,8 +103,20 @@ struct CameraScreen: View {
 
     private var topBar: some View {
         HStack(spacing: 18) {
-            Text(vm.pending > 0 ? "Saving \(vm.pending)…" : "").font(.caption).foregroundStyle(Color.cameraAccent)
+            Text(statusText).font(.caption).foregroundStyle(Color.cameraAccent)
             Spacer()
+            barButtons
+        }
+        .font(.title3)
+        .padding(.horizontal, 16)
+        .frame(height: 44)
+    }
+
+    private var statusText: String { vm.pending > 0 ? "Saving \(vm.pending)…" : "" }
+
+    /** RAW, flash, help and Settings: a row on top in portrait, a column at the left in landscape. */
+    @ViewBuilder private var barButtons: some View {
+        Group {
             Button { vm.setKeepDng(!vm.settings.keepDng) } label: {
                 Text("RAW").font(.caption.bold()).strikethrough(!vm.settings.keepDng)
                     .foregroundStyle(vm.settings.keepDng ? Color.cameraAccent : .white.opacity(0.6))
@@ -83,8 +134,7 @@ struct CameraScreen: View {
             Button { showSettings = true } label: { Image(systemName: "gearshape") }.accessibilityLabel("Settings")
         }
         .font(.title3)
-        .padding(.horizontal, 16)
-        .frame(height: 44)
+        .frame(minWidth: 32, minHeight: 44)
     }
 
     /**
@@ -134,45 +184,50 @@ struct CameraScreen: View {
     }
 
     // Viewfinder, at the raw's aspect ratio, in whatever height the controls leave.
-    private var viewfinder: some View {
+    private func viewfinder(turns: Int) -> some View {
         ZStack {
             Color.black
             ZStack {
                 Color(white: 0.04)
-                Viewfinder(renderer: vm.renderer)
-                GeometryReader { geo in
-                    Color.clear.contentShape(Rectangle())
-                        // Tap: focus lock at that point (a new tap moves it; the AF LOCK badge releases it).
-                        .onTapGesture { p in vm.focusAt(p.x / geo.size.width, p.y / geo.size.height) }
-                        // Press and hold: the auto develop without the look.
-                        .onLongPressGesture(minimumDuration: 0.25, perform: {}, onPressingChanged: { pressing in
-                            if pressing {
-                                holding = true
-                                Task {
-                                    try? await Task.sleep(nanoseconds: 250_000_000)
-                                    if holding { vm.setCompare(true) }
+                // The picture, taps, focus ring and loupe in the upright picture's coordinates, turned with it.
+                Turned(turns: turns) {
+                    ZStack {
+                        Viewfinder(renderer: vm.renderer)
+                        GeometryReader { geo in
+                            Color.clear.contentShape(Rectangle())
+                                // Tap: focus lock at that point (a new tap moves it; the AF LOCK badge releases it).
+                                .onTapGesture { p in vm.focusAt(p.x / geo.size.width, p.y / geo.size.height) }
+                                // Press and hold: the auto develop without the look.
+                                .onLongPressGesture(minimumDuration: 0.25, perform: {}, onPressingChanged: { pressing in
+                                    if pressing {
+                                        holding = true
+                                        Task {
+                                            try? await Task.sleep(nanoseconds: 250_000_000)
+                                            if holding { vm.setCompare(true) }
+                                        }
+                                    } else {
+                                        holding = false
+                                        if vm.compare { vm.setCompare(false) }
+                                    }
+                                })
+                            // While the ring is dragged it shows there, with a loupe; it focuses on release.
+                            if let p = vm.dragPoint ?? vm.focusPoint {
+                                let state = vm.controller.frames
+                                FocusRing(scanning: vm.dragPoint == nil && state.focusing,
+                                          box: CGFloat(state.focusBox) * min(geo.size.width, geo.size.height))
+                                    .position(x: p.x * geo.size.width, y: p.y * geo.size.height)
+                                focusHandle(p, geo.size)
+                                if vm.dragPoint != nil, let l = Self.loupe(at: p, in: geo.size) {
+                                    let side = CGFloat(l.size) * geo.size.width
+                                    LoupeFrame(box: CGFloat(state.focusBox) * min(geo.size.width, geo.size.height) * CGFloat(l.zoom))
+                                        .frame(width: side, height: side)
+                                        .position(x: CGFloat(l.centerX) * geo.size.width, y: CGFloat(l.centerY) * geo.size.height)
                                 }
-                            } else {
-                                holding = false
-                                if vm.compare { vm.setCompare(false) }
                             }
-                        })
-                    // While the ring is dragged it shows there, with a loupe; it focuses on release.
-                    if let p = vm.dragPoint ?? vm.focusPoint {
-                        let state = vm.controller.frames
-                        FocusRing(scanning: vm.dragPoint == nil && state.focusing,
-                                  box: CGFloat(state.focusBox) * min(geo.size.width, geo.size.height))
-                            .position(x: p.x * geo.size.width, y: p.y * geo.size.height)
-                        focusHandle(p, geo.size)
-                        if vm.dragPoint != nil, let l = Self.loupe(at: p, in: geo.size) {
-                            let side = CGFloat(l.size) * geo.size.width
-                            LoupeFrame(box: CGFloat(state.focusBox) * min(geo.size.width, geo.size.height) * CGFloat(l.zoom))
-                                .frame(width: side, height: side)
-                                .position(x: CGFloat(l.centerX) * geo.size.width, y: CGFloat(l.centerY) * geo.size.height)
                         }
+                        .coordinateSpace(.named(Self.viewfinderSpace))
                     }
                 }
-                .coordinateSpace(.named(Self.viewfinderSpace))
                 switch vm.status {
                 case .needsPermission:
                     Button("Allow camera") { vm.openSettingsApp() }.buttonStyle(.borderedProminent)
@@ -229,50 +284,124 @@ struct CameraScreen: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                 Color.black.opacity(blink).allowsHitTesting(false)
             }
-            .aspectRatio(vm.aspect, contentMode: .fit)
+            .aspectRatio(turns % 2 == 1 ? 1 / vm.aspect : vm.aspect, contentMode: .fit)
         }
     }
 
     private var bottomBar: some View {
         HStack {
-            Group {
-                if let shot = vm.lastShot {
-                    Image(uiImage: shot).resizable().scaledToFill()
-                        .frame(width: 56, height: 56).clipShape(RoundedRectangle(cornerRadius: 8))
-                        // The photo is in Photos; open the app there.
-                        .onTapGesture { if let url = URL(string: "photos-redirect://") { UIApplication.shared.open(url) } }
-                } else {
-                    Color.clear
-                }
-            }
-            .frame(width: 56, height: 56)
+            lastPhoto
             Spacer()
-            Button(action: vm.shutter) {
-                Circle().fill(vm.status == .ready ? Color.white : .gray).padding(8)
-                    .overlay(Circle().stroke(vm.status == .ready ? Color.white : .gray, lineWidth: 4))
-                    .frame(width: 76, height: 76)
-            }
-            .disabled(vm.status != .ready)
-            .scaleEffect(shutterScale)
-            .accessibilityLabel("Shutter")
+            shutterButton
             Spacer()
-            Group {
-                if vm.frontAvailable {
-                    Button(action: vm.switchFacing) {
-                        Image(systemName: "arrow.triangle.2.circlepath.camera").font(.title2)
-                            .frame(width: 56, height: 56)
-                            .background(RoundedRectangle(cornerRadius: 14).fill(Color(white: 0.16)))
-                    }
-                    .disabled(vm.status == .opening)
-                    .accessibilityLabel(vm.settings.front ? "Back camera" : "Selfie camera")
-                } else {
-                    Color.clear
-                }
-            }
-            .frame(width: 56, height: 56)
+            switchButton
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 8)
+    }
+
+    private var lastPhoto: some View {
+        Group {
+            if let shot = vm.lastShot {
+                Image(uiImage: shot).resizable().scaledToFill()
+                    .frame(width: 56, height: 56).clipShape(RoundedRectangle(cornerRadius: 8))
+                    // The photo is in Photos; open the app there.
+                    .onTapGesture { if let url = URL(string: "photos-redirect://") { UIApplication.shared.open(url) } }
+            } else {
+                Color.clear
+            }
+        }
+        .frame(width: 56, height: 56)
+    }
+
+    private var shutterButton: some View {
+        Button(action: vm.shutter) {
+            Circle().fill(vm.status == .ready ? Color.white : .gray).padding(8)
+                .overlay(Circle().stroke(vm.status == .ready ? Color.white : .gray, lineWidth: 4))
+                .frame(width: 76, height: 76)
+        }
+        .disabled(vm.status != .ready)
+        .scaleEffect(shutterScale)
+        .accessibilityLabel("Shutter")
+    }
+
+    private var switchButton: some View {
+        Group {
+            if vm.frontAvailable {
+                Button(action: vm.switchFacing) {
+                    Image(systemName: "arrow.triangle.2.circlepath.camera").font(.title2)
+                        .frame(width: 56, height: 56)
+                        .background(RoundedRectangle(cornerRadius: 14).fill(Color(white: 0.16)))
+                }
+                .disabled(vm.status == .opening)
+                .accessibilityLabel(vm.settings.front ? "Back camera" : "Selfie camera")
+            } else {
+                Color.clear
+            }
+        }
+        .frame(width: 56, height: 56)
+    }
+
+    // B&W mode lists only the mono stocks (Film on or not) and has Filter where Warmth is. Film mode lists the film stocks.
+    private var lookPicker: some View {
+        LookPicker(looks: vm.settings.monoMode ? Edition.monoLooks : vm.settings.filmMode ? Edition.filmLooks : Edition.looks,
+                   selectedId: vm.settings.look.id, onSelect: vm.setLook,
+                   film: vm.settings.film,
+                   onFilm: vm.setFilm,
+                   mono: Edition.monoLooks.isEmpty ? nil : vm.settings.monoMode,
+                   onMono: vm.setMono)
+    }
+
+    /**
+     * Landscape controls, all within the right thumb's reach: the status line and the look row on top; below, round
+     * S / B / W chips (F, the filter, in B&W mode) pick what the tall slider beside the shutter changes. With F picked
+     * the filters stand there instead of the slider. A double tap on a chip or the slider resets that setting.
+     */
+    private var landscapeControls: some View {
+        let s = vm.settings
+        return VStack(alignment: .leading, spacing: 0) {
+            Text(statusText).font(.caption).foregroundStyle(Color.cameraAccent).frame(height: 16)
+            lookPicker
+            HStack(spacing: 8) {
+                VStack(spacing: 12) {
+                    AdjustChip(letter: "S", value: "\(Int(s.strength.rounded()))", selected: adjust == .strength,
+                               onSelect: { adjust = .strength }, onReset: { vm.setStrength(LookApplier.defaultStrength) })
+                    AdjustChip(letter: "B", value: Self.signed(s.brightness), selected: adjust == .brightness,
+                               onSelect: { adjust = .brightness }, onReset: { vm.setBrightness(0) })
+                    if s.monoMode {
+                        AdjustChip(letter: "F", value: s.filter.label, selected: adjust == .warmth,
+                                   onSelect: { adjust = .warmth }, onReset: { vm.setFilter(.off) })
+                    } else {
+                        AdjustChip(letter: "W", value: Self.signed(s.warmth), selected: adjust == .warmth,
+                                   onSelect: { adjust = .warmth }, onReset: { vm.setWarmth(0) })
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                if adjust == .warmth && s.monoMode {
+                    FilterColumn(selected: s.filter, onSelect: vm.setFilter)
+                } else {
+                    switch adjust {
+                    case .strength:
+                        VerticalSlider(value: s.strength, range: 0...100, defaultValue: LookApplier.defaultStrength,
+                                       onChange: vm.setStrength)
+                    case .brightness:
+                        VerticalSlider(value: s.brightness, range: -100...100, defaultValue: 0, onChange: vm.setBrightness)
+                    case .warmth:
+                        VerticalSlider(value: s.warmth, range: -100...100, defaultValue: 0, onChange: vm.setWarmth)
+                    }
+                }
+            }
+            .frame(maxHeight: .infinity)
+            .padding(.top, 8)
+        }
+        .padding(.leading, 4)
+        .padding(.vertical, 8)
+    }
+
+    /** Whole numbers, + on positive values (Android's formatSliderValue). */
+    private static func signed(_ v: Float) -> String {
+        let n = Int(v.rounded())
+        return n > 0 ? "+\(n)" : "\(n)"
     }
 }
 
@@ -420,7 +549,7 @@ private struct FilterRow: View {
     let selected: BwFilter
     let onSelect: (BwFilter) -> Void
 
-    private static func dot(_ f: BwFilter) -> Color? {
+    static func dot(_ f: BwFilter) -> Color? {
         switch f {
         case .off: return nil
         case .yellow: return Color(red: 0.91, green: 0.77, blue: 0)
@@ -608,6 +737,218 @@ private struct HardwareShutter: ViewModifier {
             }
         } else {
             content
+        }
+    }
+}
+
+/** What the landscape slider changes: Strength, Brightness, or Warmth (Filter in B&W mode). */
+private enum Adjust { case strength, brightness, warmth }
+
+/** A round picker chip: the setting's letter with its value under it; filled while its setting is on the slider. */
+private struct AdjustChip: View {
+    let letter: String
+    let value: String
+    let selected: Bool
+    let onSelect: () -> Void
+    let onReset: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Text(letter).font(.subheadline.bold())
+            Text(value).font(.caption2).lineLimit(1).minimumScaleFactor(0.7).opacity(0.8)
+        }
+        .foregroundStyle(selected ? Color.black : .white)
+        .frame(width: 48, height: 48)
+        .background(Circle().fill(selected ? Color.cameraAccent : Color(white: 0.16)))
+        .contentShape(Circle())
+        .onTapGesture(count: 2) {
+            onSelect()
+            onReset()
+        }
+        .onTapGesture(perform: onSelect)
+        .accessibilityElement(children: .combine)
+        .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+    }
+}
+
+/** B&W filters as a column beside the shutter (landscape's F): a dot of each filter's colour before its name. */
+private struct FilterColumn: View {
+    let selected: BwFilter
+    let onSelect: (BwFilter) -> Void
+
+    var body: some View {
+        VStack(spacing: 6) {
+            ForEach(BwFilter.allCases, id: \.self) { f in
+                let on = f == selected
+                Button { onSelect(f) } label: {
+                    HStack(spacing: 4) {
+                        if let c = FilterRow.dot(f) { Circle().fill(c).frame(width: 8, height: 8) }
+                        Text(f.label).font(.footnote)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 10)
+                    .frame(width: 92, height: 30)
+                    .foregroundStyle(on ? Color.black : Color.white)
+                    .background(Capsule().fill(on ? Color.white : Color(white: 0.16)))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .frame(maxHeight: .infinity)
+    }
+}
+
+/**
+ * A tall slider for the thumb: dragging moves the value by the distance dragged (it doesn't jump to where the finger
+ * lands), a double tap resets it to `defaultValue`. A signed range fills from 0. Port of Android's `VerticalSlider`.
+ */
+private struct VerticalSlider: View {
+    let value: Float
+    let range: ClosedRange<Float>
+    let defaultValue: Float
+    let onChange: (Float) -> Void
+    @State private var dragFrom: Float?
+
+    private static let thumb: CGFloat = 24
+    private static let track: CGFloat = 6
+
+    var body: some View {
+        GeometryReader { geo in
+            let span = range.upperBound - range.lowerBound
+            let travel = max(geo.size.height - Self.thumb, 1)
+            let y = { (v: Float) -> CGFloat in Self.thumb / 2 + travel * CGFloat(1 - (v - range.lowerBound) / span) }
+            let at = y(min(max(value, range.lowerBound), range.upperBound))
+            let signed = range.lowerBound < 0 && range.upperBound > 0
+            let from = signed ? y(0) : y(range.lowerBound)
+            ZStack(alignment: .topLeading) {
+                Capsule().fill(Color(white: 0.33))
+                    .frame(width: Self.track, height: travel)
+                    .position(x: geo.size.width / 2, y: Self.thumb / 2 + travel / 2)
+                Rectangle().fill(Color.cameraAccent)
+                    .frame(width: Self.track, height: abs(from - at))
+                    .position(x: geo.size.width / 2, y: (from + at) / 2)
+                if signed {
+                    Rectangle().fill(Color.white.opacity(0.6))
+                        .frame(width: Self.track * 2, height: 2)
+                        .position(x: geo.size.width / 2, y: from)
+                }
+                Circle().fill(Color.cameraAccent)
+                    .frame(width: Self.thumb, height: Self.thumb)
+                    .position(x: geo.size.width / 2, y: at)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2) { onChange(defaultValue) }
+            .gesture(
+                DragGesture(minimumDistance: 2)
+                    .onChanged { g in
+                        let start = dragFrom ?? value
+                        if dragFrom == nil { dragFrom = start }
+                        let v = start - Float(g.translation.height / travel) * span
+                        onChange(min(max(v, range.lowerBound), range.upperBound).rounded())
+                    }
+                    .onEnded { _ in dragFrom = nil }
+            )
+        }
+        .frame(width: 48)
+        .accessibilityElement()
+        .accessibilityValue("\(Int(value.rounded()))")
+        .accessibilityAdjustableAction { direction in
+            let step: Float = direction == .increment ? 5 : -5
+            onChange(min(max(value + step, range.lowerBound), range.upperBound))
+        }
+    }
+}
+
+/**
+ * Lays the content out at this view's size turned by `turns` clockwise quarter turns and turns it: in its own
+ * coordinates it stays upright-portrait, so the viewfinder's tap points, focus ring and loupe need no change. Port of
+ * Android's `Modifier.turned`.
+ */
+private struct Turned<Content: View>: View {
+    let turns: Int
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        GeometryReader { geo in
+            let odd = turns % 2 == 1
+            content
+                .frame(width: odd ? geo.size.height : geo.size.width, height: odd ? geo.size.width : geo.size.height)
+                .rotationEffect(.degrees(Double(turns) * 90))
+                .position(x: geo.size.width / 2, y: geo.size.height / 2)
+        }
+    }
+}
+
+/**
+ * Clockwise quarter turns from the upright viewfinder picture (as the portrait screen shows it) to the window for an
+ * interface `orientation`. The camera turns with the phone, so the picture stays put on the glass while the UI turns:
+ * landscapeRight (phone turned anticlockwise) turns it back anticlockwise (3). The selfie picture turns the same way
+ * (the other way showed it upside down on the Pixel). Port of Android's `viewfinderTurns`.
+ */
+private func viewfinderTurns(_ orientation: UIInterfaceOrientation) -> Int {
+    let r: Int
+    switch orientation {
+    case .landscapeRight: r = 1 // Android's ROTATION_90
+    case .portraitUpsideDown: r = 2
+    case .landscapeLeft: r = 3
+    default: r = 0
+    }
+    return (4 - r) % 4
+}
+
+/** The window scene's interface orientation, kept up to date (a turn from one landscape to the other changes no size). */
+@MainActor
+private final class InterfaceOrientation: ObservableObject {
+    @Published private(set) var value: UIInterfaceOrientation = .portrait
+    private var observation: NSKeyValueObservation?
+
+    func start() {
+        guard observation == nil,
+              let scene = UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first else { return }
+        value = scene.effectiveGeometry.interfaceOrientation
+        observation = scene.observe(\.effectiveGeometry, options: [.new]) { [weak self] scene, _ in
+            let o = scene.effectiveGeometry.interfaceOrientation
+            Task { @MainActor in self?.value = o }
+        }
+    }
+}
+
+/**
+ * The camera screen's four parts in one layout, so the viewfinder's Metal view stays when the phone turns. Portrait:
+ * the bar on top, then the viewfinder in the height the others leave, the controls and the shutter row under it.
+ * Landscape: the bar a column at the left edge, the viewfinder, the controls a `controlsWidth` column and the shutter
+ * column at the right edge, where the right thumb is. Port of Android's `CameraLayout`.
+ */
+private struct CameraLayout: Layout {
+    let landscape: Bool
+    let controlsWidth: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        proposal.replacingUnspecifiedDimensions()
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard subviews.count == 4 else { return }
+        let bar = subviews[0], viewfinder = subviews[1], controls = subviews[2], shutter = subviews[3]
+        let w = bounds.width, h = bounds.height
+        if landscape {
+            let barW = bar.sizeThatFits(ProposedViewSize(width: nil, height: h)).width
+            let shutterW = shutter.sizeThatFits(ProposedViewSize(width: nil, height: h)).width
+            let cw = min(controlsWidth, w * 0.3)
+            let vw = max(w - barW - cw - shutterW, 0)
+            bar.place(at: CGPoint(x: bounds.minX, y: bounds.minY), proposal: ProposedViewSize(width: barW, height: h))
+            viewfinder.place(at: CGPoint(x: bounds.minX + barW, y: bounds.minY), proposal: ProposedViewSize(width: vw, height: h))
+            controls.place(at: CGPoint(x: bounds.maxX - shutterW - cw, y: bounds.minY), proposal: ProposedViewSize(width: cw, height: h))
+            shutter.place(at: CGPoint(x: bounds.maxX - shutterW, y: bounds.minY), proposal: ProposedViewSize(width: shutterW, height: h))
+        } else {
+            let barH = bar.sizeThatFits(ProposedViewSize(width: w, height: nil)).height
+            let shutterH = shutter.sizeThatFits(ProposedViewSize(width: w, height: nil)).height
+            let controlsH = controls.sizeThatFits(ProposedViewSize(width: w, height: nil)).height
+            let vh = max(h - barH - shutterH - controlsH, 0)
+            bar.place(at: CGPoint(x: bounds.minX, y: bounds.minY), proposal: ProposedViewSize(width: w, height: barH))
+            viewfinder.place(at: CGPoint(x: bounds.minX, y: bounds.minY + barH), proposal: ProposedViewSize(width: w, height: vh))
+            controls.place(at: CGPoint(x: bounds.minX, y: bounds.minY + barH + vh), proposal: ProposedViewSize(width: w, height: controlsH))
+            shutter.place(at: CGPoint(x: bounds.minX, y: bounds.maxY - shutterH), proposal: ProposedViewSize(width: w, height: shutterH))
         }
     }
 }

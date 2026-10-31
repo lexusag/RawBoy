@@ -50,7 +50,11 @@ class CameraActivity : ComponentActivity() {
     /** Android's "add this network?" sheet for a Wi-Fi QR code; it saves the network itself, nothing comes back to us. */
     private val addWifi = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {}
 
-    /** The UI stays portrait; the device's rotation only sets each photo's orientation. */
+    /**
+     * The device's rotation sets each photo's orientation (even with auto-rotate off, when the UI stays portrait).
+     * The UI turns with the window: the manifest's configChanges keep the activity, so the camera and the
+     * viewfinder's GL view survive a turn.
+     */
     private val orientation by lazy {
         object : OrientationEventListener(this) {
             override fun onOrientationChanged(degrees: Int) {
