@@ -485,7 +485,7 @@ final class CameraViewModel: ObservableObject {
     /** Picks id for the current mode: B&W mode's stock, Film mode's stock or the colour look. */
     func setLook(_ id: String) {
         change {
-            if $0.monoMode { $0.monoLookId = id } else if $0.filmMode { $0.filmLookId = id } else { $0.lookId = id }
+            if $0.filmMode { $0.filmLookId = id } else if $0.monoMode { $0.monoLookId = id } else { $0.lookId = id }
         }
     }
     func setMono(_ on: Bool) { change { $0.mono = on } }

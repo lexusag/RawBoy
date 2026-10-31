@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Generated from branding/camera.svg by tools/icons/gen.mjs. -->
+<!-- Generated from branding/film.svg by tools/icons/gen.mjs. -->
 <resources>
-    <color name="ic_launcher_background">#FFF3BD04</color>
+    <color name="ic_launcher_background">#FFF39504</color>
 </resources>

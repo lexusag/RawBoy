@@ -98,12 +98,19 @@ vec3 gaussPx(ivec2 p) {
     return sqrt(-2.0 * log(u1)) * cos(6.2831853 * u2);
 }
 
+// How much colour the print keeps: none at Saturation -100 (black and white), all from -75 up (applyLut's keep).
+float filmColourKeep() {
+    return clamp(uSaturation * 4.0, 0.0, 1.0);
+}
+
 // Grain in film density. Dye clouds are a little larger than a grain: a pixel and half its four neighbours.
 vec3 formGrain(vec3 d, vec2 fullPx) {
     ivec2 p = ivec2(floor(fullPx));
     vec3 n = gaussPx(p) + 0.5 * (gaussPx(p + ivec2(1, 0)) + gaussPx(p - ivec2(1, 0))
             + gaussPx(p + ivec2(0, 1)) + gaussPx(p - ivec2(0, 1)));
     n *= 0.57735; // 1 / sqrt(1 + 4 * 0.25)
+    // Black and white (Saturation -100, Camera's B&W + Film): one silver layer, so one grain for all three channels.
+    n = mix(vec3(n.g), n, filmColourKeep());
     // Selwyn: sigma at this pixel's area, from sigma through the 48 um aperture (area pi 24^2 um^2).
     float area = uFilmUmPerPx * uFilmUmPerPx;
     vec3 sigma = uFormGrainRms * sqrt(1809.56 / area);
@@ -124,5 +131,7 @@ vec3 applyFilm(vec3 c, vec2 fullPx, float contrast) {
     vec3 span = uFilmDMax - uFilmDMin;
     vec3 d = sampleNodes(uFilmLut, uFilmLutSize, appleLogEncode(c)) * span + uFilmDMin;
     if (uFilmGrain > 0.0) d += formGrain(d, fullPx);
-    return sampleNodes(uPrintLut, uPrintLutSize, (d - uFilmDMin) / span);
+    vec3 print = sampleNodes(uPrintLut, uPrintLutSize, (d - uFilmDMin) / span);
+    // A grey scene keeps the print's tint (paper, dye balance): black and white takes its luminance, as applyLut does.
+    return mix(vec3(dot(print, vec3(0.2126, 0.7152, 0.0722))), print, filmColourKeep());
 }

@@ -162,7 +162,9 @@ const appIconSet = (dir) => {
 const apps = [
   { logo: 'pro', res: 'app-pro/src/main/res', ios: 'ios/Pro/Assets.xcassets/AppIcon.appiconset', adaptive: true },
   { logo: 'auto', res: 'app-auto/src/main/res', ios: 'ios/Auto/Assets.xcassets/AppIcon.appiconset', adaptive: true },
-  { logo: 'camera', res: 'app-camera/src/main/res', ios: 'ios/Camera/Assets.xcassets/AppIcon.appiconset', adaptive: true },
+  // RawBoy Camera wears RawBoy Film's logo since Film mode came in (owner's choice, 2026-10-31); camera.svg stays the
+  // Readme's logo.
+  { logo: 'film', res: 'app-camera/src/main/res', ios: 'ios/Camera/Assets.xcassets/AppIcon.appiconset', adaptive: true },
   // The flavour inherits main's ic_launcher.xml and overrides its layers.
   { logo: 'film', res: 'app-camera/src/film/res', ios: 'ios/Camera/film/Film.xcassets/AppIconFilm.appiconset' },
 ].filter((a) => existsSync(join(ROOT, a.res, '..')));
