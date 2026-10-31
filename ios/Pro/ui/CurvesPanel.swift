@@ -20,8 +20,9 @@ struct CurvesPanel: View {
     /** Finger distance that grabs a point or the curve; touches farther away scroll the panel instead. */
     private static let grabRadius: CGFloat = 24
     private static let doubleTap: TimeInterval = 0.35
-    /** Margin around the curve inside the box, so the end points' dots aren't cut off. */
-    private static let inset: CGFloat = 8
+    /** Margin around the curve area inside the box, so the end points sit clear of the panel's edges where a finger
+        can grab them (Android's and web's 14 too). */
+    private static let inset: CGFloat = 14
 
     private static func color(_ c: CurveChannel) -> Color {
         switch c {
@@ -58,7 +59,7 @@ struct CurvesPanel: View {
                 Canvas { ctx, s in
                     let m = Self.inset, w = s.width - 2 * m, h = s.height - 2 * m
                     ctx.translateBy(x: m, y: m)
-                    var grid = Path()
+                    var grid = Path(CGRect(x: 0, y: 0, width: w, height: h))  // the curve area's outline
                     for g in [0.25, 0.5, 0.75] {
                         grid.move(to: CGPoint(x: g * w, y: 0))
                         grid.addLine(to: CGPoint(x: g * w, y: h))

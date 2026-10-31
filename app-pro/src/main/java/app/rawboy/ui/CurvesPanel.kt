@@ -29,6 +29,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -46,6 +47,8 @@ private const val DOUBLE_TAP_MS = 350L
 /** The curve box: width / height, and its widest (web's styles.css on phones and iOS match). */
 private const val ASPECT = 2f
 private val MAX_WIDTH = 400.dp
+/** Margin between the box's edge and the curve area, so the end points sit inside the box, clear of the panel's edges (web: styles.css). */
+private val INSET = 14.dp
 
 @Composable
 private fun curveColor(c: CurveChannel): Color = when (c) {
@@ -58,7 +61,8 @@ private fun curveColor(c: CurveChannel): Color = when (c) {
 /**
  * Curves in the Light tab (web: CurvesPanel.tsx, iOS: CurvesPanel.swift): a channel picker and a point-curve editor
  * twice as wide as tall, so it leaves the short panel under the photo room for the rest. Touch the curve to add a point on it, drag a point to move it, double-tap a point to remove it. Touches
- * elsewhere in the box aren't consumed, so they scroll the panel.
+ * elsewhere in the box aren't consumed, so they scroll the panel. The curve area sits [INSET] inside the box, outlined,
+ * so the end points can be grabbed without reaching for the panel's edge.
  */
 @Composable
 internal fun CurvesPanel(curves: ToneCurves, onChange: (ToneCurves) -> Unit) {
@@ -104,9 +108,10 @@ internal fun CurvesPanel(curves: ToneCurves, onChange: (ToneCurves) -> Unit) {
                     var lastTapIndex = -1
                     awaitEachGesture {
                         val down = awaitFirstDown()
-                        val w = size.width.toFloat()
-                        val h = size.height.toFloat()
-                        fun toCurve(o: Offset) = CurvePoint(o.x / w, 1f - o.y / h)
+                        val inset = INSET.toPx()
+                        val w = (size.width - 2 * inset).coerceAtLeast(1f)
+                        val h = (size.height - 2 * inset).coerceAtLeast(1f)
+                        fun toCurve(o: Offset) = CurvePoint((o.x - inset) / w, 1f - (o.y - inset) / h)
                         val at = toCurve(down.position)
                         // The working copy: moves never act on a composition that hasn't caught up with the last change.
                         var pts = current[channel]
@@ -141,24 +146,26 @@ internal fun CurvesPanel(curves: ToneCurves, onChange: (ToneCurves) -> Unit) {
                     }
                 },
         ) {
-            val w = size.width
-            val h = size.height
+            val inset = INSET.toPx()
+            val w = size.width - 2 * inset
+            val h = size.height - 2 * inset
+            drawRect(grid, Offset(inset, inset), Size(w, h), style = Stroke(1f))
             for (g in listOf(0.25f, 0.5f, 0.75f)) {
-                drawLine(grid, Offset(g * w, 0f), Offset(g * w, h), 1f)
-                drawLine(grid, Offset(0f, g * h), Offset(w, g * h), 1f)
+                drawLine(grid, Offset(inset + g * w, inset), Offset(inset + g * w, inset + h), 1f)
+                drawLine(grid, Offset(inset, inset + g * h), Offset(inset + w, inset + g * h), 1f)
             }
-            drawLine(grid, Offset(0f, h), Offset(w, 0f), 1f)
+            drawLine(grid, Offset(inset, inset + h), Offset(inset + w, inset), 1f)
             val samples = ToneCurves.sample(points, 129)
             val path = Path()
             samples.forEachIndexed { i, v ->
-                val x = i / 128f * w
-                val y = (1f - v) * h
+                val x = inset + i / 128f * w
+                val y = inset + (1f - v) * h
                 if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
             }
             drawPath(path, color, style = Stroke(2.dp.toPx()))
             val r = 6.dp.toPx()
             points.forEachIndexed { i, p ->
-                val c = Offset(p.x * w, (1f - p.y) * h)
+                val c = Offset(inset + p.x * w, inset + (1f - p.y) * h)
                 drawCircle(if (i == selected) accent else fill, r, c)
                 drawCircle(color, r, c, style = Stroke(2.dp.toPx()))
             }

@@ -1,5 +1,10 @@
 # Changelog
 
+**RawBoy (Android, iPhone): Curves end points easier to reach (2026-10-31)**
+
+- As on the web, the Curves box has a 14 dp/pt margin inside it, with the curve area outlined, so the end points sit
+  away from the panel's edges where a finger can grab them (Android had them on the box's edge, iPhone 8 pt in).
+
 **RawBoy Camera: black and white mode (2026-10-31)**
 
 - RawBoy Camera gets RawBoy Film's **B&W** button left of the shutter: black and white live in the viewfinder, the
