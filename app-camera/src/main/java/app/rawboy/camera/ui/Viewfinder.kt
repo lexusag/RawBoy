@@ -18,7 +18,8 @@ import app.rawboy.gl.ViewfinderRenderer
 /**
  * The live camera preview, developed with [params] (see [ViewfinderRenderer]), with an optional focus [loupe]. While
  * [onLuma] is set it gets the renderer's greyscale copies (QR codes), while [onTrackLuma] is the small ones every frame
- * (the subject tracker).
+ * (the subject tracker). [turns]: clockwise quarter turns from the upright picture to the view (see
+ * [ViewfinderRenderer.turns]).
  */
 @Composable
 fun Viewfinder(
@@ -30,6 +31,7 @@ fun Viewfinder(
     loupe: ViewfinderRenderer.Loupe? = null,
     onLuma: ((width: Int, height: Int, luma: ByteArray) -> Unit)? = null,
     onTrackLuma: ((width: Int, height: Int, luma: ByteArray) -> Unit)? = null,
+    turns: Int = 0,
 ) {
     val surfaceCallback = rememberUpdatedState(onSurfaceTexture)
     val baseCallback = rememberUpdatedState(onBase)
@@ -73,6 +75,10 @@ fun Viewfinder(
     LaunchedEffect(onTrackLuma != null) {
         val forward: (Int, Int, ByteArray) -> Unit = { w, h, luma -> trackCallback.value?.invoke(w, h, luma) }
         renderer.onTrackLuma = forward.takeIf { onTrackLuma != null }
+    }
+    LaunchedEffect(turns) {
+        renderer.turns = turns
+        view[0]?.requestRender()
     }
     LaunchedEffect(loupe) {
         renderer.loupe = loupe

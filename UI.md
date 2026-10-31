@@ -44,10 +44,6 @@ No composition aids.
 **Change:** a Settings switch for a thirds grid, and a level line that turns accent-coloured when the phone is
 straight (the orientation listener already exists for EXIF).
 
-### C5. Turn icons with the phone (Low, S) — Android, iOS
-The UI is portrait-locked (photos still come out right), so in landscape the RAW, flash and lens labels are sideways.
-**Change:** rotate the small icons and labels in place with the device orientation; the layout stays portrait.
-
 ### F1. Group the film stocks and show which one is loaded (Medium, S) — RawBoy Camera's Film mode, Android, iOS
 Twelve stocks plus Natural in one flat list; nothing says which are colour negative, cinema or slide, and the stock
 name is only in the small row under the viewfinder.

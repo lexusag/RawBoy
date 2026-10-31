@@ -165,7 +165,7 @@ targets:
         CFBundleVersion: "1"
         UILaunchScreen: {}
         UIApplicationSupportsIndirectInputEvents: true
-        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait]
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
         UIRequiresFullScreen: true
         NSCameraUsageDescription: RawBoy Camera takes RAW photos and shows them developed live.
         NSLocationWhenInUseUsageDescription: With Geotag on, RawBoy Camera saves where each photo was taken in the photo.

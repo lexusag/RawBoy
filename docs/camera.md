@@ -28,6 +28,13 @@ only the new shots and asks to unlock before opening one, and the camera closes 
 it was unlocked since, so the next double press on a locked phone always starts a fresh camera; any shot just taken
 still finishes saving in the background). Unlocked
 while it is open, it carries on as the ordinary camera.
+**Held sideways** the controls move to the right edge, under your right thumb: the shutter in the middle of the
+edge (the selfie switch above it, the last photo below), one tall slider beside it, and round **S**, **B** and **W**
+buttons (Strength, Brightness, Warmth) to pick what the slider changes; each shows its value, Brightness is picked
+first, and a double tap on a letter or the slider resets it. In B&W mode **W** becomes **F** (the filter), which lists
+the filters beside the shutter. The Film and B&W buttons and the Look menu are above them; RAW, Burst, Flash, ? and
+Settings move to a column at the left. The viewfinder stays upright and photos come out the right way round, as in
+portrait. With auto-rotate off the screen stays portrait.
 **UW · W · T** at the bottom of the viewfinder switches between the ultrawide, wide and telephoto lenses, as in
 Google Camera (each lens that can deliver RAW is offered). The button right of the shutter switches to the
 **selfie camera**, shown only when the front camera delivers RAW; selfies are saved mirrored, as the viewfinder

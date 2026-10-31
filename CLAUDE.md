@@ -84,7 +84,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   - `view/PhotoWithControls.kt` (iOS `view/PhotoWithControls.swift`) — Pro's editor and Auto's photo view: controls under the
     photo when the window is taller than wide, a side panel (≤ 360 dp, ≤ 45% of the width) on the right when wider. The web
     does the same with `@media (orientation: portrait)` / `STACKED` (`useMediaQuery.ts`); toolbar rules stay width-based.
-    iOS Pro and Auto allow landscape (`project.yml`); Camera stays portrait on both platforms.
+    iOS Pro and Auto allow landscape (`project.yml`). Camera has its own landscape layout (below).
   - `view/Help.kt` — the top bars' "?" button and sheet. Each app's content is its `ui/Help.kt`, mirrored in iOS
     `ui/Help.swift` and web `ui/pro/help.ts` / `ui/auto/help.ts` (web: also Ctrl/⌘+/, `ui/common/HelpDialog.tsx`).
     Update them with user-visible controls and gestures.
@@ -599,6 +599,19 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
 - Generated shader Kotlin is registered as a **java** source dir: KGP 2.1 ignores AGP's generated kotlin dirs.
 - `am start --eu android.intent.extra.STREAM …` neither grants read access nor makes a `SEND_MULTIPLE`
   list; test Auto intake with `VIEW -d … --grant-read-uri-permission` (one intent per file).
+- **Camera landscape** (2026-10-31, Android + iOS): the UI turns with the window (Android: no `screenOrientation`,
+  `configChanges` keep the activity, so the camera and GL view survive a turn; iOS: all orientations but upside down).
+  `CameraLayout` (`ui/CameraLandscape.kt`, a `Layout` in `CameraScreen.swift`) keeps the viewfinder in one slot so its
+  GL/Metal view isn't recreated: portrait stacked as before; landscape = bar buttons column | viewfinder | controls
+  (look row, S/B/W chips, one `VerticalSlider`; F + filter column in B&W) | shutter column. The camera turns with the
+  phone, so the **picture must stay put on the glass**: everything about the viewfinder stays in the upright portrait
+  coordinates it had (taps, focus/AE regions, faces, `Spot.turned`, the loupe) and is only turned for display by
+  `viewfinderTurns` (back: (4 − displayRotation) % 4 clockwise quarter turns; a mirrored selfie picture turns the
+  other way, so the mirror stays left-right). Android: `ViewfinderRenderer.turns` draws pass 2 + loupe into an RGBA8
+  target at the turned-back size and `TurnProgram` turns it onto the window (a SurfaceView ignores view transforms);
+  the overlays sit in `Modifier.turned` boxes. iOS: `Turned` (rotationEffect) wraps the MTKView and gesture layer.
+  Interface orientation: Android `rememberDisplayRotation` (a DisplayListener: 90 ↔ 270 is no configuration change),
+  iOS the scene's `effectiveGeometry` (KVO). Saved photos use the device's rotation as before.
 - Viewfinder orientation: Camera2 puts the sensor rotation into the SurfaceTexture transform matrix on the Pixel and
   on the emulator, so rotating by `SENSOR_ORIENTATION` as well turned it sideways and stretched it. The shader
   rotates only when the matrix doesn't (`ViewfinderRenderer`, off-diagonal check). Focus regions and face rects
