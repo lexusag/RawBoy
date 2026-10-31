@@ -209,6 +209,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private var lastFocusMove = 0L
     /** The point the camera's AF region was last moved to. */
     private var sentFocus: Pair<Float, Float>? = null
+    /** Whether the tracked subject is out of sight (held for a moment): metering goes to the centre meanwhile. */
+    @Volatile
+    private var subjectHidden = false
+    private var sentHidden = false
     private val trackBusy = AtomicBoolean(false)
 
     /** The tracker's own thread: a search takes ~0.2 ms, but never on the GL thread or a shot's develop. */
@@ -428,6 +432,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 controller.trackFocus(start.first, start.second)
                 lastFocusMove = now
                 sentFocus = start
+                subjectHidden = false
+                sentHidden = false
             }
             return
         }
@@ -445,13 +451,16 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         if (abs(r.x - point.first) >= MIN_FOCUS_MOVE || abs(r.y - point.second) >= MIN_FOCUS_MOVE) {
             _focusPoint.value = r.x to r.y
         }
+        subjectHidden = !r.found
         // Each move is a new repeating request: a few a second keep the AF box on the subject, and the last one
-        // still goes out once the subject stops.
+        // still goes out once the subject stops. Hiding or reappearing goes out at once (metering follows it).
         val shown = _focusPoint.value ?: return
-        if (shown != sentFocus && now - lastFocusMove >= FOCUS_MOVE_INTERVAL_MS) {
+        val moved = shown != sentFocus && now - lastFocusMove >= FOCUS_MOVE_INTERVAL_MS
+        if (moved || subjectHidden != sentHidden) {
             lastFocusMove = now
             sentFocus = shown
-            controller.moveFocus(shown.first, shown.second)
+            sentHidden = subjectHidden
+            controller.moveFocus(shown.first, shown.second, meter = !subjectHidden)
         }
     }
 
@@ -471,7 +480,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
      * Where the auto develop meters exposure: around the tapped focus point while focus is locked (as Camera2's AE
      * does), else the centre box. Upright as the viewfinder shows it, like its 512 px copy.
      */
-    private fun meterArea(): MeterArea = _focusPoint.value?.let { (x, y) -> MeterArea.Spot(x, y) } ?: METER_CENTRE
+    private fun meterArea(): MeterArea =
+        _focusPoint.value?.takeUnless { _tracking.value && subjectHidden }?.let { (x, y) -> MeterArea.Spot(x, y) } ?: METER_CENTRE
 
     /** Switches to the lens labelled [label] (UW, W, T) on the current side. */
     fun selectLens(label: String) {
@@ -529,7 +539,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             val stats = SceneAnalyzer.analyze(base.base, skin, state?.iso ?: 0f, meterArea())
             // The phone's auto exposure set the frame (and the shot's raw): keep it, lifted where it went dark, as the
             // shot does (see develop).
-            live = Live(base, stats, defaults, AutoTone.develop(stats, defaults, phoneAe = true))
+            val auto = AutoTone.develop(stats, defaults, phoneAe = true)
+            // A new metering area (a tap, a release, a tracked subject hiding) can move the exposure by a stop at once;
+            // the viewfinder eases there over a few updates instead of snapping.
+            val last = live?.auto?.exposure
+            val eased = if (last == null) auto else auto.copy(exposure = last + (auto.exposure - last).coerceIn(-MAX_EV_STEP, MAX_EV_STEP))
+            live = Live(base, stats, defaults, eased)
             publish()
         }
     }
@@ -865,6 +880,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         private const val MIN_FOCUS_MOVE = 0.004f
         /** At most this often a tracked subject's move goes to the camera as a new AF region. */
         private const val FOCUS_MOVE_INTERVAL_MS = 100L
+        /** Most the live develop's exposure moves per update (~3 a second), EV. */
+        private const val MAX_EV_STEP = 0.3f
 
         /** Exposure is metered on the middle half of the frame's width and height (owner's choice), unless tapped. */
         internal val METER_CENTRE = MeterArea.Centre(0.5f)

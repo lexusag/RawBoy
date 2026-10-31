@@ -47,6 +47,9 @@ final class CameraViewModel: ObservableObject {
     /** focusPoint follows the tapped subject (settings.trackFocus); the lock ends by itself once it is lost. */
     @Published private(set) var tracking = false
     private let subject = SubjectTracker()
+    /** The tracked subject is out of sight (held for a moment): metering goes to the centre meanwhile. */
+    private var subjectHidden = false
+    private var sentHidden = false
     private var lastFocusMove: TimeInterval = 0
     /** The point the camera last focused on while tracking. */
     private var sentFocus: CGPoint?
@@ -248,6 +251,8 @@ final class CameraViewModel: ObservableObject {
         subject.end()
         tracking = false
         sentFocus = nil
+        subjectHidden = false
+        sentHidden = false
     }
 
     /**
@@ -264,18 +269,21 @@ final class CameraViewModel: ObservableObject {
                 lastFocusMove = ProcessInfo.processInfo.systemUptime
                 controller.focusAt(point.x, point.y, follow: true)
             }
-        case .moved(let x, let y):
+        case .moved(let x, let y, let found):
             guard tracking else { return }
             if abs(x - point.x) >= Self.minFocusMove || abs(y - point.y) >= Self.minFocusMove {
                 focusPoint = CGPoint(x: x, y: y)
             }
+            subjectHidden = !found
             // Each move reconfigures the device: a few a second keep the AF box on the subject, and the last one
-            // still goes out once the subject stops.
+            // still goes out once the subject stops. Hiding or reappearing goes out at once (metering follows it).
             let now = ProcessInfo.processInfo.systemUptime
-            if let shown = focusPoint, shown != sentFocus, now - lastFocusMove >= Self.focusMoveInterval {
+            guard let shown = focusPoint else { return }
+            if (shown != sentFocus && now - lastFocusMove >= Self.focusMoveInterval) || subjectHidden != sentHidden {
                 lastFocusMove = now
                 sentFocus = shown
-                controller.focusAt(shown.x, shown.y, follow: true)
+                sentHidden = subjectHidden
+                controller.focusAt(shown.x, shown.y, follow: true, meter: !subjectHidden)
             }
         case .lost:
             releaseFocus()
@@ -291,6 +299,8 @@ final class CameraViewModel: ObservableObject {
 
     /** Smallest move of a tracked subject (share of the frame) that moves the focus point. */
     private static let minFocusMove = 0.004
+    /** Most the live develop's exposure moves per update (~3 a second), EV. */
+    private static let maxEvStep: Float = 0.3
     /** At most this often a tracked subject's move reconfigures the camera's focus. */
     private static let focusMoveInterval: TimeInterval = 0.1
 
@@ -317,7 +327,9 @@ final class CameraViewModel: ObservableObject {
      * exposure point of interest does), else the centre box. Upright as the viewfinder shows it, like its 512 px copy.
      */
     private var meterArea: MeterArea {
-        focusPoint.map { .spot(x: Float($0.x), y: Float($0.y)) } ?? Self.meterCentre
+        // A tracked subject out of sight: the centre, as the camera's exposure point meanwhile.
+        guard let p = focusPoint, !(tracking && subjectHidden) else { return Self.meterCentre }
+        return .spot(x: Float(p.x), y: Float(p.y))
     }
 
     /** The device's turn from portrait now (clockwise, as the photo's horizon-level orientation follows it). */
@@ -402,7 +414,13 @@ final class CameraViewModel: ObservableObject {
             await MainActor.run {
                 guard let self else { return }
                 self.analysing = false
-                self.live = Live(base: base, stats: stats, defaults: defaults, auto: auto)
+                // A new metering area (a tap, a release, a tracked subject hiding) can move the exposure by a stop at
+                // once; the viewfinder eases there over a few updates instead of snapping.
+                var eased = auto
+                if let last = self.live?.auto.exposure {
+                    eased.exposure = last + min(max(auto.exposure - last, -Self.maxEvStep), Self.maxEvStep)
+                }
+                self.live = Live(base: base, stats: stats, defaults: defaults, auto: eased)
                 self.publish()
             }
         }

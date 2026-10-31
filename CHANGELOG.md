@@ -6,6 +6,10 @@
   was tapped as it moves, focus and metering go with it (continuous autofocus on the moving focus square), and the
   badge reads **TRACKING ✕**. A subject hidden for a moment is held; one gone for about half a second ends the lock and
   the camera returns to autofocus. A spot too plain to follow stays an ordinary focus lock.
+- Tracking follows a subject that grows or shrinks as you walk up to it or away, doesn't jump to the next thing in
+  view when the subject leaves, and doesn't hop between the stripes of a repeating pattern.
+- The viewfinder's brightness eases into a new metering spot instead of jumping (on tap, release and a lost subject),
+  and releasing focus no longer flashes the viewfinder bright for a frame.
 - Engine: `PatternTracker` (Kotlin and Swift, with unit tests) follows a patch in small greyscale frames by normalised
   cross-correlation, about 0.2 ms a frame.
 

@@ -21,7 +21,8 @@ final class SubjectTracker: @unchecked Sendable {
     enum Event {
         /** Following from (x, y); false: too little detail there, the plain focus lock stays. */
         case started(Bool)
-        case moved(x: Double, y: Double)
+        /** Where the subject is; found false: out of sight this frame, its last position held. */
+        case moved(x: Double, y: Double, found: Bool)
         case lost
     }
 
@@ -94,7 +95,7 @@ final class SubjectTracker: @unchecked Sendable {
                 event = .started(ok)
             } else if let r = tracker.update(width: w, height: h, grey: grey, now: ms) {
                 if r.lost { lock.withLock { if generation == gen { running = false } } }
-                event = r.lost ? .lost : .moved(x: Double(r.x), y: Double(r.y))
+                event = r.lost ? .lost : .moved(x: Double(r.x), y: Double(r.y), found: r.found)
             } else {
                 event = nil
             }

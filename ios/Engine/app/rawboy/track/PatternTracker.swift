@@ -3,24 +3,32 @@ import Foundation
 /**
  * Follows the patch under the camera's focus point from one greyscale frame to the next (one byte per pixel, row 0 =
  * top, upright as the viewfinder shows it; about 320 px on the long side). Zero-mean normalised cross-correlation of a
- * template: searched near where the patch should be at half resolution, then refined at full resolution. The template
- * slowly takes on the patch's new look while the match is good, so a turning subject keeps being found, but a match
- * must still resemble the patch as first tapped (anchorScore), or the learning would let it drift onto whatever
- * replaced the subject. Among similar matches (a striped door, tiles) the one nearest where the patch was expected
- * wins (prior). A patch expected past the frame's edge counts as not found: what is left inside matches poorly
- * anyway, and the search, kept inside the frame, would settle on the next thing there.
+ * template, searched near where the patch should be, at its last size and a little smaller and larger, so a subject
+ * the camera walks up to (or away from) keeps being found as it grows. The region around the predicted spot is
+ * resampled to the template's scale, searched at half resolution, then refined.
+ *
+ * The template slowly takes on the patch's new look while the match is good, so a turning subject keeps being found,
+ * but a match must still resemble the patch as first tapped (anchorScore), or the learning would let it drift onto
+ * whatever replaced the subject. Among similar matches (a striped door, tiles) the one nearest where the patch was
+ * expected wins (prior). A patch expected past the frame's edge counts as not found: what is left inside matches
+ * poorly anyway, and a search kept inside the frame would settle on the next thing there.
  *
  * Positions are fractions of the frame (x right, y down). update holds the last position while the match is poor
  * (a brief occlusion) and reports the patch lost once it has been poor for lostAfter, or the frame's size changed.
  * Not thread-safe: one caller at a time. Port of PatternTracker.kt.
  */
 public final class PatternTracker {
-    /** One frame's answer: where the patch is, how well it matched (-1...1) and whether it is lost for good. */
+    /**
+     * One frame's answer: where the patch is, how well it matched (-1...1), its size against the tap's (scale),
+     * whether it was found in this frame (else its last position is held) and whether it is lost for good.
+     */
     public struct Result: Equatable {
         public let x: Float
         public let y: Float
         public let score: Float
         public let lost: Bool
+        public let scale: Float
+        public let found: Bool
     }
 
     /** About 7% of a 320 px frame: larger than the AF box, so the patch holds some texture around it. */
@@ -43,36 +51,46 @@ public final class PatternTracker {
     public static let anchorScore: Float = 0.45
     /** Score taken off a match at the edge of the search reach (less nearer the expected spot): repeated patterns. */
     static let prior: Float = 0.2
-    /** How far (px) the expected top left may lie past the frame's edge before the patch counts as leaving it. */
+    /** Sizes tried each frame against the last one: walking up to a subject grows it a few % a frame. */
+    private static let scaleSteps: [Float] = [1, 1 / 1.08, 1.08]
+    /** Score a size change must win by, so noise doesn't make the size wander. */
+    private static let scalePenalty: Float = 0.02
+    private static let minScale: Float = 0.4
+    /** How far (px) the expected patch may reach past the frame's edge before it counts as leaving it. */
     private static let edge: Float = 2
+    private static let refine = 2
     /** Grey levels (0...255) of spread a patch needs to be followed at all. */
     static let minStd: Float = 4
-    private static let refine = 2
 
     private let size: Int
     private let reach: Int
     private let lostAfter: Int64
     private var width = 0
     private var height = 0
-    /** Zero-mean templates, full and half resolution, and the full one as first tapped. */
-    private var full: [Float]?
-    private var half: [Float]?
+    /** Zero-mean template, and the same as first tapped. */
+    private var template: [Float]?
     private var anchor: [Float]?
-    /** Patch centre, full-resolution px, and its last move. */
+    /** Patch centre (frame px), its last move, and its side in frame px per template px. */
     private var cx: Float = 0
     private var cy: Float = 0
     private var vx: Float = 0
     private var vy: Float = 0
+    private var scale: Float = 1
     private var lastGood: Int64 = 0
+    /** The search region (template px, size + 2 reach square) and its half-resolution copy, reused between frames. */
+    private var region: [Float]
+    private var regionHalf: [Float]
 
     public init(size: Int = PatternTracker.templateSize, reach: Int = PatternTracker.searchReach,
                 lostAfterMs: Int64 = PatternTracker.lostAfterMs) {
         self.size = size
         self.reach = reach
         self.lostAfter = lostAfterMs
+        region = [Float](repeating: 0, count: (size + 2 * reach) * (size + 2 * reach))
+        regionHalf = [Float](repeating: 0, count: (size / 2 + reach) * (size / 2 + reach))
     }
 
-    public var active: Bool { full != nil }
+    public var active: Bool { template != nil }
 
     /**
      * Starts following the patch around (x, y) of this frame at `now` (ms, any monotonic clock). Returns false, and
@@ -85,150 +103,211 @@ public final class PatternTracker {
         let s = Float(size)
         let px = min(max(x * Float(width), s / 2), Float(width) - s / 2)
         let py = min(max(y * Float(height), s / 2), Float(height) - s / 2)
-        let f = Self.patch(grey, width, height, size, Int((px - s / 2).rounded()), Int((py - s / 2).rounded()))
+        var f = [Float](repeating: 0, count: size * size)
+        Self.sample(grey, width, height, px, py, 1, size, &f)
         guard Self.std(f) >= Self.minStd else { return false }
-        let h = Self.halve(grey, width, height)
-        let hs = size / 2
         self.width = width
         self.height = height
-        full = Self.zeroMean(f)
-        anchor = full
-        half = Self.zeroMean(Self.patch(h, width / 2, height / 2, hs, Int((px / 2 - Float(hs) / 2).rounded()),
-                                        Int((py / 2 - Float(hs) / 2).rounded())))
+        template = Self.zeroMean(f)
+        anchor = template
         cx = px
         cy = py
         vx = 0
         vy = 0
+        scale = 1
         lastGood = now
         return true
     }
 
     /** Finds the patch in the next frame; nil when nothing is being followed. */
     public func update(width: Int, height: Int, grey: [UInt8], now: Int64) -> Result? {
-        guard var f = full, var hf = half, let a = anchor else { return nil }
+        guard var t = template, let a = anchor else { return nil }
         guard width == self.width, height == self.height, grey.count >= width * height else {
             stop()
-            return Result(x: cx / Float(max(1, self.width)), y: cy / Float(max(1, self.height)), score: 0, lost: true)
+            return Result(x: cx / Float(max(1, self.width)), y: cy / Float(max(1, self.height)), score: 0, lost: true,
+                          scale: scale, found: false)
         }
-        let hw = width / 2
-        let hh = height / 2
-        let hs = size / 2
-        // Where the patch's top left should be now, full resolution.
-        let px = cx + vx - Float(size) / 2
-        let py = cy + vy - Float(size) / 2
-        let inside = px >= -Self.edge && py >= -Self.edge && px <= Float(width - size) + Self.edge
-            && py <= Float(height - size) + Self.edge
-        let h = inside ? Self.halve(grey, width, height) : nil
-        var found: (x: Int, y: Int, score: Float)?
-        if let h {
-            // Half resolution: around the predicted position, the patch's top left within reach.
-            let r = (reach + 1) / 2
-            let coarse = Self.best(h, hw, hh, hf, hs, px / 2, py / 2, r)
-            // Full resolution: a pixel or two around it.
-            let m = Self.best(grey, width, height, f, size, Float(coarse.x * 2), Float(coarse.y * 2), Self.refine)
-            // Still the tapped subject, not something the template has learned its way onto?
-            let first = Self.best(grey, width, height, a, size, Float(m.x), Float(m.y), 0)
-            found = first.score >= Self.anchorScore ? m : (x: m.x, y: m.y, score: min(m.score, first.score))
-        }
-        let score = found?.score ?? 0
-        if let fine = found, score >= Self.minScore {
-            let nx = Float(fine.x) + Float(size) / 2
-            let ny = Float(fine.y) + Float(size) / 2
-            vx = (nx - cx) * Self.velocityKeep
-            vy = (ny - cy) * Self.velocityKeep
-            cx = nx
-            cy = ny
-            lastGood = now
-            if score >= Self.updateScore, let h {
-                Self.blend(&f, Self.zeroMean(Self.patch(grey, width, height, size, fine.x, fine.y)))
-                Self.blend(&hf, Self.zeroMean(Self.patch(h, hw, hh, hs, Int((cx / 2 - Float(hs) / 2).rounded()),
-                                                         Int((cy / 2 - Float(hs) / 2).rounded()))))
-                full = f
-                half = hf
+        // Where the patch's centre should be now.
+        let px = cx + vx
+        let py = cy + vy
+        let half = Float(size) * scale / 2
+        let inside = px - half >= -Self.edge && py - half >= -Self.edge && px + half <= Float(width) + Self.edge
+            && py + half <= Float(height) + Self.edge
+        var found: (x: Float, y: Float, scale: Float, score: Float, rank: Float)?
+        if inside {
+            for k in Self.scaleSteps {
+                let s = min(max(scale * k, Self.minScale), maxScale(width, height))
+                let m = search(grey, width, height, t, px, py, s)
+                let rank = m.score - (k == 1 ? 0 : Self.scalePenalty)
+                if found == nil || rank > found!.rank { found = (m.x, m.y, s, m.score, rank) }
             }
-        } else if h != nil {
-            // Not found where it should be: look around where it was. Expected past the edge, it keeps going out.
-            vx = 0
-            vy = 0
+        }
+        var score = found?.score ?? 0
+        var ok = false
+        if let fd = found {
+            // Still the tapped subject, not something the template has learned its way onto?
+            var patch = [Float](repeating: 0, count: size * size)
+            Self.sample(grey, width, height, fd.x, fd.y, fd.scale, size, &patch)
+            let first = Self.ncc(patch, a)
+            if first < Self.anchorScore { score = min(score, first) }
+            if score >= Self.minScore {
+                ok = true
+                vx = (fd.x - cx) * Self.velocityKeep
+                vy = (fd.y - cy) * Self.velocityKeep
+                cx = fd.x
+                cy = fd.y
+                scale = fd.scale
+                lastGood = now
+                if score >= Self.updateScore {
+                    Self.blend(&t, Self.zeroMean(patch))
+                    template = t
+                }
+            } else {
+                // Not found where it should be: look around where it was. Expected past the edge, it keeps going out.
+                vx = 0
+                vy = 0
+            }
         }
         let lost = now - lastGood > lostAfter
-        let result = Result(x: cx / Float(width), y: cy / Float(height), score: score, lost: lost)
+        let result = Result(x: cx / Float(width), y: cy / Float(height), score: score, lost: lost, scale: scale,
+                            found: ok)
         if lost { stop() }
         return result
     }
 
     public func stop() {
-        full = nil
-        half = nil
+        template = nil
         anchor = nil
     }
 
+    /** Largest patch scale: the patch may grow to 60% of the frame's short side. */
+    private func maxScale(_ width: Int, _ height: Int) -> Float {
+        max(1, Float(min(width, height)) * 0.6 / Float(size))
+    }
+
     /**
-     * The best match of template t (s px square, zero mean) with its top left within r px of (ex, ey) (kept inside
-     * the image), by normalised cross-correlation less `prior` at the edge of the reach; returns its plain score.
+     * The best match of template t around (ex, ey) (frame px) with the frame seen at s frame px per template px: the
+     * region within `reach` template px resampled, searched at half resolution (2x2 averages: a fine texture one pixel
+     * off doesn't correlate at all), then refined to the pixel. Ranked by correlation less `prior` at the edge of the
+     * reach; returns the match's centre (frame px) and plain score.
      */
-    private static func best(_ img: [UInt8], _ w: Int, _ h: Int, _ t: [Float], _ s: Int,
-                             _ ex: Float, _ ey: Float, _ r: Int) -> (x: Int, y: Int, score: Float) {
+    private func search(_ img: [UInt8], _ w: Int, _ h: Int, _ t: [Float], _ ex: Float, _ ey: Float,
+                        _ s: Float) -> (x: Float, y: Float, score: Float) {
+        let rs = size + 2 * reach
+        Self.sample(img, w, h, ex, ey, s, rs, &region)
+        let prior = Self.prior / Float(reach * reach)
+        // Half resolution: the whole reach.
+        let hr = rs / 2
+        Self.halve(region, rs, &regionHalf)
+        var th = [Float](repeating: 0, count: (size / 2) * (size / 2))
+        Self.halve(t, size, &th)
+        let thNorm = sqrt(th.reduce(Float(0)) { $0 + $1 * $1 })
+        var hx = reach / 2
+        var hy = reach / 2
+        var hRank: Float = -10
+        for y in 0...reach {
+            for x in 0...reach {
+                let dx = 2 * Float(x) - Float(reach)
+                let dy = 2 * Float(y) - Float(reach)
+                let rank = Self.nccAt(regionHalf, hr, x, y, th, thNorm) - prior * (dx * dx + dy * dy)
+                if rank > hRank {
+                    hRank = rank
+                    hx = x
+                    hy = y
+                }
+            }
+        }
+        // Full resolution: a pixel or two around it.
         let tNorm = sqrt(t.reduce(Float(0)) { $0 + $1 * $1 })
-        let ix = Int(ex.rounded())
-        let iy = Int(ey.rounded())
-        let ax = min(max(ix - r, 0), w - s)
-        let bx = min(max(ix + r, 0), w - s)
-        let ay = min(max(iy - r, 0), h - s)
-        let by = min(max(iy + r, 0), h - s)
-        let n = Float(s * s)
-        let weight = r > 0 ? prior / Float(r * r) : 0
-        var bestX = ax
-        var bestY = ay
+        var bestX = 2 * hx
+        var bestY = 2 * hy
         var bestScore: Float = -2
         var bestRank: Float = -10
+        for y in max(0, 2 * hy - Self.refine)...min(2 * reach, 2 * hy + Self.refine) {
+            for x in max(0, 2 * hx - Self.refine)...min(2 * reach, 2 * hx + Self.refine) {
+                let score = Self.nccAt(region, rs, x, y, t, tNorm)
+                let dx = Float(x - reach)
+                let dy = Float(y - reach)
+                let rank = score - prior * (dx * dx + dy * dy)
+                if rank > bestRank {
+                    bestRank = rank
+                    bestScore = score
+                    bestX = x
+                    bestY = y
+                }
+            }
+        }
+        return (ex + Float(bestX - reach) * s, ey + Float(bestY - reach) * s, bestScore)
+    }
+
+    /**
+     * n x n samples of the frame, s frame px apart, centred on (cx, cy): bilinear, positions outside the frame clamped
+     * to its edge.
+     */
+    private static func sample(_ img: [UInt8], _ w: Int, _ h: Int, _ cx: Float, _ cy: Float, _ s: Float, _ n: Int,
+                               _ out: inout [Float]) {
+        let x0 = cx - (Float(n) / 2 - 0.5) * s - 0.5
+        let y0 = cy - (Float(n) / 2 - 0.5) * s - 0.5
         img.withUnsafeBufferPointer { px in
+            for j in 0..<n {
+                let fy = min(max(y0 + Float(j) * s, 0), Float(h - 1))
+                let iy = min(Int(fy), h - 2)
+                let ty = fy - Float(iy)
+                for i in 0..<n {
+                    let fx = min(max(x0 + Float(i) * s, 0), Float(w - 1))
+                    let ix = min(Int(fx), w - 2)
+                    let tx = fx - Float(ix)
+                    let p = iy * w + ix
+                    let top = Float(px[p]) * (1 - tx) + Float(px[p + 1]) * tx
+                    let bottom = Float(px[p + w]) * (1 - tx) + Float(px[p + w + 1]) * tx
+                    out[j * n + i] = top * (1 - ty) + bottom * ty
+                }
+            }
+        }
+    }
+
+    /** Correlation of zero-mean template t (norm tNorm) with the patch of img (row length n) at (x, y). */
+    private static func nccAt(_ img: [Float], _ n: Int, _ x: Int, _ y: Int, _ t: [Float], _ tNorm: Float) -> Float {
+        let s = Int(Double(t.count).squareRoot())
+        var sum: Float = 0
+        var sum2: Float = 0
+        var cross: Float = 0
+        img.withUnsafeBufferPointer { ip in
             t.withUnsafeBufferPointer { tp in
-                for y in ay...by {
-                    for x in ax...bx {
-                        var sum: Float = 0
-                        var sum2: Float = 0
-                        var cross: Float = 0
-                        var k = 0
-                        for j in 0..<s {
-                            var i = (y + j) * w + x
-                            for _ in 0..<s {
-                                let v = Float(px[i])
-                                sum += v
-                                sum2 += v * v
-                                cross += v * tp[k]
-                                i += 1
-                                k += 1
-                            }
-                        }
-                        // The template has zero mean, so the patch's mean drops out of the cross term.
-                        let variance = sum2 - sum * sum / n
-                        let score = variance <= 0 || tNorm <= 0 ? 0 : cross / (sqrt(variance) * tNorm)
-                        let dx = Float(x) - ex
-                        let dy = Float(y) - ey
-                        let rank = score - weight * (dx * dx + dy * dy)
-                        if rank > bestRank {
-                            bestRank = rank
-                            bestScore = score
-                            bestX = x
-                            bestY = y
-                        }
+                var k = 0
+                for j in 0..<s {
+                    var i = (y + j) * n + x
+                    for _ in 0..<s {
+                        let v = ip[i]
+                        sum += v
+                        sum2 += v * v
+                        cross += v * tp[k]
+                        i += 1
+                        k += 1
                     }
                 }
             }
         }
-        return (bestX, bestY, bestScore)
+        // The template has zero mean, so the patch's mean drops out of the cross term.
+        let variance = sum2 - sum * sum / Float(t.count)
+        return variance <= 1e-3 || tNorm <= 0 ? 0 : cross / (sqrt(variance) * tNorm)
     }
 
-    /** The s px square with its top left at (x0, y0), moved inside the w x h image. */
-    private static func patch(_ img: [UInt8], _ w: Int, _ h: Int, _ s: Int, _ x0: Int, _ y0: Int) -> [Float] {
-        let ax = min(max(x0, 0), w - s)
-        let ay = min(max(y0, 0), h - s)
-        var out = [Float](repeating: 0, count: s * s)
-        for j in 0..<s {
-            for i in 0..<s { out[j * s + i] = Float(img[(ay + j) * w + ax + i]) }
+    private static func ncc(_ patch: [Float], _ t: [Float]) -> Float {
+        let tNorm = sqrt(t.reduce(Float(0)) { $0 + $1 * $1 })
+        return nccAt(patch, Int(Double(patch.count).squareRoot()), 0, 0, t, tNorm)
+    }
+
+    /** 2x2 averages of the n x n square img into out (n / 2 square). */
+    private static func halve(_ img: [Float], _ n: Int, _ out: inout [Float]) {
+        let m = n / 2
+        for y in 0..<m {
+            let r0 = 2 * y * n
+            let r1 = r0 + n
+            for x in 0..<m {
+                out[y * m + x] = (img[r0 + 2 * x] + img[r0 + 2 * x + 1] + img[r1 + 2 * x] + img[r1 + 2 * x + 1]) * 0.25
+            }
         }
-        return out
     }
 
     private static func zeroMean(_ p: [Float]) -> [Float] {
@@ -243,21 +322,5 @@ public final class PatternTracker {
 
     private static func blend(_ into: inout [Float], _ from: [Float]) {
         for i in into.indices { into[i] = into[i] * (1 - learn) + from[i] * learn }
-    }
-
-    /** 2x2 box average, w / 2 x h / 2. */
-    private static func halve(_ img: [UInt8], _ w: Int, _ h: Int) -> [UInt8] {
-        let hw = w / 2
-        let hh = h / 2
-        var out = [UInt8](repeating: 0, count: hw * hh)
-        for y in 0..<hh {
-            let r0 = 2 * y * w
-            let r1 = r0 + w
-            for x in 0..<hw {
-                let s = Int(img[r0 + 2 * x]) + Int(img[r0 + 2 * x + 1]) + Int(img[r1 + 2 * x]) + Int(img[r1 + 2 * x + 1])
-                out[y * hw + x] = UInt8((s + 2) / 4)
-            }
-        }
-        return out
     }
 }

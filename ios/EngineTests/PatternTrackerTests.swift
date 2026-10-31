@@ -166,6 +166,30 @@ final class PatternTrackerTests: XCTestCase {
         }
     }
 
+    func testASubjectGrowingAsTheCameraApproachesIsFollowed() throws {
+        // Walking up to the subject: it grows 6% a frame, from 40 to ~180 px, its centre drifting a little.
+        func approach(_ z: Float, _ cx: Float, _ cy: Float) -> [UInt8] {
+            (0..<(w * h)).map { i in
+                let x = i % w, y = i / w
+                let u = Int(floor((Float(x) + 0.5 - cx) / z + 20)), v = Int(floor((Float(y) + 0.5 - cy) / z + 20))
+                return UInt8((0..<40).contains(u) && (0..<40).contains(v) ? subject[v * 40 + u] : background[i])
+            }
+        }
+        let t = PatternTracker()
+        XCTAssertTrue(t.start(width: w, height: h, grey: approach(1, 150, 120), x: 150 / Float(w), y: 120 / Float(h),
+                              now: 0))
+        var z: Float = 1
+        for i in 1...26 {
+            z *= 1.06
+            let cx = 150 + Float(i)
+            let cy = 120 - Float(i) * 0.5
+            let r = try XCTUnwrap(t.update(width: w, height: h, grey: approach(z, cx, cy), now: Int64(i) * 66))
+            XCTAssertFalse(r.lost, "frame \(i) lost (size \(z))")
+            XCTAssertEqual(r.x, cx / Float(w), accuracy: 3 / Float(w))
+            XCTAssertEqual(r.y, cy / Float(h), accuracy: 3 / Float(h))
+        }
+    }
+
     func testADifferentFrameSizeIsLost() throws {
         let t = PatternTracker()
         XCTAssertTrue(t.start(width: w, height: h, grey: frame(100, 80), x: 120 / Float(w), y: 100 / Float(h), now: 0))

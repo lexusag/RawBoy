@@ -677,11 +677,16 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   with `uvRect` set to the region around the point (main_body's `outPx` follows `vUv`, so grain and lens effects stay
   put). Untested on the phones when added (2026-10-26): tune `FOCUS_SIZE` per lens if a HAL widens small regions.
   Subject tracking (`CameraSettings.trackFocus`, off by default; 2026-10-31): `track/PatternTracker.kt/.swift`
-  (zero-mean NCC of a 24 px template, half-res search ±12 around the predicted spot then ±2 at full res, template
+  (zero-mean NCC of a 24 px template; each frame the region around the predicted spot is resampled at the patch's
+  last scale and ×1.08 / ÷1.08 (walking up to a subject grew it out of a fixed-size template), searched at half
+  resolution (2x2 averages: point steps of 2 px missed fine textures) then ±2 px at full; ~1.2 ms on the JVM; template
   learns at score ≥ 0.85, lost after 400 ms below 0.6; a match must also score ≥ 0.45 against the template as first
   tapped (`ANCHOR_SCORE`: the learning drifted onto the next thing in view on the phone), the search ranks matches
   by score − 0.2 × (distance / reach)² (`PRIOR`: a striped door made it hop between stripes), and a patch predicted
-  past the frame edge isn't searched for (it latched onto what was left at the edge); host tests `PatternTrackerTest`/`PatternTrackerTests`, ~0.2 ms
+  past the frame edge isn't searched for (it latched onto what was left at the edge). While the subject is held
+  (`Result.found` false) AE and the live develop meter the centre box, and the live develop's exposure moves at most
+  0.3 EV per update (`MAX_EV_STEP`, all metering changes): metering a dark held spot blew out the frame, then snapped
+  back on release. Release's AF cancel request carries `setCommon` (a bare one flashed the ISP's own tone curve); host tests `PatternTrackerTest`/`PatternTrackerTests`, ~0.2 ms
   per 320 px frame). Android: `ViewfinderRenderer.onTrackLuma` (a second `LumaProgram` copy, 320 px, every frame its
   async readback finished; set only while a lock may be tracked) → `CameraViewModel.onTrackLuma` on `RawBoy-track`
   (skipped while a burst merges) → `_focusPoint` + `CameraController.trackFocus`/`moveFocus` (≤ 10 Hz):

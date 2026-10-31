@@ -252,9 +252,10 @@ final class CameraController: NSObject, @unchecked Sendable {
     /**
      * Focus (and meter) at a point of the viewfinder (upright normalised, as shown) and keep it there. `follow`: a
      * tracked subject (SubjectTracker), which moves in depth too: continuous autofocus on the box instead of one
-     * scan held; called again with each move.
+     * scan held; called again with each move. `meter` false: the tracked subject is out of sight, so exposure meters
+     * the centre meanwhile (on the last spot it brightened whatever was left there).
      */
-    func focusAt(_ x: Double, _ y: Double, follow: Bool = false) {
+    func focusAt(_ x: Double, _ y: Double, follow: Bool = false, meter: Bool = true) {
         queue.async {
             guard let device = self.input?.device, let lens = self.current else { return }
             // Device coordinates are the sensor's landscape frame; the viewfinder shows it turned 90° (mirrored
@@ -279,7 +280,7 @@ final class CameraController: NSObject, @unchecked Sendable {
                 let mode: AVCaptureDevice.FocusMode = follow ? .continuousAutoFocus : .autoFocus
                 if device.isFocusModeSupported(mode) { device.focusMode = mode }
                 if device.isExposurePointOfInterestSupported {
-                    device.exposurePointOfInterest = point
+                    device.exposurePointOfInterest = meter ? point : CGPoint(x: 0.5, y: 0.5)
                     device.exposureMode = .continuousAutoExposure
                 }
                 device.unlockForConfiguration()

@@ -5,6 +5,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import kotlin.math.floor
 import kotlin.math.max
 import kotlin.random.Random
 
@@ -194,6 +195,31 @@ class PatternTrackerTest {
             val res = assertNotNullResult(t.update(w, h, striped(i * 5, i), i * 66L))
             assertFalse(res.lost)
             assertEquals((w / 2f - i * 5) / w, res.x, 2f / w)
+        }
+    }
+
+    @Test
+    fun aSubjectGrowingAsTheCameraApproachesIsFollowed() {
+        // Walking up to the subject: it grows 6% a frame, from 40 to ~180 px, its centre drifting a little.
+        fun approach(z: Float, cx: Float, cy: Float) = ByteArray(w * h) { i ->
+            val x = i % w
+            val y = i / w
+            val u = floor((x + 0.5f - cx) / z + 20f).toInt()
+            val v = floor((y + 0.5f - cy) / z + 20f).toInt()
+            val g = if (u in 0 until 40 && v in 0 until 40) subject[v * 40 + u] else background[i]
+            g.toByte()
+        }
+        val t = PatternTracker()
+        assertTrue(t.start(w, h, approach(1f, 150f, 120f), 150f / w, 120f / h, 0))
+        var z = 1f
+        for (i in 1..26) {
+            z *= 1.06f
+            val cx = 150f + i
+            val cy = 120f - i * 0.5f
+            val r = assertNotNullResult(t.update(w, h, approach(z, cx, cy), i * 66L))
+            assertFalse("frame $i lost (size ${"%.2f".format(z)})", r.lost)
+            assertEquals(cx / w, r.x, 3f / w)
+            assertEquals(cy / h, r.y, 3f / h)
         }
     }
 

@@ -235,6 +235,9 @@ class CameraController(context: Context) : AutoCloseable {
     /** Whether [focusPoint] follows a tracked subject ([trackFocus]): continuous AF there instead of a held scan. */
     @Volatile
     private var tracking = false
+    /** While tracking: whether the subject is in sight, so AE meters it; while it's held (hidden), the centre box. */
+    @Volatile
+    private var meterFocus = true
 
     /**
      * Side of the focus lock's AF box, as a share of the sensor's short side: [FOCUS_SIZE], or [MeterArea.SPOT_SIZE]
@@ -530,6 +533,7 @@ class CameraController(context: Context) : AutoCloseable {
             val s = session ?: return@post
             focusPoint = x to y
             tracking = true
+            meterFocus = true
             focusWatch = null
             val inf = info ?: return@post
             runCatching {
@@ -545,11 +549,15 @@ class CameraController(context: Context) : AutoCloseable {
         }
     }
 
-    /** Moves a tracked focus point ([trackFocus]) to ([x], [y]); the caller limits how often. */
-    fun moveFocus(x: Float, y: Float) {
+    /**
+     * Moves a tracked focus point ([trackFocus]) to ([x], [y]); the caller limits how often. [meter] false: the subject
+     * isn't in sight, so AE meters the centre box meanwhile (on the last spot it brightened whatever was left there).
+     */
+    fun moveFocus(x: Float, y: Float, meter: Boolean = true) {
         handler.post {
             if (!tracking || session == null) return@post
             focusPoint = x to y
+            meterFocus = meter
             runCatching { repeatPreview() }
         }
     }
@@ -619,8 +627,11 @@ class CameraController(context: Context) : AutoCloseable {
             val s = session ?: return@post
             val inf = info ?: return@post
             runCatching {
+                // The preview's own settings too: a bare request leaves the ISP's tone curve and exposure to the
+                // template for that frame, and the viewfinder flashed bright on release.
                 val cancel = request(s, CameraDevice.TEMPLATE_PREVIEW).apply {
                     addTarget(previewSurface ?: return@post)
+                    setCommon(inf)
                     set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_AUTO)
                     set(CaptureRequest.CONTROL_AF_TRIGGER, CameraMetadata.CONTROL_AF_TRIGGER_CANCEL)
                 }.build()
@@ -1243,7 +1254,10 @@ class CameraController(context: Context) : AutoCloseable {
             set(CaptureRequest.CONTROL_AF_REGIONS, arrayOf(region(_focusSize.value)))
         }
         if ((c.get(CameraCharacteristics.CONTROL_MAX_REGIONS_AE) ?: 0) > 0) {
-            set(CaptureRequest.CONTROL_AE_REGIONS, arrayOf(region(MeterArea.SPOT_SIZE)))
+            set(
+                CaptureRequest.CONTROL_AE_REGIONS,
+                arrayOf(if (tracking && !meterFocus) centreRegion(inf) else region(MeterArea.SPOT_SIZE)),
+            )
         }
     }
 
