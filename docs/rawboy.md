@@ -2,6 +2,9 @@
 
 ## Controls
 
+Upright, the controls sit under the photo; turn the phone sideways (or use a tablet or a wide window) and they
+move to a panel on the right, using its whole height. Android, iPhone and the web.
+
 | Slider | What it does |
 |---|---|
 | Tone mapper | **AgX** (default), **Filmic** or **Sigmoid**, per photo (carries over, in the Light preset group). All three use AgX's log range and put middle grey, display white and the slope at grey in the same place, so the sliders below mean the same and switching doesn't change brightness. AgX: Rec.2020 inset/outset, highlights desaturate towards white. Filmic (after darktable's filmic rgb): straight latitude ~1.3 EV each side of grey with rational toe and shoulder, on max RGB with the colour ratios kept, fading to white across the shoulder; slightly lifted deep shadows. Sigmoid (after darktable's sigmoid): a logistic curve in EV per channel with hue preservation; keeps more colour in bright highlights. RawBoy Auto and Camera always use AgX (their film looks are built on it). **Film**: the photo developed as negative + print on a stock (the same 12 stocks and grain/halation as Auto's Film mode), with **Stock**, **Film strength** (blends with the AgX/Filmic/Sigmoid render picked before), **Film grain** and **Halation** (0..200, 100 = the stock's own, faint as on real film; above 100 it doubles every 25, 16x at 200; only light sources and highlights at the current exposure halate, so a photo without them shows little change). Picking AgX, Filmic or Sigmoid turns the film off; Film brings the last stock back. A photo sent from Auto's Film mode opens with Film selected; presets (Light group) and carry-over keep it |

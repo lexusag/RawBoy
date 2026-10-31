@@ -79,6 +79,10 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
     via `OffscreenDeveloper.renderPreview`.
   - `view/DevelopPreview.kt` (the GLSurfaceView composable), `view/SliderTapTracker.kt`, `view/CompactSlider.kt` (the
     one-row slider behind Pro's `ParamSlider`, Auto's and Camera's sliders), `view/LookDropdown.kt` (Pro's stock and Camera's look menu).
+  - `view/PhotoWithControls.kt` (iOS `view/PhotoWithControls.swift`) — Pro's editor and Auto's photo view: controls under the
+    photo when the window is taller than wide, a side panel (≤ 360 dp, ≤ 45% of the width) on the right when wider. The web
+    does the same with `@media (orientation: portrait)` / `STACKED` (`useMediaQuery.ts`); toolbar rules stay width-based.
+    iOS Pro and Auto allow landscape (`project.yml`); Camera stays portrait on both platforms.
   - `view/Help.kt` — the top bars' "?" button and sheet. Each app's content is its `ui/Help.kt`, mirrored in iOS
     `ui/Help.swift` and web `ui/pro/help.ts` / `ui/auto/help.ts` (web: also Ctrl/⌘+/, `ui/common/HelpDialog.tsx`).
     Update them with user-visible controls and gestures.

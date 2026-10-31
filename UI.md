@@ -10,12 +10,6 @@ end.
 
 ## RawBoy (Pro)
 
-### P2. Side panel in landscape and on tablets (Medium, M) — Android, iOS
-The editor is always a column (photo, then controls capped at 320 dp). Turned sideways or on a tablet the photo
-becomes a thin strip.
-**Change:** when the window is wider than tall, put the panel on the right as the web does on desktop
-(`EditorScreen.kt`, `EditorScreen.swift`).
-
 ### P4. Tell "Film" and "Filmic" apart (Low, S) — Android, iOS, web
 The tone mapper row reads AgX, Filmic, Sigmoid, Film: a curve and a whole stock simulation, two letters apart.
 **Change:** rename the chip "Film stock", or show the stock name on it once picked ("Yellow Portrait 400").

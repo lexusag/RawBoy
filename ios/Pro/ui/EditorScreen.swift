@@ -8,7 +8,7 @@ enum EditorMode { case none, geometry, masks, leaks, presets }
 private let frameWidthPt: CGFloat = 12
 /** Empty space around the frame while masking or placing light leaks: handles can sit beyond the photo. */
 private let maskMarginPt: CGFloat = 16
-/** Slider panels' height cap: the rest of the screen goes to the photo. */
+/** Slider panels' height cap under the photo (portrait): the rest of the screen goes to the photo. */
 private let panelMax: CGFloat = 320
 /** The histogram above the slider tabs. */
 private let histogramHeight: CGFloat = 56
@@ -70,8 +70,8 @@ struct EditorScreen: View {
                          onReset: vm.reset, onAuto: vm.applyAuto,
                          canUndo: state.canUndo, canRedo: state.canRedo, onUndo: vm.undo, onRedo: vm.redo,
                          onExport: { showExport = true })
-            previewArea
-            panel
+            // Controls under the photo in portrait, beside it in landscape.
+            PhotoWithControls { previewArea } controls: { beside in panel(beside: beside) }
         }
         .background(Color(white: 0.07))
         .sheet(isPresented: $showExport) {
@@ -248,8 +248,10 @@ struct EditorScreen: View {
         cropAspect.ratio(frameWidth: frameLens.frameWidth, frameHeight: frameLens.frameHeight, portrait: portrait)
     }
 
+    /** [beside]: in the side panel (landscape), where the panel fills the height instead of the cap under the photo. */
     @ViewBuilder
-    private var panel: some View {
+    private func panel(beside: Bool) -> some View {
+        let maxHeight = beside ? CGFloat.infinity : panelMax
         if state.hasImage {
             switch mode {
             case .geometry:
@@ -301,7 +303,7 @@ struct EditorScreen: View {
                             }
                         },
                         onDone: { mode = .none }))
-                .frame(maxHeight: panelMax)
+                .frame(maxHeight: maxHeight)
             case .leaks:
                 LeaksPanel(
                     leaks: leaks, selectedId: selectedLeakId, zoomed: session.zoomCenter != nil,
@@ -318,10 +320,10 @@ struct EditorScreen: View {
                             }
                         },
                         onDone: { mode = .none }))
-                .frame(maxHeight: panelMax)
+                .frame(maxHeight: maxHeight)
             case .presets:
                 PresetsPanel(vm: vm, onDone: { mode = .none }, hasStrokes: layers.contains { !$0.strokes.isEmpty })
-                    .frame(maxHeight: panelMax)
+                    .frame(maxHeight: maxHeight)
             case .none:
                 // Tap: clipped highlights red and crushed shadows blue on the photo.
                 HistogramView(histogram: vm.histogram, active: vm.clipWarning, onTap: vm.toggleClipWarning)
@@ -341,7 +343,7 @@ struct EditorScreen: View {
                         let preset = vm.saveLensPreset(name: name)
                         if send { vm.sendPresetToAuto(preset) }
                     })
-                .frame(maxHeight: panelMax)
+                .frame(maxHeight: maxHeight)
             }
         }
     }

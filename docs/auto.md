@@ -3,6 +3,9 @@
 Pick or share RAW files (one or many); each is developed automatically and gets a film look. JPEG, HEIC, PNG and
 TIFF work too, at lower quality (see *JPEG, HEIC, PNG and TIFF* below).
 
+In the photo view the looks and sliders sit under the photo when the phone is upright, and in a panel on the right when
+it is turned sideways (or on a tablet or a wide window). Android, iPhone and the web.
+
 1. **Analysis** (from a 512 px copy, a fraction of a second per photo after decoding): centre-weighted
    key, luminance percentiles, clipping, colour mix, and faces via the same MediaPipe models as Pro.
 2. **Auto develop**, using Pro's own sliders. Exposure follows the camera, about 0.6 EV darker (cameras
