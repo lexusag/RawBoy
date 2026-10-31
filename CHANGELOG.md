@@ -1,5 +1,16 @@
 # Changelog
 
+**RawBoy Web and iPhone: RAW files open 2 to 3 times faster (2026-10-31)**
+
+- Opening a photo full size (RawBoy, Auto's photo view, export) decodes the RAW on all cores: the demosaic, the
+  Fujifilm compressed RAF and Canon CR3 unpacking and white balance used one core. A GFX 50R file now opens in about
+  3.1 s instead of 9.2 s (4-core test machine; Sony and Pixel files about twice as fast). The developed result is
+  identical, pixel for pixel.
+- RawBoy Auto (web): each photo's analysis is 2.5 times faster for GFX files too, so the grid develops sooner.
+- Less memory per open photo (one 300 MB copy of a 50 MP image fewer), and the hot pixel and column defect checks
+  are quicker. Android already used all cores for the demosaic and unpacking; it gains the white balance and memory
+  changes.
+
 **RawBoy Camera and RawBoy Film: lock screen camera listed once (2026-10-31)**
 
 - Choosing the *Lock screen camera* in Settings listed RawBoy Camera and RawBoy Film twice each, because an alias

@@ -46,6 +46,7 @@ set(RAWBOY_SOURCES
     ${ENGINE_CPP}/blemish.cpp
     ${ENGINE_CPP}/decode.cpp
     ${ENGINE_CPP}/decoder_libraw.cpp
+    ${ENGINE_CPP}/libraw_parallel.cpp
     ${ENGINE_CPP}/decoder_display.cpp
     ${ENGINE_CPP}/display_inverse.cpp
     ${ENGINE_CPP}/display_profile.cpp

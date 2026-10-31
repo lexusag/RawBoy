@@ -335,9 +335,19 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   pool is fixed at 8 (`parallelRows`' maximum) with `PTHREAD_POOL_SIZE_STRICT=2`: a worker blocked in C++ can't grow
   the pool, so more threads would deadlock. `getExceptionMessage` needs `-sEXPORT_EXCEPTION_HANDLING_HELPERS`. The
   DNG SDK needs `qWeb=1 qDNGLittleEndian=1` (its endian detection doesn't know wasm32). LibRaw is built without
-  OpenMP for the web (no `_OPENMP` anywhere, so its headers agree). Without OpenMP, X-Trans (Fuji) demosaicing would run on one thread
-  (~6× AHD's cost): `decoder_libraw.cpp` hooks `interpolate_xtrans_cb` (`RawBoyLibRaw`) and runs LibRaw's own
-  `xtrans_interpolate` on overlapping horizontal bands with `parallelRows` (`parallelXTrans`); web and iOS. LibRaw needs `LIBRAW_OWN_SWAB` on the web: it
+  OpenMP for the web (no `_OPENMP` anywhere, so its headers agree). Without OpenMP, LibRaw runs everything on one
+  thread, so `libraw_parallel.cpp` (`RawBoyLibRaw`, web and iOS) shares its slow steps out over threads, only through
+  LibRaw's own extension points (LibRaw stays unmodified): Bayer AHD (`interpolate_bayer_cb` → its tile steps, declared
+  only under `LIBRAW_LIBRARY_BUILD`, which that one file defines; tiles read only each pixel's own CFA colour, so their
+  order doesn't matter; neighbouring tiles run in different rounds), X-Trans (`interpolate_xtrans_cb` → `xtrans_interpolate` on overlapping bands,
+  `parallelXTrans`), Fuji compressed strips (virtual `fuji_decode_loop`, one LibRaw instance per thread because its
+  allocator bookkeeping isn't thread safe without OpenMP) and CR3 planes (`crxLoadDecodeLoop`); both read through
+  `LockedBufferStream` (LibRaw's buffer stream has no-op `lock()`). On all platforms: `scale_colors_loop` in row bands,
+  `convert_to_rgb_loop` skipped for camera RGB (only a histogram for auto brightness), and `decodeWithLibRaw` reads
+  `imgdata.image` in place instead of `dcraw_make_mem_image`'s 16-bit copy. Output is bit-identical to LibRaw's
+  single-thread decode (check full and draft decodes when changing any of it). GFX 50R warm, 4-core x86 Node: full
+  decode 9.2 → 3.1 s, draft 4.6 → 1.9 s; TSan clean on a host build. Fresh WASM memory is slow to touch the first time in the cloud VM (~5 µs a
+  page, a first decode 11 s), not on desktops. LibRaw needs `LIBRAW_OWN_SWAB` on the web: it
   byte-swaps big-endian data in place (`swab(p, p, n)`), which musl's `swab` corrupts (iPhone ProRAW is `MM`: garbage
   LinearizationTable, white posterised image). macOS libc and bionic happen to cope. When web and native decodes
   differ, compile a harness with `em++` (same flags, `-sNODERAWFS=1`) and run it in Node next to the clang one.
