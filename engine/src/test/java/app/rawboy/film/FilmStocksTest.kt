@@ -67,7 +67,7 @@ class FilmStocksTest {
             assertTrue(s.id, f.halation.all { it in 0f..0.05f } && f.halation[0] >= f.halation[2])
             assertTrue(s.id, f.haloRadiusUm > 0f && f.scatterUm > 0f)
         }
-        // The consumer stocks halate redder than Portra (fitted to the earlier spektrafilm-shader renders).
+        // The consumer stocks halate redder than Portra (fitted to the earlier film shader's renders).
         val byId = stocks.associateBy { it.id }
         assertTrue(byId.getValue("gold200").formation.halation[0] > byId.getValue("portra400").formation.halation[0])
     }

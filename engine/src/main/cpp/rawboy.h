@@ -210,7 +210,7 @@ TranscodeResult transcodeToLossyJxlDng(const uint8_t* data, size_t size, float d
 
 /**
  * Area-average downscale into [dstW] x [dstH] RGB half floats. With [boostHighlights], each full-resolution pixel
- * near/above clipping is scaled up first (spektrafilm-style pre-clip reconstruction), so small light sources keep
+ * near/above clipping is scaled up first (pre-clip highlight reconstruction), so small light sources keep
  * their energy in the bloom source images. Must match bloomBoost() in the shader.
  */
 void downsample(const DecodedImage& img, int dstW, int dstH, uint16_t* dst, bool boostHighlights);

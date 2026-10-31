@@ -433,7 +433,7 @@ vec3 denoise(vec2 uv, vec2 fullPx, vec3 rgb, float colorNoise) {
     return outSqrt * outSqrt;
 }
 
-// Film-like grain, added in the log (density-like) domain as spektrafilm does.
+// Film-like grain, added in the log (density-like) domain.
 // Sparse convolution noise: one randomly placed soft Gaussian "grain" per cell,
 // cells sized relative to the image (like a film frame), mostly luminance with
 // some per-layer colour. Seeded by full-resolution position so tiles match.
@@ -616,7 +616,7 @@ vec3 retouchSkin(vec2 uvG, vec2 imagePx, vec3 x) {
     return mix(x, retouched, uRetouch * m);
 }
 
-// Pre-clip highlight reconstruction (spektrafilm's boost): light near and above
+// Pre-clip highlight reconstruction (RawBoy's own boost): light near and above
 // clipping carries more energy into the glow. Must match the native downsample.
 vec3 bloomBoost(vec3 c) {
     float t = clamp((max(c.r, max(c.g, c.b)) - 0.6) / 0.4, 0.0, 1.25);
@@ -677,7 +677,7 @@ vec3 bloomTailBand(float band, vec2 uv) {
          + g1.y * (g0.x * texture(uBloomTail, vec2(h0.x, y.y)).rgb + g1.x * texture(uBloomTail, vec2(h1.x, y.y)).rgb);
 }
 
-// Light scattered from the highlights (bloomKnee) through a diffusion filter, after spektrafilm's PSF model: core
+// Light scattered from the highlights (bloomKnee) through a diffusion filter (RawBoy's own PSF model): core
 // 0.30 + halo 0.25 + tail 0.45, each normalised, so it puts back the light bloom() takes (more near clipping). The
 // halo has a slightly warm outer rim. The kernels are round, their weights falling to zero at the rim: square tap
 // grids with heavy corner weights drew square halos around bright windows.
