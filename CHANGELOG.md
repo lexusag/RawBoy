@@ -11,6 +11,13 @@
   are quicker. Android already used all cores for the demosaic and unpacking; it gains the white balance and memory
   changes.
 
+**RawBoy Camera and RawBoy Film: lock screen camera listed once (2026-10-31)**
+
+- Choosing the *Lock screen camera* in Settings listed RawBoy Camera and RawBoy Film twice each, because an alias
+  kept from an older build also answered the lock screen camera request. Each camera is now listed once, as for the
+  *Unlocked camera*. If the lock screen choice was set to the old entry, Android asks once more: pick the camera and
+  **Always** again.
+
 **RawBoy and RawBoy Auto: controls beside the photo in landscape (2026-10-31)**
 
 - Turn the phone sideways (or use a wide window or tablet) and the controls move to a panel on the right of the
