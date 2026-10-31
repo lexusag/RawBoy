@@ -240,6 +240,27 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
                         val cachedParams by produceState<ShaderParams?>(null, cachedImage, shownParams) {
                             value = cachedImage?.let { vm.cachedShaderParams(id, shownParams) }
                         }
+                        // Inset by the frame so the photo doesn't move when the decoded preview replaces it,
+                        // and framed as the preview will be, so the frame doesn't blink out while it renders.
+                        val thumbnail = @Composable {
+                            pagePhoto.thumbnail?.let {
+                                Box(Modifier.fillMaxSize().padding(FRAME_WIDTH), contentAlignment = Alignment.Center) {
+                                    Image(
+                                        it.asImageBitmap(), pagePhoto.name,
+                                        Modifier
+                                            .aspectRatio(it.width.toFloat() / it.height)
+                                            .drawBehind {
+                                                val f = framePx.toFloat()
+                                                drawRect(
+                                                    Color(frameColor.level, frameColor.level, frameColor.level),
+                                                    topLeft = Offset(-f, -f), size = Size(size.width + 2 * f, size.height + 2 * f),
+                                                )
+                                            },
+                                        contentScale = ContentScale.Fit,
+                                    )
+                                }
+                            }
+                        }
                         Box(Modifier.fillMaxSize()) {
                             val live = pagePhoto.id == id && loaded
                             val quickParams = cachedParams.takeIf { cachedImage != null }
@@ -260,6 +281,11 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
                                 DevelopPreview(
                                     if (live) preview else cachedImage, shaderParams, zoomCenter.takeIf { live }, detail.takeIf { live },
                                     framePx, frameColor, Modifier.fillMaxSize(), zoomScale = zoomScale,
+                                    // Each photo swiped to gets a new GL view, empty until it has built its program
+                                    // and drawn: the thumbnail stays over it until then, so the photo doesn't blink out.
+                                    placeholder = {
+                                        Box(Modifier.fillMaxSize().background(Color(0xFF121212))) { thumbnail() }
+                                    },
                                 )
                             }
                             if (!live && quickParams != null) {
@@ -317,25 +343,7 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
                                 }
                             } else {
                                 // Until the raw is decoded, show the grid thumbnail.
-                                pagePhoto.thumbnail?.let {
-                                    // Inset by the frame so the photo doesn't move when the decoded preview replaces it,
-                                    // and framed as the preview will be, so the frame doesn't blink out while it renders.
-                                    Box(Modifier.fillMaxSize().padding(FRAME_WIDTH), contentAlignment = Alignment.Center) {
-                                        Image(
-                                            it.asImageBitmap(), pagePhoto.name,
-                                            Modifier
-                                                .aspectRatio(it.width.toFloat() / it.height)
-                                                .drawBehind {
-                                                    val f = framePx.toFloat()
-                                                    drawRect(
-                                                        Color(frameColor.level, frameColor.level, frameColor.level),
-                                                        topLeft = Offset(-f, -f), size = Size(size.width + 2 * f, size.height + 2 * f),
-                                                    )
-                                                },
-                                            contentScale = ContentScale.Fit,
-                                        )
-                                    }
-                                }
+                                thumbnail()
                                 if (pagePhoto.id == id) CircularProgressIndicator(Modifier.align(Alignment.Center))
                             }
                         }

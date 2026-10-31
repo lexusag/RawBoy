@@ -1,6 +1,11 @@
 package app.rawboy.view
 
 import android.opengl.GLSurfaceView
+import android.os.Handler
+import android.os.Looper
+import android.view.Choreographer
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -34,21 +39,46 @@ fun DevelopPreview(
     clipWarning: Boolean = false,
     /** View pixels per full-resolution pixel while zoomed (1 = 100%; a pinch sets others). */
     zoomScale: Float = 1f,
+    /**
+     * Shown over the view until its first frame with the photo is on screen. A new GLSurfaceView shows an empty
+     * hole while it builds the develop program and uploads the image, so without it the photo blinks out
+     * (Auto's pager makes a new view for each photo swiped to).
+     */
+    placeholder: (@Composable () -> Unit)? = null,
 ) {
     val renderer = remember { DevelopRenderer() }
     var view by remember { mutableStateOf<GLSurfaceView?>(null) }
+    var drawn by remember { mutableStateOf(false) }
 
-    AndroidView(
-        modifier = modifier,
-        factory = { context ->
-            GLSurfaceView(context).apply {
-                setEGLContextClientVersion(3)
-                preserveEGLContextOnPause = true
-                setRenderer(renderer)
-                renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
-            }.also { view = it }
-        },
-    )
+    Box(modifier) {
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { context ->
+                GLSurfaceView(context).apply {
+                    setEGLContextClientVersion(3)
+                    preserveEGLContextOnPause = true
+                    setRenderer(renderer)
+                    renderMode = GLSurfaceView.RENDERMODE_WHEN_DIRTY
+                }.also { view = it }
+            },
+        )
+        if (placeholder != null && !drawn) placeholder()
+    }
+    if (placeholder != null) {
+        // Set before the view is attached, so its first frame can't be missed.
+        DisposableEffect(renderer) {
+            val main = Handler(Looper.getMainLooper())
+            renderer.onPhotoDrawn = {
+                renderer.onPhotoDrawn = null
+                // Two vsyncs: the frame is swapped after onDrawFrame returns and composited on a later vsync.
+                main.post {
+                    val choreographer = Choreographer.getInstance()
+                    choreographer.postFrameCallback { choreographer.postFrameCallback { drawn = true } }
+                }
+            }
+            onDispose { renderer.onPhotoDrawn = null }
+        }
+    }
 
     LaunchedEffect(image, view) {
         renderer.setImage(image)
