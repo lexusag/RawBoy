@@ -33,6 +33,10 @@ ARG SITE_URL
 ARG VITE_GOOGLE_CLIENT_ID
 ARG VITE_GOOGLE_API_KEY
 ARG VITE_GOOGLE_APP_ID
+# Shown in the "?" sheets (vite.config.ts); the image has no .git, so pass them:
+#   --build-arg RAWBOY_VERSION=$(git describe --tags --abbrev=0) --build-arg RAWBOY_COMMIT=$(git rev-parse HEAD)
+ARG RAWBOY_VERSION
+ARG RAWBOY_COMMIT
 # Same as `npm run build:public`, minus the WASM step done above.
 RUN npx tsc --noEmit && npx vite build
 

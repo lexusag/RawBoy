@@ -1,3 +1,4 @@
+import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import react from '@vitejs/plugin-react';
@@ -54,6 +55,27 @@ function seo(): Plugin {
   };
 }
 
+/**
+ * The release this build belongs to, shown in the "?" sheets: RAWBOY_VERSION (the release workflow passes the tag,
+ * v1.7.0 → 1.7.0, as the Android builds get it), else the newest tag git can see, else package.json's version.
+ */
+const version =
+  process.env.RAWBOY_VERSION?.trim().replace(/^v/, '') ||
+  git('describe', '--tags', '--abbrev=0')?.replace(/^v/, '') ||
+  (JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf8')) as { version: string }).version;
+
+/** Short commit of the sources: RAWBOY_COMMIT (Docker builds have no .git), else git; empty when neither is known. */
+const commit = (process.env.RAWBOY_COMMIT?.trim() || git('rev-parse', 'HEAD') || '').slice(0, 7);
+
+/** A git command's output, or undefined outside a checkout (or when it fails, e.g. no tags in a shallow clone). */
+function git(...args: string[]): string | undefined {
+  try {
+    return execFileSync('git', args, { cwd: __dirname, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim() || undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 // Identifies this build: the running app compares it with version.json on the server (src/ui/common/UpdateBanner.tsx).
 const build = new Date().toISOString();
 
@@ -62,12 +84,11 @@ function versionFile(): Plugin {
   return {
     name: 'rawboy-version-file',
     generateBundle() {
-      this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ build }) + '\n' });
+      this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ build, version, commit }) + '\n' });
     },
   };
 }
 
-const version = (JSON.parse(readFileSync(resolve(__dirname, 'package.json'), 'utf8')) as { version: string }).version;
 
 // Threads in the WASM decoder need SharedArrayBuffer, i.e. a cross-origin isolated page.
 const isolation = {
@@ -98,5 +119,5 @@ export default defineConfig({
   // The app, and the Google Drive window (src/drive/popup.ts).
   build: { rollupOptions: { input: { main: resolve(__dirname, 'index.html'), drive: resolve(__dirname, 'drive.html') } } },
   worker: { format: 'es' },
-  define: { __RAWBOY_VERSION__: JSON.stringify(version), __RAWBOY_BUILD__: JSON.stringify(build) },
+  define: { __RAWBOY_VERSION__: JSON.stringify(version), __RAWBOY_BUILD__: JSON.stringify(build), __RAWBOY_COMMIT__: JSON.stringify(commit) },
 });

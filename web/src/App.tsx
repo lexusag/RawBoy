@@ -18,6 +18,7 @@ import type { EditsSidecar } from './engine/browse/XmpSidecar';
 import { BROWSER_HELP } from './ui/browser/help';
 import type { TabId } from './ui/common/tabs';
 import { UpdateBanner } from './ui/common/UpdateBanner';
+import { versionLabel } from './ui/common/version';
 
 const TABS: TabId[] = ['pro', 'auto', 'browser'];
 const TAB_KEY = 'rawboy.tab';
@@ -217,7 +218,11 @@ export function App() {
             onDismiss={closeHelp}
             about={
               <>
-                <span>Version {__RAWBOY_VERSION__} · Decoder: {engine}</span>
+                <span>
+                  {versionLabel()}
+                  <br />
+                  Decoder: {engine}
+                </span>
                 <button
                   type="button"
                   className="text"
