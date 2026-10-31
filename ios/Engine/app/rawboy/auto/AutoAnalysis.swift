@@ -38,16 +38,18 @@ public enum AutoAnalysis {
      * [noiseIsoScale]: see AutoTone.develop. [fallbackIso] is used when the file has no ISO (e.g. from the capture).
      * [detectSkin] false skips skin detection (face metering, skin retouch): the camera saw no face.
      * [meter]: see SceneAnalyzer.analyze. [phoneAe]: RawBoy Camera's raw, exposed by the phone's auto exposure (see
-     * AutoTone.exposure).
+     * AutoTone.exposure); [captureEv]: the AE compensation it was shot with (see AutoTone.exposure).
      */
     public static func analyze(_ image: RawImage, label: String, noiseIsoScale: Float = 1, fallbackIso: Float = 0,
-                               detectSkin: Bool = true, meter: MeterArea? = nil, phoneAe: Bool = false) -> Analysis {
+                               detectSkin: Bool = true, meter: MeterArea? = nil, phoneAe: Bool = false,
+                               captureEv: Float = 0) -> Analysis {
         let start = Date()
         let (base, bloom) = copiesOf(image)
         log.notice("small copies: \(Int(Date().timeIntervalSince(start) * 1000)) ms")
         var info = Info.of(image)
         if info.iso <= 0 { info = Info(lens: info.lens, iso: fallbackIso, defaults: info.defaults) }
         info.phoneAe = phoneAe
+        info.captureEv = captureEv
         return analyze(base, bloom, info, label, noiseIsoScale, detectSkin, meter)
     }
 
@@ -62,6 +64,7 @@ public enum AutoAnalysis {
         var cameraMetered = false
         var noise = NoiseLevel.none
         var phoneAe = false
+        var captureEv: Float = 0
 
         static func of(_ img: RawImage, auto: Bool = false) -> Info {
             Info(lens: img.lens, iso: img.iso, defaults: PhotoSession.asShotDefaults(img),
@@ -82,10 +85,10 @@ public enum AutoAnalysis {
     private static func develop(_ base: PreviewImage, _ skin: SkinMask?, _ iso: Float, _ defaults: DevelopParams,
                                 _ noiseIsoScale: Float, _ cameraMetered: Bool,
                                 _ meter: MeterArea?, _ noise: NoiseLevel = .none,
-                                _ phoneAe: Bool = false) -> (SceneStats, DevelopParams) {
+                                _ phoneAe: Bool = false, _ captureEv: Float = 0) -> (SceneStats, DevelopParams) {
         let stats = SceneAnalyzer.analyze(base, skin: skin, iso: iso, meter: meter)
         return (stats, AutoTone.develop(stats, asShot: defaults, noiseIsoScale: noiseIsoScale, cameraMetered: cameraMetered,
-                                        noise: noise, phoneAe: phoneAe))
+                                        noise: noise, phoneAe: phoneAe, captureEv: captureEv))
     }
 
     private static func copiesOf(_ img: RawImage) -> (PreviewImage, BloomSources) {
@@ -101,7 +104,7 @@ public enum AutoAnalysis {
         log.notice("skin detection: \(Int(Date().timeIntervalSince(start) * 1000)) ms")
         let defaults = info.defaults
         let (stats, auto) = develop(base, skin, info.iso, defaults, noiseIsoScale, info.cameraMetered, meter, info.noise,
-                                    info.phoneAe)
+                                    info.phoneAe, info.captureEv)
         log.notice("""
             analysis \(label): key=\(stats.key) p1=\(stats.p1) p5=\(stats.p5) p50=\(stats.p50) p98=\(stats.p98) \
             p99=\(stats.p99) clipped=\(stats.clipped) chroma=\(stats.chroma) face=\(stats.faceArea) \

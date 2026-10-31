@@ -2,7 +2,7 @@
 
 A camera for the back lenses (made for the Pixel 9 Pro; any phone whose camera offers RAW works). The
 viewfinder shows the photo developed live: RawBoy Auto's automatic develop plus the **look** chosen from the
-**Look** menu under the viewfinder, with **Strength**, **Brightness** and **Warmth** as in Auto (one thin row each). **Tap** to lock focus and exposure at that point: a ring
+**Look** menu under the viewfinder, with **Strength**, **Brightness** and **Warmth** as in Auto (one thin row each). **Brightness** also changes the exposure the camera shoots with (exposure compensation, up to the camera's limit, usually ±2 to ±4 EV): a brighter setting gathers more light, so its shadows are cleaner, and a darker one keeps more highlights; the picture's brightness is the same as before. Flash shots keep their own exposure. **Tap** to lock focus and exposure at that point: a ring
 shows it (pulsing while focusing, white when locked, red when focus wasn't found) and stays locked, also for the
 shot, until you tap **AF LOCK ✕** or tap somewhere else. Exposure is metered on a box about the ring's size; focus
 uses the small square inside it (5% of the frame's short side), so a thin subject in front of a busy background

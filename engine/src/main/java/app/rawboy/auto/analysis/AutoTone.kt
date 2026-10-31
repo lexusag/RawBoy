@@ -99,7 +99,8 @@ object AutoTone {
      * camera raws, and a small phone sensor is about as noisy as those at a few times its ISO.
      * A display source (JPEG, HEIC: [DevelopParams.displaySource]) is already exposed, toned, denoised and sharpened
      * by the camera, and its neutral render is the file itself: it gets only the base grain.
-     * [phoneAe]: RawBoy Camera's raw, exposed by the phone's AE (see [exposure]).
+     * [phoneAe]: RawBoy Camera's raw, exposed by the phone's AE (see [exposure]). [captureEv]: AE compensation the raw
+     * was shot with (Camera's Brightness, see [exposure]); 0 = none.
      */
     fun develop(
         stats: SceneStats,
@@ -108,9 +109,10 @@ object AutoTone {
         cameraMetered: Boolean = false,
         noise: NoiseLevel = NoiseLevel.NONE,
         phoneAe: Boolean = false,
+        captureEv: Float = 0f,
     ): DevelopParams {
         if (asShot.displaySource) return asShot.copy(grain = BASE_GRAIN)
-        val exposure = exposure(stats, cameraMetered, phoneAe)
+        val exposure = exposure(stats, cameraMetered, phoneAe, captureEv)
         val gainEv = exposure + BASE_EXPOSURE_EV
 
         // Highlights: recover when a noticeable part of the frame lands in AgX's top stop.
@@ -145,20 +147,25 @@ object AutoTone {
      * camera underexposed (highlights far below clip) is lifted. [cameraMetered]: the camera's own
      * exposure is kept instead (see [cameraMetered]). [phoneAe]: the phone's exposure is kept unless it put the key
      * below [PHONE_KEY], which is then lifted to it (never darker than the phone's). With a face, mostly the skin decides.
+     * [captureEv]: AE compensation the raw was shot with (RawBoy Camera's Brightness moves the capture exposure, not only
+     * the develop). The exposure is worked out for the raw as it would be without it, then the compensation is taken back
+     * out, so the develop only adds what the look's Brightness asks for on top of the auto exposure: a brighter capture
+     * (less noise) for the same picture, never brightened twice, and a darker one isn't lifted back to [PHONE_KEY].
      */
-    fun exposure(stats: SceneStats, cameraMetered: Boolean = false, phoneAe: Boolean = false): Float {
+    fun exposure(stats: SceneStats, cameraMetered: Boolean = false, phoneAe: Boolean = false, captureEv: Float = 0f): Float {
+        val uncompensated = exp2(-captureEv)
         var ev = when {
-            phoneAe -> max(0f, log2(PHONE_KEY / stats.key))
+            phoneAe -> max(0f, log2(PHONE_KEY / (stats.key * uncompensated)))
             cameraMetered -> 0f
             else -> min(log2(TARGET_KEY / stats.key), TARGET_P98 - stats.p98)
         }
         if (stats.skinLuminance > 0f) {
             val t = ((stats.faceArea - FACE_AREA_FROM) / (FACE_AREA_FULL - FACE_AREA_FROM)).coerceIn(0f, 1f)
             val w = SKIN_WEIGHT * t * t * (3f - 2f * t)
-            val bySkin = log2(TARGET_SKIN / stats.skinLuminance)
+            val bySkin = log2(TARGET_SKIN / (stats.skinLuminance * uncompensated))
             ev = w * bySkin + (1f - w) * ev
         }
-        return ev.coerceIn(-2f, 2f)
+        return ev.coerceIn(-2f, 2f) - captureEv
     }
 
     /**

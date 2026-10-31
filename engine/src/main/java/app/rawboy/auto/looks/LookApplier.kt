@@ -34,8 +34,8 @@ data class Adjustments(
 object LookApplier {
     const val DEFAULT_STRENGTH = 100f
 
-    /** Brightness ±100 = ±3 EV on top of auto exposure. */
-    private const val BRIGHTNESS_EV = 3f
+    /** Brightness ±100 = ±3 EV on top of auto exposure (RawBoy Camera also shoots with it as AE compensation). */
+    const val BRIGHTNESS_EV = 3f
 
     /** Warmth ±100 = temperature x2 / ÷2 on top of the auto white balance (tint follows, see [Warmth]). */
     private const val WARMTH_RANGE = 2f

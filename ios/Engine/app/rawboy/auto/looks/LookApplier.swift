@@ -37,7 +37,7 @@ public enum LookApplier {
     public static let defaultStrength: Float = 100
 
     /** Brightness ±100 = ±3 EV on top of auto exposure. */
-    private static let brightnessEv: Float = 3
+    public static let brightnessEv: Float = 3
 
     /** Warmth ±100 = temperature x2 / ÷2 on top of the auto white balance (tint follows, see Warmth). */
     private static let warmthRange: Float = 2
