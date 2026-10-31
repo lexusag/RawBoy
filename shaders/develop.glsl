@@ -284,7 +284,28 @@ vec3 chromaOf(vec3 s, float l, float cl) {
     return (s - l) * ((cl + CHROMA_RATIO_K) / (l + CHROMA_RATIO_K));
 }
 
-vec3 denoise(vec2 uv, vec2 fullPx, vec3 rgb) {
+// Lens shading gain the decoder applied at sensor position s (the luminance part of the DNG gain maps, 1 at the
+// map's centre), or 1 without a map. Phone DNGs carry one (Pixel 9 Pro main camera: up to ~3.4x in the corners).
+float shadingGainAt(vec2 s) {
+    if (uShadingPoints.x * uShadingPoints.y < 1.5) return 1.0;
+    vec2 rel = s / uSensorSize;                                      // (h, v) fractions
+    vec2 idx = (rel.yx - uShadingGrid.xy) / uShadingGrid.zw;         // (v, h) grid index
+    vec2 tc = (idx.yx + 0.5) / uShadingPoints.yx;                    // texture (h, v)
+    return max(texture(uShading, tc).r, 1e-3);
+}
+
+// The colour denoise's noise level at sensor position s, relative to the frame's centre. The decoder's lens shading
+// gain multiplied the corners' noise along with their light, so at the same output level they hold up to ~2x more
+// colour noise (in this sqrt domain: between sqrt(g) for shot noise and g for read noise; deep shadows are read
+// noise). One colour strength sized for the centre left the corners speckled; sized for the corners it washed out
+// the centre's colour detail. Luma denoise is not scaled.
+const float COLOR_NOISE_SHADING_POW = 0.75;
+float colorNoiseScale(vec2 s) {
+    return pow(max(shadingGainAt(s), 1.0), COLOR_NOISE_SHADING_POW);
+}
+
+// [colorNoise]: colorNoiseScale at this pixel; multiplies the colour sigma only.
+vec3 denoise(vec2 uv, vec2 fullPx, vec3 rgb, float colorNoise) {
     vec3 c = sqrt(max(rgb, 0.0));
     float cl = (c.r + c.g + c.b) / 3.0;
     vec3 cc = c - cl;
@@ -292,7 +313,7 @@ vec3 denoise(vec2 uv, vec2 fullPx, vec3 rgb) {
     // Assumed noise std in sqrt space at full strength (~ISO 6400 on a typical
     // sensor). The downscaled preview averages pixels, which lowers the noise.
     float sigmaL = max(uDenoise * 0.03 * uPixelScale, 1e-5);
-    float sigmaC = max(uColorDenoise * 0.03 * uPixelScale, 1e-5);
+    float sigmaC = max(uColorDenoise * 0.03 * uPixelScale * colorNoise, 1e-5);
     float invLuma = 1.0 / (8.0 * sigmaL * sigmaL);    // range h = 2 sigma
     float invLumaC = 1.0 / (8.0 * sigmaC * sigmaC);   // the chroma filter's luma edge guard
     float invChroma = 1.0 / (18.0 * sigmaC * sigmaC); // range h = 3 sigma
@@ -738,12 +759,7 @@ float lensGain(vec2 s, vec2 p) {
         float r2 = dot(u, u);
         g *= 1.0 + r2 * (uVigK[0] + r2 * (uVigK[1] + r2 * (uVigK[2] + r2 * (uVigK[3] + r2 * uVigK[4]))));
     }
-    if (uShadingUndo > 0.5) {
-        vec2 rel = s / uSensorSize;                                      // (h, v) fractions
-        vec2 idx = (rel.yx - uShadingGrid.xy) / uShadingGrid.zw;         // (v, h) grid index
-        vec2 tc = (idx.yx + 0.5) / uShadingPoints.yx;                    // texture (h, v)
-        g /= max(texture(uShading, tc).r, 1e-3);
-    }
+    if (uShadingUndo > 0.5) g /= shadingGainAt(s);
     if (uManualVig != 0.0) {
         float rn = min(length(p - uImageCenter) / uHalfDiagonal, 1.5);
         g *= exp2(2.0 * uManualVig * pow(rn, mix(1.5, 8.0, uManualVigMid)));
