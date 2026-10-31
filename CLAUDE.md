@@ -187,7 +187,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   `monoLookId`/`filter`, `CameraSettings.develop` (both platforms) = the mono stock (AgX + mono LUT, Auto's looks) +
   Saturation -100 + `DevelopParams.bwFilter` (`BwFilter`: luminance-normalised channel gains folded into the WB matrix in
   `ShaderParams.from`, all ports; identity by default). Saturation -100 makes the scene grey before the LUT, so the
-  filter alone sets the spectral response and Strength < 100 stays grey (`applyLut`'s keep). The DNG stays colour. Tasks:
+  filter alone sets the spectral response and Strength < 100 stays grey (`applyLut`'s keep). The DNG stays colour. B&W grain is ×3 (`MONO_GRAIN`/`monoGrain` in `grainStrength`, owner's choice). Tasks:
   `:app-camera:assembleStandardDebug` / `assembleFilmDebug`, engine tests `:engine:testDebugUnitTest`.
   History: until 2026-10-31 RawBoy Film lived in its own GPLv3 repository (`lexusag/RawBoyFilm`, kept for the source
   of those releases) with a GPL port of spektrafilm's grain/halation (`shaders/film/film.glsl`), an engine `film`

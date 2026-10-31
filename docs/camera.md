@@ -149,5 +149,6 @@ viewfinder shows black and white live. Each mode keeps its own pick, so switchin
   opens up by the filter factor. Blown highlights stay white. Technically: channel gains on linear Rec.2020 after white
   balance (`DevelopParams.bwFilter`, `BwFilter.kt`), then the scene is made grey (Saturation -100) before the film's LUT.
 - **Strength** blends the film's tones with plain grey AgX: the picture stays black and white at any Strength.
+- The grain is three times the black and white look's own (as in RawBoy Auto), for a grainier, more filmic picture.
 - The JPEG is black and white; the **DNG stays in colour**, so the shot can still be developed in colour later.
 - Press and hold still shows the photo in colour, without the look.
