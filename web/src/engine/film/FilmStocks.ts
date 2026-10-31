@@ -41,7 +41,7 @@ export interface FilmData {
   print: LutData;
 }
 
-/** spektrafilm's default format: a 35 mm frame, 36 mm on the long side. Sizes grain and halation. */
+/** Default format: a 35 mm frame, 36 mm on the long side. Sizes grain and halation. */
 export const FRAME_WIDTH_UM = 36000;
 
 const NO_FORMATION: Formation = { grainRms: [0, 0, 0], halation: [0, 0, 0], haloRadiusUm: 0, scatter: [0, 0, 0], scatterUm: 0 };

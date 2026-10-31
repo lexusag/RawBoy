@@ -224,7 +224,7 @@ internal object ShotSaver {
         luts[id] ?: withContext(Dispatchers.IO) { LutLoader.load(app, id) }.also { luts[id] = it }
     }
 
-    /** A spektrafilm stock's two LUTs, loaded once (shares the LUT lock: loads are large and synchronized anyway). */
+    /** A film stock's two LUTs, loaded once (shares the LUT lock: loads are large and synchronized anyway). */
     suspend fun loadFilm(app: Context, id: String): FilmData = lutLock.withLock {
         films[id] ?: withContext(Dispatchers.IO) {
             val stock = FilmStocks.byId(app, id) ?: throw IllegalArgumentException("Unknown film stock $id")

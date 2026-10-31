@@ -32,7 +32,7 @@ export const toneMapperId = (t: ToneMapper): number => TONE_MAPPERS.find((m) => 
  * - colorDenoise: 0..100 colour (chroma) noise, Pro's own slider; null = follows denoise (Auto, Camera, older edits)
  * - localContrast: -100..100 edge-aware mid-frequency detail (texture a few pixels across), 0 = off
  * - highpassContrast: -100..100 local (clarity-style) contrast, 0 = off
- * - bloom: 0..100 diffusion-filter glow (spektrafilm-style), 0 = off
+ * - bloom: 0..100 diffusion-filter glow, 0 = off
  * - skinRetouch: 0..100 smoothing of skin (found by a segmentation model), 0 = off
  * - blemishRemoval: 0..100 automatic spot healing on skin; higher heals fainter spots, 0 = off
  * - lut: LutEntry id or null for "No LUT"; lutAmount: 0..100 strength

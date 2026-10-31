@@ -27,9 +27,9 @@ data class Look(
     /** Skin retouch applied when the photo has a face. */
     val portraitRetouch: Float = 0f,
     val monochrome: Boolean = false,
-    /** spektrafilm stock id ([app.rawboy.film.FilmStocks]) rendered instead of AgX + LUT, or null. */
+    /** Film stock id ([app.rawboy.film.FilmStocks]) rendered instead of AgX + LUT, or null. */
     val film: String? = null,
-    /** Film grain and halation, 100 = as spektrafilm simulates the stock. */
+    /** Film grain and halation, 100 = the stock as formation.json describes it. */
     val filmGrain: Float = 100f,
     val halation: Float = 100f,
 ) {

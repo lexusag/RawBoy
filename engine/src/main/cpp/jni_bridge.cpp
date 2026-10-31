@@ -259,7 +259,7 @@ JNIEXPORT jstring JNICALL Java_app_rawboy_raw_RawNative_lensName(JNIEnv* env, jc
 
 // Area-average downscale into a direct buffer of dstW*dstH RGB half floats.
 // With boostHighlights, each full-resolution pixel near/above clipping is scaled up
-// first (spektrafilm-style pre-clip reconstruction), so small light sources keep
+// first (pre-clip highlight reconstruction), so small light sources keep
 // their energy in the bloom source images. Must match bloomBoost() in Shaders.kt.
 JNIEXPORT void JNICALL Java_app_rawboy_raw_RawNative_downsample(JNIEnv* env, jclass, jlong handle, jint dstW,
                                                                  jint dstH, jobject buffer, jboolean boostHighlights) {

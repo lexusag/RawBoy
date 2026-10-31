@@ -25,9 +25,9 @@ public struct Look: Equatable, Hashable, Sendable, Identifiable {
     /** Skin retouch applied when the photo has a face. */
     public var portraitRetouch: Float = 0
     public var monochrome: Bool = false
-    /** spektrafilm stock id (FilmStocks) rendered instead of AgX + LUT, or nil. */
+    /** Film stock id (FilmStocks) rendered instead of AgX + LUT, or nil. */
     public var film: String? = nil
-    /** Film grain and halation, 100 = as spektrafilm simulates the stock. */
+    /** Film grain and halation, 100 = the stock as formation.json describes it. */
     public var filmGrain: Float = 100
     public var halation: Float = 100
 

@@ -135,7 +135,7 @@ class ShaderParams(
             maskView: String? = null,
             /** Each layer's painted mask (the session's cache); none by default (Auto, Camera). */
             brushFor: (MaskLayer) -> BrushRaster? = { null },
-            /** Loaded spektrafilm stock for DevelopParams.film (Camera). */
+            /** Loaded film stock for DevelopParams.film (Camera). */
             film: FilmData? = null,
             /** See [ShaderParams.bokehSource]; lens blur stays off without it. */
             bokehSource: PreviewImage? = null,
