@@ -3,7 +3,7 @@
 #include <cstring>
 #include "color_math.h"
 
-#include <libraw/libraw.h>
+#include "libraw_parallel.h"
 
 #ifdef __ANDROID__
 #include <android/log.h>
@@ -14,7 +14,6 @@
 #include <cmath>
 #include <cstdio>
 #include <ctime>
-#include <exception>
 #include <memory>
 #include <mutex>
 #include <vector>
@@ -416,9 +415,21 @@ int removeHotPixels(LibRaw& raw) {
     std::vector<Fix> fixes;
     parallelRows(h - 4, [&](int rowBegin, int rowEnd) {
         std::vector<Fix> local;
-        for (int y = rowBegin + 2; y < rowEnd + 2; ++y)
-            for (int x = 2; x < w - 2; ++x)
+        // check()'s cheap reject, ahead of it: two same-colour neighbours within the margin put the 2nd highest
+        // there too. In smooth areas the first two neighbours already settle it.
+        const float margin = kHotSigma * minSigma;
+        for (int y = rowBegin + 2; y < rowEnd + 2; ++y) {
+            const Layout* rowLayouts = &layouts[(y % kPeriod) * kPeriod];
+            const uint16_t* row = base + static_cast<size_t>(y) * pitch;
+            for (int x = 2, px = 2 % kPeriod; x < w - 2; ++x, px = px + 1 == kPeriod ? 0 : px + 1) {
+                const uint16_t* p = row + x;
+                int near = 0;
+                for (const int o : rowLayouts[px].same)
+                    if (float(int(p[0]) - int(p[o])) <= margin && ++near == 2) break;
+                if (near == 2) continue;
                 if (const int r = check(y, x, kHotSigma); r >= 0) local.push_back({y, x, static_cast<uint16_t>(r)});
+            }
+        }
         std::lock_guard<std::mutex> lock(fixesLock);
         fixes.insert(fixes.end(), local.begin(), local.end());
     });
@@ -498,16 +509,33 @@ int removeColumnDefects(LibRaw& raw) {
                                   std::vector<float>(static_cast<size_t>(blocks) * w, 0.0f)};
     std::vector<float> spread[2] = {std::vector<float>(blocks, 1.0f), std::vector<float>(blocks, 1.0f)};
     parallelRows(2 * blocks, [&](int jobBegin, int jobEnd) {
-        std::vector<float> v, all;
-        v.reserve(kBlock);
+        // Each column's d values, gathered row by row for a few columns at a time: walking down whole columns, or
+        // gathering whole rows, missed the cache.
+        constexpr int kChunk = 128;
+        float values[kChunk][kBlock];
+        int counts[kChunk];
+        std::vector<float> all;
         for (int job = jobBegin; job < jobEnd; ++job) {
             const int p = job % 2, b = job / 2;
             float* m = meds[p].data() + static_cast<size_t>(b) * w;
-            for (int x = 2; x < w - 2; ++x) {
-                v.clear();
-                for (int i = 0; i < kBlock; ++i)
-                    if (const float d = diff(2 * (b * kBlock + i) + p, x); !std::isnan(d)) v.push_back(d);
-                m[x] = v.size() >= kBlock / 2 ? median(v) : 0.0f;
+            for (int x0 = 2; x0 < w - 2; x0 += kChunk) {
+                const int n = std::min(kChunk, w - 2 - x0);
+                std::fill(counts, counts + n, 0);
+                for (int i = 0; i < kBlock; ++i) {
+                    const int y = 2 * (b * kBlock + i) + p;
+                    for (int k = 0; k < n; ++k)
+                        if (const float d = diff(y, x0 + k); !std::isnan(d)) values[k][counts[k]++] = d;
+                }
+                for (int k = 0; k < n; ++k) {
+                    float* v = values[k];
+                    const int c = counts[k];
+                    if (c < kBlock / 2) {
+                        m[x0 + k] = 0.0f;
+                        continue;
+                    }
+                    std::nth_element(v, v + c / 2, v + c);
+                    m[x0 + k] = v[c / 2];
+                }
             }
             // Spread across columns: MAD of the block medians (~noise / sqrt(kBlock)).
             all.assign(m + 2, m + w - 2);
@@ -594,105 +622,6 @@ int removeColumnDefects(LibRaw& raw) {
     return static_cast<int>(kept.size());
 }
 
-#ifndef _OPENMP
-/**
- * Fuji X-Trans demosaic (LibRaw's 3-pass Markesteijn) on all cores where LibRaw has no OpenMP (web, iOS). There it
- * runs on one thread: 14.6 s for a 26 MP frame vs 2.4 s for AHD on a Bayer frame of the same size (x86, -O3).
- *
- * The frame is cut into horizontal bands with kMargin rows of context on each side; each band is demosaiced by
- * LibRaw's own xtrans_interpolate on a private copy (a LibRaw instance that only holds the band), and its inner rows
- * are written back. Margins come from a snapshot taken before any band runs, so every band sees the raw CFA data.
- * Bands start on multiples of 6, so the 6×6 X-Trans pattern (and its 3-row green phase) is the same in every band.
- * LibRaw's tiles look at most 8 + 3 rows past what they write, so 36 rows of context leave the inner rows as a
- * single pass computes them, except where LibRaw's own tile seams fall (its tiles read rows their neighbour has
- * already written, which OpenMP's order changes as well).
- */
-class XTransBand : public LibRaw {
-public:
-    void demosaic(const LibRaw& full, ushort (*band)[4], int rows, int passes) {
-        imgdata.sizes.width = full.imgdata.sizes.width;
-        imgdata.sizes.height = static_cast<ushort>(rows);
-        imgdata.sizes.iwidth = imgdata.sizes.width;
-        imgdata.sizes.iheight = imgdata.sizes.height;
-        imgdata.idata.filters = 9;
-        imgdata.idata.colors = full.imgdata.idata.colors;
-        std::memcpy(imgdata.idata.xtrans, full.imgdata.idata.xtrans, sizeof imgdata.idata.xtrans);
-        std::memcpy(imgdata.color.rgb_cam, full.imgdata.color.rgb_cam, sizeof imgdata.color.rgb_cam);
-        imgdata.image = band;
-        try {
-            xtrans_interpolate(passes);
-        } catch (...) {
-            imgdata.image = nullptr;  // the band belongs to the caller
-            throw;
-        }
-        imgdata.image = nullptr;
-    }
-};
-
-void parallelXTrans(void* ctx) {
-    constexpr int kMargin = 36;      // context rows on each side of a band; a multiple of 6
-    constexpr int kMinRows = 500;    // band rows written; LibRaw needs at least LIBRAW_AHD_TILE (512) with margins
-    auto& raw = *static_cast<LibRaw*>(ctx);
-    const int w = raw.imgdata.sizes.width;
-    const int h = raw.imgdata.sizes.height;
-    const int passes = raw.imgdata.params.user_qual > 2 ? 3 : 1;  // as dcraw_process would ask
-    const int threads = std::max(1, std::min(8, static_cast<int>(std::thread::hardware_concurrency())));
-    const int bands = std::min(threads, h / kMinRows);
-    ushort(*image)[4] = raw.imgdata.image;
-    if (bands < 2) {
-        XTransBand().demosaic(raw, image, h, passes);
-        return;
-    }
-    // Band k writes rows [starts[k], starts[k + 1]).
-    std::vector<int> starts(bands + 1);
-    for (int k = 0; k <= bands; ++k) starts[k] = k == bands ? h : (h * k / bands) / 6 * 6;
-    // The CFA rows around each inner boundary, before any band overwrites them. 4 values per pixel, as LibRaw's image.
-    using Pixel = ushort[4];
-    const size_t rowValues = static_cast<size_t>(w) * 4;
-    const ushort* src = image[0];
-    std::vector<std::vector<ushort>> seams(bands);
-    for (int k = 1; k < bands; ++k)
-        seams[k].assign(src + (starts[k] - kMargin) * rowValues, src + (starts[k] + kMargin) * rowValues);
-    std::mutex errorLock;
-    std::exception_ptr error;
-    parallelRows(bands, [&](int first, int last) {
-        for (int k = first; k < last; ++k) {
-            try {
-                const int top = k == 0 ? 0 : starts[k] - kMargin;
-                const int bottom = k == bands - 1 ? h : starts[k + 1] + kMargin;
-                std::vector<ushort> band(static_cast<size_t>(bottom - top) * rowValues);
-                // Inner rows from the image (only this band writes them), margins from the seams.
-                const int innerTop = k == 0 ? 0 : starts[k] + kMargin;
-                const int innerBottom = k == bands - 1 ? h : starts[k + 1] - kMargin;
-                if (k > 0) std::copy(seams[k].begin(), seams[k].end(), band.begin());
-                std::copy(src + innerTop * rowValues, src + innerBottom * rowValues,
-                          band.begin() + (innerTop - top) * rowValues);
-                if (k < bands - 1)
-                    std::copy(seams[k + 1].begin(), seams[k + 1].end(), band.begin() + (innerBottom - top) * rowValues);
-                auto lib = std::make_unique<XTransBand>();  // LibRaw is large; keep it off the stack
-                lib->demosaic(raw, reinterpret_cast<Pixel*>(band.data()), bottom - top, passes);
-                std::copy(band.begin() + (starts[k] - top) * rowValues, band.begin() + (starts[k + 1] - top) * rowValues,
-                          image[0] + starts[k] * rowValues);
-            } catch (...) {
-                std::lock_guard<std::mutex> lock(errorLock);
-                if (!error) error = std::current_exception();
-            }
-        }
-    });
-    if (error) std::rethrow_exception(error);  // dcraw_process turns LibRaw's exceptions into its error codes
-}
-#endif
-
-/** LibRaw with RawBoy's processing steps hooked in (LibRaw's callbacks are protected). */
-class RawBoyLibRaw : public LibRaw {
-public:
-    RawBoyLibRaw() {
-#ifndef _OPENMP
-        callbacks.interpolate_xtrans_cb = parallelXTrans;
-#endif
-    }
-};
-
 }  // namespace
 
 bool decodeWithLibRaw(const uint8_t* data, size_t size, DecodedImage& out, std::string& error, float extraBlack,
@@ -714,7 +643,7 @@ bool decodeWithLibRaw(const uint8_t* data, size_t size, DecodedImage& out, std::
     p.half_size = draft;    // one pixel per CFA block, no demosaic (see DecodedImage::fullWidth)
 
     const auto t0 = std::chrono::steady_clock::now();
-    int rc = raw->open_buffer(data, size);
+    int rc = raw->openBuffer(data, size);
 #if RAWBOY_WITH_DNG_SDK
     // iPhone selfie Bayer DNGs store the CFA in portrait (3024 x 4032, 1512 x 504 lossless-JPEG tiles): LibRaw 0.21.3
     // puts those tiles in the wrong places (horizontal bands, shifted sideways). Leave them to the DNG SDK (decodeAny
@@ -762,27 +691,39 @@ bool decodeWithLibRaw(const uint8_t* data, size_t size, DecodedImage& out, std::
         return false;
     }
 
-    int err = 0;
-    libraw_processed_image_t* img = raw->dcraw_make_mem_image(&err);  // sensor orientation
-    if (!img) {
-        error = std::string("LibRaw: ") + libraw_strerror(err);
-        return false;
-    }
-    if (img->type != LIBRAW_IMAGE_BITMAP || img->colors != 3 || img->bits != 16) {
-        LibRaw::dcraw_clear_mem(img);
-        error = "LibRaw: unexpected output format";
-        return false;
+    // The processed pixels, read in place where dcraw_make_mem_image's 16-bit RGB copy would be a plain copy (another
+    // 300 MB for 50 MP): with the linear curve set above (gamma 1, no auto brightness; bright stays 1) its curve is the
+    // identity, and with user_flip 0 nothing is flipped. Anything else (a stretched or rotated frame) takes the copy.
+    const auto& sizes = raw->imgdata.sizes;
+    int memW = 0, memH = 0, memColors = 0, memBits = 0;
+    raw->get_mem_image_format(&memW, &memH, &memColors, &memBits);
+    const bool inPlace = memW == sizes.width && memH == sizes.height && memColors == 3 && memBits == 16 &&
+                         sizes.flip == 0 && raw->imgdata.image;
+    libraw_processed_image_t* img = nullptr;
+    if (!inPlace) {
+        int err = 0;
+        img = raw->dcraw_make_mem_image(&err);  // sensor orientation
+        if (!img) {
+            error = std::string("LibRaw: ") + libraw_strerror(err);
+            return false;
+        }
+        if (img->type != LIBRAW_IMAGE_BITMAP || img->colors != 3 || img->bits != 16) {
+            LibRaw::dcraw_clear_mem(img);
+            error = "LibRaw: unexpected output format";
+            return false;
+        }
     }
 
-    const int w = img->width;
-    const int h = img->height;
+    const int w = inPlace ? memW : img->width;
+    const int h = inPlace ? memH : img->height;
     // Converted pixels go straight to their oriented position (one pass, no second full-size copy).
     const int orientation = flipToTiffOrientation(fileFlip);
     const bool swap = orientation >= 5 && orientation <= 8;
     out.width = swap ? h : w;
     out.height = swap ? w : h;
     out.rgb.resize(static_cast<size_t>(w) * h * 3);
-    const auto* src = reinterpret_cast<const uint16_t*>(img->data);
+    const auto* src = inPlace ? raw->imgdata.image[0] : reinterpret_cast<const uint16_t*>(img->data);
+    const int srcStep = inPlace ? 4 : 3;  // LibRaw's image holds 4 values per pixel
 
     // camera RGB (white balanced) -> linear Rec.2020, including DNG BaselineExposure.
     const auto& color = raw->imgdata.color;
@@ -816,10 +757,10 @@ bool decodeWithLibRaw(const uint8_t* data, size_t size, DecodedImage& out, std::
         for (int y = rowBegin; y < rowEnd; ++y) {
             for (int c = 0; c < 3; ++c)
                 if (!gains[c].empty()) gains[c].prepareRow(double(y) / h, rows[c]);
-            const uint16_t* in = src + static_cast<size_t>(y) * w * 3;
+            const uint16_t* in = src + static_cast<size_t>(y) * w * srcStep;
             const OrientedRow dest = orientedRow(orientation, w, h, y);
             uint16_t* o = out.rgb.data() + dest.start;
-            for (int x = 0; x < w; ++x, in += 3, o += dest.step) {
+            for (int x = 0; x < w; ++x, in += srcStep, o += dest.step) {
                 float cam[3] = {float(in[0]) - blackOut[0], float(in[1]) - blackOut[1], float(in[2]) - blackOut[2]};
                 blendClipped(cam, clip);
                 for (int c = 0; c < 3; ++c)

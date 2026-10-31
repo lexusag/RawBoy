@@ -61,6 +61,7 @@ set(RAWBOY_SOURCES
     decode.cpp
     image_ops.cpp
     decoder_libraw.cpp
+    libraw_parallel.cpp
     decoder_display.cpp
     display_inverse.cpp
     display_profile.cpp
