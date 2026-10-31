@@ -144,7 +144,11 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   physical id directly), `CameraViewModel.kt` (live auto develop, capture → DNG), `ShotSaver.kt` (application-scoped
   one-at-a-time develop → jpegli JPEG, `previewScale` / `flashGuides` calibration, plus `SaveService` `shortService`
   FGS + partial wake lock so locking immediately after shooting from the lock screen camera never cancels or
-  freezes a save; `CameraActivity` waits for `capturing == 0` before `finishAndRemoveTask()` on screen-off),
+  freezes a save; `CameraActivity` waits for `capturing == 0` before `finishAndRemoveTask()` on screen-off; the
+  manifest allows show-when-locked, `onLaunch` turns it on only for the secure action and `onStop` off for any other
+  camera. Charging with the screensaver on sleep, power makes the phone **dream**: `isInteractive` stays true, so the
+  lock screen camera also closes on `ACTION_DREAMING_STARTED`, but only if it left the screen as the lock screen camera:
+  a frozen background process gets that broadcast late, after a new secure launch (a late SCREEN_OFF did the same in #116)),
   `CameraSettings.kt`, `ui/`. Exposure (`AutoTone.develop(phoneAe = true)`; flash shots, AE off, are re-metered as
   Auto): the phone's AE is kept, but lifted to `PHONE_KEY` (0.06) when it put the metered key below it (the Pixel's AE
   protects highlights: a white pigeon or a window in the box took the frame 1-2 EV down), never darker, max +2 EV.

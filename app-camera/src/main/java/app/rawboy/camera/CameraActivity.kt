@@ -2,10 +2,13 @@ package app.rawboy.camera
 
 import android.Manifest
 import android.app.KeyguardManager
+import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipDescription
 import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.net.wifi.WifiNetworkSuggestion
@@ -67,9 +70,29 @@ class CameraActivity : ComponentActivity() {
     /** Screen turned off while Camera2 was still reading a shot: close as soon as the raw is captured. */
     private var closeAfterCapture = false
 
+    /**
+     * Power pressed while the screensaver starts on sleep (charging, "When to start: while charging"): the phone dreams
+     * instead of turning the screen off, so [PowerManager.isInteractive] stays true in [onStop]. The lock screen camera
+     * closes on that too, but only if it was the lock screen camera when it left the screen ([stoppedOverLockScreen]):
+     * a process frozen in the background gets the dream broadcasts late, after a new secure launch has already arrived
+     * (as a late ACTION_SCREEN_OFF did in #116).
+     */
+    private var dreaming = false
+
+    /** Stopped while it was the lock screen camera (by the dream, or by the passcode prompt), not started since. */
+    private var stoppedOverLockScreen = false
+
+    private val onDream = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            dreaming = intent.action == Intent.ACTION_DREAMING_STARTED
+            if (dreaming && overLockScreen && stoppedOverLockScreen) closeWhenCaptured()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         onLaunch(intent, fresh = savedInstanceState == null)
+        ContextCompat.registerReceiver(this, onDream, IntentFilter(Intent.ACTION_DREAMING_STARTED).apply { addAction(Intent.ACTION_DREAMING_STOPPED) }, ContextCompat.RECEIVER_NOT_EXPORTED)
         lifecycleScope.launch {
             viewModel.capturing.collect { count ->
                 if (count == 0 && closeAfterCapture) finishAndRemoveTask()
@@ -105,11 +128,15 @@ class CameraActivity : ComponentActivity() {
 
     private fun onLaunch(intent: Intent?, fresh: Boolean) {
         closeAfterCapture = false
+        stoppedOverLockScreen = false
         val secure = intent?.action == MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE
         // The secure action on an unlocked phone (Settings' "Lock screen camera" choice) is an ordinary launch.
         overLockScreen = secure && getSystemService(KeyguardManager::class.java).isKeyguardLocked
-        setShowWhenLocked(true)
-        setTurnScreenOn(true)
+        // Only the secure launch shows over the lock screen. The manifest allows it for every launch (a secure launch
+        // into an existing camera then shows reliably), so an ordinary one, or one recreated in its task after the
+        // process died, turns it off here.
+        setShowWhenLocked(secure)
+        setTurnScreenOn(secure)
         if (overLockScreen && fresh) viewModel.forgetLastShot()
     }
 
@@ -253,12 +280,28 @@ class CameraActivity : ComponentActivity() {
      */
     override fun onStop() {
         super.onStop()
-        if (overLockScreen && !isChangingConfigurations && !getSystemService(PowerManager::class.java).isInteractive) closeWhenCaptured()
+        if (isChangingConfigurations) return
+        if (!overLockScreen) {
+            // An ordinary camera (or one unlocked since) mustn't come back over the lock screen when the phone wakes,
+            // with the last photo's thumbnail. Hidden anyway once stopped; a secure launch turns it on in onLaunch.
+            setShowWhenLocked(false)
+            setTurnScreenOn(false)
+        } else if (dreaming || !getSystemService(PowerManager::class.java).isInteractive) {
+            closeWhenCaptured()
+        } else {
+            stoppedOverLockScreen = true // the dream may start just after: onDream closes it then
+        }
+    }
+
+    override fun onDestroy() {
+        unregisterReceiver(onDream)
+        super.onDestroy()
     }
 
     /** Unlocked while it was open: from now on an ordinary camera. */
     override fun onStart() {
         super.onStart()
+        stoppedOverLockScreen = false
         if (overLockScreen && !getSystemService(KeyguardManager::class.java).isKeyguardLocked) leaveLockScreen()
     }
 }
