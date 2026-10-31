@@ -622,7 +622,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         activeCaptures++
         _capturing.value = activeCaptures
         if (burst) _merging.value = true
-        // Runs in ShotSaver.scope so finishing LockScreenCameraActivity never cancels an in-flight capture.
+        // Runs in ShotSaver.scope so finishing the lock screen camera never cancels an in-flight capture.
         ShotSaver.scope.launch {
             try {
                 val shot = capture(shotId, settings, hiRes, viewfinderKey, flash, burstFrames).copy(mayHaveFace = mayHaveFace)

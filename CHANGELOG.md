@@ -1,5 +1,15 @@
 # Changelog
 
+**RawBoy Camera (Android): small fixes (2026-10-31)**
+
+- The frame merging button turns gray while the flash is on, since flash shots are single frames.
+- RawBoy Film no longer shows the *Lossy JPEG XL DNG* switch: its build has no DNG SDK, so the switch did nothing.
+
+**Film looks: Yellow Mono Soft (2026-10-30)**
+
+- New black-and-white look **Yellow Mono Soft** (Auto, Camera; Android, iOS, web): the Yellow Mono negative printed on a
+  soft paper grade, for gentle highlights and open shadows. It comes first among the Yellow Mono looks.
+
 **RawBoy Camera (Android): lossy JPEG XL DNG (2026-10-30)**
 
 - New **Lossy JPEG XL DNG** switch in Settings (under Keep raw): the kept DNG is re-saved as a DNG 1.7.1 with lossy

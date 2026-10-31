@@ -5,7 +5,6 @@ import android.app.KeyguardManager
 import android.content.ClipData
 import android.content.ClipDescription
 import android.content.ClipboardManager
-import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -33,7 +32,7 @@ import app.rawboy.camera.qr.QrPayload
 import app.rawboy.camera.ui.CameraScreen
 import kotlinx.coroutines.launch
 
-open class CameraActivity : ComponentActivity() {
+class CameraActivity : ComponentActivity() {
     private val viewModel: CameraViewModel by viewModels()
 
     private val permission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->

@@ -98,7 +98,7 @@ internal sealed interface Calibration {
  * Application-scoped queue that develops captured raws into JPEGs one at a time.
  *
  * Kept outside [CameraViewModel] (with [SaveService] holding the process and CPU awake while [pending] > 0) so locking
- * the phone immediately after shooting — which finishes [LockScreenCameraActivity] and clears its ViewModel — never
+ * the phone immediately after shooting — which finishes the lock screen camera and clears its ViewModel — never
  * cancels a capture or develop still in progress.
  */
 internal object ShotSaver {
@@ -296,7 +296,7 @@ internal object ShotSaver {
             withContext(Dispatchers.IO) { thumbnail(app, uri) }?.let { _lastShot.value = SavedShot(shot.id, LastShot(uri, it)) }
         }
         // The JPEG came from the uncompressed raw; now the kept DNG shrinks to a lossy JPEG XL one.
-        if (s.keepDng && s.lossyDng && shot.temporary == null) withContext(Dispatchers.IO) { compressDng(app, shot) }
+        if (s.keepDng && s.lossyDng && DngJxlNative.available && shot.temporary == null) withContext(Dispatchers.IO) { compressDng(app, shot) }
     }
 
     /** Re-saves the kept DNG as a lossy JPEG XL DNG, in place. Best effort: the uncompressed DNG stays if it fails. IO thread. */
