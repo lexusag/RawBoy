@@ -6,7 +6,7 @@
   of the edge (front/back switch above, last photo below), one tall slider beside it, and round **S**, **B** and **W**
   buttons (Strength, Brightness, Warmth; **F**, the filter, in B&W mode, which then lists the filters beside the
   shutter) to pick what the slider changes. Brightness is picked first. Double-tap a letter or the slider to reset it.
-  The Film and B&W buttons and the Look menu sit above; RAW, Burst, Flash, ? and Settings move to a column at the left.
+  The Look menu sits above them, with the Film and B&W buttons under it; RAW, Burst, Flash, ? and Settings move to a column at the left.
 - The viewfinder picture, the focus ring and taps stay upright, the selfie view stays a true mirror, and photos keep
   their orientation as before. Portrait is unchanged. Android and iPhone.
 

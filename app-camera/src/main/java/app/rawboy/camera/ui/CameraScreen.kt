@@ -479,7 +479,22 @@ fun CameraScreen(
                         status = statusText,
                         adjust = adjust,
                         onAdjust = { adjust = it },
-                        lookRow = { lookRow(80.dp) },
+                        // The stock menu across the column, the Film and B&W buttons under it.
+                        lookRow = {
+                            Column {
+                                LookDropdown(
+                                    label = "",
+                                    looks = looks,
+                                    selected = looks.firstOrNull { it.id == settings.look.id },
+                                    onSelect = { vm.setLook(it.id) },
+                                    labelWidth = 0.dp,
+                                )
+                                Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    FilmToggle(settings.film, vm::setFilm)
+                                    if (Edition.monoLooks.isNotEmpty()) MonoToggle(settings.monoMode, vm::setMono)
+                                }
+                            }
+                        },
                         vm = vm,
                     )
                 } else {
