@@ -702,6 +702,13 @@ progress {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  /* Done (and the head's other buttons) stays in view while the panel scrolls: pinned to the top edge, over the padding. */
+  position: sticky;
+  top: -8px;
+  z-index: 2;
+  margin: -8px -16px 0;
+  padding: 8px 16px 4px;
+  background: var(--surface);
 }
 
 .slider {
@@ -1844,7 +1851,7 @@ line.curve-grid {
   color: var(--text);
 }
 
-/* Narrow Masks panel: the add buttons in the heading's row, and Mask / Adjust tabs that stay in view while it scrolls. */
+/* Narrow Masks panel: the add buttons in the heading's row, and Mask / Adjust tabs that stay in view (under the heading) while it scrolls. */
 .geometry-head .mask-add {
   flex-wrap: nowrap;
   gap: 6px;
@@ -1852,9 +1859,22 @@ line.curve-grid {
   min-width: 0;
 }
 
+/* Light leaks: the add buttons stay on one row beside Done, so the pinned heading stays short in the sidebar. */
+.geometry-head .leak-add {
+  flex-wrap: nowrap;
+  gap: 6px;
+  padding: 6px 0;
+  min-width: 0;
+}
+
+.geometry-head .leak-add button {
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+
 .mask-tabs {
   position: sticky;
-  top: -8px;
+  top: calc(var(--mask-head-height, 0px) - 8px);
   z-index: 1;
   margin: 4px -16px 0;
   padding: 0 8px;

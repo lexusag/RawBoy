@@ -1,5 +1,5 @@
 import { MAX_BRUSH_RADIUS, MAX_LAYERS, MIN_BRUSH_RADIUS, SHAPE_NAMES, type LayerAdjust, type MaskLayer } from '../../engine/develop/Masks';
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { ParamSlider, formatEv } from '../common/ParamSlider';
 import { useMediaQuery } from '../common/useMediaQuery';
 import { Note, SectionLabel } from './Controls';
@@ -58,6 +58,17 @@ export function MasksPanel(props: Props) {
   const narrow = useMediaQuery('(max-width: 760px)');
   const [tab, setTab] = useState<'Mask' | 'Adjust'>('Mask');
   const maskPart = !narrow || tab === 'Mask';
+  // The Mask / Adjust tabs stick just under the (sticky) heading with Done: its height, which depends on the add buttons.
+  const panelRef = useRef<HTMLDivElement>(null);
+  const headRef = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const panel = panelRef.current;
+    const head = headRef.current;
+    if (!panel || !head) return;
+    const observer = new ResizeObserver(() => panel.style.setProperty('--mask-head-height', `${head.offsetHeight}px`));
+    observer.observe(head);
+    return () => observer.disconnect();
+  }, []);
   const adjustPart = !narrow || tab === 'Adjust';
   const addButtons = (
     <div className="button-row mask-add">
@@ -69,9 +80,9 @@ export function MasksPanel(props: Props) {
   );
 
   return (
-    <div className="controls geometry">
+    <div className="controls geometry" ref={panelRef}>
       {/* Narrow: the add buttons share the heading's row (the top bar already says Masks). */}
-      <div className="geometry-head">
+      <div className="geometry-head" ref={headRef}>
         {narrow ? addButtons : <strong>Masks</strong>}
         <button type="button" className="text" onClick={onDone}>
           Done

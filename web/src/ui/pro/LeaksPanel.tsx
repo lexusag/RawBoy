@@ -58,7 +58,7 @@ export function LeaksPanel({ leaks, selectedId, onSelect, onAdd, onUpdate, onRem
   return (
     <div className="controls geometry">
       <div className="geometry-head">
-        <div className="button-row">
+        <div className="button-row leak-add">
           {LEAK_KINDS.map((k) => (
             <button key={k} type="button" onClick={() => onAdd(k)} disabled={full}>
               + {KIND_NAMES[k]}

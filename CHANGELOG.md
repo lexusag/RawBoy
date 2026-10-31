@@ -1,5 +1,11 @@
 # Changelog
 
+**RawBoy Web: Done always in view (2026-10-31)**
+
+- In Crop & rotate, Masks, Light leaks and Presets the heading with **Done** (and Reset crop, the add buttons) stays
+  pinned at the top of the panel while it scrolls, on phones and on desktop. Masks' Mask / Adjust tabs stick just
+  under it, and the light leak add buttons keep to one row so the pinned heading stays short.
+
 **RawBoy Camera: track the subject after a tap (2026-10-31)**
 
 - New **Track subject after tap** setting (Android and iPhone, off by default): after a tap the focus ring follows what
