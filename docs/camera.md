@@ -9,7 +9,12 @@ uses the small square inside it (5% of the frame's short side), so a thin subjec
 gets the focus. If the square finds nothing to focus on (a plain wall), the Android app tries again with the ring's
 area before turning red; on the iPhone the square needs iOS 26 (before that the iPhone picks its own area around the
 point, shown as a dot), and faces in the frame no longer pull focus away from the point. **Drag the ring** to move the
-point precisely: a 3× loupe shows what's under it, clear of your finger, and it focuses there when you let go. Press and hold to see the photo without the look. The
+point precisely: a 3× loupe shows what's under it, clear of your finger, and it focuses there when you let go. With
+**Settings → Track subject after tap** on, the ring then follows what you tapped as it (or the phone) moves, the badge
+reads **TRACKING ✕**, and focus keeps adjusting on it (continuous autofocus on the moving square, metering moving
+with it); a subject covered for a moment is held, and once it has been out of sight for about half a second the lock
+ends by itself and the camera goes back to autofocus ("Subject lost"). A spot with too little detail to follow (a
+plain wall) stays a plain lock. Press and hold to see the photo without the look. The
 **volume buttons** take a photo too; the viewfinder blinks and the phone ticks on each shot.
 **Power button double press** (Android): RawBoy Camera can be the phone's default camera, so pressing the power
 button twice opens it, also on a locked phone. Turn on *Settings → System → Gestures → Quickly open camera*. Android
@@ -37,6 +42,11 @@ shows them.
   unlock first. Shooting isn't affected: Android reads a 1280 px greyscale copy of the viewfinder about three times
   a second with ZXing on a background thread (skipped while a burst merges); the iPhone uses AVFoundation's own QR
   detector next to its face detection. On by default; **Settings → QR codes** turns it off.
+- **Subject tracking** (Track subject after tap, off by default): a 320 px greyscale copy of each viewfinder frame
+  (Android: drawn on the GPU and read back asynchronously; iPhone: made from the video frame on the CPU, about 15 a
+  second) is searched for the tapped patch by normalised cross-correlation (`PatternTracker`, shared engine code:
+  half resolution near where it should be, then refined; the template slowly learns the patch's new look). The camera's
+  focus region moves with it at most ten times a second.
 - **Flash:** the bolt button in the top bar (shown when the lens has a flash; usually not the selfie camera) turns
   **Focus-flash** (bolt with "AF") on or off. It works like Google Camera's: the light comes on, the camera focuses with it (unless focus is locked), then the flash fires.
   Exposure works like a flash guide number: the photo is exposed for the distance the lens is focused at (the flash's
@@ -79,7 +89,8 @@ shows them.
   (shown when a lens offers a maximum-resolution raw stream of the same field of view, such as 50 MP `RAW10` on the Pixel 9 Pro's main `W` lens: writes a 16-bit Bayer DNG via `MaxResDngWriter` — remosaicing 4×4 Quad-Bayer streams into standard 2×2 Bayer — and develops the JPEG from it, while keeping normal resolution on virtual crop lenses; frame merging is off on full-resolution lenses); **Merge 8 frames** (see above); **Shutter sound** (off by default: a click on each
   shot; where the law requires it, such as Japan and Korea, Android or iOS reports so and it is always on and greyed out,
   as it is on iPhones before iOS 18);
-  **Geotag** (off by default; see below); **QR codes** (on by default; see above);
+  **Geotag** (off by default; see below); **QR codes** (on by default; see above); **Track subject after tap** (off by
+  default; see above);
   **Remember camera & settings** (off by default: each start uses the
   back W lens, Yellow Portrait 400 and default sliders; on keeps lens, side, look and sliders).
 - **Geotag:** with it on, each JPEG and DNG gets the GPS tags of where it was taken: latitude, longitude, altitude

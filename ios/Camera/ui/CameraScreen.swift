@@ -191,7 +191,7 @@ struct CameraScreen: View {
                 }
                 if vm.focusPoint != nil {
                     Button { vm.releaseFocus() } label: {
-                        Text("AF LOCK  ✕")
+                        Text(vm.tracking ? "TRACKING  ✕" : "AF LOCK  ✕")
                             .font(.subheadline.weight(.semibold))
                             .foregroundStyle(.black)
                             .padding(.horizontal, 16)
@@ -451,6 +451,13 @@ private struct SettingsSheet: View {
                         VStack(alignment: .leading) {
                             Text("QR codes")
                             Text("Show what a QR code in the viewfinder holds; tap to open the link or copy the text or Wi-Fi password")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    Toggle(isOn: Binding(get: { vm.settings.trackFocus }, set: vm.setTrackFocus)) {
+                        VStack(alignment: .leading) {
+                            Text("Track subject after tap")
+                            Text("Focus follows what you tapped as it moves; back to autofocus when it's lost")
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }

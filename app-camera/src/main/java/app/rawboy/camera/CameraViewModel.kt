@@ -41,6 +41,7 @@ import app.rawboy.gl.ViewfinderRenderer
 import app.rawboy.lens.LensInfo
 import app.rawboy.lens.LensTransform
 import app.rawboy.retouch.SkinMask
+import app.rawboy.track.PatternTracker
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -66,6 +67,7 @@ import java.nio.ByteOrder
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.pow
 
@@ -191,6 +193,31 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private val _dragPoint = MutableStateFlow<Pair<Float, Float>?>(null)
     val dragPoint = _dragPoint.asStateFlow()
 
+    /**
+     * Whether the focus point follows the tapped subject ([CameraSettings.trackFocus]): [_focusPoint] moves with it,
+     * and the lock ends by itself once the subject is lost.
+     */
+    private val _tracking = MutableStateFlow(false)
+    val tracking = _tracking.asStateFlow()
+
+    /** Follows the tapped subject in the viewfinder's small grey copies; used under its own lock. */
+    private val tracker = PatternTracker()
+    /** The point the next grey copy starts [tracker] at (a tap since the last copy), or null. */
+    private var trackStart: Pair<Float, Float>? = null
+    /** Bumped by every tap and release, so a copy analysed meanwhile can't move or end the new lock. */
+    private var trackGeneration = 0
+    private var lastFocusMove = 0L
+    /** The point the camera's AF region was last moved to. */
+    private var sentFocus: Pair<Float, Float>? = null
+    /** Whether the tracked subject is out of sight (held for a moment): metering goes to the centre meanwhile. */
+    @Volatile
+    private var subjectHidden = false
+    private var sentHidden = false
+    private val trackBusy = AtomicBoolean(false)
+
+    /** The tracker's own thread: a search takes ~0.2 ms, but never on the GL thread or a shot's develop. */
+    private val trackExecutor = Executors.newSingleThreadExecutor { r -> Thread(r, "RawBoy-track") }
+
     /** One event per capture, as the request goes to the camera: the UI's shutter feedback. */
     private val _shutterEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
     val shutterEvents = _shutterEvents.asSharedFlow()
@@ -274,7 +301,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         startJob?.cancel()
         startJob = null
         controller.stop() // also ends a focus lock
-        _focusPoint.value = null
+        stopTracking(clearPoint = true)
         _dragPoint.value = null
         clearQr()
         if (hasPermission) _status.value = CameraStatus.OPENING
@@ -349,14 +376,92 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     /** Focus lock at a point of the viewfinder (upright normalised, as shown). */
     fun focusAt(x: Float, y: Float) {
         if (_status.value != CameraStatus.READY) return
-        _focusPoint.value = x to y
+        synchronized(tracker) {
+            stopTracking()
+            _focusPoint.value = x to y
+            // Focus first scans at the tap as usual; the tracker takes over from the next grey copy.
+            if (_settings.value.trackFocus) trackStart = x to y
+        }
         controller.focusAt(x, y)
     }
 
     fun releaseFocus() {
-        _focusPoint.value = null
         _dragPoint.value = null
+        stopTracking(clearPoint = true)
         controller.releaseFocus()
+    }
+
+    /**
+     * Stops following the subject; [clearPoint] also ends the lock, under the tracker's lock so that no answer still
+     * being worked out brings the point back.
+     */
+    private fun stopTracking(clearPoint: Boolean = false) {
+        synchronized(tracker) {
+            if (clearPoint) _focusPoint.value = null
+            trackGeneration++
+            trackStart = null
+            tracker.stop()
+            _tracking.value = false
+        }
+    }
+
+    /**
+     * A small grey copy of the viewfinder frame (GL thread), while a tap's focus may be tracked: starts the tracker at
+     * the tap, or finds the subject again and moves the focus point (and the AF and metering regions) with it. A
+     * subject without enough detail keeps a plain focus lock; one lost for good releases focus to autofocus.
+     */
+    fun onTrackLuma(width: Int, height: Int, luma: ByteArray) {
+        if (_merging.value || !trackBusy.compareAndSet(false, true)) return
+        trackExecutor.execute {
+            try {
+                synchronized(tracker) { track(width, height, luma) }
+            } finally {
+                trackBusy.set(false)
+            }
+        }
+    }
+
+    /** [onTrackLuma]'s work, under the tracker's lock. */
+    private fun track(width: Int, height: Int, luma: ByteArray) {
+        val now = SystemClock.uptimeMillis()
+        val start = trackStart
+        if (start != null) {
+            trackStart = null
+            if (tracker.start(width, height, luma, start.first, start.second, now)) {
+                _tracking.value = true
+                controller.trackFocus(start.first, start.second)
+                lastFocusMove = now
+                sentFocus = start
+                subjectHidden = false
+                sentHidden = false
+            }
+            return
+        }
+        val r = tracker.update(width, height, luma, now) ?: return
+        if (r.lost) {
+            val generation = trackGeneration
+            viewModelScope.launch {
+                if (synchronized(tracker) { generation != trackGeneration }) return@launch
+                releaseFocus()
+                _message.value = "Subject lost: autofocus"
+            }
+            return
+        }
+        val point = _focusPoint.value ?: return
+        if (abs(r.x - point.first) >= MIN_FOCUS_MOVE || abs(r.y - point.second) >= MIN_FOCUS_MOVE) {
+            _focusPoint.value = r.x to r.y
+        }
+        subjectHidden = !r.found
+        // Each move is a new repeating request: a few a second keep the AF box on the subject, and the last one
+        // still goes out once the subject stops. Hiding or reappearing goes out at once (metering follows it).
+        val shown = _focusPoint.value ?: return
+        val moved = shown != sentFocus && now - lastFocusMove >= FOCUS_MOVE_INTERVAL_MS
+        if (moved || subjectHidden != sentHidden) {
+            lastFocusMove = now
+            sentFocus = shown
+            sentHidden = subjectHidden
+            controller.moveFocus(shown.first, shown.second, meter = !subjectHidden)
+        }
     }
 
     /** The focus ring follows a drag to ([x], [y]); [endDragFocus] focuses there. */
@@ -375,7 +480,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
      * Where the auto develop meters exposure: around the tapped focus point while focus is locked (as Camera2's AE
      * does), else the centre box. Upright as the viewfinder shows it, like its 512 px copy.
      */
-    private fun meterArea(): MeterArea = _focusPoint.value?.let { (x, y) -> MeterArea.Spot(x, y) } ?: METER_CENTRE
+    private fun meterArea(): MeterArea =
+        _focusPoint.value?.takeUnless { _tracking.value && subjectHidden }?.let { (x, y) -> MeterArea.Spot(x, y) } ?: METER_CENTRE
 
     /** Switches to the lens labelled [label] (UW, W, T) on the current side. */
     fun selectLens(label: String) {
@@ -398,7 +504,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private fun switchTo(lens: CameraController.Info) {
         info = lens
         _hiRes.value = lens.hiRes
-        _focusPoint.value = null // the restart ends any focus lock
+        stopTracking(clearPoint = true) // the restart ends any focus lock
         _dragPoint.value = null
         // The live develop belongs to the old lens: start the new one fresh.
         live = null
@@ -433,7 +539,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             val stats = SceneAnalyzer.analyze(base.base, skin, state?.iso ?: 0f, meterArea())
             // The phone's auto exposure set the frame (and the shot's raw): keep it, lifted where it went dark, as the
             // shot does (see develop).
-            live = Live(base, stats, defaults, AutoTone.develop(stats, defaults, phoneAe = true))
+            val auto = AutoTone.develop(stats, defaults, phoneAe = true)
+            // A new metering area (a tap, a release, a tracked subject hiding) can move the exposure by a stop at once;
+            // the viewfinder eases there over a few updates instead of snapping.
+            val last = live?.auto?.exposure
+            val eased = if (last == null) auto else auto.copy(exposure = last + (auto.exposure - last).coerceIn(-MAX_EV_STEP, MAX_EV_STEP))
+            live = Live(base, stats, defaults, eased)
             publish()
         }
     }
@@ -548,6 +659,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setShowHistogram(on: Boolean) = change { it.copy(showHistogram = on) }
     fun setBurstMode(mode: BurstMode) = change { it.copy(burstMode = mode) }
     fun setShutterSound(on: Boolean) = change { it.copy(shutterSound = on) }
+    fun setTrackFocus(on: Boolean) {
+        change { it.copy(trackFocus = on) }
+        // A subject being followed: a plain lock where it is now.
+        if (!on && _tracking.value) _focusPoint.value?.let { (x, y) -> focusAt(x, y) }
+    }
+
     fun setScanQr(on: Boolean) {
         change { it.copy(scanQr = on) }
         if (!on) clearQr()
@@ -751,6 +868,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         controller.close()
         histogramRenderer.close()
         qrExecutor.shutdown()
+        trackExecutor.shutdown()
         ShotSaver.detachView()
     }
 
@@ -758,6 +876,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         private const val TAG = "RawBoyCamera"
         private const val DNG_MIME = "image/x-adobe-dng"
         private const val SAVE_DELAY_MS = 500L
+        /** Smallest move of a tracked subject (share of the frame) that moves the focus point. */
+        private const val MIN_FOCUS_MOVE = 0.004f
+        /** At most this often a tracked subject's move goes to the camera as a new AF region. */
+        private const val FOCUS_MOVE_INTERVAL_MS = 100L
+        /** Most the live develop's exposure moves per update (~3 a second), EV. */
+        private const val MAX_EV_STEP = 0.3f
 
         /** Exposure is metered on the middle half of the frame's width and height (owner's choice), unless tapped. */
         internal val METER_CENTRE = MeterArea.Centre(0.5f)
