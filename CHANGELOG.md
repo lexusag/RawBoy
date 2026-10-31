@@ -1,5 +1,13 @@
 # Changelog
 
+**RawBoy Camera and Film (Android): no noisy border on merged night shots (2026-10-31)**
+
+- Night shots merged from a burst could show a strip along the edges, about 20 pixels wide, with clearly more grain
+  and colour noise than the rest of the photo, most visible with the exposure raised. The hand moves between the
+  burst's frames, so some frames don't cover the edges; the merge filled those parts with the first frame's own
+  noisy pixels. It now averages the frames it does have there, and the parts that still got fewer frames (the
+  outermost pixels, and moving things the merge keeps from one frame) get extra noise reduction to match the rest.
+
 **RawBoy Camera and Film: Brightness changes the exposure (2026-10-31)**
 
 - Brightness used to brighten or darken only the develop. It now also sets the camera's exposure compensation, so a

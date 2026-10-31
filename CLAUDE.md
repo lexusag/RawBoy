@@ -661,7 +661,13 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   level = the merge tiles of 16 grey px at stride 8), integer grey shifts = even raw shifts (CFA phase kept); spatial
   merge of 32 px raw tiles with sin² windows (sum to 1 at half stride; even/odd tile rows in two passes so threads
   never write the same pixel), tile weight from the excess mean squared grey difference over 2σ², pixel weight from the
-  3x3 mean difference. Output keeps the raw's integer levels (rounding ≈ 0.3 DN; scaling + patching WhiteLevel would
+  3x3 mean difference. **Edges** (2026-10-31): a block an alternate frame doesn't have (shifted past its edge) adds
+  nothing (it used to add the reference's own sample, which left a ~20 px strip along the edges with one frame's noise,
+  1.5-2x luma and 2-3x colour noise after the develop); alignment SSD and tile weights count only pixels inside both
+  frames. `denom_` is then a frame-count map, and `denoiseUnderMerged` (in `finish`) gives blocks below the full count
+  (90th percentile; ratio ≥ 1.25) an edge-aware 5x5 same-colour average blended in by the missing frames, so the strip
+  (and moving things kept from the reference) end up near the interior's noise. Host test 6 (flat wall, ±14/±30 px
+  shake): edge rmse 1.86x → 1.17x the interior's. Output keeps the raw's integer levels (rounding ≈ 0.3 DN; scaling + patching WhiteLevel would
   keep more). The develop treats it as `effectiveFrames` (1 + Σ mean tile weights) times the light: noise ISO scale
   ÷ that. Host test: `tools/burst_merge/run.sh`. Pixel 9 Pro (selfie, ISO 1212): noise ~3.2× lower (a little over √8:
   the pixel weights smooth slightly), all 8 frames weight ~1.0, shutter to DNG 2–3.5 s (single 0.3 s), JPEG sooner

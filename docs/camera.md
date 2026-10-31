@@ -65,7 +65,8 @@ shows them.
   merges them into one DNG before developing, as the phone's HDR+ does for its own JPEGs: each frame is aligned to the
   first (tile by tile, so hand shake is followed) and averaged in where it matches; where something moved, the first
   frame is kept, so moving things don't ghost. Noise drops by about 3× where nothing moves, so the develop picks
-  less denoise and keeps more detail. Hold still while the burst runs. The frames are merged while the burst is
+  less denoise and keeps more detail. Along the edges, which hand shake takes out of view in some frames, and where something
+  moved, fewer frames go in; those parts get extra noise reduction so they don't stand out as a noisier border. Hold still while the burst runs. The frames are merged while the burst is
   still coming in, so the DNG follows soon after the last frame; the JPEG comes out about as fast as from one frame
   (less denoise work). It needs ~200 MB of memory at its peak, so Android may close other apps to make room. The
   shutter greys out ("Merging frames…") until the merged DNG is written, so bursts never overlap.

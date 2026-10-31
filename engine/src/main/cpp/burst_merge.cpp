@@ -6,6 +6,7 @@
 #include <cmath>
 #include <cstring>
 #include <limits>
+#include <utility>
 
 namespace rawboy {
 
@@ -240,7 +241,9 @@ std::vector<BurstMerger::Shift> BurstMerger::align(const std::vector<Plane>& alt
     static constexpr int FACTOR[4] = {1, 2, 4, 4};  // level L is FACTOR[L] x smaller than level L-1
     static constexpr int RADIUS[4] = {1, 4, 4, 4};
 
-    // Sum of squared differences of one tile at a displacement; reads clamp at the edges.
+    // Sum of squared differences of one tile at a displacement. A tile reaching past either plane's edge counts only the
+    // pixels inside both, scaled up to the full tile: edge pixels repeated past the edge made edge tiles prefer shifts
+    // that kept them in view rather than the true one.
     auto error = [](const Plane& r, const Plane& a, int ox, int oy, int size, int dx, int dy, float bound) {
         float e = 0.0f;
         if (ox >= 0 && oy >= 0 && ox + size <= r.w && oy + size <= r.h && ox + dx >= 0 && oy + dy >= 0 &&
@@ -257,14 +260,21 @@ std::vector<BurstMerger::Shift> BurstMerger::align(const std::vector<Plane>& alt
             }
             return e;
         }
+        int n = 0;
         for (int y = 0; y < size; ++y) {
+            const int ry = oy + y, ay = ry + dy;
+            if (ry < 0 || ry >= r.h || ay < 0 || ay >= a.h) continue;
             for (int x = 0; x < size; ++x) {
-                const float d = a.at(ox + x + dx, oy + y + dy) - r.at(ox + x, oy + y);
+                const int rx = ox + x, ax = rx + dx;
+                if (rx < 0 || rx >= r.w || ax < 0 || ax >= a.w) continue;
+                const float d = a.px[static_cast<size_t>(ay) * a.w + ax] - r.px[static_cast<size_t>(ry) * r.w + rx];
                 e += d * d;
+                ++n;
             }
-            if (e >= bound) break;
         }
-        return e;
+        // Less than a quarter of the tile in view: no evidence for this shift.
+        if (4 * n < size * size) return std::numeric_limits<float>::max();
+        return e * static_cast<float>(size * size) / static_cast<float>(n);
     };
 
     std::vector<Shift> coarse;
@@ -377,22 +387,26 @@ void BurstMerger::mergeFrame(Frame& f, size_t index) {
                     const float var = greyVar(mean / count);
                     const float pixelVar = pixelSigmas * pixelSigmas * 2.0f * var / 9.0f;
 
-                    // Tile weight: the aligned tile's mean squared difference beyond the noise of two frames.
+                    // Tile weight: the aligned tile's mean squared difference beyond the noise of two frames, over the
+                    // pixels inside both frames (an alternate shifted past the edge has nothing there; see below).
                     float d2 = 0.0f;
                     int m = 0;
                     for (int y = -1; y <= GREY_TILE; ++y) {
                         for (int x = -1; x <= GREY_TILE; ++x) {
-                            const float d = a.at(gx + x + s.dx, gy + y + s.dy) - r0.at(gx + x, gy + y);
-                            diff[(y + 1) * (GREY_TILE + 2) + (x + 1)] = d;
                             const int px = gx + x, py = gy + y;
-                            if (x >= 0 && y >= 0 && x < GREY_TILE && y < GREY_TILE && px >= 0 && py >= 0 &&
+                            const int ax = px + s.dx, ay = py + s.dy;
+                            const bool altIn = ax >= 0 && ay >= 0 && ax < a.w && ay < a.h;
+                            const float d = altIn ? a.at(ax, ay) - r0.at(px, py) : 0.0f;
+                            diff[(y + 1) * (GREY_TILE + 2) + (x + 1)] = d;
+                            if (altIn && x >= 0 && y >= 0 && x < GREY_TILE && y < GREY_TILE && px >= 0 && py >= 0 &&
                                 px < r0.w && py < r0.h) {
                                 d2 += d * d;
                                 ++m;
                             }
                         }
                     }
-                    const float excess = std::max(0.0f, d2 / std::max(1, m) - 2.0f * var);
+                    if (m == 0) continue;  // the whole tile falls outside this frame
+                    const float excess = std::max(0.0f, d2 / m - 2.0f * var);
                     const float tileW = 1.0f / (1.0f + excess / (tileK * var));
                     rowWeights[k] += tileW;
                     // Pixel weight: the 3x3 mean difference against its own noise.
@@ -409,12 +423,17 @@ void BurstMerger::mergeFrame(Frame& f, size_t index) {
                     }
 
                     // Accumulate per 2x2 block: the weight (and window) is the block's, so the block's weight sum is
-                    // one value. A clipped or out-of-frame sample counts as the reference's, which keeps the sums
-                    // consistent and leaves that sample as the reference has it.
+                    // one value. A block this frame doesn't have (shifted past its edge; shifts are whole blocks) adds
+                    // nothing, so near the edges the merge averages the frames it really has and denom_ counts them
+                    // (see finish). It used to add the reference's own sample there, which left the edge strip with
+                    // one frame's noise while counting as merged. A clipped alternate sample counts as the
+                    // reference's, which keeps the block's sums consistent.
                     for (int qy = std::max(0, gy); qy < std::min(height_ / 2, gy + GREY_TILE); ++qy) {
                         const int ky = qy - gy;
+                        if (qy + s.dy < 0 || qy + s.dy >= height_ / 2) continue;
                         for (int qx = std::max(0, gx); qx < std::min(gw, gx + GREY_TILE); ++qx) {
                             const int kx = qx - gx;
+                            if (qx + s.dx < 0 || qx + s.dx >= gw) continue;
                             const float w = win[ky] * win[kx] * pixW[ky * GREY_TILE + kx];
                             if (w <= 0.0f) continue;
                             denom_[static_cast<size_t>(qy) * gw + qx] += w;
@@ -427,10 +446,8 @@ void BurstMerger::mergeFrame(Frame& f, size_t index) {
                                     const size_t pi = static_cast<size_t>(y) * width_ + x;
                                     const float b = black_[j * 2 + i];
                                     float v = static_cast<float>(refRaw[pi]) - b;
-                                    if (ax >= 0 && ay >= 0 && ax < width_ && ay < height_) {
-                                        const uint16_t av = f.raw[static_cast<size_t>(ay) * width_ + ax];
-                                        if (av < sat) v = (static_cast<float>(av) - b) * gain;
-                                    }
+                                    const uint16_t av = f.raw[static_cast<size_t>(ay) * width_ + ax];
+                                    if (av < sat) v = (static_cast<float>(av) - b) * gain;
                                     num_[pi] += w * v;
                                 }
                             }
@@ -475,10 +492,91 @@ const uint16_t* BurstMerger::finish() {
         }
     });
     std::vector<float>().swap(num_);
+    if (underMergedDenoise) denoiseUnderMerged(raw);
     std::vector<float>().swap(denom_);
     refPyramid_.clear();
     finished_ = true;
     return raw.data();
+}
+
+void BurstMerger::denoiseUnderMerged(std::vector<uint16_t>& raw) {
+    // denom_ is now the frame count map: per 2x2 block, how many frames (by weight) went into it. Most of the frame
+    // has the full count; the strip along the edges that the hand shake took out of view in some frames has fewer, as
+    // have moving things the merge kept from the reference. Those parts keep more of a single frame's noise than the
+    // rest, which the develop's denoise (set for the whole frame from the burst's effective frames) left visible as
+    // a noisy border. Here they get a raw-domain denoise that brings their noise down towards the rest: an
+    // edge-aware average of the 5x5 nearest samples of the same CFA colour, blended in by how many frames are missing.
+    const int gw = width_ / 2, gh = height_ / 2;
+    if (gw < 3 || gh < 3) return;
+    // The full count: a high percentile, so ordinary per-pixel weights a little under 1 don't count as missing frames.
+    std::vector<float> sample;
+    sample.reserve(static_cast<size_t>(gw / 8 + 1) * (gh / 8 + 1));
+    for (int y = 4; y < gh; y += 8)
+        for (int x = 4; x < gw; x += 8) sample.push_back(denom_[static_cast<size_t>(y) * gw + x]);
+    const size_t k = sample.size() * 9 / 10;
+    std::nth_element(sample.begin(), sample.begin() + k, sample.end());
+    const float full = sample[k];
+    if (full < 1.5f) return;  // nothing was merged anywhere
+
+    // Blend t for a block with `count` frames: its noise variance is about full/count times the rest's. Averaging n
+    // similar samples (the centre among them) and blending by t leaves 1 - a(2t - t^2) of the variance, a = 1 - 1/n;
+    // t is solved for count/full of it, at most 1. n is the average's effective sample count on flat areas.
+    constexpr float N_AVERAGE = 10.0f;
+    constexpr float A = 1.0f - 1.0f / N_AVERAGE;
+    constexpr float MIN_RATIO = 1.25f;  // closer to the full count than this: left alone
+    auto blendFor = [&](float count) {
+        const float ratio = full / std::max(count, 1.0f);
+        if (ratio < MIN_RATIO) return 0.0f;
+        const float u = (1.0f - 1.0f / ratio) / A;
+        return u >= 1.0f ? 1.0f : 1.0f - std::sqrt(1.0f - u);
+    };
+
+    // Spatial weights over the 5x5 same-colour taps (2 raw px apart), Gaussian sigma 1.5 taps.
+    float spatial[5][5];
+    for (int j = 0; j < 5; ++j)
+        for (int i = 0; i < 5; ++i) spatial[j][i] = std::exp(-((i - 2) * (i - 2) + (j - 2) * (j - 2)) / (2.0f * 2.25f));
+
+    const float sat = white_ - 2.0f;
+    const float meanBlack = (black_[0] + black_[1] + black_[2] + black_[3]) * 0.25f;
+    const float range = std::max(1.0f, white_ - meanBlack);
+    // Results go to a list per row and are written after all rows are done: the average reads unfiltered neighbours.
+    std::vector<std::vector<std::pair<int, uint16_t>>> changed(height_);
+    parallelRows(2 * gh, [&](int y0, int y1) {
+        for (int y = y0; y < y1; ++y) {
+            for (int x = 0; x < 2 * gw; ++x) {
+                const float count = denom_[static_cast<size_t>(y >> 1) * gw + (x >> 1)];
+                const float t = blendFor(count);
+                if (t <= 0.0f) continue;
+                const size_t i = static_cast<size_t>(y) * width_ + x;
+                if (raw[i] >= sat) continue;
+                const float b = black_[(y & 1) * 2 + (x & 1)];
+                const float c = static_cast<float>(raw[i]) - b;
+                // Range weight: differences beyond ~2.5 sigma of this block's noise (one frame's over its count) are
+                // detail and stay.
+                const float var = greyVar(std::max(0.0f, c) / range) * 4.0f * range * range / std::max(count, 1.0f);
+                const float inv = 1.0f / (2.0f * 6.25f * 2.0f * var);
+                float sum = 0.0f, wsum = 0.0f;
+                for (int j = -2; j <= 2; ++j) {
+                    const int ny = y + 2 * j;
+                    if (ny < 0 || ny >= 2 * gh) continue;
+                    for (int ii = -2; ii <= 2; ++ii) {
+                        const int nx = x + 2 * ii;
+                        if (nx < 0 || nx >= 2 * gw) continue;
+                        const uint16_t nv = raw[static_cast<size_t>(ny) * width_ + nx];
+                        if (nv >= sat) continue;
+                        const float d = static_cast<float>(nv) - b - c;
+                        const float w = spatial[j + 2][ii + 2] * std::exp(-d * d * inv);
+                        sum += w * (static_cast<float>(nv) - b);
+                        wsum += w;
+                    }
+                }
+                const float v = c + t * (sum / wsum - c) + b;  // the centre is a tap with weight 1: wsum >= 1
+                changed[y].emplace_back(x, static_cast<uint16_t>(std::clamp(std::lround(v), 0L, static_cast<long>(sat))));
+            }
+        }
+    });
+    for (int y = 0; y < height_; ++y)
+        for (const auto& [x, v] : changed[y]) raw[static_cast<size_t>(y) * width_ + x] = v;
 }
 
 }  // namespace rawboy
