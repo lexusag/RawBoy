@@ -64,12 +64,11 @@ fun rememberDisplayRotation(): Int {
  * Clockwise quarter turns from the upright viewfinder picture (as the portrait screen shows it) to the window, for a
  * window turned by [displayRotation] (`Surface.ROTATION_*`). The camera turns with the phone, so the picture must
  * stay put on the glass while the UI turns: ROTATION_90 (phone turned anticlockwise) turns it back anticlockwise (3).
- * A [mirror] picture (selfie) turns the other way: the mirror must stay left-right for the person holding the
- * phone, and mirror × turn × mirror is the opposite turn.
+ * The selfie picture turns the same way (turning it the other way showed it upside down on the Pixel 9 Pro).
  */
-fun viewfinderTurns(displayRotation: Int, mirror: Boolean): Int {
+fun viewfinderTurns(displayRotation: Int): Int {
     val r = ((displayRotation % 4) + 4) % 4
-    return if (mirror) r else (4 - r) % 4
+    return (4 - r) % 4
 }
 
 /**

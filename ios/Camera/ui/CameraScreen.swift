@@ -33,7 +33,7 @@ struct CameraScreen: View {
         // shutter column at the right edge, all under the right thumb. One layout, so the Metal view stays on a turn.
         GeometryReader { geo in
             let landscape = geo.size.width > geo.size.height
-            let turns = viewfinderTurns(orientation.value, mirror: vm.settings.front)
+            let turns = viewfinderTurns(orientation.value)
             CameraLayout(landscape: landscape, controlsWidth: Self.landscapeControlsWidth) {
                 Group {
                     if landscape {
@@ -882,10 +882,10 @@ private struct Turned<Content: View>: View {
 /**
  * Clockwise quarter turns from the upright viewfinder picture (as the portrait screen shows it) to the window for an
  * interface `orientation`. The camera turns with the phone, so the picture stays put on the glass while the UI turns:
- * landscapeRight (phone turned anticlockwise) turns it back anticlockwise (3). A `mirror` picture (selfie) turns the
- * other way, so the mirror stays left-right for the person holding the phone. Port of Android's `viewfinderTurns`.
+ * landscapeRight (phone turned anticlockwise) turns it back anticlockwise (3). The selfie picture turns the same way
+ * (the other way showed it upside down on the Pixel). Port of Android's `viewfinderTurns`.
  */
-private func viewfinderTurns(_ orientation: UIInterfaceOrientation, mirror: Bool) -> Int {
+private func viewfinderTurns(_ orientation: UIInterfaceOrientation) -> Int {
     let r: Int
     switch orientation {
     case .landscapeRight: r = 1 // Android's ROTATION_90
@@ -893,7 +893,7 @@ private func viewfinderTurns(_ orientation: UIInterfaceOrientation, mirror: Bool
     case .landscapeLeft: r = 3
     default: r = 0
     }
-    return mirror ? r : (4 - r) % 4
+    return (4 - r) % 4
 }
 
 /** The window scene's interface orientation, kept up to date (a turn from one landscape to the other changes no size). */

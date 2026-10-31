@@ -174,7 +174,7 @@ fun CameraScreen(
     var adjust by rememberSaveable { mutableStateOf(Adjust.BRIGHTNESS) }
     // Turned sideways the UI turns with the window, the viewfinder picture stays put on the glass.
     val displayRotation = rememberDisplayRotation()
-    val turns = viewfinderTurns(displayRotation, frame?.mirror == true)
+    val turns = viewfinderTurns(displayRotation)
     // The volume keys don't shoot while a sheet is open.
     LaunchedEffect(showSettings, showHelp) { vm.settingsOpen = showSettings || showHelp }
 

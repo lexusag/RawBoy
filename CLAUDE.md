@@ -606,8 +606,8 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   (look row, S/B/W chips, one `VerticalSlider`; F + filter column in B&W) | shutter column. The camera turns with the
   phone, so the **picture must stay put on the glass**: everything about the viewfinder stays in the upright portrait
   coordinates it had (taps, focus/AE regions, faces, `Spot.turned`, the loupe) and is only turned for display by
-  `viewfinderTurns` (back: (4 − displayRotation) % 4 clockwise quarter turns; a mirrored selfie picture turns the
-  other way, so the mirror stays left-right). Android: `ViewfinderRenderer.turns` draws pass 2 + loupe into an RGBA8
+  `viewfinderTurns` ((4 − displayRotation) % 4 clockwise quarter turns, selfie too: turning the mirrored selfie
+  picture the other way showed it upside down on the Pixel 9 Pro). Android: `ViewfinderRenderer.turns` draws pass 2 + loupe into an RGBA8
   target at the turned-back size and `TurnProgram` turns it onto the window (a SurfaceView ignores view transforms);
   the overlays sit in `Modifier.turned` boxes. iOS: `Turned` (rotationEffect) wraps the MTKView and gesture layer.
   Interface orientation: Android `rememberDisplayRotation` (a DisplayListener: 90 ↔ 270 is no configuration change),
