@@ -25,7 +25,7 @@ internal val CAMERA_HELP = listOf(
             // RawBoy Camera only: RawBoy Film's looks are the film stocks already.
             if (Edition.filmLooks.isEmpty()) null else HelpItem(
                 "Film button",
-                "The film strip left of the Look menu. On (the default), the menu lists film stocks, developed as the negative, its print and scan, with film grain and the red halation around bright lights; off, the looks on RawBoy's film LUTs. Each keeps its own pick. B&W uses only the black and white looks, and switching it off comes back to Film.",
+                "The film strip left of the Look menu. On (the default), the menu lists film stocks, developed as the negative, its print and scan, with film grain and the red halation around bright lights; off, the looks on RawBoy's film LUTs. Each keeps its own pick. B&W uses only the black and white looks (with more contrast and grain while Film is on), and switching it off comes back to Film.",
             ),
             HelpItem("Look menu", "The film look the viewfinder shows and the photo gets."),
             HelpItem("Strength, Brightness, Warmth", "How much of the look, brighter or darker, warmer or cooler. Double-tap a slider to reset it."),

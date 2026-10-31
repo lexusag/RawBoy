@@ -470,14 +470,18 @@ final class CameraViewModel: ObservableObject {
      * Half-size grain partly averages out when the photo is saved at 3000 px (area downscale), so it's raised to look
      * as strong as at full size, where each pixel is a point sample. ProRAW is ×3 (owner's choice): its merged frames
      * have none of the sensor noise that gives a single raw (and the Pixel's) its texture, so the look's grain alone
-     * measured under 1 level of 255 (std) on a Portra 160 photo. B&W mode has monoGrain times the grain.
+     * measured under 1 level of 255 (std) on a Portra 160 photo. B&W mode has monoGrain times the grain, and
+     * filmMonoGrain times that with Film on too.
      */
     private nonisolated static func grainStrength(_ s: CameraSettings) -> Float {
         (s.smallExport ? 1.34 : 1) * (s.rawFormat == .proRaw ? 3 : 1) * (s.monoMode ? monoGrain : 1)
+            * (s.filmMono ? filmMonoGrain : 1)
     }
 
     /** B&W mode's grain on top of the mono stock's (owner's choice, 2026-10-31: the looks' own read too clean). */
     private nonisolated static let monoGrain: Float = 3
+    /** Film + B&W: monoGrain times this (owner's choice, 2026-10-31: grainier than plain B&W). */
+    private nonisolated static let filmMonoGrain: Float = 1.5
 
     // MARK: - Controls
 

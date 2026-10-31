@@ -138,7 +138,8 @@ viewfinder shows black and white live. Each mode keeps its own pick, so switchin
 RawBoy Camera has a **Film** toggle, a film strip left of the Look menu: on (the default), the **Look** menu
 lists the film stocks below; off, the looks on RawBoy's film LUTs. Each keeps its own pick, and Strength, Brightness
 and Warmth are shared. The **B&W** button sits next to it, and each switches by itself: in B&W the menu lists only the black and white looks
-below, Film on or not, and switching B&W off comes back to Film if it is on. Photos save to `Pictures/RawBoy Camera` (`…-camera.jpg`, DNGs in `RAW/`) in both modes. The film and
+below, Film on or not, and switching B&W off comes back to Film if it is on. With both on, B&W is punchier: Contrast
++20 on top of the look's and 1.5 times B&W's grain (4.5 times the look's own). Photos save to `Pictures/RawBoy Camera` (`…-camera.jpg`, DNGs in `RAW/`) in both modes. The film and
 LUT looks share ids (`portra400` is both), so Film mode's pick is kept separately (`CameraSettings.film`/`filmLookId`,
 prefs `film`/`filmLook`).
 

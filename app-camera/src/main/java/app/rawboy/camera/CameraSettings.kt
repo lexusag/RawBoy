@@ -102,6 +102,9 @@ data class CameraSettings(
     /** Film mode is on (and B&W mode isn't) and this edition has one. */
     val filmMode: Boolean get() = film && !monoMode && Edition.filmLooks.isNotEmpty()
 
+    /** B&W with Film on too: the black and white looks with [FILM_MONO_CONTRAST] and more grain (see grainStrength). */
+    val filmMono: Boolean get() = monoMode && film && Edition.filmLooks.isNotEmpty()
+
     /** The look in effect: B&W mode's stock, Film mode's stock or the colour look. */
     val look: Look get() = when {
         monoMode -> Edition.monoLook(monoLookId)
@@ -113,11 +116,16 @@ data class CameraSettings(
      * [base] (the auto develop) with the look and the sliders, as the viewfinder shows it and the shot is saved. B&W mode:
      * the filter, then grey (Saturation -100 makes the scene grey before the stock and keeps the stock's output grey, see
      * `applyLut`), so Strength blends the stock's tones with plain AgX grey and the picture stays black and white;
-     * Warmth isn't shown there and doesn't apply.
+     * Warmth isn't shown there and doesn't apply. With Film on too ([filmMono]) it has [FILM_MONO_CONTRAST] more contrast.
      */
     fun develop(base: DevelopParams, hasFace: Boolean): DevelopParams {
         val bw = monoMode
-        val p = LookApplier.apply(base, look, strength, Adjustments(brightness = brightness, warmth = if (bw) 0f else warmth), hasFace)
+        val adjust = Adjustments(
+            brightness = brightness,
+            warmth = if (bw) 0f else warmth,
+            contrast = if (filmMono) FILM_MONO_CONTRAST else 0f,
+        )
+        val p = LookApplier.apply(base, look, strength, adjust, hasFace)
         return if (bw) p.copy(saturation = -100f, bwFilter = filter) else p
     }
 
@@ -134,6 +142,8 @@ data class CameraSettings(
         const val SMALL_SHARPEN = 0.5f
         /** Raws merged per shot with [BurstMode]: noise about 1/sqrt of it where nothing moves (~2.8x less). */
         const val BURST_FRAMES = 8
+        /** Film + B&W: added to the Contrast slider's value (owner's choice, 2026-10-31: punchier than plain B&W). */
+        const val FILM_MONO_CONTRAST = 20f
 
         /** Range of the preview calibration; the Pixel's lenses need 0.5 (selfie) to ~9 (T3). */
         const val MIN_SCALE = 1f / 32

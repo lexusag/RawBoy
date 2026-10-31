@@ -913,12 +913,17 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         /**
          * Half-size grain partly averages out when the photo is saved at 3000 px (area downscale ×1.36): measured
          * std 0.83 -> 0.62 (simulation of the shader's grain), so it's raised to look as strong as before.
-         * At full size each pixel is a point sample: no loss. B&W mode has [MONO_GRAIN] times the grain.
+         * At full size each pixel is a point sample: no loss. B&W mode has [MONO_GRAIN] times the grain, and
+         * [FILM_MONO_GRAIN] times that with Film on too.
          */
-        internal fun grainStrength(s: CameraSettings) = (if (s.smallExport) 1.34f else 1f) * (if (s.monoMode) MONO_GRAIN else 1f)
+        internal fun grainStrength(s: CameraSettings) = (if (s.smallExport) 1.34f else 1f) *
+            (if (s.monoMode) MONO_GRAIN else 1f) * (if (s.filmMono) FILM_MONO_GRAIN else 1f)
 
         /** B&W mode's grain on top of the mono stock's (owner's choice, 2026-10-31: the looks' own read too clean). */
         internal const val MONO_GRAIN = 3f
+
+        /** Film + B&W: [MONO_GRAIN] times this (owner's choice, 2026-10-31: grainier than plain B&W). */
+        internal const val FILM_MONO_GRAIN = 1.5f
 
         private fun isoOf(r: android.hardware.camera2.CaptureResult): Float =
             (r.get(android.hardware.camera2.CaptureResult.SENSOR_SENSITIVITY) ?: 0).toFloat()

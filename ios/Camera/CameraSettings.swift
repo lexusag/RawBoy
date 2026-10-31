@@ -78,6 +78,8 @@ struct CameraSettings: Equatable {
     var monoMode: Bool { mono && !Edition.monoLooks.isEmpty }
     /** Film mode is on (and B&W mode isn't) and this edition has one. */
     var filmMode: Bool { film && !monoMode && !Edition.filmLooks.isEmpty }
+    /** B&W with Film on too: the black and white looks with filmMonoContrast and more grain (see grainStrength). */
+    var filmMono: Bool { monoMode && film && !Edition.filmLooks.isEmpty }
     /** The look in effect: B&W mode's stock, Film mode's stock or the colour look. */
     var look: Look {
         if monoMode { return Edition.monoLook(monoLookId) }
@@ -89,11 +91,13 @@ struct CameraSettings: Equatable {
      * base (the auto develop) with the look and the sliders, as the viewfinder shows it and the shot is saved. B&W mode:
      * the filter, then grey (Saturation -100 makes the scene grey before the stock and keeps the stock's output grey, see
      * `applyLut`), so Strength blends the stock's tones with plain AgX grey and the picture stays black and white;
-     * Warmth isn't shown there and doesn't apply. Mirrors Android's CameraSettings.develop.
+     * Warmth isn't shown there and doesn't apply. With Film on too (filmMono) it has filmMonoContrast more contrast.
+     * Mirrors Android's CameraSettings.develop.
      */
     func develop(_ base: DevelopParams, hasFace: Bool) -> DevelopParams {
-        var p = LookApplier.apply(base, look: look, strength: strength,
-                                  adjust: Adjustments(brightness: brightness, warmth: monoMode ? 0 : warmth), hasFace: hasFace)
+        let adjust = Adjustments(brightness: brightness, warmth: monoMode ? 0 : warmth,
+                                 contrast: filmMono ? Self.filmMonoContrast : 0)
+        var p = LookApplier.apply(base, look: look, strength: strength, adjust: adjust, hasFace: hasFace)
         if monoMode {
             p.saturation = -100
             p.bwFilter = filter
@@ -106,6 +110,8 @@ struct CameraSettings: Equatable {
 
     static let minQuality = 70
     static let smallLongSide = 3000
+    /** Film + B&W: added to the Contrast slider's value (owner's choice, 2026-10-31: punchier than plain B&W). */
+    static let filmMonoContrast: Float = 20
     /** Light sharpening after the downscale to smallLongSide (luma unsharp mask, `band_ops.h`); full size gets none. */
     static let smallSharpen: Float = 0.5
     /** First guess before a lens's first shot: an sRGB preview's middle grey (0.18) at a camera raw's key (~0.06). */
