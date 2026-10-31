@@ -17,6 +17,7 @@ import { BrowserStore } from './ui/browser/BrowserStore';
 import type { EditsSidecar } from './engine/browse/XmpSidecar';
 import { BROWSER_HELP } from './ui/browser/help';
 import type { TabId } from './ui/common/tabs';
+import { UpdateBanner } from './ui/common/UpdateBanner';
 
 const TABS: TabId[] = ['pro', 'auto', 'browser'];
 const TAB_KEY = 'rawboy.tab';
@@ -207,6 +208,7 @@ export function App() {
         </main>
         {message && <Toast message={message} onDismiss={() => stores[tab].consumeMessage()} />}
         <SaveToPhotosSheet />
+        <UpdateBanner />
         {showLicenses && <LicensesDialog onDismiss={() => setShowLicenses(false)} />}
         {showHelp && (
           <HelpDialog
