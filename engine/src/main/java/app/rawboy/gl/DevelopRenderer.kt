@@ -41,6 +41,10 @@ class DevelopRenderer : GLSurfaceView.Renderer {
     @Volatile
     var zoom: Pair<Pair<Float, Float>, Float>? = null
 
+    /** Called on the GL thread after each frame that drew the photo (not just the clear colour). */
+    @Volatile
+    var onPhotoDrawn: (() -> Unit)? = null
+
     private var program: DevelopProgram? = null
     private var quad: FullscreenQuad? = null
     private var lutTexture: LutTexture? = null
@@ -155,6 +159,7 @@ class DevelopRenderer : GLSurfaceView.Renderer {
         program!!.setClipWarning(clipWarning)
         program!!.setDenoisePre(denoisedInput)
         quad!!.draw()
+        onPhotoDrawn?.invoke()
     }
 
     private fun drawFit(p: ShaderParams, img: PreviewImage) {

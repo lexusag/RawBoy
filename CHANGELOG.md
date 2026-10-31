@@ -1,5 +1,11 @@
 # Changelog
 
+**RawBoy Auto (Android): no blank flash when swiping between photos (2026-10-31)**
+
+- Swiping to the next photo showed its thumbnail, then an empty dark frame for up to a second, then the photo. Each
+  photo swiped to gets a new GL view, which is empty until it has built the develop shader and drawn once. The
+  thumbnail now stays over the view until its first frame is on screen.
+
 **RawBoy Camera and Film: less colour speckle in night shadows and corners (2026-10-31)**
 
 - Low-ISO night shots (merged bursts at ISO 20-150) got no colour denoise from the ISO table, and their lifted shadows
