@@ -16,7 +16,8 @@ import kotlin.math.pow
  * Matches the decode as `decoder_libraw.cpp` does it: (raw − black) / (white − black), less the camera's extra black,
  * times the white-balance multipliers normalised to the largest (LibRaw's pre_mul), then Rec.2020 luminance weights
  * (exact for neutral colours, which the colour matrix keeps neutral). Pixels are averaged in [CELL]-pixel cells before
- * the log, about the 512 px copy's footprint, so noise in the shadows doesn't pull the mean down.
+ * the log, about the 512 px copy's footprint, so noise in the shadows doesn't pull the mean down; every other cell
+ * each way is read (a quarter of the box: ~290 ms for the whole box of a 12 MP frame on the Tab S11 Ultra).
  */
 object RawMeter {
     /** Cell side in sensor pixels (even, so each cell holds whole 2×2 CFA blocks). */
@@ -73,9 +74,9 @@ object RawMeter {
                 for (c in 0 until 3) lum += WEIGHTS[c] * (sum[c] / count[c] - extraBlack) * mul[c]
                 logSum += log2(max(lum, 1e-6))
                 cells++
-                cx += CELL
+                cx += 2 * CELL
             }
-            cy += CELL
+            cy += 2 * CELL
         }
         if (cells == 0) return null
         return 2.0.pow(logSum / cells).toFloat()

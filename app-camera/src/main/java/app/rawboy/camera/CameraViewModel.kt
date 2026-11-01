@@ -576,7 +576,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             }
             val scale = _settings.value.previewScale(false)
             val before = live?.stats?.key
-            val rawKey = controller.meterRaw(METER_CENTRE)
+            val rawKey = withContext(Dispatchers.Default) { controller.meterRaw(METER_CENTRE) }
             val after = live?.stats?.key
             // The viewfinder's key around the metered frame (analysed every ~300 ms).
             val viewfinderKey = if (before != null && after != null) kotlin.math.sqrt(before * after) else before ?: after
@@ -944,7 +944,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         private const val DNG_MIME = "image/x-adobe-dng"
         private const val SAVE_DELAY_MS = 500L
         /** After a lens's first analysed viewfinder frame, how long AE gets to settle before its raw is metered. */
-        private const val RAW_METER_DELAY_MS = 1_000L
+        private const val RAW_METER_DELAY_MS = 300L
         /** Smallest move of a tracked subject (share of the frame) that moves the focus point. */
         private const val MIN_FOCUS_MOVE = 0.004f
         /** At most this often a tracked subject's move goes to the camera as a new AF region. */

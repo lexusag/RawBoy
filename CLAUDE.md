@@ -827,7 +827,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
 - **Viewfinder calibration** (`previewScales3`, per side + lens): each lens's preview has its own gain vs the raw
   (Pixel 9 Pro: selfie ≈ 0.5, W ≈ 0.5–0.8, T3 ≈ 3.8). The first shot on a lens takes the full correction, later ones
   move halfway (in stops), estimated against the gain in use at that shot's shutter (back-to-back shots). A lens with no
-  calibration is metered from one silent raw frame of the still request ~1 s after its first analysed viewfinder frame
+  calibration is metered from one silent raw frame of the still request ~0.3 s after its first analysed viewfinder frame (off the main thread)
   (`CameraViewModel.meterRawIfUncalibrated` → `CameraController.meterRaw` → `capture/RawMeter.kt`: centre box, 8 px
   cells, LibRaw's normalisation; not for max-res lenses). Galaxy Tab S11 Ultra (SM-X936B) W: preview ~4.4 stops above
   the raw (boost range fixed at 100, so it isn't reported), scale ≈ 0.045; the per-shot correction is clamped to ×64. Checked on the
