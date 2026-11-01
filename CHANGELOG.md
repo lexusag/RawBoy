@@ -1,5 +1,12 @@
 # Changelog
 
+**RawBoy: the curves box has a visible frame again on phones (2026-11-01)**
+
+- Android: the curve area's frame and grid were drawn in the theme's outline colour on its surface-variant fill, which
+  are the same grey in the dark scheme, so the curve looked like it floated in a flat box. The box now uses the web's
+  colours: the app's surface with a 1 dp border, and the frame and grid in the same line colour.
+- iPhone: the box gets the same border, and the grid uses the matching system grey.
+
 **RawBoy: chromatic aberration sliders, applied by RawBoy Auto too (2026-11-01)**
 
 - Lens tab → **Chromatic aberration**: **Red/Cyan** and **Blue/Yellow** scale the red and blue planes around the image

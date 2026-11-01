@@ -2,6 +2,7 @@ package app.rawboy.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
@@ -49,6 +50,11 @@ private const val ASPECT = 2f
 private val MAX_WIDTH = 400.dp
 /** Margin between the box's edge and the curve area, so the end points sit inside the box, clear of the panel's edges (web: styles.css). */
 private val INSET = 14.dp
+/**
+ * The box's border and the curve area's frame and grid: web's --border, on the app's surface (web's --surface). Not the
+ * theme's outlineVariant on surfaceVariant: both default to the same #49454F in the dark scheme, so the frame vanished.
+ */
+private val LINE = Color(0xFF333338)
 
 @Composable
 private fun curveColor(c: CurveChannel): Color = when (c) {
@@ -72,7 +78,7 @@ internal fun CurvesPanel(curves: ToneCurves, onChange: (ToneCurves) -> Unit) {
     val change by rememberUpdatedState(onChange)
     val points = curves[channel]
     val color = curveColor(channel)
-    val grid = MaterialTheme.colorScheme.outlineVariant
+    val grid = LINE
     val fill = MaterialTheme.colorScheme.surface
     val accent = MaterialTheme.colorScheme.primary
 
@@ -102,7 +108,8 @@ internal fun CurvesPanel(curves: ToneCurves, onChange: (ToneCurves) -> Unit) {
                 .widthIn(max = MAX_WIDTH)
                 .fillMaxWidth()
                 .aspectRatio(ASPECT)
-                .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp))
+                .background(fill, RoundedCornerShape(4.dp))
+                .border(1.dp, LINE, RoundedCornerShape(4.dp))
                 .pointerInput(channel) {
                     var lastTapTime = 0L
                     var lastTapIndex = -1
