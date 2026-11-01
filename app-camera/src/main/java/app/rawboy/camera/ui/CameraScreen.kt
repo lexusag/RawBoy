@@ -1,5 +1,6 @@
 package app.rawboy.camera.ui
 
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.displayCutout
@@ -790,11 +791,9 @@ private fun MonoToggle(on: Boolean, onChange: (Boolean) -> Unit) {
             .size(36.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(if (on) Color.White else Color(0xFF2A2A2A))
-            .clickable(role = Role.Switch) { onChange(!on) }
-            .semantics {
-                contentDescription = "Black and white"
-                stateDescription = if (on) "On" else "Off"
-            },
+            // A switch for TalkBack (checkable, on/off), named on the node that takes the tap.
+            .semantics { contentDescription = "Black and white" }
+            .toggleable(value = on, role = Role.Switch, onValueChange = onChange),
         contentAlignment = Alignment.Center,
     ) {
         Text("B&W", style = MaterialTheme.typography.labelMedium, color = if (on) Color.Black else Color.White)
@@ -813,11 +812,9 @@ private fun FilmToggle(on: Boolean, onChange: (Boolean) -> Unit, modifier: Modif
             .size(36.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(if (on) Color.White else Color(0xFF2A2A2A))
-            .clickable(role = Role.Switch) { onChange(!on) }
-            .semantics {
-                contentDescription = "Film stocks"
-                stateDescription = if (on) "On" else "Off"
-            },
+            // A switch for TalkBack (checkable, on/off), named on the node that takes the tap.
+            .semantics { contentDescription = "Film stocks" }
+            .toggleable(value = on, role = Role.Switch, onValueChange = onChange),
         contentAlignment = Alignment.Center,
     ) {
         Icon(FilmIcon, contentDescription = null, tint = if (on) Color.Black else Color.White, modifier = Modifier.size(22.dp))

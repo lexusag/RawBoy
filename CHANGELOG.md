@@ -4,7 +4,9 @@
 
 - Android: the shutter, the sideways S, B and W (F) buttons and the tall slider now work with TalkBack. They read
   their full names and values ("Brightness, 0"), the slider moves in steps of 5 with swipes, and a Reset action does
-  what the double tap does. Film and B&W read as switches, and the selected lens is announced.
+  what the double tap does. Film and B&W read as on/off switches, and the selected lens is announced.
+- Android, all three apps: the one-row sliders (Strength, Brightness, Warmth here; Pro's and Auto's too) read their
+  name, and tapping a value says it resets.
 - iPhone: the sideways S, B and W (F) buttons and the tall slider read their full names, with the same Reset action.
 
 **RawBoy (web): selected option filled amber (2026-11-01)**
