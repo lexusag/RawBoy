@@ -488,30 +488,34 @@ private fun editsSummary(e: DevelopParams): String {
 private fun LookStrip(vm: AutoViewModel, photo: AutoPhoto) {
     val state = rememberLazyListState()
     val looks = if (photo.mode == LookMode.FILM) FilmLooks.ALL else Looks.ALL
-    // Colour and black and white looks in sections (the list has colour first): the first chip of each carries the
-    // section's heading, and a divider stands between them.
-    val sectioned = looks.any { it.monochrome } && looks.any { !it.monochrome }
+    // Colour, experimental and black and white looks in sections (Looks.sections): the first chip of each carries
+    // the section's heading, and a divider stands between them.
+    val sections = Looks.sections(looks)
+    val sectioned = sections.size > 1
+    val ordered = sections.flatMap { it.second }
     LaunchedEffect(photo.id, photo.mode) {
-        val i = looks.indexOf(photo.activeLook).coerceAtLeast(0)
-        state.scrollToItem(if (sectioned && looks[i].monochrome) i + 1 else i)
+        val i = ordered.indexOf(photo.activeLook).coerceAtLeast(0)
+        // Each earlier section's divider is a list item too.
+        val dividers = if (sectioned) sections.indexOfFirst { (_, l) -> photo.activeLook in l }.coerceAtLeast(0) else 0
+        state.scrollToItem(i + dividers)
     }
     LazyRow(
         state = state,
         contentPadding = PaddingValues(horizontal = 12.dp, vertical = 6.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        looks.forEachIndexed { i, look ->
-            val starts = sectioned && (i == 0 || look.monochrome != looks[i - 1].monochrome)
-            if (starts && i > 0) {
-                item(key = "divider") { VerticalDivider(Modifier.height(LOOK_SIZE + LOOK_HEADING + 32.dp)) }
+        sections.forEachIndexed { s, (group, list) ->
+            if (s > 0) {
+                item(key = "divider-${group.name}") { VerticalDivider(Modifier.height(LOOK_SIZE + LOOK_HEADING + 32.dp)) }
             }
-            val heading = when {
-                !sectioned -> null
-                !starts -> ""
-                look.monochrome -> "Black & white"
-                else -> "Color"
+            list.forEachIndexed { i, look ->
+                val heading = when {
+                    !sectioned -> null
+                    i > 0 -> ""
+                    else -> group.label
+                }
+                item(key = look.id) { LookChip(vm, photo, look, heading) }
             }
-            item(key = look.id) { LookChip(vm, photo, look, heading) }
         }
     }
 }

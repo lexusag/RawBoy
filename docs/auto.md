@@ -37,6 +37,8 @@ it is turned sideways (or on a tablet or a wide window). Android, iPhone and the
 | Yellow Cine Mono, Yellow Cine Mono Soft | black-and-white cinema negative on print film; developed short on a soft paper grade | — (monochrome) |
 
 Look names are RawBoy's own: "Yellow" and "Green" are two families of film character, not products.
+The look strip lists them in three sections: **Color**, **Experimental** (Movie Green and Redscale: unusual colour
+looks, never suggested) and **Black & white**.
 
 The film LUTs are generated with [spectral_film_lut](https://github.com/JanLohse/spectral_film_lut) from
 each stock's datasheet (`tools/film_luts/generate.py`). Each LUT first undoes RawBoy's AgX curve, exposes the

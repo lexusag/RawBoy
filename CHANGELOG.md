@@ -1,5 +1,11 @@
 # Changelog
 
+**Experimental looks (2026-11-01)**
+
+- Looks pickers have a third section, **Experimental**, between Color and Black & white, for unusual colour looks.
+  Movie Green and Redscale move there. It shows in RawBoy Auto's look strip, the colour Look menu of RawBoy Camera
+  (Film off) and the LUTs tab of RawBoy, on Android, iPhone and the web. Experimental looks are never suggested.
+
 **Movie Green look (2026-11-01)**
 
 - New colour look **Movie Green**: a strong green-teal grade with lifted, slightly cyan blacks, made by the owner in

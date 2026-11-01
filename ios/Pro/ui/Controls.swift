@@ -239,13 +239,14 @@ private struct LutPanel: View {
             }
         }
         LutRow(name: "No LUT", selected: params.lut == nil, loading: false) { onSelect(nil) }
-        SectionLabel("Included · Color")
-        ForEach(luts.bundled.filter { !Looks.isMonochromeLut($0.id) }, id: \.id) { e in
-            LutRow(name: e.name, selected: params.lut == e.id, loading: loading && params.lut == e.id) { onSelect(e.id) }
-        }
-        SectionLabel("Included · Black & white")
-        ForEach(luts.bundled.filter { Looks.isMonochromeLut($0.id) }, id: \.id) { e in
-            LutRow(name: e.name, selected: params.lut == e.id, loading: loading && params.lut == e.id) { onSelect(e.id) }
+        ForEach(LookGroup.allCases, id: \.self) { group in
+            let list = luts.bundled.filter { Looks.lutGroup($0.id) == group }
+            if !list.isEmpty {
+                SectionLabel("Included · \(group.label)")
+                ForEach(list, id: \.id) { e in
+                    LutRow(name: e.name, selected: params.lut == e.id, loading: loading && params.lut == e.id) { onSelect(e.id) }
+                }
+            }
         }
         SectionLabel("Your LUTs · Files › RawBoy › LUTs")
         if luts.user.isEmpty {
