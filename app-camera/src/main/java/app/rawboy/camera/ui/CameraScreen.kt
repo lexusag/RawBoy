@@ -1,5 +1,11 @@
 package app.rawboy.camera.ui
 
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.WindowInsets
@@ -52,10 +58,6 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.BlendMode
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -98,7 +100,6 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -825,58 +826,63 @@ private fun FilmToggle(on: Boolean, onChange: (Boolean) -> Unit, modifier: Modif
     }
 }
 
-/** B&W mode's colour filter: one chip per [BwFilter], a dot of its colour before the name; scrolls on narrow screens. */
+/**
+ * B&W mode's colour filter, upright: a menu like the Look pill above it (the chips ran off the edge on 360-411 dp
+ * phones). The pill and each item show a dot of the filter's colour before its name. Turned sideways, [FilterColumn]
+ * shows them all.
+ */
 @Composable
 private fun FilterRow(selected: BwFilter, onSelect: (BwFilter) -> Unit) {
+    var open by remember { mutableStateOf(false) }
     Row(Modifier.height(36.dp), verticalAlignment = Alignment.CenterVertically) {
         Text("Filter", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(88.dp))
-        val scroll = rememberScrollState()
-        Row(
-            Modifier
-                // An edge fades while more filters lie past it, so it's clear the row scrolls (Red and Green
-                // were cut off or hidden on 360-411 dp phones with nothing to say so).
-                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-                .drawWithContent {
-                    drawContent()
-                    if (scroll.canScrollBackward) {
-                        val fade = FILTER_FADE.toPx()
-                        drawRect(
-                            Brush.horizontalGradient(listOf(Color.Transparent, Color.Black), startX = 0f, endX = fade),
-                            size = Size(fade, size.height),
-                            blendMode = BlendMode.DstIn,
-                        )
-                    }
-                    if (scroll.canScrollForward) {
-                        val fade = FILTER_FADE.toPx()
-                        drawRect(
-                            Brush.horizontalGradient(listOf(Color.Black, Color.Transparent), startX = size.width - fade, endX = size.width),
-                            topLeft = Offset(size.width - fade, 0f),
-                            size = Size(fade, size.height),
-                            blendMode = BlendMode.DstIn,
-                        )
-                    }
+        Box {
+            OutlinedButton(
+                onClick = { open = true },
+                contentPadding = PaddingValues(start = 16.dp, end = 8.dp),
+                modifier = Modifier
+                    .heightIn(min = 32.dp)
+                    .semantics { contentDescription = "Filter, ${selected.label}" },
+            ) {
+                FilterDot(selected)
+                Text(selected.label)
+                Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
+            }
+            DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+                for (f in BwFilter.entries) {
+                    val isSelected = f == selected
+                    DropdownMenuItem(
+                        leadingIcon = { FilterDot(f, Modifier.padding(start = 4.dp)) },
+                        text = {
+                            Text(
+                                f.label,
+                                fontWeight = if (isSelected) FontWeight.Bold else null,
+                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                            )
+                        },
+                        onClick = {
+                            open = false
+                            onSelect(f)
+                        },
+                        modifier = Modifier.semantics { this.selected = isSelected },
+                    )
                 }
-                .horizontalScroll(scroll),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            for (f in BwFilter.entries) {
-                val dot = FILTER_COLORS[f]
-                FilterChip(
-                    selected = f == selected,
-                    onClick = { onSelect(f) },
-                    label = { Text(f.label) },
-                    leadingIcon = if (dot == null) null else {
-                        { Box(Modifier.size(8.dp).clip(CircleShape).background(dot)) }
-                    },
-                    modifier = Modifier.height(30.dp),
-                )
             }
         }
     }
 }
 
-private val FILTER_FADE = 32.dp
+/** The filter's colour as a small dot (an empty space of the same size for None, so names line up in the menu). */
+@Composable
+private fun FilterDot(f: BwFilter, modifier: Modifier = Modifier) {
+    val dot = FILTER_COLORS[f]
+    Box(
+        modifier
+            .padding(end = 8.dp)
+            .size(8.dp)
+            .then(if (dot != null) Modifier.clip(CircleShape).background(dot) else Modifier),
+    )
+}
 
 private val FILTER_COLORS = mapOf(
     BwFilter.YELLOW to Color(0xFFE8C400),

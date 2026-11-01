@@ -548,9 +548,6 @@ private struct FilmToggle: View {
 private struct FilterRow: View {
     let selected: BwFilter
     let onSelect: (BwFilter) -> Void
-    /** Whether filters lie past an edge: that edge fades then, so it's clear the row scrolls (port of Android). */
-    @State private var moreRight = false
-    @State private var moreLeft = false
 
     static func dot(_ f: BwFilter) -> Color? {
         switch f {
@@ -563,54 +560,19 @@ private struct FilterRow: View {
     }
 
     var body: some View {
+        // A menu like the Look picker above it: the chips ran off the edge on phones. Turned sideways, FilterColumn
+        // shows them all.
         HStack(spacing: 8) {
             Text("Filter").font(.subheadline).frame(width: 88, alignment: .leading)
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 6) {
-                    ForEach(BwFilter.allCases, id: \.self) { f in
-                        let on = f == selected
-                        Button { onSelect(f) } label: {
-                            HStack(spacing: 4) {
-                                if let c = Self.dot(f) { Circle().fill(c).frame(width: 8, height: 8) }
-                                Text(f.label).font(.footnote)
-                            }
-                            .padding(.horizontal, 10)
-                            .frame(height: 28)
-                            .foregroundStyle(on ? Color.black : Color.white)
-                            .background(Capsule().fill(on ? Color.white : Color(white: 0.16)))
-                        }
-                        .accessibilityAddTraits(on ? .isSelected : [])
-                    }
-                }
-                .background(GeometryReader { g in
-                    Color.clear.preference(key: FilterRowEdge.self, value: [g.frame(in: .named("filterRow")).minX, g.frame(in: .named("filterRow")).maxX])
-                })
+            Picker("Filter", selection: Binding(get: { selected }, set: { onSelect($0) })) {
+                ForEach(BwFilter.allCases, id: \.self) { Text($0.label).tag($0) }
             }
-            .coordinateSpace(name: "filterRow")
-            .background(GeometryReader { g in
-                Color.clear.onPreferenceChange(FilterRowEdge.self) { edges in
-                    moreLeft = (edges.first ?? 0) < -1
-                    moreRight = (edges.last ?? 0) > g.size.width + 1
-                }
-            })
-            .mask(
-                HStack(spacing: 0) {
-                    LinearGradient(colors: [moreLeft ? .clear : .black, .black], startPoint: .leading, endPoint: .trailing)
-                        .frame(width: 32)
-                    Color.black
-                    LinearGradient(colors: [.black, moreRight ? .clear : .black], startPoint: .leading, endPoint: .trailing)
-                        .frame(width: 32)
-                }
-            )
+            .pickerStyle(.menu)
+            .tint(Color.cameraAccent)
+            Spacer()
         }
         .frame(height: ValueSlider.rowHeight)
     }
-}
-
-/** The left and right edges of the filter chips in the row's scroll view, for its fades. */
-private struct FilterRowEdge: PreferenceKey {
-    static var defaultValue: [CGFloat] = [0, 0]
-    static func reduce(value: inout [CGFloat], nextValue: () -> [CGFloat]) { value = nextValue() }
 }
 
 /** The look, picked from a menu (Pro's stock picker). */
