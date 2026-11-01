@@ -1,5 +1,13 @@
 # Changelog
 
+**RawBoy Packer: Fujifilm X-T1 / X-E5, X-Trans, more cameras (2026-11-01)**
+
+- Fujifilm X-T1 and X-E5 raws now work: their lens correction tables (different layouts from the GFX's) are read
+  correctly, and an X-E5 (newer than the raw library's colour table) packs with Adobe's colour matrix. X-Trans raws
+  now pack as Small raw and Micro (they ran out of memory) and honour the quality setting; at High an X-T1 raw is
+  about 15% of its size. Unknown cameras now say why they fail instead of "DNG SDK error".
+- Lightroom's default sharpening and exposure now match Adobe's DNGs for the A7C II, EOS RP, EOS 6D, X-T1 and X-E5 too.
+
 **RawBoy Packer: raws to smaller DNGs in the browser (2026-11-01)**
 
 - A new web page, deployed on its own: drop camera raws or DNGs and get DNGs back. Small raw (the default) keeps the
