@@ -1,6 +1,6 @@
 import { localFolder, saveBlob, type OutputFolder } from '../ui/common/files';
 import type { PackInfo, PackerRequest } from './protocol';
-import { outputName, packOptions, threadsPerFile, type PackSettings } from './settings';
+import { outputName, packOptions, settingsSuffix, threadsPerFile, type PackSettings } from './settings';
 
 /** One packer worker (WASM engine with the DNG SDK) and a promise-based call into it. */
 class PackerWorker {
@@ -163,8 +163,9 @@ export class PackerStore {
           const bytes = await item.file.arrayBuffer();
           const { dng, info } = await worker.call<{ dng: Uint8Array; info: PackInfo }>({ op: 'pack', bytes, options }, [bytes]);
           const blob = new Blob([dng], { type: 'image/x-adobe-dng' });
-          let name = outputName(item.file.name);
-          if (folder) name = await folder.write((c) => outputName(item.file.name, c), blob);
+          const suffix = settings.nameSuffix ? settingsSuffix(settings) : '';
+          let name = outputName(item.file.name, 0, suffix);
+          if (folder) name = await folder.write((c) => outputName(item.file.name, c, suffix), blob);
           else saveBlob(name, blob);
           this.update(item.id, { status: 'done', outSize: dng.byteLength, outName: name, result: info });
         } catch (e) {

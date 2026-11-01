@@ -19,6 +19,8 @@ export interface PackSettings {
   preview: PreviewSize;
   lensCorrections: boolean;
   keepGps: boolean;
+  /** Add the settings to the file name (DSC001-small-high.dng). */
+  nameSuffix: boolean;
   /** Files packed in parallel, each in its own worker. */
   filesAtOnce: number;
 }
@@ -31,6 +33,7 @@ export const DEFAULT_SETTINGS: PackSettings = {
   preview: 'standard',
   lensCorrections: true,
   keepGps: true,
+  nameSuffix: false,
   filesAtOnce: 1,
 };
 
@@ -301,10 +304,24 @@ export function summarize(s: PackSettings, files: PackInfo[]): Line[] {
   return lines;
 }
 
-/** The output's file name: the source's name with .dng; DNG sources get "-packed" so nothing is overwritten. */
-export function outputName(source: string, counter = 0): string {
+/** The settings as a file name suffix: "small-high", "micro4000-good", "lossless", "lossless-jxl". */
+export function settingsSuffix(s: Pick<PackSettings, 'format' | 'quality' | 'maxSize'>): string {
+  switch (s.format) {
+    case 'small': return `small-${s.quality}`;
+    case 'micro': return `micro${s.maxSize}-${s.quality}`;
+    case 'losslessJxl': return 'lossless-jxl';
+    default: return 'lossless';
+  }
+}
+
+/**
+ * The output's file name: the source's name with .dng; DNG sources get "-packed" so nothing is overwritten. With a
+ * suffix (the settings) that replaces "-packed": the name already differs from the source's.
+ */
+export function outputName(source: string, counter = 0, suffix = ''): string {
   const dot = source.lastIndexOf('.');
   const base = dot > 0 ? source.slice(0, dot) : source;
   const isDng = dot > 0 && source.slice(dot + 1).toLowerCase() === 'dng';
-  return `${base}${isDng ? '-packed' : ''}${counter ? `-${counter}` : ''}.dng`;
+  const tag = suffix ? `-${suffix}` : isDng ? '-packed' : '';
+  return `${base}${tag}${counter ? `-${counter}` : ''}.dng`;
 }

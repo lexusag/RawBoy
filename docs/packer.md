@@ -45,6 +45,8 @@ little softer and darker than its own conversion.
 - **Location**: keep or remove GPS tags.
 - **Preview**: the camera's own JPEG is used when the raw has one; otherwise (DNGs, phones) a 1024 or 2048 px render, or none.
 - **Files at once**: 1 (default) to 4 files in parallel, each in its own worker. A 50 MP photo needs up to 1 GB.
+- **Settings in file name** (off by default): adds the settings to the name, e.g. `DSC001-small-high.dng`, `DSC001-micro4000-good.dng`,
+  `DSC001-lossless.dng`; for DNG sources it replaces `-packed`.
 - Output: a folder (Chrome, Edge) or the browser's downloads. Names are the source's with `.dng`; DNG sources get
   `-packed`. Originals are never changed.
 

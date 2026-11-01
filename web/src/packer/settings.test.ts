@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PackInfo } from './protocol';
-import { DEFAULT_SETTINGS, PRESETS, outputName, presetOf, summarize, threadsPerFile } from './settings';
+import { DEFAULT_SETTINGS, PRESETS, outputName, presetOf, settingsSuffix, summarize, threadsPerFile } from './settings';
 
 const info = (p: Partial<PackInfo>): PackInfo => ({
   make: 'Sony', model: 'ILCE-7M3', lens: '', format: 'ARW', width: 6024, height: 4024, dng: false, mosaic: true, bayer: true,
@@ -23,6 +23,10 @@ describe('Packer settings', () => {
     expect(outputName('DSC07421.ARW')).toBe('DSC07421.dng');
     expect(outputName('IMG_1.DNG')).toBe('IMG_1-packed.dng');
     expect(outputName('DSCF3736.RAF', 2)).toBe('DSCF3736-2.dng');
+    expect(DEFAULT_SETTINGS.nameSuffix).toBe(false);
+    expect(outputName('DSC1.ARW', 0, 'small-high')).toBe('DSC1-small-high.dng');
+    expect(outputName('IMG_1.DNG', 1, 'lossless')).toBe('IMG_1-lossless-1.dng');
+    expect(settingsSuffix({ format: 'micro', quality: 'good', maxSize: 3000 })).toBe('micro3000-good');
   });
 
   it('shares cores between files at once', () => {
