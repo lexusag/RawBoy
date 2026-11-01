@@ -70,7 +70,7 @@ down to none at −100, e.g. to keep fine detail at high ISO). Press and hold th
 grey by default) helps judge exposure; tap (click) outside the photo to cycle it through grey, white and black.
 **Swipe left or right** on the photo to move to the previous or next photo in the batch (each keeps its own
 settings; swiping is off while zoomed or exporting). Pinch with two fingers to zoom around them, up to 400% (iOS, Android, web on touch screens).
-**Remove from batch** (the bin in the web's top bar, the ⋮ menu on Android, the … menu on iOS; **Delete** on the web) takes the open photo
+**Remove from batch** (the bin in the web's top bar, its ⋯ menu on phones, the ⋮ menu on Android, the … menu on iOS; **Delete** on the web) takes the open photo
 out of the batch, the file stays, and goes on to the next photo (the one before it at the batch's end; back to the
 grid when it was the last).
 **Undo** and **Redo** (arrows in the photo view's top bar; Ctrl/⌘ Z and Shift Ctrl/⌘ Z on the web) take back the

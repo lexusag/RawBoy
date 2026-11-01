@@ -1,5 +1,13 @@
 # Changelog
 
+**RawBoy Auto (web): a ⋯ menu on phones (2026-11-01)**
+
+- In the photo view on phones (below 560 px), Apply to all, Edit in RawBoy and Remove from batch moved into a ⋯ menu
+  next to Export. The top bar is one line again instead of two, the photo gets about 100 px more, and more of the file
+  name shows.
+- The "Double-tap for 100%" hint no longer covers the ISO badge on phones, and the empty photo view's text wraps
+  without a single word on its last line.
+
 **RawBoy Packer: phone layout and polish (2026-11-01)**
 
 - On phones and narrow windows the files list and the Pack button now come straight after the settings; the summary
