@@ -1,0 +1,51 @@
+# RawBoy Packer
+
+A web page that repackages camera raws and DNGs as DNGs, like Adobe DNG Converter, with plain controls and a live
+summary of what each choice does. Everything runs in the browser (WASM: LibRaw and the Adobe DNG SDK); files are never
+uploaded. Deployed as its own Cloudflare Pages project, `rawboy-packer` (see [Cloudflare](cloudflare.md)).
+
+## Formats
+
+| Format | What is stored | Size vs the camera raw* | Opens in |
+| --- | --- | --- | --- |
+| **Small raw** (default) | Raw data (every photosite), lossy JPEG XL (DNG 1.7.1) | 25–50% at High | RawBoy, Lightroom, Apple Photos. Not darktable (purple) |
+| **Lossless** | Raw data, bit-exact, classic lossless JPEG (DNG 1.4) | 70–100% | Everything that reads DNG |
+| **Lossless JPEG XL** | Raw data, bit-exact, lossless JPEG XL (DNG 1.7) | 40–100%, slow | RawBoy, Lightroom. Black in Apple Photos |
+| **Micro** | Demosaiced, resized to a max size (linear DNG), lossy JPEG XL | 5–20% | RawBoy, Lightroom |
+
+\* Measured on an A7 III, GFX 50R and E-PL9 (2026-11-01). The page shows the measured size of each file once packed.
+
+Small raw saves X-Trans and already demosaiced sources (phone ProRAW) demosaiced at full size instead, and says so.
+
+**Quality** (Small raw, Micro) is the JPEG XL distance: Archive 0.1, **High 0.2** (default; visually the same as the raw on
+correctly exposed photos), Good 0.5, Compact 1.0. **Speed** is the encoder effort (3, 5, 7).
+
+## Lens corrections
+
+Sony (ARW SubIFD tags 0x7032/0x7035/0x7037) and Fujifilm (RAF tags 0xF00B/0xF00F/0xF010) store the camera's own
+distortion, colour fringing and vignetting corrections. The Packer turns them into DNG opcodes as Adobe's converter
+does (WarpRectilinear, FixVignetteRadial); checked against Adobe's DNG of the same GFX file.
+
+- Lossless formats: kept as instructions that RawBoy and Lightroom apply (and can switch off).
+- Small raw: the same, but vignetting is applied to the raw data itself (the SDK does that for lossy raw data).
+- Micro: everything is applied to the pixels.
+- Olympus, Canon, Nikon and Panasonic raws hold no corrections the Packer can read: Lightroom applies its own profiles.
+- DNG sources keep their own corrections.
+
+Turning *Lens corrections* off drops them.
+
+## Lightroom match
+
+Lightroom scales its default sharpening and exposure by hints that Adobe's own DNGs carry per camera. The Packer knows
+them for the GFX 50R, A7 III, NEX-3 and E-PL9; for other cameras the summary warns that Lightroom may open the DNG a
+little softer and darker than its own conversion.
+
+## Other settings
+
+- **Location**: keep or remove GPS tags.
+- **Preview**: the camera's own JPEG is used when the raw has one; otherwise (DNGs, phones) a 1024 or 2048 px render, or none.
+- **Files at once**: 1 (default) to 4 files in parallel, each in its own worker. A 50 MP photo needs up to 1 GB.
+- Output: a folder (Chrome, Edge) or the browser's downloads. Names are the source's with `.dng`; DNG sources get
+  `-packed`. Originals are never changed.
+
+Settings are remembered in the browser.

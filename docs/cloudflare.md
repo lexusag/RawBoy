@@ -119,3 +119,10 @@ Search engines rank a one-page app mostly on links to it and the words on the pa
 - The README links to `https://app.rawboy.link`; also put it in the GitHub repository's *Website* field (About → ⚙).
 - Share it where photographers talk (forums, Reddit, darktable/Fuji communities); each link is a vote.
 - Keep the static description in `web/index.html` honest and current; it's what search engines show and match.
+
+## RawBoy Packer
+
+The release workflow also deploys **Cloudflare Pages project `rawboy-packer`** (Direct Upload, same API token): the same
+build, with `packer.html` renamed to `index.html` and the main app's other pages removed (step *Prepare RawBoy Packer
+site*). `_headers` comes along, so the page is cross-origin isolated (needed for the WASM threads). A custom domain is
+added in that project's *Custom domains*, as for `rawboy`.

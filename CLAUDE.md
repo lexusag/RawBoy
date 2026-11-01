@@ -282,6 +282,23 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   generated TIFF/CR3/RAF files (no real raws needed).
   Shared native pieces: `decode.cpp` (decoder order), `image_ops.cpp` (downsample, copyTile), `band_ops.h`,
   `jpegli_settings.h`, `dng_sdk.cmake` (platform define is a parameter: `qAndroid=1` / `qWeb=1`).
+- **RawBoy Packer** (2026-11-01, web only; `docs/packer.md`): `web/packer.html` + `src/packer/` (`PackerApp`, `PackerStore`:
+  one `worker/packer.worker.ts` per file at once, each its own rawboy-full instance; `settings.ts`: presets, the live
+  summary and the "Opens in" table, numbers measured on the owner's files) → wasm `packInspect`/`pack` →
+  `engine/src/main/cpp/dng_pack.cpp` (DNG SDK builds only, not in the Android/iOS libraries). Raws: LibRaw's visible
+  area, CFA phase, per-position blacks, D65 ColorMatrix, inset crop, EXIF (`readLibRawMetadata`) into a `dng_negative`;
+  DNGs: the SDK's own parse. Formats: Small raw = `LossyCompressMosaicJXL` (non-Bayer → `ConvertToProxy` at full size),
+  Micro = `ConvertToProxy(maxSize)`, lossless JPEG / `LosslessCompressJXL`. Stage 3 is built only for a rendered preview
+  (jpegli, `PreviewEncoder`) or a linear output (300 MB at 50 MP). `PackHost` runs area tasks in bands on
+  `options.threads` (a task started inside one stays on its thread: libjxl's runner would multiply threads past the
+  web's fixed pool). `camera_lens_data.cpp`: Sony (SubIFD 0x7032/7035/7037) and Fujifilm (FujiIFD 0xF00B/F00F/F010)
+  curves → WarpRectilinear (fitted at the knots, r² weighted, scaled to fill the frame: Adobe's k0 1.044 on the
+  GF20-35) + FixVignetteRadial in OpcodeList2 (lossy raw data bakes it in). Adobe's BaselineSharpness/Exposure per camera
+  in `kAdobeHints` (read from Adobe's DNGs; Lightroom opened ours softer without them). Checked by the owner in
+  Lightroom (all formats open as raws), Apple Photos (lossless JPEG XL CFA renders black), XnView/darktable (lossy JXL
+  purple: they skip the MapPolynomial). Keep LibRaw objects on the heap (`make_unique`): on the stack they overflowed
+  the WASM 2 MB stack. Host harness: compile dng_pack.cpp with LibRaw + the SDK and a small `main()` (not in the repo).
+  Deployed as Pages project `rawboy-packer` by release.yml (dist copy, packer.html → index.html).
 - `.raw/` (git-ignored) — test files: `retouch.RAF` (GFX 50R portrait, orientation 8 after decode), `DSCF3079.RAF`
   (same body, ISO 6400, ~7 stops under: hot/warm pixels),
   `P4270088-compressed.dng` (Olympus, DNG 1.7 JPEG XL, Linear Raw), `IMG_4239/4259/4260.DNG` (iPhone 17 Pro Max

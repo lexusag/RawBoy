@@ -35,6 +35,7 @@
 #include <cstring>
 #include <ctime>
 #include <exception>
+#include <memory>
 #include <mutex>
 #include <new>
 #include <thread>
@@ -545,24 +546,25 @@ bool inspectForPacking(const uint8_t* data, size_t size, PackInfo& info, std::st
         if (looksLikeDng(host, data, size, dinfo)) {
             infoFromDng(dinfo, info);
             // Make, model and lens from LibRaw, which reads the EXIF without the image.
-            LibRaw raw;
-            if (raw.open_buffer(data, size) == LIBRAW_SUCCESS) {
-                info.make = raw.imgdata.idata.normalized_make;
-                info.model = raw.imgdata.idata.normalized_model;
-                info.lens = raw.imgdata.lens.Lens;
+            // On the heap: a LibRaw object is far larger than a web worker's 2 MB stack.
+            auto raw = std::make_unique<LibRaw>();
+            if (raw->open_buffer(data, size) == LIBRAW_SUCCESS) {
+                info.make = raw->imgdata.idata.normalized_make;
+                info.model = raw->imgdata.idata.normalized_model;
+                info.lens = raw->imgdata.lens.Lens;
             }
             return true;
         }
     } catch (...) {
     }
-    LibRaw raw;
-    const int rc = raw.open_buffer(data, size);
+    auto raw = std::make_unique<LibRaw>();
+    const int rc = raw->open_buffer(data, size);
     if (rc != LIBRAW_SUCCESS) {
         error = std::string("not a raw file LibRaw knows (") + libraw_strerror(rc) + ")";
         return false;
     }
-    infoFromLibRaw(raw.imgdata, info);
-    info.format = formatOf(data, size, &raw.imgdata);
+    infoFromLibRaw(raw->imgdata, info);
+    info.format = formatOf(data, size, &raw->imgdata);
     CameraLensData lens;
     if (readCameraLensData(data, size, lens) && lens.any()) {
         info.lensData = lens.maker;
@@ -596,14 +598,14 @@ bool packDng(const uint8_t* data, size_t size, const PackOptions& options, const
             if (!options.keepGps) stripGps(*negative->GetExif());
             info.lensWritten = !info.lensData.empty();
         } else {
-            RawBoyLibRaw raw;
-            int rc = raw.openBuffer(data, size);
-            if (rc == LIBRAW_SUCCESS) rc = raw.unpack();
+            auto raw = std::make_unique<RawBoyLibRaw>();
+            int rc = raw->openBuffer(data, size);
+            if (rc == LIBRAW_SUCCESS) rc = raw->unpack();
             if (rc != LIBRAW_SUCCESS) {
                 error = std::string("LibRaw: ") + libraw_strerror(rc);
                 return false;
             }
-            negative.Reset(negativeFromLibRaw(host, raw, data, size, options, info, previews));
+            negative.Reset(negativeFromLibRaw(host, *raw, data, size, options, info, previews));
         }
 
         // What the source allows: lossy raw needs a 2x2 mosaic; anything else is saved demosaiced at full size.
@@ -615,10 +617,12 @@ bool packDng(const uint8_t* data, size_t size, const PackOptions& options, const
 
         negative->SynchronizeMetadata();
         negative->BuildStage2Image(host);
-        negative->BuildStage3Image(host);
+        // The demosaiced image (300 MB for 50 MP) only for a rendered preview and the linear (proxy) outputs.
+        const bool renderPreview = options.previewSize > 0 && previews.Count() == 0 && encodePreview;
+        const bool linearOut = mode == PackMode::Micro || (mode == PackMode::SmallRaw && !negative->NeedLossyCompressMosaicJXL(host));
+        if (renderPreview || linearOut) negative->BuildStage3Image(host);
 
-        if (options.previewSize > 0 && previews.Count() == 0 &&
-            appendRenderedPreview(host, *negative, options.previewSize, encodePreview, previews)) {
+        if (renderPreview && appendRenderedPreview(host, *negative, options.previewSize, encodePreview, previews)) {
             info.preview = "rendered";
         }
 

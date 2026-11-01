@@ -116,8 +116,13 @@ export default defineConfig({
   base: './',
   plugins: [react(), copyModels(), seo(), versionFile(), isolationHeaders()],
   server: { fs: { allow: [repo] } },
-  // The app, and the Google Drive window (src/drive/popup.ts).
-  build: { rollupOptions: { input: { main: resolve(__dirname, 'index.html'), drive: resolve(__dirname, 'drive.html') } } },
+  // The app, the Google Drive window (src/drive/popup.ts) and RawBoy Packer (src/packer; deployed on its own site as
+  // index.html, see .github/workflows/release.yml).
+  build: {
+    rollupOptions: {
+      input: { main: resolve(__dirname, 'index.html'), drive: resolve(__dirname, 'drive.html'), packer: resolve(__dirname, 'packer.html') },
+    },
+  },
   worker: { format: 'es' },
   define: { __RAWBOY_VERSION__: JSON.stringify(version), __RAWBOY_BUILD__: JSON.stringify(build), __RAWBOY_COMMIT__: JSON.stringify(commit) },
 });
