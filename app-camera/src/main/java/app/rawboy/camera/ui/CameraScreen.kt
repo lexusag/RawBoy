@@ -1,5 +1,6 @@
 package app.rawboy.camera.ui
 
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.displayCutout
@@ -13,6 +14,13 @@ import app.rawboy.view.formatSliderValue
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.onClick
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.contentDescription
@@ -626,7 +634,8 @@ private fun LensSelector(
                     .size(if (vertical) 44.dp else 48.dp)
                     .clip(CircleShape)
                     .background(if (isSelected) Color(0xFFD0D0D0) else Color.Transparent)
-                    .clickable { onSelect(label) },
+                    .clickable(role = Role.Button) { onSelect(label) }
+                    .semantics { this.selected = isSelected },
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
@@ -770,7 +779,8 @@ private fun Shutter(enabled: Boolean, onClick: () -> Unit, modifier: Modifier = 
             .padding(8.dp)
             .clip(CircleShape)
             .background(ring)
-            .clickable(enabled = enabled, onClick = onClick),
+            .clickable(enabled = enabled, onClickLabel = "Take a photo", role = Role.Button, onClick = onClick)
+            .semantics { contentDescription = "Shutter" },
     )
 }
 
@@ -785,11 +795,9 @@ private fun MonoToggle(on: Boolean, onChange: (Boolean) -> Unit) {
             .size(36.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(if (on) Color.White else Color(0xFF2A2A2A))
-            .clickable { onChange(!on) }
-            .semantics {
-                contentDescription = "Black and white"
-                stateDescription = if (on) "On" else "Off"
-            },
+            // A switch for TalkBack (checkable, on/off), named on the node that takes the tap.
+            .semantics { contentDescription = "Black and white" }
+            .toggleable(value = on, role = Role.Switch, onValueChange = onChange),
         contentAlignment = Alignment.Center,
     ) {
         Text("B&W", style = MaterialTheme.typography.labelMedium, color = if (on) Color.Black else Color.White)
@@ -808,11 +816,9 @@ private fun FilmToggle(on: Boolean, onChange: (Boolean) -> Unit, modifier: Modif
             .size(36.dp)
             .clip(RoundedCornerShape(10.dp))
             .background(if (on) Color.White else Color(0xFF2A2A2A))
-            .clickable { onChange(!on) }
-            .semantics {
-                contentDescription = "Film stocks"
-                stateDescription = if (on) "On" else "Off"
-            },
+            // A switch for TalkBack (checkable, on/off), named on the node that takes the tap.
+            .semantics { contentDescription = "Film stocks" }
+            .toggleable(value = on, role = Role.Switch, onValueChange = onChange),
         contentAlignment = Alignment.Center,
     ) {
         Icon(FilmIcon, contentDescription = null, tint = if (on) Color.Black else Color.White, modifier = Modifier.size(22.dp))
@@ -1267,15 +1273,15 @@ private fun LandscapeControls(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                AdjustChip("S", settings.strength.roundToInt().toString(), adjust == Adjust.STRENGTH,
+                AdjustChip("S", "Strength", settings.strength.roundToInt().toString(), adjust == Adjust.STRENGTH,
                     onSelect = { onAdjust(Adjust.STRENGTH) }, onReset = { vm.setStrength(LookApplier.DEFAULT_STRENGTH) })
-                AdjustChip("B", formatSliderValue(settings.brightness, -100f..100f), adjust == Adjust.BRIGHTNESS,
+                AdjustChip("B", "Brightness", formatSliderValue(settings.brightness, -100f..100f), adjust == Adjust.BRIGHTNESS,
                     onSelect = { onAdjust(Adjust.BRIGHTNESS) }, onReset = { vm.setBrightness(0f) })
                 if (mono) {
-                    AdjustChip("F", settings.filter.label, adjust == Adjust.WARMTH,
+                    AdjustChip("F", "Filter", settings.filter.label, adjust == Adjust.WARMTH,
                         onSelect = { onAdjust(Adjust.WARMTH) }, onReset = { vm.setFilter(BwFilter.NONE) })
                 } else {
-                    AdjustChip("W", formatSliderValue(settings.warmth, -100f..100f), adjust == Adjust.WARMTH,
+                    AdjustChip("W", "Warmth", formatSliderValue(settings.warmth, -100f..100f), adjust == Adjust.WARMTH,
                         onSelect = { onAdjust(Adjust.WARMTH) }, onReset = { vm.setWarmth(0f) })
                 }
             }
@@ -1291,6 +1297,11 @@ private fun LandscapeControls(
                     }
                     VerticalSlider(
                         value, range, default, set,
+                        label = when (adjust) {
+                            Adjust.STRENGTH -> "Strength"
+                            Adjust.BRIGHTNESS -> "Brightness"
+                            Adjust.WARMTH -> "Warmth"
+                        },
                         modifier = Modifier
                             .width(40.dp)
                             .fillMaxHeight(),
@@ -1312,7 +1323,7 @@ private data class SliderSpec(
 
 /** A round picker chip: the setting's letter with its value under it; filled while its setting is on the slider. */
 @Composable
-private fun AdjustChip(letter: String, value: String, selected: Boolean, onSelect: () -> Unit, onReset: () -> Unit) {
+private fun AdjustChip(letter: String, name: String, value: String, selected: Boolean, onSelect: () -> Unit, onReset: () -> Unit) {
     val primary = MaterialTheme.colorScheme.primary
     Column(
         Modifier
@@ -1328,7 +1339,24 @@ private fun AdjustChip(letter: String, value: String, selected: Boolean, onSelec
                     },
                 )
             }
-            .semantics { stateDescription = if (selected) "On the slider" else "" },
+            // TalkBack: the setting's name and value, a tap puts it on the slider, an action resets it (the double tap).
+            .clearAndSetSemantics {
+                contentDescription = name
+                stateDescription = value
+                role = Role.Button
+                this.selected = selected
+                onClick(label = "Put on the slider") {
+                    onSelect()
+                    true
+                }
+                customActions = listOf(
+                    CustomAccessibilityAction("Reset") {
+                        onSelect()
+                        onReset()
+                        true
+                    },
+                )
+            },
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {

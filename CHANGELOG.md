@@ -7,6 +7,15 @@
 - Upright in B&W mode, the filter row's edges fade while more filters lie past them: Red and Green were cut off
   or out of sight on phones with nothing to say the row scrolls (Android and iPhone).
 
+**RawBoy Camera: TalkBack and VoiceOver in the controls (2026-11-01)**
+
+- Android: the shutter, the sideways S, B and W (F) buttons and the tall slider now work with TalkBack. They read
+  their full names and values ("Brightness, 0"), the slider moves in steps of 5 with swipes, and a Reset action does
+  what the double tap does. Film and B&W read as on/off switches, and the selected lens is announced.
+- Android, all three apps: the one-row sliders (Strength, Brightness, Warmth here; Pro's and Auto's too) read their
+  name, and tapping a value says it resets.
+- iPhone: the sideways S, B and W (F) buttons and the tall slider read their full names, with the same Reset action.
+
 **RawBoy (web): selected option filled amber (2026-11-01)**
 
 - The chosen tone mapper, crop ratio and curve channel now fill amber, like the options in RawBoy Auto and Packer.
