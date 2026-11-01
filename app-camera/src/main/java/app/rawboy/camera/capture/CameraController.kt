@@ -704,7 +704,6 @@ class CameraController(context: Context) : AutoCloseable {
         }
     }
 
-    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     private suspend fun stillDng(
         s: CameraCaptureSession,
         inf: Info,
@@ -716,37 +715,78 @@ class CameraController(context: Context) : AutoCloseable {
         location: Location?,
         out: OutputStream,
         onSubmitted: () -> Unit,
-    ): CaptureResult {
-        val request = request(s, CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
-            addTarget(reader.surface)
-            // A request uses one sensor mode: the maximum-resolution still can't also feed the (default mode) preview.
-            if (!inf.hiRes) addTarget(previewSurface ?: throw IOException("Camera not ready"))
-            setCommon(inf)
-            if (inf.hiRes) setMaxResolution(inf)
-            if (flash == FlashMode.OFF) {
-                // Low light: the preview is held at 30 fps for a smooth viewfinder; let AE give the still the longer
-                // exposure it used to choose (its full range down to 15 fps).
-                inf.stillFpsRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
-            } else {
-                // The flash freezes the subject; a longer ambient exposure would only add blur around it. And never a
-                // zero-shutter-lag frame from before the flash.
-                set(CaptureRequest.CONTROL_ENABLE_ZSL, false)
-                // The camera's AE keeps the ambient exposure for a flash still (Pixel 9 Pro), so the raw clipped:
-                // expose it ourselves (see flashExposure) and fire the flash.
-                if (manual != null) {
-                    set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF)
-                    setForLens(CaptureRequest.SENSOR_EXPOSURE_TIME, manual.first)
-                    setForLens(CaptureRequest.SENSOR_SENSITIVITY, manual.second)
-                    setForLens(CaptureRequest.SENSOR_FRAME_DURATION, max(manual.first, FLASH_FRAME_NS))
-                    setForLens(CaptureRequest.CONTROL_POST_RAW_SENSITIVITY_BOOST, 100)
-                }
-                set(CaptureRequest.FLASH_MODE, CameraMetadata.FLASH_MODE_SINGLE)
+    ): CaptureResult = captureOne(s, stillRequest(s, inf, reader, flash, manual), onSubmitted) { captureResult, img ->
+        Log.d(TAG, "still (flash $flash${manual?.let { ", manual ${it.first / 1000} µs ISO ${it.second}" } ?: ""}, state ${captureResult.get(CaptureResult.FLASH_STATE)}, AE ${captureResult.get(CaptureResult.CONTROL_AE_STATE)}): ${(captureResult.get(CaptureResult.SENSOR_EXPOSURE_TIME) ?: 0L) / 1000} µs, ISO " +
+            "${captureResult.get(CaptureResult.SENSOR_SENSITIVITY)}, boost ${captureResult.get(CaptureResult.CONTROL_POST_RAW_SENSITIVITY_BOOST)}, " +
+            "black ${captureResult.get(CaptureResult.SENSOR_DYNAMIC_BLACK_LEVEL)?.joinToString()} " +
+            "(static ${inf.characteristics.get(CameraCharacteristics.SENSOR_BLACK_LEVEL_PATTERN)}), " +
+            "white ${captureResult.get(CaptureResult.SENSOR_DYNAMIC_WHITE_LEVEL)}" +
+            if (inf.hiRes && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) ", pixelMode ${captureResult.get(CaptureResult.SENSOR_PIXEL_MODE)}" else "")
+        // The lens's own characteristics and result: colour matrices, shading map and sizes are per lens.
+        if (inf.hiRes || img.format == ImageFormat.RAW10) {
+            MaxResDngWriter.write(inf.characteristics, captureResult, img, exifOrientation, location, out)
+        } else {
+            DngCreator(inf.characteristics, captureResult).use { dng ->
+                dng.setOrientation(exifOrientation)
+                location?.let(dng::setLocation)
+                dng.writeImage(out, img)
             }
-            // DngCreator writes the lens shading map as GainMap opcodes, which the decoder applies.
-            if (inf.hasLensShadingMap) {
-                setForLens(CaptureRequest.STATISTICS_LENS_SHADING_MAP_MODE, CameraMetadata.STATISTICS_LENS_SHADING_MAP_MODE_ON)
+        }
+        captureResult
+    }
+
+    /**
+     * The still request (raw + preview targets, AE as the shot uses it), shared by the shutter ([stillDng]) and the
+     * viewfinder's raw metering ([meterRaw]), so a metered frame is exposed exactly like a photo.
+     */
+    private fun stillRequest(
+        s: CameraCaptureSession,
+        inf: Info,
+        reader: ImageReader,
+        flash: FlashMode,
+        manual: Pair<Long, Int>?,
+    ): CaptureRequest = request(s, CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
+        addTarget(reader.surface)
+        // A request uses one sensor mode: the maximum-resolution still can't also feed the (default mode) preview.
+        if (!inf.hiRes) addTarget(previewSurface ?: throw IOException("Camera not ready"))
+        setCommon(inf)
+        if (inf.hiRes) setMaxResolution(inf)
+        if (flash == FlashMode.OFF) {
+            // Low light: the preview is held at 30 fps for a smooth viewfinder; let AE give the still the longer
+            // exposure it used to choose (its full range down to 15 fps).
+            inf.stillFpsRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
+        } else {
+            // The flash freezes the subject; a longer ambient exposure would only add blur around it. And never a
+            // zero-shutter-lag frame from before the flash.
+            set(CaptureRequest.CONTROL_ENABLE_ZSL, false)
+            // The camera's AE keeps the ambient exposure for a flash still (Pixel 9 Pro), so the raw clipped:
+            // expose it ourselves (see flashExposure) and fire the flash.
+            if (manual != null) {
+                set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF)
+                setForLens(CaptureRequest.SENSOR_EXPOSURE_TIME, manual.first)
+                setForLens(CaptureRequest.SENSOR_SENSITIVITY, manual.second)
+                setForLens(CaptureRequest.SENSOR_FRAME_DURATION, max(manual.first, FLASH_FRAME_NS))
+                setForLens(CaptureRequest.CONTROL_POST_RAW_SENSITIVITY_BOOST, 100)
             }
-        }.build()
+            set(CaptureRequest.FLASH_MODE, CameraMetadata.FLASH_MODE_SINGLE)
+        }
+        // DngCreator writes the lens shading map as GainMap opcodes, which the decoder applies.
+        if (inf.hasLensShadingMap) {
+            setForLens(CaptureRequest.STATISTICS_LENS_SHADING_MAP_MODE, CameraMetadata.STATISTICS_LENS_SHADING_MAP_MODE_ON)
+        }
+    }.build()
+
+    /**
+     * Submits [request] (one raw image), waits for its result (the lens's own, see [lensResult]) and image, and hands
+     * both to [use]; the image is closed afterwards.
+     */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private suspend fun <T> captureOne(
+        s: CameraCaptureSession,
+        request: CaptureRequest,
+        onSubmitted: () -> Unit,
+        use: (CaptureResult, Image) -> T,
+    ): T {
         val image = CompletableDeferred<Image>()
         val result = CompletableDeferred<TotalCaptureResult>()
         if (!handler.post {
@@ -769,25 +809,7 @@ class CameraController(context: Context) : AutoCloseable {
             }, handler)
             onSubmitted()
             val captureResult = lensResult(result.await())
-            Log.d(TAG, "still (flash $flash${manual?.let { ", manual ${it.first / 1000} µs ISO ${it.second}" } ?: ""}, state ${captureResult.get(CaptureResult.FLASH_STATE)}, AE ${captureResult.get(CaptureResult.CONTROL_AE_STATE)}): ${(captureResult.get(CaptureResult.SENSOR_EXPOSURE_TIME) ?: 0L) / 1000} µs, ISO " +
-                "${captureResult.get(CaptureResult.SENSOR_SENSITIVITY)}, boost ${captureResult.get(CaptureResult.CONTROL_POST_RAW_SENSITIVITY_BOOST)}, " +
-                "black ${captureResult.get(CaptureResult.SENSOR_DYNAMIC_BLACK_LEVEL)?.joinToString()} " +
-                "(static ${inf.characteristics.get(CameraCharacteristics.SENSOR_BLACK_LEVEL_PATTERN)}), " +
-                "white ${captureResult.get(CaptureResult.SENSOR_DYNAMIC_WHITE_LEVEL)}" +
-                if (inf.hiRes && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) ", pixelMode ${captureResult.get(CaptureResult.SENSOR_PIXEL_MODE)}" else "")
-            image.await().use { img ->
-                // The lens's own characteristics and result: colour matrices, shading map and sizes are per lens.
-                if (inf.hiRes || img.format == ImageFormat.RAW10) {
-                    MaxResDngWriter.write(inf.characteristics, captureResult, img, exifOrientation, location, out)
-                } else {
-                    DngCreator(inf.characteristics, captureResult).use { dng ->
-                        dng.setOrientation(exifOrientation)
-                        location?.let(dng::setLocation)
-                        dng.writeImage(out, img)
-                    }
-                }
-            }
-            return captureResult
+            return image.await().use { img -> use(captureResult, img) }
         } catch (t: Throwable) {
             handler.post {
                 if (pendingImage === image) pendingImage = null
@@ -796,6 +818,57 @@ class CameraController(context: Context) : AutoCloseable {
             runCatching { if (image.isCompleted) image.getCompleted().close() }
             throw t
         }
+    }
+
+    /**
+     * The scene key ([RawMeter]) of one raw frame of the still request, metered over [meter] (no DNG is written):
+     * calibrates the viewfinder's preview gain before a lens's first photo. Null when the camera isn't ready, the lens
+     * shoots maximum resolution (that request can't feed the preview, which would stall), the raw isn't a 16-bit
+     * Bayer frame, or the frame doesn't arrive within [METER_TIMEOUT_MS].
+     */
+    suspend fun meterRaw(meter: MeterArea.Centre): Float? = captureLock.withLock {
+        try {
+            val s = session ?: return@withLock null
+            val inf = info ?: return@withLock null
+            val reader = rawReader ?: return@withLock null
+            if (inf.hiRes) return@withLock null
+            withTimeoutOrNull(METER_TIMEOUT_MS) {
+                captureOne(s, stillRequest(s, inf, reader, FlashMode.OFF, null), {}) { r, img -> rawKey(inf, r, img, meter) }
+            }
+        } catch (e: IOException) {
+            Log.w(TAG, "raw metering failed", e)
+            null
+        } finally {
+            if (readerCloseDeferred) {
+                readerCloseDeferred = false
+                rawReader?.close()
+                rawReader = null
+            }
+        }
+    }
+
+    private fun rawKey(inf: Info, r: CaptureResult, img: Image, meter: MeterArea.Centre): Float? {
+        if (img.format != ImageFormat.RAW_SENSOR) return null
+        val c = inf.characteristics
+        val cfa = c.get(CameraCharacteristics.SENSOR_INFO_COLOR_FILTER_ARRANGEMENT) ?: return null
+        val black = r.get(CaptureResult.SENSOR_DYNAMIC_BLACK_LEVEL)?.takeIf { it.size >= 4 }
+            ?: c.get(CameraCharacteristics.SENSOR_BLACK_LEVEL_PATTERN)?.let { p ->
+                FloatArray(4) { i -> p.getOffsetForIndex(i % 2, i / 2).toFloat() }
+            } ?: return null
+        val white = (r.get(CaptureResult.SENSOR_DYNAMIC_WHITE_LEVEL) ?: c.get(CameraCharacteristics.SENSOR_INFO_WHITE_LEVEL) ?: return null).toFloat()
+        val neutral = r.get(CaptureResult.SENSOR_NEUTRAL_COLOR_POINT)?.takeIf { it.size >= 3 }
+            ?.let { n -> FloatArray(3) { n[it].toFloat() } } ?: return null
+        val plane = img.planes[0]
+        val data = plane.buffer.duplicate().order(java.nio.ByteOrder.nativeOrder()).asShortBuffer()
+        val rowShorts = plane.rowStride / 2
+        val step = plane.pixelStride / 2
+        val started = System.nanoTime()
+        val key = RawMeter.key(img.width, img.height, cfa, black, white, neutral, meter.fraction, app.rawboy.camera.ShotSaver.EXTRA_BLACK) { x, y ->
+            data.get(y * rowShorts + x * step).toInt() and 0xFFFF
+        }
+        Log.d(TAG, "raw meter: key $key in ${(System.nanoTime() - started) / 1_000_000} ms (${r.get(CaptureResult.SENSOR_EXPOSURE_TIME)?.div(1000)} µs, " +
+            "ISO ${r.get(CaptureResult.SENSOR_SENSITIVITY)}, black ${black.joinToString()}, white $white)")
+        return key
     }
 
     /**
@@ -1391,6 +1464,9 @@ class CameraController(context: Context) : AutoCloseable {
         /** Flash still: exposure time and the frame duration it needs at least. */
         private const val FLASH_EXPOSURE_NS = 33_333_333L
         private const val FLASH_FRAME_NS = 33_333_333L
+
+        /** How long [meterRaw] waits for its frame (a still in low light takes up to 1/15 s, plus the pipeline). */
+        private const val METER_TIMEOUT_MS = 2_000L
 
         /**
          * Flash still gain (s x ISO) at 1 m before a lens has learned its own: Pixel 9 Pro W exposed a desk at ~0.4 m

@@ -1,5 +1,13 @@
 # Changelog
 
+**Camera viewfinder exposure on Samsung tablets (2026-11-01)**
+
+- RawBoy Camera's viewfinder is no longer blown out before the first photo on a lens. Some cameras (Galaxy Tab S11
+  Ultra) brighten their preview about 4.4 stops more than the raw they record, without saying so, and the viewfinder
+  only learned that from the first shot. Now, when a lens has no calibration yet, the app meters one raw frame
+  silently right after the camera opens (about 1.5 s of bright viewfinder the very first time) and calibrates the viewfinder from it. A shot can also correct the
+  calibration by up to 6 stops at once (was 4), so one photo is enough. Android.
+
 **Small raw colour fix (2026-11-01)**
 
 - JPEG XL DNGs (RawBoy Packer's Small raw, Adobe's JPEG XL DNGs) no longer open much paler than the same photo as an
