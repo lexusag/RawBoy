@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { RAW_ACCEPT, canPickOutputFolder, pickFiles, pickOutputFolder } from '../ui/common/files';
 import { PackerStore, type PackItem } from './PackerStore';
 import type { PackFormat, PackInfo } from './protocol';
@@ -303,10 +303,13 @@ export function PackerApp() {
 }
 
 function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+  const id = useId();
   return (
     <div className="packer-row">
-      <div className="label">{label}</div>
-      <div className="control">
+      <div className="label" id={id}>
+        {label}
+      </div>
+      <div className="control" role="group" aria-labelledby={id}>
         {children}
         {hint && <div className="hint">{hint}</div>}
       </div>

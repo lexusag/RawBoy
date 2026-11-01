@@ -42,10 +42,11 @@ body {
   gap: 20px;
 }
 
+/* One column: the files and the Pack button come right after the settings, the longer summary last. */
 @media (max-width: 860px) {
   .packer-main {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-areas: 'settings' 'summary' 'files';
+    grid-template-areas: 'settings' 'files' 'summary';
   }
 }
 
@@ -101,6 +102,8 @@ body {
 }
 
 .segmented button {
+  /* Natural width: the editor's segmented controls stretch (flex: 1), which made a wrapped option fill a whole row. */
+  flex: none;
   padding: 5px 10px;
   white-space: nowrap;
   border-radius: 7px;
@@ -193,9 +196,7 @@ body {
 }
 
 .packer-drop {
-  border: 2px dashed var(--border);
-  border-radius: 12px;
-  padding: 40px 16px;
+  padding: 32px 16px;
   text-align: center;
   color: var(--muted);
 }
@@ -203,6 +204,7 @@ body {
 .packer-drop small {
   display: block;
   margin-top: 8px;
+  font-size: 13px;
 }
 
 .packer-drop button.text {
@@ -312,11 +314,17 @@ body {
 }
 .packer-advanced > .hint {
   margin: 0 0 8px;
-  font-size: 0.9em;
-  opacity: 0.75;
+  color: var(--muted);
+  font-size: 13px;
 }
 .packer-safe {
   margin: 0 0 8px;
-  font-size: 0.9em;
-  opacity: 0.8;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.packer button:focus-visible,
+.packer a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
