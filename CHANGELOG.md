@@ -1,5 +1,12 @@
 # Changelog
 
+**RawBoy Packer: Standard and Advanced settings (2026-11-01)**
+
+- The settings open in a plain view with three choices (Smallest files, Maximum compatibility, Tiny copies for sharing);
+  file type, quality, compression effort, preview and files at once moved under *Advanced settings*, where changing
+  one row no longer changes the others. Files at once is chosen automatically from the cores and memory (Auto).
+  Clearer names and hints, and a line saying the original files are never changed.
+
 **RawBoy Packer: settings in the file name (2026-11-01)**
 
 - An option (off by default) adds the format and quality to each output name, e.g. `DSC001-small-high.dng`.
