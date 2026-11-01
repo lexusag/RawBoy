@@ -23,6 +23,7 @@ import {
   type PreviewSize,
   type Quality,
   type Speed,
+  settingsSuffix,
 } from './settings';
 
 const store = new PackerStore();
@@ -172,6 +173,13 @@ export function PackerApp() {
               ]}
               onChange={(keepGps) => change({ keepGps })}
             />
+          </Row>
+
+          <Row
+            label="Settings in file name"
+            hint={settings.nameSuffix ? `Names end like DSC001-${settingsSuffix(settings)}.dng.` : 'Off: names are the source\'s with .dng.'}
+          >
+            <Toggle on={settings.nameSuffix} onChange={(nameSuffix) => change({ nameSuffix })} />
           </Row>
 
           <Row label="Preview" hint="Used when the camera's own preview can't be (DNGs, phones). Thumbnails in Finder and photo browsers.">

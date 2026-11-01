@@ -1,5 +1,9 @@
 # Changelog
 
+**RawBoy Packer: settings in the file name (2026-11-01)**
+
+- An option (off by default) adds the format and quality to each output name, e.g. `DSC001-small-high.dng`.
+
 **RawBoy Packer: Fujifilm X-T1 / X-E5, X-Trans, more cameras (2026-11-01)**
 
 - Fujifilm X-T1 and X-E5 raws now work: their lens correction tables (different layouts from the GFX's) are read
