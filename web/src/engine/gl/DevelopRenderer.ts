@@ -5,6 +5,29 @@ import { WaveletDenoise } from './WaveletDenoise';
 import { ZoomMath, contains, rect, type DetailTile } from './Zoom';
 
 /** Frame colours around the photo, cycled by clicking outside it. Levels are display-encoded (sRGB). */
+/**
+ * While edits stream in (a slider drag, the wheel over a slider), the photo is drawn into a smaller buffer and stretched
+ * to the canvas whenever the GPU falls behind, then once more at full size when the edits rest. The develop shader
+ * samples its inputs by texture coordinates, so a smaller target only means fewer output pixels, never a different
+ * look. Large high-DPI screens (a 14" tablet: ~4 M device pixels of photo) asked several times the phone's work per
+ * frame, and every slider step queued another full-size frame behind the last.
+ */
+export const LiveRender = {
+  /** Edits closer together than this (ms) are a stream; this long after the last one the full-size frame is drawn. */
+  SETTLE_MS: 160,
+  /** A frame that had to wait this long (ms) for the GPU to finish the one before: draw fewer pixels. */
+  SLOW_MS: 30,
+  /** ...and one this quick means it keeps up: try a few more. */
+  FAST_MS: 12,
+  /** Longest a frame waits for the GPU to finish the one before (a fence that never signals can't stall drawing). */
+  MAX_WAIT_MS: 250,
+  /** Fewest device pixels drawn while editing (about 1100 x 730). */
+  MIN_PIXELS: 800_000,
+  /** Budget steps: down fast when behind, back up slowly. */
+  DOWN: 0.6,
+  UP: 1.15,
+} as const;
+
 export const FrameColors = [
   { name: 'grey', level: 0.46 }, // perceptual middle grey (~18% reflectance)
   { name: 'white', level: 1 },
@@ -33,6 +56,24 @@ export class DevelopRenderer {
   private previewVersion = 0;
   private detailVersion = 0;
   private denoisedInput = false;
+  /** Where this frame draws: the canvas, or the smaller live buffer stretched onto it ([scale] < 1). */
+  private target: { fbo: WebGLFramebuffer | null; width: number; height: number; scale: number } = { fbo: null, width: 1, height: 1, scale: 1 };
+  private live: { fbo: WebGLFramebuffer; rb: WebGLRenderbuffer; width: number; height: number } | null = null;
+  /** Live drawing: edits are streaming in (see [LiveRender]). */
+  private streaming = false;
+  private lastEdit = -Infinity;
+  private settleTimer = 0;
+  /** When the pending frame was first asked for (ms), to tell whether the GPU keeps up. */
+  private requestedAt = 0;
+  /** The pending frame waited for the GPU to finish the last one. */
+  private behind = false;
+  /** Signals when the GPU has finished the last frame drawn. */
+  private inFlight: WebGLSync | null = null;
+  /**
+   * Device pixels a live frame may draw, learnt from how long frames wait while editing (kept across drags, so a
+   * slow GPU starts the next drag light). Infinity = the whole canvas, as on any GPU that keeps up.
+   */
+  private livePixels = Infinity;
 
   params: ShaderParams | null = null;
   /** Frame around the photo in the fit and zoomed views: width in device pixels and its grey level. */
@@ -84,13 +125,120 @@ export class DevelopRenderer {
     this.invalidate();
   }
 
+  /**
+   * The develop parameters changed by an edit (not a new photo). Edits in quick succession draw live, lighter frames
+   * if the GPU can't keep up at full size, and a full-size frame once they rest.
+   */
+  edited() {
+    const now = performance.now();
+    const streaming = now - this.lastEdit < LiveRender.SETTLE_MS;
+    this.lastEdit = now;
+    if (!streaming) return;
+    this.streaming = true;
+    clearTimeout(this.settleTimer);
+    this.settleTimer = window.setTimeout(() => {
+      this.streaming = false;
+      this.invalidate();
+    }, LiveRender.SETTLE_MS);
+  }
+
   /** Schedules a redraw on the next animation frame. */
   invalidate() {
     if (this.frameRequest) return;
-    this.frameRequest = requestAnimationFrame(() => {
-      this.frameRequest = 0;
-      this.draw();
-    });
+    this.requestedAt = performance.now();
+    this.behind = false;
+    this.frameRequest = requestAnimationFrame(this.onFrame);
+  }
+
+  /**
+   * Draws, unless the GPU is still on the last frame: then waits for it (up to [LiveRender.MAX_WAIT_MS]), so the
+   * newest edit is drawn next instead of a queue of stale frames building up behind the slider.
+   */
+  private readonly onFrame = () => {
+    this.frameRequest = 0;
+    const gl = this.gl;
+    const fence = this.inFlight;
+    if (fence) {
+      const done = gl.getSyncParameter(fence, gl.SYNC_STATUS) === gl.SIGNALED;
+      if (!done && performance.now() - this.requestedAt < LiveRender.MAX_WAIT_MS) {
+        this.behind = true;
+        this.frameRequest = requestAnimationFrame(this.onFrame);
+        return;
+      }
+      gl.deleteSync(fence);
+      this.inFlight = null;
+    }
+    this.draw();
+    this.inFlight = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+    gl.flush();
+  };
+
+  /** Scale of this frame: 1 at rest; while streaming, the learnt budget over the canvas's pixels. */
+  private frameScale(): number {
+    const pixels = this.viewWidth * this.viewHeight;
+    if (!this.streaming) return 1;
+    const waited = performance.now() - this.requestedAt;
+    const budget = Math.min(this.livePixels, pixels);
+    if (this.behind && waited > LiveRender.SLOW_MS) this.livePixels = Math.max(LiveRender.MIN_PIXELS, budget * LiveRender.DOWN);
+    else if (!this.behind && waited < LiveRender.FAST_MS && this.livePixels < pixels) this.livePixels = budget * LiveRender.UP;
+    if (this.livePixels >= pixels) {
+      this.livePixels = Infinity;
+      return 1;
+    }
+    return Math.sqrt(this.livePixels / pixels);
+  }
+
+  /** Points this frame's drawing at the canvas, or at the live buffer of [scale] its size. */
+  private aim(scale: number) {
+    const gl = this.gl;
+    if (scale >= 1) {
+      this.target = { fbo: null, width: this.viewWidth, height: this.viewHeight, scale: 1 };
+      return;
+    }
+    const width = Math.max(1, Math.round(this.viewWidth * scale));
+    const height = Math.max(1, Math.round(this.viewHeight * scale));
+    let live = this.live;
+    if (!live) {
+      live = { fbo: gl.createFramebuffer()!, rb: gl.createRenderbuffer()!, width: 0, height: 0 };
+      this.live = live;
+    }
+    if (live.width !== width || live.height !== height) {
+      gl.bindRenderbuffer(gl.RENDERBUFFER, live.rb);
+      gl.renderbufferStorage(gl.RENDERBUFFER, gl.RGBA8, width, height);
+      gl.bindRenderbuffer(gl.RENDERBUFFER, null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, live.fbo);
+      gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, live.rb);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+      live.width = width;
+      live.height = height;
+    }
+    this.target = { fbo: live.fbo, width, height, scale: width / this.viewWidth };
+  }
+
+  /** Binds this frame's target and its viewport (again after passes that render elsewhere). */
+  private bindTarget() {
+    const gl = this.gl;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.target.fbo);
+    gl.viewport(0, 0, this.target.width, this.target.height);
+  }
+
+  /** Scissor box in canvas device pixels (GL's bottom-left origin), scaled to the target. */
+  private scissor(x: number, y: number, width: number, height: number) {
+    const s = this.target.scale;
+    const x0 = Math.round(x * s);
+    const y0 = Math.round(y * s);
+    this.gl.scissor(x0, y0, Math.max(0, Math.round((x + width) * s) - x0), Math.max(0, Math.round((y + height) * s) - y0));
+  }
+
+  /** Stretches the live buffer onto the canvas. */
+  private present() {
+    const t = this.target;
+    if (!t.fbo) return;
+    const gl = this.gl;
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, t.fbo);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, null);
+    gl.blitFramebuffer(0, 0, t.width, t.height, 0, 0, this.viewWidth, this.viewHeight, gl.COLOR_BUFFER_BIT, gl.LINEAR);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 
   private draw() {
@@ -112,16 +260,19 @@ export class DevelopRenderer {
       this.uploadedDetail = t;
     }
 
-    gl.viewport(0, 0, this.viewWidth, this.viewHeight);
+    const p = this.params;
+    // Inputs first: the lens blur's passes render elsewhere and leave the canvas bound.
+    if (p && img) this.inputs.bind(p);
+    this.aim(p && img ? this.frameScale() : 1);
+    this.bindTarget();
     gl.clearColor(0.07, 0.07, 0.07, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
-    const p = this.params;
     if (!p || !img) {
       this.drawPlaceholder();
+      this.present();
       return;
     }
 
-    this.inputs.bind(p);
     gl.activeTexture(gl.TEXTURE0);
     const center = this.zoomCenter;
     const tile = this.uploadedDetail;
@@ -130,6 +281,7 @@ export class DevelopRenderer {
     this.program.setClipWarning(this.clipWarning);
     this.program.setDenoisePre(this.denoisedInput);
     this.quad.draw();
+    this.present();
   }
 
   private drawFit(p: ShaderParams, img: PreviewImage) {
@@ -185,7 +337,7 @@ export class DevelopRenderer {
     const r = ZoomMath.fitRect(this.viewWidth, this.viewHeight, size[0], size[1], this.frameWidth + this.margin);
     this.clearFrame(r[0], r[1], r[2], r[3]);
     gl.enable(gl.SCISSOR_TEST);
-    gl.scissor(Math.trunc(r[0]), Math.trunc(this.viewHeight - (r[1] + r[3])), Math.trunc(r[2]), Math.trunc(r[3]));
+    this.scissor(Math.trunc(r[0]), Math.trunc(this.viewHeight - (r[1] + r[3])), Math.trunc(r[2]), Math.trunc(r[3]));
     gl.clearColor(0.07, 0.07, 0.07, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.disable(gl.SCISSOR_TEST);
@@ -201,7 +353,7 @@ export class DevelopRenderer {
     const gl = this.gl;
     const g = this.frameGrey;
     gl.enable(gl.SCISSOR_TEST);
-    gl.scissor(
+    this.scissor(
       Math.trunc(left - frame), Math.trunc(this.viewHeight - (top + height + frame)), // GL origin is bottom-left
       Math.trunc(width + 2 * frame), Math.trunc(height + 2 * frame),
     );
@@ -215,13 +367,21 @@ export class DevelopRenderer {
     this.denoisedInput = this.denoiser.active(p.denoise, p.colorDenoise);
     if (!this.denoisedInput) return texture;
     const out = this.denoiser.apply(texture, key, width, height, pixelScale, p.denoise, p.colorDenoise);
-    this.gl.viewport(0, 0, this.viewWidth, this.viewHeight);
+    this.bindTarget();
     return out;
   }
 
   release() {
     cancelAnimationFrame(this.frameRequest);
+    clearTimeout(this.settleTimer);
     const gl = this.gl;
+    if (this.inFlight) gl.deleteSync(this.inFlight);
+    this.inFlight = null;
+    if (this.live) {
+      gl.deleteFramebuffer(this.live.fbo);
+      gl.deleteRenderbuffer(this.live.rb);
+      this.live = null;
+    }
     gl.deleteTexture(this.previewTexture);
     gl.deleteTexture(this.detailTexture);
     this.denoiser.release();

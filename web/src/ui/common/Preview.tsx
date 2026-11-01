@@ -85,8 +85,13 @@ export function Preview({ session, params, frame, frameGrey, margin = 0, placeho
     };
   }, []);
 
+  // The last params and preview drawn: a change of params alone is an edit (a slider step), which may draw live.
+  const shown = useRef<{ params: ShaderParams | null; preview: unknown }>({ params: null, preview: null });
   useEffect(() => {
     const r = rendererRef.current!;
+    const last = shown.current;
+    if (params && last.params && params !== last.params && session.preview === last.preview) r.edited();
+    shown.current = { params, preview: session.preview };
     r.params = params;
     r.frameWidth = Math.round(frame * (window.devicePixelRatio || 1));
     r.frameGrey = frameGrey;
