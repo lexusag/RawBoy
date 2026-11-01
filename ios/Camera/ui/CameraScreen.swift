@@ -364,15 +364,15 @@ struct CameraScreen: View {
             lookPicker
             HStack(spacing: 8) {
                 VStack(spacing: 12) {
-                    AdjustChip(letter: "S", value: "\(Int(s.strength.rounded()))", selected: adjust == .strength,
+                    AdjustChip(letter: "S", name: "Strength", value: "\(Int(s.strength.rounded()))", selected: adjust == .strength,
                                onSelect: { adjust = .strength }, onReset: { vm.setStrength(LookApplier.defaultStrength) })
-                    AdjustChip(letter: "B", value: Self.signed(s.brightness), selected: adjust == .brightness,
+                    AdjustChip(letter: "B", name: "Brightness", value: Self.signed(s.brightness), selected: adjust == .brightness,
                                onSelect: { adjust = .brightness }, onReset: { vm.setBrightness(0) })
                     if s.monoMode {
-                        AdjustChip(letter: "F", value: s.filter.label, selected: adjust == .warmth,
+                        AdjustChip(letter: "F", name: "Filter", value: s.filter.label, selected: adjust == .warmth,
                                    onSelect: { adjust = .warmth }, onReset: { vm.setFilter(.off) })
                     } else {
-                        AdjustChip(letter: "W", value: Self.signed(s.warmth), selected: adjust == .warmth,
+                        AdjustChip(letter: "W", name: "Warmth", value: Self.signed(s.warmth), selected: adjust == .warmth,
                                    onSelect: { adjust = .warmth }, onReset: { vm.setWarmth(0) })
                     }
                 }
@@ -382,12 +382,12 @@ struct CameraScreen: View {
                 } else {
                     switch adjust {
                     case .strength:
-                        VerticalSlider(value: s.strength, range: 0...100, defaultValue: LookApplier.defaultStrength,
+                        VerticalSlider(label: "Strength", value: s.strength, range: 0...100, defaultValue: LookApplier.defaultStrength,
                                        onChange: vm.setStrength)
                     case .brightness:
-                        VerticalSlider(value: s.brightness, range: -100...100, defaultValue: 0, onChange: vm.setBrightness)
+                        VerticalSlider(label: "Brightness", value: s.brightness, range: -100...100, defaultValue: 0, onChange: vm.setBrightness)
                     case .warmth:
-                        VerticalSlider(value: s.warmth, range: -100...100, defaultValue: 0, onChange: vm.setWarmth)
+                        VerticalSlider(label: "Warmth", value: s.warmth, range: -100...100, defaultValue: 0, onChange: vm.setWarmth)
                     }
                 }
             }
@@ -747,6 +747,7 @@ private enum Adjust { case strength, brightness, warmth }
 /** A round picker chip: the setting's letter with its value under it; filled while its setting is on the slider. */
 private struct AdjustChip: View {
     let letter: String
+    let name: String
     let value: String
     let selected: Bool
     let onSelect: () -> Void
@@ -766,8 +767,16 @@ private struct AdjustChip: View {
             onReset()
         }
         .onTapGesture(perform: onSelect)
-        .accessibilityElement(children: .combine)
+        // VoiceOver: the setting's name and value; a tap puts it on the slider, an action resets it (the double tap).
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(name)
+        .accessibilityValue(value)
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
+        .accessibilityAction { onSelect() }
+        .accessibilityAction(named: "Reset") {
+            onSelect()
+            onReset()
+        }
     }
 }
 
@@ -803,6 +812,7 @@ private struct FilterColumn: View {
  * lands), a double tap resets it to `defaultValue`. A signed range fills from 0. Port of Android's `VerticalSlider`.
  */
 private struct VerticalSlider: View {
+    let label: String
     let value: Float
     let range: ClosedRange<Float>
     let defaultValue: Float
@@ -851,7 +861,9 @@ private struct VerticalSlider: View {
         }
         .frame(width: 48)
         .accessibilityElement()
+        .accessibilityLabel(label)
         .accessibilityValue("\(Int(value.rounded()))")
+        .accessibilityAction(named: "Reset") { onChange(defaultValue) }
         .accessibilityAdjustableAction { direction in
             let step: Float = direction == .increment ? 5 : -5
             onChange(min(max(value + step, range.lowerBound), range.upperBound))

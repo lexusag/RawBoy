@@ -1,5 +1,7 @@
 package app.rawboy.view
 
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -78,7 +80,7 @@ fun CompactSlider(
             color = if (value == default) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.primary,
             textAlign = TextAlign.End,
             maxLines = 1,
-            modifier = Modifier.clickable { onChange(default) }.then(m),
+            modifier = Modifier.clickable(onClickLabel = "Reset $label") { onChange(default) }.then(m),
         )
     }
     val slider = @Composable { m: Modifier, height: Dp ->
@@ -117,7 +119,8 @@ fun CompactSlider(
                         thumbTrackGapSize = 3.dp,
                     )
                 },
-                modifier = m.height(height),
+                // TalkBack reads the label with the value (the label is a separate Text beside it).
+                modifier = m.height(height).semantics { contentDescription = label },
             )
         }
     }

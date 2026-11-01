@@ -25,6 +25,13 @@ import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -159,6 +166,7 @@ fun VerticalSlider(
     modifier: Modifier = Modifier,
     color: Color,
     trackColor: Color,
+    label: String,
     thumbSize: Dp = 24.dp,
 ) {
     val current by rememberUpdatedState(value)
@@ -167,6 +175,16 @@ fun VerticalSlider(
     val span = range.endInclusive - range.start
     Canvas(
         modifier
+            // TalkBack: named, with its value, and adjustable by swipes (steps of 5) like a Material slider.
+            .semantics {
+                contentDescription = label
+                progressBarRangeInfo = ProgressBarRangeInfo(value.coerceIn(range), range, steps = (span / 5f).roundToInt() - 1)
+                setProgress { v ->
+                    change(v.coerceIn(range).roundToInt().toFloat())
+                    true
+                }
+                customActions = listOf(CustomAccessibilityAction("Reset") { change(reset); true })
+            }
             .pointerInput(range) {
                 val travel = (size.height - thumbSize.toPx()).coerceAtLeast(1f)
                 var dragged = 0f
