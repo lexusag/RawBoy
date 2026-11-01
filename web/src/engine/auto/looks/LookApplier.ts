@@ -155,7 +155,7 @@ function adjustDevelop(p: DevelopParams, adjust: Adjustments): DevelopParams {
 /**
  * A photo's whole develop: preset (a RawBoy preset with the Light group, see applyPresetDevelop) or else look (see
  * applyLook) with a partial preset's groups on top (applyPresetOnLook), then its lens preset (isLensPreset, or null),
- * which changes only the lens corrections: the profile switch, distortion, vignette radius and vignetting. A look's own vignette stays on top of the lens preset's vignetting; a RawBoy preset's Lens
+ * which changes only the lens corrections: the profile switch, distortion, chromatic aberration, vignette radius and vignetting. A look's own vignette stays on top of the lens preset's vignetting; a RawBoy preset's Lens
  * group gives way to the lens preset.
  */
 export function developAuto(
@@ -178,6 +178,8 @@ export function developAuto(
     ...developed,
     lensProfile: lens.lensProfile,
     lensDistortion: lens.lensDistortion,
+    caRed: lens.caRed,
+    caBlue: lens.caBlue,
     vignetteAmount: Math.min(100, Math.max(-100, lens.vignetteAmount + lookVignette)),
     vignetteMidpoint: lens.vignetteMidpoint,
   };

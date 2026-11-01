@@ -541,7 +541,7 @@ export class PhotoSession {
   /** Lens geometry for [params] on the current image; cached while the lens sliders are unchanged. */
   lensFor(params: DevelopParams): LensTransform {
     const info = this._state.lensInfo;
-    const key = [info, params.lensProfile, params.lensDistortion, params.vignetteAmount, params.vignetteMidpoint, params.rotation, params.flipHorizontal, params.flipVertical, params.straighten];
+    const key = [info, params.lensProfile, params.lensDistortion, params.caRed, params.caBlue, params.vignetteAmount, params.vignetteMidpoint, params.rotation, params.flipHorizontal, params.flipVertical, params.straighten];
     const crop = [params.cropLeft, params.cropTop, params.cropRight, params.cropBottom];
     const c = this.lensCache;
     const sameLens = c != null && c.key.every((v, i) => v === key[i]);

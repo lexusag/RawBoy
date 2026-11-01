@@ -31,7 +31,7 @@ enum class PresetGroup(val key: String, val label: String, val fields: List<Stri
     DETAIL("detail", "Detail", listOf("denoise", "colorDenoise", "sharpening", "localContrast", "highpassContrast", "grain", "grainSize", "grainRoughness", "grainColor", "bloom")),
     RETOUCH("retouch", "Retouch", listOf("skinRetouch", "blemishRemoval")),
     LUT("lut", "LUT", listOf("lut", "lutAmount")),
-    LENS("lens", "Lens", listOf("lensProfile", "lensDistortion", "vignetteAmount", "vignetteMidpoint")),
+    LENS("lens", "Lens", listOf("lensProfile", "lensDistortion", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint")),
     MASKS("masks", "Masks (gradients only)", listOf("masks")),
     ;
 
@@ -253,6 +253,8 @@ object Presets {
         "lutAmount" -> p.lutAmount
         "lensProfile" -> p.lensProfile
         "lensDistortion" -> p.lensDistortion
+        "caRed" -> p.caRed
+        "caBlue" -> p.caBlue
         "vignetteAmount" -> p.vignetteAmount
         "vignetteMidpoint" -> p.vignetteMidpoint
         "masks" -> Masks.forPreset(p.masks) // strokes stay with the photo
@@ -308,6 +310,8 @@ object Presets {
             "blemishRemoval" -> p.copy(blemishRemoval = f)
             "lutAmount" -> p.copy(lutAmount = f)
             "lensDistortion" -> p.copy(lensDistortion = f)
+            "caRed" -> p.copy(caRed = f)
+            "caBlue" -> p.copy(caBlue = f)
             "vignetteAmount" -> p.copy(vignetteAmount = f)
             "vignetteMidpoint" -> p.copy(vignetteMidpoint = f)
             else -> p

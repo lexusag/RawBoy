@@ -138,7 +138,7 @@ object LookApplier {
 
     /**
      * A photo's whole develop: [preset] (a RawBoy preset, see [applyPreset]) or else [look] (see [apply]), then its lens
-     * preset ([Preset.isLensPreset], or null), which changes only the lens corrections: the profile switch, distortion,
+     * preset ([Preset.isLensPreset], or null), which changes only the lens corrections: the profile switch, distortion, chromatic aberration,
      * vignette radius and vignetting. A look's own vignette stays on top of the lens preset's vignetting; a RawBoy
      * preset's Lens group gives way to the lens preset.
      */
@@ -158,6 +158,8 @@ object LookApplier {
         return developed.copy(
             lensProfile = lens.lensProfile,
             lensDistortion = lens.lensDistortion,
+            caRed = lens.caRed,
+            caBlue = lens.caBlue,
             vignetteAmount = (lens.vignetteAmount + lookVignette).coerceIn(-100f, 100f),
             vignetteMidpoint = lens.vignetteMidpoint,
         )

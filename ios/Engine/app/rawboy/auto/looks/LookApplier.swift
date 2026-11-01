@@ -127,7 +127,7 @@ public enum LookApplier {
 
     /**
      * A photo's whole develop: [preset] (a RawBoy preset, see [applyPreset]) or else [look] (see [apply]), then its lens
-     * preset ([Preset.isLensPreset], or nil), which changes only the lens corrections: the profile switch, distortion,
+     * preset ([Preset.isLensPreset], or nil), which changes only the lens corrections: the profile switch, distortion, chromatic aberration,
      * vignette radius and vignetting. A look's own vignette stays on top of the lens preset's vignetting; a RawBoy
      * preset's Lens group gives way to the lens preset.
      */
@@ -143,6 +143,8 @@ public enum LookApplier {
         var d = developed
         d.lensProfile = lens.lensProfile
         d.lensDistortion = lens.lensDistortion
+        d.caRed = lens.caRed
+        d.caBlue = lens.caBlue
         d.vignetteAmount = (lens.vignetteAmount + lookVignette).clamped(-100, 100)
         d.vignetteMidpoint = lens.vignetteMidpoint
         return d

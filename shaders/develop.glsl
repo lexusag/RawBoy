@@ -89,6 +89,7 @@ uniform float uWarpPlanes;
 uniform float uWarpK[18];        // per plane: kr0..kr3, kt0, kt1
 uniform vec2 uWarpCenter;        // sensor px
 uniform float uWarpNorm;
+uniform vec2 uCaShift;           // manual chromatic aberration: red, blue plane scale - 1 around uImageCenter (0 = off)
 uniform float uVigOn;
 uniform float uVigK[5];
 uniform vec2 uVigCenter;         // sensor px
@@ -750,6 +751,9 @@ vec2 warpPlane(vec2 s, int plane) {
                   uWarpK[o + 4] * (r2 + 2.0 * u.y * u.y) + uWarpK[o + 5] * 2.0 * u.x * u.y);
     return uWarpCenter + uWarpNorm * (u * f + t);
 }
+
+// Manual chromatic aberration: a red or blue source position scaled around the image centre.
+vec2 caPlane(vec2 p, float shift) { return p + (p - uImageCenter) * shift; }
 
 // Vignetting gains at a source position (sensor and display coordinates).
 float lensGain(vec2 s, vec2 p) {

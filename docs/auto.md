@@ -120,7 +120,7 @@ strokes and leaks wouldn't fit. For one look across a batch, save the edits as a
 can go in it; brush strokes, crop and light leaks never do) and apply that.
 **Lens presets:** a preset holding only the Lens group (RawBoy's Lens tab → **Save lens preset** / **Send to Auto**) is
 not applied in place of the look: Auto keeps it for photos taken with its lens (the lens name in the raw, ignoring
-case) and gives them its lens corrections (embedded profile on/off, Distortion, Vignetting, Vignette radius) on top of
+case) and gives them its lens corrections (embedded profile on/off, Distortion, chromatic aberration Red/Cyan and Blue/Yellow, Vignetting, Vignette radius) on top of
 their look or RawBoy preset, in this batch and later ones. Nothing else changes; a look's own vignette stays on top,
 and a RawBoy preset's Lens group gives way to the lens preset. Sending a new one for the same lens replaces it. The
 **lens presets** button in the grid (web: the **Lens** menu, and **Manage…** to remove) picks one for every photo and

@@ -504,7 +504,7 @@ class PhotoSession(
     fun lensFor(params: DevelopParams): LensTransform {
         val info = _lensInfo.value
         val key = listOf(
-            info, params.lensProfile, params.lensDistortion, params.vignetteAmount, params.vignetteMidpoint,
+            info, params.lensProfile, params.lensDistortion, params.caRed, params.caBlue, params.vignetteAmount, params.vignetteMidpoint,
             params.rotation, params.flipHorizontal, params.flipVertical, params.straighten,
         )
         val crop = params.crop

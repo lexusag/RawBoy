@@ -214,6 +214,10 @@ struct ControlsPanel: View {
         slider("Vignetting", \.vignetteAmount, -100...100)
         slider("Vignette radius", \.vignetteMidpoint, 0...100, format: formatPlain)
         Note("Distortion crops automatically so no empty edges show.")
+        SectionLabel("Chromatic aberration")
+        slider("Red/Cyan", \.caRed, -100...100)
+        slider("Blue/Yellow", \.caBlue, -100...100)
+        Note("Line up the colour fringes on edges near the corners, in the 100% view.")
         SectionLabel("Lens preset")
         LensPresetSave(lensName: lens.lensName, onSave: onSaveLensPreset).id(lens.lensName)
     }

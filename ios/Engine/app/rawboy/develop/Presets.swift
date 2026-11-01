@@ -35,7 +35,7 @@ public enum PresetGroup: String, CaseIterable, Sendable {
         case .detail: ["denoise", "colorDenoise", "sharpening", "localContrast", "highpassContrast", "grain", "grainSize", "grainRoughness", "grainColor", "bloom"]
         case .retouch: ["skinRetouch", "blemishRemoval"]
         case .lut: ["lut", "lutAmount"]
-        case .lens: ["lensProfile", "lensDistortion", "vignetteAmount", "vignetteMidpoint"]
+        case .lens: ["lensProfile", "lensDistortion", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint"]
         case .masks: ["masks"]
         }
     }
@@ -274,7 +274,7 @@ public enum Presets {
         "tintPurity": \.tintPurity, "denoise": \.denoise, "sharpening": \.sharpening, "localContrast": \.localContrast,
         "highpassContrast": \.highpassContrast, "grain": \.grain, "grainSize": \.grainSize,
         "grainRoughness": \.grainRoughness, "grainColor": \.grainColor, "bloom": \.bloom, "skinRetouch": \.skinRetouch,
-        "blemishRemoval": \.blemishRemoval, "lutAmount": \.lutAmount, "lensDistortion": \.lensDistortion,
+        "blemishRemoval": \.blemishRemoval, "lutAmount": \.lutAmount, "lensDistortion": \.lensDistortion, "caRed": \.caRed, "caBlue": \.caBlue,
         "vignetteAmount": \.vignetteAmount, "vignetteMidpoint": \.vignetteMidpoint,
         "filmAmount": \.filmAmount, "filmGrain": \.filmGrain, "halation": \.halation,
     ]

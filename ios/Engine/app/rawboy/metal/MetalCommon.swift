@@ -374,6 +374,7 @@ struct DevelopProgram {
         u.array("uWarpK", k, components: 1)
         u.vec2("uWarpCenter", Float(l.warpCenterX), Float(l.warpCenterY))
         u.float("uWarpNorm", Float(l.warpNorm))
+        u.vec2("uCaShift", Float(l.caScaleRed - 1), Float(l.caScaleBlue - 1))
         let vig = l.vignette
         u.float("uVigOn", vig != nil ? 1 : 0)
         u.array("uVigK", (0..<5).map { Float(vig?.k[safe: $0] ?? 0) }, components: 1)

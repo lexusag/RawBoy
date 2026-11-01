@@ -4,6 +4,9 @@ import type { DevelopParams } from '../develop/DevelopParams';
 import { bottom, right, type PixelRect } from '../gl/Zoom';
 import type { LensInfo, RadialVignette, Warp } from './LensInfo';
 
+/** Plane scale at ±100 on a chromatic aberration slider: 0.2%, ~6 px in the corners of a 24 MP photo. */
+export const CA_MAX = 0.002;
+
 /**
  * Lens geometry for one image and one set of slider values (port of lens/LensTransform.kt): where each output
  * pixel samples the decoded image, and the gains to apply there.
@@ -14,6 +17,7 @@ import type { LensInfo, RadialVignette, Warp } from './LensInfo';
  *   1. auto scale around the image centre (crop to valid pixels, like Lightroom's Constrain Crop)
  *   2. manual distortion (radial, around the image centre)
  *   3. embedded DNG WarpRectilinear, in sensor coordinates, per colour plane
+ *   4. manual chromatic aberration: red and blue planes scaled around the image centre
  *
  * Lens correction always works on the whole frame: the auto scale, distortion, warp and vignettes use the
  * full image and sensor, never the user crop, so a cropped pixel equals the uncropped render's pixel.
@@ -63,6 +67,12 @@ export class LensTransform {
   readonly warpPlanes: number;
   /** Output scale >= the value at which every output pixel has real image data. */
   readonly zoom: number;
+  /**
+   * Manual lateral chromatic aberration: the red and blue planes sample at this scale around the image centre
+   * (after the warp), so +100 on a slider enlarges that plane by CA_MAX.
+   */
+  readonly caScaleRed: number;
+  readonly caScaleBlue: number;
 
   constructor(readonly info: LensInfo, params: DevelopParams, knownZoom?: number) {
     this.width = info.width;
@@ -82,6 +92,8 @@ export class LensTransform {
     this.outToImage = this.rotationMatrix();
     const useProfile = params.lensProfile && info.hasProfile;
     this.manualK = (params.lensDistortion / 100) * 0.25;
+    this.caScaleRed = 1 - (params.caRed / 100) * CA_MAX;
+    this.caScaleBlue = 1 - (params.caBlue / 100) * CA_MAX;
     this.warp = useProfile ? info.warp : null;
     this.vignette = useProfile ? info.vignette : null;
     this.undoShading = !params.lensProfile && info.shading != null;
@@ -97,6 +109,10 @@ export class LensTransform {
     this.vignetteNorm = this.maxCornerDistance(this.vignetteCenterX, this.vignetteCenterY);
     this.warpPlanes = this.warp?.planes ?? 1;
     this.zoom = knownZoom ?? (this.isGeometric ? this.autoZoom() : 1);
+  }
+
+  get hasManualCa(): boolean {
+    return this.caScaleRed !== 1 || this.caScaleBlue !== 1;
   }
 
   get isGeometric(): boolean {
@@ -155,7 +171,7 @@ export class LensTransform {
     const qx = this.centerX + dx;
     const qy = this.centerY + dy;
     const w = this.warp;
-    if (!w) return [qx, qy];
+    if (!w) return this.manualCa(qx, qy, plane);
 
     const ts = this.toSensor;
     const sx = ts[0] * qx + ts[1] * qy + ts[2];
@@ -171,12 +187,19 @@ export class LensTransform {
     const srcX = this.warpCenterX + this.warpNorm * (ux * radial + tx);
     const srcY = this.warpCenterY + this.warpNorm * (uy * radial + ty);
     const fs = this.fromSensor;
-    return [fs[0] * srcX + fs[1] * srcY + fs[2], fs[3] * srcX + fs[4] * srcY + fs[5]];
+    return this.manualCa(fs[0] * srcX + fs[1] * srcY + fs[2], fs[3] * srcX + fs[4] * srcY + fs[5], plane);
+  }
+
+  /** The manual chromatic aberration scale of [plane] around the image centre. */
+  private manualCa(x: number, y: number, plane: number): number[] {
+    const s = plane === 0 ? this.caScaleRed : plane === 2 ? this.caScaleBlue : 1;
+    if (s === 1) return [x, y];
+    return [this.centerX + (x - this.centerX) * s, this.centerY + (y - this.centerY) * s];
   }
 
   /** Source pixels needed to render [out], plus [margin], clamped to the image. */
   sourceBounds(out: PixelRect, margin: number): PixelRect {
-    if (!this.isGeometric && this.zoom === 1 && this.quarterTurns === 0 && !this.flipHorizontal && !this.flipVertical && this.straightenRadians === 0 && this.cropRect.x === 0 && this.cropRect.y === 0) {
+    if (!this.isGeometric && !this.hasManualCa && this.zoom === 1 && this.quarterTurns === 0 && !this.flipHorizontal && !this.flipVertical && this.straightenRadians === 0 && this.cropRect.x === 0 && this.cropRect.y === 0) {
       const x0 = Math.max(0, out.x - margin);
       const y0 = Math.max(0, out.y - margin);
       const x1 = Math.min(this.width, right(out) + margin);
@@ -188,7 +211,7 @@ export class LensTransform {
     let maxX = -Number.MAX_VALUE;
     let maxY = -Number.MAX_VALUE;
     const steps = 24;
-    for (const plane of this.planesToCheck()) {
+    for (const plane of this.hasManualCa ? [0, 1, 2] : this.planesToCheck()) {
       for (let i = 0; i <= steps; i++) {
         const t = i / steps;
         const xs = out.x + t * out.width;

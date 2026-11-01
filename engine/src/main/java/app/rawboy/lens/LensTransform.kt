@@ -19,6 +19,7 @@ import kotlin.math.min
  *   1. auto scale around the image centre (crop to valid pixels, like Lightroom's Constrain Crop)
  *   2. manual distortion (radial, around the image centre)
  *   3. embedded DNG WarpRectilinear, in sensor coordinates, per colour plane
+ *   4. manual chromatic aberration: red and blue planes scaled around the image centre
  *
  * Lens correction always works on the whole frame: the auto scale, distortion, warp and vignettes use the
  * full image and sensor, never the user crop, so a cropped pixel equals the uncropped render's pixel.
@@ -80,6 +81,14 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
     /** Planes with distinct warp coefficients (3 = lateral chromatic aberration correction). */
     val warpPlanes = warp?.planes ?: 1
 
+    /**
+     * Manual lateral chromatic aberration: the red and blue planes sample at this scale around the image centre
+     * (after the warp), so +100 on a slider enlarges that plane by [CA_MAX].
+     */
+    val caScaleRed = 1.0 - params.caRed / 100.0 * CA_MAX
+    val caScaleBlue = 1.0 - params.caBlue / 100.0 * CA_MAX
+    val hasManualCa: Boolean get() = caScaleRed != 1.0 || caScaleBlue != 1.0
+
     val isGeometric: Boolean get() = warp != null || manualK != 0.0
 
     /** Output scale >= the value at which every output pixel has real image data. */
@@ -137,7 +146,7 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
         dy *= f
         val qx = centerX + dx
         val qy = centerY + dy
-        val w = warp ?: return doubleArrayOf(qx, qy)
+        val w = warp ?: return manualCa(qx, qy, plane)
 
         // 3: embedded warp in sensor space.
         val sx = toSensor[0] * qx + toSensor[1] * qy + toSensor[2]
@@ -152,15 +161,26 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
         val ty = c[o + 4] * (r2 + 2 * uy * uy) + c[o + 5] * 2 * ux * uy
         val srcX = warpCenterX + warpNorm * (ux * radial + tx)
         val srcY = warpCenterY + warpNorm * (uy * radial + ty)
-        return doubleArrayOf(
+        return manualCa(
             fromSensor[0] * srcX + fromSensor[1] * srcY + fromSensor[2],
             fromSensor[3] * srcX + fromSensor[4] * srcY + fromSensor[5],
+            plane,
         )
+    }
+
+    /** The manual chromatic aberration scale of [plane] around the image centre. */
+    private fun manualCa(x: Double, y: Double, plane: Int): DoubleArray {
+        val s = when (plane) {
+            0 -> caScaleRed
+            2 -> caScaleBlue
+            else -> return doubleArrayOf(x, y)
+        }
+        return doubleArrayOf(centerX + (x - centerX) * s, centerY + (y - centerY) * s)
     }
 
     /** Source pixels needed to render [out], plus [margin], clamped to the image. */
     fun sourceBounds(out: PixelRect, margin: Int): PixelRect {
-        if (!isGeometric && zoom == 1.0 && quarterTurns == 0 && !flipHorizontal && !flipVertical && straightenRadians == 0.0 && cropRect.x == 0 && cropRect.y == 0) {
+        if (!isGeometric && !hasManualCa && zoom == 1.0 && quarterTurns == 0 && !flipHorizontal && !flipVertical && straightenRadians == 0.0 && cropRect.x == 0 && cropRect.y == 0) {
             return out.expand(margin, width, height)
         }
         var minX = Double.MAX_VALUE
@@ -168,7 +188,7 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
         var maxX = -Double.MAX_VALUE
         var maxY = -Double.MAX_VALUE
         val steps = 24
-        for (plane in planesToCheck()) {
+        for (plane in if (hasManualCa) listOf(0, 1, 2) else planesToCheck()) {
             for (i in 0..steps) {
                 val t = i.toDouble() / steps
                 val xs = out.x + t * out.width
@@ -279,6 +299,9 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
     }
 
     companion object {
+        /** Plane scale at ±100 on a chromatic aberration slider: 0.2%, ~6 px in the corners of a 24 MP photo. */
+        const val CA_MAX = 0.002
+
         /** Affine (continuous pixel coordinates) from display orientation to sensor orientation. */
         fun orientationMatrix(o: Int, w: Double, h: Double): DoubleArray = when (o) {
             2 -> doubleArrayOf(-1.0, 0.0, w, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0)

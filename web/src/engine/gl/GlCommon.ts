@@ -304,6 +304,7 @@ export class DevelopProgram {
     gl.uniform1fv(this.loc('uWarpK'), k);
     this.f2('uWarpCenter', l.warpCenterX, l.warpCenterY);
     this.f1('uWarpNorm', l.warpNorm);
+    this.f2('uCaShift', l.caScaleRed - 1, l.caScaleBlue - 1);
     const vig = l.vignette;
     this.f1('uVigOn', vig ? 1 : 0);
     gl.uniform1fv(this.loc('uVigK'), new Float32Array([0, 1, 2, 3, 4].map((i) => vig?.k[i] ?? 0)));

@@ -439,7 +439,7 @@ public final class PhotoSession: ObservableObject {
     public func lensFor(_ params: DevelopParams) -> LensTransform {
         let info = lensInfo
         let key: [AnyHashable] = [
-            ObjectIdentifier(info), params.lensProfile, params.lensDistortion, params.vignetteAmount,
+            ObjectIdentifier(info), params.lensProfile, params.lensDistortion, params.caRed, params.caBlue, params.vignetteAmount,
             params.vignetteMidpoint, params.rotation, params.flipHorizontal, params.flipVertical, params.straighten,
         ]
         let crop = params.crop

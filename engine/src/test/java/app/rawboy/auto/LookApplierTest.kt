@@ -81,12 +81,12 @@ class LookApplierTest {
 
     @Test
     fun lensPresetChangesOnlyTheLensSettingsOnTopOfTheLook() {
-        val lens = Presets.captureLens(DevelopParams(lensProfile = false, lensDistortion = -15f, vignetteAmount = 20f, vignetteMidpoint = 30f), "24mm")
+        val lens = Presets.captureLens(DevelopParams(lensProfile = false, lensDistortion = -15f, caRed = 30f, caBlue = -10f, vignetteAmount = 20f, vignetteMidpoint = 30f), "24mm")
         val base = DevelopParams(exposure = 1.2f, temperature = 5600f)
         val look = Looks.NATURAL
         val plain = LookApplier.develop(base, look, 100f, Adjustments.NONE, hasFace = false, preset = null, lensPreset = null)
         val p = LookApplier.develop(base, look, 100f, Adjustments.NONE, hasFace = false, preset = null, lensPreset = lens)
-        assertEquals(plain.copy(lensProfile = false, lensDistortion = -15f, vignetteAmount = p.vignetteAmount, vignetteMidpoint = 30f), p)
+        assertEquals(plain.copy(lensProfile = false, lensDistortion = -15f, caRed = 30f, caBlue = -10f, vignetteAmount = p.vignetteAmount, vignetteMidpoint = 30f), p)
         // The look's own vignette stays on top of the lens preset's.
         assertEquals((20f + plain.vignetteAmount - base.vignetteAmount).coerceIn(-100f, 100f), p.vignetteAmount, 1e-5f)
         // A RawBoy preset's Lens group gives way to the lens preset; its other groups stay.

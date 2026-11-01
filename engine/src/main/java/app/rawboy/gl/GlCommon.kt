@@ -169,6 +169,7 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
     private val uWarpK = GLES30.glGetUniformLocation(id, "uWarpK")
     private val uWarpCenter = GLES30.glGetUniformLocation(id, "uWarpCenter")
     private val uWarpNorm = GLES30.glGetUniformLocation(id, "uWarpNorm")
+    private val uCaShift = GLES30.glGetUniformLocation(id, "uCaShift")
     private val uVigOn = GLES30.glGetUniformLocation(id, "uVigOn")
     private val uVigK = GLES30.glGetUniformLocation(id, "uVigK")
     private val uVigCenter = GLES30.glGetUniformLocation(id, "uVigCenter")
@@ -434,6 +435,7 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
         GLES30.glUniform1fv(uWarpK, 18, k, 0)
         GLES30.glUniform2f(uWarpCenter, l.warpCenterX.toFloat(), l.warpCenterY.toFloat())
         GLES30.glUniform1f(uWarpNorm, l.warpNorm.toFloat())
+        GLES30.glUniform2f(uCaShift, (l.caScaleRed - 1).toFloat(), (l.caScaleBlue - 1).toFloat())
         val vig = l.vignette
         GLES30.glUniform1f(uVigOn, if (vig != null) 1f else 0f)
         GLES30.glUniform1fv(uVigK, 5, FloatArray(5) { (vig?.k?.getOrNull(it) ?: 0.0).toFloat() }, 0)

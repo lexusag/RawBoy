@@ -9,10 +9,13 @@ void main() {
     vec3 base = texture(uImage, uvG).rgb;
     vec3 x = base;
     if (uDenoise > 0.0 || uColorDenoise > 0.0) x = denoise(uvG, srcG, x, colorNoiseScale(sG));
-    if (perPlane) {
-        // Lateral chromatic aberration: shift R and B to their own warped positions.
-        vec2 uvR = (fromSensor(warpPlane(sQ, 0)) - uInOrigin) / uInSpan;
-        vec2 uvB = (fromSensor(warpPlane(sQ, 2)) - uInOrigin) / uInSpan;
+    if (perPlane || uCaShift != vec2(0.0)) {
+        // Lateral chromatic aberration: shift R and B to their own warped positions (the profile's per-plane warp),
+        // then by the manual Red/Cyan and Blue/Yellow scales.
+        vec2 srcR = perPlane ? fromSensor(warpPlane(sQ, 0)) : srcG;
+        vec2 srcB = perPlane ? fromSensor(warpPlane(sQ, 2)) : srcG;
+        vec2 uvR = (caPlane(srcR, uCaShift.x) - uInOrigin) / uInSpan;
+        vec2 uvB = (caPlane(srcB, uCaShift.y) - uInOrigin) / uInSpan;
         x.r += texture(uImage, uvR).r - base.r;
         x.b += texture(uImage, uvB).b - base.b;
     }

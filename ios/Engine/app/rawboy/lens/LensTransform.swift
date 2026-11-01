@@ -10,6 +10,7 @@ import Foundation
  *   1. auto scale around the image centre (crop to valid pixels, like Lightroom's Constrain Crop)
  *   2. manual distortion (radial, around the image centre)
  *   3. embedded DNG WarpRectilinear, in sensor coordinates, per colour plane
+ *   4. manual chromatic aberration: red and blue planes scaled around the image centre
  *
  * Lens correction always works on the whole frame: the auto scale, distortion, warp and vignettes use the
  * full image and sensor, never the user crop, so a cropped pixel equals the uncropped render's pixel.
@@ -72,6 +73,16 @@ public final class LensTransform: @unchecked Sendable {
     /** Planes with distinct warp coefficients (3 = lateral chromatic aberration correction). */
     public let warpPlanes: Int
 
+    /**
+     * Manual lateral chromatic aberration: the red and blue planes sample at this scale around the image centre
+     * (after the warp), so +100 on a slider enlarges that plane by caMax.
+     */
+    public let caScaleRed: Double
+    public let caScaleBlue: Double
+    public var hasManualCa: Bool { caScaleRed != 1 || caScaleBlue != 1 }
+    /** Plane scale at ±100 on a chromatic aberration slider: 0.2%, ~6 px in the corners of a 24 MP photo. */
+    public static let caMax = 0.002
+
     public var isGeometric: Bool { warp != nil || manualK != 0 }
 
     /** Output scale >= the value at which every output pixel has real image data. */
@@ -92,6 +103,8 @@ public final class LensTransform: @unchecked Sendable {
         straightenRadians = Double(params.straighten).clamped(-45, 45) * .pi / 180
         useProfile = params.lensProfile && info.hasProfile
         manualK = Double(params.lensDistortion) / 100 * 0.25
+        caScaleRed = 1 - Double(params.caRed) / 100 * Self.caMax
+        caScaleBlue = 1 - Double(params.caBlue) / 100 * Self.caMax
         warp = useProfile ? info.warp : nil
         vignette = useProfile ? info.vignette : nil
         undoShading = !params.lensProfile && info.shading != nil
@@ -163,7 +176,7 @@ public final class LensTransform: @unchecked Sendable {
         dy *= f
         let qx = centerX + dx
         let qy = centerY + dy
-        guard let w = warp else { return [qx, qy] }
+        guard let w = warp else { return manualCa(qx, qy, plane) }
 
         // 3: embedded warp in sensor space.
         let sx = toSensor[0] * qx + toSensor[1] * qy + toSensor[2]
@@ -178,15 +191,27 @@ public final class LensTransform: @unchecked Sendable {
         let ty = c[o + 4] * (r2 + 2 * uy * uy) + c[o + 5] * 2 * ux * uy
         let srcX = warpCenterX + warpNorm * (ux * radial + tx)
         let srcY = warpCenterY + warpNorm * (uy * radial + ty)
-        return [
+        return manualCa(
             fromSensor[0] * srcX + fromSensor[1] * srcY + fromSensor[2],
             fromSensor[3] * srcX + fromSensor[4] * srcY + fromSensor[5],
-        ]
+            plane
+        )
+    }
+
+    /** The manual chromatic aberration scale of [plane] around the image centre. */
+    private func manualCa(_ x: Double, _ y: Double, _ plane: Int) -> [Double] {
+        let s: Double
+        switch plane {
+        case 0: s = caScaleRed
+        case 2: s = caScaleBlue
+        default: return [x, y]
+        }
+        return [centerX + (x - centerX) * s, centerY + (y - centerY) * s]
     }
 
     /** Source pixels needed to render [out], plus [margin], clamped to the image. */
     public func sourceBounds(_ out: PixelRect, margin: Int) -> PixelRect {
-        if !isGeometric && zoom == 1.0 && quarterTurns == 0 && !flipHorizontal && !flipVertical && straightenRadians == 0 && cropRect.x == 0 && cropRect.y == 0 {
+        if !isGeometric && !hasManualCa && zoom == 1.0 && quarterTurns == 0 && !flipHorizontal && !flipVertical && straightenRadians == 0 && cropRect.x == 0 && cropRect.y == 0 {
             return out.expand(margin, maxW: width, maxH: height)
         }
         var minX = Double.greatestFiniteMagnitude
@@ -194,7 +219,7 @@ public final class LensTransform: @unchecked Sendable {
         var maxX = -Double.greatestFiniteMagnitude
         var maxY = -Double.greatestFiniteMagnitude
         let steps = 24
-        for plane in planesToCheck() {
+        for plane in hasManualCa ? [0, 1, 2] : planesToCheck() {
             for i in 0...steps {
                 let t = Double(i) / Double(steps)
                 let xs = Double(out.x) + t * Double(out.width)

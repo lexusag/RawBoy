@@ -71,7 +71,7 @@ class PresetsTest {
         val decoded = Presets.decode(Presets.encode(listOf(lens))).single()
         assertEquals("XF23mmF2 R WR", decoded.lens)
         assertTrue(decoded.isLensPreset)
-        assertEquals(setOf("lensProfile", "lensDistortion", "vignetteAmount", "vignetteMidpoint"), decoded.values.keys)
+        assertEquals(setOf("lensProfile", "lensDistortion", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint"), decoded.values.keys)
         val look = Presets.capture("Look", DevelopParams(), setOf(PresetGroup.LIGHT, PresetGroup.LENS), "XF23mmF2 R WR")
         assertFalse(look.isLensPreset)
         assertEquals(decoded, Presets.lensPresetFor(listOf(look, decoded), " xf23mmf2 r wr"))
