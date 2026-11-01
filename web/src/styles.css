@@ -1705,8 +1705,9 @@ select {
 }
 
 .chips button.active {
+  background: var(--accent);
+  color: var(--accent-text);
   border-color: var(--accent);
-  color: var(--accent);
 }
 
 /* Curves channel chips: one row of equal buttons that shrink to fit, each with room for its edited mark. */
