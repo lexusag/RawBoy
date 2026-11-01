@@ -23,6 +23,7 @@ import app.rawboy.color.BwFilter
  *   filmAmount: 0..100 blend of the film render over the toneMapper one; filmGrain, halation: 0..200, 100 = the stock's
  * - lensProfile: apply the lens corrections embedded in the file (if any)
  * - lensDistortion: -100..100, + removes barrel distortion; auto crop/scale follows
+ * - caRed, caBlue: -100..100, lateral chromatic aberration: + enlarges the red (blue) plane around the image centre
  * - vignetteAmount: -100..100, + brightens corners; vignetteMidpoint: 0..100 (higher = only the corners)
  * - curves: point curves (RGB, then red, green, blue) on the final display-encoded image (see [ToneCurves])
  * - bwFilter: colour filter for black and white ([app.rawboy.color.BwFilter], RawBoy Film's B&W mode; NONE = identity),
@@ -80,6 +81,8 @@ data class DevelopParams(
     val curves: ToneCurves = ToneCurves.NONE,
     val lensProfile: Boolean = true,
     val lensDistortion: Float = 0f,
+    val caRed: Float = 0f,
+    val caBlue: Float = 0f,
     val vignetteAmount: Float = 0f,
     val vignetteMidpoint: Float = 50f,
     val rotation: Int = 0,

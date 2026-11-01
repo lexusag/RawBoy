@@ -40,6 +40,7 @@ export const toneMapperId = (t: ToneMapper): number => TONE_MAPPERS.find((m) => 
  *   film render over the AgX one; filmGrain, halation: 0..200, 100 = the stock's own
  * - lensProfile: apply the lens corrections embedded in the file (if any)
  * - lensDistortion: -100..100, + removes barrel distortion; auto crop/scale follows
+ * - caRed, caBlue: -100..100, lateral chromatic aberration: + enlarges the red (blue) plane around the image centre
  * - vignetteAmount: -100..100, + brightens corners; vignetteMidpoint: 0..100 (higher = only the corners)
  * - curves: point curves (RGB, then red, green, blue) on the final display-encoded image (see ToneCurve.ts)
  * - RGB primaries (after darktable): red/green/blueHue in degrees (-45..45), red/green/bluePurity -200..200,
@@ -99,6 +100,8 @@ export interface DevelopParams {
   curves: ToneCurves;
   lensProfile: boolean;
   lensDistortion: number;
+  caRed: number;
+  caBlue: number;
   vignetteAmount: number;
   vignetteMidpoint: number;
   rotation: number;
@@ -164,6 +167,8 @@ export const DEFAULT_PARAMS: Readonly<DevelopParams> = Object.freeze({
   curves: DEFAULT_CURVES,
   lensProfile: true,
   lensDistortion: 0,
+  caRed: 0,
+  caBlue: 0,
   vignetteAmount: 0,
   vignetteMidpoint: 50,
   rotation: 0,

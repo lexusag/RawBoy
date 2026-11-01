@@ -163,6 +163,25 @@ describe('lens geometry', () => {
     }
   });
 
+  it('manual chromatic aberration scales the red and blue planes around the centre only', () => {
+    const l = new LensTransform(LensInfo.none(6000, 4000), developParams({ caRed: 100, caBlue: -50 }));
+    expect(l.zoom).toBe(1); // no auto scale
+    close(l.source(0, 0, 1), [0, 0]);
+    // +100 enlarges red by 0.2%: the corner samples 0.2% nearer the centre.
+    close(l.source(0, 0, 0), [3000 * 0.002, 2000 * 0.002], 1e-9);
+    close(l.source(0, 0, 2), [-3000 * 0.001, -2000 * 0.001], 1e-9);
+    close(l.source(3000, 2000, 0), [3000, 2000], 1e-9);
+    // Tiles reach the planes' samples too.
+    const b = l.sourceBounds(rect(5900, 3900, 100, 100), 0);
+    expect(b.x).toBeLessThanOrEqual(5900 - 3);
+  });
+
+  it('chromatic aberration travels with lens presets into Auto', () => {
+    const lens = captureLensPreset(developParams({ caRed: 40, caBlue: -20 }), 'XF23mmF2 R WR');
+    const p = developAuto(developParams(), ALL_LOOKS[0], 100, NO_ADJUSTMENTS, false, null, lens);
+    expect([p.caRed, p.caBlue]).toEqual([40, -20]);
+  });
+
   it('manual distortion zooms in so no empty corners show', () => {
     const l = new LensTransform(LensInfo.none(6000, 4000), developParams({ lensDistortion: -60 }));
     expect(l.zoom).toBeGreaterThan(1);
@@ -847,7 +866,7 @@ describe('lens presets', () => {
     expect(lens.name).toBe('XF23mmF2 R WR');
     const [decoded] = decodePresets(encodePresets([lens]));
     expect(decoded.lens).toBe('XF23mmF2 R WR');
-    expect(Object.keys(decoded.values).sort()).toEqual(['lensDistortion', 'lensProfile', 'vignetteAmount', 'vignetteMidpoint']);
+    expect(Object.keys(decoded.values).sort()).toEqual(['caBlue', 'caRed', 'lensDistortion', 'lensProfile', 'vignetteAmount', 'vignetteMidpoint']);
     const look = capturePreset('Look', developParams(), ['light', 'lens'], 'XF23mmF2 R WR');
     expect(isLensPreset(look)).toBe(false);
     expect(lensPresetFor([look, decoded], ' xf23mmf2 r wr')).toBe(decoded);

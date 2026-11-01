@@ -1,5 +1,14 @@
 # Changelog
 
+**RawBoy: chromatic aberration sliders, applied by RawBoy Auto too (2026-11-01)**
+
+- Lens tab → **Chromatic aberration**: **Red/Cyan** and **Blue/Yellow** scale the red and blue planes around the image
+  centre (±100 = ±0.2%, about ±6 px in the corners of a 24 MP photo) to line up colour fringes on edges. Until now the
+  only CA removal was a DNG's per-plane WarpRectilinear, which most raws lack (Fuji RAF, Pixel DNGs). The sliders add to
+  that profile correction and leave the auto scale alone.
+- They belong to the Lens preset group, so lens presets and RawBoy edits sent to Auto carry them: RawBoy Auto applies
+  them in its thumbnails, preview and export, all from the same shader. Android, iPhone and the web.
+
 **RawBoy Camera (Android): photos taken back to back save sooner (2026-11-01)**
 
 - Shots no longer wait in line for the whole save of the one before: the next photo's RAW is decoded and analysed

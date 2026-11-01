@@ -23,7 +23,7 @@ flowchart TD
 
     subgraph GPU["Develop shader — GLES 3.0 / WebGL2, per output pixel"]
         direction TB
-        geo["Geometry: crop → rotate/straighten →<br/>auto-scale → distortion → DNG warp (+ lateral CA)"]
+        geo["Geometry: crop → rotate/straighten →<br/>auto-scale → distortion → DNG warp (+ lateral CA) → manual CA"]
         spatial["Fine colour denoise → skin retouch → sharpening →<br/>local contrast → high-pass contrast → bloom"]
         vig["Lens vignetting"]
         light["WB re-balance × RGB primaries →<br/>exposure → shadows/highlights →<br/>purity-limited saturation"]

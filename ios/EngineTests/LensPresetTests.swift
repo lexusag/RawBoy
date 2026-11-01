@@ -15,7 +15,7 @@ final class LensPresetTests: XCTestCase {
         XCTAssertEqual(lens.name, "XF23mmF2 R WR")
         let decoded = try XCTUnwrap(Presets.decode(Presets.encode([lens])).first)
         XCTAssertEqual(decoded.lens, "XF23mmF2 R WR")
-        XCTAssertEqual(Set(decoded.values.keys), ["lensProfile", "lensDistortion", "vignetteAmount", "vignetteMidpoint"])
+        XCTAssertEqual(Set(decoded.values.keys), ["lensProfile", "lensDistortion", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint"])
         let look = Presets.capture("Look", DevelopParams(), [.light, .lens], lens: "XF23mmF2 R WR")
         XCTAssertFalse(look.isLensPreset)
         XCTAssertEqual(Presets.lensPresetFor([look, decoded], lens: " xf23mmf2 r wr"), decoded)

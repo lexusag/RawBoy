@@ -310,6 +310,19 @@ private fun LensPanel(
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 
+    SectionLabel("Chromatic aberration")
+    ParamSlider("Red/Cyan", params.caRed, -100f..100f, defaults.caRed) {
+        onChange(params.copy(caRed = it))
+    }
+    ParamSlider("Blue/Yellow", params.caBlue, -100f..100f, defaults.caBlue) {
+        onChange(params.copy(caBlue = it))
+    }
+    Text(
+        "Line up the colour fringes on edges near the corners, in the 100% view.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+
     SectionLabel("Lens preset")
     // Named after the lens by default; manual lenses record none, so their presets are named here and picked in Auto.
     var name by rememberSaveable(lens.lensName) { mutableStateOf(lens.lensName.trim()) }

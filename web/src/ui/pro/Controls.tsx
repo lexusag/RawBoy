@@ -211,6 +211,10 @@ export function ControlsPanel({
             {slider('Vignetting', 'vignetteAmount', -100, 100)}
             {slider('Vignette radius', 'vignetteMidpoint', 0, 100, formatPlain)}
             <Note>Distortion crops automatically so no empty edges show.</Note>
+            <SectionLabel>Chromatic aberration</SectionLabel>
+            {slider('Red/Cyan', 'caRed', -100, 100)}
+            {slider('Blue/Yellow', 'caBlue', -100, 100)}
+            <Note>Line up the colour fringes on edges near the corners, in the 100% view (double-click the photo).</Note>
             <SectionLabel>Lens preset</SectionLabel>
             <LensPresetSave key={lens.lensName} lensName={lens.lensName} onSave={onSaveLensPreset} />
           </>
