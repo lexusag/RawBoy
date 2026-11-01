@@ -291,12 +291,11 @@ private struct LookStrip: View {
     let photo: AutoPhoto
 
     var body: some View {
-        // Colour and black and white looks in sections (the list has colour first): a heading over each, a divider
+        // Colour, experimental and black and white looks in sections (Looks.sections): a heading over each, a divider
         // between them.
         let looks = photo.mode == .film ? FilmLooks.all : Looks.all
-        let color = looks.filter { !$0.monochrome }
-        let mono = looks.filter(\.monochrome)
-        let sectioned = !color.isEmpty && !mono.isEmpty
+        let sections = Looks.sections(looks)
+        let sectioned = sections.count > 1
         ScrollViewReader { proxy in
             ScrollView(.horizontal) {
                 LazyHStack(alignment: .top, spacing: 8) {
@@ -305,9 +304,10 @@ private struct LookStrip: View {
                             LookChip(vm: vm, photo: photo, look: look).id(look.id)
                         }
                     } else {
-                        section("Color", color)
-                        Divider()
-                        section("Black & white", mono)
+                        ForEach(Array(sections.enumerated()), id: \.element.id) { i, s in
+                            if i > 0 { Divider() }
+                            section(s.group.label, s.looks)
+                        }
                     }
                 }
                 .padding(.horizontal, 12)

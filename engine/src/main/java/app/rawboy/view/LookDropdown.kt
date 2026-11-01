@@ -35,6 +35,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import app.rawboy.auto.looks.Look
+import app.rawboy.auto.looks.Looks
 
 /**
  * A look or film stock picked from a menu: one row instead of a strip of chips. Colour and black and white looks get
@@ -74,12 +75,12 @@ fun LookDropdown(
                 Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
             }
             DropdownMenu(expanded = open, onDismissRequest = { open = false }, modifier = Modifier.heightIn(max = menuMax)) {
-                // Colour and black and white looks under their own headings, when the list has both.
-                val sectioned = looks.any { it.monochrome } && looks.any { !it.monochrome }
-                for ((i, look) in looks.withIndex()) {
-                    if (sectioned && (i == 0 || look.monochrome != looks[i - 1].monochrome)) {
-                        if (i > 0) HorizontalDivider(Modifier.padding(vertical = 4.dp))
-                        MenuSectionLabel(if (look.monochrome) "Black & white" else "Color")
+                // Colour, experimental and black and white looks under their own headings, when the list has several.
+                val sections = Looks.sections(looks)
+                for ((s, section) in sections.withIndex()) for ((i, look) in section.second.withIndex()) {
+                    if (sections.size > 1 && i == 0) {
+                        if (s > 0) HorizontalDivider(Modifier.padding(vertical = 4.dp))
+                        MenuSectionLabel(section.first.label)
                     }
                     val isSelected = look.id == selected?.id
                     DropdownMenuItem(

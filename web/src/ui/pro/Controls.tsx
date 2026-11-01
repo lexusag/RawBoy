@@ -1,9 +1,9 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { Fragment, useEffect, useState, useSyncExternalStore } from 'react';
 import { PrimariesTrack, type PrimariesSlider } from '../../engine/color/PrimariesTrack';
 import { WhiteBalance } from '../../engine/color/WhiteBalance';
 import { CROP_ASPECTS, cropAspectLabel, cropOf, isFullCrop, type CropAspect } from '../../engine/develop/CropMath';
 import { ALL_FILM_LOOKS } from '../../engine/auto/looks/FilmLooks';
-import { isMonochromeLut } from '../../engine/auto/looks/Look';
+import { LOOK_GROUP_LABELS, LOOK_GROUPS, lutGroup } from '../../engine/auto/looks/Look';
 import { TONE_MAPPERS, effectiveColorDenoise, type DevelopParams, type SliderKey } from '../../engine/develop/DevelopParams';
 import type { LensInfo } from '../../engine/lens/LensInfo';
 import type { LutEntry } from '../../engine/lut/LutData';
@@ -240,10 +240,15 @@ function LutPanel({ params, loading, onChange, onSelect }: { params: DevelopPara
         <ParamSlider label="Strength" value={params.lutAmount} min={0} max={100} defaultValue={100} format={formatPlain} onChange={(v) => onChange({ ...params, lutAmount: v })} />
       )}
       {row('No LUT', null)}
-      <SectionLabel>Included · Color</SectionLabel>
-      {lib.bundled.filter((e) => !isMonochromeLut(e.id)).map((e: LutEntry) => row(e.name, e.id))}
-      <SectionLabel>Included · Black &amp; white</SectionLabel>
-      {lib.bundled.filter((e) => isMonochromeLut(e.id)).map((e: LutEntry) => row(e.name, e.id))}
+      {LOOK_GROUPS.map((group) => {
+        const list = lib.bundled.filter((e) => lutGroup(e.id) === group);
+        return list.length === 0 ? null : (
+          <Fragment key={group}>
+            <SectionLabel>Included · {LOOK_GROUP_LABELS[group]}</SectionLabel>
+            {list.map((e: LutEntry) => row(e.name, e.id))}
+          </Fragment>
+        );
+      })}
       <SectionLabel>Your LUTs{lib.folder ? ` · ${lib.folder}` : ''}</SectionLabel>
       {lib.user.length === 0 && <Note>Add your own .cube and HaldCLUT .png files.</Note>}
       {lib.user.map((e: LutEntry) => row(e.name, e.id))}

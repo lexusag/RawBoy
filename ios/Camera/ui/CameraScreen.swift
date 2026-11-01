@@ -598,14 +598,14 @@ private struct LookPicker: View {
                 .frame(width: 88, alignment: .leading)
             }
             Picker("Look", selection: Binding(get: { selectedId }, set: { onSelect($0) })) {
-                // Colour and black and white looks under their own headings, when the list has both.
-                let mono = looks.filter(\.monochrome)
-                let color = looks.filter { !$0.monochrome }
-                if mono.isEmpty || color.isEmpty {
+                // Colour, experimental and black and white looks under their own headings, when the list has several.
+                let sections = Looks.sections(looks)
+                if sections.count < 2 {
                     ForEach(looks) { Text($0.name).tag($0.id) }
                 } else {
-                    Section("Color") { ForEach(color) { Text($0.name).tag($0.id) } }
-                    Section("Black & white") { ForEach(mono) { Text($0.name).tag($0.id) } }
+                    ForEach(sections) { s in
+                        Section(s.group.label) { ForEach(s.looks) { Text($0.name).tag($0.id) } }
+                    }
                 }
             }
             .pickerStyle(.menu)
