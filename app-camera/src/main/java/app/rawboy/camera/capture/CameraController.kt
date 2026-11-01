@@ -215,6 +215,8 @@ class CameraController(context: Context) : AutoCloseable {
         val previewColor: FloatArray?,
         /** LENS_FOCUS_DISTANCE in diopters (0 = infinity), or null if not reported. */
         val focusDiopters: Float? = null,
+        /** AE compensation steps this frame was shot with (CONTROL_AE_EXPOSURE_COMPENSATION), or null if not reported. */
+        val compensationSteps: Int? = null,
     )
 
     private val _frames = MutableStateFlow<FrameState?>(null)
@@ -260,6 +262,13 @@ class CameraController(context: Context) : AutoCloseable {
     /** Exposure bias (EV) asked for by Camera's Brightness ([setExposureBias]); AE compensation on every request. */
     @Volatile
     private var exposureBiasEv = 0f
+
+    /**
+     * [AppliedCompensation.residual] of the last preview frame shot without AE compensation: the digital gain a still
+     * needs when Brightness is 0, against which [appliedCompensationEv] tells how much compensation stayed digital.
+     */
+    @Volatile
+    private var residualAtZero = 1f
 
     /** AE and flash modes for every request; changed only while a flash shot runs (see [torchFocus]). */
     @Volatile
@@ -508,7 +517,9 @@ class CameraController(context: Context) : AutoCloseable {
         s.setRepeatingRequest(request, object : CameraCaptureSession.CaptureCallback() {
             override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
                 val lens = lensResult(result)
-                _frames.value = frameState(inf, lens)
+                val state = frameState(inf, lens, result.get(CaptureResult.CONTROL_AE_EXPOSURE_COMPENSATION))
+                if (state.compensationSteps == 0) residualAtZero = residual(state)
+                _frames.value = state
                 precaptureWatch?.invoke(result)
                 focusWatch?.invoke(lens)
             }
@@ -679,7 +690,7 @@ class CameraController(context: Context) : AutoCloseable {
                 val result = stillDng(s, inf, reader, mode, exposure?.first, exifOrientation, location, out, onSubmitted)
                 Still(
                     result, exposure?.second, distanceKnown = diopters != null && diopters > 0f,
-                    compensationEv = if (exposure == null) compensationEv() else 0f,
+                    compensationEv = if (exposure == null) appliedCompensationEv(ambient) else 0f,
                 )
             } finally {
                 if (mode != FlashMode.OFF) endFlashSequence(inf, focused)
@@ -912,7 +923,7 @@ class CameraController(context: Context) : AutoCloseable {
                 location?.let(dng::setLocation)
                 dng.writeByteBuffer(out, Size(width, height), merged, 0)
             }
-            return Still(reference, null, effectiveFrames = 1f + weights.sum(), compensationEv = compensationEv())
+            return Still(reference, null, effectiveFrames = 1f + weights.sum(), compensationEv = appliedCompensationEv(_frames.value))
         } finally {
             BurstNative.destroy(h)
         }
@@ -1274,6 +1285,29 @@ class CameraController(context: Context) : AutoCloseable {
         return compensationSteps(inf) * step
     }
 
+    /**
+     * The part of [compensationEv] that reached the raw of [frame] (and of a still shot now): in low light the AE can
+     * only put a brighter compensation into its post-raw digital boost (see [AppliedCompensation]). This is what the
+     * develop takes back out (AutoTone's captureEv); [frame] null: all of it. [ofFrame]: the compensation [frame] was
+     * shot with (the viewfinder, which develops that frame, while the AE catches up with a slider move) rather than the
+     * one in force now (a still).
+     */
+    fun appliedCompensationEv(frame: FrameState?, ofFrame: Boolean = false): Float {
+        val requested = compensationEv()
+        if (frame == null) return requested
+        if (ofFrame) {
+            val steps = frame.compensationSteps
+            val inf = info
+            if (steps != null && inf != null) {
+                val step = characteristicsOf(inf).get(CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP)?.toFloat() ?: 0f
+                return AppliedCompensation.ev(steps * step, residual(frame), residualAtZero)
+            }
+        }
+        return AppliedCompensation.ev(requested, residual(frame), residualAtZero)
+    }
+
+    private fun residual(frame: FrameState): Float = AppliedCompensation.residual(frame.postRawBoost, stillGain(frame))
+
     /** The opened camera's characteristics (the logical camera when a physical lens is streamed). */
     private fun characteristicsOf(inf: Info): CameraCharacteristics =
         if (streamingPhysical != null) manager.getCameraCharacteristics(inf.openId) else inf.characteristics
@@ -1303,7 +1337,7 @@ class CameraController(context: Context) : AutoCloseable {
         }
     }
 
-    private fun frameState(inf: Info, r: CaptureResult): FrameState {
+    private fun frameState(inf: Info, r: CaptureResult, compensationSteps: Int?): FrameState {
         val neutral = r.get(CaptureResult.SENSOR_NEUTRAL_COLOR_POINT)
         val white = if (neutral != null && inf.xyzToCamera != null) {
             whiteFromNeutral(inf.xyzToCamera, DoubleArray(3) { neutral[it].toDouble() })
@@ -1330,6 +1364,7 @@ class CameraController(context: Context) : AutoCloseable {
             tonemapMode = r.get(CaptureResult.TONEMAP_MODE),
             previewColor = previewToRec2020(inf, r, neutral)?.let(Mat3::toGlColumnMajor),
             focusDiopters = r.get(CaptureResult.LENS_FOCUS_DISTANCE),
+            compensationSteps = compensationSteps,
         )
     }
 
