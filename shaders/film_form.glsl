@@ -1,5 +1,5 @@
 
-// Film image formation for every app (Auto, Pro, Camera, RawBoy Film, web): a negative -> print model with RawBoy's
+// Film image formation for every app (Auto, Pro, Camera, web): a negative -> print model with RawBoy's
 // own grain, halation and scatter. Assembled after develop.glsl; its entry points are filmOptics() and applyFilm().
 //
 // Written from the physics, not from spektrafilm's code:

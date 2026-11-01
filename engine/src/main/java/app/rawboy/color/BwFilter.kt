@@ -1,7 +1,7 @@
 package app.rawboy.color
 
 /**
- * A colour filter for black and white (RawBoy Film's B&W mode): like a glass filter on the lens, it passes its own
+ * A colour filter for black and white (RawBoy Camera's B&W mode): like a glass filter on the lens, it passes its own
  * colour and holds back the others, so they print lighter or darker once the picture is grey. Gains on linear Rec.2020
  * after white balance (rough Wratten 8 / 21 / 25 / 11 transmissions), divided by their luminance so middle grey keeps
  * its exposure, as a photographer opens up by the filter factor. Port: BwFilter.ts, BwFilter.swift.

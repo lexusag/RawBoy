@@ -156,9 +156,6 @@ Vivid 100, Yellow Warm 200, Green Pastel 400, Green Everyday 400, Yellow Cine 25
 film), and the slide films Green Vivid Slide 100, Green Slide 100, Yellow Slide 100 and Yellow Classic 64 (scanned, not
 printed). Colour negatives are printed on colour paper. **Natural** is the AgX develop alone.
 
-RawBoy Film (`app.rawboy.camera.film`) used to be a separate app with only these stocks; since 2026-10-31 it is this
-Film mode, and its build is gone. Its old photos stay in `Pictures/RawBoy Film`.
-
 - The film replaces AgX: after white balance, exposure and Shadows/Highlights, the scene light exposes the negative,
   which is printed and the print scanned. The negative and the print are spektrafilm's 2-LUT bake of each stock
   (film LUT: light → film density; print LUT: density → sRGB; [spektrafilm](https://github.com/andreavolpato/spektrafilm)

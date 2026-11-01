@@ -154,7 +154,7 @@ public final class ShaderParams: @unchecked Sendable {
      * [grainSizeScale] / [grainStrength]: grain cell size and amplitude factors, for apps that size grain
      * differently. [maskView]: mask layer whose mask is shown in red (Masks tool), or nil. [brushFor]: each layer's
      * painted mask (the session's cache); none by default (Auto, Camera). [film]: the loaded film stock for
-     * DevelopParams.film (Pro, Auto, RawBoy Film).
+     * DevelopParams.film (Pro, Auto, Camera).
      */
     public static func from(_ p: DevelopParams, asShot: DevelopParams, lut: LutData?, lens: LensTransform,
                             base: PreviewImage?, bloomSources: BloomSources?, skinMask: SkinMask?,
