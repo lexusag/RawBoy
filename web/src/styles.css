@@ -2436,3 +2436,19 @@ line.curve-grid,
     bottom: 44px;
   }
 }
+
+/* Phones turned sideways are wider than the 760 px breakpoint but just as crowded: RawBoy's "Send to Auto" wrapped
+   onto two lines next to Export, so it takes the short label there too. */
+@media (orientation: landscape) and (max-height: 500px) {
+  .pro-toolbar .to-auto .wide-only {
+    display: none;
+  }
+
+  .pro-toolbar .to-auto .narrow-only {
+    display: inline;
+  }
+}
+
+.pro-toolbar .to-auto {
+  white-space: nowrap;
+}

@@ -1,5 +1,10 @@
 # Changelog
 
+**RawBoy (web): one-line top bar on phones held sideways (2026-11-01)**
+
+- "Send to Auto" no longer wraps onto two lines next to Export in phone landscape; it shows "To Auto" there, as on
+  upright phones.
+
 **RawBoy Browser (web): undo icon, filter bar on phones (2026-11-01)**
 
 - Undo uses the same drawn icon as Auto and RawBoy (it was a "↶" character) and has a name for screen readers.
