@@ -3,6 +3,7 @@ import type { PhotoSort } from '../../engine/auto/PhotoOrder';
 import { PHOTO_ACCEPT, pickFiles, saveBlob } from '../common/files';
 import { isApple } from '../common/HelpDialog';
 import { AppSwitcher, HelpButton } from '../common/AppNav';
+import { UndoIcon } from '../common/UndoIcon';
 import { BIN, isArc, photosToSend, type BrowsePhoto, type BrowserStore, type Filter, type SendCriteria } from './BrowserStore';
 import type { ViewImage } from './Previews';
 import type { EditsSidecar, Flag, Rating } from '../../engine/browse/XmpSidecar';
@@ -324,7 +325,9 @@ function GridView({ store, active, scroll, selection, onSelection, onBin, onSend
           <div className="name">{state.folder?.name}</div>
           {state.folder && <div className="info">{counts.all} photo{counts.all === 1 ? '' : 's'}{!writable && ' · read-only'}</div>}
         </div>
-        <button type="button" className="icon" title={`Undo (${isApple ? '⌘' : 'Ctrl+'}Z)`} disabled={!state.canUndo || state.busy} onClick={() => void store.undo()}>↶</button>
+        <button type="button" className="icon" title={`Undo (${isApple ? '⌘' : 'Ctrl+'}Z)`} aria-label="Undo" disabled={!state.canUndo || state.busy} onClick={() => void store.undo()}>
+          <UndoIcon />
+        </button>
         <button type="button" className="text" disabled={state.busy} onClick={() => void openPhotos(store)}>Open</button>
         {counts.all > 0 && (
           <button type="button" className="text" title="Add the selected, picked or starred photos to the Auto tab" onClick={onSendToAuto}>
