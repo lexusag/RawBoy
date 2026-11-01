@@ -14,14 +14,6 @@ end.
 The tone mapper row reads AgX, Filmic, Sigmoid, Film: a curve and a whole stock simulation, two letters apart.
 **Change:** rename the chip "Film stock", or show the stock name on it once picked ("Yellow Portrait 400").
 
-## RawBoy Auto
-
-### A4. Room for the file name on phones (Medium, S) — web, Android, iOS
-In the photo view the name shrinks to "DSCF000…" behind Apply to all, Edit and Export.
-**Change:** on narrow screens put Apply to all and Edit in RawBoy in a ⋯ menu; keep Export visible.
-**Web: done** (2026-11-01: below 560 px a ⋯ menu holds Apply to all, Edit in RawBoy and Remove from batch). Android and
-iOS still to check.
-
 ## RawBoy Camera
 
 ### C2. Swipe the viewfinder to change look (High, M) — Android, iOS
