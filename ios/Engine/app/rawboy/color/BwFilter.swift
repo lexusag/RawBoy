@@ -1,7 +1,7 @@
 import Foundation
 
 /**
- * A colour filter for black and white (RawBoy Film's B&W mode; port of color/BwFilter.kt): like a glass filter on the
+ * A colour filter for black and white (RawBoy Camera's B&W mode; port of color/BwFilter.kt): like a glass filter on the
  * lens, it passes its own colour and holds back the others, so they print lighter or darker once the picture is grey.
  * Gains on linear Rec.2020 after white balance (rough Wratten 8 / 21 / 25 / 11 transmissions), divided by their
  * luminance so middle grey keeps its exposure.

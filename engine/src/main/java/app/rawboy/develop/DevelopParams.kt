@@ -19,14 +19,14 @@ import app.rawboy.color.BwFilter
  * - skinRetouch: 0..100 smoothing of skin (found by a segmentation model), 0 = off
  * - blemishRemoval: 0..100 automatic spot healing on skin; higher heals fainter spots, 0 = off
  * - lut: LutEntry id or null for "No LUT"; lutAmount: 0..100 strength
- * - film: film stock id (app.rawboy.film.FilmStocks) or null for none: the Film tone mapper (Pro, Auto, RawBoy Film);
+ * - film: film stock id (app.rawboy.film.FilmStocks) or null for none: the Film tone mapper (Pro, Auto, Camera);
  *   filmAmount: 0..100 blend of the film render over the toneMapper one; filmGrain, halation: 0..200, 100 = the stock's
  * - lensProfile: apply the lens corrections embedded in the file (if any)
  * - lensDistortion: -100..100, + removes barrel distortion; auto crop/scale follows
  * - caRed, caBlue: -100..100, lateral chromatic aberration: + enlarges the red (blue) plane around the image centre
  * - vignetteAmount: -100..100, + brightens corners; vignetteMidpoint: 0..100 (higher = only the corners)
  * - curves: point curves (RGB, then red, green, blue) on the final display-encoded image (see [ToneCurves])
- * - bwFilter: colour filter for black and white ([app.rawboy.color.BwFilter], RawBoy Film's B&W mode; NONE = identity),
+ * - bwFilter: colour filter for black and white ([app.rawboy.color.BwFilter], RawBoy Camera's B&W mode; NONE = identity),
  *   channel gains after white balance and the RGB primaries
  * - RGB primaries (after darktable): redHue/greenHue/blueHue in degrees (-45..45),
  *   red/green/bluePurity -200..200 (0 = unchanged), tintHue degrees (-180..180), tintPurity 0..100
