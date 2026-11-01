@@ -1,5 +1,10 @@
 # Changelog
 
+**RawBoy Browser (web): undo icon, filter bar on phones (2026-11-01)**
+
+- Undo uses the same drawn icon as Auto and RawBoy (it was a "↶" character) and has a name for screen readers.
+- On phones the filter bar's right edge fades, so it's clear the bar scrolls sideways to stars, sort and the switches.
+
 **RawBoy Auto (web): a ⋯ menu on phones (2026-11-01)**
 
 - In the photo view on phones (below 560 px), Apply to all, Edit in RawBoy and Remove from batch moved into a ⋯ menu

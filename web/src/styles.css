@@ -2007,6 +2007,15 @@ line.curve-grid,
   flex: none;
 }
 
+/* Phones: the filters scroll sideways; the right edge fades so the cut-off control reads as "more this way". The end
+   padding lets the last control scroll clear of the fade. */
+@media (max-width: 560px) {
+  .browser-filters {
+    padding-right: 28px;
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  }
+}
+
 .browser-filters .segmented button {
   white-space: nowrap;
   padding: 4px 10px;
