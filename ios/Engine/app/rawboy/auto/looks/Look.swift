@@ -25,7 +25,7 @@ public struct Look: Equatable, Hashable, Sendable, Identifiable {
     /** Skin retouch applied when the photo has a face. */
     public var portraitRetouch: Float = 0
     public var monochrome: Bool = false
-    /** An unusual colour look (Redscale, Movie Green): pickers list these in their own section. */
+    /** An unusual colour look (Redscale, Movie Green, Lagoon…): pickers list these in their own section. */
     public var experimental: Bool = false
     /** Film stock id (FilmStocks) rendered instead of AgX + LUT, or nil. */
     public var film: String? = nil
@@ -108,6 +108,13 @@ public enum Looks {
                                          experimental: true)
     public static let redscale = Look("redscale", "Redscale", "Redscale.png", contrast: 5, grain: 30, vignette: -15,
                                        experimental: true)
+    /** Colour swap: warm tones and skin turn turquoise, blue sky amber, highlights cream (tools/swap_luts). */
+    public static let lagoon = Look("lagoon", "Lagoon", "Lagoon.cube", grain: 20, vignette: -10, experimental: true)
+    /** Colour swap: greens turn violet, blue sky mint, reds stay (tools/swap_luts). */
+    public static let violetDust = Look("violetdust", "Violet Dust", "Violet Dust.cube", grain: 20, vignette: -10,
+                                         experimental: true)
+    /** False-colour infrared: foliage and yellows turn crimson, magenta mids (tools/swap_luts). */
+    public static let unseen = Look("unseen", "Unseen", "Unseen.cube", grain: 20, vignette: -10, experimental: true)
     /** Monochrome, soft: Tri-X on a soft paper grade, gentle highlights, open shadows. */
     public static let trixSoft = Look("trixsoft", "Yellow Mono Soft", "Yellow Mono Soft.cube", grain: 20, monochrome: true)
     /** Monochrome, classic: Tri-X on a normal paper grade. */
@@ -125,7 +132,7 @@ public enum Looks {
 
     public static let all: [Look] = [
         natural, portra400, portra800, ektar100, gold200, superia400, fuji400h,
-        vision3500t, velvia50, movieGreen, redscale, trixSoft, trix400, trixPush, trixHard, doubleX, doubleXSoft,
+        vision3500t, velvia50, movieGreen, redscale, lagoon, violetDust, unseen, trixSoft, trix400, trixPush, trixHard, doubleX, doubleXSoft,
     ]
 
     public static func byId(_ id: String) -> Look {

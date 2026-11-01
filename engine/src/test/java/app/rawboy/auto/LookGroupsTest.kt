@@ -12,7 +12,7 @@ class LookGroupsTest {
     fun looksAreListedInTheirGroups() {
         val sections = Looks.sections(Looks.ALL)
         assertEquals(listOf(LookGroup.COLOR, LookGroup.EXPERIMENTAL, LookGroup.MONOCHROME), sections.map { it.first })
-        assertEquals(listOf(Looks.MOVIE_GREEN, Looks.REDSCALE), sections[1].second)
+        assertEquals(listOf(Looks.MOVIE_GREEN, Looks.REDSCALE, Looks.LAGOON, Looks.VIOLET_DUST, Looks.UNSEEN), sections[1].second)
         assertEquals(Looks.ALL.size, sections.sumOf { it.second.size })
         // A list of one group is one section, so pickers show no headings.
         assertEquals(1, Looks.sections(FilmLooks.ALL).size)
@@ -22,6 +22,7 @@ class LookGroupsTest {
     fun bundledLutsFollowTheirLooks() {
         assertEquals(LookGroup.EXPERIMENTAL, Looks.lutGroup("asset:luts/Redscale.png"))
         assertEquals(LookGroup.EXPERIMENTAL, Looks.lutGroup("asset:luts/Movie Green.cube"))
+        assertEquals(LookGroup.EXPERIMENTAL, Looks.lutGroup("asset:luts/Unseen.cube"))
         assertEquals(LookGroup.MONOCHROME, Looks.lutGroup("asset:luts/Yellow Mono 400.cube"))
         assertEquals(LookGroup.COLOR, Looks.lutGroup("asset:luts/Yellow Vivid 100.cube"))
         assertEquals(LookGroup.COLOR, Looks.lutGroup(null))
