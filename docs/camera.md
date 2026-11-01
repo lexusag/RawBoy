@@ -139,7 +139,8 @@ viewfinder shows black and white live. Each mode keeps its own pick, so switchin
 - The JPEG is black and white; the **DNG stays in colour**, so the shot can still be developed in colour later.
 - Press and hold still shows the photo in colour, without the look.
 - In RawBoy Camera the colour **Look** menu no longer lists the black and white looks; a black and white look remembered
-  from before opens in B&W mode.
+  from before opens in B&W mode. With Film off, it lists the colour looks under **Color** and **Experimental** (Movie
+  Green, Redscale).
 
 ## Film mode
 

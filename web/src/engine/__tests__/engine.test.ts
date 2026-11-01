@@ -2,7 +2,7 @@ import { existsSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { NO_ADJUSTMENTS, applyEditsDevelop, applyLook, developAuto } from '../auto/looks/LookApplier';
 import { ALL_FILM_LOOKS, FILM_GRAIN, FilmLooks, filmLookById } from '../auto/looks/FilmLooks';
-import { ALL_LOOKS, Looks, isMonochromeLut, lookById, lutIdOf } from '../auto/looks/Look';
+import { ALL_LOOKS, Looks, isMonochromeLut, lookById, lookSections, lutGroup, lutIdOf } from '../auto/looks/Look';
 import { applyAuto, measuredNoiseSettings } from '../auto/analysis/AutoTone';
 import { Warmth } from '../auto/analysis/Warmth';
 import { Mat3 } from '../color/Mat3';
@@ -297,7 +297,21 @@ describe('presets', () => {
     expect(isMonochromeLut(lut)).toBe(true);
     expect(isMonochromeLut('asset:luts/Yellow Mono Soft.cube')).toBe(true);
     expect(isMonochromeLut('asset:luts/Redscale.png')).toBe(false);
+    expect(isMonochromeLut('asset:luts/Movie Green.cube')).toBe(false);
     expect(isMonochromeLut(null)).toBe(false);
+  });
+
+  it('lists looks and bundled LUTs as Color, Experimental, Black & white', () => {
+    const sections = lookSections(ALL_LOOKS);
+    expect(sections.map((s) => s.group)).toEqual(['color', 'experimental', 'monochrome']);
+    expect(sections[1].looks).toEqual([Looks.MOVIE_GREEN, Looks.REDSCALE]);
+    expect(sections.reduce((n, s) => n + s.looks.length, 0)).toBe(ALL_LOOKS.length);
+    expect(lookSections(ALL_FILM_LOOKS)).toHaveLength(1);
+    expect(lutGroup('asset:luts/Redscale.png')).toBe('experimental');
+    expect(lutGroup('asset:luts/Movie Green.cube')).toBe('experimental');
+    expect(lutGroup('asset:luts/Yellow Mono 400.cube')).toBe('monochrome');
+    expect(lutGroup('asset:luts/Yellow Vivid 100.cube')).toBe('color');
+    expect(lutGroup(null)).toBe('color');
   });
 
   const edited = developParams({

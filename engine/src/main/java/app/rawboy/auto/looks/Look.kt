@@ -27,6 +27,8 @@ data class Look(
     /** Skin retouch applied when the photo has a face. */
     val portraitRetouch: Float = 0f,
     val monochrome: Boolean = false,
+    /** An unusual colour look (Redscale, Movie Green): pickers list these in their own section. */
+    val experimental: Boolean = false,
     /** Film stock id ([app.rawboy.film.FilmStocks]) rendered instead of AgX + LUT, or null. */
     val film: String? = null,
     /** Film grain and halation, 100 = the stock as formation.json describes it. */
@@ -35,6 +37,20 @@ data class Look(
 ) {
     /** LutEntry id, as LutRepository names bundled LUTs. */
     val lutId: String? get() = lutFile?.let { "asset:luts/$it" }
+
+    /** The picker section this look is listed in. */
+    val group: LookGroup get() = when {
+        monochrome -> LookGroup.MONOCHROME
+        experimental -> LookGroup.EXPERIMENTAL
+        else -> LookGroup.COLOR
+    }
+}
+
+/** The pickers' sections of looks and bundled LUTs, in the order they are shown. */
+enum class LookGroup(val label: String) {
+    COLOR("Color"),
+    EXPERIMENTAL("Experimental"),
+    MONOCHROME("Black & white"),
 }
 
 /**
@@ -83,9 +99,14 @@ object Looks {
         "velvia50", "Green Vivid Slide 50", "Green Vivid Slide 50.cube",
         grain = 8f, vignette = -10f,
     )
+    /** A strong green-teal film grade with lifted blacks, made by the owner in Affinity Photo. */
+    val MOVIE_GREEN = Look(
+        "moviegreen", "Movie Green", "Movie Green.cube",
+        grain = 20f, vignette = -10f, experimental = true,
+    )
     val REDSCALE = Look(
         "redscale", "Redscale", "Redscale.png",
-        contrast = 5f, grain = 30f, vignette = -15f,
+        contrast = 5f, grain = 30f, vignette = -15f, experimental = true,
     )
     /** Monochrome, soft: Tri-X on a soft paper grade, gentle highlights, open shadows. */
     val TRIX_SOFT = Look(
@@ -120,7 +141,7 @@ object Looks {
 
     val ALL = listOf(
         NATURAL, PORTRA_400, PORTRA_800, EKTAR_100, GOLD_200, SUPERIA_400, FUJI_400H,
-        VISION3_500T, VELVIA_50, REDSCALE, TRIX_SOFT, TRIX_400, TRIX_PUSH, TRIX_HARD, DOUBLE_X, DOUBLE_X_SOFT,
+        VISION3_500T, VELVIA_50, MOVIE_GREEN, REDSCALE, TRIX_SOFT, TRIX_400, TRIX_PUSH, TRIX_HARD, DOUBLE_X, DOUBLE_X_SOFT,
     )
 
     fun byId(id: String): Look = RetiredLooks.look(id).let { key -> ALL.firstOrNull { it.id == key } } ?: NATURAL
@@ -130,4 +151,21 @@ object Looks {
 
     /** True for a bundled black and white LUT (retired ids too); pickers list these in their own section. */
     fun isMonochromeLut(id: String?): Boolean = id != null && RetiredLooks.lut(id) in MONOCHROME_LUTS
+
+    /** Bundled LUT ids of the experimental looks. */
+    private val EXPERIMENTAL_LUTS: Set<String> = ALL.filter { it.experimental }.mapNotNull { it.lutId }.toSet()
+
+    /** The section a bundled LUT is listed in (retired ids too); any other LUT is [LookGroup.COLOR]. */
+    fun lutGroup(id: String?): LookGroup = when {
+        isMonochromeLut(id) -> LookGroup.MONOCHROME
+        id != null && RetiredLooks.lut(id) in EXPERIMENTAL_LUTS -> LookGroup.EXPERIMENTAL
+        else -> LookGroup.COLOR
+    }
+
+    /**
+     * [looks] split into the pickers' sections, in [LookGroup] order, empty ones left out. A list of a single group
+     * (Film mode's stocks, Camera's B&W looks) is one section; pickers show headings only when there are several.
+     */
+    fun sections(looks: List<Look>): List<Pair<LookGroup, List<Look>>> =
+        LookGroup.entries.mapNotNull { g -> looks.filter { it.group == g }.takeIf { it.isNotEmpty() }?.let { g to it } }
 }

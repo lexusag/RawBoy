@@ -31,11 +31,14 @@ it is turned sideways (or on a tablet or a wide window). Android, iPhone and the
 | Green Everyday 400, Green Pastel 400 | cooler consumer negative; soft pastel negative | — |
 | Yellow Cine 500T | tungsten-balanced cinema negative | — (grain and bloom) |
 | Green Vivid Slide 50 | slide film, vivid | — |
+| Movie Green | strong green-teal grade, lifted blacks (RawBoy's own, made in Affinity Photo) | — |
 | Redscale | Redscale | — (red/orange redscale film) |
 | Yellow Mono Soft, Yellow Mono 400, Yellow Mono Push, Yellow Mono Hard | black-and-white negative on paper: soft grade; normal; developed longer; developed longer on a hard grade | — (monochrome, rising contrast) |
 | Yellow Cine Mono, Yellow Cine Mono Soft | black-and-white cinema negative on print film; developed short on a soft paper grade | — (monochrome) |
 
 Look names are RawBoy's own: "Yellow" and "Green" are two families of film character, not products.
+The look strip lists them in three sections: **Color**, **Experimental** (Movie Green and Redscale: unusual colour
+looks, never suggested) and **Black & white**.
 
 The film LUTs are generated with [spectral_film_lut](https://github.com/JanLohse/spectral_film_lut) from
 each stock's datasheet (`tools/film_luts/generate.py`). Each LUT first undoes RawBoy's AgX curve, exposes the

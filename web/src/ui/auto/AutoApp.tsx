@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { ALL_LOOKS, type Look } from '../../engine/auto/looks/Look';
+import { ALL_LOOKS, LOOK_GROUP_LABELS, lookSections, type Look } from '../../engine/auto/looks/Look';
 import { DEFAULT_STRENGTH, type Adjustments } from '../../engine/auto/looks/LookApplier';
 import { FrameColors } from '../../engine/gl/DevelopRenderer';
 import type { PreviewImage } from '../../engine/gl/PreviewImage';
@@ -1134,24 +1134,21 @@ function LookStrip({ store, photo }: { store: AutoStore; photo: AutoPhoto }) {
     el.querySelector<HTMLElement>('.look.selected')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [photo.id, photo.mode, activeLook(photo).id]);
   const looks = photo.mode === 'film' ? ALL_FILM_LOOKS : ALL_LOOKS;
-  const mono = looks.filter((l) => l.monochrome);
+  const sections = lookSections(looks);
   const chips = (list: Look[]) => list.map((look) => <LookChip key={look.id} store={store} photo={photo} look={look} />);
   return (
     <div className="look-strip" ref={ref}>
-      {mono.length === 0 ? (
+      {sections.length < 2 ? (
         <div className="look-section"><div className="look-chips">{chips(looks)}</div></div>
       ) : (
-        // Colour and black and white looks in their own sections: a heading above each (a divider between them in the row).
-        <>
-          <div className="look-section">
-            <div className="look-section-label">Color</div>
-            <div className="look-chips">{chips(looks.filter((l) => !l.monochrome))}</div>
+        // Colour, experimental and black and white looks in their own sections: a heading above each (a divider
+        // between them in the row).
+        sections.map((s) => (
+          <div className="look-section" key={s.group}>
+            <div className="look-section-label">{LOOK_GROUP_LABELS[s.group]}</div>
+            <div className="look-chips">{chips(s.looks)}</div>
           </div>
-          <div className="look-section">
-            <div className="look-section-label">Black &amp; white</div>
-            <div className="look-chips">{chips(mono)}</div>
-          </div>
-        </>
+        ))
       )}
     </div>
   );

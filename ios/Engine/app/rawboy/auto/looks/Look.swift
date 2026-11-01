@@ -25,6 +25,8 @@ public struct Look: Equatable, Hashable, Sendable, Identifiable {
     /** Skin retouch applied when the photo has a face. */
     public var portraitRetouch: Float = 0
     public var monochrome: Bool = false
+    /** An unusual colour look (Redscale, Movie Green): pickers list these in their own section. */
+    public var experimental: Bool = false
     /** Film stock id (FilmStocks) rendered instead of AgX + LUT, or nil. */
     public var film: String? = nil
     /** Film grain and halation, 100 = the stock as formation.json describes it. */
@@ -33,7 +35,7 @@ public struct Look: Equatable, Hashable, Sendable, Identifiable {
 
     init(_ id: String, _ name: String, _ lutFile: String?, contrast: Float = 0, grain: Float = 0, bloom: Float = 0,
          highpass: Float = 0, vignette: Float = 0, warmth: Float = 0, portraitRetouch: Float = 0,
-         monochrome: Bool = false, film: String? = nil) {
+         monochrome: Bool = false, experimental: Bool = false, film: String? = nil) {
         self.id = id
         self.name = name
         self.lutFile = lutFile
@@ -45,11 +47,35 @@ public struct Look: Equatable, Hashable, Sendable, Identifiable {
         self.warmth = warmth
         self.portraitRetouch = portraitRetouch
         self.monochrome = monochrome
+        self.experimental = experimental
         self.film = film
     }
 
     /** LutEntry id, as LutRepository names bundled LUTs. */
     public var lutId: String? { lutFile.map { "asset:luts/\($0)" } }
+
+    /** The picker section this look is listed in. */
+    public var group: LookGroup { monochrome ? .monochrome : experimental ? .experimental : .color }
+}
+
+/** One section of a look picker: a group and its looks, in catalogue order. */
+public struct LookSection: Identifiable, Sendable {
+    public let group: LookGroup
+    public let looks: [Look]
+    public var id: LookGroup { group }
+}
+
+/** The pickers' sections of looks and bundled LUTs, in the order they are shown. */
+public enum LookGroup: CaseIterable, Sendable {
+    case color, experimental, monochrome
+
+    public var label: String {
+        switch self {
+        case .color: "Color"
+        case .experimental: "Experimental"
+        case .monochrome: "Black & white"
+        }
+    }
 }
 
 /**
@@ -77,7 +103,11 @@ public enum Looks {
     public static let vision3500t = Look("vision500t", "Yellow Cine 500T", "Yellow Cine 500T.cube", grain: 35, bloom: 20)
     /** Slide film: vivid colour, deep shadows. */
     public static let velvia50 = Look("velvia50", "Green Vivid Slide 50", "Green Vivid Slide 50.cube", grain: 8, vignette: -10)
-    public static let redscale = Look("redscale", "Redscale", "Redscale.png", contrast: 5, grain: 30, vignette: -15)
+    /** A strong green-teal film grade with lifted blacks, made by the owner in Affinity Photo. */
+    public static let movieGreen = Look("moviegreen", "Movie Green", "Movie Green.cube", grain: 20, vignette: -10,
+                                         experimental: true)
+    public static let redscale = Look("redscale", "Redscale", "Redscale.png", contrast: 5, grain: 30, vignette: -15,
+                                       experimental: true)
     /** Monochrome, soft: Tri-X on a soft paper grade, gentle highlights, open shadows. */
     public static let trixSoft = Look("trixsoft", "Yellow Mono Soft", "Yellow Mono Soft.cube", grain: 20, monochrome: true)
     /** Monochrome, classic: Tri-X on a normal paper grade. */
@@ -95,7 +125,7 @@ public enum Looks {
 
     public static let all: [Look] = [
         natural, portra400, portra800, ektar100, gold200, superia400, fuji400h,
-        vision3500t, velvia50, redscale, trixSoft, trix400, trixPush, trixHard, doubleX, doubleXSoft,
+        vision3500t, velvia50, movieGreen, redscale, trixSoft, trix400, trixPush, trixHard, doubleX, doubleXSoft,
     ]
 
     public static func byId(_ id: String) -> Look {
@@ -110,6 +140,27 @@ public enum Looks {
     public static func isMonochromeLut(_ id: String?) -> Bool {
         guard let id else { return false }
         return monochromeLuts.contains(RetiredLooks.lut(id))
+    }
+
+    /** Bundled LUT ids of the experimental looks. */
+    private static let experimentalLuts: Set<String> = Set(all.filter(\.experimental).compactMap(\.lutId))
+
+    /** The section a bundled LUT is listed in (retired ids too); any other LUT is `.color`. */
+    public static func lutGroup(_ id: String?) -> LookGroup {
+        if isMonochromeLut(id) { return .monochrome }
+        if let id, experimentalLuts.contains(RetiredLooks.lut(id)) { return .experimental }
+        return .color
+    }
+
+    /**
+     * `looks` split into the pickers' sections, in LookGroup order, empty ones left out. A list of a single group
+     * (Film mode's stocks, Camera's B&W looks) is one section; pickers show headings only when there are several.
+     */
+    public static func sections(_ looks: [Look]) -> [LookSection] {
+        LookGroup.allCases.compactMap { g in
+            let l = looks.filter { $0.group == g }
+            return l.isEmpty ? nil : LookSection(group: g, looks: l)
+        }
     }
 }
 

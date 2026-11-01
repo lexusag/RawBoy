@@ -1,5 +1,19 @@
 # Changelog
 
+**Experimental looks (2026-11-01)**
+
+- Looks pickers have a third section, **Experimental**, between Color and Black & white, for unusual colour looks.
+  Movie Green and Redscale move there. It shows in RawBoy Auto's look strip, the colour Look menu of RawBoy Camera
+  (Film off) and the LUTs tab of RawBoy, on Android, iPhone and the web. Experimental looks are never suggested.
+
+**Movie Green look (2026-11-01)**
+
+- New colour look **Movie Green**: a strong green-teal grade with lifted, slightly cyan blacks, made by the owner in
+  Affinity Photo. It sits after Green Vivid Slide 50 in Auto's looks, Camera's Look menu and Pro's LUTs tab (Color),
+  on Android, iPhone and the web, with grain 20 and vignette -10 on top. The LUT was exported at 8 points per axis
+  and is resampled to 33 like the other bundled LUTs (monotone cubic between the original points, which stay exact),
+  so smooth gradients show softer transitions between the LUT's cells.
+
 **RawBoy Camera: B&W filter as a menu (2026-11-01)**
 
 - Upright in B&W mode, Filter is a menu like the Look menu above it ("● Yellow ▾"), in place of a row of chips that
