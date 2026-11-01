@@ -1,6 +1,6 @@
 import { localFolder, saveBlob, type OutputFolder } from '../ui/common/files';
 import type { PackInfo, PackerRequest } from './protocol';
-import { outputName, packOptions, settingsSuffix, threadsPerFile, type PackSettings } from './settings';
+import { autoFilesAtOnce, outputName, packOptions, settingsSuffix, threadsPerFile, type PackSettings } from './settings';
 
 /** One packer worker (WASM engine with the DNG SDK) and a promise-based call into it. */
 class PackerWorker {
@@ -150,7 +150,7 @@ export class PackerStore {
     this.cancelled = false;
     this.set({ running: true });
     const folder: OutputFolder | null = output.kind === 'folder' ? localFolder(output.dir) : null;
-    const lanes = Math.min(settings.filesAtOnce, queue.length);
+    const lanes = Math.min(settings.filesAtOnce || autoFilesAtOnce(), queue.length);
     const options = packOptions(settings, threadsPerFile(lanes));
     let next = 0;
     const lane = async (i: number) => {

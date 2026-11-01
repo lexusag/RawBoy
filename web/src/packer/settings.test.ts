@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PackInfo } from './protocol';
-import { DEFAULT_SETTINGS, PRESETS, outputName, presetOf, settingsSuffix, summarize, threadsPerFile } from './settings';
+import { DEFAULT_SETTINGS, autoFilesAtOnce, PRESETS, outputName, presetOf, settingsSuffix, summarize, threadsPerFile } from './settings';
 
 const info = (p: Partial<PackInfo>): PackInfo => ({
   make: 'Sony', model: 'ILCE-7M3', lens: '', format: 'ARW', width: 6024, height: 4024, dng: false, mosaic: true, bayer: true,
@@ -45,5 +45,14 @@ describe('Packer settings', () => {
     expect(bold(summarize({ ...DEFAULT_SETTINGS, lensCorrections: false }, files))).toContain('Lens corrections are dropped. ');
     expect(bold(summarize({ ...DEFAULT_SETTINGS, format: 'losslessJxl' }, []))).toContain('Apple Photos shows it black');
     expect(text(summarize({ ...DEFAULT_SETTINGS, format: 'micro', maxSize: 3000 }, []))).toContain('resized to 3000 px');
+  });
+});
+
+describe('auto files at once', () => {
+  it('uses a third of the cores, one on small memory', () => {
+    expect(autoFilesAtOnce(12, 16)).toBe(3);
+    expect(autoFilesAtOnce(4, 16)).toBe(1);
+    expect(autoFilesAtOnce(16, 4)).toBe(1);
+    expect(DEFAULT_SETTINGS.filesAtOnce).toBe(0);
   });
 });

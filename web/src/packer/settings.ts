@@ -21,7 +21,9 @@ export interface PackSettings {
   keepGps: boolean;
   /** Add the settings to the file name (DSC001-small-high.dng). */
   nameSuffix: boolean;
-  /** Files packed in parallel, each in its own worker. */
+  /** Show the advanced rows (format, quality, effort, preview, parallel files). */
+  advanced: boolean;
+  /** Files packed in parallel, each in its own worker; 0 = chosen from the cores and memory. */
   filesAtOnce: number;
 }
 
@@ -34,7 +36,8 @@ export const DEFAULT_SETTINGS: PackSettings = {
   lensCorrections: true,
   keepGps: true,
   nameSuffix: false,
-  filesAtOnce: 1,
+  advanced: false,
+  filesAtOnce: 0,
 };
 
 export const DISTANCE: Record<Quality, number> = { archive: 0.1, high: 0.2, good: 0.5, compact: 1.0 };
@@ -45,13 +48,13 @@ export const MAX_FILES_AT_ONCE = 4;
 
 export const FORMAT_LABEL: Record<PackFormat, string> = {
   small: 'Small raw',
-  micro: 'Micro',
+  micro: 'Micro (resized)',
   losslessJpeg: 'Lossless',
   losslessJxl: 'Lossless JPEG XL',
 };
 
 export const QUALITY_LABEL: Record<Quality, string> = { archive: 'Archive', high: 'High', good: 'Good', compact: 'Compact' };
-export const SPEED_LABEL: Record<Speed, string> = { fast: 'Fast', normal: 'Normal', best: 'Smallest' };
+export const SPEED_LABEL: Record<Speed, string> = { fast: 'Quick', normal: 'Balanced', best: 'Thorough' };
 export const PREVIEW_LABEL: Record<PreviewSize, string> = { standard: '1024 px', large: '2048 px', none: 'None' };
 
 /** The preset chips: each sets the format and its quality fields. */
@@ -61,7 +64,20 @@ export const PRESETS: Record<Exclude<Preset, 'custom'>, Pick<PackSettings, 'form
   micro: { format: 'micro', quality: 'high', speed: 'normal', maxSize: 4000 },
 };
 
-export const PRESET_LABEL: Record<Preset, string> = { small: 'Small raw', lossless: 'Lossless', micro: 'Micro', custom: 'Custom' };
+export const PRESET_LABEL: Record<Preset, string> = {
+  small: 'Smallest files',
+  lossless: 'Maximum compatibility',
+  micro: 'Tiny copies for sharing',
+  custom: 'Custom',
+};
+
+/** One plain sentence under the preset row. */
+export const PRESET_HINT: Record<Preset, string> = {
+  small: 'Keeps every bit of detail you can edit, at a quarter to a half of the camera raw\'s size. The best choice for archiving.',
+  lossless: 'Same picture data as the raw, nothing lost, but bigger files. Opens in every program that reads DNG.',
+  micro: 'A small, resized copy (about 5-20% of the raw) for sharing or casual archives. Less room for heavy edits.',
+  custom: 'Your own combination, set under Advanced settings.',
+};
 
 /** Which preset the settings match (fields a format doesn't use are ignored), or custom. */
 export function presetOf(s: PackSettings): Preset {
@@ -91,6 +107,15 @@ export function packOptions(s: PackSettings, threads: number): PackOptions {
   };
 }
 
+/**
+ * Files to pack at once when the setting is Auto: a third of the cores (each file's workers use several), one on
+ * phones and machines under 8 GB (a 50 MP photo needs up to 1 GB), at most 3.
+ */
+export function autoFilesAtOnce(cores = navigator.hardwareConcurrency || 4, memoryGb = (navigator as { deviceMemory?: number }).deviceMemory ?? 8) {
+  if (memoryGb < 8) return 1;
+  return Math.max(1, Math.min(3, Math.floor(cores / 3)));
+}
+
 /** Threads for each worker: the cores shared between the files packed at once (the WASM pool allows 6). */
 export const threadsPerFile = (filesAtOnce: number, cores = navigator.hardwareConcurrency || 4) =>
   Math.max(1, Math.min(6, Math.floor(cores / Math.max(1, filesAtOnce))));
@@ -108,7 +133,8 @@ export function loadSettings(): PackSettings {
     if (!(s.speed in EFFORT)) s.speed = DEFAULT_SETTINGS.speed;
     if (!(s.preview in PREVIEW_PX)) s.preview = DEFAULT_SETTINGS.preview;
     if (!MAX_SIZES.includes(s.maxSize)) s.maxSize = DEFAULT_SETTINGS.maxSize;
-    s.filesAtOnce = Math.min(MAX_FILES_AT_ONCE, Math.max(1, Math.round(Number(s.filesAtOnce)) || 1));
+    s.filesAtOnce = Math.min(MAX_FILES_AT_ONCE, Math.max(0, Math.round(Number(s.filesAtOnce)) || 0));
+    s.advanced = s.advanced === true;
     return s;
   } catch {
     return DEFAULT_SETTINGS;

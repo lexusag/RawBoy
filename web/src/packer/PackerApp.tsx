@@ -8,10 +8,12 @@ import {
   MAX_SIZES,
   PREVIEW_LABEL,
   PRESETS,
+  PRESET_HINT,
   PRESET_LABEL,
   QUALITY_LABEL,
   SPEED_LABEL,
   appSupport,
+  autoFilesAtOnce,
   loadSettings,
   presetOf,
   saveSettings,
@@ -30,7 +32,7 @@ const store = new PackerStore();
 
 const FORMAT_HINT: Record<PackFormat, string> = {
   small: 'Raw data, lossy JPEG XL. The best size for keeping raws.',
-  micro: 'Demosaiced and resized. For sharing and casual archives.',
+  micro: 'A resized copy with the colours already worked out (demosaiced). For sharing and casual archives.',
   losslessJpeg: 'Raw data, bit-exact. Opens in every raw developer.',
   losslessJxl: 'Raw data, bit-exact, smaller. Slow; not for Apple Photos.',
 };
@@ -41,9 +43,9 @@ const QUALITY_HINT: Record<Quality, string> = {
   compact: 'Distance 1.0: smallest; loss shows at 100% and with strong edits.',
 };
 const SPEED_HINT: Record<Speed, string> = {
-  fast: 'Quicker, files a few percent larger.',
-  normal: 'Balanced.',
-  best: 'Slower, files a few percent smaller.',
+  fast: 'How hard the packer works to shrink each file; the picture quality is the same. Quick: finishes sooner, files a few percent larger.',
+  normal: 'How hard the packer works to shrink each file; the picture quality is the same. Balanced is a good middle.',
+  best: 'Thorough: takes longer on your computer, files a few percent smaller. The picture quality is the same.',
 };
 
 export function PackerApp() {
@@ -107,38 +109,16 @@ export function PackerApp() {
 
       <main className="packer-main">
         <section className="packer-settings" aria-label="Settings">
-          <Row label="Preset">
+          <Row label="Pack as" hint={PRESET_HINT[preset]}>
             <Segmented<Preset>
               value={preset}
-              options={(['small', 'lossless', 'micro', 'custom'] as Preset[]).map((p) => ({
-                value: p,
-                label: PRESET_LABEL[p] + (p === 'small' ? ' ★' : ''),
-                disabled: p === 'custom',
-              }))}
+              options={(['small', 'lossless', 'micro'] as Preset[]).map((p) => ({ value: p, label: PRESET_LABEL[p] }))}
               onChange={(p) => p !== 'custom' && change(PRESETS[p])}
             />
           </Row>
 
-          <Row label="Format" hint={FORMAT_HINT[settings.format]}>
-            <Segmented<PackFormat>
-              value={settings.format}
-              options={(['small', 'losslessJpeg', 'losslessJxl', 'micro'] as PackFormat[]).map((f) => ({ value: f, label: FORMAT_LABEL[f] }))}
-              onChange={(format) => change({ format })}
-            />
-          </Row>
-
-          {usesQuality(settings.format) && (
-            <Row label="Quality" hint={QUALITY_HINT[settings.quality]}>
-              <Segmented<Quality>
-                value={settings.quality}
-                options={(['archive', 'high', 'good', 'compact'] as Quality[]).map((q) => ({ value: q, label: QUALITY_LABEL[q] }))}
-                onChange={(quality) => change({ quality })}
-              />
-            </Row>
-          )}
-
           {settings.format === 'micro' && (
-            <Row label="Max size" hint={`Long side; ${((settings.maxSize * settings.maxSize * 2) / 3 / 1e6).toFixed(0)} MP for a 3:2 photo. Smaller photos keep their size.`}>
+            <Row label="Longest side" hint={`${((settings.maxSize * settings.maxSize * 2) / 3 / 1e6).toFixed(0)} megapixels for a 3:2 photo. Smaller photos keep their size.`}>
               <Segmented<number>
                 value={settings.maxSize}
                 options={MAX_SIZES.map((v) => ({ value: v, label: `${v} px` }))}
@@ -147,19 +127,9 @@ export function PackerApp() {
             </Row>
           )}
 
-          {usesSpeed(settings.format) && (
-            <Row label="Speed" hint={SPEED_HINT[settings.speed]}>
-              <Segmented<Speed>
-                value={settings.speed}
-                options={(['fast', 'normal', 'best'] as Speed[]).map((s) => ({ value: s, label: SPEED_LABEL[s] }))}
-                onChange={(speed) => change({ speed })}
-              />
-            </Row>
-          )}
-
           <Row
             label="Lens corrections"
-            hint={settings.lensCorrections ? 'Sony and Fujifilm corrections written into the DNG.' : 'Dropped: the DNG opens uncorrected unless the app has its own profile.'}
+            hint={settings.lensCorrections ? 'Sony and Fujifilm corrections stored in the raw are written into the DNG.' : 'Dropped: the DNG opens uncorrected unless the app has its own profile.'}
           >
             <Toggle on={settings.lensCorrections} onChange={(lensCorrections) => change({ lensCorrections })} />
           </Row>
@@ -176,27 +146,83 @@ export function PackerApp() {
           </Row>
 
           <Row
-            label="Settings in file name"
-            hint={settings.nameSuffix ? `Names end like DSC001-${settingsSuffix(settings)}.dng.` : 'Off: names are the source\'s with .dng.'}
+            label="Add settings to file name"
+            hint={settings.nameSuffix ? `Example: DSC001-${settingsSuffix(settings)}.dng` : 'Off: DSC001.ARW becomes DSC001.dng.'}
           >
-            <Toggle on={settings.nameSuffix} onChange={(nameSuffix) => change({ nameSuffix })} />
-          </Row>
-
-          <Row label="Preview" hint="Used when the camera's own preview can't be (DNGs, phones). Thumbnails in Finder and photo browsers.">
-            <Segmented<PreviewSize>
-              value={settings.preview}
-              options={(['standard', 'large', 'none'] as PreviewSize[]).map((p) => ({ value: p, label: PREVIEW_LABEL[p] }))}
-              onChange={(preview) => change({ preview })}
+            <Segmented<boolean>
+              value={settings.nameSuffix}
+              options={[
+                { value: false, label: 'No' },
+                { value: true, label: 'Yes' },
+              ]}
+              onChange={(nameSuffix) => change({ nameSuffix })}
             />
           </Row>
 
-          <Row label="Files at once" hint="More is faster on many cores, but each 50 MP photo needs up to 1 GB of memory.">
-            <Segmented<number>
-              value={settings.filesAtOnce}
-              options={Array.from({ length: MAX_FILES_AT_ONCE }, (_, i) => ({ value: i + 1, label: String(i + 1) }))}
-              onChange={(filesAtOnce) => change({ filesAtOnce })}
-            />
-          </Row>
+          <button
+            className="text packer-advanced-toggle"
+            aria-expanded={settings.advanced}
+            onClick={() => change({ advanced: !settings.advanced })}
+          >
+            {settings.advanced ? '▾ Advanced settings' : '▸ Advanced settings'}
+            {preset === 'custom' && ' (custom)'}
+          </button>
+
+          {settings.advanced && (
+            <div className="packer-advanced">
+              <p className="hint">Changing one of these never changes the others. The choice above only fills them in once.</p>
+
+              <Row label="File type" hint={FORMAT_HINT[settings.format]}>
+                <Segmented<PackFormat>
+                  value={settings.format}
+                  options={(['small', 'losslessJpeg', 'losslessJxl', 'micro'] as PackFormat[]).map((f) => ({ value: f, label: FORMAT_LABEL[f] }))}
+                  onChange={(format) => change({ format })}
+                />
+              </Row>
+
+              {usesQuality(settings.format) && (
+                <Row label="Quality" hint={QUALITY_HINT[settings.quality]}>
+                  <Segmented<Quality>
+                    value={settings.quality}
+                    options={(['archive', 'high', 'good', 'compact'] as Quality[]).map((q) => ({ value: q, label: QUALITY_LABEL[q] }))}
+                    onChange={(quality) => change({ quality })}
+                  />
+                </Row>
+              )}
+
+              {usesSpeed(settings.format) && (
+                <Row label="Compression effort" hint={SPEED_HINT[settings.speed]}>
+                  <Segmented<Speed>
+                    value={settings.speed}
+                    options={(['fast', 'normal', 'best'] as Speed[]).map((s) => ({ value: s, label: SPEED_LABEL[s] }))}
+                    onChange={(speed) => change({ speed })}
+                  />
+                </Row>
+              )}
+
+              <Row label="Preview" hint="Used when the camera's own preview can't be (DNGs, phones). Thumbnails in Finder and photo browsers.">
+                <Segmented<PreviewSize>
+                  value={settings.preview}
+                  options={(['standard', 'large', 'none'] as PreviewSize[]).map((p) => ({ value: p, label: PREVIEW_LABEL[p] }))}
+                  onChange={(preview) => change({ preview })}
+                />
+              </Row>
+
+              <Row
+                label="Files at once"
+                hint={`Auto picks ${autoFilesAtOnce()} for this computer. More is faster on many cores, but each 50 MP photo needs up to 1 GB of memory.`}
+              >
+                <Segmented<number>
+                  value={settings.filesAtOnce}
+                  options={[
+                    { value: 0, label: 'Auto' },
+                    ...Array.from({ length: MAX_FILES_AT_ONCE }, (_, i) => ({ value: i + 1, label: String(i + 1) })),
+                  ]}
+                  onChange={(filesAtOnce) => change({ filesAtOnce })}
+                />
+              </Row>
+            </div>
+          )}
         </section>
 
         <section className="packer-summary" aria-label="What this does" aria-live="polite">
@@ -206,7 +232,7 @@ export function PackerApp() {
               {line.map((span, j) => (span.bold ? <strong key={j}>{span.text}</strong> : <span key={j}>{span.text}</span>))}
             </p>
           ))}
-          <h3>Opens in</h3>
+          <h3>After packing, the file opens in</h3>
           <ul className="packer-apps">
             {appSupport(settings.format).map((a) => (
               <li key={a.app} className={`support-${a.support}`} title={a.note}>
@@ -219,6 +245,7 @@ export function PackerApp() {
         </section>
 
         <section className="packer-files" aria-label="Files">
+          <p className="packer-safe">Your original files are never changed: packed copies are new files.</p>
           <div className="packer-actions">
             <button onClick={async () => store.add(await pickFiles(true, RAW_ACCEPT))} disabled={state.running}>
               Add files

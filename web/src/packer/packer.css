@@ -299,3 +299,24 @@ body {
     padding-top: 0;
   }
 }
+
+.packer-advanced-toggle {
+  display: block;
+  margin: 12px 0 4px;
+  padding: 8px 0;
+  font-weight: 600;
+}
+.packer-advanced {
+  border-left: 2px solid var(--border);
+  padding-left: 12px;
+}
+.packer-advanced > .hint {
+  margin: 0 0 8px;
+  font-size: 0.9em;
+  opacity: 0.75;
+}
+.packer-safe {
+  margin: 0 0 8px;
+  font-size: 0.9em;
+  opacity: 0.8;
+}
