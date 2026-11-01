@@ -9,6 +9,11 @@
 
 namespace rawboy {
 
+struct PhotoMetadata;
+
+/** EXIF essentials from LibRaw's parsed metadata (decoder_libraw.cpp). */
+void readLibRawMetadata(const libraw_data_t& d, PhotoMetadata& m);
+
 /**
  * LibRaw with RawBoy's processing steps hooked in, only through the extension points LibRaw offers for this (its
  * callbacks, virtual decode loops and lockable streams; LibRaw itself stays unmodified):

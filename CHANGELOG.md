@@ -1,5 +1,16 @@
 # Changelog
 
+**RawBoy Packer: raws to smaller DNGs in the browser (2026-11-01)**
+
+- A new web page, deployed on its own: drop camera raws or DNGs and get DNGs back. Small raw (the default) keeps the
+  raw data with JPEG XL compression at about a quarter to a half of the camera raw's size; Lossless keeps it bit-exact
+  in classic DNG compression that every raw developer reads; Micro stores a resized, demosaiced copy. A summary under
+  the settings updates with every change and says what you keep, what you lose, the expected size and which apps
+  (RawBoy, Lightroom, Apple Photos, Capture One, darktable) will open the result.
+- Sony and Fujifilm lens corrections stored in the raw are written into the DNG, as Adobe's converter does. Lightroom
+  opens the DNGs of the GFX 50R, A7 III, NEX-3 and E-PL9 with the same default sharpening and exposure as Adobe's own.
+- Files at once (1-4), location removal, preview size; originals are never changed. See docs/packer.md.
+
 **Web: no more freezes while panning a zoomed photo (2026-11-01)**
 
 - Profiled on a Galaxy Tab S11 Ultra: panning itself ran at 120 fps, but each time the view reached a new area of the

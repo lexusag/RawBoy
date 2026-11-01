@@ -1,0 +1,401 @@
+import { useEffect, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { RAW_ACCEPT, canPickOutputFolder, pickFiles, pickOutputFolder } from '../ui/common/files';
+import { PackerStore, type PackItem } from './PackerStore';
+import type { PackFormat, PackInfo } from './protocol';
+import {
+  FORMAT_LABEL,
+  MAX_FILES_AT_ONCE,
+  MAX_SIZES,
+  PREVIEW_LABEL,
+  PRESETS,
+  PRESET_LABEL,
+  QUALITY_LABEL,
+  SPEED_LABEL,
+  appSupport,
+  loadSettings,
+  presetOf,
+  saveSettings,
+  summarize,
+  usesQuality,
+  usesSpeed,
+  type PackSettings,
+  type Preset,
+  type PreviewSize,
+  type Quality,
+  type Speed,
+} from './settings';
+
+const store = new PackerStore();
+
+const FORMAT_HINT: Record<PackFormat, string> = {
+  small: 'Raw data, lossy JPEG XL. The best size for keeping raws.',
+  micro: 'Demosaiced and resized. For sharing and casual archives.',
+  losslessJpeg: 'Raw data, bit-exact. Opens in every raw developer.',
+  losslessJxl: 'Raw data, bit-exact, smaller. Slow; not for Apple Photos.',
+};
+const QUALITY_HINT: Record<Quality, string> = {
+  archive: 'JPEG XL distance 0.1: for photos you may push hard later.',
+  high: 'Distance 0.2: indistinguishable from the raw on correctly exposed photos.',
+  good: 'Distance 0.5: fine for normal edits.',
+  compact: 'Distance 1.0: smallest; loss shows at 100% and with strong edits.',
+};
+const SPEED_HINT: Record<Speed, string> = {
+  fast: 'Quicker, files a few percent larger.',
+  normal: 'Balanced.',
+  best: 'Slower, files a few percent smaller.',
+};
+
+export function PackerApp() {
+  const state = useSyncExternalStore(store.subscribe, store.getState);
+  const [settings, setSettings] = useState<PackSettings>(loadSettings);
+  const [dragging, setDragging] = useState(false);
+  useEffect(() => saveSettings(settings), [settings]);
+
+  const change = (patch: Partial<PackSettings>) => setSettings((s) => ({ ...s, ...patch }));
+  const preset = presetOf(settings);
+  const infos = useMemo(() => state.items.map((it) => it.info).filter((i): i is PackInfo => !!i), [state.items]);
+  const summary = useMemo(() => summarize(settings, infos), [settings, infos]);
+  const packable = state.items.filter((it) => it.info && it.status !== 'inspecting');
+
+  useEffect(() => {
+    // Drop files anywhere on the page.
+    const over = (e: DragEvent) => {
+      if (!e.dataTransfer?.types.includes('Files')) return;
+      e.preventDefault();
+      setDragging(true);
+    };
+    const leave = (e: DragEvent) => {
+      if (!e.relatedTarget) setDragging(false);
+    };
+    const drop = (e: DragEvent) => {
+      e.preventDefault();
+      setDragging(false);
+      store.add(Array.from(e.dataTransfer?.files ?? []));
+    };
+    window.addEventListener('dragover', over);
+    window.addEventListener('dragleave', leave);
+    window.addEventListener('drop', drop);
+    return () => {
+      window.removeEventListener('dragover', over);
+      window.removeEventListener('dragleave', leave);
+      window.removeEventListener('drop', drop);
+    };
+  }, []);
+
+  const pack = async (toFolder: boolean) => {
+    if (toFolder) {
+      let dir: FileSystemDirectoryHandle | null = null;
+      try {
+        dir = await pickOutputFolder();
+      } catch {
+        return; // cancelled
+      }
+      if (!dir) return;
+      void store.start(settings, { kind: 'folder', dir });
+    } else {
+      void store.start(settings, { kind: 'downloads' });
+    }
+  };
+
+  return (
+    <div className={`packer${dragging ? ' dragging' : ''}`}>
+      <header className="packer-header">
+        <h1>RawBoy Packer</h1>
+        <p>Repackage camera raws and DNGs as smaller DNGs, in your browser. Nothing is uploaded.</p>
+      </header>
+
+      <main className="packer-main">
+        <section className="packer-settings" aria-label="Settings">
+          <Row label="Preset">
+            <Segmented<Preset>
+              value={preset}
+              options={(['small', 'lossless', 'micro', 'custom'] as Preset[]).map((p) => ({
+                value: p,
+                label: PRESET_LABEL[p] + (p === 'small' ? ' ★' : ''),
+                disabled: p === 'custom',
+              }))}
+              onChange={(p) => p !== 'custom' && change(PRESETS[p])}
+            />
+          </Row>
+
+          <Row label="Format" hint={FORMAT_HINT[settings.format]}>
+            <Segmented<PackFormat>
+              value={settings.format}
+              options={(['small', 'losslessJpeg', 'losslessJxl', 'micro'] as PackFormat[]).map((f) => ({ value: f, label: FORMAT_LABEL[f] }))}
+              onChange={(format) => change({ format })}
+            />
+          </Row>
+
+          {usesQuality(settings.format) && (
+            <Row label="Quality" hint={QUALITY_HINT[settings.quality]}>
+              <Segmented<Quality>
+                value={settings.quality}
+                options={(['archive', 'high', 'good', 'compact'] as Quality[]).map((q) => ({ value: q, label: QUALITY_LABEL[q] }))}
+                onChange={(quality) => change({ quality })}
+              />
+            </Row>
+          )}
+
+          {settings.format === 'micro' && (
+            <Row label="Max size" hint={`Long side; ${((settings.maxSize * settings.maxSize * 2) / 3 / 1e6).toFixed(0)} MP for a 3:2 photo. Smaller photos keep their size.`}>
+              <Segmented<number>
+                value={settings.maxSize}
+                options={MAX_SIZES.map((v) => ({ value: v, label: `${v} px` }))}
+                onChange={(maxSize) => change({ maxSize })}
+              />
+            </Row>
+          )}
+
+          {usesSpeed(settings.format) && (
+            <Row label="Speed" hint={SPEED_HINT[settings.speed]}>
+              <Segmented<Speed>
+                value={settings.speed}
+                options={(['fast', 'normal', 'best'] as Speed[]).map((s) => ({ value: s, label: SPEED_LABEL[s] }))}
+                onChange={(speed) => change({ speed })}
+              />
+            </Row>
+          )}
+
+          <Row
+            label="Lens corrections"
+            hint={settings.lensCorrections ? 'Sony and Fujifilm corrections written into the DNG.' : 'Dropped: the DNG opens uncorrected unless the app has its own profile.'}
+          >
+            <Toggle on={settings.lensCorrections} onChange={(lensCorrections) => change({ lensCorrections })} />
+          </Row>
+
+          <Row label="Location" hint={settings.keepGps ? 'GPS tags kept.' : 'GPS tags removed.'}>
+            <Segmented<boolean>
+              value={settings.keepGps}
+              options={[
+                { value: true, label: 'Keep' },
+                { value: false, label: 'Remove' },
+              ]}
+              onChange={(keepGps) => change({ keepGps })}
+            />
+          </Row>
+
+          <Row label="Preview" hint="Used when the camera's own preview can't be (DNGs, phones). Thumbnails in Finder and photo browsers.">
+            <Segmented<PreviewSize>
+              value={settings.preview}
+              options={(['standard', 'large', 'none'] as PreviewSize[]).map((p) => ({ value: p, label: PREVIEW_LABEL[p] }))}
+              onChange={(preview) => change({ preview })}
+            />
+          </Row>
+
+          <Row label="Files at once" hint="More is faster on many cores, but each 50 MP photo needs up to 1 GB of memory.">
+            <Segmented<number>
+              value={settings.filesAtOnce}
+              options={Array.from({ length: MAX_FILES_AT_ONCE }, (_, i) => ({ value: i + 1, label: String(i + 1) }))}
+              onChange={(filesAtOnce) => change({ filesAtOnce })}
+            />
+          </Row>
+        </section>
+
+        <section className="packer-summary" aria-label="What this does" aria-live="polite">
+          <h2>{FORMAT_LABEL[settings.format]}</h2>
+          {summary.map((line, i) => (
+            <p key={i}>
+              {line.map((span, j) => (span.bold ? <strong key={j}>{span.text}</strong> : <span key={j}>{span.text}</span>))}
+            </p>
+          ))}
+          <h3>Opens in</h3>
+          <ul className="packer-apps">
+            {appSupport(settings.format).map((a) => (
+              <li key={a.app} className={`support-${a.support}`} title={a.note}>
+                <span className="mark">{a.support === 'yes' ? '✓' : a.support === 'no' ? '✕' : a.support === 'likely' ? '✓?' : '?'}</span>
+                <span className="app">{a.app}</span>
+                <span className="note">{a.note}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        <section className="packer-files" aria-label="Files">
+          <div className="packer-actions">
+            <button onClick={async () => store.add(await pickFiles(true, RAW_ACCEPT))} disabled={state.running}>
+              Add files
+            </button>
+            <span className="spacer" />
+            {state.items.some((it) => it.status === 'done' || it.status === 'error') && !state.running && (
+              <button className="text" onClick={() => store.clearDone()}>
+                Clear finished
+              </button>
+            )}
+            {state.running ? (
+              <button onClick={() => store.cancel()}>Stop after these</button>
+            ) : canPickOutputFolder() ? (
+              <>
+                <button onClick={() => pack(false)} disabled={!packable.length} title="Each DNG goes to the browser's downloads">
+                  Download
+                </button>
+                <button className="primary" onClick={() => pack(true)} disabled={!packable.length}>
+                  Pack {packable.length || ''} to a folder…
+                </button>
+              </>
+            ) : (
+              <button className="primary" onClick={() => pack(false)} disabled={!packable.length}>
+                Pack {packable.length || ''} and download
+              </button>
+            )}
+          </div>
+          {state.engineError && <p className="packer-error">The packer couldn't start: {state.engineError}</p>}
+          {state.items.length === 0 ? (
+            <div className="packer-drop">
+              Drop raw files or DNGs here, or <button className="text" onClick={async () => store.add(await pickFiles(true, RAW_ACCEPT))}>choose files</button>.
+              <small>ARW, RAF, CR2, CR3, NEF, ORF, RW2, PEF, DNG and other raws LibRaw reads.</small>
+            </div>
+          ) : (
+            <>
+              <ul className="packer-list">
+                {state.items.map((it) => (
+                  <FileRow key={it.id} item={it} onRemove={() => store.remove(it.id)} busy={state.running} />
+                ))}
+              </ul>
+              <Totals items={state.items} />
+            </>
+          )}
+        </section>
+      </main>
+
+      <footer className="packer-footer">
+        RawBoy Packer uses LibRaw and the Adobe DNG SDK. This product includes DNG technology under license by Adobe.{' '}
+        <a href="https://app.rawboy.link/" target="_blank" rel="noopener">
+          RawBoy Web
+        </a>
+      </footer>
+    </div>
+  );
+}
+
+function Row({ label, hint, children }: { label: string; hint?: string; children: ReactNode }) {
+  return (
+    <div className="packer-row">
+      <div className="label">{label}</div>
+      <div className="control">
+        {children}
+        {hint && <div className="hint">{hint}</div>}
+      </div>
+    </div>
+  );
+}
+
+function Segmented<T extends string | number | boolean>({
+  value,
+  options,
+  onChange,
+}: {
+  value: T;
+  options: { value: T; label: string; disabled?: boolean }[];
+  onChange: (v: T) => void;
+}) {
+  return (
+    <div className="segmented" role="radiogroup">
+      {options.map((o) => (
+        <button
+          key={String(o.value)}
+          role="radio"
+          aria-checked={o.value === value}
+          className={o.value === value ? 'on' : ''}
+          disabled={o.disabled && o.value !== value}
+          onClick={() => onChange(o.value)}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <Segmented<boolean>
+      value={on}
+      options={[
+        { value: true, label: 'Keep' },
+        { value: false, label: 'Drop' },
+      ]}
+      onChange={onChange}
+    />
+  );
+}
+
+const mb = (bytes: number) => `${(bytes / 1e6).toFixed(bytes < 10e6 ? 1 : 0)} MB`;
+
+function FileRow({ item, onRemove, busy }: { item: PackItem; onRemove: () => void; busy: boolean }) {
+  const i = item.info;
+  const camera = i ? `${i.make} ${i.model}`.trim() : '';
+  const tags: string[] = [];
+  if (i) {
+    tags.push(i.format);
+    if (i.lensData) tags.push(i.lensData === 'DNG' ? 'lens opcodes' : `${i.lensData} lens data`);
+    if (!i.bayer || !i.mosaic) tags.push(i.mosaic ? 'X-Trans' : 'linear');
+  }
+  let status: ReactNode;
+  switch (item.status) {
+    case 'inspecting':
+      status = 'Reading…';
+      break;
+    case 'ready':
+      status = mb(item.file.size);
+      break;
+    case 'waiting':
+      status = 'Waiting';
+      break;
+    case 'packing':
+      status = <span className="busy">Packing…</span>;
+      break;
+    case 'done':
+      status = (
+        <span title={`${item.outName} · ${item.result?.seconds.toFixed(1)} s`}>
+          {mb(item.file.size)} → <strong>{mb(item.outSize ?? 0)}</strong> ({Math.round(((item.outSize ?? 0) / item.file.size) * 100)}%)
+        </span>
+      );
+      break;
+    case 'error':
+      status = <span className="packer-error">{item.error}</span>;
+      break;
+  }
+  const r = item.result;
+  const notes: string[] = [];
+  if (r) {
+    if (r.modeUsed === 'small' && r.linear) notes.push('saved demosaiced (not a Bayer raw)');
+    if (r.lensWritten) notes.push('lens corrections kept');
+    if (r.preview === 'none') notes.push('no preview');
+  }
+  return (
+    <li className={`packer-item status-${item.status}`}>
+      <div className="name">
+        <span className="file">{item.file.name}</span>
+        <span className="meta">
+          {camera}
+          {i?.lens ? ` · ${i.lens}` : ''}
+          {tags.map((t) => (
+            <span key={t} className="tag">
+              {t}
+            </span>
+          ))}
+        </span>
+        {notes.length > 0 && <span className="meta">{notes.join(' · ')}</span>}
+      </div>
+      <div className="status">{status}</div>
+      <button className="remove" onClick={onRemove} disabled={busy && item.status === 'packing'} aria-label={`Remove ${item.file.name}`}>
+        ✕
+      </button>
+    </li>
+  );
+}
+
+function Totals({ items }: { items: PackItem[] }) {
+  const done = items.filter((it) => it.status === 'done');
+  if (!done.length) {
+    const total = items.reduce((s, it) => s + it.file.size, 0);
+    return <p className="packer-totals">{items.length} files, {mb(total)}</p>;
+  }
+  const before = done.reduce((s, it) => s + it.file.size, 0);
+  const after = done.reduce((s, it) => s + (it.outSize ?? 0), 0);
+  return (
+    <p className="packer-totals">
+      {done.length} of {items.length} packed: {mb(before)} → <strong>{mb(after)}</strong> ({Math.round((after / before) * 100)}%), {mb(before - after)} saved
+    </p>
+  );
+}

@@ -1,5 +1,6 @@
 # Builds signed release APKs of all three apps (RawBoy, Auto, Camera) and attaches them to the GitHub release,
-# and deploys the public web build to Cloudflare Pages (project "rawboy").
+# and deploys the public web build to Cloudflare Pages (project "rawboy", and RawBoy Packer's page as project
+# "rawboy-packer").
 # Secrets: KEYSTORE_FILE (base64 of the .jks), KEYSTORE_PASS (store and key password; key alias "rawboy"),
 # CLOUDFLARE_API_TOKEN (Account > Cloudflare Pages > Edit), CLOUDFLARE_ACCOUNT_ID.
 # Variable (optional): SITE_URL, overrides the web app's main address for search engines (default
@@ -332,3 +333,21 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: web
           command: pages deploy dist --project-name rawboy --branch main
+
+      # RawBoy Packer (web/packer.html) is its own site: the same build, with packer.html as its index page.
+      - name: Prepare RawBoy Packer site
+        working-directory: web
+        run: |
+          cp -r dist dist-packer
+          cd dist-packer
+          mv packer.html index.html
+          rm -f drive.html about.html privacy.html privacy-android.html sitemap.xml manifest.webmanifest
+          printf 'User-agent: *\nAllow: /\n' > robots.txt
+
+      - name: Deploy RawBoy Packer to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: web
+          command: pages deploy dist-packer --project-name rawboy-packer --branch main

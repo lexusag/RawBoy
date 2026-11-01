@@ -10,6 +10,8 @@ batches), on the same engine as the Android apps.
 - Skin retouch / blemish removal / face metering: the same MediaPipe models, through `@mediapipe/tasks-vision`.
 - Export: JPEG with jpegli (16-bit in, 4:4:4) or TIFF 8/16-bit, as a download. Auto's **Export all** writes into a
   folder you pick (Chrome/Edge) or downloads one ZIP.
+- **RawBoy Packer** (`packer.html`, `src/packer/`; http://localhost:5173/packer.html in dev): raws and DNGs to DNGs,
+  deployed as its own site (`../docs/packer.md`). Needs `rawboy-full.wasm`, i.e. the DNG SDK.
 
 ## Run locally
 

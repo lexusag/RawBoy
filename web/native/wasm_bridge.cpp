@@ -13,10 +13,13 @@
 #include <emscripten/val.h>
 
 #if RAWBOY_WITH_DNG_SDK
+#include "dng_pack.h"
+
 #include <jxl/decode_cxx.h>
 #include <jxl/thread_parallel_runner_cxx.h>
 #endif
 
+#include <algorithm>
 #include <cstdlib>
 #include <memory>
 #include <stdexcept>
@@ -385,6 +388,130 @@ private:
     bool created_ = false;
 };
 
+#if RAWBOY_WITH_DNG_SDK
+/** A small 8-bit sRGB JPEG (the DNG preview RawBoy Packer renders when the camera's own can't be used). */
+bool encodePreviewJpeg(const uint8_t* rgb, int width, int height, std::vector<uint8_t>& jpeg) {
+    jpeg_compress_struct cinfo{};
+    jpeg_error_mgr err{};
+    unsigned char* buffer = nullptr;
+    unsigned long size = 0;
+    cinfo.err = jpegli_std_error(&err);
+    err.error_exit = errorExit;
+    bool ok = false;
+    jpegli_create_compress(&cinfo);
+    try {
+        jpegli_mem_dest(&cinfo, &buffer, &size);
+        rawboy::configureJpegli(&cinfo, width, height, 90);
+        jpegli_start_compress(&cinfo, TRUE);
+        std::vector<uint16_t> row(static_cast<size_t>(width) * 3);
+        for (int y = 0; y < height; ++y) {
+            const uint8_t* src = rgb + static_cast<size_t>(y) * width * 3;
+            for (size_t i = 0; i < row.size(); ++i) row[i] = static_cast<uint16_t>(src[i] * 257);
+            JSAMPROW p = reinterpret_cast<JSAMPROW>(row.data());
+            jpegli_write_scanlines(&cinfo, &p, 1);
+        }
+        jpegli_finish_compress(&cinfo);
+        jpeg.assign(buffer, buffer + size);
+        ok = true;
+    } catch (const std::exception&) {
+    }
+    jpegli_destroy_compress(&cinfo);
+    std::free(buffer);
+    return ok;
+}
+
+const char* modeName(rawboy::PackMode m) {
+    switch (m) {
+        case rawboy::PackMode::LosslessJpeg: return "losslessJpeg";
+        case rawboy::PackMode::LosslessJxl: return "losslessJxl";
+        case rawboy::PackMode::SmallRaw: return "small";
+        case rawboy::PackMode::Micro: return "micro";
+    }
+    return "";
+}
+
+val packInfoOf(const rawboy::PackInfo& i) {
+    val o = val::object();
+    o.set("make", i.make);
+    o.set("model", i.model);
+    o.set("lens", i.lens);
+    o.set("format", i.format);
+    o.set("width", i.width);
+    o.set("height", i.height);
+    o.set("dng", i.dng);
+    o.set("mosaic", i.mosaic);
+    o.set("bayer", i.bayer);
+    o.set("lensData", i.lensData);
+    o.set("lensDistortion", i.lensDistortion);
+    o.set("lensVignetting", i.lensVignetting);
+    o.set("lensCa", i.lensCa);
+    o.set("adobeHints", i.adobeHints);
+    o.set("modeUsed", std::string(modeName(i.modeUsed)));
+    o.set("linear", i.linear);
+    o.set("lensWritten", i.lensWritten);
+    o.set("preview", i.preview);
+    o.set("outWidth", i.outWidth);
+    o.set("outHeight", i.outHeight);
+    o.set("seconds", i.seconds);
+    return o;
+}
+#endif
+
+/** RawBoy Packer: what a raw or DNG is (PackInfo's fields), without decoding it; null with lastError(). */
+val packInspect(const val& bytes) {
+    lastError.clear();
+#if RAWBOY_WITH_DNG_SDK
+    const std::vector<uint8_t> data = fromTyped<uint8_t>(bytes);
+    rawboy::PackInfo info;
+    if (!rawboy::inspectForPacking(data.data(), data.size(), info, lastError)) return val::null();
+    return packInfoOf(info);
+#else
+    (void)bytes;
+    lastError = "RawBoy Packer needs the Adobe DNG SDK build";
+    return val::null();
+#endif
+}
+
+/**
+ * RawBoy Packer: the file as a DNG. [options]: {mode: "losslessJpeg" | "losslessJxl" | "small" | "micro", distance,
+ * effort, maxSize, previewSize, lensCorrections, keepGps, threads}. Returns {dng: Uint8Array, info}, or null with
+ * lastError().
+ */
+val pack(const val& bytes, const val& options) {
+    lastError.clear();
+#if RAWBOY_WITH_DNG_SDK
+    rawboy::PackOptions o;
+    const std::string mode = options["mode"].as<std::string>();
+    o.mode = mode == "losslessJpeg"  ? rawboy::PackMode::LosslessJpeg
+             : mode == "losslessJxl" ? rawboy::PackMode::LosslessJxl
+             : mode == "micro"       ? rawboy::PackMode::Micro
+                                     : rawboy::PackMode::SmallRaw;
+    o.distance = options["distance"].as<float>();
+    o.effort = options["effort"].as<int>();
+    o.maxSize = options["maxSize"].as<int>();
+    o.previewSize = options["previewSize"].as<int>();
+    o.lensCorrections = options["lensCorrections"].as<bool>();
+    o.keepGps = options["keepGps"].as<bool>();
+    // The pthread pool is fixed (PTHREAD_POOL_SIZE 8, strict): leave room for LibRaw's decode threads' teardown.
+    o.threads = std::clamp(options["threads"].as<int>(), 1, 6);
+    std::vector<uint8_t> out;
+    rawboy::PackInfo info;
+    {
+        const std::vector<uint8_t> data = fromTyped<uint8_t>(bytes);
+        if (!rawboy::packDng(data.data(), data.size(), o, encodePreviewJpeg, out, info, lastError)) return val::null();
+    }
+    val result = val::object();
+    result.set("dng", toTyped(out.data(), out.size()));
+    result.set("info", packInfoOf(info));
+    return result;
+#else
+    (void)bytes;
+    (void)options;
+    lastError = "RawBoy Packer needs the Adobe DNG SDK build";
+    return val::null();
+#endif
+}
+
 }  // namespace
 
 EMSCRIPTEN_BINDINGS(rawboy) {
@@ -396,6 +523,8 @@ EMSCRIPTEN_BINDINGS(rawboy) {
     function("lastError", &getLastError);
     function("hasDngSdk", &hasDngSdk);
     function("decodeJxl", &decodeJxl);
+    function("packInspect", &packInspect);
+    function("pack", &pack);
     function("width", &width);
     function("height", &height);
     function("fullWidth", &fullWidth);

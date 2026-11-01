@@ -19,10 +19,9 @@
 #include <vector>
 
 namespace rawboy {
-namespace {
 
 /** EXIF essentials from LibRaw's parsed metadata (see PhotoMetadata). */
-void readMetadata(const libraw_data_t& d, PhotoMetadata& m) {
+void readLibRawMetadata(const libraw_data_t& d, PhotoMetadata& m) {
     m.make = d.idata.make;
     m.model = d.idata.model;
     m.lensMake = d.lens.LensMake;
@@ -60,6 +59,8 @@ void readMetadata(const libraw_data_t& d, PhotoMetadata& m) {
         m.gpsBelowSeaLevel = g.altref == 1;
     }
 }
+
+namespace {
 
 // The as-shot white chromaticity from the camera WB multipliers and the
 // XYZ->camera matrix. Leaves (x, y) untouched (D65) if anything is missing.
@@ -803,7 +804,7 @@ bool decodeWithLibRaw(const uint8_t* data, size_t size, DecodedImage& out, std::
     estimateAsShotWhite(raw->imgdata.color, out.whiteX, out.whiteY);
     out.decoder = "LibRaw " + std::string(LibRaw::version());
     out.camera = std::string(raw->imgdata.idata.make) + " " + raw->imgdata.idata.model;
-    readMetadata(raw->imgdata, out.metadata);
+    readLibRawMetadata(raw->imgdata, out.metadata);
     return true;
 }
 
