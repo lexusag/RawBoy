@@ -714,6 +714,7 @@ main {
   max-width: 420px;
   text-align: center;
   margin: 0 16px;
+  text-wrap: pretty;
 }
 
 .export-progress {
@@ -2407,5 +2408,22 @@ line.curve-grid,
   /* Auto's photo view: the back arrow, name, undo, redo, remove, Edit and Export on one line at 375 px. */
   .toolbar:not(.pro-toolbar) {
     column-gap: 4px;
+  }
+}
+
+/* Auto's ⋯ menu on phones: as wide as the icon buttons, and its menu items dim when unavailable. */
+.toolbar button.icon.more {
+  font-size: 20px;
+  line-height: 1;
+}
+
+.source-menu .menu button:disabled {
+  opacity: 0.4;
+}
+
+/* Phones: the zoom hint is nearly as wide as the photo, so it sits above Auto's ISO badge instead of across it. */
+@media (max-width: 560px) {
+  .zoom-hint {
+    bottom: 44px;
   }
 }

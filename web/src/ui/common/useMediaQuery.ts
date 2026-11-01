@@ -25,3 +25,6 @@ export const STACKED = '(orientation: portrait)';
  * SE, 660 on a 15 or 16), not the Plus or Max (about 740+). Keep in step with the same query in styles.css.
  */
 export const SHORT_SCREEN = '(orientation: portrait) and (max-height: 720px)';
+
+/** Phones upright: the width at which styles.css puts the app switcher on its own line (560 px). */
+export const PHONE_WIDTH = '(max-width: 560px)';

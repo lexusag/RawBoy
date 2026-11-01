@@ -13,7 +13,7 @@ import { ParamSlider, formatPlain, formatSigned } from '../common/ParamSlider';
 import { isPressedSlider } from '../common/sliderFocus';
 import { Preview, PreviewLabel, zoomLabel } from '../common/Preview';
 import { useTabScroll } from '../common/useTabScroll';
-import { SHORT_SCREEN, useMediaQuery } from '../common/useMediaQuery';
+import { PHONE_WIDTH, SHORT_SCREEN, useMediaQuery } from '../common/useMediaQuery';
 import { ALL_FILM_LOOKS } from '../../engine/auto/looks/FilmLooks';
 import { isLensPreset, NO_LENS_PRESET, presetSections, replacesLook, type Preset } from '../../engine/develop/Presets';
 import { groupSummary } from '../pro/PresetsPanel';
@@ -571,6 +571,8 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
   const scroll = useTabScroll(tab);
   // Regular iPhones in Safari: the tabs go on top and the look strip into the Look tab, so Adjust gets the whole panel.
   const short = useMediaQuery(SHORT_SCREEN);
+  // Phones upright: Apply to all, Edit in RawBoy and Remove go into a ⋯ menu, so the file name keeps room (UI.md A4).
+  const phone = useMediaQuery(PHONE_WIDTH);
   const photo = state.photos.find((p) => p.id === id);
   const analysis = photo?.analysis;
   const loaded = state.sessionReady === id;
@@ -736,10 +738,12 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
       >
         Copy previous
       </button>
-      {/* The top bar has no room for it on short phones. */}
-      <button type="button" className="text short-only" disabled={state.export != null || state.photos.length < 2} onClick={() => store.applyLookToAll(id)}>
-        Apply to all
-      </button>
+      {/* The top bar has no room for it on short phones (phones upright have it in the ⋯ menu). */}
+      {!phone && (
+        <button type="button" className="text short-only" disabled={state.export != null || state.photos.length < 2} onClick={() => store.applyLookToAll(id)}>
+          Apply to all
+        </button>
+      )}
     </nav>
   );
 
@@ -758,11 +762,24 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
         <button type="button" className="icon" title="Redo (Shift Ctrl/⌘ Z)" aria-label="Redo" disabled={state.export != null || !store.canRedo(id)} onClick={() => store.redo(id)}>
           <UndoIcon redo />
         </button>
-        <button type="button" className="icon" title="Remove from the batch (Delete); the file stays" aria-label="Remove from batch" disabled={state.export != null} onClick={() => store.removeOpened(id)}>
-          <DeleteIcon />
-        </button>
-        <button type="button" className="text short-hide" disabled={state.export != null || state.photos.length < 2} onClick={() => store.applyLookToAll(id)}>Apply to all</button>
-        <button type="button" className="text" disabled={state.export != null} title="Open in the RawBoy tab with these settings" onClick={() => onEditInRawBoy(id)}>Edit<span className="wide-only"> in RawBoy</span></button>
+        {phone ? (
+          <MoreMenu
+            disabled={state.export != null}
+            items={[
+              { label: 'Apply to all', disabled: state.photos.length < 2, onClick: () => store.applyLookToAll(id) },
+              { label: 'Edit in RawBoy', onClick: () => onEditInRawBoy(id) },
+              { label: 'Remove from batch', onClick: () => store.removeOpened(id) },
+            ]}
+          />
+        ) : (
+          <>
+            <button type="button" className="icon" title="Remove from the batch (Delete); the file stays" aria-label="Remove from batch" disabled={state.export != null} onClick={() => store.removeOpened(id)}>
+              <DeleteIcon />
+            </button>
+            <button type="button" className="text short-hide" disabled={state.export != null || state.photos.length < 2} onClick={() => store.applyLookToAll(id)}>Apply to all</button>
+            <button type="button" className="text" disabled={state.export != null} title="Open in the RawBoy tab with these settings" onClick={() => onEditInRawBoy(id)}>Edit<span className="wide-only"> in RawBoy</span></button>
+          </>
+        )}
         <button
           type="button"
           className="primary"
@@ -876,6 +893,50 @@ const BY_LENS = '';
 const MIXED = 'mixed';
 
 /** The selected photos' common lens preset choice, else MIXED. */
+/** A ⋯ button with a short menu of actions (Auto's photo view on phones); closes on a choice, outside press or Esc. */
+function MoreMenu({ items, disabled }: { items: { label: string; disabled?: boolean; onClick: () => void }[]; disabled?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: Event) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false);
+    };
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    document.addEventListener('pointerdown', close);
+    window.addEventListener('keydown', esc);
+    return () => {
+      document.removeEventListener('pointerdown', close);
+      window.removeEventListener('keydown', esc);
+    };
+  }, [open]);
+  return (
+    <div className="source-menu" ref={ref}>
+      <button type="button" className="icon more" title="More" aria-label="More actions" aria-haspopup="menu" aria-expanded={open} disabled={disabled} onClick={() => setOpen(!open)}>
+        ⋯
+      </button>
+      {open && (
+        <div className="menu" role="menu">
+          {items.map((it) => (
+            <button
+              key={it.label}
+              type="button"
+              role="menuitem"
+              disabled={it.disabled}
+              onClick={() => {
+                setOpen(false);
+                it.onClick();
+              }}
+            >
+              {it.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function selectionLensChoice(photos: readonly AutoPhoto[], selection: ReadonlySet<string>): string | null {
   const choices = new Set(photos.filter((p) => selection.has(p.id)).map((p) => p.lensChoice));
   return choices.size === 1 ? [...choices][0] : MIXED;
