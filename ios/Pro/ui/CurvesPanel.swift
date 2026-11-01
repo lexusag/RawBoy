@@ -68,7 +68,7 @@ struct CurvesPanel: View {
                     }
                     grid.move(to: CGPoint(x: 0, y: h))
                     grid.addLine(to: CGPoint(x: w, y: 0))
-                    ctx.stroke(grid, with: .color(.secondary.opacity(0.4)), lineWidth: 1)
+                    ctx.stroke(grid, with: .color(Color(.systemGray4)), lineWidth: 1)
                     let color = Self.color(channel)
                     var curve = Path()
                     for (i, v) in ToneCurves.sample(points, count: 129).enumerated() {
@@ -85,6 +85,7 @@ struct CurvesPanel: View {
                     }
                 }
                 .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 4))
+                .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color(.systemGray4), lineWidth: 1))  // web's border
                 .overlay(CurveTouchLayer(points: points, inset: Self.inset, grab: Self.grabRadius, onTouch: { p, began in
                     let w = size.width - 2 * Self.inset
                     let h = size.height - 2 * Self.inset
