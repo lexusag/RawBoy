@@ -59,6 +59,8 @@ export const Looks = {
   VISION3_500T: look('vision500t', 'Yellow Cine 500T', 'Yellow Cine 500T.cube', { grain: 35, bloom: 20 }),
   /** Slide film: vivid colour, deep shadows. */
   VELVIA_50: look('velvia50', 'Green Vivid Slide 50', 'Green Vivid Slide 50.cube', { grain: 8, vignette: -10 }),
+  /** A strong green-teal film grade with lifted blacks, made by the owner in Affinity Photo. */
+  MOVIE_GREEN: look('moviegreen', 'Movie Green', 'Movie Green.cube', { grain: 20, vignette: -10 }),
   REDSCALE: look('redscale', 'Redscale', 'Redscale.png', { contrast: 5, grain: 30, vignette: -15 }),
   /** Monochrome, soft: Tri-X on a soft paper grade, gentle highlights, open shadows. */
   TRIX_SOFT: look('trixsoft', 'Yellow Mono Soft', 'Yellow Mono Soft.cube', { grain: 20, monochrome: true }),
@@ -76,7 +78,7 @@ export const Looks = {
 
 export const ALL_LOOKS: Look[] = [
   Looks.NATURAL, Looks.PORTRA_400, Looks.PORTRA_800, Looks.EKTAR_100, Looks.GOLD_200,
-  Looks.SUPERIA_400, Looks.FUJI_400H, Looks.VISION3_500T, Looks.VELVIA_50, Looks.REDSCALE,
+  Looks.SUPERIA_400, Looks.FUJI_400H, Looks.VISION3_500T, Looks.VELVIA_50, Looks.MOVIE_GREEN, Looks.REDSCALE,
   Looks.TRIX_SOFT, Looks.TRIX_400, Looks.TRIX_PUSH, Looks.TRIX_HARD, Looks.DOUBLE_X, Looks.DOUBLE_X_SOFT,
 ];
 

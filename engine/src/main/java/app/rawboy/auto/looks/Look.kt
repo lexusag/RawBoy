@@ -83,6 +83,11 @@ object Looks {
         "velvia50", "Green Vivid Slide 50", "Green Vivid Slide 50.cube",
         grain = 8f, vignette = -10f,
     )
+    /** A strong green-teal film grade with lifted blacks, made by the owner in Affinity Photo. */
+    val MOVIE_GREEN = Look(
+        "moviegreen", "Movie Green", "Movie Green.cube",
+        grain = 20f, vignette = -10f,
+    )
     val REDSCALE = Look(
         "redscale", "Redscale", "Redscale.png",
         contrast = 5f, grain = 30f, vignette = -15f,
@@ -120,7 +125,7 @@ object Looks {
 
     val ALL = listOf(
         NATURAL, PORTRA_400, PORTRA_800, EKTAR_100, GOLD_200, SUPERIA_400, FUJI_400H,
-        VISION3_500T, VELVIA_50, REDSCALE, TRIX_SOFT, TRIX_400, TRIX_PUSH, TRIX_HARD, DOUBLE_X, DOUBLE_X_SOFT,
+        VISION3_500T, VELVIA_50, MOVIE_GREEN, REDSCALE, TRIX_SOFT, TRIX_400, TRIX_PUSH, TRIX_HARD, DOUBLE_X, DOUBLE_X_SOFT,
     )
 
     fun byId(id: String): Look = RetiredLooks.look(id).let { key -> ALL.firstOrNull { it.id == key } } ?: NATURAL

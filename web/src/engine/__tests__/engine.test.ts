@@ -297,6 +297,7 @@ describe('presets', () => {
     expect(isMonochromeLut(lut)).toBe(true);
     expect(isMonochromeLut('asset:luts/Yellow Mono Soft.cube')).toBe(true);
     expect(isMonochromeLut('asset:luts/Redscale.png')).toBe(false);
+    expect(isMonochromeLut('asset:luts/Movie Green.cube')).toBe(false);
     expect(isMonochromeLut(null)).toBe(false);
   });
 
