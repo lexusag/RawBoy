@@ -7,6 +7,7 @@
 #include "color_math.h"
 
 #include "dng_auto_ptr.h"
+#include "dng_camera_profile.h"
 #include "dng_color_spec.h"
 #include "dng_exceptions.h"
 #include "dng_exif.h"
@@ -137,7 +138,19 @@ bool decodeWithDngSdk(const uint8_t* data, size_t size, DecodedImage& out, std::
                 out.rgb[i * 3] = out.rgb[i * 3 + 1] = out.rgb[i * 3 + 2] = v;
             }
         } else {
-            AutoPtr<dng_color_spec> spec(negative->MakeColorSpec(dng_camera_profile_id()));
+            // The ColorMatrix alone, as the LibRaw path converts. A profile's ForwardMatrix is made together with its
+            // HueSatMap and LookTable, which put back the saturation it leaves out (Adobe Standard's for a Sony A7 III
+            // is about half as saturated as its ColorMatrix); RawBoy applies neither table, so with the ForwardMatrix
+            // a Packer Small raw (JPEG XL, decoded here) came out much paler in Auto than the same photo's lossless
+            // DNG (LibRaw).
+            dng_camera_profile profile;
+            const bool haveProfile = negative->GetProfileByID(dng_camera_profile_id(), profile);
+            if (haveProfile) {
+                profile.SetForwardMatrix1(dng_matrix());
+                profile.SetForwardMatrix2(dng_matrix());
+                profile.SetForwardMatrix3(dng_matrix());
+            }
+            AutoPtr<dng_color_spec> spec(new dng_color_spec(*negative, haveProfile ? &profile : nullptr));
 
             dng_xy_coord white = D65_xy_coord();
             if (negative->HasCameraNeutral()) {

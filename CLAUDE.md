@@ -27,7 +27,9 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
 - `engine/src/main/cpp/` — JNI library `librawboy.so`
   - `decoder_libraw.cpp` — main decoder (LibRaw 0.21.3, fetched by CMake). Outputs camera RGB
     unrotated, applies DNG gain maps per camera channel, converts to Rec.2020, then rotates.
-  - `decoder_dng.cpp` — Adobe DNG SDK fallback (DNG 1.7 / JPEG XL). Only compiled when
+  - `decoder_dng.cpp` — Adobe DNG SDK fallback (DNG 1.7 / JPEG XL). Converts colour with the profile's ColorMatrix,
+    never its ForwardMatrix: Adobe's ForwardMatrix is paired with HueSatMap/LookTable tables we don't apply, and alone
+    it rendered a Sony Small raw at about half LibRaw's saturation. Only compiled when
     `third_party/dng_sdk` exists (see `third_party/README.md`); Android builds, release and debug, fail
     without it (`checkDngSdk`, on `preReleaseBuild`): `-DCMAKE_BUILD_TYPE=Release` makes AGP run the Release
     CMake tasks for debug variants too (`mergeDebugNativeLibs` → `buildCMakeRelease`), which hang off that
