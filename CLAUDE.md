@@ -172,6 +172,10 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   `AutoTone.exposure(captureEv)` meters as if uncompensated, then subtracts it, so the picture equals the old
   develop-only Brightness. The shot carries the bias in force at the shutter (`Still`/`CaptureResult.compensationEv`;
   0 for Android's manual flash stills); a slider drag restarts the preview only when the step changes.
+  Android takes out only the compensation that reached the raw (`CameraController.appliedCompensationEv`,
+  `capture/AppliedCompensation.kt`): in low light the Pixel's AE is at 1/30 s and puts extra compensation into the
+  post-raw boost, so removing all of it undid Brightness (viewfinder brightened, then sank back). Measured as the
+  still's residual digital gain (boost / `stillGain`) against the last zero-compensation preview frame's.
   iOS: the same (`AutoTone.exposure(phoneAe:)`, viewfinder and shots), flash shots included (the iPhone's flash is
   exposed by its own AE, no flash guide). Shutter sound: iOS 18's `isShutterSoundSuppressionEnabled` where
   `isShutterSoundSuppressionSupported` (not in Japan/Korea; before iOS 18 the click always plays).

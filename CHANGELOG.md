@@ -1,5 +1,13 @@
 # Changelog
 
+**Camera: Brightness holds in low light (2026-11-01)**
+
+- Android: in a dim room, raising Brightness lit the viewfinder up and then let it sink back to where it was within a
+  second or two. The phone was already at its longest preview exposure, so the extra exposure compensation only went
+  into the camera's digital gain, which the raw never gets, yet the develop took the whole compensation back out. It
+  now takes out only the part that really reached the raw, so the brightness you set stays, in the viewfinder and in
+  the photo. In good light nothing changes (the compensation still lengthens the exposure for cleaner shadows).
+
 **Web: panning a zoomed photo keeps up on large tablets (2026-11-01)**
 
 - Dragging the photo around at 100% (or any zoom) uses the same live drawing as the sliders: if the GPU can't redraw the
