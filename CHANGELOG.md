@@ -1,5 +1,13 @@
 # Changelog
 
+**RawBoy Packer: phone layout and polish (2026-11-01)**
+
+- On phones and narrow windows the files list and the Pack button now come straight after the settings; the summary
+  moved below them.
+- Choice buttons keep their natural width instead of a wrapped one filling a whole row.
+- Hint text is easier to read (full-strength grey instead of faded), the empty file list lost its inner dashed box,
+  keyboard focus shows an amber ring, and screen readers name each setting's buttons by their row ("Lens corrections").
+
 **RawBoy Packer: Standard and Advanced settings (2026-11-01)**
 
 - The settings open in a plain view with three choices (Smallest files, Maximum compatibility, Tiny copies for sharing);
