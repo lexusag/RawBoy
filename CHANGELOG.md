@@ -1,5 +1,14 @@
 # Changelog
 
+**Experimental: Lagoon, Violet Dust, Unseen (2026-11-01)**
+
+- Three new colour-swap looks in the **Experimental** section, after Redscale: **Lagoon** (skin and warm tones go
+  turquoise, blue sky goes amber, highlights cream), **Violet Dust** (greens go violet, blue sky mint, reds stay) and
+  **Unseen** (false-colour infrared: foliage and yellows go crimson with magenta mids). All three are low-contrast
+  (lifted blacks, soft whites) and deliberately uneven, with grain 20 and vignette -10 on top. In RawBoy Auto's look
+  strip, RawBoy Camera's Look menu (Film off) and RawBoy's LUTs tab, on Android, iPhone and the web. The 33-point
+  LUTs are generated procedurally by `tools/swap_luts/generate.py`.
+
 **Experimental looks (2026-11-01)**
 
 - Looks pickers have a third section, **Experimental**, between Color and Black & white, for unusual colour looks.

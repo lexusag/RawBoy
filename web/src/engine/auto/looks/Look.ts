@@ -25,7 +25,7 @@ export interface Look {
   /** Skin retouch applied when the photo has a face. */
   portraitRetouch: number;
   monochrome: boolean;
-  /** An unusual colour look (Redscale, Movie Green): pickers list these in their own section. */
+  /** An unusual colour look (Redscale, Movie Green, Lagoon…): pickers list these in their own section. */
   experimental: boolean;
   /** Film stock id (film/FilmStocks.ts) rendered as negative + print instead of AgX + LUT, or null. */
   film: string | null;
@@ -64,6 +64,12 @@ export const Looks = {
   /** A strong green-teal film grade with lifted blacks, made by the owner in Affinity Photo. */
   MOVIE_GREEN: look('moviegreen', 'Movie Green', 'Movie Green.cube', { grain: 20, vignette: -10, experimental: true }),
   REDSCALE: look('redscale', 'Redscale', 'Redscale.png', { contrast: 5, grain: 30, vignette: -15, experimental: true }),
+  /** Colour swap: warm tones and skin turn turquoise, blue sky amber, highlights cream (tools/swap_luts). */
+  LAGOON: look('lagoon', 'Lagoon', 'Lagoon.cube', { grain: 20, vignette: -10, experimental: true }),
+  /** Colour swap: greens turn violet, blue sky mint, reds stay (tools/swap_luts). */
+  VIOLET_DUST: look('violetdust', 'Violet Dust', 'Violet Dust.cube', { grain: 20, vignette: -10, experimental: true }),
+  /** False-colour infrared: foliage and yellows turn crimson, magenta mids (tools/swap_luts). */
+  UNSEEN: look('unseen', 'Unseen', 'Unseen.cube', { grain: 20, vignette: -10, experimental: true }),
   /** Monochrome, soft: Tri-X on a soft paper grade, gentle highlights, open shadows. */
   TRIX_SOFT: look('trixsoft', 'Yellow Mono Soft', 'Yellow Mono Soft.cube', { grain: 20, monochrome: true }),
   /** Monochrome, classic: Tri-X on a normal paper grade. */
@@ -81,6 +87,7 @@ export const Looks = {
 export const ALL_LOOKS: Look[] = [
   Looks.NATURAL, Looks.PORTRA_400, Looks.PORTRA_800, Looks.EKTAR_100, Looks.GOLD_200,
   Looks.SUPERIA_400, Looks.FUJI_400H, Looks.VISION3_500T, Looks.VELVIA_50, Looks.MOVIE_GREEN, Looks.REDSCALE,
+  Looks.LAGOON, Looks.VIOLET_DUST, Looks.UNSEEN,
   Looks.TRIX_SOFT, Looks.TRIX_400, Looks.TRIX_PUSH, Looks.TRIX_HARD, Looks.DOUBLE_X, Looks.DOUBLE_X_SOFT,
 ];
 
