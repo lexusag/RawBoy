@@ -16,12 +16,6 @@ The tone mapper row reads AgX, Filmic, Sigmoid, Film: a curve and a whole stock 
 
 ## RawBoy Auto
 
-### A3. One list of adjustments in the photo view (Medium, S) — Android, iOS, web
-Brightness and Warmth appear in both the Look and the Adjust tab; it reads like two settings and costs a tab switch
-for Contrast or Grain.
-**Change:** drop the tabs: Strength, Brightness, Warmth, then a collapsible "More" with Contrast, Saturation, Tint,
-Grain and Denoise.
-
 ### A4. Room for the file name on phones (Medium, S) — web, Android, iOS
 In the photo view the name shrinks to "DSCF000…" behind Apply to all, Edit and Export.
 **Change:** on narrow screens put Apply to all and Edit in RawBoy in a ⋯ menu; keep Export visible.
