@@ -1,5 +1,11 @@
 # Changelog
 
+**RawBoy Camera: B&W filter as a menu (2026-11-01)**
+
+- Upright in B&W mode, Filter is a menu like the Look menu above it ("● Yellow ▾"), in place of a row of chips that
+  ran off the screen's edge on phones. All five filters are one tap away at any width. Sideways, the filter column is
+  unchanged (Android and iPhone).
+
 **RawBoy Camera: neutral greys, filter row hint (2026-11-01)**
 
 - Slider tracks, the selected filter, the look menu and the Settings sheet are neutral grey instead of Material's
