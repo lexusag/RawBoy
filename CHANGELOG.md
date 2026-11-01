@@ -1,5 +1,10 @@
 # Changelog
 
+**RawBoy (web): selected option filled amber (2026-11-01)**
+
+- The chosen tone mapper, crop ratio and curve channel now fill amber, like the options in RawBoy Auto and Packer.
+  They were outlined before, which was easy to miss on a phone.
+
 **RawBoy (web): one-line top bar on phones held sideways (2026-11-01)**
 
 - "Send to Auto" no longer wraps onto two lines next to Export in phone landscape; it shows "To Auto" there, as on

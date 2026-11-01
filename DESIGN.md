@@ -107,7 +107,7 @@ for the import-mode switch. Circles for slider thumbs and handles.
 
 ## Components
 
-- **Segmented control**: the main choice widget; the selected segment fills with amber.
+- **Segmented control** and **chips**: the choice widgets; the selected option fills with amber in both.
 - **Buttons**: graphite with a hairline; the single primary action per area is amber; `.text` buttons are amber text.
 - **Cards** (Packer): graphite surface, hairline, 12px radius, 16px padding. Rows inside are divided by hairlines,
   not nested cards.
