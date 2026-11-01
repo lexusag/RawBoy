@@ -1,10 +1,10 @@
 package app.rawboy.camera
 
+import android.app.ActivityManager
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
-import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -46,6 +46,7 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.flow.updateAndGet
 import kotlinx.coroutines.launch
@@ -96,7 +97,10 @@ internal sealed interface Calibration {
 }
 
 /**
- * Application-scoped queue that develops captured raws into JPEGs one at a time.
+ * Application-scoped queue that develops captured raws into JPEGs, in two overlapping stages: the CPU decode and
+ * analysis of a shot ([prepare], on `RawBoy-decode`) runs while the shot before it is developed on the GPU and
+ * encoded ([finish], on `RawBoy-develop`). At most two shots are open at once; the lossy JPEG XL DNG re-save has a
+ * queue of its own ([compressExecutor]) so it never holds up the next JPEG.
  *
  * Kept outside [CameraViewModel] (with [SaveService] holding the process and CPU awake while [pending] > 0) so locking
  * the phone immediately after shooting — which finishes the lock screen camera and clears its ViewModel — never
@@ -127,8 +131,14 @@ internal object ShotSaver {
      */
     private const val EXTRA_BLACK = 1.46e-3f
 
-    /** Nice value of the develop thread: normal priority so OpenMP / GPU develop keeps the big cores. */
+    /** Nice value of the decode and develop threads: normal priority so OpenMP / GPU develop keeps the big cores. */
     private const val DEVELOP_THREAD_PRIORITY = 0
+
+    /**
+     * The lossy JPEG XL DNG re-save runs in the background (little cores): the JPEGs come first, and the kept DNG is
+     * already complete (uncompressed) until it is replaced.
+     */
+    private const val COMPRESS_THREAD_PRIORITY = Process.THREAD_PRIORITY_BACKGROUND
 
     /** Main-thread scope that outlives individual camera activities, for in-flight captures. */
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
@@ -158,40 +168,113 @@ internal object ShotSaver {
     private val shots = Channel<Pair<Application, Shot>>(Channel.UNLIMITED)
 
     /**
-     * Shots develop on one thread of their own: it keeps the export GL context between shots. (Not
-     * THREAD_PRIORITY_BACKGROUND: that moves a thread to the little cores.) Threads it starts for
-     * decoding (LibRaw's OpenMP, parallel rows) inherit the priority.
+     * Decoded shots handed from [prepare] to [finish]. Rendezvous: a decoded shot waits here (open) until the develop
+     * stage takes it, and the decode stage starts no other shot meanwhile, so at most two shots are open at once.
      */
-    private val developExecutor = Executors.newSingleThreadExecutor { r ->
+    private val prepared = Channel<Prepared>(Channel.RENDEZVOUS)
+
+    /** Shots handed to (or being handed to) the develop stage and not finished yet. */
+    private val inDevelop = MutableStateFlow(0)
+
+    /** Bursts being captured and merged ([beginMerge]): the decode stage doesn't start a second open shot meanwhile. */
+    private val merges = MutableStateFlow(0)
+
+    private fun stageThread(name: String, priority: Int) = Executors.newSingleThreadExecutor { r ->
         Thread({
-            Process.setThreadPriority(DEVELOP_THREAD_PRIORITY)
+            Process.setThreadPriority(priority)
             r.run()
-        }, "RawBoy-develop")
+        }, name)
     }
+
+    /**
+     * Shots decode on one thread and develop on another (it keeps the export GL context between shots). (Not
+     * THREAD_PRIORITY_BACKGROUND: that moves a thread to the little cores.) Threads they start for decoding (LibRaw's
+     * OpenMP, parallel rows) inherit the priority.
+     */
+    private val decodeDispatcher = stageThread("RawBoy-decode", DEVELOP_THREAD_PRIORITY).asCoroutineDispatcher()
+    private val developExecutor = stageThread("RawBoy-develop", DEVELOP_THREAD_PRIORITY)
     private val developDispatcher = developExecutor.asCoroutineDispatcher()
+    private val compressExecutor = stageThread("RawBoy-dng", COMPRESS_THREAD_PRIORITY)
 
     /** Used only on the develop thread; low GPU priority so the viewfinder's frames come first. */
     private val exportGpu = ExportGpu(lowPriority = true)
 
+    /** A shot decoded and analysed by [prepare], ready for [finish]; owns [image] until [finish] closes it. */
+    private class Prepared(
+        val app: Application,
+        val shot: Shot,
+        val image: RawImage,
+        val shader: ShaderParams,
+        val export: ExportSettings,
+        val rawKey: Float,
+        val autoEv: Float,
+        val started: Long,
+    )
+
     init {
-        // One shot at a time: each needs a full-resolution decode.
-        CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
+        val queue = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        // Decode stage: one shot at a time (each needs a full-resolution decode).
+        queue.launch {
             for ((app, shot) in shots) {
-                try {
-                    develop(app, shot)
+                val p = try {
+                    // A second open shot only when there's memory for it: not while a burst merges, nor when the
+                    // system is low on memory. Otherwise wait for the shot in develop, as when shots never overlapped.
+                    if (inDevelop.value > 0) {
+                        if (merges.value > 0) merges.first { it == 0 }
+                        if (lowOnMemory(app)) inDevelop.first { it == 0 }
+                    }
+                    withContext(decodeDispatcher) { prepare(app, shot) }
                 } catch (e: Throwable) {
-                    Log.w(TAG, "develop ${shot.name}", e)
-                    _errors.tryEmit(
-                        "Could not save ${shot.name}: " +
-                            if (e is OutOfMemoryError) "not enough memory" else e.message ?: e.javaClass.simpleName,
-                    )
+                    failed(shot, e)
+                    shotDone(shot)
+                    continue
+                }
+                inDevelop.update { it + 1 }
+                prepared.send(p)
+            }
+        }
+        // Develop stage: GPU develop + JPEG, then the shot's bookkeeping.
+        queue.launch {
+            for (p in prepared) {
+                try {
+                    finish(p)
+                } catch (e: Throwable) {
+                    failed(p.shot, e)
                 } finally {
-                    shot.temporary?.delete()
-                    val left = _pending.updateAndGet { (it - 1).coerceAtLeast(0) }
-                    if (left == 0 && activeViews.get() == 0) releaseGpuIfIdle()
+                    runCatching { p.image.close() }
+                    inDevelop.update { it - 1 }
+                    shotDone(p.shot)
                 }
             }
         }
+    }
+
+    private fun lowOnMemory(app: Context): Boolean = runCatching {
+        ActivityManager.MemoryInfo().also { app.getSystemService(ActivityManager::class.java).getMemoryInfo(it) }.lowMemory
+    }.getOrDefault(false)
+
+    private fun failed(shot: Shot, e: Throwable) {
+        Log.w(TAG, "develop ${shot.name}", e)
+        _errors.tryEmit(
+            "Could not save ${shot.name}: " +
+                if (e is OutOfMemoryError) "not enough memory" else e.message ?: e.javaClass.simpleName,
+        )
+    }
+
+    /** A shot has left the queue (saved or failed): its temporary raw goes, and the GPU is released when all are done. */
+    private fun shotDone(shot: Shot) {
+        shot.temporary?.delete()
+        val left = _pending.updateAndGet { (it - 1).coerceAtLeast(0) }
+        if (left == 0 && activeViews.get() == 0) releaseGpuIfIdle()
+    }
+
+    /** A burst capture started: until [endMerge], a second shot isn't decoded while one develops (memory). */
+    fun beginMerge() {
+        merges.update { it + 1 }
+    }
+
+    fun endMerge() {
+        merges.update { (it - 1).coerceAtLeast(0) }
     }
 
     fun attachView() {
@@ -239,67 +322,93 @@ internal object ShotSaver {
         }
     }
 
-    /** Raw -> auto develop + look -> JPEG (jpegli), as RawBoy Auto develops a photo. */
-    private suspend fun develop(app: Application, shot: Shot) {
+    /**
+     * Decode stage: raw -> auto analysis -> the shot's develop (auto develop + look), as RawBoy Auto develops a photo.
+     * On the decode thread. The returned [Prepared] owns the open image.
+     */
+    private suspend fun prepare(app: Application, shot: Shot): Prepared {
         val s = shot.settings
         val started = System.nanoTime()
-        fun ms(from: Long) = (System.nanoTime() - from) / 1_000_000
-        val (name, rawKey, autoEv) = withContext(developDispatcher) {
-            val decodeStart = System.nanoTime()
-            RawImage.open(app, shot.dng, EXTRA_BLACK).use { img ->
-                val decodeMs = ms(decodeStart)
-                val analysisStart = System.nanoTime()
-                // A merged burst is as clean as one frame at 1/frames the ISO: denoise for that.
-                val noiseScale = (if (s.front) FRONT_NOISE_ISO_SCALE else PHONE_NOISE_ISO_SCALE) / shot.effectiveFrames
-                // The phone's auto exposure already metered the raw (Camera2 AE on the same box, its post-raw boost in
-                // the DNG's BaselineExposure): keep it, but lift it where the AE protected a highlight and took the
-                // scene down (AutoTone.PHONE_KEY). Re-metering it to Auto's camera-raw target pulled ordinary rooms 1-2 EV
-                // darker than the phone's camera. Flash shots are exposed manually (AE off), so they are metered here,
-                // which also calibrates the flash guide.
-                val a = AutoAnalysis.analyze(
-                    app, img, shot.name, noiseScale, shot.iso, detectSkin = shot.mayHaveFace, meter = shot.meter,
-                    phoneAe = shot.flashGuide == null, captureEv = shot.compensationEv,
-                )
-                val analysisMs = ms(analysisStart)
-                val looked = s.develop(a.autoBase, a.stats.hasFace)
-                // High ISO: more denoise than the auto develop's table, up to the coarse stage (denoise > 65).
-                val denoise = maxOf(looked.denoise, highIsoDenoise(a.stats.iso * noiseScale))
-                val params = looked.copy(
-                    denoise = denoise,
-                    colorDenoise = measuredColorDenoise(img, looked.exposure, denoise),
-                    shadows = maxOf(looked.shadows, backlightShadows(a.stats)),
-                )
-                val lut = params.lut?.let { loadLut(app, it) }
-                val film = params.film?.let { loadFilm(app, it) }
-                val shader = ShaderParams.from(
-                    params, a.defaults, lut, LensTransform(img.lens, params), a.base, a.bloom, a.skin,
-                    CameraViewModel.GRAIN_SIZE_SCALE, CameraViewModel.grainStrength(s), film = film,
-                )
-                val export = ExportSettings(
-                    format = ExportFormat.JPEG,
-                    jpegQuality = s.jpegQuality,
-                    jpegEncoder = JpegEncoder.JPEGLI,
-                    maxLongSide = s.maxLongSide,
-                    downscaleSharpen = CameraSettings.SMALL_SHARPEN,
-                )
-                val exportStart = System.nanoTime()
-                val saved = Exporter(app).export(img, shot.dng, shot.name, shader, export, CameraViewModel.JPEG_NAMING, exportGpu) {}
-                Log.d(TAG, "${shot.name}: decode $decodeMs ms, analysis $analysisMs ms, develop + JPEG ${ms(exportStart)} ms")
-                Triple(saved, a.stats.key, a.autoBase.exposure)
-            }
+        val decodeStart = System.nanoTime()
+        val img = RawImage.open(app, shot.dng, EXTRA_BLACK)
+        try {
+            val decodeMs = ms(decodeStart)
+            val analysisStart = System.nanoTime()
+            // A merged burst is as clean as one frame at 1/frames the ISO: denoise for that.
+            val noiseScale = (if (s.front) FRONT_NOISE_ISO_SCALE else PHONE_NOISE_ISO_SCALE) / shot.effectiveFrames
+            // The phone's auto exposure already metered the raw (Camera2 AE on the same box, its post-raw boost in
+            // the DNG's BaselineExposure): keep it, but lift it where the AE protected a highlight and took the
+            // scene down (AutoTone.PHONE_KEY). Re-metering it to Auto's camera-raw target pulled ordinary rooms 1-2 EV
+            // darker than the phone's camera. Flash shots are exposed manually (AE off), so they are metered here,
+            // which also calibrates the flash guide.
+            val a = AutoAnalysis.analyze(
+                app, img, shot.name, noiseScale, shot.iso, detectSkin = shot.mayHaveFace, meter = shot.meter,
+                phoneAe = shot.flashGuide == null, captureEv = shot.compensationEv,
+            )
+            val analysisMs = ms(analysisStart)
+            val looked = s.develop(a.autoBase, a.stats.hasFace)
+            // High ISO: more denoise than the auto develop's table, up to the coarse stage (denoise > 65).
+            val denoise = maxOf(looked.denoise, highIsoDenoise(a.stats.iso * noiseScale))
+            val params = looked.copy(
+                denoise = denoise,
+                colorDenoise = measuredColorDenoise(img, looked.exposure, denoise),
+                shadows = maxOf(looked.shadows, backlightShadows(a.stats)),
+            )
+            val lut = params.lut?.let { loadLut(app, it) }
+            val film = params.film?.let { loadFilm(app, it) }
+            val shader = ShaderParams.from(
+                params, a.defaults, lut, LensTransform(img.lens, params), a.base, a.bloom, a.skin,
+                CameraViewModel.GRAIN_SIZE_SCALE, CameraViewModel.grainStrength(s), film = film,
+            )
+            val export = ExportSettings(
+                format = ExportFormat.JPEG,
+                jpegQuality = s.jpegQuality,
+                jpegEncoder = JpegEncoder.JPEGLI,
+                maxLongSide = s.maxLongSide,
+                downscaleSharpen = CameraSettings.SMALL_SHARPEN,
+            )
+            Log.d(TAG, "${shot.name}: decode $decodeMs ms, analysis $analysisMs ms")
+            return Prepared(app, shot, img, shader, export, a.stats.key, a.autoBase.exposure, started)
+        } catch (t: Throwable) {
+            img.close()
+            throw t
         }
-        Log.d(TAG, "saved $name in ${ms(started)} ms")
-        val key = s.lensKey(shot.hiRes)
-        shot.viewfinderKey?.let { calibrate(app, rawKey, it, key, s.previewScale(shot.hiRes)) }
-        shot.flashGuide?.let { calibrateFlash(app, autoEv, it, CameraSettings.flashGuideKey(key, shot.flashDistanceKnown)) }
-        withContext(Dispatchers.IO) { findJpeg(app, name) }?.let { uri ->
-            withContext(Dispatchers.IO) { thumbnail(app, uri) }?.let { _lastShot.value = SavedShot(shot.id, LastShot(uri, it)) }
-        }
-        // The JPEG came from the uncompressed raw; now the kept DNG shrinks to a lossy JPEG XL one.
-        if (s.keepDng && s.lossyDng && shot.temporary == null) withContext(Dispatchers.IO) { compressDng(app, shot) }
     }
 
-    /** Re-saves the kept DNG as a lossy JPEG XL DNG, in place. Best effort: the uncompressed DNG stays if it fails. IO thread. */
+    /** Develop stage: GPU develop + JPEG of a [prepare]d shot, then calibration, the thumbnail and the DNG re-save. */
+    private suspend fun finish(p: Prepared) {
+        val shot = p.shot
+        val s = shot.settings
+        val app = p.app
+        val waitMs = ms(p.started)
+        val saved = withContext(developDispatcher) {
+            val exportStart = System.nanoTime()
+            Exporter(app).exportFile(p.image, shot.dng, shot.name, p.shader, p.export, CameraViewModel.JPEG_NAMING, exportGpu) {}
+                .also { Log.d(TAG, "${shot.name}: develop + JPEG ${ms(exportStart)} ms") }
+        }
+        Log.d(TAG, "saved ${saved.name} in ${ms(p.started)} ms (develop started after $waitMs ms)")
+        val key = s.lensKey(shot.hiRes)
+        shot.viewfinderKey?.let { calibrate(app, p.rawKey, it, key, s.previewScale(shot.hiRes)) }
+        shot.flashGuide?.let { calibrateFlash(app, p.autoEv, it, CameraSettings.flashGuideKey(key, shot.flashDistanceKnown)) }
+        withContext(Dispatchers.IO) { thumbnail(app, saved.uri) }?.let { _lastShot.value = SavedShot(shot.id, LastShot(saved.uri, it)) }
+        // The JPEG came from the uncompressed raw; now the kept DNG shrinks to a lossy JPEG XL one, on its own queue
+        // so the next shot's JPEG doesn't wait for it. It counts as pending, so SaveService keeps the process up.
+        if (s.keepDng && s.lossyDng && shot.temporary == null) {
+            _pending.update { it + 1 }
+            compressExecutor.execute {
+                try {
+                    compressDng(app, shot)
+                } finally {
+                    val left = _pending.updateAndGet { (it - 1).coerceAtLeast(0) }
+                    if (left == 0 && activeViews.get() == 0) releaseGpuIfIdle()
+                }
+            }
+        }
+    }
+
+    private fun ms(from: Long) = (System.nanoTime() - from) / 1_000_000
+
+    /** Re-saves the kept DNG as a lossy JPEG XL DNG, in place. Best effort: the uncompressed DNG stays if it fails. [compressExecutor]. */
     private fun compressDng(app: Context, shot: Shot) {
         val start = System.nanoTime()
         try {
@@ -338,17 +447,6 @@ internal object ShotSaver {
         val guide = CameraSettingsStore.updateFlashGuide(app, lens, estimate, MIN_FLASH_GUIDE, MAX_FLASH_GUIDE)
         Log.d(TAG, "calibrate flash $lens: auto exposure $autoEv EV at guide $guideUsed -> flash guide $guide")
         _calibrations.tryEmit(Calibration.FlashGuide(lens, guide))
-    }
-
-    private fun findJpeg(app: Context, name: String): Uri? {
-        val collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-        return app.contentResolver.query(
-            collection,
-            arrayOf(MediaStore.MediaColumns._ID),
-            "${MediaStore.MediaColumns.DISPLAY_NAME} = ? AND ${MediaStore.MediaColumns.RELATIVE_PATH} = ?",
-            arrayOf(name, CameraViewModel.JPEG_NAMING.relativePath),
-            null,
-        )?.use { c -> if (c.moveToFirst()) ContentUris.withAppendedId(collection, c.getLong(0)) else null }
     }
 
     private fun thumbnail(app: Context, uri: Uri): Bitmap? = runCatching {

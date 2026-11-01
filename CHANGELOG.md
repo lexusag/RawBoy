@@ -1,5 +1,15 @@
 # Changelog
 
+**RawBoy Camera (Android): photos taken back to back save sooner (2026-11-01)**
+
+- Shots no longer wait in line for the whole save of the one before: the next photo's RAW is decoded and analysed
+  while the previous one is developed and written as JPEG, so a run of shots should drain about a third faster
+  (at most two photos are open at once; not while a burst merges or the phone is low on memory). Each photo looks
+  exactly as before.
+- With Keep raw and Lossy JPEG XL DNG on, the DNG is re-saved in the background and no longer holds up the next JPEG.
+- JPEGs (all apps, jpegli) get their EXIF as they are written instead of a second rewrite of the finished file, and
+  the camera's last-photo thumbnail no longer looks the new JPEG up by name.
+
 **Web: the "?" sheet shows the release version, commit and build time (2026-10-31)**
 
 - The web app always said "Version 0.1.0" (package.json's version, never bumped) in small grey text, so it didn't tell

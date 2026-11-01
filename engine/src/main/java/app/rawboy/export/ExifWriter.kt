@@ -285,4 +285,18 @@ internal object ExifWriter {
             if (gps.isNotEmpty()) writeIfd(b, base, gpsOffset, gps)
         }
     }
+
+    /**
+     * [m] as the payload of a JPEG's APP1 segment: "Exif\u0000\u0000" + the TIFF block (the web's `exifSegment` without
+     * its marker and length, which the encoder writes). For [JpegNative.writeExif].
+     */
+    fun jpegApp1Payload(m: ExifMetadata): ByteArray {
+        val tiff = tiffIfds(m, emptyList())
+        val header = 6 // "Exif\0\0"
+        require(tiff.size + header <= 65533) { "EXIF too large" }
+        val b = ByteBuffer.allocate(header + tiff.size).order(ByteOrder.LITTLE_ENDIAN)
+        b.put(0, 'E'.code.toByte()).put(1, 'x'.code.toByte()).put(2, 'i'.code.toByte()).put(3, 'f'.code.toByte())
+        tiff.write(b, header)
+        return b.array()
+    }
 }
