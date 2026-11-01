@@ -772,7 +772,7 @@ private struct AdjustChip: View {
         .accessibilityLabel(name)
         .accessibilityValue(value)
         .accessibilityAddTraits(selected ? [.isButton, .isSelected] : .isButton)
-        .accessibilityAction(onSelect)
+        .accessibilityAction { onSelect() }
         .accessibilityAction(named: "Reset") {
             onSelect()
             onReset()
