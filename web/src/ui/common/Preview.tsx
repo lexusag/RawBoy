@@ -142,15 +142,17 @@ export function Preview({ session, params, frame, frameGrey, margin = 0, placeho
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.preview, zoomHint]);
+  // Once per zoom-in, not per pan step: the write is synchronous (~0.1 ms a move on a Tab S11 Ultra, every pointer move).
+  const zoomed = session.zoomCenter != null;
   useEffect(() => {
-    if (!session.zoomCenter) return;
+    if (!zoomed) return;
     setHint(false);
     try {
       localStorage.setItem(ZOOM_HINT_KEY, '1');
     } catch {
       // Storage unavailable: the hint just keeps showing on new photos.
     }
-  }, [session.zoomCenter]);
+  }, [zoomed]);
   const touch = typeof matchMedia === 'function' && matchMedia('(hover: none)').matches;
 
   // Pointer gestures: drag pans when zoomed; press and hold compares; double click toggles 100%; the wheel zooms; two

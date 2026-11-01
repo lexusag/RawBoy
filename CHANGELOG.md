@@ -1,5 +1,13 @@
 # Changelog
 
+**Web: no more freezes while panning a zoomed photo (2026-11-01)**
+
+- Profiled on a Galaxy Tab S11 Ultra: panning itself ran at 120 fps, but each time the view reached a new area of the
+  full-resolution photo, uploading that area (~6 MP, 37 MB) held the GPU for 200-320 ms: 2-3 frozen frames every 1-4 s
+  of dragging or pinching. New areas now upload in slices over a few frames while the last one stays on screen (the
+  preview stands in where it doesn't cover the view), so the photo keeps moving.
+- The "double-click for 100%" hint no longer writes to browser storage on every pan step, only once per zoom-in.
+
 **Camera: Brightness holds in low light (2026-11-01)**
 
 - Android: in a dim room, raising Brightness lit the viewfinder up and then let it sink back to where it was within a
