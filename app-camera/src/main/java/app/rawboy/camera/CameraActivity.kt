@@ -310,10 +310,23 @@ class CameraActivity : ComponentActivity() {
     }
 }
 
+// Neutral greys in place of Material's default purple-tinted containers (slider tracks, the selected filter chip, the
+// look menu and the Settings sheet): nothing but the amber accent carries colour next to the viewfinder.
 private val CameraColors = darkColorScheme(
     primary = Color(0xFFFFB74D),
     onPrimary = Color(0xFF2B1700),
     secondary = Color(0xFF80CBC4),
+    secondaryContainer = Color(0xFF3A3A3C),
+    onSecondaryContainer = Color(0xFFECECEC),
     surface = Color(0xFF1B1B1B),
+    surfaceVariant = Color(0xFF3A3A3C),
+    onSurfaceVariant = Color(0xFFB4B4BA),
+    surfaceContainerLowest = Color(0xFF0E0E0F),
+    surfaceContainerLow = Color(0xFF1B1B1C),
+    surfaceContainer = Color(0xFF1F1F21),
+    surfaceContainerHigh = Color(0xFF262628),
+    surfaceContainerHighest = Color(0xFF303032),
+    outline = Color(0xFF8A8A90),
+    outlineVariant = Color(0xFF3A3A3C),
     background = Color(0xFF000000),
 )

@@ -548,6 +548,8 @@ private struct FilmToggle: View {
 private struct FilterRow: View {
     let selected: BwFilter
     let onSelect: (BwFilter) -> Void
+    /** Whether filters lie past the right edge: the edge fades then, so it's clear the row scrolls (port of Android). */
+    @State private var moreRight = false
 
     static func dot(_ f: BwFilter) -> Color? {
         switch f {
@@ -579,10 +581,30 @@ private struct FilterRow: View {
                         .accessibilityAddTraits(on ? .isSelected : [])
                     }
                 }
+                .background(GeometryReader { g in
+                    Color.clear.preference(key: FilterRowEdge.self, value: g.frame(in: .named("filterRow")).maxX)
+                })
             }
+            .coordinateSpace(name: "filterRow")
+            .background(GeometryReader { g in
+                Color.clear.onPreferenceChange(FilterRowEdge.self) { maxX in moreRight = maxX > g.size.width + 1 }
+            })
+            .mask(
+                HStack(spacing: 0) {
+                    Color.black
+                    LinearGradient(colors: [.black, moreRight ? .clear : .black], startPoint: .leading, endPoint: .trailing)
+                        .frame(width: 32)
+                }
+            )
         }
         .frame(height: ValueSlider.rowHeight)
     }
+}
+
+/** The right edge of the filter chips in the row's scroll view, for its fade. */
+private struct FilterRowEdge: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
 }
 
 /** The look, picked from a menu (Pro's stock picker). */
