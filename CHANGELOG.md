@@ -1,5 +1,14 @@
 # Changelog
 
+**Small raw colour fix (2026-11-01)**
+
+- JPEG XL DNGs (RawBoy Packer's Small raw, Adobe's JPEG XL DNGs) no longer open much paler than the same photo as an
+  ordinary raw or lossless DNG. These files are read by the Adobe DNG SDK, which converted colour with the profile's
+  ForwardMatrix; Adobe makes that matrix together with the profile's hue/saturation tables, which RawBoy doesn't apply,
+  so on its own it is about half as saturated (Sony A7 III, Adobe Standard). The SDK path now uses the ColorMatrix,
+  as LibRaw does for every other raw. Phone DNGs (RawBoy Camera's own) are unchanged: their ForwardMatrix is plain.
+  All apps, on Android, iPhone and the web.
+
 **Experimental: Lagoon, Violet Dust, Unseen (2026-11-01)**
 
 - Three new colour-swap looks in the **Experimental** section, after Redscale: **Lagoon** (skin and warm tones go
