@@ -548,8 +548,9 @@ private struct FilmToggle: View {
 private struct FilterRow: View {
     let selected: BwFilter
     let onSelect: (BwFilter) -> Void
-    /** Whether filters lie past the right edge: the edge fades then, so it's clear the row scrolls (port of Android). */
+    /** Whether filters lie past an edge: that edge fades then, so it's clear the row scrolls (port of Android). */
     @State private var moreRight = false
+    @State private var moreLeft = false
 
     static func dot(_ f: BwFilter) -> Color? {
         switch f {
@@ -582,15 +583,20 @@ private struct FilterRow: View {
                     }
                 }
                 .background(GeometryReader { g in
-                    Color.clear.preference(key: FilterRowEdge.self, value: g.frame(in: .named("filterRow")).maxX)
+                    Color.clear.preference(key: FilterRowEdge.self, value: [g.frame(in: .named("filterRow")).minX, g.frame(in: .named("filterRow")).maxX])
                 })
             }
             .coordinateSpace(name: "filterRow")
             .background(GeometryReader { g in
-                Color.clear.onPreferenceChange(FilterRowEdge.self) { maxX in moreRight = maxX > g.size.width + 1 }
+                Color.clear.onPreferenceChange(FilterRowEdge.self) { edges in
+                    moreLeft = (edges.first ?? 0) < -1
+                    moreRight = (edges.last ?? 0) > g.size.width + 1
+                }
             })
             .mask(
                 HStack(spacing: 0) {
+                    LinearGradient(colors: [moreLeft ? .clear : .black, .black], startPoint: .leading, endPoint: .trailing)
+                        .frame(width: 32)
                     Color.black
                     LinearGradient(colors: [.black, moreRight ? .clear : .black], startPoint: .leading, endPoint: .trailing)
                         .frame(width: 32)
@@ -601,10 +607,10 @@ private struct FilterRow: View {
     }
 }
 
-/** The right edge of the filter chips in the row's scroll view, for its fade. */
+/** The left and right edges of the filter chips in the row's scroll view, for its fades. */
 private struct FilterRowEdge: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+    static var defaultValue: [CGFloat] = [0, 0]
+    static func reduce(value: inout [CGFloat], nextValue: () -> [CGFloat]) { value = nextValue() }
 }
 
 /** The look, picked from a menu (Pro's stock picker). */

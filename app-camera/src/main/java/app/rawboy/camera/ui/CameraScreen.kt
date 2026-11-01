@@ -827,11 +827,19 @@ private fun FilterRow(selected: BwFilter, onSelect: (BwFilter) -> Unit) {
         val scroll = rememberScrollState()
         Row(
             Modifier
-                // The right edge fades while more filters lie past it, so it's clear the row scrolls (Red and Green
+                // An edge fades while more filters lie past it, so it's clear the row scrolls (Red and Green
                 // were cut off or hidden on 360-411 dp phones with nothing to say so).
                 .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
                 .drawWithContent {
                     drawContent()
+                    if (scroll.canScrollBackward) {
+                        val fade = FILTER_FADE.toPx()
+                        drawRect(
+                            Brush.horizontalGradient(listOf(Color.Transparent, Color.Black), startX = 0f, endX = fade),
+                            size = Size(fade, size.height),
+                            blendMode = BlendMode.DstIn,
+                        )
+                    }
                     if (scroll.canScrollForward) {
                         val fade = FILTER_FADE.toPx()
                         drawRect(

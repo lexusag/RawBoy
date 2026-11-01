@@ -4,7 +4,7 @@
 
 - Slider tracks, the selected filter, the look menu and the Settings sheet are neutral grey instead of Material's
   faint purple, so only the amber marks a choice next to the viewfinder (Android).
-- Upright in B&W mode, the filter row's right edge fades while more filters lie past it: Red and Green were cut off
+- Upright in B&W mode, the filter row's edges fade while more filters lie past them: Red and Green were cut off
   or out of sight on phones with nothing to say the row scrolls (Android and iPhone).
 
 **RawBoy (web): selected option filled amber (2026-11-01)**
