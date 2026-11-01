@@ -148,7 +148,10 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   RAW = UW/T by 35 mm-equivalent focal; a physical lens is streamed via `OutputConfiguration.setPhysicalCameraId`,
   with per-lens keys (`setPhysicalCameraKey`) and per-lens results/characteristics for DngCreator; fallback: open the
   physical id directly), `CameraViewModel.kt` (live auto develop, capture → DNG), `ShotSaver.kt` (application-scoped
-  one-at-a-time develop → jpegli JPEG, `previewScale` / `flashGuides` calibration, plus `SaveService` `shortService`
+  two-stage queue → jpegli JPEG: `prepare` (decode + analysis, `RawBoy-decode`) overlaps the previous shot's `finish`
+  (GPU develop + JPEG, `RawBoy-develop`), handed over by a rendezvous channel so at most two shots are open; no
+  overlap while a burst merges (`beginMerge`/`endMerge`) or `MemoryInfo.lowMemory`; the lossy JPEG XL DNG re-save on
+  its own background thread (`RawBoy-dng`, counted in `pending`), `previewScale` / `flashGuides` calibration, plus `SaveService` `shortService`
   FGS + partial wake lock so locking immediately after shooting from the lock screen camera never cancels or
   freezes a save; `CameraActivity` waits for `capturing == 0` before `finishAndRemoveTask()` on screen-off; the
   manifest allows show-when-locked, `onLaunch` turns it on only for the secure action and `onStop` off for any other
@@ -803,7 +806,9 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   DNG write 0.35, LibRaw unpack 0.07 + AHD demosaic 0.7–0.9 (OpenMP), convert + orient 0.33 (orientation fused into the
   conversion; ARM64 hardware float→half, bit-identical), small copies 0.2, skin detection 0 when the camera saw no face
   (else ~0.45 warm), GPU develop 0.5 (16-bit readback: the Pixel's preferred RGBA_INTEGER/UNSIGNED_SHORT), native
-  downscale 0.2, jpegli 0.2. Develop thread at normal priority (nice 5 gained nothing for the viewfinder: its GL
+  downscale 0.2, jpegli 0.2. Back-to-back shots overlap (decode of the next during the GPU develop + JPEG, see
+  ShotSaver); jpegli writes the EXIF APP1 itself (`JpegNative.writeExif`, `ExifWriter.jpegApp1Payload`) instead of
+  ExifInterface rewriting the finished JPEG. Develop thread at normal priority (nice 5 gained nothing for the viewfinder: its GL
   thread needs ~1.7 ms/frame).
 - Camera grain: `ShaderParams.from(grainSizeScale = 0.5, grainStrength = …)` (defaults 1 elsewhere). Half-size
   grain is mostly averaged away by the 3000 px area downscale (simulated with the shader's grain: std 0.83 -> 0.62), so

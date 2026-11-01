@@ -7,6 +7,8 @@ internal object JpegNative {
     }
 
     @JvmStatic external fun begin(fd: Int, width: Int, height: Int, quality: Int): Long
+    /** An APP1 segment with [payload] ("Exif\u0000\u0000" + TIFF block); before the first [writeRows]. */
+    @JvmStatic external fun writeExif(handle: Long, payload: ByteArray)
     @JvmStatic external fun writeRows(handle: Long, samples: ShortArray, rows: Int)
     @JvmStatic external fun finish(handle: Long)
     @JvmStatic external fun abort(handle: Long)

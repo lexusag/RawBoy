@@ -78,6 +78,27 @@ JNIEXPORT jlong JNICALL Java_app_rawboy_export_JpegNative_begin(JNIEnv* env, jcl
     }
 }
 
+/**
+ * Writes an APP1 segment holding [payload] ("Exif\0\0" + TIFF block) right after the header jpegli wrote at begin
+ * (SOI, JFIF APP0), so the file needs no EXIF rewrite afterwards. Call before the first writeRows.
+ */
+JNIEXPORT void JNICALL Java_app_rawboy_export_JpegNative_writeExif(JNIEnv* env, jclass, jlong handle,
+                                                                    jbyteArray payload) {
+    Encoder* enc = fromHandle(handle);
+    const jsize length = env->GetArrayLength(payload);
+    if (length <= 0 || length > 65533) {
+        throwJava(env, "JPEG encoder: EXIF too large");
+        return;
+    }
+    std::vector<JOCTET> bytes(static_cast<size_t>(length));
+    env->GetByteArrayRegion(payload, 0, length, reinterpret_cast<jbyte*>(bytes.data()));
+    try {
+        jpegli_write_marker(&enc->cinfo, JPEG_APP0 + 1, bytes.data(), static_cast<unsigned int>(length));
+    } catch (const std::exception& e) {
+        throwJava(env, std::string("JPEG encoder: ") + e.what());
+    }
+}
+
 /** Appends [rows] rows of interleaved RGB, unsigned 16-bit (0..65535, display-encoded) samples. */
 JNIEXPORT void JNICALL Java_app_rawboy_export_JpegNative_writeRows(JNIEnv* env, jclass, jlong handle,
                                                                     jshortArray samples, jint rows) {

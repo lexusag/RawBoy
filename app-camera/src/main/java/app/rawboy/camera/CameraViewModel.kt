@@ -756,7 +756,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val shotId = ShotSaver.beginCapture(app)
         activeCaptures++
         _capturing.value = activeCaptures
-        if (burst) _merging.value = true
+        if (burst) {
+            _merging.value = true
+            ShotSaver.beginMerge()
+        }
         // Runs in ShotSaver.scope so finishing the lock screen camera never cancels an in-flight capture.
         ShotSaver.scope.launch {
             try {
@@ -769,7 +772,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 ShotSaver.cancelCapture()
             } finally {
-                if (burst) _merging.value = false
+                if (burst) {
+                    _merging.value = false
+                    ShotSaver.endMerge()
+                }
                 activeCaptures--
                 if (activeCaptures == 0) {
                     if (!resumed) stopCamera() else if (restartAfterCapture) restartCamera()

@@ -55,7 +55,22 @@ class Exporter(private val context: Context) {
         naming: OutputNaming = OutputNaming(),
         gpu: ExportGpu? = null,
         onProgress: (Float) -> Unit,
-    ): String {
+    ): String = exportFile(image, source, sourceName, params, settings, naming, gpu, onProgress).name
+
+    /** The written file's display name and MediaStore item. */
+    class Exported(val name: String, val uri: Uri)
+
+    /** As [export], also returning the file's MediaStore item (saves the caller a query by name). */
+    fun exportFile(
+        image: RawImage,
+        source: Uri?,
+        sourceName: String,
+        params: ShaderParams,
+        settings: ExportSettings,
+        naming: OutputNaming = OutputNaming(),
+        gpu: ExportGpu? = null,
+        onProgress: (Float) -> Unit,
+    ): Exported {
         this.gpu = gpu
         val resolver = context.contentResolver
         val (uri, name) = MediaStoreOutput.create(resolver, MediaStoreOutput.baseNameOf(sourceName), settings.format, naming)
@@ -63,17 +78,19 @@ class Exporter(private val context: Context) {
         try {
             when (settings.format) {
                 ExportFormat.JPEG -> if (settings.jpegEncoder == JpegEncoder.JPEGLI) {
-                    writeJpegli(image, uri, params, size, settings.jpegQuality, settings.downscaleSharpen, onProgress)
+                    // jpegli writes the EXIF as it starts the file: no rewrite of the finished JPEG.
+                    val exif = source?.let { readExif(it) ?: ExifMetadata() }
+                    writeJpegli(image, uri, params, size, settings.jpegQuality, settings.downscaleSharpen, exif, onProgress)
                 } else {
                     writeJpeg(image, uri, params, size, settings.jpegQuality, settings.downscaleSharpen, onProgress)
                 }
                 ExportFormat.TIFF -> writeTiff(image, uri, params, size, settings.tiffBits, source?.let(::readExif), settings.downscaleSharpen, onProgress)
             }
             val t = System.nanoTime()
-            if (settings.format == ExportFormat.JPEG && source != null) copyExif(source, uri)
+            if (settings.format == ExportFormat.JPEG && settings.jpegEncoder != JpegEncoder.JPEGLI && source != null) copyExif(source, uri)
             MediaStoreOutput.publish(resolver, uri)
             Log.d(TAG, "EXIF + publish ${(System.nanoTime() - t) / 1_000_000} ms")
-            return name
+            return Exported(name, uri)
         } catch (t: Throwable) {
             resolver.delete(uri, null, null)
             throw t
@@ -103,11 +120,23 @@ class Exporter(private val context: Context) {
     }
 
     /** jpegli streams each band as it is developed, at full 16-bit precision, so no full-size bitmap is held. */
-    private fun writeJpegli(image: RawImage, uri: Uri, params: ShaderParams, size: Pair<Int, Int>, quality: Int, sharpen: Float, onProgress: (Float) -> Unit) {
+    private fun writeJpegli(
+        image: RawImage,
+        uri: Uri,
+        params: ShaderParams,
+        size: Pair<Int, Int>,
+        quality: Int,
+        sharpen: Float,
+        exif: ExifMetadata?,
+        onProgress: (Float) -> Unit,
+    ) {
+        // Laid out before the encoder starts; metadata is best effort, as copyExif's was.
+        val app1 = exif?.let { runCatching { ExifWriter.jpegApp1Payload(it) }.getOrNull() }
         val pfd = context.contentResolver.openFileDescriptor(uri, "w") ?: throw IOException("Cannot write $uri")
         pfd.use {
             val handle = JpegNative.begin(it.fd, size.first, size.second, quality)
             try {
+                app1?.let { bytes -> JpegNative.writeExif(handle, bytes) }
                 renderOutput(image, params, size, sharpen, onProgress) { _, rows, band -> JpegNative.writeRows(handle, band, rows) }
             } catch (t: Throwable) {
                 JpegNative.abort(handle)
