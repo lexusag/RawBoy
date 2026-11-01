@@ -145,8 +145,11 @@ data class CameraSettings(
         /** Film + B&W: added to the Contrast slider's value (owner's choice, 2026-10-31: punchier than plain B&W). */
         const val FILM_MONO_CONTRAST = 20f
 
-        /** Range of the preview calibration; the Pixel's lenses need 0.5 (selfie) to ~9 (T3). */
-        const val MIN_SCALE = 1f / 32
+        /**
+         * Range of the preview calibration; the Pixel's lenses need 0.5 (selfie) to ~9 (T3), the Galaxy Tab S11 Ultra's
+         * back camera ~0.045 (its ISP adds a gain the raw never gets).
+         */
+        const val MIN_SCALE = 1f / 64
         const val MAX_SCALE = 32f
 
         fun lensKey(front: Boolean, lens: String, hiRes: Boolean = false) =

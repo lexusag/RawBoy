@@ -547,6 +547,49 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             val eased = if (last == null) auto else auto.copy(exposure = last + (auto.exposure - last).coerceIn(-MAX_EV_STEP, MAX_EV_STEP))
             live = Live(base, stats, defaults, eased)
             publish()
+            withContext(Dispatchers.Main) { meterRawIfUncalibrated() }
+        }
+    }
+
+    /** Lens keys whose raw metering ran this session ([meterRawIfUncalibrated]), so a lens is metered once at most. */
+    private val rawMetered = mutableSetOf<String>()
+    private var meterJob: Job? = null
+
+    /**
+     * A lens with no preview calibration yet: meter one raw frame of the still request and calibrate the viewfinder
+     * from it, as a photo would ([ShotSaver]'s calibrate). Without it the viewfinder stayed at gain 1 until the first
+     * shot, which suits the Pixel (0.5-0.8) but on a Galaxy Tab S11 Ultra, whose ISP adds ~4.4 stops the raw never
+     * gets, showed a blown-out picture. Waits [RAW_METER_DELAY_MS] after the lens's first analysed frame for AE to
+     * settle; skipped while a shot runs, focus is locked (spot metering) or for maximum-resolution lenses. Main thread.
+     */
+    private fun meterRawIfUncalibrated() {
+        val lens = info ?: return
+        val settings = _settings.value
+        val key = settings.lensKey(lens.hiRes)
+        if (lens.hiRes || key in settings.previewScales || key in rawMetered || meterJob?.isActive == true) return
+        rawMetered += key
+        meterJob = viewModelScope.launch {
+            delay(RAW_METER_DELAY_MS)
+            if (info !== lens || activeCaptures > 0 || meterArea() != METER_CENTRE) {
+                rawMetered -= key
+                return@launch
+            }
+            val scale = _settings.value.previewScale(false)
+            val before = live?.stats?.key
+            val rawKey = controller.meterRaw(METER_CENTRE)
+            val after = live?.stats?.key
+            // The viewfinder's key around the metered frame (analysed every ~300 ms).
+            val viewfinderKey = if (before != null && after != null) kotlin.math.sqrt(before * after) else before ?: after
+            if (info !== lens || rawKey == null || viewfinderKey == null || !(rawKey > 0f) || !(viewfinderKey > 0f)) {
+                Log.d(TAG, "raw meter $key: no calibration (raw key $rawKey, viewfinder key $viewfinderKey)")
+                return@launch
+            }
+            if (key in _settings.value.previewScales) return@launch // a shot calibrated it meanwhile
+            val estimate = scale * (rawKey / viewfinderKey).coerceIn(1f / 64, 64f)
+            val calibrated = withContext(Dispatchers.IO) { CameraSettingsStore.updatePreviewScale(app, key, estimate) }
+            Log.d(TAG, "raw meter $key: raw key $rawKey, viewfinder key $viewfinderKey (raw/viewfinder ${rawKey / viewfinderKey}) -> preview scale $calibrated")
+            _settings.value = _settings.value.let { it.copy(previewScales = it.previewScales + (key to calibrated)) }
+            republish()
         }
     }
 
@@ -900,6 +943,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         private const val TAG = "RawBoyCamera"
         private const val DNG_MIME = "image/x-adobe-dng"
         private const val SAVE_DELAY_MS = 500L
+        /** After a lens's first analysed viewfinder frame, how long AE gets to settle before its raw is metered. */
+        private const val RAW_METER_DELAY_MS = 1_000L
         /** Smallest move of a tracked subject (share of the frame) that moves the focus point. */
         private const val MIN_FOCUS_MOVE = 0.004f
         /** At most this often a tracked subject's move goes to the camera as a new AF region. */

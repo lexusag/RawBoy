@@ -129,7 +129,7 @@ internal object ShotSaver {
      * against the viewfinder at ISO 170-250. Without it the photo's deepest shadows were lifted, and bluish
      * after the white balance's blue gain, compared with the viewfinder.
      */
-    private const val EXTRA_BLACK = 1.46e-3f
+    const val EXTRA_BLACK = 1.46e-3f
 
     /** Nice value of the decode and develop threads: normal priority so OpenMP / GPU develop keeps the big cores. */
     private const val DEVELOP_THREAD_PRIORITY = 0
@@ -430,7 +430,7 @@ internal object ShotSaver {
         if (!(rawKey > 0f) || !(viewfinderKey > 0f)) return
         // The gain that would have matched this shot. Judged against the gain in use at its shutter: shots taken
         // back to back are calibrated after both were captured.
-        val estimate = scaleAtShutter * (rawKey / viewfinderKey).coerceIn(1f / 16, 16f)
+        val estimate = scaleAtShutter * (rawKey / viewfinderKey).coerceIn(1f / 64, 64f)
         val clamped = CameraSettingsStore.updatePreviewScale(app, lens, estimate)
         Log.d(TAG, "calibrate $lens: raw key $rawKey, viewfinder key $viewfinderKey (raw/viewfinder ${rawKey / viewfinderKey}) -> preview scale $clamped")
         _calibrations.tryEmit(Calibration.PreviewScale(lens, clamped))
