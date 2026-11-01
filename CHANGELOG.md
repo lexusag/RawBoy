@@ -7,7 +7,8 @@
   ForwardMatrix; Adobe makes that matrix together with the profile's hue/saturation tables, which RawBoy doesn't apply,
   so on its own it is about half as saturated (Sony A7 III, Adobe Standard). The SDK path now uses the ColorMatrix,
   as LibRaw does for every other raw. Phone DNGs (RawBoy Camera's own) are unchanged: their ForwardMatrix is plain.
-  All apps, on Android, iPhone and the web.
+  All apps, on Android, iPhone and the web. RawBoy Web's Auto analyses such photos again instead of showing the
+  pale previews it had saved before the fix.
 
 **Experimental: Lagoon, Violet Dust, Unseen (2026-11-01)**
 

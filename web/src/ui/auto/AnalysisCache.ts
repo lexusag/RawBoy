@@ -7,7 +7,8 @@ import type { SkinMask } from '../../engine/retouch/SkinMask';
  * measurement, skin segmentation, or the stored fields. Entries of other versions are ignored and replaced. The auto
  * develop itself is worked out again from them on every load, so AutoTone changes need no bump.
  */
-const VERSION = 1;
+// 2: JPEG XL DNGs decode with the ColorMatrix (decoder_dng.cpp); version 1 kept their pale ForwardMatrix copies.
+const VERSION = 2;
 /** About 300 photos (3 MB each: 512 px base and halo, skin mask); the least recently used go first. */
 const MAX_BYTES = 1_000_000_000;
 const DB = 'rawboy-auto-analysis';
