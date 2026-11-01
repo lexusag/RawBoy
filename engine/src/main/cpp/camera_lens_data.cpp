@@ -116,8 +116,38 @@ bool readSony(const Tiff& t, CameraLensData& out) {
 }
 
 // Fujifilm: the RAF's raw section starts with a little TIFF whose only tag, 0xF000, points to the FujiIFD:
-// GeometricDistortionParams 0xF00B (17 SRATIONAL: 645, 8 radii, 8 percentages), ChromaticAberrationParams 0xF00F
-// (25: 645, 8 radii, 8 red, 8 blue), VignettingParams 0xF010 (17: 645, 8 radii, 8 brightness percentages).
+// GeometricDistortionParams 0xF00B, ChromaticAberrationParams 0xF00F, VignettingParams 0xF010 (SRATIONALs). Each is a
+// header (a lens constant), n knot radii, then the values: n percentages (distortion, vignetting brightness) or
+// n red and n blue ratios offsets (CA). The GFX stores 8 knots from 0.35, shared by the three; the X-T1 11 (distortion,
+// vignetting) or 10 (CA) knots from 0 / 0.1; the X-E5 9 knots and zeros (no data).
+struct FujiCurve {
+    std::vector<double> knots;
+    std::vector<std::vector<double>> values;
+};
+
+FujiCurve fujiCurve(const std::vector<double>& v, int channels) {
+    FujiCurve c;
+    const int n = static_cast<int>(v.size() - 1) / (1 + channels);
+    if (v.size() < 3 || n < 2) return c;
+    for (int i = 0; i < n; ++i) c.knots.push_back(v[1 + i]);
+    for (int k = 0; k < channels; ++k) c.values.emplace_back(v.begin() + 1 + n * (1 + k), v.begin() + 1 + n * (2 + k));
+    // Knots must rise, from a radius under 1.2 (an X-E5 tail holds a stray header repeat).
+    for (int i = 0; i < n; ++i)
+        if (!(c.knots[i] >= 0 && c.knots[i] < 1.5) || (i && c.knots[i] <= c.knots[i - 1])) return {};
+    return c;
+}
+
+// Linear interpolation of a curve at r; before the first knot it ramps from `atZero`, past the last it holds.
+double fujiAt(const FujiCurve& c, int ch, double r, double atZero) {
+    const auto& k = c.knots;
+    const auto& v = c.values[ch];
+    if (r <= 0) return atZero;
+    if (r <= k.front()) return atZero + (v.front() - atZero) * r / k.front();
+    for (size_t i = 1; i < k.size(); ++i)
+        if (r <= k[i]) return v[i - 1] + (v[i] - v[i - 1]) * (r - k[i - 1]) / (k[i] - k[i - 1]);
+    return v.back();
+}
+
 bool readFuji(const uint8_t* data, size_t size, CameraLensData& out) {
     if (size < 108) return false;
     auto be32 = [&](size_t at) {
@@ -137,21 +167,28 @@ bool readFuji(const uint8_t* data, size_t size, CameraLensData& out) {
             else if (f.tag == 0xF010) vig = t.numbers(f);
         }
     }
-    if (dist.size() < 17) return false;
+    const FujiCurve d = fujiCurve(dist, 1), c = fujiCurve(ca, 2), g = fujiCurve(vig, 1);
+    if (d.knots.empty()) return false;
     out.maker = "Fujifilm";
-    // The centre isn't stored: extrapolate the first two radii in r^2 (the curves are even and smooth); the
-    // brightness is 1 there by definition.
-    out.knots.push_back(0);
-    for (int i = 0; i < 8; ++i) out.knots.push_back(dist[1 + i]);
-    for (int i = 0; i < 8; ++i) {
-        out.dist.push_back(dist[9 + i] / 100 + 1);
-        out.vig.push_back(vig.size() >= 17 ? vig[9 + i] / 100 : 1.0);
-        out.caR.push_back(ca.size() >= 25 ? ca[9 + i] + 1 : 1.0);
-        out.caB.push_back(ca.size() >= 25 ? ca[17 + i] + 1 : 1.0);
+    // The shared knots are the distortion's. The centre may not be stored (GFX): extrapolate the first two radii in
+    // r^2 (the curves are even and smooth); the brightness is 1 there by definition.
+    std::vector<double> knots = d.knots;
+    const bool hasZero = knots.front() <= 0;
+    for (double r : knots) {
+        out.knots.push_back(r);
+        out.dist.push_back(d.values[0][out.knots.size() - 1] / 100 + 1);
     }
-    const double k1 = out.knots[1] * out.knots[1], k2 = out.knots[2] * out.knots[2];
-    for (auto* v : {&out.dist, &out.caR, &out.caB}) v->insert(v->begin(), (*v)[0] - ((*v)[1] - (*v)[0]) * k1 / (k2 - k1));
-    out.vig.insert(out.vig.begin(), 1.0);
+    for (double r : out.knots) {
+        out.vig.push_back(g.knots.empty() ? 1.0 : fujiAt(g, 0, r, 100.0) / 100);
+        out.caR.push_back(c.knots.empty() ? 1.0 : fujiAt(c, 0, r, 0.0) + 1);
+        out.caB.push_back(c.knots.empty() ? 1.0 : fujiAt(c, 1, r, 0.0) + 1);
+    }
+    if (!hasZero && out.knots.size() >= 2) {
+        const double k1 = out.knots[0] * out.knots[0], k2 = out.knots[1] * out.knots[1];
+        for (auto* v : {&out.dist, &out.caR, &out.caB}) v->insert(v->begin(), (*v)[0] - ((*v)[1] - (*v)[0]) * k1 / (k2 - k1));
+        out.vig.insert(out.vig.begin(), 1.0);
+        out.knots.insert(out.knots.begin(), 0.0);
+    }
     return true;
 }
 

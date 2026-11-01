@@ -9,6 +9,8 @@
 #include "libraw_parallel.h"
 #include "rawboy.h"
 
+#include <stdexcept>
+
 #include "dng_area_task.h"
 #include "dng_auto_ptr.h"
 #include "dng_camera_profile.h"
@@ -60,6 +62,11 @@ constexpr AdobeHints kAdobeHints[] = {
     {"Sony ILCE-7M3", 1.33, 0.35},
     {"Sony NEX-3", 1.2, 0.35},
     {"Olympus E-PL9", 1.5, 0.5},
+    {"Sony ILCE-7CM2", 1.33, 0.35},
+    {"Canon EOS RP", 1.25, -0.17},
+    {"Canon EOS 6D", 1.25, 0.25},
+    {"Fujifilm X-T1", 1.33, 0.15},
+    {"Fujifilm X-E5", 1.1, 2.02},
 };
 
 const AdobeHints* adobeHintsFor(const std::string& camera) {
@@ -79,7 +86,9 @@ public:
     dng_jxl_encode_settings* MakeJXLEncodeSettings(use_case_enum useCase, const dng_image& image,
                                                    const dng_negative* negative) const override {
         dng_jxl_encode_settings* s = dng_host::MakeJXLEncodeSettings(useCase, image, negative);
-        if (useCase == use_case_LossyMosaic || useCase == use_case_ProxyImage || useCase == use_case_MainImage) {
+        if (useCase == use_case_LossyMosaic || useCase == use_case_ProxyImage || useCase == use_case_MainImage ||
+            // A full-size linear DNG (X-Trans Small raw) is encoded as the main image, never lossless there.
+            (useCase == use_case_EncodedMainImage && options_.mode != PackMode::LosslessJxl)) {
             s->SetDistance(options_.distance);
         }
         s->SetEffort(static_cast<uint32>(std::clamp(options_.effort, 1, 9)));
@@ -413,11 +422,21 @@ dng_negative* negativeFromLibRaw(dng_host& host, RawBoyLibRaw& raw, const uint8_
     };
     if (d.idata.filters == 9) {
         // X-Trans: 6x6, as LibRaw's xtrans table (visible-area coordinates).
-        neg->SetFujiMosaic6x6(0);
-        dng_mosaic_info* mi = const_cast<dng_mosaic_info*>(neg->GetMosaicInfo());
-        mi->fCFAPatternSize = dng_point(6, 6);
-        for (int r = 0; r < 6; ++r)
-            for (int c = 0; c < 6; ++c) mi->fCFAPattern[r][c] = static_cast<uint8>(d.idata.xtrans[(r + 6) % 6][(c + 6) % 6]);
+        // The SDK knows the layout as one fixed pattern shifted by a phase: find the phase equal to LibRaw's table.
+        // Overriding the pattern instead left the SDK's demosaic (Small raw / Micro on X-Trans) out of memory.
+        bool found = false;
+        for (uint32 phase = 0; phase < 36 && !found; ++phase) {
+            neg->SetFujiMosaic6x6(phase);
+            const dng_mosaic_info* mi = neg->GetMosaicInfo();
+            found = true;
+            for (int r = 0; r < 6 && found; ++r)
+                for (int c = 0; c < 6; ++c)
+                    if (mi->fCFAPattern[r][c] != static_cast<uint8>(d.idata.xtrans[r][c])) {
+                        found = false;
+                        break;
+                    }
+        }
+        if (!found) throw std::runtime_error("unsupported X-Trans layout");
     } else {
         const int c00 = colorAt(0, 0), c01 = colorAt(0, 1);
         const uint32 phase = c00 == 1 ? (c01 == 0 ? 0 : 3) : (c00 == 0 ? 1 : 2);  // GRBG, GBRG, RGGB, BGGR
@@ -462,7 +481,18 @@ dng_negative* negativeFromLibRaw(dng_host& host, RawBoyLibRaw& raw, const uint8_
     // UniqueCameraModel), as-shot white balance.
     const float(*xyz)[3] = d.color.cam_xyz;
     dng_matrix_3by3 m(xyz[0][0], xyz[0][1], xyz[0][2], xyz[1][0], xyz[1][1], xyz[1][2], xyz[2][0], xyz[2][1], xyz[2][2]);
-    if (m.MaxEntry() == 0) ThrowProgramError("no colour matrix for this camera in LibRaw");
+    if (m.MaxEntry() == 0) {
+        // Cameras newer than LibRaw's table: Adobe's D65 matrices, read from its own DNGs.
+        static const struct { const char* model; double v[9]; } kMatrices[] = {
+            {"X-E5", {1.1809, -0.5358, -0.1141, -0.4248, 1.2164, 0.2343, -0.0514, 0.1097, 0.5848}},
+        };
+        for (const auto& k : kMatrices)
+            if (std::string(d.idata.normalized_model) == k.model || std::string(d.idata.model) == k.model)
+                m = dng_matrix_3by3(k.v[0], k.v[1], k.v[2], k.v[3], k.v[4], k.v[5], k.v[6], k.v[7], k.v[8]);
+        if (m.MaxEntry() == 0)
+            throw std::runtime_error(std::string("this camera (") + d.idata.make + " " + d.idata.model +
+                                     ") is newer than the raw library's colour table");
+    }
     AutoPtr<dng_camera_profile> profile(new dng_camera_profile);
     profile->SetName("RawBoy Packer");
     profile->SetColorMatrix1(m);
@@ -621,7 +651,6 @@ bool packDng(const uint8_t* data, size_t size, const PackOptions& options, const
         const bool renderPreview = options.previewSize > 0 && previews.Count() == 0 && encodePreview;
         const bool linearOut = mode == PackMode::Micro || (mode == PackMode::SmallRaw && !negative->NeedLossyCompressMosaicJXL(host));
         if (renderPreview || linearOut) negative->BuildStage3Image(host);
-
         if (renderPreview && appendRenderedPreview(host, *negative, options.previewSize, encodePreview, previews)) {
             info.preview = "rendered";
         }
