@@ -85,13 +85,18 @@ export function Preview({ session, params, frame, frameGrey, margin = 0, placeho
     };
   }, []);
 
-  // The last params and preview drawn: a change of params alone is an edit (a slider step), which may draw live.
-  const shown = useRef<{ params: ShaderParams | null; preview: unknown }>({ params: null, preview: null });
+  // What the last frame showed: a change of params alone (a slider step), or of the zoomed view alone (a pan or a
+  // pinch), is an edit, which may draw live (DevelopRenderer.edited).
+  const shown = useRef<{ params: ShaderParams | null; preview: unknown; center: [number, number] | null; scale: number }>({
+    params: null, preview: null, center: null, scale: 1,
+  });
   useEffect(() => {
     const r = rendererRef.current!;
     const last = shown.current;
-    if (params && last.params && params !== last.params && session.preview === last.preview) r.edited();
-    shown.current = { params, preview: session.preview };
+    const center = session.zoomCenter;
+    const viewMoved = center != null && last.center != null && (center !== last.center || session.zoomScale !== last.scale);
+    if (params && last.params && session.preview === last.preview && (params !== last.params || viewMoved)) r.edited();
+    shown.current = { params, preview: session.preview, center, scale: session.zoomScale };
     r.params = params;
     r.frameWidth = Math.round(frame * (window.devicePixelRatio || 1));
     r.frameGrey = frameGrey;

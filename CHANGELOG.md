@@ -1,5 +1,11 @@
 # Changelog
 
+**Web: panning a zoomed photo keeps up on large tablets (2026-11-01)**
+
+- Dragging the photo around at 100% (or any zoom) uses the same live drawing as the sliders: if the GPU can't redraw the
+  whole screen at full resolution every frame, the view is drawn lighter while it moves and sharp again as soon as it
+  stops. Pinch zoom too. GPUs that keep up draw exactly as before.
+
 **Web: sliders keep up on large tablets (2026-11-01)**
 
 - On a big high-resolution screen (reported on a Galaxy Tab S11 Ultra) every slider step re-developed the whole photo
