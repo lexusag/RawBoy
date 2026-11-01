@@ -1,5 +1,12 @@
 # Changelog
 
+**RawBoy Camera: neutral greys, filter row hint (2026-11-01)**
+
+- Slider tracks, the selected filter, the look menu and the Settings sheet are neutral grey instead of Material's
+  faint purple, so only the amber marks a choice next to the viewfinder (Android).
+- Upright in B&W mode, the filter row's edges fade while more filters lie past them: Red and Green were cut off
+  or out of sight on phones with nothing to say the row scrolls (Android and iPhone).
+
 **RawBoy Camera: TalkBack and VoiceOver in the controls (2026-11-01)**
 
 - Android: the shutter, the sideways S, B and W (F) buttons and the tall slider now work with TalkBack. They read

@@ -52,6 +52,10 @@ import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -826,8 +830,33 @@ private fun FilmToggle(on: Boolean, onChange: (Boolean) -> Unit, modifier: Modif
 private fun FilterRow(selected: BwFilter, onSelect: (BwFilter) -> Unit) {
     Row(Modifier.height(36.dp), verticalAlignment = Alignment.CenterVertically) {
         Text("Filter", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(88.dp))
+        val scroll = rememberScrollState()
         Row(
-            Modifier.horizontalScroll(rememberScrollState()),
+            Modifier
+                // An edge fades while more filters lie past it, so it's clear the row scrolls (Red and Green
+                // were cut off or hidden on 360-411 dp phones with nothing to say so).
+                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                .drawWithContent {
+                    drawContent()
+                    if (scroll.canScrollBackward) {
+                        val fade = FILTER_FADE.toPx()
+                        drawRect(
+                            Brush.horizontalGradient(listOf(Color.Transparent, Color.Black), startX = 0f, endX = fade),
+                            size = Size(fade, size.height),
+                            blendMode = BlendMode.DstIn,
+                        )
+                    }
+                    if (scroll.canScrollForward) {
+                        val fade = FILTER_FADE.toPx()
+                        drawRect(
+                            Brush.horizontalGradient(listOf(Color.Black, Color.Transparent), startX = size.width - fade, endX = size.width),
+                            topLeft = Offset(size.width - fade, 0f),
+                            size = Size(fade, size.height),
+                            blendMode = BlendMode.DstIn,
+                        )
+                    }
+                }
+                .horizontalScroll(scroll),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -846,6 +875,8 @@ private fun FilterRow(selected: BwFilter, onSelect: (BwFilter) -> Unit) {
         }
     }
 }
+
+private val FILTER_FADE = 32.dp
 
 private val FILTER_COLORS = mapOf(
     BwFilter.YELLOW to Color(0xFFE8C400),
