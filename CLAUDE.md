@@ -64,6 +64,11 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   - `gl/ShaderParams.kt` — slider values → uniforms; WB and RGB-primaries matrices are combined here.
   - `gl/GlCommon.kt` — program/uniform binding, texture slots (units 0–6, see below), `SampleGeometry`.
   - `gl/DevelopRenderer.kt` (preview, fit + 100% view, exposure frame), `gl/OffscreenDeveloper.kt` (export tiles).
+    Web's `DevelopRenderer.ts` adds live drawing (`LiveRender`): a fence per frame, and the next frame waits (≤ 250 ms)
+    until the GPU finished the last, else Chrome queued many frames and the photo trailed a slider by seconds on a
+    Tab S11 Ultra; while edits stream (`edited()`, from `Preview` when only the params change) a GPU that falls behind
+    draws into a smaller FBO blitted onto the canvas (budget learnt per session, ≥ 0.8 MP), full size once they rest.
+    Scissor boxes go through `scissor()` and passes that bind other framebuffers must be followed by `bindTarget()`.
   - `lens/LensTransform.kt` — output→source geometry: user crop → rotation/straighten → flips (a mirror in `outToImage`, so masks, which sit on the
     image, follow with no shader change) → auto-scale → manual
     distortion → DNG warp. **Mirrors the shader math**; Kotlin uses it for tile bounds and auto crop.

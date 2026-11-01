@@ -1,5 +1,14 @@
 # Changelog
 
+**Web: sliders keep up on large tablets (2026-11-01)**
+
+- On a big high-resolution screen (reported on a Galaxy Tab S11 Ultra) every slider step re-developed the whole photo
+  at full screen resolution, several times a phone's pixels, and the frames queued up behind the GPU, so the photo
+  trailed the finger further and further. The preview now waits for the GPU to finish a frame before starting the next
+  (it always draws the newest slider value, never a backlog), and while a slider is moving it draws the photo at a
+  lower resolution if, and only as far as, the GPU can't keep up; the full-resolution frame follows as soon as the
+  slider rests (~0.16 s). Phones and desktops that keep up draw exactly as before. RawBoy and Auto tabs.
+
 **RawBoy: the curves box has a visible frame again on phones (2026-11-01)**
 
 - Android: the curve area's frame and grid were drawn in the theme's outline colour on its surface-variant fill, which
