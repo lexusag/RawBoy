@@ -630,7 +630,7 @@ private fun LensSelector(
                     .clip(CircleShape)
                     .background(if (isSelected) Color(0xFFD0D0D0) else Color.Transparent)
                     .clickable(role = Role.Button) { onSelect(label) }
-                    .semantics { selected = isSelected },
+                    .semantics { this.selected = isSelected },
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
