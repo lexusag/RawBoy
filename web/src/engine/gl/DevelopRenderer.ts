@@ -21,6 +21,12 @@ export const LiveRender = {
   FAST_MS: 12,
   /** Longest a frame waits for the GPU to finish the one before (a fence that never signals can't stall drawing). */
   MAX_WAIT_MS: 250,
+  /**
+   * A full-resolution tile is uploaded this many pixels per frame, into a second texture while the last tile stays on
+   * screen. In one texImage2D a ~6 MP RGB16F tile (37 MB) held the GPU 200-320 ms on a Tab S11 Ultra (Mali-G925,
+   * ANGLE), 2-3 frozen frames each time panning reached a new tile.
+   */
+  TILE_UPLOAD_PIXELS: 500_000,
   /** Fewest device pixels drawn while editing (about 1100 x 730). */
   MIN_PIXELS: 800_000,
   /** Budget steps: down fast when behind, back up slowly. */
@@ -45,7 +51,9 @@ export class DevelopRenderer {
   private readonly quad: FullscreenQuad;
   private readonly inputs: DevelopInputs;
   private readonly previewTexture: WebGLTexture;
-  private readonly detailTexture: WebGLTexture;
+  private detailTexture: WebGLTexture;
+  /** A tile being uploaded band by band (see [LiveRender.TILE_UPLOAD_PIXELS]), swapped in once complete. */
+  private staging: { tile: DetailTile; texture: WebGLTexture; rows: number } | null = null;
   private image: PreviewImage | null = null;
   private uploadedImage: PreviewImage | null = null;
   private detail: DetailTile | null = null;
@@ -67,6 +75,8 @@ export class DevelopRenderer {
   private requestedAt = 0;
   /** The pending frame waited for the GPU to finish the last one. */
   private behind = false;
+  /** The frame just drawn left work for the next one (a tile still uploading). */
+  private needsFrame = false;
   /** Signals when the GPU has finished the last frame drawn. */
   private inFlight: WebGLSync | null = null;
   /**
@@ -103,7 +113,7 @@ export class DevelopRenderer {
     this.quad = new FullscreenQuad(gl);
     this.inputs = new DevelopInputs(gl);
     this.previewTexture = createTexture(gl, gl.LINEAR);
-    this.detailTexture = createTexture(gl, gl.NEAREST); // 1:1, keep pixels crisp
+    this.detailTexture = this.newDetailTexture();
     this.denoiser = new WaveletDenoise(gl, this.quad);
   }
 
@@ -168,9 +178,11 @@ export class DevelopRenderer {
       gl.deleteSync(fence);
       this.inFlight = null;
     }
+    this.needsFrame = false;
     this.draw();
     this.inFlight = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
     gl.flush();
+    if (this.needsFrame) this.invalidate();
   };
 
   /** Scale of this frame: 1 at rest; while streaming, the learnt budget over the canvas's pixels. */
@@ -250,15 +262,7 @@ export class DevelopRenderer {
       this.uploadedImage = img;
       this.previewVersion++;
     }
-    if (this.detail !== this.uploadedDetail) {
-      const t = this.detail;
-      if (t) {
-        gl.bindTexture(gl.TEXTURE_2D, this.detailTexture);
-        uploadHalfRgb(gl, t.rect.width, t.rect.height, t.pixels);
-        this.detailVersion++;
-      }
-      this.uploadedDetail = t;
-    }
+    this.uploadDetail();
 
     const p = this.params;
     // Inputs first: the lens blur's passes render elsewhere and leave the canvas bound.
@@ -308,8 +312,9 @@ export class DevelopRenderer {
     const w = view.width * scale;
     const h = view.height * scale;
     this.clearFrame((this.viewWidth - w) / 2, (this.viewHeight - h) / 2, w, h);
+    // While the next tile uploads, the last one serves only where it covers the view, else the preview stands in.
     const useTile = tile != null && !ZoomMath.previewSuffices(scale, img.width, img.fullWidth) &&
-      (scale === 1 || contains(tile.rect, p.lens.sourceBounds(view, 0)));
+      ((scale === 1 && !this.staging) || contains(tile.rect, p.lens.sourceBounds(view, 0)));
     let geometry: SampleGeometry;
     if (useTile) {
       const input = this.denoised(p, this.detailTexture, `d${this.detailVersion}`, tile.rect.width, tile.rect.height, 1);
@@ -327,6 +332,57 @@ export class DevelopRenderer {
       geometry = new SampleGeometry(img.width, img.height, rect(0, 0, img.fullWidth, img.fullHeight), view, img.fullWidth, img.fullHeight);
     }
     this.program.bind(p, geometry, (view.width * scale) / this.viewWidth, (view.height * scale) / this.viewHeight, true);
+  }
+
+  private newDetailTexture(): WebGLTexture {
+    return createTexture(this.gl, this.gl.NEAREST); // 1:1, keep pixels crisp
+  }
+
+  /**
+   * Brings the shown tile up to [detail]: a new tile goes into a staging texture a band of rows per frame (asking for
+   * the next frame until done), then replaces the shown one. No tile drops it at once.
+   */
+  private uploadDetail() {
+    const gl = this.gl;
+    const t = this.detail;
+    if (t === this.uploadedDetail) {
+      this.dropStaging();
+      return;
+    }
+    if (!t) {
+      this.dropStaging();
+      this.uploadedDetail = null;
+      return;
+    }
+    const w = t.rect.width;
+    const h = t.rect.height;
+    if (this.staging?.tile !== t) {
+      this.dropStaging();
+      const texture = this.newDetailTexture();
+      gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGB16F, w, h);
+      this.staging = { tile: t, texture, rows: 0 };
+    }
+    const st = this.staging!;
+    const band = Math.min(h - st.rows, Math.max(16, Math.floor(LiveRender.TILE_UPLOAD_PIXELS / w)));
+    gl.bindTexture(gl.TEXTURE_2D, st.texture);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 2);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, st.rows, w, band, gl.RGB, gl.HALF_FLOAT, t.pixels, st.rows * w * 3);
+    st.rows += band;
+    if (st.rows < h) {
+      this.needsFrame = true;
+      return;
+    }
+    gl.deleteTexture(this.detailTexture);
+    this.detailTexture = st.texture;
+    this.staging = null;
+    this.uploadedDetail = t;
+    this.detailVersion++;
+  }
+
+  private dropStaging() {
+    if (!this.staging) return;
+    this.gl.deleteTexture(this.staging.texture);
+    this.staging = null;
   }
 
   /** The frame alone, around an empty photo area of [placeholderSize] (the app draws a thumbnail over it). */
@@ -384,6 +440,7 @@ export class DevelopRenderer {
     }
     gl.deleteTexture(this.previewTexture);
     gl.deleteTexture(this.detailTexture);
+    this.dropStaging();
     this.denoiser.release();
     this.inputs.release();
     this.quad.release();

@@ -69,6 +69,9 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
     Tab S11 Ultra; while edits stream (`edited()`, from `Preview` when only the params or only the zoomed view's centre/scale change: sliders, pan, pinch) a GPU that falls behind
     draws into a smaller FBO blitted onto the canvas (budget learnt per session, ≥ 0.8 MP), full size once they rest.
     Scissor boxes go through `scissor()` and passes that bind other framebuffers must be followed by `bindTarget()`.
+    Detail tiles upload in bands (`LiveRender.TILE_UPLOAD_PIXELS`, 0.5 MP a frame) into a staging texture swapped in
+    when complete: one texImage2D of a ~6 MP RGB16F tile held the Tab S11 Ultra's GPU (Mali-G925 via ANGLE) 200-320 ms.
+    Profiled over adb (`connectOverCDP`, trace + rAF monitor); the drag itself ran at 120 fps.
   - `lens/LensTransform.kt` — output→source geometry: user crop → rotation/straighten → flips (a mirror in `outToImage`, so masks, which sit on the
     image, follow with no shader change) → auto-scale → manual
     distortion → DNG warp. **Mirrors the shader math**; Kotlin uses it for tile bounds and auto crop.
