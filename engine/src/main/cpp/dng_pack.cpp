@@ -67,6 +67,7 @@ constexpr AdobeHints kAdobeHints[] = {
     {"Canon EOS 6D", 1.25, 0.25},
     {"Fujifilm X-T1", 1.33, 0.15},
     {"Fujifilm X-E5", 1.1, 2.02},
+    {"Fujifilm X-T5", 1.1, 0.02},
 };
 
 const AdobeHints* adobeHintsFor(const std::string& camera) {
@@ -387,6 +388,63 @@ const char* formatOf(const uint8_t* data, size_t size, const libraw_data_t* d) {
     return "RAW";
 }
 
+// ---- Fujifilm geometry ----
+
+/** The camera's own crop from a RAF header (raw-area coordinates), as Adobe's converter uses it. */
+struct FujiCrop {
+    uint32 top = 0, left = 0, width = 0, height = 0;
+};
+
+/**
+ * RawImageCropTopLeft 0x0110 and RawImageCroppedSize 0x0111 from the RAF header's directory (pointer at byte 92: a
+ * count, then tag / length / big-endian values). LibRaw reads them too but moves an X-Trans crop to a multiple of 6
+ * (X-T5: top 21 → 24, 5152 → 5149 rows; X-T1: 16 → 18); Adobe's DNGs keep the camera's crop exactly.
+ */
+bool readFujiCrop(const uint8_t* data, size_t size, FujiCrop& crop) {
+    if (size < 96 || std::memcmp(data, "FUJIFILMCCD-RAW", 15) != 0) return false;
+    auto be16 = [&](size_t at) { return uint32(data[at]) << 8 | data[at + 1]; };
+    auto be32 = [&](size_t at) { return be16(at) << 16 | be16(at + 2); };
+    size_t at = be32(92);
+    if (at + 4 > size) return false;
+    uint32 entries = be32(at);
+    at += 4;
+    bool topLeft = false, cropped = false;
+    for (; entries > 0 && entries < 256 && at + 4 <= size; --entries) {
+        const uint32 tag = be16(at), len = be16(at + 2);
+        at += 4;
+        if (at + len > size) break;
+        if (tag == 0x0110 && len >= 4) {
+            crop.top = be16(at);
+            crop.left = be16(at + 2);
+            topLeft = true;
+        } else if (tag == 0x0111 && len >= 4) {
+            crop.height = be16(at);
+            crop.width = be16(at + 2);
+            cropped = true;
+        }
+        at += len;
+    }
+    return topLeft && cropped && crop.width && crop.height;
+}
+
+/**
+ * LibRaw 0.21 doesn't know the 40 MP X-Trans 5 HR sensor (X-T5, X-E5; raw 7872 x 5196) and centres its visible area
+ * at column 60: 60 columns of picture lost on the left, 60 of zeros (below black) on the right. LibRaw 0.22's own
+ * geometry for it (identify.cpp, case 7872), checked against Adobe's DNGs of an X-T5 and an X-E5 raw. Drop this when
+ * LibRaw is updated.
+ */
+void fixLibRawGeometry(libraw_data_t& d) {
+    libraw_image_sizes_t& s = d.sizes;
+    if (d.idata.filters != 9 || s.raw_width != 7872 || s.raw_height != 5196 || s.left_margin != 60) return;
+    s.top_margin = 6;
+    s.left_margin = 0;
+    s.width = s.iwidth = 7752;
+    s.height = s.iheight = 5178;
+    for (int r = 0; r < 6; ++r)
+        for (int c = 0; c < 6; ++c)
+            d.idata.xtrans[r][c] = d.idata.xtrans_abs[(r + s.top_margin) % 6][(c + s.left_margin) % 6];
+}
+
 void infoFromLibRaw(const libraw_data_t& d, PackInfo& info) {
     info.make = d.idata.normalized_make;
     info.model = d.idata.normalized_model;
@@ -482,9 +540,11 @@ dng_negative* negativeFromLibRaw(dng_host& host, RawBoyLibRaw& raw, const uint8_
     const float(*xyz)[3] = d.color.cam_xyz;
     dng_matrix_3by3 m(xyz[0][0], xyz[0][1], xyz[0][2], xyz[1][0], xyz[1][1], xyz[1][2], xyz[2][0], xyz[2][1], xyz[2][2]);
     if (m.MaxEntry() == 0) {
-        // Cameras newer than LibRaw's table: Adobe's D65 matrices, read from its own DNGs.
+        // Cameras newer than LibRaw's table: Adobe's D65 matrices, read from its own DNGs. The X-T5 and X-E5 share
+        // the 40 MP X-Trans 5 HR sensor, and Adobe gives them the same matrix.
         static const struct { const char* model; double v[9]; } kMatrices[] = {
             {"X-E5", {1.1809, -0.5358, -0.1141, -0.4248, 1.2164, 0.2343, -0.0514, 0.1097, 0.5848}},
+            {"X-T5", {1.1809, -0.5358, -0.1141, -0.4248, 1.2164, 0.2343, -0.0514, 0.1097, 0.5848}},
         };
         for (const auto& k : kMatrices)
             if (std::string(d.idata.normalized_model) == k.model || std::string(d.idata.model) == k.model)
@@ -508,7 +568,16 @@ dng_negative* negativeFromLibRaw(dng_host& host, RawBoyLibRaw& raw, const uint8_
         default: break;
     }
     // The camera's own crop inside the visible area (Fuji: 8256x6192 of 8280x6208; Sony 6000x4000 of 6024x4024).
-    const libraw_raw_inset_crop_t& ic = d.sizes.raw_inset_crops[0];
+    // Fujifilm's straight from the RAF header (LibRaw's is moved to a multiple of 6 on X-Trans).
+    libraw_raw_inset_crop_t ic = d.sizes.raw_inset_crops[0];
+    FujiCrop fuji;
+    if (readFujiCrop(data, size, fuji) && fuji.left >= d.sizes.left_margin && fuji.top >= d.sizes.top_margin &&
+        fuji.left - d.sizes.left_margin + fuji.width <= w && fuji.top - d.sizes.top_margin + fuji.height <= h) {
+        ic.cleft = static_cast<ushort>(fuji.left);
+        ic.ctop = static_cast<ushort>(fuji.top);
+        ic.cwidth = static_cast<ushort>(fuji.width);
+        ic.cheight = static_cast<ushort>(fuji.height);
+    }
     const uint32 cl = ic.cleft >= d.sizes.left_margin ? ic.cleft - d.sizes.left_margin : 0;
     const uint32 ct = ic.ctop >= d.sizes.top_margin ? ic.ctop - d.sizes.top_margin : 0;
     if (ic.cwidth && ic.cheight && ic.cwidth != 0xffff && cl + ic.cwidth <= w && ct + ic.cheight <= h) {
@@ -593,6 +662,7 @@ bool inspectForPacking(const uint8_t* data, size_t size, PackInfo& info, std::st
         error = std::string("not a raw file LibRaw knows (") + libraw_strerror(rc) + ")";
         return false;
     }
+    fixLibRawGeometry(raw->imgdata);
     infoFromLibRaw(raw->imgdata, info);
     info.format = formatOf(data, size, &raw->imgdata);
     CameraLensData lens;
@@ -630,7 +700,10 @@ bool packDng(const uint8_t* data, size_t size, const PackOptions& options, const
         } else {
             auto raw = std::make_unique<RawBoyLibRaw>();
             int rc = raw->openBuffer(data, size);
-            if (rc == LIBRAW_SUCCESS) rc = raw->unpack();
+            if (rc == LIBRAW_SUCCESS) {
+                fixLibRawGeometry(raw->imgdata);
+                rc = raw->unpack();
+            }
             if (rc != LIBRAW_SUCCESS) {
                 error = std::string("LibRaw: ") + libraw_strerror(rc);
                 return false;
