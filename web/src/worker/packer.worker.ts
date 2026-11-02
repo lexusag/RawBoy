@@ -24,11 +24,6 @@ function run(req: PackerRequest): [unknown, Transferable[]] {
       if (!out) throw new Error(module.lastError());
       return [out, [out.dng.buffer]];
     }
-    case 'decodeJxl': {
-      const out = module.decodeJxl(new Uint8Array(req.bytes)) as { rgba: Uint8Array; width: number; height: number } | null;
-      if (!out) throw new Error(module.lastError());
-      return [out, [out.rgba.buffer]];
-    }
     default:
       throw new Error('unknown request');
   }

@@ -17,9 +17,14 @@ interface InFlightTask {
   promise: Promise<CachedThumb | null>;
 }
 
+interface QueuedTask {
+  key: string;
+  isCancelled: () => boolean;
+  execute: () => Promise<void>;
+}
+
 const thumbCache = new Map<string, CacheEntry>();
 const inFlight = new Map<string, InFlightTask>();
-const failedKeys = new Set<string>();
 
 function fileCacheKey(file: File): string {
   return `${file.name}:${file.size}:${file.lastModified}`;
@@ -28,28 +33,24 @@ function fileCacheKey(file: File): string {
 /** Max concurrent thumbnail decodes so RAFs / large raws don't overwhelm CPU and memory. */
 const MAX_CONCURRENT_THUMBS = 3;
 let activeWorkers = 0;
-const workQueue: (() => void)[] = [];
+let workQueue: QueuedTask[] = [];
 
 function pumpQueue() {
-  while (activeWorkers < MAX_CONCURRENT_THUMBS && workQueue.length > 0) {
-    activeWorkers++;
-    const next = workQueue.shift()!;
-    next();
+  while (workQueue.length > 0 && workQueue[0].isCancelled()) {
+    workQueue.shift();
   }
-}
 
-function queueWork<T>(fn: () => Promise<T>): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    workQueue.push(() => {
-      fn()
-        .then(resolve, reject)
-        .finally(() => {
-          activeWorkers--;
-          pumpQueue();
-        });
+  while (activeWorkers < MAX_CONCURRENT_THUMBS && workQueue.length > 0) {
+    const task = workQueue.shift()!;
+    if (task.isCancelled()) {
+      continue;
+    }
+    activeWorkers++;
+    task.execute().finally(() => {
+      activeWorkers--;
+      pumpQueue();
     });
-    pumpQueue();
-  });
+  }
 }
 
 async function decodeAndDownscale(file: File): Promise<{ blob: Blob; width: number; height: number } | null> {
@@ -88,12 +89,11 @@ export function getCachedThumbnail(itemId: number, file: File): CachedThumb | nu
 
 /**
  * Loads a thumbnail for [file] attached to [itemId].
- * Concurrency is capped, and if [itemId] is removed while in flight, the decoded URL
- * is revoked immediately and not cached.
+ * Concurrency is capped. If [itemId] is removed while waiting in queue or during decode,
+ * the task is dropped immediately without wasting work.
  */
 export function requestThumbnail(itemId: number, file: File): Promise<CachedThumb | null> {
   const key = fileCacheKey(file);
-  if (failedKeys.has(key)) return Promise.resolve(null);
 
   const existing = thumbCache.get(key);
   if (existing) {
@@ -108,63 +108,77 @@ export function requestThumbnail(itemId: number, file: File): Promise<CachedThum
   }
 
   const itemIds = new Set<number>([itemId]);
-  const promise = queueWork(async () => {
-    try {
-      const decoded = await decodeAndDownscale(file);
-      inFlight.delete(key);
+  let taskResolve: (v: CachedThumb | null) => void;
 
-      if (!decoded) {
-        failedKeys.add(key);
-        return null;
-      }
-
-      // If all items requesting this file were removed before decode finished, free immediately!
-      if (itemIds.size === 0) {
-        return null;
-      }
-
-      const url = URL.createObjectURL(decoded.blob);
-
-      // Re-check after URL creation in case revocation raced
-      if (itemIds.size === 0) {
-        URL.revokeObjectURL(url);
-        return null;
-      }
-
-      const entry: CacheEntry = {
-        url,
-        width: decoded.width,
-        height: decoded.height,
-        itemIds,
-      };
-      thumbCache.set(key, entry);
-      return { url: entry.url, width: entry.width, height: entry.height };
-    } catch {
-      inFlight.delete(key);
-      failedKeys.add(key);
-      return null;
-    }
+  const promise = new Promise<CachedThumb | null>((resolve) => {
+    taskResolve = resolve;
   });
 
+  const queuedTask: QueuedTask = {
+    key,
+    isCancelled: () => itemIds.size === 0,
+    execute: async () => {
+      if (itemIds.size === 0) {
+        inFlight.delete(key);
+        taskResolve(null);
+        return;
+      }
+
+      try {
+        const decoded = await decodeAndDownscale(file);
+        inFlight.delete(key);
+
+        if (!decoded || itemIds.size === 0) {
+          taskResolve(null);
+          return;
+        }
+
+        const url = URL.createObjectURL(decoded.blob);
+
+        if (itemIds.size === 0) {
+          URL.revokeObjectURL(url);
+          taskResolve(null);
+          return;
+        }
+
+        const entry: CacheEntry = {
+          url,
+          width: decoded.width,
+          height: decoded.height,
+          itemIds,
+        };
+        thumbCache.set(key, entry);
+        taskResolve({ url: entry.url, width: entry.width, height: entry.height });
+      } catch {
+        inFlight.delete(key);
+        taskResolve(null);
+      }
+    },
+  };
+
   inFlight.set(key, { itemIds, promise });
+  workQueue.push(queuedTask);
+  pumpQueue();
+
   return promise;
 }
 
 /**
  * Releases [itemId]'s claim on the thumbnail of [file].
- * If this was the last item using this thumbnail (or waiting for it in flight),
- * the object URL is revoked and memory freed.
+ * If this was the last item using this thumbnail or waiting in the queue,
+ * queued work is cancelled immediately and object URLs are revoked.
  */
 export function releaseThumbnail(itemId: number, file: File) {
   const key = fileCacheKey(file);
 
-  // In-flight task cancellation
   const inflight = inFlight.get(key);
   if (inflight) {
     inflight.itemIds.delete(itemId);
+    if (inflight.itemIds.size === 0) {
+      workQueue = workQueue.filter((t) => t.key !== key);
+    }
   }
 
-  // Cached entry release
   const entry = thumbCache.get(key);
   if (entry) {
     entry.itemIds.delete(itemId);
@@ -176,7 +190,7 @@ export function releaseThumbnail(itemId: number, file: File) {
 }
 
 /**
- * Revokes all cached thumbnail URLs and cancels all queued tasks.
+ * Revokes all cached thumbnail URLs and clears pending queue tasks.
  */
 export function clearThumbnailCache() {
   workQueue.length = 0;
@@ -189,12 +203,11 @@ export function clearThumbnailCache() {
     URL.revokeObjectURL(entry.url);
   }
   thumbCache.clear();
-  failedKeys.clear();
 }
 
 export function ItemThumbnail({ item, onClick }: { item: PackItem; onClick?: () => void }) {
   const [thumb, setThumb] = useState<CachedThumb | null>(() => getCachedThumbnail(item.id, item.file));
-  const [loading, setLoading] = useState(() => !thumb && !failedKeys.has(fileCacheKey(item.file)));
+  const [loading, setLoading] = useState(() => !thumb);
   const [inView, setInView] = useState(false);
   const containerRef = useRef<HTMLButtonElement>(null);
 

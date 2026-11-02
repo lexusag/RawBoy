@@ -142,6 +142,16 @@ describe('ItemThumbnail', () => {
     }
   });
 
+  it('retries thumbnail extraction instead of permanently blocking after failure', async () => {
+    const fakeFile = new File(['not a raw'], 'temp.txt', { type: 'text/plain' });
+    const firstResult = await requestThumbnail(5, fakeFile);
+    expect(firstResult).toBeNull();
+
+    // Re-requesting should attempt again and not be permanently rejected by a global blacklist
+    const secondResult = await requestThumbnail(5, fakeFile);
+    expect(secondResult).toBeNull();
+  });
+
   it('clearThumbnailCache revokes all active object URLs', async () => {
     const file1 = mockRawFile('a.dng');
     const file2 = mockRawFile('b.dng');

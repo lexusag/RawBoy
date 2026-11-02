@@ -485,7 +485,6 @@ export function PackerApp() {
       {previewItem && (
         <PreviewModal
           item={previewItem}
-          decodeJxl={(bytes) => store.decodeJxl(bytes)}
           onClose={() => setPreviewId(null)}
           hasPrev={previewIndex > 0}
           hasNext={previewIndex >= 0 && previewIndex < orderedItems.length - 1}

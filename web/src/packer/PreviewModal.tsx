@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { findEmbeddedPreview, findJxlPreview, withOrientation } from '../engine/browse/EmbeddedPreview';
+import { findEmbeddedPreview } from '../engine/browse/EmbeddedPreview';
+import { jxlViewImageOf } from '../ui/browser/Previews';
 import type { PackItem } from './PackerStore';
 
 interface PreviewModalProps {
   item: PackItem;
-  decodeJxl?: (bytes: ArrayBuffer) => Promise<{ rgba: Uint8Array; width: number; height: number }>;
   onClose: () => void;
   onPrev?: () => void;
   onNext?: () => void;
@@ -18,7 +18,7 @@ interface LoadedPreview {
   height: number;
 }
 
-export function PreviewModal({ item, decodeJxl, onClose, onPrev, onNext, hasPrev, hasNext }: PreviewModalProps) {
+export function PreviewModal({ item, onClose, onPrev, onNext, hasPrev, hasNext }: PreviewModalProps) {
   const [data, setData] = useState<LoadedPreview | null>(null);
   const [loading, setLoading] = useState(true);
   const touchStartX = useRef<number | null>(null);
@@ -31,35 +31,19 @@ export function PreviewModal({ item, decodeJxl, onClose, onPrev, onNext, hasPrev
     setData(null);
 
     const load = async () => {
-      // 1. Try JXL preview for DNGs where JXL preview contains the real high-res preview
-      if (decodeJxl) {
-        try {
-          const jxl = await findJxlPreview(item.file, 2560);
-          if (jxl && jxl.pieces.length > 0 && typeof OffscreenCanvas !== 'undefined') {
-            const canvas = new OffscreenCanvas(jxl.width, jxl.height);
-            const ctx = canvas.getContext('2d');
-            if (ctx) {
-              const across = Math.ceil(jxl.width / jxl.pieceWidth);
-              for (const [k, piece] of jxl.pieces.entries()) {
-                const bytes = await item.file.slice(piece.offset, piece.offset + piece.length).arrayBuffer();
-                const px = await decodeJxl(bytes);
-                const image = new ImageData(new Uint8ClampedArray(px.rgba.buffer, px.rgba.byteOffset, px.rgba.length), px.width, px.height);
-                ctx.putImageData(image, (k % across) * jxl.pieceWidth, Math.floor(k / across) * jxl.pieceHeight);
-              }
-              let blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.9 });
-              if (jxl.orientation > 1) {
-                blob = withOrientation(blob, jxl.orientation);
-              }
-              if (!active) return;
-              objectUrl = URL.createObjectURL(blob);
-              setData({ url: objectUrl, width: jxl.width, height: jxl.height });
-              setLoading(false);
-              return;
-            }
-          }
-        } catch {
-          // Fall through to standard embedded preview
+      // 1. Try JXL preview first (for DNGs where JXL preview has the real high-res preview)
+      try {
+        const jxl = await jxlViewImageOf(item.file, 2560);
+        if (!active) return;
+        if (jxl) {
+          objectUrl = URL.createObjectURL(jxl.blob);
+          const [w, h] = jxl.size.split(' × ').map(Number);
+          setData({ url: objectUrl, width: w || 0, height: h || 0 });
+          setLoading(false);
+          return;
         }
+      } catch {
+        // Fall through to standard embedded preview
       }
 
       // 2. Standard embedded preview
@@ -82,7 +66,7 @@ export function PreviewModal({ item, decodeJxl, onClose, onPrev, onNext, hasPrev
       active = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [item.file, decodeJxl]);
+  }, [item.file]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
