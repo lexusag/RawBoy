@@ -1,5 +1,11 @@
 # Changelog
 
+**RawBoy Packer: jump to top and persistent clear finished (2026-11-02)**
+
+- Added a floating "Jump to top" button that appears when scrolled down, smoothly returning to the top of the page.
+- The "Clear finished" button is now always visible in the actions bar, disabled when there are no finished or failed
+  files to clear or while a packing run is active.
+
 **RawBoy Packer: raw details in the file list (2026-11-02)**
 
 - Each file in the list now shows how its raw data is stored, under the camera and lens: bit depth, compression
