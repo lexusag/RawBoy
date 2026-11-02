@@ -1,6 +1,6 @@
 import { localFolder, saveBlob, type OutputFolder } from '../ui/common/files';
 import type { PackInfo, PackerRequest } from './protocol';
-import { autoFilesAtOnce, outputName, packOptions, settingsSuffix, threadsPerFile, type PackSettings } from './settings';
+import { autoFilesAtOnce, outputName, packOptions, settingsSuffix, threadsPerFile, type PackRun, type PackSettings } from './settings';
 
 /** One packer worker (WASM engine with the DNG SDK) and a promise-based call into it. */
 class PackerWorker {
@@ -140,12 +140,15 @@ export class PackerStore {
     this.set({ items: [] });
   }
 
-  /** Packs every file that is ready (or failed before), writing each DNG as soon as it is done. */
-  async start(settings: PackSettings, output: Output) {
-    if (this.state.running) return;
+  /**
+   * Packs every file that is ready (or failed before), writing each DNG as soon as it is done. Resolves with what the
+   * run did, or null when nothing was started.
+   */
+  async start(settings: PackSettings, output: Output): Promise<PackRun | null> {
+    if (this.state.running) return null;
     await this.inspecting;
     const queue = this.state.items.filter((it) => it.status === 'ready' || it.status === 'done' || (it.status === 'error' && it.info));
-    if (!queue.length) return;
+    if (!queue.length) return null;
     for (const it of queue) this.update(it.id, { status: 'waiting', error: undefined, outSize: undefined, outName: undefined });
     this.cancelled = false;
     this.set({ running: true });
@@ -180,8 +183,22 @@ export class PackerStore {
       }
     };
     await Promise.all(Array.from({ length: lanes }, (_, i) => lane(i)));
-    for (const it of this.state.items) if (it.status === 'waiting') this.update(it.id, { status: 'ready' });
+    const ids = new Set(queue.map((it) => it.id));
+    const run: PackRun = { done: 0, failed: 0, stopped: false, before: 0, after: 0 };
+    for (const it of this.state.items) {
+      if (!ids.has(it.id)) continue;
+      if (it.status === 'done') {
+        run.done++;
+        run.before += it.file.size;
+        run.after += it.outSize ?? 0;
+      } else if (it.status === 'error') run.failed++;
+      else if (it.status === 'waiting') {
+        run.stopped = true;
+        this.update(it.id, { status: 'ready' });
+      }
+    }
     this.set({ running: false });
+    return run;
   }
 
   /** Stops after the files being packed now. */
