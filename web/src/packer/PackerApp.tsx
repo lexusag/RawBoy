@@ -76,10 +76,30 @@ export function PackerApp() {
   const [dragging, setDragging] = useState(false);
   const [finished, setFinished] = useState<{ title: string; body: string } | null>(null);
   const [permission, setPermission] = useState(notifyPermission);
+  const [scrolled, setScrolled] = useState(false);
   useEffect(() => saveSettings(settings), [settings]);
   // The choice when a run ends counts, not when it started.
   const notifyRef = useRef(settings.notifyWhenDone);
   notifyRef.current = settings.notifyWhenDone;
+
+  useEffect(() => {
+    const onScroll = () => setScrolled((window.scrollY || document.documentElement.scrollTop) > 200);
+    window.addEventListener('scroll', onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  const scrollToTop = () => {
+    const reduceMotion =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    try {
+      window.scrollTo({ top: 0, behavior: reduceMotion ? 'auto' : 'smooth' });
+    } catch {
+      window.scrollTo(0, 0);
+    }
+  };
 
   const setNotify = async (notifyWhenDone: boolean) => {
     change({ notifyWhenDone });
@@ -326,11 +346,13 @@ export function PackerApp() {
               Add files
             </button>
             <span className="spacer" />
-            {state.items.some((it) => it.status === 'done' || it.status === 'error') && !state.running && (
-              <button className="text" onClick={() => store.clearDone()}>
-                Clear finished
-              </button>
-            )}
+            <button
+              className="text"
+              onClick={() => store.clearDone()}
+              disabled={state.running || !state.items.some((it) => it.status === 'done' || it.status === 'error')}
+            >
+              Clear finished
+            </button>
             {state.running ? (
               <button onClick={() => store.cancel()} disabled={state.stopping}>
                 {state.stopping ? 'Stopping…' : 'Stop after these'}
@@ -370,6 +392,15 @@ export function PackerApp() {
       </main>
 
       {state.running && <PackProgress items={state.items} runIds={state.runIds} stopping={state.stopping} />}
+
+      <button
+        type="button"
+        className={`packer-jump-top${scrolled ? ' visible' : ''}`}
+        onClick={scrollToTop}
+        aria-label="Jump to top"
+      >
+        ↑ Jump to top
+      </button>
 
       {finished && (
         <div className="dialog-backdrop" onClick={() => setFinished(null)}>

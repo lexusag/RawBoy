@@ -60,5 +60,22 @@ describe('PackerStore', () => {
     expect(items.every((it) => it.status === 'done' && it.info)).toBe(true);
     await new Promise((r) => setTimeout(r, 50));
     expect(store.getState().items.every((it) => it.status === 'done')).toBe(true);
+
+    store.clearDone();
+    expect(store.getState().items).toEqual([]);
+  });
+
+  it('clearDone removes finished and failed items while keeping ready ones', async () => {
+    const store = new PackerStore();
+    store.add([file('a.raf'), file('b.raf')]);
+    await new Promise((r) => setTimeout(r, 5));
+    const running = store.start({ ...DEFAULT_SETTINGS, filesAtOnce: 1 }, { kind: 'downloads' });
+    store.cancel();
+    await running;
+    await new Promise((r) => setTimeout(r, 100));
+    expect(store.getState().items.map((it) => it.status)).toEqual(['done', 'ready']);
+
+    store.clearDone();
+    expect(store.getState().items.map((it) => it.status)).toEqual(['ready']);
   });
 });
