@@ -111,7 +111,7 @@ export function PackerApp() {
   const preset = presetOf(settings);
   const infos = useMemo(() => state.items.map((it) => it.info).filter((i): i is PackInfo => !!i), [state.items]);
   const summary = useMemo(() => summarize(settings, infos), [settings, infos]);
-  const packable = state.items.filter((it) => it.info && it.status !== 'inspecting');
+  const packable = state.items.filter((it) => it.status === 'inspecting' || it.info);
 
   useEffect(() => {
     // Drop files anywhere on the page.
