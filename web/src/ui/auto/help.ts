@@ -42,7 +42,7 @@ export const AUTO_HELP: HelpSection[] = [
       { keys: ['Delete'], how: 'Remove (bin)', text: 'Take this photo out of the batch (the file stays) and go on to the next.' },
       { keys: ['Esc'], text: 'Back to the grid' },
       { keys: ['Mod+Z'], text: 'Undo this photo\'s last edit; with Shift, Redo (also the arrows in the top bar)' },
-      { how: 'Double-click', text: '100% view; drag to pan, double-click again to go back.' },
+      { how: 'Double-click', text: '100% view; drag to pan, double-click again to go back. ← / → and the ‹ › buttons still change the photo, which opens whole.' },
       { how: 'Mouse wheel over the photo', text: 'Zoom in and out around the pointer, up to 400%; out past the whole photo goes back to it.' },
       { how: 'Pinch (touch screens)', text: 'Two fingers zoom around their middle, up to 400%, and pan with it; out past the whole photo goes back to it.' },
       { how: 'Click outside the photo', text: 'Change the frame around it: grey, white or black.' },

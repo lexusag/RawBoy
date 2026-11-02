@@ -1,5 +1,11 @@
 # Changelog
 
+**RawBoy Auto (web): next and previous photo while zoomed (2026-11-02)**
+
+- In the photo view, the ‹ › buttons now stay on screen while the photo is zoomed in, and ← / →, Space and Backspace
+  change the photo while zoomed too. The next photo opens whole (fitted); double-click or pinch to zoom it again.
+  Swiping stays off while zoomed, since one finger pans then.
+
 **RawBoy Packer: pack without waiting for files to be read (2026-11-02)**
 
 - *Pack* works as soon as files are added: it no longer waits until every file shows its camera and format. A file not
