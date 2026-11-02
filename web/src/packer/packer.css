@@ -211,6 +211,72 @@ body {
   padding: 0;
 }
 
+.packer-queue {
+  display: flex;
+  flex-direction: column;
+}
+
+.packer-folder-group {
+  margin-bottom: 16px;
+}
+
+.packer-folder-group:last-child {
+  margin-bottom: 0;
+}
+
+.packer-folder-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 0 6px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.packer-folder-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.packer-folder-icon {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.packer-folder-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.packer-folder-count {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.packer-folder-remove {
+  background: none;
+  border: none;
+  color: var(--muted);
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.packer-folder-remove:hover:not(:disabled) {
+  color: var(--error);
+}
+
+.packer-folder-remove:disabled {
+  opacity: 0.3;
+}
+
 .packer-list {
   list-style: none;
   margin: 0;

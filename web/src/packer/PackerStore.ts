@@ -47,6 +47,7 @@ export type ItemStatus = 'inspecting' | 'ready' | 'waiting' | 'packing' | 'done'
 export interface PackItem {
   id: number;
   file: File;
+  folder?: string;
   status: ItemStatus;
   info?: PackInfo;
   /** After packing: the DNG's size, name and what was written. */
@@ -54,6 +55,42 @@ export interface PackItem {
   outName?: string;
   result?: PackInfo;
   error?: string;
+}
+
+export type PackItemInput = File | { file: File; folder?: string };
+
+export function folderOf(file: File): string | undefined {
+  if ('folder' in file && typeof (file as { folder?: unknown }).folder === 'string') {
+    return (file as { folder: string }).folder;
+  }
+  if (file.webkitRelativePath) {
+    const idx = file.webkitRelativePath.lastIndexOf('/');
+    if (idx > 0) return file.webkitRelativePath.slice(0, idx);
+  }
+  return undefined;
+}
+
+export interface FolderGroup {
+  folder: string | null;
+  items: PackItem[];
+}
+
+/** Groups queue items by their folder, preserving the order folders first appeared. */
+export function groupByFolder(items: PackItem[]): FolderGroup[] {
+  const groups: FolderGroup[] = [];
+  const map = new Map<string | null, FolderGroup>();
+
+  for (const item of items) {
+    const key = item.folder ?? null;
+    let g = map.get(key);
+    if (!g) {
+      g = { folder: key, items: [] };
+      map.set(key, g);
+      groups.push(g);
+    }
+    g.items.push(item);
+  }
+  return groups;
 }
 
 /** Where packed files go: a folder (File System Access API) or the browser's downloads. */
@@ -100,15 +137,18 @@ export class PackerStore {
     return this.workers[i];
   }
 
-  /** Adds files (duplicates by name and size skipped) and reads what each is, one after another. */
-  add(files: File[]) {
-    const known = new Set(this.state.items.map((it) => `${it.file.name}/${it.file.size}`));
+  /** Adds files (duplicates by folder, name and size skipped) and reads what each is, one after another. */
+  add(files: PackItemInput[]) {
+    const known = new Set(this.state.items.map((it) => `${it.folder ?? ''}/${it.file.name}/${it.file.size}`));
     const added: PackItem[] = [];
-    for (const file of files) {
-      const key = `${file.name}/${file.size}`;
+    for (const raw of files) {
+      const file = 'file' in raw ? raw.file : raw;
+      if (file.name.startsWith('.')) continue;
+      const folder = ('folder' in raw && raw.folder != null) ? raw.folder : folderOf(file);
+      const key = `${folder ?? ''}/${file.name}/${file.size}`;
       if (known.has(key)) continue;
       known.add(key);
-      added.push({ id: this.nextId++, file, status: 'inspecting' });
+      added.push({ id: this.nextId++, file, folder, status: 'inspecting' });
     }
     if (!added.length) return;
     this.set({ items: [...this.state.items, ...added] });
@@ -143,6 +183,14 @@ export class PackerStore {
     this.set({ items: this.state.items.filter((it) => it.id !== id) });
   }
 
+  /** Removes every file in [folder] that is not currently being packed. */
+  removeFolder(folder: string | null | undefined) {
+    const target = folder ?? undefined;
+    this.set({
+      items: this.state.items.filter((it) => (it.folder ?? undefined) !== target || it.status === 'packing'),
+    });
+  }
+
   /** Drops finished and failed files from the list. */
   clearDone() {
     this.set({ items: this.state.items.filter((it) => it.status !== 'done' && it.status !== 'error') });
@@ -160,7 +208,9 @@ export class PackerStore {
    */
   async start(settings: PackSettings, output: Output): Promise<PackRun | null> {
     if (this.state.running) return null;
-    const queue = this.state.items.filter(
+    const groups = groupByFolder(this.state.items);
+    const ordered = groups.flatMap((g) => g.items);
+    const queue = ordered.filter(
       (it) => it.status === 'inspecting' || it.status === 'ready' || it.status === 'done' || (it.status === 'error' && it.info),
     );
     if (!queue.length) return null;

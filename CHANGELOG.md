@@ -1,5 +1,11 @@
 # Changelog
 
+**RawBoy Packer: folder grouping in the queue (2026-11-02)**
+
+- Files in the queue are now grouped by folder with folder name headers, item counts, and a folder remove button.
+- Folders can be added using the new "Add folder" button or by dragging and dropping folders directly onto the page.
+- Loose files dropped or picked individually are cleanly organized, with the queue processing files in folder group order.
+
 **RawBoy Packer: jump to top and persistent clear finished (2026-11-02)**
 
 - Added a floating "Jump to top" button that appears when scrolled down, smoothly returning to the top of the page.

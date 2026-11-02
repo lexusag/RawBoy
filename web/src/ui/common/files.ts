@@ -18,6 +18,84 @@ export function pickFiles(multiple: boolean, accept = RAW_ACCEPT): Promise<File[
   });
 }
 
+/** Opens the folder picker to select files within a folder. */
+export function pickFolderFiles(): Promise<File[]> {
+  return new Promise((resolve) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    (input as unknown as { webkitdirectory: boolean }).webkitdirectory = true;
+    input.multiple = true;
+    input.onchange = () => resolve(Array.from(input.files ?? []));
+    input.click();
+  });
+}
+
+/**
+ * Reads files from a drop event, traversing directories recursively if folders were dropped.
+ * Preserves the relative folder path for items inside directories.
+ */
+export async function readDroppedFiles(dt: DataTransfer | null): Promise<{ file: File; folder?: string }[]> {
+  if (!dt) return [];
+  const result: { file: File; folder?: string }[] = [];
+
+  const items = Array.from(dt.items ?? []);
+  const entries: any[] = [];
+  for (const item of items) {
+    if (item.kind !== 'file') continue;
+    const entry = (item as unknown as { webkitGetAsEntry?: () => any }).webkitGetAsEntry?.();
+    if (entry) entries.push(entry);
+  }
+
+  if (!entries.length) {
+    for (const file of Array.from(dt.files ?? [])) {
+      if (!file.name.startsWith('.')) {
+        result.push({ file });
+      }
+    }
+    return result;
+  }
+
+  async function traverse(entry: any, path: string): Promise<void> {
+    if (entry.name.startsWith('.')) return;
+    if (entry.isFile) {
+      const file = await new Promise<File | null>((res) => {
+        entry.file(res, () => res(null));
+      });
+      if (file && !file.name.startsWith('.')) {
+        result.push({ file, folder: path || undefined });
+      }
+    } else if (entry.isDirectory) {
+      const dirReader = entry.createReader();
+      const readAll = async (): Promise<any[]> => {
+        const batch: any[] = [];
+        while (true) {
+          const chunk = await new Promise<any[]>((res) => {
+            dirReader.readEntries(res, () => res([]));
+          });
+          if (!chunk || !chunk.length) break;
+          batch.push(...chunk);
+        }
+        return batch;
+      };
+      const children = await readAll();
+      const currentPath = path ? `${path}/${entry.name}` : entry.name;
+      for (const child of children) {
+        await traverse(child, currentPath);
+      }
+    }
+  }
+
+  for (const entry of entries) {
+    if (entry.isDirectory) {
+      await traverse(entry, '');
+    } else {
+      await traverse(entry, '');
+    }
+  }
+
+  return result;
+}
+
 /** Hands a file to the browser as a download. */
 export function saveBlob(name: string, blob: Blob) {
   const url = URL.createObjectURL(blob);

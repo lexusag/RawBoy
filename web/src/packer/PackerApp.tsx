@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { RAW_ACCEPT, canPickOutputFolder, pickFiles, pickOutputFolder } from '../ui/common/files';
-import { PackerStore, type PackItem } from './PackerStore';
+import { RAW_ACCEPT, canPickOutputFolder, pickFiles, pickFolderFiles, pickOutputFolder, readDroppedFiles } from '../ui/common/files';
+import { groupByFolder, PackerStore, type PackItem } from './PackerStore';
 import type { PackFormat, PackInfo } from './protocol';
 import {
   FORMAT_LABEL,
@@ -143,10 +143,11 @@ export function PackerApp() {
     const leave = (e: DragEvent) => {
       if (!e.relatedTarget) setDragging(false);
     };
-    const drop = (e: DragEvent) => {
+    const drop = async (e: DragEvent) => {
       e.preventDefault();
       setDragging(false);
-      store.add(Array.from(e.dataTransfer?.files ?? []));
+      const dropped = await readDroppedFiles(e.dataTransfer);
+      if (dropped.length) store.add(dropped);
     };
     window.addEventListener('dragover', over);
     window.addEventListener('dragleave', leave);
@@ -345,6 +346,9 @@ export function PackerApp() {
             <button onClick={async () => store.add(await pickFiles(true, RAW_ACCEPT))} disabled={state.running}>
               Add files
             </button>
+            <button onClick={async () => store.add(await pickFolderFiles())} disabled={state.running}>
+              Add folder
+            </button>
             <span className="spacer" />
             <button
               className="text"
@@ -376,16 +380,12 @@ export function PackerApp() {
           {state.engineError && <p className="packer-error">The packer couldn't start: {state.engineError}</p>}
           {state.items.length === 0 ? (
             <div className="packer-drop">
-              Drop raw files or DNGs here, or <button className="text" onClick={async () => store.add(await pickFiles(true, RAW_ACCEPT))}>choose files</button>.
+              Drop raw files or folders here, or <button className="text" onClick={async () => store.add(await pickFiles(true, RAW_ACCEPT))}>choose files</button> or <button className="text" onClick={async () => store.add(await pickFolderFiles())}>a folder</button>.
               <small>ARW, RAF, CR2, CR3, NEF, ORF, RW2, PEF, DNG and other raws LibRaw reads.</small>
             </div>
           ) : (
             <>
-              <ul className="packer-list">
-                {state.items.map((it) => (
-                  <FileRow key={it.id} item={it} onRemove={() => store.remove(it.id)} busy={state.running} />
-                ))}
-              </ul>
+              <QueueView items={state.items} running={state.running} />
               <Totals items={state.items} />
             </>
           )}
@@ -497,6 +497,66 @@ function rawDetails(i: PackInfo): { parts: string[]; title: string } {
 }
 
 const mb = (bytes: number) => `${(bytes / 1e6).toFixed(bytes < 10e6 ? 1 : 0)} MB`;
+
+function QueueView({ items, running }: { items: PackItem[]; running: boolean }) {
+  const groups = useMemo(() => groupByFolder(items), [items]);
+  const hasFolders = groups.some((g) => g.folder != null);
+
+  return (
+    <div className="packer-queue">
+      {groups.map((group) => {
+        const key = group.folder ?? '__root';
+        const folderName = group.folder ?? 'Other files';
+        return (
+          <div key={key} className="packer-folder-group">
+            {hasFolders && (
+              <div className="packer-folder-header">
+                <span className="packer-folder-title">
+                  {group.folder ? <FolderIcon /> : <FilesIcon />}
+                  <span className="packer-folder-name" title={folderName}>
+                    {folderName}
+                  </span>
+                  <span className="packer-folder-count">({group.items.length})</span>
+                </span>
+                <button
+                  type="button"
+                  className="packer-folder-remove text"
+                  onClick={() => store.removeFolder(group.folder)}
+                  disabled={running && group.items.some((it) => it.status === 'packing')}
+                  title={`Remove ${folderName}`}
+                  aria-label={`Remove folder ${folderName}`}
+                >
+                  ✕
+                </button>
+              </div>
+            )}
+            <ul className="packer-list">
+              {group.items.map((it) => (
+                <FileRow key={it.id} item={it} onRemove={() => store.remove(it.id)} busy={running} />
+              ))}
+            </ul>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function FolderIcon() {
+  return (
+    <svg className="packer-folder-icon" width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z" />
+    </svg>
+  );
+}
+
+function FilesIcon() {
+  return (
+    <svg className="packer-folder-icon" width={16} height={16} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12z" />
+    </svg>
+  );
+}
 
 function FileRow({ item, onRemove, busy }: { item: PackItem; onRemove: () => void; busy: boolean }) {
   const i = item.info;
