@@ -450,6 +450,20 @@ function Toggle({ on, onChange }: { on: boolean; onChange: (v: boolean) => void 
   );
 }
 
+/**
+ * The source's raw data in one short line: bit depth, compression, colour filter and size, e.g.
+ * "14-bit · lossless compressed · X-Trans · 40.2 MP". The full pixel size is in the tooltip.
+ */
+function rawDetails(i: PackInfo): { parts: string[]; title: string } {
+  const parts: string[] = [];
+  if (i.bits > 0) parts.push(`${i.bits}-bit`);
+  if (i.compression) parts.push(i.compression);
+  parts.push(!i.mosaic ? 'linear' : i.bayer ? 'Bayer' : 'X-Trans');
+  if (i.width > 0 && i.height > 0) parts.push(`${((i.width * i.height) / 1e6).toFixed(1)} MP`);
+  const title = i.width > 0 && i.height > 0 ? `${i.width} × ${i.height} px` : '';
+  return { parts, title };
+}
+
 const mb = (bytes: number) => `${(bytes / 1e6).toFixed(bytes < 10e6 ? 1 : 0)} MB`;
 
 function FileRow({ item, onRemove, busy }: { item: PackItem; onRemove: () => void; busy: boolean }) {
@@ -457,10 +471,10 @@ function FileRow({ item, onRemove, busy }: { item: PackItem; onRemove: () => voi
   const camera = i ? `${i.make} ${i.model}`.trim() : '';
   const tags: string[] = [];
   if (i) {
-    tags.push(i.format);
+    tags.push(i.dng && i.dngVersion ? `DNG ${i.dngVersion}` : i.format);
     if (i.lensData) tags.push(i.lensData === 'DNG' ? 'lens opcodes' : `${i.lensData} lens data`);
-    if (!i.bayer || !i.mosaic) tags.push(i.mosaic ? 'X-Trans' : 'linear');
   }
+  const raw = i ? rawDetails(i) : null;
   let status: ReactNode;
   switch (item.status) {
     case 'inspecting':
@@ -506,6 +520,17 @@ function FileRow({ item, onRemove, busy }: { item: PackItem; onRemove: () => voi
             </span>
           ))}
         </span>
+        {raw && (
+          <span className="meta raw" title={raw.title}>
+            {/* Each part stays on one line with the dot after it, so a narrow row breaks only between parts. */}
+            {raw.parts.map((p, n) => (
+              <span key={p}>
+                {n > 0 && ' '}
+                <span className="nowrap">{n < raw.parts.length - 1 ? `${p} ·` : p}</span>
+              </span>
+            ))}
+          </span>
+        )}
         {notes.length > 0 && <span className="meta">{notes.join(' · ')}</span>}
       </div>
       <div className="status">{status}</div>

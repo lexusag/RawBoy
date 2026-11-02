@@ -456,6 +456,54 @@ void infoFromLibRaw(const libraw_data_t& d, PackInfo& info) {
     info.adobeHints = adobeHintsFor(info.make + " " + info.model) != nullptr;
 }
 
+/** Bits needed for [white] (a white level): 16383 → 14, 1023 → 10, 15872 → 14. */
+int bitsForWhite(double white) {
+    int bits = 0;
+    while (bits < 32 && white >= std::ldexp(1.0, bits)) ++bits;
+    return bits;
+}
+
+/**
+ * How a camera raw's data is stored, from the maker notes LibRaw reads on open, or else from the decoder it picked.
+ * Without a clear answer it says only "compressed": a wrong "lossless" would mislead more than a vague label.
+ */
+std::string compressionOf(LibRaw& raw) {
+    const libraw_data_t& d = raw.imgdata;
+    const std::string make = d.idata.normalized_make;
+    if (make == "Sony") {
+        switch (d.makernotes.sony.SonyRawFileType) {
+            case 0: case 1: return "uncompressed";
+            case 2: return "lossy compressed";
+            case 3: case 4: return "lossless compressed";
+            default: break;
+        }
+    }
+    if (make == "Nikon") {
+        switch (d.makernotes.nikon.NEFCompression) {
+            case 1: case 4: return "lossy compressed";
+            case 2: case 5: case 6: case 7: case 9: case 10: return "uncompressed";
+            case 3: return "lossless compressed";
+            case 13: case 14: return "High Efficiency";
+            default: break;
+        }
+    }
+    libraw_decoder_info_t dec{};
+    if (raw.get_decoder_info(&dec) != LIBRAW_SUCCESS || !dec.decoder_name) return "";
+    const std::string name = dec.decoder_name;
+    const auto is = [&](const char* prefix) { return name.rfind(prefix, 0) == 0; };
+    if (is("fuji_compressed_load_raw")) {
+        // Read from the RAF's compressed-data header on open (X-H2 and later can also store lossy raws).
+        return raw.get_internal_data_pointer()->unpacker_data.fuji_lossless ? "lossless compressed" : "lossy compressed";
+    }
+    if (is("sony_arw2_load_raw") || is("sony_arw_load_raw")) return "lossy compressed";
+    if (is("lossless_jpeg_load_raw") || is("sony_ljpeg_load_raw") || is("olympus_load_raw")) return "lossless compressed";
+    if (is("unpacked_load_raw") || is("packed_load_raw") || is("fuji_14bit_load_raw") || is("eight_bit_load_raw") ||
+        is("nokia_load_raw")) {
+        return "uncompressed";
+    }
+    return "compressed";
+}
+
 dng_negative* negativeFromLibRaw(dng_host& host, RawBoyLibRaw& raw, const uint8_t* data, size_t size,
                                  const PackOptions& opt, PackInfo& info, dng_preview_list& previews) {
     const libraw_data_t& d = raw.imgdata;
@@ -632,7 +680,24 @@ void infoFromDng(const dng_info& dinfo, PackInfo& info) {
         info.bayer = info.mosaic && ifd.fCFARepeatPatternRows == 2 && ifd.fCFARepeatPatternCols == 2;
         // The DNG's own lens corrections (Adobe's, the camera's or a phone's opcodes) are carried over as they are.
         if (ifd.fOpcodeList2Count || ifd.fOpcodeList3Count) info.lensData = "DNG";
+        const double white = ifd.fWhiteLevel[0] > 0 ? ifd.fWhiteLevel[0] : std::ldexp(1.0, ifd.fBitsPerSample[0]) - 1;
+        info.bits = ifd.fBitsPerSample[0] == 32 ? 32 : std::min<int>(bitsForWhite(white), ifd.fBitsPerSample[0]);
+        switch (ifd.fCompression) {
+            case ccUncompressed: info.compression = "uncompressed"; break;
+            case ccJPEG: info.compression = "lossless JPEG"; break;
+            case ccLossyJPEG: info.compression = "lossy JPEG"; break;
+            case ccDeflate: info.compression = "Deflate"; break;
+            case ccJXL:
+                // JXLDistance 0 = lossless; a phone or older writer may leave it out (-1).
+                info.compression = ifd.fJXLDistance == 0.0f ? "lossless JPEG XL"
+                                   : ifd.fJXLDistance > 0.0f ? "lossy JPEG XL"
+                                                             : "JPEG XL";
+                break;
+            default: break;
+        }
     }
+    const uint32 v = dinfo.fShared->fDNGVersion;
+    if (v) info.dngVersion = std::to_string(v >> 24) + "." + std::to_string((v >> 16) & 0xFF);
 }
 
 }  // namespace
@@ -665,6 +730,8 @@ bool inspectForPacking(const uint8_t* data, size_t size, PackInfo& info, std::st
     fixLibRawGeometry(raw->imgdata);
     infoFromLibRaw(raw->imgdata, info);
     info.format = formatOf(data, size, &raw->imgdata);
+    info.bits = bitsForWhite(raw->imgdata.color.maximum);
+    info.compression = compressionOf(*raw);
     CameraLensData lens;
     if (readCameraLensData(data, size, lens) && lens.any()) {
         info.lensData = lens.maker;

@@ -4,7 +4,7 @@ import { DEFAULT_SETTINGS, autoFilesAtOnce, PRESETS, outputName, presetOf, runMe
 
 const info = (p: Partial<PackInfo>): PackInfo => ({
   make: 'Sony', model: 'ILCE-7M3', lens: '', format: 'ARW', width: 6024, height: 4024, dng: false, mosaic: true, bayer: true,
-  lensData: 'Sony', lensDistortion: true, lensVignetting: true, lensCa: true, adobeHints: true, modeUsed: 'small', linear: false,
+  lensData: 'Sony', lensDistortion: true, lensVignetting: true, lensCa: true, adobeHints: true, bits: 14, compression: 'lossless compressed', dngVersion: '', modeUsed: 'small', linear: false,
   lensWritten: false, preview: '', outWidth: 0, outHeight: 0, seconds: 0, ...p,
 });
 const text = (lines: ReturnType<typeof summarize>) => lines.map((l) => l.map((s) => s.text).join('')).join('\n');
