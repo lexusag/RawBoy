@@ -1,5 +1,12 @@
 # Changelog
 
+**RawBoy Packer: progress bar pinned to the bottom (2026-11-02)**
+
+- While packing, a progress bar stays at the bottom of the screen, on desktop and phone, however far the page is
+  scrolled: files packed of the run, failures, an estimate of the time left (by file size), and a Stop button. The
+  page leaves room under it, so the last files and the footer still scroll clear, and it keeps clear of a phone's
+  gesture bar. "Stop after these" now shows that it is stopping.
+
 **RawBoy Packer: Fujifilm X-T5, X-Trans framing (2026-11-02)**
 
 - Fujifilm X-T5 raws now pack: Adobe's colour matrix (the raw library is older than the camera), Lightroom's default
