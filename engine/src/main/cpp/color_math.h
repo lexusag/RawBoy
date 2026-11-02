@@ -77,28 +77,26 @@ inline Mat3 bradfordAdaptation(const Vec3& srcWhite, const Vec3& dstWhite) {
 inline void blendClipped(float c[3], const float clip[3]) {
     const float rMax = std::fmax(c[0] / clip[0], std::fmax(c[1] / clip[1], c[2] / clip[2]));
     if (!(rMax > 0.9f)) return;
-    const float rMin = std::fmin(c[0] / clip[0], std::fmin(c[1] / clip[1], c[2] / clip[2]));
-    // Blend to neutral only for highlights where every channel has substantial light (rMin approaching clip),
-    // as when white light blows out. Saturated coloured light (red gels, stage lighting) has only one or two
+    const float lowest = std::fmin(clip[0], std::fmin(clip[1], clip[2]));
+    const float cMin = std::fmin(c[0], std::fmin(c[1], c[2]));
+    const float rMin = cMin / lowest;
+    // Blend to neutral only for highlights where every channel has substantial light (rMin = min(c) / lowest approaching
+    // 1.0), as in blown white highlights. Saturated coloured light (red gels, stage lighting) has only one or two
     // channels near clip while the others are dark; blending those desaturates pure colour into harsh pink/white.
     const float uMax = std::fmin(1.0f, (rMax - 0.9f) / 0.1f);
     const float uMin = std::fmax(0.0f, std::fmin(1.0f, (rMin - 0.5f) / 0.3f));
     const float u = uMax * uMin;
     const float t = u * u * (3.0f - 2.0f * u);
-    if (t > 0.0f) {
-        const float lowest = std::fmin(clip[0], std::fmin(clip[1], clip[2]));
-        const float k[3] = {std::fmin(c[0], lowest), std::fmin(c[1], lowest), std::fmin(c[2], lowest)};
-        // Lightness and two opponent axes (dcraw's trans matrix for three colours).
-        const float a0 = 1.7320508f * (c[0] - c[1]), b0 = 2.0f * c[2] - c[0] - c[1];
-        const float a1 = 1.7320508f * (k[0] - k[1]), b1 = 2.0f * k[2] - k[0] - k[1];
-        const float s0 = a0 * a0 + b0 * b0;
-        const float ratio = s0 > 0.0f ? std::sqrt((a1 * a1 + b1 * b1) / s0) : 1.0f;
-        const float l = (c[0] + c[1] + c[2]) / 3.0f, a = a0 * ratio / 3.0f, b = b0 * ratio / 3.0f;
-        const float blended[3] = {l + 0.8660254f * a - 0.5f * b, l - 0.8660254f * a - 0.5f * b, l + b};
-        for (int i = 0; i < 3; ++i) c[i] = std::fmin(c[i] + (blended[i] - c[i]) * t, clip[i]);
-    } else {
-        for (int i = 0; i < 3; ++i) c[i] = std::fmin(c[i], clip[i]);
-    }
+    if (!(t > 0.0f)) return;
+    const float k[3] = {std::fmin(c[0], lowest), std::fmin(c[1], lowest), std::fmin(c[2], lowest)};
+    // Lightness and two opponent axes (dcraw's trans matrix for three colours).
+    const float a0 = 1.7320508f * (c[0] - c[1]), b0 = 2.0f * c[2] - c[0] - c[1];
+    const float a1 = 1.7320508f * (k[0] - k[1]), b1 = 2.0f * k[2] - k[0] - k[1];
+    const float s0 = a0 * a0 + b0 * b0;
+    const float ratio = s0 > 0.0f ? std::sqrt((a1 * a1 + b1 * b1) / s0) : 1.0f;
+    const float l = (c[0] + c[1] + c[2]) / 3.0f, a = a0 * ratio / 3.0f, b = b0 * ratio / 3.0f;
+    const float blended[3] = {l + 0.8660254f * a - 0.5f * b, l - 0.8660254f * a - 0.5f * b, l + b};
+    for (int i = 0; i < 3; ++i) c[i] += (blended[i] - c[i]) * t;
 }
 
 }  // namespace rawboy

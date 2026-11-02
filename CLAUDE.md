@@ -498,15 +498,16 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   `DecodedImage::clipLevel`, the neutral value blown highlights are blended to; it includes BaselineExposure and, for
   LibRaw, its normalisation to the largest multiplier, e.g. 0.71 for an infrared NEX-3 DNG, 1.27 for its JXL copy).
 - **Blown highlights and white balance:** both decoders blend clipped pixels to neutral at the as-shot white
-  (`blendClipped`, dcraw's blend within 10% of a channel's real clip when all channels approach clip; LibRaw runs with `highlight = 1`).
+  (`blendClipped`, dcraw's blend within 10% of a channel's real clip; LibRaw runs with `highlight = 1`).
   dcraw's own blend (`highlight = 2`) and the old per-channel clip at the DNG SDK's camera white acted wherever a
   white balanced channel passed the *lowest* clip: with infrared multipliers (blue x3.7) that desaturated or cut
   light ~2 stops below clipping. Saturated coloured light (e.g. red gels, stage lighting) has only one or two channels
-  near clip while the others are dark; blending to neutral is restricted to broad highlights where all channels have
-  substantial light (`rMin` approaching clip), preventing harsh pink/white desaturation contours. The shader's re-balance
-  (`uWhiteBalance`, layer WB) would tint neutral highlights with the opposite of the change (yellow-green when an IR photo
-  is neutralised), so `balanceWhite` divides that tint back out as all channels near `uClipLevel` (as-shot `DevelopParams.clipLevel`,
-  like `displaySource` never an edit; 0 = off, e.g. the viewfinder). Test file: `.raw/DSC00140*.dng` (IR NEX-3, filament).
+  near clip while the others are dark; blending to neutral is gated on `rMin = min(c) / lowest` (smoothstep 0.5..0.8),
+  so red light keeps its colour while white highlights where one channel clipped first (near-white highlights where green
+  clips at `lowest`) blend to neutral without magenta casts. The shader's re-balance (`uWhiteBalance`, layer WB) would
+  tint neutral highlights with the opposite of the change (yellow-green when an IR photo is neutralised), so `balanceWhite`
+  divides that tint back out as all channels near `uClipLevel` (as-shot `DevelopParams.clipLevel`, like `displaySource`
+  never an edit; 0 = off, e.g. the viewfinder). Test file: `.raw/DSC00140*.dng` (IR NEX-3, filament).
   `sensorWidth/Height` + TIFF `orientation` map back to sensor space for DNG opcodes.
 - Shader per output pixel: `outPx` (cropped, rotated/straightened output) → `uOutToImage` → lens pre (auto-scale,
   manual distortion) → sensor space → DNG warp (per plane for lateral CA) → back to image space → sample.
