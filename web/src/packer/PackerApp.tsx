@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { RAW_ACCEPT, canPickFolder, canPickOutputFolder, pickFiles, pickFolderFiles, pickOutputFolder, readDroppedFiles } from '../ui/common/files';
+import { RAW_ACCEPT, canPickFolder, canPickOutputFolder, isRawFileName, pickFiles, pickFolderFiles, pickOutputFolder, readDroppedFiles } from '../ui/common/files';
 import { groupByFolder, PackerStore, type PackItem } from './PackerStore';
 import type { PackFormat, PackInfo } from './protocol';
 import {
@@ -77,6 +77,21 @@ export function PackerApp() {
   const [finished, setFinished] = useState<{ title: string; body: string } | null>(null);
   const [permission, setPermission] = useState(notifyPermission);
   const [scrolled, setScrolled] = useState(false);
+  const [skippedNote, setSkippedNote] = useState<string | null>(null);
+  const noteTimerRef = useRef<number | null>(null);
+
+  const showSkipped = (count: number) => {
+    if (count <= 0) return;
+    const text = count === 1 ? '1 non-raw file skipped' : `${count} non-raw files skipped`;
+    setSkippedNote(text);
+    if (noteTimerRef.current) window.clearTimeout(noteTimerRef.current);
+    noteTimerRef.current = window.setTimeout(() => setSkippedNote(null), 5000);
+  };
+
+  useEffect(() => () => {
+    if (noteTimerRef.current) window.clearTimeout(noteTimerRef.current);
+  }, []);
+
   useEffect(() => saveSettings(settings), [settings]);
   // The choice when a run ends counts, not when it started.
   const notifyRef = useRef(settings.notifyWhenDone);
@@ -146,8 +161,9 @@ export function PackerApp() {
     const drop = async (e: DragEvent) => {
       e.preventDefault();
       setDragging(false);
-      const dropped = await readDroppedFiles(e.dataTransfer);
-      if (dropped.length) store.add(dropped);
+      const { files, skipped } = await readDroppedFiles(e.dataTransfer);
+      if (files.length) store.add(files);
+      if (skipped > 0) showSkipped(skipped);
     };
     window.addEventListener('dragover', over);
     window.addEventListener('dragleave', leave);
@@ -158,6 +174,20 @@ export function PackerApp() {
       window.removeEventListener('drop', drop);
     };
   }, []);
+
+  const addFiles = async () => {
+    const picked = await pickFiles(true, RAW_ACCEPT);
+    const valid = picked.filter((f) => !f.name.startsWith('.') && isRawFileName(f.name));
+    const skipped = picked.length - valid.length;
+    if (valid.length) store.add(valid);
+    if (skipped > 0) showSkipped(skipped);
+  };
+
+  const addFolder = async () => {
+    const { files, skipped } = await pickFolderFiles();
+    if (files.length) store.add(files);
+    if (skipped > 0) showSkipped(skipped);
+  };
 
   const pack = async (toFolder: boolean) => {
     if (toFolder) {
@@ -343,11 +373,11 @@ export function PackerApp() {
         <section className="packer-files" aria-label="Files">
           <p className="packer-safe">Your original files are never changed: packed copies are new files.</p>
           <div className="packer-actions">
-            <button onClick={async () => store.add(await pickFiles(true, RAW_ACCEPT))} disabled={state.running}>
+            <button onClick={addFiles} disabled={state.running}>
               Add files
             </button>
             {canPickFolder() && (
-              <button onClick={async () => store.add(await pickFolderFiles())} disabled={state.running}>
+              <button onClick={addFolder} disabled={state.running}>
                 Add folder
               </button>
             )}
@@ -380,11 +410,12 @@ export function PackerApp() {
             )}
           </div>
           {state.engineError && <p className="packer-error">The packer couldn't start: {state.engineError}</p>}
+          {skippedNote && <p className="packer-note" role="status">{skippedNote}</p>}
           {state.items.length === 0 ? (
             <div className="packer-drop">
-              Drop raw files or folders here, or <button className="text" onClick={async () => store.add(await pickFiles(true, RAW_ACCEPT))}>choose files</button>
+              Drop raw files or folders here, or <button className="text" onClick={addFiles}>choose files</button>
               {canPickFolder() && (
-                <> or <button className="text" onClick={async () => store.add(await pickFolderFiles())}>a folder</button></>
+                <> or <button className="text" onClick={addFolder}>a folder</button></>
               )}.
               <small>ARW, RAF, CR2, CR3, NEF, ORF, RW2, PEF, DNG and other raws LibRaw reads.</small>
             </div>
@@ -527,6 +558,7 @@ function QueueView({ items, running }: { items: PackItem[]; running: boolean }) 
                   type="button"
                   className="packer-folder-remove text"
                   onClick={() => store.removeFolder(group.folder)}
+                  disabled={running && group.items.every((it) => it.status === 'packing')}
                   title={`Remove ${folderName}`}
                   aria-label={`Remove folder ${folderName}`}
                 >

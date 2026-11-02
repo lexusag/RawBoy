@@ -269,8 +269,19 @@ body {
   line-height: 1;
 }
 
-.packer-folder-remove:hover {
+.packer-folder-remove:hover:not(:disabled) {
   color: var(--error);
+}
+
+.packer-folder-remove:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.packer-note {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .packer-list {

@@ -59,8 +59,10 @@ describe('readDroppedFiles', () => {
     } as unknown as DataTransfer;
 
     const result = await readDroppedFiles(dt);
-    expect(result).toHaveLength(1);
-    expect(result[0].file.name).toBe('photo.arw');
+    expect(result.files).toHaveLength(1);
+    expect(result.files[0].file.name).toBe('photo.arw');
+    // 4 non-raw files (jpg, xmp, txt, db); hidden dotfile (.DS_Store) is ignored without counting as non-raw
+    expect(result.skipped).toBe(4);
   });
 
   it('filters out non-raw files and hidden files during directory traversal', async () => {
@@ -115,9 +117,10 @@ describe('readDroppedFiles', () => {
     } as unknown as DataTransfer;
 
     const result = await readDroppedFiles(dt);
-    expect(result).toHaveLength(1);
-    expect(result[0].file.name).toBe('DSC001.ARW');
-    expect(result[0].folder).toBe('Vacation');
+    expect(result.files).toHaveLength(1);
+    expect(result.files[0].file.name).toBe('DSC001.ARW');
+    expect(result.files[0].folder).toBe('Vacation');
+    expect(result.skipped).toBe(3);
   });
 
   it('disambiguates two dropped folders with the same name', async () => {
@@ -160,8 +163,9 @@ describe('readDroppedFiles', () => {
     } as unknown as DataTransfer;
 
     const result = await readDroppedFiles(dt);
-    expect(result).toHaveLength(2);
-    expect(result[0].folder).toBe('DCIM');
-    expect(result[1].folder).toBe('DCIM (2)');
+    expect(result.files).toHaveLength(2);
+    expect(result.files[0].folder).toBe('DCIM');
+    expect(result.files[1].folder).toBe('DCIM (2)');
+    expect(result.skipped).toBe(0);
   });
 });

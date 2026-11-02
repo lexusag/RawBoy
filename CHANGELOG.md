@@ -3,8 +3,8 @@
 **RawBoy Packer: folder grouping in the queue (2026-11-02)**
 
 - Files in the queue are now grouped by folder with folder name headers, item counts, and a folder remove button.
-- Folders can be added using the new "Add folder" button (when supported) or by dragging and dropping folders directly onto the page.
-- Packing proceeds in folder group order (by order of first appearance). Non-raw files (JPG, XMP, TXT, Thumbs.db) are filtered out when dropping or picking folders.
+- Folders can be added using the new "Add folder" button or by dragging and dropping folders directly onto the page.
+- Packing proceeds in folder group order (by order of first appearance). Non-raw files (such as JPG, XMP, TXT and Thumbs.db) are skipped when dropping files or picking folders, with a note showing how many were skipped.
 
 **RawBoy Packer: jump to top and persistent clear finished (2026-11-02)**
 

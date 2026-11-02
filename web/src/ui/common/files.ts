@@ -34,8 +34,13 @@ export function pickFiles(multiple: boolean, accept = RAW_ACCEPT): Promise<File[
 export const canPickFolder = (): boolean =>
   typeof HTMLInputElement !== 'undefined' && 'webkitdirectory' in HTMLInputElement.prototype;
 
+export interface PickFolderResult {
+  files: File[];
+  skipped: number;
+}
+
 /** Opens the folder picker to select files within a folder. */
-export function pickFolderFiles(accept = RAW_ACCEPT): Promise<File[]> {
+export function pickFolderFiles(accept = RAW_ACCEPT): Promise<PickFolderResult> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -43,19 +48,28 @@ export function pickFolderFiles(accept = RAW_ACCEPT): Promise<File[]> {
     input.multiple = true;
     input.onchange = () => {
       const all = Array.from(input.files ?? []);
-      resolve(accept ? all.filter((f) => !f.name.startsWith('.') && isRawFileName(f.name, accept)) : all);
+      const nonHidden = all.filter((f) => !f.name.startsWith('.'));
+      const files = accept ? nonHidden.filter((f) => isRawFileName(f.name, accept)) : nonHidden;
+      const skipped = nonHidden.length - files.length;
+      resolve({ files, skipped });
     };
     input.click();
   });
+}
+
+export interface DroppedFilesResult {
+  files: { file: File; folder?: string }[];
+  skipped: number;
 }
 
 /**
  * Reads files from a drop event, traversing directories recursively if folders were dropped.
  * Preserves the relative folder path for items inside directories.
  */
-export async function readDroppedFiles(dt: DataTransfer | null, accept = RAW_ACCEPT): Promise<{ file: File; folder?: string }[]> {
-  if (!dt) return [];
-  const result: { file: File; folder?: string }[] = [];
+export async function readDroppedFiles(dt: DataTransfer | null, accept = RAW_ACCEPT): Promise<DroppedFilesResult> {
+  if (!dt) return { files: [], skipped: 0 };
+  const files: { file: File; folder?: string }[] = [];
+  let skipped = 0;
 
   const items = Array.from(dt.items ?? []);
   const entries: FileSystemEntry[] = [];
@@ -65,26 +79,35 @@ export async function readDroppedFiles(dt: DataTransfer | null, accept = RAW_ACC
     if (entry) entries.push(entry);
   }
 
-  const matches = (name: string) => !name.startsWith('.') && (!accept || isRawFileName(name, accept));
+  const isHidden = (name: string) => name.startsWith('.');
+  const isMatch = (name: string) => !accept || isRawFileName(name, accept);
 
   if (!entries.length) {
     for (const file of Array.from(dt.files ?? [])) {
-      if (matches(file.name)) {
-        result.push({ file });
+      if (isHidden(file.name)) continue;
+      if (isMatch(file.name)) {
+        files.push({ file });
+      } else {
+        skipped++;
       }
     }
-    return result;
+    return { files, skipped };
   }
 
   async function traverse(entry: FileSystemEntry, path: string): Promise<void> {
-    if (entry.name.startsWith('.')) return;
+    if (isHidden(entry.name)) return;
     if (entry.isFile) {
-      if (!matches(entry.name)) return;
+      if (!isMatch(entry.name)) {
+        skipped++;
+        return;
+      }
       const file = await new Promise<File | null>((res) => {
         (entry as FileSystemFileEntry).file(res, () => res(null));
       });
-      if (file && matches(file.name)) {
-        result.push({ file, folder: path || undefined });
+      if (file && isMatch(file.name)) {
+        files.push({ file, folder: path || undefined });
+      } else if (file) {
+        skipped++;
       }
     } else if (entry.isDirectory) {
       const dirReader = (entry as FileSystemDirectoryEntry).createReader();
@@ -119,7 +142,7 @@ export async function readDroppedFiles(dt: DataTransfer | null, accept = RAW_ACC
     }
   }
 
-  return result;
+  return { files, skipped };
 }
 
 /** Hands a file to the browser as a download. */
