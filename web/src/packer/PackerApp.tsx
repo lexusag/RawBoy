@@ -2,6 +2,8 @@ import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type
 import { RAW_ACCEPT, canPickFolder, canPickOutputFolder, isRawFileName, pickFiles, pickFolderFiles, pickOutputFolder, readDroppedFiles } from '../ui/common/files';
 import { groupByFolder, PackerStore, type PackItem } from './PackerStore';
 import type { PackFormat, PackInfo } from './protocol';
+import { ItemThumbnail, revokeThumbnail } from './ItemThumbnail';
+import { PreviewModal } from './PreviewModal';
 import {
   FORMAT_LABEL,
   MAX_FILES_AT_ONCE,
@@ -126,6 +128,37 @@ export function PackerApp() {
         setPermission(notifyPermission());
       }
     }
+  };
+
+  const [previewItem, setPreviewItem] = useState<PackItem | null>(null);
+  const previewIndex = previewItem ? state.items.findIndex((it) => it.id === previewItem.id) : -1;
+
+  const removeItem = (id: number) => {
+    const it = state.items.find((item) => item.id === id);
+    if (it) revokeThumbnail(it.file);
+    if (previewItem?.id === id) setPreviewItem(null);
+    store.remove(id);
+  };
+
+  const removeFolder = (folder: string | null | undefined) => {
+    const target = folder ?? undefined;
+    for (const it of state.items) {
+      if ((it.folder ?? undefined) === target && it.status !== 'packing') {
+        revokeThumbnail(it.file);
+        if (previewItem?.id === it.id) setPreviewItem(null);
+      }
+    }
+    store.removeFolder(folder);
+  };
+
+  const clearDone = () => {
+    for (const it of state.items) {
+      if (it.status === 'done' || it.status === 'error') {
+        revokeThumbnail(it.file);
+        if (previewItem?.id === it.id) setPreviewItem(null);
+      }
+    }
+    store.clearDone();
   };
 
   useEffect(() => {
@@ -384,7 +417,7 @@ export function PackerApp() {
             <span className="spacer" />
             <button
               className="text"
-              onClick={() => store.clearDone()}
+              onClick={clearDone}
               disabled={state.running || !state.items.some((it) => it.status === 'done' || it.status === 'error')}
               title={state.running ? 'Available when packing has stopped' : 'Remove packed and failed files from the list'}
             >
@@ -421,7 +454,13 @@ export function PackerApp() {
             </div>
           ) : (
             <>
-              <QueueView items={state.items} running={state.running} />
+              <QueueView
+                items={state.items}
+                running={state.running}
+                onRemove={removeItem}
+                onRemoveFolder={removeFolder}
+                onPreview={setPreviewItem}
+              />
               <Totals items={state.items} />
             </>
           )}
@@ -438,6 +477,17 @@ export function PackerApp() {
       >
         ↑ Jump to top
       </button>
+
+      {previewItem && (
+        <PreviewModal
+          item={previewItem}
+          onClose={() => setPreviewItem(null)}
+          hasPrev={previewIndex > 0}
+          hasNext={previewIndex >= 0 && previewIndex < state.items.length - 1}
+          onPrev={() => previewIndex > 0 && setPreviewItem(state.items[previewIndex - 1])}
+          onNext={() => previewIndex >= 0 && previewIndex < state.items.length - 1 && setPreviewItem(state.items[previewIndex + 1])}
+        />
+      )}
 
       {finished && (
         <div className="dialog-backdrop" onClick={() => setFinished(null)}>
@@ -534,7 +584,19 @@ function rawDetails(i: PackInfo): { parts: string[]; title: string } {
 
 const mb = (bytes: number) => `${(bytes / 1e6).toFixed(bytes < 10e6 ? 1 : 0)} MB`;
 
-function QueueView({ items, running }: { items: PackItem[]; running: boolean }) {
+function QueueView({
+  items,
+  running,
+  onRemove,
+  onRemoveFolder,
+  onPreview,
+}: {
+  items: PackItem[];
+  running: boolean;
+  onRemove: (id: number) => void;
+  onRemoveFolder: (folder: string | null | undefined) => void;
+  onPreview: (item: PackItem) => void;
+}) {
   const groups = useMemo(() => groupByFolder(items), [items]);
   const hasFolders = groups.some((g) => g.folder != null);
 
@@ -557,7 +619,7 @@ function QueueView({ items, running }: { items: PackItem[]; running: boolean }) 
                 <button
                   type="button"
                   className="packer-folder-remove text"
-                  onClick={() => store.removeFolder(group.folder)}
+                  onClick={() => onRemoveFolder(group.folder)}
                   disabled={running && group.items.every((it) => it.status === 'packing')}
                   title={`Remove ${folderName}`}
                   aria-label={`Remove folder ${folderName}`}
@@ -568,7 +630,7 @@ function QueueView({ items, running }: { items: PackItem[]; running: boolean }) 
             )}
             <ul className="packer-list">
               {group.items.map((it) => (
-                <FileRow key={it.id} item={it} onRemove={() => store.remove(it.id)} busy={running} />
+                <FileRow key={it.id} item={it} onRemove={() => onRemove(it.id)} onPreview={() => onPreview(it)} busy={running} />
               ))}
             </ul>
           </div>
@@ -594,7 +656,7 @@ function FilesIcon() {
   );
 }
 
-function FileRow({ item, onRemove, busy }: { item: PackItem; onRemove: () => void; busy: boolean }) {
+function FileRow({ item, onRemove, onPreview, busy }: { item: PackItem; onRemove: () => void; onPreview: () => void; busy: boolean }) {
   const i = item.info;
   const camera = i ? `${i.make} ${i.model}`.trim() : '';
   const tags: string[] = [];
@@ -637,6 +699,7 @@ function FileRow({ item, onRemove, busy }: { item: PackItem; onRemove: () => voi
   }
   return (
     <li className={`packer-item status-${item.status}`}>
+      <ItemThumbnail file={item.file} onClick={onPreview} />
       <div className="name">
         <span className="file">{item.file.name}</span>
         <span className="meta">
