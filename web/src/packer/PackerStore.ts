@@ -108,21 +108,30 @@ export class PackerStore {
     }
     if (!added.length) return;
     this.set({ items: [...this.state.items, ...added] });
+    for (const item of added) this.inspect(item.id);
+  }
+
+  /**
+   * Queues reading what a file is. Packing does not need it (pack() reports the same info), so a file that a run
+   * picked up before its turn here is skipped.
+   */
+  private inspect(id: number) {
     this.inspector ??= this.worker(0);
-    for (const item of added) {
-      this.inspecting = this.inspecting.then(async () => {
-        if (!this.state.items.some((it) => it.id === item.id)) return;
-        try {
-          const bytes = await item.file.arrayBuffer();
-          const info = await this.inspector!.call<PackInfo>({ op: 'inspect', bytes }, [bytes]);
-          this.update(item.id, { status: 'ready', info });
-        } catch (e) {
-          const message = e instanceof Error ? e.message : String(e);
-          if (/DNG SDK|rawboy-full|Failed to fetch|import/i.test(message)) this.set({ engineError: message });
-          this.update(item.id, { status: 'error', error: message });
-        }
-      });
-    }
+    this.inspecting = this.inspecting.then(async () => {
+      const item = this.state.items.find((it) => it.id === id);
+      if (item?.status !== 'inspecting') return;
+      try {
+        const bytes = await item.file.arrayBuffer();
+        const info = await this.inspector!.call<PackInfo>({ op: 'inspect', bytes }, [bytes]);
+        const now = this.state.items.find((it) => it.id === id);
+        if (now?.status === 'inspecting') this.update(id, { status: 'ready', info });
+        else if (now && !now.info) this.update(id, { info });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        if (/DNG SDK|rawboy-full|Failed to fetch|import/i.test(message)) this.set({ engineError: message });
+        if (this.state.items.find((it) => it.id === id)?.status === 'inspecting') this.update(id, { status: 'error', error: message });
+      }
+    });
   }
 
   remove(id: number) {
@@ -141,13 +150,15 @@ export class PackerStore {
   }
 
   /**
-   * Packs every file that is ready (or failed before), writing each DNG as soon as it is done. Resolves with what the
-   * run did, or null when nothing was started.
+   * Packs every file that is ready, still being read, or failed before, writing each DNG as soon as it is done. It does
+   * not wait for files to be read: a file not read yet is packed when its turn comes. Resolves with what the run did,
+   * or null when nothing was started.
    */
   async start(settings: PackSettings, output: Output): Promise<PackRun | null> {
     if (this.state.running) return null;
-    await this.inspecting;
-    const queue = this.state.items.filter((it) => it.status === 'ready' || it.status === 'done' || (it.status === 'error' && it.info));
+    const queue = this.state.items.filter(
+      (it) => it.status === 'inspecting' || it.status === 'ready' || it.status === 'done' || (it.status === 'error' && it.info),
+    );
     if (!queue.length) return null;
     for (const it of queue) this.update(it.id, { status: 'waiting', error: undefined, outSize: undefined, outName: undefined });
     this.cancelled = false;
@@ -170,7 +181,7 @@ export class PackerStore {
           let name = outputName(item.file.name, 0, suffix);
           if (folder) name = await folder.write((c) => outputName(item.file.name, c, suffix), blob);
           else saveBlob(name, blob);
-          this.update(item.id, { status: 'done', outSize: dng.byteLength, outName: name, result: info });
+          this.update(item.id, { status: 'done', outSize: dng.byteLength, outName: name, result: info, info: this.state.items.find((it) => it.id === item.id)?.info ?? info });
         } catch (e) {
           this.update(item.id, { status: 'error', error: e instanceof Error ? e.message : String(e) });
           // A worker that ran out of memory is unusable: start a fresh one for the next file.
@@ -194,7 +205,12 @@ export class PackerStore {
       } else if (it.status === 'error') run.failed++;
       else if (it.status === 'waiting') {
         run.stopped = true;
-        this.update(it.id, { status: 'ready' });
+        if (it.info) this.update(it.id, { status: 'ready' });
+        else {
+          // Stopped before its turn and never read: read it now, as if just added.
+          this.update(it.id, { status: 'inspecting' });
+          this.inspect(it.id);
+        }
       }
     }
     this.set({ running: false });

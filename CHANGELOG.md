@@ -1,5 +1,11 @@
 # Changelog
 
+**RawBoy Packer: pack without waiting for files to be read (2026-11-02)**
+
+- *Pack* works as soon as files are added: it no longer waits until every file shows its camera and format. A file not
+  read yet is packed when its turn comes, and its details appear once it is done. Files left over after *Stop* are read
+  as usual.
+
 **RawBoy Packer: pop-up when packing is done (2026-11-02)**
 
 - New *When done* setting (off by default, remembered): *Pop-up* shows a message with the number of files packed, the
