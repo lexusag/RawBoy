@@ -695,6 +695,14 @@ bool packDng(const uint8_t* data, size_t size, const PackOptions& options, const
             negative->Parse(host, stream, dinfo);
             negative->PostParse(host, stream, dinfo);
             negative->ReadStage1Image(host, stream, dinfo);
+            // The SDK keeps a JPEG XL source's compressed tiles and writes them back as they are, so a Small raw or
+            // Lossless JPEG XL DNG packed as Lossless stayed JPEG XL (DNG 1.7). Dropping them makes the writer encode
+            // the decoded pixels as lossless JPEG (DNG 1.4), which older software opens.
+            if (options.mode == PackMode::LosslessJpeg) {
+                negative->ClearRawLossyCompressedImage();
+                negative->ClearRawLossyCompressedImageDigest();
+                negative->ClearRawImageDigest();
+            }
             if (!options.keepGps) stripGps(*negative->GetExif());
             info.lensWritten = !info.lensData.empty();
         } else {
