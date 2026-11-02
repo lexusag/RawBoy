@@ -1011,6 +1011,8 @@ export class AutoStore {
   openDetail(id: string) {
     const p = this.photo(id);
     if (!p?.analysis || this._state.export) return;
+    // Another photo (arrow keys, the ‹ › buttons, Delete) opens fitted, also when the last one was zoomed in.
+    if (this._state.selected !== id) this.session.exitZoom();
     this.update({ selected: id });
     if (this._state.sessionReady === id) return;
     this.released = false;

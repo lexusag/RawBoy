@@ -611,8 +611,9 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
   // The thumbnail shown until the raw is decoded, by its size: the frame goes around it (Preview's placeholderSize).
   const [thumbSize, setThumbSize] = useState<{ src: string; size: [number, number] } | null>(null);
   const zoomed = session.zoomCenter != null;
+  // Also while zoomed: the next photo opens fitted (openDetail leaves the zoom).
   const go = (delta: number) => {
-    if (zoomed || state.export) return;
+    if (state.export) return;
     const next = pages[index + delta];
     if (next) store.openDetail(next.id);
   };
@@ -659,7 +660,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   });
-  // Swipe left/right on touch screens, when not zoomed.
+  // Swipe left/right on touch screens, when not zoomed (one finger pans then; the ‹ › buttons still work).
   const swipe = useRef<{ x: number; y: number } | null>(null);
   if (!photo || !analysis) return null;
   // What the look strip's place holds and what press-and-hold takes away: RawBoy edits, a preset or the look.
@@ -850,8 +851,8 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
             {loaded && (showAuto || zoomed) && <PreviewLabel>{showAuto ? `Without ${develop}` : zoomLabel(session.zoomScale)}</PreviewLabel>}
             {state.export && <progress className="export-progress" value={state.export.current} max={1} />}
           </Preview>
-          {index > 0 && !zoomed && <button type="button" className="nav prev" onClick={() => go(-1)} title="Previous (← or Backspace)">‹</button>}
-          {index < pages.length - 1 && !zoomed && <button type="button" className="nav next" onClick={() => go(1)} title="Next (→ or Space)">›</button>}
+          {index > 0 && <button type="button" className="nav prev" onClick={() => go(-1)} title="Previous (← or Backspace)">‹</button>}
+          {index < pages.length - 1 && <button type="button" className="nav next" onClick={() => go(1)} title="Next (→ or Space)">›</button>}
         </div>
         <aside className="sidebar auto-controls">
           {short ? tabs : lookControls}
