@@ -31,6 +31,12 @@ export interface PackInfo {
   lensVignetting: boolean;
   lensCa: boolean;
   adobeHints: boolean;
+  /** The raw data's bit depth, from its white level (0 = unknown). */
+  bits: number;
+  /** How the source stores its data: "lossless compressed", "lossy JPEG XL"...; "" when unknown. */
+  compression: string;
+  /** DNG sources: "1.7"; "" otherwise. */
+  dngVersion: string;
   // Results of pack() only:
   modeUsed: PackFormat;
   linear: boolean;

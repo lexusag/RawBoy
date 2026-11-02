@@ -1,5 +1,12 @@
 # Changelog
 
+**RawBoy Packer: raw details in the file list (2026-11-02)**
+
+- Each file in the list now shows how its raw data is stored, under the camera and lens: bit depth, compression
+  (lossless or lossy compressed, uncompressed; for DNGs lossless/lossy JPEG or JPEG XL), colour filter (Bayer, X-Trans,
+  linear) and megapixels, e.g. "14-bit · lossless compressed · X-Trans · 40.1 MP". DNGs show their version (DNG 1.4,
+  DNG 1.7). The pixel size is in the tooltip.
+
 **RawBoy Packer: JPEG XL DNGs back to maximum compatibility (2026-11-02)**
 
 - Packing a JPEG XL DNG (Small raw, Lossless JPEG XL, Micro) as *Lossless* now really turns it into a classic lossless

@@ -287,7 +287,9 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
 - **RawBoy Packer** (2026-11-01, web only; `docs/packer.md`): `web/packer.html` + `src/packer/` (`PackerApp`, `PackerStore`:
   one `worker/packer.worker.ts` per file at once, each its own rawboy-full instance; `settings.ts`: presets, the live
   summary and the "Opens in" table, numbers measured on the owner's files) → wasm `packInspect`/`pack` →
-  `engine/src/main/cpp/dng_pack.cpp` (DNG SDK builds only, not in the Android/iOS libraries). Raws: LibRaw's visible
+  `engine/src/main/cpp/dng_pack.cpp` (DNG SDK builds only, not in the Android/iOS libraries). The file list's raw line
+  (`rawDetails`) comes from `PackInfo.bits/compression/dngVersion`, set in `inspectForPacking` (`compressionOf`: Sony/Nikon
+  maker notes, Fuji `fuji_lossless`, else LibRaw's decoder name; DNGs: `fCompression` + `fJXLDistance`). Raws: LibRaw's visible
   area (`fixLibRawGeometry`: LibRaw 0.21 frames 40 MP X-Trans, raw width 7872, 60 px off; 0.22's margins), CFA phase, per-position blacks, D65 ColorMatrix, inset crop (Fujifilm: the RAF header's own, `readFujiCrop`), EXIF (`readLibRawMetadata`) into a `dng_negative`;
   DNGs: the SDK's own parse. Formats: Small raw = `LossyCompressMosaicJXL` (non-Bayer → `ConvertToProxy` at full size),
   Micro = `ConvertToProxy(maxSize)`, lossless JPEG / `LosslessCompressJXL`. Stage 3 is built only for a rendered preview

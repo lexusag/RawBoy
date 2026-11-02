@@ -39,6 +39,9 @@ struct PackInfo {
     std::string lensData;  // "Sony", "Fujifilm" (corrections in the file), "" (none)
     bool lensDistortion = false, lensVignetting = false, lensCa = false;
     bool adobeHints = false;  // Adobe's BaselineSharpness/Exposure known for this camera
+    int bits = 0;             // the raw data's bit depth, from its white level (a Pixel's 16-bit samples hold 10 bits)
+    std::string compression;  // "lossless compressed", "lossy JPEG XL"...; "" when unknown
+    std::string dngVersion;   // DNG sources: "1.7"
     // pack() only:
     PackMode modeUsed = PackMode::SmallRaw;
     bool linear = false;        // the output is demosaiced

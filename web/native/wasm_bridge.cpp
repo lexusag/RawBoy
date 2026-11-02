@@ -446,6 +446,9 @@ val packInfoOf(const rawboy::PackInfo& i) {
     o.set("lensVignetting", i.lensVignetting);
     o.set("lensCa", i.lensCa);
     o.set("adobeHints", i.adobeHints);
+    o.set("bits", i.bits);
+    o.set("compression", i.compression);
+    o.set("dngVersion", i.dngVersion);
     o.set("modeUsed", std::string(modeName(i.modeUsed)));
     o.set("linear", i.linear);
     o.set("lensWritten", i.lensWritten);

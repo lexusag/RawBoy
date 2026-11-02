@@ -54,6 +54,18 @@ Lightroom scales its default sharpening and exposure by hints that Adobe's own D
 them for the GFX 50R, X-T1, X-T5, X-E5, A7 III, A7C II, NEX-3, E-PL9, EOS RP and EOS 6D; for other cameras the summary warns that Lightroom may open the DNG a
 little softer and darker than its own conversion.
 
+## File list
+
+Each file shows its camera and lens, the format (DNGs with their version, e.g. DNG 1.7), whether it holds lens
+corrections, and a line about its raw data: bit depth (from the white level, so a Pixel's 16-bit samples read 10-bit),
+compression, colour filter (Bayer, X-Trans, or linear for demosaiced DNGs) and megapixels.
+
+- Camera raws: Sony and Nikon from their maker notes (uncompressed, lossless or lossy compressed, Nikon's High
+  Efficiency); Fujifilm from the RAF's compressed-data header (lossless or lossy compressed); otherwise from the
+  decoder LibRaw picks, and plain "compressed" when that doesn't say which.
+- DNGs: uncompressed, lossless JPEG, lossy JPEG, Deflate, or JPEG XL (lossless when JXLDistance is 0, lossy when it is
+  set higher, plain "JPEG XL" when the file doesn't say).
+
 ## Other settings
 
 - **Location**: keep or remove GPS tags.
