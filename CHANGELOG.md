@@ -1,5 +1,14 @@
 # Changelog
 
+**RawBoy Packer: Fujifilm X-T5, X-Trans framing (2026-11-02)**
+
+- Fujifilm X-T5 raws now pack: Adobe's colour matrix (the raw library is older than the camera), Lightroom's default
+  sharpening and exposure as in Adobe's DNGs, and the camera's lens corrections.
+- 40 MP X-Trans raws (X-T5, X-E5) are framed as the camera and Adobe frame them: the raw library placed the picture 60
+  pixels to the right, so a strip on the left was lost and a black strip came in on the right. X-Trans raws (these and
+  the X-T1) now keep the camera's own crop exactly (the X-T1's lost 2 rows). Checked pixel for pixel against Adobe's
+  DNGs of an X-T5, X-E5 and X-T1 raw.
+
 **RawBoy Auto (web): next and previous photo while zoomed (2026-11-02)**
 
 - In the photo view, the ‹ › buttons now stay on screen while the photo is zoomed in, and ← / →, Space and Backspace

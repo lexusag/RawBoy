@@ -22,7 +22,7 @@ correctly exposed photos), Good 0.5, Compact 1.0. **Speed** is the encoder effor
 
 ## Lens corrections
 
-Sony (ARW SubIFD tags 0x7032/0x7035/0x7037) and Fujifilm (RAF tags 0xF00B/0xF00F/0xF010; the GFX, X-T1 and X-E5 layouts differ, the X-E5 stores none) store the camera's own
+Sony (ARW SubIFD tags 0x7032/0x7035/0x7037) and Fujifilm (RAF tags 0xF00B/0xF00F/0xF010; the GFX, X-T1, X-T5 and X-E5 layouts differ, the X-E5 stores none) store the camera's own
 distortion, colour fringing and vignetting corrections. The Packer turns them into DNG opcodes as Adobe's converter
 does (WarpRectilinear, FixVignetteRadial); checked against Adobe's DNG of the same GFX file.
 
@@ -37,7 +37,7 @@ Turning *Lens corrections* off drops them.
 ## Lightroom match
 
 Lightroom scales its default sharpening and exposure by hints that Adobe's own DNGs carry per camera. The Packer knows
-them for the GFX 50R, X-T1, X-E5, A7 III, A7C II, NEX-3, E-PL9, EOS RP and EOS 6D; for other cameras the summary warns that Lightroom may open the DNG a
+them for the GFX 50R, X-T1, X-T5, X-E5, A7 III, A7C II, NEX-3, E-PL9, EOS RP and EOS 6D; for other cameras the summary warns that Lightroom may open the DNG a
 little softer and darker than its own conversion.
 
 ## Other settings

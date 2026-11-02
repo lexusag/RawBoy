@@ -119,7 +119,8 @@ bool readSony(const Tiff& t, CameraLensData& out) {
 // GeometricDistortionParams 0xF00B, ChromaticAberrationParams 0xF00F, VignettingParams 0xF010 (SRATIONALs). Each is a
 // header (a lens constant), n knot radii, then the values: n percentages (distortion, vignetting brightness) or
 // n red and n blue ratios offsets (CA). The GFX stores 8 knots from 0.35, shared by the three; the X-T1 11 (distortion,
-// vignetting) or 10 (CA) knots from 0 / 0.1; the X-E5 9 knots and zeros (no data).
+// vignetting) or 10 (CA) knots from 0 / 0.1; the X-T5 10 knots at
+// sqrt(i / 8) (0, 0.354, 0.5 ... 1.061); the X-E5 9 knots and zeros (no data).
 struct FujiCurve {
     std::vector<double> knots;
     std::vector<std::vector<double>> values;
