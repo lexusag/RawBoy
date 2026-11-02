@@ -1,5 +1,11 @@
 # Changelog
 
+**RawBoy Packer: pop-up when packing is done (2026-11-02)**
+
+- New *When done* setting (off by default, remembered): *Pop-up* shows a message with the number of files packed, the
+  sizes before and after, and any that failed or were stopped. When the tab is in the background and the browser allows
+  it, a system notification says the same; the browser asks for permission when the option is turned on.
+
 **Camera viewfinder exposure on Samsung tablets (2026-11-01)**
 
 - RawBoy Camera's viewfinder is no longer blown out before the first photo on a lens. Some cameras (Galaxy Tab S11

@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { RAW_ACCEPT, canPickOutputFolder, pickFiles, pickOutputFolder } from '../ui/common/files';
 import { PackerStore, type PackItem } from './PackerStore';
 import type { PackFormat, PackInfo } from './protocol';
@@ -16,10 +16,12 @@ import {
   autoFilesAtOnce,
   loadSettings,
   presetOf,
+  runMessage,
   saveSettings,
   summarize,
   usesQuality,
   usesSpeed,
+  type PackRun,
   type PackSettings,
   type Preset,
   type PreviewSize,
@@ -29,6 +31,26 @@ import {
 } from './settings';
 
 const store = new PackerStore();
+
+const canNotify = () => typeof Notification !== 'undefined';
+
+/** The system notification's state, for the "When done" hint. */
+const notifyPermission = (): NotificationPermission | 'unsupported' => (canNotify() ? Notification.permission : 'unsupported');
+
+/** A system notification for a run that finished while the tab was in the background; false when it can't be shown. */
+function systemNotify(title: string, body: string): boolean {
+  if (!canNotify() || Notification.permission !== 'granted') return false;
+  try {
+    const n = new Notification(title, { body, icon: new URL('favicon.svg', document.baseURI).href, tag: 'rawboy-packer' });
+    n.onclick = () => {
+      window.focus();
+      n.close();
+    };
+    return true;
+  } catch {
+    return false; // Android Chrome only shows notifications from a service worker
+  }
+}
 
 const FORMAT_HINT: Record<PackFormat, string> = {
   small: 'Raw data, lossy JPEG XL. The best size for keeping raws.',
@@ -52,7 +74,38 @@ export function PackerApp() {
   const state = useSyncExternalStore(store.subscribe, store.getState);
   const [settings, setSettings] = useState<PackSettings>(loadSettings);
   const [dragging, setDragging] = useState(false);
+  const [finished, setFinished] = useState<{ title: string; body: string } | null>(null);
+  const [permission, setPermission] = useState(notifyPermission);
   useEffect(() => saveSettings(settings), [settings]);
+  // The choice when a run ends counts, not when it started.
+  const notifyRef = useRef(settings.notifyWhenDone);
+  notifyRef.current = settings.notifyWhenDone;
+
+  const setNotify = async (notifyWhenDone: boolean) => {
+    change({ notifyWhenDone });
+    // Ask once, from the click: browsers only show the prompt after a user gesture.
+    if (notifyWhenDone && canNotify() && Notification.permission === 'default') {
+      try {
+        setPermission(await Notification.requestPermission());
+      } catch {
+        setPermission(notifyPermission());
+      }
+    }
+  };
+
+  useEffect(() => {
+    if (!finished) return;
+    const key = (e: KeyboardEvent) => e.key === 'Escape' && setFinished(null);
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, [finished]);
+
+  const onFinished = (run: PackRun | null) => {
+    if (!run || !notifyRef.current) return;
+    const message = runMessage(run);
+    setFinished(message);
+    if (document.hidden) systemNotify(message.title, message.body);
+  };
 
   const change = (patch: Partial<PackSettings>) => setSettings((s) => ({ ...s, ...patch }));
   const preset = presetOf(settings);
@@ -94,9 +147,9 @@ export function PackerApp() {
         return; // cancelled
       }
       if (!dir) return;
-      void store.start(settings, { kind: 'folder', dir });
+      onFinished(await store.start(settings, { kind: 'folder', dir }));
     } else {
-      void store.start(settings, { kind: 'downloads' });
+      onFinished(await store.start(settings, { kind: 'downloads' }));
     }
   };
 
@@ -156,6 +209,28 @@ export function PackerApp() {
                 { value: true, label: 'Yes' },
               ]}
               onChange={(nameSuffix) => change({ nameSuffix })}
+            />
+          </Row>
+
+          <Row
+            label="When done"
+            hint={
+              !settings.notifyWhenDone
+                ? 'Off: check the file list for progress.'
+                : permission === 'granted'
+                  ? 'A pop-up here, and a system notification when this tab is in the background.'
+                  : permission === 'denied'
+                    ? 'A pop-up here. System notifications are blocked for this site in the browser settings.'
+                    : 'A pop-up here when every file is packed.'
+            }
+          >
+            <Segmented<boolean>
+              value={settings.notifyWhenDone}
+              options={[
+                { value: false, label: 'Nothing' },
+                { value: true, label: 'Pop-up' },
+              ]}
+              onChange={(v) => void setNotify(v)}
             />
           </Row>
 
@@ -291,6 +366,20 @@ export function PackerApp() {
           )}
         </section>
       </main>
+
+      {finished && (
+        <div className="dialog-backdrop" onClick={() => setFinished(null)}>
+          <div className="dialog packer-done" role="alertdialog" aria-labelledby="packer-done-title" aria-describedby="packer-done-body" onClick={(e) => e.stopPropagation()}>
+            <h2 id="packer-done-title">{finished.title}</h2>
+            <p id="packer-done-body">{finished.body}</p>
+            <div className="dialog-actions">
+              <button className="primary" autoFocus onClick={() => setFinished(null)}>
+                OK
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <footer className="packer-footer">
         RawBoy Packer uses LibRaw and the Adobe DNG SDK. This product includes DNG technology under license by Adobe.{' '}

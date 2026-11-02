@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PackInfo } from './protocol';
-import { DEFAULT_SETTINGS, autoFilesAtOnce, PRESETS, outputName, presetOf, settingsSuffix, summarize, threadsPerFile } from './settings';
+import { DEFAULT_SETTINGS, autoFilesAtOnce, PRESETS, outputName, presetOf, runMessage, settingsSuffix, summarize, threadsPerFile } from './settings';
 
 const info = (p: Partial<PackInfo>): PackInfo => ({
   make: 'Sony', model: 'ILCE-7M3', lens: '', format: 'ARW', width: 6024, height: 4024, dng: false, mosaic: true, bayer: true,
@@ -54,5 +54,16 @@ describe('auto files at once', () => {
     expect(autoFilesAtOnce(4, 16)).toBe(1);
     expect(autoFilesAtOnce(16, 4)).toBe(1);
     expect(DEFAULT_SETTINGS.filesAtOnce).toBe(0);
+  });
+
+  it('describes a finished run for the pop-up, off by default', () => {
+    expect(DEFAULT_SETTINGS.notifyWhenDone).toBe(false);
+    expect(runMessage({ done: 3, failed: 0, stopped: false, before: 150e6, after: 50e6 })).toEqual({
+      title: 'Packing finished',
+      body: '3 files packed: 150 MB → 50 MB (33%).',
+    });
+    expect(runMessage({ done: 1, failed: 1, stopped: false, before: 40e6, after: 10e6 }).body).toBe('1 file packed: 40 MB → 10 MB (25%). 1 file failed.');
+    expect(runMessage({ done: 0, failed: 2, stopped: false, before: 0, after: 0 }).title).toBe('Packing failed');
+    expect(runMessage({ done: 1, failed: 0, stopped: true, before: 40e6, after: 10e6 }).title).toBe('Packing stopped');
   });
 });

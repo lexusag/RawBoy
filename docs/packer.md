@@ -47,13 +47,16 @@ little softer and darker than its own conversion.
 - **Files at once**: Auto (default: a third of the cores, one on phones and machines under 8 GB) or 1 to 4 files in parallel, each in its own worker. A 50 MP photo needs up to 1 GB.
 - **Settings in file name** (off by default): adds the settings to the name, e.g. `DSC001-small-high.dng`, `DSC001-micro4000-good.dng`,
   `DSC001-lossless.dng`; for DNG sources it replaces `-packed`.
+- **When done** (off by default): *Pop-up* shows a message when every file is packed (count, sizes, failures). When the
+  tab is in the background, a system notification too, if the browser allows notifications for the page (it asks when
+  the option is turned on; Android Chrome shows only the pop-up).
 - Output: a folder (Chrome, Edge) or the browser's downloads. Names are the source's with `.dng`; DNG sources get
   `-packed`. Originals are never changed.
 
 ## Standard and Advanced
 
 The page opens in a plain view: **Pack as** (Smallest files, Maximum compatibility, Tiny copies for sharing), the
-longest side for tiny copies, lens corrections, location and the file-name option. *Advanced settings* (collapsed)
+longest side for tiny copies, lens corrections, location, the file-name option and *When done*. *Advanced settings* (collapsed)
 holds file type, quality, compression effort, preview and files at once. Picking a *Pack as* choice fills the advanced
 values once; changing an advanced row never changes another row. The *After packing, the file opens in* list describes
 the packed file.

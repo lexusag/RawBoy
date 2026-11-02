@@ -25,6 +25,8 @@ export interface PackSettings {
   advanced: boolean;
   /** Files packed in parallel, each in its own worker; 0 = chosen from the cores and memory. */
   filesAtOnce: number;
+  /** Show a pop-up (and a system notification while the tab is in the background) when packing finishes. */
+  notifyWhenDone: boolean;
 }
 
 export const DEFAULT_SETTINGS: PackSettings = {
@@ -38,6 +40,7 @@ export const DEFAULT_SETTINGS: PackSettings = {
   nameSuffix: false,
   advanced: false,
   filesAtOnce: 0,
+  notifyWhenDone: false,
 };
 
 export const DISTANCE: Record<Quality, number> = { archive: 0.1, high: 0.2, good: 0.5, compact: 1.0 };
@@ -135,6 +138,7 @@ export function loadSettings(): PackSettings {
     if (!MAX_SIZES.includes(s.maxSize)) s.maxSize = DEFAULT_SETTINGS.maxSize;
     s.filesAtOnce = Math.min(MAX_FILES_AT_ONCE, Math.max(0, Math.round(Number(s.filesAtOnce)) || 0));
     s.advanced = s.advanced === true;
+    s.notifyWhenDone = s.notifyWhenDone === true;
     return s;
   } catch {
     return DEFAULT_SETTINGS;
@@ -350,4 +354,28 @@ export function outputName(source: string, counter = 0, suffix = ''): string {
   const isDng = dot > 0 && source.slice(dot + 1).toLowerCase() === 'dng';
   const tag = suffix ? `-${suffix}` : isDng ? '-packed' : '';
   return `${base}${tag}${counter ? `-${counter}` : ''}.dng`;
+}
+
+/** What a finished run did, for the "packing finished" pop-up. */
+export interface PackRun {
+  done: number;
+  failed: number;
+  /** Stopped with "Stop after these" before every file was packed. */
+  stopped: boolean;
+  /** Sizes of the packed files' sources and outputs. */
+  before: number;
+  after: number;
+}
+
+/** The pop-up's title and one line under it. */
+export function runMessage(r: PackRun): { title: string; body: string } {
+  const title = r.stopped ? 'Packing stopped' : r.failed && !r.done ? 'Packing failed' : 'Packing finished';
+  const parts: string[] = [];
+  if (r.done) {
+    const pct = r.before ? Math.round((r.after / r.before) * 100) : 0;
+    parts.push(`${plural(r.done, 'file')} packed: ${(r.before / 1e6).toFixed(0)} MB → ${(r.after / 1e6).toFixed(0)} MB (${pct}%).`);
+  }
+  if (r.failed) parts.push(`${plural(r.failed, 'file')} failed.`);
+  if (!r.done && !r.failed) parts.push('No files were packed.');
+  return { title, body: parts.join(' ') };
 }
