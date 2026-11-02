@@ -350,6 +350,7 @@ export function PackerApp() {
               className="text"
               onClick={() => store.clearDone()}
               disabled={state.running || !state.items.some((it) => it.status === 'done' || it.status === 'error')}
+              title={state.running ? 'Available when packing has stopped' : 'Remove packed and failed files from the list'}
             >
               Clear finished
             </button>
@@ -575,6 +576,22 @@ function FileRow({ item, onRemove, busy }: { item: PackItem; onRemove: () => voi
 /** Pinned to the bottom of the screen while a run packs, so it stays in view however long the file list is. */
 function PackProgress({ items, runIds, stopping }: { items: PackItem[]; runIds: number[]; stopping: boolean }) {
   const startRef = useRef(performance.now());
+  // The Jump to top button sits above this bar, whatever height it has (wrapped text, safe area).
+  const barRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = barRef.current;
+    if (!el) return;
+    const root = document.documentElement;
+    const publish = () => root.style.setProperty('--packer-progress-h', `${el.offsetHeight}px`);
+    publish();
+    if (typeof ResizeObserver === 'undefined') return () => root.style.removeProperty('--packer-progress-h');
+    const ro = new ResizeObserver(publish);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      root.style.removeProperty('--packer-progress-h');
+    };
+  }, []);
   const ids = new Set(runIds);
   const run = items.filter((it) => ids.has(it.id)); // files removed during the run drop out
   const finished = run.filter((it) => it.status === 'done' || it.status === 'error');
@@ -592,7 +609,7 @@ function PackProgress({ items, runIds, stopping }: { items: PackItem[]; runIds: 
   if (stopping) parts.push(packing ? `stopping after ${packing === 1 ? 'this file' : `these ${packing}`}` : 'stopping');
   else if (left !== null) parts.push(`about ${duration(left)} left`);
   return (
-    <div className="packer-progress" role="region" aria-label="Packing progress">
+    <div className="packer-progress" role="region" aria-label="Packing progress" ref={barRef}>
       <div className="packer-progress-inner">
         <div className="packer-progress-text" aria-live="polite">
           {parts.join(' · ')}

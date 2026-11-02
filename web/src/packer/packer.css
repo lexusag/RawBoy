@@ -398,13 +398,6 @@ body {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .packer-progress-bar > div,
-  .packer-jump-top {
-    transition: none;
-  }
-}
-
 .packer-jump-top {
   position: fixed;
   right: max(20px, env(safe-area-inset-right));
@@ -445,7 +438,7 @@ body {
 }
 
 .packer.running .packer-jump-top {
-  bottom: calc(76px + env(safe-area-inset-bottom));
+  bottom: calc(var(--packer-progress-h, 64px) + 12px);
 }
 
 @media (max-width: 520px) {
@@ -457,7 +450,13 @@ body {
   }
 
   .packer.running .packer-jump-top {
-    bottom: calc(84px + env(safe-area-inset-bottom));
+    bottom: calc(var(--packer-progress-h, 72px) + 12px);
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .packer-progress-bar > div,
+  .packer-jump-top {
+    transition: none;
+  }
+}
