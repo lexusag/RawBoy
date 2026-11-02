@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { RAW_ACCEPT, canPickOutputFolder, pickFiles, pickFolderFiles, pickOutputFolder, readDroppedFiles } from '../ui/common/files';
+import { RAW_ACCEPT, canPickFolder, canPickOutputFolder, pickFiles, pickFolderFiles, pickOutputFolder, readDroppedFiles } from '../ui/common/files';
 import { groupByFolder, PackerStore, type PackItem } from './PackerStore';
 import type { PackFormat, PackInfo } from './protocol';
 import {
@@ -346,9 +346,11 @@ export function PackerApp() {
             <button onClick={async () => store.add(await pickFiles(true, RAW_ACCEPT))} disabled={state.running}>
               Add files
             </button>
-            <button onClick={async () => store.add(await pickFolderFiles())} disabled={state.running}>
-              Add folder
-            </button>
+            {canPickFolder() && (
+              <button onClick={async () => store.add(await pickFolderFiles())} disabled={state.running}>
+                Add folder
+              </button>
+            )}
             <span className="spacer" />
             <button
               className="text"
@@ -380,7 +382,10 @@ export function PackerApp() {
           {state.engineError && <p className="packer-error">The packer couldn't start: {state.engineError}</p>}
           {state.items.length === 0 ? (
             <div className="packer-drop">
-              Drop raw files or folders here, or <button className="text" onClick={async () => store.add(await pickFiles(true, RAW_ACCEPT))}>choose files</button> or <button className="text" onClick={async () => store.add(await pickFolderFiles())}>a folder</button>.
+              Drop raw files or folders here, or <button className="text" onClick={async () => store.add(await pickFiles(true, RAW_ACCEPT))}>choose files</button>
+              {canPickFolder() && (
+                <> or <button className="text" onClick={async () => store.add(await pickFolderFiles())}>a folder</button></>
+              )}.
               <small>ARW, RAF, CR2, CR3, NEF, ORF, RW2, PEF, DNG and other raws LibRaw reads.</small>
             </div>
           ) : (
@@ -505,7 +510,7 @@ function QueueView({ items, running }: { items: PackItem[]; running: boolean }) 
   return (
     <div className="packer-queue">
       {groups.map((group) => {
-        const key = group.folder ?? '__root';
+        const key = group.folder === null ? ':loose:' : `dir:${group.folder}`;
         const folderName = group.folder ?? 'Other files';
         return (
           <div key={key} className="packer-folder-group">
@@ -522,7 +527,6 @@ function QueueView({ items, running }: { items: PackItem[]; running: boolean }) 
                   type="button"
                   className="packer-folder-remove text"
                   onClick={() => store.removeFolder(group.folder)}
-                  disabled={running && group.items.some((it) => it.status === 'packing')}
                   title={`Remove ${folderName}`}
                   aria-label={`Remove folder ${folderName}`}
                 >

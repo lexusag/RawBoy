@@ -1,5 +1,27 @@
 import { describe, expect, it } from 'vitest';
-import { isRawFileName, readDroppedFiles } from './files';
+import { canPickFolder, isRawFileName, readDroppedFiles } from './files';
+
+interface MockFileEntry {
+  isFile: true;
+  isDirectory: false;
+  name: string;
+  fullPath: string;
+  file: (success: (f: File) => void, error?: () => void) => void;
+}
+
+interface MockDirEntry {
+  isFile: false;
+  isDirectory: true;
+  name: string;
+  fullPath: string;
+  createReader: () => { readEntries: (success: (entries: FileSystemEntry[]) => void, error?: () => void) => void };
+}
+
+describe('canPickFolder', () => {
+  it('returns a boolean based on webkitdirectory support', () => {
+    expect(typeof canPickFolder()).toBe('boolean');
+  });
+});
 
 describe('isRawFileName', () => {
   it('accepts raw and DNG extensions case-insensitively', () => {
@@ -47,23 +69,24 @@ describe('readDroppedFiles', () => {
     const xmpFile = new File(['xmp'], 'DSC001.xmp');
     const dbFile = new File(['db'], 'Thumbs.db');
 
-    const makeFileEntry = (file: File) => ({
+    const makeFileEntry = (f: File, dir: string): MockFileEntry => ({
       isFile: true,
       isDirectory: false,
-      name: file.name,
-      file: (cb: (f: File) => void) => cb(file),
+      name: f.name,
+      fullPath: `/${dir}/${f.name}`,
+      file: (cb: (file: File) => void) => cb(f),
     });
 
-    const entries = [
-      makeFileEntry(rawFile),
-      makeFileEntry(jpgFile),
-      makeFileEntry(xmpFile),
-      makeFileEntry(dbFile),
+    const entries: FileSystemEntry[] = [
+      makeFileEntry(rawFile, 'Vacation') as unknown as FileSystemEntry,
+      makeFileEntry(jpgFile, 'Vacation') as unknown as FileSystemEntry,
+      makeFileEntry(xmpFile, 'Vacation') as unknown as FileSystemEntry,
+      makeFileEntry(dbFile, 'Vacation') as unknown as FileSystemEntry,
     ];
 
     let read = false;
     const dirReader = {
-      readEntries: (cb: (entries: unknown[]) => void) => {
+      readEntries: (cb: (items: FileSystemEntry[]) => void) => {
         if (!read) {
           read = true;
           cb(entries);
@@ -73,16 +96,17 @@ describe('readDroppedFiles', () => {
       },
     };
 
-    const dirEntry = {
+    const dirEntry: MockDirEntry = {
       isFile: false,
       isDirectory: true,
       name: 'Vacation',
+      fullPath: '/Vacation',
       createReader: () => dirReader,
     };
 
     const item = {
       kind: 'file',
-      webkitGetAsEntry: () => dirEntry,
+      webkitGetAsEntry: () => dirEntry as unknown as FileSystemEntry,
     };
 
     const dt = {
@@ -94,5 +118,50 @@ describe('readDroppedFiles', () => {
     expect(result).toHaveLength(1);
     expect(result[0].file.name).toBe('DSC001.ARW');
     expect(result[0].folder).toBe('Vacation');
+  });
+
+  it('disambiguates two dropped folders with the same name', async () => {
+    const file1 = new File(['card1'], 'DSC001.ARW');
+    const file2 = new File(['card2'], 'DSC001.ARW');
+
+    const makeDirEntry = (name: string, file: File): MockDirEntry => {
+      let read = false;
+      const fileEntry: MockFileEntry = {
+        isFile: true,
+        isDirectory: false,
+        name: file.name,
+        fullPath: `/${name}/${file.name}`,
+        file: (cb: (f: File) => void) => cb(file),
+      };
+      return {
+        isFile: false,
+        isDirectory: true,
+        name,
+        fullPath: `/${name}`,
+        createReader: () => ({
+          readEntries: (cb: (items: FileSystemEntry[]) => void) => {
+            if (!read) {
+              read = true;
+              cb([fileEntry as unknown as FileSystemEntry]);
+            } else {
+              cb([]);
+            }
+          },
+        }),
+      };
+    };
+
+    const dt = {
+      items: [
+        { kind: 'file', webkitGetAsEntry: () => makeDirEntry('DCIM', file1) as unknown as FileSystemEntry },
+        { kind: 'file', webkitGetAsEntry: () => makeDirEntry('DCIM', file2) as unknown as FileSystemEntry },
+      ],
+      files: [],
+    } as unknown as DataTransfer;
+
+    const result = await readDroppedFiles(dt);
+    expect(result).toHaveLength(2);
+    expect(result[0].folder).toBe('DCIM');
+    expect(result[1].folder).toBe('DCIM (2)');
   });
 });

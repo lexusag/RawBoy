@@ -70,6 +70,12 @@ export function folderOf(file: File): string | undefined {
   return undefined;
 }
 
+/** The full relative path and file size used to identify duplicates in the queue. */
+export function fileKey(file: File, folder?: string): string {
+  const path = file.webkitRelativePath || (folder ? `${folder}/${file.name}` : file.name);
+  return `${path}/${file.size}`;
+}
+
 export interface FolderGroup {
   folder: string | null;
   items: PackItem[];
@@ -137,15 +143,15 @@ export class PackerStore {
     return this.workers[i];
   }
 
-  /** Adds files (duplicates by folder, name and size skipped) and reads what each is, one after another. */
+  /** Adds files (duplicates by full relative path and size skipped) and reads what each is, one after another. */
   add(files: PackItemInput[]) {
-    const known = new Set(this.state.items.map((it) => `${it.folder ?? ''}/${it.file.name}/${it.file.size}`));
+    const known = new Set(this.state.items.map((it) => fileKey(it.file, it.folder)));
     const added: PackItem[] = [];
     for (const raw of files) {
       const file = 'file' in raw ? raw.file : raw;
       if (file.name.startsWith('.')) continue;
       const folder = ('folder' in raw && raw.folder != null) ? raw.folder : folderOf(file);
-      const key = `${folder ?? ''}/${file.name}/${file.size}`;
+      const key = fileKey(file, folder);
       if (known.has(key)) continue;
       known.add(key);
       added.push({ id: this.nextId++, file, folder, status: 'inspecting' });

@@ -30,6 +30,10 @@ export function pickFiles(multiple: boolean, accept = RAW_ACCEPT): Promise<File[
   });
 }
 
+/** Whether the browser supports picking a folder via an <input> element (webkitdirectory). */
+export const canPickFolder = (): boolean =>
+  typeof HTMLInputElement !== 'undefined' && 'webkitdirectory' in HTMLInputElement.prototype;
+
 /** Opens the folder picker to select files within a folder. */
 export function pickFolderFiles(accept = RAW_ACCEPT): Promise<File[]> {
   return new Promise((resolve) => {
@@ -54,10 +58,10 @@ export async function readDroppedFiles(dt: DataTransfer | null, accept = RAW_ACC
   const result: { file: File; folder?: string }[] = [];
 
   const items = Array.from(dt.items ?? []);
-  const entries: any[] = [];
+  const entries: FileSystemEntry[] = [];
   for (const item of items) {
     if (item.kind !== 'file') continue;
-    const entry = (item as unknown as { webkitGetAsEntry?: () => any }).webkitGetAsEntry?.();
+    const entry = item.webkitGetAsEntry?.();
     if (entry) entries.push(entry);
   }
 
@@ -72,22 +76,22 @@ export async function readDroppedFiles(dt: DataTransfer | null, accept = RAW_ACC
     return result;
   }
 
-  async function traverse(entry: any, path: string): Promise<void> {
+  async function traverse(entry: FileSystemEntry, path: string): Promise<void> {
     if (entry.name.startsWith('.')) return;
     if (entry.isFile) {
       if (!matches(entry.name)) return;
       const file = await new Promise<File | null>((res) => {
-        entry.file(res, () => res(null));
+        (entry as FileSystemFileEntry).file(res, () => res(null));
       });
       if (file && matches(file.name)) {
         result.push({ file, folder: path || undefined });
       }
     } else if (entry.isDirectory) {
-      const dirReader = entry.createReader();
-      const readAll = async (): Promise<any[]> => {
-        const batch: any[] = [];
+      const dirReader = (entry as FileSystemDirectoryEntry).createReader();
+      const readAll = async (): Promise<FileSystemEntry[]> => {
+        const batch: FileSystemEntry[] = [];
         while (true) {
-          const chunk = await new Promise<any[]>((res) => {
+          const chunk = await new Promise<FileSystemEntry[]>((res) => {
             dirReader.readEntries(res, () => res([]));
           });
           if (!chunk || !chunk.length) break;
@@ -96,16 +100,20 @@ export async function readDroppedFiles(dt: DataTransfer | null, accept = RAW_ACC
         return batch;
       };
       const children = await readAll();
-      const currentPath = path ? `${path}/${entry.name}` : entry.name;
       for (const child of children) {
-        await traverse(child, currentPath);
+        await traverse(child, child.isDirectory ? `${path}/${child.name}` : path);
       }
     }
   }
 
+  const seenRoots = new Map<string, number>();
   for (const entry of entries) {
     if (entry.isDirectory) {
-      await traverse(entry, '');
+      let rootPath = entry.fullPath ? entry.fullPath.replace(/^\//, '') : entry.name;
+      const count = (seenRoots.get(rootPath) ?? 0) + 1;
+      seenRoots.set(rootPath, count);
+      if (count > 1) rootPath = `${rootPath} (${count})`;
+      await traverse(entry, rootPath);
     } else {
       await traverse(entry, '');
     }

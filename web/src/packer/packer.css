@@ -269,12 +269,8 @@ body {
   line-height: 1;
 }
 
-.packer-folder-remove:hover:not(:disabled) {
+.packer-folder-remove:hover {
   color: var(--error);
-}
-
-.packer-folder-remove:disabled {
-  opacity: 0.3;
 }
 
 .packer-list {

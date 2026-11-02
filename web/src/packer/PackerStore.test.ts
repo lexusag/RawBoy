@@ -7,16 +7,17 @@ import { DEFAULT_SETTINGS } from './settings';
 
 const info = (format: string) => ({ make: 'Fuji', model: 'X', format }) as unknown;
 
-const ops: string[] = [];
+const ops: { op: string; content?: string }[] = [];
 
 /** Answers one message at a time, like the real worker; reading a file is slow, packing quick. */
 class FakeWorker {
   onmessage: ((ev: MessageEvent) => void) | null = null;
   onerror: ((ev: ErrorEvent) => void) | null = null;
   private busy: Promise<void> = Promise.resolve();
-  postMessage({ id, req }: { id: number; req: { op: string } }) {
+  postMessage({ id, req }: { id: number; req: { op: string; bytes?: ArrayBuffer } }) {
     this.busy = this.busy.then(async () => {
-      ops.push(req.op);
+      const content = req.bytes ? new TextDecoder().decode(req.bytes) : undefined;
+      ops.push({ op: req.op, content });
       await new Promise((r) => setTimeout(r, req.op === 'inspect' ? 30 : 1));
       const result = req.op === 'init' ? null : req.op === 'inspect' ? info('inspected') : { dng: new Uint8Array(10), info: info('packed') };
       this.onmessage?.({ data: { id, ok: true, result } } as MessageEvent);
@@ -25,7 +26,7 @@ class FakeWorker {
   terminate() {}
 }
 
-const file = (name: string) => new File([new Uint8Array(100)], name);
+const file = (name: string, content = name) => new File([new TextEncoder().encode(content)], name);
 
 describe('PackerStore', () => {
   beforeEach(() => {
@@ -55,7 +56,7 @@ describe('PackerStore', () => {
     const run = await store.start({ ...DEFAULT_SETTINGS, filesAtOnce: 1 }, { kind: 'downloads' });
     expect(run).toMatchObject({ done: 3, failed: 0, stopped: false });
     // Only the read already under way when Pack was pressed; the rest are skipped and packed directly.
-    expect(ops.filter((o) => o === 'inspect')).toHaveLength(1);
+    expect(ops.filter((o) => o.op === 'inspect')).toHaveLength(1);
     const items = store.getState().items;
     expect(items.every((it) => it.status === 'done' && it.info)).toBe(true);
     await new Promise((r) => setTimeout(r, 50));
@@ -145,28 +146,42 @@ describe('PackerStore', () => {
     expect(store.getState().items.map((i) => i.file.name)).toEqual(['c.raf']);
   });
 
-  it('packs items in folder group order', async () => {
+  it('packs items in folder group order following first appearance', async () => {
     const store = new PackerStore();
+    // Trip added first, loose file second, Trip file third, loose file fourth
     store.add([
-      { file: file('loose.raf') },
-      { file: file('trip1.raf'), folder: 'Trip' },
-      { file: file('loose2.raf') },
-      { file: file('trip2.raf'), folder: 'Trip' },
+      { file: file('trip1.raf', 'trip1'), folder: 'Trip' },
+      { file: file('loose1.raf', 'loose1') },
+      { file: file('trip2.raf', 'trip2'), folder: 'Trip' },
+      { file: file('loose2.raf', 'loose2') },
     ]);
     await new Promise((r) => setTimeout(r, 5));
 
-    const origWorker = FakeWorker.prototype.postMessage;
-    // Intercept pack calls
-    vi.spyOn(FakeWorker.prototype, 'postMessage').mockImplementation(function (this: any, { id, req }: any) {
-      origWorker.call(this, { id, req });
-    });
-
     const run = await store.start({ ...DEFAULT_SETTINGS, filesAtOnce: 1 }, { kind: 'downloads' });
     expect(run?.done).toBe(4);
-    // loose.raf and loose2.raf belong to loose group (folder null), trip1.raf and trip2.raf belong to Trip group
-    // The flatMap of groupByFolder orders loose group files first, then Trip group files
-    const groups = groupByFolder(store.getState().items);
-    const orderedNames = groups.flatMap((g) => g.items).map((i) => i.file.name);
-    expect(orderedNames).toEqual(['loose.raf', 'loose2.raf', 'trip1.raf', 'trip2.raf']);
+
+    // With filesAtOnce: 1, pack calls arrive at the worker in folder group order.
+    // Trip appeared first, so all Trip items pack first, followed by all loose items.
+    const packed = ops.filter((o) => o.op === 'pack').map((o) => o.content);
+    expect(packed).toEqual(['trip1', 'trip2', 'loose1', 'loose2']);
+  });
+
+  it('does not merge or deduplicate files from different folders with the same name', () => {
+    const store = new PackerStore();
+    const f1 = file('DSC001.ARW');
+    Object.defineProperty(f1, 'webkitRelativePath', { value: 'A/DCIM/DSC001.ARW' });
+    const f2 = file('DSC001.ARW');
+    Object.defineProperty(f2, 'webkitRelativePath', { value: 'B/DCIM/DSC001.ARW' });
+
+    store.add([f1, f2]);
+    const items = store.getState().items;
+    expect(items).toHaveLength(2);
+    expect(items[0].folder).toBe('A/DCIM');
+    expect(items[1].folder).toBe('B/DCIM');
+
+    const groups = groupByFolder(items);
+    expect(groups).toHaveLength(2);
+    expect(groups[0].folder).toBe('A/DCIM');
+    expect(groups[1].folder).toBe('B/DCIM');
   });
 });
