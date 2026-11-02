@@ -23,7 +23,7 @@ int main() {
     }
 
     // 2. Near-white highlight: Green clips at lowest, Red and Blue are brighter.
-    // Must blend all three channels to their mean (44860) without holding Green at its clip (which would produce magenta).
+    // Must blend all three channels to their mean (44860) without holding Green at its clip (producing magenta).
     {
         float c[3] = {48000.0f, 38580.0f, 48000.0f};
         blendClipped(c, clip);

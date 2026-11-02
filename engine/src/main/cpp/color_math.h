@@ -69,10 +69,10 @@ inline Mat3 bradfordAdaptation(const Vec3& srcWhite, const Vec3& dstWhite) {
  * Highlight blending (dcraw's blend_highlights) for one white balanced camera RGB pixel [c], where [clip] holds each
  * channel's value at the sensor's clip. Near clip the pixel keeps its lightness (channel sum) and hue but takes the
  * chroma of a copy clipped at the lowest of [clip], so a blown highlight comes out neutral (at the mean of [clip]).
- * Blending to neutral is only applied when all channels have substantial light (min(c) / lowest approaching
- * 1.0), as in blown white highlights. Saturated coloured light (red gels, stage lighting) has only one or two channels near clip while
- * the others are dark; blending those desaturates pure colour into harsh pink/white. Only pixels with a channel within
- * 10% of its own clip are touched.
+ * Blending to neutral is only applied when all channels have substantial light (min(c) / lowest approaching 1.0), as
+ * in blown white highlights. Saturated coloured light (red gels, stage lighting) has only one or two channels near
+ * clip while the others are dark; blending those desaturates pure colour into harsh pink/white. Only pixels with a
+ * channel within 10% of its own clip are touched.
  */
 inline void blendClipped(float c[3], const float clip[3]) {
     const float rMax = std::fmax(c[0] / clip[0], std::fmax(c[1] / clip[1], c[2] / clip[2]));
@@ -80,9 +80,10 @@ inline void blendClipped(float c[3], const float clip[3]) {
     const float lowest = std::fmin(clip[0], std::fmin(clip[1], clip[2]));
     const float cMin = std::fmin(c[0], std::fmin(c[1], c[2]));
     const float rMin = cMin / lowest;
-    // Blend to neutral only for highlights where every channel has substantial light (rMin = min(c) / lowest approaching
-    // 1.0), as in blown white highlights. Saturated coloured light (red gels, stage lighting) has only one or two
-    // channels near clip while the others are dark; blending those desaturates pure colour into harsh pink/white.
+    // Blend to neutral only for highlights where every channel has substantial light (rMin = min(c) / lowest
+    // approaching 1.0), as in blown white highlights. Saturated coloured light (red gels, stage lighting) has
+    // only one or two channels near clip while the others are dark; blending those desaturates pure colour into
+    // harsh pink/white.
     const float uMax = std::fmin(1.0f, (rMax - 0.9f) / 0.1f);
     const float uMin = std::fmax(0.0f, std::fmin(1.0f, (rMin - 0.5f) / 0.3f));
     const float u = uMax * uMin;
