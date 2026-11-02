@@ -176,6 +176,7 @@ export function releaseThumbnail(itemId: number, file: File) {
     inflight.itemIds.delete(itemId);
     if (inflight.itemIds.size === 0) {
       workQueue = workQueue.filter((t) => t.key !== key);
+      inFlight.delete(key);
     }
   }
 

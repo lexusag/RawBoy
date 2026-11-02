@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import { findEmbeddedPreview } from '../engine/browse/EmbeddedPreview';
-import { jxlViewImageOf } from '../ui/browser/Previews';
 import type { PackItem } from './PackerStore';
 
 interface PreviewModalProps {
@@ -33,6 +32,8 @@ export function PreviewModal({ item, onClose, onPrev, onNext, hasPrev, hasNext }
     const load = async () => {
       // 1. Try JXL preview first (for DNGs where JXL preview has the real high-res preview)
       try {
+        const { jxlViewImageOf } = await import('../ui/browser/Previews');
+        if (!active) return;
         const jxl = await jxlViewImageOf(item.file, 2560);
         if (!active) return;
         if (jxl) {

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as EmbeddedPreviewModule from '../engine/browse/EmbeddedPreview';
 import { clearThumbnailCache, releaseThumbnail, requestThumbnail } from './ItemThumbnail';
 
 type Entry = [tag: number, type: number, values: number[]];
@@ -143,13 +144,51 @@ describe('ItemThumbnail', () => {
   });
 
   it('retries thumbnail extraction instead of permanently blocking after failure', async () => {
-    const fakeFile = new File(['not a raw'], 'temp.txt', { type: 'text/plain' });
-    const firstResult = await requestThumbnail(5, fakeFile);
-    expect(firstResult).toBeNull();
+    const file = mockRawFile('retry-test.dng');
 
-    // Re-requesting should attempt again and not be permanently rejected by a global blacklist
-    const secondResult = await requestThumbnail(5, fakeFile);
-    expect(secondResult).toBeNull();
+    let attempts = 0;
+    const realFind = EmbeddedPreviewModule.findEmbeddedPreview;
+    const spy = vi.spyOn(EmbeddedPreviewModule, 'findEmbeddedPreview').mockImplementation(async (f) => {
+      attempts++;
+      if (attempts === 1) {
+        throw new Error('Temporary decode failure');
+      }
+      return realFind(f);
+    });
+
+    try {
+      // First attempt fails due to temporary error
+      const firstResult = await requestThumbnail(5, file);
+      expect(firstResult).toBeNull();
+      expect(attempts).toBe(1);
+
+      // Second attempt retries and succeeds with valid thumbnail!
+      const secondResult = await requestThumbnail(5, file);
+      expect(secondResult).not.toBeNull();
+      expect(secondResult?.url).toBeDefined();
+      expect(attempts).toBe(2);
+
+      releaseThumbnail(5, file);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('allows re-requesting a file that was removed while waiting in queue without hanging', async () => {
+    const file = mockRawFile('readd.dng');
+
+    // Request item 10, then immediately release before queue drains
+    const p1 = requestThumbnail(10, file);
+    releaseThumbnail(10, file);
+    const r1 = await p1;
+    expect(r1).toBeNull();
+
+    // Add same file back as item 20: should NOT hang on dead in-flight task, should decode and succeed
+    const res = await requestThumbnail(20, file);
+    expect(res).not.toBeNull();
+    expect(res?.url).toBeDefined();
+
+    releaseThumbnail(20, file);
   });
 
   it('clearThumbnailCache revokes all active object URLs', async () => {
