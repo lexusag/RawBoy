@@ -154,7 +154,7 @@ export function PackerApp() {
   };
 
   return (
-    <div className={`packer${dragging ? ' dragging' : ''}`}>
+    <div className={`packer${dragging ? ' dragging' : ''}${state.running ? ' running' : ''}`}>
       <header className="packer-header">
         <h1>RawBoy Packer</h1>
         <p>Repackage camera raws and DNGs as smaller DNGs, in your browser. Nothing is uploaded.</p>
@@ -332,7 +332,9 @@ export function PackerApp() {
               </button>
             )}
             {state.running ? (
-              <button onClick={() => store.cancel()}>Stop after these</button>
+              <button onClick={() => store.cancel()} disabled={state.stopping}>
+                {state.stopping ? 'Stopping…' : 'Stop after these'}
+              </button>
             ) : canPickOutputFolder() ? (
               <>
                 <button onClick={() => pack(false)} disabled={!packable.length} title="Each DNG goes to the browser's downloads">
@@ -366,6 +368,8 @@ export function PackerApp() {
           )}
         </section>
       </main>
+
+      {state.running && <PackProgress items={state.items} runIds={state.runIds} stopping={state.stopping} />}
 
       {finished && (
         <div className="dialog-backdrop" onClick={() => setFinished(null)}>
@@ -511,6 +515,51 @@ function FileRow({ item, onRemove, busy }: { item: PackItem; onRemove: () => voi
     </li>
   );
 }
+
+/** Pinned to the bottom of the screen while a run packs, so it stays in view however long the file list is. */
+function PackProgress({ items, runIds, stopping }: { items: PackItem[]; runIds: number[]; stopping: boolean }) {
+  const startRef = useRef(performance.now());
+  const ids = new Set(runIds);
+  const run = items.filter((it) => ids.has(it.id)); // files removed during the run drop out
+  const finished = run.filter((it) => it.status === 'done' || it.status === 'error');
+  const failed = finished.filter((it) => it.status === 'error').length;
+  const packing = run.filter((it) => it.status === 'packing').length;
+  const total = run.reduce((s, it) => s + it.file.size, 0);
+  const doneBytes = finished.reduce((s, it) => s + it.file.size, 0);
+  // By size: a 60 MB file takes longer than a 20 MB one. Files being packed count half, so the bar moves from the start.
+  const packingBytes = run.filter((it) => it.status === 'packing').reduce((s, it) => s + it.file.size, 0);
+  const fraction = total ? Math.min(1, (doneBytes + packingBytes / 2) / total) : 0;
+  const elapsed = (performance.now() - startRef.current) / 1000;
+  const left = doneBytes > 0 && finished.length < run.length ? (elapsed * (total - doneBytes)) / doneBytes : null;
+  const parts = [`${finished.length - failed} of ${run.length} packed`];
+  if (failed) parts.push(`${failed} failed`);
+  if (stopping) parts.push(packing ? `stopping after ${packing === 1 ? 'this file' : `these ${packing}`}` : 'stopping');
+  else if (left !== null) parts.push(`about ${duration(left)} left`);
+  return (
+    <div className="packer-progress" role="region" aria-label="Packing progress">
+      <div className="packer-progress-inner">
+        <div className="packer-progress-text" aria-live="polite">
+          {parts.join(' · ')}
+        </div>
+        <button onClick={() => store.cancel()} disabled={stopping}>
+          {stopping ? 'Stopping…' : 'Stop'}
+        </button>
+        <div
+          className="packer-progress-bar"
+          role="progressbar"
+          aria-label="Packed"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(fraction * 100)}
+        >
+          <div style={{ width: `${fraction * 100}%` }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const duration = (s: number) => (s < 60 ? `${Math.max(5, Math.round(s / 5) * 5)} s` : s < 3600 ? `${Math.round(s / 60)} min` : `${(s / 3600).toFixed(1)} h`);
 
 function Totals({ items }: { items: PackItem[] }) {
   const done = items.filter((it) => it.status === 'done');

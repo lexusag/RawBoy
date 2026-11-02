@@ -6,7 +6,7 @@ body {
 .packer {
   max-width: 1180px;
   margin: 0 auto;
-  padding: 24px 20px 40px;
+  padding: 24px max(20px, env(safe-area-inset-right)) 40px max(20px, env(safe-area-inset-left));
   min-height: 100%;
 }
 
@@ -289,7 +289,7 @@ body {
 
 @media (max-width: 520px) {
   .packer {
-    padding: 16px 12px 32px;
+    padding: 16px max(12px, env(safe-area-inset-right)) 32px max(12px, env(safe-area-inset-left));
   }
 
   .packer-row {
@@ -331,4 +331,71 @@ body {
 
 .packer-done p {
   margin: 0;
+}
+
+/* The progress bar is pinned to the bottom of the screen while packing; the page gets room under it so the last files,
+   the totals and the footer can still be scrolled clear of it. */
+.packer.running {
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+}
+
+.packer-progress {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30; /* under the done dialog (40) */
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  box-shadow: 0 -6px 18px rgb(0 0 0 / 0.35);
+  padding: 10px max(20px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(20px, env(safe-area-inset-left));
+}
+
+.packer-progress-inner {
+  max-width: 1140px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.packer-progress-text {
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.packer-progress-bar {
+  grid-column: 1 / -1;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.packer-progress-bar > div {
+  height: 100%;
+  background: var(--accent);
+  border-radius: inherit;
+  transition: width 0.4s ease-out;
+}
+
+@media (max-width: 520px) {
+  .packer-progress {
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+  }
+
+  .packer-progress-text {
+    white-space: normal;
+    font-size: 14px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .packer-progress-bar > div {
+    transition: none;
+  }
 }

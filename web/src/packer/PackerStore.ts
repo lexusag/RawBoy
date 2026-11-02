@@ -62,13 +62,17 @@ export type Output = { kind: 'folder'; dir: FileSystemDirectoryHandle } | { kind
 export interface PackerState {
   items: PackItem[];
   running: boolean;
+  /** The files in the current run, in order; empty when nothing runs. Drives the pinned progress bar. */
+  runIds: number[];
+  /** Stop was pressed: the run ends after the files being packed now. */
+  stopping: boolean;
   /** The engine failed to load (e.g. a build without the DNG SDK). */
   engineError: string | null;
 }
 
 /** RawBoy Packer's file list and queue. Files are inspected when added and packed by up to filesAtOnce workers. */
 export class PackerStore {
-  private state: PackerState = { items: [], running: false, engineError: null };
+  private state: PackerState = { items: [], running: false, runIds: [], stopping: false, engineError: null };
   private readonly listeners = new Set<() => void>();
   private nextId = 1;
   private workers: PackerWorker[] = [];
@@ -162,7 +166,7 @@ export class PackerStore {
     if (!queue.length) return null;
     for (const it of queue) this.update(it.id, { status: 'waiting', error: undefined, outSize: undefined, outName: undefined });
     this.cancelled = false;
-    this.set({ running: true });
+    this.set({ running: true, runIds: queue.map((it) => it.id), stopping: false });
     const folder: OutputFolder | null = output.kind === 'folder' ? localFolder(output.dir) : null;
     const lanes = Math.min(settings.filesAtOnce || autoFilesAtOnce(), queue.length);
     const options = packOptions(settings, threadsPerFile(lanes));
@@ -213,12 +217,13 @@ export class PackerStore {
         }
       }
     }
-    this.set({ running: false });
+    this.set({ running: false, runIds: [], stopping: false });
     return run;
   }
 
   /** Stops after the files being packed now. */
   cancel() {
     this.cancelled = true;
+    if (this.state.running) this.set({ stopping: true });
   }
 }
