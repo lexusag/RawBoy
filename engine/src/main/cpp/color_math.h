@@ -69,8 +69,8 @@ inline Mat3 bradfordAdaptation(const Vec3& srcWhite, const Vec3& dstWhite) {
  * Highlight blending (dcraw's blend_highlights) for one white balanced camera RGB pixel [c], where [clip] holds each
  * channel's value at the sensor's clip. Near clip the pixel keeps its lightness (channel sum) and hue but takes the
  * chroma of a copy clipped at the lowest of [clip], so a blown highlight comes out neutral (at the mean of [clip]).
- * Blending to neutral is only applied when all channels have substantial light (rMin approaching clip), as in blown
- * white highlights. Saturated coloured light (red gels, stage lighting) has only one or two channels near clip while
+ * Blending to neutral is only applied when all channels have substantial light (min(c) / lowest approaching
+ * 1.0), as in blown white highlights. Saturated coloured light (red gels, stage lighting) has only one or two channels near clip while
  * the others are dark; blending those desaturates pure colour into harsh pink/white. Only pixels with a channel within
  * 10% of its own clip are touched.
  */

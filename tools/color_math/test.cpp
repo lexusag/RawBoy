@@ -22,14 +22,16 @@ int main() {
         assert(c[1] > clip[1]);  // Green blends above its clip to match Red and Blue
     }
 
-    // 2. Near-white highlight: Green clips at lowest, Red and Blue are at camera white.
-    // Must blend to neutral without drifting magenta.
+    // 2. Near-white highlight: Green clips at lowest, Red and Blue are brighter.
+    // Must blend all three channels to their mean (44860) without holding Green at its clip (which would produce magenta).
     {
-        float c[3] = {38580.0f, 38580.0f, 38580.0f};
+        float c[3] = {48000.0f, 38580.0f, 48000.0f};
         blendClipped(c, clip);
-        assert(std::fabs(c[0] - 38580.0f) < 1.0f);
-        assert(std::fabs(c[1] - 38580.0f) < 1.0f);
-        assert(std::fabs(c[2] - 38580.0f) < 1.0f);
+        const float expectedMean = (48000.0f + 38580.0f + 48000.0f) / 3.0f;
+        assert(std::fabs(c[0] - expectedMean) < 1.0f);
+        assert(std::fabs(c[1] - expectedMean) < 1.0f);
+        assert(std::fabs(c[2] - expectedMean) < 1.0f);
+        assert(c[1] > clip[1]);  // Green blends above its clip to avoid magenta cast
     }
 
     // 3. Saturated coloured light: Red clips, Green and Blue are dark (e.g. red gels / studio light).
