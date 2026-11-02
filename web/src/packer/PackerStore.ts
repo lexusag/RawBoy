@@ -184,6 +184,12 @@ export class PackerStore {
     });
   }
 
+  /** Decodes a JPEG XL byte stream into 8-bit RGBA pixels using the DNG SDK build. */
+  async decodeJxl(bytes: ArrayBuffer): Promise<{ rgba: Uint8Array; width: number; height: number }> {
+    this.inspector ??= this.worker(0);
+    return this.inspector.call<{ rgba: Uint8Array; width: number; height: number }>({ op: 'decodeJxl', bytes }, [bytes]);
+  }
+
   remove(id: number) {
     if (this.state.items.find((it) => it.id === id)?.status === 'packing') return;
     this.set({ items: this.state.items.filter((it) => it.id !== id) });

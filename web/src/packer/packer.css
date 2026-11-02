@@ -583,8 +583,15 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .packer-progress-bar > div,
-  .packer-jump-top {
+  .packer-jump-top,
+  .packer-thumb,
+  .packer-thumb.clickable,
+  .packer-thumb.clickable:hover,
+  .packer-thumb-icon.loading,
+  .packer-preview-nav {
     transition: none;
+    animation: none;
+    transform: none;
   }
 }
 
@@ -712,8 +719,22 @@ body {
 }
 
 @media (max-width: 520px) {
+  .packer-preview-backdrop {
+    padding: 12px;
+  }
+
   .packer-preview-nav {
-    display: none;
+    width: 36px;
+    height: 36px;
+    font-size: 20px;
+  }
+
+  .packer-preview-nav.prev {
+    left: 8px;
+  }
+
+  .packer-preview-nav.next {
+    right: 8px;
   }
 }
 

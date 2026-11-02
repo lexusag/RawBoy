@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type
 import { RAW_ACCEPT, canPickFolder, canPickOutputFolder, isRawFileName, pickFiles, pickFolderFiles, pickOutputFolder, readDroppedFiles } from '../ui/common/files';
 import { groupByFolder, PackerStore, type PackItem } from './PackerStore';
 import type { PackFormat, PackInfo } from './protocol';
-import { ItemThumbnail, revokeThumbnail } from './ItemThumbnail';
+import { ItemThumbnail, releaseThumbnail } from './ItemThumbnail';
 import { PreviewModal } from './PreviewModal';
 import {
   FORMAT_LABEL,
@@ -130,13 +130,17 @@ export function PackerApp() {
     }
   };
 
-  const [previewItem, setPreviewItem] = useState<PackItem | null>(null);
-  const previewIndex = previewItem ? state.items.findIndex((it) => it.id === previewItem.id) : -1;
+  const [previewId, setPreviewId] = useState<number | null>(null);
+
+  // Follow folder group presentation order so prev/next navigation matches visual queue order
+  const orderedItems = useMemo(() => groupByFolder(state.items).flatMap((g) => g.items), [state.items]);
+  const previewItem = previewId !== null ? state.items.find((it) => it.id === previewId) ?? null : null;
+  const previewIndex = previewItem ? orderedItems.findIndex((it) => it.id === previewItem.id) : -1;
 
   const removeItem = (id: number) => {
     const it = state.items.find((item) => item.id === id);
-    if (it) revokeThumbnail(it.file);
-    if (previewItem?.id === id) setPreviewItem(null);
+    if (it) releaseThumbnail(it.id, it.file);
+    if (previewId === id) setPreviewId(null);
     store.remove(id);
   };
 
@@ -144,8 +148,8 @@ export function PackerApp() {
     const target = folder ?? undefined;
     for (const it of state.items) {
       if ((it.folder ?? undefined) === target && it.status !== 'packing') {
-        revokeThumbnail(it.file);
-        if (previewItem?.id === it.id) setPreviewItem(null);
+        releaseThumbnail(it.id, it.file);
+        if (previewId === it.id) setPreviewId(null);
       }
     }
     store.removeFolder(folder);
@@ -154,8 +158,8 @@ export function PackerApp() {
   const clearDone = () => {
     for (const it of state.items) {
       if (it.status === 'done' || it.status === 'error') {
-        revokeThumbnail(it.file);
-        if (previewItem?.id === it.id) setPreviewItem(null);
+        releaseThumbnail(it.id, it.file);
+        if (previewId === it.id) setPreviewId(null);
       }
     }
     store.clearDone();
@@ -459,7 +463,7 @@ export function PackerApp() {
                 running={state.running}
                 onRemove={removeItem}
                 onRemoveFolder={removeFolder}
-                onPreview={setPreviewItem}
+                onPreview={(item) => setPreviewId(item.id)}
               />
               <Totals items={state.items} />
             </>
@@ -481,11 +485,12 @@ export function PackerApp() {
       {previewItem && (
         <PreviewModal
           item={previewItem}
-          onClose={() => setPreviewItem(null)}
+          decodeJxl={(bytes) => store.decodeJxl(bytes)}
+          onClose={() => setPreviewId(null)}
           hasPrev={previewIndex > 0}
-          hasNext={previewIndex >= 0 && previewIndex < state.items.length - 1}
-          onPrev={() => previewIndex > 0 && setPreviewItem(state.items[previewIndex - 1])}
-          onNext={() => previewIndex >= 0 && previewIndex < state.items.length - 1 && setPreviewItem(state.items[previewIndex + 1])}
+          hasNext={previewIndex >= 0 && previewIndex < orderedItems.length - 1}
+          onPrev={() => previewIndex > 0 && setPreviewId(orderedItems[previewIndex - 1].id)}
+          onNext={() => previewIndex >= 0 && previewIndex < orderedItems.length - 1 && setPreviewId(orderedItems[previewIndex + 1].id)}
         />
       )}
 
@@ -699,7 +704,7 @@ function FileRow({ item, onRemove, onPreview, busy }: { item: PackItem; onRemove
   }
   return (
     <li className={`packer-item status-${item.status}`}>
-      <ItemThumbnail file={item.file} onClick={onPreview} />
+      <ItemThumbnail item={item} onClick={onPreview} />
       <div className="name">
         <span className="file">{item.file.name}</span>
         <span className="meta">

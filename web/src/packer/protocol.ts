@@ -50,4 +50,5 @@ export interface PackInfo {
 export type PackerRequest =
   | { op: 'init'; wasmBase: string }
   | { op: 'inspect'; bytes: ArrayBuffer }
-  | { op: 'pack'; bytes: ArrayBuffer; options: PackOptions };
+  | { op: 'pack'; bytes: ArrayBuffer; options: PackOptions }
+  | { op: 'decodeJxl'; bytes: ArrayBuffer };
