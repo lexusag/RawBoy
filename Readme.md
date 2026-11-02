@@ -13,7 +13,7 @@ Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and
 - **RawBoy Web** (`web/`): RawBoy and RawBoy Auto in the browser, plus **RawBoy Browser** for culling a folder of
   raws, as three tabs (see [RawBoy Web](docs/web.md)). Try it at **[app.rawboy.link](https://app.rawboy.link)**.
 - **RawBoy Packer** (`web/packer.html`): a web page that repackages raws and DNGs as smaller DNGs (JPEG XL or
-  lossless), keeping Sony and Fujifilm lens corrections (see [RawBoy Packer](docs/packer.md)).
+  lossless), keeping Sony and Fujifilm lens corrections (see [RawBoy Packer](docs/packer.md)).  Try it at **[packer.rawboy.link](https://packer.rawboy.link)**.
 
 - Decoding: **LibRaw 0.21** (CR2/CR3/NEF/ARW/RAF/RW2/ORF/DNG…), with the **Adobe DNG SDK 1.7.1** as fallback for DNGs LibRaw can't read — notably DNG 1.7 with JPEG XL compression (setup: [third_party/README.md](third_party/README.md)).
 - Develop pipeline: GLES 3.0 fragment shader, so the preview updates in real time while sliders move.
