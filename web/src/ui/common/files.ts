@@ -3,6 +3,18 @@ import { zipSync } from 'fflate';
 /** Raw extensions the decoders handle (LibRaw's common ones plus DNG); anything else is still tried when picked. */
 export const RAW_ACCEPT = '.dng,.cr2,.cr3,.crw,.nef,.nrw,.arw,.srf,.sr2,.raf,.rw2,.orf,.pef,.srw,.x3f,.3fr,.fff,.iiq,.mos,.mrw,.erf,.kdc,.dcr,.rwl,.raw';
 
+const rawExtensionSet = (accept: string) => new Set(accept.split(',').map((e) => e.trim().toLowerCase()));
+const RAW_EXTENSIONS = rawExtensionSet(RAW_ACCEPT);
+
+/** Checks whether a file name ends in one of the raw / DNG extensions. */
+export function isRawFileName(name: string, accept = RAW_ACCEPT): boolean {
+  const dot = name.lastIndexOf('.');
+  if (dot <= 0) return false;
+  const ext = name.slice(dot).toLowerCase();
+  const set = accept === RAW_ACCEPT ? RAW_EXTENSIONS : rawExtensionSet(accept);
+  return set.has(ext);
+}
+
 /** RawBoy's and Auto's picker: raws plus JPEG, HEIC, PNG and TIFF (decoded as display sources; HEIC needs Safari). */
 export const PHOTO_ACCEPT = `${RAW_ACCEPT},.jpg,.jpeg,.heic,.heif,.png,.tif,.tiff`;
 
@@ -19,13 +31,16 @@ export function pickFiles(multiple: boolean, accept = RAW_ACCEPT): Promise<File[
 }
 
 /** Opens the folder picker to select files within a folder. */
-export function pickFolderFiles(): Promise<File[]> {
+export function pickFolderFiles(accept = RAW_ACCEPT): Promise<File[]> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
     (input as unknown as { webkitdirectory: boolean }).webkitdirectory = true;
     input.multiple = true;
-    input.onchange = () => resolve(Array.from(input.files ?? []));
+    input.onchange = () => {
+      const all = Array.from(input.files ?? []);
+      resolve(accept ? all.filter((f) => !f.name.startsWith('.') && isRawFileName(f.name, accept)) : all);
+    };
     input.click();
   });
 }
@@ -34,7 +49,7 @@ export function pickFolderFiles(): Promise<File[]> {
  * Reads files from a drop event, traversing directories recursively if folders were dropped.
  * Preserves the relative folder path for items inside directories.
  */
-export async function readDroppedFiles(dt: DataTransfer | null): Promise<{ file: File; folder?: string }[]> {
+export async function readDroppedFiles(dt: DataTransfer | null, accept = RAW_ACCEPT): Promise<{ file: File; folder?: string }[]> {
   if (!dt) return [];
   const result: { file: File; folder?: string }[] = [];
 
@@ -46,9 +61,11 @@ export async function readDroppedFiles(dt: DataTransfer | null): Promise<{ file:
     if (entry) entries.push(entry);
   }
 
+  const matches = (name: string) => !name.startsWith('.') && (!accept || isRawFileName(name, accept));
+
   if (!entries.length) {
     for (const file of Array.from(dt.files ?? [])) {
-      if (!file.name.startsWith('.')) {
+      if (matches(file.name)) {
         result.push({ file });
       }
     }
@@ -58,10 +75,11 @@ export async function readDroppedFiles(dt: DataTransfer | null): Promise<{ file:
   async function traverse(entry: any, path: string): Promise<void> {
     if (entry.name.startsWith('.')) return;
     if (entry.isFile) {
+      if (!matches(entry.name)) return;
       const file = await new Promise<File | null>((res) => {
         entry.file(res, () => res(null));
       });
-      if (file && !file.name.startsWith('.')) {
+      if (file && matches(file.name)) {
         result.push({ file, folder: path || undefined });
       }
     } else if (entry.isDirectory) {
