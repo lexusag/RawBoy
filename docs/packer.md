@@ -20,6 +20,20 @@ Small raw saves X-Trans and already demosaiced sources (phone ProRAW) demosaiced
 **Quality** (Small raw, Micro) is the JPEG XL distance: Archive 0.1, **High 0.2** (default; visually the same as the raw on
 correctly exposed photos), Good 0.5, Compact 1.0. **Speed** is the encoder effort (3, 5, 7).
 
+## Back to maximum compatibility
+
+A JPEG XL DNG (Small raw, Lossless JPEG XL, Micro, or one from Adobe's converter or a phone) can be added to the Packer
+again and packed as **Lossless** (*Maximum compatibility*): the result is a classic lossless JPEG DNG (DNG 1.4, readable
+by DNG 1.3 readers) that older Lightroom/Camera Raw, darktable and Apple Photos open. The pixels are exactly those of
+the JPEG XL file (checked bit for bit on GFX 50R, X-T5 and Pixel DNGs, 2026-11-02):
+
+- Lossless JPEG XL → Lossless gives back the camera's raw data exactly.
+- Small raw and Micro stay what they are: what the lossy compression or resizing discarded doesn't come back, and an
+  X-Trans or phone Small raw, or a Micro, stays a demosaiced (linear) DNG.
+- The files get big, because lossy-decoded data no longer compresses well: a GFX 50R Small raw went from 32 MB to
+  91 MB (the RAF is 48 MB), an X-T5 Small raw (linear) from 21 MB to 174 MB, a 4000 px Micro from 2 MB to 43 MB.
+  Keep the camera raw if you may need a small, widely readable file later.
+
 ## Lens corrections
 
 Sony (ARW SubIFD tags 0x7032/0x7035/0x7037) and Fujifilm (RAF tags 0xF00B/0xF00F/0xF010; the GFX, X-T1, X-T5 and X-E5 layouts differ, the X-E5 stores none) store the camera's own

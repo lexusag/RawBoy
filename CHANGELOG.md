@@ -1,5 +1,12 @@
 # Changelog
 
+**RawBoy Packer: JPEG XL DNGs back to maximum compatibility (2026-11-02)**
+
+- Packing a JPEG XL DNG (Small raw, Lossless JPEG XL, Micro) as *Lossless* now really turns it into a classic lossless
+  JPEG DNG that older software opens. Before, the Packer copied the JPEG XL data over unchanged, so the "Lossless" file
+  was still JPEG XL (DNG 1.7). The pixels are bit-identical to the JPEG XL file; lossy compression stays lost and the
+  file is larger (see the Packer page).
+
 **RawBoy Packer: progress bar pinned to the bottom (2026-11-02)**
 
 - While packing, a progress bar stays at the bottom of the screen, on desktop and phone, however far the page is
