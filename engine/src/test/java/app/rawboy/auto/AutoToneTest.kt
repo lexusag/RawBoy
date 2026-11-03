@@ -29,6 +29,9 @@ class AutoToneTest {
         assertEquals(Triple(0f, 6f, 15f), AutoTone.measuredNoiseSettings(NoiseLevel(0.0023f, 0.0019f), 0f))
         // Very noisy: capped at 100.
         assertEquals(100f, AutoTone.measuredNoiseSettings(NoiseLevel(0.05f, 0.05f), 0f).second)
+        // Luma denoise is at least twice as lower than chroma.
+        val capped = AutoTone.measuredNoiseSettings(NoiseLevel(0.015f, 0.003f), 0f)
+        assertEquals(Triple(5f, 10f, 11f), capped)
     }
 
     @Test

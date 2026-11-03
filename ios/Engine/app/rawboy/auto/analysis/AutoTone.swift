@@ -186,7 +186,7 @@ public enum AutoTone {
         let sharpening: Float
         if full <= 20 { sharpening = 15 } else if full <= 45 { sharpening = 15 - (full - 20) / 25 * 5 }
         else if full <= 65 { sharpening = 10 - (full - 45) / 20 * 5 } else { sharpening = 5 }
-        let luma = Float(max(0, (full * lumaDenoiseScale).roundToInt() - lumaDenoiseOffset)) * lumaDenoiseShare
+        let luma = min(Float(max(0, (full * lumaDenoiseScale).roundToInt() - lumaDenoiseOffset)) * lumaDenoiseShare, (color / 2).rounded())
         return (Float(luma.roundToInt()), color, Float(sharpening.roundToInt()))
     }
 

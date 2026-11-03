@@ -207,7 +207,10 @@ object AutoTone {
             full <= 65f -> 10f - (full - 45f) / 20f * 5f
             else -> 5f
         }.roundToInt().toFloat()
-        val luma = ((full * LUMA_DENOISE_SCALE).roundToInt() - LUMA_DENOISE_OFFSET).coerceAtLeast(0) * LUMA_DENOISE_SHARE
+        val luma = minOf(
+            ((full * LUMA_DENOISE_SCALE).roundToInt() - LUMA_DENOISE_OFFSET).coerceAtLeast(0) * LUMA_DENOISE_SHARE,
+            (color / 2f).roundToInt().toFloat(),
+        )
         return Triple(luma.roundToInt().toFloat(), color, sharpening)
     }
 

@@ -347,11 +347,20 @@ internal object ShotSaver {
             )
             val analysisMs = ms(analysisStart)
             val looked = s.develop(a.autoBase, a.stats.hasFace)
-            // High ISO: more denoise than the auto develop's table, up to the coarse stage (denoise > 65).
-            val denoise = maxOf(looked.denoise, highIsoDenoise(a.stats.iso * noiseScale))
+            // High ISO: chroma denoise floor for phone sensors (up to the coarse stage > 65); luma at least twice as lower.
+            val highIso = highIsoDenoise(a.stats.iso * noiseScale)
+            val colorDenoise = maxOf(
+                looked.colorDenoise ?: looked.denoise,
+                highIso,
+                measuredColorDenoise(img, looked.exposure) ?: 0f,
+            )
+            val denoise = minOf(
+                maxOf(looked.denoise, (highIso / 2f).roundToInt().toFloat()),
+                (colorDenoise / 2f).roundToInt().toFloat(),
+            )
             val params = looked.copy(
                 denoise = denoise,
-                colorDenoise = measuredColorDenoise(img, looked.exposure, denoise),
+                colorDenoise = colorDenoise,
                 shadows = maxOf(looked.shadows, backlightShadows(a.stats)),
             )
             val lut = params.lut?.let { loadLut(app, it) }
@@ -470,16 +479,16 @@ internal object ShotSaver {
 
     /**
      * Colour denoise from the shot's measured colour noise (~30 ms; Auto's calibration, [AutoTone.measuredNoiseSettings]
-     * at the develop's [exposure]), at least the luma [denoise] it used to follow; null (follows [denoise]) when the
-     * raw can't be measured. The ISO table under-rated low-ISO night shots: a merged burst at ISO 20-150 got no colour
+     * at the develop's [exposure]); null when the raw can't be measured.
+     * The ISO table under-rated low-ISO night shots: a merged burst at ISO 20-150 got no colour
      * denoise, yet the phone's lens shading had lifted its corners up to 3.4x, and lifted shadows showed the colour
-     * speckle (Pixel 9 Pro test, 2026-10-30). Luma stays on the ISO table (the owner's call: luma noise is right).
+     * speckle (Pixel 9 Pro test, 2026-10-30). Luma is set at least twice as lower than chroma.
      * The shader scales this towards the corners by the shading gain (develop.glsl `colorNoiseScale`).
      */
-    private fun measuredColorDenoise(img: RawImage, exposure: Float, denoise: Float): Float? {
+    private fun measuredColorDenoise(img: RawImage, exposure: Float): Float? {
         val noise = img.measureNoise()
         if (!noise.measured) return null
-        return maxOf(AutoTone.measuredNoiseSettings(noise, exposure).second, denoise)
+        return AutoTone.measuredNoiseSettings(noise, exposure).second
     }
 
     /**

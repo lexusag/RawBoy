@@ -9,6 +9,8 @@ final class NoiseTests: XCTestCase {
         let pixel = AutoTone.measuredNoiseSettings(NoiseLevel(luma: 0.0023, chroma: 0.0019), exposure: 0)
         XCTAssertEqual([pixel.0, pixel.1, pixel.2], [0, 6, 15])
         XCTAssertEqual(AutoTone.measuredNoiseSettings(NoiseLevel(luma: 0.05, chroma: 0.05), exposure: 0).1, 100)
+        let capped = AutoTone.measuredNoiseSettings(NoiseLevel(luma: 0.015, chroma: 0.003), exposure: 0)
+        XCTAssertEqual([capped.0, capped.1, capped.2], [5, 10, 11])
     }
 
     /** The same C++ as the web build: IMG_4914.CR2 (Canon G9, ISO 400) measured 0.0107 / 0.0141 there. */

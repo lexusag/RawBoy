@@ -658,16 +658,15 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
 - **Measured auto denoise** (Pro's Auto button, Auto; Camera only for colour, see below): `noise.cpp` `estimateNoise` (JNI
   `RawNative.noiseLevel`, `rb_noise_level`, wasm `noiseLevel`) → `NoiseLevel` (luma, chroma std in the shader's sqrt
   domain) → `AutoTone.measuredNoiseSettings`: slider = 2000 (luma) / 2600 (colour) × std × 2^((exposure + 0.7) / 2),
-  sharpening 15 → 5 as that luma value grows, then luma × 0.8 (`LUMA_DENOISE_SCALE`, 2026-10-18: the full fit read too smooth) − 10, min 0 (`LUMA_DENOISE_OFFSET`, 2026-10-25: what Auto's Denoise −5 gave), then × 0.5 (`LUMA_DENOISE_SHARE`, 2026-10-25: about 1 luma to 2 colour); sets `colorDenoise` explicitly (ISO fallback leaves it null). ~400 patches
+  sharpening 15 → 5 as that luma value grows, then luma × 0.8 (`LUMA_DENOISE_SCALE`, 2026-10-18: the full fit read too smooth) − 10, min 0 (`LUMA_DENOISE_OFFSET`, 2026-10-25: what Auto's Denoise −5 gave), then × 0.5 (`LUMA_DENOISE_SHARE`, 2026-10-25: about 1 luma to 2 colour), capped at half of colour denoise (2026-11-03); sets `colorDenoise` explicitly (ISO fallback leaves it null). ~400 patches
   of 84 px, 16 px blocks: luma minus Gaussian σ 1.5, chroma minus σ 6; per 1 EV band the 10th percentile, weighted by
   band area (deep-shadow read noise counts). Checks: a 3×3 residual underestimated coarse (correlated) noise of the
   old Canon G9; a 2×2-binned one read texture on iPhone ProRAW as noise. Calibrated on `.raw/` with 100% crops through
   the web export (`PhotoSession.export` with a crop): 1× right, 1.6× softens fur. Auto's Denoise adjustment shifts
   `colorDenoise` too when set (`LookApplier`).
-- Camera colour denoise (2026-10-31): luma stays on the ISO table below, but `colorDenoise` = the measured chroma
-  through `AutoTone.measuredNoiseSettings` at the look's exposure, at least `denoise` (`ShotSaver.measuredColorDenoise`,
-  iOS `CameraViewModel.measuredColorDenoise`; null if unmeasured). Pixel 9 Pro night test: merged bursts at ISO 22-156
-  got colour 0 and speckled shadows; measured 18-38. Luma noise was the owner's "good now": ask before changing it.
+- Camera denoise (2026-11-03): high-ISO floor (`highIsoDenoise`) and measured chroma set `colorDenoise`, while luma
+  denoise is kept at least twice as lower than chroma (`min(luma, colorDenoise / 2)`). Low-ISO night shots keep measured colour
+  denoise (18-38) with luma near 0; at high ISO chroma takes the high-ISO floor (60/80/100) and luma stays at or below half of that (30/40/50).
   Removing colour noise makes the remaining luma grain read a little stronger in Y (raw noise is anti-correlated across
   channels after the colour matrix), with the luma setting unchanged.
 - Colour denoise follows the lens shading (`colorNoiseScale` in develop.glsl): sigmaC × max(gain, 1)^0.75, gain = the

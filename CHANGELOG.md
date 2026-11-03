@@ -1,5 +1,10 @@
 # Changelog
 
+**Auto denoise: luma set at least twice as lower than chroma (2026-11-03)**
+
+- RawBoy Camera (Android, iOS): at high ISO, chroma denoise takes the high-ISO floor (60 at equivalent ISO 6400, 80 at 12800, 100 at 25600) and measured colour noise, while luma denoise is capped at half of chroma (at most 30/40/50), rather than matching it. Low ISO keeps gentle/zero luma denoise with measured colour denoise.
+- AutoTone (`Auto`, `Pro`, `Camera`): measured auto denoise guarantees luma denoise is at least twice as lower than colour denoise (`min(luma, color / 2)`).
+
 **RawBoy Auto: clear Saved badges on export, lower contrast while waiting (2026-11-03)**
 
 - Starting a new export clears previous "Saved" badges on the photos being exported (or all photos for "Export all"), so progress can be followed cleanly.

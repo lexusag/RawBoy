@@ -750,6 +750,8 @@ describe('Pro Auto button', () => {
     expect(measuredNoiseSettings({ luma: 0.0107, chroma: 0.0141 }, 2)).toEqual([17, 93, 8]);
     expect(measuredNoiseSettings({ luma: 0.0023, chroma: 0.0019 }, 0)).toEqual([0, 6, 15]);
     expect(measuredNoiseSettings({ luma: 0.05, chroma: 0.05 }, 0)[1]).toBe(100);
+    // Luma denoise is at least twice as lower than chroma.
+    expect(measuredNoiseSettings({ luma: 0.015, chroma: 0.003 }, 0)).toEqual([5, 10, 11]);
   });
 });
 

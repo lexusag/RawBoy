@@ -84,7 +84,10 @@ export function measuredNoiseSettings(noise: NoiseLevel, exposure: number): [num
   const full = clamp(round(LUMA_DENOISE_PER_STD * noise.luma * shown), 0, 100);
   const color = clamp(round(COLOR_DENOISE_PER_STD * noise.chroma * shown), 0, 100);
   const sharpening = full <= 20 ? 15 : full <= 45 ? 15 - ((full - 20) / 25) * 5 : full <= 65 ? 10 - ((full - 45) / 20) * 5 : 5;
-  const luma = Math.max(0, round(full * LUMA_DENOISE_SCALE) - LUMA_DENOISE_OFFSET) * LUMA_DENOISE_SHARE;
+  const luma = Math.min(
+    Math.max(0, round(full * LUMA_DENOISE_SCALE) - LUMA_DENOISE_OFFSET) * LUMA_DENOISE_SHARE,
+    round(color / 2),
+  );
   return [round(luma), color, round(sharpening)];
 }
 
