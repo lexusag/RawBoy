@@ -786,9 +786,17 @@ final class AutoViewModel: ObservableObject {
 
     // MARK: - Export
 
+    private func clearExported() {
+        guard photos.contains(where: { $0.status == .exported }) else { return }
+        for i in photos.indices where photos[i].status == .exported {
+            photos[i].status = .ready
+        }
+    }
+
     /** Exports the detail view's photo from the already decoded image. */
     func exportSelected() {
         guard let id = sessionReady, let p = photo(id), let a = p.analysis, let params = p.params, export == nil else { return }
+        clearExported()
         export = BatchExport(done: 0, total: 1, failed: 0)
         let settings = exportSettings
         keepAwake(true)
@@ -824,6 +832,7 @@ final class AutoViewModel: ObservableObject {
         // The detail view's full-resolution image would double the memory each export needs.
         session.close()
         sessionReady = nil
+        clearExported()
         export = BatchExport(done: 0, total: todo.count, failed: 0, waiting: Set(todo.map(\.id)))
         let settings = exportSettings
         keepAwake(true)

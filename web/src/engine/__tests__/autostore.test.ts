@@ -403,3 +403,46 @@ describe('Auto denoise on "As is" photos', () => {
     expect(paramsOf(store.state.photos[0])!.denoise).toBe(0);
   });
 });
+
+describe('Auto export', () => {
+  it('clears "Saved" (exported) status from previous export when a new export starts', async () => {
+    vi.stubGlobal('window', { setTimeout: () => 0 });
+    const { developParams } = await import('../develop/DevelopParams');
+    const store = new AutoStore();
+    store.add([new File(['a'], 'a.CR2'), new File(['b'], 'b.CR2')]);
+    const analysis = { defaults: developParams(), autoBase: developParams(), stats: { hasFace: false } };
+    const s = store as unknown as { _state: { photos: { id: string; analysis: unknown; status: string }[] } };
+    s._state.photos = s._state.photos.map((p) => ({ ...p, analysis, status: 'exported' }));
+
+    const mockFolder = { name: 'Exports', write: vi.fn().mockResolvedValue('a.jpg') } as unknown as import('../../ui/common/files').OutputFolder;
+
+    let callCount = 0;
+    (store as unknown as { exportOne: () => Promise<Blob> }).exportOne = vi.fn().mockImplementation(async () => {
+      callCount++;
+      if (callCount === 1) {
+        expect(store.state.photos.every((p) => p.status === 'exporting' || p.status === 'ready')).toBe(true);
+      }
+      return new Blob();
+    });
+    (store as unknown as { save: () => Promise<string> }).save = vi.fn().mockResolvedValue('a.jpg');
+
+    await store.exportAll(mockFolder);
+    expect(store.state.photos.every((p) => p.status === 'exported')).toBe(true);
+
+    const [p1, p2] = store.state.photos;
+    s._state.photos = [
+      { ...p1, status: 'exported' },
+      { ...p2, status: 'ready' },
+    ];
+    (store as unknown as { _state: { sessionReady: string } })._state.sessionReady = p2.id;
+    (store as unknown as { session: { export: () => Promise<Blob> } }).session.export = vi.fn().mockImplementation(async () => {
+      expect(store.state.photos.find((p) => p.id === p1.id)?.status).toBe('ready');
+      return new Blob();
+    });
+    await store.exportSelected(mockFolder);
+    expect(store.state.photos.find((p) => p.id === p1.id)?.status).toBe('ready');
+    expect(store.state.photos.find((p) => p.id === p2.id)?.status).toBe('exported');
+    vi.unstubAllGlobals();
+  });
+});
+
