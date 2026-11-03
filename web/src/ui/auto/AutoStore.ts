@@ -1089,6 +1089,14 @@ export class AutoStore {
 
   // ---- Export ----
 
+  private clearExported(ids?: ReadonlySet<string>) {
+    const shouldClear = (p: AutoPhoto) => p.status === 'exported' && (!ids || ids.has(p.id));
+    if (!this._state.photos.some(shouldClear)) return;
+    this.update({
+      photos: this._state.photos.map((p) => (shouldClear(p) ? { ...p, status: 'ready' } : p)),
+    });
+  }
+
   /** Exports the detail view's photo from the already decoded image. */
   async exportSelected(folder: OutputFolder | null) {
     const id = this._state.sessionReady;
@@ -1096,6 +1104,7 @@ export class AutoStore {
     const a = p?.analysis;
     const params = p && paramsOf(p);
     if (!id || !p || !a || !params || this._state.export) return;
+    this.clearExported(new Set([id]));
     this.update({ export: { done: 0, total: 1, failed: 0, current: 0 } });
     this.updatePhoto(id, (q) => ({ ...q, status: 'exporting' }));
     let ok = false;
@@ -1126,6 +1135,7 @@ export class AutoStore {
     this.closeDetail();
     // The detail view's full-resolution image would double the memory each export needs.
     this.session.close();
+    this.clearExported(ids);
     this.update({ sessionReady: null, export: { done: 0, total: todo.length, failed: 0, current: 0, waiting: new Set(todo.map((p) => p.id)) } });
     let failed = 0;
     const settings = this._state.exportSettings;

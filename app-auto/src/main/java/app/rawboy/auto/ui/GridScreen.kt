@@ -529,10 +529,21 @@ private val DenoiseIcon: ImageVector by lazy {
         .build()
 }
 
-/** [colour] 0 = grey and a little darker (a photo still waiting to be exported), 1 = as it is. */
+/** [colour] 0 = grey, lower contrast and a little darker (a photo still waiting to be exported), 1 = as it is. */
 private fun waitingFilter(colour: Float): ColorFilter {
     val m = ColorMatrix().apply { setToSaturation(colour) }
     val dim = 0.8f + 0.2f * colour
-    m *= ColorMatrix().apply { setToScale(dim, dim, dim, 1f) }
-    return ColorFilter.colorMatrix(m)
+    val contrast = 0.75f + 0.25f * colour
+    val cScale = contrast * dim
+    val offset = 128f * (1f - contrast) * dim
+    val cd = ColorMatrix(
+        floatArrayOf(
+            cScale, 0f, 0f, 0f, offset,
+            0f, cScale, 0f, 0f, offset,
+            0f, 0f, cScale, 0f, offset,
+            0f, 0f, 0f, 1f, 0f,
+        )
+    )
+    cd *= m
+    return ColorFilter.colorMatrix(cd)
 }

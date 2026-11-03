@@ -291,10 +291,11 @@ private struct PhotoCell: View {
             ZStack {
                 Color(white: 0.12)
                 if let t = photo.thumbnail {
-                    // Grey while it waits to be exported, turning to colour once saved.
+                    // Grey and lower contrast while it waits to be exported, turning to colour once saved.
                     Image(decorative: t, scale: 1).resizable().scaledToFill()
                         .saturation(waiting ? 0 : 1)
                         .brightness(waiting ? -0.12 : 0)
+                        .contrast(waiting ? 0.75 : 1)
                         .animation(.easeOut(duration: 0.6), value: waiting)
                 }
                 switch photo.status {

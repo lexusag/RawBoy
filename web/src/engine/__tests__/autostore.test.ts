@@ -1,4 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 // The store's analysis needs the WASM decoder; these tests only add photos, so it is stubbed out.
 vi.mock('../auto/AutoAnalysis', () => ({ decodeForAnalysis: () => new Promise(() => {}), finishAnalysis: () => new Promise(() => {}) }));
@@ -401,5 +405,59 @@ describe('Auto denoise on "As is" photos', () => {
     expect(store.state.message).toBe('Every photo already has its auto denoise');
     store.undo(p.id);
     expect(paramsOf(store.state.photos[0])!.denoise).toBe(0);
+  });
+});
+
+describe('Auto export', () => {
+  it('clears "Saved" (exported) status from previous export when a new export starts', async () => {
+    vi.stubGlobal('window', { setTimeout: () => 0 });
+    const { developParams } = await import('../develop/DevelopParams');
+    const store = new AutoStore();
+    store.add([new File(['a'], 'a.CR2'), new File(['b'], 'b.CR2')]);
+    const analysis = { defaults: developParams(), autoBase: developParams(), stats: { hasFace: false } };
+    const s = store as unknown as { _state: { photos: { id: string; analysis: unknown; status: string }[] } };
+    s._state.photos = s._state.photos.map((p) => ({ ...p, analysis, status: 'exported' }));
+
+    const mockFolder = { name: 'Exports', write: vi.fn().mockResolvedValue('a.jpg') } as unknown as import('../../ui/common/files').OutputFolder;
+
+    let firstExportStatus: string[] = [];
+    (store as unknown as { exportOne: () => Promise<Blob> }).exportOne = vi.fn().mockImplementation(async () => {
+      if (firstExportStatus.length === 0) {
+        firstExportStatus = store.state.photos.map((p) => p.status);
+      }
+      return new Blob();
+    });
+    (store as unknown as { save: () => Promise<string> }).save = vi.fn().mockResolvedValue('a.jpg');
+
+    await store.exportAll(mockFolder);
+    expect(firstExportStatus).toEqual(['exporting', 'ready']);
+    expect(store.state.photos.every((p) => p.status === 'exported')).toBe(true);
+
+    // Selected export clears only the selected photo's badge, keeping others
+    const [p1, p2] = store.state.photos;
+    s._state.photos = [
+      { ...p1, status: 'exported' },
+      { ...p2, status: 'exported' },
+    ];
+    let selectedOtherStatus: string | null = null;
+    (store as unknown as { session: { export: () => Promise<Blob> } }).session.export = vi.fn().mockImplementation(async () => {
+      selectedOtherStatus = store.state.photos.find((p) => p.id === p1.id)?.status ?? null;
+      return new Blob();
+    });
+    (store as unknown as { _state: { sessionReady: string } })._state.sessionReady = p2.id;
+    await store.exportSelected(mockFolder);
+    expect(selectedOtherStatus).toBe('exported');
+    expect(store.state.photos.find((p) => p.id === p1.id)?.status).toBe('exported');
+    expect(store.state.photos.find((p) => p.id === p2.id)?.status).toBe('exported');
+
+    // Exporting a selection of photos clears only the selected photos' badges
+    s._state.photos = [
+      { ...p1, status: 'exported' },
+      { ...p2, status: 'exported' },
+    ];
+    firstExportStatus = [];
+    await store.exportAll(mockFolder, new Set([p1.id]));
+    expect(firstExportStatus).toEqual(['exporting', 'exported']);
+    expect(store.state.photos.map((p) => p.status)).toEqual(['exported', 'exported']);
   });
 });

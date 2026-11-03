@@ -1441,9 +1441,9 @@ select {
   opacity: 1;
 }
 
-/* Still to be saved by "Export all": grey, turning to colour once saved. */
+/* Still to be saved by "Export all": grey and lower contrast, turning to colour once saved. */
 .auto-grid .cell .thumb img.export-waiting {
-  filter: grayscale(1) brightness(0.8);
+  filter: grayscale(1) contrast(0.75) brightness(0.8);
 }
 
 @media (prefers-reduced-motion: reduce) {

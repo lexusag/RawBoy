@@ -1,5 +1,10 @@
 # Changelog
 
+**RawBoy Auto: clear Saved badges on export, lower contrast while waiting (2026-11-03)**
+
+- Starting a new export clears previous "Saved" badges on the photos being exported (or all photos for "Export all"), so progress can be followed cleanly.
+- Photos waiting to be saved now have reduced contrast (0.75) in addition to desaturation and brightness dimming (Android, iOS, web), making the transition to full render visible on black-and-white photos as well.
+
 **RawBoy Packer: folder grouping in the queue (2026-11-02)**
 
 - Files in the queue are now grouped by folder with folder name headers, item counts, and a folder remove button.
