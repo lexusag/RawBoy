@@ -42,6 +42,10 @@ describe('Packer settings', () => {
     expect(text(lines)).toContain('1 file without lens corrections in the file (Olympus E-PL9');
     expect(text(lines)).toContain('Sony ILCE-7M5: ');
     expect(bold(lines)).toContain('1 file can\'t be saved as Small raw');
+
+    const fujiFiles = [info({ make: 'Fujifilm', model: 'GFX 100S II', adobeHints: true })];
+    const fujiLines = summarize(DEFAULT_SETTINGS, fujiFiles);
+    expect(text(fujiLines)).not.toContain('aren\'t known to the Packer');
     expect(bold(summarize({ ...DEFAULT_SETTINGS, lensCorrections: false }, files))).toContain('Lens corrections are dropped. ');
     expect(bold(summarize({ ...DEFAULT_SETTINGS, format: 'losslessJxl' }, []))).toContain('Apple Photos shows it black');
     expect(text(summarize({ ...DEFAULT_SETTINGS, format: 'micro', maxSize: 3000 }, []))).toContain('resized to 3000 px');

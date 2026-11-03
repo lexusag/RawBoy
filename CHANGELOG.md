@@ -1,5 +1,11 @@
 # Changelog
 
+**RawBoy Packer: sensor-based support for Fujifilm cameras (2026-11-03)**
+
+- Added sensor-family support for Fujifilm cameras in RawBoy Packer: D65 color matrix and Adobe baseline hints (exposure and sharpness) are now resolved by sensor architecture (GFX 102 MP, GFX 51.4 MP, X-Trans 1–5, APS-C Bayer) rather than individual models.
+- Verified on Fujifilm GFX 100S II (`DSCF5521.RAF`): correctly packages to Small raw and Lossless DNG with in-camera lens corrections (distortion, CA, vignetting), RAF inset crop, D65 color matrix, and Adobe hints.
+- Automatically normalizes Fujifilm camera model names (e.g. `GFX100S II` → `GFX 100S II`) so Lightroom matches native film simulation profiles.
+
 **RawBoy Auto: clear Saved badges on export, lower contrast while waiting (2026-11-03)**
 
 - Starting a new export clears previous "Saved" badges on the photos being exported (or all photos for "Export all"), so progress can be followed cleanly.

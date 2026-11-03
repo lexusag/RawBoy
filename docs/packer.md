@@ -51,7 +51,7 @@ Turning *Lens corrections* off drops them.
 ## Lightroom match
 
 Lightroom scales its default sharpening and exposure by hints that Adobe's own DNGs carry per camera. The Packer knows
-them for the GFX 50R, X-T1, X-T5, X-E5, A7 III, A7C II, NEX-3, E-PL9, EOS RP and EOS 6D; for other cameras the summary warns that Lightroom may open the DNG a
+them for Fujifilm cameras by sensor family (GFX 100 series, GFX 50 series, X-Trans 1–5), Sony (A7 III, A7C II, NEX-3), Olympus (E-PL9), Canon (EOS RP, EOS 6D); for other cameras the summary warns that Lightroom may open the DNG a
 little softer and darker than its own conversion.
 
 ## File list

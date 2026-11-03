@@ -59,6 +59,8 @@ struct AdobeHints {
 };
 constexpr AdobeHints kAdobeHints[] = {
     {"Fujifilm GFX 50R", 1.9, 0.22},
+    {"Fujifilm GFX 100S II", 1.33, 1.22},
+    {"Fujifilm GFX100S II", 1.33, 1.22},
     {"Sony ILCE-7M3", 1.33, 0.35},
     {"Sony NEX-3", 1.2, 0.35},
     {"Olympus E-PL9", 1.5, 0.5},
@@ -70,10 +72,38 @@ constexpr AdobeHints kAdobeHints[] = {
     {"Fujifilm X-T5", 1.1, 0.02},
 };
 
-const AdobeHints* adobeHintsFor(const std::string& camera) {
-    for (const auto& h : kAdobeHints)
-        if (camera == h.camera) return &h;
-    return nullptr;
+/** Sensor-level baseline hints for Fujifilm when a specific camera model is not in kAdobeHints. */
+bool fujiSensorHints(const PackInfo& info, double& sharpness, double& exposure) {
+    if (info.make != "Fujifilm") return false;
+    if (info.bayer) {
+        // GFX 102 MP (GFX 100, 100S, 100 II, 100S II)
+        if (info.width > 11000) { sharpness = 1.33; exposure = 1.22; return true; }
+        // GFX 51.4 MP (GFX 50S, 50R, 50S II)
+        if (info.width > 8000) { sharpness = 1.9; exposure = 0.22; return true; }
+        return false;
+    }
+    // X-Trans sensors (no OLPF):
+    // 40.2 MP X-Trans 5 HR (X-T5, X-H2, X-T50, X100VI, X-E5...)
+    if (info.width > 7000) { sharpness = 1.1; exposure = 0.02; return true; }
+    // 26.1 MP X-Trans 4 / 5 HS (X-T3, X-T4, X-T30, X-Pro3, X100V, X-S10, X-E4, X-H2S...)
+    if (info.width > 6200) { sharpness = 1.2; exposure = 0.0; return true; }
+    // 24.3 MP X-Trans 3 (X-Pro2, X-T2, X-T20, X-E3, X-H1, X100F...)
+    if (info.width > 5900) { sharpness = 1.25; exposure = 0.0; return true; }
+    // 16.3 MP X-Trans 1/2 (X-T1, X-T10, X-E1, X-E2, X-Pro1, X100S, X100T, X70...)
+    if (info.width > 4800) { sharpness = 1.33; exposure = 0.15; return true; }
+    return false;
+}
+
+bool getAdobeHints(const PackInfo& info, double& sharpness, double& exposure) {
+    const std::string camera = info.make + " " + info.model;
+    for (const auto& h : kAdobeHints) {
+        if (camera == h.camera) {
+            sharpness = h.sharpness;
+            exposure = h.exposure;
+            return true;
+        }
+    }
+    return fujiSensorHints(info, sharpness, exposure);
 }
 
 // ---- Host: options, threads ----
@@ -445,15 +475,103 @@ void fixLibRawGeometry(libraw_data_t& d) {
             d.idata.xtrans[r][c] = d.idata.xtrans_abs[(r + s.top_margin) % 6][(c + s.left_margin) % 6];
 }
 
+/**
+ * Normalizes Fujifilm model strings for clean UI display and exact match with Adobe's profile lookup tables.
+ * e.g. "GFX100SII" -> "GFX 100S II", "GFX50S II" -> "GFX 50S II", "X-T30II" -> "X-T30 II".
+ */
+std::string normalizeFujiModel(const std::string& model) {
+    if (model.empty()) return model;
+    if (model.rfind("GFX", 0) == 0) {
+        std::string s = model;
+        if (s.size() > 3 && s[3] != ' ') s.insert(3, " ");
+        size_t pos = s.find("SII");
+        if (pos != std::string::npos && (pos == 0 || s[pos - 1] != ' ')) {
+            s.replace(pos, 3, "S II");
+        }
+        pos = s.find("II");
+        if (pos != std::string::npos && pos > 0 && s[pos - 1] != ' ') {
+            s.insert(pos, " ");
+        }
+        std::string res;
+        for (char c : s) {
+            if (c == ' ' && !res.empty() && res.back() == ' ') continue;
+            res += c;
+        }
+        return res;
+    }
+    if (model.rfind("X-", 0) == 0) {
+        std::string s = model;
+        size_t pos = s.find("II");
+        if (pos != std::string::npos && pos > 0 && s[pos - 1] != ' ' && s[pos - 1] != '-') {
+            s.insert(pos, " ");
+        }
+        if (s.size() >= 2 && s.substr(s.size() - 2) == "IR" && s[s.size() - 3] != ' ') {
+            s.insert(s.size() - 2, " ");
+        }
+        return s;
+    }
+    return model;
+}
+
+/**
+ * Returns Adobe's D65 ColorMatrix for Fujifilm sensors by sensor dimensions and CFA type.
+ * All camera models sharing the same sensor (silicon, CFA dyes, readout) share the same matrix.
+ */
+dng_matrix_3by3 fujiSensorColorMatrix(const libraw_data_t& d) {
+    const auto& s = d.sizes;
+    const bool isXTrans = (d.idata.filters == 9);
+    if (isXTrans) {
+        // 40.2 MP X-Trans 5 HR (X-T5, X-H2, X-T50, X100VI, X-E5...): raw 7872 x 5196
+        if (s.raw_width == 7872 || s.width > 7000) {
+            return dng_matrix_3by3(1.1809, -0.5358, -0.1141, -0.4248, 1.2164, 0.2343, -0.0514, 0.1097, 0.5848);
+        }
+        // 26.1 MP X-Trans 5 HS Stacked (X-H2S): raw 6336 x 4224
+        if (s.raw_width == 6336) {
+            return dng_matrix_3by3(1.2836, -0.5909, -0.1032, -0.3087, 1.1132, 0.2236, -0.0035, 0.0872, 0.5330);
+        }
+        // 26.1 MP X-Trans 4 BSI (X-T3, X-T4, X-T30, X-T30 II, X-Pro3, X100V, X-S10, X-E4, X-S20, X-M5...): raw 6384
+        if (s.raw_width == 6384 || (s.width >= 6200 && s.width < 7000)) {
+            return dng_matrix_3by3(1.3426, -0.6334, -0.1177, -0.4244, 1.2136, 0.2371, -0.0580, 0.1303, 0.5980);
+        }
+        // 24.3 MP X-Trans 3 (X-Pro2, X-T2, X-T20, X-E3, X-H1, X100F...): raw 6048 / 6160
+        if (s.raw_width == 6048 || s.raw_width == 6160 || (s.width >= 6000 && s.width < 6200)) {
+            return dng_matrix_3by3(1.1434, -0.4948, -0.1210, -0.3746, 1.2042, 0.1903, -0.0666, 0.1479, 0.5235);
+        }
+        // 16.3 MP X-Trans 1 & 2 (X-T1, X-T10, X-E1, X-E2, X-Pro1, X100S, X100T, X70...): raw 4992 / 5120
+        if (s.raw_width == 4992 || s.raw_width == 5120 || (s.width >= 4800 && s.width < 6000)) {
+            return dng_matrix_3by3(0.8458, -0.2451, -0.0855, -0.4597, 1.2447, 0.2407, -0.1475, 0.2482, 0.6526);
+        }
+    } else {
+        // Bayer: GFX Medium Format and entry APS-C
+        // 102 MP Medium Format Bayer (GFX 100, GFX 100S, GFX 100 II, GFX 100S II): raw 11808 x 8754
+        if (s.raw_width == 11808 || s.width > 11000) {
+            return dng_matrix_3by3(1.2806, -0.5779, -0.1110, -0.3546, 1.1507, 0.2318, -0.0177, 0.0996, 0.5715);
+        }
+        // 51.4 MP Medium Format Bayer (GFX 50S, GFX 50R, GFX 50S II): raw 9216 / 8472 / 6912
+        if (s.raw_width == 9216 || s.raw_width == 8472 || s.raw_width == 6912 || (s.width > 8000 && s.width < 11000)) {
+            return dng_matrix_3by3(1.1756, -0.4754, -0.0874, -0.3056, 1.1045, 0.2305, -0.0381, 0.1457, 0.6006);
+        }
+        // 24.2 MP APS-C Bayer (X-A3, X-A5, X-A7, X-T100, X-T200, XF10): width ~ 6000
+        if (s.width >= 5900 && s.width < 6200) {
+            return dng_matrix_3by3(1.1673, -0.4760, -0.1041, -0.3988, 1.2058, 0.2166, -0.0771, 0.1417, 0.5569);
+        }
+    }
+    return dng_matrix_3by3();
+}
+
 void infoFromLibRaw(const libraw_data_t& d, PackInfo& info) {
     info.make = d.idata.normalized_make;
     info.model = d.idata.normalized_model;
+    if (info.make == "Fujifilm") {
+        info.model = normalizeFujiModel(info.model);
+    }
     info.lens = d.lens.Lens;
     info.width = d.sizes.width;
     info.height = d.sizes.height;
     info.mosaic = d.idata.filters != 0 && d.idata.colors == 3;
     info.bayer = info.mosaic && d.idata.filters > 1000;
-    info.adobeHints = adobeHintsFor(info.make + " " + info.model) != nullptr;
+    double sh = 0, exp = 0;
+    info.adobeHints = getAdobeHints(info, sh, exp);
 }
 
 /** Bits needed for [white] (a white level): 16383 → 14, 1023 → 10, 15872 → 14. */
@@ -516,9 +634,10 @@ dng_negative* negativeFromLibRaw(dng_host& host, RawBoyLibRaw& raw, const uint8_
     neg->SetModelName(unique.c_str());
     neg->SetLocalName(unique.c_str());
     neg->SetRGB();
-    if (const AdobeHints* hints = adobeHintsFor(unique)) {
-        neg->SetBaselineSharpness(hints->sharpness);
-        neg->SetBaselineExposure(hints->exposure);
+    double sh = 0, exp = 0;
+    if (getAdobeHints(info, sh, exp)) {
+        neg->SetBaselineSharpness(sh);
+        neg->SetBaselineExposure(exp);
     }
 
     // CFA, at the visible area's origin. LibRaw's colours: 0 R, 1 G, 2 B, 3 G2.
@@ -587,15 +706,18 @@ dng_negative* negativeFromLibRaw(dng_host& host, RawBoyLibRaw& raw, const uint8_
     // UniqueCameraModel), as-shot white balance.
     const float(*xyz)[3] = d.color.cam_xyz;
     dng_matrix_3by3 m(xyz[0][0], xyz[0][1], xyz[0][2], xyz[1][0], xyz[1][1], xyz[1][2], xyz[2][0], xyz[2][1], xyz[2][2]);
+    if (m.MaxEntry() == 0 && info.make == "Fujifilm") {
+        m = fujiSensorColorMatrix(d);
+    }
     if (m.MaxEntry() == 0) {
-        // Cameras newer than LibRaw's table: Adobe's D65 matrices, read from its own DNGs. The X-T5 and X-E5 share
-        // the 40 MP X-Trans 5 HR sensor, and Adobe gives them the same matrix.
+        // Other cameras newer than LibRaw's table: Adobe's D65 matrices, read from its own DNGs.
         static const struct { const char* model; double v[9]; } kMatrices[] = {
             {"X-E5", {1.1809, -0.5358, -0.1141, -0.4248, 1.2164, 0.2343, -0.0514, 0.1097, 0.5848}},
             {"X-T5", {1.1809, -0.5358, -0.1141, -0.4248, 1.2164, 0.2343, -0.0514, 0.1097, 0.5848}},
         };
         for (const auto& k : kMatrices)
-            if (std::string(d.idata.normalized_model) == k.model || std::string(d.idata.model) == k.model)
+            if (std::string(d.idata.normalized_model) == k.model || std::string(d.idata.model) == k.model ||
+                std::string(info.model) == k.model)
                 m = dng_matrix_3by3(k.v[0], k.v[1], k.v[2], k.v[3], k.v[4], k.v[5], k.v[6], k.v[7], k.v[8]);
         if (m.MaxEntry() == 0)
             throw std::runtime_error(std::string("this camera (") + d.idata.make + " " + d.idata.model +
@@ -715,6 +837,9 @@ bool inspectForPacking(const uint8_t* data, size_t size, PackInfo& info, std::st
             if (raw->open_buffer(data, size) == LIBRAW_SUCCESS) {
                 info.make = raw->imgdata.idata.normalized_make;
                 info.model = raw->imgdata.idata.normalized_model;
+                if (info.make == "Fujifilm") {
+                    info.model = normalizeFujiModel(info.model);
+                }
                 info.lens = raw->imgdata.lens.Lens;
             }
             return true;
