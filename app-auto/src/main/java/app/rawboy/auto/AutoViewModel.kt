@@ -892,9 +892,10 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
 
     // ---- Export ----
 
-    private fun clearExported() {
-        if (_photos.value.any { it.status == PhotoStatus.EXPORTED }) {
-            _photos.update { list -> list.map { if (it.status == PhotoStatus.EXPORTED) it.copy(status = PhotoStatus.READY) else it } }
+    private fun clearExported(ids: Set<String>? = null) {
+        val shouldClear: (AutoPhoto) -> Boolean = { it.status == PhotoStatus.EXPORTED && (ids == null || it.id in ids) }
+        if (_photos.value.any(shouldClear)) {
+            _photos.update { list -> list.map { if (shouldClear(it)) it.copy(status = PhotoStatus.READY) else it } }
         }
     }
 
@@ -905,7 +906,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
         val a = p.analysis ?: return
         val params = p.params ?: return
         if (_export.value != null) return
-        clearExported()
+        clearExported(setOf(id))
         _export.value = BatchExport(done = 0, total = 1, failed = 0)
         val settings = _exportSettings.value
         exportJob = viewModelScope.launch {
@@ -940,7 +941,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
         // The detail view's full-resolution image would double the memory each export needs.
         session.close()
         _sessionReady.value = null
-        clearExported()
+        clearExported(ids)
         _export.value = BatchExport(done = 0, total = todo.size, failed = 0, waiting = todo.map { it.id }.toSet())
         val settings = _exportSettings.value
         exportJob = viewModelScope.launch {

@@ -533,16 +533,17 @@ private val DenoiseIcon: ImageVector by lazy {
 private fun waitingFilter(colour: Float): ColorFilter {
     val m = ColorMatrix().apply { setToSaturation(colour) }
     val dim = 0.8f + 0.2f * colour
-    m *= ColorMatrix().apply { setToScale(dim, dim, dim, 1f) }
     val contrast = 0.75f + 0.25f * colour
-    val offset = 128f * (1f - contrast)
-    m *= ColorMatrix(
+    val cScale = contrast * dim
+    val offset = 128f * (1f - contrast) * dim
+    val cd = ColorMatrix(
         floatArrayOf(
-            contrast, 0f, 0f, 0f, offset,
-            0f, contrast, 0f, 0f, offset,
-            0f, 0f, contrast, 0f, offset,
+            cScale, 0f, 0f, 0f, offset,
+            0f, cScale, 0f, 0f, offset,
+            0f, 0f, cScale, 0f, offset,
             0f, 0f, 0f, 1f, 0f,
         )
     )
-    return ColorFilter.colorMatrix(m)
+    cd *= m
+    return ColorFilter.colorMatrix(cd)
 }
