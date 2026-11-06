@@ -1,5 +1,10 @@
 # Changelog
 
+**RawBoy Browser (web): force real previews instead of embedded (2026-11-05)**
+
+- Added a "Real preview" button in the photo viewer (and an "R" keyboard shortcut) to force developing the raw photo as shot using RawBoy's engine instead of showing the camera's embedded JPEG preview.
+- Added a "Real previews" toggle in the grid filter bar, remembered across sessions in browser storage.
+
 **RawBoy: scroll film stocks with mouse wheel (2026-11-05)**
 
 - Hovering over the Film button or the stock picker in RawBoy Pro (web) now scrolls through film stocks with the mouse wheel without clicking. A wheel already scrolling the controls panel leaves it alone.
