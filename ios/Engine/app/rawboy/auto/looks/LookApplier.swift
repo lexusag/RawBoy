@@ -158,4 +158,16 @@ public enum LookApplier {
         let c = combined.clamped(-100, 100)
         return adjust >= 0 ? (c + adjust).clamped(-100, 100) : c + (-100 - c) * min(-adjust / 100, 1)
     }
+
+    /**
+     * Warmth and tint adjustments that make [unadjusted] (the develop before adjustments) render with [kelvin] and [tint].
+     */
+    public static func whiteBalanceAdjust(_ unadjusted: DevelopParams, kelvin: Float, tint: Float) -> (warmth: Float, tint: Float) {
+        let factor = unadjusted.temperature > 0 ? kelvin / unadjusted.temperature : 1
+        guard factor > 0, factor.isFinite else { return (0, 0) }
+        let warmth = Float(Int((100 * log2(factor)).rounded())).clamped(-100, 100)
+        let warmed = Warmth.shift(unadjusted, powf(warmthRange, warmth / 100))
+        let tintDelta = Float(Int((tint - warmed.tint).rounded())).clamped(-50, 50)
+        return (warmth, tintDelta)
+    }
 }

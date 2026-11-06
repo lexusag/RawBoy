@@ -1,6 +1,6 @@
 import { decodeForAnalysis, finishAnalysis, type Analysis, type DecodedForAnalysis } from '../../engine/auto/AutoAnalysis';
 import { ALL_LOOKS, Looks, type Look } from '../../engine/auto/looks/Look';
-import { DEFAULT_STRENGTH, NO_ADJUSTMENTS, applyEditsDevelop, developAuto, sameAdjustments, type Adjustments } from '../../engine/auto/looks/LookApplier';
+import { DEFAULT_STRENGTH, NO_ADJUSTMENTS, applyEditsDevelop, developAuto, sameAdjustments, whiteBalanceAdjust, type Adjustments } from '../../engine/auto/looks/LookApplier';
 import { ALL_FILM_LOOKS, FilmLooks } from '../../engine/auto/looks/FilmLooks';
 import { suggestFilm, suggestLook } from '../../engine/auto/looks/LookSuggester';
 import { autoDevelop } from '../../engine/auto/analysis/AutoTone';
@@ -909,6 +909,35 @@ export class AutoStore {
   /** Sliders (a drag is one undo step); [force] for a button. */
   setAdjust = (id: string, change: Partial<Adjustments>, force = false) =>
     this.changeDevelop(id, (p) => ({ ...p, adjust: { ...p.adjust, ...change } }), force);
+
+  /** White balance picker: sets warmth and tint so the clicked spot of the preview (fit or 100% view) renders neutral grey. */
+  pickWhite = async (id: string, x: number, y: number) => {
+    const p = this.photo(id);
+    if (!p || !p.analysis || this._state.export) return;
+    let pick;
+    try {
+      pick = await this.session.pickWhite(x, y, this.frameWidth, p.analysis.defaults);
+    } catch {
+      return; // photo was closed meanwhile
+    }
+    if (!pick || this.photo(id)?.id !== id) return;
+    if (pick.kind === 'clipped') {
+      this.update({ message: "That spot is blown out: pick a grey that isn't clipped" });
+      return;
+    }
+    if (pick.kind === 'notNeutral') {
+      this.update({ message: 'No white balance makes that spot grey' });
+      return;
+    }
+    const current = this.photo(id);
+    if (!current || !current.analysis) return;
+    const a = current.analysis;
+    const unadjusted = current.edits
+      ? current.edits
+      : developAuto(autoBaseOf(current, a), activeLook(current), current.strength, NO_ADJUSTMENTS, a.stats.hasFace, current.preset, current.lensPreset);
+    const adjust = whiteBalanceAdjust(unadjusted, pick.kelvin, pick.tint);
+    this.setAdjust(id, adjust, true);
+  };
 
   canUndo = (id: string) => this.histories.get(id)?.canUndo ?? false;
   canRedo = (id: string) => this.histories.get(id)?.canRedo ?? false;

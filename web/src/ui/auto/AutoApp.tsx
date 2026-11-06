@@ -653,6 +653,8 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
   const [choosingPreset, setChoosingPreset] = useState(false);
   // Look: the look and the two everyday controls; Adjust: every adjustment (those two again, then the offsets from the auto develop).
   const [tab, setTab] = useState<'Look' | 'Adjust'>('Look');
+  const [pickingWhite, setPickingWhite] = useState(false);
+  useEffect(() => { setPickingWhite(false); }, [id, tab]);
   const scroll = useTabScroll(tab);
   // Regular iPhones in Safari: the tabs go on top and the look strip into the Look tab, so Adjust gets the whole panel.
   const short = useMediaQuery(SHORT_SCREEN);
@@ -913,7 +915,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
           onDismiss={() => setChoosingPreset(false)}
         />
       )}
-      <div className="workspace auto">
+      <div className={`workspace auto${pickingWhite ? ' picking-white' : ''}`}>
         <div
           className="preview-wrap"
           // One finger swipes; a second one is a pinch and cancels the swipe.
@@ -935,7 +937,15 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
             placeholderSize={thumbSize?.src === photo.thumbnail ? thumbSize.size : null}
             onViewSize={(w, h, f) => store.setViewSize(w, h, f)}
             onToggleZoom={(x, y) => loaded && store.toggleZoom(x, y)}
-            onClick={(x, y) => loaded && store.onPreviewClick(x, y)}
+            onClick={(x, y) => {
+              if (!loaded) return;
+              if (pickingWhite) {
+                setPickingWhite(false);
+                void store.pickWhite(id, x, y);
+              } else {
+                store.onPreviewClick(x, y);
+              }
+            }}
             onPan={(dx, dy) => store.session.pan(dx, dy)}
             onZoomBy={(x, y, f) => loaded && store.zoomBy(x, y, f)}
             onCompare={setShowAuto}
@@ -981,6 +991,11 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
                 <div className="slider-pair">
                   {adjustSlider('Brightness', 'brightness', 100)}
                   {adjustSlider('Contrast', 'contrast', 50)}
+                </div>
+                <div className="chips">
+                  <button type="button" className={pickingWhite ? 'active' : ''} onClick={() => setPickingWhite(!pickingWhite)}>
+                    {pickingWhite ? 'Click something neutral grey' : 'Pick white balance'}
+                  </button>
                 </div>
                 <div className="slider-pair">
                   {adjustSlider('Warmth', 'warmth', 100)}

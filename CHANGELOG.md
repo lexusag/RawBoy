@@ -1,5 +1,10 @@
 # Changelog
 
+**RawBoy Auto: white balance picker on the Adjust tab (2026-11-06)**
+
+- "Pick white balance" button on the Adjust tab (Android, iOS and web), like RawBoy Pro's eyedropper.
+- Tapping or clicking a neutral grey spot in the photo sets Warmth and Tint so that spot renders grey, with messages when the sampled spot is clipped or not neutral.
+
 **RawBoy Packer: sort by shoot date or name (2026-11-06)**
 
 - Files in the queue are now sorted by shoot date by default (from EXIF DateTimeOriginal / DateTimeDigitized, falling back to file modification date), with an option to sort by file name (like in RawBoy Auto).

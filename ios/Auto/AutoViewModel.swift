@@ -535,8 +535,33 @@ final class AutoViewModel: ObservableObject {
 
     func setStrength(_ id: String, _ strength: Float) { changeDevelop(id) { $0.strength = strength } }
 
-    /** Sliders (a drag is one undo step). */
-    func setAdjust(_ id: String, _ change: (inout Adjustments) -> Void) { changeDevelop(id) { change(&$0.adjust) } }
+    /** Sliders (a drag is one undo step); [force] for a button. */
+    func setAdjust(_ id: String, force: Bool = false, _ change: (inout Adjustments) -> Void) {
+        changeDevelop(id, force: force) { change(&$0.adjust) }
+    }
+
+    /** White balance picker: sets warmth and tint so the tapped spot of the preview (fit or 100% view) renders neutral grey. */
+    func pickWhite(_ id: String, _ x: Float, _ y: Float, frameWidth: Int) {
+        guard let p = photo(id), let a = p.analysis, export == nil else { return }
+        Task {
+            guard let pick = await session.pickWhite(x, y, frameWidth: frameWidth, defaults: a.defaults),
+                  photo(id)?.id == id else { return }
+            switch pick {
+            case .clipped:
+                message = "That spot is blown out: pick a grey that isn't clipped"
+            case .notNeutral:
+                message = "No white balance makes that spot grey"
+            case .white(let kelvin, let tint):
+                guard let current = photo(id), let currentAnalysis = current.analysis else { return }
+                let unadjusted = current.edits
+                    ?? LookApplier.develop(currentAnalysis.autoBase, look: current.activeLook, strength: current.strength,
+                                           adjust: Adjustments.none, hasFace: currentAnalysis.stats.hasFace,
+                                           preset: current.preset, lensPreset: current.lensPreset)
+                let wb = LookApplier.whiteBalanceAdjust(unadjusted, kelvin: kelvin, tint: tint)
+                setAdjust(id, force: true) { $0.warmth = wb.warmth; $0.tint = wb.tint }
+            }
+        }
+    }
 
     func canUndo(_ id: String) -> Bool { histories[id]?.canUndo ?? false }
     func canRedo(_ id: String) -> Bool { histories[id]?.canRedo ?? false }

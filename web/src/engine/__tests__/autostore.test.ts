@@ -520,6 +520,74 @@ describe('Auto export', () => {
   });
 });
 
+describe('Auto white balance picker', () => {
+  it('whiteBalanceAdjust solves for warmth and tint matching the target kelvin and tint', async () => {
+    const { whiteBalanceAdjust, developAuto, NO_ADJUSTMENTS } = await import('../auto/looks/LookApplier');
+    const { Looks } = await import('../auto/looks/Look');
+    const { developParams } = await import('../develop/DevelopParams');
+
+    const base = developParams({ temperature: 5000, tint: 0 });
+    const unadjusted = developAuto(base, Looks.NATURAL, 100, NO_ADJUSTMENTS, false, null, null);
+
+    // Target neutral grey with same WB -> 0 warmth and 0 tint
+    expect(whiteBalanceAdjust(unadjusted, 5000, 0)).toEqual({ warmth: 0, tint: 0 });
+
+    // Target warmer temperature (7071K ~ factor 1.414 -> warmth +50)
+    const warmer = whiteBalanceAdjust(unadjusted, 7071, 15);
+    expect(warmer.warmth).toBe(50);
+    // After warming, tint follows mired shift, and tint delta covers the rest
+    const developedWarmer = developAuto(base, Looks.NATURAL, 100, { ...NO_ADJUSTMENTS, ...warmer }, false, null, null);
+    expect(Math.abs(developedWarmer.temperature - 7071)).toBeLessThan(10);
+    expect(Math.abs(developedWarmer.tint - 15)).toBeLessThanOrEqual(1);
+
+    // Clamps to slider limits (-100..100 for warmth, -50..50 for tint)
+    expect(whiteBalanceAdjust(unadjusted, 50000, 100)).toEqual({ warmth: 100, tint: 50 });
+    expect(whiteBalanceAdjust(unadjusted, 100, -100)).toEqual({ warmth: -100, tint: -50 });
+  });
+
+  it('store.pickWhite adjusts warmth and tint on the open photo and records undo', async () => {
+    vi.stubGlobal('window', { setTimeout: () => 0, clearTimeout: () => {} });
+    const { developParams } = await import('../develop/DevelopParams');
+    const store = new AutoStore();
+    store.add([new File(['a'], 'a.CR2')]);
+    const [p] = store.state.photos;
+    const defaults = developParams({ temperature: 5000, tint: 0 });
+    const analysis = { defaults, autoBase: defaults, stats: { hasFace: false } };
+    const s = store as unknown as { _state: { photos: { id: string; analysis: unknown }[] } };
+    s._state.photos = [{ ...p, analysis }];
+
+    // Mock session.pickWhite
+    (store.session as unknown as { pickWhite: () => Promise<unknown> }).pickWhite = vi.fn().mockResolvedValue({
+      kind: 'white',
+      kelvin: 6000,
+      tint: 5,
+    });
+
+    await store.pickWhite(p.id, 100, 100);
+    const updated = store.state.photos.find((x) => x.id === p.id)!;
+    expect(updated.adjust.warmth).not.toBe(0);
+    expect(store.canUndo(p.id)).toBe(true);
+
+    store.undo(p.id);
+    expect(store.state.photos.find((x) => x.id === p.id)!.adjust.warmth).toBe(0);
+    expect(store.state.photos.find((x) => x.id === p.id)!.adjust.tint).toBe(0);
+
+    // Blown out / clipped spot
+    (store.session as unknown as { pickWhite: () => Promise<unknown> }).pickWhite = vi.fn().mockResolvedValue({
+      kind: 'clipped',
+    });
+    await store.pickWhite(p.id, 100, 100);
+    expect(store.state.message).toBe("That spot is blown out: pick a grey that isn't clipped");
+
+    // Non-neutral spot
+    (store.session as unknown as { pickWhite: () => Promise<unknown> }).pickWhite = vi.fn().mockResolvedValue({
+      kind: 'notNeutral',
+    });
+    await store.pickWhite(p.id, 100, 100);
+    expect(store.state.message).toBe('No white balance makes that spot grey');
+  });
+});
+
 describe('Auto grid filter', () => {
   it('filters photos by camera, lens, ISO and shoot date, and provides available options with counts', async () => {
     vi.stubGlobal('window', { setTimeout: () => 0 });

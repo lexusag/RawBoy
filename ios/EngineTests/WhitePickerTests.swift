@@ -78,4 +78,23 @@ final class WhitePickerTests: XCTestCase {
         let c = WhitePicker.box(0, 0, 6000, 4000)
         XCTAssertEqual([c.x0, c.x1, c.y0, c.y1], [0, 40, 0, 40])
     }
+
+    func testWhiteBalanceAdjustSolvesForWarmthAndTint() {
+        let base = DevelopParams(temperature: 5000, tint: 0)
+        let unadjusted = LookApplier.develop(base, look: Looks.natural, strength: 100, adjust: Adjustments.none, hasFace: false, preset: nil, lensPreset: nil)
+
+        let (w0, t0) = LookApplier.whiteBalanceAdjust(unadjusted, kelvin: 5000, tint: 0)
+        XCTAssertEqual(w0, 0, accuracy: 1e-6)
+        XCTAssertEqual(t0, 0, accuracy: 1e-6)
+
+        let (wWarmer, tWarmer) = LookApplier.whiteBalanceAdjust(unadjusted, kelvin: 7071, tint: 15)
+        XCTAssertEqual(wWarmer, 50, accuracy: 1e-6)
+        let developed = LookApplier.develop(base, look: Looks.natural, strength: 100, adjust: Adjustments(warmth: wWarmer, tint: tWarmer), hasFace: false, preset: nil, lensPreset: nil)
+        XCTAssertEqual(developed.temperature, 7071, accuracy: 10)
+        XCTAssertEqual(developed.tint, 15, accuracy: 1)
+
+        let (wMax, tMax) = LookApplier.whiteBalanceAdjust(unadjusted, kelvin: 50000, tint: 100)
+        XCTAssertEqual(wMax, 100, accuracy: 1e-6)
+        XCTAssertEqual(tMax, 50, accuracy: 1e-6)
+    }
 }
