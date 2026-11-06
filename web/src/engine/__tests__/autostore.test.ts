@@ -156,6 +156,30 @@ describe('Auto batch preset', () => {
     expect(paramsOf(store.state.photos[0])?.lut).not.toBe('asset:luts/x.cube');
     vi.unstubAllGlobals();
   });
+
+  it('applies a preset to a single open photo without changing the rest of the batch', async () => {
+    vi.stubGlobal('window', { setTimeout: () => 0 });
+    const { developParams } = await import('../develop/DevelopParams');
+    const { capturePreset } = await import('../develop/Presets');
+    const store = new AutoStore();
+    store.add([new File(['a'], 'a.CR2'), new File(['b'], 'b.CR2')]);
+    const analysis = { autoBase: developParams({ exposure: 1.0 }), stats: { hasFace: false } };
+    const s = store as unknown as { _state: { photos: { analysis: unknown }[] } };
+    s._state.photos = s._state.photos.map((p) => ({ ...p, analysis }));
+    const [a] = store.state.photos;
+    store.openDetail(a.id);
+    expect(store.state.selected).toBe(a.id);
+
+    const preset = capturePreset('Portrait Soft', developParams({ contrast: -10 }), ['light']);
+    store.applyPresetTo(preset, new Set([a.id]));
+    expect(store.state.photos[0].preset?.name).toBe('Portrait Soft');
+    expect(store.state.photos[1].preset).toBeNull();
+    expect(store.state.message).toBe('Portrait Soft applied to 1 photo');
+
+    store.removePhotoPreset(a.id);
+    expect(store.state.photos[0].preset).toBeNull();
+    vi.unstubAllGlobals();
+  });
 });
 
 describe('Auto preset denoise', () => {
