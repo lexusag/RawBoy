@@ -296,7 +296,7 @@ export function ControlsPanel({
             </label>
             <SectionLabel>Manual</SectionLabel>
             {slider('Distortion', 'lensDistortion', -100, 100)}
-            {slider('Anamorphic', 'lensAnamorphic', -100, 100)}
+            {slider('Horizontal distortion', 'lensAnamorphic', -100, 100)}
             {slider('Crop', 'lensCrop', -100, 100)}
             {slider('Vignetting', 'vignetteAmount', -100, 100)}
             {slider('Vignette radius', 'vignetteMidpoint', 0, 100, formatPlain)}

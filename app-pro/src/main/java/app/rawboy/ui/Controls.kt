@@ -323,7 +323,7 @@ private fun LensPanel(
     ParamSlider("Distortion", params.lensDistortion, -100f..100f, defaults.lensDistortion) {
         onChange(params.copy(lensDistortion = it))
     }
-    ParamSlider("Anamorphic", params.lensAnamorphic, -100f..100f, defaults.lensAnamorphic) {
+    ParamSlider("Horizontal distortion", params.lensAnamorphic, -100f..100f, defaults.lensAnamorphic) {
         onChange(params.copy(lensAnamorphic = it))
     }
     ParamSlider("Crop", params.lensCrop, -100f..100f, defaults.lensCrop) {
