@@ -566,6 +566,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
   const session = useSyncExternalStore(store.session.subscribe, () => store.session.state);
   const [showAuto, setShowAuto] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [choosingPreset, setChoosingPreset] = useState(false);
   // Look: the look and the two everyday controls; Adjust: every adjustment (those two again, then the offsets from the auto develop).
   const [tab, setTab] = useState<'Look' | 'Adjust'>('Look');
   const scroll = useTabScroll(tab);
@@ -677,6 +678,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
             <div className="name">{EDITS_NAME}</div>
             <div className="info">From the RawBoy tab · the sliders below adjust on top</div>
           </div>
+          <button type="button" className="text" disabled={state.export != null} onClick={() => setChoosingPreset(true)}>Apply preset…</button>
           <button type="button" className="text" disabled={state.export != null} onClick={() => store.removeEdits(photo.id)}>
             Use {photo.preset ? 'the preset' : 'a look'}
           </button>
@@ -687,6 +689,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
             <div className="name">{photo.preset.name}</div>
             <div className="info">RawBoy preset · {groupSummary(photo.preset)}</div>
           </div>
+          <button type="button" className="text" disabled={state.export != null} onClick={() => setChoosingPreset(true)}>Change</button>
           <button type="button" className="text" disabled={state.export != null} onClick={() => store.removePhotoPreset(photo.id)}>Use a look</button>
         </div>
       ) : (
@@ -698,6 +701,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
                 <div className="name">{photo.preset.name}</div>
                 <div className="info">RawBoy preset · {groupSummary(photo.preset)} · on top of the look</div>
               </div>
+              <button type="button" className="text" disabled={state.export != null} onClick={() => setChoosingPreset(true)}>Change</button>
               <button type="button" className="text" disabled={state.export != null} onClick={() => store.removePhotoPreset(photo.id)}>Remove</button>
             </div>
           )}
@@ -767,6 +771,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
           <MoreMenu
             disabled={state.export != null}
             items={[
+              { label: 'Apply RawBoy preset…', onClick: () => setChoosingPreset(true) },
               { label: 'Apply to all', disabled: state.photos.length < 2, onClick: () => store.applyLookToAll(id) },
               { label: 'Edit in RawBoy', onClick: () => onEditInRawBoy(id) },
               { label: 'Remove from batch', onClick: () => store.removeOpened(id) },
@@ -774,6 +779,16 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
           />
         ) : (
           <>
+            <button
+              type="button"
+              className="icon"
+              title="Apply RawBoy preset to this photo"
+              aria-label="Preset"
+              disabled={state.export != null}
+              onClick={() => setChoosingPreset(true)}
+            >
+              <PresetsIcon />
+            </button>
             <button type="button" className="icon" title="Remove from the batch (Delete); the file stays" aria-label="Remove from batch" disabled={state.export != null} onClick={() => store.removeOpened(id)}>
               <DeleteIcon />
             </button>
@@ -801,6 +816,17 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
             const folder = await outputFolder(store, destination);
             if (folder !== undefined) void store.exportSelected(folder);
           }}
+        />
+      )}
+      {choosingPreset && (
+        <PresetPicker
+          store={store}
+          count={1}
+          onPick={(p) => {
+            setChoosingPreset(false);
+            store.applyPresetTo(p, new Set([id]));
+          }}
+          onDismiss={() => setChoosingPreset(false)}
         />
       )}
       <div className="workspace auto">

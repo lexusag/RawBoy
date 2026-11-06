@@ -5,6 +5,15 @@
 - Added a "Real preview" button in the photo viewer (and an "R" keyboard shortcut) to force developing the raw photo as shot using RawBoy's engine instead of showing the camera's embedded JPEG preview.
 - Added a "Real previews" toggle in the grid filter bar, remembered across sessions in browser storage.
 
+**RawBoy: scroll film stocks with mouse wheel (2026-11-05)**
+
+- Hovering over the Film button or the stock picker in RawBoy Pro (web) now scrolls through film stocks with the mouse wheel without clicking. A wheel already scrolling the controls panel leaves it alone.
+
+**RawBoy Auto: apply presets in photo view (2026-11-05)**
+
+- In the photo view, presets can now be applied directly to the opened photo alone via "Apply RawBoy preset…" in the ⋮/…/⋯ menu (or the Preset button in the top bar on desktop).
+- When a preset is already active on the photo, a "Change" button allows choosing a different preset directly from the Look panel.
+
 **RawBoy Auto: clear Saved badges on export, lower contrast while waiting (2026-11-03)**
 
 - Starting a new export clears previous "Saved" badges on the photos being exported (or all photos for "Export all"), so progress can be followed cleanly.
