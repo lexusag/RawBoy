@@ -1,5 +1,9 @@
 # Changelog
 
+**RawBoy Pro: Scale slider in crop mode that preserves resolution (2026-11-06)**
+
+- Crop & rotate (Android, iOS, web): added a **Scale** slider (100%–200%, default 100%) that zooms the image within the full frame, allowing re-framing while preserving the full pixel dimensions of the exported image.
+
 **RawBoy Pro: batch-select presets to delete or export (2026-11-06)**
 
 - Presets panel (Android, iOS, web): added **Select** (and long-press on Android/iOS) to enter multi-select mode, select or deselect all presets, and batch-delete or export the selected presets at once.

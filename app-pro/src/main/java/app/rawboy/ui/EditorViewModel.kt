@@ -301,6 +301,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 flipHorizontal = newDefaults.flipHorizontal,
                 flipVertical = newDefaults.flipVertical,
                 straighten = newDefaults.straighten,
+                scale = newDefaults.scale,
                 masks = newDefaults.masks,
                 leaks = newDefaults.leaks,
             )

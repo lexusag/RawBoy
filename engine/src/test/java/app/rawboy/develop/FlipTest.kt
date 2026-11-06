@@ -40,4 +40,18 @@ class FlipTest {
         assertArrayEquals(doubleArrayOf(5900.0, 50.0), plain.source(100.0, 50.0), 1e-6)
         assertTrue(CropMath.flip(DevelopParams(rotation = 1), false).flipVertical)
     }
+
+    @Test
+    fun scalePreservesResolutionAndZoomsAroundCenter() {
+        val unscaled = LensTransform(info, DevelopParams())
+        val scaled = LensTransform(info, DevelopParams(scale = 150f))
+        assertEquals(unscaled.outputWidth, scaled.outputWidth)
+        assertEquals(unscaled.outputHeight, scaled.outputHeight)
+        val cx = unscaled.outputWidth / 2.0
+        val cy = unscaled.outputHeight / 2.0
+        assertArrayEquals(unscaled.source(cx, cy), scaled.source(cx, cy), 1e-6)
+        val s1 = scaled.source(cx + 150.0, cy)
+        val s0 = unscaled.source(cx + 100.0, cy)
+        assertArrayEquals(s0, s1, 1e-6)
+    }
 }

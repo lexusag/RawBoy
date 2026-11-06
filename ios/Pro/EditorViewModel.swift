@@ -212,6 +212,7 @@ final class EditorViewModel: ObservableObject {
         p.flipHorizontal = newDefaults.flipHorizontal
         p.flipVertical = newDefaults.flipVertical
         p.straighten = newDefaults.straighten
+        p.scale = newDefaults.scale
         p.masks = newDefaults.masks
         p.leaks = newDefaults.leaks
         p = p.withCrop(newDefaults.crop)

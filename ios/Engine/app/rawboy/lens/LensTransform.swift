@@ -41,6 +41,7 @@ public final class LensTransform: @unchecked Sendable {
     public var outputHeight: Int { cropRect.height }
 
     private let straightenRadians: Double
+    private let scaleFactor: Double
 
     /** Output pixel -> image pixel (display orientation), row-major 3x3 affine. */
     public private(set) var outToImage: [Double] = []
@@ -101,6 +102,7 @@ public final class LensTransform: @unchecked Sendable {
         frameWidth = quarterTurns % 2 == 1 ? height : width
         frameHeight = quarterTurns % 2 == 1 ? width : height
         straightenRadians = Double(params.straighten).clamped(-45, 45) * .pi / 180
+        scaleFactor = Double(params.scale).clamped(100, 200) / 100
         useProfile = params.lensProfile && info.hasProfile
         manualK = Double(params.lensDistortion) / 100 * 0.25
         caScaleRed = 1 - Double(params.caRed) / 100 * Self.caMax
@@ -211,7 +213,7 @@ public final class LensTransform: @unchecked Sendable {
 
     /** Source pixels needed to render [out], plus [margin], clamped to the image. */
     public func sourceBounds(_ out: PixelRect, margin: Int) -> PixelRect {
-        if !isGeometric && !hasManualCa && zoom == 1.0 && quarterTurns == 0 && !flipHorizontal && !flipVertical && straightenRadians == 0 && cropRect.x == 0 && cropRect.y == 0 {
+        if !isGeometric && !hasManualCa && zoom == 1.0 && quarterTurns == 0 && !flipHorizontal && !flipVertical && straightenRadians == 0 && scaleFactor == 1.0 && cropRect.x == 0 && cropRect.y == 0 {
             return out.expand(margin, maxW: width, maxH: height)
         }
         var minX = Double.greatestFiniteMagnitude
@@ -293,7 +295,7 @@ public final class LensTransform: @unchecked Sendable {
         let sn = sin(t)
         let ow = Double(frameWidth)
         let oh = Double(frameHeight)
-        let s = c + max(ow / oh, oh / ow) * abs(sn)
+        let s = (c + max(ow / oh, oh / ow) * abs(sn)) * scaleFactor
         // R(-theta) = [[c, s], [-s, c]]
         let r = [c / s, sn / s, -sn / s, c / s]
         // R(-90 k): k=1 [[0,1],[-1,0]], k=2 [[-1,0],[0,-1]], k=3 [[0,-1],[1,0]]

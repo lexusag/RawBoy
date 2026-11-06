@@ -144,6 +144,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
           flipHorizontal: state.params.flipHorizontal,
           flipVertical: state.params.flipVertical,
           straighten: state.params.straighten,
+          scale: state.params.scale,
         },
         cropOf(state.params),
       )

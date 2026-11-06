@@ -97,6 +97,7 @@ struct EditorScreen: View {
             d.flipHorizontal = state.params.flipHorizontal
             d.flipVertical = state.params.flipVertical
             d.straighten = state.params.straighten
+            d.scale = state.params.scale
             edited = d.withCrop(state.params.crop)
         }
         // The crop tool shows the whole frame with the crop drawn over it.

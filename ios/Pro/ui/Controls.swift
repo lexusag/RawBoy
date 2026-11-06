@@ -345,6 +345,12 @@ struct GeometryPanel: View {
                 p.straighten = v
                 onChange(p)
             }
+            ParamSlider(label: "Scale", value: params.scale, range: 100...200, defaultValue: 100,
+                        format: { "\(Int(round($0)))%" }) { v in
+                var p = params
+                p.scale = v
+                onChange(p)
+            }
             Note("Drag the corners, edges or inside of the frame to crop. Straightening crops automatically so no empty corners show. Resets for each new photo.")
         }
         .padding(.horizontal, 16)

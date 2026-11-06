@@ -49,6 +49,7 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
     val outputHeight = cropRect.height
 
     private val straightenRadians = Math.toRadians(params.straighten.toDouble().coerceIn(-45.0, 45.0))
+    private val scaleFactor = params.scale.toDouble().coerceIn(100.0, 200.0) / 100.0
 
     /** Output pixel -> image pixel (display orientation), row-major 3x3 affine. */
     val outToImage: DoubleArray = rotationMatrix()
@@ -180,7 +181,7 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
 
     /** Source pixels needed to render [out], plus [margin], clamped to the image. */
     fun sourceBounds(out: PixelRect, margin: Int): PixelRect {
-        if (!isGeometric && !hasManualCa && zoom == 1.0 && quarterTurns == 0 && !flipHorizontal && !flipVertical && straightenRadians == 0.0 && cropRect.x == 0 && cropRect.y == 0) {
+        if (!isGeometric && !hasManualCa && zoom == 1.0 && quarterTurns == 0 && !flipHorizontal && !flipVertical && straightenRadians == 0.0 && scaleFactor == 1.0 && cropRect.x == 0 && cropRect.y == 0) {
             return out.expand(margin, width, height)
         }
         var minX = Double.MAX_VALUE
@@ -266,7 +267,7 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
         val sn = kotlin.math.sin(t)
         val ow = frameWidth.toDouble()
         val oh = frameHeight.toDouble()
-        val s = c + max(ow / oh, oh / ow) * kotlin.math.abs(sn)
+        val s = (c + max(ow / oh, oh / ow) * kotlin.math.abs(sn)) * scaleFactor
         // R(-theta) = [[c, s], [-s, c]]
         val r = doubleArrayOf(c / s, sn / s, -sn / s, c / s)
         // R(-90 k): k=1 [[0,1],[-1,0]], k=2 [[-1,0],[0,-1]], k=3 [[0,-1],[1,0]]
