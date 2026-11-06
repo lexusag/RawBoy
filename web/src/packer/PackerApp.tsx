@@ -1,4 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import type { PhotoSort } from '../engine/auto/PhotoOrder';
 import { RAW_ACCEPT, canPickFolder, canPickOutputFolder, isRawFileName, pickFiles, pickFolderFiles, pickOutputFolder, readDroppedFiles } from '../ui/common/files';
 import { groupByFolder, PackerStore, type PackItem } from './PackerStore';
 import type { PackFormat, PackInfo } from './protocol';
@@ -133,7 +134,7 @@ export function PackerApp() {
   const [previewId, setPreviewId] = useState<number | null>(null);
 
   // Follow folder group presentation order so prev/next navigation matches visual queue order
-  const orderedItems = useMemo(() => groupByFolder(state.items).flatMap((g) => g.items), [state.items]);
+  const orderedItems = useMemo(() => groupByFolder(state.items, state.sort).flatMap((g) => g.items), [state.items, state.sort]);
   const previewItem = previewId !== null ? state.items.find((it) => it.id === previewId) ?? null : null;
   const previewIndex = previewItem ? orderedItems.findIndex((it) => it.id === previewItem.id) : -1;
 
@@ -419,6 +420,17 @@ export function PackerApp() {
               </button>
             )}
             <span className="spacer" />
+            {state.items.length > 0 && (
+              <button
+                type="button"
+                className="text"
+                disabled={state.running}
+                title={state.sort === 'date' ? 'Photos in the order they were shot. Click to sort by file name.' : 'Photos by file name. Click to sort by shoot date.'}
+                onClick={() => store.setSort(state.sort === 'date' ? 'name' : 'date')}
+              >
+                Sort: {state.sort === 'date' ? 'Shoot date' : 'File name'}
+              </button>
+            )}
             <button
               className="text"
               onClick={clearDone}
@@ -460,6 +472,7 @@ export function PackerApp() {
             <>
               <QueueView
                 items={state.items}
+                sort={state.sort}
                 running={state.running}
                 onRemove={removeItem}
                 onRemoveFolder={removeFolder}
@@ -590,18 +603,20 @@ const mb = (bytes: number) => `${(bytes / 1e6).toFixed(bytes < 10e6 ? 1 : 0)} MB
 
 function QueueView({
   items,
+  sort,
   running,
   onRemove,
   onRemoveFolder,
   onPreview,
 }: {
   items: PackItem[];
+  sort: PhotoSort;
   running: boolean;
   onRemove: (id: number) => void;
   onRemoveFolder: (folder: string | null | undefined) => void;
   onPreview: (item: PackItem) => void;
 }) {
-  const groups = useMemo(() => groupByFolder(items), [items]);
+  const groups = useMemo(() => groupByFolder(items, sort), [items, sort]);
   const hasFolders = groups.some((g) => g.folder != null);
 
   return (

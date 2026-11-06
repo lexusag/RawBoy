@@ -1,4 +1,6 @@
 import { localFolder, saveBlob, type OutputFolder } from '../ui/common/files';
+import { fileDate, saveSort, savedSort, sortPhotos, type PhotoSort } from '../engine/auto/PhotoOrder';
+import { findCaptureDate } from '../engine/browse/CaptureDate';
 import type { PackInfo, PackerRequest } from './protocol';
 import { autoFilesAtOnce, outputName, packOptions, settingsSuffix, threadsPerFile, type PackRun, type PackSettings } from './settings';
 
@@ -48,6 +50,8 @@ export interface PackItem {
   id: number;
   file: File;
   folder?: string;
+  /** When it was shot, else the file's date, as an EXIF date (CaptureDate); null if unknown. Orders the queue. */
+  date: string | null;
   status: ItemStatus;
   info?: PackInfo;
   /** After packing: the DNG's size, name and what was written. */
@@ -81,8 +85,8 @@ export interface FolderGroup {
   items: PackItem[];
 }
 
-/** Groups queue items by their folder, preserving the order folders first appeared. */
-export function groupByFolder(items: PackItem[]): FolderGroup[] {
+/** Groups queue items by their folder, preserving the order folders first appeared, with items in each folder sorted by [sort]. */
+export function groupByFolder(items: PackItem[], sort: PhotoSort = 'date'): FolderGroup[] {
   const groups: FolderGroup[] = [];
   const map = new Map<string | null, FolderGroup>();
 
@@ -96,7 +100,18 @@ export function groupByFolder(items: PackItem[]): FolderGroup[] {
     }
     g.items.push(item);
   }
+  for (const g of groups) {
+    g.items = sortPhotos(g.items, sort, (it) => it.file.name);
+  }
   return groups;
+}
+
+/**
+ * Orders items by folder (by first appearance), and within each folder by [sort]: 'date' by shoot date
+ * (oldest first; those without one after the rest, by file name), then file name; 'name' by file name.
+ */
+export function sortPackItems(items: readonly PackItem[], sort: PhotoSort = 'date'): PackItem[] {
+  return groupByFolder(items as PackItem[], sort).flatMap((g) => g.items);
 }
 
 /** Where packed files go: a folder (File System Access API) or the browser's downloads. */
@@ -111,11 +126,22 @@ export interface PackerState {
   stopping: boolean;
   /** The engine failed to load (e.g. a build without the DNG SDK). */
   engineError: string | null;
+  /** How queue items are ordered: by shoot date (default) or file name. */
+  sort: PhotoSort;
 }
+
+export const SORT_KEY = 'rawboy.packer.sort';
 
 /** RawBoy Packer's file list and queue. Files are inspected when added and packed by up to filesAtOnce workers. */
 export class PackerStore {
-  private state: PackerState = { items: [], running: false, runIds: [], stopping: false, engineError: null };
+  private state: PackerState = {
+    items: [],
+    running: false,
+    runIds: [],
+    stopping: false,
+    engineError: null,
+    sort: savedSort(SORT_KEY),
+  };
   private readonly listeners = new Set<() => void>();
   private nextId = 1;
   private workers: PackerWorker[] = [];
@@ -154,11 +180,43 @@ export class PackerStore {
       const key = fileKey(file, folder);
       if (known.has(key)) continue;
       known.add(key);
-      added.push({ id: this.nextId++, file, folder, status: 'inspecting' });
+      added.push({
+        id: this.nextId++,
+        file,
+        folder,
+        date: fileDate(file.lastModified),
+        status: 'inspecting',
+      });
     }
     if (!added.length) return;
     this.set({ items: [...this.state.items, ...added] });
+    void this.readDates(added);
     for (const item of added) this.inspect(item.id);
+  }
+
+  /**
+   * Gives [items] their capture dates (they start with their files' dates) and updates item dates once for all of them.
+   */
+  private async readDates(items: PackItem[]) {
+    const dates = new Map<number, string>();
+    for (const it of items) {
+      try {
+        const date = await findCaptureDate(it.file);
+        if (date && date !== it.date) dates.set(it.id, date);
+      } catch {
+        // keep fileDate
+      }
+    }
+    if (!dates.size) return;
+    this.set({
+      items: this.state.items.map((it) => (dates.has(it.id) ? { ...it, date: dates.get(it.id)! } : it)),
+    });
+  }
+
+  /** Orders files by [sort] from now on (remembered in this browser). */
+  setSort(sort: PhotoSort) {
+    saveSort(SORT_KEY, sort);
+    this.set({ sort });
   }
 
   /**
@@ -214,7 +272,7 @@ export class PackerStore {
    */
   async start(settings: PackSettings, output: Output): Promise<PackRun | null> {
     if (this.state.running) return null;
-    const groups = groupByFolder(this.state.items);
+    const groups = groupByFolder(this.state.items, this.state.sort);
     const ordered = groups.flatMap((g) => g.items);
     const queue = ordered.filter(
       (it) => it.status === 'inspecting' || it.status === 'ready' || it.status === 'done' || (it.status === 'error' && it.info),

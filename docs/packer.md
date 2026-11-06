@@ -56,6 +56,9 @@ little softer and darker than its own conversion.
 
 ## File list
 
+Files are in the order they were shot (from each file's EXIF date; a file without one by its file's date). *Sort: File name*
+orders them by name instead; remembered in this browser.
+
 Each file shows its camera and lens, the format (DNGs with their version, e.g. DNG 1.7), whether it holds lens
 corrections, and a line about its raw data: bit depth (from the white level, so a Pixel's 16-bit samples read 10-bit),
 compression, colour filter (Bayer, X-Trans, or linear for demosaiced DNGs) and megapixels.

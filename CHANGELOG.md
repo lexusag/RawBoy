@@ -1,5 +1,10 @@
 # Changelog
 
+**RawBoy Packer: sort by shoot date or name (2026-11-06)**
+
+- Files in the queue are now sorted by shoot date by default (from EXIF DateTimeOriginal / DateTimeDigitized, falling back to file modification date), with an option to sort by file name (like in RawBoy Auto).
+- The sort preference is remembered in the browser (localStorage) and controls the queue list order, preview navigation, and the order files are packed.
+
 **RawBoy Auto: clear Saved badges on export, lower contrast while waiting (2026-11-03)**
 
 - Starting a new export clears previous "Saved" badges on the photos being exported (or all photos for "Export all"), so progress can be followed cleanly.
