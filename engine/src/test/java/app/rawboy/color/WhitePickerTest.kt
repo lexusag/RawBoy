@@ -85,4 +85,16 @@ class WhitePickerTest {
             assertTrue(pick.tint in -WhiteBalance.MAX_TINT.toFloat()..WhiteBalance.MAX_TINT.toFloat())
         }
     }
+
+    @Test
+    fun pickFromSumSolvesForGrey() {
+        val pick = WhitePicker.pickFromSum(18.0, 18.0, 18.0, 100, 5200f, 8f) as WhitePicker.Pick.White
+        assertEquals(5200f, pick.kelvin, 2f)
+        assertEquals(8f, pick.tint, 0.2f)
+    }
+
+    @Test
+    fun pickFromSumClippedWhenEmpty() {
+        assertEquals(WhitePicker.Pick.Clipped, WhitePicker.pickFromSum(0.0, 0.0, 0.0, 0, 5200f, 0f))
+    }
 }

@@ -85,6 +85,11 @@ fun ControlsPanel(
     /** White balance picker armed: the next tap on the photo sets temperature and tint. */
     pickingWhite: Boolean = false,
     onPickWhite: () -> Unit = {},
+    /** Auto white balance armed: draggable extendable rectangle sets temperature and tint. */
+    autoWb: Boolean = false,
+    onAutoWb: () -> Unit = {},
+    /** Reset white balance (temperature and tint) to as-shot defaults. */
+    onResetWb: () -> Unit = {},
     /** Lens tab: saves its settings as the lens preset for this lens; with true, also sends it to RawBoy Auto. */
     onSaveLensPreset: (name: String, sendToAuto: Boolean) -> Unit = { _, _ -> },
     /** The tab the user chose, kept by the view model so it survives this panel leaving composition. */
@@ -176,11 +181,28 @@ fun ControlsPanel(
                 SectionLabel("Curves")
                 CurvesPanel(params.curves) { onChange(params.copy(curves = it)) }
             } else if (tab == 1) {
-                FilterChip(
-                    selected = pickingWhite,
-                    onClick = onPickWhite,
-                    label = { Text(if (pickingWhite) "Tap something neutral grey" else "Pick white balance") },
-                )
+                Row(
+                    modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    FilterChip(
+                        selected = pickingWhite,
+                        onClick = onPickWhite,
+                        label = { Text(if (pickingWhite) "Tap something neutral grey" else "Pick white balance") },
+                    )
+                    FilterChip(
+                        selected = autoWb,
+                        onClick = onAutoWb,
+                        label = { Text("Auto WB") },
+                    )
+                    OutlinedButton(
+                        onClick = onResetWb,
+                        enabled = params.temperature != defaults.temperature || params.tint != defaults.tint,
+                    ) {
+                        Text("Reset WB")
+                    }
+                }
                 TemperatureSlider(params.temperature, defaults.temperature) {
                     onChange(params.copy(temperature = it))
                 }
