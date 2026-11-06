@@ -661,7 +661,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
   const analysis = photo?.analysis;
   const loaded = state.sessionReady === id;
   // Photos that can be opened, in grid order.
-  const pages = useMemo(() => store.shown.filter((p) => p.analysis), [store.shown]);
+  const pages = useMemo(() => store.shown.filter((p) => p.analysis), [store, state.photos, state.filter]);
   const index = pages.findIndex((p) => p.id === id);
   const skinMask = session.skin.kind === 'ready' ? session.skin.mask : null;
   const params = useMemo(() => (photo ? paramsOf(photo) : null), [photo]);
