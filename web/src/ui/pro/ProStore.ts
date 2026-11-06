@@ -1,5 +1,6 @@
 import { autoBase } from '../../engine/auto/AutoAnalysis';
 import { applyAuto } from '../../engine/auto/analysis/AutoTone';
+import { FILM_STOCKS } from '../../engine/auto/looks/FilmLooks';
 import { cropOf, flipped, rotateCrop, withCrop, type CropRect } from '../../engine/develop/CropMath';
 import type { EditsSidecar } from '../../engine/browse/XmpSidecar';
 import { developParams, type DevelopParams } from '../../engine/develop/DevelopParams';
@@ -288,6 +289,19 @@ export class ProStore {
 
   /** Film chip: the last stock (Portra 400 at first). */
   useFilm = () => this.selectFilm(this._state.params.film ?? this.lastFilm);
+
+  /** Steps through film stocks by [delta] (e.g. +1 next, -1 previous). Turns Film on if it was off. */
+  stepFilm = (delta: number) => {
+    const current = this._state.params.film ?? this.lastFilm;
+    const index = FILM_STOCKS.findIndex((s) => s.id === current);
+    const base = index >= 0 ? index : 0;
+    const target = this._state.params.film == null && delta === 0 ? base : base + delta;
+    const nextIndex = Math.max(0, Math.min(FILM_STOCKS.length - 1, target));
+    const next = FILM_STOCKS[nextIndex];
+    if (next && next.id !== this._state.params.film) {
+      this.selectFilm(next.id);
+    }
+  };
 
   private filmFailed(id: string | null, message: string) {
     const p = this._state.params;

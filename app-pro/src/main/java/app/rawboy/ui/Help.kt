@@ -31,7 +31,7 @@ internal val PRO_HELP = listOf(
         "Sliders and tools",
         listOf(
             HelpItem("Double-tap a slider", "Reset it (tapping its value does too)."),
-            HelpItem("Pick white balance", "Color tab: tap something neutral grey and Temperature and Tint make it grey."),
+            HelpItem("Pick white balance", "Color tab: tap something neutral grey and Temperature and Tint make it grey. Auto WB solves them for a draggable extendable rectangle; Reset WB returns to as-shot defaults."),
             HelpItem("Curves", "Light tab: touch the curve to add a point, drag it, double-tap it to remove; elsewhere the box scrolls. RGB, then Red, Green and Blue."),
             HelpItem("Detail", "Luma and Color denoise work separately. Local contrast brings out texture; High-pass contrast is wider clarity. Tap Grain's name for its size, roughness and color."),
             HelpItem("Masks", "Brush, linear, radial and stripe layers with their own light and colour. Brush or Erase paints on any layer."),

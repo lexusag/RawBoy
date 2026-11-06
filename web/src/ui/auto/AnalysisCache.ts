@@ -53,7 +53,7 @@ export class AnalysisCache {
     // Structured clone keeps the fields but not the class.
     const l = entry.decoded.lens;
     const lens = new LensInfo(l.lensName, l.width, l.height, l.sensorWidth, l.sensorHeight, l.orientation, l.warp, l.vignette, l.shading, l.gainMapsApplied);
-    return { decoded: { ...entry.decoded, lens }, skin: entry.skin };
+    return { decoded: { ...entry.decoded, camera: entry.decoded.camera ?? '', lens }, skin: entry.skin };
   }
 
   /** Keeps [decoded] and [skin] for [key], dropping the least recently used entries past MAX_BYTES. */

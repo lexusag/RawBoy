@@ -15,6 +15,7 @@ export interface Analysis {
   autoBase: DevelopParams;
   stats: SceneStats;
   lens: LensInfo;
+  camera: string;
   base: PreviewImage;
   bloom: BloomSources;
   skin: SkinMask | null;
@@ -44,6 +45,7 @@ export interface DecodedForAnalysis {
   clipLevel: number;
   lens: LensInfo;
   iso: number;
+  camera: string;
   description: string;
   cameraMetered: boolean;
   base: PreviewImage;
@@ -74,6 +76,7 @@ export async function decodeForAnalysis(
       clipLevel: img.clipLevel,
       lens: img.lens,
       iso: img.iso,
+      camera: img.camera,
       description: img.description,
       cameraMetered: cameraMetered(img.metadata.make, img.baselineExposure),
       base,
@@ -112,7 +115,7 @@ export async function finishAnalysis(d: DecodedForAnalysis, label: string, known
       `noise=${noise.luma}/${noise.chroma} -> exposure=${auto.exposure} hl=${auto.highlights} denoise=${auto.denoise}/${auto.colorDenoise} sh=${auto.shadows} contrast=${auto.contrast} ` +
       `wb=${Math.trunc(defaults.temperature)}K/${Math.trunc(defaults.tint)} -> ${Math.trunc(auto.temperature)}K/${Math.trunc(auto.tint)}`,
   );
-  return { defaults, autoBase: auto, stats, lens: d.lens, base: d.base, bloom: d.bloom, skin, description: d.description };
+  return { defaults, autoBase: auto, stats, lens: d.lens, camera: d.camera ?? '', base: d.base, bloom: d.bloom, skin, description: d.description };
 }
 
 /**

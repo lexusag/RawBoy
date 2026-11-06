@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../ui/common/files', () => ({ localFolder: vi.fn(), saveBlob: vi.fn() }));
 
-import { folderOf, groupByFolder, PackerStore } from './PackerStore';
+import { folderOf, folderStatusSummary, groupByFolder, PackerStore, type PackItem } from './PackerStore';
 import { DEFAULT_SETTINGS } from './settings';
 
 const info = (format: string) => ({ make: 'Fuji', model: 'X', format }) as unknown;
@@ -220,7 +220,7 @@ describe('PackerStore', () => {
     store.add([f1, f2, f3]);
 
     // By default, sorted by shoot date (08:00, 10:00, 12:00 -> IMG_1, IMG_2, IMG_10)
-    let groups = groupByFolder(store.getState().items, store.getState().sort);
+    const groups = groupByFolder(store.getState().items, store.getState().sort);
     expect(groups[0].items.map((i) => i.file.name)).toEqual(['IMG_1.CR3', 'IMG_2.CR3', 'IMG_10.CR3']);
 
     // Packing proceeds in shoot date order
@@ -284,5 +284,39 @@ describe('PackerStore', () => {
     expect(groups[0].items.map((i) => i.file.name)).toEqual(['B.dng', 'A.dng']);
     expect(groups[0].items[0].date).toBe('2026:10:01 07:00:00');
     expect(groups[0].items[1].date).toBe('2026:10:01 10:00:00');
+  });
+
+  describe('folderStatusSummary', () => {
+    const makeItem = (id: number, status: PackItem['status']): PackItem => ({
+      id,
+      file: file(`photo${id}.raf`),
+      date: null,
+      status,
+    });
+
+    it('returns null when items list is empty or items are in initial states', () => {
+      expect(folderStatusSummary([])).toBeNull();
+      expect(folderStatusSummary([makeItem(1, 'ready'), makeItem(2, 'inspecting'), makeItem(3, 'waiting')])).toBeNull();
+    });
+
+    it('reports packing status as busy', () => {
+      const summary = folderStatusSummary([makeItem(1, 'packing'), makeItem(2, 'done'), makeItem(3, 'waiting')]);
+      expect(summary).toEqual({ text: '1 packing… · 1 done', kind: 'busy' });
+    });
+
+    it('reports error status', () => {
+      const summary = folderStatusSummary([makeItem(1, 'error'), makeItem(2, 'done'), makeItem(3, 'ready')]);
+      expect(summary).toEqual({ text: '1 failed · 1 done', kind: 'error' });
+    });
+
+    it('reports all done when every file is finished', () => {
+      const summary = folderStatusSummary([makeItem(1, 'done'), makeItem(2, 'done')]);
+      expect(summary).toEqual({ text: 'all done', kind: 'done' });
+    });
+
+    it('reports partial done count when some files are finished and none active or failed', () => {
+      const summary = folderStatusSummary([makeItem(1, 'done'), makeItem(2, 'ready')]);
+      expect(summary).toEqual({ text: '1 of 2 done', kind: 'done' });
+    });
   });
 });

@@ -53,6 +53,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.rawboy.develop.CropRect
 import app.rawboy.develop.CropAspect
 import app.rawboy.develop.CropMath
 import app.rawboy.develop.Preset
@@ -138,7 +139,19 @@ fun EditorScreen(vm: EditorViewModel) {
     val histogramShown = state.hasImage && mode == EditorMode.NONE
     // White balance picker: armed from the Color tab, the next tap on the photo picks.
     var pickingWhite by remember { mutableStateOf(false) }
-    LaunchedEffect(mode, state.fileName) { pickingWhite = false }
+    // Auto white balance: armed from the Color tab with a draggable extendable rectangle.
+    var autoWb by remember { mutableStateOf(false) }
+    var autoWbRect by remember { mutableStateOf(CropRect(0.15f, 0.15f, 0.85f, 0.85f)) }
+    LaunchedEffect(mode, state.fileName) {
+        pickingWhite = false
+        autoWb = false
+    }
+    LaunchedEffect(controlsTab) {
+        if (controlsTab != 1) {
+            pickingWhite = false
+            autoWb = false
+        }
+    }
     // Masks (UI state; the layers themselves are in the params).
     var selectedLayer by rememberSaveable { mutableStateOf<String?>(null) }
     var maskTool by rememberSaveable { mutableStateOf(MaskTool.MOVE) }
@@ -309,10 +322,10 @@ fun EditorScreen(vm: EditorViewModel) {
                                 detectTapGestures(
                                     // Zoom and frame colour work on the cropped view; the crop tool shows the whole frame.
                                     // Masks and leaks zoom too (frame-colour taps stay off while they are open).
-                                    onDoubleTap = { if (!geometryMode) vm.toggleZoom(it.x, it.y, marginPx) },
+                                    onDoubleTap = { if (!geometryMode && !autoWb) vm.toggleZoom(it.x, it.y, marginPx) },
                                     onTap = {
                                         when {
-                                            geometryMode || shapesMode -> {}
+                                            geometryMode || shapesMode || autoWb -> {}
                                             pickingWhite -> {
                                                 pickingWhite = false
                                                 vm.pickWhite(it.x, it.y)
@@ -353,6 +366,17 @@ fun EditorScreen(vm: EditorViewModel) {
                         CropOverlay(
                             shaderParams.lens.outputWidth, shaderParams.lens.outputHeight, state.params.crop,
                             cropRatio, framePx, vm::setCrop, Modifier.matchParentSize(),
+                        )
+                    }
+                    if (autoWb && !geometryMode && !shapesMode && zoomCenter == null && preview != null && !showOriginal) {
+                        AutoWbOverlay(
+                            shaderParams.lens.outputWidth, shaderParams.lens.outputHeight, autoWbRect,
+                            framePx,
+                            onRectChange = { newRect, force ->
+                                autoWbRect = newRect
+                                vm.autoWhiteBalance(newRect, force = force)
+                            },
+                            modifier = Modifier.matchParentSize(),
                         )
                     }
 
@@ -516,7 +540,26 @@ fun EditorScreen(vm: EditorViewModel) {
                     blemish = blemish,
                     modifier = panel,
                     pickingWhite = pickingWhite,
-                    onPickWhite = { pickingWhite = !pickingWhite },
+                    onPickWhite = {
+                        val next = !pickingWhite
+                        pickingWhite = next
+                        if (next) autoWb = false
+                    },
+                    autoWb = autoWb,
+                    onAutoWb = {
+                        val next = !autoWb
+                        autoWb = next
+                        if (next) {
+                            pickingWhite = false
+                            vm.exitZoom()
+                            vm.autoWhiteBalance(autoWbRect, force = true)
+                        }
+                    },
+                    onResetWb = {
+                        autoWb = false
+                        pickingWhite = false
+                        vm.resetWhiteBalance()
+                    },
                     onSaveLensPreset = { name, send -> vm.saveLensPreset(name).let { if (send) vm.sendPresetToAuto(it) } },
                     chosenTab = controlsTab,
                     onTab = vm::setControlsTab,

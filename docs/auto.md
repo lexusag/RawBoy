@@ -133,11 +133,15 @@ and a RawBoy preset's Lens group gives way to the lens preset. Sending a new one
 those added later: **By lens** (the default), **None**, or a named preset. Manual lenses record no lens name, so their
 presets (and lens-only presets saved before RawBoy recorded the lens) never match by lens: pick them by name, for the
 whole batch or for a selection (**Lens** in the selection bar). **Remove** forgets a preset. **One preset per scene:** select a scene's photos and
-tap **Preset** (the bookmarks icon) in the selection bar to develop just those with a preset; the rest keep theirs.
+tap **Preset** (the bookmarks icon) in the selection bar to develop just those with a preset; the rest keep theirs. In the photo view, **Apply RawBoy preset…** (or the Preset button) applies a preset to the open photo alone, and **Change** picks another.
 **Order:** the grid shows photos in the order they were shot (oldest first), from each file's EXIF capture date
 (read from its metadata, without decoding it; a photo without one goes by its file's modified date). **Sort: Shoot
 date** next to *Import as* switches to **Sort: File name** (IMG_9 before IMG_10) and back; remembered. Swiping in
 the photo view, Copy previous and Export all follow the same order (Android, iOS and web).
+**Filter** (web): four dropdowns above the grid filter the batch by **Camera**, **Lens**, **ISO** and **Shoot date** (each
+showing the count of matching photos in the batch), singly or combined. When a filter is active, the grid, detail
+navigation (‹ ›, Space, Backspace and arrow keys) and Export show and export only the matching photos, with a count of
+visible photos; **Clear filter** resets back to the whole batch.
 **Opening a photo that's still waiting:** tap (web: click) a photo marked *Waiting* and it's analysed next, ahead of
 the rest of the batch (its badge reads *Next*), then opens once it's ready, unless another photo was opened meanwhile.
 **Rotating, removing and exporting photos:** long-press a photo in the grid to start selecting, tap others to add them

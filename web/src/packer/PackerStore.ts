@@ -114,6 +114,44 @@ export function sortPackItems(items: readonly PackItem[], sort: PhotoSort = 'dat
   return groupByFolder(items as PackItem[], sort).flatMap((g) => g.items);
 }
 
+export interface FolderStatusSummary {
+  text: string;
+  kind: 'busy' | 'error' | 'done';
+}
+
+/** Summarises a folder's packing progress for display when the folder is collapsed. */
+export function folderStatusSummary(items: PackItem[]): FolderStatusSummary | null {
+  const total = items.length;
+  if (total === 0) return null;
+
+  const doneCount = items.filter((it) => it.status === 'done').length;
+  const packingCount = items.filter((it) => it.status === 'packing').length;
+  const errorCount = items.filter((it) => it.status === 'error').length;
+
+  if (packingCount > 0) {
+    const parts = [`${packingCount} packing…`];
+    if (doneCount > 0) parts.push(`${doneCount} done`);
+    if (errorCount > 0) parts.push(`${errorCount} failed`);
+    return { text: parts.join(' · '), kind: 'busy' };
+  }
+
+  if (errorCount > 0) {
+    const parts = [`${errorCount} failed`];
+    if (doneCount > 0) parts.push(`${doneCount} done`);
+    return { text: parts.join(' · '), kind: 'error' };
+  }
+
+  if (doneCount === total) {
+    return { text: 'all done', kind: 'done' };
+  }
+
+  if (doneCount > 0) {
+    return { text: `${doneCount} of ${total} done`, kind: 'done' };
+  }
+
+  return null;
+}
+
 /** Where packed files go: a folder (File System Access API) or the browser's downloads. */
 export type Output = { kind: 'folder'; dir: FileSystemDirectoryHandle } | { kind: 'downloads' };
 
