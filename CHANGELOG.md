@@ -1,5 +1,10 @@
 # Changelog
 
+**RawBoy Auto: apply presets in photo view (2026-11-05)**
+
+- In the photo view, presets can now be applied directly to the opened photo alone via "Apply RawBoy preset…" in the ⋮/…/⋯ menu (or the Preset button in the top bar on desktop).
+- When a preset is already active on the photo, a "Change" button allows choosing a different preset directly from the Look panel.
+
 **RawBoy Auto: clear Saved badges on export, lower contrast while waiting (2026-11-03)**
 
 - Starting a new export clears previous "Saved" badges on the photos being exported (or all photos for "Export all"), so progress can be followed cleanly.
