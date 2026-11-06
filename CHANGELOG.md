@@ -10,7 +10,8 @@
 
 - Detail tab: added fake anamorphic lens flare slider (0–100, off by default) with Neutral, Blue, and Golden coating tint options across Android, iOS, and Web.
 - Optical model scatters horizontal streaks from highlight-boosted light sources across the framed photo (remaining horizontal under rotation and straightening, and unchanged by crop).
-- Continuous bilinear taps along and across the streak (no texel snapping) keep the flare smooth instead of blocky and free of beading.
+- Continuous bilinear taps along and across the streak with per-texel knee evaluation keep the flare smooth and free of beading on specular highlights.
+- The flare shines brilliantly over light sources with an intense white core instead of dimming over highlights.
 - Flare threshold doubled (one EV above bloom's knee) so dimmer zones flare less; smoother needle and wing cross-profiles.
 - Presets and sidecars: saved under the Detail preset group and carries over between photos.
 
