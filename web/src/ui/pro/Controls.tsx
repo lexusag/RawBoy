@@ -10,27 +10,18 @@ import type { LutEntry } from '../../engine/lut/LutData';
 import { LutRepository } from '../../engine/lut/LutRepository';
 import type { BlemishState, SkinState } from '../../engine/session/PhotoSession';
 import { pickFiles } from '../common/files';
-import { ParamSlider, continuesPageScroll, formatDegrees, formatEv, formatPlain, wheelNotches } from '../common/ParamSlider';
+import {
+  INITIAL_WHEEL_STATE,
+  ParamSlider,
+  formatDegrees,
+  formatEv,
+  formatPlain,
+  stepWheel,
+  type WheelStepState,
+} from '../common/ParamSlider';
 import { useTabScroll } from '../common/useTabScroll';
 import { CurvesPanel } from './CurvesPanel';
 import { CONTROLS_TABS as TABS, type ControlsTab as Tab } from './ProStore';
-
-/**
- * Accumulates wheel notches for discrete stepping (e.g. through a list of film stocks),
- * stepping towards positive deltas for wheel down / scroll down, and negative for scroll up.
- * Returns the number of discrete steps to advance (or 0 if not enough accumulated).
- */
-export function accumulateWheelSteps(
-  acc: number,
-  notches: number,
-): { steps: number; newAcc: number } {
-  if (notches === 0) return { steps: 0, newAcc: acc };
-  const delta = -notches;
-  const base = Math.sign(acc) !== Math.sign(delta) ? 0 : acc;
-  const total = base + delta;
-  const steps = Math.trunc(total) || 0;
-  return { steps, newAcc: total - steps };
-}
 
 interface Props {
   params: DevelopParams;
@@ -77,6 +68,8 @@ export function ControlsPanel({
 
   const filmButtonRef = useRef<HTMLButtonElement | null>(null);
   const stockRef = useRef<HTMLLabelElement | null>(null);
+  const wheelState = useRef<WheelStepState>(INITIAL_WHEEL_STATE);
+  const wheelingStock = useRef(false);
 
   useEffect(() => {
     const button = filmButtonRef.current;
@@ -86,31 +79,51 @@ export function ControlsPanel({
     if (stock) elements.push(stock);
     if (elements.length === 0) return;
 
-    let wheelAcc = 0;
+    const body = scroll.ref.current;
+    let lastBodyScrollTop = body?.scrollTop ?? 0;
+    let lastBodyScrollAt = -Infinity;
+
+    const onBodyScroll = (e: Event) => {
+      if (!body) return;
+      const top = body.scrollTop;
+      if (top !== lastBodyScrollTop) {
+        lastBodyScrollTop = top;
+        if (!wheelingStock.current) lastBodyScrollAt = e.timeStamp;
+      }
+    };
+
     const onWheel = (e: WheelEvent) => {
-      if (continuesPageScroll(e)) return;
-      const notches = wheelNotches(e);
-      if (notches === 0) return;
+      const canScrollBody =
+        body != null &&
+        ((e.deltaY < 0 && body.scrollTop > 0) ||
+          (e.deltaY > 0 && body.scrollTop + body.clientHeight < body.scrollHeight - 1));
+      if (!wheelingStock.current && canScrollBody && e.timeStamp - lastBodyScrollAt < 200) return;
+      wheelingStock.current = true;
       e.preventDefault();
-      const res = accumulateWheelSteps(wheelAcc, notches);
-      wheelAcc = res.newAcc;
+      const res = stepWheel(wheelState.current, e);
+      wheelState.current = res.state;
       if (res.steps !== 0) {
         onStepFilm(res.steps);
       }
     };
-    const onLeave = () => { wheelAcc = 0; };
+    const onLeave = () => {
+      wheelingStock.current = false;
+      wheelState.current = INITIAL_WHEEL_STATE;
+    };
 
+    body?.addEventListener('scroll', onBodyScroll, { passive: true });
     for (const el of elements) {
       el.addEventListener('wheel', onWheel, { passive: false });
       el.addEventListener('mouseleave', onLeave);
     }
     return () => {
+      body?.removeEventListener('scroll', onBodyScroll);
       for (const el of elements) {
         el.removeEventListener('wheel', onWheel);
         el.removeEventListener('mouseleave', onLeave);
       }
     };
-  }, [tab, params.film, onStepFilm]);
+  }, [tab, filmOn, scroll.ref, onStepFilm]);
 
   const slider = (label: string, key: SliderKey, min: number, max: number, format?: (v: number) => string, def = defaults[key]) => (
     <ParamSlider key={key} label={label} value={params[key]} min={min} max={max} defaultValue={def} format={format} onChange={(v) => onChange({ ...params, [key]: v })} />

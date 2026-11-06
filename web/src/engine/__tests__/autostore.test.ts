@@ -68,18 +68,20 @@ describe('Pro film tone mapper', () => {
     expect(store.state.params).toMatchObject({ film: 'vision500t', filmAmount: 100, toneMapper: 'filmic' });
   });
 
-  it('stepFilm cycles through stocks, clamping at both ends and turning Film on when off', async () => {
+  it('stepFilm enables lastFilm on the first notch when off and cycles through stocks clamped at both ends', async () => {
     const { ProStore } = await import('../../ui/pro/ProStore');
     const { FILM_STOCKS } = await import('../auto/looks/FilmLooks');
     const store = new ProStore();
     expect(store.state.params.film).toBeNull();
 
-    // Stepping when off turns Film on with the next stock
+    // First notch when off turns Film on at the initial stock (Portra 400 = FILM_STOCKS[0])
     store.stepFilm(1);
-    expect(store.state.params.film).toBe(FILM_STOCKS[1].id);
+    expect(store.state.params.film).toBe(FILM_STOCKS[0].id);
     expect(store.state.params.filmAmount).toBe(100);
 
-    // Stepping further advances through stocks
+    // Next notches step forward through stocks
+    store.stepFilm(1);
+    expect(store.state.params.film).toBe(FILM_STOCKS[1].id);
     store.stepFilm(1);
     expect(store.state.params.film).toBe(FILM_STOCKS[2].id);
 
@@ -95,11 +97,13 @@ describe('Pro film tone mapper', () => {
     store.stepFilm(100);
     expect(store.state.params.film).toBe(FILM_STOCKS[FILM_STOCKS.length - 1].id);
 
-    // Turning off with tone mapper remembers the stock; stepping turns it back on
+    // Turning off with tone mapper remembers the stock; first notch back turns it on at that stock
     store.setToneMapper('agx');
     expect(store.state.params.film).toBeNull();
-    store.stepFilm(0);
+    store.stepFilm(-1);
     expect(store.state.params.film).toBe(FILM_STOCKS[FILM_STOCKS.length - 1].id);
+    store.stepFilm(-1);
+    expect(store.state.params.film).toBe(FILM_STOCKS[FILM_STOCKS.length - 2].id);
   });
 });
 

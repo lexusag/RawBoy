@@ -307,13 +307,18 @@ export class ProStore {
   /** Film chip: the last stock (Portra 400 at first). */
   useFilm = () => this.selectFilm(this._state.params.film ?? this.lastFilm);
 
-  /** Steps through film stocks by [delta] (e.g. +1 next, -1 previous). Turns Film on if it was off. */
+  /**
+   * Steps through film stocks by [delta] (e.g. +1 next, -1 previous). When Film is off, the first notch turns it back
+   * on at the last stock before any remaining notches step further.
+   */
   stepFilm = (delta: number) => {
+    if (delta === 0) return;
+    const filmOff = this._state.params.film == null;
     const current = this._state.params.film ?? this.lastFilm;
     const index = FILM_STOCKS.findIndex((s) => s.id === current);
     const base = index >= 0 ? index : 0;
-    const target = this._state.params.film == null && delta === 0 ? base : base + delta;
-    const nextIndex = Math.max(0, Math.min(FILM_STOCKS.length - 1, target));
+    const shift = filmOff ? delta - Math.sign(delta) : delta;
+    const nextIndex = Math.max(0, Math.min(FILM_STOCKS.length - 1, base + shift));
     const next = FILM_STOCKS[nextIndex];
     if (next && next.id !== this._state.params.film) {
       this.selectFilm(next.id);
