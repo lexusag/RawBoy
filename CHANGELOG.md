@@ -1,5 +1,11 @@
 # Changelog
 
+**RawBoy Packer: collapse and expand folders in the queue (2026-11-06)**
+
+- Folders in the queue can now be collapsed and expanded individually by clicking their header.
+- When collapsed, the folder header displays live packing progress (packing, done, failed) alongside the file count.
+- An "Expand all" / "Collapse all" action in the files bar expands or collapses all folder groups together.
+
 **RawBoy Auto: clear Saved badges on export, lower contrast while waiting (2026-11-03)**
 
 - Starting a new export clears previous "Saved" badges on the photos being exported (or all photos for "Export all"), so progress can be followed cleanly.
