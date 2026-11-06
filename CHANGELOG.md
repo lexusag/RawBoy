@@ -1,5 +1,11 @@
 # Changelog
 
+**RawBoy Auto (web): filter grid by camera, lens, ISO and shoot date (2026-11-06)**
+
+- Added a metadata filter bar above the Auto grid with dropdowns for Camera, Lens, ISO, and Shoot date, each displaying the count of matching photos in the batch.
+- Filters work individually or combined; the grid, detail view photo navigation (arrow keys, Space, Backspace, and ‹ › buttons), and batch export show and export only the filtered photos.
+- Added a "Clear filter" button to reset filters back to the full batch, and an empty state when no photos match the active filters.
+
 **RawBoy Browser (web): force real previews instead of embedded (2026-11-05)**
 
 - Added a "Real preview" button in the photo viewer (and an "R" keyboard shortcut) to force developing the raw photo as shot using RawBoy's engine instead of showing the camera's embedded JPEG preview.
