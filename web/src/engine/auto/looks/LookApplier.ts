@@ -178,6 +178,8 @@ export function developAuto(
     ...developed,
     lensProfile: lens.lensProfile,
     lensDistortion: lens.lensDistortion,
+    lensAnamorphic: lens.lensAnamorphic,
+    lensCrop: lens.lensCrop,
     caRed: lens.caRed,
     caBlue: lens.caBlue,
     vignetteAmount: Math.min(100, Math.max(-100, lens.vignetteAmount + lookVignette)),

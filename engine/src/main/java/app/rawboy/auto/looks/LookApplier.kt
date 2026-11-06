@@ -159,6 +159,8 @@ object LookApplier {
         return developed.copy(
             lensProfile = lens.lensProfile,
             lensDistortion = lens.lensDistortion,
+            lensAnamorphic = lens.lensAnamorphic,
+            lensCrop = lens.lensCrop,
             caRed = lens.caRed,
             caBlue = lens.caBlue,
             vignetteAmount = (lens.vignetteAmount + lookVignette).coerceIn(-100f, 100f),

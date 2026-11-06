@@ -295,9 +295,11 @@ export function ControlsPanel({
             </label>
             <SectionLabel>Manual</SectionLabel>
             {slider('Distortion', 'lensDistortion', -100, 100)}
+            {slider('Anamorphic', 'lensAnamorphic', -100, 100)}
+            {slider('Crop', 'lensCrop', -100, 100)}
             {slider('Vignetting', 'vignetteAmount', -100, 100)}
             {slider('Vignette radius', 'vignetteMidpoint', 0, 100, formatPlain)}
-            <Note>Distortion crops automatically so no empty edges show.</Note>
+            <Note>At Crop 0, distortion crops automatically so no empty edges show; negative shows the curved edges, positive crops tighter.</Note>
             <SectionLabel>Chromatic aberration</SectionLabel>
             {slider('Red/Cyan', 'caRed', -100, 100)}
             {slider('Blue/Yellow', 'caBlue', -100, 100)}

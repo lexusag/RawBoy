@@ -33,9 +33,9 @@ export const withCrop = (p: DevelopParams, r: CropRect): DevelopParams => ({
 export const withoutCrop = (p: DevelopParams): DevelopParams => withCrop(p, FULL_CROP);
 
 /** Crop aspect ratios offered by the tool, as long side : short side (orientation is chosen separately). */
-export type CropAspect = 'free' | 'original' | '1:1' | '5:4' | '4:3' | '3:2' | '16:9';
+export type CropAspect = 'free' | 'original' | '1:1' | '5:4' | '4:3' | '3:2' | '16:9' | '2:1' | '2.39:1';
 
-export const CROP_ASPECTS: readonly CropAspect[] = ['free', 'original', '1:1', '5:4', '4:3', '3:2', '16:9'];
+export const CROP_ASPECTS: readonly CropAspect[] = ['free', 'original', '1:1', '5:4', '4:3', '3:2', '16:9', '2:1', '2.39:1'];
 
 export function cropAspectLabel(a: CropAspect, portrait: boolean): string {
   if (a === 'free') return 'Free';

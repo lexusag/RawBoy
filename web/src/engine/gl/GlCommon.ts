@@ -294,6 +294,8 @@ export class DevelopProgram {
     this.f1('uHalfDiagonal', l.halfDiagonal);
     this.f1('uZoom', l.zoom);
     this.f1('uManualK', l.manualK);
+    this.f1('uAnamorphicK', l.anamorphicK);
+    this.f1('uClipFrame', l.clipFrame ? 1 : 0);
     const warp = l.warp;
     this.f1('uWarpOn', warp ? 1 : 0);
     this.f1('uWarpPlanes', l.warpPlanes);

@@ -143,6 +143,8 @@ public enum LookApplier {
         var d = developed
         d.lensProfile = lens.lensProfile
         d.lensDistortion = lens.lensDistortion
+        d.lensAnamorphic = lens.lensAnamorphic
+        d.lensCrop = lens.lensCrop
         d.caRed = lens.caRed
         d.caBlue = lens.caBlue
         d.vignetteAmount = (lens.vignetteAmount + lookVignette).clamped(-100, 100)

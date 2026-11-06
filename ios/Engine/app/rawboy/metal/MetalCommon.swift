@@ -366,6 +366,8 @@ struct DevelopProgram {
         u.float("uHalfDiagonal", Float(l.halfDiagonal))
         u.float("uZoom", Float(l.zoom))
         u.float("uManualK", Float(l.manualK))
+        u.float("uAnamorphicK", Float(l.anamorphicK))
+        u.float("uClipFrame", l.clipFrame ? 1 : 0)
         let warp = l.warp
         u.float("uWarpOn", warp != nil ? 1 : 0)
         u.float("uWarpPlanes", Float(l.warpPlanes))

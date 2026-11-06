@@ -23,8 +23,8 @@ export const Shaders = {
     s += '    if (uLeakCount > 0) c = applyLeaks(c, srcG, outPx);\n';
     // 16-bit unsigned integer target for export: exact, core in WebGL2.
     s += forExport
-      ? '    fragColor = uvec4(uvec3(c * 65535.0 + 0.5), 65535u);\n'
-      : '    if (uClipWarn > 0.0) c = clipWarning(c);\n    fragColor = vec4(c, 1.0);\n';
+      ? '    if (uClipFrame > 0.5) c *= frameMask(srcG);\n    fragColor = uvec4(uvec3(c * 65535.0 + 0.5), 65535u);\n'
+      : '    float fm = uClipFrame > 0.5 ? frameMask(srcG) : 1.0;\n    if (uClipWarn > 0.0 && fm >= 1.0) c = clipWarning(c);\n    fragColor = vec4(c * fm, 1.0);\n';
     s += '}\n';
     return s;
   },

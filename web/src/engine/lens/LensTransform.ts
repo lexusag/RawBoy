@@ -14,8 +14,8 @@ export const CA_MAX = 0.002;
  * Output pixel p (full resolution, after rotation and crop) maps to its source by:
  *   0. add the user crop's origin (the crop only picks a window of the finished frame), then undo
  *      rotation (90 degree turns + straighten), with auto crop for the straighten angle, and the flips
- *   1. auto scale around the image centre (crop to valid pixels, like Lightroom's Constrain Crop)
- *   2. manual distortion (radial, around the image centre)
+ *   1. auto scale around the image centre (crop to valid pixels, like Lightroom's Constrain Crop), adjusted by lensCrop
+ *   2. manual distortion (spherical + cylindrical anamorphic, around the image centre)
  *   3. embedded DNG WarpRectilinear, in sensor coordinates, per colour plane
  *   4. manual chromatic aberration: red and blue planes scaled around the image centre
  *
@@ -49,6 +49,10 @@ export class LensTransform {
   readonly outToImage: M3;
   /** k in src_r = r * (1 - k r^2); +100 on the slider removes strong barrel distortion. */
   readonly manualK: number;
+  /** Cylindrical (horizontal) distortion k: -100 bows vertical edges outward like an anamorphic lens. */
+  readonly anamorphicK: number;
+  /** True when zoomed out past the auto crop, so pixels outside [0, width] x [0, height] render black. */
+  readonly clipFrame: boolean;
   readonly warp: Warp | null;
   readonly vignette: RadialVignette | null;
   /** The decode applied the shading gain maps; with the profile off, take the luminance part back out. */
@@ -66,7 +70,7 @@ export class LensTransform {
   readonly vignetteNorm: number;
   /** Planes with distinct warp coefficients (3 = lateral chromatic aberration correction). */
   readonly warpPlanes: number;
-  /** Output scale >= the value at which every output pixel has real image data. */
+  /** Output scale: at lensCrop = 0, >= the value at which every output pixel has real image data. */
   readonly zoom: number;
   /**
    * Manual lateral chromatic aberration: the red and blue planes sample at this scale around the image centre
@@ -94,6 +98,9 @@ export class LensTransform {
     this.outToImage = this.rotationMatrix();
     const useProfile = params.lensProfile && info.hasProfile;
     this.manualK = (params.lensDistortion / 100) * 0.25;
+    this.anamorphicK = (params.lensAnamorphic / 100) * 0.30;
+    const cropScale = 2 ** (Math.min(100, Math.max(-100, params.lensCrop)) / 150);
+    this.clipFrame = params.lensCrop < 0;
     this.caScaleRed = 1 - (params.caRed / 100) * CA_MAX;
     this.caScaleBlue = 1 - (params.caBlue / 100) * CA_MAX;
     this.warp = useProfile ? info.warp : null;
@@ -110,7 +117,7 @@ export class LensTransform {
     this.vignetteCenterY = (this.vignette?.centerY ?? 0.5) * info.sensorHeight;
     this.vignetteNorm = this.maxCornerDistance(this.vignetteCenterX, this.vignetteCenterY);
     this.warpPlanes = this.warp?.planes ?? 1;
-    this.zoom = knownZoom ?? (this.isGeometric ? this.autoZoom() : 1);
+    this.zoom = knownZoom ?? (this.isGeometric ? this.autoZoom() : 1) * cropScale;
   }
 
   get hasManualCa(): boolean {
@@ -118,7 +125,7 @@ export class LensTransform {
   }
 
   get isGeometric(): boolean {
-    return this.warp != null || this.manualK !== 0;
+    return this.warp != null || this.manualK !== 0 || this.anamorphicK !== 0;
   }
 
   /** Source position (image, display orientation) of output pixel (x, y) for colour plane 0..2. */
@@ -162,14 +169,17 @@ export class LensTransform {
     return best;
   }
 
+  private distortFactor(k: number, rn2: number): number {
+    return k <= 0 ? 1 - k * rn2 : 0.2 + 0.8 / Math.sqrt(1 + 2.5 * k * rn2);
+  }
+
   /** Steps 1-3 for an image position (x, y). */
   private lensSource(x: number, y: number, plane: number, zoomOverride: number): number[] {
     let dx = (x - this.centerX) / zoomOverride;
     let dy = (y - this.centerY) / zoomOverride;
     const rn2 = (dx * dx + dy * dy) / (this.halfDiagonal * this.halfDiagonal);
-    const f = 1 - this.manualK * rn2;
-    dx *= f;
-    dy *= f;
+    dx *= this.distortFactor(this.manualK + this.anamorphicK, rn2);
+    dy *= this.distortFactor(this.manualK, rn2);
     const qx = this.centerX + dx;
     const qy = this.centerY + dy;
     const w = this.warp;
