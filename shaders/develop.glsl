@@ -737,66 +737,50 @@ vec3 bloom(vec3 x, vec2 uvG, vec2 imagePx) {
 
 // Fake anamorphic lens flare: horizontal streaks across the framed picture (uOutToImage's X axis, so rotating or
 // straightening keeps the streak horizontal and cropping leaves it unchanged) scattered from uBloomHalo's boosted
-// highlights (bloomKnee). Two grids anchored to uBloomHalo's texels keep tiny point lights free of beading and
-// bilinear knee dilution: a crisp 1-texel inner needle and a wide 2x2 bilinear-pair wing reaching ~27% of the long
-// edge on each side. Already-bright highlights keep their own white core instead of taking on the coating tint.
+// highlights (bloomKnee). Taps sit at continuous positions along and across the streak, read with the sampler's
+// bilinear filter: snapping them to the halo's texel grid made the streak a stack of blocks one texel (~10 px) tall
+// that jumped as the pixel crossed a texel boundary. Spacing the taps 1 texel apart (the wing: two taps 1 apart per
+// 2 texels, each across two taps 1 apart) makes the bilinear tents sum to a constant, so there is no beading either.
+// A crisp inner needle reaches 15 texels and a wide wing ~27% of the long edge on each side. Already-bright
+// highlights keep their own white core instead of taking on the coating tint.
 vec3 anamorphicFlare(vec3 x, vec2 imagePx) {
     vec2 size = 1.0 / uBloomHaloTexel;
-    vec2 dir = normalize((mat2(uOutToImage) * vec2(1.0, 0.0)) / (uImageSize * uBloomHaloTexel));
-    bool swapXY = abs(dir.y) > abs(dir.x);
-    vec2 st = imagePx / (uImageSize * uBloomHaloTexel) - 0.5;
-    vec2 d = swapXY ? dir.yx : dir;
-    vec2 p0 = swapXY ? st.yx : st;
-    vec2 lim = swapXY ? size.yx : size;
-    float slope = d.y / d.x;
-    float cosA = abs(d.x);
+    vec2 d = normalize((mat2(uOutToImage) * vec2(1.0, 0.0)) / (uImageSize * uBloomHaloTexel));
+    vec2 n = vec2(-d.y, d.x);
+    vec2 p = imagePx / (uImageSize * uBloomHaloTexel); // halo texel coordinates, texel centres at +0.5
 
-    float ix0 = floor(p0.x + 0.5);
+    // Needle: one tap per texel along the streak, three across (smooth ~1 texel wide profile).
     vec3 core = vec3(0.0);
     float cw = 0.0;
     for (int i = -16; i <= 16; ++i) {
-        float tx = ix0 + float(i);
-        float yLine = p0.y + (tx - p0.x) * slope;
-        float iy0 = floor(yLine + 0.5);
+        float a = float(i);
+        float rx = 1.0 - abs(a) / 15.0;
+        if (rx <= 0.0) continue;
+        float w = exp(-abs(a) / 4.0) * rx * rx;
+        cw += w;
         for (int j = -1; j <= 1; ++j) {
-            float ty = iy0 + float(j);
-            float dy = (ty - yLine) * cosA;
-            float ry = max(1.0 - abs(dy) / 1.05, 0.0);
-            if (ry <= 0.0) continue;
-            float dx = (tx - p0.x) * d.x + (ty - p0.y) * d.y;
-            float rx = max(1.0 - abs(dx) / 15.0, 0.0);
-            if (rx <= 0.0) continue;
-            float w = exp(-dy * dy / 0.36 - abs(dx) / 4.0) * ry * ry * rx * rx;
-            cw += w;
-            if (tx >= 0.0 && tx < lim.x && ty >= 0.0 && ty < lim.y) {
-                vec2 at = ((swapXY ? vec2(ty, tx) : vec2(tx, ty)) + 0.5) * uBloomHaloTexel;
-                vec3 c = texture(uBloomHalo, at).rgb;
-                core += (w * bloomKnee(c, uExposure)) * c;
-            }
+            vec2 t = p + a * d + (0.75 * float(j)) * n;
+            if (t.x < 0.0 || t.x >= size.x || t.y < 0.0 || t.y >= size.y) continue;
+            vec3 c = texture(uBloomHalo, t * uBloomHaloTexel).rgb;
+            core += (w * (j == 0 ? 0.56 : 0.22) * bloomKnee(c, uExposure)) * c;
         }
     }
 
-    float kx0 = floor((p0.x - 0.5) * 0.5 + 0.5);
+    // Wing: per 2 texels two taps 1 apart along the streak, each across two taps 1 apart.
     vec3 wing = vec3(0.0);
     float ww = 0.0;
-    for (int i = -72; i <= 72; ++i) {
-        float px = 2.0 * (kx0 + float(i)) + 0.5;
-        float yLine = p0.y + (px - p0.x) * slope;
-        float ky0 = floor((yLine - 0.5) * 0.5);
-        for (int j = 0; j <= 1; ++j) {
-            float py = 2.0 * (ky0 + float(j)) + 0.5;
-            float dy = (py - yLine) * cosA;
-            float ry = max(1.0 - abs(dy) / 1.4, 0.0);
-            if (ry <= 0.0) continue;
-            float dx = (px - p0.x) * d.x + (py - p0.y) * d.y;
-            float rx = max(1.0 - abs(dx) / 140.0, 0.0);
+    for (int i = -70; i <= 70; ++i) {
+        for (int s = 0; s <= 1; ++s) {
+            float a = 2.0 * float(i) + (s == 0 ? -0.5 : 0.5);
+            float rx = 1.0 - abs(a) / 140.0;
             if (rx <= 0.0) continue;
-            float w = pow(1.0 + abs(dx) / 7.5, -1.35) * exp(-dy * dy / 0.9) * ry * ry * rx * rx;
+            float w = pow(1.0 + abs(a) / 7.5, -1.35) * rx * rx;
             ww += w;
-            if (px >= 0.0 && px < lim.x && py >= 0.0 && py < lim.y) {
-                vec2 at = ((swapXY ? vec2(py, px) : vec2(px, py)) + 0.5) * uBloomHaloTexel;
-                vec3 c = texture(uBloomHalo, at).rgb;
-                wing += (w * bloomKnee(c, uExposure)) * c;
+            for (int j = 0; j <= 1; ++j) {
+                vec2 t = p + a * d + (j == 0 ? -0.5 : 0.5) * n;
+                if (t.x < 0.0 || t.x >= size.x || t.y < 0.0 || t.y >= size.y) continue;
+                vec3 c = texture(uBloomHalo, t * uBloomHaloTexel).rgb;
+                wing += (0.5 * w * bloomKnee(c, uExposure)) * c;
             }
         }
     }

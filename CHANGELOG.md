@@ -10,7 +10,7 @@
 
 - Detail tab: added fake anamorphic lens flare slider (0–100, off by default) with Neutral, Blue, and Golden coating tint options across Android, iOS, and Web.
 - Optical model scatters horizontal streaks from highlight-boosted light sources across the framed photo (remaining horizontal under rotation and straightening, and unchanged by crop).
-- Double-anchored texel sampling on the highlight halo avoids beading artifacts and nonlinear knee dilution on point lights.
+- Continuous bilinear taps along and across the streak (no texel snapping) keep the flare smooth instead of blocky and free of beading.
 - Presets and sidecars: saved under the Detail preset group and carries over between photos.
 
 **RawBoy Pro: anamorphic lens distortion and adjustable crop (2026-11-06)**
