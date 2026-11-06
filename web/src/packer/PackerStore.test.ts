@@ -19,7 +19,7 @@ class FakeWorker {
       const content = req.bytes ? new TextDecoder().decode(req.bytes) : undefined;
       ops.push({ op: req.op, content });
       await new Promise((r) => setTimeout(r, req.op === 'inspect' ? 30 : 1));
-      const result = req.op === 'init' ? null : req.op === 'inspect' ? info('inspected') : { dng: new Uint8Array(10), info: info('packed') };
+      const result = req.op === 'init' ? { dngSdk: true, threads: false } : req.op === 'inspect' ? info('inspected') : { dng: new Uint8Array(10), info: info('packed') };
       this.onmessage?.({ data: { id, ok: true, result } } as MessageEvent);
     });
   }
@@ -284,6 +284,12 @@ describe('PackerStore', () => {
     expect(groups[0].items.map((i) => i.file.name)).toEqual(['B.dng', 'A.dng']);
     expect(groups[0].items[0].date).toBe('2026:10:01 07:00:00');
     expect(groups[0].items[1].date).toBe('2026:10:01 10:00:00');
+  });
+
+  it('exposes engineReady resolving worker initialization', async () => {
+    const store = new PackerStore();
+    const result = await store.engineReady;
+    expect(result).toEqual({ dngSdk: true, threads: false });
   });
 
   describe('folderStatusSummary', () => {

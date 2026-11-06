@@ -4,6 +4,10 @@ import { folderStatusSummary, groupByFolder, PackerStore, type FolderGroup, type
 import type { PackFormat, PackInfo } from './protocol';
 import { ItemThumbnail, releaseThumbnail } from './ItemThumbnail';
 import { PreviewModal } from './PreviewModal';
+import { HelpDialog, HELP_SHORTCUT, isHelpShortcut } from '../ui/common/HelpDialog';
+import { LicensesDialog } from '../ui/common/LicensesDialog';
+import { versionLabel } from '../ui/common/version';
+import { PACKER_HELP } from './help';
 import {
   FORMAT_LABEL,
   MAX_FILES_AT_ONCE,
@@ -80,7 +84,28 @@ export function PackerApp() {
   const [permission, setPermission] = useState(notifyPermission);
   const [scrolled, setScrolled] = useState(false);
   const [skippedNote, setSkippedNote] = useState<string | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
+  const [showLicenses, setShowLicenses] = useState(false);
+  const [engine, setEngine] = useState<string>('Loading decoder…');
   const noteTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    store.engineReady.then(
+      (r) => setEngine(`LibRaw + Adobe DNG SDK (JPEG XL)${r?.threads ? '' : ' · single-threaded'}`),
+      (e: unknown) => setEngine(`Decoder failed to load: ${e instanceof Error ? e.message : String(e)}`),
+    );
+  }, []);
+
+  // Ctrl+/ (⌘/ on Apple devices) opens the help, as in Google's apps; the open dialog handles closing it.
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (!isHelpShortcut(e)) return;
+      e.preventDefault();
+      setShowHelp(true);
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, []);
 
   const showSkipped = (count: number) => {
     if (count <= 0) return;
@@ -274,8 +299,19 @@ export function PackerApp() {
   return (
     <div className={`packer${dragging ? ' dragging' : ''}${state.running ? ' running' : ''}`}>
       <header className="packer-header">
-        <h1>RawBoy Packer</h1>
-        <p>Repackage camera raws and DNGs as smaller DNGs, in your browser. Nothing is uploaded.</p>
+        <div>
+          <h1>RawBoy Packer</h1>
+          <p>Repackage camera raws and DNGs as smaller DNGs, in your browser. Nothing is uploaded.</p>
+        </div>
+        <button
+          type="button"
+          className="help-button"
+          title={`Help and shortcuts (${HELP_SHORTCUT})`}
+          aria-label="Help and shortcuts"
+          onClick={() => setShowHelp(true)}
+        >
+          ?
+        </button>
       </header>
 
       <main className="packer-main">
@@ -559,6 +595,36 @@ export function PackerApp() {
             </div>
           </div>
         </div>
+      )}
+
+      {showLicenses && <LicensesDialog onDismiss={() => setShowLicenses(false)} />}
+      {showHelp && (
+        <HelpDialog
+          title="RawBoy Packer"
+          sections={PACKER_HELP}
+          onDismiss={() => setShowHelp(false)}
+          about={
+            <>
+              <span>
+                {versionLabel()}
+                <br />
+                Decoder: {engine}
+              </span>
+              <button
+                type="button"
+                className="text"
+                onClick={() => {
+                  setShowHelp(false);
+                  setShowLicenses(true);
+                }}
+              >
+                Licences
+              </button>
+              <a className="text" href="about.html" target="_blank" rel="noopener">About</a>
+              <a className="text" href="privacy.html" target="_blank" rel="noopener">Privacy</a>
+            </>
+          }
+        />
       )}
 
       <footer className="packer-footer">

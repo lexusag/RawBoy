@@ -10,6 +10,7 @@ async function init(wasmBase: string) {
   const { default: create } = await import(/* @vite-ignore */ new URL('rawboy-full.mjs', wasmBase).href);
   module = await create();
   if (!module.hasDngSdk()) throw new Error('This build has no Adobe DNG SDK');
+  return { dngSdk: true, threads: typeof SharedArrayBuffer !== 'undefined' };
 }
 
 function run(req: PackerRequest): [unknown, Transferable[]] {
@@ -33,8 +34,8 @@ self.onmessage = async (ev: MessageEvent<{ id: number; req: PackerRequest }>) =>
   const { id, req } = ev.data;
   try {
     if (req.op === 'init') {
-      await init(req.wasmBase);
-      self.postMessage({ id, ok: true, result: null });
+      const result = await init(req.wasmBase);
+      self.postMessage({ id, ok: true, result });
       return;
     }
     const [result, transfer] = run(req);
