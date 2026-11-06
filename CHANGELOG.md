@@ -1,5 +1,9 @@
 # Changelog
 
+**RawBoy Pro: batch-select presets to delete or export (2026-11-06)**
+
+- Presets panel (Android, iOS, web): added **Select** (and long-press on Android/iOS) to enter multi-select mode, select or deselect all presets, and batch-delete or export the selected presets at once.
+
 **RawBoy Pro (web): Auto WB with draggable rectangle and reset WB button (2026-11-06)**
 
 - Color tab: added the "Auto WB" button next to "Pick white balance" on the web, displaying a draggable, extendable rectangle over the preview to solve white balance from the selected area.

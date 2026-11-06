@@ -1,6 +1,9 @@
 package app.rawboy.ui
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -10,6 +13,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
@@ -23,6 +28,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -42,6 +48,7 @@ class PresetActions(
     val update: (Preset) -> Unit,
     val rename: (Preset, String) -> Unit,
     val delete: (Preset) -> Unit,
+    val deleteBatch: (Set<String>) -> Unit = {},
     val export: (List<Preset>) -> Unit,
     val import: () -> Unit,
     /** Hands the preset to RawBoy Auto, which applies it to its whole batch. */
@@ -61,25 +68,126 @@ fun PresetsPanel(
     /** The photo has brush strokes (which presets don't keep): the save dialog says so. */
     hasStrokes: Boolean = false,
 ) {
+    var selecting by remember { mutableStateOf(false) }
+    var selected by remember { mutableStateOf(emptySet<String>()) }
+    var deletingBatch by remember { mutableStateOf(false) }
+
+    LaunchedEffect(presets) {
+        val ids = presets.map { it.id }.toSet()
+        if (!ids.containsAll(selected)) selected = selected intersect ids
+        if (presets.isEmpty()) selecting = false
+    }
+
+    BackHandler(enabled = selecting) {
+        selecting = false
+        selected = emptySet()
+    }
+
     Column(modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Presets", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-            TextButton(onClick = onDone) { Text("Done") }
+        if (selecting) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = {
+                    selecting = false
+                    selected = emptySet()
+                }) {
+                    Icon(Icons.Default.Close, contentDescription = "Cancel selection")
+                }
+                Text(
+                    if (selected.isEmpty()) "Select presets" else "${selected.size} selected",
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f),
+                )
+                TextButton(onClick = {
+                    selected = if (selected.size == presets.size) emptySet() else presets.map { it.id }.toSet()
+                }) {
+                    Text(if (selected.size == presets.size) "Deselect" else "All")
+                }
+                IconButton(
+                    onClick = { deletingBatch = true },
+                    enabled = selected.isNotEmpty(),
+                ) {
+                    Icon(Icons.Default.Delete, contentDescription = "Delete selected")
+                }
+            }
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text("Presets", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                if (presets.isNotEmpty()) {
+                    TextButton(onClick = { selecting = true }) { Text("Select") }
+                }
+                TextButton(onClick = onDone) { Text("Done") }
+            }
         }
-        Column(Modifier.verticalScroll(rememberScrollState())) { PresetsContent(presets, actions, hasStrokes) }
+        Column(Modifier.verticalScroll(rememberScrollState())) {
+            PresetsContent(
+                presets = presets,
+                actions = actions,
+                hasStrokes = hasStrokes,
+                selecting = selecting,
+                selected = selected,
+                onToggleSelect = { id ->
+                    selected = if (id in selected) selected - id else selected + id
+                },
+                onStartSelect = { id ->
+                    selecting = true
+                    selected = setOf(id)
+                },
+            )
+        }
+    }
+
+    if (deletingBatch && selected.isNotEmpty()) {
+        val targetPresets = presets.filter { it.id in selected }
+        val count = targetPresets.size
+        if (count > 0) {
+            AlertDialog(
+                onDismissRequest = { deletingBatch = false },
+                title = {
+                    Text(if (count == 1) "Delete “${targetPresets.first().name}”?" else "Delete $count presets?")
+                },
+                confirmButton = {
+                    TextButton(onClick = {
+                        deletingBatch = false
+                        actions.deleteBatch(selected)
+                        selecting = false
+                        selected = emptySet()
+                    }) { Text("Delete") }
+                },
+                dismissButton = { TextButton(onClick = { deletingBatch = false }) { Text("Cancel") } },
+            )
+        }
     }
 }
 
 @Composable
-private fun PresetsContent(presets: List<Preset>, actions: PresetActions, hasStrokes: Boolean) {
+private fun PresetsContent(
+    presets: List<Preset>,
+    actions: PresetActions,
+    hasStrokes: Boolean,
+    selecting: Boolean,
+    selected: Set<String>,
+    onToggleSelect: (String) -> Unit,
+    onStartSelect: (String) -> Unit,
+) {
     var saving by remember { mutableStateOf(false) }
     var renaming by remember { mutableStateOf<Preset?>(null) }
     var deleting by remember { mutableStateOf<Preset?>(null) }
 
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 4.dp)) {
-        OutlinedButton(onClick = { saving = true }) { Text("Save current…") }
-        TextButton(onClick = actions.import) { Text("Import") }
-        TextButton(onClick = { actions.export(presets) }, enabled = presets.isNotEmpty()) { Text("Export all") }
+    if (!selecting) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 4.dp)) {
+            OutlinedButton(onClick = { saving = true }) { Text("Save current…") }
+            TextButton(onClick = actions.import) { Text("Import") }
+            TextButton(onClick = { actions.export(presets) }, enabled = presets.isNotEmpty()) { Text("Export all") }
+        }
+    } else {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(bottom = 4.dp)) {
+            TextButton(
+                onClick = { actions.export(presets.filter { it.id in selected }) },
+                enabled = selected.isNotEmpty(),
+            ) {
+                Text("Export selected")
+            }
+        }
     }
     if (presets.isEmpty()) {
         Text(
@@ -93,7 +201,11 @@ private fun PresetsContent(presets: List<Preset>, actions: PresetActions, hasStr
         if (label != null) SectionLabel(label)
         for (p in section) {
             PresetRow(
-                p,
+                preset = p,
+                selecting = selecting,
+                selected = p.id in selected,
+                onSelect = { onToggleSelect(p.id) },
+                onLongSelect = { onStartSelect(p.id) },
                 onApply = { actions.apply(p) },
                 onUpdate = { actions.update(p) },
                 onRename = { renaming = p },
@@ -139,9 +251,14 @@ private fun PresetsContent(presets: List<Preset>, actions: PresetActions, hasStr
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun PresetRow(
     preset: Preset,
+    selecting: Boolean,
+    selected: Boolean,
+    onSelect: () -> Unit,
+    onLongSelect: () -> Unit,
     onApply: () -> Unit,
     onUpdate: () -> Unit,
     onRename: () -> Unit,
@@ -154,9 +271,19 @@ private fun PresetRow(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onApply)
+            .combinedClickable(
+                onClick = { if (selecting) onSelect() else onApply() },
+                onLongClick = { if (!selecting) onLongSelect() },
+            )
             .padding(vertical = 4.dp),
     ) {
+        if (selecting) {
+            Checkbox(
+                checked = selected,
+                onCheckedChange = null,
+                modifier = Modifier.padding(end = 8.dp),
+            )
+        }
         Column(Modifier.weight(1f)) {
             Text(preset.name, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
@@ -167,14 +294,16 @@ private fun PresetRow(
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Box {
-            IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "Preset options") }
-            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                DropdownMenuItem(text = { Text("Update from current") }, onClick = { menu = false; onUpdate() })
-                DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; onRename() })
-                DropdownMenuItem(text = { Text("Export") }, onClick = { menu = false; onExport() })
-                DropdownMenuItem(text = { Text("Send to Auto") }, onClick = { menu = false; onSendToAuto() })
-                DropdownMenuItem(text = { Text("Delete") }, onClick = { menu = false; onDelete() })
+        if (!selecting) {
+            Box {
+                IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, contentDescription = "Preset options") }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(text = { Text("Update from current") }, onClick = { menu = false; onUpdate() })
+                    DropdownMenuItem(text = { Text("Rename") }, onClick = { menu = false; onRename() })
+                    DropdownMenuItem(text = { Text("Export") }, onClick = { menu = false; onExport() })
+                    DropdownMenuItem(text = { Text("Send to Auto") }, onClick = { menu = false; onSendToAuto() })
+                    DropdownMenuItem(text = { Text("Delete") }, onClick = { menu = false; onDelete() })
+                }
             }
         }
     }
