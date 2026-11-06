@@ -107,7 +107,12 @@ import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
+fun DetailScreen(
+    vm: AutoViewModel,
+    id: String,
+    snackbar: SnackbarHostState,
+    pickPreset: (Set<String>) -> Unit = {},
+) {
     val photos by vm.photos.collectAsStateWithLifecycle()
     val photo = photos.firstOrNull { it.id == id } ?: return
     val analysis = photo.analysis ?: return
@@ -194,6 +199,11 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
                             Icon(Icons.Default.MoreVert, contentDescription = "More")
                         }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                            DropdownMenuItem(
+                                text = { Text("Apply RawBoy preset…") },
+                                onClick = { menu = false; pickPreset(setOf(id)) },
+                                enabled = export == null,
+                            )
                             DropdownMenuItem(
                                 text = { Text("Apply to all") },
                                 onClick = { menu = false; vm.applyLookToAll(id) },
@@ -378,7 +388,10 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
             } else if (preset != null) {
                 // A RawBoy preset develops this photo in place of the look strip.
                 ReplacedLook(preset.name, "RawBoy preset · ${groupSummary(preset)}") {
-                    TextButton(onClick = { vm.removePhotoPreset(id) }, enabled = export == null) { Text("Use a look") }
+                    Row {
+                        TextButton(onClick = { pickPreset(setOf(id)) }, enabled = export == null) { Text("Change") }
+                        TextButton(onClick = { vm.removePhotoPreset(id) }, enabled = export == null) { Text("Use a look") }
+                    }
                 }
             } else {
                 // Each photo keeps one pick per mode.

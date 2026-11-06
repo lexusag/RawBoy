@@ -316,6 +316,55 @@ class PhotoSession(
         }
     }
 
+    /**
+     * Auto white balance for an area of the photo ([rect], fractions 0..1 of the visible output picture).
+     * Solves for temperature and tint so the non-clipped pixels in the area render neutral grey.
+     */
+    suspend fun autoWhite(rect: CropRect, defaults: DevelopParams): WhitePicker.Pick? {
+        val img = image ?: return null
+        val b = _base.value ?: return null
+        if (viewWidth <= 0 || viewHeight <= 0) return null
+        val lens = lensFor(params)
+        val w = lens.outputWidth
+        val h = lens.outputHeight
+        val minX = rect.left.coerceIn(0f, 1f) * w
+        val maxX = rect.right.coerceIn(0f, 1f) * w
+        val minY = rect.top.coerceIn(0f, 1f) * h
+        val maxY = rect.bottom.coerceIn(0f, 1f) * h
+        if (maxX <= minX || maxY <= minY) return null
+
+        return withContext(Dispatchers.Default) {
+            val buf = b.pixels.duplicate().order(ByteOrder.nativeOrder()).asShortBuffer()
+            val stepsX = maxOf(1, minOf(64, (maxX - minX).toInt()))
+            val stepsY = maxOf(1, minOf(64, (maxY - minY).toInt()))
+            val dx = (maxX - minX) / stepsX
+            val dy = (maxY - minY) / stepsY
+            var sumR = 0.0
+            var sumG = 0.0
+            var sumB = 0.0
+            var n = 0
+            for (iy in 0..stepsY) {
+                val outY = (minY + iy * dy).toDouble()
+                for (ix in 0..stepsX) {
+                    val outX = (minX + ix * dx).toDouble()
+                    val src = lens.source(outX, outY)
+                    val bx = (src[0] / img.width * b.width).toInt().coerceIn(0, b.width - 1)
+                    val by = (src[1] / img.height * b.height).toInt().coerceIn(0, b.height - 1)
+                    val idx = (by * b.width + bx) * 3
+                    val r = Half.toFloat(buf.get(idx))
+                    val g = Half.toFloat(buf.get(idx + 1))
+                    val bVal = Half.toFloat(buf.get(idx + 2))
+                    if (r < 0f || g < 0f || bVal < 0f || r >= WhitePicker.CLIP || g >= WhitePicker.CLIP || bVal >= WhitePicker.CLIP) continue
+                    sumR += r
+                    sumG += g
+                    sumB += bVal
+                    n++
+                }
+            }
+            WhitePicker.pickFromSum(sumR, sumG, sumB, n, defaults.temperature, defaults.tint)
+        }
+    }
+
     /** Double tap: zoom to 100% at the tapped point of the fit view, or back out. */
     fun toggleZoom(viewX: Float, viewY: Float, frameWidth: Int) {
         if (image == null) return

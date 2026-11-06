@@ -270,6 +270,54 @@ button.icon.active {
   text-overflow: ellipsis;
 }
 
+/* Auto: metadata filters in the grid header */
+.auto-filters {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  flex: none;
+}
+
+@media (max-width: 560px) {
+  .auto-filters {
+    padding-right: 28px;
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  }
+}
+
+.auto-filters-label {
+  color: var(--muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.auto-filters select {
+  min-width: 0;
+  max-width: 180px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auto-filters select.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.auto-filters .clear-filter {
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.auto-filters .filter-count {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  margin-left: 4px;
+}
+
 /* Auto's photo view: the photo's lens preset. */
 .photo-lens {
   display: flex;
@@ -2028,7 +2076,8 @@ line.curve-grid,
 }
 
 .auto-advance,
-.edits-in-sidecars {
+.edits-in-sidecars,
+.real-previews {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -2038,7 +2087,8 @@ line.curve-grid,
 }
 
 .auto-advance input,
-.edits-in-sidecars input {
+.edits-in-sidecars input,
+.real-previews input {
   accent-color: var(--accent);
 }
 
@@ -2186,6 +2236,11 @@ line.curve-grid,
   .browser .toolbar button.primary {
     padding: 6px;
   }
+}
+
+.browser .toolbar button.text.active {
+  background: var(--surface-2);
+  border-color: var(--accent);
 }
 
 /* Pro: histogram above the slider tabs; click toggles the clipping warning on the photo. */

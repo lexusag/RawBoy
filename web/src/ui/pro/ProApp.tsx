@@ -570,6 +570,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
                   onToneMapper={store.setToneMapper}
                   onFilm={store.useFilm}
                   onSelectFilm={store.selectFilm}
+                  onStepFilm={store.stepFilm}
                   lens={session.lensInfo}
                   skin={session.skin}
                   blemish={session.blemish}

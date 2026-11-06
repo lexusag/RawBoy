@@ -23,7 +23,7 @@ import { DeleteIcon } from '../common/DeleteIcon';
 import { DenoiseIcon } from '../common/DenoiseIcon';
 import { UndoIcon } from '../common/UndoIcon';
 import { AppSwitcher, HelpButton } from '../common/AppNav';
-import { activeLook, EDITS_NAME, EXPORT_SIZES, lookName, paramsOf, SETTINGS, type AutoPhoto, type AutoStore, type ImportMode, type LookMode } from './AutoStore';
+import { activeLook, availableFilterOptions, EDITS_NAME, EXPORT_SIZES, isFilterActive, lookName, paramsOf, SETTINGS, type AutoPhoto, type AutoStore, type ImportMode, type LookMode } from './AutoStore';
 import { shortcutKey } from '../common/shortcutKey';
 
 /** The frame around the photo in the fit view, CSS pixels, as RawBoy's (grey, white or black: click outside the photo). */
@@ -95,7 +95,9 @@ function GridView({ store, scroll, lastViewed }: {
     if (c.top < g.top) el.scrollTop += c.top - g.top - 8;
     else if (c.bottom > g.bottom) el.scrollTop += c.bottom - g.bottom + 8;
   }, []);
-  const { photos } = state;
+  const filtered = isFilterActive(state.filter);
+  const photos = filtered ? store.shown : state.photos;
+  const filterOptions = useMemo(() => availableFilterOptions(state.photos), [state.photos]);
   const photosRef = useRef(photos);
   photosRef.current = photos;
   const exporting = state.export != null;
@@ -224,7 +226,7 @@ function GridView({ store, scroll, lastViewed }: {
               disabled={exporting || exportable === 0}
               onClick={() => setExportSheet('all')}
             >
-              {exportable > 1 ? `Export all (${exportable})` : 'Export'}
+              {exportable > 1 ? (filtered ? `Export filtered (${exportable})` : `Export all (${exportable})`) : 'Export'}
             </button>
             <HelpButton />
           </>
@@ -290,6 +292,77 @@ function GridView({ store, scroll, lastViewed }: {
           </div>
         </div>
       )}
+      {!selecting && state.photos.length > 0 && (
+        <div className="auto-filters">
+          <span className="auto-filters-label">Filter</span>
+          <select
+            aria-label="Filter by camera"
+            title="Filter by camera"
+            className={state.filter.camera ? 'active' : ''}
+            value={state.filter.camera ?? ''}
+            disabled={exporting || (filterOptions.cameras.length === 0 && !state.filter.camera)}
+            onChange={(e) => store.setFilter({ camera: e.target.value || null })}
+          >
+            <option value="">All cameras</option>
+            {filterOptions.cameras.map((c) => (
+              <option key={c.value} value={c.value}>{c.label} ({c.count})</option>
+            ))}
+          </select>
+          <select
+            aria-label="Filter by lens"
+            title="Filter by lens"
+            className={state.filter.lens ? 'active' : ''}
+            value={state.filter.lens ?? ''}
+            disabled={exporting || (filterOptions.lenses.length === 0 && !state.filter.lens)}
+            onChange={(e) => store.setFilter({ lens: e.target.value || null })}
+          >
+            <option value="">All lenses</option>
+            {filterOptions.lenses.map((l) => (
+              <option key={l.value} value={l.value}>{l.label} ({l.count})</option>
+            ))}
+          </select>
+          <select
+            aria-label="Filter by ISO"
+            title="Filter by ISO"
+            className={state.filter.iso != null ? 'active' : ''}
+            value={state.filter.iso != null ? String(state.filter.iso) : ''}
+            disabled={exporting || (filterOptions.isos.length === 0 && state.filter.iso == null)}
+            onChange={(e) => store.setFilter({ iso: e.target.value ? Number(e.target.value) : null })}
+          >
+            <option value="">All ISOs</option>
+            {filterOptions.isos.map((i) => (
+              <option key={i.value} value={String(i.value)}>{i.label} ({i.count})</option>
+            ))}
+          </select>
+          <select
+            aria-label="Filter by date"
+            title="Filter by shoot date"
+            className={state.filter.date ? 'active' : ''}
+            value={state.filter.date ?? ''}
+            disabled={exporting || (filterOptions.dates.length === 0 && !state.filter.date)}
+            onChange={(e) => store.setFilter({ date: e.target.value || null })}
+          >
+            <option value="">All dates</option>
+            {filterOptions.dates.map((d) => (
+              <option key={d.value} value={d.value}>{d.label} ({d.count})</option>
+            ))}
+          </select>
+          {filtered && (
+            <>
+              <button
+                type="button"
+                className="text clear-filter"
+                title="Clear all filters"
+                disabled={exporting}
+                onClick={() => store.clearFilter()}
+              >
+                Clear filter
+              </button>
+              <span className="filter-count">{photos.length} of {state.photos.length}</span>
+            </>
+          )}
+        </div>
+      )}
       {state.export && (
         <div className="batch-progress">
           <div className="batch-progress-row">
@@ -307,17 +380,26 @@ function GridView({ store, scroll, lastViewed }: {
       )}
       {photos.length === 0 ? (
         <div className="center empty">
-          <p>
-            {state.importMode === 'plain'
-              ? 'Pick photos, e.g. TIFFs finished elsewhere. Each is added as it is, with no automatic edits: apply a preset (just grain, say) or a look yourself.'
-              : state.importMode === 'film'
-                ? 'Pick RAW photos. Each is developed automatically as film, on a suggested stock.'
-                : 'Pick RAW photos. Each is developed automatically and gets a suggested film look.'}
-            {state.importMode !== 'plain' && ' JPEG, HEIC, PNG and TIFF work too, at lower quality.'}
-          </p>
-          <button type="button" className="primary" onClick={add}>Choose photos</button>
-          {driveConfigured() && <button type="button" className="text" onClick={() => void addFromDrive(store)}>Choose from Google Drive</button>}
-          <p>or drop them here.</p>
+          {state.photos.length === 0 ? (
+            <>
+              <p>
+                {state.importMode === 'plain'
+                  ? 'Pick photos, e.g. TIFFs finished elsewhere. Each is added as it is, with no automatic edits: apply a preset (just grain, say) or a look yourself.'
+                  : state.importMode === 'film'
+                    ? 'Pick RAW photos. Each is developed automatically as film, on a suggested stock.'
+                    : 'Pick RAW photos. Each is developed automatically and gets a suggested film look.'}
+                {state.importMode !== 'plain' && ' JPEG, HEIC, PNG and TIFF work too, at lower quality.'}
+              </p>
+              <button type="button" className="primary" onClick={add}>Choose photos</button>
+              {driveConfigured() && <button type="button" className="text" onClick={() => void addFromDrive(store)}>Choose from Google Drive</button>}
+              <p>or drop them here.</p>
+            </>
+          ) : (
+            <>
+              <p>No photos match this filter.</p>
+              <button type="button" className="text" onClick={() => store.clearFilter()}>Clear filter</button>
+            </>
+          )}
         </div>
       ) : (
         <div className="grid auto-grid" ref={gridRef} onScroll={(e) => (scroll.current = e.currentTarget.scrollTop)}>
@@ -342,10 +424,12 @@ function GridView({ store, scroll, lastViewed }: {
       {exportSheet && (
         <ExportSheet
           store={store}
-          count={exportSheet === 'all' ? exportable : photos.filter((p) => p.analysis && exportSheet.has(p.id)).length}
+          count={exportSheet === 'all' ? exportable : state.photos.filter((p) => p.analysis && exportSheet.has(p.id)).length}
           onDismiss={() => setExportSheet(null)}
           onExport={async (destination) => {
-            const ids = exportSheet === 'all' ? undefined : exportSheet;
+            const ids = exportSheet === 'all'
+              ? (filtered ? new Set(photos.map((p) => p.id)) : undefined)
+              : exportSheet;
             setExportSheet(null);
             const folder = await outputFolder(store, destination);
             if (folder === undefined) return;
@@ -566,6 +650,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
   const session = useSyncExternalStore(store.session.subscribe, () => store.session.state);
   const [showAuto, setShowAuto] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
+  const [choosingPreset, setChoosingPreset] = useState(false);
   // Look: the look and the two everyday controls; Adjust: every adjustment (those two again, then the offsets from the auto develop).
   const [tab, setTab] = useState<'Look' | 'Adjust'>('Look');
   const [pickingWhite, setPickingWhite] = useState(false);
@@ -579,7 +664,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
   const analysis = photo?.analysis;
   const loaded = state.sessionReady === id;
   // Photos that can be opened, in grid order.
-  const pages = useMemo(() => state.photos.filter((p) => p.analysis), [state.photos]);
+  const pages = useMemo(() => store.shown.filter((p) => p.analysis), [store, state.photos, state.filter]);
   const index = pages.findIndex((p) => p.id === id);
   const skinMask = session.skin.kind === 'ready' ? session.skin.mask : null;
   const params = useMemo(() => (photo ? paramsOf(photo) : null), [photo]);
@@ -679,6 +764,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
             <div className="name">{EDITS_NAME}</div>
             <div className="info">From the RawBoy tab · the sliders below adjust on top</div>
           </div>
+          <button type="button" className="text" disabled={state.export != null} onClick={() => setChoosingPreset(true)}>Apply preset…</button>
           <button type="button" className="text" disabled={state.export != null} onClick={() => store.removeEdits(photo.id)}>
             Use {photo.preset ? 'the preset' : 'a look'}
           </button>
@@ -689,6 +775,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
             <div className="name">{photo.preset.name}</div>
             <div className="info">RawBoy preset · {groupSummary(photo.preset)}</div>
           </div>
+          <button type="button" className="text" disabled={state.export != null} onClick={() => setChoosingPreset(true)}>Change</button>
           <button type="button" className="text" disabled={state.export != null} onClick={() => store.removePhotoPreset(photo.id)}>Use a look</button>
         </div>
       ) : (
@@ -700,6 +787,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
                 <div className="name">{photo.preset.name}</div>
                 <div className="info">RawBoy preset · {groupSummary(photo.preset)} · on top of the look</div>
               </div>
+              <button type="button" className="text" disabled={state.export != null} onClick={() => setChoosingPreset(true)}>Change</button>
               <button type="button" className="text" disabled={state.export != null} onClick={() => store.removePhotoPreset(photo.id)}>Remove</button>
             </div>
           )}
@@ -769,6 +857,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
           <MoreMenu
             disabled={state.export != null}
             items={[
+              { label: 'Apply RawBoy preset…', onClick: () => setChoosingPreset(true) },
               { label: 'Apply to all', disabled: state.photos.length < 2, onClick: () => store.applyLookToAll(id) },
               { label: 'Edit in RawBoy', onClick: () => onEditInRawBoy(id) },
               { label: 'Remove from batch', onClick: () => store.removeOpened(id) },
@@ -776,6 +865,16 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
           />
         ) : (
           <>
+            <button
+              type="button"
+              className="icon"
+              title="Apply RawBoy preset to this photo"
+              aria-label="Preset"
+              disabled={state.export != null}
+              onClick={() => setChoosingPreset(true)}
+            >
+              <PresetsIcon />
+            </button>
             <button type="button" className="icon" title="Remove from the batch (Delete); the file stays" aria-label="Remove from batch" disabled={state.export != null} onClick={() => store.removeOpened(id)}>
               <DeleteIcon />
             </button>
@@ -803,6 +902,17 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
             const folder = await outputFolder(store, destination);
             if (folder !== undefined) void store.exportSelected(folder);
           }}
+        />
+      )}
+      {choosingPreset && (
+        <PresetPicker
+          store={store}
+          count={1}
+          onPick={(p) => {
+            setChoosingPreset(false);
+            store.applyPresetTo(p, new Set([id]));
+          }}
+          onDismiss={() => setChoosingPreset(false)}
         />
       )}
       <div className={`workspace auto${pickingWhite ? ' picking-white' : ''}`}>

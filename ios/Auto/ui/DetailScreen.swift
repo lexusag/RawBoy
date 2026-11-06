@@ -6,6 +6,7 @@ struct DetailScreen: View {
     @ObservedObject var vm: AutoViewModel
     @ObservedObject var session: PhotoSession
     let id: String
+    var pickPreset: ((Set<String>) -> Void)? = nil
 
     /** Look: the look and the two everyday controls; Adjust: every adjustment (those two again, then the offsets from the auto develop). Kept across photos. */
     @AppStorage("auto.detailTab") private var tab = 0
@@ -31,6 +32,9 @@ struct DetailScreen: View {
                                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                             }
                             Spacer()
+                            if let pickPreset {
+                                Button("Change") { pickPreset([photo.id]) }.disabled(vm.export != nil)
+                            }
                             Button("Use a look") { vm.removePhotoPreset(photo.id) }.disabled(vm.export != nil)
                         }
                         .padding(.horizontal, 12)
@@ -179,6 +183,10 @@ struct DetailScreen: View {
         ToolbarItemGroup(placement: .topBarTrailing) {
             // Apply to all and Remove share a menu: the bar is full on phones and the name needs the room.
             Menu {
+                if let pickPreset {
+                    Button("Apply RawBoy preset…") { pickPreset([id]) }
+                        .disabled(vm.export != nil)
+                }
                 Button("Apply to all") { vm.applyLookToAll(id) }
                     .disabled(vm.export != nil || vm.photos.count < 2)
                 Button("Remove from batch", systemImage: "trash") { vm.removeOpened(id) }

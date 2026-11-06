@@ -29,7 +29,7 @@ import { EditHistory } from '../common/EditHistory';
 import { imageUrl, saveExports, savesToPhotos, type OutputFolder } from '../common/files';
 import type { EditsSidecar } from '../../engine/browse/XmpSidecar';
 import { findCaptureDate } from '../../engine/browse/CaptureDate';
-import { fileDate, saveSort, savedSort, sortPhotos, type PhotoSort } from '../../engine/auto/PhotoOrder';
+import { compareNames, fileDate, saveSort, savedSort, sortPhotos, type PhotoSort } from '../../engine/auto/PhotoOrder';
 import { decodeAuto, encodeAuto } from './AutoSidecar';
 import { AnalysisCache } from './AnalysisCache';
 import { PreviewCache } from './PreviewCache';
@@ -42,6 +42,94 @@ export type LookMode = 'looks' | 'film';
 
 /** How photos are added: in a look mode, or "As is" (plain): no auto develop and no look, only what the user applies. */
 export type ImportMode = LookMode | 'plain';
+
+/** Metadata filter criteria for Auto's grid. */
+export interface AutoFilter {
+  camera: string | null;
+  lens: string | null;
+  iso: number | null;
+  date: string | null;
+}
+
+export const NO_FILTER: AutoFilter = {
+  camera: null,
+  lens: null,
+  iso: null,
+  date: null,
+};
+
+export const isFilterActive = (f: AutoFilter): boolean =>
+  f.camera !== null || f.lens !== null || f.iso !== null || f.date !== null;
+
+export function photoCamera(p: AutoPhoto): string | null {
+  if (!p.analysis) return null;
+  return p.analysis.camera?.trim() || 'Unknown camera';
+}
+
+export function photoLens(p: AutoPhoto): string | null {
+  if (!p.analysis) return null;
+  return p.analysis.lens?.lensName?.trim() || 'Unknown lens';
+}
+
+export function photoIso(p: AutoPhoto): number | null {
+  if (!p.analysis) return null;
+  const iso = p.analysis.stats?.iso;
+  return iso != null && iso > 0 ? Math.round(iso) : null;
+}
+
+export function photoDate(p: AutoPhoto): string | null {
+  const d = p.date?.trim();
+  return d ? d.slice(0, 10).replace(/:/g, '-') : null;
+}
+
+export function photoMatchesFilter(p: AutoPhoto, filter: AutoFilter): boolean {
+  if (filter.camera !== null && photoCamera(p) !== filter.camera) return false;
+  if (filter.lens !== null && photoLens(p) !== filter.lens) return false;
+  if (filter.iso !== null && photoIso(p) !== filter.iso) return false;
+  if (filter.date !== null && photoDate(p) !== filter.date) return false;
+  return true;
+}
+
+export interface FilterOption<T> {
+  value: T;
+  label: string;
+  count: number;
+}
+
+export interface AvailableFilters {
+  cameras: FilterOption<string>[];
+  lenses: FilterOption<string>[];
+  isos: FilterOption<number>[];
+  dates: FilterOption<string>[];
+}
+
+export function availableFilterOptions(photos: readonly AutoPhoto[]): AvailableFilters {
+  const cameras = new Map<string, number>();
+  const lenses = new Map<string, number>();
+  const isos = new Map<number, number>();
+  const dates = new Map<string, number>();
+
+  for (const p of photos) {
+    const c = photoCamera(p);
+    if (c) cameras.set(c, (cameras.get(c) ?? 0) + 1);
+
+    const l = photoLens(p);
+    if (l) lenses.set(l, (lenses.get(l) ?? 0) + 1);
+
+    const iso = photoIso(p);
+    if (iso != null) isos.set(iso, (isos.get(iso) ?? 0) + 1);
+
+    const d = photoDate(p);
+    if (d) dates.set(d, (dates.get(d) ?? 0) + 1);
+  }
+
+  return {
+    cameras: [...cameras.entries()].map(([value, count]) => ({ value, label: value, count })).sort((a, b) => compareNames(a.value, b.value)),
+    lenses: [...lenses.entries()].map(([value, count]) => ({ value, label: value, count })).sort((a, b) => compareNames(a.value, b.value)),
+    isos: [...isos.entries()].map(([value, count]) => ({ value, label: `ISO ${value}`, count })).sort((a, b) => a.value - b.value),
+    dates: [...dates.entries()].map(([value, count]) => ({ value, label: value, count })).sort((a, b) => a.value.localeCompare(b.value)),
+  };
+}
 
 /**
  * One photo of the batch (port of AutoPhoto). Only small whole-image copies are kept; the full-resolution raw is
@@ -205,6 +293,7 @@ const LOOK_THUMBNAIL = 192;
 
 export interface AutoState {
   photos: AutoPhoto[];
+  filter: AutoFilter;
   export: BatchExport | null;
   message: string | null;
   /** Photo shown in the detail view, or null for the grid. */
@@ -277,7 +366,7 @@ class Lock {
 
 /** RawBoy Auto's batch, look and export logic (port of AutoViewModel.kt). */
 export class AutoStore {
-  private _state: AutoState = { photos: [], export: null, message: null, selected: null, sessionReady: null, cachedPreview: null, importMode: savedImportMode(), sort: savedSort(SORT_KEY),
+  private _state: AutoState = { photos: [], filter: NO_FILTER, export: null, message: null, selected: null, sessionReady: null, cachedPreview: null, importMode: savedImportMode(), sort: savedSort(SORT_KEY),
     exportSettings: savedExportSettings(), preset: null, lensPresets: PresetStore.load().filter(isLensPreset), lensChoice: null, frameColor: savedFrame(),
     opening: null };
   /**
@@ -398,6 +487,23 @@ export class AutoStore {
   setSort(sort: PhotoSort) {
     saveSort(SORT_KEY, sort);
     this.update({ sort, photos: sortPhotos(this._state.photos, sort) });
+  }
+
+  /** Photos passing the active metadata filter, in batch order. */
+  get shown(): AutoPhoto[] {
+    const { photos, filter } = this._state;
+    if (!isFilterActive(filter)) return photos;
+    return photos.filter((p) => photoMatchesFilter(p, filter));
+  }
+
+  /** Updates the active metadata filter in the grid. */
+  setFilter(filter: Partial<AutoFilter>) {
+    this.update({ filter: { ...this._state.filter, ...filter } });
+  }
+
+  /** Resets the metadata filter back to all photos. */
+  clearFilter() {
+    this.update({ filter: NO_FILTER });
   }
 
   /** Gives photo [id] the settings kept in its sidecar, if any (they count as given, so analysis keeps the look). */
@@ -694,7 +800,7 @@ export class AutoStore {
   removeOpened(id: string) {
     const p = this.photo(id);
     if (!p || this._state.export) return;
-    const pages = this._state.photos.filter((q) => q.analysis);
+    const pages = this.shown.filter((q) => q.analysis);
     const index = pages.findIndex((q) => q.id === id);
     const next = index < 0 ? undefined : pages[index + 1] ?? pages[index - 1];
     this.remove(new Set([id]));
@@ -873,7 +979,7 @@ export class AutoStore {
 
   /** The analysed photo before [id] in the batch (the one Backspace goes back to), for "Copy previous". */
   previousPhoto(id: string): AutoPhoto | null {
-    const pages = this._state.photos.filter((p) => p.analysis);
+    const pages = this.shown.filter((p) => p.analysis);
     const index = pages.findIndex((p) => p.id === id);
     return index > 0 ? pages[index - 1] : null;
   }

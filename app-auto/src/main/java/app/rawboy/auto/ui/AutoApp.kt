@@ -73,7 +73,7 @@ fun AutoApp(vm: AutoViewModel) {
     val id = selected
     if (id != null) {
         BackHandler { vm.closeDetail() }
-        DetailScreen(vm, id, snackbar)
+        DetailScreen(vm, id, snackbar, pickPreset)
     } else {
         GridScreen(vm, snackbar, pickPhotos, pickPreset)
     }

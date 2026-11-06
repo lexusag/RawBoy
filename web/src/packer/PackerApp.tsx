@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { RAW_ACCEPT, canPickFolder, canPickOutputFolder, isRawFileName, pickFiles, pickFolderFiles, pickOutputFolder, readDroppedFiles } from '../ui/common/files';
-import { groupByFolder, PackerStore, type PackItem } from './PackerStore';
+import { folderStatusSummary, groupByFolder, PackerStore, type FolderGroup, type PackItem } from './PackerStore';
 import type { PackFormat, PackInfo } from './protocol';
 import { ItemThumbnail, releaseThumbnail } from './ItemThumbnail';
 import { PreviewModal } from './PreviewModal';
@@ -132,10 +132,33 @@ export function PackerApp() {
 
   const [previewId, setPreviewId] = useState<number | null>(null);
 
+  const groups = useMemo(() => groupByFolder(state.items), [state.items]);
+  const hasFolders = useMemo(() => groups.some((g) => g.folder != null), [groups]);
   // Follow folder group presentation order so prev/next navigation matches visual queue order
-  const orderedItems = useMemo(() => groupByFolder(state.items).flatMap((g) => g.items), [state.items]);
+  const orderedItems = useMemo(() => groups.flatMap((g) => g.items), [groups]);
   const previewItem = previewId !== null ? state.items.find((it) => it.id === previewId) ?? null : null;
   const previewIndex = previewItem ? orderedItems.findIndex((it) => it.id === previewItem.id) : -1;
+
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(() => new Set());
+  const folderKeys = useMemo(() => (hasFolders ? groups.map((g) => g.folder ?? ':loose:') : []), [hasFolders, groups]);
+  const allCollapsed = folderKeys.length > 0 && folderKeys.every((k) => collapsedFolders.has(k));
+
+  const toggleFolder = (key: string) => {
+    setCollapsedFolders((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const collapseAll = () => {
+    setCollapsedFolders(new Set(folderKeys));
+  };
+
+  const expandAll = () => {
+    setCollapsedFolders(new Set());
+  };
 
   const removeItem = (id: number) => {
     const it = state.items.find((item) => item.id === id);
@@ -153,6 +176,13 @@ export function PackerApp() {
       }
     }
     store.removeFolder(folder);
+    const key = folder ?? ':loose:';
+    setCollapsedFolders((prev) => {
+      if (!prev.has(key)) return prev;
+      const next = new Set(prev);
+      next.delete(key);
+      return next;
+    });
   };
 
   const clearDone = () => {
@@ -419,6 +449,16 @@ export function PackerApp() {
               </button>
             )}
             <span className="spacer" />
+            {hasFolders && (
+              <button
+                type="button"
+                className="text"
+                onClick={allCollapsed ? expandAll : collapseAll}
+                title={allCollapsed ? 'Expand all folders' : 'Collapse all folders'}
+              >
+                {allCollapsed ? 'Expand all' : 'Collapse all'}
+              </button>
+            )}
             <button
               className="text"
               onClick={clearDone}
@@ -459,8 +499,11 @@ export function PackerApp() {
           ) : (
             <>
               <QueueView
-                items={state.items}
+                groups={groups}
+                hasFolders={hasFolders}
                 running={state.running}
+                collapsedFolders={collapsedFolders}
+                onToggleFolder={toggleFolder}
                 onRemove={removeItem}
                 onRemoveFolder={removeFolder}
                 onPreview={(item) => setPreviewId(item.id)}
@@ -589,37 +632,57 @@ function rawDetails(i: PackInfo): { parts: string[]; title: string } {
 const mb = (bytes: number) => `${(bytes / 1e6).toFixed(bytes < 10e6 ? 1 : 0)} MB`;
 
 function QueueView({
-  items,
+  groups,
+  hasFolders,
   running,
+  collapsedFolders,
+  onToggleFolder,
   onRemove,
   onRemoveFolder,
   onPreview,
 }: {
-  items: PackItem[];
+  groups: FolderGroup[];
+  hasFolders: boolean;
   running: boolean;
+  collapsedFolders: Set<string>;
+  onToggleFolder: (key: string) => void;
   onRemove: (id: number) => void;
   onRemoveFolder: (folder: string | null | undefined) => void;
   onPreview: (item: PackItem) => void;
 }) {
-  const groups = useMemo(() => groupByFolder(items), [items]);
-  const hasFolders = groups.some((g) => g.folder != null);
-
   return (
     <div className="packer-queue">
-      {groups.map((group) => {
-        const key = group.folder === null ? ':loose:' : `dir:${group.folder}`;
+      {groups.map((group, groupIndex) => {
+        const groupKey = group.folder === null ? ':loose:' : group.folder;
         const folderName = group.folder ?? 'Other files';
+        const isCollapsed = hasFolders && collapsedFolders.has(groupKey);
+        const listId = `packer-group-${groupIndex}`;
+        const statusSummary = isCollapsed ? folderStatusSummary(group.items) : null;
+
         return (
-          <div key={key} className="packer-folder-group">
+          <div key={groupKey} className={`packer-folder-group${isCollapsed ? ' collapsed' : ''}`}>
             {hasFolders && (
               <div className="packer-folder-header">
-                <span className="packer-folder-title">
+                <button
+                  type="button"
+                  className="packer-folder-toggle"
+                  onClick={() => onToggleFolder(groupKey)}
+                  aria-expanded={!isCollapsed}
+                  aria-controls={listId}
+                  aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} folder ${folderName}`}
+                >
+                  <ChevronIcon collapsed={isCollapsed} />
                   {group.folder ? <FolderIcon /> : <FilesIcon />}
                   <span className="packer-folder-name" title={folderName}>
                     {folderName}
                   </span>
                   <span className="packer-folder-count">({group.items.length})</span>
-                </span>
+                  {statusSummary && (
+                    <span className={`packer-folder-status ${statusSummary.kind}`}>
+                      {statusSummary.text}
+                    </span>
+                  )}
+                </button>
                 <button
                   type="button"
                   className="packer-folder-remove text"
@@ -632,15 +695,36 @@ function QueueView({
                 </button>
               </div>
             )}
-            <ul className="packer-list">
-              {group.items.map((it) => (
-                <FileRow key={it.id} item={it} onRemove={() => onRemove(it.id)} onPreview={() => onPreview(it)} busy={running} />
-              ))}
-            </ul>
+            {!isCollapsed && (
+              <ul id={listId} className="packer-list">
+                {group.items.map((it) => (
+                  <FileRow key={it.id} item={it} onRemove={() => onRemove(it.id)} onPreview={() => onPreview(it)} busy={running} />
+                ))}
+              </ul>
+            )}
           </div>
         );
       })}
     </div>
+  );
+}
+
+function ChevronIcon({ collapsed }: { collapsed: boolean }) {
+  return (
+    <svg
+      className={`packer-chevron-icon${collapsed ? ' collapsed' : ''}`}
+      width={14}
+      height={14}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2.5}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M6 9l6 6 6-6" />
+    </svg>
   );
 }
 

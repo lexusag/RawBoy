@@ -51,6 +51,7 @@ export const AUTO_HELP: HelpSection[] = [
       { how: 'Pick white balance', text: 'Adjust tab: click something neutral grey and Warmth and Tint make it grey.' },
       { how: 'Apply to all', text: 'Copies the look and its settings to every photo (brightness and denoise stay per photo).' },
       { keys: ['C'], how: 'Copy previous', text: 'Gives this photo the look, brightness and settings of the photo before it (denoise stays).' },
+      { how: 'Apply RawBoy preset… (top bar / ⋯)', text: 'Develop this photo with a RawBoy preset instead of its look (from your RawBoy tab presets, or a preset file).' },
       { how: 'Edit in RawBoy', text: 'Opens the photo in the RawBoy tab with this look as the starting edits. Back to Auto there brings it back with your RawBoy edits (crop, masks, lens blur and light leaks too, in Export all as well), the sliders here adjust on top, and Use a look drops them.' },
     ],
   },

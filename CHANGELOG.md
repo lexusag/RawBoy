@@ -1,9 +1,40 @@
 # Changelog
 
-**RawBoy Auto: white balance picker on the Adjust tab (2026-11-05)**
+**RawBoy Auto: white balance picker on the Adjust tab (2026-11-06)**
 
 - "Pick white balance" button on the Adjust tab (Android, iOS and web), like RawBoy Pro's eyedropper.
 - Tapping or clicking a neutral grey spot in the photo sets Warmth and Tint so that spot renders grey, with messages when the sampled spot is clipped or not neutral.
+
+**RawBoy Packer: collapse and expand folders in the queue (2026-11-06)**
+
+- Folders in the queue can now be collapsed and expanded individually by clicking their header.
+- When collapsed, the folder header displays live packing progress (packing, done, failed) alongside the file count.
+- An "Expand all" / "Collapse all" action in the files bar expands or collapses all folder groups together.
+
+**RawBoy Pro: Auto WB with draggable rectangle and reset WB button (2026-11-06)**
+
+- Color tab: added an "Auto WB" button next to "Pick white balance" that displays a draggable, extendable rectangle over the preview and calculates white balance from the selected area.
+- Added a "Reset WB" button to quickly revert temperature and tint back to as-shot defaults.
+
+**RawBoy Auto (web): filter grid by camera, lens, ISO and shoot date (2026-11-06)**
+
+- Added a metadata filter bar above the Auto grid with dropdowns for Camera, Lens, ISO, and Shoot date, each displaying the count of matching photos in the batch.
+- Filters work individually or combined; the grid, detail view photo navigation (arrow keys, Space, Backspace, and ‹ › buttons), and batch export show and export only the filtered photos.
+- Added a "Clear filter" button to reset filters back to the full batch, and an empty state when no photos match the active filters.
+
+**RawBoy Browser (web): force real previews instead of embedded (2026-11-05)**
+
+- Added a "Real preview" button in the photo viewer (and an "R" keyboard shortcut) to force developing the raw photo as shot using RawBoy's engine instead of showing the camera's embedded JPEG preview.
+- Added a "Real previews" toggle in the grid filter bar, remembered across sessions in browser storage.
+
+**RawBoy: scroll film stocks with mouse wheel (2026-11-05)**
+
+- Hovering over the Film button or the stock picker in RawBoy Pro (web) now scrolls through film stocks with the mouse wheel without clicking. A wheel already scrolling the controls panel leaves it alone.
+
+**RawBoy Auto: apply presets in photo view (2026-11-05)**
+
+- In the photo view, presets can now be applied directly to the opened photo alone via "Apply RawBoy preset…" in the ⋮/…/⋯ menu (or the Preset button in the top bar on desktop).
+- When a preset is already active on the photo, a "Change" button allows choosing a different preset directly from the Look panel.
 
 **RawBoy Auto: clear Saved badges on export, lower contrast while waiting (2026-11-03)**
 

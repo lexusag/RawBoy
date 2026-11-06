@@ -66,6 +66,9 @@ compression, colour filter (Bayer, X-Trans, or linear for demosaiced DNGs) and m
 - DNGs: uncompressed, lossless JPEG, lossy JPEG, Deflate, or JPEG XL (lossless when JXLDistance is 0, lossy when it is
   set higher, plain "JPEG XL" when the file doesn't say).
 
+When adding folders, files are grouped by folder. Each folder can be collapsed and expanded individually by clicking its
+header (which shows progress and status when collapsed), and all folders can be expanded or collapsed together.
+
 ## Other settings
 
 - **Location**: keep or remove GPS tags.
