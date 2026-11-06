@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../ui/common/files', () => ({ localFolder: vi.fn(), saveBlob: vi.fn() }));
 
-import { folderOf, groupByFolder, PackerStore } from './PackerStore';
+import { folderOf, folderStatusSummary, groupByFolder, PackerStore, type PackItem } from './PackerStore';
 import { DEFAULT_SETTINGS } from './settings';
 
 const info = (format: string) => ({ make: 'Fuji', model: 'X', format }) as unknown;
@@ -183,5 +183,38 @@ describe('PackerStore', () => {
     expect(groups).toHaveLength(2);
     expect(groups[0].folder).toBe('A/DCIM');
     expect(groups[1].folder).toBe('B/DCIM');
+  });
+
+  describe('folderStatusSummary', () => {
+    const makeItem = (id: number, status: PackItem['status']): PackItem => ({
+      id,
+      file: file(`photo${id}.raf`),
+      status,
+    });
+
+    it('returns null when items list is empty or items are in initial states', () => {
+      expect(folderStatusSummary([])).toBeNull();
+      expect(folderStatusSummary([makeItem(1, 'ready'), makeItem(2, 'inspecting'), makeItem(3, 'waiting')])).toBeNull();
+    });
+
+    it('reports packing status as busy', () => {
+      const summary = folderStatusSummary([makeItem(1, 'packing'), makeItem(2, 'done'), makeItem(3, 'waiting')]);
+      expect(summary).toEqual({ text: '1 packing… · 1 done', kind: 'busy' });
+    });
+
+    it('reports error status', () => {
+      const summary = folderStatusSummary([makeItem(1, 'error'), makeItem(2, 'done'), makeItem(3, 'ready')]);
+      expect(summary).toEqual({ text: '1 failed · 1 done', kind: 'error' });
+    });
+
+    it('reports all done when every file is finished', () => {
+      const summary = folderStatusSummary([makeItem(1, 'done'), makeItem(2, 'done')]);
+      expect(summary).toEqual({ text: 'all done', kind: 'done' });
+    });
+
+    it('reports partial done count when some files are finished and none active or failed', () => {
+      const summary = folderStatusSummary([makeItem(1, 'done'), makeItem(2, 'ready')]);
+      expect(summary).toEqual({ text: '1 of 2 done', kind: 'done' });
+    });
   });
 });

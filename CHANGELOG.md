@@ -1,5 +1,11 @@
 # Changelog
 
+**RawBoy Packer: collapse and expand folders in the queue (2026-11-06)**
+
+- Folders in the queue can now be collapsed and expanded individually by clicking their header.
+- When collapsed, the folder header displays live packing progress (packing, done, failed) alongside the file count.
+- An "Expand all" / "Collapse all" action in the files bar expands or collapses all folder groups together.
+
 **RawBoy Pro: Auto WB with draggable rectangle and reset WB button (2026-11-06)**
 
 - Color tab: added an "Auto WB" button next to "Pick white balance" that displays a draggable, extendable rectangle over the preview and calculates white balance from the selected area.
