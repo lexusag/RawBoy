@@ -1738,8 +1738,9 @@ select {
   }
 }
 
-/* The crop frame and mask handles take presses on their handles; elsewhere they reach the preview. */
+/* The crop frame, Auto WB rectangle and mask handles take presses on their handles; elsewhere they reach the preview. */
 .preview .overlay.crop-overlay,
+.preview .overlay.auto-wb-overlay,
 .preview .overlay.mask-overlay {
   pointer-events: auto;
   touch-action: none;

@@ -209,6 +209,23 @@ export class ProStore {
     else this.set({ message: 'No white balance makes that spot grey' });
   };
 
+  /** Auto white balance for an area of the photo, setting temperature and tint. */
+  autoWhiteBalance = (rect: CropRect, force = false) => {
+    const s = this._state;
+    if (!this.hasImage || this.busy) return;
+    const pick = this.session.autoWhite(rect, s.defaults);
+    if (!pick) return;
+    if (pick.kind === 'white') this.commit({ ...s.params, temperature: pick.kelvin, tint: pick.tint }, force);
+    else if (pick.kind === 'clipped') this.set({ message: "That region is blown out: pick an area that isn't clipped" });
+    else this.set({ message: 'No white balance makes that area grey' });
+  };
+
+  /** Resets white balance (temperature and tint) back to the as-shot defaults. */
+  resetWhiteBalance = () => {
+    const d = this._state.defaults;
+    this.commit({ ...this._state.params, temperature: d.temperature, tint: d.tint }, true);
+  };
+
   /** [extra]: device pixels around the frame in the fit view (the mask tool's margin). */
   toggleZoom = (x: number, y: number, extra = 0) => this.session.toggleZoom(x, y, this.frameWidth + extra);
   pan = (dx: number, dy: number) => this.session.pan(dx, dy);
