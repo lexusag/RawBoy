@@ -5,13 +5,13 @@
 - Added the "(?)" help button to RawBoy Packer's header (and shortcut `Ctrl+/` / `⌘/`), opening the help sheet like in the other RawBoy apps.
 - The help sheet covers Packer basics, formats and compatibility round-trip, queue and folder management, photo preview shortcuts, and advanced settings.
 - Displays the app version (release, commit, and build time via `versionLabel()`), engine status (`LibRaw + Adobe DNG SDK`), and links to Open-source Licences, About, and Privacy.
-- Flare threshold doubled (one EV above bloom's knee) so dimmer zones flare less; smoother needle and wing cross-profiles.
 
 **RawBoy Pro: fake anamorphic lens flares (2026-11-06)**
 
 - Detail tab: added fake anamorphic lens flare slider (0–100, off by default) with Neutral, Blue, and Golden coating tint options across Android, iOS, and Web.
 - Optical model scatters horizontal streaks from highlight-boosted light sources across the framed photo (remaining horizontal under rotation and straightening, and unchanged by crop).
 - Continuous bilinear taps along and across the streak (no texel snapping) keep the flare smooth instead of blocky and free of beading.
+- Flare threshold doubled (one EV above bloom's knee) so dimmer zones flare less; smoother needle and wing cross-profiles.
 - Presets and sidecars: saved under the Detail preset group and carries over between photos.
 
 **RawBoy Pro: anamorphic lens distortion and adjustable crop (2026-11-06)**
