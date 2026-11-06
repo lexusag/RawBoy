@@ -23,9 +23,15 @@ keystore.properties
 # local stuff
 .logo/
 
-# Python bytecode
+# Node / Vite / Vitest
+node_modules/
+.vite/
+.vitest-cache/
+
+# Python
 __pycache__/
 *.pyc
+.venv/
 
 # impeccable-ignore-start
 # Ephemeral output, runtime state, and per-dev overrides.
