@@ -132,7 +132,7 @@ export function PackerApp() {
 
   const [previewId, setPreviewId] = useState<number | null>(null);
 
-  const groups = useMemo(() => groupByFolder(state.items), [state.items]);
+  const groups = useMemo(() => groupByFolder(state.items, state.sort), [state.items, state.sort]);
   const hasFolders = useMemo(() => groups.some((g) => g.folder != null), [groups]);
   // Follow folder group presentation order so prev/next navigation matches visual queue order
   const orderedItems = useMemo(() => groups.flatMap((g) => g.items), [groups]);
@@ -449,6 +449,17 @@ export function PackerApp() {
               </button>
             )}
             <span className="spacer" />
+            {state.items.length > 0 && (
+              <button
+                type="button"
+                className="text"
+                disabled={state.running}
+                title={state.sort === 'date' ? 'Photos in the order they were shot. Click to sort by file name.' : 'Photos by file name. Click to sort by shoot date.'}
+                onClick={() => store.setSort(state.sort === 'date' ? 'name' : 'date')}
+              >
+                Sort: {state.sort === 'date' ? 'Shoot date' : 'File name'}
+              </button>
+            )}
             {hasFolders && (
               <button
                 type="button"
