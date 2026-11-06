@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { DEFAULT_PRESET_GROUPS, PRESET_GROUPS, presetSections, type Preset, type PresetGroup } from '../../engine/develop/Presets';
 import { pickFiles } from '../common/files';
 import { Note, SectionLabel } from './Controls';
@@ -10,6 +10,7 @@ export interface PresetActions {
   update: (p: Preset) => void;
   rename: (p: Preset, name: string) => void;
   delete: (p: Preset) => void;
+  deleteBatch?: (list: Preset[]) => void;
   export: (list: Preset[]) => void;
   import: (file: File) => void;
 }
@@ -30,27 +31,119 @@ export function PresetsPanel({ presets, actions, onDone, hasStrokes = false }: {
   const [saving, setSaving] = useState(false);
   const [renaming, setRenaming] = useState<Preset | null>(null);
   const [menu, setMenu] = useState<string | null>(null);
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const ids = new Set(presets.map((p) => p.id));
+    setSelected((prev) => {
+      let changed = false;
+      for (const id of prev) {
+        if (!ids.has(id)) {
+          changed = true;
+          break;
+        }
+      }
+      if (!changed) return prev;
+      const next = new Set<string>();
+      for (const id of prev) if (ids.has(id)) next.add(id);
+      return next;
+    });
+    if (presets.length === 0) setSelecting(false);
+  }, [presets]);
 
   const importFile = async () => {
     const [file] = await pickFiles(false, '.json,application/json');
     if (file) actions.import(file);
   };
 
+  const toggleSelect = (id: string) => {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSelected(next);
+  };
+
   return (
     <div className="controls geometry presets">
-      <div className="geometry-head">
-        <strong>Presets</strong>
-        <button type="button" className="text" onClick={onDone}>
-          Done
-        </button>
-      </div>
-      <div className="button-row">
-        <button type="button" onClick={() => setSaving(true)}>Save current…</button>
-        <button type="button" className="text" onClick={importFile}>Import</button>
-        <button type="button" className="text" onClick={() => actions.export(presets)} disabled={presets.length === 0}>
-          Export all
-        </button>
-      </div>
+      {selecting ? (
+        <>
+          <div className="geometry-head">
+            <strong>{selected.size === 0 ? 'Select presets' : `${selected.size} selected`}</strong>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <button
+                type="button"
+                className="text"
+                onClick={() => setSelected(selected.size === presets.length ? new Set() : new Set(presets.map((p) => p.id)))}
+              >
+                {selected.size === presets.length ? 'Deselect all' : 'Select all'}
+              </button>
+              <button
+                type="button"
+                className="text"
+                onClick={() => {
+                  setSelecting(false);
+                  setSelected(new Set());
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+          <div className="button-row">
+            <button
+              type="button"
+              disabled={selected.size === 0}
+              onClick={() => {
+                const target = presets.filter((p) => selected.has(p.id));
+                const count = target.length;
+                if (count === 0) return;
+                if (window.confirm(count === 1 ? `Delete “${target[0].name}”?` : `Delete ${count} presets?`)) {
+                  if (actions.deleteBatch) {
+                    actions.deleteBatch(target);
+                  } else {
+                    target.forEach((p) => actions.delete(p));
+                  }
+                  setSelecting(false);
+                  setSelected(new Set());
+                }
+              }}
+            >
+              Delete selected{selected.size > 0 ? ` (${selected.size})` : ''}
+            </button>
+            <button
+              type="button"
+              className="text"
+              disabled={selected.size === 0}
+              onClick={() => actions.export(presets.filter((p) => selected.has(p.id)))}
+            >
+              Export selected
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="geometry-head">
+            <strong>Presets</strong>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              {presets.length > 0 && (
+                <button type="button" className="text" onClick={() => setSelecting(true)}>
+                  Select
+                </button>
+              )}
+              <button type="button" className="text" onClick={onDone}>
+                Done
+              </button>
+            </div>
+          </div>
+          <div className="button-row">
+            <button type="button" onClick={() => setSaving(true)}>Save current…</button>
+            <button type="button" className="text" onClick={importFile}>Import</button>
+            <button type="button" className="text" onClick={() => actions.export(presets)} disabled={presets.length === 0}>
+              Export all
+            </button>
+          </div>
+        </>
+      )}
       {presets.length === 0 && (
         <Note>
           No presets yet. Save the current edits (any groups of sliders) to reuse them on other photos. Rotation, flips, straightening and crop are never
@@ -62,29 +155,44 @@ export function PresetsPanel({ presets, actions, onDone, hasStrokes = false }: {
           {section.label && <SectionLabel>{section.label}</SectionLabel>}
           {section.presets.map((p) => (
             <div key={p.id} className="preset-row">
-              <button type="button" className="preset-apply" onClick={() => actions.apply(p)} title="Apply">
+              {selecting && (
+                <input
+                  type="checkbox"
+                  checked={selected.has(p.id)}
+                  onChange={() => toggleSelect(p.id)}
+                  style={{ marginRight: '8px' }}
+                />
+              )}
+              <button
+                type="button"
+                className="preset-apply"
+                onClick={() => (selecting ? toggleSelect(p.id) : actions.apply(p))}
+                title={selecting ? 'Toggle selection' : 'Apply'}
+              >
                 <span className="preset-name">{p.name}</span>
                 <span className="preset-groups">{groupSummary(p)}</span>
               </button>
-              <div className="preset-menu">
-                <button type="button" className="icon" title="Preset options" onClick={() => setMenu(menu === p.id ? null : p.id)}>⋮</button>
-                {menu === p.id && (
-                  <div className="menu" onMouseLeave={() => setMenu(null)}>
-                    <button type="button" onClick={() => { setMenu(null); actions.update(p); }}>Update from current</button>
-                    <button type="button" onClick={() => { setMenu(null); setRenaming(p); }}>Rename</button>
-                    <button type="button" onClick={() => { setMenu(null); actions.export([p]); }}>Export</button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setMenu(null);
-                        if (window.confirm(`Delete “${p.name}”?`)) actions.delete(p);
-                      }}
-                    >
-                      Delete
-                    </button>
-                  </div>
-                )}
-              </div>
+              {!selecting && (
+                <div className="preset-menu">
+                  <button type="button" className="icon" title="Preset options" onClick={() => setMenu(menu === p.id ? null : p.id)}>⋮</button>
+                  {menu === p.id && (
+                    <div className="menu" onMouseLeave={() => setMenu(null)}>
+                      <button type="button" onClick={() => { setMenu(null); actions.update(p); }}>Update from current</button>
+                      <button type="button" onClick={() => { setMenu(null); setRenaming(p); }}>Rename</button>
+                      <button type="button" onClick={() => { setMenu(null); actions.export([p]); }}>Export</button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMenu(null);
+                          if (window.confirm(`Delete “${p.name}”?`)) actions.delete(p);
+                        }}
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>

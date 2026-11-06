@@ -16,20 +16,52 @@ struct PresetsPanel: View {
     @State private var renaming: Preset?
     @State private var renameText = ""
     @State private var deleting: Preset?
+    @State private var deletingBatch = false
+    @State private var selecting = false
+    @State private var selected = Set<String>()
     @State private var importing = false
     @State private var sharing: URL?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack {
-                Text("Presets").font(.headline)
-                Spacer()
-                Button("Done", action: onDone).fontWeight(.semibold)
-            }
-            HStack(spacing: 12) {
-                Button("Save current…") { saving = true }.buttonStyle(.bordered)
-                Button("Import") { importing = true }
-                Button("Export all") { sharing = vm.presetFile(vm.presets) }.disabled(vm.presets.isEmpty)
+            if selecting {
+                HStack {
+                    Button("Cancel") {
+                        selecting = false
+                        selected.removeAll()
+                    }
+                    Spacer()
+                    Text(selected.isEmpty ? "Select presets" : "\(selected.count) selected").font(.headline)
+                    Spacer()
+                    Button(selected.count == vm.presets.count ? "Deselect" : "All") {
+                        selected = selected.count == vm.presets.count ? [] : Set(vm.presets.map(\.id))
+                    }
+                    Button(role: .destructive) { deletingBatch = true } label: {
+                        Image(systemName: "trash")
+                    }
+                    .disabled(selected.isEmpty)
+                }
+                if !selected.isEmpty {
+                    HStack(spacing: 12) {
+                        Button("Export selected") {
+                            sharing = vm.presetFile(vm.presets.filter { selected.contains($0.id) })
+                        }
+                    }
+                }
+            } else {
+                HStack {
+                    Text("Presets").font(.headline)
+                    Spacer()
+                    if !vm.presets.isEmpty {
+                        Button("Select") { selecting = true }
+                    }
+                    Button("Done", action: onDone).fontWeight(.semibold)
+                }
+                HStack(spacing: 12) {
+                    Button("Save current…") { saving = true }.buttonStyle(.bordered)
+                    Button("Import") { importing = true }
+                    Button("Export all") { sharing = vm.presetFile(vm.presets) }.disabled(vm.presets.isEmpty)
+                }
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
@@ -58,6 +90,23 @@ struct PresetsPanel: View {
             Button("Delete", role: .destructive) { if let p = deleting { vm.deletePreset(p.id) } }
             Button("Cancel", role: .cancel) {}
         }
+        .alert(
+            selected.count == 1
+                ? "Delete “\(vm.presets.first { selected.contains($0.id) }?.name ?? "preset")”?"
+                : "Delete \(selected.count) presets?",
+            isPresented: $deletingBatch
+        ) {
+            Button("Delete", role: .destructive) {
+                vm.deletePresets(selected)
+                selecting = false
+                selected.removeAll()
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .onChange(of: vm.presets.map(\.id)) { _, ids in
+            selected.formIntersection(ids)
+            if ids.isEmpty { selecting = false }
+        }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.json, .plainText, .data]) { result in
             if case let .success(url) = result { vm.importPresets(url) }
         }
@@ -68,29 +117,59 @@ struct PresetsPanel: View {
 
     private func row(_ p: Preset) -> some View {
         HStack {
+            if selecting {
+                Image(systemName: selected.contains(p.id) ? "checkmark.circle.fill" : "circle")
+                    .foregroundStyle(selected.contains(p.id) ? Color.accentColor : .secondary)
+            }
             VStack(alignment: .leading, spacing: 1) {
                 Text(p.name).font(.subheadline).lineLimit(1)
                 Text(PresetGroup.allCases.filter { p.groups.contains($0) }.map(\.label).joined(separator: " · "))
                     .font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
             Spacer()
-            Menu {
-                Button("Update from current") { vm.updatePreset(p.id) }
-                Button("Rename") {
-                    renameText = p.name
-                    renaming = p
+            if !selecting {
+                Menu {
+                    Button("Update from current") { vm.updatePreset(p.id) }
+                    Button("Rename") {
+                        renameText = p.name
+                        renaming = p
+                    }
+                    Button("Export") { sharing = vm.presetFile([p]) }
+                    Button("Send to Auto") { vm.sendPresetToAuto(p) }
+                    Button("Delete", role: .destructive) { deleting = p }
+                } label: {
+                    Image(systemName: "ellipsis").frame(width: 36, height: 36)
                 }
-                Button("Export") { sharing = vm.presetFile([p]) }
-                Button("Send to Auto") { vm.sendPresetToAuto(p) }
-                Button("Delete", role: .destructive) { deleting = p }
-            } label: {
-                Image(systemName: "ellipsis").frame(width: 36, height: 36)
+                .accessibilityLabel("Preset options")
             }
-            .accessibilityLabel("Preset options")
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
-        .onTapGesture { vm.applyPreset(p) }
+        .onTapGesture {
+            if selecting {
+                if selected.contains(p.id) { selected.remove(p.id) } else { selected.insert(p.id) }
+            } else {
+                vm.applyPreset(p)
+            }
+        }
+        .contextMenu {
+            if !selecting {
+                Button {
+                    selecting = true
+                    selected = [p.id]
+                } label: {
+                    Label("Select", systemImage: "checkmark.circle")
+                }
+                Button { vm.updatePreset(p.id) } label: { Label("Update from current", systemImage: "arrow.triangle.2.circlepath") }
+                Button {
+                    renameText = p.name
+                    renaming = p
+                } label: { Label("Rename", systemImage: "pencil") }
+                Button { sharing = vm.presetFile([p]) } label: { Label("Export", systemImage: "square.and.arrow.up") }
+                Button { vm.sendPresetToAuto(p) } label: { Label("Send to Auto", systemImage: "arrow.up.forward.app") }
+                Button(role: .destructive) { deleting = p } label: { Label("Delete", systemImage: "trash") }
+            }
+        }
     }
 }
 

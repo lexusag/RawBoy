@@ -512,6 +512,8 @@ final class EditorViewModel: ObservableObject {
 
     func deletePreset(_ id: String) { setPresets(presets.filter { $0.id != id }) }
 
+    func deletePresets(_ ids: Set<String>) { setPresets(presets.filter { !ids.contains($0.id) }) }
+
     /** Applies [preset]'s groups to the current photo; a LUT goes through selectLut (load, error message). */
     func applyPreset(_ preset: Preset) {
         commit(Presets.apply(preset, state.params), force: true)

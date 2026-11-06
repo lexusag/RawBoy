@@ -286,6 +286,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
       update: (p) => store.updatePreset(p.id),
       rename: (p, name) => store.renamePreset(p.id, name),
       delete: (p) => store.deletePreset(p.id),
+      deleteBatch: (list) => store.deletePresets(list.map((p) => p.id)),
       export: store.exportPresets,
       import: (f) => void store.importPresets(f),
     }),

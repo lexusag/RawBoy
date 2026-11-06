@@ -583,6 +583,8 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     fun deletePreset(id: String) = setPresets(_presets.value.filterNot { it.id == id })
 
+    fun deletePresets(ids: Set<String>) = setPresets(_presets.value.filterNot { it.id in ids })
+
     /** Applies [preset]'s groups to the current photo; a LUT goes through [selectLut] (load, error message). */
     fun applyPreset(preset: Preset) {
         commit(Presets.apply(preset, _state.value.params), force = true)

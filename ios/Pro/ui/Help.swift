@@ -22,6 +22,6 @@ let proHelp = [
         HelpItem("Detail", "Luma and Color denoise work separately. Local contrast brings out texture; High-pass contrast is wider clarity. Tap Grain's name for its size, roughness and color."),
         HelpItem("Masks", "Brush, linear, radial and stripe layers with their own light and colour. Brush or Erase paints on any layer."),
         HelpItem("Light leaks", "Film-style light (up to 4: streaks, glows, triangles), made like a Photoshop light leak: a white shape with an orange and a red glow, in Screen mode, so the photo shows through and the grain stays on top. Drag one anywhere inside to move it, the dots to resize, the round knob to turn it, the square to bend it; Bend, Taper and Warp reshape it, Softness blurs the core, Glow sets how far the colour reaches. At 100% intensity its white middle (inside the dashed line) hides what is under it. Leaks belong to the photo: presets don't keep them."),
-        HelpItem("Presets", "Save the edits by group, apply, import and export .rawboy.json files, or Send to Auto for a whole batch."),
+        HelpItem("Presets", "Save the edits by group, apply, import and export .rawboy.json files, or Send to Auto for a whole batch. Select to batch-delete or export."),
     ]),
 ]

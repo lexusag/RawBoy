@@ -110,6 +110,7 @@ fun EditorScreen(vm: EditorViewModel) {
             update = { vm.updatePreset(it.id) },
             rename = { p, name -> vm.renamePreset(p.id, name) },
             delete = { vm.deletePreset(it.id) },
+            deleteBatch = vm::deletePresets,
             export = { list ->
                 presetsToExport = list
                 presetExport.launch(if (list.size == 1) "${list[0].name}.rawboy.json" else "RawBoy presets.rawboy.json")

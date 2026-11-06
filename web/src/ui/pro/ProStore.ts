@@ -478,6 +478,11 @@ export class ProStore {
 
   deletePreset = (id: string) => this.setPresets(this._state.presets.filter((p) => p.id !== id));
 
+  deletePresets = (ids: Set<string> | string[]) => {
+    const set = ids instanceof Set ? ids : new Set(ids);
+    this.setPresets(this._state.presets.filter((p) => !set.has(p.id)));
+  };
+
   /** Applies the preset's groups to the current photo; a LUT goes through selectLut (load, error message). */
   applyPreset = (preset: Preset) => {
     this.commit(applyPreset(preset, this._state.params), true);
