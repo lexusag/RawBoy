@@ -30,4 +30,12 @@ final class PresetSectionTests: XCTestCase {
         XCTAssertEqual(shape(Presets.sections([warm])), ["-: Warm"])
         XCTAssertEqual(shape(Presets.sections([mono])), ["Black & white: Mono"])
     }
+
+    func testDetailGroupCarriesAnamorphicFlareAndColor() throws {
+        let flare = params { $0.anamorphic = 45; $0.anamorphicColor = .blue }
+        let preset = try XCTUnwrap(Presets.decode(Presets.encode([Presets.capture("Flare", flare, [.detail])])).first)
+        let applied = Presets.apply(preset, DevelopParams())
+        XCTAssertEqual(applied.anamorphic, 45)
+        XCTAssertEqual(applied.anamorphicColor, .blue)
+    }
 }

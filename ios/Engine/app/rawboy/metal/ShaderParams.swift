@@ -59,6 +59,9 @@ public final class ShaderParams: @unchecked Sendable {
     public let curve: [Float]?
     /** `uClipLevel`: DevelopParams.clipLevel of the as-shot defaults (blown highlights), 0 = unknown. */
     public let clipLevel: Float
+    /** Horizontal anamorphic flare strength (`uAnamorphic`, 0 = off) and coating tint (`uAnamorphicTint`). */
+    public let anamorphic: Float
+    public let anamorphicTint: [Float]
 
     public init(whiteBalance: [Float], exposure: Float, contrast: Float, saturation: Float, shadows: Float,
                 highlights: Float, blacks: Float, whites: Float, denoise: Float, denoiseWide: Float,
@@ -69,7 +72,8 @@ public final class ShaderParams: @unchecked Sendable {
                 skinRetouch: Float, skinMask: SkinMask?, grainSizeScale: Float = 1, gamutSoft: Float = 1,
                 toneMapper: Int = 0, displaySource: Float = 0, layers: LayerUniforms = .none, leaks: LeakUniforms = .none,
                 film: FilmData? = nil, filmAmount: Float = 0,
-                filmGrain: Float = 1, halation: Float = 1, curve: [Float]? = nil, clipLevel: Float = 0) {
+                filmGrain: Float = 1, halation: Float = 1, curve: [Float]? = nil, clipLevel: Float = 0,
+                anamorphic: Float = 0, anamorphicTint: [Float] = AnamorphicColor.neutral.tint) {
         self.whiteBalance = whiteBalance
         self.exposure = exposure
         self.contrast = contrast
@@ -109,6 +113,8 @@ public final class ShaderParams: @unchecked Sendable {
         self.halation = halation
         self.curve = curve
         self.clipLevel = clipLevel
+        self.anamorphic = anamorphic
+        self.anamorphicTint = anamorphicTint
     }
 
     /**
@@ -207,7 +213,9 @@ public final class ShaderParams: @unchecked Sendable {
             filmGrain: p.filmGrain / 100,
             halation: halationGain(p.halation),
             curve: p.curves.table(),
-            clipLevel: asShot.clipLevel)
+            clipLevel: asShot.clipLevel,
+            anamorphic: p.anamorphic / 100 * (0.35 + 0.65 * p.anamorphic / 100),
+            anamorphicTint: p.anamorphicColor.tint)
     }
 
     /** Full layer temperature offset (100) moves the white this many mireds; + = warmer, as the global slider. */

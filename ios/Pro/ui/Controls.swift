@@ -24,6 +24,7 @@ struct ControlsPanel: View {
     var onSaveLensPreset: (_ name: String, _ sendToAuto: Bool) -> Void = { _, _ in }
 
     @AppStorage("pro.tab") private var chosenTab = 0
+    @State private var anamorphicOpen: Bool?
     @State private var grainOpen = false
 
     private static let tabNames = ["Light", "Color", "Detail", "LUTs", "Lens"]
@@ -168,7 +169,32 @@ struct ControlsPanel: View {
             }
         }
         slider("Bloom", \.bloom, 0...100, format: formatPlain)
+        anamorphicSliders
         grainSliders
+    }
+
+    /**
+     * Anamorphic lens flare, whose colour choices (Neutral, Blue, Golden) open when the slider is raised or when a
+     * non-default colour is picked, and can also be toggled from the slider's label. As Controls.kt's AnamorphicSliders.
+     */
+    @ViewBuilder private var anamorphicSliders: some View {
+        let active = params.anamorphic > 0 || params.anamorphicColor != defaults.anamorphicColor
+        let shown = anamorphicOpen ?? active
+        ParamSlider(label: shown ? "Anamorphic ▾" : "Anamorphic ▸", value: params.anamorphic, range: 0...100,
+                    defaultValue: defaults.anamorphic, format: formatPlain, onLabelTap: { anamorphicOpen = !shown }) { v in
+            if v == 0, anamorphicOpen == false { anamorphicOpen = nil }
+            set { $0.anamorphic = v }
+        }
+        if shown {
+            Picker("Flare color", selection: Binding(
+                get: { params.anamorphicColor },
+                set: { c in set { $0.anamorphicColor = c } })) {
+                ForEach(AnamorphicColor.allCases, id: \.self) { Text($0.label).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .padding(.leading, 16)
+            .padding(.vertical, 4)
+        }
     }
 
     /**

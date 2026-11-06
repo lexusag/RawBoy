@@ -256,6 +256,9 @@ struct DevelopProgram {
         u.float("uSkinSigma", skin?.sigmaPx ?? 3)
         let bloomReady = p.bloomHalo != nil && p.bloomTail != nil
         u.float("uBloom", bloomReady ? p.bloom : 0)
+        u.float("uAnamorphic", p.bloomHalo != nil ? p.anamorphic : 0)
+        let tint = p.anamorphicTint
+        u.vec4("uAnamorphicTint", tint[0], tint[1], tint[2], tint[3])
         u.vec2("uBloomHaloTexel", 1 / Float(p.bloomHalo?.width ?? 1), 1 / Float(p.bloomHalo?.height ?? 1))
         u.vec2("uBloomTailTexel", 1 / Float(p.bloomTail?.width ?? 1), 1 / Float(p.bloomTail?.height ?? 1))
         u.vec2("uBaseTexel", 1 / Float(p.base?.width ?? 1), 1 / Float(p.base?.height ?? 1))
@@ -352,6 +355,7 @@ struct DevelopProgram {
                            tailWidth: Int, tailHeight: Int) {
         u.float("uClarity", p.highpassContrast)
         u.float("uBloom", p.bloom)
+        u.float("uAnamorphic", p.anamorphic)
         u.vec2("uBaseTexel", 1 / Float(baseWidth), 1 / Float(baseHeight))
         u.vec2("uBloomHaloTexel", 1 / Float(baseWidth), 1 / Float(baseHeight))
         u.vec2("uBloomTailTexel", 1 / Float(tailWidth), 1 / Float(tailHeight))

@@ -1,6 +1,6 @@
 import { isMonochromeLut } from '../auto/looks/Look';
 import { RetiredLooks } from '../auto/looks/RetiredLooks';
-import { TONE_MAPPERS, type DevelopParams } from './DevelopParams';
+import { ANAMORPHIC_COLORS, TONE_MAPPERS, type DevelopParams } from './DevelopParams';
 import { forPreset, parseLayers, type MaskLayer } from './Masks';
 import { parseCurves, type ToneCurves } from './ToneCurve';
 
@@ -24,7 +24,11 @@ export const PRESET_GROUPS: readonly { key: PresetGroup; label: string; fields: 
     label: 'Color',
     fields: ['saturation', 'redHue', 'redPurity', 'greenHue', 'greenPurity', 'blueHue', 'bluePurity', 'tintHue', 'tintPurity'],
   },
-  { key: 'detail', label: 'Detail', fields: ['localContrast', 'highpassContrast', 'grain', 'grainSize', 'grainRoughness', 'grainColor', 'bloom'] },
+  {
+    key: 'detail',
+    label: 'Detail',
+    fields: ['localContrast', 'highpassContrast', 'grain', 'grainSize', 'grainRoughness', 'grainColor', 'bloom', 'anamorphic', 'anamorphicColor'],
+  },
   // Its own group, off by default: RawBoy Auto measures denoise and sharpening on each photo (its ISO and noise), and
   // a preset overrides that only when it holds this group.
   { key: 'denoise', label: 'Denoise & sharpening', fields: ['denoise', 'colorDenoise', 'sharpening'] },
@@ -198,6 +202,8 @@ export function applyPreset(preset: Preset, params: DevelopParams): DevelopParam
       if (typeof value === 'boolean') p.lensProfile = value;
     } else if (field === 'toneMapper') {
       if (TONE_MAPPERS.some((m) => m.key === value)) p.toneMapper = value;
+    } else if (field === 'anamorphicColor') {
+      if (ANAMORPHIC_COLORS.some((m) => m.key === value)) p.anamorphicColor = value;
     } else if (typeof value === 'number' && Number.isFinite(value) && typeof p[field] === 'number') {
       p[field] = value;
     }

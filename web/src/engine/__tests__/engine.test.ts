@@ -452,6 +452,31 @@ describe('presets', () => {
     expect(applyPreset(p, developParams()).localContrast).toBe(35);
     expect(applyPreset(capturePreset('L', developParams({ localContrast: 35 }), ['light']), developParams()).localContrast).toBe(0);
   });
+
+  it('keeps anamorphic flare and color in the Detail group and round-trips them', () => {
+    const flare = developParams({ anamorphic: 45, anamorphicColor: 'blue' });
+    const [p] = decodePresets(encodePresets([capturePreset('Flare', flare, ['detail'])]));
+    expect(p.values).toMatchObject({ anamorphic: 45, anamorphicColor: 'blue' });
+    const applied = applyPreset(p, developParams());
+    expect(applied.anamorphic).toBe(45);
+    expect(applied.anamorphicColor).toBe('blue');
+
+    // Unknown color key is ignored, leaving existing
+    const bad = { ...p, values: { ...p.values, anamorphicColor: 'cyan' as never } };
+    expect(applyPreset(bad, developParams({ anamorphicColor: 'golden' })).anamorphicColor).toBe('golden');
+  });
+
+  it('anamorphic flare maps to shader params with nonlinear strength and color tint', () => {
+    const d = developParams({ anamorphic: 50, anamorphicColor: 'golden' });
+    const sp = ShaderParams.from(d, d, null, new LensTransform(LensInfo.none(100, 100), d), null, null, null);
+    expect(sp.anamorphic).toBeCloseTo(0.5 * (0.35 + 0.65 * 0.5), 5);
+    close(Array.from(sp.anamorphicTint), [1.15, 0.71, 0.15, 0.85], 1e-5);
+
+    const neutral = developParams({ anamorphic: 0, anamorphicColor: 'neutral' });
+    const spNeutral = ShaderParams.from(neutral, neutral, null, new LensTransform(LensInfo.none(100, 100), neutral), null, null, null);
+    expect(spNeutral.anamorphic).toBe(0);
+    close(Array.from(spNeutral.anamorphicTint), [1, 1, 1, 0.35], 1e-5);
+  });
 });
 
 describe('mask layers', () => {

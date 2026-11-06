@@ -33,6 +33,8 @@ uniform sampler2D uBloomHalo;    // highlight-boosted ~512 px copy
 uniform sampler2D uBloomTail;    // highlight-boosted ~64 px copy, scattered: BLOOM_TAIL_BANDS bands (BloomTail)
 uniform vec2 uBloomHaloTexel;
 uniform vec2 uBloomTailTexel;    // of the whole texture, all bands
+uniform float uAnamorphic;       // horizontal flare strength, 0 = off
+uniform vec4 uAnamorphicTint;    // rgb = linear Rec.2020 coating tint, a = luminance-tint mix
 uniform float uRetouch;          // 0..1
 uniform sampler2D uSkinMask;     // 0..1 skin probability over the whole image
 uniform float uSkinSigma;        // smoothing sigma, full-resolution px (scaled to face size)
@@ -731,6 +733,79 @@ vec3 bloomScatter(vec2 uvG, vec2 imagePx) {
 // highlights reaches them; mixing the whole image with its scatter veiled every tone.
 vec3 bloom(vec3 x, vec2 uvG, vec2 imagePx) {
     return x + uBloom * (bloomScatter(uvG, imagePx) - bloomKnee(x, uExposure) * x);
+}
+
+// Fake anamorphic lens flare: horizontal streaks across the framed picture (uOutToImage's X axis, so rotating or
+// straightening keeps the streak horizontal and cropping leaves it unchanged) scattered from uBloomHalo's boosted
+// highlights (bloomKnee). Two grids anchored to uBloomHalo's texels keep tiny point lights free of beading and
+// bilinear knee dilution: a crisp 1-texel inner needle and a wide 2x2 bilinear-pair wing reaching ~27% of the long
+// edge on each side. Already-bright highlights keep their own white core instead of taking on the coating tint.
+vec3 anamorphicFlare(vec3 x, vec2 imagePx) {
+    vec2 size = 1.0 / uBloomHaloTexel;
+    vec2 dir = normalize((mat2(uOutToImage) * vec2(1.0, 0.0)) / (uImageSize * uBloomHaloTexel));
+    bool swapXY = abs(dir.y) > abs(dir.x);
+    vec2 st = imagePx / (uImageSize * uBloomHaloTexel) - 0.5;
+    vec2 d = swapXY ? dir.yx : dir;
+    vec2 p0 = swapXY ? st.yx : st;
+    vec2 lim = swapXY ? size.yx : size;
+    float slope = d.y / d.x;
+    float cosA = abs(d.x);
+
+    float ix0 = floor(p0.x + 0.5);
+    vec3 core = vec3(0.0);
+    float cw = 0.0;
+    for (int i = -16; i <= 16; ++i) {
+        float tx = ix0 + float(i);
+        float yLine = p0.y + (tx - p0.x) * slope;
+        float iy0 = floor(yLine + 0.5);
+        for (int j = -1; j <= 1; ++j) {
+            float ty = iy0 + float(j);
+            float dy = (ty - yLine) * cosA;
+            float ry = max(1.0 - abs(dy) / 1.05, 0.0);
+            if (ry <= 0.0) continue;
+            float dx = (tx - p0.x) * d.x + (ty - p0.y) * d.y;
+            float rx = max(1.0 - abs(dx) / 15.0, 0.0);
+            if (rx <= 0.0) continue;
+            float w = exp(-dy * dy / 0.36 - abs(dx) / 4.0) * ry * ry * rx * rx;
+            cw += w;
+            if (tx >= 0.0 && tx < lim.x && ty >= 0.0 && ty < lim.y) {
+                vec2 at = ((swapXY ? vec2(ty, tx) : vec2(tx, ty)) + 0.5) * uBloomHaloTexel;
+                vec3 c = texture(uBloomHalo, at).rgb;
+                core += (w * bloomKnee(c, uExposure)) * c;
+            }
+        }
+    }
+
+    float kx0 = floor((p0.x - 0.5) * 0.5 + 0.5);
+    vec3 wing = vec3(0.0);
+    float ww = 0.0;
+    for (int i = -72; i <= 72; ++i) {
+        float px = 2.0 * (kx0 + float(i)) + 0.5;
+        float yLine = p0.y + (px - p0.x) * slope;
+        float ky0 = floor((yLine - 0.5) * 0.5);
+        for (int j = 0; j <= 1; ++j) {
+            float py = 2.0 * (ky0 + float(j)) + 0.5;
+            float dy = (py - yLine) * cosA;
+            float ry = max(1.0 - abs(dy) / 1.4, 0.0);
+            if (ry <= 0.0) continue;
+            float dx = (px - p0.x) * d.x + (py - p0.y) * d.y;
+            float rx = max(1.0 - abs(dx) / 140.0, 0.0);
+            if (rx <= 0.0) continue;
+            float w = pow(1.0 + abs(dx) / 7.5, -1.35) * exp(-dy * dy / 0.9) * ry * ry * rx * rx;
+            ww += w;
+            if (px >= 0.0 && px < lim.x && py >= 0.0 && py < lim.y) {
+                vec2 at = ((swapXY ? vec2(py, px) : vec2(px, py)) + 0.5) * uBloomHaloTexel;
+                vec3 c = texture(uBloomHalo, at).rgb;
+                wing += (w * bloomKnee(c, uExposure)) * c;
+            }
+        }
+    }
+
+    vec3 streak = 1.1 * (core / max(cw, 1e-5)) + 2.4 * (wing / max(ww, 1e-5));
+    streak /= 1.0 + 0.35 * max(streak.r, max(streak.g, streak.b));
+    vec3 tinted = mix(streak, vec3(lum(streak)), uAnamorphicTint.a) * uAnamorphicTint.rgb;
+    float selfHi = bloomKnee(x, uExposure);
+    return x + uAnamorphic * (1.0 - 0.85 * selfHi) * mix(tinted, vec3(lum(tinted)), selfHi);
 }
 
 vec2 toSensor(vec2 p) { return (uToSensor * vec3(p, 1.0)).xy; }

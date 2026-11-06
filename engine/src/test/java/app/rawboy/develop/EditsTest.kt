@@ -11,6 +11,7 @@ class EditsTest {
 
     private val edited = defaults.copy(
         exposure = 0.7f, contrast = 12f, temperature = 5500f, film = "portra400", filmAmount = 80f, colorDenoise = 20f,
+        anamorphic = 35f, anamorphicColor = AnamorphicColor.GOLDEN,
         curves = ToneCurves(rgb = listOf(CurvePoint(0f, 0f), CurvePoint(0.5f, 0.6f), CurvePoint(1f, 1f))),
         lensAnamorphic = -50f, lensCrop = -25f,
         rotation = 1, flipHorizontal = true, straighten = 2.5f, cropLeft = 0.1f, cropTop = 0.05f, cropRight = 0.9f, cropBottom = 0.8f,

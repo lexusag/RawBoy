@@ -37,6 +37,15 @@ class PresetsTest {
     }
 
     @Test
+    fun detailGroupCarriesAnamorphicFlareAndColor() {
+        val flare = DevelopParams(anamorphic = 45f, anamorphicColor = AnamorphicColor.BLUE)
+        val preset = Presets.decode(Presets.encode(listOf(Presets.capture("Flare", flare, setOf(PresetGroup.DETAIL))))).single()
+        val applied = Presets.apply(preset, DevelopParams())
+        assertEquals(45f, applied.anamorphic, 0f)
+        assertEquals(AnamorphicColor.BLUE, applied.anamorphicColor)
+    }
+
+    @Test
     fun detailGroupCarriesBothDenoises() {
         val split = DevelopParams(denoise = 30f, colorDenoise = 60f)
         val preset = Presets.decode(Presets.encode(listOf(Presets.capture("Split", split, setOf(PresetGroup.DETAIL))))).single()

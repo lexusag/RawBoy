@@ -3,6 +3,7 @@ package app.rawboy.gl
 import app.rawboy.color.Mat3
 import app.rawboy.color.Primaries
 import app.rawboy.color.WhiteBalance
+import app.rawboy.develop.AnamorphicColor
 import app.rawboy.develop.BrushRaster
 import app.rawboy.develop.DevelopParams
 import app.rawboy.develop.LeakUniforms
@@ -83,6 +84,9 @@ class ShaderParams(
     val leaks: LeakUniforms = LeakUniforms.NONE,
     /** Highlight-boosted ~1536 px copy of the whole image the masks' lens blur works from (BokehTexture), or null. */
     val bokehSource: PreviewImage? = null,
+    /** Horizontal anamorphic flare strength (`uAnamorphic`, 0 = off) and coating tint (`uAnamorphicTint`). */
+    val anamorphic: Float = 0f,
+    val anamorphicTint: FloatArray = AnamorphicColor.NEUTRAL.tint,
 ) {
     /**
      * Extra source pixels needed around an output region for the spatial effects
@@ -192,6 +196,8 @@ class ShaderParams(
                 clipLevel = asShot.clipLevel,
                 leaks = LightLeaks.pack(p.leaks, lens.width, lens.height),
                 bokehSource = bokehSource,
+                anamorphic = p.anamorphic / 100f * (0.35f + 0.65f * p.anamorphic / 100f),
+                anamorphicTint = p.anamorphicColor.tint,
             )
         }
 

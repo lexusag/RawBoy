@@ -28,7 +28,13 @@ enum class PresetGroup(val key: String, val label: String, val fields: List<Stri
             "tintHue", "tintPurity",
         ),
     ),
-    DETAIL("detail", "Detail", listOf("denoise", "colorDenoise", "sharpening", "localContrast", "highpassContrast", "grain", "grainSize", "grainRoughness", "grainColor", "bloom")),
+    DETAIL(
+        "detail", "Detail",
+        listOf(
+            "denoise", "colorDenoise", "sharpening", "localContrast", "highpassContrast",
+            "grain", "grainSize", "grainRoughness", "grainColor", "bloom", "anamorphic", "anamorphicColor",
+        ),
+    ),
     RETOUCH("retouch", "Retouch", listOf("skinRetouch", "blemishRemoval")),
     LUT("lut", "LUT", listOf("lut", "lutAmount")),
     LENS("lens", "Lens", listOf("lensProfile", "lensDistortion", "lensAnamorphic", "lensCrop", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint")),
@@ -247,6 +253,8 @@ object Presets {
         "grainRoughness" -> p.grainRoughness
         "grainColor" -> p.grainColor
         "bloom" -> p.bloom
+        "anamorphic" -> p.anamorphic
+        "anamorphicColor" -> p.anamorphicColor.key
         "skinRetouch" -> p.skinRetouch
         "blemishRemoval" -> p.blemishRemoval
         "lut" -> p.lut
@@ -270,6 +278,7 @@ object Presets {
         if (field == "colorDenoise" && value == null) return p.copy(colorDenoise = null)
         if (field == "lensProfile") return if (value is Boolean) p.copy(lensProfile = value) else p
         if (field == "toneMapper") return ToneMapper.fromKey(value as? String)?.let { p.copy(toneMapper = it) } ?: p
+        if (field == "anamorphicColor") return AnamorphicColor.fromKey(value as? String)?.let { p.copy(anamorphicColor = it) } ?: p
         if (field == "curves") return if (value is ToneCurves) p.copy(curves = value) else p
         if (field == "masks") {
             // Fresh ids, so two photos never share a layer id.
@@ -308,6 +317,7 @@ object Presets {
             "grainRoughness" -> p.copy(grainRoughness = f)
             "grainColor" -> p.copy(grainColor = f)
             "bloom" -> p.copy(bloom = f)
+            "anamorphic" -> p.copy(anamorphic = f)
             "skinRetouch" -> p.copy(skinRetouch = f)
             "blemishRemoval" -> p.copy(blemishRemoval = f)
             "lutAmount" -> p.copy(lutAmount = f)

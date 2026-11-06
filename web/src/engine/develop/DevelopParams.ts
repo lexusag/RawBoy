@@ -20,6 +20,21 @@ export const TONE_MAPPERS: readonly { key: ToneMapper; label: string; shaderId: 
 export const toneMapperId = (t: ToneMapper): number => TONE_MAPPERS.find((m) => m.key === t)?.shaderId ?? 0;
 
 /**
+ * Coating colour of Pro's fake anamorphic lens flare (`uAnamorphicTint`: linear Rec.2020 RGB reflectance + luminance
+ * mix, see shaders/develop.glsl). Stored by key in presets and sidecars.
+ */
+export type AnamorphicColor = 'neutral' | 'blue' | 'golden';
+
+export const ANAMORPHIC_COLORS: readonly { key: AnamorphicColor; label: string; tint: readonly [number, number, number, number] }[] = [
+  { key: 'neutral', label: 'Neutral', tint: [1, 1, 1, 0.35] },
+  { key: 'blue', label: 'Blue', tint: [0.32, 0.6, 1.55, 0.85] },
+  { key: 'golden', label: 'Golden', tint: [1.15, 0.71, 0.15, 0.85] },
+];
+
+export const anamorphicTintOf = (c: AnamorphicColor): Float32Array =>
+  new Float32Array((ANAMORPHIC_COLORS.find((m) => m.key === c) ?? ANAMORPHIC_COLORS[0]).tint);
+
+/**
  * Slider values as the user sees them (port of develop/DevelopParams.kt).
  *
  * - toneMapper: the display transform (AgX by default; Pro only, Auto and Camera stay on AgX)
@@ -33,6 +48,7 @@ export const toneMapperId = (t: ToneMapper): number => TONE_MAPPERS.find((m) => 
  * - localContrast: -100..100 edge-aware mid-frequency detail (texture a few pixels across), 0 = off
  * - highpassContrast: -100..100 local (clarity-style) contrast, 0 = off
  * - bloom: 0..100 diffusion-filter glow, 0 = off
+ * - anamorphic: 0..100 horizontal anamorphic lens flare, 0 = off; anamorphicColor: 'neutral' | 'blue' | 'golden'
  * - skinRetouch: 0..100 smoothing of skin (found by a segmentation model), 0 = off
  * - blemishRemoval: 0..100 automatic spot healing on skin; higher heals fainter spots, 0 = off
  * - lut: LutEntry id or null for "No LUT"; lutAmount: 0..100 strength
@@ -92,6 +108,8 @@ export interface DevelopParams {
   localContrast: number;
   highpassContrast: number;
   bloom: number;
+  anamorphic: number;
+  anamorphicColor: AnamorphicColor;
   skinRetouch: number;
   blemishRemoval: number;
   lut: string | null;
@@ -162,6 +180,8 @@ export const DEFAULT_PARAMS: Readonly<DevelopParams> = Object.freeze({
   localContrast: 0,
   highpassContrast: 0,
   bloom: 0,
+  anamorphic: 0,
+  anamorphicColor: 'neutral',
   skinRetouch: 0,
   blemishRemoval: 0,
   lut: null,

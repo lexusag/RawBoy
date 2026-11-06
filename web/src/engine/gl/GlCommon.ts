@@ -172,6 +172,8 @@ export class DevelopProgram {
     this.f1('uSkinSigma', skin?.sigmaPx ?? 3);
     const bloomReady = p.bloomHalo != null && p.bloomTail != null;
     this.f1('uBloom', bloomReady ? p.bloom : 0);
+    this.f1('uAnamorphic', p.bloomHalo != null ? p.anamorphic : 0);
+    gl.uniform4fv(this.loc('uAnamorphicTint'), p.anamorphicTint);
     this.i1('uBloomHalo', Units.BLOOM_HALO);
     this.i1('uBloomTail', Units.BLOOM_TAIL);
     this.f2('uBloomHaloTexel', 1 / (p.bloomHalo?.width ?? 1), 1 / (p.bloomHalo?.height ?? 1));
