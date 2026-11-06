@@ -773,10 +773,14 @@ function FileRow({ item, onRemove, onPreview, busy }: { item: PackItem; onRemove
       status = mb(item.file.size);
       break;
     case 'waiting':
-      status = 'Waiting';
+      status = `${mb(item.file.size)} → Pending`;
       break;
     case 'packing':
-      status = <span className="busy">Packing…</span>;
+      status = (
+        <>
+          {mb(item.file.size)} → <span className="busy">Packing…</span>
+        </>
+      );
       break;
     case 'done':
       status = (
