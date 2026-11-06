@@ -2076,7 +2076,8 @@ line.curve-grid,
 }
 
 .auto-advance,
-.edits-in-sidecars {
+.edits-in-sidecars,
+.real-previews {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -2086,7 +2087,8 @@ line.curve-grid,
 }
 
 .auto-advance input,
-.edits-in-sidecars input {
+.edits-in-sidecars input,
+.real-previews input {
   accent-color: var(--accent);
 }
 
@@ -2234,6 +2236,11 @@ line.curve-grid,
   .browser .toolbar button.primary {
     padding: 6px;
   }
+}
+
+.browser .toolbar button.text.active {
+  background: var(--surface-2);
+  border-color: var(--accent);
 }
 
 /* Pro: histogram above the slider tabs; click toggles the clipping warning on the photo. */

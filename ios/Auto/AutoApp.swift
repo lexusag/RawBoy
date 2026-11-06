@@ -39,7 +39,10 @@ struct AutoRoot: View {
     var body: some View {
         Group {
             if let id = vm.selected {
-                DetailScreen(vm: vm, session: vm.session, id: id)
+                DetailScreen(vm: vm, session: vm.session, id: id, pickPreset: { ids in
+                    presetTarget = ids
+                    pickingPreset = true
+                })
             } else {
                 GridScreen(vm: vm, addFromPhotos: { pickingPhotos = true }, addFromFiles: { pickingFiles = true },
                            pickPreset: { ids in

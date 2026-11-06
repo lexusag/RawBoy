@@ -5,6 +5,7 @@ import { isApple } from '../common/HelpDialog';
 import { AppSwitcher, HelpButton } from '../common/AppNav';
 import { UndoIcon } from '../common/UndoIcon';
 import { BIN, isArc, photosToSend, type BrowsePhoto, type BrowserStore, type Filter, type SendCriteria } from './BrowserStore';
+import { isRawName } from './PhotoGroups';
 import type { ViewImage } from './Previews';
 import type { EditsSidecar, Flag, Rating } from '../../engine/browse/XmpSidecar';
 import { shortcutKey } from '../common/shortcutKey';
@@ -382,6 +383,10 @@ function GridView({ store, active, scroll, selection, onSelection, onBin, onSend
               Edits in sidecars
             </label>
           )}
+          <label className="real-previews" title="Develop raw photos with RawBoy in the viewer instead of showing the camera's embedded preview">
+            <input type="checkbox" checked={state.realPreviews} onChange={(e) => store.setRealPreviews(e.target.checked)} />
+            Real previews
+          </label>
         </div>
       )}
       {state.photos.length === 0 ? (
@@ -620,11 +625,12 @@ function Cell({ photo, current, selected, onClick, onLongPress }: {
 }
 
 function Viewer({ store, photo, active, onEdit }: { store: BrowserStore; photo: BrowsePhoto; active: boolean; onEdit: () => void }) {
-  useSyncExternalStore(store.subscribe, () => store.state); // the filtered list below follows the store
+  const state = useSyncExternalStore(store.subscribe, () => store.state); // the filtered list below follows the store
   const [view, setView] = useState<{ id: string; url: string; image: ViewImage } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const shown = store.shown();
   const index = shown.findIndex((p) => p.id === photo.id);
+  const isRaw = isRawName(photo.main) || /\.tiff?$/i.test(photo.main);
 
   useEffect(() => {
     let url: string | null = null;
@@ -647,7 +653,7 @@ function Viewer({ store, photo, active, onEdit }: { store: BrowserStore; photo: 
       if (url) setTimeout(() => URL.revokeObjectURL(url!), 1000);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store, photo.id]);
+  }, [store, photo.id, state.realPreviews]);
 
   useEffect(() => {
     if (!active) return;
@@ -656,6 +662,7 @@ function Viewer({ store, photo, active, onEdit }: { store: BrowserStore; photo: 
       if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') store.step(-1);
       else if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') store.step(1);
       else if (e.key === 'Escape' || e.key === 'Enter' || shortcutKey(e) === 'g') store.closeViewer();
+      else if (shortcutKey(e) === 'r' && isRaw) store.setRealPreviews(!state.realPreviews);
       else return;
       e.preventDefault();
     };
@@ -684,6 +691,16 @@ function Viewer({ store, photo, active, onEdit }: { store: BrowserStore; photo: 
             {sourceLabel && ` · ${sourceLabel}`}
           </div>
         </div>
+        {isRaw && (
+          <button
+            type="button"
+            className={`text${state.realPreviews ? ' active' : ''}`}
+            title="Develop raw photos with RawBoy instead of showing the camera's embedded preview (R)"
+            onClick={() => store.setRealPreviews(!state.realPreviews)}
+          >
+            <span className="wide-only">Real preview</span><span className="narrow-only">Real</span>
+          </button>
+        )}
         <button type="button" className="text" title="Open in the RawBoy tab (E)" onClick={onEdit}>Edit<span className="wide-only"> in RawBoy</span></button>
         <HelpButton />
       </header>
