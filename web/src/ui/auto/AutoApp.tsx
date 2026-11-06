@@ -322,14 +322,27 @@ function GridView({ store, scroll, lastViewed }: {
             ))}
           </select>
           <select
-            aria-label="Filter by ISO"
-            title="Filter by ISO"
-            className={state.filter.iso != null ? 'active' : ''}
-            value={state.filter.iso != null ? String(state.filter.iso) : ''}
-            disabled={exporting || (filterOptions.isos.length === 0 && state.filter.iso == null)}
-            onChange={(e) => store.setFilter({ iso: e.target.value ? Number(e.target.value) : null })}
+            aria-label="Filter by minimum ISO"
+            title="Filter by minimum ISO"
+            className={state.filter.isoMin != null ? 'active' : ''}
+            value={state.filter.isoMin != null ? String(state.filter.isoMin) : ''}
+            disabled={exporting || (filterOptions.isos.length === 0 && state.filter.isoMin == null)}
+            onChange={(e) => store.setFilter({ isoMin: e.target.value ? Number(e.target.value) : null })}
           >
-            <option value="">All ISOs</option>
+            <option value="">Min ISO</option>
+            {filterOptions.isos.map((i) => (
+              <option key={i.value} value={String(i.value)}>{i.label} ({i.count})</option>
+            ))}
+          </select>
+          <select
+            aria-label="Filter by maximum ISO"
+            title="Filter by maximum ISO"
+            className={state.filter.isoMax != null ? 'active' : ''}
+            value={state.filter.isoMax != null ? String(state.filter.isoMax) : ''}
+            disabled={exporting || (filterOptions.isos.length === 0 && state.filter.isoMax == null)}
+            onChange={(e) => store.setFilter({ isoMax: e.target.value ? Number(e.target.value) : null })}
+          >
+            <option value="">Max ISO</option>
             {filterOptions.isos.map((i) => (
               <option key={i.value} value={String(i.value)}>{i.label} ({i.count})</option>
             ))}

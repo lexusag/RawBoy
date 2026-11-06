@@ -664,9 +664,41 @@ describe('Auto grid filter', () => {
     expect(isFilterActive(store.state.filter)).toBe(true);
     expect(store.shown.map((p) => p.name)).toEqual(['shot1.CR2', 'shot2.CR2']);
 
-    // Combine with ISO
+    // Combine with ISO (backward compatible exact match)
     store.setFilter({ iso: 1600 });
     expect(store.shown.map((p) => p.name)).toEqual(['shot2.CR2']);
+
+    // Filter by ISO range
+    store.setFilter({ camera: null, isoMin: 400, isoMax: 1600 });
+    expect(store.shown.map((p) => p.name)).toEqual(['shot1.CR2', 'shot2.CR2', 'shot3.CR2']);
+
+    // ISO minimum bound
+    store.setFilter({ isoMin: 1000, isoMax: null });
+    expect(store.shown.map((p) => p.name)).toEqual(['shot2.CR2']);
+
+    // ISO maximum bound
+    store.setFilter({ isoMin: null, isoMax: 800 });
+    expect(store.shown.map((p) => p.name)).toEqual(['shot1.CR2', 'shot3.CR2']);
+
+    // ISO exact match via min/max
+    store.setFilter({ isoMin: 400, isoMax: 400 });
+    expect(store.shown.map((p) => p.name)).toEqual(['shot1.CR2', 'shot3.CR2']);
+
+    // ISO range with no match
+    store.setFilter({ isoMin: 800, isoMax: 1200 });
+    expect(store.shown).toEqual([]);
+
+    // Conflicting ISO bounds reset the opposing bound
+    store.setFilter({ isoMin: 400, isoMax: 800 });
+    store.setFilter({ isoMin: 1600 });
+    expect(store.state.filter.isoMin).toBe(1600);
+    expect(store.state.filter.isoMax).toBeNull();
+    expect(store.shown.map((p) => p.name)).toEqual(['shot2.CR2']);
+
+    store.setFilter({ isoMax: 400 });
+    expect(store.state.filter.isoMin).toBeNull();
+    expect(store.state.filter.isoMax).toBe(400);
+    expect(store.shown.map((p) => p.name)).toEqual(['shot1.CR2', 'shot3.CR2']);
 
     // Filter by lens
     store.setFilter({ camera: null, iso: null, lens: 'FE 24-70mm F2.8 GM' });

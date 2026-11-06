@@ -138,7 +138,7 @@ tap **Preset** (the bookmarks icon) in the selection bar to develop just those w
 (read from its metadata, without decoding it; a photo without one goes by its file's modified date). **Sort: Shoot
 date** next to *Import as* switches to **Sort: File name** (IMG_9 before IMG_10) and back; remembered. Swiping in
 the photo view, Copy previous and Export all follow the same order (Android, iOS and web).
-**Filter** (web): four dropdowns above the grid filter the batch by **Camera**, **Lens**, **ISO** and **Shoot date** (each
+**Filter** (web): dropdowns above the grid filter the batch by **Camera**, **Lens**, **ISO range** (Min ISO and Max ISO) and **Shoot date** (each
 showing the count of matching photos in the batch), singly or combined. When a filter is active, the grid, detail
 navigation (‹ ›, Space, Backspace and arrow keys) and Export show and export only the matching photos, with a count of
 visible photos; **Clear filter** resets back to the whole batch.
