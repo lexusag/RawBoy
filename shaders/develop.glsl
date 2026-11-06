@@ -735,6 +735,12 @@ vec3 bloom(vec3 x, vec2 uvG, vec2 imagePx) {
     return x + uBloom * (bloomScatter(uvG, imagePx) - bloomKnee(x, uExposure) * x);
 }
 
+// The flare's own knee, bloom's with twice the light needed (one EV higher: 2 to 4 EV above grey), so only real
+// light sources flare and dimmer zones stay clean.
+float anamorphicKnee(vec3 c, float gain) {
+    return smoothstep(2.0 * BLOOM_KNEE_LO, 2.0 * BLOOM_KNEE_HI, max(c.r, max(c.g, c.b)) * gain);
+}
+
 // Fake anamorphic lens flare: horizontal streaks across the framed picture (uOutToImage's X axis, so rotating or
 // straightening keeps the streak horizontal and cropping leaves it unchanged) scattered from uBloomHalo's boosted
 // highlights (bloomKnee). Taps sit at continuous positions along and across the streak, read with the sampler's
@@ -749,7 +755,7 @@ vec3 anamorphicFlare(vec3 x, vec2 imagePx) {
     vec2 n = vec2(-d.y, d.x);
     vec2 p = imagePx / (uImageSize * uBloomHaloTexel); // halo texel coordinates, texel centres at +0.5
 
-    // Needle: one tap per texel along the streak, three across (smooth ~1 texel wide profile).
+    // Needle: one tap per texel along the streak, five across at half-texel spacing (a smooth profile).
     vec3 core = vec3(0.0);
     float cw = 0.0;
     for (int i = -16; i <= 16; ++i) {
@@ -758,15 +764,15 @@ vec3 anamorphicFlare(vec3 x, vec2 imagePx) {
         if (rx <= 0.0) continue;
         float w = exp(-abs(a) / 4.0) * rx * rx;
         cw += w;
-        for (int j = -1; j <= 1; ++j) {
-            vec2 t = p + a * d + (0.75 * float(j)) * n;
+        for (int j = -2; j <= 2; ++j) {
+            vec2 t = p + a * d + (0.5 * float(j)) * n;
             if (t.x < 0.0 || t.x >= size.x || t.y < 0.0 || t.y >= size.y) continue;
             vec3 c = texture(uBloomHalo, t * uBloomHaloTexel).rgb;
-            core += (w * (j == 0 ? 0.56 : 0.22) * bloomKnee(c, uExposure)) * c;
+            core += (w * (j == 0 ? 0.4 : (abs(j) == 1 ? 0.2 : 0.1)) * anamorphicKnee(c, uExposure)) * c;
         }
     }
 
-    // Wing: per 2 texels two taps 1 apart along the streak, each across two taps 1 apart.
+    // Wing: per 2 texels two taps 1 apart along the streak, each across three taps 1 apart (1-2-1).
     vec3 wing = vec3(0.0);
     float ww = 0.0;
     for (int i = -70; i <= 70; ++i) {
@@ -776,11 +782,11 @@ vec3 anamorphicFlare(vec3 x, vec2 imagePx) {
             if (rx <= 0.0) continue;
             float w = pow(1.0 + abs(a) / 7.5, -1.35) * rx * rx;
             ww += w;
-            for (int j = 0; j <= 1; ++j) {
-                vec2 t = p + a * d + (j == 0 ? -0.5 : 0.5) * n;
+            for (int j = -1; j <= 1; ++j) {
+                vec2 t = p + a * d + float(j) * n;
                 if (t.x < 0.0 || t.x >= size.x || t.y < 0.0 || t.y >= size.y) continue;
                 vec3 c = texture(uBloomHalo, t * uBloomHaloTexel).rgb;
-                wing += (0.5 * w * bloomKnee(c, uExposure)) * c;
+                wing += (w * (j == 0 ? 0.5 : 0.25) * anamorphicKnee(c, uExposure)) * c;
             }
         }
     }
