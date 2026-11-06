@@ -14,6 +14,7 @@ import app.rawboy.auto.looks.Look
 import app.rawboy.auto.looks.LookApplier
 import app.rawboy.auto.looks.LookSuggester
 import app.rawboy.auto.looks.Looks
+import app.rawboy.color.WhitePicker
 import app.rawboy.develop.DevelopParams
 import app.rawboy.develop.Edits
 import app.rawboy.develop.MaskLayer
@@ -639,8 +640,31 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setStrength(id: String, strength: Float) = changeDevelop(id) { it.copy(strength = strength) }
 
-    /** Sliders (a drag is one undo step). */
-    fun setAdjust(id: String, change: (Adjustments) -> Adjustments) = changeDevelop(id) { it.copy(adjust = change(it.adjust)) }
+    /** Sliders (a drag is one undo step); [force] for a button. */
+    fun setAdjust(id: String, force: Boolean = false, change: (Adjustments) -> Adjustments) =
+        changeDevelop(id, force = force) { it.copy(adjust = change(it.adjust)) }
+
+    /** White balance picker: sets warmth and tint so the tapped spot of the preview (fit or 100% view) renders neutral grey. */
+    fun pickWhite(id: String, viewX: Float, viewY: Float, frameWidth: Int = 0) {
+        val p = photo(id) ?: return
+        val a = p.analysis ?: return
+        if (_export.value != null) return
+        viewModelScope.launch {
+            val pick = session.pickWhite(viewX, viewY, frameWidth, a.defaults) ?: return@launch
+            if (photo(id)?.id != id) return@launch
+            when (pick) {
+                is WhitePicker.Pick.Clipped -> _message.value = "That spot is blown out: pick a grey that isn't clipped"
+                is WhitePicker.Pick.NotNeutral -> _message.value = "No white balance makes that spot grey"
+                is WhitePicker.Pick.White -> {
+                    val current = photo(id) ?: return@launch
+                    val unadjusted = current.edits
+                        ?: LookApplier.develop(current.analysis?.autoBase ?: return@launch, current.activeLook, current.strength, Adjustments.NONE, a.stats.hasFace, current.preset, current.lensPreset)
+                    val (warmth, tint) = LookApplier.whiteBalanceAdjust(unadjusted, pick.kelvin, pick.tint)
+                    setAdjust(id, force = true) { it.copy(warmth = warmth, tint = tint) }
+                }
+            }
+        }
+    }
 
     /** Takes photo [id]'s last edit back (not while exporting). */
     fun undo(id: String) = restore(id) { h, d -> h.undo(d) }

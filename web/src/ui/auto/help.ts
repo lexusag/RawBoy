@@ -48,6 +48,7 @@ export const AUTO_HELP: HelpSection[] = [
       { how: 'Click outside the photo', text: 'Change the frame around it: grey, white or black.' },
       { how: 'Press and hold', text: 'See the photo without the look.' },
       { how: 'Look, Adjust', text: 'Look, Strength, Brightness and Warmth; Adjust has the auto develop\'s own sliders.' },
+      { how: 'Pick white balance', text: 'Adjust tab: click something neutral grey and Warmth and Tint make it grey.' },
       { how: 'Apply to all', text: 'Copies the look and its settings to every photo (brightness and denoise stay per photo).' },
       { keys: ['C'], how: 'Copy previous', text: 'Gives this photo the look, brightness and settings of the photo before it (denoise stays).' },
       { how: 'Edit in RawBoy', text: 'Opens the photo in the RawBoy tab with this look as the starting edits. Back to Auto there brings it back with your RawBoy edits (crop, masks, lens blur and light leaks too, in Export all as well), the sliders here adjust on top, and Use a look drops them.' },

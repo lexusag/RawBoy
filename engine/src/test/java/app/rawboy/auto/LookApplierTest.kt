@@ -108,4 +108,24 @@ class LookApplierTest {
         assertEquals(0.1f, p.cropLeft, 0f)
         assertEquals(2, p.rotation)
     }
+
+    @Test
+    fun whiteBalanceAdjustSolvesForWarmthAndTint() {
+        val base = DevelopParams(temperature = 5000f, tint = 0f)
+        val unadjusted = LookApplier.develop(base, Looks.NATURAL, 100f, Adjustments.NONE, hasFace = false, preset = null, lensPreset = null)
+
+        val (w0, t0) = LookApplier.whiteBalanceAdjust(unadjusted, 5000f, 0f)
+        assertEquals(0f, w0, 1e-6f)
+        assertEquals(0f, t0, 1e-6f)
+
+        val (wWarmer, tWarmer) = LookApplier.whiteBalanceAdjust(unadjusted, 7071f, 15f)
+        assertEquals(50f, wWarmer, 1e-6f)
+        val developed = LookApplier.develop(base, Looks.NATURAL, 100f, Adjustments(warmth = wWarmer, tint = tWarmer), hasFace = false, preset = null, lensPreset = null)
+        assertEquals(7071f, developed.temperature, 10f)
+        assertEquals(15f, developed.tint, 1f)
+
+        val (wMax, tMax) = LookApplier.whiteBalanceAdjust(unadjusted, 50000f, 100f)
+        assertEquals(100f, wMax, 1e-6f)
+        assertEquals(50f, tMax, 1e-6f)
+    }
 }

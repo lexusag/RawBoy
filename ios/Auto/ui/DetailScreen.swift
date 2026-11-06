@@ -11,6 +11,7 @@ struct DetailScreen: View {
     @AppStorage("auto.detailTab") private var tab = 0
     @State private var page: String?
     @State private var showExport = false
+    @State private var pickingWhite = false
 
     /** Photos that can be opened, in grid order. */
     private var pages: [AutoPhoto] { vm.photos.filter { $0.analysis != nil } }
@@ -83,7 +84,7 @@ struct DetailScreen: View {
         ScrollView(.horizontal) {
             LazyHStack(spacing: 0) {
                 ForEach(pages) { p in
-                    PhotoPage(vm: vm, session: session, photo: p, current: p.id == id)
+                    PhotoPage(vm: vm, session: session, photo: p, current: p.id == id, pickingWhite: $pickingWhite)
                         .containerRelativeFrame(.horizontal)
                         .id(p.id)
                 }
@@ -98,7 +99,11 @@ struct DetailScreen: View {
         .background(Color(white: 0.07))
         .onAppear { page = id }
         .onChange(of: page) { _, new in if let new, new != id { vm.openDetail(new) } }
-        .onChange(of: id) { _, new in if page != new { page = new } }
+        .onChange(of: id) { _, new in
+            if page != new { page = new }
+            pickingWhite = false
+        }
+        .onChange(of: tab) { _, _ in pickingWhite = false }
         .overlay(alignment: .bottom) {
             if let e = vm.export { ProgressView(value: Double(e.current)) }
         }
@@ -128,6 +133,14 @@ struct DetailScreen: View {
                         vm.setAdjust(id) { $0.contrast = v }
                     }
                 }
+                Button {
+                    pickingWhite.toggle()
+                } label: {
+                    Label(pickingWhite ? "Tap something neutral grey" : "Pick white balance", systemImage: "eyedropper")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(pickingWhite ? .accentColor : .secondary)
+                .padding(.vertical, 4)
                 HStack(spacing: 16) {
                     ValueSlider("Warmth", value: a.warmth, range: -100...100, defaultValue: 0, stacked: true) { v in
                         vm.setAdjust(id) { $0.warmth = v }
@@ -189,6 +202,7 @@ private struct PhotoPage: View {
     @ObservedObject var session: PhotoSession
     let photo: AutoPhoto
     let current: Bool
+    @Binding var pickingWhite: Bool
 
     /** Press and hold shows the auto develop without the look. */
     @State private var showAuto = false
@@ -256,7 +270,12 @@ private struct PhotoPage: View {
         }
         let tap = SpatialTapGesture().onEnded { e in
             guard live else { return }
-            vm.onPreviewTap(Float(e.location.x * scale), Float(e.location.y * scale), frameWidth: framePx)
+            if pickingWhite {
+                pickingWhite = false
+                vm.pickWhite(photo.id, Float(e.location.x * scale), Float(e.location.y * scale), frameWidth: framePx)
+            } else {
+                vm.onPreviewTap(Float(e.location.x * scale), Float(e.location.y * scale), frameWidth: framePx)
+            }
         }
         let hold = LongPressGesture(minimumDuration: 0.25)
             .onEnded { _ in if live && pinchLast == nil { showAuto = true } }

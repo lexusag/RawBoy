@@ -38,6 +38,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -133,6 +134,8 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
     val framePx = with(LocalDensity.current) { FRAME_WIDTH.roundToPx() }
     val scope = rememberCoroutineScope()
     var showAuto by remember { mutableStateOf(false) }
+    var pickingWhite by remember { mutableStateOf(false) }
+    LaunchedEffect(id) { pickingWhite = false }
     val loaded = ready == id
     // Photos that can be opened, in grid order.
     val pages = remember(photos) { photos.filter { it.analysis != null } }
@@ -307,7 +310,14 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
                                         .pointerInput(framePx) {
                                             detectTapGestures(
                                                 onDoubleTap = { session.toggleZoom(it.x, it.y, framePx) },
-                                                onTap = { vm.onPreviewTap(it.x, it.y, framePx) },
+                                                onTap = {
+                                                    if (pickingWhite) {
+                                                        pickingWhite = false
+                                                        vm.pickWhite(id, it.x, it.y, framePx)
+                                                    } else {
+                                                        vm.onPreviewTap(it.x, it.y, framePx)
+                                                    }
+                                                },
                                                 onPress = {
                                                     val compare = scope.launch {
                                                         delay(COMPARE_DELAY_MS)
@@ -386,8 +396,8 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
             // Copy previous sits at the tabs' end, by the controls it changes (the top bar is full on phones).
             Row(verticalAlignment = Alignment.CenterVertically) {
                 PrimaryTabRow(selectedTabIndex = tab, modifier = Modifier.weight(1f)) {
-                    SmallTab("Look", tab == 0) { tab = 0 }
-                    SmallTab("Adjust", tab == 1) { tab = 1 }
+                    SmallTab("Look", tab == 0) { tab = 0; pickingWhite = false }
+                    SmallTab("Adjust", tab == 1) { tab = 1; pickingWhite = false }
                 }
                 TextButton(
                     onClick = { vm.copyPrevious(id) },
@@ -418,6 +428,11 @@ fun DetailScreen(vm: AutoViewModel, id: String, snackbar: SnackbarHostState) {
                     SliderPair(
                         { m -> AutoSlider("Brightness", a.brightness, -100f..100f, 0f, m) { v -> vm.setAdjust(id) { it.copy(brightness = v) } } },
                         { m -> AutoSlider("Contrast", a.contrast, -50f..50f, 0f, m) { v -> vm.setAdjust(id) { it.copy(contrast = v) } } },
+                    )
+                    FilterChip(
+                        selected = pickingWhite,
+                        onClick = { pickingWhite = !pickingWhite },
+                        label = { Text(if (pickingWhite) "Tap something neutral grey" else "Pick white balance") },
                     )
                     SliderPair(
                         { m -> AutoSlider("Warmth", a.warmth, -100f..100f, 0f, m) { v -> vm.setAdjust(id) { it.copy(warmth = v) } } },

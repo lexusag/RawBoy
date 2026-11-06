@@ -6,6 +6,7 @@ import app.rawboy.develop.Preset
 import app.rawboy.develop.Presets
 import kotlin.math.abs
 import kotlin.math.pow
+import kotlin.math.roundToInt
 
 /**
  * The user's controls on top of the auto develop and the look; all 0 = as suggested. [brightness] -100..100 shifts
@@ -172,5 +173,17 @@ object LookApplier {
     private fun saturation(combined: Float, adjust: Float): Float {
         val c = combined.coerceIn(-100f, 100f)
         return if (adjust >= 0f) (c + adjust).coerceIn(-100f, 100f) else c + (-100f - c) * (-adjust / 100f).coerceAtMost(1f)
+    }
+
+    /**
+     * Warmth and tint adjustments that make [unadjusted] (the develop before adjustments) render with [kelvin] and [tint].
+     */
+    fun whiteBalanceAdjust(unadjusted: DevelopParams, kelvin: Float, tint: Float): Pair<Float, Float> {
+        val factor = if (unadjusted.temperature > 0f) kelvin / unadjusted.temperature else 1f
+        if (factor <= 0f || !factor.isFinite()) return 0f to 0f
+        val warmth = (100f * kotlin.math.ln(factor) / kotlin.math.ln(WARMTH_RANGE)).roundToInt().coerceIn(-100, 100).toFloat()
+        val warmed = Warmth.shift(unadjusted, WARMTH_RANGE.pow(warmth / 100f))
+        val tintDelta = (tint - warmed.tint).roundToInt().coerceIn(-50, 50).toFloat()
+        return warmth to tintDelta
     }
 }

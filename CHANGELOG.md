@@ -1,5 +1,10 @@
 # Changelog
 
+**RawBoy Auto: white balance picker on the Adjust tab (2026-11-05)**
+
+- "Pick white balance" button on the Adjust tab (Android, iOS and web), like RawBoy Pro's eyedropper.
+- Tapping or clicking a neutral grey spot in the photo sets Warmth and Tint so that spot renders grey, with messages when the sampled spot is clipped or not neutral.
+
 **RawBoy Auto: clear Saved badges on export, lower contrast while waiting (2026-11-03)**
 
 - Starting a new export clears previous "Saved" badges on the photos being exported (or all photos for "Export all"), so progress can be followed cleanly.

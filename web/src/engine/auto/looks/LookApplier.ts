@@ -184,3 +184,15 @@ export function developAuto(
     vignetteMidpoint: lens.vignetteMidpoint,
   };
 }
+
+/**
+ * Warmth and tint adjustments that make [unadjusted] (the develop before adjustments) render with [kelvin] and [tint].
+ */
+export function whiteBalanceAdjust(unadjusted: DevelopParams, kelvin: number, tint: number): Pick<Adjustments, 'warmth' | 'tint'> {
+  const factor = unadjusted.temperature > 0 ? kelvin / unadjusted.temperature : 1;
+  if (!(factor > 0) || !Number.isFinite(factor)) return { warmth: 0, tint: 0 };
+  const warmth = Math.min(100, Math.max(-100, Math.round(100 * Math.log2(factor))));
+  const warmed = Warmth.shift(unadjusted, WARMTH_RANGE ** (warmth / 100));
+  const tintDelta = Math.min(50, Math.max(-50, Math.round(tint - warmed.tint)));
+  return { warmth, tint: tintDelta };
+}
