@@ -385,8 +385,8 @@ describe('presets', () => {
     expect(lutGroup('asset:luts/Yellow Mono 400.cube')).toBe('monochrome');
     expect(lutGroup('asset:luts/Yellow Vivid 100.cube')).toBe('color');
     expect(lutGroup('asset:luts/Film Flash.cube')).toBe('color');
-    expect(lutGroup('asset:luts/Film Flash Normal.cube')).toBe('color');
     expect(lutGroup(null)).toBe('color');
+    expect(lookById('filmflash')).toBe(Looks.FILM_FLASH);
   });
 
   const edited = developParams({

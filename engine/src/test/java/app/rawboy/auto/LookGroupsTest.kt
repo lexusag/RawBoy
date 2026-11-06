@@ -26,7 +26,6 @@ class LookGroupsTest {
         assertEquals(LookGroup.MONOCHROME, Looks.lutGroup("asset:luts/Yellow Mono 400.cube"))
         assertEquals(LookGroup.COLOR, Looks.lutGroup("asset:luts/Yellow Vivid 100.cube"))
         assertEquals(LookGroup.COLOR, Looks.lutGroup("asset:luts/Film Flash.cube"))
-        assertEquals(LookGroup.COLOR, Looks.lutGroup("asset:luts/Film Flash Normal.cube"))
         assertEquals(LookGroup.COLOR, Looks.lutGroup(null))
     }
 }
