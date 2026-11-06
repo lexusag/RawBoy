@@ -1,5 +1,10 @@
 # Changelog
 
+**RawBoy Browser (web): force real previews instead of embedded (2026-11-05)**
+
+- Added a "Real preview" button in the photo viewer (and an "R" keyboard shortcut) to force developing the raw photo as shot using RawBoy's engine instead of showing the camera's embedded JPEG preview.
+- Added a "Real previews" toggle in the grid filter bar, remembered across sessions in browser storage.
+
 **RawBoy Auto: clear Saved badges on export, lower contrast while waiting (2026-11-03)**
 
 - Starting a new export clears previous "Saved" badges on the photos being exported (or all photos for "Export all"), so progress can be followed cleanly.
