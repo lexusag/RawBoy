@@ -44,6 +44,7 @@ export class LensTransform {
   readonly outputWidth: number;
   readonly outputHeight: number;
   private readonly straightenRadians: number;
+  private readonly scaleFactor: number;
   /** Output pixel -> image pixel (display orientation), row-major 3x3 affine. */
   readonly outToImage: M3;
   /** k in src_r = r * (1 - k r^2); +100 on the slider removes strong barrel distortion. */
@@ -89,6 +90,7 @@ export class LensTransform {
     this.outputWidth = this.cropRect.width;
     this.outputHeight = this.cropRect.height;
     this.straightenRadians = (Math.min(45, Math.max(-45, params.straighten)) * Math.PI) / 180;
+    this.scaleFactor = Math.min(200, Math.max(100, params.scale ?? 100)) / 100;
     this.outToImage = this.rotationMatrix();
     const useProfile = params.lensProfile && info.hasProfile;
     this.manualK = (params.lensDistortion / 100) * 0.25;
@@ -199,7 +201,7 @@ export class LensTransform {
 
   /** Source pixels needed to render [out], plus [margin], clamped to the image. */
   sourceBounds(out: PixelRect, margin: number): PixelRect {
-    if (!this.isGeometric && !this.hasManualCa && this.zoom === 1 && this.quarterTurns === 0 && !this.flipHorizontal && !this.flipVertical && this.straightenRadians === 0 && this.cropRect.x === 0 && this.cropRect.y === 0) {
+    if (!this.isGeometric && !this.hasManualCa && this.zoom === 1 && this.quarterTurns === 0 && !this.flipHorizontal && !this.flipVertical && this.straightenRadians === 0 && this.scaleFactor === 1 && this.cropRect.x === 0 && this.cropRect.y === 0) {
       const x0 = Math.max(0, out.x - margin);
       const y0 = Math.max(0, out.y - margin);
       const x1 = Math.min(this.width, right(out) + margin);
@@ -300,7 +302,7 @@ export class LensTransform {
     const sn = Math.sin(t);
     const ow = this.frameWidth;
     const oh = this.frameHeight;
-    const s = c + Math.max(ow / oh, oh / ow) * Math.abs(sn);
+    const s = (c + Math.max(ow / oh, oh / ow) * Math.abs(sn)) * this.scaleFactor;
     const r = [c / s, sn / s, -sn / s, c / s];
     const q =
       this.quarterTurns === 1 ? [0, 1, -1, 0] : this.quarterTurns === 2 ? [-1, 0, 0, -1] : this.quarterTurns === 3 ? [0, -1, 1, 0] : [1, 0, 0, 1];

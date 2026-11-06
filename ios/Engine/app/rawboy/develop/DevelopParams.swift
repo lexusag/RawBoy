@@ -87,6 +87,7 @@ public struct DevelopParams: Equatable, Sendable {
     public var flipHorizontal: Bool = false
     public var flipVertical: Bool = false
     public var straighten: Float = 0
+    public var scale: Float = 100
     public var cropLeft: Float = 0
     public var cropTop: Float = 0
     public var cropRight: Float = 1

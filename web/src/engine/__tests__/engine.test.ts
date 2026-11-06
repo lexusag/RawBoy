@@ -235,6 +235,23 @@ describe('crop', () => {
     close(before.source(before.outputWidth / 2, before.outputHeight / 2), after.source(after.outputWidth / 2, after.outputHeight / 2), 1e-6);
   });
 
+  it('scale zooms around the centre while preserving resolution of the frame', () => {
+    const info = LensInfo.none(6000, 4000);
+    const unscaled = new LensTransform(info, developParams());
+    const scaled = new LensTransform(info, developParams({ scale: 150 }));
+    // Preserves output resolution:
+    expect(scaled.outputWidth).toBe(unscaled.outputWidth);
+    expect(scaled.outputHeight).toBe(unscaled.outputHeight);
+    // Centre of frame maps to centre of image:
+    const cx = unscaled.outputWidth / 2;
+    const cy = unscaled.outputHeight / 2;
+    close(scaled.source(cx, cy), unscaled.source(cx, cy), 1e-6);
+    // Zoomed in by 1.5x: moving 150 px in output corresponds to 100 px in source:
+    const s1 = scaled.source(cx + 150, cy);
+    const s0 = unscaled.source(cx + 100, cy);
+    close(s1, s0, 1e-6);
+  });
+
   it('flips mirror the picture as shown, crop and straighten included', () => {
     const info = LensInfo.none(6000, 4000);
     for (const rotation of [0, 1, 2, 3]) {

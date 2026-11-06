@@ -34,6 +34,7 @@ object Edits {
         values["flipHorizontal"] = p.flipHorizontal
         values["flipVertical"] = p.flipVertical
         values["straighten"] = num(p.straighten)
+        values["scale"] = num(p.scale)
         values["cropLeft"] = num(p.cropLeft)
         values["cropTop"] = num(p.cropTop)
         values["cropRight"] = num(p.cropRight)
@@ -86,6 +87,7 @@ object Edits {
             flipHorizontal = v.opt("flipHorizontal") as? Boolean ?: p.flipHorizontal,
             flipVertical = v.opt("flipVertical") as? Boolean ?: p.flipVertical,
             straighten = f("straighten", -45f, 45f) ?: p.straighten,
+            scale = f("scale", 100f, 200f) ?: p.scale,
             cropLeft = if (cropOk) left else p.cropLeft,
             cropTop = if (cropOk) top else p.cropTop,
             cropRight = if (cropOk) right else p.cropRight,

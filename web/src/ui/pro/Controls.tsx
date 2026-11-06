@@ -428,6 +428,16 @@ export function GeometryPanel({ params, onChange, onRotate, onFlip, aspect, port
         format={formatDegrees}
         onChange={(v) => onChange({ ...params, straighten: Math.round(v * 100) / 100 })}
       />
+      <ParamSlider
+        label="Scale"
+        value={params.scale}
+        min={100}
+        max={200}
+        step={1}
+        defaultValue={100}
+        format={(v) => `${Math.round(v)}%`}
+        onChange={(v) => onChange({ ...params, scale: Math.round(v) })}
+      />
       <Note>Drag the corners, edges or inside of the frame to crop. Straightening crops automatically so no empty corners show. Resets for each new photo.</Note>
     </div>
   );

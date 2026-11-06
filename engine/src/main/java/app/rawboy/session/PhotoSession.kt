@@ -554,7 +554,7 @@ class PhotoSession(
         val info = _lensInfo.value
         val key = listOf(
             info, params.lensProfile, params.lensDistortion, params.caRed, params.caBlue, params.vignetteAmount, params.vignetteMidpoint,
-            params.rotation, params.flipHorizontal, params.flipVertical, params.straighten,
+            params.rotation, params.flipHorizontal, params.flipVertical, params.straighten, params.scale,
         )
         val crop = params.crop
         lensCache?.let { (k, c, t) ->

@@ -41,4 +41,19 @@ final class FlipTests: XCTestCase {
         turned.rotation = 1
         XCTAssertTrue(CropMath.flip(turned, vertical: false).flipVertical)
     }
+
+    func testScalePreservesResolutionAndZoomsAroundCenter() {
+        let unscaled = LensTransform(info: info, params: DevelopParams())
+        var p = DevelopParams()
+        p.scale = 150
+        let scaled = LensTransform(info: info, params: p)
+        XCTAssertEqual(unscaled.outputWidth, scaled.outputWidth)
+        XCTAssertEqual(unscaled.outputHeight, scaled.outputHeight)
+        let cx = Double(unscaled.outputWidth) / 2
+        let cy = Double(unscaled.outputHeight) / 2
+        assertClose(unscaled.source(cx, cy), scaled.source(cx, cy), 1e-6)
+        let s1 = scaled.source(cx + 150, cy)
+        let s0 = unscaled.source(cx + 100, cy)
+        assertClose(s0, s1, 1e-6)
+    }
 }

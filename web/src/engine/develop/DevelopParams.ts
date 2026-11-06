@@ -48,10 +48,11 @@ export const toneMapperId = (t: ToneMapper): number => TONE_MAPPERS.find((m) => 
  * - bwFilter: colour filter for black and white (BwFilter.ts, RawBoy Camera's B&W mode; 'none' = identity), channel gains
  *   after white balance and the RGB primaries
  * - rotation: clockwise quarter turns; straighten: degrees -45..45, + turns clockwise (auto crop).
+ * - scale: 100..200%, 100% = normal (scales image within the full frame to preserve final resolution).
  * - flipHorizontal/flipVertical: mirror the photo (display orientation, before rotation) left-right / top-bottom.
  * - cropLeft/Top/Right/Bottom: 0..1 edges of the user crop within the rotated + straightened frame
  *   (0, 0, 1, 1 = no crop). See CropMath.
- *   Rotation, flips, straighten and crop are per photo: they reset when another file is opened.
+ *   Rotation, flips, straighten, scale and crop are per photo: they reset when another file is opened.
  *
  * - masks: up to MAX_LAYERS gradient layers with local adjustments (see Masks.ts); per photo, like the crop.
  * - leaks: up to MAX_LEAKS light leaks over the finished picture (see LightLeaks.ts); per photo, like the masks.
@@ -108,6 +109,7 @@ export interface DevelopParams {
   flipHorizontal: boolean;
   flipVertical: boolean;
   straighten: number;
+  scale: number;
   cropLeft: number;
   cropTop: number;
   cropRight: number;
@@ -175,6 +177,7 @@ export const DEFAULT_PARAMS: Readonly<DevelopParams> = Object.freeze({
   flipHorizontal: false,
   flipVertical: false,
   straighten: 0,
+  scale: 100,
   cropLeft: 0,
   cropTop: 0,
   cropRight: 1,

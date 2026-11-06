@@ -157,6 +157,7 @@ export class ProStore {
         flipHorizontal: newDefaults.flipHorizontal,
         flipVertical: newDefaults.flipVertical,
         straighten: newDefaults.straighten,
+        scale: newDefaults.scale,
         masks: newDefaults.masks,
         leaks: newDefaults.leaks,
       },

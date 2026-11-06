@@ -248,6 +248,7 @@ fun EditorScreen(vm: EditorViewModel) {
                             flipHorizontal = state.params.flipHorizontal,
                             flipVertical = state.params.flipVertical,
                             straighten = state.params.straighten,
+                            scale = state.params.scale,
                         ).withCrop(state.params.crop)
                     } else {
                         state.params
