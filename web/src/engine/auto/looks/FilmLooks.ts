@@ -32,6 +32,8 @@ export const ALL_FILM_LOOKS: Look[] = [
   stock('kodachrome64', 'Yellow Classic 64'),
 ];
 
+export const FILM_STOCKS: Look[] = ALL_FILM_LOOKS.filter((l) => l.film != null);
+
 export const filmLookById = (id: string): Look => {
   const key = RetiredLooks.stock(id);
   return ALL_FILM_LOOKS.find((l) => l.id === key) ?? FilmLooks.PORTRA_400;

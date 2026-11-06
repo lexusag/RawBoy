@@ -1,5 +1,9 @@
 # Changelog
 
+**RawBoy: scroll film stocks with mouse wheel (2026-11-05)**
+
+- Hovering over the Film button or the stock picker in RawBoy Pro (web) now scrolls through film stocks with the mouse wheel without clicking. A wheel already scrolling the controls panel leaves it alone.
+
 **RawBoy Auto: apply presets in photo view (2026-11-05)**
 
 - In the photo view, presets can now be applied directly to the opened photo alone via "Apply RawBoy preset…" in the ⋮/…/⋯ menu (or the Preset button in the top bar on desktop).
