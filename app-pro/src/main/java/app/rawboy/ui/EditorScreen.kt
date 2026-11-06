@@ -53,6 +53,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import app.rawboy.develop.CropRect
 import app.rawboy.develop.CropAspect
 import app.rawboy.develop.CropMath
 import app.rawboy.develop.Preset
