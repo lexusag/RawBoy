@@ -2,6 +2,7 @@ import { NO_NOISE, cameraMetered, type NoiseLevel } from '../auto/analysis/AutoT
 import { WhiteBalance } from '../color/WhiteBalance';
 import { WhitePicker, type WhitePick } from '../color/WhitePicker';
 import { BrushRaster, makeGuide, type BrushGuide } from '../develop/BrushRaster';
+import type { CropRect } from '../develop/CropMath';
 import { developParams, effectiveColorDenoise, type DevelopParams } from '../develop/DevelopParams';
 import type { MaskLayer } from '../develop/Masks';
 import { exportImage } from '../export/Exporter';
@@ -347,6 +348,17 @@ export class PhotoSession {
     return WhitePicker.pick(rgb, defaults.temperature, defaults.tint);
   }
 
+  /**
+   * Auto white balance for an area of the photo ([rect], fractions 0..1 of the visible output picture).
+   * Solves for temperature and tint so the non-clipped pixels in the area render neutral grey.
+   */
+  autoWhite(rect: CropRect, defaults: DevelopParams): WhitePick | null {
+    const img = this.image;
+    const b = this._state.base;
+    if (!img || !b) return null;
+    return autoWhiteArea(b, img.width, img.height, this.lensFor(this.params), rect, defaults);
+  }
+
   /** Double click: zoom to 100% at the clicked point of the fit view, or back out. */
   toggleZoom(viewX: number, viewY: number, frameWidth: number) {
     if (!this.image) return;
@@ -644,4 +656,53 @@ export async function editTexturesOf(image: RawImage, p: DevelopParams): Promise
   const bokehSource = blurs ? await image.createPreview(BOKEH_SOURCE_MAX_DIMENSION, true) : null;
   if (!p.masks.some((l) => l.strokes.length)) return { brushFor: () => null, bokehSource };
   return { brushFor: brushLookup(await image.createPreview(PREVIEW_MAX_DIMENSION), p.masks), bokehSource };
+}
+
+/**
+ * Auto white balance for an area of the photo ([rect], fractions 0..1 of [lens]'s output picture), sampled from the
+ * 512 px [base] copy before any develop step.
+ */
+export function autoWhiteArea(
+  base: PreviewImage,
+  imgWidth: number,
+  imgHeight: number,
+  lens: LensTransform,
+  rect: CropRect,
+  defaults: DevelopParams,
+): WhitePick | null {
+  const w = lens.outputWidth;
+  const h = lens.outputHeight;
+  const minX = Math.max(0, Math.min(1, rect.left)) * w;
+  const maxX = Math.max(0, Math.min(1, rect.right)) * w;
+  const minY = Math.max(0, Math.min(1, rect.top)) * h;
+  const maxY = Math.max(0, Math.min(1, rect.bottom)) * h;
+  if (maxX <= minX || maxY <= minY) return null;
+
+  const stepsX = Math.max(1, Math.min(64, Math.trunc(maxX - minX)));
+  const stepsY = Math.max(1, Math.min(64, Math.trunc(maxY - minY)));
+  const dx = (maxX - minX) / stepsX;
+  const dy = (maxY - minY) / stepsY;
+  let sumR = 0;
+  let sumG = 0;
+  let sumB = 0;
+  let n = 0;
+  for (let iy = 0; iy <= stepsY; iy++) {
+    const outY = minY + iy * dy;
+    for (let ix = 0; ix <= stepsX; ix++) {
+      const outX = minX + ix * dx;
+      const src = lens.source(outX, outY);
+      const bx = Math.max(0, Math.min(base.width - 1, Math.trunc((src[0] / imgWidth) * base.width)));
+      const by = Math.max(0, Math.min(base.height - 1, Math.trunc((src[1] / imgHeight) * base.height)));
+      const idx = (by * base.width + bx) * 3;
+      const r = halfToFloat(base.pixels[idx]);
+      const g = halfToFloat(base.pixels[idx + 1]);
+      const bVal = halfToFloat(base.pixels[idx + 2]);
+      if (r < 0 || g < 0 || bVal < 0 || r >= WhitePicker.CLIP || g >= WhitePicker.CLIP || bVal >= WhitePicker.CLIP) continue;
+      sumR += r;
+      sumG += g;
+      sumB += bVal;
+      n++;
+    }
+  }
+  return WhitePicker.pickFromSum(sumR, sumG, sumB, n, defaults.temperature, defaults.tint);
 }

@@ -17,23 +17,30 @@ export const WhitePicker = {
     return meterBox(meterSpot(x / width, y / height, WhitePicker.SPOT_SIZE), width, height);
   },
 
+  /** Solves for white balance from accumulated RGB sums and sample count [n]. */
+  pickFromSum(sumR: number, sumG: number, sumB: number, n: number, asShotKelvin: number, asShotTint: number): WhitePick {
+    if (n === 0) return { kind: 'clipped' };
+    const wb = WhiteBalance.neutralTempTint(asShotKelvin, asShotTint, [sumR / n, sumG / n, sumB / n]);
+    return wb ? { kind: 'white', kelvin: wb[0], tint: wb[1] } : { kind: 'notNeutral' };
+  },
+
   /** rgb: the box's pixels (RGB triplets, linear Rec.2020 as decoded); as-shot white from the photo's defaults. */
   pick(rgb: ArrayLike<number>, asShotKelvin: number, asShotTint: number): WhitePick {
-    const sum = [0, 0, 0];
+    let sumR = 0;
+    let sumG = 0;
+    let sumB = 0;
     let n = 0;
     for (let i = 0; i + 2 < rgb.length; i += 3) {
       const r = rgb[i];
       const g = rgb[i + 1];
       const b = rgb[i + 2];
       if (r >= WhitePicker.CLIP || g >= WhitePicker.CLIP || b >= WhitePicker.CLIP) continue;
-      sum[0] += r;
-      sum[1] += g;
-      sum[2] += b;
+      sumR += r;
+      sumG += g;
+      sumB += b;
       n++;
     }
-    if (n === 0) return { kind: 'clipped' };
-    const wb = WhiteBalance.neutralTempTint(asShotKelvin, asShotTint, sum.map((v) => v / n));
-    return wb ? { kind: 'white', kelvin: wb[0], tint: wb[1] } : { kind: 'notNeutral' };
+    return WhitePicker.pickFromSum(sumR, sumG, sumB, n, asShotKelvin, asShotTint);
   },
 };
 

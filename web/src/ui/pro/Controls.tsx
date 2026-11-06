@@ -49,6 +49,11 @@ interface Props {
   /** White balance picker armed: the next click on the photo sets temperature and tint. */
   pickingWhite: boolean;
   onPickWhite: () => void;
+  /** Auto white balance armed: draggable extendable rectangle sets temperature and tint. */
+  autoWb: boolean;
+  onAutoWb: () => void;
+  /** Reset white balance (temperature and tint) to as-shot defaults. */
+  onResetWb: () => void;
   /** Lens tab: saves its settings as the lens preset for this lens. */
   onSaveLensPreset: (name: string) => void;
   /** The tab the user chose, kept by the store so it survives this panel leaving (Auto, Presets, a photo loading). */
@@ -59,7 +64,7 @@ interface Props {
 /** The editor's tabs Light, Color, Detail, LUTs, Lens (port of app-pro's Controls.kt). */
 export function ControlsPanel({
   params, defaults, onChange, lutLoading, onSelectLut, filmLoading, onToneMapper, onFilm, onSelectFilm, onStepFilm,
-  lens, skin, blemish, pickingWhite, onPickWhite, onSaveLensPreset, chosenTab, onTab: setTab,
+  lens, skin, blemish, pickingWhite, onPickWhite, autoWb, onAutoWb, onResetWb, onSaveLensPreset, chosenTab, onTab: setTab,
 }: Props) {
   // Film replaces the tone mapper and the user LUT (kept, but not rendered), so the LUTs tab hides while Film is on.
   const filmOn = params.film != null;
@@ -198,6 +203,16 @@ export function ControlsPanel({
             <div className="chips">
               <button type="button" className={pickingWhite ? 'active' : ''} onClick={onPickWhite}>
                 {pickingWhite ? 'Click something neutral grey' : 'Pick white balance'}
+              </button>
+              <button type="button" className={autoWb ? 'active' : ''} onClick={onAutoWb}>
+                Auto WB
+              </button>
+              <button
+                type="button"
+                onClick={onResetWb}
+                disabled={params.temperature === defaults.temperature && params.tint === defaults.tint}
+              >
+                Reset WB
               </button>
             </div>
             <TemperatureSlider kelvin={params.temperature} defaultKelvin={defaults.temperature} onChange={(t) => onChange({ ...params, temperature: t })} />

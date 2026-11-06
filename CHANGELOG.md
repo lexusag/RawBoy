@@ -1,5 +1,10 @@
 # Changelog
 
+**RawBoy Pro (web): Auto WB with draggable rectangle and reset WB button (2026-11-06)**
+
+- Color tab: added the "Auto WB" button next to "Pick white balance" on the web, displaying a draggable, extendable rectangle over the preview to solve white balance from the selected area.
+- Added the "Reset WB" button on the web to revert temperature and tint back to as-shot defaults.
+
 **RawBoy Auto (web): filter grid by ISO range (2026-11-06)**
 
 - Filter bar now features "Min ISO" and "Max ISO" dropdowns instead of a single ISO selector, allowing filtering by any range of ISOs (e.g. ISO 400 to 1600), lower bounds (ISO ≥ min), or upper bounds (ISO ≤ max).

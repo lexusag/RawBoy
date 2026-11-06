@@ -33,7 +33,7 @@ export const PRO_HELP: HelpSection[] = [
       { how: 'Double-click a slider', text: 'Reset it (clicking its value does too).' },
       { how: 'Mouse wheel over a slider', text: 'Move it without clicking; with Shift in big steps, with Ctrl/⌘ in fine ones. A wheel that is scrolling the panel keeps scrolling it.' },
       { how: 'Mouse wheel over Film or stock', text: 'Step through the film stocks without clicking. A wheel scrolling the panel leaves it alone.' },
-      { how: 'Pick white balance', text: 'Color tab: click something neutral grey and Temperature and Tint make it grey.' },
+      { how: 'Pick white balance', text: 'Color tab: click something neutral grey and Temperature and Tint make it grey. Auto WB solves them for a draggable extendable rectangle; Reset WB returns to as-shot defaults.' },
       { how: 'Curves', text: 'Light tab: click the box to add a point, drag it, double-click it to remove. On touch, press on the curve or a point; elsewhere the box scrolls. RGB, then Red, Green and Blue.' },
       { how: 'Detail', text: 'Luma and Color denoise work separately. Local contrast brings out texture; High-pass contrast is wider clarity. Tap Grain\'s name for its size, roughness and color.' },
       { how: 'Presets', text: 'Save the edits by group, apply, import and export .rawboy.json files.' },

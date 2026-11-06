@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { FrameColors } from '../../engine/gl/DevelopRenderer';
-import { cropAspectRatio, cropOf, withCrop, withoutCrop, FULL_CROP, cropWithAspect, type CropAspect } from '../../engine/develop/CropMath';
+import { cropAspectRatio, cropOf, withCrop, withoutCrop, FULL_CROP, cropWithAspect, type CropAspect, type CropRect } from '../../engine/develop/CropMath';
 import { PHOTO_ACCEPT, pickFiles } from '../common/files';
 import { isTabShown } from '../common/tabs';
 import { Preview, PreviewLabel, zoomLabel } from '../common/Preview';
+import { AutoWbOverlay } from './AutoWbOverlay';
 import { ControlsPanel, GeometryPanel } from './Controls';
 import { CropOverlay } from './CropOverlay';
 import { MaskOverlay, type BrushSettings, type MaskTool } from './MaskOverlay';
@@ -82,7 +83,19 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   const [leaksMode, setLeaksMode] = useState(false);
   // White balance picker: armed from the Color tab, the next click on the photo picks.
   const [pickingWhite, setPickingWhite] = useState(false);
-  useEffect(() => setPickingWhite(false), [geometryMode, masksMode, leaksMode, presetsMode, state.fileName]);
+  // Auto white balance: armed from the Color tab with a draggable extendable rectangle.
+  const [autoWb, setAutoWb] = useState(false);
+  const [autoWbRect, setAutoWbRect] = useState<CropRect>({ left: 0.15, top: 0.15, right: 0.85, bottom: 0.85 });
+  useEffect(() => {
+    setPickingWhite(false);
+    setAutoWb(false);
+  }, [geometryMode, masksMode, leaksMode, presetsMode, state.fileName]);
+  useEffect(() => {
+    if (state.controlsTab !== 'Color') {
+      setPickingWhite(false);
+      setAutoWb(false);
+    }
+  }, [state.controlsTab]);
   const [maskTool, setMaskTool] = useState<MaskTool>('move');
   const [brush, setBrushState] = useState<BrushSettings>(loadBrush);
   const setBrush = (b: BrushSettings) => {
@@ -113,8 +126,8 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   const leakId = leaks.some((l) => l.id === selectedLeak) ? selectedLeak : (leaks[leaks.length - 1]?.id ?? null);
   // Overlay handles, also beyond the photo, in either tool.
   const shapesMode = masksMode || leaksMode;
-  // Crop works on the fit view only; masks work at 100% too (frame-colour clicks stay off while masking).
-  const zoomable = !geometryMode;
+  // Crop and Auto WB work on the fit view only; masks work at 100% too (frame-colour clicks stay off while masking).
+  const zoomable = !geometryMode && !autoWb;
   const maskMargin = useMediaQuery('(max-width: 560px)') ? MASK_MARGIN_NARROW : MASK_MARGIN;
   const dpr = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
   const zoomExtra = shapesMode ? maskMargin * dpr : 0;
@@ -428,6 +441,18 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
               onChange={store.setCrop}
             />
           )}
+          {autoWb && !geometryMode && !shapesMode && !session.zoomCenter && !showOriginal && shaderParams && (
+            <AutoWbOverlay
+              frameWidth={shaderParams.lens.outputWidth}
+              frameHeight={shaderParams.lens.outputHeight}
+              rect={autoWbRect}
+              frame={FRAME_WIDTH}
+              onChange={(next) => {
+                setAutoWbRect(next);
+                store.autoWhiteBalance(next);
+              }}
+            />
+          )}
           {masksMode && !showOriginal && shaderParams && (
             <MaskOverlay
               lens={shaderParams.lens}
@@ -575,7 +600,26 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
                   skin={session.skin}
                   blemish={session.blemish}
                   pickingWhite={pickingWhite}
-                  onPickWhite={() => setPickingWhite(!pickingWhite)}
+                  onPickWhite={() => {
+                    const next = !pickingWhite;
+                    setPickingWhite(next);
+                    if (next) setAutoWb(false);
+                  }}
+                  autoWb={autoWb}
+                  onAutoWb={() => {
+                    const next = !autoWb;
+                    setAutoWb(next);
+                    if (next) {
+                      setPickingWhite(false);
+                      store.session.exitZoom();
+                      store.autoWhiteBalance(autoWbRect, true);
+                    }
+                  }}
+                  onResetWb={() => {
+                    setAutoWb(false);
+                    setPickingWhite(false);
+                    store.resetWhiteBalance();
+                  }}
                   onSaveLensPreset={store.saveLensPreset}
                   chosenTab={state.controlsTab}
                   onTab={store.setControlsTab}
