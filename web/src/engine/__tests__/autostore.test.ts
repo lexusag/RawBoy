@@ -461,3 +461,107 @@ describe('Auto export', () => {
     expect(store.state.photos.map((p) => p.status)).toEqual(['exported', 'exported']);
   });
 });
+
+describe('Auto grid filter', () => {
+  it('filters photos by camera, lens, ISO and shoot date, and provides available options with counts', async () => {
+    vi.stubGlobal('window', { setTimeout: () => 0 });
+    const { availableFilterOptions, isFilterActive, NO_FILTER, photoCamera, photoDate, photoIso, photoLens } = await import('../../ui/auto/AutoStore');
+    const { developParams } = await import('../develop/DevelopParams');
+    const { LensInfo } = await import('../lens/LensInfo');
+
+    const store = new AutoStore();
+    store.add([
+      new File(['1'], 'shot1.CR2', { lastModified: 1700000000000 }),
+      new File(['2'], 'shot2.CR2', { lastModified: 1700000000000 }),
+      new File(['3'], 'shot3.CR2', { lastModified: 1700000000000 }),
+    ]);
+
+    const makeAnalysis = (camera: string, lensName: string, iso: number) => ({
+      defaults: developParams(),
+      autoBase: developParams(),
+      camera,
+      lens: new LensInfo(lensName, 6000, 4000, 36, 24, 1, null, null, null, 0),
+      stats: { hasFace: false, iso, key: 0.05, p1: -6, p5: -5, p50: -2, p98: 0, p99: 0.5, clipped: 0, chroma: 0.2, greenBlue: 0.1, warm: 0.2, faceArea: 0, skinLuminance: 0 },
+      base: {} as unknown,
+      bloom: {} as unknown,
+      skin: null,
+      description: `${camera} · ${lensName} · ISO ${iso}`,
+    });
+
+    const s = store as unknown as { _state: { photos: { id: string; date: string | null; analysis: unknown }[] } };
+    s._state.photos[0].analysis = makeAnalysis('Fujifilm X-T5', 'XF35mmF1.4 R', 400);
+    s._state.photos[0].date = '2024:10:15 10:00:00';
+
+    s._state.photos[1].analysis = makeAnalysis('Fujifilm X-T5', 'XF18-55mmF2.8-4 R LM OIS', 1600);
+    s._state.photos[1].date = '2024:10:15 14:30:00';
+
+    s._state.photos[2].analysis = makeAnalysis('Sony ILCE-7M3', 'FE 24-70mm F2.8 GM', 400);
+    s._state.photos[2].date = '2024:10:16 09:15:00';
+
+    const p0 = store.state.photos[0];
+    const p1 = store.state.photos[1];
+    const p2 = store.state.photos[2];
+
+    expect(photoCamera(p0)).toBe('Fujifilm X-T5');
+    expect(photoLens(p0)).toBe('XF35mmF1.4 R');
+    expect(photoIso(p0)).toBe(400);
+    expect(photoDate(p0)).toBe('2024-10-15');
+    expect(photoCamera(p1)).toBe('Fujifilm X-T5');
+    expect(photoCamera(p2)).toBe('Sony ILCE-7M3');
+
+    // Available options
+    const opts = availableFilterOptions(store.state.photos);
+    expect(opts.cameras).toEqual([
+      { value: 'Fujifilm X-T5', label: 'Fujifilm X-T5', count: 2 },
+      { value: 'Sony ILCE-7M3', label: 'Sony ILCE-7M3', count: 1 },
+    ]);
+    expect(opts.lenses).toEqual([
+      { value: 'FE 24-70mm F2.8 GM', label: 'FE 24-70mm F2.8 GM', count: 1 },
+      { value: 'XF18-55mmF2.8-4 R LM OIS', label: 'XF18-55mmF2.8-4 R LM OIS', count: 1 },
+      { value: 'XF35mmF1.4 R', label: 'XF35mmF1.4 R', count: 1 },
+    ]);
+    expect(opts.isos).toEqual([
+      { value: 400, label: 'ISO 400', count: 2 },
+      { value: 1600, label: 'ISO 1600', count: 1 },
+    ]);
+    expect(opts.dates).toEqual([
+      { value: '2024-10-15', label: '2024-10-15', count: 2 },
+      { value: '2024-10-16', label: '2024-10-16', count: 1 },
+    ]);
+
+    // Initial state: NO_FILTER -> all 3 photos shown
+    expect(isFilterActive(store.state.filter)).toBe(false);
+    expect(store.shown.map((p) => p.name)).toEqual(['shot1.CR2', 'shot2.CR2', 'shot3.CR2']);
+
+    // Filter by camera
+    store.setFilter({ camera: 'Fujifilm X-T5' });
+    expect(isFilterActive(store.state.filter)).toBe(true);
+    expect(store.shown.map((p) => p.name)).toEqual(['shot1.CR2', 'shot2.CR2']);
+
+    // Combine with ISO
+    store.setFilter({ iso: 1600 });
+    expect(store.shown.map((p) => p.name)).toEqual(['shot2.CR2']);
+
+    // Filter by lens
+    store.setFilter({ camera: null, iso: null, lens: 'FE 24-70mm F2.8 GM' });
+    expect(store.shown.map((p) => p.name)).toEqual(['shot3.CR2']);
+
+    // Filter by date
+    store.setFilter({ lens: null, date: '2024-10-15' });
+    expect(store.shown.map((p) => p.name)).toEqual(['shot1.CR2', 'shot2.CR2']);
+
+    // No match
+    store.setFilter({ camera: 'Nikon Z8' });
+    expect(store.shown).toEqual([]);
+
+    // Clear filter
+    store.clearFilter();
+    expect(store.state.filter).toEqual(NO_FILTER);
+    expect(store.shown.map((p) => p.name)).toEqual(['shot1.CR2', 'shot2.CR2', 'shot3.CR2']);
+
+    // previousPhoto respects active filter
+    store.setFilter({ camera: 'Fujifilm X-T5' }); // shot1 and shot2
+    expect(store.previousPhoto(p1.id)?.id).toBe(p0.id);
+    expect(store.previousPhoto(p0.id)).toBeNull();
+  });
+});

@@ -1,5 +1,11 @@
 # Changelog
 
+**RawBoy Auto (web): filter grid by camera, lens, ISO and shoot date (2026-11-06)**
+
+- Added a metadata filter bar above the Auto grid with dropdowns for Camera, Lens, ISO, and Shoot date, each displaying the count of matching photos in the batch.
+- Filters work individually or combined; the grid, detail view photo navigation (arrow keys, Space, Backspace, and ‹ › buttons), and batch export show and export only the filtered photos.
+- Added a "Clear filter" button to reset filters back to the full batch, and an empty state when no photos match the active filters.
+
 **RawBoy Auto: clear Saved badges on export, lower contrast while waiting (2026-11-03)**
 
 - Starting a new export clears previous "Saved" badges on the photos being exported (or all photos for "Export all"), so progress can be followed cleanly.
