@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { endSliderDrag, moveSliderDrag, startSliderDrag } from './ParamSlider';
+import { INITIAL_WHEEL_STATE, endSliderDrag, moveSliderDrag, startSliderDrag, stepWheel } from './ParamSlider';
 
 describe('ParamSlider pointer gestures', () => {
   it('drags horizontally with a stylus (pen), including fine moves under touch slop', () => {
@@ -62,3 +62,82 @@ describe('ParamSlider pointer gestures', () => {
     expect(strayTouch?.id).toBe(11);
   });
 });
+
+describe('stepWheel discrete list stepping', () => {
+  const wheel = (deltaY: number, timeStamp: number, deltaMode = 0, deltaX = 0, shiftKey = false) => ({
+    deltaX,
+    deltaY,
+    deltaMode,
+    shiftKey,
+    timeStamp,
+  });
+
+  it('steps immediately on every macOS small-pixel mouse click (e.g. 4..35 px per click)', () => {
+    let state = INITIAL_WHEEL_STATE;
+    const c1 = stepWheel(state, wheel(4, 100));
+    expect(c1.steps).toBe(1);
+    state = c1.state;
+
+    const c2 = stepWheel(state, wheel(12, 220));
+    expect(c2.steps).toBe(1);
+    state = c2.state;
+
+    const c3 = stepWheel(state, wheel(-8, 350));
+    expect(c3.steps).toBe(-1);
+  });
+
+  it('steps once per standard 100/120 px mouse notch without overshooting', () => {
+    let state = INITIAL_WHEEL_STATE;
+    const c1 = stepWheel(state, wheel(100, 100));
+    expect(c1.steps).toBe(1);
+    state = c1.state;
+
+    const c2 = stepWheel(state, wheel(120, 140));
+    expect(c2.steps).toBe(1);
+    state = c2.state;
+
+    const up = stepWheel(state, wheel(-100, 180));
+    expect(up.steps).toBe(-1);
+  });
+
+  it('steps once on both 1-line (macOS Firefox) and 3-line (Windows/Linux Firefox) ticks', () => {
+    const mac = stepWheel(INITIAL_WHEEL_STATE, wheel(1, 100, 1));
+    expect(mac.steps).toBe(1);
+
+    const win = stepWheel(mac.state, wheel(3, 130, 1));
+    expect(win.steps).toBe(1);
+
+    const up = stepWheel(win.state, wheel(-1, 160, 1));
+    expect(up.steps).toBe(-1);
+  });
+
+  it('steps immediately on start of a trackpad gesture and every 30 px thereafter', () => {
+    let state = INITIAL_WHEEL_STATE;
+    // Gesture starts: immediate first step
+    const f1 = stepWheel(state, wheel(6, 100));
+    expect(f1.steps).toBe(1);
+    state = f1.state;
+
+    // 16 ms later: +18 px (under 30 px) -> still on that step
+    const f2 = stepWheel(state, wheel(18, 116));
+    expect(f2.steps).toBe(0);
+    state = f2.state;
+
+    // 16 ms later: +15 px (total 33 px >= 30 px) -> advances a second step
+    const f3 = stepWheel(state, wheel(15, 132));
+    expect(f3.steps).toBe(1);
+    expect(f3.state.acc).toBe(3);
+  });
+
+  it('steps immediately when reversing direction mid-stream and ignores 0 deltas', () => {
+    const down = stepWheel(INITIAL_WHEEL_STATE, wheel(10, 100));
+    expect(down.steps).toBe(1);
+
+    const noop = stepWheel(down.state, wheel(0, 110, 0, 5, false));
+    expect(noop.steps).toBe(0);
+
+    const reverse = stepWheel(noop.state, wheel(-6, 120));
+    expect(reverse.steps).toBe(-1);
+  });
+});
+

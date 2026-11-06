@@ -37,6 +37,71 @@ export function wheelNotches(e: WheelEvent): number {
   return Math.abs(d) >= 40 ? -Math.sign(d) * Math.max(1, Math.round(Math.abs(d) / 100)) : -d / 100;
 }
 
+/** Pause (ms) between wheel events that starts a fresh discrete click or scroll gesture. */
+const WHEEL_IDLE_MS = 65;
+/** Continuous pixel travel per step after the initial step of a gesture (trackpad / smooth wheel). */
+const WHEEL_STEP_PX = 30;
+
+export interface WheelStepState {
+  acc: number;
+  lastTime: number;
+  dir: -1 | 0 | 1;
+  stepped: boolean;
+}
+
+export const INITIAL_WHEEL_STATE: WheelStepState = {
+  acc: 0,
+  lastTime: -Infinity,
+  dir: 0,
+  stepped: false,
+};
+
+/**
+ * Discrete list stepping from a wheel event (e.g. stepping through film stocks): positive steps move forward
+ * (wheel down), negative backward (wheel up). Every discrete mouse click steps immediately (including macOS's small
+ * pixel deltas and 1-line Firefox ticks), while a continuous trackpad or smooth-wheel stream steps once at the start
+ * and then every [WHEEL_STEP_PX] pixels.
+ */
+export function stepWheel(
+  state: WheelStepState,
+  e: Pick<WheelEvent, 'deltaX' | 'deltaY' | 'deltaMode' | 'shiftKey' | 'timeStamp'>,
+): { steps: number; state: WheelStepState } {
+  const d = e.deltaY !== 0 ? e.deltaY : e.shiftKey ? e.deltaX : 0;
+  if (d === 0) return { steps: 0, state };
+  const dir: -1 | 1 = d > 0 ? 1 : -1;
+
+  if (e.deltaMode === 2) {
+    return { steps: dir, state: { acc: 0, lastTime: e.timeStamp, dir, stepped: true } };
+  }
+  if (e.deltaMode === 1 && Math.abs(d) >= 1) {
+    const steps = dir * Math.max(1, Math.round(Math.abs(d) / 3));
+    return { steps, state: { acc: 0, lastTime: e.timeStamp, dir, stepped: true } };
+  }
+
+  const px = e.deltaMode === 1 ? d * 16 : d;
+  if (Math.abs(px) >= 40) {
+    const steps = dir * Math.max(1, Math.round(Math.abs(px) / 100));
+    return { steps, state: { acc: 0, lastTime: e.timeStamp, dir, stepped: true } };
+  }
+
+  const fresh = e.timeStamp - state.lastTime > WHEEL_IDLE_MS || state.dir !== dir;
+  if (fresh || !state.stepped) {
+    return { steps: dir, state: { acc: 0, lastTime: e.timeStamp, dir, stepped: true } };
+  }
+
+  const total = state.acc + px;
+  const steps = Math.trunc(total / WHEEL_STEP_PX) || 0;
+  return {
+    steps,
+    state: {
+      acc: total - steps * WHEEL_STEP_PX,
+      lastTime: e.timeStamp,
+      dir,
+      stepped: true,
+    },
+  };
+}
+
 interface Props {
   label: string;
   value: number;
