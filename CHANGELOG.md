@@ -1,5 +1,11 @@
 # Changelog
 
+**RawBoy Packer: help menu and version display (2026-11-06)**
+
+- Added the "(?)" help button to RawBoy Packer's header (and shortcut `Ctrl+/` / `⌘/`), opening the help sheet like in the other RawBoy apps.
+- The help sheet covers Packer basics, formats and compatibility round-trip, queue and folder management, photo preview shortcuts, and advanced settings.
+- Displays the app version (release, commit, and build time via `versionLabel()`), engine status (`LibRaw + Adobe DNG SDK`), and links to Open-source Licences, About, and Privacy.
+
 **RawBoy Pro: fake anamorphic lens flares (2026-11-06)**
 
 - Detail tab: added fake anamorphic lens flare slider (0–100, off by default) with Neutral, Blue, and Golden coating tint options across Android, iOS, and Web.

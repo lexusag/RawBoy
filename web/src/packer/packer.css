@@ -25,6 +25,13 @@ body {
   pointer-events: none;
 }
 
+.packer-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
 .packer-header h1 {
   margin: 0;
   font-size: 26px;

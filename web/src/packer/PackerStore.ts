@@ -4,12 +4,17 @@ import { findCaptureDate } from '../engine/browse/CaptureDate';
 import type { PackInfo, PackerRequest } from './protocol';
 import { autoFilesAtOnce, outputName, packOptions, settingsSuffix, threadsPerFile, type PackRun, type PackSettings } from './settings';
 
+export interface EngineInitResult {
+  dngSdk: boolean;
+  threads: boolean;
+}
+
 /** One packer worker (WASM engine with the DNG SDK) and a promise-based call into it. */
 class PackerWorker {
   private readonly worker = new Worker(new URL('../worker/packer.worker.ts', import.meta.url), { type: 'module' });
   private nextId = 1;
   private readonly pending = new Map<number, { resolve: (v: unknown) => void; reject: (e: Error) => void }>();
-  readonly ready: Promise<unknown>;
+  readonly ready: Promise<EngineInitResult>;
 
   constructor() {
     this.worker.onmessage = (ev: MessageEvent<{ id: number; ok: boolean; result?: unknown; error?: string }>) => {
@@ -23,7 +28,7 @@ class PackerWorker {
       for (const p of this.pending.values()) p.reject(new Error(ev.message || 'The packer stopped (out of memory?)'));
       this.pending.clear();
     };
-    this.ready = this.send({ op: 'init', wasmBase: new URL('wasm/', document.baseURI).href });
+    this.ready = this.send<EngineInitResult>({ op: 'init', wasmBase: new URL('wasm/', document.baseURI).href });
   }
 
   private send<T>(req: PackerRequest, transfer: Transferable[] = []): Promise<T> {
@@ -192,6 +197,11 @@ export class PackerStore {
     return () => void this.listeners.delete(l);
   };
   readonly getState = () => this.state;
+
+  get engineReady(): Promise<EngineInitResult> {
+    this.inspector ??= this.worker(0);
+    return this.inspector.ready;
+  }
 
   private set(patch: Partial<PackerState>) {
     this.state = { ...this.state, ...patch };
