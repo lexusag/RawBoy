@@ -270,7 +270,8 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   keep only a 256 px JPEG beside them): `findJxlPreview` → wasm `decodeJxl` (libjxl from the DNG SDK build; lite build
   has none and falls back to the JPEG) → `Previews.jxlViewImageOf`; the grid decodes the smallest JXL ≥ 400 px
   (`BrowserStore.thumbnailSource`, not cached), the viewer the smallest ≥ 2560. Test files: `.raw/DSC0227*-compressed.dng`
-  (Sony A7 III, 1024 + 6000 px JXL previews). Ratings: `engine/browse/XmpSidecar.ts` edits only `xmp:Rating` and
+  (Sony A7 III, 1024 + 6000 px JXL previews). Real previews (opt-in, Browser's `realPreviews`, off by default, key R or button):
+  viewer develops raws as shot at 2560 px via `developAsShot` instead of the camera's embedded JPEG. Ratings: `engine/browse/XmpSidecar.ts` edits only `xmp:Rating` and
   `rawboy:Pick` in place, so other apps' sidecars survive. Pro edits (opt-in, Browser's `editsInSidecars`, off by default): `rawboy:Develop` = escaped
   JSON from `develop/Edits.ts` (fields differing from the photo's as-shot defaults, strokes kept via
   `parseLayers(v, true)`); `BrowserStore.editsSidecar` hands an `EditsSidecar` to `ProStore.open` (writes queued on the

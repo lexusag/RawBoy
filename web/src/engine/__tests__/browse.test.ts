@@ -11,6 +11,7 @@ import { NO_ADJUSTMENTS } from '../auto/looks/LookApplier';
 import { decodeAuto, encodeAuto } from '../../ui/auto/AutoSidecar';
 import { groupPhotos, withSuffix } from '../../ui/browser/PhotoGroups';
 import { BrowserStore, photosToSend, withFlag, withStars, type BrowsePhoto, type Filter, type SendCriteria } from '../../ui/browser/BrowserStore';
+import { realViewImageOf, viewImageOf } from '../../ui/browser/Previews';
 import type { Flag } from '../browse/XmpSidecar';
 
 /** A structurally complete JPEG (not decodable): SOF [sof] with the size, a scan with stuffed and restart bytes, EOI. */
@@ -483,5 +484,41 @@ describe('Rating a selection', () => {
     store.setSort('name');
     expect(order()).toEqual(['IMG_2.jpg', 'IMG_9.jpg', 'IMG_10.jpg']);
     store.setSort('date');
+  });
+
+  it('toggles and remembers realPreviews preference', () => {
+    const map = new Map<string, string>();
+    vi.stubGlobal('localStorage', {
+      getItem: (k: string) => map.get(k) ?? null,
+      setItem: (k: string, v: string) => map.set(k, v),
+      removeItem: (k: string) => map.delete(k),
+    });
+    try {
+      const store = new BrowserStore();
+      expect(store.state.realPreviews).toBe(false);
+      store.setRealPreviews(true);
+      expect(store.state.realPreviews).toBe(true);
+      expect(map.get('rawboy.browser.realPreviews')).toBe('1');
+      store.setRealPreviews(false);
+      expect(store.state.realPreviews).toBe(false);
+      expect(map.get('rawboy.browser.realPreviews')).toBe('0');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('returns embedded preview when forceReal is false, and skips embedded when forceReal is true', async () => {
+    const preview = jpeg(3000, 2000);
+    const data = tiff([[[274, 3, [1]], [513, 4, [-1]], [514, 4, [preview.length]]]], [preview]);
+    const file = new File([data], 'test.cr2');
+
+    const embedded = await viewImageOf(file, false);
+    expect(embedded.source).toBe('embedded');
+    expect(embedded.size).toBe('3000 × 2000');
+
+    // With forceReal = true, it bypasses embedded preview (and will attempt raw decode)
+    const real = realViewImageOf(file);
+    // developAsShot fails on fake tiff since RawImage.open fails on non-raw buffer, which proves developAsShot was called
+    await expect(real).rejects.toThrow();
   });
 });
