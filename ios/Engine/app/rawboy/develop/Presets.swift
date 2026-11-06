@@ -32,7 +32,8 @@ public enum PresetGroup: String, CaseIterable, Sendable {
         case .curves: ["curves"]
         case .color: ["saturation", "redHue", "redPurity", "greenHue", "greenPurity", "blueHue", "bluePurity", "tintHue",
                       "tintPurity"]
-        case .detail: ["denoise", "colorDenoise", "sharpening", "localContrast", "highpassContrast", "grain", "grainSize", "grainRoughness", "grainColor", "bloom"]
+        case .detail: ["denoise", "colorDenoise", "sharpening", "localContrast", "highpassContrast", "grain", "grainSize",
+                       "grainRoughness", "grainColor", "bloom", "anamorphic", "anamorphicColor"]
         case .retouch: ["skinRetouch", "blemishRemoval"]
         case .lut: ["lut", "lutAmount"]
         case .lens: ["lensProfile", "lensDistortion", "lensAnamorphic", "lensCrop", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint"]
@@ -272,8 +273,8 @@ public enum Presets {
         "saturation": \.saturation, "redHue": \.redHue, "redPurity": \.redPurity, "greenHue": \.greenHue,
         "greenPurity": \.greenPurity, "blueHue": \.blueHue, "bluePurity": \.bluePurity, "tintHue": \.tintHue,
         "tintPurity": \.tintPurity, "denoise": \.denoise, "sharpening": \.sharpening, "localContrast": \.localContrast,
-        "highpassContrast": \.highpassContrast, "grain": \.grain, "grainSize": \.grainSize,
-        "grainRoughness": \.grainRoughness, "grainColor": \.grainColor, "bloom": \.bloom, "skinRetouch": \.skinRetouch,
+        "grainRoughness": \.grainRoughness, "grainColor": \.grainColor, "bloom": \.bloom,
+        "anamorphic": \.anamorphic, "skinRetouch": \.skinRetouch,
         "blemishRemoval": \.blemishRemoval, "lutAmount": \.lutAmount, "lensDistortion": \.lensDistortion,
         "lensAnamorphic": \.lensAnamorphic, "lensCrop": \.lensCrop, "caRed": \.caRed, "caBlue": \.caBlue,
         "vignetteAmount": \.vignetteAmount, "vignetteMidpoint": \.vignetteMidpoint,
@@ -283,6 +284,7 @@ public enum Presets {
     private static func get(_ p: DevelopParams, _ field: String) -> PresetValue {
         switch field {
         case "toneMapper": .text(p.toneMapper.key)
+        case "anamorphicColor": .text(p.anamorphicColor.key)
         case "lut": .text(p.lut)
         case "film": .text(p.film)
         case "lensProfile": .flag(p.lensProfile)
@@ -304,6 +306,7 @@ public enum Presets {
         case ("colorDenoise", .text(.none)): out.colorDenoise = nil
         case let ("curves", .curves(c)): out.curves = c
         case let ("toneMapper", .text(s)): if let t = ToneMapper.fromKey(s) { out.toneMapper = t }
+        case let ("anamorphicColor", .text(s)): if let c = AnamorphicColor.fromKey(s) { out.anamorphicColor = c }
         case let ("masks", .layers(layers)):
             // Fresh ids, so two photos never share a layer id.
             out.masks = layers.prefix(Masks.maxLayers).map { var l = $0; l.id = Masks.newId(); return l }

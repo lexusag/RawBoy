@@ -4,7 +4,7 @@ import { WhiteBalance } from '../../engine/color/WhiteBalance';
 import { CROP_ASPECTS, cropAspectLabel, cropOf, isFullCrop, type CropAspect } from '../../engine/develop/CropMath';
 import { FILM_STOCKS } from '../../engine/auto/looks/FilmLooks';
 import { LOOK_GROUP_LABELS, LOOK_GROUPS, lutGroup } from '../../engine/auto/looks/Look';
-import { TONE_MAPPERS, effectiveColorDenoise, type DevelopParams, type SliderKey } from '../../engine/develop/DevelopParams';
+import { ANAMORPHIC_COLORS, TONE_MAPPERS, effectiveColorDenoise, type DevelopParams, type SliderKey } from '../../engine/develop/DevelopParams';
 import type { LensInfo } from '../../engine/lens/LensInfo';
 import type { LutEntry } from '../../engine/lut/LutData';
 import { LutRepository } from '../../engine/lut/LutRepository';
@@ -274,6 +274,7 @@ export function ControlsPanel({
             {slider('Blemish removal', 'blemishRemoval', 0, 100, formatPlain)}
             {blemishNote && <Note>{blemishNote}</Note>}
             {slider('Bloom', 'bloom', 0, 100, formatPlain)}
+            <AnamorphicSliders params={params} defaults={defaults} onChange={onChange} />
             <GrainSliders params={params} defaults={defaults} onChange={onChange} />
             <Note>Denoise and grain are sized in full-resolution pixels: judge them in the 100% view (double-click the photo).</Note>
           </>
@@ -473,6 +474,58 @@ function LensPresetSave({ lensName, onSave }: { lensName: string; onSave: (name:
           ? 'This photo records no lens (a manual lens?): in the Auto tab, pick the preset by name for the photos taken with it.'
           : `The Auto tab applies these settings to every photo taken with ${lensName.trim()}, on top of its look; only the lens settings change.`}
       </Note>
+    </>
+  );
+}
+
+/**
+ * Anamorphic lens flare, whose colour choices (Neutral, Blue, Golden) open when the slider is raised or when a
+ * non-default colour is picked, and can also be toggled from the slider's label. Port of Controls.kt's AnamorphicSliders.
+ */
+function AnamorphicSliders({
+  params,
+  defaults,
+  onChange,
+}: {
+  params: DevelopParams;
+  defaults: DevelopParams;
+  onChange: (p: DevelopParams) => void;
+}) {
+  const [open, setOpen] = useState<boolean | null>(null);
+  const active = params.anamorphic > 0 || params.anamorphicColor !== defaults.anamorphicColor;
+  const shown = open ?? active;
+  return (
+    <>
+      <ParamSlider
+        key="anamorphic"
+        label={shown ? 'Anamorphic ▾' : 'Anamorphic ▸'}
+        value={params.anamorphic}
+        min={0}
+        max={100}
+        defaultValue={defaults.anamorphic}
+        format={formatPlain}
+        onLabelClick={() => setOpen(!shown)}
+        onChange={(v) => {
+          if (v === 0 && open === false) setOpen(null);
+          onChange({ ...params, anamorphic: v });
+        }}
+      />
+      {shown && (
+        <div className="slider-details">
+          <div className="chips" role="group" aria-label="Anamorphic flare color">
+            {ANAMORPHIC_COLORS.map((c) => (
+              <button
+                key={c.key}
+                type="button"
+                className={params.anamorphicColor === c.key ? 'active' : ''}
+                onClick={() => onChange({ ...params, anamorphicColor: c.key })}
+              >
+                {c.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </>
   );
 }

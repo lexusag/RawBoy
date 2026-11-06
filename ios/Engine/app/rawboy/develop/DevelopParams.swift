@@ -14,6 +14,7 @@ import Foundation
  * - localContrast: -100..100 edge-aware mid-frequency detail (texture a few pixels across), 0 = off
  * - highpassContrast: -100..100 local (clarity-style) contrast, 0 = off
  * - bloom: 0..100 diffusion-filter glow, 0 = off
+ * - anamorphic: 0..100 horizontal anamorphic lens flare, 0 = off; anamorphicColor: AnamorphicColor coating tint
  * - skinRetouch: 0..100 smoothing of skin (found by a segmentation model), 0 = off
  * - blemishRemoval: 0..100 automatic spot healing on skin; higher heals fainter spots, 0 = off
  * - lut: LutEntry id or nil for "No LUT"; lutAmount: 0..100 strength
@@ -70,6 +71,8 @@ public struct DevelopParams: Equatable, Sendable {
     public var localContrast: Float = 0
     public var highpassContrast: Float = 0
     public var bloom: Float = 0
+    public var anamorphic: Float = 0
+    public var anamorphicColor: AnamorphicColor = .neutral
     public var skinRetouch: Float = 0
     public var blemishRemoval: Float = 0
     public var lut: String? = nil
@@ -150,4 +153,32 @@ public enum ToneMapper: CaseIterable, Sendable {
     }
 
     public static func fromKey(_ key: String?) -> ToneMapper? { allCases.first { $0.key == key } }
+}
+
+/**
+ * Coating colour of Pro's fake anamorphic lens flare (`uAnamorphicTint`: linear Rec.2020 RGB reflectance + luminance
+ * mix, see shaders/develop.glsl). [key] is stored in presets.
+ */
+public enum AnamorphicColor: String, CaseIterable, Equatable, Sendable {
+    case neutral, blue, golden
+
+    public var key: String { rawValue }
+
+    public var label: String {
+        switch self {
+        case .neutral: "Neutral"
+        case .blue: "Blue"
+        case .golden: "Golden"
+        }
+    }
+
+    public var tint: [Float] {
+        switch self {
+        case .neutral: [1, 1, 1, 0.35]
+        case .blue: [0.32, 0.6, 1.55, 0.85]
+        case .golden: [1.15, 0.71, 0.15, 0.85]
+        }
+    }
+
+    public static func fromKey(_ key: String?) -> AnamorphicColor? { key.flatMap(AnamorphicColor.init(rawValue:)) }
 }

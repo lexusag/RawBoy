@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import app.rawboy.color.PrimariesSlider
 import app.rawboy.color.PrimariesTrack
 import app.rawboy.color.WhiteBalance
+import app.rawboy.develop.AnamorphicColor
 import app.rawboy.develop.CropAspect
 import app.rawboy.develop.DevelopParams
 import app.rawboy.develop.ToneMapper
@@ -277,6 +278,7 @@ fun ControlsPanel(
                 ParamSlider("Bloom", params.bloom, 0f..100f, defaults.bloom, ::formatPlain) {
                     onChange(params.copy(bloom = it))
                 }
+                AnamorphicSliders(params, defaults, onChange)
                 GrainSliders(params, defaults, onChange)
             } else if (tab == 4) {
                 LensPanel(params, defaults, lens, onChange, onSaveLensPreset)
@@ -558,6 +560,38 @@ internal fun ParamSlider(
         trackBrush = trackBrush,
         onChange = onChange,
     )
+}
+
+/**
+ * Anamorphic lens flare, whose colour choices (Neutral, Blue, Golden) open when the slider is raised or when a
+ * non-default colour is picked, and can also be toggled from the slider's label.
+ */
+@Composable
+private fun AnamorphicSliders(params: DevelopParams, defaults: DevelopParams, onChange: (DevelopParams) -> Unit) {
+    val active = params.anamorphic > 0f || params.anamorphicColor != defaults.anamorphicColor
+    var open by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    val shown = open ?: active
+    ParamSlider(
+        if (shown) "Anamorphic ▾" else "Anamorphic ▸", params.anamorphic, 0f..100f, defaults.anamorphic, ::formatPlain,
+        onLabelClick = { open = !shown },
+    ) {
+        if (it == 0f && open == false) open = null
+        onChange(params.copy(anamorphic = it))
+    }
+    if (!shown) return
+    Row(
+        Modifier.padding(start = 16.dp).horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        for (c in AnamorphicColor.entries) {
+            FilterChip(
+                selected = params.anamorphicColor == c,
+                onClick = { onChange(params.copy(anamorphicColor = c)) },
+                label = { Text(c.label) },
+            )
+        }
+    }
 }
 
 /**

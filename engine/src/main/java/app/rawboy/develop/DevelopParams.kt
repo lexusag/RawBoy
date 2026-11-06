@@ -16,6 +16,7 @@ import app.rawboy.color.BwFilter
  * - localContrast: -100..100 edge-aware mid-frequency detail (texture a few pixels across), 0 = off
  * - highpassContrast: -100..100 local (clarity-style) contrast, 0 = off
  * - bloom: 0..100 diffusion-filter glow, 0 = off
+ * - anamorphic: 0..100 horizontal anamorphic lens flare, 0 = off; anamorphicColor: [AnamorphicColor] coating tint
  * - skinRetouch: 0..100 smoothing of skin (found by a segmentation model), 0 = off
  * - blemishRemoval: 0..100 automatic spot healing on skin; higher heals fainter spots, 0 = off
  * - lut: LutEntry id or null for "No LUT"; lutAmount: 0..100 strength
@@ -73,6 +74,8 @@ data class DevelopParams(
     val localContrast: Float = 0f,
     val highpassContrast: Float = 0f,
     val bloom: Float = 0f,
+    val anamorphic: Float = 0f,
+    val anamorphicColor: AnamorphicColor = AnamorphicColor.NEUTRAL,
     val skinRetouch: Float = 0f,
     val blemishRemoval: Float = 0f,
     val lut: String? = null,
@@ -130,5 +133,19 @@ enum class ToneMapper(val shaderId: Int, val key: String, val label: String) {
 
     companion object {
         fun fromKey(key: String?): ToneMapper? = entries.firstOrNull { it.key == key }
+    }
+}
+
+/**
+ * Coating colour of Pro's fake anamorphic lens flare (`uAnamorphicTint`: linear Rec.2020 RGB reflectance + luminance
+ * mix, see shaders/develop.glsl). [key] is stored in presets and edits.
+ */
+enum class AnamorphicColor(val key: String, val label: String, internal val tint: FloatArray) {
+    NEUTRAL("neutral", "Neutral", floatArrayOf(1f, 1f, 1f, 0.35f)),
+    BLUE("blue", "Blue", floatArrayOf(0.32f, 0.6f, 1.55f, 0.85f)),
+    GOLDEN("golden", "Golden", floatArrayOf(1.15f, 0.71f, 0.15f, 0.85f));
+
+    companion object {
+        fun fromKey(key: String?): AnamorphicColor? = entries.firstOrNull { it.key == key }
     }
 }

@@ -146,6 +146,8 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
     private val uBloomTail = GLES30.glGetUniformLocation(id, "uBloomTail")
     private val uBloomHaloTexel = GLES30.glGetUniformLocation(id, "uBloomHaloTexel")
     private val uBloomTailTexel = GLES30.glGetUniformLocation(id, "uBloomTailTexel")
+    private val uAnamorphic = GLES30.glGetUniformLocation(id, "uAnamorphic")
+    private val uAnamorphicTint = GLES30.glGetUniformLocation(id, "uAnamorphicTint")
     private val uLut = GLES30.glGetUniformLocation(id, "uLut")
     private val uLutSize = GLES30.glGetUniformLocation(id, "uLutSize")
     private val uLutAmount = GLES30.glGetUniformLocation(id, "uLutAmount")
@@ -267,6 +269,8 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
         GLES30.glUniform1f(uSkinSigma, skin?.sigmaPx ?: 3f)
         val bloomReady = p.bloomHalo != null && p.bloomTail != null
         GLES30.glUniform1f(uBloom, if (bloomReady) p.bloom else 0f)
+        GLES30.glUniform1f(uAnamorphic, if (p.bloomHalo != null) p.anamorphic else 0f)
+        GLES30.glUniform4fv(uAnamorphicTint, 1, p.anamorphicTint, 0)
         GLES30.glUniform1i(uBloomHalo, ImageTexture.BLOOM_HALO_UNIT)
         GLES30.glUniform1i(uBloomTail, ImageTexture.BLOOM_TAIL_UNIT)
         GLES30.glUniform2f(uBloomHaloTexel, 1f / (p.bloomHalo?.width ?: 1), 1f / (p.bloomHalo?.height ?: 1))
@@ -415,6 +419,7 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
     fun bindLiveCopies(p: ShaderParams, baseWidth: Int, baseHeight: Int, tailWidth: Int, tailHeight: Int) {
         GLES30.glUniform1f(uClarity, p.highpassContrast)
         GLES30.glUniform1f(uBloom, p.bloom)
+        GLES30.glUniform1f(uAnamorphic, p.anamorphic)
         GLES30.glUniform2f(uBaseTexel, 1f / baseWidth, 1f / baseHeight)
         GLES30.glUniform2f(uBloomHaloTexel, 1f / baseWidth, 1f / baseHeight)
         GLES30.glUniform2f(uBloomTailTexel, 1f / tailWidth, 1f / tailHeight)
