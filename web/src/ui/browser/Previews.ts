@@ -28,15 +28,22 @@ let decodeTail: Promise<unknown> = Promise.resolve();
  * bigger than its JPEG), else the raw developed as shot (white balance as shot, every slider at default) at
  * [DECODED_SIZE].
  */
-export async function viewImageOf(file: File): Promise<ViewImage> {
+export async function viewImageOf(file: File, forceReal = false): Promise<ViewImage> {
   if (!isRawName(file.name) && !/\.tiff?$/i.test(file.name)) return { blob: file, size: '', source: 'image' };
-  const jxl = await jxlViewImageOf(file, DECODED_SIZE);
-  if (jxl) return jxl;
-  const embedded = await findEmbeddedPreview(file);
-  if (embedded) return { blob: embedded.jpeg, size: `${embedded.width} × ${embedded.height}`, source: 'embedded' };
+  if (!forceReal) {
+    const jxl = await jxlViewImageOf(file, DECODED_SIZE);
+    if (jxl) return jxl;
+    const embedded = await findEmbeddedPreview(file);
+    if (embedded) return { blob: embedded.jpeg, size: `${embedded.width} × ${embedded.height}`, source: 'embedded' };
+  }
   const run = decodeTail.then(() => developAsShot(file));
   decodeTail = run.catch(() => undefined);
   return run;
+}
+
+/** The raw developed as shot by RawBoy at [DECODED_SIZE], ignoring any embedded preview. */
+export function realViewImageOf(file: File): Promise<ViewImage> {
+  return viewImageOf(file, true);
 }
 
 /**

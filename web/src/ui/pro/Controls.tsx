@@ -1,8 +1,8 @@
-import { Fragment, useEffect, useState, useSyncExternalStore } from 'react';
+import { Fragment, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { PrimariesTrack, type PrimariesSlider } from '../../engine/color/PrimariesTrack';
 import { WhiteBalance } from '../../engine/color/WhiteBalance';
 import { CROP_ASPECTS, cropAspectLabel, cropOf, isFullCrop, type CropAspect } from '../../engine/develop/CropMath';
-import { ALL_FILM_LOOKS } from '../../engine/auto/looks/FilmLooks';
+import { FILM_STOCKS } from '../../engine/auto/looks/FilmLooks';
 import { LOOK_GROUP_LABELS, LOOK_GROUPS, lutGroup } from '../../engine/auto/looks/Look';
 import { TONE_MAPPERS, effectiveColorDenoise, type DevelopParams, type SliderKey } from '../../engine/develop/DevelopParams';
 import type { LensInfo } from '../../engine/lens/LensInfo';
@@ -10,14 +10,27 @@ import type { LutEntry } from '../../engine/lut/LutData';
 import { LutRepository } from '../../engine/lut/LutRepository';
 import type { BlemishState, SkinState } from '../../engine/session/PhotoSession';
 import { pickFiles } from '../common/files';
-import { ParamSlider, formatDegrees, formatEv, formatPlain } from '../common/ParamSlider';
+import { ParamSlider, continuesPageScroll, formatDegrees, formatEv, formatPlain, wheelNotches } from '../common/ParamSlider';
 import { useTabScroll } from '../common/useTabScroll';
 import { CurvesPanel } from './CurvesPanel';
 import { CONTROLS_TABS as TABS, type ControlsTab as Tab } from './ProStore';
 
-
-/** The Film tone mapper's stocks (Auto's film looks without Natural). */
-const FILM_STOCKS = ALL_FILM_LOOKS.filter((l) => l.film != null);
+/**
+ * Accumulates wheel notches for discrete stepping (e.g. through a list of film stocks),
+ * stepping towards positive deltas for wheel down / scroll down, and negative for scroll up.
+ * Returns the number of discrete steps to advance (or 0 if not enough accumulated).
+ */
+export function accumulateWheelSteps(
+  acc: number,
+  notches: number,
+): { steps: number; newAcc: number } {
+  if (notches === 0) return { steps: 0, newAcc: acc };
+  const delta = -notches;
+  const base = Math.sign(acc) !== Math.sign(delta) ? 0 : acc;
+  const total = base + delta;
+  const steps = Math.trunc(total) || 0;
+  return { steps, newAcc: total - steps };
+}
 
 interface Props {
   params: DevelopParams;
@@ -29,6 +42,7 @@ interface Props {
   onToneMapper: (t: DevelopParams['toneMapper']) => void;
   onFilm: () => void;
   onSelectFilm: (id: string) => void;
+  onStepFilm: (delta: number) => void;
   lens: LensInfo;
   skin: SkinState;
   blemish: BlemishState;
@@ -44,8 +58,8 @@ interface Props {
 
 /** The editor's tabs Light, Color, Detail, LUTs, Lens (port of app-pro's Controls.kt). */
 export function ControlsPanel({
-  params, defaults, onChange, lutLoading, onSelectLut, filmLoading, onToneMapper, onFilm, onSelectFilm, lens, skin, blemish,
-  pickingWhite, onPickWhite, onSaveLensPreset, chosenTab, onTab: setTab,
+  params, defaults, onChange, lutLoading, onSelectLut, filmLoading, onToneMapper, onFilm, onSelectFilm, onStepFilm,
+  lens, skin, blemish, pickingWhite, onPickWhite, onSaveLensPreset, chosenTab, onTab: setTab,
 }: Props) {
   // Film replaces the tone mapper and the user LUT (kept, but not rendered), so the LUTs tab hides while Film is on.
   const filmOn = params.film != null;
@@ -55,6 +69,43 @@ export function ControlsPanel({
   useEffect(() => {
     if (tab === 'LUTs') void LutRepository.rescan(); // pick up changes in the user's folder
   }, [tab]);
+
+  const filmButtonRef = useRef<HTMLButtonElement | null>(null);
+  const stockRef = useRef<HTMLLabelElement | null>(null);
+
+  useEffect(() => {
+    const button = filmButtonRef.current;
+    const stock = stockRef.current;
+    const elements: HTMLElement[] = [];
+    if (button) elements.push(button);
+    if (stock) elements.push(stock);
+    if (elements.length === 0) return;
+
+    let wheelAcc = 0;
+    const onWheel = (e: WheelEvent) => {
+      if (continuesPageScroll(e)) return;
+      const notches = wheelNotches(e);
+      if (notches === 0) return;
+      e.preventDefault();
+      const res = accumulateWheelSteps(wheelAcc, notches);
+      wheelAcc = res.newAcc;
+      if (res.steps !== 0) {
+        onStepFilm(res.steps);
+      }
+    };
+    const onLeave = () => { wheelAcc = 0; };
+
+    for (const el of elements) {
+      el.addEventListener('wheel', onWheel, { passive: false });
+      el.addEventListener('mouseleave', onLeave);
+    }
+    return () => {
+      for (const el of elements) {
+        el.removeEventListener('wheel', onWheel);
+        el.removeEventListener('mouseleave', onLeave);
+      }
+    };
+  }, [tab, params.film, onStepFilm]);
 
   const slider = (label: string, key: SliderKey, min: number, max: number, format?: (v: number) => string, def = defaults[key]) => (
     <ParamSlider key={key} label={label} value={params[key]} min={min} max={max} defaultValue={def} format={format} onChange={(v) => onChange({ ...params, [key]: v })} />
@@ -105,11 +156,19 @@ export function ControlsPanel({
                   {m.label}
                 </button>
               ))}
-              <button type="button" className={params.film ? 'active' : ''} onClick={onFilm}>Film</button>
+              <button
+                ref={filmButtonRef}
+                type="button"
+                className={params.film ? 'active' : ''}
+                onClick={onFilm}
+                title="Film tone mapper (mouse wheel scrolls stocks)"
+              >
+                Film
+              </button>
             </div>
             {params.film && (
               <>
-                <label className="film-stock">
+                <label ref={stockRef} className="film-stock" title="Film stock (mouse wheel scrolls stocks)">
                   <span>Stock</span>
                   <select value={params.film} onChange={(e) => onSelectFilm(e.target.value)}>
                     {FILM_STOCKS.map((l) => (

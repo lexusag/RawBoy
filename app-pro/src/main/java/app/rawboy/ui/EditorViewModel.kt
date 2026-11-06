@@ -45,6 +45,7 @@ import app.rawboy.lut.LutRepository
 import app.rawboy.session.PhotoSession
 import app.rawboy.view.EditHistory
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -249,6 +250,34 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 WhitePicker.Pick.NotNeutral -> _state.update { it.copy(message = "No white balance makes that spot grey") }
             }
         }
+    }
+
+    private var autoWbJob: Job? = null
+
+    /** Auto white balance for an area of the photo, setting temperature and tint. */
+    fun autoWhiteBalance(rect: CropRect, force: Boolean = false) {
+        val s = _state.value
+        if (!s.hasImage) return
+        autoWbJob?.cancel()
+        autoWbJob = viewModelScope.launch {
+            val pick = try {
+                session.autoWhite(rect, s.defaults)
+            } catch (e: Exception) {
+                null
+            } ?: return@launch
+            if (_state.value.fileName != s.fileName) return@launch
+            when (pick) {
+                is WhitePicker.Pick.White -> commit(_state.value.params.copy(temperature = pick.kelvin, tint = pick.tint), force = force)
+                WhitePicker.Pick.Clipped -> _state.update { it.copy(message = "That region is blown out: pick an area that isn't clipped") }
+                WhitePicker.Pick.NotNeutral -> _state.update { it.copy(message = "No white balance makes that area grey") }
+            }
+        }
+    }
+
+    /** Resets white balance (temperature and tint) back to the as-shot defaults. */
+    fun resetWhiteBalance() {
+        val d = _state.value.defaults
+        commit(_state.value.params.copy(temperature = d.temperature, tint = d.tint), force = true)
     }
 
     /** Drag in the zoomed view, in screen pixels. */

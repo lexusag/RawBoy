@@ -44,6 +44,11 @@ export interface BrowserState {
    * only; remembered in this browser, off until turned on).
    */
   editsInSidecars: boolean;
+  /**
+   * RawBoy develops raws as shot in the viewer instead of showing the camera's embedded JPEG preview (remembered
+   * in this browser, off until turned on).
+   */
+  realPreviews: boolean;
   /** The folder opened last time (its handle is kept), for Reopen; null when there is none. */
   lastFolder: string | null;
   canUndo: boolean;
@@ -54,6 +59,7 @@ export interface BrowserState {
 const AUTO_ADVANCE_KEY = 'rawboy.browser.autoAdvance';
 const SORT_KEY = 'rawboy.browser.sort';
 const EDITS_IN_SIDECARS_KEY = 'rawboy.browser.editsInSidecars';
+const REAL_PREVIEWS_KEY = 'rawboy.browser.realPreviews';
 /** IndexedDB key of the last folder's handle. */
 const FOLDER_KEY = 'browseFolder';
 const LAST_FOLDER_KEY = 'rawboy.browser.lastFolder';
@@ -152,6 +158,14 @@ function savedAutoAdvance(): boolean {
   }
 }
 
+function savedRealPreviews(): boolean {
+  try {
+    return localStorage.getItem(REAL_PREVIEWS_KEY) === '1';
+  } catch {
+    return false;
+  }
+}
+
 const values = (dir: FileSystemDirectoryHandle) =>
   (dir as unknown as { values(): AsyncIterable<FileSystemHandle> }).values();
 
@@ -203,13 +217,14 @@ async function moveFile(from: FileSystemDirectoryHandle, name: string, to: FileS
 export class BrowserStore {
   private _state: BrowserState = {
     folder: null, photos: [], filter: 'all', minStars: 0, sort: savedSort(SORT_KEY), current: null, viewing: false, binCount: 0,
-    autoAdvance: savedAutoAdvance(), editsInSidecars: savedEditsInSidecars(), lastFolder: null, canUndo: false, busy: false, message: null,
+    autoAdvance: savedAutoAdvance(), editsInSidecars: savedEditsInSidecars(), realPreviews: savedRealPreviews(), lastFolder: null, canUndo: false, busy: false, message: null,
   };
   private readonly listeners = new Set<() => void>();
   private dir: FileSystemDirectoryHandle | null = null;
   /** Picked files by name (no folder access). */
   private files = new Map<string, File>();
-  private readonly views = new Map<string, Promise<ViewImage>>();
+  private readonly embeddedViews = new Map<string, Promise<ViewImage>>();
+  private readonly realViews = new Map<string, Promise<ViewImage>>();
   private readonly undoStack: Undo[] = [];
   private readonly writeTimers = new Map<string, number>();
   private writes: Promise<unknown> = Promise.resolve();
@@ -364,7 +379,8 @@ export class BrowserStore {
     for (const p of this._state.photos) if (p.thumbnail) URL.revokeObjectURL(p.thumbnail);
     this.dir = null;
     this.files = new Map();
-    this.views.clear();
+    this.embeddedViews.clear();
+    this.realViews.clear();
     this.undoStack.length = 0;
     this.thumbQueue = [];
     this.update({ folder: null, photos: [], current: null, viewing: false, binCount: 0, canUndo: false });
@@ -492,12 +508,13 @@ export class BrowserStore {
   // ---- Thumbnails and the viewer's image ----
 
   /** What the viewer shows for [id]; kept, so going back and forth is instant. */
-  viewImage(id: string): Promise<ViewImage> {
-    let v = this.views.get(id);
+  viewImage(id: string, forceReal = this._state.realPreviews): Promise<ViewImage> {
+    const cache = forceReal ? this.realViews : this.embeddedViews;
+    let v = cache.get(id);
     if (!v) {
-      v = this.fileOf(id).then(viewImageOf);
-      v.catch(() => this.views.delete(id));
-      this.views.set(id, v);
+      v = this.fileOf(id).then((file) => viewImageOf(file, forceReal));
+      v.catch(() => cache.delete(id));
+      cache.set(id, v);
     }
     return v;
   }
@@ -507,9 +524,9 @@ export class BrowserStore {
    * small one (a full-size JXL preview takes ~10× as long), not kept.
    */
   private async thumbnailSource(id: string): Promise<ViewImage> {
-    const cached = this.views.get(id);
+    const cached = this.realViews.get(id) ?? this.embeddedViews.get(id);
     if (cached) return cached;
-    return (await jxlViewImageOf(await this.fileOf(id), THUMBNAIL)) ?? this.viewImage(id);
+    return (await jxlViewImageOf(await this.fileOf(id), THUMBNAIL)) ?? this.viewImage(id, false);
   }
 
   /** Makes [ids]' thumbnails next (the viewer's neighbours, photos scrolled into view). */
@@ -753,6 +770,15 @@ export class BrowserStore {
     this.update({ editsInSidecars });
     try {
       localStorage.setItem(EDITS_IN_SIDECARS_KEY, editsInSidecars ? '1' : '0');
+    } catch {
+      // not remembered
+    }
+  }
+
+  setRealPreviews(realPreviews: boolean) {
+    this.update({ realPreviews });
+    try {
+      localStorage.setItem(REAL_PREVIEWS_KEY, realPreviews ? '1' : '0');
     } catch {
       // not remembered
     }

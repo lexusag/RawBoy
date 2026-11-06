@@ -26,23 +26,30 @@ object WhitePicker {
     fun box(x: Float, y: Float, width: Int, height: Int): IntArray =
         MeterArea.Spot(x / width, y / height, SPOT_SIZE).box(width, height)
 
+    /** Solves for white balance from accumulated RGB sums and sample count [n]. */
+    fun pickFromSum(sumR: Double, sumG: Double, sumB: Double, n: Int, asShotKelvin: Float, asShotTint: Float): Pick {
+        if (n == 0) return Pick.Clipped
+        val mean = doubleArrayOf(sumR / n, sumG / n, sumB / n)
+        val wb = WhiteBalance.neutralTempTint(asShotKelvin.toDouble(), asShotTint.toDouble(), mean) ?: return Pick.NotNeutral
+        return Pick.White(wb[0].toFloat(), wb[1].toFloat())
+    }
+
     /** [rgb]: the box's pixels (RGB triplets, linear Rec.2020 as decoded); as-shot white from the photo's defaults. */
     fun pick(rgb: FloatArray, asShotKelvin: Float, asShotTint: Float): Pick {
-        val sum = DoubleArray(3)
+        var sumR = 0.0
+        var sumG = 0.0
+        var sumB = 0.0
         var n = 0
         for (i in 0 until rgb.size / 3) {
             val r = rgb[i * 3]
             val g = rgb[i * 3 + 1]
             val b = rgb[i * 3 + 2]
             if (r >= CLIP || g >= CLIP || b >= CLIP) continue
-            sum[0] += r
-            sum[1] += g
-            sum[2] += b
+            sumR += r
+            sumG += g
+            sumB += b
             n++
         }
-        if (n == 0) return Pick.Clipped
-        val mean = DoubleArray(3) { sum[it] / n }
-        val wb = WhiteBalance.neutralTempTint(asShotKelvin.toDouble(), asShotTint.toDouble(), mean) ?: return Pick.NotNeutral
-        return Pick.White(wb[0].toFloat(), wb[1].toFloat())
+        return pickFromSum(sumR, sumG, sumB, n, asShotKelvin, asShotTint)
     }
 }

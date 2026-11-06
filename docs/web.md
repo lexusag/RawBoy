@@ -57,7 +57,8 @@ blemish removal use the same MediaPipe models in the browser.
   the small one for the grid, the full-size one at 2560 px in the viewer (needs the build with the Adobe DNG SDK). A
   RAW + JPEG pair is one photo.
   Keys: **1–5** stars, **P** pick, **X** reject, **U** unflag, **Mod+Z** undo, arrows to move, Enter to open, Esc back,
-  **Z** or double-click for 1:1 of the preview, **E** to edit in RawBoy; **Auto-advance** goes on to the next photo
+  **Z** or double-click for 1:1 of the preview, **R** or **Real preview** to develop the raw with RawBoy instead of
+  showing the camera's embedded JPEG preview (remembered), **E** to edit in RawBoy; **Auto-advance** goes on to the next photo
   after rating. Filters: All / Picks / Unflagged / Rejects and minimum stars. The grid is in shoot-date order (EXIF
   capture date, else the file's date; read after the folder shows, so it may reorder once), or **File name** order
   from the menu next to the filters (remembered). Ratings are written as you go into XMP
