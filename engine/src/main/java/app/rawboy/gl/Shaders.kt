@@ -47,10 +47,12 @@ internal object Shaders {
         append("    if (uLeakCount > 0) c = applyLeaks(c, srcG, outPx);\n")
         if (forExport) {
             // 16-bit unsigned integer target: exact, core in GLES 3.0, no float-buffer extension needed.
+            append("    if (uClipFrame > 0.5) c *= frameMask(srcG);\n")
             append("    fragColor = uvec4(uvec3(c * 65535.0 + 0.5), 65535u);\n")
         } else {
-            append("    if (uClipWarn > 0.0) c = clipWarning(c);\n")
-            append("    fragColor = vec4(c, 1.0);\n")
+            append("    float fm = uClipFrame > 0.5 ? frameMask(srcG) : 1.0;\n")
+            append("    if (uClipWarn > 0.0 && fm >= 1.0) c = clipWarning(c);\n")
+            append("    fragColor = vec4(c * fm, 1.0);\n")
         }
         append("}\n")
     }

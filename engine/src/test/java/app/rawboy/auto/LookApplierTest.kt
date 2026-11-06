@@ -81,19 +81,27 @@ class LookApplierTest {
 
     @Test
     fun lensPresetChangesOnlyTheLensSettingsOnTopOfTheLook() {
-        val lens = Presets.captureLens(DevelopParams(lensProfile = false, lensDistortion = -15f, caRed = 30f, caBlue = -10f, vignetteAmount = 20f, vignetteMidpoint = 30f), "24mm")
+        val lens = Presets.captureLens(
+            DevelopParams(lensProfile = false, lensDistortion = -15f, lensAnamorphic = -45f, lensCrop = -30f, caRed = 30f, caBlue = -10f, vignetteAmount = 20f, vignetteMidpoint = 30f),
+            "24mm",
+        )
         val base = DevelopParams(exposure = 1.2f, temperature = 5600f)
         val look = Looks.NATURAL
         val plain = LookApplier.develop(base, look, 100f, Adjustments.NONE, hasFace = false, preset = null, lensPreset = null)
         val p = LookApplier.develop(base, look, 100f, Adjustments.NONE, hasFace = false, preset = null, lensPreset = lens)
-        assertEquals(plain.copy(lensProfile = false, lensDistortion = -15f, caRed = 30f, caBlue = -10f, vignetteAmount = p.vignetteAmount, vignetteMidpoint = 30f), p)
+        assertEquals(
+            plain.copy(lensProfile = false, lensDistortion = -15f, lensAnamorphic = -45f, lensCrop = -30f, caRed = 30f, caBlue = -10f, vignetteAmount = p.vignetteAmount, vignetteMidpoint = 30f),
+            p,
+        )
         // The look's own vignette stays on top of the lens preset's.
         assertEquals((20f + plain.vignetteAmount - base.vignetteAmount).coerceIn(-100f, 100f), p.vignetteAmount, 1e-5f)
         // A RawBoy preset's Lens group gives way to the lens preset; its other groups stay.
-        val street = Presets.capture("Street", DevelopParams(exposure = 0.3f, lensDistortion = 40f, vignetteAmount = -50f), setOf(PresetGroup.LIGHT, PresetGroup.LENS))
+        val street = Presets.capture("Street", DevelopParams(exposure = 0.3f, lensDistortion = 40f, lensAnamorphic = 25f, lensCrop = 15f, vignetteAmount = -50f), setOf(PresetGroup.LIGHT, PresetGroup.LENS))
         val q = LookApplier.develop(base, look, 100f, Adjustments.NONE, hasFace = false, preset = street, lensPreset = lens)
         assertEquals(0.3f, q.exposure, 1e-6f)
         assertEquals(-15f, q.lensDistortion, 1e-6f)
+        assertEquals(-45f, q.lensAnamorphic, 1e-6f)
+        assertEquals(-30f, q.lensCrop, 1e-6f)
         assertEquals(20f, q.vignetteAmount, 1e-6f)
     }
 

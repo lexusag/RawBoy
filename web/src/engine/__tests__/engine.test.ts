@@ -9,8 +9,9 @@ import { Mat3 } from '../color/Mat3';
 import { PrimariesTrack } from '../color/PrimariesTrack';
 import { Primaries } from '../color/Primaries';
 import { WhiteBalance } from '../color/WhiteBalance';
-import { cropHandleAt, cropWithAspect, dragCrop, FULL_CROP, flipped, rotateCrop, withCrop } from '../develop/CropMath';
+import { CROP_ASPECTS, cropAspectLabel, cropAspectRatio, cropHandleAt, cropWithAspect, dragCrop, FULL_CROP, flipped, rotateCrop, withCrop } from '../develop/CropMath';
 import { developParams, effectiveColorDenoise } from '../develop/DevelopParams';
+import { decodeEdits, encodeEdits } from '../develop/Edits';
 import { BrushRaster, type BrushGuide } from '../develop/BrushRaster';
 import { MAX_LENS_BLUR, NO_ADJUST, curveOffset, forPreset, newBrushLayer, newLinearLayer, newRadialLayer, newStripeLayer, parseLayers, type BrushStroke, type MaskLayer } from '../develop/Masks';
 import {
@@ -189,6 +190,47 @@ describe('lens geometry', () => {
     expect(corner[0]).toBeGreaterThan(-0.6);
     expect(corner[1]).toBeGreaterThan(-0.6);
   });
+
+  it('anamorphic distortion bows verticals while keeping horizontals straight, and Crop adjusts zoom and frame clipping', () => {
+    const info = LensInfo.none(6000, 4000);
+    const auto = new LensTransform(info, developParams({ lensAnamorphic: -60 }));
+    expect(auto.clipFrame).toBe(false);
+    expect(auto.zoom).toBeGreaterThan(1);
+    // Horizontals keep constant source y when radial distortion is 0.
+    const y0 = auto.source(1000, 500)[1];
+    expect(auto.source(3000, 500)[1]).toBeCloseTo(y0, 9);
+    expect(auto.source(5000, 500)[1]).toBeCloseTo(y0, 9);
+    // Off-centre verticals bow horizontally between vertical centre and top/bottom.
+    expect(auto.source(1000, 200)[0]).not.toBeCloseTo(auto.source(1000, 2000)[0], 3);
+    for (const [x, y] of [[0, 0], [6000, 0], [0, 2000], [3000, 0]]) {
+      const s = auto.source(x, y);
+      expect(s[0]).toBeGreaterThan(-0.6);
+      expect(s[0]).toBeLessThan(6000.6);
+      expect(s[1]).toBeGreaterThan(-0.6);
+      expect(s[1]).toBeLessThan(4000.6);
+    }
+    const zoomedOut = new LensTransform(info, developParams({ lensAnamorphic: -60, lensCrop: -100 }));
+    expect(zoomedOut.clipFrame).toBe(true);
+    expect(zoomedOut.zoom).toBeLessThan(auto.zoom);
+    expect(zoomedOut.source(0, 0)[0]).toBeLessThan(-10);
+    const tighter = new LensTransform(info, developParams({ lensAnamorphic: -60, lensCrop: 100 }));
+    expect(tighter.clipFrame).toBe(false);
+    expect(tighter.zoom).toBeGreaterThan(auto.zoom);
+
+    // Extreme positive pincushion + anamorphic stays monotone and invertible even when zoomed out.
+    const mono = new LensTransform(info, developParams({ lensDistortion: 100, lensAnamorphic: 100, lensCrop: -100 }));
+    let prev = -Infinity;
+    for (let i = 0; i <= 20; i++) {
+      const sx = mono.source(i * 300, 200)[0];
+      expect(sx).toBeGreaterThan(prev);
+      prev = sx;
+    }
+    const extreme = new LensTransform(info, developParams({ lensDistortion: 100, lensAnamorphic: 100, lensCrop: -100, straighten: 6, rotation: 1 }));
+    for (const [x, y] of [[200, 300], [1800, 1200], [3500, 5200]]) {
+      const s = extreme.source(x, y);
+      close(extreme.output(s[0], s[1]), [x, y], 1e-2);
+    }
+  });
 });
 
 describe('crop', () => {
@@ -199,7 +241,7 @@ describe('crop', () => {
     null,
     0,
   );
-  const edit = { lensDistortion: 40, vignetteAmount: 30, straighten: 7.5, rotation: 1 };
+  const edit = { lensDistortion: 40, lensAnamorphic: -35, lensCrop: -20, vignetteAmount: 30, straighten: 7.5, rotation: 1 };
 
   it('a full crop changes nothing', () => {
     const a = new LensTransform(warped, developParams(edit));
@@ -277,7 +319,20 @@ describe('crop', () => {
     expect(flipped(developParams({ rotation: 1 }), false).flipVertical).toBe(true);
   });
 
-  it('aspect ratios and drags keep the shape and stay inside the frame', () => {
+  it('aspect ratios and drags keep the shape and stay inside the frame, including cinema 2:1 and 2.39:1', () => {
+    expect(CROP_ASPECTS).toContain('2:1');
+    expect(CROP_ASPECTS).toContain('2.39:1');
+    expect([cropAspectLabel('2:1', false), cropAspectLabel('2:1', true)]).toEqual(['2:1', '1:2']);
+    expect([cropAspectLabel('2.39:1', false), cropAspectLabel('2.39:1', true)]).toEqual(['2.39:1', '1:2.39']);
+    expect(cropAspectRatio('2:1', 6000, 4000, false)).toBeCloseTo(2, 9);
+    expect(cropAspectRatio('2:1', 6000, 4000, true)).toBeCloseTo(0.5, 9);
+    expect(cropAspectRatio('2.39:1', 6000, 4000, false)).toBeCloseTo(2.39, 9);
+    expect(cropAspectRatio('2.39:1', 6000, 4000, true)).toBeCloseTo(1 / 2.39, 9);
+    const scope = cropWithAspect(FULL_CROP, 2.39, 6000, 4000);
+    expect(scope.left).toBeCloseTo(0, 6);
+    expect(scope.right).toBeCloseTo(1, 6);
+    expect(((scope.right - scope.left) * 6000) / ((scope.bottom - scope.top) * 4000)).toBeCloseTo(2.39, 5);
+
     const r = cropWithAspect(FULL_CROP, 1, 6000, 4000);
     expect(((r.right - r.left) * 6000) / ((r.bottom - r.top) * 4000)).toBeCloseTo(1, 6);
     expect(r.top).toBeCloseTo(0, 6);
@@ -893,12 +948,16 @@ describe('curves', () => {
 
 describe('lens presets', () => {
   it('round-trip with their lens and match it, ignoring case', () => {
-    const lens = captureLensPreset(developParams({ lensDistortion: -12, vignetteAmount: 40 }), 'XF23mmF2 R WR');
+    const lens = captureLensPreset(developParams({ lensDistortion: -12, lensAnamorphic: -45, lensCrop: -30, vignetteAmount: 40 }), 'XF23mmF2 R WR');
     expect(isLensPreset(lens)).toBe(true);
     expect(lens.name).toBe('XF23mmF2 R WR');
     const [decoded] = decodePresets(encodePresets([lens]));
     expect(decoded.lens).toBe('XF23mmF2 R WR');
-    expect(Object.keys(decoded.values).sort()).toEqual(['caBlue', 'caRed', 'lensDistortion', 'lensProfile', 'vignetteAmount', 'vignetteMidpoint']);
+    expect(Object.keys(decoded.values).sort()).toEqual([
+      'caBlue', 'caRed', 'lensAnamorphic', 'lensCrop', 'lensDistortion', 'lensProfile', 'vignetteAmount', 'vignetteMidpoint',
+    ]);
+    const applied = applyPreset(decoded, developParams());
+    expect([applied.lensAnamorphic, applied.lensCrop]).toEqual([-45, -30]);
     const look = capturePreset('Look', developParams(), ['light', 'lens'], 'XF23mmF2 R WR');
     expect(isLensPreset(look)).toBe(false);
     expect(lensPresetFor([look, decoded], ' xf23mmf2 r wr')).toBe(decoded);
@@ -947,19 +1006,34 @@ describe('lens presets', () => {
   });
 
   it('change only the lens settings, on top of the look or a RawBoy preset', () => {
-    const lens = captureLensPreset(developParams({ lensProfile: false, lensDistortion: -15, vignetteAmount: 20, vignetteMidpoint: 30 }), '24mm');
+    const lens = captureLensPreset(
+      developParams({ lensProfile: false, lensDistortion: -15, lensAnamorphic: -45, lensCrop: -30, vignetteAmount: 20, vignetteMidpoint: 30 }),
+      '24mm',
+    );
     const base = developParams({ exposure: 1.2, temperature: 5600 });
     const plain = developAuto(base, Looks.NATURAL, 100, NO_ADJUSTMENTS, false, null, null);
     const p = developAuto(base, Looks.NATURAL, 100, NO_ADJUSTMENTS, false, null, lens);
-    expect(p).toEqual({ ...plain, lensProfile: false, lensDistortion: -15, vignetteAmount: p.vignetteAmount, vignetteMidpoint: 30 });
+    expect(p).toEqual({
+      ...plain, lensProfile: false, lensDistortion: -15, lensAnamorphic: -45, lensCrop: -30, vignetteAmount: p.vignetteAmount, vignetteMidpoint: 30,
+    });
     // The look's own vignette stays on top of the lens preset's.
     expect(p.vignetteAmount).toBeCloseTo(Math.min(100, Math.max(-100, 20 + plain.vignetteAmount - base.vignetteAmount)), 5);
     // A RawBoy preset's Lens group gives way to the lens preset; its other groups stay.
-    const street = capturePreset('Street', developParams({ exposure: 0.3, lensDistortion: 40, vignetteAmount: -50 }), ['light', 'lens']);
+    const street = capturePreset('Street', developParams({ exposure: 0.3, lensDistortion: 40, lensAnamorphic: 25, lensCrop: 15, vignetteAmount: -50 }), ['light', 'lens']);
     const q = developAuto(base, Looks.NATURAL, 100, NO_ADJUSTMENTS, false, street, lens);
     expect(q.exposure).toBeCloseTo(0.3, 6);
     expect(q.lensDistortion).toBe(-15);
+    expect(q.lensAnamorphic).toBe(-45);
+    expect(q.lensCrop).toBe(-30);
     expect(q.vignetteAmount).toBe(20);
+  });
+
+  it('round-trips lensAnamorphic and lensCrop in photo edits', () => {
+    const defaults = developParams();
+    const edited = developParams({ lensAnamorphic: -55, lensCrop: -25 });
+    const text = encodeEdits(edited, defaults);
+    expect(text).not.toBeNull();
+    expect(decodeEdits(text!, defaults)).toEqual(edited);
   });
 });
 

@@ -31,7 +31,7 @@ enum class PresetGroup(val key: String, val label: String, val fields: List<Stri
     DETAIL("detail", "Detail", listOf("denoise", "colorDenoise", "sharpening", "localContrast", "highpassContrast", "grain", "grainSize", "grainRoughness", "grainColor", "bloom")),
     RETOUCH("retouch", "Retouch", listOf("skinRetouch", "blemishRemoval")),
     LUT("lut", "LUT", listOf("lut", "lutAmount")),
-    LENS("lens", "Lens", listOf("lensProfile", "lensDistortion", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint")),
+    LENS("lens", "Lens", listOf("lensProfile", "lensDistortion", "lensAnamorphic", "lensCrop", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint")),
     MASKS("masks", "Masks (gradients only)", listOf("masks")),
     ;
 
@@ -253,6 +253,8 @@ object Presets {
         "lutAmount" -> p.lutAmount
         "lensProfile" -> p.lensProfile
         "lensDistortion" -> p.lensDistortion
+        "lensAnamorphic" -> p.lensAnamorphic
+        "lensCrop" -> p.lensCrop
         "caRed" -> p.caRed
         "caBlue" -> p.caBlue
         "vignetteAmount" -> p.vignetteAmount
@@ -310,6 +312,8 @@ object Presets {
             "blemishRemoval" -> p.copy(blemishRemoval = f)
             "lutAmount" -> p.copy(lutAmount = f)
             "lensDistortion" -> p.copy(lensDistortion = f)
+            "lensAnamorphic" -> p.copy(lensAnamorphic = f)
+            "lensCrop" -> p.copy(lensCrop = f)
             "caRed" -> p.copy(caRed = f)
             "caBlue" -> p.copy(caBlue = f)
             "vignetteAmount" -> p.copy(vignetteAmount = f)

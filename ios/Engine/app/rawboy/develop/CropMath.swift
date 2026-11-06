@@ -41,16 +41,18 @@ public extension DevelopParams {
 
 /** Crop aspect ratios offered by the tool, as long side : short side (orientation is chosen separately). */
 public enum CropAspect: CaseIterable, Sendable {
-    case free, original, square, r5x4, r4x3, r3x2, r16x9
+    case free, original, square, r5x4, r4x3, r3x2, r16x9, r2x1, r239x1
 
-    private var sides: (long: Int, short: Int) {
+    private var sides: (long: Double, short: Double, longLabel: String, shortLabel: String) {
         switch self {
-        case .free, .original: (0, 0)
-        case .square: (1, 1)
-        case .r5x4: (5, 4)
-        case .r4x3: (4, 3)
-        case .r3x2: (3, 2)
-        case .r16x9: (16, 9)
+        case .free, .original: (0, 0, "", "")
+        case .square: (1, 1, "1", "1")
+        case .r5x4: (5, 4, "5", "4")
+        case .r4x3: (4, 3, "4", "3")
+        case .r3x2: (3, 2, "3", "2")
+        case .r16x9: (16, 9, "16", "9")
+        case .r2x1: (2, 1, "2", "1")
+        case .r239x1: (2.39, 1, "2.39", "1")
         }
     }
 
@@ -59,7 +61,7 @@ public enum CropAspect: CaseIterable, Sendable {
         case .free: "Free"
         case .original: "Original"
         case .square: "1:1"
-        default: portrait ? "\(sides.short):\(sides.long)" : "\(sides.long):\(sides.short)"
+        default: portrait ? "\(sides.shortLabel):\(sides.longLabel)" : "\(sides.longLabel):\(sides.shortLabel)"
         }
     }
 
@@ -72,7 +74,7 @@ public enum CropAspect: CaseIterable, Sendable {
             let a = Double(frameWidth) / Double(frameHeight)
             return portrait ? min(a, 1 / a) : max(a, 1 / a)
         default:
-            return portrait ? Double(sides.short) / Double(sides.long) : Double(sides.long) / Double(sides.short)
+            return portrait ? sides.short / sides.long : sides.long / sides.short
         }
     }
 }

@@ -164,6 +164,8 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
     private val uHalfDiagonal = GLES30.glGetUniformLocation(id, "uHalfDiagonal")
     private val uZoom = GLES30.glGetUniformLocation(id, "uZoom")
     private val uManualK = GLES30.glGetUniformLocation(id, "uManualK")
+    private val uAnamorphicK = GLES30.glGetUniformLocation(id, "uAnamorphicK")
+    private val uClipFrame = GLES30.glGetUniformLocation(id, "uClipFrame")
     private val uWarpOn = GLES30.glGetUniformLocation(id, "uWarpOn")
     private val uWarpPlanes = GLES30.glGetUniformLocation(id, "uWarpPlanes")
     private val uWarpK = GLES30.glGetUniformLocation(id, "uWarpK")
@@ -427,6 +429,8 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
         GLES30.glUniform1f(uHalfDiagonal, l.halfDiagonal.toFloat())
         GLES30.glUniform1f(uZoom, l.zoom.toFloat())
         GLES30.glUniform1f(uManualK, l.manualK.toFloat())
+        GLES30.glUniform1f(uAnamorphicK, l.anamorphicK.toFloat())
+        GLES30.glUniform1f(uClipFrame, if (l.clipFrame) 1f else 0f)
         val warp = l.warp
         GLES30.glUniform1f(uWarpOn, if (warp != null) 1f else 0f)
         GLES30.glUniform1f(uWarpPlanes, l.warpPlanes.toFloat())

@@ -25,21 +25,28 @@ fun DevelopParams.withCrop(r: CropRect): DevelopParams =
 fun DevelopParams.withoutCrop(): DevelopParams = withCrop(CropMath.FULL)
 
 /** Crop aspect ratios offered by the tool, as long side : short side (orientation is chosen separately). */
-enum class CropAspect(private val long: Int, private val short: Int) {
-    FREE(0, 0),
-    ORIGINAL(0, 0),
-    SQUARE(1, 1),
-    R5_4(5, 4),
-    R4_3(4, 3),
-    R3_2(3, 2),
-    R16_9(16, 9),
+enum class CropAspect(
+    private val long: Double,
+    private val short: Double,
+    private val longLabel: String = "",
+    private val shortLabel: String = "",
+) {
+    FREE(0.0, 0.0),
+    ORIGINAL(0.0, 0.0),
+    SQUARE(1.0, 1.0),
+    R5_4(5.0, 4.0, "5", "4"),
+    R4_3(4.0, 3.0, "4", "3"),
+    R3_2(3.0, 2.0, "3", "2"),
+    R16_9(16.0, 9.0, "16", "9"),
+    R2_1(2.0, 1.0, "2", "1"),
+    R2_39(2.39, 1.0, "2.39", "1"),
     ;
 
     fun label(portrait: Boolean): String = when (this) {
         FREE -> "Free"
         ORIGINAL -> "Original"
         SQUARE -> "1:1"
-        else -> if (portrait) "$short:$long" else "$long:$short"
+        else -> if (portrait) "$shortLabel:$longLabel" else "$longLabel:$shortLabel"
     }
 
     /** Width / height in pixels, or null for free. */
@@ -49,7 +56,7 @@ enum class CropAspect(private val long: Int, private val short: Int) {
             val a = frameWidth.toDouble() / frameHeight
             if (portrait) min(a, 1 / a) else max(a, 1 / a)
         }
-        else -> if (portrait) short.toDouble() / long else long.toDouble() / short
+        else -> if (portrait) short / long else long / short
     }
 }
 

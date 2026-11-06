@@ -246,6 +246,7 @@ public final class PhotoSession: ObservableObject {
         let outY = (viewY - r[1]) / r[3] * Float(h)
         guard outX >= 0, outX <= Float(w), outY >= 0, outY <= Float(h) else { return nil }
         let src = lens.source(Double(outX), Double(outY))
+        if lens.clipFrame && (src[0] < 0 || src[1] < 0 || src[0] > Double(img.width) || src[1] > Double(img.height)) { return nil }
         let b = WhitePicker.box(Float(src[0]), Float(src[1]), img.width, img.height)
         let kelvin = defaults.temperature
         let tint = defaults.tint
@@ -439,7 +440,8 @@ public final class PhotoSession: ObservableObject {
     public func lensFor(_ params: DevelopParams) -> LensTransform {
         let info = lensInfo
         let key: [AnyHashable] = [
-            ObjectIdentifier(info), params.lensProfile, params.lensDistortion, params.caRed, params.caBlue, params.vignetteAmount,
+            ObjectIdentifier(info), params.lensProfile, params.lensDistortion, params.lensAnamorphic, params.lensCrop,
+            params.caRed, params.caBlue, params.vignetteAmount,
             params.vignetteMidpoint, params.rotation, params.flipHorizontal, params.flipVertical, params.straighten, params.scale,
         ]
         let crop = params.crop

@@ -304,6 +304,7 @@ class PhotoSession(
         val outY = (viewY - r[1]) / r[3] * h
         if (outX !in 0f..w.toFloat() || outY !in 0f..h.toFloat()) return null
         val src = lens.source(outX.toDouble(), outY.toDouble())
+        if (lens.clipFrame && (src[0] < 0.0 || src[1] < 0.0 || src[0] > img.width || src[1] > img.height)) return null
         val box = WhitePicker.box(src[0].toFloat(), src[1].toFloat(), img.width, img.height)
         val bw = box[1] - box[0]
         val bh = box[3] - box[2]
@@ -348,6 +349,7 @@ class PhotoSession(
                 for (ix in 0..stepsX) {
                     val outX = (minX + ix * dx).toDouble()
                     val src = lens.source(outX, outY)
+                    if (lens.clipFrame && (src[0] < 0.0 || src[1] < 0.0 || src[0] > img.width || src[1] > img.height)) continue
                     val bx = (src[0] / img.width * b.width).toInt().coerceIn(0, b.width - 1)
                     val by = (src[1] / img.height * b.height).toInt().coerceIn(0, b.height - 1)
                     val idx = (by * b.width + bx) * 3
@@ -553,7 +555,8 @@ class PhotoSession(
     fun lensFor(params: DevelopParams): LensTransform {
         val info = _lensInfo.value
         val key = listOf(
-            info, params.lensProfile, params.lensDistortion, params.caRed, params.caBlue, params.vignetteAmount, params.vignetteMidpoint,
+            info, params.lensProfile, params.lensDistortion, params.lensAnamorphic, params.lensCrop,
+            params.caRed, params.caBlue, params.vignetteAmount, params.vignetteMidpoint,
             params.rotation, params.flipHorizontal, params.flipVertical, params.straighten, params.scale,
         )
         val crop = params.crop

@@ -15,6 +15,8 @@ final class FlipTests: XCTestCase {
             for vertical in [false, true] {
                 var before = DevelopParams()
                 before.lensDistortion = 40
+                before.lensAnamorphic = -35
+                before.lensCrop = -20
                 before.straighten = 7.5
                 before.rotation = rotation
                 before = before.withCrop(CropRect(0.1, 0.2, 0.5, 0.9))
@@ -55,5 +57,68 @@ final class FlipTests: XCTestCase {
         let s1 = scaled.source(cx + 150, cy)
         let s0 = unscaled.source(cx + 100, cy)
         assertClose(s0, s1, 1e-6)
+    }
+
+    func testAnamorphicDistortionAndAdjustableCrop() throws {
+        var anam = DevelopParams()
+        anam.lensAnamorphic = -60
+        let auto = LensTransform(info: info, params: anam)
+        XCTAssertFalse(auto.clipFrame)
+        XCTAssertGreaterThan(auto.zoom, 1.0)
+        // Horizontals keep constant source y when radial distortion is 0.
+        let y0 = auto.source(1000, 500)[1]
+        XCTAssertEqual(auto.source(3000, 500)[1], y0, accuracy: 1e-9)
+        XCTAssertEqual(auto.source(5000, 500)[1], y0, accuracy: 1e-9)
+        // Off-centre verticals bow horizontally.
+        XCTAssertNotEqual(auto.source(1000, 200)[0], auto.source(1000, 2000)[0])
+        for (x, y) in [(0.0, 0.0), (6000.0, 0.0), (0.0, 2000.0), (3000.0, 0.0)] {
+            let s = auto.source(x, y)
+            XCTAssertTrue(s[0] > -0.6 && s[0] < 6000.6 && s[1] > -0.6 && s[1] < 4000.6)
+        }
+        var outParams = anam
+        outParams.lensCrop = -100
+        let zoomedOut = LensTransform(info: info, params: outParams)
+        XCTAssertTrue(zoomedOut.clipFrame)
+        XCTAssertLessThan(zoomedOut.zoom, auto.zoom)
+        XCTAssertLessThan(zoomedOut.source(0, 0)[0], -10)
+        var tightParams = anam
+        tightParams.lensCrop = 100
+        let tighter = LensTransform(info: info, params: tightParams)
+        XCTAssertFalse(tighter.clipFrame)
+        XCTAssertGreaterThan(tighter.zoom, auto.zoom)
+
+        var ext = DevelopParams()
+        ext.lensDistortion = 100
+        ext.lensAnamorphic = 100
+        ext.lensCrop = -100
+        let mono = LensTransform(info: info, params: ext)
+        var prev = -Double.infinity
+        for i in 0...20 {
+            let sx = mono.source(Double(i) * 300, 200)[0]
+            XCTAssertGreaterThan(sx, prev)
+            prev = sx
+        }
+        ext.straighten = 6
+        ext.rotation = 1
+        let extreme = LensTransform(info: info, params: ext)
+        for (x, y) in [(200.0, 300.0), (1800.0, 1200.0), (3500.0, 5200.0)] {
+            let s = extreme.source(x, y)
+            assertClose(extreme.output(s[0], s[1]), [x, y], 1e-2)
+        }
+    }
+
+    func testCinemaCropAspectRatios() throws {
+        XCTAssertEqual(CropAspect.r2x1.label(portrait: false), "2:1")
+        XCTAssertEqual(CropAspect.r2x1.label(portrait: true), "1:2")
+        XCTAssertEqual(try XCTUnwrap(CropAspect.r2x1.ratio(frameWidth: 6000, frameHeight: 4000, portrait: false)), 2.0, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(CropAspect.r2x1.ratio(frameWidth: 6000, frameHeight: 4000, portrait: true)), 0.5, accuracy: 1e-9)
+        XCTAssertEqual(CropAspect.r239x1.label(portrait: false), "2.39:1")
+        XCTAssertEqual(CropAspect.r239x1.label(portrait: true), "1:2.39")
+        XCTAssertEqual(try XCTUnwrap(CropAspect.r239x1.ratio(frameWidth: 6000, frameHeight: 4000, portrait: false)), 2.39, accuracy: 1e-9)
+        XCTAssertEqual(try XCTUnwrap(CropAspect.r239x1.ratio(frameWidth: 6000, frameHeight: 4000, portrait: true)), 1.0 / 2.39, accuracy: 1e-9)
+        let scope = CropMath.withAspect(CropMath.full, ratio: 2.39, frameWidth: 6000, frameHeight: 4000)
+        XCTAssertEqual(scope.left, 0, accuracy: 1e-6)
+        XCTAssertEqual(scope.right, 1, accuracy: 1e-6)
+        XCTAssertEqual(Double(scope.right - scope.left) * 6000 / (Double(scope.bottom - scope.top) * 4000), 2.39, accuracy: 1e-5)
     }
 }

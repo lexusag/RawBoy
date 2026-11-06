@@ -21,6 +21,8 @@ import Foundation
  *   render over the AgX one; filmGrain, halation: 0..200, 100 = the stock as formation.json describes it
  * - lensProfile: apply the lens corrections embedded in the file (if any)
  * - lensDistortion: -100..100, + removes barrel distortion; auto crop/scale follows
+ * - lensAnamorphic: -100..100 cylindrical (horizontal) distortion; - bows vertical edges outward like an anamorphic lens
+ * - lensCrop: -100..100 scale around the auto crop (0 = no empty edges; < 0 reveals curved borders; > 0 crops tighter)
  * - caRed, caBlue: -100..100, lateral chromatic aberration: + enlarges the red (blue) plane around the image centre
  * - vignetteAmount: -100..100, + brightens corners; vignetteMidpoint: 0..100 (higher = only the corners)
  * - curves: point curves (RGB, then red, green, blue) on the final display-encoded image (see ToneCurves)
@@ -79,6 +81,8 @@ public struct DevelopParams: Equatable, Sendable {
     public var curves = ToneCurves.none
     public var lensProfile: Bool = true
     public var lensDistortion: Float = 0
+    public var lensAnamorphic: Float = 0
+    public var lensCrop: Float = 0
     public var caRed: Float = 0
     public var caBlue: Float = 0
     public var vignetteAmount: Float = 0

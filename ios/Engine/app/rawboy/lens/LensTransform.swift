@@ -7,8 +7,8 @@ import Foundation
  * Output pixel p (full resolution, after rotation and crop) maps to its source by:
  *   0. add the user crop's origin (the crop only picks a window of the finished frame), then undo
  *      rotation (90 degree turns + straighten), with auto crop for the straighten angle, and the flips
- *   1. auto scale around the image centre (crop to valid pixels, like Lightroom's Constrain Crop)
- *   2. manual distortion (radial, around the image centre)
+ *   1. auto scale around the image centre (crop to valid pixels, like Lightroom's Constrain Crop), adjusted by lensCrop
+ *   2. manual distortion (spherical + cylindrical anamorphic, around the image centre)
  *   3. embedded DNG WarpRectilinear, in sensor coordinates, per colour plane
  *   4. manual chromatic aberration: red and blue planes scaled around the image centre
  *
@@ -51,6 +51,12 @@ public final class LensTransform: @unchecked Sendable {
     /** k in src_r = r * (1 - k r^2); +100 on the slider removes strong barrel distortion. */
     public let manualK: Double
 
+    /** Cylindrical (horizontal) distortion k: -100 bows vertical edges outward like an anamorphic lens. */
+    public let anamorphicK: Double
+
+    /** True when zoomed out past the auto crop, so pixels outside [0, width] x [0, height] render black. */
+    public let clipFrame: Bool
+
     public let warp: LensInfo.Warp?
     public let vignette: LensInfo.RadialVignette?
 
@@ -84,9 +90,9 @@ public final class LensTransform: @unchecked Sendable {
     /** Plane scale at ±100 on a chromatic aberration slider: 0.2%, ~6 px in the corners of a 24 MP photo. */
     public static let caMax = 0.002
 
-    public var isGeometric: Bool { warp != nil || manualK != 0 }
+    public var isGeometric: Bool { warp != nil || manualK != 0 || anamorphicK != 0 }
 
-    /** Output scale >= the value at which every output pixel has real image data. */
+    /** Output scale: at lensCrop = 0, >= the value at which every output pixel has real image data. */
     public private(set) var zoom: Double = 1
 
     public init(info: LensInfo, params: DevelopParams, knownZoom: Double? = nil) {
@@ -105,6 +111,9 @@ public final class LensTransform: @unchecked Sendable {
         scaleFactor = Double(params.scale).clamped(100, 200) / 100
         useProfile = params.lensProfile && info.hasProfile
         manualK = Double(params.lensDistortion) / 100 * 0.25
+        anamorphicK = Double(params.lensAnamorphic) / 100 * 0.30
+        let cropScale = pow(2.0, Double(params.lensCrop).clamped(-100, 100) / 150.0)
+        clipFrame = params.lensCrop < 0
         caScaleRed = 1 - Double(params.caRed) / 100 * Self.caMax
         caScaleBlue = 1 - Double(params.caBlue) / 100 * Self.caMax
         warp = useProfile ? info.warp : nil
@@ -123,7 +132,7 @@ public final class LensTransform: @unchecked Sendable {
         outToImage = rotationMatrix()
         warpNorm = maxCornerDistance(warpCenterX, warpCenterY)
         vignetteNorm = maxCornerDistance(vignetteCenterX, vignetteCenterY)
-        zoom = knownZoom ?? (isGeometric ? autoZoom() : 1.0)
+        zoom = knownZoom ?? ((isGeometric ? autoZoom() : 1.0) * cropScale)
     }
 
     /** Source position (image, display orientation) of output pixel (x, y) for colour plane 0..2. */
@@ -167,15 +176,18 @@ public final class LensTransform: @unchecked Sendable {
         return best
     }
 
+    private func distortFactor(_ k: Double, _ rn2: Double) -> Double {
+        k <= 0 ? 1.0 - k * rn2 : 0.2 + 0.8 / (1.0 + 2.5 * k * rn2).squareRoot()
+    }
+
     /** Steps 1-3 for an image position (x, y). */
     private func lensSource(_ x: Double, _ y: Double, _ plane: Int, _ zoomOverride: Double) -> [Double] {
-        // 1-2: scale and manual radial distortion around the image centre.
+        // 1-2: scale and manual spherical + cylindrical distortion around the image centre.
         var dx = (x - centerX) / zoomOverride
         var dy = (y - centerY) / zoomOverride
         let rn2 = (dx * dx + dy * dy) / (halfDiagonal * halfDiagonal)
-        let f = 1.0 - manualK * rn2
-        dx *= f
-        dy *= f
+        dx *= distortFactor(manualK + anamorphicK, rn2)
+        dy *= distortFactor(manualK, rn2)
         let qx = centerX + dx
         let qy = centerY + dy
         guard let w = warp else { return manualCa(qx, qy, plane) }

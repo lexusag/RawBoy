@@ -1,5 +1,10 @@
 # Changelog
 
+**RawBoy Pro: anamorphic lens distortion and adjustable crop (2026-11-06)**
+
+- Lens tab (Android, iOS, web): added **Anamorphic** (−100–100, cylindrical horizontal distortion that bows vertical edges like an anamorphic lens while keeping horizontals straighter) and **Crop** (−100–100: 0 auto-crops empty edges as before, negative zooms out with anti-aliased black borders to keep wide field of view, positive crops tighter). Both are included in the Lens preset group, lens presets (including RawBoy Auto), and edit carry-over.
+- Crop & rotate (Android, iOS, web): added **2:1** and **2.39:1** cinema aspect ratios (and **1:2** / **1:2.39** in Portrait).
+
 **RawBoy Pro: Scale slider in crop mode that preserves resolution (2026-11-06)**
 
 - Crop & rotate (Android, iOS, web): added a **Scale** slider (100%–200%, default 100%) that zooms the image within the full frame, allowing re-framing while preserving the full pixel dimensions of the exported image.

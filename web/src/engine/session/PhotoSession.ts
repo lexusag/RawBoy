@@ -342,6 +342,7 @@ export class PhotoSession {
     const outY = ((viewY - r[1]) / r[3]) * h;
     if (!(outX >= 0 && outX <= w && outY >= 0 && outY <= h)) return null;
     const src = lens.source(outX, outY);
+    if (lens.clipFrame && (src[0] < 0 || src[1] < 0 || src[0] > img.width || src[1] > img.height)) return null;
     const [x0, x1, y0, y1] = WhitePicker.box(src[0], src[1], img.width, img.height);
     const halves = await img.copyTile(rect(x0, y0, x1 - x0, y1 - y0));
     const rgb = Float32Array.from(halves, halfToFloat);
@@ -553,7 +554,11 @@ export class PhotoSession {
   /** Lens geometry for [params] on the current image; cached while the lens sliders are unchanged. */
   lensFor(params: DevelopParams): LensTransform {
     const info = this._state.lensInfo;
-    const key = [info, params.lensProfile, params.lensDistortion, params.caRed, params.caBlue, params.vignetteAmount, params.vignetteMidpoint, params.rotation, params.flipHorizontal, params.flipVertical, params.straighten, params.scale];
+    const key = [
+      info, params.lensProfile, params.lensDistortion, params.lensAnamorphic, params.lensCrop,
+      params.caRed, params.caBlue, params.vignetteAmount, params.vignetteMidpoint,
+      params.rotation, params.flipHorizontal, params.flipVertical, params.straighten, params.scale,
+    ];
     const crop = [params.cropLeft, params.cropTop, params.cropRight, params.cropBottom];
     const c = this.lensCache;
     const sameLens = c != null && c.key.every((v, i) => v === key[i]);
@@ -691,6 +696,7 @@ export function autoWhiteArea(
     for (let ix = 0; ix <= stepsX; ix++) {
       const outX = minX + ix * dx;
       const src = lens.source(outX, outY);
+      if (lens.clipFrame && (src[0] < 0 || src[1] < 0 || src[0] > imgWidth || src[1] > imgHeight)) continue;
       const bx = Math.max(0, Math.min(base.width - 1, Math.trunc((src[0] / imgWidth) * base.width)));
       const by = Math.max(0, Math.min(base.height - 1, Math.trunc((src[1] / imgHeight) * base.height)));
       const idx = (by * base.width + bx) * 3;

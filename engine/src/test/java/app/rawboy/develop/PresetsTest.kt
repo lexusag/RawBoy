@@ -65,13 +65,19 @@ class PresetsTest {
 
     @Test
     fun lensPresetsRoundTripAndMatchTheirLens() {
-        val lens = Presets.captureLens(DevelopParams(lensDistortion = -12f, vignetteAmount = 40f), "XF23mmF2 R WR")
+        val lens = Presets.captureLens(DevelopParams(lensDistortion = -12f, lensAnamorphic = -45f, lensCrop = -30f, vignetteAmount = 40f), "XF23mmF2 R WR")
         assertTrue(lens.isLensPreset)
         assertEquals("XF23mmF2 R WR", lens.name)
         val decoded = Presets.decode(Presets.encode(listOf(lens))).single()
         assertEquals("XF23mmF2 R WR", decoded.lens)
         assertTrue(decoded.isLensPreset)
-        assertEquals(setOf("lensProfile", "lensDistortion", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint"), decoded.values.keys)
+        assertEquals(
+            setOf("lensProfile", "lensDistortion", "lensAnamorphic", "lensCrop", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint"),
+            decoded.values.keys,
+        )
+        val applied = Presets.apply(decoded, DevelopParams())
+        assertEquals(-45f, applied.lensAnamorphic, 0f)
+        assertEquals(-30f, applied.lensCrop, 0f)
         val look = Presets.capture("Look", DevelopParams(), setOf(PresetGroup.LIGHT, PresetGroup.LENS), "XF23mmF2 R WR")
         assertFalse(look.isLensPreset)
         assertEquals(decoded, Presets.lensPresetFor(listOf(look, decoded), " xf23mmf2 r wr"))

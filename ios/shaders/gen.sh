@@ -31,13 +31,13 @@ body() {  # develop.glsl, the film formation, light_leak.glsl, main_body.glsl
 
 { header "out vec4 fragColor;"; body
   printf '    if (uLutAmount > 0.0) c = clamp(applyLut(c), 0.0, 1.0);\n    if (uCurveOn > 0.0) c = applyCurves(c);\n    if (uLeakCount > 0) c = applyLeaks(c, srcG, outPx);\n'
-  printf '    if (uClipWarn > 0.0) c = clipWarning(c);\n    fragColor = vec4(c, 1.0);\n}\n'
+  printf '    float fm = uClipFrame > 0.5 ? frameMask(srcG) : 1.0;\n    if (uClipWarn > 0.0 && fm >= 1.0) c = clipWarning(c);\n    fragColor = vec4(c * fm, 1.0);\n}\n'
 } > "$TMP/develop_frag.frag"
 
 { header "out uvec4 fragColor;"; body
   printf '    if (uLutAmount > 0.0) c = clamp(applyLut(c), 0.0, 1.0);\n    if (uCurveOn > 0.0) c = applyCurves(c);\n    if (uLeakCount > 0) c = applyLeaks(c, srcG, outPx);\n'
   # 16-bit unsigned integer target, as Android's export: exact, no float rounding of the output.
-  printf '    fragColor = uvec4(uvec3(c * 65535.0 + 0.5), 65535u);\n}\n'
+  printf '    if (uClipFrame > 0.5) c *= frameMask(srcG);\n    fragColor = uvec4(uvec3(c * 65535.0 + 0.5), 65535u);\n}\n'
 } > "$TMP/develop_export.frag"
 
 sed 's/#version 300 es/#version 310 es/' "$SRC/develop.vert" > "$TMP/develop_vert.vert"

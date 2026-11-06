@@ -321,6 +321,12 @@ private fun LensPanel(
     ParamSlider("Distortion", params.lensDistortion, -100f..100f, defaults.lensDistortion) {
         onChange(params.copy(lensDistortion = it))
     }
+    ParamSlider("Anamorphic", params.lensAnamorphic, -100f..100f, defaults.lensAnamorphic) {
+        onChange(params.copy(lensAnamorphic = it))
+    }
+    ParamSlider("Crop", params.lensCrop, -100f..100f, defaults.lensCrop) {
+        onChange(params.copy(lensCrop = it))
+    }
     ParamSlider("Vignetting", params.vignetteAmount, -100f..100f, defaults.vignetteAmount) {
         onChange(params.copy(vignetteAmount = it))
     }
@@ -328,7 +334,7 @@ private fun LensPanel(
         onChange(params.copy(vignetteMidpoint = it))
     }
     Text(
-        "Distortion crops automatically so no empty edges show.",
+        "At Crop 0, distortion crops automatically so no empty edges show; negative shows the curved edges, positive crops tighter.",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )

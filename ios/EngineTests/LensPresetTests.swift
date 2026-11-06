@@ -10,12 +10,18 @@ final class LensPresetTests: XCTestCase {
     }
 
     func testRoundTripWithTheirLensAndMatchIt() throws {
-        let lens = Presets.captureLens(params { $0.lensDistortion = -12; $0.vignetteAmount = 40 }, lens: "XF23mmF2 R WR")
+        let lens = Presets.captureLens(params { $0.lensDistortion = -12; $0.lensAnamorphic = -45; $0.lensCrop = -30; $0.vignetteAmount = 40 }, lens: "XF23mmF2 R WR")
         XCTAssertTrue(lens.isLensPreset)
         XCTAssertEqual(lens.name, "XF23mmF2 R WR")
         let decoded = try XCTUnwrap(Presets.decode(Presets.encode([lens])).first)
         XCTAssertEqual(decoded.lens, "XF23mmF2 R WR")
-        XCTAssertEqual(Set(decoded.values.keys), ["lensProfile", "lensDistortion", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint"])
+        XCTAssertEqual(
+            Set(decoded.values.keys),
+            ["lensProfile", "lensDistortion", "lensAnamorphic", "lensCrop", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint"]
+        )
+        let applied = Presets.apply(decoded, to: DevelopParams())
+        XCTAssertEqual(applied.lensAnamorphic, -45)
+        XCTAssertEqual(applied.lensCrop, -30)
         let look = Presets.capture("Look", DevelopParams(), [.light, .lens], lens: "XF23mmF2 R WR")
         XCTAssertFalse(look.isLensPreset)
         XCTAssertEqual(Presets.lensPresetFor([look, decoded], lens: " xf23mmf2 r wr"), decoded)
@@ -66,7 +72,8 @@ final class LensPresetTests: XCTestCase {
 
     func testChangesOnlyTheLensSettingsOnTopOfTheLook() {
         let lens = Presets.captureLens(params {
-            $0.lensProfile = false; $0.lensDistortion = -15; $0.vignetteAmount = 20; $0.vignetteMidpoint = 30
+            $0.lensProfile = false; $0.lensDistortion = -15; $0.lensAnamorphic = -45; $0.lensCrop = -30
+            $0.vignetteAmount = 20; $0.vignetteMidpoint = 30
         }, lens: "24mm")
         let base = params { $0.exposure = 1.2; $0.temperature = 5600 }
         let plain = LookApplier.develop(base, look: Looks.natural, strength: 100, adjust: .none, hasFace: false, preset: nil, lensPreset: nil)
@@ -74,16 +81,20 @@ final class LensPresetTests: XCTestCase {
         var expected = plain
         expected.lensProfile = false
         expected.lensDistortion = -15
+        expected.lensAnamorphic = -45
+        expected.lensCrop = -30
         expected.vignetteAmount = p.vignetteAmount
         expected.vignetteMidpoint = 30
         XCTAssertEqual(p, expected)
         // The look's own vignette stays on top of the lens preset's.
         XCTAssertEqual(p.vignetteAmount, (20 + plain.vignetteAmount - base.vignetteAmount).clamped(-100, 100), accuracy: 1e-5)
         // A RawBoy preset's Lens group gives way to the lens preset; its other groups stay.
-        let street = Presets.capture("Street", params { $0.exposure = 0.3; $0.lensDistortion = 40; $0.vignetteAmount = -50 }, [.light, .lens])
+        let street = Presets.capture("Street", params { $0.exposure = 0.3; $0.lensDistortion = 40; $0.lensAnamorphic = 25; $0.lensCrop = 15; $0.vignetteAmount = -50 }, [.light, .lens])
         let q = LookApplier.develop(base, look: Looks.natural, strength: 100, adjust: .none, hasFace: false, preset: street, lensPreset: lens)
         XCTAssertEqual(q.exposure, 0.3, accuracy: 1e-6)
         XCTAssertEqual(q.lensDistortion, -15)
+        XCTAssertEqual(q.lensAnamorphic, -45)
+        XCTAssertEqual(q.lensCrop, -30)
         XCTAssertEqual(q.vignetteAmount, 20)
     }
 }

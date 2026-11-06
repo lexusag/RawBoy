@@ -82,8 +82,10 @@ uniform mat3 uToSensor;          // display-oriented px -> sensor px
 uniform mat3 uFromSensor;
 uniform vec2 uImageCenter;       // display-oriented px
 uniform float uHalfDiagonal;
-uniform float uZoom;             // auto crop/scale
-uniform float uManualK;          // manual distortion
+uniform float uZoom;             // auto crop/scale (adjusted by lensCrop)
+uniform float uManualK;          // manual spherical distortion
+uniform float uAnamorphicK;      // manual cylindrical (horizontal) distortion
+uniform float uClipFrame;        // 1 = mask pixels outside [0, uImageSize] to black (when lensCrop < 0)
 uniform float uWarpOn;
 uniform float uWarpPlanes;
 uniform float uWarpK[18];        // per plane: kr0..kr3, kt0, kt1
@@ -734,11 +736,25 @@ vec3 bloom(vec3 x, vec2 uvG, vec2 imagePx) {
 vec2 toSensor(vec2 p) { return (uToSensor * vec3(p, 1.0)).xy; }
 vec2 fromSensor(vec2 s) { return (uFromSensor * vec3(s, 1.0)).xy; }
 
-// Output pixel -> position after auto scale and manual distortion (display orientation).
+// Radial scale factor at normalised radius^2 rn2: cubic for barrel (k <= 0), globally monotonic rational
+// with the same slope -k at the centre for pincushion (k > 0) so zoomed-out edges never fold back.
+float distortFactor(float k, float rn2) {
+    return k <= 0.0 ? 1.0 - k * rn2 : 0.2 + 0.8 * inversesqrt(1.0 + 2.5 * k * rn2);
+}
+
+// Output pixel -> position after zoom and manual spherical + cylindrical distortion (display orientation).
 vec2 lensPre(vec2 p) {
     vec2 d = (p - uImageCenter) / uZoom;
     float rn2 = dot(d, d) / (uHalfDiagonal * uHalfDiagonal);
-    return uImageCenter + d * (1.0 - uManualK * rn2);
+    return uImageCenter + vec2(d.x * distortFactor(uManualK + uAnamorphicK, rn2), d.y * distortFactor(uManualK, rn2));
+}
+
+// Anti-aliased coverage of the source image [0, uImageSize], so zoomed-out distortion shows clean black borders
+// instead of smeared clamped edge texels.
+float frameMask(vec2 p) {
+    vec2 fw = max(fwidth(p), vec2(1e-4));
+    vec2 a = clamp(min(p, uImageSize - p) / fw + 0.5, 0.0, 1.0);
+    return a.x * a.y;
 }
 
 // DNG WarpRectilinear in sensor space for one plane.

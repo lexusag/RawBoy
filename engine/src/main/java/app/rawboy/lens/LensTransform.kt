@@ -8,6 +8,8 @@ import kotlin.math.floor
 import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
+import kotlin.math.sqrt
 
 /**
  * Lens geometry for one image and one set of slider values: where each output
@@ -16,8 +18,8 @@ import kotlin.math.min
  * Output pixel p (full resolution, after rotation and crop) maps to its source by:
  *   0. add the user crop's origin (the crop only picks a window of the finished frame), then undo
  *      rotation (90 degree turns + straighten), with auto crop for the straighten angle, and the flips
- *   1. auto scale around the image centre (crop to valid pixels, like Lightroom's Constrain Crop)
- *   2. manual distortion (radial, around the image centre)
+ *   1. auto scale around the image centre (crop to valid pixels, like Lightroom's Constrain Crop), adjusted by lensCrop
+ *   2. manual distortion (spherical + cylindrical anamorphic, around the image centre)
  *   3. embedded DNG WarpRectilinear, in sensor coordinates, per colour plane
  *   4. manual chromatic aberration: red and blue planes scaled around the image centre
  *
@@ -59,6 +61,15 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
     /** k in src_r = r * (1 - k r^2); +100 on the slider removes strong barrel distortion. */
     val manualK = params.lensDistortion / 100.0 * 0.25
 
+    /** Cylindrical (horizontal) distortion k: -100 bows vertical edges outward like an anamorphic lens. */
+    val anamorphicK = params.lensAnamorphic / 100.0 * 0.30
+
+    /** Scale relative to the auto crop: 0 = exact Constrain Crop, < 0 zooms out to show curved borders, > 0 crops tighter. */
+    private val cropScale = 2.0.pow(params.lensCrop.toDouble().coerceIn(-100.0, 100.0) / 150.0)
+
+    /** True when zoomed out past the auto crop, so pixels outside [0, width] x [0, height] render black. */
+    val clipFrame: Boolean = params.lensCrop < 0f
+
     val warp: LensInfo.Warp? = info.warp.takeIf { useProfile }
     val vignette: LensInfo.RadialVignette? = info.vignette.takeIf { useProfile }
 
@@ -90,10 +101,10 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
     val caScaleBlue = 1.0 - params.caBlue / 100.0 * CA_MAX
     val hasManualCa: Boolean get() = caScaleRed != 1.0 || caScaleBlue != 1.0
 
-    val isGeometric: Boolean get() = warp != null || manualK != 0.0
+    val isGeometric: Boolean get() = warp != null || manualK != 0.0 || anamorphicK != 0.0
 
-    /** Output scale >= the value at which every output pixel has real image data. */
-    val zoom: Double = knownZoom ?: if (isGeometric) autoZoom() else 1.0
+    /** Output scale: at lensCrop = 0, >= the value at which every output pixel has real image data. */
+    val zoom: Double = knownZoom ?: ((if (isGeometric) autoZoom() else 1.0) * cropScale)
 
     /** Source position (image, display orientation) of output pixel (x, y) for colour plane 0..2. */
     fun source(x: Double, y: Double, plane: Int = 1): DoubleArray {
@@ -136,15 +147,17 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
         return best
     }
 
+    private fun distortFactor(k: Double, rn2: Double): Double =
+        if (k <= 0.0) 1.0 - k * rn2 else 0.2 + 0.8 / sqrt(1.0 + 2.5 * k * rn2)
+
     /** Steps 1-3 for an image position (x, y). */
     private fun lensSource(x: Double, y: Double, plane: Int, zoomOverride: Double): DoubleArray {
-        // 1-2: scale and manual radial distortion around the image centre.
+        // 1-2: scale and manual spherical + cylindrical distortion around the image centre.
         var dx = (x - centerX) / zoomOverride
         var dy = (y - centerY) / zoomOverride
         val rn2 = (dx * dx + dy * dy) / (halfDiagonal * halfDiagonal)
-        val f = 1.0 - manualK * rn2
-        dx *= f
-        dy *= f
+        dx *= distortFactor(manualK + anamorphicK, rn2)
+        dy *= distortFactor(manualK, rn2)
         val qx = centerX + dx
         val qy = centerY + dy
         val w = warp ?: return manualCa(qx, qy, plane)
