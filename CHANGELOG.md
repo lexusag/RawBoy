@@ -1,5 +1,10 @@
 # Changelog
 
+**RawBoy Auto (web): filter grid by ISO range (2026-11-06)**
+
+- Filter bar now features "Min ISO" and "Max ISO" dropdowns instead of a single ISO selector, allowing filtering by any range of ISOs (e.g. ISO 400 to 1600), lower bounds (ISO ≥ min), or upper bounds (ISO ≤ max).
+- Selecting a minimum ISO higher than the current maximum ISO (or vice versa) automatically resets the opposing bound.
+
 **RawBoy Auto: white balance picker on the Adjust tab (2026-11-06)**
 
 - "Pick white balance" button on the Adjust tab (Android, iOS and web), like RawBoy Pro's eyedropper.

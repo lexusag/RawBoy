@@ -47,19 +47,21 @@ export type ImportMode = LookMode | 'plain';
 export interface AutoFilter {
   camera: string | null;
   lens: string | null;
-  iso: number | null;
+  isoMin: number | null;
+  isoMax: number | null;
   date: string | null;
 }
 
 export const NO_FILTER: AutoFilter = {
   camera: null,
   lens: null,
-  iso: null,
+  isoMin: null,
+  isoMax: null,
   date: null,
 };
 
 export const isFilterActive = (f: AutoFilter): boolean =>
-  f.camera !== null || f.lens !== null || f.iso !== null || f.date !== null;
+  f.camera !== null || f.lens !== null || f.isoMin !== null || f.isoMax !== null || f.date !== null;
 
 export function photoCamera(p: AutoPhoto): string | null {
   if (!p.analysis) return null;
@@ -85,7 +87,9 @@ export function photoDate(p: AutoPhoto): string | null {
 export function photoMatchesFilter(p: AutoPhoto, filter: AutoFilter): boolean {
   if (filter.camera !== null && photoCamera(p) !== filter.camera) return false;
   if (filter.lens !== null && photoLens(p) !== filter.lens) return false;
-  if (filter.iso !== null && photoIso(p) !== filter.iso) return false;
+  const iso = photoIso(p);
+  if (filter.isoMin !== null && (iso == null || iso < filter.isoMin)) return false;
+  if (filter.isoMax !== null && (iso == null || iso > filter.isoMax)) return false;
   if (filter.date !== null && photoDate(p) !== filter.date) return false;
   return true;
 }
@@ -497,8 +501,28 @@ export class AutoStore {
   }
 
   /** Updates the active metadata filter in the grid. */
-  setFilter(filter: Partial<AutoFilter>) {
-    this.update({ filter: { ...this._state.filter, ...filter } });
+  setFilter(filter: Partial<AutoFilter> & { iso?: number | null }) {
+    const next: AutoFilter = { ...this._state.filter };
+    if ('iso' in filter) {
+      next.isoMin = filter.iso ?? null;
+      next.isoMax = filter.iso ?? null;
+    }
+    if ('camera' in filter) next.camera = filter.camera ?? null;
+    if ('lens' in filter) next.lens = filter.lens ?? null;
+    if ('date' in filter) next.date = filter.date ?? null;
+    if ('isoMin' in filter) {
+      next.isoMin = filter.isoMin ?? null;
+      if (next.isoMin !== null && next.isoMax !== null && next.isoMin > next.isoMax && !('isoMax' in filter)) {
+        next.isoMax = null;
+      }
+    }
+    if ('isoMax' in filter) {
+      next.isoMax = filter.isoMax ?? null;
+      if (next.isoMax !== null && next.isoMin !== null && next.isoMax < next.isoMin && !('isoMin' in filter)) {
+        next.isoMin = null;
+      }
+    }
+    this.update({ filter: next });
   }
 
   /** Resets the metadata filter back to all photos. */
