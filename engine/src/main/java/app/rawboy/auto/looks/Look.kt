@@ -99,6 +99,11 @@ object Looks {
         "velvia50", "Green Vivid Slide 50", "Green Vivid Slide 50.cube",
         grain = 8f, vignette = -10f,
     )
+    /** Direct flash 35mm film scan: vivid cadmium red, warm peach skin, high-key cool background. */
+    val FILM_FLASH = Look(
+        "filmflash", "Film Flash", "Film Flash.cube",
+        grain = 20f,
+    )
     /** A strong green-teal film grade with lifted blacks, made by the owner in Affinity Photo. */
     val MOVIE_GREEN = Look(
         "moviegreen", "Movie Green", "Movie Green.cube",
@@ -156,7 +161,7 @@ object Looks {
 
     val ALL = listOf(
         NATURAL, PORTRA_400, PORTRA_800, EKTAR_100, GOLD_200, SUPERIA_400, FUJI_400H,
-        VISION3_500T, VELVIA_50, MOVIE_GREEN, REDSCALE, LAGOON, VIOLET_DUST, UNSEEN, TRIX_SOFT, TRIX_400, TRIX_PUSH, TRIX_HARD, DOUBLE_X, DOUBLE_X_SOFT,
+        VISION3_500T, VELVIA_50, FILM_FLASH, MOVIE_GREEN, REDSCALE, LAGOON, VIOLET_DUST, UNSEEN, TRIX_SOFT, TRIX_400, TRIX_PUSH, TRIX_HARD, DOUBLE_X, DOUBLE_X_SOFT,
     )
 
     fun byId(id: String): Look = RetiredLooks.look(id).let { key -> ALL.firstOrNull { it.id == key } } ?: NATURAL

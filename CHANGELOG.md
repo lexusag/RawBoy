@@ -1,11 +1,11 @@
 # Changelog
 
-**RawBoy Pro: bundled Film Flash and Film Flash Normal LUTs (2026-11-06)**
+**RawBoy: bundled Film Flash look across Camera, Auto, and Pro (2026-11-06)**
 
-- Bundled two new film flash LUTs under `luts/`: "Film Flash" (direct match to on-camera flash color negative film scans) and "Film Flash Normal" (universal film stock look at standard exposure).
-- "Film Flash": calibrated to match 35mm Noritsu minilab scans under direct flash, boosting exposure with pure cadmium red dye saturation (suppressed green/blue crosstalk), warm peachy skin tones, and cool high-key cyan-white background neutrals.
-- "Film Flash Normal": provides the same film dye matrix, warm skin separation, and Noritsu contrast curve at standard exposure without forcing an exposure lift.
-- Available across Android, iOS, and Web under the Color section of the LUTs picker.
+- Added the "Film Flash" look across RawBoy Camera, RawBoy Auto, and RawBoy Pro, bundled as `luts/Film Flash.cube`.
+- Modeled on 35mm color negative film scanned on a Noritsu HS-1800 minilab scanner under flash: pure cadmium red dye saturation (suppressing green/blue sensor leakage), warm glowing peach skin tones, and Noritsu contrast curve with smooth highlight rolloff at standard exposure.
+- RawBoy Camera: available in the look dropdown under the viewfinder.
+- RawBoy Auto & Pro: available in Auto's look picker and Pro's LUT selector under the Color section.
 - Added reproducible generator script in `tools/film_flash_luts/generate.py`.
 
 **RawBoy Packer: help menu and version display (2026-11-06)**

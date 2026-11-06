@@ -3,15 +3,14 @@
 # dependencies = ["numpy>=1.24", "scipy>=1.10"]
 # ///
 """
-Generates RawBoy's bundled film flash LUTs (<repo>/luts/Film Flash*.cube).
+Generates RawBoy's bundled "Film Flash" LUT (<repo>/luts/Film Flash.cube).
 
 Matches digital raw development (calibrated against Fujifilm raw + AgX)
-to 35mm color negative film scanned on a Noritsu HS-1800 minilab scanner under direct flash.
+to 35mm color negative film scanned on a Noritsu HS-1800 minilab scanner under flash.
 
-1. "Film Flash": Direct match to on-camera flash film scans, including flash exposure
-   lift, cadmium red dye purity, golden peach skin tones, and cool high-key Noritsu scan background.
-2. "Film Flash Normal": Universal film stock look at standard exposure, preserving the film
-   color matrix, red dye separation, and film tone curve without forcing an artificial exposure boost.
+Preserves the authentic 35mm film dye matrix: pure cadmium red dye saturation (suppressed
+green/blue sensor leakage), warm glowing peach skin tones, and Noritsu contrast curve with
+smooth highlight rolloff at standard exposure.
 
 Usage:
     uv run tools/film_flash_luts/generate.py
@@ -24,7 +23,7 @@ LUT_DIR = Path(__file__).resolve().parents[2] / "luts"
 LUT_SIZE = 33
 
 
-def build_lut(mode: str = "match", n: int = LUT_SIZE) -> np.ndarray:
+def build_lut(n: int = LUT_SIZE) -> np.ndarray:
     """Builds a 3D LUT table of shape (n, n, n, 3) in [b][g][r] order."""
     r = np.linspace(0, 1, n, dtype=np.float32)
     g = np.linspace(0, 1, n, dtype=np.float32)
@@ -66,51 +65,25 @@ def build_lut(mode: str = "match", n: int = LUT_SIZE) -> np.ndarray:
     C = np.sqrt(a**2 + b_lab**2)
     h_deg = np.degrees(np.arctan2(b_lab, a)) % 360
 
-    if mode == "match":
-        # Tone curve tailored to match the flash exposure from the digital raw
-        xp = [0.00, 0.06, 0.15, 0.28, 0.45, 0.62, 0.78, 0.90, 1.00]
-        fp = [0.005, 0.04, 0.14, 0.38, 0.68, 0.82, 0.91, 0.96, 1.00]
-        L_base = np.interp(L, xp, fp)
+    # Standard film negative tone curve (S-curve) without forcing an artificial exposure boost
+    xp = [0.00, 0.08, 0.20, 0.35, 0.50, 0.65, 0.80, 0.92, 1.00]
+    fp = [0.008, 0.06, 0.17, 0.34, 0.52, 0.69, 0.84, 0.94, 0.99]
+    L_out = np.interp(L, xp, fp)
 
-        w_wall = np.exp(-((h_deg - 238) / 35) ** 2) * np.exp(-((C - 0.02) / 0.025) ** 2) * (L > 0.2)
-        L_out = L_base + 0.12 * w_wall
+    w_red = np.exp(-((h_deg - 28) / 25) ** 2) * np.clip((C - 0.05) / 0.08, 0, 1)
+    w_skin = np.exp(-((h_deg - 42) / 18) ** 2) * (C < 0.06) * (L > 0.3)
+    w_cool = np.exp(-((h_deg - 238) / 35) ** 2) * (C < 0.06) * (L > 0.4)
 
-        w_red = np.exp(-((h_deg - 28) / 25) ** 2) * np.clip((C - 0.05) / 0.08, 0, 1)
-        L_out = L_out * (1.0 - 0.15 * w_red)
+    C_factor = np.ones_like(C)
+    h_shift = np.zeros_like(h_deg)
 
-        C_factor = np.ones_like(C)
-        h_shift = np.zeros_like(h_deg)
+    C_factor += 0.35 * w_red
+    h_shift += 5.0 * w_red
 
-        C_factor += 0.30 * w_red
-        h_shift += 5.0 * w_red
+    C_factor += 0.18 * w_skin
+    h_shift += 4.0 * w_skin
 
-        w_skin = np.exp(-((h_deg - 42) / 18) ** 2) * (C < 0.06) * (L > 0.45)
-        C_factor += 0.15 * w_skin
-        h_shift += 4.5 * w_skin
-
-        C_factor += 0.40 * w_wall
-
-    elif mode == "universal":
-        # Standard film negative tone curve (S-curve) without heavy artificial exposure boost
-        xp = [0.00, 0.08, 0.20, 0.35, 0.50, 0.65, 0.80, 0.92, 1.00]
-        fp = [0.008, 0.06, 0.17, 0.34, 0.52, 0.69, 0.84, 0.94, 0.99]
-        L_base = np.interp(L, xp, fp)
-        L_out = L_base
-
-        w_red = np.exp(-((h_deg - 28) / 25) ** 2) * np.clip((C - 0.05) / 0.08, 0, 1)
-        w_skin = np.exp(-((h_deg - 42) / 18) ** 2) * (C < 0.06) * (L > 0.3)
-        w_cool = np.exp(-((h_deg - 238) / 35) ** 2) * (C < 0.06) * (L > 0.4)
-
-        C_factor = np.ones_like(C)
-        h_shift = np.zeros_like(h_deg)
-
-        C_factor += 0.35 * w_red
-        h_shift += 5.0 * w_red
-
-        C_factor += 0.18 * w_skin
-        h_shift += 4.0 * w_skin
-
-        C_factor += 0.25 * w_cool
+    C_factor += 0.25 * w_cool
 
     C_out = C * C_factor
     h_out = np.radians((h_deg + h_shift) % 360)
@@ -150,12 +123,8 @@ def save_cube(lut_table: np.ndarray, path: Path, title: str) -> None:
 
 def main() -> None:
     LUT_DIR.mkdir(parents=True, exist_ok=True)
-
-    match_lut = build_lut("match", LUT_SIZE)
-    save_cube(match_lut, LUT_DIR / "Film Flash.cube", "Film Flash")
-
-    uni_lut = build_lut("universal", LUT_SIZE)
-    save_cube(uni_lut, LUT_DIR / "Film Flash Normal.cube", "Film Flash Normal")
+    lut = build_lut(LUT_SIZE)
+    save_cube(lut, LUT_DIR / "Film Flash.cube", "Film Flash")
 
 
 if __name__ == "__main__":
