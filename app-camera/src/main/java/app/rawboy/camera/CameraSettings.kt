@@ -54,6 +54,8 @@ data class CameraSettings(
     val showHistogram: Boolean = false,
     /** A 3 x 3 grid over the viewfinder (rule of thirds). Off by default. */
     val showGrid: Boolean = false,
+    /** The zoom buttons (+, zoom, −) over the viewfinder. Pinching zooms either way. On by default. */
+    val showZoomControl: Boolean = true,
     /** A level line over the viewfinder that turns yellow when the phone is straight. Off by default. */
     val showLevel: Boolean = false,
     /** Whether each shot (without flash) takes [BURST_FRAMES] raws and merges them into one: see [BurstMode]. */
@@ -221,6 +223,7 @@ object CameraSettingsStore {
             showHistogram = p.getBoolean("showHistogram", d.showHistogram),
             showGrid = p.getBoolean("showGrid", d.showGrid),
             showLevel = p.getBoolean("showLevel", d.showLevel),
+            showZoomControl = p.getBoolean("showZoomControl", d.showZoomControl),
             burstMode = runCatching { BurstMode.valueOf(p.getString("burstMode", null)!!) }.getOrDefault(d.burstMode),
             shutterSound = p.getBoolean("shutterSound", d.shutterSound),
             geotag = p.getBoolean("geotag", d.geotag),
@@ -281,6 +284,7 @@ object CameraSettingsStore {
             .putBoolean("showHistogram", s.showHistogram)
             .putBoolean("showGrid", s.showGrid)
             .putBoolean("showLevel", s.showLevel)
+            .putBoolean("showZoomControl", s.showZoomControl)
             .putString("burstMode", s.burstMode.name)
             .putBoolean("shutterSound", s.shutterSound)
             .putBoolean("geotag", s.geotag)

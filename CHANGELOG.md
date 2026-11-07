@@ -39,6 +39,10 @@
 
 # Changelog
 
+**RawBoy Camera (Android): Zoom buttons can be hidden (2026-11-07)**
+
+- New Settings switch "Zoom buttons" (on by default) hides the + / zoom / − column over the viewfinder. Pinch zoom keeps working either way. Not compiled or run (no SDK in the session).
+
 **RawBoy Camera (Android): compact zoom control (2026-11-07)**
 
 - The zoom control is now one narrow column in the viewfinder's bottom right corner, beside the lens buttons: + on top, the zoom in the middle (a tap jumps 1x → 2x → 5x → 10x → 1x), − below, 48 dp buttons. The separate presets row is gone. Not compiled or run (no SDK in the session).

@@ -14,7 +14,7 @@ internal val CAMERA_HELP = listOf(
             HelpItem("Track subject after tap", "In Settings: the focus ring follows what you tapped (TRACKING ✕); back to autofocus once it's lost."),
             HelpItem("Press and hold", "See the photo without the look."),
             HelpItem("UW · W · T", "Switch between the ultrawide, wide and telephoto lenses. The button next to the shutter switches to the selfie camera."),
-            HelpItem("Zoom 1-10×", "For seeing something far away: pinch the viewfinder, or use + and − in the bottom right corner (hold to keep zooming). Tap the number between them to jump 1×, 2×, 5×, 10× and back to 1×. It zooms the viewfinder only: photos are still taken of the whole frame."),
+            HelpItem("Zoom 1-10×", "For seeing something far away: pinch the viewfinder, or use + and − in the bottom right corner (Settings › Zoom buttons hides them) (hold to keep zooming). Tap the number between them to jump 1×, 2×, 5×, 10× and back to 1×. It zooms the viewfinder only: photos are still taken of the whole frame."),
             HelpItem("Thumbnail", "Opens the last photo."),
             HelpItem("QR codes", "Point the camera at one: a bar above the lenses shows what it holds. Tap it to open the link, join the Wi-Fi network or copy the text; ✕ hides it. Settings › QR codes turns it off."),
         ),
