@@ -168,19 +168,26 @@ bool decodeWithDngSdk(const uint8_t* data, size_t size, DecodedImage& out, std::
             const Mat3 d50ToD65 = bradfordAdaptation(xyToXYZ(0.3457, 0.3585), xyToXYZ(0.3127, 0.3290));
             const Mat3 camToRec2020 = multiply(kXyzToRec2020, multiply(d50ToD65, camToXyzD50));
 
+            const dng_vector& camWhite = spec->CameraWhite();
+            const float camW[3] = {static_cast<float>(camWhite[0]), static_cast<float>(camWhite[1]),
+                                   static_cast<float>(camWhite[2])};
+            // The scene level of the output, as the LibRaw path has it: LibRaw normalises its white balance
+            // multipliers to the largest (1 / the smallest camera white), so a photo's sensor clip reaches 1 in its
+            // most amplified channel. Leaving green at 1 instead made a Packer Small raw (decoded here) a stop or
+            // more brighter in Auto than the same photo's lossless DNG (LibRaw): blue x2 on a Pixel 9 Pro.
+            const float level = std::min({camW[0], camW[1], camW[2]}) > 0.0f ? std::min({camW[0], camW[1], camW[2]}) : 1.0f;
+
             float m[9];
             for (int r = 0; r < 3; ++r)
-                for (int c = 0; c < 3; ++c) m[r * 3 + c] = static_cast<float>(camToRec2020.m[r][c]) * exposure;
+                for (int c = 0; c < 3; ++c)
+                    m[r * 3 + c] = static_cast<float>(camToRec2020.m[r][c]) * exposure * level;
 
             // Blown highlights are blended to neutral in white balanced camera RGB, where the camera white is 1 and
             // channel c clips at 1 / white[c]. Clipping each channel at the camera white instead cut every channel
             // with a high multiplier at a fraction of its range: in an infrared photo (blue x3.7) bright light lost
             // its blue and blown highlights went flat yellow.
-            const dng_vector& camWhite = spec->CameraWhite();
-            const float camW[3] = {static_cast<float>(camWhite[0]), static_cast<float>(camWhite[1]),
-                                   static_cast<float>(camWhite[2])};
             const float clip[3] = {1.0f / camW[0], 1.0f / camW[1], 1.0f / camW[2]};
-            out.clipLevel = (clip[0] + clip[1] + clip[2]) / 3.0f * exposure;
+            out.clipLevel = (clip[0] + clip[1] + clip[2]) / 3.0f * exposure * level;
 
             for (size_t i = 0, n = static_cast<size_t>(w) * h; i < n; ++i) {
                 float c[3] = {cam[i * 3] * clip[0], cam[i * 3 + 1] * clip[1], cam[i * 3 + 2] * clip[2]};

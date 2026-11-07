@@ -366,6 +366,7 @@ internal object ShotSaver {
                 jpegEncoder = JpegEncoder.JPEGLI,
                 maxLongSide = s.maxLongSide,
                 downscaleSharpen = CameraSettings.SMALL_SHARPEN,
+                hdrGainMap = s.hdrGainMap,
             )
             Log.d(TAG, "${shot.name}: decode $decodeMs ms, analysis $analysisMs ms")
             return Prepared(app, shot, img, shader, export, a.stats.key, a.autoBase.exposure, started)

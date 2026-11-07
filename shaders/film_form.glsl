@@ -94,8 +94,9 @@ vec3 filmOptics(vec3 x, vec2 uvG, vec2 imagePx) {
 
 // Unit Gaussian per channel at a full-resolution pixel (Box-Muller on the shared pcg hash).
 vec3 gaussPx(ivec2 p) {
-    vec3 u1 = max(unitHash(p, 0x6b43u), 1e-7);
-    vec3 u2 = unitHash(p, 0x1f35u);
+    uint fs = uint(uGrainFrame) * 0x9e3779b1u; // 0 for photos; the video frame counter moves the grain
+    vec3 u1 = max(unitHash(p, 0x6b43u + fs), 1e-7);
+    vec3 u2 = unitHash(p, 0x1f35u + fs);
     return sqrt(-2.0 * log(u1)) * cos(6.2831853 * u2);
 }
 

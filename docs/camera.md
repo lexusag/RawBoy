@@ -91,6 +91,7 @@ shows them.
     logcat line (preview ISO, exposure, boost) in real scenes and adjust.
 - **JPEG:** encoded with Google's **jpegli** from 16-bit pixels, full-resolution colour (4:4:4), quality 95 by
   default (Settings: 70–100). jpegli's adaptive quantisation gives fewer artefacts per byte than libjpeg.
+- **HDR gain map** (Android, **Settings → HDR gain map**, off by default): saves the JPEG as an **Ultra HDR JPEG**. The picture itself is unchanged; a small second image (the gain map) tells HDR screens to show highlights brighter, up to 2 stops, starting from the brightest quarter of the tones. Apps that don't know gain maps show the normal photo. The gain map is worked out from the finished picture, so it makes the highlights brighter on an HDR screen but doesn't bring back detail the picture already lost; a photo with nothing bright stays an ordinary JPEG.. Not yet checked on a phone or in the viewers (Google Photos, Chrome, iOS Photos): tell me if the highlights look too strong or too weak (`kKnee`, `kHeadroomEv` in `ultrahdr.h`).
 - **RAW:** the **RAW** button in the top bar keeps the DNG next to the JPEG (lit) or not (struck through); the same
   setting as in Settings.
 - **Settings:** JPEG quality; whether to keep the DNG (off by default: only the JPEG is saved); **Lossy JPEG XL DNG** (Android, shown while the DNG
@@ -170,3 +171,12 @@ printed). Colour negatives are printed on colour paper. **Natural** is the AgX d
   downscaled photo shows the grain as a smaller scan would.
 - **Strength** blends the film render with the AgX one (grain and halation fade with it). Middle grey stays where
   AgX puts it, so exposure and Brightness behave as before. Whites reach the paper's white (about 0.85), not 1.0.
+
+## Video (Android prototype)
+
+Turn on **Settings › Experimental features** (off by default) and a **VIDEO** button appears in the top bar; it switches to video mode (the RAW, Burst and Flash buttons hide). The shutter becomes a red record button, the volume buttons start and stop too, and the timer shows beside the status. The recording is the viewfinder as it looks, with the chosen look or film stock baked in: 1080p, 30 fps, H.264 (16 Mbit/s) and stereo AAC from the microphone (asked for the first time video mode is switched on; refusing gives silent videos), saved to `Movies/RawBoy Camera/VID_<date>_<time>-camera.mp4`.
+
+- The viewfinder is 4:3, a video is 16:9: the parts the file will not have are darkened. A phone held sideways records a landscape file.
+- Film grain moves with the frames in video mode. The live exposure eases much slower than for photos, so brightness does not pump.
+- Skin retouch, the ISO-based denoise and sharpening, bursts, flash and raw are photo-only. The lens and the camera (selfie) can't be changed while recording, and leaving the app stops the recording.
+- Prototype: no video stabilisation, no 4K, no log; the lens/stream setup is the photo one. How it works: `ViewfinderRenderer.videoSink` draws the same develop pass into the `MediaCodec` input surface through an EGL window surface in the viewfinder's own context (`gl/VideoOutput.kt`); `capture/VideoRecorder.kt` runs the encoders and the MP4 muxer. Findings and the plan: `docs/video.md`.

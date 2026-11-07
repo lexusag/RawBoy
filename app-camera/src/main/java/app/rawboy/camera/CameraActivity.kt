@@ -47,6 +47,11 @@ class CameraActivity : ComponentActivity() {
         viewModel.onLocationPermission(granted.values.any { it })
     }
 
+    /** Asked when video mode is first switched on; without it videos are silent. */
+    private val audioPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        viewModel.onAudioPermission(granted)
+    }
+
     /** Android's "add this network?" sheet for a Wi-Fi QR code; it saves the network itself, nothing comes back to us. */
     private val addWifi = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {}
 
@@ -113,10 +118,14 @@ class CameraActivity : ComponentActivity() {
                     requestLocation = {
                         locationPermission.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
                     },
+                    requestAudio = { audioPermission.launch(Manifest.permission.RECORD_AUDIO) },
                     openPhoto = ::openPhoto,
                     openQr = ::openQr,
                 )
             }
+        }
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            viewModel.onAudioPermission(true)
         }
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
             viewModel.onPermission(true)
