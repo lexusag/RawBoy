@@ -202,8 +202,6 @@ fun CameraScreen(
     // Turned sideways the UI turns with the window, the viewfinder picture stays put on the glass.
     val displayRotation = rememberDisplayRotation()
     val turns = viewfinderTurns(displayRotation)
-    // A recording started sideways is a landscape file.
-    LaunchedEffect(turns) { vm.displayTurns = turns }
     // Video wants the microphone: asked when the mode is first switched on.
     LaunchedEffect(videoMode) { if (videoMode && !vm.hasAudioPermission()) requestAudio() }
     // The volume keys don't shoot while a sheet is open.

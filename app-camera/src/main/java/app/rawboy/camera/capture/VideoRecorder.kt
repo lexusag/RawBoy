@@ -218,6 +218,8 @@ class VideoRecorder private constructor(
         // The renderer draws no more frames and lets go of the encoder's surface on its own thread; only then may the
         // encoder end its input. Not answered in time (camera stalled, view gone): end it anyway.
         sink.closing = true
+        // The sound stops with the picture: it used to run on while the renderer let go (0.7-1.6 s of extra audio).
+        stopAudio = true
         sink.requestRender()
         val deadline = SystemClock.uptimeMillis() + 800
         while (!sink.released && SystemClock.uptimeMillis() < deadline) Thread.sleep(10)

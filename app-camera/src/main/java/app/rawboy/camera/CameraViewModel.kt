@@ -250,10 +250,6 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private var recordingJob: Job? = null
     private var audioGranted = false
 
-    /** Clockwise quarter turns of the window (the UI sets it): a sideways phone records a landscape file. */
-    @Volatile
-    var displayTurns = 0
-
     private var stopRequested = false
 
     fun onAudioPermission(granted: Boolean) {
@@ -267,6 +263,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         if (_recordingMs.value != null) return
         if (on && !_settings.value.experimental) return
         _videoMode.value = on
+        republish() // the video viewfinder drops the colour denoise (see publish)
     }
 
     private fun toggleRecording() {
@@ -275,7 +272,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun startRecording() {
         if (recorder != null || _recordingMs.value != null) return
-        val turns = displayTurns
+        // As photos do: the phone's own rotation, so a phone held sideways with auto-rotate off still records upright.
+        val turns = (deviceDegrees / 90) % 4
         val withAudio = audioGranted
         stopRequested = false
         _recordingMs.value = 0
@@ -783,7 +781,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val s = _settings.value
         val developed = if (_compare.value) l.auto else s.develop(l.auto, l.stats.hasFace)
         // The ISP has already denoised and sharpened the preview stream.
-        val p = developed.copy(denoise = 0f, sharpening = 0f, skinRetouch = 0f)
+        // Video also drops the colour denoise: its coarse stages are many taps per pixel, drawn twice a frame (screen and
+        // encoder), and a clip on a non-Film look (colour floor 70) ran at 12 fps instead of 30.
+        val p = developed.copy(
+            denoise = 0f, sharpening = 0f, skinRetouch = 0f,
+            colorDenoise = if (_videoMode.value) 0f else developed.colorDenoise,
+        )
         val lut = p.lut?.let { id -> runCatching { ShotSaver.loadLut(app, id) }.getOrNull() }
         val film = p.film?.let { id -> runCatching { ShotSaver.loadFilm(app, id) }.getOrNull() }
         val lens = LensTransform(LensInfo.none(f.fullWidth, f.fullHeight), p)
