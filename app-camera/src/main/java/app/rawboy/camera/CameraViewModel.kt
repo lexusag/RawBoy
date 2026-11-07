@@ -265,6 +265,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setVideoMode(on: Boolean) {
         if (_recordingMs.value != null) return
+        if (on && !_settings.value.experimental) return
         _videoMode.value = on
     }
 
@@ -877,6 +878,15 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         change { it.copy(trackFocus = on) }
         // A subject being followed: a plain lock where it is now.
         if (!on && _tracking.value) _focusPoint.value?.let { (x, y) -> focusAt(x, y) }
+    }
+
+    /** Experimental features (video) on or off; off leaves video mode, ending a recording. */
+    fun setExperimental(on: Boolean) {
+        change { it.copy(experimental = on) }
+        if (!on) {
+            stopRecording()
+            _videoMode.value = false
+        }
     }
 
     fun setScanQr(on: Boolean) {

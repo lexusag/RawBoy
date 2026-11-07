@@ -253,7 +253,7 @@ fun CameraScreen(
             else -> ""
         }
         val barButtons = @Composable {
-            VideoModeButton(videoMode, enabled = recordingMs == null) { vm.setVideoMode(!videoMode) }
+            if (settings.experimental) VideoModeButton(videoMode, enabled = recordingMs == null) { vm.setVideoMode(!videoMode) }
             if (!videoMode) {
                 RawButton(settings.keepDng) { vm.setKeepDng(!settings.keepDng) }
                 BurstButton(settings.burstMode, lowLight, hiRes, flashAvailable && settings.flash != FlashMode.OFF) { vm.setBurstMode(settings.burstMode.next()) }
@@ -1219,6 +1219,13 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             subtitle = "Focus follows what you tapped as it moves; back to autofocus when it's lost",
             checked = settings.trackFocus,
             onChange = vm::setTrackFocus,
+        )
+        Spacer(Modifier.height(16.dp))
+        SettingSwitch(
+            title = "Experimental features",
+            subtitle = "Features still being tested: video mode (a VIDEO button in the top bar)",
+            checked = settings.experimental,
+            onChange = vm::setExperimental,
         )
         Spacer(Modifier.height(16.dp))
         SettingSwitch(

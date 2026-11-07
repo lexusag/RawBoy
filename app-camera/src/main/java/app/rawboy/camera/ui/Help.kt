@@ -35,7 +35,7 @@ internal val CAMERA_HELP = listOf(
     HelpSection(
         "Top bar",
         listOf(
-            HelpItem("VIDEO (prototype)", "Switches to video: the shutter becomes a red record button and the picture is recorded with the look on it, 1080p at 30 fps with stereo sound, into Movies/RawBoy Camera. The darkened bands show what a 16:9 video leaves out of the viewfinder. Lens and camera can't change while recording; leaving the app stops it."),
+            HelpItem("VIDEO (experimental)", "Shown when Settings › Experimental features is on. Switches to video: the shutter becomes a red record button and the picture is recorded with the look on it, 1080p at 30 fps with stereo sound, into Movies/RawBoy Camera. The darkened bands show what a 16:9 video leaves out of the viewfinder. Lens and camera can't change while recording; leaving the app stops it."),
             HelpItem("RAW", "Keep the DNG next to the JPEG (lit) or not (struck through)."),
             HelpItem("Burst (stacked frames)", "Merge 8 frames into each shot without flash for less noise. Tap to cycle On, Auto (small A: merges in low light only; the default) and Off. Coloured when the next shot will merge, gray when it won't. Same as the Settings choice."),
             HelpItem("Flash", "Turns Focus-flash on or off: the light comes on to help focusing, then the flash fires. On the selfie camera it lights the screen: a bright frame around the picture, with the screen at full brightness, for the moment of the shot."),
