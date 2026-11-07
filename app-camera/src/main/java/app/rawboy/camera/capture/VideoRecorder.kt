@@ -175,19 +175,26 @@ class VideoRecorder private constructor(
                         }
                     }
                 }
-                val index = a.codec.dequeueOutputBuffer(info, if (inputDone) TIMEOUT_US else 0)
-                when {
-                    index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> addTrack(a.codec.outputFormat, isVideo = false)
-                    index >= 0 -> {
-                        val buffer = a.codec.getOutputBuffer(index)
-                        val config = info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
-                        if (buffer != null && info.size > 0 && !config) {
-                            buffer.position(info.offset)
-                            buffer.limit(info.offset + info.size)
-                            write(audioTrack, buffer, info)
+                // Every finished AAC frame, not one per microphone read: a read holds several frames' worth of
+                // samples, so taking one output per read left the encoder's input full and feedAudio dropped most
+                // of the sound (a 7 s clip held 1.7 s of audio with 1.3-1.5 s holes; Photos stalled and ran the
+                // picture fast against that audio clock, VLC ignored it).
+                while (true) {
+                    val index = a.codec.dequeueOutputBuffer(info, if (inputDone) TIMEOUT_US else 0)
+                    when {
+                        index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> addTrack(a.codec.outputFormat, isVideo = false)
+                        index >= 0 -> {
+                            val buffer = a.codec.getOutputBuffer(index)
+                            val config = info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
+                            if (buffer != null && info.size > 0 && !config) {
+                                buffer.position(info.offset)
+                                buffer.limit(info.offset + info.size)
+                                write(audioTrack, buffer, info)
+                            }
+                            a.codec.releaseOutputBuffer(index, false)
+                            if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) return
                         }
-                        a.codec.releaseOutputBuffer(index, false)
-                        if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) return
+                        else -> break
                     }
                 }
             }
