@@ -1105,20 +1105,22 @@ describe('applyEditsDevelop', () => {
   });
 
   it('the flare source keeps a small bright lamp and gates a big lit window', () => {
-    const w = 300, h = 200;
+    const w = 900, h = 600;
     const pixels = new Uint16Array(w * h * 3);
     const put = (x0: number, y0: number, x1: number, y1: number, v: number) => {
       for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) for (let c = 0; c < 3; c++) pixels[(y * w + x) * 3 + c] = floatToHalf(v);
     };
-    put(40, 90, 46, 96, 12); // a lamp
-    put(150, 20, 290, 180, 12); // a window
+    put(120, 270, 126, 276, 12); // a lamp
+    put(450, 60, 870, 540, 12); // a window
+    put(300, 270, 306, 276, 12); // a lamp a little way from it
     const src = { width: w, height: h, pixels, fullWidth: w * 10, fullHeight: h * 10 };
     const f = makeFlareSource(src);
-    expect(f.width).toBe(100);
+    expect(f.width).toBe(300);
     expect(f.height).toBe(h + 2 * flareCoarseRows(h));
     expect(flareRows(f)).toBe(h);
     const at = (x: number, y: number) => halfToFloat(f.pixels[(y * f.width + x) * 3]);
-    expect(at(14, 93)).toBeGreaterThan(5);
-    expect(at(70, 100)).toBeLessThan(0.5);
+    expect(at(41, 273)).toBeGreaterThan(5);
+    expect(at(101, 273)).toBeGreaterThan(5); // a small light near a big one still flares
+    expect(at(200, 300)).toBeLessThan(0.5);
   });
 });

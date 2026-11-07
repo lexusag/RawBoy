@@ -1,3 +1,7 @@
+**RawBoy: a small light next to a bright area flares again (2026-11-07)**
+
+- The anamorphic flare's size gate reached too far: a small light by a lit ceiling or window (a lamp held next to a face, in a stairwell) was counted as part of the big bright area and got no flare. The gate now looks about 40% as far (Gaussian 2.5% of the long edge, was 4%, and the dilation 0.3 of that, was 0.8). Big lit windows and signs are still left alone. Checked on the web render path on a stairwell portrait, the night street shots and the test chart; Android and iOS carry the same constants, not built here.
+
 **RawBoy Camera (Android): video recorded as HEVC (2026-11-07)**
 
 - Google Photos on the Pixel 9 Pro froze for seconds while playing the app's videos (in the owner's screen recording the timer sat at 0:15 while "playing"), while the camera's own clips and the same files on a PC played fine. The frame times are clean (30 fps, no gaps) and a copy re-muxed with exact 30 fps times froze too, so the encoded H.264 High stream is the suspect. Video now records HEVC (Main, 16 Mbit/s, still 1080p30); a phone without an HEVC encoder falls back to H.264. Untested on the phone when added: if it still stalls, send the clip and the screen recording.

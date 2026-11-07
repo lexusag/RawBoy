@@ -25,7 +25,8 @@ import kotlin.math.sqrt
 object FlareSource {
     const val SOURCE_MAX_DIMENSION = 1536
 
-    private const val SIZE_SIGMA = 0.04f
+    private const val SIZE_SIGMA = 0.025f
+    private const val SIZE_DILATE = 0.3f
     private const val SIZE_LO = 0.05f
     private const val SIZE_HI = 0.14f
     private const val BRIGHT_LO = 4.5f
@@ -120,7 +121,7 @@ object FlareSource {
             blown[yc * wf + x] = sum / 3f
         }
         val sigma = SIZE_SIGMA * max(wf, rc)
-        val area = maxFilter(gauss3(blown, wf, rc, sigma, sigma), wf, rc, (0.8f * sigma).roundToInt())
+        val area = maxFilter(gauss3(blown, wf, rc, sigma, sigma), wf, rc, (SIZE_DILATE * sigma).roundToInt())
 
         val gated = FloatArray(wf * h * 3)
         for (y in 0 until h) for (x in 0 until wf) {
