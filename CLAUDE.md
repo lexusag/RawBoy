@@ -693,7 +693,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   the raw** (Pixel 9 Pro): the AE precapture with AE_MODE_ON_ALWAYS_FLASH fires no pre-flash for third-party apps
   (FLASH_REQUIRED after 2 frames, ambient values unchanged) and the still keeps the ambient exposure, only the post-raw
   boost drops: 19% of the raw clipped at 0.4 m. So flash stills are manual (AE_MODE_OFF, boost 100, FLASH_MODE_SINGLE,
-  1/30 s): gain (s x ISO) = guide x distance² from `LENS_FOCUS_DISTANCE` (`flashExposure`), capped at the ambient gain;
+  1/30 s): gain (s x ISO) = guide x `flashFalloff`(distance) (distance², x max(1, d)^0.3 beyond 1 m) from `LENS_FOCUS_DISTANCE` (`flashExposure`); an unlearned guide defaults to the 16/4 defaults x (lens f-number / 1.7)², capped at the ambient gain;
   the guide is learned per lens (`CameraSettings.flashGuides`, `CameraViewModel.calibrateFlash`) from the auto
   develop's exposure, aiming +0.5 EV (dark raws recover, clipped ones don't). **Pixel 9 Pro UW reports LENS_FOCUS_DISTANCE 0 on
   every frame** (lens and logical result, even AF-locked at ~1 m; it claims APPROXIMATE calibration): exactly 0 = unknown,

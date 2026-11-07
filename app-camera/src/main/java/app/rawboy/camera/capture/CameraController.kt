@@ -85,10 +85,10 @@ class Still(
 
 /** A lens's learned flash exposure (see [CameraController.flashExposure]). */
 class FlashGuides(
-    /** Gain (s x ISO) at 1 m; the gain is this x distance². */
-    val byDistance: Float = CameraController.DEFAULT_FLASH_GUIDE,
-    /** Gain when the lens doesn't report its focus distance (Pixel 9 Pro UW: always 0). */
-    val noDistance: Float = CameraController.DEFAULT_FLASH_GAIN_NO_DISTANCE,
+    /** Gain (s x ISO) at 1 m, learned for this lens; null: the default, scaled to the lens's aperture. */
+    val byDistance: Float? = null,
+    /** Gain when the lens doesn't report its focus distance (Pixel 9 Pro UW: always 0); null: as above. */
+    val noDistance: Float? = null,
 )
 
 /**
@@ -142,6 +142,8 @@ class CameraController(context: Context) : AutoCloseable {
         val maxResFormat: Int = ImageFormat.RAW_SENSOR,
         /** [rawSize] is the [maxResSize]: the raw stream and its stills use the maximum-resolution sensor mode. */
         val hiRes: Boolean = false,
+        /** The lens's aperture (f-number); the flash default for a lens that hasn't learned its own scales with it. */
+        val fNumber: Float = FLASH_REFERENCE_F_NUMBER,
     ) {
         /** The lens can focus (a fixed-focus lens reports a minimum focus distance of 0). */
         val canFocus get() = (characteristics.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f) > 0f
@@ -172,7 +174,7 @@ class CameraController(context: Context) : AutoCloseable {
         fun labelled(label: String) = Info(
             openId, physicalId, label, facing, equivalentFocal, characteristics, regionArray, rawSize, previewSize,
             sensorOrientation, previewGamma, toneMapModes, shadingMapModes, faceModes, activeArray, xyzToCamera,
-            cameraToSrgb, hasFlash, maxResSize, maxResFormat, hiRes,
+            cameraToSrgb, hasFlash, maxResSize, maxResFormat, hiRes, fNumber,
         )
 
         /**
@@ -384,6 +386,7 @@ class CameraController(context: Context) : AutoCloseable {
             maxResSize = maxRes?.first,
             maxResFormat = maxResFormat,
             hiRes = hiRes,
+            fNumber = c.get(CameraCharacteristics.LENS_INFO_AVAILABLE_APERTURES)?.firstOrNull()?.takeIf { it > 0f } ?: FLASH_REFERENCE_F_NUMBER,
         )
     }
 
@@ -1048,8 +1051,13 @@ class CameraController(context: Context) : AutoCloseable {
         val ambientGain = ambient?.let { it.exposureNs / 1e9f * it.iso }?.takeIf { it > 0f } ?: Float.MAX_VALUE
         val known = diopters != null && diopters > 0f
         val metres = if (known) (1f / diopters!!).coerceIn(MIN_FLASH_DISTANCE_M, MAX_FLASH_DISTANCE_M) else 1f
-        val guide = if (known) guides.byDistance else guides.noDistance
-        val byFlash = guide * metres * metres
+        // A lens that hasn't learned its own guide starts from the default, scaled by its light gathering (a tele at f/2.8
+        // passes 2.7x less of the flash's light than the f/1.7 main lens the default was set on).
+        val apertureScale = (inf.fNumber / FLASH_REFERENCE_F_NUMBER).let { it * it }.coerceIn(0.5f, 8f)
+        val guide = (if (known) guides.byDistance else guides.noDistance)
+            ?: ((if (known) DEFAULT_FLASH_GUIDE else DEFAULT_FLASH_GAIN_NO_DISTANCE) * apertureScale)
+        val falloff = flashFalloff(metres)
+        val byFlash = guide * falloff
         val gain = min(byFlash, ambientGain).coerceAtMost(FLASH_EXPOSURE_NS / 1e9f * isoRange.upper)
         var t = FLASH_EXPOSURE_NS.coerceIn(timeRange.lower, timeRange.upper)
         var iso = gain / (t / 1e9f)
@@ -1062,9 +1070,17 @@ class CameraController(context: Context) : AutoCloseable {
         Log.d(TAG, "flash exposure: focus ${diopters ?: "?"} dpt -> ${if (known) "%.2f m".format(metres) else "unknown"}, guide $guide -> gain $byFlash, " +
             "ambient $ambientGain -> ${exposure.first / 1000} µs ISO ${exposure.second}")
         // Calibrate only from shots the flash exposed (not those capped by ambient light or the sensor's range).
-        val guideUsed = if (byFlash <= ambientGain && abs(used / byFlash - 1f) < 0.1f) used / (metres * metres) else null
+        val guideUsed = if (byFlash <= ambientGain && abs(used / byFlash - 1f) < 0.1f) used / falloff else null
         return exposure to guideUsed
     }
+
+    /**
+     * How much more exposure than at 1 m a subject at [metres] needs: the square of the distance (a point source) and
+     * beyond 1 m a bit more ([FLASH_FAR_EXPONENT]), because the guide is learned on close subjects (a hand's length)
+     * while the phone's LED is no point source: the farther the subject, the more of the light is lost to the
+     * wide beam's spread over the scene and to the room's own ambient fill-in the flash must overcome.
+     */
+    private fun flashFalloff(metres: Float): Float = metres * metres * max(1f, metres).pow(FLASH_FAR_EXPONENT)
 
     /**
      * Restarts the repeating preview with the current [aeMode]/[flashMode], sends one preview request with [trigger],
@@ -1464,6 +1480,12 @@ class CameraController(context: Context) : AutoCloseable {
         /** Flash still: exposure time and the frame duration it needs at least. */
         private const val FLASH_EXPOSURE_NS = 33_333_333L
         private const val FLASH_FRAME_NS = 33_333_333L
+
+        /** The f-number [DEFAULT_FLASH_GUIDE] was set on (Pixel 9 Pro W, f/1.68). */
+        private const val FLASH_REFERENCE_F_NUMBER = 1.7f
+
+        /** Extra exponent on distances beyond 1 m, see [flashFalloff]: 2 m needs 1.23x (0.3 EV), 4 m 1.5x (0.6 EV) more. */
+        private const val FLASH_FAR_EXPONENT = 0.3f
 
         /** How long [meterRaw] waits for its frame (a still in low light takes up to 1/15 s, plus the pipeline). */
         private const val METER_TIMEOUT_MS = 2_000L
