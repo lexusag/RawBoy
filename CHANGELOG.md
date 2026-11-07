@@ -33,6 +33,10 @@
 
 # Changelog
 
+**RawBoy Camera (Android): compact zoom control (2026-11-07)**
+
+- The zoom control is now one narrow column in the viewfinder's bottom right corner, beside the lens buttons: + on top, the zoom in the middle (a tap jumps 1x → 2x → 5x → 10x → 1x), − below, 48 dp buttons. The separate presets row is gone. Not compiled or run (no SDK in the session).
+
 **RawBoy Camera (Android): digital zoom up to 10x for seeing far away (2026-11-07)**
 
 - A zoom control above the lens buttons: a large readout (tap it for 1x), 56 dp − and + buttons (a tap steps 1.25x, holding zooms smoothly) and 1x / 2x / 5x / 10x presets; pinching the viewfinder zooms too. It is a GPU crop of the centre of the camera frame in the viewfinder's first pass (`ViewfinderRenderer.zoom`), so it is smooth, works on every lens, and the live develop, histogram and QR reader see the zoomed picture. Focus taps are mapped back to the unzoomed frame, and a zoom change releases an AF lock.
