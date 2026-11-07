@@ -205,6 +205,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
             jpegQuality = prefs.getInt(KEY_EXPORT_QUALITY, SETTINGS.jpegQuality).coerceIn(1, 100),
             tiffBits = if (prefs.getInt(KEY_EXPORT_BITS, SETTINGS.tiffBits) == 8) 8 else 16,
             maxLongSide = prefs.getInt(KEY_EXPORT_SIZE, 0).takeIf { it in EXPORT_SIZES },
+            filmScan = prefs.getBoolean(KEY_EXPORT_SCAN, false),
         ),
     )
     val exportSettings = _exportSettings.asStateFlow()
@@ -527,6 +528,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
             .putInt(KEY_EXPORT_QUALITY, settings.jpegQuality)
             .putInt(KEY_EXPORT_BITS, settings.tiffBits)
             .putInt(KEY_EXPORT_SIZE, settings.maxLongSide ?: 0)
+            .putBoolean(KEY_EXPORT_SCAN, settings.filmScan)
             .apply()
     }
 
@@ -1060,6 +1062,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
         private const val KEY_EXPORT_SIZE = "exportMaxLongSide"
         private const val KEY_EXPORT_QUALITY = "exportJpegQuality"
         private const val KEY_EXPORT_BITS = "exportTiffBits"
+        private const val KEY_EXPORT_SCAN = "exportFilmScan"
         private const val KEY_FRAME = "frame"
         private const val KEY_SORT = "sort"
     }

@@ -33,6 +33,8 @@ import kotlin.math.roundToInt
 fun ExportDialog(
     initial: ExportSettings,
     sourceName: String,
+    /** A film look is on (the Film tone mapper): the Film scan option applies. */
+    film: Boolean,
     onDismiss: () -> Unit,
     onExport: (ExportSettings) -> Unit,
     /** Hands the photo with all its edits to RawBoy Auto, for its batch export. */
@@ -77,6 +79,25 @@ fun ExportDialog(
                             }
                         }
                     }
+                }
+
+                if (film) {
+                    Spacer(Modifier.height(16.dp))
+                    Text("Film scan")
+                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                        listOf(false, true).forEachIndexed { index, on ->
+                            SegmentedButton(
+                                selected = settings.filmScan == on,
+                                onClick = { settings = settings.copy(filmScan = on) },
+                                shape = SegmentedButtonDefaults.itemShape(index, 2),
+                            ) { Text(if (on) "1.5× size" else "Off") }
+                        }
+                    }
+                    Text(
+                        "Upscales the photo and grows the grain on a finer pitch, as a finer scan of the negative.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
 
                 Spacer(Modifier.height(16.dp))

@@ -77,3 +77,5 @@ Edits carry over when you open the next file, except rotation, flips, straighten
 
 `IMG_1234.CR3` → `Pictures/RawBoy/IMG_1234-rawboy.jpg`. If that name exists:
 `IMG_1234-rawboy-001.jpg`, `-002`, … JPEG keeps the main EXIF fields (camera, lens, exposure, date, GPS).
+
+**Film scan 1.5×** (Export dialog, Android and web; only while the Film tone mapper is on): renders the photo 1.5× larger. The photo is upscaled by iterative back-projection and lightly sharpened before the grain, and the film grain is generated at the finer pitch. The Size setting is ignored for a scan. Needs float render targets, otherwise it is a plain enlargement.

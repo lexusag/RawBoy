@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { BandDownscaler } from '../../engine/export/BandDownscaler';
+import { scanSize } from '../../engine/gl/ScanScale';
 import { DEFAULT_EXPORT, EXTENSIONS, baseNameOf, fileName, type ExportSettings } from '../../engine/export/ExportSettings';
 import { ParamSlider, formatPlain } from '../common/ParamSlider';
 import { useExportDestination, type ExportDestination } from '../common/ExportDestination';
@@ -7,18 +8,21 @@ import { useExportDestination, type ExportDestination } from '../common/ExportDe
 const SIZES: (number | null)[] = [null, 6000, 4000, 3000, 2048];
 
 /** Format, quality / bit depth and size of the export (port of app-pro's ExportDialog.kt). */
-export function ExportDialog({ initial, sourceName, outputSize, onDismiss, onExport }: {
+export function ExportDialog({ initial, sourceName, outputSize, film, onDismiss, onExport }: {
   initial: ExportSettings;
   sourceName: string;
   /** Full output size (after rotation). */
   outputSize: [number, number];
+  /** A film look is on (the Film tone mapper): the Film scan option applies. */
+  film: boolean;
   onDismiss: () => void;
   /** Called from the Export click (Google Drive opens its folder picker from it). */
   onExport: (s: ExportSettings, destination: ExportDestination) => void;
 }) {
   const [s, setS] = useState(initial);
   const [destination, destinationRow] = useExportDestination(true);
-  const [w, h] = BandDownscaler.outputSize(outputSize[0], outputSize[1], s.maxLongSide);
+  const scan = film && s.filmScan;
+  const [w, h] = scan ? scanSize(outputSize[0], outputSize[1]) : BandDownscaler.outputSize(outputSize[0], outputSize[1], s.maxLongSide);
   return (
     <div className="dialog-backdrop" onClick={onDismiss}>
       <div className="dialog" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Export">
@@ -56,9 +60,22 @@ export function ExportDialog({ initial, sourceName, outputSize, onDismiss, onExp
             </div>
           </div>
         )}
+        {film && (
+          <div className="field">
+            <span>Film scan</span>
+            <div className="segmented">
+              {([false, true] as const).map((on) => (
+                <button key={String(on)} type="button" className={s.filmScan === on ? 'active' : ''} onClick={() => setS({ ...s, filmScan: on })}>
+                  {on ? '1.5× size' : 'Off'}
+                </button>
+              ))}
+            </div>
+            <small>Upscales the photo and grows the grain on a finer pitch, as a finer scan of the negative</small>
+          </div>
+        )}
         <label className="field">
           <span>Size</span>
-          <select value={s.maxLongSide ?? ''} onChange={(e) => setS({ ...s, maxLongSide: e.target.value ? Number(e.target.value) : null })}>
+          <select disabled={scan} value={s.maxLongSide ?? ''} onChange={(e) => setS({ ...s, maxLongSide: e.target.value ? Number(e.target.value) : null })}>
             {SIZES.map((v) => (
               <option key={v ?? 'full'} value={v ?? ''}>
                 {v ? `${v} px long side` : 'Full resolution'}

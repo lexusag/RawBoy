@@ -4,6 +4,7 @@ The develop pipeline's GLSL (ES 3.00), the single source of truth for every plat
 
 - `develop.vert`: vertex shader (fullscreen quad).
 - `develop.glsl`: uniforms and every stage as functions (lens, denoise, retouch, sharpening, bloom, tone mappers AgX / filmic / sigmoid, LUT, point curves).
+- `scan.frag`: the Film scan 1.5× export upscale pre-pass (complete shader, `uPass` steps; see `engine/.../gl/ScanUpscaler.kt`).
 - `denoise.vert`, `denoise_split.frag`, `denoise_level.frag`, `denoise_shrink.frag`, `denoise_merge.frag`: the wavelet
   denoise pre-pass (complete shaders, run before the develop shader; see `engine/.../gl/WaveletDenoise.kt`). iOS uses
   hand ports in `ios/Engine/app/rawboy/metal/Helpers.metal`: keep them in step.
