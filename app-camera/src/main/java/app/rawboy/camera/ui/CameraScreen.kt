@@ -458,13 +458,13 @@ fun CameraScreen(
                                 .padding(bottom = 16.dp),
                         )
                     }
-                    // Big buttons and a big readout, above the lens selector (beside the shutter row in landscape).
+                    // A narrow column in the bottom right corner, beside the lens selector.
                     ZoomControl(
                         zoom = zoom,
                         onZoom = vm::setZoom,
                         modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .padding(bottom = if (lenses.size > 1 && !landscape) 84.dp else 16.dp),
+                            .align(Alignment.BottomEnd)
+                            .padding(end = 8.dp, bottom = 16.dp),
                     )
                     // Above the lens selector, out of the way of the focus ring and the top badges.
                     qrCode?.let { code ->
@@ -474,7 +474,7 @@ fun CameraScreen(
                             onDismiss = vm::dismissQr,
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
-                                .padding(start = 16.dp, end = 16.dp, bottom = (if (lenses.size > 1 && !landscape) 84.dp else 16.dp) + 132.dp),
+                                .padding(start = 16.dp, end = 16.dp, bottom = if (lenses.size > 1 && !landscape) 84.dp else 16.dp),
                         )
                     }
                     Box(Modifier.matchParentSize().turned(turns)) {
@@ -675,56 +675,39 @@ private fun QrChip(code: QrPayload, onOpen: () -> Unit, onDismiss: () -> Unit, m
 }
 
 /**
- * Digital zoom 1-10x for seeing something far away: a readout of the zoom (tap it to go back to 1x), large − and +
- * buttons (hold to keep zooming) and preset steps, all with 56 dp touch targets. Pinching the viewfinder zooms too.
+ * Digital zoom 1-10x for seeing something far away, as one narrow column: + on top, the zoom in the middle (a tap goes
+ * to the next of 1x, 2x, 5x, 10x, then back to 1x), − below; 48 dp touch targets, holding + or − zooms smoothly.
+ * Pinching the viewfinder zooms too.
  */
 @Composable
 private fun ZoomControl(zoom: Float, onZoom: (Float) -> Unit, modifier: Modifier = Modifier) {
     val current = rememberUpdatedState(zoom)
     val setZoom = rememberUpdatedState(onZoom)
     val label = zoomLabel(zoom)
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Row(
-            Modifier.clip(RoundedCornerShape(32.dp)).background(Color(0xB3000000)).padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-            verticalAlignment = Alignment.CenterVertically,
+    val next = ZOOM_PRESETS.firstOrNull { it > zoom + 0.05f } ?: ZOOM_PRESETS.first()
+    Column(
+        modifier.clip(RoundedCornerShape(28.dp)).background(Color(0x99000000)).padding(4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
+        ZoomStepButton("+", "Zoom in", 1, current, setZoom)
+        Box(
+            Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .background(if (zoom > 1.05f) Color(0xFFD0D0D0) else Color.Transparent)
+                .clickable(role = Role.Button, onClickLabel = "Zoom ${zoomLabel(next)} times") { onZoom(next) }
+                .semantics { contentDescription = "Zoom $label times"; stateDescription = "$label times" },
+            contentAlignment = Alignment.Center,
         ) {
-            ZoomStepButton("−", "Zoom out", -1, current, setZoom)
-            Box(
-                Modifier
-                    .size(width = 88.dp, height = 56.dp)
-                    .clip(RoundedCornerShape(28.dp))
-                    .clickable(role = Role.Button, onClickLabel = "Reset to 1x") { onZoom(1f) }
-                    .semantics { contentDescription = "Zoom $label times"; stateDescription = "$label times" },
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(label + "×", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold), color = Color.White)
-            }
-            ZoomStepButton("+", "Zoom in", 1, current, setZoom)
+            Text(
+                label + "×",
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                color = if (zoom > 1.05f) Color.Black else Color.White,
+                maxLines = 1,
+            )
         }
-        Row(
-            Modifier.clip(RoundedCornerShape(28.dp)).background(Color(0x99000000)).padding(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            for (step in ZOOM_PRESETS) {
-                val isSelected = kotlin.math.abs(zoom - step) < 0.05f
-                Box(
-                    Modifier
-                        .size(width = 56.dp, height = 48.dp)
-                        .clip(CircleShape)
-                        .background(if (isSelected) Color(0xFFD0D0D0) else Color.Transparent)
-                        .clickable(role = Role.Button) { onZoom(step) }
-                        .semantics { this.selected = isSelected; contentDescription = "Zoom ${step.toInt()} times" },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        "${step.toInt()}×",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = if (isSelected) Color.Black else Color.White,
-                    )
-                }
-            }
-        }
+        ZoomStepButton("−", "Zoom out", -1, current, setZoom)
     }
 }
 
@@ -739,9 +722,8 @@ private fun ZoomStepButton(
 ) {
     Box(
         Modifier
-            .size(56.dp)
+            .size(48.dp)
             .clip(CircleShape)
-            .background(Color(0x40FFFFFF))
             .pointerInput(direction) {
                 detectTapGestures(
                     onPress = {
@@ -768,7 +750,7 @@ private fun ZoomStepButton(
             },
         contentAlignment = Alignment.Center,
     ) {
-        Text(text, style = MaterialTheme.typography.headlineMedium, color = Color.White)
+        Text(text, style = MaterialTheme.typography.titleLarge, color = Color.White)
     }
 }
 
