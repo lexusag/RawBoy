@@ -1,3 +1,7 @@
+**RawBoy Camera (Android): optional video stabilization (2026-11-07)**
+
+- New Settings › Video stabilization (shown with Experimental features, off by default). In video mode it turns on the camera's preview stabilization (Android 13+; the plain video stabilization on older phones) and the lens stabilizer, so the recorded picture is steadier; the frame is cropped a little and the viewfinder trails the camera by a few frames. Photos stay unstabilized. Tap-to-focus regions don't account for the stabilization crop (a few % off while it is on). Untested on the phone when added: check that the picture is steadier and the crop is acceptable.
+
 **RawBoy Camera (Android): video sound no longer has holes, so Photos plays it (2026-11-07)**
 
 - Videos stalled at once in Google Photos on the Pixel, then played choppy and sped up, while VLC and a PC played them fine (H.264 and HEVC alike, so not the codec). The cause was the sound: the audio loop took one finished AAC frame per microphone read, but a read holds several frames, so the encoder's input filled and most of the sound was dropped. A 7 s clip held 1.7 s of audio in four pieces with 1.3-1.5 s holes between them; Photos follows the audio clock and chased it with the picture. The loop now takes every finished frame each time. Checked on the clip's audio packets (1024-sample frames, timestamps jumping 1.3-1.5 s); untested on the phone when added: send the next clip if Photos still stalls.

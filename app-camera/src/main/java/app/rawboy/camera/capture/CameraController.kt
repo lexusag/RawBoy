@@ -508,6 +508,41 @@ class CameraController(context: Context) : AutoCloseable {
     private fun lensResult(total: TotalCaptureResult): CaptureResult =
         streamingPhysical?.let { total.physicalCameraResults[it] } ?: total
 
+    /** Video mode's stabilization is on ([setVideoStabilization]); photos and the plain viewfinder never stabilize. */
+    @Volatile
+    private var stabilizeVideo = false
+
+    /**
+     * Turns stabilization of the preview stream (which the video is cut from) on or off: preview stabilization where
+     * the camera offers it (Android 13+), else the ordinary video stabilization, else nothing. It crops the picture
+     * a little and delays it by a few frames. Restarts the preview when it changes.
+     */
+    fun setVideoStabilization(on: Boolean) {
+        handler.post {
+            if (stabilizeVideo == on) return@post
+            stabilizeVideo = on
+            runCatching { repeatPreview() }
+        }
+    }
+
+    private fun hasOis(inf: Info): Boolean =
+        characteristicsOf(inf).get(CameraCharacteristics.LENS_INFO_AVAILABLE_OPTICAL_STABILIZATION)
+            ?.contains(CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_ON) == true
+
+    /** The CONTROL_VIDEO_STABILIZATION_MODE for a preview request: OFF unless [stabilizeVideo] and the camera has a mode. */
+    private fun stabilizationMode(inf: Info): Int {
+        if (!stabilizeVideo) return CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_OFF
+        val modes = characteristicsOf(inf).get(CameraCharacteristics.CONTROL_AVAILABLE_VIDEO_STABILIZATION_MODES)
+            ?: return CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_OFF
+        return when {
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_PREVIEW_STABILIZATION in modes ->
+                CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_PREVIEW_STABILIZATION
+            CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_ON in modes -> CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_ON
+            else -> CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_OFF
+        }
+    }
+
     /** (Re)starts the repeating preview, with the focus lock if there is one. */
     private fun repeatPreview() {
         val s = session ?: return
@@ -1280,8 +1315,12 @@ class CameraController(context: Context) : AutoCloseable {
         set(CaptureRequest.FLASH_MODE, flashMode)
         set(CaptureRequest.CONTROL_AWB_MODE, CameraMetadata.CONTROL_AWB_MODE_AUTO)
         // The Pixel's templates turn video stabilization on: it crops the preview ~20% (the raw isn't), so the
-        // viewfinder showed a tighter frame than the photo. OFF also disables preview stabilization.
-        set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_OFF)
+        // viewfinder showed a tighter frame than the photo. OFF also disables preview stabilization. Only video
+        // mode's optional stabilization turns it back on (the video is cut from this preview stream).
+        set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, stabilizationMode(inf))
+        if (stabilizeVideo && hasOis(inf)) {
+            set(CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE, CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_ON)
+        }
         // A known curve on the preview, so the viewfinder can undo it (ViewfinderRenderer).
         when {
             inf.hasPresetCurve -> {
