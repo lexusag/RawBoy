@@ -282,6 +282,8 @@ struct CameraScreen: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                if vm.settings.showGrid { GridOverlay() }
+                if vm.settings.showLevel, let tilt = vm.tilt { LevelOverlay(tilt: tilt) }
                 Color.black.opacity(blink).allowsHitTesting(false)
             }
             .aspectRatio(turns % 2 == 1 ? 1 / vm.aspect : vm.aspect, contentMode: .fit)
@@ -683,6 +685,20 @@ private struct SettingsSheet: View {
                                 .font(.caption).foregroundStyle(.secondary)
                         }
                     }
+                    Toggle(isOn: Binding(get: { vm.settings.showGrid }, set: vm.setShowGrid)) {
+                        VStack(alignment: .leading) {
+                            Text("Grid")
+                            Text("A 3 x 3 grid over the viewfinder to line up the frame")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    Toggle(isOn: Binding(get: { vm.settings.showLevel }, set: vm.setShowLevel)) {
+                        VStack(alignment: .leading) {
+                            Text("Level")
+                            Text("A line over the viewfinder that turns yellow when the phone is straight")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
                     Toggle(isOn: Binding(get: { vm.settings.showHistogram }, set: vm.setShowHistogram)) {
                         VStack(alignment: .leading) {
                             Text("Histogram")
@@ -952,5 +968,48 @@ private struct CameraLayout: Layout {
             controls.place(at: CGPoint(x: bounds.minX, y: bounds.minY + barH + vh), proposal: ProposedViewSize(width: w, height: controlsH))
             shutter.place(at: CGPoint(x: bounds.minX, y: bounds.maxY - shutterH), proposal: ProposedViewSize(width: w, height: shutterH))
         }
+    }
+}
+
+/// Thin lines at the thirds of the viewfinder; they take no touches.
+private struct GridOverlay: View {
+    var body: some View {
+        Canvas { context, size in
+            var path = Path()
+            for i in 1...2 {
+                let x = size.width * CGFloat(i) / 3, y = size.height * CGFloat(i) / 3
+                path.move(to: CGPoint(x: x, y: 0)); path.addLine(to: CGPoint(x: x, y: size.height))
+                path.move(to: CGPoint(x: 0, y: y)); path.addLine(to: CGPoint(x: size.width, y: y))
+            }
+            context.stroke(path, with: .color(.white.opacity(0.45)), lineWidth: 1)
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+/// A horizon line through the middle of the viewfinder, turned against the phone's tilt (degrees clockwise from
+/// upright). Yellow within one degree of straight, with a short fixed mark each side to compare it with.
+private struct LevelOverlay: View {
+    let tilt: Double
+
+    var body: some View {
+        Canvas { context, size in
+            let level = abs(tilt) <= 1
+            let colour: Color = level ? Color(red: 1, green: 0.84, blue: 0.31) : .white.opacity(0.7)
+            let c = CGPoint(x: size.width / 2, y: size.height / 2)
+            let half = min(size.width, size.height) * 0.22
+            var marks = Path()
+            marks.move(to: CGPoint(x: c.x - half * 1.5, y: c.y)); marks.addLine(to: CGPoint(x: c.x - half * 1.25, y: c.y))
+            marks.move(to: CGPoint(x: c.x + half * 1.25, y: c.y)); marks.addLine(to: CGPoint(x: c.x + half * 1.5, y: c.y))
+            context.stroke(marks, with: .color(colour.opacity(0.5)), lineWidth: 2)
+            var line = Path()
+            line.move(to: CGPoint(x: c.x - half, y: c.y)); line.addLine(to: CGPoint(x: c.x + half, y: c.y))
+            var turned = context
+            turned.translateBy(x: c.x, y: c.y)
+            turned.rotate(by: .degrees(-tilt))
+            turned.translateBy(x: -c.x, y: -c.y)
+            turned.stroke(line, with: .color(colour), lineWidth: 2)
+        }
+        .allowsHitTesting(false)
     }
 }

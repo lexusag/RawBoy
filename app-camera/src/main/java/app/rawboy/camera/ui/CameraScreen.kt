@@ -57,6 +57,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -174,6 +175,7 @@ fun CameraScreen(
     val screenFlashLit by vm.screenFlashLit.collectAsStateWithLifecycle()
     val hiRes by vm.hiRes.collectAsStateWithLifecycle()
     val histogram by vm.histogram.collectAsStateWithLifecycle()
+    val tilt by vm.tilt.collectAsStateWithLifecycle()
     val lowLight by vm.lowLight.collectAsStateWithLifecycle()
     val qrCode by vm.qrCode.collectAsStateWithLifecycle()
     // Only the AF state of the camera's per-frame metadata, so the screen doesn't recompose 30 times a second.
@@ -456,6 +458,8 @@ fun CameraScreen(
                             )
                         }
                     }
+                    if (settings.showGrid) GridOverlay(Modifier.matchParentSize())
+                    if (settings.showLevel) LevelOverlay(tilt, Modifier.matchParentSize())
                     // Shutter blink over the viewfinder.
                     if (blink.value > 0f) {
                         Box(
@@ -1018,6 +1022,20 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
         )
         Spacer(Modifier.height(16.dp))
         SettingSwitch(
+            title = "Grid",
+            subtitle = "A 3 x 3 grid over the viewfinder to line up the frame",
+            checked = settings.showGrid,
+            onChange = vm::setShowGrid,
+        )
+        Spacer(Modifier.height(16.dp))
+        SettingSwitch(
+            title = "Level",
+            subtitle = "A line over the viewfinder that turns yellow when the phone is straight",
+            checked = settings.showLevel,
+            onChange = vm::setShowLevel,
+        )
+        Spacer(Modifier.height(16.dp))
+        SettingSwitch(
             title = "Histogram",
             subtitle = "A live RGB histogram in a corner of the viewfinder",
             checked = settings.showHistogram,
@@ -1440,3 +1458,39 @@ private fun ScreenFlashFrame(modifier: Modifier = Modifier) {
 /** Frame width as a share of the screen's short side; a wide frame is the light, the middle is still enough to compose. */
 private const val SCREEN_FLASH_FRAME_SHARE = 0.2f
 private val SCREEN_FLASH_COLOUR = Color(0xFFFFF4E6)
+
+/** Thin lines at the thirds of the viewfinder; they take no touches. */
+@Composable
+private fun GridOverlay(modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val line = Color.White.copy(alpha = 0.45f)
+        val w = 1.dp.toPx()
+        for (i in 1..2) {
+            drawLine(line, Offset(size.width * i / 3f, 0f), Offset(size.width * i / 3f, size.height), w)
+            drawLine(line, Offset(0f, size.height * i / 3f), Offset(size.width, size.height * i / 3f), w)
+        }
+    }
+}
+
+/**
+ * A horizon line through the middle of the viewfinder, turned against the phone's tilt ([tilt] degrees clockwise from
+ * upright, null when flat: nothing is drawn). Yellow within [LEVEL_TOLERANCE] degrees of straight, with a short fixed
+ * mark each side to compare it with.
+ */
+@Composable
+private fun LevelOverlay(tilt: Float?, modifier: Modifier = Modifier) {
+    if (tilt == null) return
+    Canvas(modifier) {
+        val level = kotlin.math.abs(tilt) <= LEVEL_TOLERANCE
+        val colour = if (level) Color(0xFFFFD54F) else Color.White.copy(alpha = 0.7f)
+        val c = Offset(size.width / 2f, size.height / 2f)
+        val half = minOf(size.width, size.height) * 0.22f
+        val w = 2.dp.toPx()
+        // Fixed marks at the sides, the line itself turns.
+        drawLine(colour.copy(alpha = 0.5f), Offset(c.x - half * 1.5f, c.y), Offset(c.x - half * 1.25f, c.y), w)
+        drawLine(colour.copy(alpha = 0.5f), Offset(c.x + half * 1.25f, c.y), Offset(c.x + half * 1.5f, c.y), w)
+        rotate(-tilt, c) { drawLine(colour, Offset(c.x - half, c.y), Offset(c.x + half, c.y), w) }
+    }
+}
+
+private const val LEVEL_TOLERANCE = 1f

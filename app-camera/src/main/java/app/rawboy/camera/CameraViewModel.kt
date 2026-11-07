@@ -250,6 +250,24 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     @Volatile
     var deviceDegrees = 0
 
+    private val _tilt = MutableStateFlow<Float?>(null)
+
+    /**
+     * How far the phone is turned clockwise from the nearest upright (portrait or landscape), -45..45 degrees, for the
+     * level line; null while the phone lies flat (no usable direction) or the level is off.
+     */
+    val tilt = _tilt.asStateFlow()
+
+    /** From the activity's orientation sensor: [degrees] is the device's turn clockwise from portrait, 0..359, or null when flat. */
+    fun onTilt(degrees: Int?) {
+        if (degrees == null || !_settings.value.showLevel) {
+            _tilt.value = null
+            return
+        }
+        // Whole degrees: the line doesn't need finer, and the screen isn't redrawn for sensor noise.
+        _tilt.value = (((degrees + 45) % 90) - 45).toFloat()
+    }
+
     /** The latest analysed viewfinder frame. */
     private class Live(val base: ViewfinderBase, val stats: SceneStats, val defaults: DevelopParams, val auto: DevelopParams)
 
@@ -726,6 +744,11 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
     fun setRememberLast(on: Boolean) = change { it.copy(rememberLast = on) }
     fun setShowHistogram(on: Boolean) = change { it.copy(showHistogram = on) }
+    fun setShowGrid(on: Boolean) = change { it.copy(showGrid = on) }
+    fun setShowLevel(on: Boolean) {
+        if (!on) _tilt.value = null
+        change { it.copy(showLevel = on) }
+    }
     fun setBurstMode(mode: BurstMode) = change { it.copy(burstMode = mode) }
     fun setShutterSound(on: Boolean) = change { it.copy(shutterSound = on) }
     fun setTrackFocus(on: Boolean) {

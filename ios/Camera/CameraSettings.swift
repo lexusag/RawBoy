@@ -51,6 +51,10 @@ struct CameraSettings: Equatable {
     var rememberLast = false
     /** A live RGB histogram in a corner of the viewfinder. */
     var showHistogram = false
+    /** A 3 x 3 grid over the viewfinder (rule of thirds). Off by default. */
+    var showGrid = false
+    /** A level line over the viewfinder that turns yellow when the phone is straight. Off by default. */
+    var showLevel = false
     /** Save where each photo was taken (GPS tags in the JPEG and DNG). Location access is asked for when turned on. */
     var geotag = false
     /** Play the camera shutter click on each shot. Where the law requires it, iOS plays it regardless. */
@@ -149,6 +153,8 @@ enum CameraSettingsStore {
         s.smallExport = d.object(forKey: "camera.smallExport") as? Bool ?? def.smallExport
         s.rememberLast = d.bool(forKey: "camera.rememberLast")
         s.showHistogram = d.object(forKey: "camera.showHistogram") as? Bool ?? def.showHistogram
+        s.showGrid = d.object(forKey: "camera.showGrid") as? Bool ?? def.showGrid
+        s.showLevel = d.object(forKey: "camera.showLevel") as? Bool ?? def.showLevel
         s.geotag = d.object(forKey: "camera.geotag") as? Bool ?? def.geotag
         s.shutterSound = d.object(forKey: "camera.shutterSound") as? Bool ?? def.shutterSound
         s.scanQr = d.object(forKey: "camera.scanQr") as? Bool ?? def.scanQr
@@ -193,6 +199,8 @@ enum CameraSettingsStore {
         d.set(s.smallExport, forKey: "camera.smallExport")
         d.set(s.rememberLast, forKey: "camera.rememberLast")
         d.set(s.showHistogram, forKey: "camera.showHistogram")
+        d.set(s.showGrid, forKey: "camera.showGrid")
+        d.set(s.showLevel, forKey: "camera.showLevel")
         d.set(s.geotag, forKey: "camera.geotag")
         d.set(s.shutterSound, forKey: "camera.shutterSound")
         d.set(s.scanQr, forKey: "camera.scanQr")

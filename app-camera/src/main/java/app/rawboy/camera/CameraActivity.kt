@@ -58,6 +58,7 @@ class CameraActivity : ComponentActivity() {
     private val orientation by lazy {
         object : OrientationEventListener(this) {
             override fun onOrientationChanged(degrees: Int) {
+                viewModel.onTilt(degrees.takeIf { it != ORIENTATION_UNKNOWN })
                 if (degrees == ORIENTATION_UNKNOWN) return
                 viewModel.deviceDegrees = ((degrees + 45) / 90 * 90) % 360
             }
