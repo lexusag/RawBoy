@@ -1,3 +1,7 @@
+**RawBoy: DNGs decoded by the DNG SDK open at the same brightness as LibRaw's (2026-11-07)**
+
+- A Packer Small raw (lossy JPEG XL, decoded by the DNG SDK) opened a stop or more brighter in RawBoy and RawBoy Auto than the same photo's original or Lossless DNG (LibRaw): LibRaw normalises its white balance multipliers to the largest, the SDK path left green at 1 (a Pixel 9 Pro's blue multiplier is 2). Auto's exposure, histogram stats and highlight clip level now match. Host test `tools/dng_decode_test/run.sh`.
+
 # Changelog
 
 **RawBoy Packer: help menu and version display (2026-11-06)**
