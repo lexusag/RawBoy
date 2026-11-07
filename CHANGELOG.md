@@ -1,3 +1,7 @@
+**RawBoy Camera: cleaner shadows in non-Film looks (2026-11-07)**
+
+- Colour looks outside Film mode (LUT looks, Natural, Redscale and the other Experimental looks) had noisy shadows, Redscale with ugly blocky colour blotches: they have no film grain or scatter to hide it, and the LUT steepens the shadows (Redscale about 4x). Camera now floors the shot's denoise for them: luma 12 and colour 35, and for Experimental looks luma 22 and colour 70 (reaching the shader's coarse colour stage). Film and B&W are unchanged. Android and iOS. Values are first guesses, not yet checked on device.
+
 **RawBoy Packer: Small raw back to Maximum compatibility no longer washed out (2026-11-07)**
 
 - A lossy JPEG XL DNG (Small raw) packed again as Lossless came out washed out and magenta in Apple Photos and other software that ignores OpcodeList2 in a DNG 1.4 file: the lossy mosaic's non-linear encoding was kept, with the MapPolynomial that undoes it. The Packer now applies the list to the pixels, so the file holds ordinary linear raw data. Checked on the Pixel and GFX 50R Small raws; host test `tools/dng_pack_test/run.sh`.
