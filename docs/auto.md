@@ -31,7 +31,7 @@ it is turned sideways (or on a tablet or a wide window). Android, iPhone and the
 | Green Everyday 400, Green Pastel 400 | cooler consumer negative; soft pastel negative | — |
 | Yellow Cine 500T | tungsten-balanced cinema negative | — (grain and bloom) |
 | Green Vivid Slide 50 | slide film, vivid | — |
-| Film Flash | direct flash 35mm film scan: vivid cadmium red, warm peach skin, high-key cool background | flash and contrasty scenes |
+| Film Flash | direct flash 35mm film scan: vivid cadmium red, warm peach skin, high-key cool background | — (never suggested; pick it by hand) |
 | Movie Green | strong green-teal grade, lifted blacks (RawBoy's own, made in Affinity Photo) | — |
 | Redscale | Redscale | — (red/orange redscale film) |
 | Lagoon | colour swap: skin and warm tones turquoise, blue sky amber, cream highlights, low contrast | — |
