@@ -20,19 +20,37 @@ export const TONE_MAPPERS: readonly { key: ToneMapper; label: string; shaderId: 
 export const toneMapperId = (t: ToneMapper): number => TONE_MAPPERS.find((m) => m.key === t)?.shaderId ?? 0;
 
 /**
- * Coating colour of Pro's fake anamorphic lens flare (`uAnamorphicTint`: linear Rec.2020 RGB reflectance + luminance
- * mix, see shaders/develop.glsl). Stored by key in presets and sidecars.
+ * Coating colour of Pro's fake anamorphic lens flare (see `anamorphicFlare` in shaders/develop.glsl). `tint` is the
+ * linear Rec.2020 colour of the streak, `length` how far each channel's streak reaches (1 = full: a short red and a long
+ * blue make a white core, cyan, then blue tips) and `bar` the colour of the soft glow round it. Stored by key in presets
+ * and sidecars.
  */
-export type AnamorphicColor = 'neutral' | 'blue' | 'golden';
+export type AnamorphicColor = 'neutral' | 'blue' | 'golden' | 'magenta';
 
-export const ANAMORPHIC_COLORS: readonly { key: AnamorphicColor; label: string; tint: readonly [number, number, number, number] }[] = [
-  { key: 'neutral', label: 'Neutral', tint: [1, 1, 1, 0.35] },
-  { key: 'blue', label: 'Blue', tint: [0.32, 0.6, 1.55, 0.85] },
-  { key: 'golden', label: 'Golden', tint: [1.15, 0.71, 0.15, 0.85] },
+export const ANAMORPHIC_COLORS: readonly {
+  key: AnamorphicColor;
+  label: string;
+  tint: readonly [number, number, number];
+  length: readonly [number, number, number];
+  bar: readonly [number, number, number];
+}[] = [
+  { key: 'neutral', label: 'Neutral', tint: [1, 1, 1], length: [0.85, 0.85, 0.85], bar: [0.8, 0.85, 0.95] },
+  { key: 'blue', label: 'Blue', tint: [0.7, 0.9, 1.45], length: [0.3, 0.55, 1], bar: [0.2, 0.5, 1] },
+  { key: 'golden', label: 'Golden', tint: [1.2, 0.9, 0.55], length: [1, 0.7, 0.4], bar: [1, 0.6, 0.2] },
+  { key: 'magenta', label: 'Magenta', tint: [1.15, 0.8, 1.25], length: [0.8, 0.45, 1], bar: [0.7, 0.3, 1] },
 ];
 
-export const anamorphicTintOf = (c: AnamorphicColor): Float32Array =>
-  new Float32Array((ANAMORPHIC_COLORS.find((m) => m.key === c) ?? ANAMORPHIC_COLORS[0]).tint);
+const coatingOf = (c: AnamorphicColor) => ANAMORPHIC_COLORS.find((m) => m.key === c) ?? ANAMORPHIC_COLORS[0];
+
+/** `uAnamorphicTint`: the streak's colour, and a = 1 when ghosts are on. */
+export const anamorphicTintOf = (c: AnamorphicColor, ghosts = false): Float32Array =>
+  new Float32Array([...coatingOf(c).tint, ghosts ? 1 : 0]);
+
+/** `uAnamorphicLen`: the streak's reach per channel. */
+export const anamorphicLengthOf = (c: AnamorphicColor): Float32Array => new Float32Array([...coatingOf(c).length, 0]);
+
+/** `uAnamorphicBar`: the colour of the soft bar. */
+export const anamorphicBarOf = (c: AnamorphicColor): Float32Array => new Float32Array([...coatingOf(c).bar, 0]);
 
 /**
  * Slider values as the user sees them (port of develop/DevelopParams.kt).
@@ -48,7 +66,7 @@ export const anamorphicTintOf = (c: AnamorphicColor): Float32Array =>
  * - localContrast: -100..100 edge-aware mid-frequency detail (texture a few pixels across), 0 = off
  * - highpassContrast: -100..100 local (clarity-style) contrast, 0 = off
  * - bloom: 0..100 diffusion-filter glow, 0 = off
- * - anamorphic: 0..100 horizontal anamorphic lens flare, 0 = off; anamorphicColor: 'neutral' | 'blue' | 'golden'
+ * - anamorphic: 0..100 horizontal anamorphic lens flare, 0 = off; anamorphicColor: 'neutral' | 'blue' | 'golden' | 'magenta'; anamorphicGhosts: faint oval ghosts of the lights
  * - skinRetouch: 0..100 smoothing of skin (found by a segmentation model), 0 = off
  * - blemishRemoval: 0..100 automatic spot healing on skin; higher heals fainter spots, 0 = off
  * - lut: LutEntry id or null for "No LUT"; lutAmount: 0..100 strength
@@ -110,6 +128,7 @@ export interface DevelopParams {
   bloom: number;
   anamorphic: number;
   anamorphicColor: AnamorphicColor;
+  anamorphicGhosts: boolean;
   skinRetouch: number;
   blemishRemoval: number;
   lut: string | null;
@@ -182,6 +201,7 @@ export const DEFAULT_PARAMS: Readonly<DevelopParams> = Object.freeze({
   bloom: 0,
   anamorphic: 0,
   anamorphicColor: 'neutral',
+  anamorphicGhosts: false,
   skinRetouch: 0,
   blemishRemoval: 0,
   lut: null,

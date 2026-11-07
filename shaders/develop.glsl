@@ -34,7 +34,11 @@ uniform sampler2D uBloomTail;    // highlight-boosted ~64 px copy, scattered: BL
 uniform vec2 uBloomHaloTexel;
 uniform vec2 uBloomTailTexel;    // of the whole texture, all bands
 uniform float uAnamorphic;       // horizontal flare strength, 0 = off
-uniform vec4 uAnamorphicTint;    // rgb = linear Rec.2020 coating tint, a = luminance-tint mix
+uniform vec4 uAnamorphicTint;    // rgb = linear Rec.2020 coating tint, a = 1 with ghosts
+uniform vec4 uAnamorphicLen;     // rgb = streak length per channel (1 = full), a unused
+uniform vec4 uAnamorphicBar;     // rgb = tint of the soft bar round the wing
+uniform sampler2D uFlare;        // flare source: boosted highlights, two bands (needle rows, wing rows), see anamorphicFlare
+uniform vec4 uFlareInfo;         // texture width, rows of band 0, rows of band 1
 uniform float uRetouch;          // 0..1
 uniform sampler2D uSkinMask;     // 0..1 skin probability over the whole image
 uniform float uSkinSigma;        // smoothing sigma, full-resolution px (scaled to face size)
@@ -735,92 +739,133 @@ vec3 bloom(vec3 x, vec2 uvG, vec2 imagePx) {
     return x + uBloom * (bloomScatter(uvG, imagePx) - bloomKnee(x, uExposure) * x);
 }
 
+// <anamorphic-flare>
 // The flare's own knee, bloom's with twice the light needed (one EV higher: 2 to 4 EV above grey), so only real
 // light sources flare and dimmer zones stay clean.
 float anamorphicKnee(vec3 c, float gain) {
     return smoothstep(2.0 * BLOOM_KNEE_LO, 2.0 * BLOOM_KNEE_HI, max(c.r, max(c.g, c.b)) * gain);
 }
 
-// Bilinear sample of flare highlight energy from uBloomHalo: evaluating anamorphicKnee on integer texels and then
-// bilinearly interpolating preserves the partition of unity (linear B-splines sum to 1 everywhere along the streak).
-// Evaluating a nonlinear knee on bilinearly interpolated samples shrunk point highlights to sub-texel spikes,
-// causing severe 70-100% ripple and bead/dot-matrix artifacts across the streak.
-vec3 flareSample(vec2 t, vec2 size) {
+// The flare source uFlare (FlareSource): three bands stacked top to bottom, one highlight-boosted texel per halo texel
+// across and, in band 0, FLARE_ROWS rows per texel down (the thin needle), in band 1 one row per texel (the wing).
+// Both are already multiplied by how little of the surroundings is blown out (big windows and signs flare
+// nothing); band 2 is band 1's luminance blurred into tall ovals, for the ghosts. uFlareInfo = texture width, rows of
+// band 0, rows of band 1.
+// How strong the needle, the wing, the soft bar and the ghosts are before the Anamorphic slider.
+const float FLARE_NEEDLE = 2.5;
+const float FLARE_WING = 2.0;
+const float FLARE_BAR = 1.5;
+const float FLARE_GHOSTS = 1.2;
+
+// Flare energy of the texel at integer position [i] of the band starting at row [row0] with [rows] rows: the knee
+// on the texel, never on interpolated values (a nonlinear knee on bilinear samples shrank point lights to sub-texel
+// spikes and beaded the streak).
+vec3 flareTexel(ivec2 i, float row0, float rows, float width) {
+    ivec2 c = clamp(i, ivec2(0), ivec2(int(width) - 1, int(rows) - 1));
+    vec3 h = texelFetch(uFlare, ivec2(c.x, c.y + int(row0)), 0).rgb;
+    return anamorphicKnee(h, uExposure) * h;
+}
+
+// Bilinear sample of that energy at band position [t] (texel centres at +0.5): the tents sum to 1 along and across
+// the streak, so it stays smooth.
+vec3 flareSample(vec2 t, float row0, float rows, float width) {
     vec2 p0 = floor(t - 0.5);
     vec2 f = t - 0.5 - p0;
     ivec2 i0 = ivec2(p0);
-    ivec2 lim = ivec2(size) - 1;
-
-    ivec2 c00 = clamp(i0, ivec2(0), lim);
-    ivec2 c10 = clamp(i0 + ivec2(1, 0), ivec2(0), lim);
-    ivec2 c01 = clamp(i0 + ivec2(0, 1), ivec2(0), lim);
-    ivec2 c11 = clamp(i0 + ivec2(1, 1), ivec2(0), lim);
-
-    vec3 h00 = texelFetch(uBloomHalo, c00, 0).rgb;
-    vec3 h10 = texelFetch(uBloomHalo, c10, 0).rgb;
-    vec3 h01 = texelFetch(uBloomHalo, c01, 0).rgb;
-    vec3 h11 = texelFetch(uBloomHalo, c11, 0).rgb;
-
-    vec3 e00 = anamorphicKnee(h00, uExposure) * h00;
-    vec3 e10 = anamorphicKnee(h10, uExposure) * h10;
-    vec3 e01 = anamorphicKnee(h01, uExposure) * h01;
-    vec3 e11 = anamorphicKnee(h11, uExposure) * h11;
-
+    vec3 e00 = flareTexel(i0, row0, rows, width);
+    vec3 e10 = flareTexel(i0 + ivec2(1, 0), row0, rows, width);
+    vec3 e01 = flareTexel(i0 + ivec2(0, 1), row0, rows, width);
+    vec3 e11 = flareTexel(i0 + ivec2(1, 1), row0, rows, width);
     return mix(mix(e00, e10, f.x), mix(e01, e11, f.x), f.y);
 }
 
-// Fake anamorphic lens flare: horizontal streaks across the framed picture (uOutToImage's X axis, so rotating or
-// straightening keeps the streak horizontal and cropping leaves it unchanged) scattered from uBloomHalo's boosted
-// highlights (anamorphicKnee). Evaluating the knee on integer texels and sampling continuously along and across
-// the streak makes the bilinear tents sum to a constant, so streaks are smooth without beading or blockiness.
-// A crisp inner needle reaches 15 texels and a wide wing ~27% of the long edge on each side. The flare shines
-// brightly over light sources, keeping an intense white core over highlights while tinting dimmer areas.
-vec3 anamorphicFlare(vec3 x, vec2 imagePx) {
-    vec2 size = 1.0 / uBloomHaloTexel;
-    vec2 d = normalize((mat2(uOutToImage) * vec2(1.0, 0.0)) / (uImageSize * uBloomHaloTexel));
-    vec2 n = vec2(-d.y, d.x);
-    vec2 p = imagePx / (uImageSize * uBloomHaloTexel); // halo texel coordinates, texel centres at +0.5
+bool flareInside(vec2 t, float rows, float width) {
+    return t.x >= 0.0 && t.x < width && t.y >= 0.0 && t.y < rows;
+}
 
-    // Needle: one tap per texel along the streak, five across at half-texel spacing (a smooth profile).
+// Fake anamorphic lens flare: horizontal streaks across the framed picture (uOutToImage's X axis, so rotating or
+// straightening keeps the streak horizontal and cropping leaves it unchanged) scattered from the flare source's
+// boosted highlights. A thin needle (a Gaussian of ~2 fine rows) and a wide wing reach out along the streak with a
+// length per colour channel (uAnamorphicLen: the coating's dispersion, short in red and long in blue gives a white
+// core, cyan and then blue tips); a soft bar tinted uAnamorphicBar glows round the wing. Optionally (uAnamorphicTint.a)
+// two faint oval ghosts of the lights, mirrored through the frame's centre.
+vec3 anamorphicFlare(vec3 x, vec2 imagePx) {
+    float width = uFlareInfo.x;
+    float rows0 = uFlareInfo.y;
+    float rows1 = uFlareInfo.z;
+    vec2 texPx = vec2(uImageSize.x / width, 0.0);                    // image px per texel across
+    texPx.y = uImageSize.y / rows1;                                  // ... and per row of band 1
+    float rowPx0 = uImageSize.y / rows0;                             // image px per row of band 0
+    vec2 u = normalize(mat2(uOutToImage) * vec2(1.0, 0.0));
+    vec2 n = vec2(-u.y, u.x);
+    // One step along the streak is one texel across (a halo texel); one step across is a row of the band.
+    vec2 d0 = vec2(u.x, u.y * texPx.x / rowPx0);
+    vec2 d1 = vec2(u.x, u.y * texPx.x / texPx.y);
+    vec2 n0 = vec2(n.x * rowPx0 / texPx.x, n.y);
+    vec2 n1 = vec2(n.x * texPx.y / texPx.x, n.y);
+    vec2 p0 = vec2(imagePx.x / texPx.x, imagePx.y / rowPx0);
+    vec2 p1 = vec2(imagePx.x / texPx.x, imagePx.y / texPx.y);
+    vec3 len = uAnamorphicLen.rgb;
+
+    // Needle: one tap per texel along the streak, nine across, one fine row apart (a Gaussian, sigma 1.8 rows).
     vec3 core = vec3(0.0);
-    float cw = 0.0;
+    vec3 cw = vec3(0.0);
     for (int i = -16; i <= 16; ++i) {
         float a = float(i);
-        float rx = 1.0 - abs(a) / 15.0;
-        if (rx <= 0.0) continue;
-        float w = exp(-abs(a) / 4.0) * rx * rx;
+        vec3 w = exp(-abs(a) / (4.0 * len)) * pow(max(1.0 - abs(a) / (15.0 * len), 0.0), vec3(2.0));
+        if (max(w.r, max(w.g, w.b)) <= 0.0) continue;
         cw += w;
-        for (int j = -2; j <= 2; ++j) {
-            vec2 t = p + a * d + (0.5 * float(j)) * n;
-            if (t.x < 0.0 || t.x >= size.x || t.y < 0.0 || t.y >= size.y) continue;
-            core += (w * (j == 0 ? 0.4 : (abs(j) == 1 ? 0.2 : 0.1))) * flareSample(t, size);
+        vec3 acc = vec3(0.0);
+        for (int j = -4; j <= 4; ++j) {
+            vec2 t = p0 + a * d0 + float(j) * n0;
+            if (!flareInside(t, rows0, width)) continue;
+            acc += exp(-float(j * j) / 6.48) * flareSample(t, 0.0, rows0, width);
         }
+        core += w * acc;
     }
+    core /= max(cw, vec3(1e-5)) * 5.2; // the nine cross weights sum to ~5.2 (sigma 1.8: 1.8 * sqrt(2 pi) = 4.5 + tails)
 
-    // Wing: per 2 texels two taps 1 apart along the streak, each across three taps 1 apart (1-2-1).
+    // Wing: per 2 texels two taps 1 apart along the streak, each across three taps one row of band 1 apart (1-2-1).
     vec3 wing = vec3(0.0);
-    float ww = 0.0;
-    for (int i = -70; i <= 70; ++i) {
+    vec3 ww = vec3(0.0);
+    for (int i = -75; i <= 75; ++i) {
         for (int s = 0; s <= 1; ++s) {
             float a = 2.0 * float(i) + (s == 0 ? -0.5 : 0.5);
-            float rx = 1.0 - abs(a) / 140.0;
-            if (rx <= 0.0) continue;
-            float w = pow(1.0 + abs(a) / 7.5, -1.35) * rx * rx;
+            vec3 w = pow(1.0 + abs(a) / (14.0 * len), vec3(-1.2)) * pow(max(1.0 - abs(a) / (150.0 * len), 0.0), vec3(2.0));
+            if (max(w.r, max(w.g, w.b)) <= 0.0) continue;
             ww += w;
+            vec3 acc = vec3(0.0);
             for (int j = -1; j <= 1; ++j) {
-                vec2 t = p + a * d + float(j) * n;
-                if (t.x < 0.0 || t.x >= size.x || t.y < 0.0 || t.y >= size.y) continue;
-                wing += (w * (j == 0 ? 0.5 : 0.25)) * flareSample(t, size);
+                vec2 t = p1 + a * d1 + float(j) * n1;
+                if (!flareInside(t, rows1, width)) continue;
+                acc += (j == 0 ? 0.5 : 0.25) * flareSample(t, rows0, rows1, width);
             }
+            wing += w * acc;
         }
     }
+    wing /= max(ww, vec3(1e-5));
 
-    vec3 streak = 1.1 * (core / max(cw, 1e-5)) + 2.4 * (wing / max(ww, 1e-5));
-    streak /= 1.0 + 0.35 * max(streak.r, max(streak.g, streak.b));
-    vec3 tinted = mix(streak, vec3(lum(streak)), uAnamorphicTint.a) * uAnamorphicTint.rgb;
+    vec3 streak = (FLARE_NEEDLE * core + FLARE_WING * wing) * uAnamorphicTint.rgb + FLARE_BAR * lum(wing) * uAnamorphicBar.rgb;
+
+    if (uAnamorphicTint.a > 0.5) {
+        // Ghosts: the lights (band 2, blurred into tall ovals) mirrored through the frame's centre at two scales.
+        vec3 ghost = vec3(0.0);
+        for (int k = 0; k < 2; ++k) {
+            float sc = k == 0 ? -0.6 : -1.3;
+            vec3 col = k == 0 ? vec3(0.3, 1.0, 0.85) : vec3(1.0, 0.6, 0.95);
+            vec2 q = uImageCenter + (imagePx - uImageCenter) / sc;
+            vec2 tq = vec2(q.x / texPx.x, q.y / texPx.y);
+            if (!flareInside(tq, rows1, width)) continue;
+            ghost += col * flareSample(tq, rows0 + rows1, rows1, width).r * (k == 0 ? 1.0 : 0.6);
+        }
+        streak += FLARE_GHOSTS * ghost;
+    }
+
+    streak /= 1.0 + 0.15 * max(streak.r, max(streak.g, streak.b));
     float selfHi = bloomKnee(x, uExposure);
-    return x + uAnamorphic * mix(tinted, vec3(lum(tinted)), selfHi);
+    return x + uAnamorphic * mix(streak, vec3(lum(streak)), selfHi);
 }
+// </anamorphic-flare>
 
 vec2 toSensor(vec2 p) { return (uToSensor * vec3(p, 1.0)).xy; }
 vec2 fromSensor(vec2 s) { return (uFromSensor * vec3(s, 1.0)).xy; }

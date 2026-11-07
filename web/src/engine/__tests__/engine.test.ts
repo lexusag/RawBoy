@@ -42,7 +42,8 @@ import { ZoomMath, rect } from '../gl/Zoom';
 import { LensInfo } from '../lens/LensInfo';
 import { LensTransform } from '../lens/LensTransform';
 import { parseCube } from '../lut/LutLoader';
-import { halfToFloat } from '../util/half';
+import { floatToHalf, halfToFloat } from '../util/half';
+import { flareCoarseRows, flareRows, makeFlareSource } from '../gl/FlareSource';
 
 const close = (a: number[], b: number[], eps = 1e-9) => a.forEach((v, i) => expect(v).toBeCloseTo(b[i], -Math.log10(eps)));
 const IDENTITY = [1, 0, 0, 0, 1, 0, 0, 0, 1];
@@ -458,12 +459,13 @@ describe('presets', () => {
   });
 
   it('keeps anamorphic flare and color in the Detail group and round-trips them', () => {
-    const flare = developParams({ anamorphic: 45, anamorphicColor: 'blue' });
+    const flare = developParams({ anamorphic: 45, anamorphicColor: 'magenta', anamorphicGhosts: true });
     const [p] = decodePresets(encodePresets([capturePreset('Flare', flare, ['detail'])]));
-    expect(p.values).toMatchObject({ anamorphic: 45, anamorphicColor: 'blue' });
+    expect(p.values).toMatchObject({ anamorphic: 45, anamorphicColor: 'magenta', anamorphicGhosts: true });
     const applied = applyPreset(p, developParams());
     expect(applied.anamorphic).toBe(45);
-    expect(applied.anamorphicColor).toBe('blue');
+    expect(applied.anamorphicColor).toBe('magenta');
+    expect(applied.anamorphicGhosts).toBe(true);
 
     // Unknown color key is ignored, leaving existing
     const bad = { ...p, values: { ...p.values, anamorphicColor: 'cyan' as never } };
@@ -474,12 +476,14 @@ describe('presets', () => {
     const d = developParams({ anamorphic: 50, anamorphicColor: 'golden' });
     const sp = ShaderParams.from(d, d, null, new LensTransform(LensInfo.none(100, 100), d), null, null, null);
     expect(sp.anamorphic).toBeCloseTo(0.5 * (0.35 + 0.65 * 0.5), 5);
-    close(Array.from(sp.anamorphicTint), [1.15, 0.71, 0.15, 0.85], 1e-5);
+    close(Array.from(sp.anamorphicTint), [1.2, 0.9, 0.55, 0], 1e-5);
+    close(Array.from(sp.anamorphicLength), [1, 0.7, 0.4, 0], 1e-5);
+    expect(ShaderParams.from(developParams({ anamorphic: 50, anamorphicGhosts: true }), d, null, new LensTransform(LensInfo.none(100, 100), d), null, null, null).anamorphicTint[3]).toBe(1);
 
     const neutral = developParams({ anamorphic: 0, anamorphicColor: 'neutral' });
     const spNeutral = ShaderParams.from(neutral, neutral, null, new LensTransform(LensInfo.none(100, 100), neutral), null, null, null);
     expect(spNeutral.anamorphic).toBe(0);
-    close(Array.from(spNeutral.anamorphicTint), [1, 1, 1, 0.35], 1e-5);
+    close(Array.from(spNeutral.anamorphicTint), [1, 1, 1, 0], 1e-5);
   });
 });
 
@@ -1098,5 +1102,23 @@ describe('applyEditsDevelop', () => {
     expect(p.colorDenoise).toBeCloseTo(49.75, 9);
     expect(p.sharpening).toBe(30);
     expect(p.rotation).toBe(2);
+  });
+
+  it('the flare source keeps a small bright lamp and gates a big lit window', () => {
+    const w = 300, h = 200;
+    const pixels = new Uint16Array(w * h * 3);
+    const put = (x0: number, y0: number, x1: number, y1: number, v: number) => {
+      for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) for (let c = 0; c < 3; c++) pixels[(y * w + x) * 3 + c] = floatToHalf(v);
+    };
+    put(40, 90, 46, 96, 12); // a lamp
+    put(150, 20, 290, 180, 12); // a window
+    const src = { width: w, height: h, pixels, fullWidth: w * 10, fullHeight: h * 10 };
+    const f = makeFlareSource(src);
+    expect(f.width).toBe(100);
+    expect(f.height).toBe(h + 2 * flareCoarseRows(h));
+    expect(flareRows(f)).toBe(h);
+    const at = (x: number, y: number) => halfToFloat(f.pixels[(y * f.width + x) * 3]);
+    expect(at(14, 93)).toBeGreaterThan(5);
+    expect(at(70, 100)).toBeLessThan(0.5);
   });
 });

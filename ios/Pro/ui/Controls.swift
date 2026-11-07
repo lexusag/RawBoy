@@ -174,11 +174,12 @@ struct ControlsPanel: View {
     }
 
     /**
-     * Anamorphic lens flare, whose colour choices (Neutral, Blue, Golden) open when the slider is raised or when a
+     * Anamorphic lens flare, whose colour choices (Neutral, Blue, Golden, Magenta) and Ghosts open when the slider is raised or when a
      * non-default colour is picked, and can also be toggled from the slider's label. As Controls.kt's AnamorphicSliders.
      */
     @ViewBuilder private var anamorphicSliders: some View {
         let active = params.anamorphic > 0 || params.anamorphicColor != defaults.anamorphicColor
+            || params.anamorphicGhosts != defaults.anamorphicGhosts
         let shown = anamorphicOpen ?? active
         ParamSlider(label: shown ? "Anamorphic ▾" : "Anamorphic ▸", value: params.anamorphic, range: 0...100,
                     defaultValue: defaults.anamorphic, format: formatPlain, onLabelTap: { anamorphicOpen = !shown }) { v in
@@ -194,6 +195,10 @@ struct ControlsPanel: View {
             .pickerStyle(.segmented)
             .padding(.leading, 16)
             .padding(.vertical, 4)
+            Toggle("Ghosts", isOn: Binding(
+                get: { params.anamorphicGhosts },
+                set: { g in set { $0.anamorphicGhosts = g } }))
+            .padding(.leading, 16)
         }
     }
 

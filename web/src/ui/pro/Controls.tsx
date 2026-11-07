@@ -479,7 +479,7 @@ function LensPresetSave({ lensName, onSave }: { lensName: string; onSave: (name:
 }
 
 /**
- * Anamorphic lens flare, whose colour choices (Neutral, Blue, Golden) open when the slider is raised or when a
+ * Anamorphic lens flare, whose colour choices (Neutral, Blue, Golden, Magenta) and Ghosts open when the slider is raised or when a
  * non-default colour is picked, and can also be toggled from the slider's label. Port of Controls.kt's AnamorphicSliders.
  */
 function AnamorphicSliders({
@@ -492,7 +492,7 @@ function AnamorphicSliders({
   onChange: (p: DevelopParams) => void;
 }) {
   const [open, setOpen] = useState<boolean | null>(null);
-  const active = params.anamorphic > 0 || params.anamorphicColor !== defaults.anamorphicColor;
+  const active = params.anamorphic > 0 || params.anamorphicColor !== defaults.anamorphicColor || params.anamorphicGhosts !== defaults.anamorphicGhosts;
   const shown = open ?? active;
   return (
     <>
@@ -523,6 +523,14 @@ function AnamorphicSliders({
                 {c.label}
               </button>
             ))}
+            <button
+              type="button"
+              className={params.anamorphicGhosts ? 'active' : ''}
+              aria-pressed={params.anamorphicGhosts}
+              onClick={() => onChange({ ...params, anamorphicGhosts: !params.anamorphicGhosts })}
+            >
+              Ghosts
+            </button>
           </div>
         </div>
       )}

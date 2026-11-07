@@ -1025,7 +1025,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
                 // The stored 512/128 px copies were made from this same file, so they match.
                 val shader = ShaderParams.from(
                     params, a.defaults, lut, LensTransform(img.lens, params), a.base, a.bloom, a.skin, film = film,
-                    brushFor = textures.brushFor, bokehSource = textures.bokehSource,
+                    brushFor = textures.brushFor, bokehSource = textures.bokehSource, flareSource = textures.flareSource,
                 )
                 Exporter(getApplication()).export(img, p.uri, p.name, shader, settings, NAMING, onProgress = onProgress)
             }

@@ -216,6 +216,7 @@ struct DevelopProgram {
             "uImage": image, "uLut": inputs.lut, "uShading": inputs.shading, "uBase": inputs.base,
             "uBloomHalo": inputs.bloomHalo, "uBloomTail": inputs.bloomTail, "uSkinMask": inputs.skinMask,
             "uBrushMask": inputs.brush, "uFilmLut": inputs.filmLut, "uPrintLut": inputs.printLut,
+            "uFlare": inputs.flare,
             // No lens blur on iOS yet (uBokehScale stays 0); any texture keeps the slot bound.
             "uBokeh": inputs.base,
         ].merging(overrides) { $1 }
@@ -256,9 +257,14 @@ struct DevelopProgram {
         u.float("uSkinSigma", skin?.sigmaPx ?? 3)
         let bloomReady = p.bloomHalo != nil && p.bloomTail != nil
         u.float("uBloom", bloomReady ? p.bloom : 0)
-        u.float("uAnamorphic", p.bloomHalo != nil ? p.anamorphic : 0)
+        u.float("uAnamorphic", p.flareSource != nil ? p.anamorphic : 0)
         let tint = p.anamorphicTint
         u.vec4("uAnamorphicTint", tint[0], tint[1], tint[2], tint[3])
+        let len = p.anamorphicLength, bar = p.anamorphicBar
+        u.vec4("uAnamorphicLen", len[0], len[1], len[2], len[3])
+        u.vec4("uAnamorphicBar", bar[0], bar[1], bar[2], bar[3])
+        let flareRows = p.flareSource.map { FlareSource.rows($0) } ?? 1
+        u.vec4("uFlareInfo", Float(p.flareSource?.width ?? 1), Float(flareRows), Float(FlareSource.coarseRows(flareRows)), 0)
         u.vec2("uBloomHaloTexel", 1 / Float(p.bloomHalo?.width ?? 1), 1 / Float(p.bloomHalo?.height ?? 1))
         u.vec2("uBloomTailTexel", 1 / Float(p.bloomTail?.width ?? 1), 1 / Float(p.bloomTail?.height ?? 1))
         u.vec2("uBaseTexel", 1 / Float(p.base?.width ?? 1), 1 / Float(p.base?.height ?? 1))
@@ -355,7 +361,7 @@ struct DevelopProgram {
                            tailWidth: Int, tailHeight: Int) {
         u.float("uClarity", p.highpassContrast)
         u.float("uBloom", p.bloom)
-        u.float("uAnamorphic", p.anamorphic)
+        // No anamorphic flare in the viewfinder (no flare source; Pro only): uAnamorphic stays as the develop set it.
         u.vec2("uBaseTexel", 1 / Float(baseWidth), 1 / Float(baseHeight))
         u.vec2("uBloomHaloTexel", 1 / Float(baseWidth), 1 / Float(baseHeight))
         u.vec2("uBloomTailTexel", 1 / Float(tailWidth), 1 / Float(tailHeight))
@@ -415,6 +421,7 @@ final class DevelopTextures {
     private(set) var base: MTLTexture
     private(set) var bloomHalo: MTLTexture
     private(set) var bloomTail: MTLTexture
+    private(set) var flare: MTLTexture
     private(set) var skinMask: MTLTexture
     private(set) var brush: MTLTexture
 
@@ -425,6 +432,7 @@ final class DevelopTextures {
     private var uploadedBase: [UInt16]?
     private var uploadedHalo: [UInt16]?
     private var uploadedTail: [UInt16]?
+    private var uploadedFlare: [UInt16]?
     private var uploadedMask: [Float]?
     private var brushSlotW = 0
     private var brushSlotH = 0
@@ -449,6 +457,7 @@ final class DevelopTextures {
         base = empty(.rgba16Float)
         bloomHalo = empty(.rgba16Float)
         bloomTail = empty(.rgba16Float)
+        flare = empty(.rgba16Float)
         skinMask = empty(.r16Float)
         brush = empty(.rg8Unorm)
     }
@@ -463,6 +472,7 @@ final class DevelopTextures {
         if let b = p.base { base = upload(b, into: base, uploaded: &uploadedBase) }
         if let b = p.bloomHalo { bloomHalo = upload(b, into: bloomHalo, uploaded: &uploadedHalo) }
         if let b = p.bloomTail { bloomTail = upload(b, into: bloomTail, uploaded: &uploadedTail) }
+        if let b = p.flareSource { flare = upload(b, into: flare, uploaded: &uploadedFlare) }
         bindMask(p.skinMask)
         bindBrush(p.layers.brush)
     }

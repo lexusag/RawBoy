@@ -2,7 +2,7 @@ import { Mat3 } from '../color/Mat3';
 import { bwFilterMatrix } from '../color/BwFilter';
 import { Primaries } from '../color/Primaries';
 import { WhiteBalance } from '../color/WhiteBalance';
-import { anamorphicTintOf, effectiveColorDenoise, toneMapperId, type DevelopParams } from '../develop/DevelopParams';
+import { anamorphicBarOf, anamorphicLengthOf, anamorphicTintOf, effectiveColorDenoise, toneMapperId, type DevelopParams } from '../develop/DevelopParams';
 import type { BrushRaster } from '../develop/BrushRaster';
 import { curveTable } from '../develop/ToneCurve';
 import { CURVE_SCALE, MAX_LAYERS, MAX_LENS_BLUR, layerIsIdentity, type MaskLayer } from '../develop/Masks';
@@ -199,9 +199,13 @@ export class ShaderParams {
     readonly leaks: LeakUniforms = NO_LEAKS,
     /** Highlight-boosted whole-image copy the lens blur starts from (BokehTexture), or null: no lens blur. */
     readonly bokehSource: PreviewImage | null = null,
-    /** Horizontal anamorphic flare strength (`uAnamorphic`, 0 = off) and coating tint (`uAnamorphicTint`). */
+    /** Horizontal anamorphic flare strength (`uAnamorphic`, 0 = off) and coating (`uAnamorphicTint`, `Len`, `Bar`). */
     readonly anamorphic = 0,
     readonly anamorphicTint: Float32Array = anamorphicTintOf('neutral'),
+    readonly anamorphicLength: Float32Array = anamorphicLengthOf('neutral'),
+    readonly anamorphicBar: Float32Array = anamorphicBarOf('neutral'),
+    /** What the flare scatters light from (FlareSource, `uFlare`), or null: no flare. */
+    readonly flareSource: PreviewImage | null = null,
   ) {}
 
   /** Extra source pixels needed around an output region for the spatial effects, so tiles join seamlessly. */
@@ -242,6 +246,8 @@ export class ShaderParams {
     film: FilmData | null = null,
     /** Highlight-boosted copy for the masks' lens blur (PhotoSession.bokehSource). */
     bokehSource: PreviewImage | null = null,
+    /** The anamorphic flare's source (PhotoSession.flareSource). */
+    flareSource: PreviewImage | null = null,
   ): ShaderParams {
     const filmUsed = film && film.stock.id === p.film ? film : null;
     const sourceWhite = WhiteBalance.xyFromTempTint(asShot.temperature, asShot.tint);
@@ -295,7 +301,10 @@ export class ShaderParams {
       packLeaks(p.leaks, lens.width, lens.height),
       bokehSource,
       (p.anamorphic / 100) * (0.35 + (0.65 * p.anamorphic) / 100),
-      anamorphicTintOf(p.anamorphicColor),
+      anamorphicTintOf(p.anamorphicColor, p.anamorphicGhosts),
+      anamorphicLengthOf(p.anamorphicColor),
+      anamorphicBarOf(p.anamorphicColor),
+      flareSource,
     );
   }
 }

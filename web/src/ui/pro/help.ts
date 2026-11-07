@@ -35,7 +35,7 @@ export const PRO_HELP: HelpSection[] = [
       { how: 'Mouse wheel over Film or stock', text: 'Step through the film stocks without clicking. A wheel scrolling the panel leaves it alone.' },
       { how: 'Pick white balance', text: 'Color tab: click something neutral grey and Temperature and Tint make it grey. Auto WB solves them for a draggable extendable rectangle; Reset WB returns to as-shot defaults.' },
       { how: 'Curves', text: 'Light tab: click the box to add a point, drag it, double-click it to remove. On touch, press on the curve or a point; elsewhere the box scrolls. RGB, then Red, Green and Blue.' },
-      { how: 'Detail', text: 'Luma and Color denoise work separately. Local contrast brings out texture; High-pass contrast is wider clarity. Fake anamorphic flare adds horizontal cinema streaks (Neutral, Blue or Golden). Tap Grain\'s name for its size, roughness and color.' },
+      { how: 'Detail', text: 'Luma and Color denoise work separately. Local contrast brings out texture; High-pass contrast is wider clarity. Fake anamorphic flare adds horizontal cinema streaks (Neutral, Blue, Golden or Magenta, with optional faint Ghosts; big lit windows and signs do not flare). Tap Grain\'s name for its size, roughness and color.' },
       { how: 'Lens', text: 'Embedded profile, Distortion, Horizontal distortion (bows verticals like an anamorphic lens), Crop (0 auto-crops empty edges; negative shows the curved edges, positive crops tighter), Vignetting and Chromatic aberration.' },
       { how: 'Presets', text: 'Save the edits by group, apply, import and export .rawboy.json files. Select to batch-delete or export.' },
     ],

@@ -10,6 +10,7 @@ import type { ExportSettings } from '../export/ExportSettings';
 import { FilmStocks, type FilmData } from '../film/FilmStocks';
 import { scatterBloomTail } from '../gl/BloomTail';
 import { BOKEH_SOURCE_MAX_DIMENSION } from '../gl/BokehTexture';
+import { FLARE_SOURCE_MAX_DIMENSION, makeFlareSource } from '../gl/FlareSource';
 import type { BloomSources, PreviewImage } from '../gl/PreviewImage';
 import { WAVELET_DENOISE_MARGIN } from '../gl/WaveletDenoise';
 import { ShaderParams, WIDE_DENOISE_MARGIN, wideDenoise, type BrushLookup } from '../gl/ShaderParams';
@@ -47,6 +48,8 @@ export interface SessionState {
   bloomSources: BloomSources | null;
   /** Highlight-boosted copy the masks' lens blur starts from; made the first time a layer blurs. */
   bokehSource: PreviewImage | null;
+  /** What the anamorphic flare scatters from (FlareSource); made the first time the flare is on. */
+  flareSource: PreviewImage | null;
   skin: SkinState;
   blemish: BlemishState;
   /** Centre of the 100% view in full-resolution pixels; null = fit to view. */
@@ -102,6 +105,7 @@ export class PhotoSession {
     base: null,
     bloomSources: null,
     bokehSource: null,
+    flareSource: null,
     skin: { kind: 'notComputed' },
     blemish: { working: false, healed: 0, detected: 0 },
     zoomCenter: null,
@@ -118,6 +122,7 @@ export class PhotoSession {
   private skinJob: Promise<void> | null = null;
   /** The lens blur's source copy being made, so export can wait for it. */
   private bokehJob: Promise<void> | null = null;
+  private flareJob: Promise<void> | null = null;
   private viewWidth = 0;
   private viewHeight = 0;
   /** The frame the zoomed view keeps around the photo, device pixels (ZoomMath's [frame]). */
@@ -215,12 +220,14 @@ export class PhotoSession {
       base: loaded.base,
       bloomSources: loaded.bloom,
       bokehSource: null,
+      flareSource: null,
       skin: { kind: 'notComputed' },
       blemish: { working: false, healed: 0, detected: 0 },
     });
     this.params = initialParams(defaults);
     this.ensureSkinMask();
     this.ensureBokehSource();
+    this.ensureFlareSource();
     // Camera and exposure (ISO, shutter, aperture, focal length); the decoder's summary if none of it is known.
     return { description: shotInfoLine(img.camera, img.metadata) || img.description, defaults, params: this.params };
   }
@@ -232,6 +239,7 @@ export class PhotoSession {
     if (newParams.skinRetouch > 0 || newParams.blemishRemoval > 0) this.ensureSkinMask();
     if (newParams.blemishRemoval !== before.blemishRemoval) this.scheduleBlemishes();
     this.ensureBokehSource();
+    this.ensureFlareSource();
     // A 90 degree turn or a new crop changes the output shape, and a flip moves the content, so the zoom position
     // no longer applies.
     const cropChanged =
@@ -286,7 +294,7 @@ export class PhotoSession {
     const s = this._state;
     return ShaderParams.from(
       p, defaults, lut, this.lensFor(p), s.base, s.bloomSources, s.skin.kind === 'ready' ? s.skin.mask : null, 1, 1, maskView,
-      (l) => this.brushRaster(l), film, s.bokehSource,
+      (l) => this.brushRaster(l), film, s.bokehSource, s.flareSource,
     );
   }
 
@@ -305,6 +313,23 @@ export class PhotoSession {
         this.bokehJob = null;
       }
       if (this.image !== img) this.ensureBokehSource(); // another photo opened meanwhile
+    })();
+  }
+
+  /** Makes the anamorphic flare's source once the flare is on (see FlareSource). */
+  private ensureFlareSource(p: DevelopParams = this.params) {
+    const img = this.image;
+    if (!img || this._state.flareSource || this.flareJob || p.anamorphic <= 0) return;
+    this.flareJob = (async () => {
+      try {
+        const source = makeFlareSource(await img.createPreview(FLARE_SOURCE_MAX_DIMENSION, true));
+        if (this.image === img) this.update({ flareSource: source });
+      } catch (e) {
+        this.onMessage(`Anamorphic flare failed: ${e instanceof Error ? e.message : String(e)}`);
+      } finally {
+        this.flareJob = null;
+      }
+      if (this.image !== img) this.ensureFlareSource(); // another photo opened meanwhile
     })();
   }
 
@@ -529,11 +554,13 @@ export class PhotoSession {
         base,
         bloomSources: bloom,
         bokehSource: null, // made again from the healed image
+        flareSource: null,
 
         detail: null, // the 100% tile shows old pixels; reload it
         blemish: { working: false, healed: count, detected: (this.blemishSpots?.length ?? 0) / 4 },
       });
       this.ensureBokehSource();
+      this.ensureFlareSource();
       this.recheckZoomTile();
     })().catch((e: unknown) => {
       this.onMessage(`Blemish removal failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -606,7 +633,9 @@ export class PhotoSession {
     const lut = p.lut && p.film == null ? await loadLutCached(p.lut) : null;
     const film = p.film ? await FilmStocks.load(p.film) : null;
     this.ensureBokehSource(p);
+    this.ensureFlareSource(p);
     await this.bokehJob;
+    await this.flareJob;
     return exportImage(img, this.shaderParams(p, defaults, lut, null, film), settings, onProgress);
   }
 
@@ -649,6 +678,8 @@ export interface EditTextures {
   brushFor: BrushLookup;
   /** The lens blur's source copy, or null when no layer blurs. */
   bokehSource: PreviewImage | null;
+  /** The anamorphic flare's source copy, or null when the flare is off. */
+  flareSource: PreviewImage | null;
 }
 
 /**
@@ -659,8 +690,9 @@ export interface EditTextures {
 export async function editTexturesOf(image: RawImage, p: DevelopParams): Promise<EditTextures> {
   const blurs = p.masks.some((l) => l.enabled && l.opacity > 0 && l.adjust.lensBlur > 0);
   const bokehSource = blurs ? await image.createPreview(BOKEH_SOURCE_MAX_DIMENSION, true) : null;
-  if (!p.masks.some((l) => l.strokes.length)) return { brushFor: () => null, bokehSource };
-  return { brushFor: brushLookup(await image.createPreview(PREVIEW_MAX_DIMENSION), p.masks), bokehSource };
+  const flareSource = p.anamorphic > 0 ? makeFlareSource(await image.createPreview(FLARE_SOURCE_MAX_DIMENSION, true)) : null;
+  if (!p.masks.some((l) => l.strokes.length)) return { brushFor: () => null, bokehSource, flareSource };
+  return { brushFor: brushLookup(await image.createPreview(PREVIEW_MAX_DIMENSION), p.masks), bokehSource, flareSource };
 }
 
 /**

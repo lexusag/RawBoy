@@ -1361,7 +1361,7 @@ export class AutoStore {
       // The stored 512/128 px copies were made from this same file, so they match.
       const shader = ShaderParams.from(
         params, a.defaults, lut, new LensTransform(img.lens, params), a.base, a.bloom, skin, 1, 1, null, textures.brushFor, film,
-        textures.bokehSource,
+        textures.bokehSource, textures.flareSource,
       );
       return await exportImage(img, shader, settings, onProgress);
     } finally {

@@ -62,6 +62,10 @@ public final class ShaderParams: @unchecked Sendable {
     /** Horizontal anamorphic flare strength (`uAnamorphic`, 0 = off) and coating tint (`uAnamorphicTint`). */
     public let anamorphic: Float
     public let anamorphicTint: [Float]
+    public let anamorphicLength: [Float]
+    public let anamorphicBar: [Float]
+    /** What the flare scatters light from (FlareSource, `uFlare`), or nil: no flare. */
+    public let flareSource: PreviewImage?
 
     public init(whiteBalance: [Float], exposure: Float, contrast: Float, saturation: Float, shadows: Float,
                 highlights: Float, blacks: Float, whites: Float, denoise: Float, denoiseWide: Float,
@@ -73,7 +77,9 @@ public final class ShaderParams: @unchecked Sendable {
                 toneMapper: Int = 0, displaySource: Float = 0, layers: LayerUniforms = .none, leaks: LeakUniforms = .none,
                 film: FilmData? = nil, filmAmount: Float = 0,
                 filmGrain: Float = 1, halation: Float = 1, curve: [Float]? = nil, clipLevel: Float = 0,
-                anamorphic: Float = 0, anamorphicTint: [Float] = AnamorphicColor.neutral.tint) {
+                anamorphic: Float = 0, anamorphicTint: [Float] = AnamorphicColor.neutral.tintVec(ghosts: false),
+                anamorphicLength: [Float] = AnamorphicColor.neutral.lengthVec,
+                anamorphicBar: [Float] = AnamorphicColor.neutral.barVec, flareSource: PreviewImage? = nil) {
         self.whiteBalance = whiteBalance
         self.exposure = exposure
         self.contrast = contrast
@@ -115,6 +121,9 @@ public final class ShaderParams: @unchecked Sendable {
         self.clipLevel = clipLevel
         self.anamorphic = anamorphic
         self.anamorphicTint = anamorphicTint
+        self.anamorphicLength = anamorphicLength
+        self.anamorphicBar = anamorphicBar
+        self.flareSource = flareSource
     }
 
     /**
@@ -166,7 +175,7 @@ public final class ShaderParams: @unchecked Sendable {
                             base: PreviewImage?, bloomSources: BloomSources?, skinMask: SkinMask?,
                             grainSizeScale: Float = 1, grainStrength: Float = 1, maskView: String? = nil,
                             brushFor: (MaskLayer) -> BrushRaster? = { _ in nil },
-                            film: FilmData? = nil) -> ShaderParams {
+                            film: FilmData? = nil, flareSource: PreviewImage? = nil) -> ShaderParams {
         let filmUsed = film.flatMap { $0.stock.id == p.film ? $0 : nil }
         let sourceWhite = WhiteBalance.xyFromTempTint(Double(asShot.temperature), Double(asShot.tint))
         let targetWhite = WhiteBalance.xyFromTempTint(Double(p.temperature), Double(p.tint))
@@ -215,7 +224,9 @@ public final class ShaderParams: @unchecked Sendable {
             curve: p.curves.table(),
             clipLevel: asShot.clipLevel,
             anamorphic: p.anamorphic / 100 * (0.35 + 0.65 * p.anamorphic / 100),
-            anamorphicTint: p.anamorphicColor.tint)
+            anamorphicTint: p.anamorphicColor.tintVec(ghosts: p.anamorphicGhosts),
+            anamorphicLength: p.anamorphicColor.lengthVec, anamorphicBar: p.anamorphicColor.barVec,
+            flareSource: flareSource)
     }
 
     /** Full layer temperature offset (100) moves the white this many mireds; + = warmer, as the global slider. */

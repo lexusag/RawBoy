@@ -21,6 +21,7 @@ import app.rawboy.gl.BloomSources
 import app.rawboy.gl.BloomTail
 import app.rawboy.gl.BokehTexture
 import app.rawboy.gl.DetailTile
+import app.rawboy.gl.FlareSource
 import app.rawboy.gl.PreviewImage
 import app.rawboy.gl.ShaderParams
 import app.rawboy.gl.WaveletDenoise
@@ -95,6 +96,11 @@ class PhotoSession(
     private val _bokehSource = MutableStateFlow<PreviewImage?>(null)
     val bokehSource = _bokehSource.asStateFlow()
     private var bokehJob: Job? = null
+
+    /** What the anamorphic flare scatters light from ([FlareSource]); made the first time the flare is on. */
+    private val _flareSource = MutableStateFlow<PreviewImage?>(null)
+    val flareSource = _flareSource.asStateFlow()
+    private var flareJob: Job? = null
 
     /** Centre of the zoomed view in full-resolution pixels; null = fit to view. */
     private val _zoomCenter = MutableStateFlow<Pair<Float, Float>?>(null)
@@ -175,6 +181,8 @@ class PhotoSession(
         _bloomSources.value = loaded.bloom
         bokehJob?.cancel()
         _bokehSource.value = null
+        flareJob?.cancel()
+        _flareSource.value = null
         skinJob?.cancel()
         _skin.value = SkinState.NotComputed
         blemishJob?.cancel()
@@ -186,6 +194,7 @@ class PhotoSession(
         params = initialParams(defaults)
         ensureSkinMask()
         ensureBokehSource()
+        ensureFlareSource()
         // Camera and exposure (ISO, shutter, aperture, focal length); the decoder's summary if none of it is known.
         return Opened(loaded.image.shotInfo.line().ifEmpty { loaded.image.description }, defaults, params)
     }
@@ -197,6 +206,7 @@ class PhotoSession(
         if (newParams.skinRetouch > 0f || newParams.blemishRemoval > 0f) ensureSkinMask()
         if (newParams.blemishRemoval != before.blemishRemoval) scheduleBlemishes()
         ensureBokehSource()
+        ensureFlareSource()
         // A 90 degree turn or a new crop changes the output shape, and a flip moves the content, so the zoom position
         // no longer applies.
         val flipChanged = newParams.flipHorizontal != before.flipHorizontal || newParams.flipVertical != before.flipVertical
@@ -214,6 +224,7 @@ class PhotoSession(
         ShaderParams.from(
             p, defaults, lut, lensFor(p), _base.value, _bloomSources.value, (_skin.value as? SkinState.Ready)?.mask,
             maskView = maskView, brushFor = ::brushRaster, film = film, bokehSource = _bokehSource.value,
+            flareSource = _flareSource.value,
         )
 
     /** Starts making the lens blur's source copy once a mask layer of [p] blurs (see BokehTexture). */
@@ -231,6 +242,24 @@ class PhotoSession(
                 throw e
             } catch (e: Exception) {
                 onMessage("Lens blur failed: ${e.message}")
+            }
+        }
+    }
+
+    /** Starts making the anamorphic flare's source once the flare is on (see [FlareSource]). */
+    private fun ensureFlareSource(p: DevelopParams = params) {
+        val img = image ?: return
+        if (_flareSource.value != null || flareJob?.isActive == true || p.anamorphic <= 0f) return
+        flareJob = scope.launch {
+            try {
+                val source = withContext(Dispatchers.Default) {
+                    FlareSource.make(img.createPreview(FlareSource.SOURCE_MAX_DIMENSION, boostHighlights = true))
+                }
+                if (image === img) _flareSource.value = source
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                onMessage("Anamorphic flare failed: ${e.message}")
             }
         }
     }
@@ -533,7 +562,10 @@ class PhotoSession(
             _bloomSources.value = rebuilt.third
             bokehJob?.cancel() // made again from the healed image
             _bokehSource.value = null
+            flareJob?.cancel()
+            _flareSource.value = null
             ensureBokehSource()
+            ensureFlareSource()
             _detail.value = null // the 100% tile shows old pixels; reload it
             recheckZoomTile()
             _blemish.value = BlemishState(working = false, healed = count, detected = (blemishSpots?.size ?: 0) / 4)
@@ -627,7 +659,9 @@ class PhotoSession(
         val lut = p.lut?.takeIf { p.film == null }?.let { loadLut(it) }
         val film = p.film?.let { id -> filmLoader?.invoke(id) }
         ensureBokehSource(p)
+        ensureFlareSource(p)
         bokehJob?.join()
+        flareJob?.join()
         return withContext(Dispatchers.Default) {
             Exporter(context).export(
                 image = img,
@@ -705,7 +739,7 @@ fun brushLookup(image: PreviewImage, layers: List<MaskLayer>): (MaskLayer) -> Br
 }
 
 /** What exporting RawBoy edits needs besides the analysis's small copies (see [editTexturesOf]). */
-class EditTextures(val brushFor: (MaskLayer) -> BrushRaster?, val bokehSource: PreviewImage?)
+class EditTextures(val brushFor: (MaskLayer) -> BrushRaster?, val bokehSource: PreviewImage?, val flareSource: PreviewImage?)
 
 /**
  * The painted masks and the lens blur source for exporting [p] from [image] without a session (Auto's batch export),
@@ -715,8 +749,9 @@ class EditTextures(val brushFor: (MaskLayer) -> BrushRaster?, val bokehSource: P
 fun editTexturesOf(image: RawImage, p: DevelopParams): EditTextures {
     val blurs = p.masks.any { it.enabled && it.opacity > 0f && it.adjust.lensBlur > 0f }
     val bokehSource = if (blurs) image.createPreview(BokehTexture.SOURCE_MAX_DIMENSION, boostHighlights = true) else null
-    if (p.masks.none { it.strokes.isNotEmpty() }) return EditTextures({ null }, bokehSource)
-    return EditTextures(brushLookup(image.createPreview(PhotoSession.PREVIEW_MAX_DIMENSION), p.masks), bokehSource)
+    val flareSource = if (p.anamorphic > 0f) FlareSource.make(image.createPreview(FlareSource.SOURCE_MAX_DIMENSION, boostHighlights = true)) else null
+    if (p.masks.none { it.strokes.isNotEmpty() }) return EditTextures({ null }, bokehSource, flareSource)
+    return EditTextures(brushLookup(image.createPreview(PhotoSession.PREVIEW_MAX_DIMENSION), p.masks), bokehSource, flareSource)
 }
 
 /** Everything decoded for one photo, swapped in together. */

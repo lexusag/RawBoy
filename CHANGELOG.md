@@ -14,6 +14,12 @@
 
 # Changelog
 
+**RawBoy: more cinematic anamorphic flare, Magenta coating and optional Ghosts (2026-11-07)**
+
+- The anamorphic flare now follows the real thing more closely: each colour channel's streak reaches a different distance (white core, cyan, then blue tips), a soft bar of coating colour runs along it, and only small, very bright lights flare. Big lit windows and signs are left alone (a size gate on the blown-out area of each neighbourhood), as are bright reflections that do not clip. Streak strength falls off with the light's size.
+- New **Magenta** coating beside Neutral, Blue and Golden, and an optional **Ghosts** switch (faint tall ovals mirrored through the frame centre; off by default, kept in the Detail preset group and edits).
+- Builds on a flare source made once per photo from the 1536 px highlight-boosted copy (`FlareSource`, a new texture unit). Old edits and presets still load; the look of an existing flare changes (strength curve unchanged). Android, iOS and web; developed and checked on the web render path (the real shader through WebGL), **not yet built or run on Android or iOS**.
+
 **RawBoy Auto and Pro: 25% less Film grain by default (2026-11-07)**
 
 - Film mode's default grain is 25% lower: Auto's film looks start at 60% of the stock's grain (was 80%) and Pro's Film grain slider defaults to 75 (was 100). Android, iOS and web. Slider ranges and photos' saved edits are unchanged. RawBoy Camera keeps its film grain at 80 (its film looks no longer follow Auto's value). Not yet checked on a device.

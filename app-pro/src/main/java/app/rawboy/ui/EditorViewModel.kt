@@ -107,6 +107,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     val blemish = session.blemish
     val bloomSources = session.bloomSources
     val bokehSource = session.bokehSource
+    val flareSource = session.flareSource
     val zoomCenter = session.zoomCenter
     val zoomScale = session.zoomScale
     val detail = session.detail
