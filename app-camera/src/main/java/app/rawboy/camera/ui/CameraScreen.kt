@@ -1218,6 +1218,16 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             accent = EXPERIMENTAL_ORANGE,
             onChange = vm::setExperimental,
         )
+        if (settings.experimental) {
+            Spacer(Modifier.height(16.dp))
+            SettingSwitch(
+                title = "Video stabilization",
+                subtitle = "Steadier video (video mode only): the picture is cropped a little and trails the camera by a few frames",
+                checked = settings.videoStabilization,
+                accent = EXPERIMENTAL_ORANGE,
+                onChange = vm::setVideoStabilization,
+            )
+        }
         Spacer(Modifier.height(16.dp))
         SettingSwitch(
             title = "Zoom buttons",

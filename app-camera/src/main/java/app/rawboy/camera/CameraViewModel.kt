@@ -263,7 +263,19 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         if (_recordingMs.value != null) return
         if (on && !_settings.value.experimental) return
         _videoMode.value = on
+        applyStabilization()
         republish() // the video viewfinder drops the colour denoise (see publish)
+    }
+
+    /** Stabilization is video mode's, and only when switched on in Settings. */
+    private fun applyStabilization() {
+        controller.setVideoStabilization(_videoMode.value && _settings.value.experimental && _settings.value.videoStabilization)
+    }
+
+    fun setVideoStabilization(on: Boolean) {
+        change { it.copy(videoStabilization = on) }
+        // Changing it restarts the preview (a visible blink and a new crop): not in the middle of a recording.
+        if (_recordingMs.value == null) applyStabilization()
     }
 
     private fun toggleRecording() {
@@ -320,6 +332,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             val uri = withContext(Dispatchers.IO + NonCancellable) { r.stop() }
             _videoSink.value = null
             _recordingMs.value = null
+            applyStabilization() // a switch flipped during the recording takes effect now
             _message.value = if (uri != null) "Video saved to Movies/${Edition.FOLDER}" else "Nothing was recorded"
         }
     }
@@ -475,6 +488,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 _flashAvailable.value = inf.hasFlash || _screenFlashCamera.value
                 _hiRes.value = inf.hiRes
                 controller.setExposureBias(exposureBias(_settings.value))
+                applyStabilization()
                 controller.start(inf, st)
                 _frame.value = ViewfinderRenderer.Frame(
                     bufferWidth = inf.previewSize.width,
@@ -891,6 +905,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         if (!on) {
             stopRecording()
             _videoMode.value = false
+            applyStabilization()
         }
     }
 
