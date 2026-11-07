@@ -12,7 +12,7 @@ import type { PreviewImage } from './PreviewImage';
  * - band 2, as band 1: its luminance blurred into tall ovals (sigma 4 across, 10 down), for the ghosts.
  *
  * Bands 0 and 1 are the boosted light multiplied by two gates, so the shader's knee does the rest:
- * - size: how much of the neighbourhood (a Gaussian of 4% of the long edge, then the largest value within 0.8 of that)
+ * - size: how much of the neighbourhood (a Gaussian of 2.5% of the long edge, then the largest value within 0.3 of that)
  *   is bright. A lamp covers little of it, a window or a sign nearly all (`SIZE_LO`..`SIZE_HI`): big lights don't flare.
  * - brightness: lights that don't fill a texel with clipped light (small windows, reflections) drop out
  *   (`BRIGHT_LO`..`BRIGHT_HI`, boosted units: 7 is a clipped texel).
@@ -20,7 +20,9 @@ import type { PreviewImage } from './PreviewImage';
  */
 export const FLARE_SOURCE_MAX_DIMENSION = 1536;
 
-const SIZE_SIGMA = 0.04;
+/** The size gate's reach: tight enough that a small light beside a big bright area (a lamp by a lit ceiling) still flares. */
+const SIZE_SIGMA = 0.025;
+const SIZE_DILATE = 0.3;
 const SIZE_LO = 0.05;
 const SIZE_HI = 0.14;
 const BRIGHT_LO = 4.5;
@@ -118,7 +120,7 @@ export function makeFlareSource(src: PreviewImage): PreviewImage {
     }
   }
   const sigma = SIZE_SIGMA * Math.max(wf, rc);
-  const area = maxFilter(gauss3(blown, wf, rc, sigma, sigma), wf, rc, Math.round(0.8 * sigma));
+  const area = maxFilter(gauss3(blown, wf, rc, sigma, sigma), wf, rc, Math.round(SIZE_DILATE * sigma));
 
   // Bands 0 and 1: the light times both gates.
   const gated = new Float32Array(wf * h * 3);

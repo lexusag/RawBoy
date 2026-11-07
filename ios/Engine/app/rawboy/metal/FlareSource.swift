@@ -15,7 +15,8 @@ import Foundation
 public enum FlareSource {
     public static let sourceMaxDimension = 1536
 
-    private static let sizeSigma: Float = 0.04
+    private static let sizeSigma: Float = 0.025
+    private static let sizeDilate: Float = 0.3
     private static let sizeLo: Float = 0.05
     private static let sizeHi: Float = 0.14
     private static let brightLo: Float = 4.5
@@ -110,7 +111,7 @@ public enum FlareSource {
             blown[yc * wf + x] = sum / 3
         } }
         let sigma = sizeSigma * Float(max(wf, rc))
-        let area = maxFilter(gauss3(blown, wf, rc, sy: sigma, sx: sigma), wf, rc, Int((0.8 * sigma).rounded()))
+        let area = maxFilter(gauss3(blown, wf, rc, sy: sigma, sx: sigma), wf, rc, Int((sizeDilate * sigma).rounded()))
 
         var gated = [Float](repeating: 0, count: wf * h * 3)
         for y in 0..<h { for x in 0..<wf {
