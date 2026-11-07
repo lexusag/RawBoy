@@ -462,6 +462,7 @@ fun DetailScreen(
     if (exportSheet) {
         ExportSheet(
             count = 1,
+            hasFilm = photo.mode == LookMode.FILM,
             settings = exportSettings,
             onChange = vm::setExportSettings,
             onDismiss = { exportSheet = false },

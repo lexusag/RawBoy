@@ -1,6 +1,7 @@
 import type { ShaderParams } from '../gl/ShaderParams';
 import { sharedDeveloper } from '../gl/ThumbnailRenderer';
-import { rect } from '../gl/Zoom';
+import { SCAN_MARGIN, SCAN_SCALE, filmScanApplies, scanSize } from '../gl/ScanScale';
+import { rect, type PixelRect } from '../gl/Zoom';
 import type { RawImage } from '../raw/RawImage';
 import { rawWorker } from '../raw/RawWorker';
 import { BandDownscaler } from './BandDownscaler';
@@ -18,16 +19,20 @@ type Consume = (y: number, rows: number, band: Uint16Array) => Promise<void> | v
  * main EXIF fields) or TIFF (port of export/Exporter.kt). Returns the file's bytes; the caller saves or zips them.
  */
 export async function exportImage(image: RawImage, params: ShaderParams, settings: ExportSettings, onProgress: (f: number) => void): Promise<Blob> {
-  const size = BandDownscaler.outputSize(params.lens.outputWidth, params.lens.outputHeight, settings.maxLongSide);
+  // Film scan: Film mode rendered 1.5x larger (the size setting doesn't apply to it).
+  const scan = settings.filmScan && filmScanApplies(params);
+  const size = scan
+    ? scanSize(params.lens.outputWidth, params.lens.outputHeight)
+    : BandDownscaler.outputSize(params.lens.outputWidth, params.lens.outputHeight, settings.maxLongSide);
   if (settings.format === 'tiff') {
     const writer = new TiffWriter(size[0], size[1], settings.tiffBits, image.metadata);
-    await renderOutput(image, params, size, onProgress, (_, rows, band) => writer.writeRows(band, rows));
+    await renderOutput(image, params, size, scan, onProgress, (_, rows, band) => writer.writeRows(band, rows));
     return writer.finish();
   }
   const id = await rawWorker().call<number>({ op: 'jpegBegin', width: size[0], height: size[1], quality: settings.jpegQuality });
   try {
     // jpegli streams each band as it is developed, at full 16-bit precision.
-    await renderOutput(image, params, size, onProgress, async (_, rows, band) => {
+    await renderOutput(image, params, size, scan, onProgress, async (_, rows, band) => {
       await rawWorker().call({ op: 'jpegWrite', id, rows: band.slice(0, size[0] * rows * 3), count: rows });
     });
   } catch (e) {
@@ -47,11 +52,12 @@ export async function exportImage(image: RawImage, params: ShaderParams, setting
 
 /**
  * Renders the image at [size] (the full output size, or smaller: then the full-resolution bands are area-downscaled
- * as they stream, and the grain is sized to the smaller output).
+ * as they stream, and the grain is sized to the smaller output; or a film scan, [scan]: [SCAN_SCALE] times larger).
  */
-async function renderOutput(image: RawImage, params: ShaderParams, size: [number, number], onProgress: (f: number) => void, consume: Consume) {
+async function renderOutput(image: RawImage, params: ShaderParams, size: [number, number], scan: boolean, onProgress: (f: number) => void, consume: Consume) {
   const w = params.lens.outputWidth;
   const h = params.lens.outputHeight;
+  if (scan) return renderBands(image, params, 1, onProgress, consume, SCAN_SCALE);
   if (size[0] === w && size[1] === h) return renderBands(image, params, 1, onProgress, consume);
   const scaler = await BandDownscaler.create(w, h, size[0], size[1], consume);
   try {
@@ -65,11 +71,13 @@ async function renderOutput(image: RawImage, params: ShaderParams, size: [number
   await scaler.finish();
 }
 
-/** Renders the image top to bottom in bands of TILE_HEIGHT rows; [consume] gets RGB 16-bit samples. */
-async function renderBands(image: RawImage, params: ShaderParams, minGrainPx: number, onProgress: (f: number) => void, consume: Consume) {
+/**
+ * Renders the image top to bottom in bands of TILE_HEIGHT rows; [consume] gets RGB 16-bit samples. [scale] > 1 (film
+ * scan): the tiles are in output pixels, [scale] times the photo's; each one's source region is upscaled first.
+ */
+async function renderBands(image: RawImage, params: ShaderParams, minGrainPx: number, onProgress: (f: number) => void, consume: Consume, scale = 1) {
   // Output size: rotation by 90 degrees swaps width and height.
-  const w = params.lens.outputWidth;
-  const h = params.lens.outputHeight;
+  const [w, h] = scale > 1 ? scanSize(params.lens.outputWidth, params.lens.outputHeight) : [params.lens.outputWidth, params.lens.outputHeight];
   const tilesX = Math.ceil(w / TILE_WIDTH);
   const tilesY = Math.ceil(h / TILE_HEIGHT);
   const band = new Uint16Array(w * TILE_HEIGHT * 3);
@@ -80,7 +88,7 @@ async function renderBands(image: RawImage, params: ShaderParams, minGrainPx: nu
   const developer = sharedDeveloper();
   developer.setImageSize(image.width, image.height);
   developer.minGrainPx = minGrainPx;
-  const margin = params.spatialMargin;
+  const margin = params.spatialMargin + (scale > 1 ? SCAN_MARGIN : 0);
   // Fetch the next tile's source pixels while the GPU develops this one.
   const tiles: { out: ReturnType<typeof rect> }[] = [];
   for (let ty = 0; ty < tilesY; ty++)
@@ -90,7 +98,11 @@ async function renderBands(image: RawImage, params: ShaderParams, minGrainPx: nu
       tiles.push({ out: rect(x, y, Math.min(TILE_WIDTH, w - x), Math.min(TILE_HEIGHT, h - y)) });
     }
   const fetch = (i: number) => {
-    const src = params.lens.sourceBounds(tiles[i].out, margin);
+    const o = tiles[i].out;
+    // The photo's pixels under this tile; a scan upscales them whole, so their edges are even (see render).
+    const base = scale > 1 ? rect(Math.floor(o.x / scale), Math.floor(o.y / scale), Math.ceil((o.x + o.width) / scale) - Math.floor(o.x / scale), Math.ceil((o.y + o.height) / scale) - Math.floor(o.y / scale)) : o;
+    let src = params.lens.sourceBounds(base, margin);
+    if (scale > 1) src = evenRect(src, image.width, image.height);
     return image.copyTile(src).then((pixels) => ({ src, pixels }));
   };
   let next = tiles.length ? fetch(0) : null;
@@ -98,13 +110,22 @@ async function renderBands(image: RawImage, params: ShaderParams, minGrainPx: nu
     const { src, pixels } = await next!;
     next = i + 1 < tiles.length ? fetch(i + 1) : null;
     const out = tiles[i].out;
-    const developed = developer.render(params, pixels, src, out);
+    const developed = developer.render(params, pixels, src, out, scale);
     pack(developed, out.width, out.height, band, w, out.x);
     done++;
     onProgress(done / tiles.length);
     const lastInBand = out.x + out.width >= w;
     if (lastInBand) await consume(out.y, out.height, band);
   }
+}
+
+/** [r] grown to even x, y, width and height inside a [maxW] x [maxH] image (an odd last column or row is dropped). */
+function evenRect(r: PixelRect, maxW: number, maxH: number): PixelRect {
+  const x0 = r.x - (r.x & 1);
+  const y0 = r.y - (r.y & 1);
+  const x1 = Math.min(r.x + r.width + ((r.x + r.width) & 1), maxW - (maxW & 1));
+  const y1 = Math.min(r.y + r.height + ((r.y + r.height) & 1), maxH - (maxH & 1));
+  return rect(x0, y0, x1 - x0, y1 - y0);
 }
 
 /** Copies a developed RGBA tile into a band of interleaved RGB 16-bit samples [bandWidth] wide, from column [x]. */

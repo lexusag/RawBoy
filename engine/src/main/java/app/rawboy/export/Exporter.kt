@@ -8,6 +8,7 @@ import android.util.Log
 import androidx.exifinterface.media.ExifInterface
 import app.rawboy.gl.OffscreenDeveloper
 import app.rawboy.gl.PixelRect
+import app.rawboy.gl.ScanScale
 import app.rawboy.gl.ShaderParams
 import app.rawboy.raw.RawImage
 import java.io.FileInputStream
@@ -15,6 +16,8 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import kotlin.math.ceil
+import kotlin.math.floor
 
 /**
  * A GL context for exports, kept between exports made on one thread (the camera develops shot after
@@ -41,6 +44,9 @@ class ExportGpu(private val lowPriority: Boolean = false) : AutoCloseable {
  */
 class Exporter(private val context: Context) {
     private var gpu: ExportGpu? = null
+
+    /** The export in progress is a film scan (see [ExportSettings.filmScan]). */
+    private var scan = false
 
     /**
      * Returns the display name of the written file. [gpu] reuses a GL context across exports made on
@@ -72,9 +78,12 @@ class Exporter(private val context: Context) {
         onProgress: (Float) -> Unit,
     ): Exported {
         this.gpu = gpu
+        // Film scan: Film mode rendered 1.5x larger (the size setting doesn't apply to it).
+        scan = settings.filmScan && ScanScale.applies(params)
         val resolver = context.contentResolver
         val (uri, name) = MediaStoreOutput.create(resolver, MediaStoreOutput.baseNameOf(sourceName), settings.format, naming)
-        val size = BandDownscaler.outputSize(params.lens.outputWidth, params.lens.outputHeight, settings.maxLongSide)
+        val size = if (scan) ScanScale.size(params.lens.outputWidth, params.lens.outputHeight)
+        else BandDownscaler.outputSize(params.lens.outputWidth, params.lens.outputHeight, settings.maxLongSide)
         try {
             when (settings.format) {
                 ExportFormat.JPEG -> if (settings.jpegEncoder == JpegEncoder.JPEGLI) {
@@ -168,8 +177,8 @@ class Exporter(private val context: Context) {
 
     /**
      * Renders the image at [size] (the full output size, or smaller: then the full-resolution bands are
-     * area-downscaled as they stream, then sharpened by [sharpen], and the grain is sized to the smaller output).
-     * Same callback as [renderBands].
+     * area-downscaled as they stream, then sharpened by [sharpen], and the grain is sized to the smaller output; or
+     * a film scan, [scan]: [ScanScale.SCALE] times larger). Same callback as [renderBands].
      */
     private fun renderOutput(
         image: RawImage,
@@ -181,7 +190,8 @@ class Exporter(private val context: Context) {
     ) {
         val w = params.lens.outputWidth
         val h = params.lens.outputHeight
-        if (size.first == w && size.second == h) return renderBands(image, params, 1f, onProgress, consume)
+        if (scan) return renderBands(image, params, 1f, ScanScale.SCALE, onProgress, consume)
+        if (size.first == w && size.second == h) return renderBands(image, params, 1f, 1f, onProgress, consume)
         var encodeNs = 0L
         var scaleNs = 0L
         BandDownscaler(w, h, size.first, size.second, TILE_HEIGHT, sharpen) { y, rows, band ->
@@ -191,7 +201,7 @@ class Exporter(private val context: Context) {
         }.use { scaler ->
             // A grain cell at least one output pixel, as a full-size render of the smaller image would have.
             val minGrain = maxOf(w, h).toFloat() / maxOf(size.first, size.second)
-            renderBands(image, params, minGrain, onProgress) { _, rows, band ->
+            renderBands(image, params, minGrain, 1f, onProgress) { _, rows, band ->
                 val t = System.nanoTime()
                 scaler.push(rows, band)
                 scaleNs += System.nanoTime() - t
@@ -205,19 +215,21 @@ class Exporter(private val context: Context) {
 
     /**
      * Renders the image top to bottom in bands of [TILE_HEIGHT] rows. [minGrainPx]: smallest grain cell
-     * in full-resolution pixels (see [renderOutput]).
+     * in full-resolution pixels (see [renderOutput]). [scale] > 1 (film scan): the tiles are in output pixels, [scale]
+     * times the photo's; each one's source region is upscaled first.
      * [consume] receives (firstRow, rowCount, RGB samples as unsigned 16-bit in a ShortArray).
      */
     private fun renderBands(
         image: RawImage,
         params: ShaderParams,
         minGrainPx: Float,
+        scale: Float,
         onProgress: (Float) -> Unit,
         consume: (y: Int, rows: Int, band: ShortArray) -> Unit,
     ) {
         // Output size: rotation by 90 degrees swaps width and height.
-        val w = params.lens.outputWidth
-        val h = params.lens.outputHeight
+        val (w, h) = if (scale > 1f) ScanScale.size(params.lens.outputWidth, params.lens.outputHeight)
+        else Pair(params.lens.outputWidth, params.lens.outputHeight)
         val tilesX = (w + TILE_WIDTH - 1) / TILE_WIDTH
         val tilesY = (h + TILE_HEIGHT - 1) / TILE_HEIGHT
         var input = ByteBuffer.allocateDirect((TILE_WIDTH + 2 * HALO) * (TILE_HEIGHT + 2 * HALO) * RawImage.BYTES_PER_PIXEL)
@@ -243,12 +255,21 @@ class Exporter(private val context: Context) {
                     // Pad the tile so the denoise filter sees real neighbours at tile edges.
                     // Source pixels this tile needs: lens geometry plus the denoise neighbourhood.
                     val out = PixelRect(x, y, cols, rows)
-                    val src = params.lens.sourceBounds(out, params.spatialMargin)
+                    val margin = params.spatialMargin + if (scale > 1f) ScanScale.MARGIN else 0
+                    val src = if (scale > 1f) {
+                        // The photo's pixels under this tile; a scan upscales them whole, so their edges are even.
+                        val x0 = floor(x / scale).toInt()
+                        val y0 = floor(y / scale).toInt()
+                        val base = PixelRect(x0, y0, ceil((x + cols) / scale).toInt() - x0, ceil((y + rows) / scale).toInt() - y0)
+                        evenRect(params.lens.sourceBounds(base, margin), image.width, image.height)
+                    } else {
+                        params.lens.sourceBounds(out, margin)
+                    }
                     val bytes = src.width * src.height * RawImage.BYTES_PER_PIXEL
                     if (input.capacity() < bytes) input = ByteBuffer.allocateDirect(bytes).order(ByteOrder.nativeOrder())
                     val t0 = System.nanoTime()
                     image.copyTile(src.x, src.y, src.width, src.height, input)
-                    developer.render(params, input, src, out, output)
+                    developer.render(params, input, src, out, output, scale)
                     renderNs += System.nanoTime() - t0
                     BandNative.packTile(output, developer.bytesPerSample, cols, rows, band, w, x)
                     done++
@@ -309,6 +330,15 @@ class Exporter(private val context: Context) {
                 exif.saveAttributes()
             }
         } // Metadata is best effort; the image is already written.
+    }
+
+    /** [r] grown to even x, y, width and height inside a [maxW] x [maxH] image (an odd last column or row is dropped). */
+    private fun evenRect(r: PixelRect, maxW: Int, maxH: Int): PixelRect {
+        val x0 = r.x - (r.x and 1)
+        val y0 = r.y - (r.y and 1)
+        val x1 = minOf(r.right + (r.right and 1), maxW - (maxW and 1))
+        val y1 = minOf(r.bottom + (r.bottom and 1), maxH - (maxH and 1))
+        return PixelRect(x0, y0, x1 - x0, y1 - y0)
     }
 
     private companion object {

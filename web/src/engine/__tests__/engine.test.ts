@@ -35,6 +35,8 @@ import { FilmStocks } from '../film/FilmStocks';
 import { baseNameOf, fileName } from '../export/ExportSettings';
 import { NO_LAYERS, ShaderParams, WIDE_DENOISE_MARGIN, packLayers } from '../gl/ShaderParams';
 import { BOKEH_RADIUS, bokehGeometry } from '../gl/BokehTexture';
+import { SampleGeometry } from '../gl/GlCommon';
+import { SCAN_SCALE, filmScanApplies, scanSize } from '../gl/ScanScale';
 import { WAVELET_DENOISE_MARGIN, denoiseLevels } from '../gl/WaveletDenoise';
 import { ZoomMath, rect } from '../gl/Zoom';
 import { LensInfo } from '../lens/LensInfo';
@@ -822,6 +824,24 @@ describe('export', () => {
     expect(BandDownscaler.outputSize(6208, 8280, 3000)).toEqual([2249, 3000]);
     expect(BandDownscaler.outputSize(6000, 4000, null)).toEqual([6000, 4000]);
     expect(BandDownscaler.outputSize(2000, 1000, 3000)).toEqual([2000, 1000]);
+  });
+
+  it('a film scan is 1.5x the output, only with a film look on', () => {
+    expect(SCAN_SCALE).toBe(1.5);
+    expect(scanSize(6208, 8280)).toEqual([9312, 12420]);
+    expect(scanSize(1001, 667)).toEqual([1502, 1001]);
+    expect(filmScanApplies({ film: null, filmAmount: 100 })).toBe(false);
+    expect(filmScanApplies({ film: {}, filmAmount: 0 })).toBe(false);
+    expect(filmScanApplies({ film: {}, filmAmount: 60 })).toBe(true);
+  });
+
+  it('a scaled render spans the photo in fractions of a pixel', () => {
+    const plain = new SampleGeometry(100, 100, rect(10, 10, 100, 100), rect(5, 6, 64, 32), 1000, 800);
+    expect(plain.outputF).toEqual([5, 6, 64, 32]);
+    const scan = new SampleGeometry(150, 150, rect(10, 10, 100, 100), rect(1024, 512, 1024, 512), 1000, 800, 1, 1.5);
+    expect(scan.outputF[0]).toBeCloseTo(1024 / 1.5, 9);
+    expect(scan.outputF[1]).toBeCloseTo(512 / 1.5, 9);
+    expect(scan.outputF[2]).toBeCloseTo(1024 / 1.5, 9);
   });
 
   it('names files like Android', () => {

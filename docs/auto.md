@@ -98,7 +98,7 @@ photo being saved; photos already saved stay (on the web without a folder, the Z
 While it runs, the grid shows the photos still to be saved in grey; each turns to colour once it's saved.
 **Export all** and the photo view's **Export** ask for the format and size first (remembered for the next export),
 as RawBoy's export dialog does: JPEG with a quality slider (default 92) or TIFF (8 or 16-bit, LZW,
-default 16), at the original size or a long side of 5600, 4096, 2048 or 1080 px. Both keep the photo's EXIF.
+default 16), at the original size or a long side of 5600, 4096, 2048 or 1080 px. Both keep the photo's EXIF. For Film-mode photos (Android, web) **Film scan** renders 1.5× larger with the grain at the finer pitch; the size choice is ignored for those.
 **RawBoy presets:** **Apply RawBoy preset…** next to *Import as* (Android, iOS) opens a `.rawboy.json` file, as RawBoy
 exports it on any platform; RawBoy's **Send to Auto**, or opening a preset file with RawBoy Auto, does the same. The
 preset develops every photo, and photos added later, in place of its look: everything it holds, lens corrections,

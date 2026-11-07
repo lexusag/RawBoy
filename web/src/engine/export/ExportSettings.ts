@@ -10,9 +10,11 @@ export interface ExportSettings {
   tiffBits: 8 | 16;
   /** Long side of the saved image in pixels, area-downscaled from full resolution; null = full size. */
   maxLongSide: number | null;
+  /** Film mode only: render 1.5x larger, upscaling the photo and growing the film grain on the finer pitch (ScanScale). */
+  filmScan: boolean;
 }
 
-export const DEFAULT_EXPORT: ExportSettings = { format: 'jpeg', jpegQuality: 92, tiffBits: 16, maxLongSide: null };
+export const DEFAULT_EXPORT: ExportSettings = { format: 'jpeg', jpegQuality: 92, tiffBits: 16, maxLongSide: null, filmScan: false };
 
 const KEY = 'rawboy.export';
 
@@ -26,6 +28,7 @@ export const ExportSettingsStore = {
         jpegQuality: Math.min(100, Math.max(1, Number(s.jpegQuality) || DEFAULT_EXPORT.jpegQuality)),
         tiffBits: s.tiffBits === 8 ? 8 : 16,
         maxLongSide: typeof s.maxLongSide === 'number' && s.maxLongSide > 0 ? s.maxLongSide : null,
+        filmScan: s.filmScan === true,
       };
     } catch {
       return { ...DEFAULT_EXPORT };

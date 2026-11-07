@@ -40,6 +40,7 @@ internal class OffscreenDeveloper(
     private val outputTexture: Int
     private val framebuffer: Int
     private val denoiser: WaveletDenoise
+    private val scanner: ScanUpscaler
     private var uploads = 0
     private var denoisedInput = false
 
@@ -91,6 +92,7 @@ internal class OffscreenDeveloper(
         GLES30.glGenFramebuffers(1, ids, 0)
         framebuffer = ids[0]
         denoiser = WaveletDenoise(quad, GLES30.GL_NEAREST)
+        scanner = ScanUpscaler(quad)
         GLES30.glDisable(GLES30.GL_BLEND)
         GLES30.glDisable(GLES30.GL_DITHER)
     }
@@ -125,13 +127,27 @@ internal class OffscreenDeveloper(
      * [input] holds RGB half floats for [inRect], which must contain every source
      * pixel [out] needs (lens geometry + denoise neighbourhood), so tiles match
      * seamlessly. [output] receives out.width*out.height*4 values in 0..65535, [bytesPerSample] bytes each.
+     *
+     * [scale] > 1 (film scan export): [out] is in output pixels, [scale] times the photo's; the input is first upscaled
+     * by [scale] ([ScanUpscaler]) and [inRect] must have even edges, so the upscaled grid is whole pixels that line up
+     * with the output's (an integer number of output pixels from the photo's origin).
      */
-    fun render(params: ShaderParams, input: ByteBuffer, inRect: PixelRect, out: PixelRect, output: ByteBuffer) {
+    fun render(params: ShaderParams, input: ByteBuffer, inRect: PixelRect, out: PixelRect, output: ByteBuffer, scale: Float = 1f) {
         bindInputs(params)
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, inputTexture)
         GlUtil.uploadHalfRgb(inRect.width, inRect.height, input)
-        val geometry = SampleGeometry(inRect.width, inRect.height, inRect, out, imageWidth, imageHeight, minGrainPx)
-        draw(params, geometry, out.width, out.height, output, denoised(params, inRect.width, inRect.height, 1f))
+        var texture = denoised(params, inRect.width, inRect.height, 1f)
+        var texW = inRect.width
+        var texH = inRect.height
+        if (scale > 1f) {
+            if (scanner.supported) {
+                texW = Math.round(inRect.width * scale)
+                texH = Math.round(inRect.height * scale)
+                texture = scanner.apply(texture, inRect.width, inRect.height, texW, texH, params.denoise)
+            } // else: no float targets, the develop shader samples the source as it is at the finer pitch
+        }
+        val geometry = SampleGeometry(texW, texH, inRect, out, imageWidth, imageHeight, minGrainPx, scale)
+        draw(params, geometry, out.width, out.height, output, texture)
     }
 
     /**
@@ -204,6 +220,7 @@ internal class OffscreenDeveloper(
         GLES30.glDeleteFramebuffers(1, intArrayOf(framebuffer), 0)
         GLES30.glDeleteTextures(2, intArrayOf(inputTexture, outputTexture), 0)
         denoiser.release()
+        scanner.release()
         quad.release()
         lutTexture.release()
         filmTextures.release()

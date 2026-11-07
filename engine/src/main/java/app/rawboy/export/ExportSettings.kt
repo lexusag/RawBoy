@@ -22,6 +22,11 @@ data class ExportSettings(
     val maxLongSide: Int? = null,
     /** Light sharpening after the downscale (0 = none, ~0.5 subtle); only when [maxLongSide] makes the image smaller. */
     val downscaleSharpen: Float = 0f,
+    /**
+     * Film mode only: render [app.rawboy.gl.ScanScale.SCALE] times larger, upscaling the photo and growing the film grain
+     * on the finer pitch. Photos without a film look export as usual; [maxLongSide] doesn't apply to a scan.
+     */
+    val filmScan: Boolean = false,
 )
 
 object ExportSettingsStore {
@@ -34,6 +39,7 @@ object ExportSettingsStore {
             format = runCatching { ExportFormat.valueOf(p.getString("format", null)!!) }.getOrDefault(defaults.format),
             jpegQuality = p.getInt("jpegQuality", defaults.jpegQuality).coerceIn(1, 100),
             tiffBits = p.getInt("tiffBits", defaults.tiffBits).let { if (it == 8) 8 else 16 },
+            filmScan = p.getBoolean("filmScan", defaults.filmScan),
         )
     }
 
@@ -42,6 +48,7 @@ object ExportSettingsStore {
             .putString("format", settings.format.name)
             .putInt("jpegQuality", settings.jpegQuality)
             .putInt("tiffBits", settings.tiffBits)
+            .putBoolean("filmScan", settings.filmScan)
             .apply()
     }
 }

@@ -8,6 +8,11 @@
 
 # Changelog
 
+**RawBoy Pro and Auto: Film scan 1.5× export (2026-11-07)**
+
+- Export option **Film scan 1.5×** (Android and web; iOS not ported yet), shown only for Film mode (Pro's Film tone mapper, Auto's Film looks). Renders the photo 1.5× larger: iterative back-projection upscale plus a light luma sharpen before the grain, then the film grain at the finer pitch (print-size grain matched, `SCAN_GRAIN`). The Size setting is ignored for a scan. New pre-pass shader `shaders/scan.frag`.
+- Android code is not compiled or run yet; the web build is tested in headless Chromium.
+
 **RawBoy: bundled Film Flash look across Camera, Auto, and Pro (2026-11-06)**
 
 - Added the "Film Flash" look across RawBoy Camera, RawBoy Auto, and RawBoy Pro, bundled as `luts/Film Flash.cube`.

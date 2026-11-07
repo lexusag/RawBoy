@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { filmScanApplies } from '../../engine/gl/ScanScale';
 import { FrameColors } from '../../engine/gl/DevelopRenderer';
 import { cropAspectRatio, cropOf, withCrop, withoutCrop, FULL_CROP, cropWithAspect, type CropAspect, type CropRect } from '../../engine/develop/CropMath';
 import { PHOTO_ACCEPT, pickFiles } from '../common/files';
@@ -636,6 +637,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
           initial={state.exportSettings}
           sourceName={state.fileName ?? 'image'}
           outputSize={[shaderParams.lens.outputWidth, shaderParams.lens.outputHeight]}
+          film={filmScanApplies(shaderParams)}
           onDismiss={() => setShowExport(false)}
           onExport={async (s, destination) => {
             setShowExport(false);

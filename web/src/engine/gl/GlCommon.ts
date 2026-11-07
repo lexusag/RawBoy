@@ -7,6 +7,7 @@ import type { LutData } from '../lut/LutData';
 import type { SkinMask } from '../retouch/SkinMask';
 import type { PreviewImage } from './PreviewImage';
 import type { ShaderParams } from './ShaderParams';
+import { SCAN_GRAIN } from './ScanScale';
 import { Shaders } from './Shaders';
 import { BokehTexture, bokehUniforms, type BokehGeometry } from './BokehTexture';
 import type { PixelRect } from './Zoom';
@@ -33,7 +34,18 @@ export class SampleGeometry {
     readonly imageHeight: number,
     /** Smallest grain cell in full-resolution pixels: more than 1 when the export is saved smaller. */
     readonly minGrainPx = 1,
+    /**
+     * Output pixels per full-resolution pixel: 1.5 in a film scan export ([output] is then in output pixels, the
+     * texture is [textureWidth] = scale x the input's), else 1.
+     */
+    readonly renderScale = 1,
   ) {}
+
+  /** [output] in full-resolution pixels (x, y, width, height): the quad's span in the photo, fractional when scaled. */
+  get outputF(): [number, number, number, number] {
+    const k = this.renderScale;
+    return [this.output.x / k, this.output.y / k, this.output.width / k, this.output.height / k];
+  }
 
   /** Grain cell in full-resolution pixels: ~1/3200 of the long edge (fine-grain film). */
   get grainSize(): number {
@@ -193,8 +205,10 @@ export class DevelopProgram {
     this.f1('uPixelScale', g.textureWidth / g.input.width);
     this.f2('uInOrigin', g.input.x, g.input.y);
     this.f2('uInSpan', g.input.width, g.input.height);
-    this.f2('uOutOrigin', g.output.x, g.output.y);
-    this.f2('uOutSpan', g.output.width, g.output.height);
+    const [ox, oy, ow, oh] = g.outputF;
+    this.f2('uOutOrigin', ox, oy);
+    this.f2('uOutSpan', ow, oh);
+    this.f1('uRenderScale', g.renderScale);
     this.bindLens(p.lens);
     this.bindFilm(p, g);
   }
@@ -278,7 +292,8 @@ export class DevelopProgram {
     // Halation and scatter happen before the film, so Strength fades them with the film render.
     const optics = p.halation * amount;
     const form = s.formation;
-    this.f1('uFilmGrain', p.filmGrain);
+    // A film scan export (finer pixels) matches the grain's strength at print size, not per pixel (see ScanUpscaler).
+    this.f1('uFilmGrain', p.filmGrain * (g.renderScale > 1 ? SCAN_GRAIN : 1));
     this.f3('uFormGrainRms', form.grainRms);
     this.f3('uFormHalation', form.halation, optics);
     this.f1('uFormHaloUm', form.haloRadiusUm);

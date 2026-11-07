@@ -574,6 +574,7 @@ fun EditorScreen(vm: EditorViewModel) {
         ExportDialog(
             initial = exportSettings,
             sourceName = state.fileName ?: "image",
+            film = state.params.film != null && state.params.filmAmount > 0f,
             onDismiss = { showExport = false },
             onExport = { settings ->
                 showExport = false

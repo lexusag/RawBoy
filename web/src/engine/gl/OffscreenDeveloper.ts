@@ -1,6 +1,7 @@
 import { DevelopInputs, DevelopProgram, FullscreenQuad, SampleGeometry, createTexture, uploadHalfRgb } from './GlCommon';
 import type { PreviewImage } from './PreviewImage';
 import type { ShaderParams } from './ShaderParams';
+import { ScanUpscaler } from './ScanUpscaler';
 import { WaveletDenoise } from './WaveletDenoise';
 import { rect, type PixelRect } from './Zoom';
 
@@ -17,6 +18,7 @@ export class OffscreenDeveloper {
   private readonly outputTexture: WebGLTexture;
   private readonly framebuffer: WebGLFramebuffer;
   private readonly denoiser: WaveletDenoise;
+  private readonly scanner: ScanUpscaler;
   private uploads = 0;
   private denoisedInput = false;
   imageWidth = 1;
@@ -36,6 +38,7 @@ export class OffscreenDeveloper {
     this.outputTexture = createTexture(gl, gl.NEAREST);
     this.framebuffer = gl.createFramebuffer()!;
     this.denoiser = new WaveletDenoise(gl, this.quad);
+    this.scanner = new ScanUpscaler(gl, this.quad);
   }
 
   get maxTextureSize(): number {
@@ -50,14 +53,31 @@ export class OffscreenDeveloper {
   /**
    * Develops the full-resolution region [out] from [input] (RGB half floats for [inRect], which must contain every
    * source pixel [out] needs). Returns out.width*out.height RGBA values in 0..65535.
+   *
+   * [scale] > 1 (film scan export): [out] is in output pixels, [scale] times the photo's; the input is first upscaled by
+   * [scale] (ScanUpscaler) and [inRect] must have even edges, so the upscaled grid is whole pixels that line up with the
+   * output's (an integer number of output pixels from the photo's origin).
    */
-  render(params: ShaderParams, input: Uint16Array, inRect: PixelRect, out: PixelRect): Uint16Array | Uint32Array {
+  render(params: ShaderParams, input: Uint16Array, inRect: PixelRect, out: PixelRect, scale = 1): Uint16Array | Uint32Array {
     const gl = this.gl;
     this.inputs.bind(params);
     gl.bindTexture(gl.TEXTURE_2D, this.inputTexture);
     uploadHalfRgb(gl, inRect.width, inRect.height, input);
-    const geometry = new SampleGeometry(inRect.width, inRect.height, inRect, out, this.imageWidth, this.imageHeight, this.minGrainPx);
-    return this.draw(params, geometry, out.width, out.height, this.denoised(params, inRect.width, inRect.height, 1));
+    let texture = this.denoised(params, inRect.width, inRect.height, 1);
+    let texW = inRect.width;
+    let texH = inRect.height;
+    if (scale > 1) {
+      texW = Math.round(inRect.width * scale);
+      texH = Math.round(inRect.height * scale);
+      if (this.scanner.supported) texture = this.scanner.apply(texture, inRect.width, inRect.height, texW, texH, params.denoise);
+      else {
+        // No float targets: the develop shader samples the source bilinearly at the finer pitch.
+        texW = inRect.width;
+        texH = inRect.height;
+      }
+    }
+    const geometry = new SampleGeometry(texW, texH, inRect, out, this.imageWidth, this.imageHeight, this.minGrainPx, scale);
+    return this.draw(params, geometry, out.width, out.height, texture);
   }
 
   /** Develops the whole photo from its downscaled [preview] into a [width] x [height] image, as the fit view does. */
@@ -117,6 +137,7 @@ export class OffscreenDeveloper {
     gl.deleteTexture(this.inputTexture);
     gl.deleteTexture(this.outputTexture);
     this.denoiser.release();
+    this.scanner.release();
     this.quad.release();
     this.inputs.release();
     this.program.release();
