@@ -31,6 +31,7 @@ it is turned sideways (or on a tablet or a wide window). Android, iPhone and the
 | Green Everyday 400, Green Pastel 400 | cooler consumer negative; soft pastel negative | — |
 | Yellow Cine 500T | tungsten-balanced cinema negative | — (grain and bloom) |
 | Green Vivid Slide 50 | slide film, vivid | — |
+| Film Flash | direct flash 35mm film scan: vivid cadmium red, warm peach skin, high-key cool background | — (never suggested; pick it by hand) |
 | Movie Green | strong green-teal grade, lifted blacks (RawBoy's own, made in Affinity Photo) | — |
 | Redscale | Redscale | — (red/orange redscale film) |
 | Lagoon | colour swap: skin and warm tones turquoise, blue sky amber, cream highlights, low contrast | — |
@@ -58,7 +59,7 @@ film. The scene light exposes the negative, which is printed and the print scann
 Everyday 400, Yellow Cine 250D/500T, Green Vivid Slide 100, Green Slide 100, Yellow Slide 100, Yellow Classic 64) and spektrafilm's film and print LUTs. The
 grain (in film density, sized on a 36 mm frame), halation (the reddish glow around bright light) and scatter are
 RawBoy's own (`shaders/film_form.glsl`). A stock is suggested per photo (tungsten
-light: Yellow Cine 500T); the grain starts at 80% of the stock's; Strength blends the film with the AgX develop; Grain (±50)
+light: Yellow Cine 500T); the grain starts at 60% of the stock's; Strength blends the film with the AgX develop; Grain (±50)
 scales it from none to double. Each photo keeps one pick per mode, and the Pro tab (web) shows a photo handed over in Film mode with its
 stock. Whites reach the print's paper white (about 0.85), not 1.0.
 
@@ -97,7 +98,7 @@ photo being saved; photos already saved stay (on the web without a folder, the Z
 While it runs, the grid shows the photos still to be saved in grey; each turns to colour once it's saved.
 **Export all** and the photo view's **Export** ask for the format and size first (remembered for the next export),
 as RawBoy's export dialog does: JPEG with a quality slider (default 92) or TIFF (8 or 16-bit, LZW,
-default 16), at the original size or a long side of 5600, 4096, 2048 or 1080 px. Both keep the photo's EXIF.
+default 16), at the original size or a long side of 5600, 4096, 2048 or 1080 px. Both keep the photo's EXIF. For Film-mode photos (Android, web) **Film scan** renders 1.5× larger with the grain at the finer pitch; the size choice is ignored for those.
 **RawBoy presets:** **Apply RawBoy preset…** next to *Import as* (Android, iOS) opens a `.rawboy.json` file, as RawBoy
 exports it on any platform; RawBoy's **Send to Auto**, or opening a preset file with RawBoy Auto, does the same. The
 preset develops every photo, and photos added later, in place of its look: everything it holds, lens corrections,

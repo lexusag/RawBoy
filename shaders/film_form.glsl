@@ -21,6 +21,7 @@ uniform vec3 uFilmDMin;             // density wire: D = code * (max - min) + mi
 uniform vec3 uFilmDMax;
 uniform float uFilmUmPerPx;         // micrometres of film per full-resolution pixel; 0 = no film
 uniform float uFilmGrain;           // 0 = off, 1 = the stock's granularity
+uniform float uRenderScale;         // output pixels per full-resolution pixel: 1.5 in a film scan export, else 1 (0 = unset)
 uniform vec3 uFormGrainRms;         // per layer (C, M, Y): RMS granularity at net density 1, 48 um aperture
 uniform vec3 uFormHalation;         // per channel: fraction of light returned by the base (x amount); 0 = off
 uniform float uFormHaloUm;          // halation disc radius
@@ -93,19 +94,22 @@ vec3 filmOptics(vec3 x, vec2 uvG, vec2 imagePx) {
 
 // Unit Gaussian per channel at a full-resolution pixel (Box-Muller on the shared pcg hash).
 vec3 gaussPx(ivec2 p) {
-    vec3 u1 = max(unitHash(p, 0x6b43u), 1e-7);
-    vec3 u2 = unitHash(p, 0x1f35u);
+    uint fs = uint(uGrainFrame) * 0x9e3779b1u; // 0 for photos; the video frame counter moves the grain
+    vec3 u1 = max(unitHash(p, 0x6b43u + fs), 1e-7);
+    vec3 u2 = unitHash(p, 0x1f35u + fs);
     return sqrt(-2.0 * log(u1)) * cos(6.2831853 * u2);
 }
 
 // Grain in film density. Dye clouds are a little larger than a grain: a pixel and half its four neighbours.
 vec3 formGrain(vec3 d, vec2 fullPx) {
-    ivec2 p = ivec2(floor(fullPx));
+    // A film scan export renders finer than the photo's pixels: one grain sample per output pixel, on the finer pitch.
+    float k = max(uRenderScale, 1.0);
+    ivec2 p = ivec2(floor(fullPx * k));
     vec3 n = gaussPx(p) + 0.5 * (gaussPx(p + ivec2(1, 0)) + gaussPx(p - ivec2(1, 0))
             + gaussPx(p + ivec2(0, 1)) + gaussPx(p - ivec2(0, 1)));
     n *= 0.57735; // 1 / sqrt(1 + 4 * 0.25)
     // Selwyn: sigma at this pixel's area, from sigma through the 48 um aperture (area pi 24^2 um^2).
-    float area = uFilmUmPerPx * uFilmUmPerPx;
+    float area = uFilmUmPerPx * uFilmUmPerPx / (k * k);
     vec3 sigma = uFormGrainRms * sqrt(1809.56 / area);
     // Density dependence, normalised to 1 at net density 1 (where granularity is quoted).
     vec3 dSat = max(uFilmDMax, 1.2);

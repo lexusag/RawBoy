@@ -154,7 +154,7 @@ fun ControlsPanel(
                     ParamSlider("Film strength", params.filmAmount, 0f..100f, 100f, ::formatPlain) {
                         onChange(params.copy(filmAmount = it))
                     }
-                    ParamSlider("Film grain", params.filmGrain, 0f..200f, 100f, ::formatPlain) {
+                    ParamSlider("Film grain", params.filmGrain, 0f..200f, 75f, ::formatPlain) {
                         onChange(params.copy(filmGrain = it))
                     }
                     ParamSlider("Halation", params.halation, 0f..200f, 100f, ::formatPlain) {

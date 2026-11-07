@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.AlertDialog
@@ -40,6 +41,8 @@ import kotlin.math.roundToInt
 @Composable
 fun ExportSheet(
     count: Int,
+    /** Some photo exported is in Film mode: the Film scan option applies to it. */
+    hasFilm: Boolean,
     settings: ExportSettings,
     onChange: (ExportSettings) -> Unit,
     onDismiss: () -> Unit,
@@ -50,7 +53,7 @@ fun ExportSheet(
         title = { Text(if (count > 1) "Export $count photos" else "Export") },
         text = {
             Column {
-                ExportOptions(settings, onChange, Modifier.fillMaxWidth())
+                ExportOptions(settings, onChange, Modifier.fillMaxWidth(), hasFilm = hasFilm)
                 Text(
                     "Saved to Pictures/${AutoViewModel.NAMING.folder}",
                     style = MaterialTheme.typography.bodySmall,
@@ -72,6 +75,8 @@ fun ExportOptions(
     onChange: (ExportSettings) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
+    /** Offer Film scan: Film photos exported 1.5x larger (the size setting then doesn't apply to them). */
+    hasFilm: Boolean = false,
 ) {
     Column(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -135,6 +140,32 @@ fun ExportOptions(
                     ) { Text("$bits-bit") }
                 }
             }
+        }
+        if (hasFilm) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 4.dp)) {
+                Text(
+                    "Film scan",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.width(88.dp),
+                )
+                SingleChoiceSegmentedButtonRow(Modifier.weight(1f).padding(end = 8.dp)) {
+                    listOf(false, true).forEachIndexed { i, on ->
+                        SegmentedButton(
+                            selected = settings.filmScan == on,
+                            onClick = { onChange(settings.copy(filmScan = on)) },
+                            shape = SegmentedButtonDefaults.itemShape(i, 2),
+                            enabled = enabled,
+                        ) { Text(if (on) "1.5× size" else "Off") }
+                    }
+                }
+            }
+            Text(
+                "Film photos only: upscaled, with finer grain",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 88.dp),
+            )
         }
     }
 }

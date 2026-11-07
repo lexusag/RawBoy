@@ -197,7 +197,7 @@ export function ControlsPanel({
                 </label>
                 {params.lut && <Note>Your LUT is off while Film is on; it returns with another tone mapper.</Note>}
                 {slider('Film strength', 'filmAmount', 0, 100, formatPlain, 100)}
-                {slider('Film grain', 'filmGrain', 0, 200, formatPlain, 100)}
+                {slider('Film grain', 'filmGrain', 0, 200, formatPlain, 75)}
                 {slider('Halation', 'halation', 0, 200, formatPlain, 100)}
               </>
             )}

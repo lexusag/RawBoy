@@ -57,6 +57,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -113,6 +114,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.runtime.State
+import kotlinx.coroutines.coroutineScope
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
@@ -151,6 +157,7 @@ fun CameraScreen(
     vm: CameraViewModel,
     requestPermission: () -> Unit,
     requestLocation: () -> Unit,
+    requestAudio: () -> Unit,
     openPhoto: (Uri) -> Unit,
     openQr: (QrPayload) -> Unit,
 ) {
@@ -166,14 +173,21 @@ fun CameraScreen(
     val lenses by vm.lenses.collectAsStateWithLifecycle()
     val frontAvailable by vm.frontAvailable.collectAsStateWithLifecycle()
     val focusPoint by vm.focusPoint.collectAsStateWithLifecycle()
+    val zoom by vm.zoom.collectAsStateWithLifecycle()
     val dragPoint by vm.dragPoint.collectAsStateWithLifecycle()
     val tracking by vm.tracking.collectAsStateWithLifecycle()
     val focusSize by vm.controller.focusSize.collectAsStateWithLifecycle()
     val flashAvailable by vm.flashAvailable.collectAsStateWithLifecycle()
+    val screenFlashCamera by vm.screenFlashCamera.collectAsStateWithLifecycle()
+    val screenFlashLit by vm.screenFlashLit.collectAsStateWithLifecycle()
     val hiRes by vm.hiRes.collectAsStateWithLifecycle()
     val histogram by vm.histogram.collectAsStateWithLifecycle()
+    val tilt by vm.tilt.collectAsStateWithLifecycle()
     val lowLight by vm.lowLight.collectAsStateWithLifecycle()
     val qrCode by vm.qrCode.collectAsStateWithLifecycle()
+    val videoMode by vm.videoMode.collectAsStateWithLifecycle()
+    val recordingMs by vm.recordingMs.collectAsStateWithLifecycle()
+    val videoSink by vm.videoSink.collectAsStateWithLifecycle()
     // Only the AF state of the camera's per-frame metadata, so the screen doesn't recompose 30 times a second.
     val afState by remember(vm) { vm.controller.frames.map { it?.afState }.distinctUntilChanged() }
         .collectAsStateWithLifecycle(null)
@@ -188,6 +202,10 @@ fun CameraScreen(
     // Turned sideways the UI turns with the window, the viewfinder picture stays put on the glass.
     val displayRotation = rememberDisplayRotation()
     val turns = viewfinderTurns(displayRotation)
+    // A recording started sideways is a landscape file.
+    LaunchedEffect(turns) { vm.displayTurns = turns }
+    // Video wants the microphone: asked when the mode is first switched on.
+    LaunchedEffect(videoMode) { if (videoMode && !vm.hasAudioPermission()) requestAudio() }
     // The volume keys don't shoot while a sheet is open.
     LaunchedEffect(showSettings, showHelp) { vm.settingsOpen = showSettings || showHelp }
 
@@ -218,6 +236,7 @@ fun CameraScreen(
     // A Surface, so text and icons get the theme's light content colour on black.
     Surface(color = Color.Black, contentColor = Color.White) {
     Box(Modifier.fillMaxSize()) {
+        ScreenFlashEffect(screenFlashLit)
         // Portrait: the bar, viewfinder, controls and shutter row stacked. Landscape (the phone turned sideways):
         // the bar's buttons in a column at the left, the viewfinder, then the S/B/W picker with one tall slider and
         // the shutter column at the right edge, all under the right thumb.
@@ -228,14 +247,18 @@ fun CameraScreen(
         ) {
         val landscape = maxWidth > maxHeight
         val statusText = when {
+            recordingMs != null -> "● " + formatRecordingTime(recordingMs ?: 0L)
             merging -> "Merging frames…"
             pending > 0 -> "Saving $pending…"
             else -> ""
         }
         val barButtons = @Composable {
-            RawButton(settings.keepDng) { vm.setKeepDng(!settings.keepDng) }
-            BurstButton(settings.burstMode, lowLight, hiRes, flashAvailable && settings.flash != FlashMode.OFF) { vm.setBurstMode(settings.burstMode.next()) }
-            if (flashAvailable) FlashButton(settings.flash, vm::cycleFlash)
+            if (settings.experimental) VideoModeButton(videoMode, enabled = recordingMs == null) { vm.setVideoMode(!videoMode) }
+            if (!videoMode) {
+                RawButton(settings.keepDng) { vm.setKeepDng(!settings.keepDng) }
+                BurstButton(settings.burstMode, lowLight, hiRes, flashAvailable && settings.flash != FlashMode.OFF) { vm.setBurstMode(settings.burstMode.next()) }
+                if (flashAvailable) FlashButton(settings.flash, screenFlashCamera, vm::cycleFlash)
+            }
             HelpButton(appName, CAMERA_HELP, onOpenChange = { showHelp = it })
             IconButton(onClick = { showSettings = true }) {
                 Icon(Icons.Filled.Settings, contentDescription = "Settings")
@@ -259,6 +282,8 @@ fun CameraScreen(
         val shutterButton = @Composable {
             Shutter(
                 enabled = status == CameraStatus.READY && !merging,
+                video = videoMode,
+                recording = recordingMs != null,
                 onClick = vm::shutter,
                 modifier = Modifier.graphicsLayer {
                     scaleX = shutterScale.value
@@ -364,7 +389,13 @@ fun CameraScreen(
                         // Only while a tap's focus may be tracked: the copies cost nothing otherwise.
                         onTrackLuma = if (settings.trackFocus && focusPoint != null) vm::onTrackLuma else null,
                         turns = turns,
+                        zoom = zoom,
+
+                        videoSink = videoSink,
+                        videoMode = videoMode,
                     )
+                    // Video is a 16:9 (or 9:16) slice of the 4:3 viewfinder: shade what the file will not have.
+                    if (videoMode) VideoFrameMask(if (turns % 2 == 1) 16f / 9f else 9f / 16f)
                     // Taps, the focus handle, ring and loupe work in the upright picture's coordinates, turned with it.
                     Box(
                         Modifier
@@ -375,6 +406,20 @@ fun CameraScreen(
                         Box(
                             Modifier
                                 .matchParentSize()
+                                // Pinch: two fingers zoom (the tap and hold below only see a single finger).
+                                .pointerInput(Unit) {
+                                    awaitEachGesture {
+                                        awaitFirstDown(requireUnconsumed = false)
+                                        do {
+                                            val event = awaitPointerEvent()
+                                            if (event.changes.count { it.pressed } >= 2) {
+                                                val change = event.calculateZoom()
+                                                if (change != 1f) vm.setZoom(vm.zoom.value * change)
+                                                event.changes.forEach { it.consume() }
+                                            }
+                                        } while (event.changes.any { it.pressed })
+                                    }
+                                }
                                 .pointerInput(Unit) {
                                     detectTapGestures(
                                         // Tap: focus lock at that point (a new tap moves it; the AF LOCK badge releases it).
@@ -413,6 +458,14 @@ fun CameraScreen(
                                 .padding(bottom = 16.dp),
                         )
                     }
+                    // Big buttons and a big readout, above the lens selector (beside the shutter row in landscape).
+                    ZoomControl(
+                        zoom = zoom,
+                        onZoom = vm::setZoom,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = if (lenses.size > 1 && !landscape) 84.dp else 16.dp),
+                    )
                     // Above the lens selector, out of the way of the focus ring and the top badges.
                     qrCode?.let { code ->
                         QrChip(
@@ -421,7 +474,7 @@ fun CameraScreen(
                             onDismiss = vm::dismissQr,
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
-                                .padding(start = 16.dp, end = 16.dp, bottom = if (lenses.size > 1 && !landscape) 84.dp else 16.dp),
+                                .padding(start = 16.dp, end = 16.dp, bottom = (if (lenses.size > 1 && !landscape) 84.dp else 16.dp) + 132.dp),
                         )
                     }
                     Box(Modifier.matchParentSize().turned(turns)) {
@@ -453,6 +506,8 @@ fun CameraScreen(
                             )
                         }
                     }
+                    if (settings.showGrid) GridOverlay(Modifier.matchParentSize())
+                    if (settings.showLevel) LevelOverlay(tilt, Modifier.matchParentSize())
                     // Shutter blink over the viewfinder.
                     if (blink.value > 0f) {
                         Box(
@@ -568,6 +623,8 @@ fun CameraScreen(
             },
         )
         }
+        // Screen flash (selfie camera): the lit frame over the whole screen, under the snackbar.
+        if (screenFlashLit) ScreenFlashFrame(Modifier.matchParentSize())
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter))
     }
     }
@@ -616,6 +673,114 @@ private fun QrChip(code: QrPayload, onOpen: () -> Unit, onDismiss: () -> Unit, m
         }
     }
 }
+
+/**
+ * Digital zoom 1-10x for seeing something far away: a readout of the zoom (tap it to go back to 1x), large − and +
+ * buttons (hold to keep zooming) and preset steps, all with 56 dp touch targets. Pinching the viewfinder zooms too.
+ */
+@Composable
+private fun ZoomControl(zoom: Float, onZoom: (Float) -> Unit, modifier: Modifier = Modifier) {
+    val current = rememberUpdatedState(zoom)
+    val setZoom = rememberUpdatedState(onZoom)
+    val label = zoomLabel(zoom)
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            Modifier.clip(RoundedCornerShape(32.dp)).background(Color(0xB3000000)).padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ZoomStepButton("−", "Zoom out", -1, current, setZoom)
+            Box(
+                Modifier
+                    .size(width = 88.dp, height = 56.dp)
+                    .clip(RoundedCornerShape(28.dp))
+                    .clickable(role = Role.Button, onClickLabel = "Reset to 1x") { onZoom(1f) }
+                    .semantics { contentDescription = "Zoom $label times"; stateDescription = "$label times" },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(label + "×", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold), color = Color.White)
+            }
+            ZoomStepButton("+", "Zoom in", 1, current, setZoom)
+        }
+        Row(
+            Modifier.clip(RoundedCornerShape(28.dp)).background(Color(0x99000000)).padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            for (step in ZOOM_PRESETS) {
+                val isSelected = kotlin.math.abs(zoom - step) < 0.05f
+                Box(
+                    Modifier
+                        .size(width = 56.dp, height = 48.dp)
+                        .clip(CircleShape)
+                        .background(if (isSelected) Color(0xFFD0D0D0) else Color.Transparent)
+                        .clickable(role = Role.Button) { onZoom(step) }
+                        .semantics { this.selected = isSelected; contentDescription = "Zoom ${step.toInt()} times" },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "${step.toInt()}×",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (isSelected) Color.Black else Color.White,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** − or +: a tap zooms by [ZOOM_TAP_FACTOR], holding keeps zooming smoothly. */
+@Composable
+private fun ZoomStepButton(
+    text: String,
+    description: String,
+    direction: Int,
+    current: State<Float>,
+    onZoom: State<(Float) -> Unit>,
+) {
+    Box(
+        Modifier
+            .size(56.dp)
+            .clip(CircleShape)
+            .background(Color(0x40FFFFFF))
+            .pointerInput(direction) {
+                detectTapGestures(
+                    onPress = {
+                        val factor = if (direction > 0) ZOOM_TAP_FACTOR else 1f / ZOOM_TAP_FACTOR
+                        onZoom.value(current.value * factor)
+                        coroutineScope {
+                            val hold = launch {
+                                delay(ZOOM_HOLD_DELAY_MS)
+                                while (true) {
+                                    onZoom.value(current.value * if (direction > 0) ZOOM_HOLD_FACTOR else 1f / ZOOM_HOLD_FACTOR)
+                                    delay(ZOOM_HOLD_TICK_MS)
+                                }
+                            }
+                            tryAwaitRelease()
+                            hold.cancel()
+                        }
+                    },
+                )
+            }
+            .semantics(mergeDescendants = true) {
+                role = Role.Button
+                contentDescription = description
+                onClick(label = description) { onZoom.value(current.value * if (direction > 0) ZOOM_TAP_FACTOR else 1f / ZOOM_TAP_FACTOR); true }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text, style = MaterialTheme.typography.headlineMedium, color = Color.White)
+    }
+}
+
+/** "1", "2.5", "10": one decimal below 10x. */
+private fun zoomLabel(zoom: Float): String =
+    if (zoom >= 9.95f) "10" else String.format(java.util.Locale.US, "%.1f", zoom).removeSuffix(".0")
+
+private val ZOOM_PRESETS = listOf(1f, 2f, 5f, 10f)
+private const val ZOOM_TAP_FACTOR = 1.25f
+private const val ZOOM_HOLD_FACTOR = 1.04f
+private const val ZOOM_HOLD_DELAY_MS = 300L
+private const val ZOOM_HOLD_TICK_MS = 30L
 
 /** UW · W · T, as Google Camera shows them: the selected lens in a filled circle. */
 @Composable
@@ -771,18 +936,62 @@ private fun loupeAt(x: Float, y: Float, view: IntSize, side: Float, gap: Float):
 }
 
 @Composable
-private fun Shutter(enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun Shutter(enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, video: Boolean = false, recording: Boolean = false) {
     val ring = if (enabled) Color.White else Color.Gray
+    // Video: a red dot, which becomes a red square while recording.
+    val fill = if (!video) ring else if (enabled) Color(0xFFE53935) else Color.Gray
+    val shape = if (recording) RoundedCornerShape(8.dp) else CircleShape
     Box(
         modifier
             .size(76.dp)
             .border(BorderStroke(4.dp, ring), CircleShape)
-            .padding(8.dp)
-            .clip(CircleShape)
-            .background(ring)
-            .clickable(enabled = enabled, onClickLabel = "Take a photo", role = Role.Button, onClick = onClick)
-            .semantics { contentDescription = "Shutter" },
+            .padding(if (recording) 20.dp else 8.dp)
+            .clip(shape)
+            .background(fill)
+            .clickable(
+                enabled = enabled,
+                onClickLabel = if (!video) "Take a photo" else if (recording) "Stop recording" else "Start recording",
+                role = Role.Button,
+                onClick = onClick,
+            )
+            .semantics { contentDescription = if (video) "Record" else "Shutter" },
     )
+}
+
+/** Dims the parts of the viewfinder outside the video's [target] aspect (width / height as the window shows it). */
+@Composable
+private fun VideoFrameMask(target: Float) {
+    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+        val shade = Color.Black.copy(alpha = 0.55f)
+        val a = size.width / size.height
+        if (a > target) {
+            val bar = (size.width - size.height * target) / 2f
+            drawRect(shade, androidx.compose.ui.geometry.Offset.Zero, androidx.compose.ui.geometry.Size(bar, size.height))
+            drawRect(shade, androidx.compose.ui.geometry.Offset(size.width - bar, 0f), androidx.compose.ui.geometry.Size(bar, size.height))
+        } else {
+            val bar = (size.height - size.width / target) / 2f
+            drawRect(shade, androidx.compose.ui.geometry.Offset.Zero, androidx.compose.ui.geometry.Size(size.width, bar))
+            drawRect(shade, androidx.compose.ui.geometry.Offset(0f, size.height - bar), androidx.compose.ui.geometry.Size(size.width, bar))
+        }
+    }
+}
+
+/** Photo / video switch in the top bar: "VIDEO", lit while video mode is on. */
+@Composable
+private fun VideoModeButton(on: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.semantics { stateDescription = if (on) "On" else "Off" }) {
+        Text(
+            "VIDEO",
+            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+            color = if (on) MaterialTheme.colorScheme.primary else LocalContentColor.current.copy(alpha = 0.6f),
+            modifier = Modifier.semantics { contentDescription = "Video mode" },
+        )
+    }
+}
+
+private fun formatRecordingTime(ms: Long): String {
+    val total = ms / 1000
+    return "%02d:%02d".format(total / 60, total % 60)
 }
 
 /**
@@ -999,6 +1208,13 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
         )
         Spacer(Modifier.height(16.dp))
         SettingSwitch(
+            title = "HDR gain map",
+            subtitle = "Save Ultra HDR JPEGs: the same picture, with extra highlight range for HDR screens. Off by default",
+            checked = settings.hdrGainMap,
+            onChange = vm::setHdrGainMap,
+        )
+        Spacer(Modifier.height(16.dp))
+        SettingSwitch(
             title = "QR codes",
             subtitle = "Show what a QR code in the viewfinder holds; tap to open the link, join the Wi-Fi or copy the text",
             checked = settings.scanQr,
@@ -1010,6 +1226,27 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             subtitle = "Focus follows what you tapped as it moves; back to autofocus when it's lost",
             checked = settings.trackFocus,
             onChange = vm::setTrackFocus,
+        )
+        Spacer(Modifier.height(16.dp))
+        SettingSwitch(
+            title = "Experimental features",
+            subtitle = "Features still being tested: video mode (a VIDEO button in the top bar)",
+            checked = settings.experimental,
+            onChange = vm::setExperimental,
+        )
+        Spacer(Modifier.height(16.dp))
+        SettingSwitch(
+            title = "Grid",
+            subtitle = "A 3 x 3 grid over the viewfinder to line up the frame",
+            checked = settings.showGrid,
+            onChange = vm::setShowGrid,
+        )
+        Spacer(Modifier.height(16.dp))
+        SettingSwitch(
+            title = "Level",
+            subtitle = "A line over the viewfinder that turns yellow when the phone is straight",
+            checked = settings.showLevel,
+            onChange = vm::setShowLevel,
         )
         Spacer(Modifier.height(16.dp))
         SettingSwitch(
@@ -1097,12 +1334,16 @@ private fun BurstButton(mode: BurstMode, lowLight: Boolean, hiRes: Boolean, flas
     }
 }
 
-/** Off <-> Focus-flash (the bolt with "AF": the light comes on to focus and meter first, then the flash fires). */
+/**
+ * Off <-> Focus-flash (the bolt with "AF": the light comes on to focus and meter first, then the flash fires). On the
+ * selfie camera, which has no flash unit: Off <-> screen flash (the bolt alone; the screen's frame lights for the shot).
+ */
 @Composable
-private fun FlashButton(mode: FlashMode, onClick: () -> Unit) {
-    val description = when (mode) {
-        FlashMode.OFF -> "Flash off"
-        FlashMode.FOCUS_FLASH -> "Flash with focus light"
+private fun FlashButton(mode: FlashMode, screen: Boolean, onClick: () -> Unit) {
+    val description = when {
+        mode == FlashMode.OFF -> "Flash off"
+        screen -> "Screen flash"
+        else -> "Flash with focus light"
     }
     IconButton(onClick = onClick) {
         Box {
@@ -1111,7 +1352,7 @@ private fun FlashButton(mode: FlashMode, onClick: () -> Unit) {
                 contentDescription = description,
                 tint = if (mode == FlashMode.OFF) LocalContentColor.current else MaterialTheme.colorScheme.primary,
             )
-            if (mode == FlashMode.FOCUS_FLASH) {
+            if (mode == FlashMode.FOCUS_FLASH && !screen) {
                 Text(
                     "AF",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp, lineHeight = 8.sp),
@@ -1393,3 +1634,77 @@ private fun FilterColumn(selected: BwFilter, onSelect: (BwFilter) -> Unit) {
         }
     }
 }
+
+/**
+ * Screen flash for the selfie camera: while [lit], the window goes to full brightness (see [ScreenFlashFrame], drawn on
+ * top by [CameraScreen]).
+ */
+@Composable
+private fun ScreenFlashEffect(lit: Boolean) {
+    val activity = LocalContext.current.findActivity() ?: return
+    androidx.compose.runtime.DisposableEffect(lit) {
+        val attrs = activity.window.attributes
+        val before = attrs.screenBrightness
+        if (lit) activity.window.attributes = attrs.apply { screenBrightness = 1f }
+        onDispose { if (lit) activity.window.attributes = activity.window.attributes.apply { screenBrightness = before } }
+    }
+}
+
+private tailrec fun android.content.Context.findActivity(): android.app.Activity? = when (this) {
+    is android.app.Activity -> this
+    is android.content.ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
+/** The lit frame of the screen flash: warm white all around the screen edge, the viewfinder showing through the middle. */
+@Composable
+private fun ScreenFlashFrame(modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier) {
+        val t = min(size.width, size.height) * SCREEN_FLASH_FRAME_SHARE
+        val c = SCREEN_FLASH_COLOUR
+        drawRect(c, topLeft = androidx.compose.ui.geometry.Offset.Zero, size = Size(size.width, t))
+        drawRect(c, topLeft = androidx.compose.ui.geometry.Offset(0f, size.height - t), size = Size(size.width, t))
+        drawRect(c, topLeft = androidx.compose.ui.geometry.Offset(0f, t), size = Size(t, size.height - 2 * t))
+        drawRect(c, topLeft = androidx.compose.ui.geometry.Offset(size.width - t, t), size = Size(t, size.height - 2 * t))
+    }
+}
+
+/** Frame width as a share of the screen's short side; a wide frame is the light, the middle is still enough to compose. */
+private const val SCREEN_FLASH_FRAME_SHARE = 0.2f
+private val SCREEN_FLASH_COLOUR = Color(0xFFFFF4E6)
+
+/** Thin lines at the thirds of the viewfinder; they take no touches. */
+@Composable
+private fun GridOverlay(modifier: Modifier = Modifier) {
+    Canvas(modifier) {
+        val line = Color.White.copy(alpha = 0.45f)
+        val w = 1.dp.toPx()
+        for (i in 1..2) {
+            drawLine(line, Offset(size.width * i / 3f, 0f), Offset(size.width * i / 3f, size.height), w)
+            drawLine(line, Offset(0f, size.height * i / 3f), Offset(size.width, size.height * i / 3f), w)
+        }
+    }
+}
+
+/**
+ * A horizon line through the middle of the viewfinder, turned against the phone's tilt ([tilt] degrees clockwise from
+ * upright, null when flat: nothing is drawn). Yellow within [LEVEL_TOLERANCE] degrees of straight, with a short fixed
+ * mark each side to compare it with.
+ */
+@Composable
+private fun LevelOverlay(tilt: Float?, modifier: Modifier = Modifier) {
+    if (tilt == null) return
+    Canvas(modifier) {
+        val level = kotlin.math.abs(tilt) <= LEVEL_TOLERANCE
+        val colour = if (level) Color(0xFFFFD54F) else Color.White.copy(alpha = 0.7f)
+        val c = Offset(size.width / 2f, size.height / 2f)
+        val half = minOf(size.width, size.height) * 0.22f
+        val w = 2.dp.toPx()
+        // Fixed marks at the sides, the line itself turns.
+        drawLine(colour.copy(alpha = 0.5f), Offset(c.x - half * 1.5f, c.y), Offset(c.x - half * 1.25f, c.y), w)
+        drawLine(colour.copy(alpha = 0.5f), Offset(c.x + half * 1.25f, c.y), Offset(c.x + half * 1.5f, c.y), w)
+        rotate(-tilt, c) { drawLine(colour, Offset(c.x - half, c.y), Offset(c.x + half, c.y), w) }
+    }
+}
+
+private const val LEVEL_TOLERANCE = 1f

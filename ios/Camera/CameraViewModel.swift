@@ -1,4 +1,5 @@
 import AVFoundation
+import CoreMotion
 import Foundation
 import os
 import Photos
@@ -57,6 +58,12 @@ final class CameraViewModel: ObservableObject {
     @Published private(set) var aspect: CGFloat = 3.0 / 4.0
     /** RGB levels of the live develop (settings.showHistogram), nil when off or before the first one. */
     @Published private(set) var histogram: Histogram?
+    /**
+     * How far the phone is turned clockwise from the nearest upright (portrait or landscape), -45...45 degrees, for the
+     * level line; nil while the level is off or the phone lies flat.
+     */
+    @Published private(set) var tilt: Double?
+    private let motion = CMMotionManager()
     /** The QR code in the viewfinder (settings.scanQr), or nil. */
     @Published private(set) var qrCode: QrPayload?
     private var qrTracker = QrTracker()
@@ -127,6 +134,7 @@ final class CameraViewModel: ObservableObject {
 
     init() {
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
+        if settings.showLevel { startTilt() }
         controller.onFrame = { [renderer, subject] buffer in
             renderer.enqueue(buffer)
             let frame = renderer.frame
@@ -510,6 +518,35 @@ final class CameraViewModel: ObservableObject {
     func setSmallExport(_ on: Bool) { change { $0.smallExport = on } }
     func setRememberLast(_ on: Bool) { change { $0.rememberLast = on } }
     func setShutterSound(_ on: Bool) { change { $0.shutterSound = on } }
+    func setShowGrid(_ on: Bool) { change { $0.showGrid = on } }
+    func setShowLevel(_ on: Bool) {
+        change { $0.showLevel = on }
+        if on { startTilt() } else { stopTilt() }
+    }
+
+    private func startTilt() {
+        guard motion.isAccelerometerAvailable, !motion.isAccelerometerActive else { return }
+        motion.accelerometerUpdateInterval = 1.0 / 20
+        motion.startAccelerometerUpdates(to: .main) { [weak self] data, _ in
+            guard let self, let a = data?.acceleration else { return }
+            // Gravity along the screen's axes: flat on a table (z dominates) there is no horizon to show.
+            if abs(a.z) > 0.9 {
+                if self.tilt != nil { self.tilt = nil }
+                return
+            }
+            // Portrait upright: gravity is -y. Turned clockwise, it moves to +x.
+            let degrees = atan2(a.x, -a.y) * 180 / .pi
+            // Whole degrees from the nearest upright: the line doesn't need finer, and the screen isn't redrawn for noise.
+            let off = ((degrees + 405).truncatingRemainder(dividingBy: 90) - 45).rounded()
+            if self.tilt != off { self.tilt = off }
+        }
+    }
+
+    private func stopTilt() {
+        motion.stopAccelerometerUpdates()
+        tilt = nil
+    }
+
     func setShowHistogram(_ on: Bool) {
         change { $0.showHistogram = on }
         if !on { histogram = nil }
@@ -729,7 +766,8 @@ final class CameraViewModel: ObservableObject {
                     var params = s.develop(a.autoBase, hasFace: a.stats.hasFace)
                     // High ISO: more denoise than the auto develop's table, up to the coarse stage (denoise > 65).
                     params.denoise = max(params.denoise, Self.highIsoDenoise(a.stats.iso * noiseScale))
-                    params.colorDenoise = Self.measuredColorDenoise(img, exposure: params.exposure, denoise: params.denoise)
+                    params.colorDenoise = max(Self.measuredColorDenoise(img, exposure: params.exposure, denoise: params.denoise) ?? params.denoise,
+                                              params.colorDenoise ?? 0)
                     params.shadows = max(params.shadows, Self.backlightShadows(a.stats))
                     let shader = ShaderParams.from(params, asShot: a.defaults, lut: lut,
                                                    lens: LensTransform(info: img.lens, params: params), base: a.base,

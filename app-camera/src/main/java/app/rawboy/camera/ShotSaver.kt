@@ -351,7 +351,7 @@ internal object ShotSaver {
             val denoise = maxOf(looked.denoise, highIsoDenoise(a.stats.iso * noiseScale))
             val params = looked.copy(
                 denoise = denoise,
-                colorDenoise = measuredColorDenoise(img, looked.exposure, denoise),
+                colorDenoise = maxOf(measuredColorDenoise(img, looked.exposure, denoise) ?: denoise, looked.colorDenoise ?: 0f),
                 shadows = maxOf(looked.shadows, backlightShadows(a.stats)),
             )
             val lut = params.lut?.let { loadLut(app, it) }
@@ -366,6 +366,7 @@ internal object ShotSaver {
                 jpegEncoder = JpegEncoder.JPEGLI,
                 maxLongSide = s.maxLongSide,
                 downscaleSharpen = CameraSettings.SMALL_SHARPEN,
+                hdrGainMap = s.hdrGainMap,
             )
             Log.d(TAG, "${shot.name}: decode $decodeMs ms, analysis $analysisMs ms")
             return Prepared(app, shot, img, shader, export, a.stats.key, a.autoBase.exposure, started)

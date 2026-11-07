@@ -2,7 +2,71 @@
 
 - A Packer Small raw (lossy JPEG XL, decoded by the DNG SDK) opened a stop or more brighter in RawBoy and RawBoy Auto than the same photo's original or Lossless DNG (LibRaw): LibRaw normalises its white balance multipliers to the largest, the SDK path left green at 1 (a Pixel 9 Pro's blue multiplier is 2). Auto's exposure, histogram stats and highlight clip level now match. Host test `tools/dng_decode_test/run.sh`.
 
+**RawBoy Camera (Android): optional HDR gain map in the JPEG (2026-11-07)**
+
+- New Settings switch **HDR gain map**, off by default. On, each JPEG is an Ultra HDR JPEG: the SDR picture exactly as before, plus a gain map (MPF second image, XMP `hdrgm`, ISO 21496-1) that lets HDR screens show highlights up to 2 stops brighter. Viewers without gain map support show the plain picture; Film, B&W and LUT looks are unchanged because the SDR picture is untouched.
+- The gain map comes from the finished SDR picture, not from the scene: one channel (Rec.709 luma of the display-encoded pixels), zero below 0.75, easing up to the full 2 stops at white, averaged over 4 x 4 pixels and saved as a grayscale jpegli JPEG (about 1/4 size per side). It expands the tone mapper's highlight shoulder; it does not recover detail the SDR picture lost. A picture with nothing bright enough (peak gain below 3/255) stays a plain JPEG. If building the container fails, the plain JPEG is written.
+- `engine/src/main/cpp/ultrahdr.h` (container, metadata and gain map; header-only), `JpegNative.beginGainMap`, `ExportSettings.hdrGainMap`. Host test of the container: `tools/ultrahdr/run.sh` (reads it back the way `decoder_display.cpp` does: MPF offsets, XMP, ISO 21496-1 fields).
+- Not yet checked on a device or in a viewer: the Android build was not run for this change (no SDK in the sandbox), only the container on the host and `jpeg_jpegli.cpp` against a stub header. Knee 0.75 and 2 stops are first guesses (`kKnee`, `kHeadroomEv`). The setting is Android only; iOS and the other apps are unchanged.
+
+**RawBoy Camera (Android): video mode prototype (2026-11-07)**
+
+- Hidden behind Settings › Experimental features (off by default). New VIDEO button in the top bar. In video mode the shutter (and the volume buttons) start and stop a recording: 1080p, 30 fps, H.264, stereo AAC, saved to `Movies/RawBoy Camera/VID_<date>_<time>-camera.mp4`. Pixel 9 Pro only for now; Android only.
+- The file is what the viewfinder shows: the develop pass (look, Film or B&W stock, Strength, Brightness, Warmth) is drawn a second time into the encoder's input surface, cropped to 16:9 (the viewfinder is 4:3; the cut-off parts are darkened in video mode). A phone held sideways records a landscape file.
+- Film grain is seeded by position only for photos, which in a video would be a frozen pattern: `uGrainFrame` (video only, 0 for photos) folds a frame counter into the grain seeds in `develop.glsl` and `film_form.glsl`.
+- The live exposure eases at most 0.05 EV per update in video mode (0.3 for photos) so the recording doesn't pump. Skin retouch, the ISO-based wavelet denoise and sharpening are photo-only. The camera session is the photo one (no video stabilisation, lens or camera can't change while recording).
+- Untested on a device when added; thermal and 30 fps headroom with Film on still to be measured (logcat tag `RawBoyViewfinder`, `RawBoyVideo`).
+
+**RawBoy Camera: punchier Natural and plain LUT looks, stronger colour denoise (2026-11-07)**
+
+- Natural and the plain LUT looks (not Film, B&W or the Experimental looks) now start with Contrast +6 and Saturation +8 on top of the auto develop. Camera only: Auto and Pro's Auto button keep their base.
+- The colour-denoise floor for those looks goes from 35 to 70, which reaches the shader's coarse chroma stage: chroma mottle in a Natural shadow patch (Pixel stage DNG, σ10 chroma std) 3.95 → 2.55. 100 gave 1.34 but faded colour at edges. Experimental looks keep luma 22 / colour 70.
+- Redscale's blocky shadow noise stays as it is (owner's call): it is mostly luma noise amplified by the LUT's red ramp (gain ~2.5-3.5 between input 32 and 100), so colour denoise barely helps (chroma std 5.06 → 4.33 at 100); luma floors of 40/70 cut about 20%, a gentler red ramp about 25% but darker. Android and iOS, tuned through the web develop on Pixel DNGs; not yet checked on device.
+
+**RawBoy Camera: cleaner shadows in non-Film looks (2026-11-07)**
+
+- Colour looks outside Film mode (LUT looks, Natural, Redscale and the other Experimental looks) had noisy shadows, Redscale with ugly blocky colour blotches: they have no film grain or scatter to hide it, and the LUT steepens the shadows (Redscale about 4x). Camera now floors the shot's denoise for them: luma 12 and colour 35, and for Experimental looks luma 22 and colour 70 (reaching the shader's coarse colour stage). Film and B&W are unchanged. Android and iOS. Values are first guesses, not yet checked on device.
+
+**RawBoy Packer: Small raw back to Maximum compatibility no longer washed out (2026-11-07)**
+
+- A lossy JPEG XL DNG (Small raw) packed again as Lossless came out washed out and magenta in Apple Photos and other software that ignores OpcodeList2 in a DNG 1.4 file: the lossy mosaic's non-linear encoding was kept, with the MapPolynomial that undoes it. The Packer now applies the list to the pixels, so the file holds ordinary linear raw data. Checked on the Pixel and GFX 50R Small raws; host test `tools/dng_pack_test/run.sh`.
+
 # Changelog
+
+**RawBoy Camera (Android): digital zoom up to 10x for seeing far away (2026-11-07)**
+
+- A zoom control above the lens buttons: a large readout (tap it for 1x), 56 dp − and + buttons (a tap steps 1.25x, holding zooms smoothly) and 1x / 2x / 5x / 10x presets; pinching the viewfinder zooms too. It is a GPU crop of the centre of the camera frame in the viewfinder's first pass (`ViewfinderRenderer.zoom`), so it is smooth, works on every lens, and the live develop, histogram and QR reader see the zoomed picture. Focus taps are mapped back to the unzoomed frame, and a zoom change releases an AF lock.
+- View only: photos and DNGs are still the whole frame, and the zoom is not saved between launches. Made for people with poor eyesight, so the viewfinder comes first; cropping the saved photo to match, hardware zoom for the first steps, and iOS are not done. Android code is not compiled or run (no SDK in the session): check on a Pixel 9 Pro.
+
+**RawBoy Auto and Pro: 25% less Film grain by default (2026-11-07)**
+
+- Film mode's default grain is 25% lower: Auto's film looks start at 60% of the stock's grain (was 80%) and Pro's Film grain slider defaults to 75 (was 100). Android, iOS and web. Slider ranges and photos' saved edits are unchanged. RawBoy Camera keeps its film grain at 80 (its film looks no longer follow Auto's value). Not yet checked on a device.
+
+**RawBoy Camera: Grid and Level options, off by default (2026-11-07)**
+
+- Two new Settings switches: Grid (a 3 x 3 grid over the viewfinder) and Level (a line that turns against the phone's tilt and goes yellow within 1 degree of straight; nothing is drawn with the phone flat). Both are off by default and nothing changes for current users. Android and iOS. Not yet checked on a device.
+
+**RawBoy Camera (Android): selfie flash with a lit frame (2026-11-07)**
+
+- The selfie camera gets the flash button: on the shutter the screen goes to full brightness with a wide warm-white frame around the viewfinder, and the shot is taken after a short settle (450 ms) so AE sees the light. Single frame, no burst merging, no preview calibration from it.
+- Android code is not compiled or run (no SDK in the session); the frame width (20% of the short side) and the settle time are first guesses to check on a Pixel 9 Pro.
+
+**RawBoy Camera: flash exposure at zoom (2026-11-07)**
+
+- Flash shots on the zoom (telephoto) lenses and farther subjects came out too dark while the main lens at arm's length was right. Two causes, both addressed: a lens that hasn't learned its own flash guide now starts from the default scaled by its aperture (f-number² against the main lens's f/1.7: a f/2.8 tele gets ~2.7x the gain), and beyond 1 m the exposure grows slightly faster than distance² (extra exponent 0.3: +0.3 EV at 2 m, +0.6 EV at 4 m) because the guide is learned on near subjects. Learned per-lens guides keep working (calibration divides by the same falloff). Android only; the iPhone's flash is metered by iOS. Values are first estimates, not yet checked on device; the log line `flash exposure:` shows the result.
+
+**RawBoy Pro and Auto: Film scan 1.5× export (2026-11-07)**
+
+- Export option **Film scan 1.5×** (Android and web; iOS not ported yet), shown only for Film mode (Pro's Film tone mapper, Auto's Film looks). Renders the photo 1.5× larger: iterative back-projection upscale plus a light luma sharpen before the grain, then the film grain at the finer pitch (print-size grain matched, `SCAN_GRAIN`). The Size setting is ignored for a scan. New pre-pass shader `shaders/scan.frag`.
+- Android code is not compiled or run yet; the web build is tested in headless Chromium.
+
+**RawBoy: bundled Film Flash look across Camera, Auto, and Pro (2026-11-06)**
+
+- Added the "Film Flash" look across RawBoy Camera, RawBoy Auto, and RawBoy Pro, bundled as `luts/Film Flash.cube`.
+- Modeled on 35mm color negative film scanned on a Noritsu HS-1800 minilab scanner under flash: pure cadmium red dye saturation (suppressing green/blue sensor leakage), warm glowing peach skin tones, and Noritsu contrast curve with smooth highlight rolloff at standard exposure.
+- RawBoy Camera: available in the look dropdown under the viewfinder.
+- RawBoy Auto & Pro: available in Auto's look picker and Pro's LUT selector under the Color section.
+- Added reproducible generator script in `tools/film_flash_luts/generate.py`.
 
 **RawBoy Packer: help menu and version display (2026-11-06)**
 
@@ -14,7 +78,8 @@
 
 - Detail tab: added fake anamorphic lens flare slider (0–100, off by default) with Neutral, Blue, and Golden coating tint options across Android, iOS, and Web.
 - Optical model scatters horizontal streaks from highlight-boosted light sources across the framed photo (remaining horizontal under rotation and straightening, and unchanged by crop).
-- Continuous bilinear taps along and across the streak (no texel snapping) keep the flare smooth instead of blocky and free of beading.
+- Continuous bilinear taps along and across the streak with per-texel knee evaluation keep the flare smooth and free of beading on specular highlights.
+- The flare shines brilliantly over light sources with an intense white core instead of dimming over highlights.
 - Flare threshold doubled (one EV above bloom's knee) so dimmer zones flare less; smoother needle and wing cross-profiles.
 - Presets and sidecars: saved under the Detail preset group and carries over between photos.
 

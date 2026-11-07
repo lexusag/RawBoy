@@ -60,6 +60,10 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
     pinned commits with its own Highway and libjpeg-turbo headers), 16-bit RGB in, 4:4:4. Separate .so with
     `--exclude-libs,ALL` because libjxl (DNG SDK path) bundles an older Highway. The DNG SDK's own
     `libjxl/lib/jpegli` is an unbuildable snapshot; don't try to use it.
+  - `ultrahdr.h` — Ultra HDR JPEG writing (Camera's **HDR gain map** setting, Android): `GainMapBuilder` makes a 1/4-size luma gain map from the
+    final 16-bit RGB rows (zero below luma 0.75, 2 EV at white: a guess, tune on a phone), `assemble` puts the XMP `hdrgm` + ISO 21496-1 + MPF segments around the SDR JPEG
+    and appends the gain map JPEG. `jpeg_jpegli.cpp`'s `beginGainMap` encodes the SDR picture into an `open_memstream` buffer and does that in `finish`
+    (any failure falls back to the plain JPEG). Host test: `tools/ultrahdr/run.sh` (the layouts mirror `decoder_display.cpp`'s reader).
 - `engine/src/main/java/app/rawboy/`
   - `gl/Shaders.kt` — assembles the develop shader (GLSL ES 3.00) from `shaders/`; `shaders/main_body.glsl` shows the stage order.
     Edit the `.glsl` files, never the generated `ShaderSources.kt`.
@@ -671,6 +675,11 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   got colour 0 and speckled shadows; measured 18-38. Luma noise was the owner's "good now": ask before changing it.
   Removing colour noise makes the remaining luma grain read a little stronger in Y (raw noise is anti-correlated across
   channels after the colour matrix), with the luma setting unchanged.
+  2026-11-07: non-Film colour looks get a colour floor of 70 (`CameraSettings.LUT_COLOR_DENOISE`, iOS `lutColorDenoise`; luma floor 12,
+  experimental looks 22/70) and Contrast +6 / Saturation +8 (`LOOK_CONTRAST`/`LOOK_SATURATION`, not Film, B&W or experimental). Redscale's
+  blocky shadow noise is luma noise times the LUT's red ramp (gain ~2.5-3.5), not colour noise: colour 100 gave 5.06 → 4.33 chroma std,
+  luma floor 70 about -20%; accepted as is. Harness: web develop in headless Chrome (`analyzeFile` + `developAuto` + the camera's
+  phone-AE lift and floors), shadow crops measured as σ10 high-pass std.
 - Colour denoise follows the lens shading (`colorNoiseScale` in develop.glsl): sigmaC × max(gain, 1)^0.75, gain = the
   decoder-applied DNG gain map (`uShading`, sensor coords, 1 without a map; luma not scaled). The Pixel's ISP shades
   low-ISO frames up to 3.4× in the corners but only 1.2-1.7× at high ISO, so low-ISO night corners had ~2× the centre's
@@ -693,7 +702,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   the raw** (Pixel 9 Pro): the AE precapture with AE_MODE_ON_ALWAYS_FLASH fires no pre-flash for third-party apps
   (FLASH_REQUIRED after 2 frames, ambient values unchanged) and the still keeps the ambient exposure, only the post-raw
   boost drops: 19% of the raw clipped at 0.4 m. So flash stills are manual (AE_MODE_OFF, boost 100, FLASH_MODE_SINGLE,
-  1/30 s): gain (s x ISO) = guide x distance² from `LENS_FOCUS_DISTANCE` (`flashExposure`), capped at the ambient gain;
+  1/30 s): gain (s x ISO) = guide x `flashFalloff`(distance) (distance², x max(1, d)^0.3 beyond 1 m) from `LENS_FOCUS_DISTANCE` (`flashExposure`); an unlearned guide defaults to the 16/4 defaults x (lens f-number / 1.7)², capped at the ambient gain;
   the guide is learned per lens (`CameraSettings.flashGuides`, `CameraViewModel.calibrateFlash`) from the auto
   develop's exposure, aiming +0.5 EV (dark raws recover, clipped ones don't). **Pixel 9 Pro UW reports LENS_FOCUS_DISTANCE 0 on
   every frame** (lens and logical result, even AF-locked at ~1 m; it claims APPROXIMATE calibration): exactly 0 = unknown,

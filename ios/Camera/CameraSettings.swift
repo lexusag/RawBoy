@@ -51,6 +51,10 @@ struct CameraSettings: Equatable {
     var rememberLast = false
     /** A live RGB histogram in a corner of the viewfinder. */
     var showHistogram = false
+    /** A 3 x 3 grid over the viewfinder (rule of thirds). Off by default. */
+    var showGrid = false
+    /** A level line over the viewfinder that turns yellow when the phone is straight. Off by default. */
+    var showLevel = false
     /** Save where each photo was taken (GPS tags in the JPEG and DNG). Location access is asked for when turned on. */
     var geotag = false
     /** Play the camera shutter click on each shot. Where the law requires it, iOS plays it regardless. */
@@ -101,9 +105,30 @@ struct CameraSettings: Equatable {
         if monoMode {
             p.saturation = -100
             p.bwFilter = filter
+            return p
+        }
+        if look.film != nil { return p }
+        // LUT and neutral looks have no film grain and scatter to hide shadow noise, and a LUT steepens the shadows
+        // (Redscale ~4x): clean the shadows more than the ISO table does. Mirrors Android CameraSettings.develop.
+        let luma = look.experimental ? Self.lutLumaDenoiseExperimental : Self.lutLumaDenoise
+        let color = look.experimental ? Self.lutColorDenoiseExperimental : Self.lutColorDenoise
+        p.denoise = max(p.denoise, luma)
+        p.colorDenoise = max(p.colorDenoise ?? p.denoise, color)
+        // Neutral and plain LUT looks start a little punchier than Auto's base; see Android CameraSettings.LOOK_*.
+        if !look.experimental {
+            p.contrast = min(100, p.contrast + Self.lookContrast)
+            p.saturation = min(100, p.saturation + Self.lookSaturation)
         }
         return p
     }
+
+    /// Denoise floors for non-Film colour looks (2026-11-07); see Android CameraSettings.LUT_*.
+    static let lutLumaDenoise: Float = 12
+    static let lutColorDenoise: Float = 70
+    static let lutLumaDenoiseExperimental: Float = 22
+    static let lutColorDenoiseExperimental: Float = 70
+    static let lookContrast: Float = 6
+    static let lookSaturation: Float = 8
 
     /** The long side to save at, or nil for full size. */
     var maxLongSide: Int? { smallExport ? Self.smallLongSide : nil }
@@ -135,6 +160,8 @@ enum CameraSettingsStore {
         s.smallExport = d.object(forKey: "camera.smallExport") as? Bool ?? def.smallExport
         s.rememberLast = d.bool(forKey: "camera.rememberLast")
         s.showHistogram = d.object(forKey: "camera.showHistogram") as? Bool ?? def.showHistogram
+        s.showGrid = d.object(forKey: "camera.showGrid") as? Bool ?? def.showGrid
+        s.showLevel = d.object(forKey: "camera.showLevel") as? Bool ?? def.showLevel
         s.geotag = d.object(forKey: "camera.geotag") as? Bool ?? def.geotag
         s.shutterSound = d.object(forKey: "camera.shutterSound") as? Bool ?? def.shutterSound
         s.scanQr = d.object(forKey: "camera.scanQr") as? Bool ?? def.scanQr
@@ -179,6 +206,8 @@ enum CameraSettingsStore {
         d.set(s.smallExport, forKey: "camera.smallExport")
         d.set(s.rememberLast, forKey: "camera.rememberLast")
         d.set(s.showHistogram, forKey: "camera.showHistogram")
+        d.set(s.showGrid, forKey: "camera.showGrid")
+        d.set(s.showLevel, forKey: "camera.showLevel")
         d.set(s.geotag, forKey: "camera.geotag")
         d.set(s.shutterSound, forKey: "camera.shutterSound")
         d.set(s.scanQr, forKey: "camera.scanQr")

@@ -30,7 +30,7 @@ public struct Look: Equatable, Hashable, Sendable, Identifiable {
     /** Film stock id (FilmStocks) rendered instead of AgX + LUT, or nil. */
     public var film: String? = nil
     /** Film grain and halation, 100 = the stock as formation.json describes it. */
-    public var filmGrain: Float = 100
+    public var filmGrain: Float = 75
     public var halation: Float = 100
 
     init(_ id: String, _ name: String, _ lutFile: String?, contrast: Float = 0, grain: Float = 0, bloom: Float = 0,
@@ -103,11 +103,13 @@ public enum Looks {
     public static let vision3500t = Look("vision500t", "Yellow Cine 500T", "Yellow Cine 500T.cube", grain: 35, bloom: 20)
     /** Slide film: vivid colour, deep shadows. */
     public static let velvia50 = Look("velvia50", "Green Vivid Slide 50", "Green Vivid Slide 50.cube", grain: 8, vignette: -10)
+    /** Direct flash 35mm film scan: vivid cadmium red, warm peach skin, high-key cool background. */
+    public static let filmFlash = Look("filmflash", "Film Flash", "Film Flash.cube", grain: 20)
     /** A strong green-teal film grade with lifted blacks, made by the owner in Affinity Photo. */
     public static let movieGreen = Look("moviegreen", "Movie Green", "Movie Green.cube", grain: 20, vignette: -10,
                                          experimental: true)
     public static let redscale = Look("redscale", "Redscale", "Redscale.png", contrast: 5, grain: 30, vignette: -15,
-                                       experimental: true)
+                                        experimental: true)
     /** Colour swap: warm tones and skin turn turquoise, blue sky amber, highlights cream (tools/swap_luts). */
     public static let lagoon = Look("lagoon", "Lagoon", "Lagoon.cube", grain: 20, vignette: -10, experimental: true)
     /** Colour swap: greens turn violet, blue sky mint, reds stay (tools/swap_luts). */
@@ -132,7 +134,7 @@ public enum Looks {
 
     public static let all: [Look] = [
         natural, portra400, portra800, ektar100, gold200, superia400, fuji400h,
-        vision3500t, velvia50, movieGreen, redscale, lagoon, violetDust, unseen, trixSoft, trix400, trixPush, trixHard, doubleX, doubleXSoft,
+        vision3500t, velvia50, filmFlash, movieGreen, redscale, lagoon, violetDust, unseen, trixSoft, trix400, trixPush, trixHard, doubleX, doubleXSoft,
     ]
 
     public static func byId(_ id: String) -> Look {
@@ -178,8 +180,10 @@ public enum Looks {
  * retouch on the portrait films. Mirrors Android's FilmLooks.
  */
 public enum FilmLooks {
-    /** Auto's film grain, a little finer than the stock's own (100). */
-    public static let filmGrain: Float = 80
+    /** Auto's film grain, finer than the stock's own (100): 25% lower than it was (owner's choice, 2026-11-07). */
+    public static let filmGrain: Float = 60
+    /** RawBoy Camera's film grain, unchanged by that: its film looks keep their earlier 80. */
+    public static let cameraFilmGrain: Float = 80
 
     private static func stock(_ id: String, _ name: String, portraitRetouch: Float = 0) -> Look {
         var look = Look(id, name, nil, portraitRetouch: portraitRetouch, film: id)

@@ -1184,6 +1184,7 @@ function ExportSheet({ store, count, onDismiss, onExport }: {
 /** Format, JPEG quality or TIFF bit depth, and size of exports (in ExportSheet). */
 function ExportOptions({ store, disabled }: { store: AutoStore; disabled: boolean }) {
   const s = useSyncExternalStore(store.subscribe, () => store.state.exportSettings);
+  const hasFilm = useSyncExternalStore(store.subscribe, () => store.state.photos.some((p) => p.mode === 'film'));
   return (
     <>
       <div className="import-mode-row export-options">
@@ -1246,6 +1247,26 @@ function ExportOptions({ store, disabled }: { store: AutoStore; disabled: boolea
           </div>
         )}
       </div>
+      {hasFilm && (
+        <div className="import-mode-row export-options">
+          <span className="import-mode-label">Film scan</span>
+          <div className="segmented">
+            {([false, true] as const).map((on) => (
+              <button
+                key={String(on)}
+                type="button"
+                className={s.filmScan === on ? 'active' : ''}
+                aria-pressed={s.filmScan === on}
+                disabled={disabled}
+                onClick={() => store.setExportSettings({ ...s, filmScan: on })}
+              >
+                {on ? '1.5× size' : 'Off'}
+              </button>
+            ))}
+          </div>
+          <small className="muted">Film photos only, finer grain</small>
+        </div>
+      )}
     </>
   );
 }

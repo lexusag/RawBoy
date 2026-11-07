@@ -22,6 +22,7 @@ uniform float uGrain;       // 0..1
 uniform float uGrainSize;   // grain cell size in full-resolution pixels
 uniform float uGrainRoughness; // 0..1: grain strength varies in clumps (a coarser field modulates it)
 uniform float uGrainColor;  // 0 = monochrome grain, 1 = independent per channel
+uniform float uGrainFrame;  // video: frame counter folded into every grain seed so the grain moves; 0 = fixed (photos)
 uniform float uSharpen;     // 0..1
 uniform float uLocalContrast; // -1..1, edge-aware mid-frequency detail
 uniform float uClarity;     // -1..1, high-pass (local) contrast
@@ -462,12 +463,13 @@ vec3 grainField(vec2 fullPx, float size, uint seed) {
 }
 
 vec3 grainNoise(vec2 fullPx) {
-    vec3 g = grainField(fullPx, uGrainSize, 0u);
+    uint fs = uint(uGrainFrame) * 0x9e3779b1u;
+    vec3 g = grainField(fullPx, uGrainSize, fs);
     if (uGrainRoughness > 0.0) {
         // Uneven grain: grains twice as large mixed in, as clumps among the fine ones. Same variance, so Amount
         // keeps its meaning.
         float w = uGrainRoughness * 1.5;
-        g = (g + w * grainField(fullPx, uGrainSize * 2.0, 0x51edu)) * inversesqrt(1.0 + w * w);
+        g = (g + w * grainField(fullPx, uGrainSize * 2.0, 0x51edu + fs)) * inversesqrt(1.0 + w * w);
     }
     float mono = (g.r + g.g + g.b) * 0.57735;
     // Each channel's variance dips between mono and full colour (they are correlated); keep it at the default 0.15's.
@@ -741,14 +743,40 @@ float anamorphicKnee(vec3 c, float gain) {
     return smoothstep(2.0 * BLOOM_KNEE_LO, 2.0 * BLOOM_KNEE_HI, max(c.r, max(c.g, c.b)) * gain);
 }
 
+// Bilinear sample of flare highlight energy from uBloomHalo: evaluating anamorphicKnee on integer texels and then
+// bilinearly interpolating preserves the partition of unity (linear B-splines sum to 1 everywhere along the streak).
+// Evaluating a nonlinear knee on bilinearly interpolated samples shrunk point highlights to sub-texel spikes,
+// causing severe 70-100% ripple and bead/dot-matrix artifacts across the streak.
+vec3 flareSample(vec2 t, vec2 size) {
+    vec2 p0 = floor(t - 0.5);
+    vec2 f = t - 0.5 - p0;
+    ivec2 i0 = ivec2(p0);
+    ivec2 lim = ivec2(size) - 1;
+
+    ivec2 c00 = clamp(i0, ivec2(0), lim);
+    ivec2 c10 = clamp(i0 + ivec2(1, 0), ivec2(0), lim);
+    ivec2 c01 = clamp(i0 + ivec2(0, 1), ivec2(0), lim);
+    ivec2 c11 = clamp(i0 + ivec2(1, 1), ivec2(0), lim);
+
+    vec3 h00 = texelFetch(uBloomHalo, c00, 0).rgb;
+    vec3 h10 = texelFetch(uBloomHalo, c10, 0).rgb;
+    vec3 h01 = texelFetch(uBloomHalo, c01, 0).rgb;
+    vec3 h11 = texelFetch(uBloomHalo, c11, 0).rgb;
+
+    vec3 e00 = anamorphicKnee(h00, uExposure) * h00;
+    vec3 e10 = anamorphicKnee(h10, uExposure) * h10;
+    vec3 e01 = anamorphicKnee(h01, uExposure) * h01;
+    vec3 e11 = anamorphicKnee(h11, uExposure) * h11;
+
+    return mix(mix(e00, e10, f.x), mix(e01, e11, f.x), f.y);
+}
+
 // Fake anamorphic lens flare: horizontal streaks across the framed picture (uOutToImage's X axis, so rotating or
 // straightening keeps the streak horizontal and cropping leaves it unchanged) scattered from uBloomHalo's boosted
-// highlights (bloomKnee). Taps sit at continuous positions along and across the streak, read with the sampler's
-// bilinear filter: snapping them to the halo's texel grid made the streak a stack of blocks one texel (~10 px) tall
-// that jumped as the pixel crossed a texel boundary. Spacing the taps 1 texel apart (the wing: two taps 1 apart per
-// 2 texels, each across two taps 1 apart) makes the bilinear tents sum to a constant, so there is no beading either.
-// A crisp inner needle reaches 15 texels and a wide wing ~27% of the long edge on each side. Already-bright
-// highlights keep their own white core instead of taking on the coating tint.
+// highlights (anamorphicKnee). Evaluating the knee on integer texels and sampling continuously along and across
+// the streak makes the bilinear tents sum to a constant, so streaks are smooth without beading or blockiness.
+// A crisp inner needle reaches 15 texels and a wide wing ~27% of the long edge on each side. The flare shines
+// brightly over light sources, keeping an intense white core over highlights while tinting dimmer areas.
 vec3 anamorphicFlare(vec3 x, vec2 imagePx) {
     vec2 size = 1.0 / uBloomHaloTexel;
     vec2 d = normalize((mat2(uOutToImage) * vec2(1.0, 0.0)) / (uImageSize * uBloomHaloTexel));
@@ -767,8 +795,7 @@ vec3 anamorphicFlare(vec3 x, vec2 imagePx) {
         for (int j = -2; j <= 2; ++j) {
             vec2 t = p + a * d + (0.5 * float(j)) * n;
             if (t.x < 0.0 || t.x >= size.x || t.y < 0.0 || t.y >= size.y) continue;
-            vec3 c = texture(uBloomHalo, t * uBloomHaloTexel).rgb;
-            core += (w * (j == 0 ? 0.4 : (abs(j) == 1 ? 0.2 : 0.1)) * anamorphicKnee(c, uExposure)) * c;
+            core += (w * (j == 0 ? 0.4 : (abs(j) == 1 ? 0.2 : 0.1))) * flareSample(t, size);
         }
     }
 
@@ -785,8 +812,7 @@ vec3 anamorphicFlare(vec3 x, vec2 imagePx) {
             for (int j = -1; j <= 1; ++j) {
                 vec2 t = p + a * d + float(j) * n;
                 if (t.x < 0.0 || t.x >= size.x || t.y < 0.0 || t.y >= size.y) continue;
-                vec3 c = texture(uBloomHalo, t * uBloomHaloTexel).rgb;
-                wing += (w * (j == 0 ? 0.5 : 0.25) * anamorphicKnee(c, uExposure)) * c;
+                wing += (w * (j == 0 ? 0.5 : 0.25)) * flareSample(t, size);
             }
         }
     }
@@ -795,7 +821,7 @@ vec3 anamorphicFlare(vec3 x, vec2 imagePx) {
     streak /= 1.0 + 0.35 * max(streak.r, max(streak.g, streak.b));
     vec3 tinted = mix(streak, vec3(lum(streak)), uAnamorphicTint.a) * uAnamorphicTint.rgb;
     float selfHi = bloomKnee(x, uExposure);
-    return x + uAnamorphic * (1.0 - 0.85 * selfHi) * mix(tinted, vec3(lum(tinted)), selfHi);
+    return x + uAnamorphic * mix(tinted, vec3(lum(tinted)), selfHi);
 }
 
 vec2 toSensor(vec2 p) { return (uToSensor * vec3(p, 1.0)).xy; }

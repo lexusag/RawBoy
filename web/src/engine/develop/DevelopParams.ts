@@ -188,7 +188,7 @@ export const DEFAULT_PARAMS: Readonly<DevelopParams> = Object.freeze({
   lutAmount: 100,
   film: null,
   filmAmount: 100,
-  filmGrain: 100,
+  filmGrain: 75,
   halation: 100,
   curves: DEFAULT_CURVES,
   lensProfile: true,

@@ -42,6 +42,8 @@ import app.rawboy.lens.LensInfo
 import app.rawboy.lens.LensTransform
 import app.rawboy.retouch.SkinMask
 import app.rawboy.track.PatternTracker
+import app.rawboy.camera.capture.VideoRecorder
+import app.rawboy.gl.VideoSink
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -185,6 +187,14 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private val _flashAvailable = MutableStateFlow(false)
     val flashAvailable = _flashAvailable.asStateFlow()
 
+    /** The selfie camera has no flash unit: the flash button lights the screen's frame instead (screen flash). */
+    private val _screenFlashCamera = MutableStateFlow(false)
+    val screenFlashCamera = _screenFlashCamera.asStateFlow()
+
+    /** The frame is lit now: from just before a screen flash shot until its exposure is done. */
+    private val _screenFlashLit = MutableStateFlow(false)
+    val screenFlashLit = _screenFlashLit.asStateFlow()
+
     /** Focus lock point (upright normalised, as shown), or null for continuous autofocus. */
     private val _focusPoint = MutableStateFlow<Pair<Float, Float>?>(null)
     val focusPoint = _focusPoint.asStateFlow()
@@ -219,6 +229,103 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private val trackExecutor = Executors.newSingleThreadExecutor { r -> Thread(r, "RawBoy-track") }
 
     /** One event per capture, as the request goes to the camera: the UI's shutter feedback. */
+    // ---- Video (prototype: the viewfinder's look recorded as 1080p30 H.264 + stereo AAC) ----
+
+    private val _videoMode = MutableStateFlow(false)
+
+    /** Photo / Video switch; not remembered between starts. */
+    val videoMode = _videoMode.asStateFlow()
+
+    private val _videoSink = MutableStateFlow<VideoSink?>(null)
+
+    /** The encoder's surface while recording; the viewfinder draws into it. */
+    val videoSink = _videoSink.asStateFlow()
+
+    private val _recordingMs = MutableStateFlow<Long?>(null)
+
+    /** Elapsed recording time, null when not recording. */
+    val recordingMs = _recordingMs.asStateFlow()
+
+    private var recorder: VideoRecorder? = null
+    private var recordingJob: Job? = null
+    private var audioGranted = false
+
+    /** Clockwise quarter turns of the window (the UI sets it): a sideways phone records a landscape file. */
+    @Volatile
+    var displayTurns = 0
+
+    private var stopRequested = false
+
+    fun onAudioPermission(granted: Boolean) {
+        audioGranted = granted
+        if (!granted) _message.value = "No microphone access: videos will have no sound"
+    }
+
+    fun hasAudioPermission() = audioGranted
+
+    fun setVideoMode(on: Boolean) {
+        if (_recordingMs.value != null) return
+        if (on && !_settings.value.experimental) return
+        _videoMode.value = on
+    }
+
+    private fun toggleRecording() {
+        if (recorder != null) stopRecording() else startRecording()
+    }
+
+    private fun startRecording() {
+        if (recorder != null || _recordingMs.value != null) return
+        val turns = displayTurns
+        val withAudio = audioGranted
+        stopRequested = false
+        _recordingMs.value = 0
+        recordingJob = viewModelScope.launch {
+            val r = try {
+                withContext(Dispatchers.IO) { VideoRecorder.create(app, turns, withAudio) { /* the view's requestRender is on the sink */ } }
+            } catch (e: Exception) {
+                Log.w(TAG, "recording did not start", e)
+                _message.value = "Could not start recording: ${e.message}"
+                _recordingMs.value = null
+                stopRequested = false
+                return@launch
+            }
+            recorder = r
+            _videoSink.value = r.sink
+            if (stopRequested) {
+                stopRequested = false
+                stopRecording()
+                return@launch
+            }
+            // The timer, and a watch on the renderer: no encoder surface means no video, so stop instead of recording nothing.
+            while (recorder === r) {
+                _recordingMs.value = r.elapsedMs
+                if (r.failed) {
+                    _message.value = "Recording failed: this phone refused the encoder surface"
+                    stopRecording()
+                    return@launch
+                }
+                delay(200)
+            }
+        }
+    }
+
+    /** Ends the recording and saves the file (on a worker thread); shows where it went. */
+    fun stopRecording() {
+        val r = recorder ?: run {
+            // Still starting up: the start stops again as soon as it has a recorder.
+            if (_recordingMs.value != null) stopRequested = true
+            return
+        }
+        recorder = null
+        recordingJob = null
+        viewModelScope.launch {
+            val uri = withContext(Dispatchers.IO + NonCancellable) { r.stop() }
+            _videoSink.value = null
+            _recordingMs.value = null
+            _message.value = if (uri != null) "Video saved to Movies/${Edition.FOLDER}" else "Nothing was recorded"
+        }
+    }
+
     private val _shutterEvents = MutableSharedFlow<Unit>(extraBufferCapacity = 4)
     val shutterEvents = _shutterEvents.asSharedFlow()
 
@@ -241,6 +348,24 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     /** Device rotation (degrees clockwise from portrait), for the photo's orientation. */
     @Volatile
     var deviceDegrees = 0
+
+    private val _tilt = MutableStateFlow<Float?>(null)
+
+    /**
+     * How far the phone is turned clockwise from the nearest upright (portrait or landscape), -45..45 degrees, for the
+     * level line; null while the phone lies flat (no usable direction) or the level is off.
+     */
+    val tilt = _tilt.asStateFlow()
+
+    /** From the activity's orientation sensor: [degrees] is the device's turn clockwise from portrait, 0..359, or null when flat. */
+    fun onTilt(degrees: Int?) {
+        if (degrees == null || !_settings.value.showLevel) {
+            _tilt.value = null
+            return
+        }
+        // Whole degrees: the line doesn't need finer, and the screen isn't redrawn for sensor noise.
+        _tilt.value = (((degrees + 45) % 90) - 45).toFloat()
+    }
 
     /** The latest analysed viewfinder frame. */
     private class Live(val base: ViewfinderBase, val stats: SceneStats, val defaults: DevelopParams, val auto: DevelopParams)
@@ -286,6 +411,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     fun onPause() {
         resumed = false
+        stopRecording() // a recording never carries on in the background
         updateLocation()
         // The process may be killed in the background: write settings still waiting for a slider to rest.
         if (saveJob?.isActive == true) {
@@ -347,7 +473,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     if (front != _settings.value.front) change { it.copy(front = front) }
                     (all.firstOrNull { it.label == _settings.value.lens } ?: all.first { it.label == "W" }).also { info = it }
                 }
-                _flashAvailable.value = inf.hasFlash
+                _screenFlashCamera.value = inf.isFront && !inf.hasFlash
+                _flashAvailable.value = inf.hasFlash || _screenFlashCamera.value
                 _hiRes.value = inf.hiRes
                 controller.setExposureBias(exposureBias(_settings.value))
                 controller.start(inf, st)
@@ -374,6 +501,25 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    private val _zoom = MutableStateFlow(1f)
+
+    /** Digital zoom of the viewfinder, [MIN_ZOOM]..[MAX_ZOOM] (the centre 1/zoom of the frame; not saved between launches). */
+    val zoom = _zoom.asStateFlow()
+
+    /**
+     * Zooms to [value] (clamped). Zoom is logarithmic to the eye, so callers step it by factors. A focus lock belongs to
+     * the old picture, so it is released.
+     */
+    fun setZoom(value: Float) {
+        val z = value.coerceIn(MIN_ZOOM, MAX_ZOOM)
+        if (z == _zoom.value) return
+        _zoom.value = z
+        if (_focusPoint.value != null) releaseFocus()
+    }
+
+    /** A point of the zoomed viewfinder, as the camera's unzoomed frame has it. */
+    private fun unzoom(v: Float): Float = 0.5f + (v - 0.5f) / _zoom.value
+
     /** Focus lock at a point of the viewfinder (upright normalised, as shown). */
     fun focusAt(x: Float, y: Float) {
         if (_status.value != CameraStatus.READY) return
@@ -383,7 +529,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             // Focus first scans at the tap as usual; the tracker takes over from the next grey copy.
             if (_settings.value.trackFocus) trackStart = x to y
         }
-        controller.focusAt(x, y)
+        controller.focusAt(unzoom(x), unzoom(y))
     }
 
     fun releaseFocus() {
@@ -430,7 +576,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             trackStart = null
             if (tracker.start(width, height, luma, start.first, start.second, now)) {
                 _tracking.value = true
-                controller.trackFocus(start.first, start.second)
+                controller.trackFocus(unzoom(start.first), unzoom(start.second))
                 lastFocusMove = now
                 sentFocus = start
                 subjectHidden = false
@@ -461,7 +607,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             lastFocusMove = now
             sentFocus = shown
             sentHidden = subjectHidden
-            controller.moveFocus(shown.first, shown.second, meter = !subjectHidden)
+            controller.moveFocus(unzoom(shown.first), unzoom(shown.second), meter = !subjectHidden)
         }
     }
 
@@ -486,6 +632,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Switches to the lens labelled [label] (UW, W, T) on the current side. */
     fun selectLens(label: String) {
+        if (_recordingMs.value != null) return // the camera session would restart under the recording
         val lens = _lenses.value.firstOrNull { it.label == label } ?: return
         if (lens === info) return
         switchTo(lens)
@@ -494,6 +641,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Back cameras <-> selfie camera (its main lens). */
     fun switchFacing() {
+        if (_recordingMs.value != null) return
         val front = !_settings.value.front
         val all = lensesBySide?.get(front).orEmpty()
         val lens = all.firstOrNull { it.label == "W" } ?: all.firstOrNull() ?: return
@@ -544,7 +692,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             // A new metering area (a tap, a release, a tracked subject hiding) can move the exposure by a stop at once;
             // the viewfinder eases there over a few updates instead of snapping.
             val last = live?.auto?.exposure
-            val eased = if (last == null) auto else auto.copy(exposure = last + (auto.exposure - last).coerceIn(-MAX_EV_STEP, MAX_EV_STEP))
+            // Video eases much slower: a 0.3 EV step every 300 ms would pump visibly in a recording.
+            val step = if (_videoMode.value) VIDEO_EV_STEP else MAX_EV_STEP
+            val eased = if (last == null) auto else auto.copy(exposure = last + (auto.exposure - last).coerceIn(-step, step))
             live = Live(base, stats, defaults, eased)
             publish()
             withContext(Dispatchers.Main) { meterRawIfUncalibrated() }
@@ -717,12 +867,27 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
     fun setRememberLast(on: Boolean) = change { it.copy(rememberLast = on) }
     fun setShowHistogram(on: Boolean) = change { it.copy(showHistogram = on) }
+    fun setShowGrid(on: Boolean) = change { it.copy(showGrid = on) }
+    fun setShowLevel(on: Boolean) {
+        if (!on) _tilt.value = null
+        change { it.copy(showLevel = on) }
+    }
     fun setBurstMode(mode: BurstMode) = change { it.copy(burstMode = mode) }
     fun setShutterSound(on: Boolean) = change { it.copy(shutterSound = on) }
+    fun setHdrGainMap(on: Boolean) = change { it.copy(hdrGainMap = on) }
     fun setTrackFocus(on: Boolean) {
         change { it.copy(trackFocus = on) }
         // A subject being followed: a plain lock where it is now.
         if (!on && _tracking.value) _focusPoint.value?.let { (x, y) -> focusAt(x, y) }
+    }
+
+    /** Experimental features (video) on or off; off leaves video mode, ending a recording. */
+    fun setExperimental(on: Boolean) {
+        change { it.copy(experimental = on) }
+        if (!on) {
+            stopRecording()
+            _videoMode.value = false
+        }
     }
 
     fun setScanQr(on: Boolean) {
@@ -780,14 +945,20 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     /** Takes a raw now; it is developed into a JPEG in the background. */
     fun shutter() {
         if (!resumed || _status.value != CameraStatus.READY || _merging.value) return
+        if (_videoMode.value) {
+            toggleRecording()
+            return
+        }
         val settings = _settings.value
         val hiRes = info?.hiRes == true
         val flash = settings.flash.takeIf { info?.hasFlash == true } ?: FlashMode.OFF
+        // The selfie camera: the screen's frame is the light, the shot itself is an ordinary one exposed by AE.
+        val screenFlash = settings.flash != FlashMode.OFF && _screenFlashCamera.value
         // Flash and maximum-resolution shots are single frames (CameraController.captureDng).
-        val burstFrames = if (hiRes) 1 else settings.burstFrames(lowLight.value)
+        val burstFrames = if (hiRes || screenFlash) 1 else settings.burstFrames(lowLight.value)
         val burst = burstFrames > 1 && flash == FlashMode.OFF
         // A flash shot's raw is lit by the flash, the viewfinder wasn't: no calibration from it.
-        val viewfinderKey = if (flash == FlashMode.OFF) live?.stats?.key else null
+        val viewfinderKey = if (flash == FlashMode.OFF && !screenFlash) live?.stats?.key else null
         val mayHaveFace = info?.hasFaceDetection != true || controller.frames.value?.faces?.isNotEmpty() != false
         controller.frames.value?.let { f ->
             Log.d(TAG, "shutter ${settings.lensKey(hiRes)}: preview ISO ${f.iso.toInt()}, ${f.exposureNs / 1000} µs, boost ${f.postRawBoost}, " +
@@ -806,7 +977,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         // Runs in ShotSaver.scope so finishing the lock screen camera never cancels an in-flight capture.
         ShotSaver.scope.launch {
             try {
-                val shot = capture(shotId, settings, hiRes, viewfinderKey, flash, burstFrames).copy(mayHaveFace = mayHaveFace)
+                if (screenFlash) {
+                    // Light the frame and let the screen and AE come up before the exposure.
+                    _screenFlashLit.value = true
+                    delay(SCREEN_FLASH_SETTLE_MS)
+                }
+                val shot = capture(shotId, settings, hiRes, viewfinderKey, flash, burstFrames, screenFlash).copy(mayHaveFace = mayHaveFace)
                 ShotSaver.enqueue(app, shot)
             } catch (e: Throwable) {
                 Log.w(TAG, "capture", e)
@@ -815,6 +991,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 ShotSaver.cancelCapture()
             } finally {
+                _screenFlashLit.value = false
                 if (burst) {
                     _merging.value = false
                     ShotSaver.endMerge()
@@ -829,13 +1006,18 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /** As the request goes to the camera: the click (if on, or required here) and the UI's shutter feedback. */
-    private fun onShutter() {
+    private fun onShutter(screenFlash: Boolean = false) {
         if (_settings.value.shutterSound || shutterSoundRequired) shutterSound.play()
         _shutterEvents.tryEmit(Unit)
+        // The exposure runs right after the request goes out: keep the frame lit through it, then switch it off.
+        if (screenFlash) viewModelScope.launch {
+            delay(SCREEN_FLASH_HOLD_MS)
+            _screenFlashLit.value = false
+        }
     }
 
     /** Captures a raw and saves it as DNG (in Pictures/<Edition.FOLDER>/RAW, or a temporary file). */
-    private suspend fun capture(shotId: Long, settings: CameraSettings, hiRes: Boolean, viewfinderKey: Float?, flash: FlashMode, burstFrames: Int): Shot {
+    private suspend fun capture(shotId: Long, settings: CameraSettings, hiRes: Boolean, viewfinderKey: Float?, flash: FlashMode, burstFrames: Int, screenFlash: Boolean = false): Shot {
         val resolver = app.contentResolver
         val baseName = "IMG_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ROOT).format(Date())
         val degrees = deviceDegrees
@@ -851,7 +1033,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             val result = try {
                 withContext(Dispatchers.IO) {
                     val out = resolver.openOutputStream(uri, "w") ?: throw java.io.IOException("Cannot write $name")
-                    val result = out.buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix) { onShutter() } }
+                    val result = out.buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix) { onShutter(screenFlash) } }
                     fix?.let { addGps(uri, it) }
                     MediaStoreOutput.publish(resolver, uri)
                     result
@@ -866,7 +1048,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             val file = File(app.cacheDir, "$baseName-$shotId.dng")
             val result = try {
                 withContext(Dispatchers.IO) {
-                    val result = file.outputStream().buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix) { onShutter() } }
+                    val result = file.outputStream().buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix) { onShutter(screenFlash) } }
                     fix?.let { addGps(Uri.fromFile(file), it) }
                     result
                 }
@@ -943,6 +1125,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         private const val TAG = "RawBoyCamera"
         private const val DNG_MIME = "image/x-adobe-dng"
         private const val SAVE_DELAY_MS = 500L
+
+        /** Screen flash: how long the frame is lit before the shot (screen at full brightness, AE caught up), and after the request. */
+        private const val SCREEN_FLASH_SETTLE_MS = 450L
+        private const val SCREEN_FLASH_HOLD_MS = 250L
         /** After a lens's first analysed viewfinder frame, how long AE gets to settle before its raw is metered. */
         private const val RAW_METER_DELAY_MS = 300L
         /** Smallest move of a tracked subject (share of the frame) that moves the focus point. */
@@ -951,6 +1137,14 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         private const val FOCUS_MOVE_INTERVAL_MS = 100L
         /** Most the live develop's exposure moves per update (~3 a second), EV. */
         private const val MAX_EV_STEP = 0.3f
+
+        const val MIN_ZOOM = 1f
+
+        /** Far-away viewing: 10x of the frame (digital, on top of the lens). */
+        const val MAX_ZOOM = 10f
+
+        /** Video: the most the viewfinder's exposure moves per update (~3 a second), so about 0.15 EV a second. */
+        private const val VIDEO_EV_STEP = 0.05f
 
         /** Exposure is metered on the middle half of the frame's width and height (owner's choice), unless tapped. */
         internal val METER_CENTRE = MeterArea.Centre(0.5f)

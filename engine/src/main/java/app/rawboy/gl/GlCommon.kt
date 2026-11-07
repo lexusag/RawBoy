@@ -41,8 +41,18 @@ internal class SampleGeometry(
     val imageHeight: Int,
     /** Smallest grain cell in full-resolution pixels: more than 1 when the export is saved smaller. */
     val minGrainPx: Float = 1f,
-    /** [output] with fractional edges, [x, y, width, height] (a pinch zoom's view, ZoomMath.viewRectF). */
-    val outputF: FloatArray = floatArrayOf(output.x.toFloat(), output.y.toFloat(), output.width.toFloat(), output.height.toFloat()),
+    /**
+     * Output pixels per full-resolution pixel: 1.5 in a film scan export ([output] is then in output pixels, the texture
+     * is [textureWidth] = scale x the input's), else 1.
+     */
+    val renderScale: Float = 1f,
+    /**
+     * [output] in full-resolution pixels with fractional edges, [x, y, width, height]: a pinch zoom's view
+     * (ZoomMath.viewRectF), or a scaled render's tile.
+     */
+    val outputF: FloatArray = floatArrayOf(
+        output.x / renderScale, output.y / renderScale, output.width / renderScale, output.height / renderScale,
+    ),
 ) {
     /** Grain cell in full-resolution pixels: ~1/3200 of the long edge (fine-grain film). */
     val grainSize: Float get() = maxOf(minGrainPx, maxOf(imageWidth, imageHeight) / 3200f)
@@ -132,6 +142,7 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
     private val uGrainSize = GLES30.glGetUniformLocation(id, "uGrainSize")
     private val uGrainRoughness = GLES30.glGetUniformLocation(id, "uGrainRoughness")
     private val uGrainColor = GLES30.glGetUniformLocation(id, "uGrainColor")
+    private val uGrainFrame = GLES30.glGetUniformLocation(id, "uGrainFrame")
     private val uSharpen = GLES30.glGetUniformLocation(id, "uSharpen")
     private val uLocalContrast = GLES30.glGetUniformLocation(id, "uLocalContrast")
     private val uClarity = GLES30.glGetUniformLocation(id, "uClarity")
@@ -218,6 +229,7 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
     private val uFilmDMin = GLES30.glGetUniformLocation(id, "uFilmDMin")
     private val uFilmDMax = GLES30.glGetUniformLocation(id, "uFilmDMax")
     private val uFilmUmPerPx = GLES30.glGetUniformLocation(id, "uFilmUmPerPx")
+    private val uRenderScale = GLES30.glGetUniformLocation(id, "uRenderScale")
     private val uFilmGrain = GLES30.glGetUniformLocation(id, "uFilmGrain")
     private val uFormGrainRms = GLES30.glGetUniformLocation(id, "uFormGrainRms")
     private val uFormHalation = GLES30.glGetUniformLocation(id, "uFormHalation")
@@ -288,6 +300,7 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
         GLES30.glUniform2f(uInSpan, g.input.width.toFloat(), g.input.height.toFloat())
         GLES30.glUniform2f(uOutOrigin, g.outputF[0], g.outputF[1])
         GLES30.glUniform2f(uOutSpan, g.outputF[2], g.outputF[3])
+        GLES30.glUniform1f(uRenderScale, g.renderScale)
         bindLens(p.lens)
         bindLayers(p.layers)
         bindLeaks(p.leaks)
@@ -297,6 +310,12 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
         GLES30.glUniform2f(uBokehTexel, 1f / (bokeh?.width ?: 1), 1f / (bokeh?.height ?: 1))
         bindFilm(p, g)
     }
+
+    /**
+     * Video: moves every grain seed with the frame counter (0 = the fixed, position-only grain of photos). Call after
+     * [bind], while this program is in use.
+     */
+    fun setGrainFrame(frame: Float) = GLES30.glUniform1f(uGrainFrame, frame)
 
     /** Mask layer uniforms (positions in image pixels of an [imageWidth] x [imageHeight] image); uses this program. */
     fun bindMasks(p: ShaderParams, imageWidth: Int, imageHeight: Int) {
@@ -366,7 +385,8 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
         GLES30.glUniform1f(uFilmUmPerPx, FilmTextures.FRAME_WIDTH_UM / maxOf(g.imageWidth, g.imageHeight))
         // Halation and scatter happen before the film, so Strength fades them with the film render.
         val optics = p.halation * amount
-        GLES30.glUniform1f(uFilmGrain, p.filmGrain)
+        // A film scan export (finer pixels) matches the grain's strength at print size, not per pixel (see ScanScale).
+        GLES30.glUniform1f(uFilmGrain, p.filmGrain * (if (g.renderScale > 1f) ScanScale.GRAIN else 1f))
         val form = s.formation
         vec3(uFormGrainRms, form.grainRms)
         vec3(uFormHalation, form.halation, optics)

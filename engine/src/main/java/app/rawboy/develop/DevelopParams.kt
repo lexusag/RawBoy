@@ -82,7 +82,7 @@ data class DevelopParams(
     val lutAmount: Float = 100f,
     val film: String? = null,
     val filmAmount: Float = 100f,
-    val filmGrain: Float = 100f,
+    val filmGrain: Float = 75f,
     val halation: Float = 100f,
     val curves: ToneCurves = ToneCurves.NONE,
     val lensProfile: Boolean = true,

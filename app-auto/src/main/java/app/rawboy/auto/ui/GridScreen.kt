@@ -344,6 +344,7 @@ fun GridScreen(vm: AutoViewModel, snackbar: SnackbarHostState, pickPhotos: () ->
     exportSheet?.let { ids ->
         ExportSheet(
             count = if (ids.isEmpty()) exportable else photos.count { it.analysis != null && it.id in ids },
+            hasFilm = photos.any { it.mode == LookMode.FILM && (ids.isEmpty() || it.id in ids) },
             settings = exportSettings,
             onChange = vm::setExportSettings,
             onDismiss = { exportSheet = null },

@@ -83,6 +83,13 @@ class ViewfinderRenderer(
     var loupe: Loupe? = null
 
     /**
+     * Digital zoom, 1 = the whole frame: pass 1 samples the centre 1/[zoom] of the camera frame, so the whole viewfinder
+     * (develop, analysis, tracker) sees the zoomed picture. A GPU crop, so it is smooth and works at any lens.
+     */
+    @Volatile
+    var zoom: Float = 1f
+
+    /**
      * Clockwise quarter turns from the upright image to the window. 0 while the window is in the phone's natural
      * orientation (portrait), as before. With the screen turned sideways the window turns but the camera image should
      * stay put on the glass, so pass 2 (and the loupe) is drawn as in portrait into [screen] and turned onto the window
@@ -90,6 +97,17 @@ class ViewfinderRenderer(
      */
     @Volatile
     var turns: Int = 0
+
+    /**
+     * Video: while set, every frame's develop is drawn a second time into this encoder surface ([VideoSink]), and the
+     * grain moves with the frame counter (it is position-only for photos, a frozen pattern in a video).
+     */
+    @Volatile
+    var videoSink: VideoSink? = null
+
+    /** Grain moves with the frame counter on the screen too (video mode, so the viewfinder grain looks as the file's). */
+    @Volatile
+    var animateGrain: Boolean = false
 
     @Volatile
     var baseIntervalMs: Long = 300
@@ -139,6 +157,11 @@ class ViewfinderRenderer(
     private val trackTarget = Target(bytes = true)
     private val track = LumaRead()
     private val screen = Target(bytes = true)
+    private val videoTurned = Target(bytes = true)
+    private var encoder: EncoderSurface? = null
+    private var encoderFor: VideoSink? = null
+    private var lastEncodedNs = Long.MIN_VALUE
+    private var frameIndex = 0
     private var turn: TurnProgram? = null
     private var lastBase = 0L
     private var lastLuma = 0L
@@ -157,6 +180,10 @@ class ViewfinderRenderer(
         trackTarget.reset()
         track.reset()
         screen.reset()
+        videoTurned.reset()
+        // The context is new: the old EGL surface (and the program state it shared) is gone with it.
+        encoder = null
+        encoderFor = null
         pending = null
         pixelBuffer = 0
         pixelBufferSize = 0
@@ -201,6 +228,7 @@ class ViewfinderRenderer(
         val st = surfaceTexture ?: return
         st.updateTexImage()
         st.getTransformMatrix(texMatrix)
+        val frameNs = st.timestamp
 
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
         GLES30.glViewport(0, 0, viewWidth, viewHeight)
@@ -215,7 +243,7 @@ class ViewfinderRenderer(
         linear.bindForDrawing()
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         GLES30.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, cameraTexture)
-        linearize!!.draw(quad!!, texMatrix, f, dataSpaceOf(st))
+        linearize!!.draw(quad!!, texMatrix, f, dataSpaceOf(st), zoom.coerceAtLeast(1f))
 
         // The whole-image copies, from this frame: built from a readback instead, they lagged the image by
         // a few hundred ms and bright lights left a trailing glow when the camera moved.
@@ -279,6 +307,9 @@ class ViewfinderRenderer(
         val geometry = SampleGeometry(w, h, input, output, f.fullWidth, f.fullHeight)
         develop!!.bind(p, geometry, r[2] / viewWidth, r[3] / viewHeight, flipY = true)
         develop!!.bindLiveCopies(p, sw, sh, tw, th * BloomTail.BANDS)
+        frameIndex = (frameIndex + 1) % GRAIN_FRAME_PERIOD
+        val grainFrame = if (videoSink != null || animateGrain) frameIndex.toFloat() else 0f
+        develop!!.setGrainFrame(grainFrame)
         quad!!.draw()
         loupe?.let { l ->
             // The same develop again, into a square viewport, sampling only the region around the point.
@@ -299,7 +330,86 @@ class ViewfinderRenderer(
             GLES30.glViewport(0, 0, this.viewWidth, this.viewHeight)
             turn!!.draw(quad!!, screen.texture, k)
         }
+        drawVideo(p, f, w, h, sw, sh, tw, th, frameNs, grainFrame)
         stats.frame(SystemClock.uptimeMillis() - now)
+    }
+
+    /**
+     * The same develop again, into the video encoder's surface, filling it (the 4:3 picture cropped to 16:9) and turned
+     * like the window. Draws each camera frame once: a redraw for a slider change keeps the frame's timestamp.
+     */
+    private fun drawVideo(
+        p: ShaderParams, f: Frame, w: Int, h: Int, sw: Int, sh: Int, tw: Int, th: Int, frameNs: Long, grainFrame: Float,
+    ) {
+        val sink = videoSink
+        if (sink == null || sink.closing) {
+            // Stopped: the EGL surface goes now, on this thread, and only then may the encoder end its input.
+            encoder?.release()
+            encoder = null
+            encoderFor?.released = true
+            encoderFor = null
+            sink?.released = true
+            return
+        }
+        var enc = encoder
+        if (enc == null || encoderFor !== sink) {
+            enc?.release()
+            enc = EncoderSurface(sink)
+            if (!enc.create()) {
+                sink.failed = true
+                sink.closing = true
+                return
+            }
+            encoder = enc
+            encoderFor = sink
+            lastEncodedNs = Long.MIN_VALUE
+        }
+        if (frameNs <= lastEncodedNs) return
+        val pts = sink.presentationNs(frameNs)
+        if (pts < 0) return
+        lastEncodedNs = frameNs
+        if (!enc.makeCurrent()) {
+            sink.failed = true
+            sink.closing = true
+            return
+        }
+        val k = ((sink.turns % 4) + 4) % 4
+        // The picture is drawn upright at the encoder's size turned back, then turned onto the encoder's surface.
+        val pw = if (k % 2 == 1) sink.height else sink.width
+        val ph = if (k % 2 == 1) sink.width else sink.height
+        if (k != 0) {
+            videoTurned.ensure(pw, ph, mipmapped = false)
+            videoTurned.bindForDrawing()
+        } else {
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+            GLES30.glViewport(0, 0, pw, ph)
+        }
+        lutTexture!!.bind(p.lut)
+        filmTextures!!.bind(p.film)
+        shadingTexture!!.bind(p.lens.info.shading)
+        bindUnit(ImageTexture.BASE_UNIT, small.texture)
+        bindUnit(ImageTexture.BLOOM_HALO_UNIT, halo.texture)
+        bindUnit(ImageTexture.BLOOM_TAIL_UNIT, tail.texture)
+        maskTexture!!.bind(p.skinMask)
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, linear.texture)
+        val outW = p.lens.outputWidth
+        val outH = p.lens.outputHeight
+        // Cover, not fit: scaled until both sides fill the encoder, the overflow clipped.
+        val cover = max(pw.toFloat() / outW, ph.toFloat() / outH)
+        val geometry = SampleGeometry(
+            w, h, PixelRect(0, 0, f.fullWidth, f.fullHeight), PixelRect(0, 0, outW, outH), f.fullWidth, f.fullHeight,
+        )
+        develop!!.bind(p, geometry, outW * cover / pw, outH * cover / ph, flipY = true)
+        develop!!.bindLiveCopies(p, sw, sh, tw, th * BloomTail.BANDS)
+        develop!!.setGrainFrame(grainFrame)
+        quad!!.draw()
+        if (k != 0) {
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+            GLES30.glViewport(0, 0, sink.width, sink.height)
+            turn!!.draw(quad!!, videoTurned.texture, k)
+        }
+        enc.swapAndRestore(pts)
     }
 
     /** A readback in flight: its pixel buffer, fence and size. */
@@ -569,12 +679,13 @@ class ViewfinderRenderer(
         private val uGamma = GLES30.glGetUniformLocation(id, "uGamma")
         private val uScale = GLES30.glGetUniformLocation(id, "uScale")
         private val uMirror = GLES30.glGetUniformLocation(id, "uMirror")
+        private val uZoom = GLES30.glGetUniformLocation(id, "uZoom")
         private val uColor = GLES30.glGetUniformLocation(id, "uColor")
         private val uYuvToRgb = GLES30.glGetUniformLocation(id, "uYuvToRgb")
         private val uYuvOffset = GLES30.glGetUniformLocation(id, "uYuvOffset")
         private var yuvDataSpace = -1
 
-        fun draw(quad: FullscreenQuad, texMatrix: FloatArray, f: Frame, dataSpace: Int) {
+        fun draw(quad: FullscreenQuad, texMatrix: FloatArray, f: Frame, dataSpace: Int, zoom: Float) {
             GLES30.glUseProgram(id)
             GLES30.glUniform1i(uCamera, 0)
             GLES30.glUniformMatrix4fv(uTexMatrix, 1, false, texMatrix, 0)
@@ -588,6 +699,7 @@ class ViewfinderRenderer(
             // adds the selfie mirror itself (determinant > 0). Mirror here only when it hasn't.
             val determinant = texMatrix[0] * texMatrix[5] - texMatrix[1] * texMatrix[4]
             GLES30.glUniform1f(uMirror, if (f.mirror && determinant < 0f) 1f else 0f)
+            GLES30.glUniform1f(uZoom, zoom)
             GLES30.glUniform1f(uGamma, f.gamma)
             GLES30.glUniform1f(uScale, f.scale)
             GLES30.glUniformMatrix3fv(uColor, 1, false, f.color ?: SRGB_TO_REC2020, 0)
@@ -670,13 +782,15 @@ uniform int uRotation; // clockwise quarter turns from buffer to upright
 uniform float uGamma;  // <= 0: sRGB curve
 uniform float uScale;
 uniform float uMirror; // 1: show a mirror image
+uniform float uZoom;   // digital zoom: the centre 1/uZoom of the frame
 uniform mat3 uColor;   // linear preview RGB -> Rec.2020
 in vec2 vUp;
 out vec4 fragColor;
 
 void main() {
-    float u = mix(vUp.x, 1.0 - vUp.x, uMirror);
-    float v = vUp.y;
+    vec2 zoomed = 0.5 + (vUp - 0.5) / uZoom;
+    float u = mix(zoomed.x, 1.0 - zoomed.x, uMirror);
+    float v = zoomed.y;
     // Buffer position (y = 0 at the buffer's top) that lands at (u, v) after rotating clockwise.
     vec2 b;
     if (uRotation == 1) b = vec2(v, 1.0 - u);
@@ -876,6 +990,9 @@ void main() {
 
     companion object {
         const val BASE_MAX_DIMENSION = 512
+
+        /** The frame counter wraps here (it goes into the shader as a float seed). */
+        private const val GRAIN_FRAME_PERIOD = 100_000
 
         /** Long side of [onLuma]'s copies: a QR code a twentieth of the frame wide still gets ~2 px per module. */
         const val LUMA_MAX_DIMENSION = 1280

@@ -28,6 +28,9 @@ by DNG 1.3 readers) that older Lightroom/Camera Raw, darktable and Apple Photos 
 the JPEG XL file (checked bit for bit on GFX 50R, X-T5 and Pixel DNGs, 2026-11-02):
 
 - Lossless JPEG XL → Lossless gives back the camera's raw data exactly.
+- A Small raw's pixels are stored in a non-linear encoding that the file's own OpcodeList2 (a MapPolynomial) undoes, and
+  Apple Photos and older software ignore that list in a DNG 1.4 file (the picture came out washed out and magenta). The
+  Packer applies it to the pixels, so the Lossless file holds ordinary linear raw data and no such list.
 - Small raw and Micro stay what they are: what the lossy compression or resizing discarded doesn't come back, and an
   X-Trans or phone Small raw, or a Micro, stays a demosaiced (linear) DNG.
 - The files get big, because lossy-decoded data no longer compresses well: a GFX 50R Small raw went from 32 MB to

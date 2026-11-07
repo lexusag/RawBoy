@@ -52,16 +52,24 @@ data class CameraSettings(
     val rememberLast: Boolean = false,
     /** A live RGB histogram in a corner of the viewfinder. */
     val showHistogram: Boolean = false,
+    /** A 3 x 3 grid over the viewfinder (rule of thirds). Off by default. */
+    val showGrid: Boolean = false,
+    /** A level line over the viewfinder that turns yellow when the phone is straight. Off by default. */
+    val showLevel: Boolean = false,
     /** Whether each shot (without flash) takes [BURST_FRAMES] raws and merges them into one: see [BurstMode]. */
     val burstMode: BurstMode = BurstMode.AUTO,
     /** Play the camera shutter click on each shot. Where the law requires it, Android plays it regardless (ShutterSound). */
     val shutterSound: Boolean = false,
     /** Save where each photo was taken (GPS tags in the JPEG and DNG). Needs location permission, asked when turned on. */
     val geotag: Boolean = false,
+    /** Save the JPEG as an Ultra HDR JPEG: the same picture plus a gain map that lets HDR screens show brighter highlights (`ultrahdr.h`). */
+    val hdrGainMap: Boolean = false,
     /** Look for QR codes in the viewfinder and offer to open them, as the phone's own camera does. */
     val scanQr: Boolean = true,
     /** After a tap, keep focus on what was tapped as it moves (CameraViewModel's tracker); off = the focus stays put. */
     val trackFocus: Boolean = false,
+    /** Features still in testing (video mode today); hidden until switched on in Settings. */
+    val experimental: Boolean = false,
     /**
      * Per camera ([lensKey]): gain from the linearised preview to raw units (1.0 = sensor clip), learned
      * from each shot (raw key / viewfinder key), so the viewfinder's auto exposure matches the final.
@@ -90,8 +98,8 @@ data class CameraSettings(
     fun flashGuide(hiRes: Boolean = false): FlashGuides {
         val k = lensKey(hiRes)
         return FlashGuides(
-            flashGuides[k] ?: flashGuides[lensKey] ?: CameraController.DEFAULT_FLASH_GUIDE,
-            flashGuides[flashGuideKey(k, distanceKnown = false)] ?: flashGuides[flashGuideKey(lensKey, distanceKnown = false)] ?: CameraController.DEFAULT_FLASH_GAIN_NO_DISTANCE,
+            flashGuides[k] ?: flashGuides[lensKey],
+            flashGuides[flashGuideKey(k, distanceKnown = false)] ?: flashGuides[flashGuideKey(lensKey, distanceKnown = false)],
         )
     }
     val flashGuide: FlashGuides get() = flashGuide(false)
@@ -126,7 +134,22 @@ data class CameraSettings(
             contrast = if (filmMono) FILM_MONO_CONTRAST else 0f,
         )
         val p = LookApplier.apply(base, look, strength, adjust, hasFace)
-        return if (bw) p.copy(saturation = -100f, bwFilter = filter) else p
+        if (bw) return p.copy(saturation = -100f, bwFilter = filter)
+        if (look.film != null) return p
+        // LUT and neutral looks have no film grain and scatter to hide shadow noise, and a LUT steepens the shadows
+        // (Redscale ~4x): clean the shadows more than the ISO table does. Mirrors iOS CameraSettings.develop.
+        val experimental = look.experimental
+        val luma = if (experimental) LUT_LUMA_DENOISE_EXPERIMENTAL else LUT_LUMA_DENOISE
+        val color = if (experimental) LUT_COLOR_DENOISE_EXPERIMENTAL else LUT_COLOR_DENOISE
+        // Neutral and plain LUT looks start a little punchier than Auto's base (2026-11-07, tuned on Pixel night/stage DNGs
+        // through the web develop); the colour-swap looks keep their own colour.
+        val punch = !experimental
+        return p.copy(
+            denoise = maxOf(p.denoise, luma),
+            colorDenoise = maxOf(p.colorDenoise ?: p.denoise, color),
+            contrast = if (punch) (p.contrast + LOOK_CONTRAST).coerceAtMost(100f) else p.contrast,
+            saturation = if (punch) (p.saturation + LOOK_SATURATION).coerceAtMost(100f) else p.saturation,
+        )
     }
 
     /** The long side to save at, or null for full size. */
@@ -144,6 +167,21 @@ data class CameraSettings(
         const val BURST_FRAMES = 8
         /** Film + B&W: added to the Contrast slider's value (owner's choice, 2026-10-31: punchier than plain B&W). */
         const val FILM_MONO_CONTRAST = 20f
+
+        /**
+         * Denoise floors for non-Film colour looks (2026-11-07): shadows of LUT and neutral shots were noisy, Redscale
+         * with blocky coarse colour blotches. Experimental looks (colour swaps, Redscale) get more; 70 colour reaches
+         * the shader's coarse stage (> 65). Unverified on device: tune against Pixel night shots.
+         */
+        const val LUT_LUMA_DENOISE = 12f
+        /** 70 reaches the coarse chroma stage: Natural's shadow colour mottle (σ10 chroma std) 3.95 → 2.55 (35 → 70), 1.34 at 100 with colour fading at edges. */
+        const val LUT_COLOR_DENOISE = 70f
+        const val LUT_LUMA_DENOISE_EXPERIMENTAL = 22f
+        const val LUT_COLOR_DENOISE_EXPERIMENTAL = 70f
+
+        /** Added to Contrast / Saturation for Natural and the plain LUT looks (not Film, B&W or the experimental looks). */
+        const val LOOK_CONTRAST = 6f
+        const val LOOK_SATURATION = 8f
 
         /**
          * Range of the preview calibration; the Pixel's lenses need 0.5 (selfie) to ~9 (T3), the Galaxy Tab S11 Ultra's
@@ -181,11 +219,15 @@ object CameraSettingsStore {
             maxRes = p.getBoolean("maxRes", d.maxRes),
             rememberLast = p.getBoolean("rememberLast", d.rememberLast),
             showHistogram = p.getBoolean("showHistogram", d.showHistogram),
+            showGrid = p.getBoolean("showGrid", d.showGrid),
+            showLevel = p.getBoolean("showLevel", d.showLevel),
             burstMode = runCatching { BurstMode.valueOf(p.getString("burstMode", null)!!) }.getOrDefault(d.burstMode),
             shutterSound = p.getBoolean("shutterSound", d.shutterSound),
             geotag = p.getBoolean("geotag", d.geotag),
+            hdrGainMap = p.getBoolean("hdrGainMap", d.hdrGainMap),
             scanQr = p.getBoolean("scanQr", d.scanQr),
             trackFocus = p.getBoolean("trackFocus", d.trackFocus),
+            experimental = p.getBoolean("experimental", d.experimental),
             previewScales = parseScales(p.getString(SCALES_KEY, null)),
             flashGuides = parseScales(p.getString(FLASH_GUIDES_KEY, null), min = 1e-2f, max = 1e4f),
             // "FLASH" (plain flash, since removed) becomes Focus-flash.
@@ -237,11 +279,15 @@ object CameraSettingsStore {
             .putBoolean("maxRes", s.maxRes)
             .putBoolean("rememberLast", s.rememberLast)
             .putBoolean("showHistogram", s.showHistogram)
+            .putBoolean("showGrid", s.showGrid)
+            .putBoolean("showLevel", s.showLevel)
             .putString("burstMode", s.burstMode.name)
             .putBoolean("shutterSound", s.shutterSound)
             .putBoolean("geotag", s.geotag)
+            .putBoolean("hdrGainMap", s.hdrGainMap)
             .putBoolean("scanQr", s.scanQr)
             .putBoolean("trackFocus", s.trackFocus)
+            .putBoolean("experimental", s.experimental)
             .putBoolean("front", s.front)
             .putString("lens", s.lens)
             .putString("flash", s.flash.name)

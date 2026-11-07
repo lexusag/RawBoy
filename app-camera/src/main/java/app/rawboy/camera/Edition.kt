@@ -26,10 +26,10 @@ internal object Edition {
      * Film mode's stocks (the Film toggle): the film stocks of RawBoy Auto's Film mode.
      * Their ids overlap the LUT looks' ids (portra400 is both), so Film mode keeps its own pick (filmLookId).
      */
-    val filmLooks: List<Look> = FilmLooks.ALL
+    val filmLooks: List<Look> = FilmLooks.ALL.map { if (it.film != null) it.copy(filmGrain = FilmLooks.CAMERA_FILM_GRAIN) else it }
     val defaultFilmLookId: String = FilmLooks.PORTRA_400.id
 
-    fun filmLook(id: String): Look = FilmLooks.byId(id)
+    fun filmLook(id: String): Look = filmLooks.firstOrNull { it.id == id } ?: FilmLooks.byId(id)
 
     /** Pictures/<FOLDER> (JPEGs) and Pictures/<FOLDER>/RAW (DNGs); JPEGs are named IMG_…-<JPEG_SUFFIX>.jpg. */
     const val FOLDER = "RawBoy Camera"
