@@ -14,9 +14,9 @@
 
 # Changelog
 
-**RawBoy Camera: 25% less grain with Film on (2026-11-07)**
+**RawBoy Auto and Pro: 25% less Film grain by default (2026-11-07)**
 
-- With the Film toggle on (the default), the grain strength is now 0.75 of what it was, in colour and in B&W (3x and 1.5x multiples unchanged, so they scale together). Film off is unchanged. Camera only, Android and iOS; settings and sliders untouched. Not yet checked on device.
+- Film mode's default grain is 25% lower: Auto's film looks start at 60% of the stock's grain (was 80%) and Pro's Film grain slider defaults to 75 (was 100). Android, iOS and web. Slider ranges and photos' saved edits are unchanged. RawBoy Camera keeps its film grain at 80 (its film looks no longer follow Auto's value). Not yet checked on a device.
 
 **RawBoy Camera: Grid and Level options, off by default (2026-11-07)**
 

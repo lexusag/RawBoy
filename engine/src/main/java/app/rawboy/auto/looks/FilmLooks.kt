@@ -7,8 +7,11 @@ package app.rawboy.auto.looks
  * Looks add only skin retouch on the portrait films; the auto develop's exposure, white balance and denoise stay.
  */
 object FilmLooks {
-    /** Auto's film grain, a little finer than the stock's own (100). */
-    const val FILM_GRAIN = 80f
+    /** Auto's film grain, finer than the stock's own (100): 25% lower than it was (owner's choice, 2026-11-07). */
+    const val FILM_GRAIN = 60f
+
+    /** RawBoy Camera's film grain, unchanged by that: its film looks keep their earlier 80. */
+    const val CAMERA_FILM_GRAIN = 80f
 
     private fun stock(id: String, name: String, portraitRetouch: Float = 0f) =
         Look(id, name, lutFile = null, film = id, portraitRetouch = portraitRetouch, filmGrain = FILM_GRAIN)

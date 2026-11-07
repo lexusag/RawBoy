@@ -1017,10 +1017,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
          * [FILM_MONO_GRAIN] times that with Film on too.
          */
         internal fun grainStrength(s: CameraSettings) = (if (s.smallExport) 1.34f else 1f) *
-            (if (s.film) FILM_GRAIN else 1f) * (if (s.monoMode) MONO_GRAIN else 1f) * (if (s.filmMono) FILM_MONO_GRAIN else 1f)
-
-        /** Film on (the default): 25% less grain than the look's own (owner's choice, 2026-11-07); B&W's multiples stay. */
-        internal const val FILM_GRAIN = 0.75f
+            (if (s.monoMode) MONO_GRAIN else 1f) * (if (s.filmMono) FILM_MONO_GRAIN else 1f)
 
         /** B&W mode's grain on top of the mono stock's (owner's choice, 2026-10-31: the looks' own read too clean). */
         internal const val MONO_GRAIN = 3f

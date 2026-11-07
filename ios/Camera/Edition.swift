@@ -22,10 +22,14 @@ enum Edition {
      * Film mode's stocks (the Film toggle): the film stocks of RawBoy Auto's Film mode.
      * Their ids overlap the LUT looks' ids (portra400 is both), so Film mode keeps its own pick (filmLookId).
      */
-    static let filmLooks: [Look] = FilmLooks.all
+    static let filmLooks: [Look] = FilmLooks.all.map { look in
+        var look = look
+        if look.film != nil { look.filmGrain = FilmLooks.cameraFilmGrain }
+        return look
+    }
     static let defaultFilmLookId = FilmLooks.portra400.id
 
-    static func filmLook(_ id: String) -> Look { FilmLooks.byId(id) }
+    static func filmLook(_ id: String) -> Look { filmLooks.first { $0.id == id } ?? FilmLooks.byId(id) }
 
     /** Photos albums for the JPEGs and the DNGs; JPEGs are named IMG_…-<jpegSuffix>.jpg. */
     static let album = "RawBoy Camera"

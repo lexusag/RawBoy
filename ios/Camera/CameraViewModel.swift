@@ -482,12 +482,10 @@ final class CameraViewModel: ObservableObject {
      * filmMonoGrain times that with Film on too.
      */
     private nonisolated static func grainStrength(_ s: CameraSettings) -> Float {
-        (s.smallExport ? 1.34 : 1) * (s.rawFormat == .proRaw ? 3 : 1) * (s.film ? filmGrain : 1) * (s.monoMode ? monoGrain : 1)
+        (s.smallExport ? 1.34 : 1) * (s.rawFormat == .proRaw ? 3 : 1) * (s.monoMode ? monoGrain : 1)
             * (s.filmMono ? filmMonoGrain : 1)
     }
 
-    /** Film on (the default): 25% less grain than the look's own (owner's choice, 2026-11-07); B&W's multiples stay. */
-    private nonisolated static let filmGrain: Float = 0.75
     /** B&W mode's grain on top of the mono stock's (owner's choice, 2026-10-31: the looks' own read too clean). */
     private nonisolated static let monoGrain: Float = 3
     /** Film + B&W: monoGrain times this (owner's choice, 2026-10-31: grainier than plain B&W). */

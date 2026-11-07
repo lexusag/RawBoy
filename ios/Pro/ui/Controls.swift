@@ -112,7 +112,7 @@ struct ControlsPanel: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             slider("Film strength", \.filmAmount, 0...100, format: formatPlain, defaultValue: 100)
-            slider("Film grain", \.filmGrain, 0...200, format: formatPlain, defaultValue: 100)
+            slider("Film grain", \.filmGrain, 0...200, format: formatPlain, defaultValue: 75)
             slider("Halation", \.halation, 0...200, format: formatPlain, defaultValue: 100)
         }
         slider("Exposure", \.exposure, -5...5, format: formatEv)
