@@ -27,7 +27,7 @@ import java.util.Locale
 import kotlin.math.abs
 
 /**
- * One video file: H.264 1080p30 from the viewfinder's encoder surface ([sink], drawn by the renderer) plus stereo AAC
+ * One video file: HEVC (H.264 fallback) 1080p30 from the viewfinder's encoder surface ([sink], drawn by the renderer) plus stereo AAC
  * from the microphone, muxed to MP4 in Movies/RawBoy Camera. The picture already carries the look; nothing here knows
  * about colour.
  *
@@ -269,6 +269,36 @@ class VideoRecorder private constructor(
         private const val VIDEO_BITRATE = 16_000_000
         private const val AUDIO_BITRATE = 192_000
 
+        /** A configured encoder of [mime] (surface input), or null when the device has none or refuses the format. */
+        private fun videoCodecOf(width: Int, height: Int, mime: String): MediaCodec? {
+            var codec: MediaCodec? = null
+            try {
+                val format = MediaFormat.createVideoFormat(mime, width, height).apply {
+                    setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
+                    setInteger(MediaFormat.KEY_BIT_RATE, VIDEO_BITRATE)
+                    setInteger(MediaFormat.KEY_FRAME_RATE, 30)
+                    setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
+                    setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
+                    setInteger(
+                        MediaFormat.KEY_PROFILE,
+                        if (mime == MediaFormat.MIMETYPE_VIDEO_HEVC) MediaCodecInfo.CodecProfileLevel.HEVCProfileMain
+                        else MediaCodecInfo.CodecProfileLevel.AVCProfileHigh,
+                    )
+                    // The picture is the display-referred look: tag it as ordinary SDR BT.709 video.
+                    setInteger(MediaFormat.KEY_COLOR_STANDARD, MediaFormat.COLOR_STANDARD_BT709)
+                    setInteger(MediaFormat.KEY_COLOR_TRANSFER, MediaFormat.COLOR_TRANSFER_SDR_VIDEO)
+                    setInteger(MediaFormat.KEY_COLOR_RANGE, MediaFormat.COLOR_RANGE_LIMITED)
+                }
+                codec = MediaCodec.createEncoderByType(mime)
+                codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+                return codec
+            } catch (e: Exception) {
+                Log.w(TAG, "no $mime encoder", e)
+                runCatching { codec?.release() }
+                return null
+            }
+        }
+
         /** 1080p long side and short side; the file is landscape or portrait with the phone ([create]'s `turns`). */
         const val LONG_SIDE = 1920
         const val SHORT_SIDE = 1080
@@ -307,20 +337,12 @@ class VideoRecorder private constructor(
                 descriptor = resolver.openFileDescriptor(uri, "w") ?: throw IOException("Could not open the video file")
                 muxer = MediaMuxer(descriptor.fileDescriptor, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
 
-                val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
-                    setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-                    setInteger(MediaFormat.KEY_BIT_RATE, VIDEO_BITRATE)
-                    setInteger(MediaFormat.KEY_FRAME_RATE, 30)
-                    setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
-                    setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
-                    setInteger(MediaFormat.KEY_PROFILE, MediaCodecInfo.CodecProfileLevel.AVCProfileHigh)
-                    // The picture is the display-referred look: tag it as ordinary SDR BT.709 video.
-                    setInteger(MediaFormat.KEY_COLOR_STANDARD, MediaFormat.COLOR_STANDARD_BT709)
-                    setInteger(MediaFormat.KEY_COLOR_TRANSFER, MediaFormat.COLOR_TRANSFER_SDR_VIDEO)
-                    setInteger(MediaFormat.KEY_COLOR_RANGE, MediaFormat.COLOR_RANGE_LIMITED)
-                }
-                video = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
-                video.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+                // HEVC first: the Pixel's player stalled for seconds on this app's grainy H.264 High files (the same
+                // frames re-muxed with exact 30 fps times stalled too), while the camera's own videos play fine.
+                // H.264 stays as the fallback for a device without an HEVC encoder.
+                video = videoCodecOf(width, height, MediaFormat.MIMETYPE_VIDEO_HEVC)
+                    ?: videoCodecOf(width, height, MediaFormat.MIMETYPE_VIDEO_AVC)
+                    ?: throw IOException("No video encoder")
                 surface = video.createInputSurface()
 
                 if (withAudio) microphone = runCatching { audioOf() }.onFailure { Log.w(TAG, "no microphone", it) }.getOrNull()

@@ -1,3 +1,7 @@
+**RawBoy Camera (Android): video recorded as HEVC (2026-11-07)**
+
+- Google Photos on the Pixel 9 Pro froze for seconds while playing the app's videos (in the owner's screen recording the timer sat at 0:15 while "playing"), while the camera's own clips and the same files on a PC played fine. The frame times are clean (30 fps, no gaps) and a copy re-muxed with exact 30 fps times froze too, so the encoded H.264 High stream is the suspect. Video now records HEVC (Main, 16 Mbit/s, still 1080p30); a phone without an HEVC encoder falls back to H.264. Untested on the phone when added: if it still stalls, send the clip and the screen recording.
+
 **RawBoy Camera (Android): video fixes from the first test clips (2026-11-07)**
 
 - A clip on a non-Film look ran at a steady 12 fps (the film and B&W clips ran at 30): the viewfinder kept those looks' colour-denoise floor (70), whose coarse stages are many taps per pixel, drawn twice per frame (screen and encoder). Video mode now draws the viewfinder without colour denoise. This is inferred from the clips and the shader, not measured on the phone: if a look still stutters, send the `RawBoyViewfinder` logcat lines (fps, GL ms per frame) while recording.
