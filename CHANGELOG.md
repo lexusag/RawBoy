@@ -14,6 +14,10 @@
 
 # Changelog
 
+**RawBoy Camera: 25% less grain with Film on (2026-11-07)**
+
+- With the Film toggle on (the default), the grain strength is now 0.75 of what it was, in colour and in B&W (3x and 1.5x multiples unchanged, so they scale together). Film off is unchanged. Camera only, Android and iOS; settings and sliders untouched. Not yet checked on device.
+
 **RawBoy Camera: Grid and Level options, off by default (2026-11-07)**
 
 - Two new Settings switches: Grid (a 3 x 3 grid over the viewfinder) and Level (a line that turns against the phone's tilt and goes yellow within 1 degree of straight; nothing is drawn with the phone flat). Both are off by default and nothing changes for current users. Android and iOS. Not yet checked on a device.
