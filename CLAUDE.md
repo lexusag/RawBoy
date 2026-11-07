@@ -671,6 +671,11 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   got colour 0 and speckled shadows; measured 18-38. Luma noise was the owner's "good now": ask before changing it.
   Removing colour noise makes the remaining luma grain read a little stronger in Y (raw noise is anti-correlated across
   channels after the colour matrix), with the luma setting unchanged.
+  2026-11-07: non-Film colour looks get a colour floor of 70 (`CameraSettings.LUT_COLOR_DENOISE`, iOS `lutColorDenoise`; luma floor 12,
+  experimental looks 22/70) and Contrast +6 / Saturation +8 (`LOOK_CONTRAST`/`LOOK_SATURATION`, not Film, B&W or experimental). Redscale's
+  blocky shadow noise is luma noise times the LUT's red ramp (gain ~2.5-3.5), not colour noise: colour 100 gave 5.06 → 4.33 chroma std,
+  luma floor 70 about -20%; accepted as is. Harness: web develop in headless Chrome (`analyzeFile` + `developAuto` + the camera's
+  phone-AE lift and floors), shadow crops measured as σ10 high-pass std.
 - Colour denoise follows the lens shading (`colorNoiseScale` in develop.glsl): sigmaC × max(gain, 1)^0.75, gain = the
   decoder-applied DNG gain map (`uShading`, sensor coords, 1 without a map; luma not scaled). The Pixel's ISP shades
   low-ISO frames up to 3.4× in the corners but only 1.2-1.7× at high ISO, so low-ISO night corners had ~2× the centre's

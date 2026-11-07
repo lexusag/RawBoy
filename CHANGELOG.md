@@ -1,3 +1,9 @@
+**RawBoy Camera: punchier Natural and plain LUT looks, stronger colour denoise (2026-11-07)**
+
+- Natural and the plain LUT looks (not Film, B&W or the Experimental looks) now start with Contrast +6 and Saturation +8 on top of the auto develop. Camera only: Auto and Pro's Auto button keep their base.
+- The colour-denoise floor for those looks goes from 35 to 70, which reaches the shader's coarse chroma stage: chroma mottle in a Natural shadow patch (Pixel stage DNG, σ10 chroma std) 3.95 → 2.55. 100 gave 1.34 but faded colour at edges. Experimental looks keep luma 22 / colour 70.
+- Redscale's blocky shadow noise stays as it is (owner's call): it is mostly luma noise amplified by the LUT's red ramp (gain ~2.5-3.5 between input 32 and 100), so colour denoise barely helps (chroma std 5.06 → 4.33 at 100); luma floors of 40/70 cut about 20%, a gentler red ramp about 25% but darker. Android and iOS, tuned through the web develop on Pixel DNGs; not yet checked on device.
+
 **RawBoy Camera: cleaner shadows in non-Film looks (2026-11-07)**
 
 - Colour looks outside Film mode (LUT looks, Natural, Redscale and the other Experimental looks) had noisy shadows, Redscale with ugly blocky colour blotches: they have no film grain or scatter to hide it, and the LUT steepens the shadows (Redscale about 4x). Camera now floors the shot's denoise for them: luma 12 and colour 35, and for Experimental looks luma 22 and colour 70 (reaching the shader's coarse colour stage). Film and B&W are unchanged. Android and iOS. Values are first guesses, not yet checked on device.

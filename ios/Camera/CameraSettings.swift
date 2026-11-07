@@ -110,14 +110,21 @@ struct CameraSettings: Equatable {
         let color = look.experimental ? Self.lutColorDenoiseExperimental : Self.lutColorDenoise
         p.denoise = max(p.denoise, luma)
         p.colorDenoise = max(p.colorDenoise ?? p.denoise, color)
+        // Neutral and plain LUT looks start a little punchier than Auto's base; see Android CameraSettings.LOOK_*.
+        if !look.experimental {
+            p.contrast = min(100, p.contrast + Self.lookContrast)
+            p.saturation = min(100, p.saturation + Self.lookSaturation)
+        }
         return p
     }
 
     /// Denoise floors for non-Film colour looks (2026-11-07); see Android CameraSettings.LUT_*.
     static let lutLumaDenoise: Float = 12
-    static let lutColorDenoise: Float = 35
+    static let lutColorDenoise: Float = 70
     static let lutLumaDenoiseExperimental: Float = 22
     static let lutColorDenoiseExperimental: Float = 70
+    static let lookContrast: Float = 6
+    static let lookSaturation: Float = 8
 
     /** The long side to save at, or nil for full size. */
     var maxLongSide: Int? { smallExport ? Self.smallLongSide : nil }
