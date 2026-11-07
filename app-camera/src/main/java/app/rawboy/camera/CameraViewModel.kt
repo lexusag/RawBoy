@@ -870,6 +870,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
     fun setRememberLast(on: Boolean) = change { it.copy(rememberLast = on) }
     fun setShowHistogram(on: Boolean) = change { it.copy(showHistogram = on) }
+    fun setShowZoomControl(on: Boolean) = change { it.copy(showZoomControl = on) }
     fun setShowGrid(on: Boolean) = change { it.copy(showGrid = on) }
     fun setShowLevel(on: Boolean) {
         if (!on) _tilt.value = null

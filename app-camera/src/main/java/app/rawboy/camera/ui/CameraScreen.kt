@@ -458,13 +458,15 @@ fun CameraScreen(
                         )
                     }
                     // A narrow column in the bottom right corner, beside the lens selector.
-                    ZoomControl(
-                        zoom = zoom,
-                        onZoom = vm::setZoom,
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(end = 8.dp, bottom = 16.dp),
-                    )
+                    if (settings.showZoomControl) {
+                        ZoomControl(
+                            zoom = zoom,
+                            onZoom = vm::setZoom,
+                            modifier = Modifier
+                                .align(Alignment.BottomEnd)
+                                .padding(end = 8.dp, bottom = 16.dp),
+                        )
+                    }
                     // Above the lens selector, out of the way of the focus ring and the top badges.
                     qrCode?.let { code ->
                         QrChip(
@@ -1215,6 +1217,13 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             checked = settings.experimental,
             accent = EXPERIMENTAL_ORANGE,
             onChange = vm::setExperimental,
+        )
+        Spacer(Modifier.height(16.dp))
+        SettingSwitch(
+            title = "Zoom buttons",
+            subtitle = "The + and − buttons and zoom level over the viewfinder. Pinching still zooms",
+            checked = settings.showZoomControl,
+            onChange = vm::setShowZoomControl,
         )
         Spacer(Modifier.height(16.dp))
         SettingSwitch(
