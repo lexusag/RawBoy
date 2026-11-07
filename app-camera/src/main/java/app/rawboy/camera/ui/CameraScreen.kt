@@ -170,6 +170,8 @@ fun CameraScreen(
     val tracking by vm.tracking.collectAsStateWithLifecycle()
     val focusSize by vm.controller.focusSize.collectAsStateWithLifecycle()
     val flashAvailable by vm.flashAvailable.collectAsStateWithLifecycle()
+    val screenFlashCamera by vm.screenFlashCamera.collectAsStateWithLifecycle()
+    val screenFlashLit by vm.screenFlashLit.collectAsStateWithLifecycle()
     val hiRes by vm.hiRes.collectAsStateWithLifecycle()
     val histogram by vm.histogram.collectAsStateWithLifecycle()
     val lowLight by vm.lowLight.collectAsStateWithLifecycle()
@@ -218,6 +220,7 @@ fun CameraScreen(
     // A Surface, so text and icons get the theme's light content colour on black.
     Surface(color = Color.Black, contentColor = Color.White) {
     Box(Modifier.fillMaxSize()) {
+        ScreenFlashEffect(screenFlashLit)
         // Portrait: the bar, viewfinder, controls and shutter row stacked. Landscape (the phone turned sideways):
         // the bar's buttons in a column at the left, the viewfinder, then the S/B/W picker with one tall slider and
         // the shutter column at the right edge, all under the right thumb.
@@ -235,7 +238,7 @@ fun CameraScreen(
         val barButtons = @Composable {
             RawButton(settings.keepDng) { vm.setKeepDng(!settings.keepDng) }
             BurstButton(settings.burstMode, lowLight, hiRes, flashAvailable && settings.flash != FlashMode.OFF) { vm.setBurstMode(settings.burstMode.next()) }
-            if (flashAvailable) FlashButton(settings.flash, vm::cycleFlash)
+            if (flashAvailable) FlashButton(settings.flash, screenFlashCamera, vm::cycleFlash)
             HelpButton(appName, CAMERA_HELP, onOpenChange = { showHelp = it })
             IconButton(onClick = { showSettings = true }) {
                 Icon(Icons.Filled.Settings, contentDescription = "Settings")
@@ -568,6 +571,8 @@ fun CameraScreen(
             },
         )
         }
+        // Screen flash (selfie camera): the lit frame over the whole screen, under the snackbar.
+        if (screenFlashLit) ScreenFlashFrame(Modifier.matchParentSize())
         SnackbarHost(snackbar, Modifier.align(Alignment.BottomCenter))
     }
     }
@@ -1097,12 +1102,16 @@ private fun BurstButton(mode: BurstMode, lowLight: Boolean, hiRes: Boolean, flas
     }
 }
 
-/** Off <-> Focus-flash (the bolt with "AF": the light comes on to focus and meter first, then the flash fires). */
+/**
+ * Off <-> Focus-flash (the bolt with "AF": the light comes on to focus and meter first, then the flash fires). On the
+ * selfie camera, which has no flash unit: Off <-> screen flash (the bolt alone; the screen's frame lights for the shot).
+ */
 @Composable
-private fun FlashButton(mode: FlashMode, onClick: () -> Unit) {
-    val description = when (mode) {
-        FlashMode.OFF -> "Flash off"
-        FlashMode.FOCUS_FLASH -> "Flash with focus light"
+private fun FlashButton(mode: FlashMode, screen: Boolean, onClick: () -> Unit) {
+    val description = when {
+        mode == FlashMode.OFF -> "Flash off"
+        screen -> "Screen flash"
+        else -> "Flash with focus light"
     }
     IconButton(onClick = onClick) {
         Box {
@@ -1111,7 +1120,7 @@ private fun FlashButton(mode: FlashMode, onClick: () -> Unit) {
                 contentDescription = description,
                 tint = if (mode == FlashMode.OFF) LocalContentColor.current else MaterialTheme.colorScheme.primary,
             )
-            if (mode == FlashMode.FOCUS_FLASH) {
+            if (mode == FlashMode.FOCUS_FLASH && !screen) {
                 Text(
                     "AF",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 8.sp, lineHeight = 8.sp),
@@ -1393,3 +1402,41 @@ private fun FilterColumn(selected: BwFilter, onSelect: (BwFilter) -> Unit) {
         }
     }
 }
+
+/**
+ * Screen flash for the selfie camera: while [lit], the window goes to full brightness (see [ScreenFlashFrame], drawn on
+ * top by [CameraScreen]).
+ */
+@Composable
+private fun ScreenFlashEffect(lit: Boolean) {
+    val activity = LocalContext.current.findActivity() ?: return
+    androidx.compose.runtime.DisposableEffect(lit) {
+        val attrs = activity.window.attributes
+        val before = attrs.screenBrightness
+        if (lit) activity.window.attributes = attrs.apply { screenBrightness = 1f }
+        onDispose { if (lit) activity.window.attributes = activity.window.attributes.apply { screenBrightness = before } }
+    }
+}
+
+private tailrec fun android.content.Context.findActivity(): android.app.Activity? = when (this) {
+    is android.app.Activity -> this
+    is android.content.ContextWrapper -> baseContext.findActivity()
+    else -> null
+}
+
+/** The lit frame of the screen flash: warm white all around the screen edge, the viewfinder showing through the middle. */
+@Composable
+private fun ScreenFlashFrame(modifier: Modifier = Modifier) {
+    androidx.compose.foundation.Canvas(modifier) {
+        val t = min(size.width, size.height) * SCREEN_FLASH_FRAME_SHARE
+        val c = SCREEN_FLASH_COLOUR
+        drawRect(c, topLeft = androidx.compose.ui.geometry.Offset.Zero, size = Size(size.width, t))
+        drawRect(c, topLeft = androidx.compose.ui.geometry.Offset(0f, size.height - t), size = Size(size.width, t))
+        drawRect(c, topLeft = androidx.compose.ui.geometry.Offset(0f, t), size = Size(t, size.height - 2 * t))
+        drawRect(c, topLeft = androidx.compose.ui.geometry.Offset(size.width - t, t), size = Size(t, size.height - 2 * t))
+    }
+}
+
+/** Frame width as a share of the screen's short side; a wide frame is the light, the middle is still enough to compose. */
+private const val SCREEN_FLASH_FRAME_SHARE = 0.2f
+private val SCREEN_FLASH_COLOUR = Color(0xFFFFF4E6)

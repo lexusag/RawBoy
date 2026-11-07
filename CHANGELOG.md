@@ -8,9 +8,11 @@
 
 # Changelog
 
-**RawBoy Camera: flash exposure at zoom (2026-11-07)**
+**RawBoy Camera (Android): selfie flash with a lit frame, flash tuned for far subjects and the telephoto (2026-11-07)**
 
-- Flash shots on the zoom (telephoto) lenses and farther subjects came out too dark while the main lens at arm's length was right. Two causes, both addressed: a lens that hasn't learned its own flash guide now starts from the default scaled by its aperture (f-number² against the main lens's f/1.7: a f/2.8 tele gets ~2.7x the gain), and beyond 1 m the exposure grows slightly faster than distance² (extra exponent 0.3: +0.3 EV at 2 m, +0.6 EV at 4 m) because the guide is learned on near subjects. Learned per-lens guides keep working (calibration divides by the same falloff). Android only; the iPhone's flash is metered by iOS. Values are first estimates, not yet checked on device; the log line `flash exposure:` shows the result.
+- The selfie camera gets the flash button: on the shutter the screen goes to full brightness with a wide warm-white frame around the viewfinder, and the shot is taken after a short settle (450 ms) so AE sees the light. Single frame, no burst merging, no preview calibration from it.
+- Back flash: a far subject that needs more gain than the highest ISO gives at 1/30 s now gets a longer exposure (up to 1/15 s) instead of coming out dark, and a lens's default flash guide is scaled by its f-number squared against the wide's (f/1.7), so the telephoto starts brighter. Learned per-lens guides are unchanged, and so is the wide at arm's length.
+- Android code is not compiled or run (no SDK in the session); values are first guesses to check on a Pixel 9 Pro.
 
 **RawBoy Pro and Auto: Film scan 1.5× export (2026-11-07)**
 
