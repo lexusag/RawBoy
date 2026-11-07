@@ -401,6 +401,25 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    private val _zoom = MutableStateFlow(1f)
+
+    /** Digital zoom of the viewfinder, [MIN_ZOOM]..[MAX_ZOOM] (the centre 1/zoom of the frame; not saved between launches). */
+    val zoom = _zoom.asStateFlow()
+
+    /**
+     * Zooms to [value] (clamped). Zoom is logarithmic to the eye, so callers step it by factors. A focus lock belongs to
+     * the old picture, so it is released.
+     */
+    fun setZoom(value: Float) {
+        val z = value.coerceIn(MIN_ZOOM, MAX_ZOOM)
+        if (z == _zoom.value) return
+        _zoom.value = z
+        if (_focusPoint.value != null) releaseFocus()
+    }
+
+    /** A point of the zoomed viewfinder, as the camera's unzoomed frame has it. */
+    private fun unzoom(v: Float): Float = 0.5f + (v - 0.5f) / _zoom.value
+
     /** Focus lock at a point of the viewfinder (upright normalised, as shown). */
     fun focusAt(x: Float, y: Float) {
         if (_status.value != CameraStatus.READY) return
@@ -410,7 +429,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             // Focus first scans at the tap as usual; the tracker takes over from the next grey copy.
             if (_settings.value.trackFocus) trackStart = x to y
         }
-        controller.focusAt(x, y)
+        controller.focusAt(unzoom(x), unzoom(y))
     }
 
     fun releaseFocus() {
@@ -457,7 +476,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             trackStart = null
             if (tracker.start(width, height, luma, start.first, start.second, now)) {
                 _tracking.value = true
-                controller.trackFocus(start.first, start.second)
+                controller.trackFocus(unzoom(start.first), unzoom(start.second))
                 lastFocusMove = now
                 sentFocus = start
                 subjectHidden = false
@@ -488,7 +507,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             lastFocusMove = now
             sentFocus = shown
             sentHidden = subjectHidden
-            controller.moveFocus(shown.first, shown.second, meter = !subjectHidden)
+            controller.moveFocus(unzoom(shown.first), unzoom(shown.second), meter = !subjectHidden)
         }
     }
 
@@ -1000,6 +1019,11 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         private const val FOCUS_MOVE_INTERVAL_MS = 100L
         /** Most the live develop's exposure moves per update (~3 a second), EV. */
         private const val MAX_EV_STEP = 0.3f
+
+        const val MIN_ZOOM = 1f
+
+        /** Far-away viewing: 10x of the frame (digital, on top of the lens). */
+        const val MAX_ZOOM = 10f
 
         /** Exposure is metered on the middle half of the frame's width and height (owner's choice), unless tapped. */
         internal val METER_CENTRE = MeterArea.Centre(0.5f)
