@@ -185,6 +185,14 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private val _flashAvailable = MutableStateFlow(false)
     val flashAvailable = _flashAvailable.asStateFlow()
 
+    /** The selfie camera has no flash unit: the flash button lights the screen's frame instead (screen flash). */
+    private val _screenFlashCamera = MutableStateFlow(false)
+    val screenFlashCamera = _screenFlashCamera.asStateFlow()
+
+    /** The frame is lit now: from just before a screen flash shot until its exposure is done. */
+    private val _screenFlashLit = MutableStateFlow(false)
+    val screenFlashLit = _screenFlashLit.asStateFlow()
+
     /** Focus lock point (upright normalised, as shown), or null for continuous autofocus. */
     private val _focusPoint = MutableStateFlow<Pair<Float, Float>?>(null)
     val focusPoint = _focusPoint.asStateFlow()
@@ -347,7 +355,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     if (front != _settings.value.front) change { it.copy(front = front) }
                     (all.firstOrNull { it.label == _settings.value.lens } ?: all.first { it.label == "W" }).also { info = it }
                 }
-                _flashAvailable.value = inf.hasFlash
+                _screenFlashCamera.value = inf.isFront && !inf.hasFlash
+                _flashAvailable.value = inf.hasFlash || _screenFlashCamera.value
                 _hiRes.value = inf.hiRes
                 controller.setExposureBias(exposureBias(_settings.value))
                 controller.start(inf, st)
@@ -783,11 +792,13 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val settings = _settings.value
         val hiRes = info?.hiRes == true
         val flash = settings.flash.takeIf { info?.hasFlash == true } ?: FlashMode.OFF
+        // The selfie camera: the screen's frame is the light, the shot itself is an ordinary one exposed by AE.
+        val screenFlash = settings.flash != FlashMode.OFF && _screenFlashCamera.value
         // Flash and maximum-resolution shots are single frames (CameraController.captureDng).
-        val burstFrames = if (hiRes) 1 else settings.burstFrames(lowLight.value)
+        val burstFrames = if (hiRes || screenFlash) 1 else settings.burstFrames(lowLight.value)
         val burst = burstFrames > 1 && flash == FlashMode.OFF
         // A flash shot's raw is lit by the flash, the viewfinder wasn't: no calibration from it.
-        val viewfinderKey = if (flash == FlashMode.OFF) live?.stats?.key else null
+        val viewfinderKey = if (flash == FlashMode.OFF && !screenFlash) live?.stats?.key else null
         val mayHaveFace = info?.hasFaceDetection != true || controller.frames.value?.faces?.isNotEmpty() != false
         controller.frames.value?.let { f ->
             Log.d(TAG, "shutter ${settings.lensKey(hiRes)}: preview ISO ${f.iso.toInt()}, ${f.exposureNs / 1000} µs, boost ${f.postRawBoost}, " +
@@ -806,7 +817,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         // Runs in ShotSaver.scope so finishing the lock screen camera never cancels an in-flight capture.
         ShotSaver.scope.launch {
             try {
-                val shot = capture(shotId, settings, hiRes, viewfinderKey, flash, burstFrames).copy(mayHaveFace = mayHaveFace)
+                if (screenFlash) {
+                    // Light the frame and let the screen and AE come up before the exposure.
+                    _screenFlashLit.value = true
+                    delay(SCREEN_FLASH_SETTLE_MS)
+                }
+                val shot = capture(shotId, settings, hiRes, viewfinderKey, flash, burstFrames, screenFlash).copy(mayHaveFace = mayHaveFace)
                 ShotSaver.enqueue(app, shot)
             } catch (e: Throwable) {
                 Log.w(TAG, "capture", e)
@@ -815,6 +831,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 }
                 ShotSaver.cancelCapture()
             } finally {
+                _screenFlashLit.value = false
                 if (burst) {
                     _merging.value = false
                     ShotSaver.endMerge()
@@ -829,13 +846,18 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /** As the request goes to the camera: the click (if on, or required here) and the UI's shutter feedback. */
-    private fun onShutter() {
+    private fun onShutter(screenFlash: Boolean = false) {
         if (_settings.value.shutterSound || shutterSoundRequired) shutterSound.play()
         _shutterEvents.tryEmit(Unit)
+        // The exposure runs right after the request goes out: keep the frame lit through it, then switch it off.
+        if (screenFlash) viewModelScope.launch {
+            delay(SCREEN_FLASH_HOLD_MS)
+            _screenFlashLit.value = false
+        }
     }
 
     /** Captures a raw and saves it as DNG (in Pictures/<Edition.FOLDER>/RAW, or a temporary file). */
-    private suspend fun capture(shotId: Long, settings: CameraSettings, hiRes: Boolean, viewfinderKey: Float?, flash: FlashMode, burstFrames: Int): Shot {
+    private suspend fun capture(shotId: Long, settings: CameraSettings, hiRes: Boolean, viewfinderKey: Float?, flash: FlashMode, burstFrames: Int, screenFlash: Boolean = false): Shot {
         val resolver = app.contentResolver
         val baseName = "IMG_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ROOT).format(Date())
         val degrees = deviceDegrees
@@ -851,7 +873,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             val result = try {
                 withContext(Dispatchers.IO) {
                     val out = resolver.openOutputStream(uri, "w") ?: throw java.io.IOException("Cannot write $name")
-                    val result = out.buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix) { onShutter() } }
+                    val result = out.buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix) { onShutter(screenFlash) } }
                     fix?.let { addGps(uri, it) }
                     MediaStoreOutput.publish(resolver, uri)
                     result
@@ -866,7 +888,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             val file = File(app.cacheDir, "$baseName-$shotId.dng")
             val result = try {
                 withContext(Dispatchers.IO) {
-                    val result = file.outputStream().buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix) { onShutter() } }
+                    val result = file.outputStream().buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix) { onShutter(screenFlash) } }
                     fix?.let { addGps(Uri.fromFile(file), it) }
                     result
                 }
@@ -943,6 +965,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         private const val TAG = "RawBoyCamera"
         private const val DNG_MIME = "image/x-adobe-dng"
         private const val SAVE_DELAY_MS = 500L
+
+        /** Screen flash: how long the frame is lit before the shot (screen at full brightness, AE caught up), and after the request. */
+        private const val SCREEN_FLASH_SETTLE_MS = 450L
+        private const val SCREEN_FLASH_HOLD_MS = 250L
         /** After a lens's first analysed viewfinder frame, how long AE gets to settle before its raw is metered. */
         private const val RAW_METER_DELAY_MS = 300L
         /** Smallest move of a tracked subject (share of the frame) that moves the focus point. */

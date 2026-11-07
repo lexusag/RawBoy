@@ -55,7 +55,10 @@ shows them.
   second) is searched for the tapped patch by normalised cross-correlation (`PatternTracker`, shared engine code:
   half resolution near where it should be, then refined; the template slowly learns the patch's new look). The camera's
   focus region moves with it at most ten times a second.
-- **Flash:** the bolt button in the top bar (shown when the lens has a flash; usually not the selfie camera) turns
+- **Selfie flash (Android):** the selfie camera has no flash unit, so the bolt button there turns on a **screen flash**: on the
+  shutter the screen goes to full brightness with a wide warm-white frame around the picture, and the shot is taken
+  about half a second later, exposed by the camera's AE under that light (single frame, no burst merging).
+- **Flash:** the bolt button in the top bar (shown when the lens has a flash) turns
   **Focus-flash** (bolt with "AF") on or off. It works like Google Camera's: the light comes on, the camera focuses with it (unless focus is locked), then the flash fires.
   Exposure works like a flash guide number: the photo is exposed for the distance the lens is focused at (the flash's
   light falls off with its square), never brighter than without flash, and each lens learns its flash strength from
