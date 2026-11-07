@@ -52,6 +52,10 @@ data class CameraSettings(
     val rememberLast: Boolean = false,
     /** A live RGB histogram in a corner of the viewfinder. */
     val showHistogram: Boolean = false,
+    /** A 3 x 3 grid over the viewfinder (rule of thirds). Off by default. */
+    val showGrid: Boolean = false,
+    /** A level line over the viewfinder that turns yellow when the phone is straight. Off by default. */
+    val showLevel: Boolean = false,
     /** Whether each shot (without flash) takes [BURST_FRAMES] raws and merges them into one: see [BurstMode]. */
     val burstMode: BurstMode = BurstMode.AUTO,
     /** Play the camera shutter click on each shot. Where the law requires it, Android plays it regardless (ShutterSound). */
@@ -198,6 +202,8 @@ object CameraSettingsStore {
             maxRes = p.getBoolean("maxRes", d.maxRes),
             rememberLast = p.getBoolean("rememberLast", d.rememberLast),
             showHistogram = p.getBoolean("showHistogram", d.showHistogram),
+            showGrid = p.getBoolean("showGrid", d.showGrid),
+            showLevel = p.getBoolean("showLevel", d.showLevel),
             burstMode = runCatching { BurstMode.valueOf(p.getString("burstMode", null)!!) }.getOrDefault(d.burstMode),
             shutterSound = p.getBoolean("shutterSound", d.shutterSound),
             geotag = p.getBoolean("geotag", d.geotag),
@@ -254,6 +260,8 @@ object CameraSettingsStore {
             .putBoolean("maxRes", s.maxRes)
             .putBoolean("rememberLast", s.rememberLast)
             .putBoolean("showHistogram", s.showHistogram)
+            .putBoolean("showGrid", s.showGrid)
+            .putBoolean("showLevel", s.showLevel)
             .putString("burstMode", s.burstMode.name)
             .putBoolean("shutterSound", s.shutterSound)
             .putBoolean("geotag", s.geotag)

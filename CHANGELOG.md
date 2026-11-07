@@ -8,6 +8,10 @@
 
 # Changelog
 
+**RawBoy Camera: Grid and Level options, off by default (2026-11-07)**
+
+- Two new Settings switches: Grid (a 3 x 3 grid over the viewfinder) and Level (a line that turns against the phone's tilt and goes yellow within 1 degree of straight; nothing is drawn with the phone flat). Both are off by default and nothing changes for current users. Android and iOS. Not yet checked on a device.
+
 **RawBoy Camera (Android): selfie flash with a lit frame (2026-11-07)**
 
 - The selfie camera gets the flash button: on the shutter the screen goes to full brightness with a wide warm-white frame around the viewfinder, and the shot is taken after a short settle (450 ms) so AE sees the light. Single frame, no burst merging, no preview calibration from it.
