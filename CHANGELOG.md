@@ -5,6 +5,14 @@
 - `engine/src/main/cpp/ultrahdr.h` (container, metadata and gain map; header-only), `JpegNative.beginGainMap`, `ExportSettings.hdrGainMap`. Host test of the container: `tools/ultrahdr/run.sh` (reads it back the way `decoder_display.cpp` does: MPF offsets, XMP, ISO 21496-1 fields).
 - Not yet checked on a device or in a viewer: the Android build was not run for this change (no SDK in the sandbox), only the container on the host and `jpeg_jpegli.cpp` against a stub header. Knee 0.75 and 2 stops are first guesses (`kKnee`, `kHeadroomEv`). The setting is Android only; iOS and the other apps are unchanged.
 
+**RawBoy Camera (Android): video mode prototype (2026-11-07)**
+
+- Hidden behind Settings › Experimental features (off by default). New VIDEO button in the top bar. In video mode the shutter (and the volume buttons) start and stop a recording: 1080p, 30 fps, H.264, stereo AAC, saved to `Movies/RawBoy Camera/VID_<date>_<time>-camera.mp4`. Pixel 9 Pro only for now; Android only.
+- The file is what the viewfinder shows: the develop pass (look, Film or B&W stock, Strength, Brightness, Warmth) is drawn a second time into the encoder's input surface, cropped to 16:9 (the viewfinder is 4:3; the cut-off parts are darkened in video mode). A phone held sideways records a landscape file.
+- Film grain is seeded by position only for photos, which in a video would be a frozen pattern: `uGrainFrame` (video only, 0 for photos) folds a frame counter into the grain seeds in `develop.glsl` and `film_form.glsl`.
+- The live exposure eases at most 0.05 EV per update in video mode (0.3 for photos) so the recording doesn't pump. Skin retouch, the ISO-based wavelet denoise and sharpening are photo-only. The camera session is the photo one (no video stabilisation, lens or camera can't change while recording).
+- Untested on a device when added; thermal and 30 fps headroom with Film on still to be measured (logcat tag `RawBoyViewfinder`, `RawBoyVideo`).
+
 **RawBoy Camera: punchier Natural and plain LUT looks, stronger colour denoise (2026-11-07)**
 
 - Natural and the plain LUT looks (not Film, B&W or the Experimental looks) now start with Contrast +6 and Saturation +8 on top of the auto develop. Camera only: Auto and Pro's Auto button keep their base.
@@ -20,6 +28,15 @@
 - A lossy JPEG XL DNG (Small raw) packed again as Lossless came out washed out and magenta in Apple Photos and other software that ignores OpcodeList2 in a DNG 1.4 file: the lossy mosaic's non-linear encoding was kept, with the MapPolynomial that undoes it. The Packer now applies the list to the pixels, so the file holds ordinary linear raw data. Checked on the Pixel and GFX 50R Small raws; host test `tools/dng_pack_test/run.sh`.
 
 # Changelog
+
+**RawBoy Camera (Android): digital zoom up to 10x for seeing far away (2026-11-07)**
+
+- A zoom control above the lens buttons: a large readout (tap it for 1x), 56 dp − and + buttons (a tap steps 1.25x, holding zooms smoothly) and 1x / 2x / 5x / 10x presets; pinching the viewfinder zooms too. It is a GPU crop of the centre of the camera frame in the viewfinder's first pass (`ViewfinderRenderer.zoom`), so it is smooth, works on every lens, and the live develop, histogram and QR reader see the zoomed picture. Focus taps are mapped back to the unzoomed frame, and a zoom change releases an AF lock.
+- View only: photos and DNGs are still the whole frame, and the zoom is not saved between launches. Made for people with poor eyesight, so the viewfinder comes first; cropping the saved photo to match, hardware zoom for the first steps, and iOS are not done. Android code is not compiled or run (no SDK in the session): check on a Pixel 9 Pro.
+
+**RawBoy Auto and Pro: 25% less Film grain by default (2026-11-07)**
+
+- Film mode's default grain is 25% lower: Auto's film looks start at 60% of the stock's grain (was 80%) and Pro's Film grain slider defaults to 75 (was 100). Android, iOS and web. Slider ranges and photos' saved edits are unchanged. RawBoy Camera keeps its film grain at 80 (its film looks no longer follow Auto's value). Not yet checked on a device.
 
 **RawBoy Camera: Grid and Level options, off by default (2026-11-07)**
 

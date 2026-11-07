@@ -22,6 +22,7 @@ uniform float uGrain;       // 0..1
 uniform float uGrainSize;   // grain cell size in full-resolution pixels
 uniform float uGrainRoughness; // 0..1: grain strength varies in clumps (a coarser field modulates it)
 uniform float uGrainColor;  // 0 = monochrome grain, 1 = independent per channel
+uniform float uGrainFrame;  // video: frame counter folded into every grain seed so the grain moves; 0 = fixed (photos)
 uniform float uSharpen;     // 0..1
 uniform float uLocalContrast; // -1..1, edge-aware mid-frequency detail
 uniform float uClarity;     // -1..1, high-pass (local) contrast
@@ -462,12 +463,13 @@ vec3 grainField(vec2 fullPx, float size, uint seed) {
 }
 
 vec3 grainNoise(vec2 fullPx) {
-    vec3 g = grainField(fullPx, uGrainSize, 0u);
+    uint fs = uint(uGrainFrame) * 0x9e3779b1u;
+    vec3 g = grainField(fullPx, uGrainSize, fs);
     if (uGrainRoughness > 0.0) {
         // Uneven grain: grains twice as large mixed in, as clumps among the fine ones. Same variance, so Amount
         // keeps its meaning.
         float w = uGrainRoughness * 1.5;
-        g = (g + w * grainField(fullPx, uGrainSize * 2.0, 0x51edu)) * inversesqrt(1.0 + w * w);
+        g = (g + w * grainField(fullPx, uGrainSize * 2.0, 0x51edu + fs)) * inversesqrt(1.0 + w * w);
     }
     float mono = (g.r + g.g + g.b) * 0.57735;
     // Each channel's variance dips between mono and full colour (they are correlated); keep it at the default 0.15's.

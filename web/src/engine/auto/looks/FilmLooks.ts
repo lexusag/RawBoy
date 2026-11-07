@@ -7,7 +7,7 @@ import { RetiredLooks } from './RetiredLooks';
  * portrait films; the auto develop's exposure, white balance and denoise stay.
  */
 /** Auto's film grain, a little finer than the stock's own (100). */
-export const FILM_GRAIN = 80;
+export const FILM_GRAIN = 60;
 
 const stock = (id: string, name: string, portraitRetouch = 0): Look =>
   ({ ...Looks.NATURAL, id, name, film: id, portraitRetouch, filmGrain: FILM_GRAIN });

@@ -32,7 +32,7 @@ data class Look(
     /** Film stock id ([app.rawboy.film.FilmStocks]) rendered instead of AgX + LUT, or null. */
     val film: String? = null,
     /** Film grain and halation, 100 = the stock as formation.json describes it. */
-    val filmGrain: Float = 100f,
+    val filmGrain: Float = 75f,
     val halation: Float = 100f,
 ) {
     /** LutEntry id, as LutRepository names bundled LUTs. */

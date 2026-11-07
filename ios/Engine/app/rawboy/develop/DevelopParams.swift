@@ -79,7 +79,7 @@ public struct DevelopParams: Equatable, Sendable {
     public var lutAmount: Float = 100
     public var film: String? = nil
     public var filmAmount: Float = 100
-    public var filmGrain: Float = 100
+    public var filmGrain: Float = 75
     public var halation: Float = 100
     public var curves = ToneCurves.none
     public var lensProfile: Bool = true

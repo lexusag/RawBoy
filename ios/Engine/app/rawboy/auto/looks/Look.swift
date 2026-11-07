@@ -30,7 +30,7 @@ public struct Look: Equatable, Hashable, Sendable, Identifiable {
     /** Film stock id (FilmStocks) rendered instead of AgX + LUT, or nil. */
     public var film: String? = nil
     /** Film grain and halation, 100 = the stock as formation.json describes it. */
-    public var filmGrain: Float = 100
+    public var filmGrain: Float = 75
     public var halation: Float = 100
 
     init(_ id: String, _ name: String, _ lutFile: String?, contrast: Float = 0, grain: Float = 0, bloom: Float = 0,
@@ -180,8 +180,10 @@ public enum Looks {
  * retouch on the portrait films. Mirrors Android's FilmLooks.
  */
 public enum FilmLooks {
-    /** Auto's film grain, a little finer than the stock's own (100). */
-    public static let filmGrain: Float = 80
+    /** Auto's film grain, finer than the stock's own (100): 25% lower than it was (owner's choice, 2026-11-07). */
+    public static let filmGrain: Float = 60
+    /** RawBoy Camera's film grain, unchanged by that: its film looks keep their earlier 80. */
+    public static let cameraFilmGrain: Float = 80
 
     private static func stock(_ id: String, _ name: String, portraitRetouch: Float = 0) -> Look {
         var look = Look(id, name, nil, portraitRetouch: portraitRetouch, film: id)

@@ -68,6 +68,8 @@ data class CameraSettings(
     val scanQr: Boolean = true,
     /** After a tap, keep focus on what was tapped as it moves (CameraViewModel's tracker); off = the focus stays put. */
     val trackFocus: Boolean = false,
+    /** Features still in testing (video mode today); hidden until switched on in Settings. */
+    val experimental: Boolean = false,
     /**
      * Per camera ([lensKey]): gain from the linearised preview to raw units (1.0 = sensor clip), learned
      * from each shot (raw key / viewfinder key), so the viewfinder's auto exposure matches the final.
@@ -225,6 +227,7 @@ object CameraSettingsStore {
             hdrGainMap = p.getBoolean("hdrGainMap", d.hdrGainMap),
             scanQr = p.getBoolean("scanQr", d.scanQr),
             trackFocus = p.getBoolean("trackFocus", d.trackFocus),
+            experimental = p.getBoolean("experimental", d.experimental),
             previewScales = parseScales(p.getString(SCALES_KEY, null)),
             flashGuides = parseScales(p.getString(FLASH_GUIDES_KEY, null), min = 1e-2f, max = 1e4f),
             // "FLASH" (plain flash, since removed) becomes Focus-flash.
@@ -284,6 +287,7 @@ object CameraSettingsStore {
             .putBoolean("hdrGainMap", s.hdrGainMap)
             .putBoolean("scanQr", s.scanQr)
             .putBoolean("trackFocus", s.trackFocus)
+            .putBoolean("experimental", s.experimental)
             .putBoolean("front", s.front)
             .putString("lens", s.lens)
             .putString("flash", s.flash.name)
