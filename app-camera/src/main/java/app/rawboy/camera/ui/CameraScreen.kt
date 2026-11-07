@@ -1208,6 +1208,13 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
         )
         Spacer(Modifier.height(16.dp))
         SettingSwitch(
+            title = "HDR gain map",
+            subtitle = "Save Ultra HDR JPEGs: the same picture, with extra highlight range for HDR screens. Off by default",
+            checked = settings.hdrGainMap,
+            onChange = vm::setHdrGainMap,
+        )
+        Spacer(Modifier.height(16.dp))
+        SettingSwitch(
             title = "QR codes",
             subtitle = "Show what a QR code in the viewfinder holds; tap to open the link, join the Wi-Fi or copy the text",
             checked = settings.scanQr,
