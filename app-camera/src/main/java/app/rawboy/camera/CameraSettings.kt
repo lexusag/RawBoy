@@ -137,7 +137,15 @@ data class CameraSettings(
         val experimental = look.experimental
         val luma = if (experimental) LUT_LUMA_DENOISE_EXPERIMENTAL else LUT_LUMA_DENOISE
         val color = if (experimental) LUT_COLOR_DENOISE_EXPERIMENTAL else LUT_COLOR_DENOISE
-        return p.copy(denoise = maxOf(p.denoise, luma), colorDenoise = maxOf(p.colorDenoise ?: p.denoise, color))
+        // Neutral and plain LUT looks start a little punchier than Auto's base (2026-11-07, tuned on Pixel night/stage DNGs
+        // through the web develop); the colour-swap looks keep their own colour.
+        val punch = !experimental
+        return p.copy(
+            denoise = maxOf(p.denoise, luma),
+            colorDenoise = maxOf(p.colorDenoise ?: p.denoise, color),
+            contrast = if (punch) (p.contrast + LOOK_CONTRAST).coerceAtMost(100f) else p.contrast,
+            saturation = if (punch) (p.saturation + LOOK_SATURATION).coerceAtMost(100f) else p.saturation,
+        )
     }
 
     /** The long side to save at, or null for full size. */
@@ -162,9 +170,14 @@ data class CameraSettings(
          * the shader's coarse stage (> 65). Unverified on device: tune against Pixel night shots.
          */
         const val LUT_LUMA_DENOISE = 12f
-        const val LUT_COLOR_DENOISE = 35f
+        /** 70 reaches the coarse chroma stage: Natural's shadow colour mottle (σ10 chroma std) 3.95 → 2.55 (35 → 70), 1.34 at 100 with colour fading at edges. */
+        const val LUT_COLOR_DENOISE = 70f
         const val LUT_LUMA_DENOISE_EXPERIMENTAL = 22f
         const val LUT_COLOR_DENOISE_EXPERIMENTAL = 70f
+
+        /** Added to Contrast / Saturation for Natural and the plain LUT looks (not Film, B&W or the experimental looks). */
+        const val LOOK_CONTRAST = 6f
+        const val LOOK_SATURATION = 8f
 
         /**
          * Range of the preview calibration; the Pixel's lenses need 0.5 (selfie) to ~9 (T3), the Galaxy Tab S11 Ultra's
