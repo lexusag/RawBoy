@@ -99,6 +99,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.foundation.rememberScrollState
@@ -202,8 +203,6 @@ fun CameraScreen(
     // Turned sideways the UI turns with the window, the viewfinder picture stays put on the glass.
     val displayRotation = rememberDisplayRotation()
     val turns = viewfinderTurns(displayRotation)
-    // A recording started sideways is a landscape file.
-    LaunchedEffect(turns) { vm.displayTurns = turns }
     // Video wants the microphone: asked when the mode is first switched on.
     LaunchedEffect(videoMode) { if (videoMode && !vm.hasAudioPermission()) requestAudio() }
     // The volume keys don't shoot while a sheet is open.
@@ -1214,6 +1213,7 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             title = "Experimental features",
             subtitle = "Features still being tested: video mode (a VIDEO button in the top bar)",
             checked = settings.experimental,
+            accent = EXPERIMENTAL_ORANGE,
             onChange = vm::setExperimental,
         )
         Spacer(Modifier.height(16.dp))
@@ -1430,15 +1430,30 @@ private fun DefaultCameraChoice(action: String, title: String, whenSet: String, 
 }
 
 @Composable
-private fun SettingSwitch(title: String, subtitle: String, checked: Boolean, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
+private fun SettingSwitch(
+    title: String,
+    subtitle: String,
+    checked: Boolean,
+    enabled: Boolean = true,
+    accent: Color? = null,
+    onChange: (Boolean) -> Unit,
+) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium)
+            Text(title, style = MaterialTheme.typography.bodyMedium, color = accent ?: Color.Unspecified)
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Switch(checked = checked, onCheckedChange = onChange, enabled = enabled)
+        Switch(
+            checked = checked,
+            onCheckedChange = onChange,
+            enabled = enabled,
+            colors = if (accent == null) SwitchDefaults.colors() else SwitchDefaults.colors(checkedTrackColor = accent, checkedThumbColor = Color.White),
+        )
     }
 }
+
+/** Experimental features stand out in Settings: bright orange. */
+private val EXPERIMENTAL_ORANGE = Color(0xFFFF9100)
 
 private const val COMPARE_DELAY_MS = 250L
 

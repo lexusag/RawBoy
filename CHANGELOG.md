@@ -1,3 +1,9 @@
+**RawBoy Camera (Android): video fixes from the first test clips (2026-11-07)**
+
+- A clip on a non-Film look ran at a steady 12 fps (the film and B&W clips ran at 30): the viewfinder kept those looks' colour-denoise floor (70), whose coarse stages are many taps per pixel, drawn twice per frame (screen and encoder). Video mode now draws the viewfinder without colour denoise. This is inferred from the clips and the shader, not measured on the phone: if a look still stutters, send the `RawBoyViewfinder` logcat lines (fps, GL ms per frame) while recording.
+- A phone held sideways with auto-rotate off recorded a portrait file with the picture on its side. The file's orientation now follows the phone's own rotation, as photos do.
+- The sound ran 0.7-1.6 s past the last picture; it now stops with the picture.
+
 **RawBoy: DNGs decoded by the DNG SDK open at the same brightness as LibRaw's (2026-11-07)**
 
 - A Packer Small raw (lossy JPEG XL, decoded by the DNG SDK) opened a stop or more brighter in RawBoy and RawBoy Auto than the same photo's original or Lossless DNG (LibRaw): LibRaw normalises its white balance multipliers to the largest, the SDK path left green at 1 (a Pixel 9 Pro's blue multiplier is 2). Auto's exposure, histogram stats and highlight clip level now match. Host test `tools/dng_decode_test/run.sh`.
