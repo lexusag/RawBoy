@@ -553,10 +553,10 @@ final class AutoViewModel: ObservableObject {
                 message = "No white balance makes that spot grey"
             case .white(let kelvin, let tint):
                 guard let current = photo(id), let currentAnalysis = current.analysis else { return }
-                let unadjusted = current.edits
-                    ?? LookApplier.develop(currentAnalysis.autoBase, look: current.activeLook, strength: current.strength,
-                                           adjust: Adjustments.none, hasFace: currentAnalysis.stats.hasFace,
-                                           preset: current.preset, lensPreset: current.lensPreset)
+                // The Swift port has no RawBoy edits (Kotlin's AutoPhoto.edits), so the unadjusted develop is the look's.
+                let unadjusted = LookApplier.develop(currentAnalysis.autoBase, look: current.activeLook, strength: current.strength,
+                                                     adjust: Adjustments.none, hasFace: currentAnalysis.stats.hasFace,
+                                                     preset: current.preset, lensPreset: current.lensPreset)
                 let wb = LookApplier.whiteBalanceAdjust(unadjusted, kelvin: kelvin, tint: tint)
                 setAdjust(id, force: true) { $0.warmth = wb.warmth; $0.tint = wb.tint }
             }
