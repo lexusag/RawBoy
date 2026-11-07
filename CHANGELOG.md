@@ -14,6 +14,10 @@
 
 # Changelog
 
+**RawBoy Auto and Pro: 25% less Film grain by default (2026-11-07)**
+
+- Film mode's default grain is 25% lower: Auto's film looks start at 60% of the stock's grain (was 80%) and Pro's Film grain slider defaults to 75 (was 100). Android, iOS and web. Slider ranges and photos' saved edits are unchanged. RawBoy Camera keeps its film grain at 80 (its film looks no longer follow Auto's value). Not yet checked on a device.
+
 **RawBoy Camera: Grid and Level options, off by default (2026-11-07)**
 
 - Two new Settings switches: Grid (a 3 x 3 grid over the viewfinder) and Level (a line that turns against the phone's tilt and goes yellow within 1 degree of straight; nothing is drawn with the phone flat). Both are off by default and nothing changes for current users. Android and iOS. Not yet checked on a device.
