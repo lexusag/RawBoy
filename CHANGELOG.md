@@ -1,3 +1,7 @@
+**RawBoy Packer: Small raw back to Maximum compatibility no longer washed out (2026-11-07)**
+
+- A lossy JPEG XL DNG (Small raw) packed again as Lossless came out washed out and magenta in Apple Photos and other software that ignores OpcodeList2 in a DNG 1.4 file: the lossy mosaic's non-linear encoding was kept, with the MapPolynomial that undoes it. The Packer now applies the list to the pixels, so the file holds ordinary linear raw data. Checked on the Pixel and GFX 50R Small raws; host test `tools/dng_pack_test/run.sh`.
+
 # Changelog
 
 **RawBoy: bundled Film Flash look across Camera, Auto, and Pro (2026-11-06)**

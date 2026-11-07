@@ -769,6 +769,14 @@ bool packDng(const uint8_t* data, size_t size, const PackOptions& options, const
                 negative->ClearRawLossyCompressedImage();
                 negative->ClearRawLossyCompressedImageDigest();
                 negative->ClearRawImageDigest();
+                // A lossy JPEG XL mosaic (Small raw) is stored in a non-linear encoding that only its OpcodeList2
+                // (a MapPolynomial) undoes. Apple Photos and older software don't apply that list to a DNG 1.4 file,
+                // so the Lossless output rendered washed out and magenta. Apply the list to the pixels instead: the
+                // SDK then stores linear raw data and leaves the list out.
+                const dng_ifd& mainIfd = *dinfo.fIFD[dinfo.fMainIndex];
+                if (mainIfd.fCompression == ccJXL && mainIfd.fJXLDistance > 0.0f) {
+                    negative->OpcodeList2().SetAlwaysApply();
+                }
             }
             if (!options.keepGps) stripGps(*negative->GetExif());
             info.lensWritten = !info.lensData.empty();
