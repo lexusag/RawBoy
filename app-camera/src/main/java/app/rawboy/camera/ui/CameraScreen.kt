@@ -157,6 +157,7 @@ fun CameraScreen(
     vm: CameraViewModel,
     requestPermission: () -> Unit,
     requestLocation: () -> Unit,
+    requestAudio: () -> Unit,
     openPhoto: (Uri) -> Unit,
     openQr: (QrPayload) -> Unit,
 ) {
@@ -184,6 +185,9 @@ fun CameraScreen(
     val tilt by vm.tilt.collectAsStateWithLifecycle()
     val lowLight by vm.lowLight.collectAsStateWithLifecycle()
     val qrCode by vm.qrCode.collectAsStateWithLifecycle()
+    val videoMode by vm.videoMode.collectAsStateWithLifecycle()
+    val recordingMs by vm.recordingMs.collectAsStateWithLifecycle()
+    val videoSink by vm.videoSink.collectAsStateWithLifecycle()
     // Only the AF state of the camera's per-frame metadata, so the screen doesn't recompose 30 times a second.
     val afState by remember(vm) { vm.controller.frames.map { it?.afState }.distinctUntilChanged() }
         .collectAsStateWithLifecycle(null)
@@ -198,6 +202,10 @@ fun CameraScreen(
     // Turned sideways the UI turns with the window, the viewfinder picture stays put on the glass.
     val displayRotation = rememberDisplayRotation()
     val turns = viewfinderTurns(displayRotation)
+    // A recording started sideways is a landscape file.
+    LaunchedEffect(turns) { vm.displayTurns = turns }
+    // Video wants the microphone: asked when the mode is first switched on.
+    LaunchedEffect(videoMode) { if (videoMode && !vm.hasAudioPermission()) requestAudio() }
     // The volume keys don't shoot while a sheet is open.
     LaunchedEffect(showSettings, showHelp) { vm.settingsOpen = showSettings || showHelp }
 
@@ -239,14 +247,18 @@ fun CameraScreen(
         ) {
         val landscape = maxWidth > maxHeight
         val statusText = when {
+            recordingMs != null -> "● " + formatRecordingTime(recordingMs ?: 0L)
             merging -> "Merging frames…"
             pending > 0 -> "Saving $pending…"
             else -> ""
         }
         val barButtons = @Composable {
-            RawButton(settings.keepDng) { vm.setKeepDng(!settings.keepDng) }
-            BurstButton(settings.burstMode, lowLight, hiRes, flashAvailable && settings.flash != FlashMode.OFF) { vm.setBurstMode(settings.burstMode.next()) }
-            if (flashAvailable) FlashButton(settings.flash, screenFlashCamera, vm::cycleFlash)
+            VideoModeButton(videoMode, enabled = recordingMs == null) { vm.setVideoMode(!videoMode) }
+            if (!videoMode) {
+                RawButton(settings.keepDng) { vm.setKeepDng(!settings.keepDng) }
+                BurstButton(settings.burstMode, lowLight, hiRes, flashAvailable && settings.flash != FlashMode.OFF) { vm.setBurstMode(settings.burstMode.next()) }
+                if (flashAvailable) FlashButton(settings.flash, screenFlashCamera, vm::cycleFlash)
+            }
             HelpButton(appName, CAMERA_HELP, onOpenChange = { showHelp = it })
             IconButton(onClick = { showSettings = true }) {
                 Icon(Icons.Filled.Settings, contentDescription = "Settings")
@@ -270,6 +282,8 @@ fun CameraScreen(
         val shutterButton = @Composable {
             Shutter(
                 enabled = status == CameraStatus.READY && !merging,
+                video = videoMode,
+                recording = recordingMs != null,
                 onClick = vm::shutter,
                 modifier = Modifier.graphicsLayer {
                     scaleX = shutterScale.value
@@ -376,7 +390,12 @@ fun CameraScreen(
                         onTrackLuma = if (settings.trackFocus && focusPoint != null) vm::onTrackLuma else null,
                         turns = turns,
                         zoom = zoom,
+
+                        videoSink = videoSink,
+                        videoMode = videoMode,
                     )
+                    // Video is a 16:9 (or 9:16) slice of the 4:3 viewfinder: shade what the file will not have.
+                    if (videoMode) VideoFrameMask(if (turns % 2 == 1) 16f / 9f else 9f / 16f)
                     // Taps, the focus handle, ring and loupe work in the upright picture's coordinates, turned with it.
                     Box(
                         Modifier
@@ -917,18 +936,62 @@ private fun loupeAt(x: Float, y: Float, view: IntSize, side: Float, gap: Float):
 }
 
 @Composable
-private fun Shutter(enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun Shutter(enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, video: Boolean = false, recording: Boolean = false) {
     val ring = if (enabled) Color.White else Color.Gray
+    // Video: a red dot, which becomes a red square while recording.
+    val fill = if (!video) ring else if (enabled) Color(0xFFE53935) else Color.Gray
+    val shape = if (recording) RoundedCornerShape(8.dp) else CircleShape
     Box(
         modifier
             .size(76.dp)
             .border(BorderStroke(4.dp, ring), CircleShape)
-            .padding(8.dp)
-            .clip(CircleShape)
-            .background(ring)
-            .clickable(enabled = enabled, onClickLabel = "Take a photo", role = Role.Button, onClick = onClick)
-            .semantics { contentDescription = "Shutter" },
+            .padding(if (recording) 20.dp else 8.dp)
+            .clip(shape)
+            .background(fill)
+            .clickable(
+                enabled = enabled,
+                onClickLabel = if (!video) "Take a photo" else if (recording) "Stop recording" else "Start recording",
+                role = Role.Button,
+                onClick = onClick,
+            )
+            .semantics { contentDescription = if (video) "Record" else "Shutter" },
     )
+}
+
+/** Dims the parts of the viewfinder outside the video's [target] aspect (width / height as the window shows it). */
+@Composable
+private fun VideoFrameMask(target: Float) {
+    androidx.compose.foundation.Canvas(Modifier.fillMaxSize()) {
+        val shade = Color.Black.copy(alpha = 0.55f)
+        val a = size.width / size.height
+        if (a > target) {
+            val bar = (size.width - size.height * target) / 2f
+            drawRect(shade, androidx.compose.ui.geometry.Offset.Zero, androidx.compose.ui.geometry.Size(bar, size.height))
+            drawRect(shade, androidx.compose.ui.geometry.Offset(size.width - bar, 0f), androidx.compose.ui.geometry.Size(bar, size.height))
+        } else {
+            val bar = (size.height - size.width / target) / 2f
+            drawRect(shade, androidx.compose.ui.geometry.Offset.Zero, androidx.compose.ui.geometry.Size(size.width, bar))
+            drawRect(shade, androidx.compose.ui.geometry.Offset(0f, size.height - bar), androidx.compose.ui.geometry.Size(size.width, bar))
+        }
+    }
+}
+
+/** Photo / video switch in the top bar: "VIDEO", lit while video mode is on. */
+@Composable
+private fun VideoModeButton(on: Boolean, enabled: Boolean, onClick: () -> Unit) {
+    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.semantics { stateDescription = if (on) "On" else "Off" }) {
+        Text(
+            "VIDEO",
+            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+            color = if (on) MaterialTheme.colorScheme.primary else LocalContentColor.current.copy(alpha = 0.6f),
+            modifier = Modifier.semantics { contentDescription = "Video mode" },
+        )
+    }
+}
+
+private fun formatRecordingTime(ms: Long): String {
+    val total = ms / 1000
+    return "%02d:%02d".format(total / 60, total % 60)
 }
 
 /**

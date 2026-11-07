@@ -142,6 +142,7 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
     private val uGrainSize = GLES30.glGetUniformLocation(id, "uGrainSize")
     private val uGrainRoughness = GLES30.glGetUniformLocation(id, "uGrainRoughness")
     private val uGrainColor = GLES30.glGetUniformLocation(id, "uGrainColor")
+    private val uGrainFrame = GLES30.glGetUniformLocation(id, "uGrainFrame")
     private val uSharpen = GLES30.glGetUniformLocation(id, "uSharpen")
     private val uLocalContrast = GLES30.glGetUniformLocation(id, "uLocalContrast")
     private val uClarity = GLES30.glGetUniformLocation(id, "uClarity")
@@ -309,6 +310,12 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
         GLES30.glUniform2f(uBokehTexel, 1f / (bokeh?.width ?: 1), 1f / (bokeh?.height ?: 1))
         bindFilm(p, g)
     }
+
+    /**
+     * Video: moves every grain seed with the frame counter (0 = the fixed, position-only grain of photos). Call after
+     * [bind], while this program is in use.
+     */
+    fun setGrainFrame(frame: Float) = GLES30.glUniform1f(uGrainFrame, frame)
 
     /** Mask layer uniforms (positions in image pixels of an [imageWidth] x [imageHeight] image); uses this program. */
     fun bindMasks(p: ShaderParams, imageWidth: Int, imageHeight: Int) {

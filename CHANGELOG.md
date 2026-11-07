@@ -1,3 +1,11 @@
+**RawBoy Camera (Android): video mode prototype (2026-11-07)**
+
+- New VIDEO button in the top bar. In video mode the shutter (and the volume buttons) start and stop a recording: 1080p, 30 fps, H.264, stereo AAC, saved to `Movies/RawBoy Camera/VID_<date>_<time>-camera.mp4`. Pixel 9 Pro only for now; Android only.
+- The file is what the viewfinder shows: the develop pass (look, Film or B&W stock, Strength, Brightness, Warmth) is drawn a second time into the encoder's input surface, cropped to 16:9 (the viewfinder is 4:3; the cut-off parts are darkened in video mode). A phone held sideways records a landscape file.
+- Film grain is seeded by position only for photos, which in a video would be a frozen pattern: `uGrainFrame` (video only, 0 for photos) folds a frame counter into the grain seeds in `develop.glsl` and `film_form.glsl`.
+- The live exposure eases at most 0.05 EV per update in video mode (0.3 for photos) so the recording doesn't pump. Skin retouch, the ISO-based wavelet denoise and sharpening are photo-only. The camera session is the photo one (no video stabilisation, lens or camera can't change while recording).
+- Untested on a device when added; thermal and 30 fps headroom with Film on still to be measured (logcat tag `RawBoyViewfinder`, `RawBoyVideo`).
+
 **RawBoy Camera: punchier Natural and plain LUT looks, stronger colour denoise (2026-11-07)**
 
 - Natural and the plain LUT looks (not Film, B&W or the Experimental looks) now start with Contrast +6 and Saturation +8 on top of the auto develop. Camera only: Auto and Pro's Auto button keep their base.

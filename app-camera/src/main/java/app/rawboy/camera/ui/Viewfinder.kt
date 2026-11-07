@@ -13,12 +13,13 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import app.rawboy.gl.ShaderParams
+import app.rawboy.gl.VideoSink
 import app.rawboy.gl.ViewfinderRenderer
 
 /**
  * The live camera preview, developed with [params] (see [ViewfinderRenderer]), with an optional focus [loupe]. While
  * [onLuma] is set it gets the renderer's greyscale copies (QR codes), while [onTrackLuma] is the small ones every frame
- * (the subject tracker). [turns]: clockwise quarter turns from the upright picture to the view (see
+ * (the subject tracker). [videoSink]: the video encoder's surface while recording (see [ViewfinderRenderer.videoSink]); [videoMode] moves the grain with the frames. [turns]: clockwise quarter turns from the upright picture to the view (see
  * [ViewfinderRenderer.turns]).
  */
 @Composable
@@ -33,6 +34,8 @@ fun Viewfinder(
     onTrackLuma: ((width: Int, height: Int, luma: ByteArray) -> Unit)? = null,
     turns: Int = 0,
     zoom: Float = 1f,
+    videoSink: VideoSink? = null,
+    videoMode: Boolean = false,
 ) {
     val surfaceCallback = rememberUpdatedState(onSurfaceTexture)
     val baseCallback = rememberUpdatedState(onBase)
@@ -83,6 +86,14 @@ fun Viewfinder(
     }
     LaunchedEffect(zoom) {
         renderer.zoom = zoom
+        view[0]?.requestRender()
+    }
+    LaunchedEffect(videoSink) {
+        renderer.videoSink = videoSink
+        view[0]?.requestRender()
+    }
+    LaunchedEffect(videoMode) {
+        renderer.animateGrain = videoMode
         view[0]?.requestRender()
     }
     LaunchedEffect(loupe) {

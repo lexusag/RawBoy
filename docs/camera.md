@@ -170,3 +170,12 @@ printed). Colour negatives are printed on colour paper. **Natural** is the AgX d
   downscaled photo shows the grain as a smaller scan would.
 - **Strength** blends the film render with the AgX one (grain and halation fade with it). Middle grey stays where
   AgX puts it, so exposure and Brightness behave as before. Whites reach the paper's white (about 0.85), not 1.0.
+
+## Video (Android prototype)
+
+The **VIDEO** button in the top bar switches to video mode (the RAW, Burst and Flash buttons hide). The shutter becomes a red record button, the volume buttons start and stop too, and the timer shows beside the status. The recording is the viewfinder as it looks, with the chosen look or film stock baked in: 1080p, 30 fps, H.264 (16 Mbit/s) and stereo AAC from the microphone (asked for the first time video mode is switched on; refusing gives silent videos), saved to `Movies/RawBoy Camera/VID_<date>_<time>-camera.mp4`.
+
+- The viewfinder is 4:3, a video is 16:9: the parts the file will not have are darkened. A phone held sideways records a landscape file.
+- Film grain moves with the frames in video mode. The live exposure eases much slower than for photos, so brightness does not pump.
+- Skin retouch, the ISO-based denoise and sharpening, bursts, flash and raw are photo-only. The lens and the camera (selfie) can't be changed while recording, and leaving the app stops the recording.
+- Prototype: no video stabilisation, no 4K, no log; the lens/stream setup is the photo one. How it works: `ViewfinderRenderer.videoSink` draws the same develop pass into the `MediaCodec` input surface through an EGL window surface in the viewfinder's own context (`gl/VideoOutput.kt`); `capture/VideoRecorder.kt` runs the encoders and the MP4 muxer. Findings and the plan: `docs/video.md`.
