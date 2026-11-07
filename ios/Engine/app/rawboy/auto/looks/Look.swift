@@ -30,7 +30,7 @@ public struct Look: Equatable, Hashable, Sendable, Identifiable {
     /** Film stock id (FilmStocks) rendered instead of AgX + LUT, or nil. */
     public var film: String? = nil
     /** Film grain and halation, 100 = the stock as formation.json describes it. */
-    public var filmGrain: Float = 100
+    public var filmGrain: Float = 75
     public var halation: Float = 100
 
     init(_ id: String, _ name: String, _ lutFile: String?, contrast: Float = 0, grain: Float = 0, bloom: Float = 0,

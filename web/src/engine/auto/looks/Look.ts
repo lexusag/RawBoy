@@ -37,7 +37,7 @@ export interface Look {
 const look = (id: string, name: string, lutFile: string | null, p: Partial<Look> = {}): Look => ({
   id, name, lutFile, lutAmount: 100, exposure: 0, contrast: 0, saturation: 0, highlights: 0, blacks: 0, whites: 0,
   grain: 0, bloom: 0, highpass: 0, vignette: 0, warmth: 0, portraitRetouch: 0, monochrome: false, experimental: false,
-  film: null, filmGrain: 100, halation: 100, ...p,
+  film: null, filmGrain: 75, halation: 100, ...p,
 });
 
 /** LutEntry id, as LutRepository names bundled LUTs. */
