@@ -33,7 +33,7 @@ public enum PresetGroup: String, CaseIterable, Sendable {
         case .color: ["saturation", "redHue", "redPurity", "greenHue", "greenPurity", "blueHue", "bluePurity", "tintHue",
                       "tintPurity"]
         case .detail: ["denoise", "colorDenoise", "sharpening", "localContrast", "highpassContrast", "grain", "grainSize",
-                       "grainRoughness", "grainColor", "bloom", "anamorphic", "anamorphicColor"]
+                       "grainRoughness", "grainColor", "bloom", "anamorphic", "anamorphicColor", "anamorphicGhosts"]
         case .retouch: ["skinRetouch", "blemishRemoval"]
         case .lut: ["lut", "lutAmount"]
         case .lens: ["lensProfile", "lensDistortion", "lensAnamorphic", "lensCrop", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint"]
@@ -288,6 +288,7 @@ public enum Presets {
         case "lut": .text(p.lut)
         case "film": .text(p.film)
         case "lensProfile": .flag(p.lensProfile)
+        case "anamorphicGhosts": .flag(p.anamorphicGhosts)
         case "colorDenoise": p.colorDenoise.map { PresetValue.number($0) } ?? .text(nil)
         case "masks": .layers(Masks.forPreset(p.masks))  // strokes stay with the photo
         case "curves": .curves(p.curves)
@@ -302,6 +303,7 @@ public enum Presets {
         case let ("lut", .text(s)): out.lut = s.map(RetiredLooks.lut)
         case let ("film", .text(s)): out.film = s.map(RetiredLooks.stock)
         case let ("lensProfile", .flag(b)): out.lensProfile = b
+        case let ("anamorphicGhosts", .flag(b)): out.anamorphicGhosts = b
         case let ("colorDenoise", .number(n)): if n.isFinite { out.colorDenoise = n }
         case ("colorDenoise", .text(.none)): out.colorDenoise = nil
         case let ("curves", .curves(c)): out.curves = c

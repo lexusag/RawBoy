@@ -38,11 +38,12 @@ class PresetsTest {
 
     @Test
     fun detailGroupCarriesAnamorphicFlareAndColor() {
-        val flare = DevelopParams(anamorphic = 45f, anamorphicColor = AnamorphicColor.BLUE)
+        val flare = DevelopParams(anamorphic = 45f, anamorphicColor = AnamorphicColor.MAGENTA, anamorphicGhosts = true)
         val preset = Presets.decode(Presets.encode(listOf(Presets.capture("Flare", flare, setOf(PresetGroup.DETAIL))))).single()
         val applied = Presets.apply(preset, DevelopParams())
         assertEquals(45f, applied.anamorphic, 0f)
-        assertEquals(AnamorphicColor.BLUE, applied.anamorphicColor)
+        assertEquals(AnamorphicColor.MAGENTA, applied.anamorphicColor)
+        assertEquals(true, applied.anamorphicGhosts)
     }
 
     @Test

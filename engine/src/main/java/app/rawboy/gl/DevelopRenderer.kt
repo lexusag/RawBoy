@@ -52,6 +52,7 @@ class DevelopRenderer : GLSurfaceView.Renderer {
     private var baseTexture: ImageTexture? = null
     private var bloomHaloTexture: ImageTexture? = null
     private var bloomTailTexture: ImageTexture? = null
+    private var flareTexture: ImageTexture? = null
     private var maskTexture: MaskTexture? = null
     private var brushTexture: BrushTexture? = null
     private var filmTextures: FilmTextures? = null
@@ -87,6 +88,7 @@ class DevelopRenderer : GLSurfaceView.Renderer {
         baseTexture = ImageTexture(ImageTexture.BASE_UNIT)
         bloomHaloTexture = ImageTexture(ImageTexture.BLOOM_HALO_UNIT)
         bloomTailTexture = ImageTexture(ImageTexture.BLOOM_TAIL_UNIT)
+        flareTexture = ImageTexture(ImageTexture.FLARE_UNIT)
         maskTexture = MaskTexture()
         brushTexture = BrushTexture()
         filmTextures = FilmTextures()
@@ -145,6 +147,7 @@ class DevelopRenderer : GLSurfaceView.Renderer {
         baseTexture!!.bind(p.base)
         bloomHaloTexture!!.bind(p.bloomHalo)
         bloomTailTexture!!.bind(p.bloomTail)
+        flareTexture!!.bind(p.flareSource)
         maskTexture!!.bind(p.skinMask)
         brushTexture!!.bind(p.layers.brush)
         filmTextures!!.bind(p.film)

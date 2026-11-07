@@ -132,6 +132,7 @@ fun DetailScreen(
     val base by session.base.collectAsStateWithLifecycle()
     val bloomSources by session.bloomSources.collectAsStateWithLifecycle()
     val bokehSource by session.bokehSource.collectAsStateWithLifecycle()
+    val flareSource by session.flareSource.collectAsStateWithLifecycle()
     val skin by session.skin.collectAsStateWithLifecycle()
     val skinMask = (skin as? SkinState.Ready)?.mask
     val undoStates by vm.undoStates.collectAsStateWithLifecycle()
@@ -282,7 +283,7 @@ fun DetailScreen(
                                 val shaderParams = if (live) {
                                     // Press and hold shows the auto develop without the look.
                                     val shown = shownParams
-                                    remember(shown, lutData, filmData, lensInfo, base, bloomSources, bokehSource, skinMask) {
+                                    remember(shown, lutData, filmData, lensInfo, base, bloomSources, bokehSource, flareSource, skinMask) {
                                         session.shaderParams(
                                             shown, analysis.defaults, lutData.takeIf { shown.lut != null },
                                             film = filmData.takeIf { shown.film != null },

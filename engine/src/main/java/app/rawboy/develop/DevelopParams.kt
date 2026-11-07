@@ -16,7 +16,8 @@ import app.rawboy.color.BwFilter
  * - localContrast: -100..100 edge-aware mid-frequency detail (texture a few pixels across), 0 = off
  * - highpassContrast: -100..100 local (clarity-style) contrast, 0 = off
  * - bloom: 0..100 diffusion-filter glow, 0 = off
- * - anamorphic: 0..100 horizontal anamorphic lens flare, 0 = off; anamorphicColor: [AnamorphicColor] coating tint
+ * - anamorphic: 0..100 horizontal anamorphic lens flare, 0 = off; anamorphicColor: [AnamorphicColor] coating;
+ *   anamorphicGhosts: faint oval ghosts of the lights
  * - skinRetouch: 0..100 smoothing of skin (found by a segmentation model), 0 = off
  * - blemishRemoval: 0..100 automatic spot healing on skin; higher heals fainter spots, 0 = off
  * - lut: LutEntry id or null for "No LUT"; lutAmount: 0..100 strength
@@ -76,6 +77,7 @@ data class DevelopParams(
     val bloom: Float = 0f,
     val anamorphic: Float = 0f,
     val anamorphicColor: AnamorphicColor = AnamorphicColor.NEUTRAL,
+    val anamorphicGhosts: Boolean = false,
     val skinRetouch: Float = 0f,
     val blemishRemoval: Float = 0f,
     val lut: String? = null,
@@ -137,13 +139,26 @@ enum class ToneMapper(val shaderId: Int, val key: String, val label: String) {
 }
 
 /**
- * Coating colour of Pro's fake anamorphic lens flare (`uAnamorphicTint`: linear Rec.2020 RGB reflectance + luminance
- * mix, see shaders/develop.glsl). [key] is stored in presets and edits.
+ * Coating colour of Pro's fake anamorphic lens flare (see `anamorphicFlare` in shaders/develop.glsl). [tint] is the
+ * linear Rec.2020 colour of the streak, [length] how far each channel's streak reaches (a short red and a long blue make
+ * a white core, cyan, then blue tips) and [bar] the colour of the soft glow round it. [key] is stored in presets and edits.
  */
-enum class AnamorphicColor(val key: String, val label: String, internal val tint: FloatArray) {
-    NEUTRAL("neutral", "Neutral", floatArrayOf(1f, 1f, 1f, 0.35f)),
-    BLUE("blue", "Blue", floatArrayOf(0.32f, 0.6f, 1.55f, 0.85f)),
-    GOLDEN("golden", "Golden", floatArrayOf(1.15f, 0.71f, 0.15f, 0.85f));
+enum class AnamorphicColor(
+    val key: String,
+    val label: String,
+    internal val tint: FloatArray,
+    internal val length: FloatArray,
+    internal val bar: FloatArray,
+) {
+    NEUTRAL("neutral", "Neutral", floatArrayOf(1f, 1f, 1f), floatArrayOf(0.85f, 0.85f, 0.85f), floatArrayOf(0.8f, 0.85f, 0.95f)),
+    BLUE("blue", "Blue", floatArrayOf(0.7f, 0.9f, 1.45f), floatArrayOf(0.3f, 0.55f, 1f), floatArrayOf(0.2f, 0.5f, 1f)),
+    GOLDEN("golden", "Golden", floatArrayOf(1.2f, 0.9f, 0.55f), floatArrayOf(1f, 0.7f, 0.4f), floatArrayOf(1f, 0.6f, 0.2f)),
+    MAGENTA("magenta", "Magenta", floatArrayOf(1.15f, 0.8f, 1.25f), floatArrayOf(0.8f, 0.45f, 1f), floatArrayOf(0.7f, 0.3f, 1f));
+
+    /** `uAnamorphicTint`: the colour, and a = 1 when [ghosts] are on. */
+    fun tintVec(ghosts: Boolean) = floatArrayOf(tint[0], tint[1], tint[2], if (ghosts) 1f else 0f)
+    fun lengthVec() = floatArrayOf(length[0], length[1], length[2], 0f)
+    fun barVec() = floatArrayOf(bar[0], bar[1], bar[2], 0f)
 
     companion object {
         fun fromKey(key: String?): AnamorphicColor? = entries.firstOrNull { it.key == key }

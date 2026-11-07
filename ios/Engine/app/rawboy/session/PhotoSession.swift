@@ -57,6 +57,8 @@ public final class PhotoSession: ObservableObject {
     @Published public private(set) var blemish = BlemishState()
     /** Highlight-boosted small copies that bloom scatters light from. */
     @Published public private(set) var bloomSources: BloomSources?
+    /** What the anamorphic flare scatters light from (FlareSource); made the first time the flare is on. */
+    @Published public private(set) var flareSource: PreviewImage?
     /** Centre of the zoomed view in full-resolution pixels; nil = fit to view. */
     @Published public private(set) var zoomCenter: (Float, Float)?
     /** View pixels per full-resolution pixel while zoomed: 1 = 100% (double tap), others from a pinch. */
@@ -79,6 +81,7 @@ public final class PhotoSession: ObservableObject {
     private var selectedFilm: String?
 
     private var skinTask: Task<Void, Never>?
+    private var flareTask: Task<Void, Never>?
     private var blemishTask: Task<Void, Never>?
     /** (x, y, radius, score) per candidate, most obvious first; detected once per photo. */
     private var blemishSpots: [Float]?
@@ -142,6 +145,8 @@ public final class PhotoSession: ObservableObject {
         preview = loaded.preview
         base = loaded.base
         bloomSources = loaded.bloom
+        flareTask?.cancel()
+        flareSource = nil
         skinTask?.cancel()
         skin = .notComputed
         blemishTask?.cancel()
@@ -163,10 +168,24 @@ public final class PhotoSession: ObservableObject {
         params = newParams
         if newParams.skinRetouch > 0 || newParams.blemishRemoval > 0 { ensureSkinMask() }
         if newParams.blemishRemoval != before.blemishRemoval { scheduleBlemishes() }
+        ensureFlareSource()
         // A 90 degree turn or a new crop changes the output shape, and a flip moves the content, so the zoom position
         // no longer applies.
         let flipChanged = newParams.flipHorizontal != before.flipHorizontal || newParams.flipVertical != before.flipVertical
         if newParams.rotation != before.rotation || newParams.crop != before.crop || flipChanged { exitZoom() } else { recheckZoomTile() }
+    }
+
+    /** Starts making the anamorphic flare's source once the flare is on (see FlareSource). */
+    private func ensureFlareSource(_ p: DevelopParams? = nil) {
+        guard let img = image, flareSource == nil, flareTask == nil, (p ?? params).anamorphic > 0 else { return }
+        flareTask = Task {
+            let source = await Task.detached(priority: .userInitiated) {
+                FlareSource.make(img.createPreview(maxDimension: FlareSource.sourceMaxDimension, boostHighlights: true))
+            }.value
+            flareTask = nil
+            guard image === img else { ensureFlareSource(); return }
+            flareSource = source
+        }
     }
 
     /** Uniforms for [p] with this photo's current textures; [maskView]: the layer whose mask is shown in red. */
@@ -174,7 +193,8 @@ public final class PhotoSession: ObservableObject {
                              maskView: String? = nil, film: FilmData? = nil) -> ShaderParams {
         ShaderParams.from(p, asShot: defaults, lut: lut ?? (useSelectedLut ? lutData : nil), lens: lensFor(p), base: base,
                           bloomSources: bloomSources, skinMask: skin.mask, maskView: maskView,
-                          brushFor: { [unowned self] in self.brushRaster($0) }, film: film ?? (useSelectedLut ? filmData : nil))
+                          brushFor: { [unowned self] in self.brushRaster($0) }, film: film ?? (useSelectedLut ? filmData : nil),
+                          flareSource: flareSource)
     }
 
     /**
@@ -421,6 +441,10 @@ public final class PhotoSession: ObservableObject {
             preview = rebuilt.0
             base = rebuilt.1
             bloomSources = rebuilt.2
+            flareTask?.cancel()
+            flareTask = nil
+            flareSource = nil
+            ensureFlareSource()
             detail = nil  // the 100% tile shows old pixels; reload it
             recheckZoomTile()
             blemish = BlemishState(working: false, healed: count, detected: (blemishSpots?.count ?? 0) / 4)
@@ -511,6 +535,8 @@ public final class PhotoSession: ObservableObject {
                        naming: OutputNaming = OutputNaming(),
                        onProgress: @escaping @Sendable (Float) -> Void) async throws -> URL {
         guard let img = image else { throw RawImageError(message: "No photo open") }
+        ensureFlareSource(p)
+        await flareTask?.value
         let lut = try await (p.film == nil ? p.lut : nil).asyncMap { try await loadLut($0) }
         var film: FilmData?
         if let id = p.film, let filmLoader { film = try await filmLoader(id) }

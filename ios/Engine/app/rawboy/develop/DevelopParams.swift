@@ -14,7 +14,8 @@ import Foundation
  * - localContrast: -100..100 edge-aware mid-frequency detail (texture a few pixels across), 0 = off
  * - highpassContrast: -100..100 local (clarity-style) contrast, 0 = off
  * - bloom: 0..100 diffusion-filter glow, 0 = off
- * - anamorphic: 0..100 horizontal anamorphic lens flare, 0 = off; anamorphicColor: AnamorphicColor coating tint
+ * - anamorphic: 0..100 horizontal anamorphic lens flare, 0 = off; anamorphicColor: AnamorphicColor coating;
+ *   anamorphicGhosts: faint oval ghosts of the lights
  * - skinRetouch: 0..100 smoothing of skin (found by a segmentation model), 0 = off
  * - blemishRemoval: 0..100 automatic spot healing on skin; higher heals fainter spots, 0 = off
  * - lut: LutEntry id or nil for "No LUT"; lutAmount: 0..100 strength
@@ -73,6 +74,7 @@ public struct DevelopParams: Equatable, Sendable {
     public var bloom: Float = 0
     public var anamorphic: Float = 0
     public var anamorphicColor: AnamorphicColor = .neutral
+    public var anamorphicGhosts = false
     public var skinRetouch: Float = 0
     public var blemishRemoval: Float = 0
     public var lut: String? = nil
@@ -156,11 +158,12 @@ public enum ToneMapper: CaseIterable, Sendable {
 }
 
 /**
- * Coating colour of Pro's fake anamorphic lens flare (`uAnamorphicTint`: linear Rec.2020 RGB reflectance + luminance
- * mix, see shaders/develop.glsl). [key] is stored in presets.
+ * Coating colour of Pro's fake anamorphic lens flare (see `anamorphicFlare` in shaders/develop.glsl). `tint` is the
+ * linear Rec.2020 colour of the streak, `length` how far each channel's streak reaches (a short red and a long blue make
+ * a white core, cyan, then blue tips) and `bar` the colour of the soft glow round it. [key] is stored in presets.
  */
 public enum AnamorphicColor: String, CaseIterable, Equatable, Sendable {
-    case neutral, blue, golden
+    case neutral, blue, golden, magenta
 
     public var key: String { rawValue }
 
@@ -169,16 +172,41 @@ public enum AnamorphicColor: String, CaseIterable, Equatable, Sendable {
         case .neutral: "Neutral"
         case .blue: "Blue"
         case .golden: "Golden"
+        case .magenta: "Magenta"
         }
     }
 
     public var tint: [Float] {
         switch self {
-        case .neutral: [1, 1, 1, 0.35]
-        case .blue: [0.32, 0.6, 1.55, 0.85]
-        case .golden: [1.15, 0.71, 0.15, 0.85]
+        case .neutral: [1, 1, 1]
+        case .blue: [0.7, 0.9, 1.45]
+        case .golden: [1.2, 0.9, 0.55]
+        case .magenta: [1.15, 0.8, 1.25]
         }
     }
+
+    public var length: [Float] {
+        switch self {
+        case .neutral: [0.85, 0.85, 0.85]
+        case .blue: [0.3, 0.55, 1]
+        case .golden: [1, 0.7, 0.4]
+        case .magenta: [0.8, 0.45, 1]
+        }
+    }
+
+    public var bar: [Float] {
+        switch self {
+        case .neutral: [0.8, 0.85, 0.95]
+        case .blue: [0.2, 0.5, 1]
+        case .golden: [1, 0.6, 0.2]
+        case .magenta: [0.7, 0.3, 1]
+        }
+    }
+
+    /** `uAnamorphicTint`: the colour, and a = 1 when [ghosts] are on. */
+    public func tintVec(ghosts: Bool) -> [Float] { tint + [ghosts ? 1 : 0] }
+    public var lengthVec: [Float] { length + [0] }
+    public var barVec: [Float] { bar + [0] }
 
     public static func fromKey(_ key: String?) -> AnamorphicColor? { key.flatMap(AnamorphicColor.init(rawValue:)) }
 }

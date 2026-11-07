@@ -33,6 +33,7 @@ internal class OffscreenDeveloper(
     private val baseTexture: ImageTexture
     private val bloomHaloTexture: ImageTexture
     private val bloomTailTexture: ImageTexture
+    private val flareTexture: ImageTexture
     private val maskTexture: MaskTexture
     private val brushTexture: BrushTexture
     private val bokehTexture: BokehTexture
@@ -83,6 +84,7 @@ internal class OffscreenDeveloper(
         baseTexture = ImageTexture(ImageTexture.BASE_UNIT)
         bloomHaloTexture = ImageTexture(ImageTexture.BLOOM_HALO_UNIT)
         bloomTailTexture = ImageTexture(ImageTexture.BLOOM_TAIL_UNIT)
+        flareTexture = ImageTexture(ImageTexture.FLARE_UNIT)
         maskTexture = MaskTexture()
         brushTexture = BrushTexture()
         bokehTexture = BokehTexture(quad)
@@ -172,6 +174,7 @@ internal class OffscreenDeveloper(
         baseTexture.bind(params.base)
         bloomHaloTexture.bind(params.bloomHalo)
         bloomTailTexture.bind(params.bloomTail)
+        flareTexture.bind(params.flareSource)
         maskTexture.bind(params.skinMask)
         brushTexture.bind(params.layers.brush)
         bokehTexture.bind(params) // after the brush atlas: its mask pass reads it
@@ -228,6 +231,7 @@ internal class OffscreenDeveloper(
         baseTexture.release()
         bloomHaloTexture.release()
         bloomTailTexture.release()
+        flareTexture.release()
         maskTexture.release()
         brushTexture.release()
         bokehTexture.release()

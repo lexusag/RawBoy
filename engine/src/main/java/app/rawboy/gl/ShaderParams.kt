@@ -86,7 +86,11 @@ class ShaderParams(
     val bokehSource: PreviewImage? = null,
     /** Horizontal anamorphic flare strength (`uAnamorphic`, 0 = off) and coating tint (`uAnamorphicTint`). */
     val anamorphic: Float = 0f,
-    val anamorphicTint: FloatArray = AnamorphicColor.NEUTRAL.tint,
+    val anamorphicTint: FloatArray = AnamorphicColor.NEUTRAL.tintVec(false),
+    val anamorphicLength: FloatArray = AnamorphicColor.NEUTRAL.lengthVec(),
+    val anamorphicBar: FloatArray = AnamorphicColor.NEUTRAL.barVec(),
+    /** What the flare scatters light from ([FlareSource], `uFlare`), or null: no flare. */
+    val flareSource: PreviewImage? = null,
 ) {
     /**
      * Extra source pixels needed around an output region for the spatial effects
@@ -143,6 +147,8 @@ class ShaderParams(
             film: FilmData? = null,
             /** See [ShaderParams.bokehSource]; lens blur stays off without it. */
             bokehSource: PreviewImage? = null,
+            /** See [ShaderParams.flareSource]; the anamorphic flare stays off without it. */
+            flareSource: PreviewImage? = null,
         ): ShaderParams {
             val filmUsed = film?.takeIf { it.stock.id == p.film }
             val sourceWhite = WhiteBalance.xyFromTempTint(asShot.temperature.toDouble(), asShot.tint.toDouble())
@@ -197,7 +203,10 @@ class ShaderParams(
                 leaks = LightLeaks.pack(p.leaks, lens.width, lens.height),
                 bokehSource = bokehSource,
                 anamorphic = p.anamorphic / 100f * (0.35f + 0.65f * p.anamorphic / 100f),
-                anamorphicTint = p.anamorphicColor.tint,
+                anamorphicTint = p.anamorphicColor.tintVec(p.anamorphicGhosts),
+                anamorphicLength = p.anamorphicColor.lengthVec(),
+                anamorphicBar = p.anamorphicColor.barVec(),
+                flareSource = flareSource,
             )
         }
 

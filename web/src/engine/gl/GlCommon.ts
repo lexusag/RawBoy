@@ -10,6 +10,7 @@ import type { ShaderParams } from './ShaderParams';
 import { SCAN_GRAIN } from './ScanScale';
 import { Shaders } from './Shaders';
 import { BokehTexture, bokehUniforms, type BokehGeometry } from './BokehTexture';
+import { flareCoarseRows, flareRows } from './FlareSource';
 import type { PixelRect } from './Zoom';
 
 /** Port of engine/.../gl/GlCommon.kt for WebGL2. Texture units match Android's. */
@@ -17,6 +18,7 @@ export const Units = {
   IMAGE: 0, LUT: 1, SHADING: 2, BASE: 3, BLOOM_HALO: 4, BLOOM_TAIL: 5, SKIN: 6, BRUSH: 7, FILM_LUT: 8, PRINT_LUT: 9,
   // 10, 11: the wavelet denoise pre-pass; 13: the lens blur passes.
   BOKEH: 12,
+  FLARE: 14,
 } as const;
 
 /**
@@ -184,8 +186,13 @@ export class DevelopProgram {
     this.f1('uSkinSigma', skin?.sigmaPx ?? 3);
     const bloomReady = p.bloomHalo != null && p.bloomTail != null;
     this.f1('uBloom', bloomReady ? p.bloom : 0);
-    this.f1('uAnamorphic', p.bloomHalo != null ? p.anamorphic : 0);
+    const flare = p.flareSource;
+    this.f1('uAnamorphic', flare != null ? p.anamorphic : 0);
     gl.uniform4fv(this.loc('uAnamorphicTint'), p.anamorphicTint);
+    gl.uniform4fv(this.loc('uAnamorphicLen'), p.anamorphicLength);
+    gl.uniform4fv(this.loc('uAnamorphicBar'), p.anamorphicBar);
+    this.i1('uFlare', Units.FLARE);
+    this.gl.uniform4f(this.loc('uFlareInfo'), flare?.width ?? 1, flare ? flareRows(flare) : 1, flare ? flareCoarseRows(flareRows(flare)) : 1, 0);
     this.i1('uBloomHalo', Units.BLOOM_HALO);
     this.i1('uBloomTail', Units.BLOOM_TAIL);
     this.f2('uBloomHaloTexel', 1 / (p.bloomHalo?.width ?? 1), 1 / (p.bloomHalo?.height ?? 1));
@@ -259,6 +266,7 @@ export class DevelopProgram {
       ['uImage', Units.IMAGE], ['uLut', Units.LUT], ['uShading', Units.SHADING], ['uBase', Units.BASE],
       ['uBloomHalo', Units.BLOOM_HALO], ['uBloomTail', Units.BLOOM_TAIL], ['uSkinMask', Units.SKIN],
       ['uBrushMask', Units.BRUSH], ['uFilmLut', Units.FILM_LUT], ['uPrintLut', Units.PRINT_LUT], ['uBokeh', Units.BOKEH],
+      ['uFlare', Units.FLARE],
     ] as const) this.i1(name, unit);
     this.f2('uScale', 1, 1); // the whole target (develop.vert)
     this.f1('uFlipY', 0);
@@ -553,6 +561,7 @@ export class DevelopInputs {
   readonly base: ImageTexture;
   readonly halo: ImageTexture;
   readonly tail: ImageTexture;
+  readonly flare: ImageTexture;
   readonly skin: MaskTexture;
   readonly shading: ShadingTexture;
   readonly lut: LutTexture;
@@ -564,6 +573,7 @@ export class DevelopInputs {
     this.base = new ImageTexture(gl, Units.BASE);
     this.halo = new ImageTexture(gl, Units.BLOOM_HALO);
     this.tail = new ImageTexture(gl, Units.BLOOM_TAIL);
+    this.flare = new ImageTexture(gl, Units.FLARE);
     this.skin = new MaskTexture(gl);
     this.shading = new ShadingTexture(gl);
     this.lut = new LutTexture(gl);
@@ -578,6 +588,7 @@ export class DevelopInputs {
     this.base.bind(p.base);
     this.halo.bind(p.bloomHalo);
     this.tail.bind(p.bloomTail);
+    this.flare.bind(p.flareSource);
     this.skin.bind(p.skinMask);
     this.brush.bind(p.layers.brush);
     this.film.bind(p.film);
@@ -585,7 +596,7 @@ export class DevelopInputs {
   }
 
   release() {
-    for (const t of [this.base, this.halo, this.tail, this.skin, this.shading, this.lut, this.brush, this.film, this.bokeh]) t.release();
+    for (const t of [this.base, this.halo, this.tail, this.flare, this.skin, this.shading, this.lut, this.brush, this.film, this.bokeh]) t.release();
   }
 }
 

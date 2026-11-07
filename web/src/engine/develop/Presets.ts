@@ -27,7 +27,7 @@ export const PRESET_GROUPS: readonly { key: PresetGroup; label: string; fields: 
   {
     key: 'detail',
     label: 'Detail',
-    fields: ['localContrast', 'highpassContrast', 'grain', 'grainSize', 'grainRoughness', 'grainColor', 'bloom', 'anamorphic', 'anamorphicColor'],
+    fields: ['localContrast', 'highpassContrast', 'grain', 'grainSize', 'grainRoughness', 'grainColor', 'bloom', 'anamorphic', 'anamorphicColor', 'anamorphicGhosts'],
   },
   // Its own group, off by default: RawBoy Auto measures denoise and sharpening on each photo (its ISO and noise), and
   // a preset overrides that only when it holds this group.
@@ -198,8 +198,8 @@ export function applyPreset(preset: Preset, params: DevelopParams): DevelopParam
       else if (typeof value === 'string') p[field] = field === 'lut' ? RetiredLooks.lut(value) : RetiredLooks.stock(value);
     } else if (field === 'colorDenoise') {
       if (value === null || (typeof value === 'number' && Number.isFinite(value))) p.colorDenoise = value;
-    } else if (field === 'lensProfile') {
-      if (typeof value === 'boolean') p.lensProfile = value;
+    } else if (field === 'lensProfile' || field === 'anamorphicGhosts') {
+      if (typeof value === 'boolean') p[field] = value;
     } else if (field === 'toneMapper') {
       if (TONE_MAPPERS.some((m) => m.key === value)) p.toneMapper = value;
     } else if (field === 'anamorphicColor') {

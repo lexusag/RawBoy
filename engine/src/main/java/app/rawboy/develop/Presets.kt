@@ -32,7 +32,7 @@ enum class PresetGroup(val key: String, val label: String, val fields: List<Stri
         "detail", "Detail",
         listOf(
             "denoise", "colorDenoise", "sharpening", "localContrast", "highpassContrast",
-            "grain", "grainSize", "grainRoughness", "grainColor", "bloom", "anamorphic", "anamorphicColor",
+            "grain", "grainSize", "grainRoughness", "grainColor", "bloom", "anamorphic", "anamorphicColor", "anamorphicGhosts",
         ),
     ),
     RETOUCH("retouch", "Retouch", listOf("skinRetouch", "blemishRemoval")),
@@ -255,6 +255,7 @@ object Presets {
         "bloom" -> p.bloom
         "anamorphic" -> p.anamorphic
         "anamorphicColor" -> p.anamorphicColor.key
+        "anamorphicGhosts" -> p.anamorphicGhosts
         "skinRetouch" -> p.skinRetouch
         "blemishRemoval" -> p.blemishRemoval
         "lut" -> p.lut
@@ -276,6 +277,7 @@ object Presets {
         if (field == "lut") return if (value == null || value is String) p.copy(lut = (value as String?)?.let(RetiredLooks::lut)) else p
         if (field == "film") return if (value == null || value is String) p.copy(film = (value as String?)?.let(RetiredLooks::stock)) else p
         if (field == "colorDenoise" && value == null) return p.copy(colorDenoise = null)
+        if (field == "anamorphicGhosts") return if (value is Boolean) p.copy(anamorphicGhosts = value) else p
         if (field == "lensProfile") return if (value is Boolean) p.copy(lensProfile = value) else p
         if (field == "toneMapper") return ToneMapper.fromKey(value as? String)?.let { p.copy(toneMapper = it) } ?: p
         if (field == "anamorphicColor") return AnamorphicColor.fromKey(value as? String)?.let { p.copy(anamorphicColor = it) } ?: p

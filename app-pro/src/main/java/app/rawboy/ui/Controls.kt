@@ -563,12 +563,13 @@ internal fun ParamSlider(
 }
 
 /**
- * Anamorphic lens flare, whose colour choices (Neutral, Blue, Golden) open when the slider is raised or when a
+ * Anamorphic lens flare, whose colour choices (Neutral, Blue, Golden, Magenta) and Ghosts open when the slider is raised or when a
  * non-default colour is picked, and can also be toggled from the slider's label.
  */
 @Composable
 private fun AnamorphicSliders(params: DevelopParams, defaults: DevelopParams, onChange: (DevelopParams) -> Unit) {
-    val active = params.anamorphic > 0f || params.anamorphicColor != defaults.anamorphicColor
+    val active = params.anamorphic > 0f || params.anamorphicColor != defaults.anamorphicColor ||
+        params.anamorphicGhosts != defaults.anamorphicGhosts
     var open by rememberSaveable { mutableStateOf<Boolean?>(null) }
     val shown = open ?: active
     ParamSlider(
@@ -591,6 +592,11 @@ private fun AnamorphicSliders(params: DevelopParams, defaults: DevelopParams, on
                 label = { Text(c.label) },
             )
         }
+        FilterChip(
+            selected = params.anamorphicGhosts,
+            onClick = { onChange(params.copy(anamorphicGhosts = !params.anamorphicGhosts)) },
+            label = { Text("Ghosts") },
+        )
     }
 }
 
