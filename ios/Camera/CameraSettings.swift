@@ -101,9 +101,23 @@ struct CameraSettings: Equatable {
         if monoMode {
             p.saturation = -100
             p.bwFilter = filter
+            return p
         }
+        if look.film != nil { return p }
+        // LUT and neutral looks have no film grain and scatter to hide shadow noise, and a LUT steepens the shadows
+        // (Redscale ~4x): clean the shadows more than the ISO table does. Mirrors Android CameraSettings.develop.
+        let luma = look.experimental ? Self.lutLumaDenoiseExperimental : Self.lutLumaDenoise
+        let color = look.experimental ? Self.lutColorDenoiseExperimental : Self.lutColorDenoise
+        p.denoise = max(p.denoise, luma)
+        p.colorDenoise = max(p.colorDenoise ?? p.denoise, color)
         return p
     }
+
+    /// Denoise floors for non-Film colour looks (2026-11-07); see Android CameraSettings.LUT_*.
+    static let lutLumaDenoise: Float = 12
+    static let lutColorDenoise: Float = 35
+    static let lutLumaDenoiseExperimental: Float = 22
+    static let lutColorDenoiseExperimental: Float = 70
 
     /** The long side to save at, or nil for full size. */
     var maxLongSide: Int? { smallExport ? Self.smallLongSide : nil }

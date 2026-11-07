@@ -729,7 +729,8 @@ final class CameraViewModel: ObservableObject {
                     var params = s.develop(a.autoBase, hasFace: a.stats.hasFace)
                     // High ISO: more denoise than the auto develop's table, up to the coarse stage (denoise > 65).
                     params.denoise = max(params.denoise, Self.highIsoDenoise(a.stats.iso * noiseScale))
-                    params.colorDenoise = Self.measuredColorDenoise(img, exposure: params.exposure, denoise: params.denoise)
+                    params.colorDenoise = max(Self.measuredColorDenoise(img, exposure: params.exposure, denoise: params.denoise) ?? params.denoise,
+                                              params.colorDenoise ?? 0)
                     params.shadows = max(params.shadows, Self.backlightShadows(a.stats))
                     let shader = ShaderParams.from(params, asShot: a.defaults, lut: lut,
                                                    lens: LensTransform(info: img.lens, params: params), base: a.base,

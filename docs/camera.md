@@ -119,7 +119,7 @@ shows them.
   denoise/sharpening appear only in the final.
 - **Noise:** a phone sensor is noisier than the camera raws Auto's noise settings were tuned on, so Camera picks
   denoise and sharpening as for 4× the shot's ISO (2 stops): base ISO stays clean, ISO 400 gets Denoise 20,
-  ISO 1600 gets 45, ISO 6400 and up 65.
+  ISO 1600 gets 45, ISO 6400 and up 65. Looks outside Film mode (LUT looks, Natural) have no film grain to hide shadow noise, so they get at least Denoise 12 and Color denoise 35 (Experimental looks such as Redscale 22 and 70, which also reaches the coarse colour stage).
 
 ## Black and white
 

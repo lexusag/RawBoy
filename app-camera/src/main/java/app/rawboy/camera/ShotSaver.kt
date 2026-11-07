@@ -351,7 +351,7 @@ internal object ShotSaver {
             val denoise = maxOf(looked.denoise, highIsoDenoise(a.stats.iso * noiseScale))
             val params = looked.copy(
                 denoise = denoise,
-                colorDenoise = measuredColorDenoise(img, looked.exposure, denoise),
+                colorDenoise = maxOf(measuredColorDenoise(img, looked.exposure, denoise) ?: denoise, looked.colorDenoise ?: 0f),
                 shadows = maxOf(looked.shadows, backlightShadows(a.stats)),
             )
             val lut = params.lut?.let { loadLut(app, it) }

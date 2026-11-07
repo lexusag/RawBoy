@@ -126,7 +126,14 @@ data class CameraSettings(
             contrast = if (filmMono) FILM_MONO_CONTRAST else 0f,
         )
         val p = LookApplier.apply(base, look, strength, adjust, hasFace)
-        return if (bw) p.copy(saturation = -100f, bwFilter = filter) else p
+        if (bw) return p.copy(saturation = -100f, bwFilter = filter)
+        if (look.film != null) return p
+        // LUT and neutral looks have no film grain and scatter to hide shadow noise, and a LUT steepens the shadows
+        // (Redscale ~4x): clean the shadows more than the ISO table does. Mirrors iOS CameraSettings.develop.
+        val experimental = look.experimental
+        val luma = if (experimental) LUT_LUMA_DENOISE_EXPERIMENTAL else LUT_LUMA_DENOISE
+        val color = if (experimental) LUT_COLOR_DENOISE_EXPERIMENTAL else LUT_COLOR_DENOISE
+        return p.copy(denoise = maxOf(p.denoise, luma), colorDenoise = maxOf(p.colorDenoise ?: p.denoise, color))
     }
 
     /** The long side to save at, or null for full size. */
@@ -144,6 +151,16 @@ data class CameraSettings(
         const val BURST_FRAMES = 8
         /** Film + B&W: added to the Contrast slider's value (owner's choice, 2026-10-31: punchier than plain B&W). */
         const val FILM_MONO_CONTRAST = 20f
+
+        /**
+         * Denoise floors for non-Film colour looks (2026-11-07): shadows of LUT and neutral shots were noisy, Redscale
+         * with blocky coarse colour blotches. Experimental looks (colour swaps, Redscale) get more; 70 colour reaches
+         * the shader's coarse stage (> 65). Unverified on device: tune against Pixel night shots.
+         */
+        const val LUT_LUMA_DENOISE = 12f
+        const val LUT_COLOR_DENOISE = 35f
+        const val LUT_LUMA_DENOISE_EXPERIMENTAL = 22f
+        const val LUT_COLOR_DENOISE_EXPERIMENTAL = 70f
 
         /**
          * Range of the preview calibration; the Pixel's lenses need 0.5 (selfie) to ~9 (T3), the Galaxy Tab S11 Ultra's
