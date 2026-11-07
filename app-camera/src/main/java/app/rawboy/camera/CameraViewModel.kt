@@ -976,6 +976,15 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         // Flash and maximum-resolution shots are single frames (CameraController.captureDng).
         val burstFrames = if (hiRes || screenFlash) 1 else settings.burstFrames(lowLight.value)
         val burst = burstFrames > 1 && flash == FlashMode.OFF
+        // Debug note for the saved files' ImageDescription (CameraController.captureDng adds the frames actually merged).
+        val mergeNote = "mode=${settings.burstMode.name.lowercase()} lowLight=${if (lowLight.value) 1 else 0}" +
+            when {
+                burstFrames > 1 -> ""
+                settings.burstMode == BurstMode.OFF -> " reason=mode-off"
+                hiRes -> " reason=max-res"
+                screenFlash -> " reason=screen-flash"
+                else -> " reason=not-low-light"
+            }
         // A flash shot's raw is lit by the flash, the viewfinder wasn't: no calibration from it.
         val viewfinderKey = if (flash == FlashMode.OFF && !screenFlash) live?.stats?.key else null
         val mayHaveFace = info?.hasFaceDetection != true || controller.frames.value?.faces?.isNotEmpty() != false
@@ -1001,7 +1010,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     _screenFlashLit.value = true
                     delay(SCREEN_FLASH_SETTLE_MS)
                 }
-                val shot = capture(shotId, settings, hiRes, viewfinderKey, flash, burstFrames, screenFlash).copy(mayHaveFace = mayHaveFace)
+                val shot = capture(shotId, settings, hiRes, viewfinderKey, flash, burstFrames, screenFlash, mergeNote).copy(mayHaveFace = mayHaveFace)
                 ShotSaver.enqueue(app, shot)
             } catch (e: Throwable) {
                 Log.w(TAG, "capture", e)
@@ -1036,7 +1045,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /** Captures a raw and saves it as DNG (in Pictures/<Edition.FOLDER>/RAW, or a temporary file). */
-    private suspend fun capture(shotId: Long, settings: CameraSettings, hiRes: Boolean, viewfinderKey: Float?, flash: FlashMode, burstFrames: Int, screenFlash: Boolean = false): Shot {
+    private suspend fun capture(shotId: Long, settings: CameraSettings, hiRes: Boolean, viewfinderKey: Float?, flash: FlashMode, burstFrames: Int, screenFlash: Boolean = false, mergeNote: String = ""): Shot {
         val resolver = app.contentResolver
         val baseName = "IMG_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ROOT).format(Date())
         val degrees = deviceDegrees
@@ -1052,7 +1061,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             val result = try {
                 withContext(Dispatchers.IO) {
                     val out = resolver.openOutputStream(uri, "w") ?: throw java.io.IOException("Cannot write $name")
-                    val result = out.buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix) { onShutter(screenFlash) } }
+                    val result = out.buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix, mergeNote) { onShutter(screenFlash) } }
                     fix?.let { addGps(uri, it) }
                     MediaStoreOutput.publish(resolver, uri)
                     result
@@ -1062,12 +1071,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 throw t
             }
             Log.d(TAG, "$name: capture + DNG write ${(System.nanoTime() - dngStart) / 1_000_000} ms")
-            Shot(shotId, uri, name, null, settings, viewfinderKey, isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv)
+            Shot(shotId, uri, name, null, settings, viewfinderKey, isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description)
         } else {
             val file = File(app.cacheDir, "$baseName-$shotId.dng")
             val result = try {
                 withContext(Dispatchers.IO) {
-                    val result = file.outputStream().buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix) { onShutter(screenFlash) } }
+                    val result = file.outputStream().buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix, mergeNote) { onShutter(screenFlash) } }
                     fix?.let { addGps(Uri.fromFile(file), it) }
                     result
                 }
@@ -1075,7 +1084,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 file.delete()
                 throw t
             }
-            Shot(shotId, Uri.fromFile(file), "$baseName.dng", file, settings, viewfinderKey, isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv)
+            Shot(shotId, Uri.fromFile(file), "$baseName.dng", file, settings, viewfinderKey, isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description)
         }
     }
 

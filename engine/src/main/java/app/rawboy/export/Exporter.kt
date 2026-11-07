@@ -89,11 +89,13 @@ class Exporter(private val context: Context) {
                 ExportFormat.JPEG -> if (settings.jpegEncoder == JpegEncoder.JPEGLI) {
                     // jpegli writes the EXIF as it starts the file: no rewrite of the finished JPEG.
                     val exif = source?.let { readExif(it) ?: ExifMetadata() }
+                        ?.let { if (settings.description.isBlank()) it else it.copy(description = settings.description) }
                     writeJpegli(image, uri, params, size, settings.jpegQuality, settings.downscaleSharpen, exif, settings.hdrGainMap, onProgress)
                 } else {
                     writeJpeg(image, uri, params, size, settings.jpegQuality, settings.downscaleSharpen, onProgress)
                 }
-                ExportFormat.TIFF -> writeTiff(image, uri, params, size, settings.tiffBits, source?.let(::readExif), settings.downscaleSharpen, onProgress)
+                ExportFormat.TIFF -> writeTiff(image, uri, params, size, settings.tiffBits, source?.let(::readExif)
+                    ?.let { if (settings.description.isBlank()) it else it.copy(description = settings.description) }, settings.downscaleSharpen, onProgress)
             }
             val t = System.nanoTime()
             if (settings.format == ExportFormat.JPEG && settings.jpegEncoder != JpegEncoder.JPEGLI && source != null) copyExif(source, uri)

@@ -1,3 +1,7 @@
+**RawBoy Camera (Android): burst merge written into the photo's description (2026-11-07)**
+
+- For debugging Merge 8 frames: every shot's JPEG and DNG now carry an ImageDescription such as `RawBoy merge=on frames=8/8 effective=6.43 mode=auto lowLight=1` (merged) or `RawBoy merge=off frames=1 mode=auto lowLight=0 reason=not-low-light` (single frame; reasons: mode-off, not-low-light, max-res, flash, screen-flash). Read it with `exiftool -ImageDescription`. `frames=` is how many of the requested frames arrived and were merged.
+
 **RawBoy Camera (Android): optional video stabilization (2026-11-07)**
 
 - New Settings › Video stabilization (shown with Experimental features, off by default). In video mode it turns on the camera's preview stabilization (Android 13+; the plain video stabilization on older phones) and the lens stabilizer, so the recorded picture is steadier; the frame is cropped a little and the viewfinder trails the camera by a few frames. Photos stay unstabilized. Tap-to-focus regions don't account for the stabilization crop (a few % off while it is on). Untested on the phone when added: check that the picture is steadier and the crop is acceptable.

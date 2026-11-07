@@ -29,6 +29,8 @@ data class ExifMetadata(
     val focalLength35mm: Double = Double.NaN,
     val iso: Double = Double.NaN,
     val gps: Gps? = null,
+    /** ImageDescription (IFD0); RawBoy Camera puts its merge debug note here. */
+    val description: String = "",
 ) {
     /**
      * [latitude]/[longitude] as degrees, minutes, seconds; [altitude] in metres (NaN if unknown); the fix's UTC time as
@@ -92,6 +94,7 @@ data class ExifMetadata(
                 focalLength35mm = number(ExifInterface.TAG_FOCAL_LENGTH_IN_35MM_FILM),
                 iso = number(ExifInterface.TAG_PHOTOGRAPHIC_SENSITIVITY),
                 gps = gps,
+                description = text(ExifInterface.TAG_IMAGE_DESCRIPTION).trim(),
             )
         }
 
@@ -161,6 +164,7 @@ internal object ExifWriter {
     private fun known(x: Double) = x.isFinite() && x > 0
 
     // Tags (TIFF 6 / EXIF 2.32 / GPS).
+    private const val IMAGE_DESCRIPTION = 0x010e
     private const val MAKE = 0x010f
     private const val MODEL = 0x0110
     private const val ORIENTATION = 0x0112
@@ -192,6 +196,7 @@ internal object ExifWriter {
 
     private fun ifds(m: ExifMetadata): Triple<List<Entry>, List<Entry>, List<Entry>> {
         val ifd0 = ArrayList<Entry>()
+        if (m.description.isNotBlank()) ifd0 += ascii(IMAGE_DESCRIPTION, m.description.trim())
         if (m.make.isNotBlank()) ifd0 += ascii(MAKE, m.make.trim())
         if (m.model.isNotBlank()) ifd0 += ascii(MODEL, m.model.trim())
         ifd0 += short(ORIENTATION, 1) // the exported pixels are already upright
