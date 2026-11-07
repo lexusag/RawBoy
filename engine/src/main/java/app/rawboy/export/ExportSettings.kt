@@ -27,6 +27,11 @@ data class ExportSettings(
      * on the finer pitch. Photos without a film look export as usual; [maxLongSide] doesn't apply to a scan.
      */
     val filmScan: Boolean = false,
+    /**
+     * JPEGLI only: write an Ultra HDR JPEG, i.e. the SDR picture plus a gain map (MPF, XMP `hdrgm`, ISO 21496-1) that
+     * lets HDR screens show the highlights brighter. Off, or a picture with nothing bright, gives the plain JPEG.
+     */
+    val hdrGainMap: Boolean = false,
 )
 
 object ExportSettingsStore {

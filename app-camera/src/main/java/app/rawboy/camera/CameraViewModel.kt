@@ -751,6 +751,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
     fun setBurstMode(mode: BurstMode) = change { it.copy(burstMode = mode) }
     fun setShutterSound(on: Boolean) = change { it.copy(shutterSound = on) }
+    fun setHdrGainMap(on: Boolean) = change { it.copy(hdrGainMap = on) }
     fun setTrackFocus(on: Boolean) {
         change { it.copy(trackFocus = on) }
         // A subject being followed: a plain lock where it is now.

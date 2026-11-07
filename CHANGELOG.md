@@ -1,3 +1,10 @@
+**RawBoy Camera (Android): optional HDR gain map in the JPEG (2026-11-07)**
+
+- New Settings switch **HDR gain map**, off by default. On, each JPEG is an Ultra HDR JPEG: the SDR picture exactly as before, plus a gain map (MPF second image, XMP `hdrgm`, ISO 21496-1) that lets HDR screens show highlights up to 2 stops brighter. Viewers without gain map support show the plain picture; Film, B&W and LUT looks are unchanged because the SDR picture is untouched.
+- The gain map comes from the finished SDR picture, not from the scene: one channel (Rec.709 luma of the display-encoded pixels), zero below 0.75, easing up to the full 2 stops at white, averaged over 4 x 4 pixels and saved as a grayscale jpegli JPEG (about 1/4 size per side). It expands the tone mapper's highlight shoulder; it does not recover detail the SDR picture lost. A picture with nothing bright enough (peak gain below 3/255) stays a plain JPEG. If building the container fails, the plain JPEG is written.
+- `engine/src/main/cpp/ultrahdr.h` (container, metadata and gain map; header-only), `JpegNative.beginGainMap`, `ExportSettings.hdrGainMap`. Host test of the container: `tools/ultrahdr/run.sh` (reads it back the way `decoder_display.cpp` does: MPF offsets, XMP, ISO 21496-1 fields).
+- Not yet checked on a device or in a viewer: the Android build was not run for this change (no SDK in the sandbox), only the container on the host and `jpeg_jpegli.cpp` against a stub header. Knee 0.75 and 2 stops are first guesses (`kKnee`, `kHeadroomEv`). The setting is Android only; iOS and the other apps are unchanged.
+
 **RawBoy Camera: punchier Natural and plain LUT looks, stronger colour denoise (2026-11-07)**
 
 - Natural and the plain LUT looks (not Film, B&W or the Experimental looks) now start with Contrast +6 and Saturation +8 on top of the auto develop. Camera only: Auto and Pro's Auto button keep their base.

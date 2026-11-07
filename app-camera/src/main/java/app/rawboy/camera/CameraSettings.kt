@@ -62,6 +62,8 @@ data class CameraSettings(
     val shutterSound: Boolean = false,
     /** Save where each photo was taken (GPS tags in the JPEG and DNG). Needs location permission, asked when turned on. */
     val geotag: Boolean = false,
+    /** Save the JPEG as an Ultra HDR JPEG: the same picture plus a gain map that lets HDR screens show brighter highlights (`ultrahdr.h`). */
+    val hdrGainMap: Boolean = false,
     /** Look for QR codes in the viewfinder and offer to open them, as the phone's own camera does. */
     val scanQr: Boolean = true,
     /** After a tap, keep focus on what was tapped as it moves (CameraViewModel's tracker); off = the focus stays put. */
@@ -220,6 +222,7 @@ object CameraSettingsStore {
             burstMode = runCatching { BurstMode.valueOf(p.getString("burstMode", null)!!) }.getOrDefault(d.burstMode),
             shutterSound = p.getBoolean("shutterSound", d.shutterSound),
             geotag = p.getBoolean("geotag", d.geotag),
+            hdrGainMap = p.getBoolean("hdrGainMap", d.hdrGainMap),
             scanQr = p.getBoolean("scanQr", d.scanQr),
             trackFocus = p.getBoolean("trackFocus", d.trackFocus),
             previewScales = parseScales(p.getString(SCALES_KEY, null)),
@@ -278,6 +281,7 @@ object CameraSettingsStore {
             .putString("burstMode", s.burstMode.name)
             .putBoolean("shutterSound", s.shutterSound)
             .putBoolean("geotag", s.geotag)
+            .putBoolean("hdrGainMap", s.hdrGainMap)
             .putBoolean("scanQr", s.scanQr)
             .putBoolean("trackFocus", s.trackFocus)
             .putBoolean("front", s.front)

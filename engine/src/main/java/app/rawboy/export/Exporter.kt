@@ -89,7 +89,7 @@ class Exporter(private val context: Context) {
                 ExportFormat.JPEG -> if (settings.jpegEncoder == JpegEncoder.JPEGLI) {
                     // jpegli writes the EXIF as it starts the file: no rewrite of the finished JPEG.
                     val exif = source?.let { readExif(it) ?: ExifMetadata() }
-                    writeJpegli(image, uri, params, size, settings.jpegQuality, settings.downscaleSharpen, exif, onProgress)
+                    writeJpegli(image, uri, params, size, settings.jpegQuality, settings.downscaleSharpen, exif, settings.hdrGainMap, onProgress)
                 } else {
                     writeJpeg(image, uri, params, size, settings.jpegQuality, settings.downscaleSharpen, onProgress)
                 }
@@ -137,13 +137,15 @@ class Exporter(private val context: Context) {
         quality: Int,
         sharpen: Float,
         exif: ExifMetadata?,
+        hdrGainMap: Boolean,
         onProgress: (Float) -> Unit,
     ) {
         // Laid out before the encoder starts; metadata is best effort, as copyExif's was.
         val app1 = exif?.let { runCatching { ExifWriter.jpegApp1Payload(it) }.getOrNull() }
         val pfd = context.contentResolver.openFileDescriptor(uri, "w") ?: throw IOException("Cannot write $uri")
         pfd.use {
-            val handle = JpegNative.begin(it.fd, size.first, size.second, quality)
+            val handle = if (hdrGainMap) JpegNative.beginGainMap(it.fd, size.first, size.second, quality)
+            else JpegNative.begin(it.fd, size.first, size.second, quality)
             try {
                 app1?.let { bytes -> JpegNative.writeExif(handle, bytes) }
                 renderOutput(image, params, size, sharpen, onProgress) { _, rows, band -> JpegNative.writeRows(handle, band, rows) }

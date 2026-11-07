@@ -8,13 +8,16 @@
 #include <jni.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <memory>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 #include "jpegli_settings.h"
+#include "ultrahdr.h"
 
 namespace {
 
@@ -36,12 +39,92 @@ struct Encoder {
     FILE* file = nullptr;
     int width = 0;
     bool created = false;
+    // Gain map mode (Ultra HDR): the SDR picture is encoded into memory, so the container can be put around it at the
+    // end, and the gain map is accumulated from the same rows.
+    FILE* mem = nullptr;
+    char* memBuf = nullptr;
+    size_t memSize = 0;
+    std::unique_ptr<rawboy::uhdr::GainMapBuilder> gain;
 
     ~Encoder() {
         if (created) jpegli_destroy_compress(&cinfo);
+        if (mem) fclose(mem);
+        free(memBuf);
         if (file) fclose(file);
     }
 };
+
+/** The 8-bit gain map as a grayscale JPEG (jpegli, in memory). */
+std::vector<uint8_t> encodeGainMap(const std::vector<uint8_t>& map, int width, int height) {
+    char* buf = nullptr;
+    size_t size = 0;
+    FILE* mem = open_memstream(&buf, &size);
+    if (!mem) throw std::runtime_error("gain map: no memory stream");
+    jpeg_compress_struct cinfo{};
+    jpeg_error_mgr err{};
+    bool created = false;
+    try {
+        cinfo.err = jpegli_std_error(&err);
+        err.error_exit = errorExit;
+        jpegli_create_compress(&cinfo);
+        created = true;
+        jpegli_stdio_dest(&cinfo, mem);
+        cinfo.image_width = static_cast<JDIMENSION>(width);
+        cinfo.image_height = static_cast<JDIMENSION>(height);
+        cinfo.input_components = 1;
+        cinfo.in_color_space = JCS_GRAYSCALE;
+        jpegli_set_defaults(&cinfo);
+        jpegli_set_quality(&cinfo, 85, TRUE);
+        jpegli_start_compress(&cinfo, TRUE);
+        for (int y = 0; y < height; ++y) {
+            JSAMPROW row = const_cast<JSAMPROW>(map.data() + static_cast<size_t>(y) * width);
+            jpegli_write_scanlines(&cinfo, &row, 1);
+        }
+        jpegli_finish_compress(&cinfo);
+        jpegli_destroy_compress(&cinfo);
+        created = false;
+    } catch (...) {
+        if (created) jpegli_destroy_compress(&cinfo);
+        fclose(mem);
+        free(buf);
+        throw;
+    }
+    fclose(mem);
+    std::vector<uint8_t> out(buf, buf + size);
+    free(buf);
+    return out;
+}
+
+jlong beginEncoder(JNIEnv* env, jint fd, jint width, jint height, jint quality, bool gainMap) {
+    auto enc = std::make_unique<Encoder>();
+    const int own = dup(fd);
+    if (own < 0 || !(enc->file = fdopen(own, "wb"))) {
+        if (own >= 0) close(own);
+        throwJava(env, "cannot open output for JPEG");
+        return 0;
+    }
+    try {
+        enc->cinfo.err = jpegli_std_error(&enc->err);
+        enc->err.error_exit = errorExit;
+        jpegli_create_compress(&enc->cinfo);
+        enc->created = true;
+        if (gainMap) {
+            enc->mem = open_memstream(&enc->memBuf, &enc->memSize);
+            if (!enc->mem) throw std::runtime_error("no memory stream");
+            enc->gain = std::make_unique<rawboy::uhdr::GainMapBuilder>(width, height);
+            jpegli_stdio_dest(&enc->cinfo, enc->mem);
+        } else {
+            jpegli_stdio_dest(&enc->cinfo, enc->file);
+        }
+        rawboy::configureJpegli(&enc->cinfo, width, height, quality);
+        jpegli_start_compress(&enc->cinfo, TRUE);
+        enc->width = width;
+        return reinterpret_cast<jlong>(enc.release());
+    } catch (const std::exception& e) {
+        throwJava(env, std::string("JPEG encoder: ") + e.what());
+        return 0;
+    }
+}
 
 Encoder* fromHandle(jlong handle) { return reinterpret_cast<Encoder*>(handle); }
 
@@ -55,27 +138,16 @@ extern "C" {
  */
 JNIEXPORT jlong JNICALL Java_app_rawboy_export_JpegNative_begin(JNIEnv* env, jclass, jint fd, jint width,
                                                                  jint height, jint quality) {
-    auto enc = std::make_unique<Encoder>();
-    const int own = dup(fd);
-    if (own < 0 || !(enc->file = fdopen(own, "wb"))) {
-        if (own >= 0) close(own);
-        throwJava(env, "cannot open output for JPEG");
-        return 0;
-    }
-    try {
-        enc->cinfo.err = jpegli_std_error(&enc->err);
-        enc->err.error_exit = errorExit;
-        jpegli_create_compress(&enc->cinfo);
-        enc->created = true;
-        jpegli_stdio_dest(&enc->cinfo, enc->file);
-        rawboy::configureJpegli(&enc->cinfo, width, height, quality);
-        jpegli_start_compress(&enc->cinfo, TRUE);
-        enc->width = width;
-        return reinterpret_cast<jlong>(enc.release());
-    } catch (const std::exception& e) {
-        throwJava(env, std::string("JPEG encoder: ") + e.what());
-        return 0;
-    }
+    return beginEncoder(env, fd, width, height, quality, false);
+}
+
+/**
+ * As begin, for an Ultra HDR JPEG: the file gets a gain map (see ultrahdr.h) built from the rows written, unless the
+ * picture has nothing bright enough to need one, in which case it is the plain JPEG.
+ */
+JNIEXPORT jlong JNICALL Java_app_rawboy_export_JpegNative_beginGainMap(JNIEnv* env, jclass, jint fd, jint width,
+                                                                        jint height, jint quality) {
+    return beginEncoder(env, fd, width, height, quality, true);
 }
 
 /**
@@ -120,6 +192,7 @@ JNIEXPORT void JNICALL Java_app_rawboy_export_JpegNative_writeRows(JNIEnv* env, 
         while (written < static_cast<JDIMENSION>(rows)) {
             written += jpegli_write_scanlines(&enc->cinfo, pointers.data() + written, rows - written);
         }
+        if (enc->gain) enc->gain->addRows(data, rows);
     } catch (const std::exception& e) {
         error = e.what();
     }
@@ -133,6 +206,23 @@ JNIEXPORT void JNICALL Java_app_rawboy_export_JpegNative_finish(JNIEnv* env, jcl
     std::string error;
     try {
         jpegli_finish_compress(&enc->cinfo);
+        if (enc->mem) {
+            // Gain map mode: the SDR picture is in memory. Whatever goes wrong with the gain map, the SDR JPEG is
+            // still written as it is.
+            fclose(enc->mem);
+            enc->mem = nullptr;
+            std::vector<uint8_t> out(enc->memBuf, enc->memBuf + enc->memSize);
+            try {
+                const std::vector<uint8_t> map = enc->gain->finish();
+                if (*std::max_element(map.begin(), map.end()) >= rawboy::uhdr::kMinPeak) {
+                    const std::vector<uint8_t> gainJpeg = encodeGainMap(map, enc->gain->mapWidth(), enc->gain->mapHeight());
+                    std::vector<uint8_t> hdr = rawboy::uhdr::assemble(out, gainJpeg);
+                    if (!hdr.empty()) out = std::move(hdr);
+                }
+            } catch (const std::exception&) {
+            }
+            if (fwrite(out.data(), 1, out.size(), enc->file) != out.size()) error = "write failed";
+        }
     } catch (const std::exception& e) {
         error = e.what();
     }
