@@ -90,8 +90,8 @@ data class CameraSettings(
     fun flashGuide(hiRes: Boolean = false): FlashGuides {
         val k = lensKey(hiRes)
         return FlashGuides(
-            flashGuides[k] ?: flashGuides[lensKey] ?: CameraController.DEFAULT_FLASH_GUIDE,
-            flashGuides[flashGuideKey(k, distanceKnown = false)] ?: flashGuides[flashGuideKey(lensKey, distanceKnown = false)] ?: CameraController.DEFAULT_FLASH_GAIN_NO_DISTANCE,
+            flashGuides[k] ?: flashGuides[lensKey],
+            flashGuides[flashGuideKey(k, distanceKnown = false)] ?: flashGuides[flashGuideKey(lensKey, distanceKnown = false)],
         )
     }
     val flashGuide: FlashGuides get() = flashGuide(false)
