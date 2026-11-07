@@ -1,3 +1,7 @@
+**RawBoy Camera (Android): video sound no longer has holes, so Photos plays it (2026-11-07)**
+
+- Videos stalled at once in Google Photos on the Pixel, then played choppy and sped up, while VLC and a PC played them fine (H.264 and HEVC alike, so not the codec). The cause was the sound: the audio loop took one finished AAC frame per microphone read, but a read holds several frames, so the encoder's input filled and most of the sound was dropped. A 7 s clip held 1.7 s of audio in four pieces with 1.3-1.5 s holes between them; Photos follows the audio clock and chased it with the picture. The loop now takes every finished frame each time. Checked on the clip's audio packets (1024-sample frames, timestamps jumping 1.3-1.5 s); untested on the phone when added: send the next clip if Photos still stalls.
+
 **RawBoy: a small light next to a bright area flares again (2026-11-07)**
 
 - The anamorphic flare's size gate reached too far: a small light by a lit ceiling or window (a lamp held next to a face, in a stairwell) was counted as part of the big bright area and got no flare. The gate now looks about 40% as far (Gaussian 2.5% of the long edge, was 4%, and the dilation 0.3 of that, was 0.8). Big lit windows and signs are still left alone. Checked on the web render path on a stairwell portrait, the night street shots and the test chart; Android and iOS carry the same constants, not built here.
