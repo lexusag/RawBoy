@@ -32,6 +32,7 @@ fun Viewfinder(
     onLuma: ((width: Int, height: Int, luma: ByteArray) -> Unit)? = null,
     onTrackLuma: ((width: Int, height: Int, luma: ByteArray) -> Unit)? = null,
     turns: Int = 0,
+    zoom: Float = 1f,
 ) {
     val surfaceCallback = rememberUpdatedState(onSurfaceTexture)
     val baseCallback = rememberUpdatedState(onBase)
@@ -78,6 +79,10 @@ fun Viewfinder(
     }
     LaunchedEffect(turns) {
         renderer.turns = turns
+        view[0]?.requestRender()
+    }
+    LaunchedEffect(zoom) {
+        renderer.zoom = zoom
         view[0]?.requestRender()
     }
     LaunchedEffect(loupe) {

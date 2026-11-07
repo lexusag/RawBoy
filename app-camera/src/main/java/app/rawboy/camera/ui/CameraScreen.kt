@@ -114,6 +114,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.calculateZoom
+import androidx.compose.runtime.State
+import kotlinx.coroutines.coroutineScope
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.input.pointer.pointerInput
@@ -167,6 +172,7 @@ fun CameraScreen(
     val lenses by vm.lenses.collectAsStateWithLifecycle()
     val frontAvailable by vm.frontAvailable.collectAsStateWithLifecycle()
     val focusPoint by vm.focusPoint.collectAsStateWithLifecycle()
+    val zoom by vm.zoom.collectAsStateWithLifecycle()
     val dragPoint by vm.dragPoint.collectAsStateWithLifecycle()
     val tracking by vm.tracking.collectAsStateWithLifecycle()
     val focusSize by vm.controller.focusSize.collectAsStateWithLifecycle()
@@ -369,6 +375,7 @@ fun CameraScreen(
                         // Only while a tap's focus may be tracked: the copies cost nothing otherwise.
                         onTrackLuma = if (settings.trackFocus && focusPoint != null) vm::onTrackLuma else null,
                         turns = turns,
+                        zoom = zoom,
                     )
                     // Taps, the focus handle, ring and loupe work in the upright picture's coordinates, turned with it.
                     Box(
@@ -380,6 +387,20 @@ fun CameraScreen(
                         Box(
                             Modifier
                                 .matchParentSize()
+                                // Pinch: two fingers zoom (the tap and hold below only see a single finger).
+                                .pointerInput(Unit) {
+                                    awaitEachGesture {
+                                        awaitFirstDown(requireUnconsumed = false)
+                                        do {
+                                            val event = awaitPointerEvent()
+                                            if (event.changes.count { it.pressed } >= 2) {
+                                                val change = event.calculateZoom()
+                                                if (change != 1f) vm.setZoom(vm.zoom.value * change)
+                                                event.changes.forEach { it.consume() }
+                                            }
+                                        } while (event.changes.any { it.pressed })
+                                    }
+                                }
                                 .pointerInput(Unit) {
                                     detectTapGestures(
                                         // Tap: focus lock at that point (a new tap moves it; the AF LOCK badge releases it).
@@ -418,6 +439,14 @@ fun CameraScreen(
                                 .padding(bottom = 16.dp),
                         )
                     }
+                    // Big buttons and a big readout, above the lens selector (beside the shutter row in landscape).
+                    ZoomControl(
+                        zoom = zoom,
+                        onZoom = vm::setZoom,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(bottom = if (lenses.size > 1 && !landscape) 84.dp else 16.dp),
+                    )
                     // Above the lens selector, out of the way of the focus ring and the top badges.
                     qrCode?.let { code ->
                         QrChip(
@@ -426,7 +455,7 @@ fun CameraScreen(
                             onDismiss = vm::dismissQr,
                             modifier = Modifier
                                 .align(Alignment.BottomCenter)
-                                .padding(start = 16.dp, end = 16.dp, bottom = if (lenses.size > 1 && !landscape) 84.dp else 16.dp),
+                                .padding(start = 16.dp, end = 16.dp, bottom = (if (lenses.size > 1 && !landscape) 84.dp else 16.dp) + 132.dp),
                         )
                     }
                     Box(Modifier.matchParentSize().turned(turns)) {
@@ -625,6 +654,114 @@ private fun QrChip(code: QrPayload, onOpen: () -> Unit, onDismiss: () -> Unit, m
         }
     }
 }
+
+/**
+ * Digital zoom 1-10x for seeing something far away: a readout of the zoom (tap it to go back to 1x), large − and +
+ * buttons (hold to keep zooming) and preset steps, all with 56 dp touch targets. Pinching the viewfinder zooms too.
+ */
+@Composable
+private fun ZoomControl(zoom: Float, onZoom: (Float) -> Unit, modifier: Modifier = Modifier) {
+    val current = rememberUpdatedState(zoom)
+    val setZoom = rememberUpdatedState(onZoom)
+    val label = zoomLabel(zoom)
+    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(
+            Modifier.clip(RoundedCornerShape(32.dp)).background(Color(0xB3000000)).padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ZoomStepButton("−", "Zoom out", -1, current, setZoom)
+            Box(
+                Modifier
+                    .size(width = 88.dp, height = 56.dp)
+                    .clip(RoundedCornerShape(28.dp))
+                    .clickable(role = Role.Button, onClickLabel = "Reset to 1x") { onZoom(1f) }
+                    .semantics { contentDescription = "Zoom $label times"; stateDescription = "$label times" },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(label + "×", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold), color = Color.White)
+            }
+            ZoomStepButton("+", "Zoom in", 1, current, setZoom)
+        }
+        Row(
+            Modifier.clip(RoundedCornerShape(28.dp)).background(Color(0x99000000)).padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            for (step in ZOOM_PRESETS) {
+                val isSelected = kotlin.math.abs(zoom - step) < 0.05f
+                Box(
+                    Modifier
+                        .size(width = 56.dp, height = 48.dp)
+                        .clip(CircleShape)
+                        .background(if (isSelected) Color(0xFFD0D0D0) else Color.Transparent)
+                        .clickable(role = Role.Button) { onZoom(step) }
+                        .semantics { this.selected = isSelected; contentDescription = "Zoom ${step.toInt()} times" },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        "${step.toInt()}×",
+                        style = MaterialTheme.typography.titleMedium,
+                        color = if (isSelected) Color.Black else Color.White,
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** − or +: a tap zooms by [ZOOM_TAP_FACTOR], holding keeps zooming smoothly. */
+@Composable
+private fun ZoomStepButton(
+    text: String,
+    description: String,
+    direction: Int,
+    current: State<Float>,
+    onZoom: State<(Float) -> Unit>,
+) {
+    Box(
+        Modifier
+            .size(56.dp)
+            .clip(CircleShape)
+            .background(Color(0x40FFFFFF))
+            .pointerInput(direction) {
+                detectTapGestures(
+                    onPress = {
+                        val factor = if (direction > 0) ZOOM_TAP_FACTOR else 1f / ZOOM_TAP_FACTOR
+                        onZoom.value(current.value * factor)
+                        coroutineScope {
+                            val hold = launch {
+                                delay(ZOOM_HOLD_DELAY_MS)
+                                while (true) {
+                                    onZoom.value(current.value * if (direction > 0) ZOOM_HOLD_FACTOR else 1f / ZOOM_HOLD_FACTOR)
+                                    delay(ZOOM_HOLD_TICK_MS)
+                                }
+                            }
+                            tryAwaitRelease()
+                            hold.cancel()
+                        }
+                    },
+                )
+            }
+            .semantics(mergeDescendants = true) {
+                role = Role.Button
+                contentDescription = description
+                onClick(label = description) { onZoom.value(current.value * if (direction > 0) ZOOM_TAP_FACTOR else 1f / ZOOM_TAP_FACTOR); true }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(text, style = MaterialTheme.typography.headlineMedium, color = Color.White)
+    }
+}
+
+/** "1", "2.5", "10": one decimal below 10x. */
+private fun zoomLabel(zoom: Float): String =
+    if (zoom >= 9.95f) "10" else String.format(java.util.Locale.US, "%.1f", zoom).removeSuffix(".0")
+
+private val ZOOM_PRESETS = listOf(1f, 2f, 5f, 10f)
+private const val ZOOM_TAP_FACTOR = 1.25f
+private const val ZOOM_HOLD_FACTOR = 1.04f
+private const val ZOOM_HOLD_DELAY_MS = 300L
+private const val ZOOM_HOLD_TICK_MS = 30L
 
 /** UW · W · T, as Google Camera shows them: the selected lens in a filled circle. */
 @Composable

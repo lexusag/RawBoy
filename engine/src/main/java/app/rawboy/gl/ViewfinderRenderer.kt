@@ -83,6 +83,13 @@ class ViewfinderRenderer(
     var loupe: Loupe? = null
 
     /**
+     * Digital zoom, 1 = the whole frame: pass 1 samples the centre 1/[zoom] of the camera frame, so the whole viewfinder
+     * (develop, analysis, tracker) sees the zoomed picture. A GPU crop, so it is smooth and works at any lens.
+     */
+    @Volatile
+    var zoom: Float = 1f
+
+    /**
      * Clockwise quarter turns from the upright image to the window. 0 while the window is in the phone's natural
      * orientation (portrait), as before. With the screen turned sideways the window turns but the camera image should
      * stay put on the glass, so pass 2 (and the loupe) is drawn as in portrait into [screen] and turned onto the window
@@ -215,7 +222,7 @@ class ViewfinderRenderer(
         linear.bindForDrawing()
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         GLES30.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, cameraTexture)
-        linearize!!.draw(quad!!, texMatrix, f, dataSpaceOf(st))
+        linearize!!.draw(quad!!, texMatrix, f, dataSpaceOf(st), zoom.coerceAtLeast(1f))
 
         // The whole-image copies, from this frame: built from a readback instead, they lagged the image by
         // a few hundred ms and bright lights left a trailing glow when the camera moved.
@@ -569,12 +576,13 @@ class ViewfinderRenderer(
         private val uGamma = GLES30.glGetUniformLocation(id, "uGamma")
         private val uScale = GLES30.glGetUniformLocation(id, "uScale")
         private val uMirror = GLES30.glGetUniformLocation(id, "uMirror")
+        private val uZoom = GLES30.glGetUniformLocation(id, "uZoom")
         private val uColor = GLES30.glGetUniformLocation(id, "uColor")
         private val uYuvToRgb = GLES30.glGetUniformLocation(id, "uYuvToRgb")
         private val uYuvOffset = GLES30.glGetUniformLocation(id, "uYuvOffset")
         private var yuvDataSpace = -1
 
-        fun draw(quad: FullscreenQuad, texMatrix: FloatArray, f: Frame, dataSpace: Int) {
+        fun draw(quad: FullscreenQuad, texMatrix: FloatArray, f: Frame, dataSpace: Int, zoom: Float) {
             GLES30.glUseProgram(id)
             GLES30.glUniform1i(uCamera, 0)
             GLES30.glUniformMatrix4fv(uTexMatrix, 1, false, texMatrix, 0)
@@ -588,6 +596,7 @@ class ViewfinderRenderer(
             // adds the selfie mirror itself (determinant > 0). Mirror here only when it hasn't.
             val determinant = texMatrix[0] * texMatrix[5] - texMatrix[1] * texMatrix[4]
             GLES30.glUniform1f(uMirror, if (f.mirror && determinant < 0f) 1f else 0f)
+            GLES30.glUniform1f(uZoom, zoom)
             GLES30.glUniform1f(uGamma, f.gamma)
             GLES30.glUniform1f(uScale, f.scale)
             GLES30.glUniformMatrix3fv(uColor, 1, false, f.color ?: SRGB_TO_REC2020, 0)
@@ -670,13 +679,15 @@ uniform int uRotation; // clockwise quarter turns from buffer to upright
 uniform float uGamma;  // <= 0: sRGB curve
 uniform float uScale;
 uniform float uMirror; // 1: show a mirror image
+uniform float uZoom;   // digital zoom: the centre 1/uZoom of the frame
 uniform mat3 uColor;   // linear preview RGB -> Rec.2020
 in vec2 vUp;
 out vec4 fragColor;
 
 void main() {
-    float u = mix(vUp.x, 1.0 - vUp.x, uMirror);
-    float v = vUp.y;
+    vec2 zoomed = 0.5 + (vUp - 0.5) / uZoom;
+    float u = mix(zoomed.x, 1.0 - zoomed.x, uMirror);
+    float v = zoomed.y;
     // Buffer position (y = 0 at the buffer's top) that lands at (u, v) after rotating clockwise.
     vec2 b;
     if (uRotation == 1) b = vec2(v, 1.0 - u);
