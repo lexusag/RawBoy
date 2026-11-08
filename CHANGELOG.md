@@ -1,3 +1,7 @@
+**RawBoy Camera (Android): Samsung photos match the viewfinder better (2026-11-08)**
+
+- On a Galaxy S25 the viewfinder looked punchy but the saved photo was flat. Samsung's preview is its own rendering (an S-curve and more colour) and ignores the plain sRGB curve the app asks for, so the viewfinder can't undo it as it does on a Pixel, while the raw has neither. Measured on one S25 pair (Film look, same scene): shadows x0.55-0.65, highlights x1.2, midtone colour +30%. Saved photos from Samsung DNGs now get Contrast +25 and Saturation +25 on top of the look (`CameraSettings.withPhoneIspLook`; B&W keeps its grey). First estimate from a single pair: send more Samsung viewfinder/JPEG pairs to tune it. Not compiled or run in the session (no Android SDK).
+
 **RawBoy Camera (Android): optical-only video stabilization and an exposure lock (2026-11-08)**
 
 - Settings › Optical video stabilization (Experimental features) now uses only the lens's own stabilizer (OIS): the electronic and preview stabilization are gone, so video is no longer cropped or delayed. Plain video stabilization stays off.
