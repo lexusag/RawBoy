@@ -62,6 +62,11 @@ export function offsetFromName(name: string): number {
   const m = /-flat([+-]\d+(?:\.\d+)?)ev/i.exec(name);
   return m ? Number(m[1]) : 0;
 }
+/** The graded file keeps the clip's own name plus a suffix: VID_x-flat+1.0ev.mp4 -> VID_x-flat+1.0ev-rawboyvideo.mp4. */
+function outputName(ext: string): string {
+  const base = (source?.name ?? 'video').replace(/\.[^./\\]+$/, '');
+  return `${base}-rawboyvideo.${ext}`;
+}
 let offsetEv = 0;
 /** Light is brought back down by the recorded raise (linear light, before the look), then the user's own exposure. */
 function applyExposure() {
@@ -205,9 +210,9 @@ $('fast').onclick = () => {
     } else if (m.type === 'done') {
       const a = document.createElement('a');
       a.href = URL.createObjectURL(new Blob([m.buffer], { type: 'video/mp4' }));
-      a.download = 'rawboy-graded.mp4';
+      a.download = outputName('mp4');
       a.click();
-      finish(`Saved rawboy-graded.mp4 (${((performance.now() - t0) / 1000).toFixed(1)} s).`);
+      finish(`Saved ${a.download} (${((performance.now() - t0) / 1000).toFixed(1)} s).`);
     } else if (m.type === 'canceled') finish('Export canceled.');
     else finish(`Export failed: ${m.message}. Try the real-time export.`);
   };
@@ -243,9 +248,9 @@ $('export').onclick = async () => {
   const ext = rec.mimeType.includes('mp4') ? 'mp4' : 'webm';
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(chunks, { type: rec.mimeType }));
-  a.download = `rawboy-graded.${ext}`;
+  a.download = outputName(ext);
   a.click();
-  status(`Saved rawboy-graded.${ext}`);
+  status(`Saved ${a.download}`);
   btn.disabled = false;
 };
 
