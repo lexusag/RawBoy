@@ -1,3 +1,7 @@
+**RawBoy web, Pro: Looks, a look selector prototype (2026-11-08)**
+
+- New **Looks** button in Pro's top bar (off while Film is on, or a crop, mask, leak, preset or Auto WB tool is open). Click it, then click the photo: the area there is shown through every LUT at once as vertical stripes of one continuous picture, each labelled with its LUT (No LUT first, then the bundled and Your LUTs). Click a stripe to make that LUT the photo's LUT (one undo step); drag the window (its bar or the stripes) and the stripes follow the area under it. LUTs that don't fit at 44 px a stripe go on pages (‹ ›, arrow keys); Esc or ✕ closes. Code: `ui/pro/LookSelector.tsx`; each stripe is the shared off-screen developer's `renderPreviewRegion` (one preview upload per redraw) with `lut` swapped, so it is the fit view's own shader and parameters. It samples the downscaled preview, not the 100% tile. Checked in headless Chrome (software GL, a stand-in decoder, desktop and 390 px phone); open questions in the PR.
+
 **RawBoy Camera (Android): flat video is exposed 1 EV higher (2026-11-08)**
 
 - Flat video now raises the camera's exposure by +1 EV (AE compensation, real light) so the shadows keep detail, and the file keeps the lift: the picture is 1 EV brighter than the look would be. The offset is the constant `VideoRecorder.FLAT_RAISE_EV` and is in the file name, `VID_<date>_<time>-flat+1.0ev.mp4`; a converter takes it out with exposure of -1 EV before grading. Older `-flat` clips are 0 EV. Highlights clip 1 EV sooner in the viewfinder's source picture.

@@ -1739,6 +1739,121 @@ select {
 }
 
 /* The crop frame, Auto WB rectangle and mask handles take presses on their handles; elsewhere they reach the preview. */
+/* Look selector (prototype, Pro): a draggable window of vertical stripes, one LUT each, over the photo. */
+.look-selector-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 4;
+}
+
+.look-selector {
+  position: absolute;
+  pointer-events: auto;
+  touch-action: none;
+  cursor: grab;
+  overflow: hidden;
+  border-radius: 6px;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.55), 0 6px 24px rgba(0, 0, 0, 0.55);
+  background: #111;
+}
+
+.look-selector.dragging {
+  cursor: grabbing;
+}
+
+.look-selector canvas {
+  position: absolute;
+  inset: 0;
+  display: block;
+}
+
+.look-stripes {
+  position: absolute;
+  inset: 0;
+  display: grid;
+}
+
+.look-stripe {
+  position: relative;
+  min-width: 0;
+  border-left: 1px solid rgba(255, 255, 255, 0.35);
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  padding-bottom: 6px;
+  cursor: pointer;
+}
+
+.look-stripe:first-child {
+  border-left: 0;
+}
+
+@media (hover: hover) {
+  .look-stripe:hover {
+    background: rgba(255, 255, 255, 0.12);
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+  }
+}
+
+.look-stripe.current {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.look-name {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  max-height: calc(100% - 40px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  line-height: 1.2;
+  padding: 6px 3px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.62);
+  color: #fff;
+  pointer-events: none;
+}
+
+.look-stripe.current .look-name {
+  color: var(--accent);
+}
+
+.look-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 4px 3px 8px;
+  background: rgba(0, 0, 0, 0.62);
+  font-size: 12px;
+  cursor: grab;
+}
+
+.look-title {
+  flex: 1;
+  font-weight: 600;
+}
+
+.look-bar button {
+  min-width: 28px;
+  padding: 2px 6px;
+  font-size: 14px;
+  line-height: 1.1;
+  background: rgba(255, 255, 255, 0.12);
+  border-color: transparent;
+}
+
+.look-page {
+  font-variant-numeric: tabular-nums;
+}
+
 .preview .overlay.crop-overlay,
 .preview .overlay.auto-wb-overlay,
 .preview .overlay.mask-overlay {

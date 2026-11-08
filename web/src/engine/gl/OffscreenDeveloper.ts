@@ -20,6 +20,8 @@ export class OffscreenDeveloper {
   private readonly denoiser: WaveletDenoise;
   private readonly scanner: ScanUpscaler;
   private uploads = 0;
+  /** The preview [renderPreviewRegion] left in the input texture; any other render replaces it. */
+  private regionSource: PreviewImage | null = null;
   private denoisedInput = false;
   imageWidth = 1;
   imageHeight = 1;
@@ -60,6 +62,7 @@ export class OffscreenDeveloper {
    */
   render(params: ShaderParams, input: Uint16Array, inRect: PixelRect, out: PixelRect, scale = 1): Uint16Array | Uint32Array {
     const gl = this.gl;
+    this.regionSource = null;
     this.inputs.bind(params);
     gl.bindTexture(gl.TEXTURE_2D, this.inputTexture);
     uploadHalfRgb(gl, inRect.width, inRect.height, input);
@@ -83,12 +86,31 @@ export class OffscreenDeveloper {
   /** Develops the whole photo from its downscaled [preview] into a [width] x [height] image, as the fit view does. */
   renderPreview(params: ShaderParams, preview: PreviewImage, width: number, height: number): Uint16Array | Uint32Array {
     const gl = this.gl;
+    this.regionSource = null;
     this.inputs.bind(params);
     gl.bindTexture(gl.TEXTURE_2D, this.inputTexture);
     uploadHalfRgb(gl, preview.width, preview.height, preview.pixels);
     const geometry = new SampleGeometry(
       preview.width, preview.height, rect(0, 0, preview.fullWidth, preview.fullHeight),
       rect(0, 0, params.lens.outputWidth, params.lens.outputHeight), preview.fullWidth, preview.fullHeight,
+    );
+    return this.draw(params, geometry, width, height, this.denoised(params, preview.width, preview.height, preview.width / preview.fullWidth));
+  }
+
+  /**
+   * Develops the part [region] (output pixels: the cropped, lens-corrected picture's) of the photo from its downscaled
+   * [preview] into [width] x [height]. Many renders of one preview in a row (the look selector's stripes) upload it once.
+   */
+  renderPreviewRegion(params: ShaderParams, preview: PreviewImage, region: PixelRect, width: number, height: number): Uint16Array | Uint32Array {
+    const gl = this.gl;
+    this.inputs.bind(params);
+    gl.bindTexture(gl.TEXTURE_2D, this.inputTexture);
+    if (this.regionSource !== preview) {
+      uploadHalfRgb(gl, preview.width, preview.height, preview.pixels);
+      this.regionSource = preview;
+    }
+    const geometry = new SampleGeometry(
+      preview.width, preview.height, rect(0, 0, preview.fullWidth, preview.fullHeight), region, preview.fullWidth, preview.fullHeight,
     );
     return this.draw(params, geometry, width, height, this.denoised(params, preview.width, preview.height, preview.width / preview.fullWidth));
   }

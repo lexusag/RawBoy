@@ -11,6 +11,7 @@ import { CropOverlay } from './CropOverlay';
 import { MaskOverlay, type BrushSettings, type MaskTool } from './MaskOverlay';
 import { MasksPanel, radiusToSize, sizeToRadius } from './MasksPanel';
 import { LeaksPanel } from './LeaksPanel';
+import { LookSelector } from './LookSelector';
 import type { LightLeak } from '../../engine/develop/LightLeaks';
 import type { MaskShape } from '../../engine/develop/Masks';
 import { PresetsPanel, type PresetActions } from './PresetsPanel';
@@ -97,6 +98,17 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
       setAutoWb(false);
     }
   }, [state.controlsTab]);
+  // Look selector (prototype): armed from the top bar, the next click on the photo opens it there.
+  const [looksArmed, setLooksArmed] = useState(false);
+  const [looksAt, setLooksAt] = useState<{ x: number; y: number } | null>(null);
+  const closeLooks = () => {
+    setLooksArmed(false);
+    setLooksAt(null);
+  };
+  useEffect(() => {
+    setLooksArmed(false);
+    setLooksAt(null);
+  }, [geometryMode, masksMode, leaksMode, presetsMode, autoWb, state.fileName, state.params.film]);
   const [maskTool, setMaskTool] = useState<MaskTool>('move');
   const [brush, setBrushState] = useState<BrushSettings>(loadBrush);
   const setBrush = (b: BrushSettings) => {
@@ -389,6 +401,23 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
           <ResetIcon />
           <span className="tool-label">Reset</span>
         </button>
+        <button
+          type="button"
+          className={`icon${looksArmed ? ' active' : ''}`}
+          title={state.params.film != null ? 'Looks: turn Film off to compare LUTs' : 'Looks: click the photo to see that area in every LUT'}
+          aria-pressed={looksArmed}
+          onClick={() => {
+            if (looksArmed) closeLooks();
+            else {
+              setLooksArmed(true);
+              setPickingWhite(false);
+            }
+          }}
+          disabled={!hasImage || busy || geometryMode || shapesMode || presetsMode || autoWb || state.params.film != null}
+        >
+          <LooksIcon />
+          <span className="tool-label">Looks</span>
+        </button>
         <button type="button" className="auto-button" title="Auto light and colour (keeps the LUT)" onClick={store.applyAuto} disabled={!hasImage || busy}>Auto</button>
         <span className="row-break" />
         <button
@@ -422,7 +451,10 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
           onToggleZoom={(x, y) => zoomable && store.toggleZoom(x, y, zoomExtra)}
           onClick={(x, y) => {
             if (!zoomable || shapesMode) return;
-            if (pickingWhite) {
+            if (looksArmed) {
+              const d = window.devicePixelRatio || 1;
+              setLooksAt({ x: x / d, y: y / d });
+            } else if (pickingWhite) {
               setPickingWhite(false);
               void store.pickWhite(x, y);
             } else {
@@ -497,6 +529,23 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
               onStrokeEnd={() => {}}
             />
           )}
+          {looksArmed && looksAt && !showOriginal && (
+            <LookSelector
+              key={state.fileName ?? ''}
+              session={store.session}
+              state={session}
+              params={state.params}
+              defaults={state.defaults}
+              frame={FRAME_WIDTH}
+              at={looksAt}
+              onPick={(id) => {
+                store.selectLut(id);
+                closeLooks();
+              }}
+              onClose={closeLooks}
+            />
+          )}
+          {looksArmed && !looksAt && session.preview && <PreviewLabel>Click the photo to compare looks</PreviewLabel>}
           {maskView && !session.zoomCenter && <PreviewLabel>Mask</PreviewLabel>}
           {state.loading && <div className="center"><span className="spinner" /></div>}
           {!session.preview && !state.loading && (
@@ -703,6 +752,19 @@ function LeakIcon() {
     <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" style={{ display: 'block' }} aria-hidden="true">
       <path d="M3 17L21 7" strokeWidth={8} strokeOpacity={0.3} />
       <path d="M3 17L21 7" strokeWidth={3} />
+    </svg>
+  );
+}
+
+/** Looks: the photo cut into vertical stripes. */
+function LooksIcon() {
+  return (
+    <svg width={20} height={20} viewBox="0 0 24 24" fill="currentColor" style={{ display: 'block' }} aria-hidden="true">
+      <rect x={3} y={4} width={3} height={16} rx={0.5} fillOpacity={0.35} />
+      <rect x={7} y={4} width={3} height={16} rx={0.5} fillOpacity={0.6} />
+      <rect x={11} y={4} width={3} height={16} rx={0.5} fillOpacity={0.85} />
+      <rect x={15} y={4} width={3} height={16} rx={0.5} />
+      <rect x={19} y={4} width={2} height={16} rx={0.5} fillOpacity={0.5} />
     </svg>
   );
 }
