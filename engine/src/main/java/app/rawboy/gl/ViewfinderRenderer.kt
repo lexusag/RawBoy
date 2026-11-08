@@ -15,6 +15,7 @@ import kotlin.math.abs
 import kotlin.math.log2
 import kotlin.math.max
 import kotlin.math.min
+import kotlin.math.pow
 import kotlin.math.roundToInt
 
 /**
@@ -392,7 +393,7 @@ class ViewfinderRenderer(
         val cover = max(pw.toFloat() / outW, ph.toFloat() / outH)
         if (sink.flat) {
             // No look: the linear frame, exposed as the viewfinder's auto develop would, Apple Log encoded.
-            flatVideo!!.draw(quad!!, linear.texture, pw / (outW * cover), ph / (outH * cover), p.exposure / BASE_EXPOSURE_GAIN)
+            flatVideo!!.draw(quad!!, linear.texture, pw / (outW * cover), ph / (outH * cover), p.exposure / BASE_EXPOSURE_GAIN * 2f.pow(sink.raiseEv))
             if (k != 0) {
                 GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
                 GLES30.glViewport(0, 0, sink.width, sink.height)

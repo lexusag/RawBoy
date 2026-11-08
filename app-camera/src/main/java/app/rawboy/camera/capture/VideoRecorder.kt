@@ -277,6 +277,14 @@ class VideoRecorder private constructor(
 
         /** The flat picture keeps more of the shadows and highlights for grading, so it gets more bits. */
         private const val FLAT_BITRATE = 28_000_000
+
+        /**
+         * Flat video is exposed this many EV higher than the look would be, to keep the shadows off the 8-bit floor: the
+         * camera's AE compensation takes it (real light), and the file keeps the lift in linear light before the Apple Log
+         * encode. The converter undoes it with exposure of minus this. It is written into the file name
+         * (`-flat+1.0ev`); older `-flat` files are 0 EV.
+         */
+        const val FLAT_RAISE_EV = 1.0f
         private const val AUDIO_BITRATE = 192_000
 
         /** A configured encoder of [mime] (surface input), or null when the device has none or refuses the format. */
@@ -338,7 +346,7 @@ class VideoRecorder private constructor(
             val resolver = context.contentResolver
             val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
             val values = ContentValues().apply {
-                put(MediaStore.MediaColumns.DISPLAY_NAME, "VID_$stamp-${if (flat) "flat" else Edition.JPEG_SUFFIX}.mp4")
+                put(MediaStore.MediaColumns.DISPLAY_NAME, "VID_$stamp-${if (flat) String.format(Locale.US, "flat%+.1fev", FLAT_RAISE_EV) else Edition.JPEG_SUFFIX}.mp4")
                 put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
                 put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/" + Edition.FOLDER + "/")
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
@@ -372,6 +380,7 @@ class VideoRecorder private constructor(
                     height = height,
                     turns = turns,
                     flat = flat,
+                    raiseEv = FLAT_RAISE_EV,
                     presentationNs = { recorder.presentationNs(it) },
                     requestRender = requestRender,
                 )
