@@ -1237,7 +1237,7 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             Spacer(Modifier.height(16.dp))
             SettingSwitch(
                 title = "Flat video for grading",
-                subtitle = "Records without the look: an Apple Log picture with no grain, bloom or colour grading, to apply a look later on the RawBoy Looks web page. Changes apply to the next recording",
+                subtitle = "Records without the look: an Apple Log picture with no grain, bloom or colour grading, to apply a look later on the web video page. Changes apply to the next recording",
                 checked = settings.flatVideo,
                 accent = EXPERIMENTAL_ORANGE,
                 onChange = vm::setFlatVideo,

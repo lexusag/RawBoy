@@ -74,7 +74,7 @@ data class CameraSettings(
     val experimental: Boolean = false,
     /** Video stabilization while recording (video mode only; it crops the picture a little). Needs [experimental]. */
     val videoStabilization: Boolean = false,
-    /** Video mode records a flat Apple Log picture without the look, to be graded later (RawBoy Looks web page). Needs [experimental]. */
+    /** Video mode records a flat Apple Log picture without the look, to be graded later (the web video page). Needs [experimental]. */
     val flatVideo: Boolean = false,
     /**
      * Per camera ([lensKey]): gain from the linearised preview to raw units (1.0 = sensor clip), learned
