@@ -7,6 +7,8 @@ export interface VideoGrade {
   /** How the clip is encoded: 0 Rec.709/sRGB, 1 Apple Log (BT.2020), 2 HLG (BT.2020). */
   input: 0 | 1 | 2;
   exposureEv: number;
+  /** 1 = unchanged; power of luma/0.18 around middle grey. */
+  contrast: number;
   /** 0..1 mix between the original and the graded picture. */
   strength: number;
   grain: number;
@@ -35,7 +37,7 @@ uniform sampler2D uVideo;
 uniform sampler3D uLook, uFilm, uPrint;
 uniform float uLookSize, uFilmSize, uPrintSize;
 uniform int uMode, uInput;
-uniform float uEv, uStrength, uGrain, uFrame;
+uniform float uContrast, uEv, uStrength, uGrain, uFrame;
 uniform vec3 uDMin, uDMax;
 
 const float R0 = -0.05641088, RT = 0.01, C = 47.28711236, B = 0.00964052, G = 0.08550479, BETA = 0.69336945;
@@ -72,6 +74,7 @@ void main() {
   else if (uInput == 2) lin = hlgDecode(src);
   else lin = REC709_TO_2020 * srgbDecode(src);
   lin *= exp2(uEv);
+  lin *= pow(max(dot(lin, vec3(0.2627, 0.6780, 0.0593)), 1e-8) / 0.18, uContrast - 1.0);
   vec3 graded;
   if (uMode == 2) {
     vec3 span = uDMax - uDMin;
@@ -176,6 +179,7 @@ export class VideoRenderer {
     gl.uniform1f(this.u('uEv'), g.exposureEv);
     gl.uniform1f(this.u('uStrength'), g.strength);
     gl.uniform1f(this.u('uGrain'), g.grain);
+    gl.uniform1f(this.u('uContrast'), g.contrast);
     gl.uniform1f(this.u('uFrame'), frame % 4096);
     gl.uniform1f(this.u('uLookSize'), g.look?.size ?? 2);
     gl.uniform1f(this.u('uFilmSize'), g.film?.size ?? 2);

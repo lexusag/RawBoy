@@ -14,8 +14,8 @@ batches), on the same engine as the Android apps.
   deployed as its own site (`../docs/packer.md`). Needs `rawboy-full.wasm`, i.e. the DNG SDK.
 
 - **RawBoy Video** (`video.html`, `src/video/`; http://localhost:5173/video.html in dev): pick a clip, choose a look or
-  film stock, preview it live and export the graded clip. Input can be Rec.709, Apple Log (the film stocks' own input
-  encoding) or HLG. WebGL2 + `MediaRecorder`: export plays the clip in real time (with sound) into mp4/webm. Looks are
+  film stock, preview it live and export the graded clip. Input can be a flat RawBoy Camera clip (Apple Log, Rec.2020
+  codes tagged BT.709), normal Rec.709 video or HLG. WebGL2 + `MediaRecorder`: export plays the clip in real time (with sound) into mp4/webm. Looks are
   the bundled `.cube`s; film stocks are the 2-LUT spektrafilm bundles, without halation (grain is simple luma noise).
 
 ## Run locally

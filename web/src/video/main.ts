@@ -15,8 +15,8 @@ app.innerHTML = `
       <input id="file" type="file" accept="video/*" hidden />
       <label>Clip is recorded as
         <select id="input">
+          <option value="1" selected>Flat clip from RawBoy Camera (Apple Log)</option>
           <option value="0">Normal video (Rec.709)</option>
-          <option value="1">Apple Log / RawBoy flat</option>
           <option value="2">HLG (HDR phone video)</option>
         </select>
       </label>
@@ -26,6 +26,7 @@ app.innerHTML = `
       <label>Choice <select id="choice"></select></label>
       <label>Strength <input id="strength" type="range" min="0" max="100" value="100" /></label>
       <label>Exposure <input id="ev" type="range" min="-30" max="30" value="0" /></label>
+      <label>Contrast <input id="contrast" type="range" min="60" max="160" value="100" /></label>
       <label>Grain <input id="grain" type="range" min="0" max="100" value="30" /></label>
       <button id="export" class="primary" disabled>Export graded clip</button>
       <div class="note" id="status">Runs in your browser; the clip is not uploaded. Export records in real time, with sound.</div>
@@ -47,7 +48,7 @@ video.playsInline = true;
 video.preload = 'auto';
 video.crossOrigin = 'anonymous';
 
-const grade: VideoGrade = { mode: 2, input: 0, exposureEv: 0, strength: 1, grain: 0.3, look: null, film: null, print: null, densityMin: [0, 0, 0], densityMax: [1, 1, 1] };
+const grade: VideoGrade = { mode: 2, input: 1, exposureEv: 0, contrast: 1, strength: 1, grain: 0.3, look: null, film: null, print: null, densityMin: [0, 0, 0], densityMax: [1, 1, 1] };
 let frame = 0;
 let loadToken = 0;
 
@@ -148,6 +149,7 @@ $('choice').onchange = () => void applyChoice();
 $('input').onchange = () => { grade.input = Number($<HTMLSelectElement>('input').value) as 0 | 1 | 2; redraw(); };
 $('strength').oninput = () => { grade.strength = Number($<HTMLInputElement>('strength').value) / 100; redraw(); };
 $('ev').oninput = () => { grade.exposureEv = Number($<HTMLInputElement>('ev').value) / 10; redraw(); };
+$('contrast').oninput = () => { grade.contrast = Number($<HTMLInputElement>('contrast').value) / 100; redraw(); };
 $('grain').oninput = () => { grade.grain = Number($<HTMLInputElement>('grain').value) / 100; redraw(); };
 
 // Export: plays the clip once from the start while recording the canvas (and the clip's sound).
