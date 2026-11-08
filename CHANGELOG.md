@@ -2,6 +2,10 @@
 
 - AF LOCK / TRACKING and (in video mode) AE LOCK are stacked at the top left of the viewfinder, clear of the histogram at the top right. "Without look" moved to the bottom left for the same reason.
 
+**RawBoy Camera (Android): saves back off when memory is low (2026-11-08)**
+
+- On a phone with little free memory a save could take over a minute (once 62-70 s in the GPU develop instead of ~1 s, with ~2 GB of 16 GB free and swap nearly full). The camera now develops one shot at a time, instead of decoding the next while the last develops, when free memory is under 2.5 GB, the system reports low memory, or it asked apps to trim memory in the last minute; it also frees the GPU context when asked to trim while idle. The log (tag `RawBoyCamera`) now shows free memory before each decode, when a shot waits for memory, on trim requests, and after any develop slower than 8 s. Not compiled or run in the session (no Android SDK): on the phone, shoot a burst of shots while other apps fill memory and compare the `saved … in … ms` lines with and without.
+
 **RawBoy Camera (Android): flat video for grading later (2026-11-08)**
 
 - New Settings › Flat video for grading (under Experimental features, off by default). In video mode the recording skips the look: the file holds the viewfinder's linear picture, exposed as the auto develop meters it, encoded with Apple's log curve in Rec.2020 colours, tagged BT.709 so browsers leave the codes alone (the input RawBoy's film LUTs expect), with no grain, bloom or grading, HEVC at 28 Mbit/s. The viewfinder still shows the look. Files are named `VID_<date>_<time>-flat.mp4` and look washed out in any player until a look is applied. The Pixel's own HDRnet tone mapping is still in the picture (it can't be switched off), but its scene tone mapping isn't.
