@@ -120,7 +120,7 @@ export default defineConfig({
   // index.html, see .github/workflows/release.yml).
   build: {
     rollupOptions: {
-      input: { main: resolve(__dirname, 'index.html'), drive: resolve(__dirname, 'drive.html'), packer: resolve(__dirname, 'packer.html') },
+      input: { main: resolve(__dirname, 'index.html'), drive: resolve(__dirname, 'drive.html'), packer: resolve(__dirname, 'packer.html'), video: resolve(__dirname, 'video.html') },
     },
   },
   worker: { format: 'es' },
