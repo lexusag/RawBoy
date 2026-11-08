@@ -166,6 +166,26 @@ data class CameraSettings(
 
     companion object {
         const val MIN_QUALITY = 70
+
+        /**
+         * Samsung (2026-11-08, Galaxy S25 pair of viewfinder screenshot and saved JPEG, same Film look): the preview
+         * the viewfinder shows is the ISP's own rendering and ignores the plain sRGB curve we ask for, so it can't be
+         * undone like the Pixel's. It is an S-curve (darks x0.55-0.65, highlights x1.2 around display grey 0.33, in
+         * log-log slope ~1.14) with ~+30% chroma in the midtones, while the raw decoded here has neither, so the saved
+         * photo came out flat next to the viewfinder. Added to the shot's develop to match; first estimate from one
+         * pair, tune on more Samsung shots. Camera only, saved photos only (the viewfinder already has it).
+         */
+        const val SAMSUNG_CONTRAST = 25f
+        const val SAMSUNG_SATURATION = 25f
+
+        /** [p] with the Samsung ISP look added when the DNG's [make] is Samsung; B&W keeps its grey (saturation -100). */
+        fun withPhoneIspLook(p: DevelopParams, make: String): DevelopParams {
+            if (!make.equals("samsung", ignoreCase = true)) return p
+            return p.copy(
+                contrast = (p.contrast + SAMSUNG_CONTRAST).coerceAtMost(100f),
+                saturation = if (p.saturation <= -100f) p.saturation else (p.saturation + SAMSUNG_SATURATION).coerceAtMost(100f),
+            )
+        }
         const val SMALL_LONG_SIDE = 3000
         /** Light sharpening after the downscale to [SMALL_LONG_SIDE] (luma unsharp mask, `band_ops.h`); full size gets none. */
         const val SMALL_SHARPEN = 0.5f

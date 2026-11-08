@@ -348,7 +348,7 @@ internal object ShotSaver {
                 phoneAe = shot.flashGuide == null, captureEv = shot.compensationEv,
             )
             val analysisMs = ms(analysisStart)
-            val looked = s.develop(a.autoBase, a.stats.hasFace)
+            val looked = CameraSettings.withPhoneIspLook(s.develop(a.autoBase, a.stats.hasFace), img.make)
             // High ISO: more denoise than the auto develop's table, up to the coarse stage (denoise > 65).
             val denoise = maxOf(looked.denoise, highIsoDenoise(a.stats.iso * noiseScale))
             val params = looked.copy(
