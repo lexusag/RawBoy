@@ -1236,6 +1236,14 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
         if (settings.experimental) {
             Spacer(Modifier.height(16.dp))
             SettingSwitch(
+                title = "Flat video for grading",
+                subtitle = "Records without the look: an Apple Log picture with no grain, bloom or colour grading, to apply a look later on the RawBoy Looks web page. Changes apply to the next recording",
+                checked = settings.flatVideo,
+                accent = EXPERIMENTAL_ORANGE,
+                onChange = vm::setFlatVideo,
+            )
+            Spacer(Modifier.height(16.dp))
+            SettingSwitch(
                 title = "Optical video stabilization",
                 subtitle = "Uses the lens's own stabilizer while filming (video mode only). No crop and no delay, but a gentler effect than software stabilization",
                 checked = settings.videoStabilization,

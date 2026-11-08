@@ -1,3 +1,7 @@
+**RawBoy Camera (Android): flat video for grading later (2026-11-08)**
+
+- New Settings › Flat video for grading (under Experimental features, off by default). In video mode the recording skips the look: the file holds the viewfinder's linear picture, exposed as the auto develop meters it, encoded with Apple's log curve in Rec.2020 colours (the input RawBoy's film LUTs expect), with no grain, bloom or grading, HEVC at 28 Mbit/s. The viewfinder still shows the look. Files are named `VID_<date>_<time>-flat.mp4` and look washed out in any player until a look is applied. The Pixel's own HDRnet tone mapping is still in the picture (it can't be switched off), but its scene tone mapping isn't.
+
 **RawBoy Camera (Android): optical-only video stabilization and an exposure lock (2026-11-08)**
 
 - Settings › Optical video stabilization (Experimental features) now uses only the lens's own stabilizer (OIS): the electronic and preview stabilization are gone, so video is no longer cropped or delayed. Plain video stabilization stays off.

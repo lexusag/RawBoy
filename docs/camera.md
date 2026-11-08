@@ -178,6 +178,8 @@ Turn on **Settings › Experimental features** (off by default) and a **VIDEO** 
 
 In video mode, **AE LOCK** (top right of the viewfinder) holds the exposure and tapping the picture locks focus (**AF LOCK**); the two are independent. **Settings › Optical video stabilization** uses the lens stabilizer only (no crop, no delay).
 
+**Settings › Flat video for grading** records without the look: an Apple Log picture in Rec.2020 colours (no grain, bloom or grading, 28 Mbit/s HEVC), named `...-flat.mp4`. It plays washed out; grade it later with a look or film stock.
+
 - The viewfinder is 4:3, a video is 16:9: the parts the file will not have are darkened. A phone held sideways records a landscape file.
 - Film grain moves with the frames in video mode. The live exposure eases much slower than for photos, so brightness does not pump.
 - Skin retouch, the ISO-based denoise and sharpening, bursts, flash and raw are photo-only. The lens and the camera (selfie) can't be changed while recording, and leaving the app stops the recording.

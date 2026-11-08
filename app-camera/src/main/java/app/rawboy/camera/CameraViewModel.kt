@@ -284,6 +284,11 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         controller.setVideoStabilization(_videoMode.value && _settings.value.experimental && _settings.value.videoStabilization)
     }
 
+    /** Not in the middle of a recording: the file's format is fixed when it starts. */
+    fun setFlatVideo(on: Boolean) {
+        if (_recordingMs.value == null) change { it.copy(flatVideo = on) }
+    }
+
     fun setVideoStabilization(on: Boolean) {
         change { it.copy(videoStabilization = on) }
         // Changing it restarts the preview (a visible blink and a new crop): not in the middle of a recording.
@@ -299,11 +304,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         // As photos do: the phone's own rotation, so a phone held sideways with auto-rotate off still records upright.
         val turns = (deviceDegrees / 90) % 4
         val withAudio = audioGranted
+        val flat = _settings.value.flatVideo
         stopRequested = false
         _recordingMs.value = 0
         recordingJob = viewModelScope.launch {
             val r = try {
-                withContext(Dispatchers.IO) { VideoRecorder.create(app, turns, withAudio) { /* the view's requestRender is on the sink */ } }
+                withContext(Dispatchers.IO) { VideoRecorder.create(app, turns, withAudio, flat) { /* the view's requestRender is on the sink */ } }
             } catch (e: Exception) {
                 Log.w(TAG, "recording did not start", e)
                 _message.value = "Could not start recording: ${e.message}"
