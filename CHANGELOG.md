@@ -1,3 +1,7 @@
+**RawBoy Camera (Android): flat video for grading later (2026-11-08)**
+
+- New Settings › Flat video for grading (under Experimental features, off by default). In video mode the recording skips the look: the file holds the viewfinder's linear picture, exposed as the auto develop meters it, encoded with Apple's log curve in Rec.2020 colours, tagged BT.709 so browsers leave the codes alone (the input RawBoy's film LUTs expect), with no grain, bloom or grading, HEVC at 28 Mbit/s. The viewfinder still shows the look. Files are named `VID_<date>_<time>-flat.mp4` and look washed out in any player until a look is applied. The Pixel's own HDRnet tone mapping is still in the picture (it can't be switched off), but its scene tone mapping isn't.
+
 **RawBoy Camera (Android): Samsung photos match the viewfinder better (2026-11-08)**
 
 - On a Galaxy S25 the viewfinder looked punchy but the saved photo was flat. Samsung's preview is its own rendering (an S-curve and more colour) and ignores the plain sRGB curve the app asks for, so the viewfinder can't undo it as it does on a Pixel, while the raw has neither. Measured on one S25 pair (Film look, same scene): shadows x0.55-0.65, highlights x1.2, midtone colour +30%. Saved photos from Samsung DNGs now get Contrast +25 and Saturation +25 on top of the look (`CameraSettings.withPhoneIspLook`; B&W keeps its grey). First estimate from a single pair: send more Samsung viewfinder/JPEG pairs to tune it. Not compiled or run in the session (no Android SDK).

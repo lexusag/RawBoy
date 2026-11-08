@@ -163,6 +163,7 @@ class ViewfinderRenderer(
     private var lastEncodedNs = Long.MIN_VALUE
     private var frameIndex = 0
     private var turn: TurnProgram? = null
+    private var flatVideo: FlatProgram? = null
     private var lastBase = 0L
     private var lastLuma = 0L
     private var viewWidth = 1
@@ -196,6 +197,7 @@ class ViewfinderRenderer(
         tailScatter = PassProgram(PassProgram.TAIL_SCATTER, trilinear = false)
         lumaProgram = LumaProgram()
         turn = TurnProgram()
+        flatVideo = FlatProgram()
         develop = DevelopProgram(forExport = false)
         quad = FullscreenQuad()
         lutTexture = LutTexture()
@@ -384,6 +386,21 @@ class ViewfinderRenderer(
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
             GLES30.glViewport(0, 0, pw, ph)
         }
+        val outW = p.lens.outputWidth
+        val outH = p.lens.outputHeight
+        // Cover, not fit: scaled until both sides fill the encoder, the overflow clipped.
+        val cover = max(pw.toFloat() / outW, ph.toFloat() / outH)
+        if (sink.flat) {
+            // No look: the linear frame, exposed as the viewfinder's auto develop would, Apple Log encoded.
+            flatVideo!!.draw(quad!!, linear.texture, pw / (outW * cover), ph / (outH * cover), p.exposure / BASE_EXPOSURE_GAIN)
+            if (k != 0) {
+                GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+                GLES30.glViewport(0, 0, sink.width, sink.height)
+                turn!!.draw(quad!!, videoTurned.texture, k)
+            }
+            enc.swapAndRestore(pts)
+            return
+        }
         lutTexture!!.bind(p.lut)
         filmTextures!!.bind(p.film)
         shadingTexture!!.bind(p.lens.info.shading)
@@ -393,10 +410,6 @@ class ViewfinderRenderer(
         maskTexture!!.bind(p.skinMask)
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, linear.texture)
-        val outW = p.lens.outputWidth
-        val outH = p.lens.outputHeight
-        // Cover, not fit: scaled until both sides fill the encoder, the overflow clipped.
-        val cover = max(pw.toFloat() / outW, ph.toFloat() / outH)
         val geometry = SampleGeometry(
             w, h, PixelRect(0, 0, f.fullWidth, f.fullHeight), PixelRect(0, 0, outW, outH), f.fullWidth, f.fullHeight,
         )
@@ -904,6 +917,51 @@ void main() {
     }
 
     /**
+     * The flat video picture: the linear Rec.2020 frame times the exposure, cropped to the part [uSpan] shows,
+     * Apple Log encoded (Apple's published curve, the same the film LUTs take in). Output has the picture's top at high y,
+     * as the develop pass draws it.
+     */
+    private class FlatProgram {
+        private val id = GlUtil.createProgram(LinearizeProgram.VERTEX, FRAGMENT)
+        private val uSource = GLES30.glGetUniformLocation(id, "uSource")
+        private val uSpan = GLES30.glGetUniformLocation(id, "uSpan")
+        private val uGain = GLES30.glGetUniformLocation(id, "uGain")
+
+        fun draw(quad: FullscreenQuad, texture: Int, spanX: Float, spanY: Float, gain: Float) {
+            GLES30.glUseProgram(id)
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, texture)
+            GLES30.glUniform1i(uSource, 0)
+            GLES30.glUniform2f(uSpan, spanX, spanY)
+            GLES30.glUniform1f(uGain, gain)
+            quad.draw()
+        }
+
+        companion object {
+            const val FRAGMENT = """#version 300 es
+precision highp float;
+uniform sampler2D uSource;
+uniform vec2 uSpan;
+uniform float uGain;
+in vec2 vUp;
+out vec4 fragColor;
+vec3 appleLog(vec3 r) {
+    const float R0 = -0.05641088, RT = 0.01, C = 47.28711236, B = 0.00964052, G = 0.08550479, D = 0.69336945;
+    vec3 lg = G * log2(max(r, RT) + B) + D;
+    vec3 sq = C * (r - R0) * (r - R0);
+    return mix(vec3(0.0), mix(sq, lg, step(vec3(RT), r)), step(vec3(R0), r));
+}
+void main() {
+    // vUp.y is high at the picture's top; the texture's row 0 is the top.
+    vec2 uv = vec2(0.5 + (vUp.x - 0.5) * uSpan.x, 0.5 - (vUp.y - 0.5) * uSpan.y);
+    vec3 lin = texture(uSource, uv).rgb * uGain;
+    fragColor = vec4(clamp(appleLog(lin), 0.0, 1.0), 1.0);
+}
+"""
+        }
+    }
+
+    /**
      * Copies the upright pass-2 picture onto the window turned clockwise by `turns` quarter turns. Window and texture
      * coordinates both have y up here (the develop drew with flipY, so the picture's top is the texture's top).
      */
@@ -993,6 +1051,9 @@ void main() {
 
         /** The frame counter wraps here (it goes into the shader as a float seed). */
         private const val GRAIN_FRAME_PERIOD = 100_000
+
+        /** 2^ShaderParams.BASE_EXPOSURE_EV: the lift AgX gets, which the film pipeline's input does not include. */
+        private const val BASE_EXPOSURE_GAIN = 1.6245f
 
         /** Long side of [onLuma]'s copies: a QR code a twentieth of the frame wide still gets ~2 px per module. */
         const val LUMA_MAX_DIMENSION = 1280

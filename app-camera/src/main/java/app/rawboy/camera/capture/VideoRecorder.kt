@@ -274,15 +274,18 @@ class VideoRecorder private constructor(
         private const val AUDIO_RATE = 48_000
         private const val BYTES_PER_FRAME = 4 // 16-bit stereo
         private const val VIDEO_BITRATE = 16_000_000
+
+        /** The flat picture keeps more of the shadows and highlights for grading, so it gets more bits. */
+        private const val FLAT_BITRATE = 28_000_000
         private const val AUDIO_BITRATE = 192_000
 
         /** A configured encoder of [mime] (surface input), or null when the device has none or refuses the format. */
-        private fun videoCodecOf(width: Int, height: Int, mime: String): MediaCodec? {
+        private fun videoCodecOf(width: Int, height: Int, mime: String, flat: Boolean): MediaCodec? {
             var codec: MediaCodec? = null
             try {
                 val format = MediaFormat.createVideoFormat(mime, width, height).apply {
                     setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-                    setInteger(MediaFormat.KEY_BIT_RATE, VIDEO_BITRATE)
+                    setInteger(MediaFormat.KEY_BIT_RATE, if (flat) FLAT_BITRATE else VIDEO_BITRATE)
                     setInteger(MediaFormat.KEY_FRAME_RATE, 30)
                     setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
                     setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
@@ -291,9 +294,15 @@ class VideoRecorder private constructor(
                         if (mime == MediaFormat.MIMETYPE_VIDEO_HEVC) MediaCodecInfo.CodecProfileLevel.HEVCProfileMain
                         else MediaCodecInfo.CodecProfileLevel.AVCProfileHigh,
                     )
-                    // The picture is the display-referred look: tag it as ordinary SDR BT.709 video.
-                    setInteger(MediaFormat.KEY_COLOR_STANDARD, MediaFormat.COLOR_STANDARD_BT709)
-                    setInteger(MediaFormat.KEY_COLOR_TRANSFER, MediaFormat.COLOR_TRANSFER_SDR_VIDEO)
+                    if (flat) {
+                        // Apple Log codes (Rec.2020 primaries). Tagged BT.709 and no transfer on purpose: a browser
+                        // that sees BT.2020 converts the codes to sRGB primaries, which wrecks a log picture.
+                        setInteger(MediaFormat.KEY_COLOR_STANDARD, MediaFormat.COLOR_STANDARD_BT709)
+                    } else {
+                        // The picture is the display-referred look: tag it as ordinary SDR BT.709 video.
+                        setInteger(MediaFormat.KEY_COLOR_STANDARD, MediaFormat.COLOR_STANDARD_BT709)
+                        setInteger(MediaFormat.KEY_COLOR_TRANSFER, MediaFormat.COLOR_TRANSFER_SDR_VIDEO)
+                    }
                     setInteger(MediaFormat.KEY_COLOR_RANGE, MediaFormat.COLOR_RANGE_LIMITED)
                 }
                 codec = MediaCodec.createEncoderByType(mime)
@@ -319,6 +328,7 @@ class VideoRecorder private constructor(
             context: Context,
             turns: Int,
             withAudio: Boolean,
+            flat: Boolean,
             requestRender: () -> Unit,
         ): VideoRecorder {
             val landscape = turns % 2 != 0
@@ -328,7 +338,7 @@ class VideoRecorder private constructor(
             val resolver = context.contentResolver
             val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
             val values = ContentValues().apply {
-                put(MediaStore.MediaColumns.DISPLAY_NAME, "VID_$stamp-${Edition.JPEG_SUFFIX}.mp4")
+                put(MediaStore.MediaColumns.DISPLAY_NAME, "VID_$stamp-${if (flat) "flat" else Edition.JPEG_SUFFIX}.mp4")
                 put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
                 put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/" + Edition.FOLDER + "/")
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
@@ -347,8 +357,8 @@ class VideoRecorder private constructor(
                 // HEVC first: the Pixel's player stalled for seconds on this app's grainy H.264 High files (the same
                 // frames re-muxed with exact 30 fps times stalled too), while the camera's own videos play fine.
                 // H.264 stays as the fallback for a device without an HEVC encoder.
-                video = videoCodecOf(width, height, MediaFormat.MIMETYPE_VIDEO_HEVC)
-                    ?: videoCodecOf(width, height, MediaFormat.MIMETYPE_VIDEO_AVC)
+                video = videoCodecOf(width, height, MediaFormat.MIMETYPE_VIDEO_HEVC, flat)
+                    ?: videoCodecOf(width, height, MediaFormat.MIMETYPE_VIDEO_AVC, flat)
                     ?: throw IOException("No video encoder")
                 surface = video.createInputSurface()
 
@@ -361,6 +371,7 @@ class VideoRecorder private constructor(
                     width = width,
                     height = height,
                     turns = turns,
+                    flat = flat,
                     presentationNs = { recorder.presentationNs(it) },
                     requestRender = requestRender,
                 )
