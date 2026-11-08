@@ -103,8 +103,8 @@ export class VideoRenderer {
   private lutIds: (string | null)[] = [null, null, null];
   private uni = new Map<string, WebGLUniformLocation | null>();
 
-  constructor(readonly canvas: HTMLCanvasElement) {
-    const gl = canvas.getContext('webgl2', { antialias: false, preserveDrawingBuffer: true });
+  constructor(readonly canvas: HTMLCanvasElement | OffscreenCanvas) {
+    const gl = (canvas as HTMLCanvasElement).getContext('webgl2', { antialias: false, preserveDrawingBuffer: true }) as WebGL2RenderingContext | null;
     if (!gl) throw new Error('WebGL2 is not available in this browser.');
     this.gl = gl;
     const compile = (type: number, src: string) => {
@@ -163,17 +163,18 @@ export class VideoRenderer {
     }
   }
 
-  draw(video: HTMLVideoElement, g: VideoGrade, frame: number) {
+  /** Draws [source] (a video element or a decoded VideoFrame, [width] x [height] px) through the grade. */
+  draw(source: TexImageSource, width: number, height: number, g: VideoGrade, frame: number) {
     const gl = this.gl;
-    if (video.videoWidth === 0) return;
-    this.setSize(video.videoWidth, video.videoHeight);
+    if (width === 0) return;
+    this.setSize(width, height);
     gl.viewport(0, 0, this.canvas.width, this.canvas.height);
     this.uploadLut(0, g.look);
     this.uploadLut(1, g.film);
     this.uploadLut(2, g.print);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.videoTex);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
     gl.uniform1i(this.u('uMode'), g.mode);
     gl.uniform1i(this.u('uInput'), g.input);
     gl.uniform1f(this.u('uEv'), g.exposureEv);

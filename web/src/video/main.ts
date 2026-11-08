@@ -1,6 +1,7 @@
 import { FilmStocks } from '../engine/film/FilmStocks';
 import { LutRepository, loadLutCached } from '../engine/lut/LutRepository';
 import { VideoRenderer, type VideoGrade } from './render';
+import type { ExportMessage, ExportRequest } from './exportWorker';
 
 const app = document.getElementById('app')!;
 app.innerHTML = `
@@ -28,8 +29,11 @@ app.innerHTML = `
       <label>Exposure <input id="ev" type="range" min="-30" max="30" value="0" /></label>
       <label>Contrast <input id="contrast" type="range" min="60" max="160" value="100" /></label>
       <label>Grain <input id="grain" type="range" min="0" max="100" value="30" /></label>
-      <button id="export" class="primary" disabled>Export graded clip</button>
-      <div class="note" id="status">Runs in your browser; the clip is not uploaded. Export records in real time, with sound.</div>
+      <button id="fast" class="primary" disabled>Export graded clip (fast, background)</button>
+      <progress id="prog" max="100" value="0" hidden style="width:100%"></progress>
+      <button id="cancel" hidden>Cancel export</button>
+      <button id="export" disabled>Export in real time (records the preview)</button>
+      <div class="note" id="status">Runs in your browser; the clip is not uploaded. Fast export runs in the background; the real-time one records the preview, with sound.</div>
     </div>
   </div>`;
 
@@ -82,7 +86,7 @@ async function applyChoice() {
       grade.look = l;
     }
     grade.mode = kind;
-    status('Runs in your browser; the clip is not uploaded. Export records in real time, with sound.');
+    status('Runs in your browser; the clip is not uploaded. Fast export runs in the background; the real-time one records the preview, with sound.');
     redraw();
   } catch (e) {
     status(`Could not load: ${(e as Error).message}`);
@@ -90,7 +94,7 @@ async function applyChoice() {
 }
 
 function redraw() {
-  if (video.readyState >= 2) renderer.draw(video, grade, frame);
+  if (video.readyState >= 2) renderer.draw(video, video.videoWidth, video.videoHeight, grade, frame);
 }
 
 function loop() {
@@ -108,6 +112,7 @@ function schedule() {
 
 let seeking = false;
 async function openFile(file: File) {
+  source = file;
   video.pause();
   video.src = URL.createObjectURL(file);
   video.load();
@@ -116,7 +121,7 @@ async function openFile(file: File) {
     video.onerror = () => rej(new Error('This browser cannot play that clip.'));
   }).catch((e: Error) => status(e.message));
   $('empty').style.display = 'none';
-  for (const id of ['play', 'seek', 'export']) $<HTMLButtonElement>(id).disabled = false;
+  for (const id of ['play', 'seek', 'export', 'fast']) $<HTMLButtonElement>(id).disabled = false;
   video.currentTime = 0;
   redraw();
 }
@@ -152,7 +157,46 @@ $('ev').oninput = () => { grade.exposureEv = Number($<HTMLInputElement>('ev').va
 $('contrast').oninput = () => { grade.contrast = Number($<HTMLInputElement>('contrast').value) / 100; redraw(); };
 $('grain').oninput = () => { grade.grain = Number($<HTMLInputElement>('grain').value) / 100; redraw(); };
 
-// Export: plays the clip once from the start while recording the canvas (and the clip's sound).
+// Fast export: a worker decodes, grades and encodes the clip faster than real time, without drawing a preview.
+let source: File | null = null;
+const fastOk = typeof Worker !== 'undefined' && 'VideoDecoder' in window && 'VideoEncoder' in window && typeof OffscreenCanvas !== 'undefined';
+if (!fastOk) $('fast').style.display = 'none';
+$('fast').onclick = () => {
+  if (!source) return;
+  const worker = new Worker(new URL('./exportWorker.ts', import.meta.url), { type: 'module' });
+  const t0 = performance.now();
+  const prog = $<HTMLProgressElement>('prog');
+  const cancel = $<HTMLButtonElement>('cancel');
+  const busy = (on: boolean) => {
+    for (const id of ['fast', 'export', 'open']) $<HTMLButtonElement>(id).disabled = on;
+    prog.hidden = cancel.hidden = !on;
+    prog.value = 0;
+  };
+  video.pause();
+  busy(true);
+  status('Exporting in the background…');
+  const finish = (msg: string) => { busy(false); worker.terminate(); status(msg); };
+  worker.onmessage = (e: MessageEvent<ExportMessage>) => {
+    const m = e.data;
+    if (m.type === 'progress') {
+      prog.value = Math.round(m.progress * 100);
+      status(`Exporting in the background… ${prog.value} %`);
+    } else if (m.type === 'done') {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([m.buffer], { type: 'video/mp4' }));
+      a.download = 'rawboy-graded.mp4';
+      a.click();
+      finish(`Saved rawboy-graded.mp4 (${((performance.now() - t0) / 1000).toFixed(1)} s).`);
+    } else if (m.type === 'canceled') finish('Export canceled.');
+    else finish(`Export failed: ${m.message}. Try the real-time export.`);
+  };
+  worker.onerror = (e) => finish(`Export failed: ${e.message}. Try the real-time export.`);
+  cancel.onclick = () => worker.postMessage({ cancel: true });
+  const request: ExportRequest = { file: source, grade: { ...grade } };
+  worker.postMessage(request);
+};
+
+// Real-time export: plays the clip once from the start while recording the canvas (and the clip's sound).
 $('export').onclick = async () => {
   const btn = $<HTMLButtonElement>('export');
   btn.disabled = true;
