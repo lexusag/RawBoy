@@ -1,3 +1,7 @@
+**RawBoy Camera (Android): flat video is exposed 1 EV higher (2026-11-08)**
+
+- Flat video now raises the camera's exposure by +1 EV (AE compensation, real light) so the shadows keep detail, and the file keeps the lift: the picture is 1 EV brighter than the look would be. The offset is the constant `VideoRecorder.FLAT_RAISE_EV` and is in the file name, `VID_<date>_<time>-flat+1.0ev.mp4`; a converter takes it out with exposure of -1 EV before grading. Older `-flat` clips are 0 EV. Highlights clip 1 EV sooner in the viewfinder's source picture.
+
 **RawBoy Camera (Android): lock chips no longer cover the histogram (2026-11-08)**
 
 - AF LOCK / TRACKING and (in video mode) AE LOCK are stacked at the top left of the viewfinder, clear of the histogram at the top right. "Without look" moved to the bottom left for the same reason.

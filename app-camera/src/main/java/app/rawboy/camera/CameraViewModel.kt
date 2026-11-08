@@ -263,6 +263,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         if (_recordingMs.value != null) return
         if (on && !_settings.value.experimental) return
         _videoMode.value = on
+        controller.setExposureBias(exposureBias(_settings.value)) // flat video raises it
         if (!on) setExposureLock(false) // the lock is video mode's: photos meter as always
         applyStabilization()
         republish() // the video viewfinder drops the colour denoise (see publish)
@@ -859,7 +860,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
      * AE compensation for [s]'s Brightness: all of it goes into the capture (preview and stills), and the develop takes
      * the applied part back out (AutoTone's captureEv), so Brightness looks the same and raises the shot's exposure.
      */
-    private fun exposureBias(s: CameraSettings): Float = s.brightness / 100f * LookApplier.BRIGHTNESS_EV
+    private fun exposureBias(s: CameraSettings): Float =
+        s.brightness / 100f * LookApplier.BRIGHTNESS_EV +
+            // Flat video exposes this much higher for the shadows (the file keeps the lift, see VideoRecorder.FLAT_RAISE_EV).
+            if (_videoMode.value && s.experimental && s.flatVideo) VideoRecorder.FLAT_RAISE_EV else 0f
 
     /** Only the newest control values matter: a newer publish replaces one still running. */
     private fun republish() {

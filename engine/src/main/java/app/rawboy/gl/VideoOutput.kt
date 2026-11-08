@@ -24,6 +24,8 @@ class VideoSink(
     val turns: Int,
     /** Record the flat Apple Log picture ([FlatProgram]) instead of the developed look. */
     val flat: Boolean = false,
+    /** Flat only: EV added in linear light before the log encode (the converter takes it out again). */
+    val raiseEv: Float = 0f,
     /** Camera frame timestamp (ns, the SurfaceTexture's) -> presentation time (ns) of the encoded frame, or < 0 to skip the frame. */
     val presentationNs: (cameraTimestampNs: Long) -> Long,
     /** Asks the view for a frame (so a stop is noticed even if the camera has stalled). */
