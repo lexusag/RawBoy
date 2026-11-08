@@ -170,14 +170,12 @@ export function sameLensPreset(presets: readonly Preset[], lensPreset: Preset): 
 export const replacesLook = (p: Preset): boolean => p.groups.includes('light');
 
 /**
- * under with over's groups in place of its own, the rest of under as it was, named after both: a partial preset
+ * under with the fields over holds in place of its own, the rest of under as it was, named after both: a partial preset
  * (see replacesLook) applied on top of a photo's preset.
  */
 export function layerPreset(under: Preset, over: Preset): Preset {
-  const replaced = new Set(PRESET_GROUPS.filter((g) => over.groups.includes(g.key)).flatMap((g) => g.fields));
-  const values: Preset['values'] = {};
-  for (const [f, v] of Object.entries(under.values)) if (!replaced.has(f as keyof DevelopParams)) values[f as keyof DevelopParams] = v;
-  Object.assign(values, over.values);
+  // Only the fields over actually holds win: one a file left out of its groups keeps under's value.
+  const values: Preset['values'] = { ...under.values, ...over.values };
   const groups = PRESET_GROUPS.map((g) => g.key).filter((k) => under.groups.includes(k) || over.groups.includes(k));
   const preset: Preset = { id: newId(), name: `${under.name} + ${over.name}`, groups, values };
   if (under.lens !== undefined) preset.lens = under.lens;
