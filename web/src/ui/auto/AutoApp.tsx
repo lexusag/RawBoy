@@ -1095,7 +1095,12 @@ function LensPresetSelect({ presets, choice, disabled, title, onChange }: {
       title={title}
       value={choice ?? BY_LENS}
       disabled={disabled}
-      onChange={(e) => onChange(e.target.value === BY_LENS ? null : e.target.value)}
+      onChange={(e) => {
+        const select = e.currentTarget;
+        onChange(select.value === BY_LENS ? null : select.value);
+        // A focused select counts as text entry, so it would keep Space / arrows from going to the next photo.
+        select.blur();
+      }}
     >
       {choice === MIXED && <option value={MIXED} disabled>Lens: mixed</option>}
       <option value={BY_LENS}>Lens: by lens</option>
