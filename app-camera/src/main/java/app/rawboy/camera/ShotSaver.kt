@@ -86,6 +86,8 @@ internal data class Shot(
     val hiRes: Boolean = false,
     /** AE compensation (EV) the raw was shot with, from Brightness (CameraController.setExposureBias). */
     val compensationEv: Float = 0f,
+    /** Debug note on whether the burst merge ran, saved in the JPEG's ImageDescription (and the DNG's). */
+    val description: String = "",
 )
 
 /** A finished shot and the sequence number assigned at its shutter, so lock screen launches hide earlier ones. */
@@ -367,6 +369,7 @@ internal object ShotSaver {
                 maxLongSide = s.maxLongSide,
                 downscaleSharpen = CameraSettings.SMALL_SHARPEN,
                 hdrGainMap = s.hdrGainMap,
+                description = shot.description,
             )
             Log.d(TAG, "${shot.name}: decode $decodeMs ms, analysis $analysisMs ms")
             return Prepared(app, shot, img, shader, export, a.stats.key, a.autoBase.exposure, started)

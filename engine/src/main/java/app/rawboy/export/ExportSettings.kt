@@ -32,6 +32,8 @@ data class ExportSettings(
      * lets HDR screens show the highlights brighter. Off, or a picture with nothing bright, gives the plain JPEG.
      */
     val hdrGainMap: Boolean = false,
+    /** JPEGLI/TIFF: written as the file's ImageDescription instead of the source's (blank: the source's). */
+    val description: String = "",
 )
 
 object ExportSettingsStore {

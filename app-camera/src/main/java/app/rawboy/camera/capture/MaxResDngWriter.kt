@@ -69,6 +69,7 @@ internal object MaxResDngWriter {
         image: Image,
         exifOrientation: Int,
         location: Location?,
+        description: String,
         out: OutputStream,
     ) {
         val width = image.width
@@ -141,7 +142,7 @@ internal object MaxResDngWriter {
         entries += short(258, 16)                                               // BitsPerSample
         entries += short(259, 1)                                                // Compression: none
         entries += short(262, 32803)                                            // PhotometricInterpretation: CFA
-        entries += ascii(270, "")                                               // ImageDescription
+        entries += ascii(270, description)                                               // ImageDescription
         entries += ascii(271, Build.MANUFACTURER.orEmpty())                     // Make
         entries += ascii(272, Build.MODEL.orEmpty())                            // Model
         val stripOffsetsEntry = longs(273, IntArray(stripCount))                // StripOffsets (patched once sized)

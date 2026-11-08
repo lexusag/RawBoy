@@ -81,6 +81,8 @@ class Still(
     val effectiveFrames: Float = 1f,
     /** AE compensation (EV) the raw was shot with ([CameraController.setExposureBias]); 0 for flash stills (AE off). */
     val compensationEv: Float = 0f,
+    /** Debug note saved in the DNG's and JPEG's ImageDescription: whether frames were merged, and how many. */
+    val description: String = "",
 )
 
 /** A lens's learned flash exposure (see [CameraController.flashExposure]). */
@@ -710,6 +712,8 @@ class CameraController(context: Context) : AutoCloseable {
         guides: FlashGuides = FlashGuides(),
         burstFrames: Int = 1,
         location: Location? = null,
+        /** Why the shot is a burst or not (mode, light), for the debug note; the frames actually merged are added here. */
+        note: String = "",
         onSubmitted: () -> Unit = {},
     ): Still = captureLock.withLock {
         try {
@@ -717,7 +721,7 @@ class CameraController(context: Context) : AutoCloseable {
             val inf = info ?: throw IOException("Camera not ready")
             val reader = rawReader ?: throw IOException("Camera not ready")
             val mode = if (inf.hasFlash) flash else FlashMode.OFF
-            if (mode == FlashMode.OFF && burstFrames > 1 && !inf.hiRes) return@withLock burstDng(s, inf, burstFrames, exifOrientation, location, out, onSubmitted)
+            if (mode == FlashMode.OFF && burstFrames > 1 && !inf.hiRes) return@withLock burstDng(s, inf, burstFrames, exifOrientation, location, note, out, onSubmitted)
             // Ambient exposure before any light comes on: the flash still never needs more.
             val ambient = _frames.value
             var focused = false
@@ -725,10 +729,17 @@ class CameraController(context: Context) : AutoCloseable {
                 if (mode == FlashMode.FOCUS_FLASH) focused = torchFocus(s, inf)
                 val diopters = _frames.value?.focusDiopters
                 val exposure = if (mode == FlashMode.OFF) null else flashExposure(inf, ambient, diopters, guides)
-                val result = stillDng(s, inf, reader, mode, exposure?.first, exifOrientation, location, out, onSubmitted)
+                val why = when {
+                    burstFrames <= 1 -> ""
+                    inf.hiRes -> " reason=max-res"
+                    else -> " reason=flash"
+                }
+                val description = "RawBoy merge=off frames=1 $note$why".trim()
+                val result = stillDng(s, inf, reader, mode, exposure?.first, exifOrientation, location, description, out, onSubmitted)
                 Still(
                     result, exposure?.second, distanceKnown = diopters != null && diopters > 0f,
                     compensationEv = if (exposure == null) appliedCompensationEv(ambient) else 0f,
+                    description = description,
                 )
             } finally {
                 if (mode != FlashMode.OFF) endFlashSequence(inf, focused)
@@ -751,6 +762,7 @@ class CameraController(context: Context) : AutoCloseable {
         manual: Pair<Long, Int>?,
         exifOrientation: Int,
         location: Location?,
+        description: String,
         out: OutputStream,
         onSubmitted: () -> Unit,
     ): CaptureResult = captureOne(s, stillRequest(s, inf, reader, flash, manual), onSubmitted) { captureResult, img ->
@@ -762,10 +774,11 @@ class CameraController(context: Context) : AutoCloseable {
             if (inf.hiRes && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) ", pixelMode ${captureResult.get(CaptureResult.SENSOR_PIXEL_MODE)}" else "")
         // The lens's own characteristics and result: colour matrices, shading map and sizes are per lens.
         if (inf.hiRes || img.format == ImageFormat.RAW10) {
-            MaxResDngWriter.write(inf.characteristics, captureResult, img, exifOrientation, location, out)
+            MaxResDngWriter.write(inf.characteristics, captureResult, img, exifOrientation, location, description, out)
         } else {
             DngCreator(inf.characteristics, captureResult).use { dng ->
                 dng.setOrientation(exifOrientation)
+                dng.setDescription(description)
                 location?.let(dng::setLocation)
                 dng.writeImage(out, img)
             }
@@ -921,6 +934,7 @@ class CameraController(context: Context) : AutoCloseable {
         frames: Int,
         exifOrientation: Int,
         location: Location?,
+        note: String,
         out: OutputStream,
         onSubmitted: () -> Unit,
     ): Still {
@@ -1029,12 +1043,15 @@ class CameraController(context: Context) : AutoCloseable {
             Log.d(TAG, "burst: ${weights.size + 1} of $frames frames, ${(System.nanoTime() - started) / 1_000_000} ms from submit to merged, " +
                 "at most ${BurstNative.maxQueued(h)} waiting, frame weights ${weights.joinToString(" ") { "%.2f".format(it) }}, " +
                 "noise ${noiseModel(reference).let { "${it.first} ${it.second}" }}")
+            val effective = 1f + weights.sum()
+            val description = "RawBoy merge=on frames=${weights.size + 1}/$frames effective=${"%.2f".format(java.util.Locale.ROOT, effective)} $note".trim()
             DngCreator(inf.characteristics, reference).use { dng ->
                 dng.setOrientation(exifOrientation)
+                dng.setDescription(description)
                 location?.let(dng::setLocation)
                 dng.writeByteBuffer(out, Size(width, height), merged, 0)
             }
-            return Still(reference, null, effectiveFrames = 1f + weights.sum(), compensationEv = appliedCompensationEv(_frames.value))
+            return Still(reference, null, effectiveFrames = effective, compensationEv = appliedCompensationEv(_frames.value), description = description)
         } finally {
             BurstNative.destroy(h)
         }
