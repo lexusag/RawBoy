@@ -305,6 +305,12 @@ export class ProStore {
     this.commit({ ...p, film: id, filmAmount: id && !p.film ? 100 : p.filmAmount }, true);
   };
 
+  /** A look picked in the look selector: [next] is the current parameters with a LUT or a film stock set (one undo step). */
+  setLook = (next: DevelopParams) => {
+    if (next.film) this.lastFilm = next.film;
+    this.commit(next, true);
+  };
+
   /** Film chip: the last stock (Portra 400 at first). */
   useFilm = () => this.selectFilm(this._state.params.film ?? this.lastFilm);
 

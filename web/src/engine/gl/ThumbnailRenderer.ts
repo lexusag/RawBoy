@@ -1,6 +1,7 @@
 import { OffscreenDeveloper } from './OffscreenDeveloper';
 import type { PreviewImage } from './PreviewImage';
 import type { ShaderParams } from './ShaderParams';
+import type { PixelRect } from './Zoom';
 
 let developer: OffscreenDeveloper | null = null;
 
@@ -31,4 +32,21 @@ export function renderThumbnail(params: ShaderParams, preview: PreviewImage, max
     rgba[i * 4 + 3] = 255;
   }
   return new ImageData(rgba, w, h);
+}
+
+/**
+ * Develops the part [region] of the picture (output pixels, as `params.lens.outputWidth` x `outputHeight`) from
+ * [preview] into a [width] x [height] image: the fit view's pixels for that area. Calls in a row on one preview
+ * upload it once.
+ */
+export function renderRegion(params: ShaderParams, preview: PreviewImage, region: PixelRect, width: number, height: number): ImageData {
+  const samples = sharedDeveloper().renderPreviewRegion(params, preview, region, width, height);
+  const rgba = new Uint8ClampedArray(width * height * 4);
+  for (let i = 0; i < width * height; i++) {
+    rgba[i * 4] = to8(samples[i * 4]);
+    rgba[i * 4 + 1] = to8(samples[i * 4 + 1]);
+    rgba[i * 4 + 2] = to8(samples[i * 4 + 2]);
+    rgba[i * 4 + 3] = 255;
+  }
+  return new ImageData(rgba, width, height);
 }
