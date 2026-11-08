@@ -263,11 +263,23 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         if (_recordingMs.value != null) return
         if (on && !_settings.value.experimental) return
         _videoMode.value = on
+        if (!on) setExposureLock(false) // the lock is video mode's: photos meter as always
         applyStabilization()
         republish() // the video viewfinder drops the colour denoise (see publish)
     }
 
-    /** Stabilization is video mode's, and only when switched on in Settings. */
+    private val _exposureLocked = MutableStateFlow(false)
+
+    /** Video mode's exposure lock (AE lock), separate from the focus lock. */
+    val exposureLocked: StateFlow<Boolean> = _exposureLocked
+
+    fun setExposureLock(locked: Boolean) {
+        if (locked && !_videoMode.value) return
+        _exposureLocked.value = locked
+        controller.setExposureLock(locked)
+    }
+
+    /** Optical stabilization is video mode's, and only when switched on in Settings. */
     private fun applyStabilization() {
         controller.setVideoStabilization(_videoMode.value && _settings.value.experimental && _settings.value.videoStabilization)
     }

@@ -507,6 +507,21 @@ fun CameraScreen(
                             )
                         }
                     }
+                    if (videoMode) {
+                        val aeLocked by vm.exposureLocked.collectAsStateWithLifecycle()
+                        Text(
+                            if (aeLocked) "AE LOCK  ✕" else "AE LOCK",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                            color = if (aeLocked) Color.Black else Color.White,
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(top = 8.dp, end = 12.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(if (aeLocked) Color(0xFFFFD54F) else Color(0x66000000))
+                                .clickable { vm.setExposureLock(!aeLocked) }
+                                .padding(horizontal = 16.dp, vertical = 8.dp),
+                        )
+                    }
                     if (settings.showGrid) GridOverlay(Modifier.matchParentSize())
                     if (settings.showLevel) LevelOverlay(tilt, Modifier.matchParentSize())
                     // Shutter blink over the viewfinder.
@@ -1221,8 +1236,8 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
         if (settings.experimental) {
             Spacer(Modifier.height(16.dp))
             SettingSwitch(
-                title = "Video stabilization",
-                subtitle = "Steadier video (video mode only): the picture is cropped a little and trails the camera by a few frames",
+                title = "Optical video stabilization",
+                subtitle = "Uses the lens's own stabilizer while filming (video mode only). No crop and no delay, but a gentler effect than software stabilization",
                 checked = settings.videoStabilization,
                 accent = EXPERIMENTAL_ORANGE,
                 onChange = vm::setVideoStabilization,
