@@ -5,7 +5,9 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
+import android.content.ComponentCallbacks2
 import android.content.Context
+import android.content.res.Configuration
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.graphics.Bitmap
@@ -136,6 +138,9 @@ internal object ShotSaver {
     /** Nice value of the decode and develop threads: normal priority so OpenMP / GPU develop keeps the big cores. */
     private const val DEVELOP_THREAD_PRIORITY = 0
 
+    /** A develop slower than this logs the memory state (normal is ~1 s). */
+    private const val SLOW_DEVELOP_MS = 8_000L
+
     /**
      * The lossy JPEG XL DNG re-save runs in the background (little cores): the JPEGs come first, and the kept DNG is
      * already complete (uncompressed) until it is replaced.
@@ -223,7 +228,10 @@ internal object ShotSaver {
                     // system is low on memory. Otherwise wait for the shot in develop, as when shots never overlapped.
                     if (inDevelop.value > 0) {
                         if (merges.value > 0) merges.first { it == 0 }
-                        if (lowOnMemory(app)) inDevelop.first { it == 0 }
+                        if (lowOnMemory(app)) {
+                            Log.d(TAG, "${shot.name}: memory tight (${memoryNote(app)}), decoding after the develop")
+                            inDevelop.first { it == 0 }
+                        }
                     }
                     withContext(decodeDispatcher) { prepare(app, shot) }
                 } catch (e: Throwable) {
@@ -251,9 +259,59 @@ internal object ShotSaver {
         }
     }
 
-    private fun lowOnMemory(app: Context): Boolean = runCatching {
-        ActivityManager.MemoryInfo().also { app.getSystemService(ActivityManager::class.java).getMemoryInfo(it) }.lowMemory
-    }.getOrDefault(false)
+    /** Free memory under which a second open shot (another full-resolution decode) isn't started: it would swap. */
+    private const val TIGHT_AVAIL_BYTES = 2_500L * 1024 * 1024
+
+    /** After the system asked apps to trim (running low or worse), shots stay one at a time for this long. */
+    private const val TRIM_MEMORY_HOLD_MS = 60_000L
+
+    @Volatile private var trimmedUntil = 0L
+    private var trimRegistered = false
+
+    /** Listens for the system's low-memory signals: drops the GPU when idle, and serialises shots for a while. */
+    private fun registerTrim(app: Application) {
+        if (trimRegistered) return
+        trimRegistered = true
+        app.registerComponentCallbacks(object : ComponentCallbacks2 {
+            override fun onTrimMemory(level: Int) {
+                if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+                    trimmedUntil = System.currentTimeMillis() + TRIM_MEMORY_HOLD_MS
+                    Log.d(TAG, "onTrimMemory $level (${memoryNote(app)})")
+                    if (_pending.value == 0) releaseGpuIfIdle()
+                }
+            }
+
+            override fun onConfigurationChanged(newConfig: Configuration) {}
+
+            @Deprecated("Replaced by onTrimMemory")
+            override fun onLowMemory() {
+                trimmedUntil = System.currentTimeMillis() + TRIM_MEMORY_HOLD_MS
+            }
+        })
+    }
+
+    private fun memoryInfo(app: Context): ActivityManager.MemoryInfo? = runCatching {
+        ActivityManager.MemoryInfo().also { app.getSystemService(ActivityManager::class.java).getMemoryInfo(it) }
+    }.getOrNull()
+
+    /**
+     * Memory is short enough that a second full-resolution shot open at once would likely swap (a save once spent
+     * 62-70 s in the GPU develop, normally ~1.1 s, with ~2 GB of 16 GB free): the system says low, free memory is
+     * under [TIGHT_AVAIL_BYTES], or it recently asked apps to trim.
+     */
+    private fun lowOnMemory(app: Context): Boolean {
+        if (System.currentTimeMillis() < trimmedUntil) return true
+        val info = memoryInfo(app) ?: return false
+        return info.lowMemory || info.availMem < TIGHT_AVAIL_BYTES
+    }
+
+    /** One-line memory state for the logs, to correlate slow saves with memory pressure. */
+    private fun memoryNote(app: Context): String {
+        val i = memoryInfo(app) ?: return "memory unknown"
+        val mb = 1024 * 1024
+        return "avail ${i.availMem / mb} of ${i.totalMem / mb} MB, low=${i.lowMemory} (threshold ${i.threshold / mb} MB), " +
+            "native heap ${android.os.Debug.getNativeHeapAllocatedSize() / mb} MB"
+    }
 
     private fun failed(shot: Shot, e: Throwable) {
         Log.w(TAG, "develop ${shot.name}", e)
@@ -302,6 +360,7 @@ internal object ShotSaver {
     }
 
     fun enqueue(app: Application, shot: Shot) {
+        registerTrim(app)
         shots.trySend(app to shot)
     }
 
@@ -332,6 +391,7 @@ internal object ShotSaver {
         val s = shot.settings
         val started = System.nanoTime()
         val decodeStart = System.nanoTime()
+        Log.d(TAG, "${shot.name}: decode starts, ${memoryNote(app)}")
         val img = RawImage.open(app, shot.dng, EXTRA_BLACK)
         try {
             val decodeMs = ms(decodeStart)
@@ -388,7 +448,11 @@ internal object ShotSaver {
         val saved = withContext(developDispatcher) {
             val exportStart = System.nanoTime()
             Exporter(app).exportFile(p.image, shot.dng, shot.name, p.shader, p.export, CameraViewModel.JPEG_NAMING, exportGpu) {}
-                .also { Log.d(TAG, "${shot.name}: develop + JPEG ${ms(exportStart)} ms") }
+                .also {
+                    val took = ms(exportStart)
+                    Log.d(TAG, "${shot.name}: develop + JPEG $took ms")
+                    if (took > SLOW_DEVELOP_MS) Log.w(TAG, "${shot.name}: slow develop, ${memoryNote(app)}")
+                }
         }
         Log.d(TAG, "saved ${saved.name} in ${ms(p.started)} ms (develop started after $waitMs ms)")
         val key = s.lensKey(shot.hiRes)
