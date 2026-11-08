@@ -295,8 +295,9 @@ class VideoRecorder private constructor(
                         else MediaCodecInfo.CodecProfileLevel.AVCProfileHigh,
                     )
                     if (flat) {
-                        // Apple Log in Rec.2020 primaries: no standard transfer fits, so none is tagged.
-                        setInteger(MediaFormat.KEY_COLOR_STANDARD, MediaFormat.COLOR_STANDARD_BT2020)
+                        // Apple Log codes (Rec.2020 primaries). Tagged BT.709 and no transfer on purpose: a browser
+                        // that sees BT.2020 converts the codes to sRGB primaries, which wrecks a log picture.
+                        setInteger(MediaFormat.KEY_COLOR_STANDARD, MediaFormat.COLOR_STANDARD_BT709)
                     } else {
                         // The picture is the display-referred look: tag it as ordinary SDR BT.709 video.
                         setInteger(MediaFormat.KEY_COLOR_STANDARD, MediaFormat.COLOR_STANDARD_BT709)

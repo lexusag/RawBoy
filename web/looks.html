@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <title>RawBoy Looks: grade a flat RawBoy Camera video with a film stock</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <style>
+      body { margin: 0; background: #121212; color: #eee; font: 15px system-ui, sans-serif; }
+      main { max-width: 960px; margin: 0 auto; padding: 16px; }
+      canvas { width: 100%; background: #000; display: block; border-radius: 8px; }
+      .row { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin: 12px 0; }
+      select, button, input[type=file] { font: inherit; padding: 8px 12px; border-radius: 8px; border: 1px solid #444; background: #222; color: #eee; }
+      label { display: flex; gap: 8px; align-items: center; }
+      p.note { color: #aaa; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>RawBoy Looks</h1>
+      <p class="note">Open a <code>-flat.mp4</code> clip recorded with RawBoy Camera's Flat video setting, pick a film stock, and play or record the graded result. Nothing is uploaded.</p>
+      <div class="row">
+        <input id="file" type="file" accept="video/*" />
+        <select id="stock"></select>
+      </div>
+      <canvas id="view" width="1280" height="720"></canvas>
+      <div class="row">
+        <button id="play">Play / pause</button>
+        <label>Exposure <input id="ev" type="range" min="-3" max="3" step="0.1" value="0" /><span id="evv">0.0 EV</span></label>
+        <label>Contrast <input id="contrast" type="range" min="0.6" max="1.6" step="0.01" value="1" /><span id="cv">1.00</span></label>
+      </div>
+      <div class="row">
+        <button id="record">Record graded clip</button>
+        <span id="status" class="note"></span>
+      </div>
+    </main>
+    <script type="module" src="/src/looks/main.ts"></script>
+  </body>
+</html>
