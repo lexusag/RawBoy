@@ -26,6 +26,7 @@ app.innerHTML = `
       </label>
       <label>Choice <select id="choice"></select></label>
       <label>Strength <input id="strength" type="range" min="0" max="100" value="100" /></label>
+      <label id="offsetRow">Exposure raise in the clip (undone) <span id="offsetVal"></span><input id="offset" type="range" min="0" max="40" value="0" /></label>
       <label>Exposure <input id="ev" type="range" min="-30" max="30" value="0" /></label>
       <label>Contrast <input id="contrast" type="range" min="60" max="160" value="100" /></label>
       <label>Grain <input id="grain" type="range" min="0" max="100" value="30" /></label>
@@ -55,6 +56,29 @@ video.crossOrigin = 'anonymous';
 const grade: VideoGrade = { mode: 2, input: 1, exposureEv: 0, contrast: 1, strength: 1, grain: 0.3, look: null, film: null, print: null, densityMin: [0, 0, 0], densityMax: [1, 1, 1] };
 let frame = 0;
 let loadToken = 0;
+
+/** Exposure the Camera raised a flat clip by (EV), taken from its name: VID_<date>_<time>-flat+1.0ev.mp4. Older -flat.mp4 clips: 0. */
+export function offsetFromName(name: string): number {
+  const m = /-flat([+-]\d+(?:\.\d+)?)ev/i.exec(name);
+  return m ? Number(m[1]) : 0;
+}
+/** The graded file keeps the clip's own name plus a suffix: VID_x-flat+1.0ev.mp4 -> VID_x-flat+1.0ev-rawboyvideo.mp4. */
+function outputName(ext: string): string {
+  const base = (source?.name ?? 'video').replace(/\.[^./\\]+$/, '');
+  return `${base}-rawboyvideo.${ext}`;
+}
+let offsetEv = 0;
+/** Light is brought back down by the recorded raise (linear light, before the look), then the user's own exposure. */
+function applyExposure() {
+  grade.exposureEv = Number($<HTMLInputElement>('ev').value) / 10 - (grade.input === 1 ? offsetEv : 0);
+  $('offsetVal').textContent = `${offsetEv > 0 ? '+' : ''}${offsetEv.toFixed(1)} EV`;
+  $('offsetRow').style.display = grade.input === 1 ? '' : 'none';
+}
+function setOffset(ev: number) {
+  offsetEv = ev;
+  $<HTMLInputElement>('offset').value = String(Math.round(ev * 10));
+  applyExposure();
+}
 
 const status = (s: string) => ($('status').textContent = s);
 const fmt = (t: number) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
@@ -113,6 +137,7 @@ function schedule() {
 let seeking = false;
 async function openFile(file: File) {
   source = file;
+  setOffset(offsetFromName(file.name));
   video.pause();
   video.src = URL.createObjectURL(file);
   video.load();
@@ -151,9 +176,10 @@ $('seek').onchange = () => (seeking = false);
 
 $('kind').onchange = fillChoices;
 $('choice').onchange = () => void applyChoice();
-$('input').onchange = () => { grade.input = Number($<HTMLSelectElement>('input').value) as 0 | 1 | 2; redraw(); };
+$('input').onchange = () => { grade.input = Number($<HTMLSelectElement>('input').value) as 0 | 1 | 2; applyExposure(); redraw(); };
+$('offset').oninput = () => { offsetEv = Number($<HTMLInputElement>('offset').value) / 10; applyExposure(); redraw(); };
 $('strength').oninput = () => { grade.strength = Number($<HTMLInputElement>('strength').value) / 100; redraw(); };
-$('ev').oninput = () => { grade.exposureEv = Number($<HTMLInputElement>('ev').value) / 10; redraw(); };
+$('ev').oninput = () => { applyExposure(); redraw(); };
 $('contrast').oninput = () => { grade.contrast = Number($<HTMLInputElement>('contrast').value) / 100; redraw(); };
 $('grain').oninput = () => { grade.grain = Number($<HTMLInputElement>('grain').value) / 100; redraw(); };
 
@@ -184,9 +210,9 @@ $('fast').onclick = () => {
     } else if (m.type === 'done') {
       const a = document.createElement('a');
       a.href = URL.createObjectURL(new Blob([m.buffer], { type: 'video/mp4' }));
-      a.download = 'rawboy-graded.mp4';
+      a.download = outputName('mp4');
       a.click();
-      finish(`Saved rawboy-graded.mp4 (${((performance.now() - t0) / 1000).toFixed(1)} s).`);
+      finish(`Saved ${a.download} (${((performance.now() - t0) / 1000).toFixed(1)} s).`);
     } else if (m.type === 'canceled') finish('Export canceled.');
     else finish(`Export failed: ${m.message}. Try the real-time export.`);
   };
@@ -222,10 +248,11 @@ $('export').onclick = async () => {
   const ext = rec.mimeType.includes('mp4') ? 'mp4' : 'webm';
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob(chunks, { type: rec.mimeType }));
-  a.download = `rawboy-graded.${ext}`;
+  a.download = outputName(ext);
   a.click();
-  status(`Saved rawboy-graded.${ext}`);
+  status(`Saved ${a.download}`);
   btn.disabled = false;
 };
 
+applyExposure();
 fillChoices();

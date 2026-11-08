@@ -17,8 +17,10 @@ batches), on the same engine as the Android apps.
   film stock, preview it live and export the graded clip. Input can be a flat RawBoy Camera clip (Apple Log, Rec.2020
   codes tagged BT.709), normal Rec.709 video or HLG. WebGL2 for the preview. **Fast export** runs in a Web Worker
   (`exportWorker.ts`): mediabunny decodes with WebCodecs, the same shader grades each frame on an OffscreenCanvas, and
-  it re-encodes to mp4 (copying the audio) as fast as the decoder and encoder go, with no preview and a progress bar;
-  without WebCodecs the page offers only the real-time export (plays the clip into `MediaRecorder`). Looks are the
+  it re-encodes to mp4 named `<clip name>-rawboyvideo.mp4` (copying the audio) as fast as the decoder and encoder go, with no preview and a progress bar;
+  without WebCodecs the page offers only the real-time export (plays the clip into `MediaRecorder`). The Camera's flat clips are recorded with an exposure raise
+  (to keep shadow detail) that the page undoes before the look: it reads it from the file name
+  (`-flat+1.0ev.mp4`; older `-flat.mp4` clips = 0) and has a slider to override it. Looks are the
   bundled `.cube`s; film stocks are the 2-LUT spektrafilm bundles, without halation (grain is simple luma noise).
 
 ## Run locally
