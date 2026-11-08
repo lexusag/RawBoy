@@ -1739,7 +1739,7 @@ select {
 }
 
 /* The crop frame, Auto WB rectangle and mask handles take presses on their handles; elsewhere they reach the preview. */
-/* Look selector (prototype, Pro): a draggable window of vertical stripes, one LUT each, over the photo. */
+/* Look selector (prototype, Pro): a draggable window of vertical stripes, one LUT or film stock each, over the photo. */
 .look-selector-layer {
   position: absolute;
   inset: 0;
@@ -1781,7 +1781,7 @@ select {
   display: flex;
   justify-content: center;
   align-items: flex-end;
-  padding-bottom: 6px;
+  padding: 0 4px 6px;
   cursor: pointer;
 }
 
@@ -1802,24 +1802,37 @@ select {
   outline-offset: -2px;
 }
 
-.look-name {
-  writing-mode: vertical-rl;
-  transform: rotate(180deg);
-  max-height: calc(100% - 40px);
+.look-stripe-name {
+  max-width: 100%;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
-  line-height: 1.2;
-  padding: 6px 3px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  font-size: 12px;
+  line-height: 1.25;
+  text-align: center;
+  padding: 3px 6px;
   border-radius: 3px;
   background: rgba(0, 0, 0, 0.62);
   color: #fff;
   pointer-events: none;
 }
 
-.look-stripe.current .look-name {
+.look-stripe.current .look-stripe-name {
   color: var(--accent);
+}
+
+.look-kind {
+  position: absolute;
+  top: 34px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.62);
+  color: var(--accent);
+  pointer-events: none;
 }
 
 .look-bar {

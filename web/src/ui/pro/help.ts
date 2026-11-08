@@ -12,7 +12,7 @@ export const PRO_HELP: HelpSection[] = [
       { how: 'Tabs', text: 'Light, Color, Detail, LUTs and Lens hold the sliders. Edits carry over to the next photo; crop, rotation, flips and scale don\'t.' },
       { how: 'Lens preset', text: 'Lens tab: name it (the lens by default) and Save lens preset keeps its settings for this photo\'s lens; the Auto tab corrects every photo taken with that lens with it, on top of its look. Manual lenses record no lens: the Auto tab lets you pick their presets by name.' },
       { how: 'Top bar', text: 'Crop & rotate (turn, flip, straighten, scale, crop), Presets, Masks, Light leaks, Undo and Redo (Ctrl/⌘ Z, Shift Ctrl/⌘ Z), Reset all, Auto (automatic light and colour, keeps the LUT) and Export.' },
-      { how: 'Looks', text: 'Click the photo to see the area there through every LUT as vertical stripes, one LUT each; click a stripe to use that LUT. Drag the window to look elsewhere. Several pages when the LUTs do not fit (‹ ›, or the arrow keys).' },
+      { how: 'Looks', text: 'Click the photo to see the area there through every LUT and film stock as vertical stripes; click a stripe to use that LUT (Film off) or stock (Film on). Drag the window to look elsewhere (it draws at lower resolution while moving). Several pages when the looks do not fit (‹ ›, or the arrow keys).' },
       { how: 'Back to Auto', text: 'Returns a photo opened from the Auto tab (Edit in RawBoy) there with these edits; Send to Auto adds any other photo to Auto\'s batch with them.' },
     ],
   },

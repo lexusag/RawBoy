@@ -108,7 +108,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   useEffect(() => {
     setLooksArmed(false);
     setLooksAt(null);
-  }, [geometryMode, masksMode, leaksMode, presetsMode, autoWb, state.fileName, state.params.film]);
+  }, [geometryMode, masksMode, leaksMode, presetsMode, autoWb, state.fileName]);
   const [maskTool, setMaskTool] = useState<MaskTool>('move');
   const [brush, setBrushState] = useState<BrushSettings>(loadBrush);
   const setBrush = (b: BrushSettings) => {
@@ -404,7 +404,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
         <button
           type="button"
           className={`icon${looksArmed ? ' active' : ''}`}
-          title={state.params.film != null ? 'Looks: turn Film off to compare LUTs' : 'Looks: click the photo to see that area in every LUT'}
+          title="Looks: click the photo to see that area in every LUT and film stock"
           aria-pressed={looksArmed}
           onClick={() => {
             if (looksArmed) closeLooks();
@@ -413,7 +413,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
               setPickingWhite(false);
             }
           }}
-          disabled={!hasImage || busy || geometryMode || shapesMode || presetsMode || autoWb || state.params.film != null}
+          disabled={!hasImage || busy || geometryMode || shapesMode || presetsMode || autoWb}
         >
           <LooksIcon />
           <span className="tool-label">Looks</span>
@@ -538,8 +538,8 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
               defaults={state.defaults}
               frame={FRAME_WIDTH}
               at={looksAt}
-              onPick={(id) => {
-                store.selectLut(id);
+              onPick={(next) => {
+                store.setLook(next);
                 closeLooks();
               }}
               onClose={closeLooks}
