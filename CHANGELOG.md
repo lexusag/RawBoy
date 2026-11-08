@@ -1,3 +1,8 @@
+**RawBoy Camera (Android): optical-only video stabilization and an exposure lock (2026-11-08)**
+
+- Settings › Optical video stabilization (Experimental features) now uses only the lens's own stabilizer (OIS): the electronic and preview stabilization are gone, so video is no longer cropped or delayed. Plain video stabilization stays off.
+- Video mode has an **AE LOCK** button (top right of the viewfinder) that holds the exposure; it is separate from the focus lock (tap the picture, **AF LOCK**), so either can be on alone. It switches off when leaving video mode.
+
 **RawBoy Camera (Android): burst merge written into the photo's description (2026-11-07)**
 
 - For debugging Merge 8 frames: every shot's JPEG and DNG now carry an ImageDescription such as `RawBoy merge=on frames=8/8 effective=6.43 mode=auto lowLight=1` (merged) or `RawBoy merge=off frames=1 mode=auto lowLight=0 reason=not-low-light` (single frame; reasons: mode-off, not-low-light, max-res, flash, screen-flash). Read it with `exiftool -ImageDescription`. `frames=` is how many of the requested frames arrived and were merged.
