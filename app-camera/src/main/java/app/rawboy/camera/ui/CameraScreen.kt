@@ -482,19 +482,12 @@ fun CameraScreen(
                         shownFocus?.let { (x, y) -> FocusRing(x, y, if (dragPoint != null) null else afState, focusSize) }
                         loupe?.let { LoupeFrame(it, focusSize) }
                     }
-                    if (focusPoint != null) {
-                        Box(
-                            Modifier
-                                .align(Alignment.TopCenter)
-                                .padding(top = 4.dp)
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null,
-                                    onClick = { vm.releaseFocus() },
-                                )
-                                .padding(horizontal = 12.dp, vertical = 8.dp),
-                            contentAlignment = Alignment.Center,
-                        ) {
+                    // Top left, stacked: the histogram has the top right, and the chips are wider than they look.
+                    Column(
+                        Modifier.align(Alignment.TopStart).padding(start = 8.dp, top = 4.dp),
+                        horizontalAlignment = Alignment.Start,
+                    ) {
+                        if (focusPoint != null) {
                             Text(
                                 if (tracking) "TRACKING  ✕" else "AF LOCK  ✕",
                                 style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
@@ -506,21 +499,20 @@ fun CameraScreen(
                                     .padding(horizontal = 16.dp, vertical = 8.dp),
                             )
                         }
-                    }
-                    if (videoMode) {
-                        val aeLocked by vm.exposureLocked.collectAsStateWithLifecycle()
-                        Text(
-                            if (aeLocked) "AE LOCK  ✕" else "AE LOCK",
-                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                            color = if (aeLocked) Color.Black else Color.White,
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(top = 8.dp, end = 12.dp)
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(if (aeLocked) Color(0xFFFFD54F) else Color(0x66000000))
-                                .clickable { vm.setExposureLock(!aeLocked) }
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                        )
+                        if (videoMode) {
+                            val aeLocked by vm.exposureLocked.collectAsStateWithLifecycle()
+                            Text(
+                                if (aeLocked) "AE LOCK  ✕" else "AE LOCK",
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                                color = if (aeLocked) Color.Black else Color.White,
+                                modifier = Modifier
+                                    .padding(top = if (focusPoint != null) 6.dp else 0.dp)
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(if (aeLocked) Color(0xFFFFD54F) else Color(0x66000000))
+                                    .clickable { vm.setExposureLock(!aeLocked) }
+                                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                            )
+                        }
                     }
                     if (settings.showGrid) GridOverlay(Modifier.matchParentSize())
                     if (settings.showLevel) LevelOverlay(tilt, Modifier.matchParentSize())
@@ -532,7 +524,7 @@ fun CameraScreen(
                                 .background(Color.Black.copy(alpha = blink.value)),
                         )
                     }
-                    // Top right: "Without look" takes the left corner and AF LOCK the middle.
+                    // Top right; the lock chips stack at the top left.
                     if (settings.showHistogram && params != null) {
                         HistogramView(
                             histogram,
@@ -548,7 +540,7 @@ fun CameraScreen(
                             "Without look",
                             style = MaterialTheme.typography.labelMedium,
                             modifier = Modifier
-                                .align(Alignment.TopStart)
+                                .align(Alignment.BottomStart)
                                 .padding(12.dp)
                                 .background(Color(0x99000000))
                                 .padding(horizontal = 8.dp, vertical = 4.dp),
