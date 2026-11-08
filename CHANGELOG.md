@@ -1,3 +1,7 @@
+**RawBoy web, Pro: the look selector drags smoothly on phones and tablets (2026-11-08)**
+
+- Each look of the shown page is developed once, whole, at 640 px (and kept while the edit stays the same, so turning back to a page is instant); moving the window only copies pixels out of those, with no GPU readback or LUT upload per move. Once the window rests for 150 ms its stripes are developed at full resolution for that spot. The owner found the first version "super slow" on the phone and tablet. On software GL in headless Chrome the same 30-step drag went from 2.0-3.0 s with frames up to 217 ms to 0.5-0.6 s with none over 17 ms; not measured on a real phone or tablet. Costs memory: up to about 37 thumbnails of 640 x 480 (~45 MB) per photo and edit.
+
 **RawBoy web, Pro: the look selector can be dragged past the photo's edges (2026-11-08)**
 
 - The Looks window can hang over the photo's edges and off the preview (96 px of it stays in view; its bar stays at the top, with its buttons and labels sliding back into view), so any stripe can sit over any spot, including the corners. Only the part over the photo is developed; the rest of the window stays empty.
