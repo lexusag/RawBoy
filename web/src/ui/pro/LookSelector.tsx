@@ -26,6 +26,8 @@ const MAX_HEIGHT = 360;
 const MIN_HEIGHT = 140;
 /** Pointer travel (CSS px) before a press is a drag, not a click on a stripe. */
 const DRAG_SLOP = 5;
+/** How much of the window (CSS px) stays inside the preview when it is dragged out. */
+const KEEP_IN = 96;
 /** While the panel is being dragged the stripes are developed at this fraction of their size and stretched. */
 const DRAG_SCALE = 0.35;
 
@@ -140,8 +142,13 @@ export function LookSelector({ session, state, params, defaults, frame, at, onPi
     setPos({ x: at.x - zoneW / 2, y: at.y - zoneH / 2 });
     setCentred(true);
   }, [centred, visible, zoneW, zoneH, at.x, at.y]);
-  const left = visible ? Math.min(Math.max(pos.x, visible.l), visible.l + visible.w - zoneW) : 0;
-  const top = visible ? Math.min(Math.max(pos.y, visible.t), visible.t + visible.h - zoneH) : 0;
+  // The window may hang over the photo's edges (and off the preview's), so any stripe can sit over any spot: it keeps
+  // KEEP_IN px of itself in view, and its bar stays at the top.
+  const left = visible ? Math.min(Math.max(pos.x, KEEP_IN - zoneW), box.w - KEEP_IN) : 0;
+  const top = visible ? Math.min(Math.max(pos.y, 0), box.h - KEEP_IN) : 0;
+  // How far it hangs out right and bottom: the bar's buttons and the labels slide back into view.
+  const hangRight = Math.max(0, left + zoneW - box.w);
+  const hangBottom = Math.max(0, top + zoneH - box.h);
 
   // The area under the panel, in output pixels.
   const region = useMemo(() => {
@@ -169,26 +176,42 @@ export function LookSelector({ session, state, params, defaults, frame, at, onPi
     const n = shown.length;
     const scale = dragging ? DRAG_SCALE : 1;
     let small: HTMLCanvasElement | null = null;
+    // Where the picture and the preview sit in the window's pixels: only their overlap is developed, the rest of
+    // the window (over the grey frame, past the preview) stays empty.
+    const sx = outW / picture!.width;
+    const sy = outH / picture!.height;
+    const clipL = Math.max(picture!.left, 0);
+    const clipT = Math.max(picture!.top, 0);
+    const clipR = Math.min(picture!.left + picture!.width, box.w);
+    const clipB = Math.min(picture!.top + picture!.height, box.h);
+    const px0 = Math.max(0, Math.round((clipL - left) * dpr));
+    const px1 = Math.min(pw, Math.round((clipR - left) * dpr));
+    const py0 = Math.max(0, Math.round((clipT - top) * dpr));
+    const py1 = Math.min(ph, Math.round((clipB - top) * dpr));
     const draw = (i: number, lut: LutData | null, film: FilmData | null) => {
-      const x0 = Math.round((i * pw) / n);
-      const x1 = Math.round(((i + 1) * pw) / n);
-      if (x1 <= x0) return;
-      const slice = rect(region.x + (region.width * x0) / pw, region.y, (region.width * (x1 - x0)) / pw, region.height);
+      const x0 = Math.max(px0, Math.round((i * pw) / n));
+      const x1 = Math.min(px1, Math.round(((i + 1) * pw) / n));
+      if (x1 <= x0 || py1 <= py0) return;
+      const slice = rect(
+        (left + x0 / dpr - picture!.left) * sx, (top + py0 / dpr - picture!.top) * sy,
+        ((x1 - x0) / dpr) * sx, ((py1 - py0) / dpr) * sy,
+      );
       const sp = session.shaderParams(withLook(params, shown[i]), defaults, lut, null, film);
       const w = Math.max(1, Math.round((x1 - x0) * scale));
-      const h = Math.max(1, Math.round(ph * scale));
+      const h = Math.max(1, Math.round((py1 - py0) * scale));
       const img = renderRegion(sp, preview, slice, w, h);
-      if (scale === 1) return ctx.putImageData(img, x0, 0);
+      if (scale === 1) return ctx.putImageData(img, x0, py0);
       // Low resolution while dragging: develop small, stretch.
       small ??= document.createElement('canvas');
       small.width = w;
       small.height = h;
       small.getContext('2d')!.putImageData(img, 0, 0);
       ctx.imageSmoothingEnabled = true;
-      ctx.drawImage(small, x0, 0, x1 - x0, ph);
+      ctx.drawImage(small, x0, py0, x1 - x0, py1 - py0);
     };
     const frame = requestAnimationFrame(() => {
       if (cancelled) return;
+      ctx.clearRect(0, 0, pw, ph);
       const waiting: number[] = [];
       shown.forEach((item, i) => {
         if (item.kind === 'film') {
@@ -229,7 +252,7 @@ export function LookSelector({ session, state, params, defaults, frame, at, onPi
     };
     // params themselves are covered by paramsKey; session and defaults are stable for one photo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.preview, state.base, state.bloomSources, state.bokehSource, state.flareSource, state.lensInfo, region, pw, ph, shown, paramsKey, defaults, dragging]);
+  }, [state.preview, state.base, state.bloomSources, state.bokehSource, state.flareSource, state.lensInfo, region, box.w, box.h, pw, ph, shown, paramsKey, defaults, dragging]);
 
   // Escape closes, arrows turn the page.
   useEffect(() => {
@@ -308,7 +331,7 @@ export function LookSelector({ session, state, params, defaults, frame, at, onPi
           onDoubleClick={(e) => e.stopPropagation()}
         >
           <canvas ref={canvasRef} width={pw} height={ph} style={{ width: zoneW, height: zoneH }} />
-          <div className="look-stripes" style={{ gridTemplateColumns: `repeat(${shown.length}, 1fr)` }}>
+          <div className="look-stripes" style={{ gridTemplateColumns: `repeat(${shown.length}, 1fr)`, paddingBottom: hangBottom }}>
             {shown.map((item) => (
               <div key={`${item.kind}:${item.id ?? 'none'}`} className={`look-stripe${isCurrent(params, item) ? ' current' : ''}${item.kind === 'film' ? ' film' : ''}`} title={item.kind === 'film' ? `${item.name} (film)` : item.name} role="button" aria-label={`Use ${item.name}`}>
                 {item.kind === 'film' && <span className="look-kind">Film</span>}
@@ -316,7 +339,7 @@ export function LookSelector({ session, state, params, defaults, frame, at, onPi
               </div>
             ))}
           </div>
-          <div className="look-bar">
+          <div className="look-bar" style={{ left: Math.max(0, -left), right: hangRight }}>
             <span className="look-title">Looks{loading > 0 ? ' …' : ''}</span>
             {pages > 1 && (
               <>

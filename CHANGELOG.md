@@ -1,3 +1,7 @@
+**RawBoy web, Pro: the look selector can be dragged past the photo's edges (2026-11-08)**
+
+- The Looks window can hang over the photo's edges and off the preview (96 px of it stays in view; its bar stays at the top, with its buttons and labels sliding back into view), so any stripe can sit over any spot, including the corners. Only the part over the photo is developed; the rest of the window stays empty.
+
 **RawBoy web, Auto: a partial preset layered on another keeps all the other's values (2026-11-08)**
 
 - `layerPreset` (a partial preset applied over a photo's or the batch's preset) used to drop every field of the new preset's groups from the old one, even fields the new preset didn't hold (a preset file may leave some out), so those fell back to the auto develop. Now only the fields the new preset actually holds replace the old values. New test `presetstack.test.ts` applies several partial presets in a row and checks the untouched fields.
