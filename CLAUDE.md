@@ -579,8 +579,10 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   hand): warp = fbm domain warp + outward lumps, **unioned** with the clean shape (`min(e, ew)`) so it never uncovers
   anything; `uLeakLook` = texture, cover: texture mixes the screen layers towards a per-channel exposure burn
   `1 - (1 - c) e^-E` (red fills first: white → yellow → orange → red) with value-noise mottling, rays along the leak's
-  length and hue drift (`leakFbm`, Hoskins hash, no sine); cover mixes the picture towards a dim wash of the two hues
-  *before* the light, solid inside the outline (`eShape`, before texture frays it), for censoring. Glows reshape by 8
+  length and hue drift (`leakFbm`, Hoskins hash, no sine); cover mixes the picture towards a whitish cream wash *before*
+  the light, solid in the middle only (`eShape` < -0.5, gone by -0.2, before texture frays it; owner: cover "closer
+  to the centre, far from borders, more whitish", so the edge stays light over the photo), and moves the burn's core
+  light towards white (`coreTint`), for censoring. Glows reshape by 8
   radii (`uLeakRadii`, 2 vec4 per leak, stored minus 1 so unbound = ellipse) at 22.5° + k 45° through a closed
   Catmull-Rom (`leakRadius`, the same in TS); edge `(|q| - r) / sqrt(r)`. Web overlay: hollow `outline` dots, size
   dots sit on the reshaped outline (`dragShape` divides by r). Android/iOS: model, JSON, packing, binding and the

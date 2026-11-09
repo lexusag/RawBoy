@@ -76,7 +76,7 @@ export function LeaksPanel({ leaks, selectedId, onSelect, onAdd, onUpdate, onRem
       {leaks.length === 0 && (
         <Note>
           Add a film-style light leak (a streak of light, a round glow or a triangle), then drag it over the photo. Its glow lets the photo show
-          through; with Cover at 100% nothing inside its outline shows, so it can hide part of a photo (drag a glow’s hollow dots to fit its
+          through; with Cover at 100% nothing in its middle shows (about half way out to its outline), so it can hide part of a photo (drag a glow’s hollow dots to fit its
           outline to the area). The grain stays on top. Up to {MAX_LEAKS}; leaks reset for each new photo.
         </Note>
       )}
@@ -248,7 +248,7 @@ export function LeaksPanel({ leaks, selectedId, onSelect, onAdd, onUpdate, onRem
             Drag the leak to move it, the dots to resize ({leak.kind === 'streak' ? 'side dots: width, end dots: length' : 'along and across'}),
             {leak.kind === 'glow' ? ' the hollow dots to reshape its outline around what it should hide,' : ''} the round knob to turn it, the square
             to bend it. Warp makes the outline organic (it only grows), Texture burns the light in like film (white, yellow, orange, red; mottled and
-            streaked), Cover hides the photo inside the outline completely. Texture 0 and Warp 0 give the clean Photoshop look. Leaks aren’t saved in
+            streaked), Cover hides the photo in its whitish middle completely (make the leak a little larger than what it hides). Texture 0 and Warp 0 give the clean Photoshop look. Leaks aren’t saved in
             presets: they belong to this photo.
           </Note>
         </>

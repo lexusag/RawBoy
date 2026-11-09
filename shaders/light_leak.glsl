@@ -153,13 +153,14 @@ vec3 applyLeaks(vec3 c, vec2 p, vec2 fullPx) {
         float a = tintIn.a * along;
         float blur = 0.03 + 0.6 * s.z;
         vec3 before = c;
-        // Cover: the picture under the shape is replaced by a dim wash of the leak's colours before the light goes on,
-        // solid inside the outline whatever the softness, so the light over it never lets the picture through.
+        // Cover: the picture in the middle of the shape is replaced by a warm, whitish wash before the light goes on, so
+        // the light over it never lets the picture through. Solid from the centre to about halfway out, fading out well
+        // inside the outline, so the leak's own edge stays light and colour over the photo, never a flat patch.
         float cover = 0.0;
         if (look.y > 0.0) {
-            float cb = 0.03 + 0.25 * s.z;
-            cover = look.y * a * (1.0 - smoothstep(-cb, cb, eShape - cb));
-            vec3 wash = mix(tintOut.rgb, tintIn.rgb, 0.35 + 0.5 * hueVar) * (0.32 + 0.25 * mottle) + 0.06;
+            cover = look.y * a * (1.0 - smoothstep(-0.5, -0.2, eShape));
+            vec3 cream = vec3(1.0, 0.95, 0.86);
+            vec3 wash = mix(cream, mix(tintIn.rgb, tintOut.rgb, hueVar), 0.12 + 0.12 * hueVar) * (0.86 + 0.14 * mottle);
             c = mix(c, wash, cover);
         }
         // Core: the white shape, Gaussian-blurred over the softness (half covered on the outline).
@@ -183,8 +184,11 @@ vec3 applyLeaks(vec3 c, vec2 p, vec2 fullPx) {
             float bright = (0.35 + 1.3 * mottle) * (0.75 + 0.5 * rays);
             vec3 hue = mix(tintIn.rgb, tintOut.rgb, smoothstep(0.25, 0.75, hueVar) * 0.8);
             vec3 tint = mix(hue * vec3(1.0, 0.8, 0.6), vec3(1.0), 0.08);
-            float light = a * (core * 5.0 * mix(1.0, bright, 0.5) + (1.6 * glowIn + 0.9 * glowOut) * bright);
-            vec3 burnt = 1.0 - (1.0 - c) * exp(-light * (tint * 1.7 + vec3(0.04)));
+            float coreLight = a * core * 5.0 * mix(1.0, bright, 0.5);
+            float glowLight = a * (1.6 * glowIn + 0.9 * glowOut) * bright;
+            // A covering leak burns whiter in its middle (Cover moves the core's light towards white).
+            vec3 coreTint = mix(tint, vec3(1.0), 0.45 * look.y);
+            vec3 burnt = 1.0 - (1.0 - c) * exp(-(coreLight * coreTint + glowLight * tint) * 1.7 - (coreLight + glowLight) * 0.04);
             lit = mix(lit, burnt, tex);
         }
         c = lit;
