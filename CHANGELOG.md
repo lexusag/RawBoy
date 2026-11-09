@@ -1,7 +1,3 @@
-**RawBoy web, Auto and Browser: the same on big landscape screens (2026-11-09)**
-
-- Auto's photo grid and Browser's grid and viewer have no sidebar, so on a big landscape window (1000 x 600 px or more) their top bar becomes a panel down the right edge with all its buttons, and the photos use the rest. Same CSS block as the editors' (`styles.css`); not checked in the running app.
-
 **RawBoy web, Pro and Auto: all buttons on the right on big landscape screens (2026-11-09)**
 
 - On a window at least 1000 x 600 px and wider than tall (tablets, desktops), the top bar's buttons (Open, Crop, Presets, Undo, Export, Help and the rest) move to the top of the right sidebar, so every control is on the right and the photo gets the full height. Pure CSS (the editor becomes a grid, `.workspace` is `display: contents`); smaller and upright windows keep the top bar. Checked on a mock of the markup in headless Chrome, not in the running app (web dependencies not installed here).
