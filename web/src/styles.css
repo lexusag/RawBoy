@@ -2700,31 +2700,4 @@ line.curve-grid,
     width: auto;
     border-top: none;
   }
-
-  /* Grid views (Auto's grid, Browser's grid and viewer) have no sidebar: the bar becomes the right-hand panel. */
-  .editor:not(:has(> .workspace)) {
-    position: relative;
-  }
-
-  .editor:not(:has(> .workspace)) > :not(.toolbar) {
-    margin-right: min(var(--sidebar), 45vw);
-  }
-
-  .editor:not(:has(> .workspace)) > .toolbar {
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: min(var(--sidebar), 45vw);
-    flex-wrap: wrap;
-    align-content: flex-start;
-    overflow-y: auto;
-    border-bottom: none;
-    border-left: 1px solid var(--border);
-    background: var(--surface);
-  }
-
-  .editor:not(:has(> .workspace)) > .toolbar .title {
-    flex: 1 1 100%;
-  }
 }
