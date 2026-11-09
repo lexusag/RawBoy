@@ -678,10 +678,11 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
             ) : fxMode ? (
               <FxPanel
                 effects={effects}
+                aspect={shaderParams ? shaderParams.lens.width / shaderParams.lens.height : 1.5}
                 selectedId={fxId}
                 onSelect={setSelectedFx}
                 onAdd={(kind) => {
-                  const id = store.addEffect(kind);
+                  const id = store.addEffect(kind, shaderParams ? shaderParams.lens.width / shaderParams.lens.height : undefined);
                   if (id) setSelectedFx(id);
                 }}
                 onUpdate={store.updateEffect}

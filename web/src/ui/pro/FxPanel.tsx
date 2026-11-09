@@ -1,4 +1,4 @@
-import { FX_DEFAULTS, FX_KINDS, MAX_EFFECTS, fxCss, newFxSeed, withFxKind, type FxKind, type LightEffect } from '../../engine/develop/LightEffects';
+import { FX_DEFAULTS, FX_KINDS, MAX_EFFECTS, fxCoverSize, fxCss, newFxSeed, withFxKind, type FxKind, type LightEffect } from '../../engine/develop/LightEffects';
 import { ParamSlider, formatPlain } from '../common/ParamSlider';
 import { Note } from './Controls';
 
@@ -8,7 +8,7 @@ const expSlider = (min: number, max: number) => ({
   from: (v: number) => min * (max / min) ** (v / 100),
 });
 /** The effect's mean radius (fraction of the long side). */
-const SIZE = expSlider(0.03, 1);
+const SIZE = expSlider(0.03, 1.5);
 const sizeOf = (e: LightEffect) => Math.sqrt(e.rx * e.ry);
 /** Stretch slider -100..100 <-> rx / ry, 1/4..4. */
 const stretchOf = (e: Pick<LightEffect, 'rx' | 'ry'>) => (100 * Math.log(e.rx / e.ry)) / Math.log(4);
@@ -26,6 +26,8 @@ const AMOUNT_NAMES: Record<FxKind, string> = { lightning: 'Branches', sparks: 'S
 
 interface Props {
   effects: readonly LightEffect[];
+  /** The photo's width / height: Size and Stretch reset to the box that covers it. */
+  aspect: number;
   selectedId: string | null;
   onSelect: (id: string) => void;
   onAdd: (kind: FxKind) => void;
@@ -39,10 +41,11 @@ interface Props {
  * dragged into place on the photo like light leaks. A top-bar mode like Leaks; the effect's box is moved, sized and
  * turned on the photo (MaskOverlay) or with these sliders.
  */
-export function FxPanel({ effects, selectedId, onSelect, onAdd, onUpdate, onRemove, onDone }: Props) {
+export function FxPanel({ effects, aspect, selectedId, onSelect, onAdd, onUpdate, onRemove, onDone }: Props) {
   const fx = effects.find((e) => e.id === selectedId) ?? null;
   const set = (change: (e: LightEffect) => LightEffect, force = false) => fx && onUpdate(fx.id, change, force);
   const full = effects.length >= MAX_EFFECTS;
+  const cover = fxCoverSize(aspect);
   return (
     <div className="controls geometry">
       <div className="geometry-head">
@@ -121,7 +124,7 @@ export function FxPanel({ effects, selectedId, onSelect, onAdd, onUpdate, onRemo
             value={SIZE.to(sizeOf(fx))}
             min={0}
             max={100}
-            defaultValue={SIZE.to(Math.sqrt(FX_DEFAULTS[fx.kind].rx * FX_DEFAULTS[fx.kind].ry))}
+            defaultValue={SIZE.to(Math.sqrt(cover.rx * cover.ry))}
             format={(v) => percent(SIZE.from(v))}
             onChange={(v) =>
               set((e) => {
@@ -135,7 +138,7 @@ export function FxPanel({ effects, selectedId, onSelect, onAdd, onUpdate, onRemo
             value={stretchOf(fx)}
             min={-100}
             max={100}
-            defaultValue={stretchOf(FX_DEFAULTS[fx.kind])}
+            defaultValue={stretchOf(cover)}
             format={(v) => `${(4 ** (v / 100)).toFixed(2)}:1`}
             onChange={(v) =>
               set((e) => {

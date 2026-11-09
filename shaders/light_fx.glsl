@@ -16,7 +16,7 @@ uniform highp sampler2D uFx;      // RGBA32F, a row per chunk: bbox (own frame),
 uniform vec4 uFxGeom[MAX_FX];     // centre.xy (image px), rx, ry (image px)
 uniform vec4 uFxShape[MAX_FX];    // cos(angle), sin(angle), width scale (px per unit width), glow radius (core widths)
 uniform vec4 uFxColor[MAX_FX];    // hue 0..1, colour spread 0..1, intensity 0..1, halo radius (px)
-uniform vec4 uFxRange[MAX_FX];    // first row, rows, reach (px), jag 0..1 (fine kinks within each segment)
+uniform vec4 uFxRange[MAX_FX];    // first row, rows, reach (px), wobble 0..1 (fine crackle of the lines, see applyLightFx)
 
 // erf, within ~3e-4 (tanh form).
 float fxErf(float x) {
@@ -33,12 +33,19 @@ float fxLine(vec2 q, vec2 a, vec2 dir, float len, float r) {
     return exp(-(n * n) / (r * r)) * 0.5 * (fxErf(t / r) - fxErf((t - len) / r));
 }
 
-// Pseudo-random 0..1 (Dave Hoskins' hash without sine, as light_leak.glsl's).
-float fxHash(float p) {
-    p = fract(p * 0.1031);
-    p *= p + 33.33;
-    p *= p + p;
-    return fract(p);
+// Pseudo-random 0..1 for a lattice point (Dave Hoskins' hash without sine, as light_leak.glsl's).
+float fxHash(vec2 p) {
+    vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+    p3 += dot(p3, p3.yzx + 33.33);
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+// Smooth value noise 0..1.
+float fxNoise(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = p - i;
+    vec2 w = f * f * (3.0 - 2.0 * f);
+    return mix(mix(fxHash(i), fxHash(i + vec2(1.0, 0.0)), w.x), mix(fxHash(i + vec2(0.0, 1.0)), fxHash(i + vec2(1.0, 1.0)), w.x), w.y);
 }
 
 // Neon light of a hue (0..1): saturation 0.8, value 1 (LightEffects.ts' fxColor).
@@ -62,6 +69,20 @@ vec3 applyLightFx(vec3 c, vec2 p, vec2 fullPx) {
         vec2 q = vec2(s.x * d.x + s.y * d.y, -s.y * d.x + s.x * d.y); // own frame, image px
         vec2 scale = g.zw;
         float reach = rg.z;
+        vec2 q0 = q; // unwarped: the wide halo stays smooth, only the core and glow crackle
+        if (rg.w > 0.0) {
+            // Crackle: the lines are bent by two octaves of smooth noise laid over the plane (in the effect's own scale, so
+            // the look is the same at any resolution), so a bolt stays jagged and organic however far it is zoomed, and
+            // never shows the straight facets of its generated points. Warping the point (not each segment) keeps the
+            // lines joined, and the glow and halo follow it.
+            float mean = sqrt(scale.x * scale.y);
+            float s1 = mean * 0.03;
+            float s2 = mean * 0.009;
+            vec2 so = vec2(rg.x * 13.7, rg.x * 7.1);
+            vec2 w1 = vec2(fxNoise(q / s1 + so), fxNoise(q / s1 + so + vec2(17.3, 5.9))) - 0.5;
+            vec2 w2 = vec2(fxNoise(q / s2 + so + vec2(3.1, 9.7)), fxNoise(q / s2 + so + vec2(11.3, 1.9))) - 0.5;
+            q += rg.w * (w1 * s1 * 1.1 + w2 * s2 * 1.5);
+        }
         vec3 base = fxHue(col.x);
         float core = 0.0;
         vec3 coreCol = vec3(0.0);
@@ -87,17 +108,8 @@ vec3 applyLightFx(vec3 c, vec2 p, vec2 fullPx) {
                 float tu = dot(q - a, dir);
                 float t = clamp(tu, 0.0, len);
                 float n = (q.x - a.x) * dir.y - (q.y - a.y) * dir.x;
-                if (rg.w > 0.0 && len > 1e-4) {
-                    // Jag: the core zigzags within the segment (3 straight kinks of random size, none at its ends), so
-                    // a bolt stays jagged at full resolution, finer than its generated points.
-                    float u = t / len * 3.0;
-                    float fl = min(floor(u), 2.0);
-                    float seed = A.x * 1931.7 + A.y * 2713.3;
-                    float j0 = fl < 0.5 ? 0.0 : fxHash(seed + fl) - 0.5;
-                    float j1 = fl > 1.5 ? 0.0 : fxHash(seed + fl + 1.0) - 0.5;
-                    n += mix(j0, j1, u - fl) * len * 0.35 * rg.w;
-                }
                 float dist2 = n * n + (tu - t) * (tu - t);
+                if (dist2 > reach * reach) continue; // beyond this segment's light: skip its erf and exp work
                 float w = mix(B.x, B.y, len > 1e-4 ? t / len : 0.0) * s.z;
                 float wAvg = 0.5 * (B.x + B.y) * s.z;
                 vec3 tint = col.y > 0.0 ? fxHue(col.x + B.w * col.y * 0.18) : base;
@@ -113,7 +125,7 @@ vec3 applyLightFx(vec3 c, vec2 p, vec2 fullPx) {
                 vec2 ga = a - dir * (0.5 * (gl - len));
                 float gr = max(wAvg * s.w, footprint);
                 glow += tint * (B.z * fxLine(q, ga, dir, gl, gr));
-                halo += tint * (B.z * fxLine(q, ga, dir, gl, col.w) * min(1.5, (B.x + B.y) * 80.0)); // thick lines bloom more
+                halo += tint * (B.z * fxLine(q0, ga, dir, gl, col.w) * min(1.5, (B.x + B.y) * 80.0)); // thick lines bloom more
             }
         }
         vec3 light = core * mix(coreCol, vec3(1.0), 0.75) * 4.0 + glow * 0.9 + halo * 0.3;
@@ -122,6 +134,11 @@ vec3 applyLightFx(vec3 c, vec2 p, vec2 fullPx) {
         c = 1.0 - (1.0 - c) * exp(-light * 1.6);
         float changed = max(max(c.r - before.r, c.g - before.g), c.b - before.b) / max(1.0 - min(min(before.r, before.g), before.b), 1e-3);
         covered = 1.0 - (1.0 - covered) * (1.0 - clamp(changed, 0.0, 1.0));
+    }
+    if (covered > 0.0) {
+        // A wide soft glow on a dark picture would show steps of one 8-bit level as bands: dither it (triangular noise of
+        // +-1 level, only where light was added, hashed from the full-resolution pixel so it is the same in every tile).
+        c += (fxHash(fullPx) + fxHash(fullPx + vec2(17.3, 5.1)) - 1.0) * (1.0 / 255.0) * min(1.0, covered * 16.0);
     }
     if (uGrain > 0.0 && covered > 0.0) {
         // The light flattens the grain under it; lay it back as much as the light took away, so it sits under the grain.
