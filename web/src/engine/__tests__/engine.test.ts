@@ -554,6 +554,7 @@ describe('mask layers', () => {
   it('round-trips through presets with fresh ids and drops broken layers', () => {
     const edited = developParams({ masks: [sky, spot] });
     expect(DEFAULT_PRESET_GROUPS).not.toContain('masks');
+    expect(DEFAULT_PRESET_GROUPS).not.toContain('detail');
     const [p] = decodePresets(encodePresets([capturePreset('M', edited, ['masks'])]));
     const out = applyPreset(p, developParams({ exposure: 1 }));
     expect(out.exposure).toBe(1);

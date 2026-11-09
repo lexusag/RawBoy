@@ -40,9 +40,10 @@ export const PRESET_GROUPS: readonly { key: PresetGroup; label: string; fields: 
 
 /**
  * What the save dialog ticks first: lens corrections are usually specific to one camera and lens, masks to one
- * composition, and denoise to one photo's noise (Auto measures it per photo).
+ * composition, denoise to one photo's noise (Auto measures it per photo), and Detail (grain, bloom, flare) is a look
+ * rather than a correction, so it is a deliberate choice.
  */
-export const DEFAULT_PRESET_GROUPS: readonly PresetGroup[] = PRESET_GROUPS.map((g) => g.key).filter((k) => k !== 'lens' && k !== 'masks' && k !== 'denoise');
+export const DEFAULT_PRESET_GROUPS: readonly PresetGroup[] = PRESET_GROUPS.map((g) => g.key).filter((k) => k !== 'lens' && k !== 'masks' && k !== 'denoise' && k !== 'detail');
 
 /**
  * A named set of slider values. values holds only the fields of groups; applying it overrides those and leaves
