@@ -44,7 +44,7 @@ Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and
 | `app-pro/` | **RawBoy** for Android (`:app-pro`): the full editor UI. |
 | `app-auto/` | **RawBoy Auto** for Android (`:app-auto`): batch queue, grid and detail screens. |
 | `app-camera/` | **RawBoy Camera** for Android (`:app-camera`). |
-| `shaders/` | The develop GLSL (develop, denoise, bokeh, light leaks, film formation): the single source of truth for Android, iOS and the web (see [shaders/README.md](shaders/README.md)). |
+| `shaders/` | The develop GLSL (develop, denoise, bokeh, light leaks, light effects, film formation): the single source of truth for Android, iOS and the web (see [shaders/README.md](shaders/README.md)). |
 | `ios/` | The iOS apps, generated with XcodeGen from `project.yml`: `Pro/`, `Auto/` and `Camera/` app targets, `Engine/` (the Swift/Metal port of the engine), `EngineTests/`, `native/` (the C++ engine built as frameworks), `shaders/` (generates the Metal shaders from the root `shaders/`) and `mediapipe/` (model fetch). |
 | `web/` | **RawBoy Web** (Vite + React + TypeScript): `src/engine/` is the TypeScript port of the Kotlin engine, `src/ui/` the RawBoy, Auto and Browser tabs, `src/worker/` the Web Workers, `src/drive/` Google Drive, and `native/` the C++ engine compiled to WebAssembly. Also its Dockerfile and nginx config (see [web/README.md](web/README.md)). |
 | `luts/` | Bundled `.cube` film-look LUTs, plus `spektrafilm/` (spektrafilm's film stock LUTs, CC BY-SA 4.0). |

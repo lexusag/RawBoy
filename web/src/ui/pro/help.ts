@@ -11,7 +11,7 @@ export const PRO_HELP: HelpSection[] = [
       ...(driveConfigured() ? [{ how: 'Google Drive', text: 'Open › From Google Drive picks a photo in your Drive; Export › Save to Google Drive puts the export in a Drive folder you pick. RawBoy only sees the files you pick and the ones it saves.' }] : []),
       { how: 'Tabs', text: 'Light, Color, Detail, LUTs and Lens hold the sliders. Edits carry over to the next photo; crop, rotation, flips and scale don\'t.' },
       { how: 'Lens preset', text: 'Lens tab: name it (the lens by default) and Save lens preset keeps its settings for this photo\'s lens; the Auto tab corrects every photo taken with that lens with it, on top of its look. Manual lenses record no lens: the Auto tab lets you pick their presets by name.' },
-      { how: 'Top bar', text: 'Crop & rotate (turn, flip, straighten, scale, crop), Presets, Masks, Light leaks, Undo and Redo (Ctrl/⌘ Z, Shift Ctrl/⌘ Z), Reset all, Auto (automatic light and colour, keeps the LUT) and Export.' },
+      { how: 'Top bar', text: 'Crop & rotate (turn, flip, straighten, scale, crop), Presets, Masks, Light leaks, Effects, Undo and Redo (Ctrl/⌘ Z, Shift Ctrl/⌘ Z), Reset all, Auto (automatic light and colour, keeps the LUT) and Export.' },
       { how: 'Looks', text: 'Click the photo to see the area there through every LUT and film stock as vertical stripes; click a stripe to use that LUT (Film off) or stock (Film on). Drag the window to look elsewhere, also past the photo\'s edges (it shows a quick copy while moving and the exact pixels once it rests). Several pages when the looks do not fit (‹ ›, or the arrow keys).' },
       { how: 'Back to Auto', text: 'Returns a photo opened from the Auto tab (Edit in RawBoy) there with these edits; Send to Auto adds any other photo to Auto\'s batch with them.' },
     ],
@@ -59,6 +59,14 @@ export const PRO_HELP: HelpSection[] = [
       { how: 'Intensity, Cover', text: 'Cover at 100% hides everything inside the leak\'s outline, however the light falls on it: a natural-looking way to cover part of a nude for social media. Cover 0 lets the photo show through the light; Intensity fades the whole leak.' },
       { how: 'Bend, Taper, Warp, Texture', text: 'Bend curves the leak into an arc, Taper narrows it towards one end, Warp makes its outline organic (it only grows). Texture burns the light in like film: white in the middle, yellow, orange and red towards the edge, mottled and streaked. New pattern picks another warp and texture.' },
       { how: 'Softness, Glow, Colour', text: 'Softness blurs the white core, Glow sets how far the coloured light reaches, Colour goes from magenta-red to amber. Leaks belong to the photo: presets don\'t keep them.' },
+    ],
+  },
+  {
+    title: 'Effects',
+    items: [
+      { how: '+ Lightning, + Sparks, + Trails, + Swirl', text: 'Adds a lomo light effect (up to 4): a forked lightning bolt, an electric spark cluster, streaks of moving light or neon swirls, a new random one each press. It glows into the photo like light double-exposed onto film and the grain stays on top. Drag inside it to move it, the dots to size it, the round knob to turn it; the switch changes the selected effect\'s kind.' },
+      { how: 'New random', text: 'Draws a new random pattern with the same size, colour and settings: press it until you like one.' },
+      { how: 'Branches, Thickness, Glow, Colour, Colour mix', text: 'Branches (Sparks, Strands) sets how much there is, Thickness the line width, Glow how far the coloured glow and soft halo reach, Colour the hue and Colour mix how far each line may drift from it (sparks in blue, violet and green). Effects belong to the photo: presets don\'t keep them.' },
     ],
   },
 ];

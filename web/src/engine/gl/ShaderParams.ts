@@ -6,6 +6,7 @@ import { anamorphicBarOf, anamorphicLengthOf, anamorphicTintOf, effectiveColorDe
 import type { BrushRaster } from '../develop/BrushRaster';
 import { curveTable } from '../develop/ToneCurve';
 import { CURVE_SCALE, MAX_LAYERS, MAX_LENS_BLUR, layerIsIdentity, type MaskLayer } from '../develop/Masks';
+import { NO_FX, packEffects, type FxUniforms } from '../develop/LightEffects';
 import { NO_LEAKS, bendCurvature, packLeaks, type LeakUniforms } from '../develop/LightLeaks';
 import type { FilmData } from '../film/FilmStocks';
 import type { LensTransform } from '../lens/LensTransform';
@@ -206,6 +207,8 @@ export class ShaderParams {
     readonly anamorphicBar: Float32Array = anamorphicBarOf('neutral'),
     /** What the flare scatters light from (FlareSource, `uFlare`), or null: no flare. */
     readonly flareSource: PreviewImage | null = null,
+    /** Light effects over the finished picture, after the leaks (shaders/light_fx.glsl). */
+    readonly fx: FxUniforms = NO_FX,
   ) {}
 
   /** Extra source pixels needed around an output region for the spatial effects, so tiles join seamlessly. */
@@ -305,6 +308,7 @@ export class ShaderParams {
       anamorphicLengthOf(p.anamorphicColor),
       anamorphicBarOf(p.anamorphicColor),
       flareSource,
+      packEffects(p.fx ?? [], lens.width, lens.height),
     );
   }
 }

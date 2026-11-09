@@ -592,6 +592,16 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   all moved next to Undo/Redo, as Android's): outlines bent and
   tapered like the shader, `grabInside`, a bend square at q = (0.5, 0). Older edits without kind/bend/… parse as plain
   glows. Not in presets (edits sidecars keep them).
+- Light effects (Pro, web only; `develop/LightEffects.ts`, `shaders/light_fx.glsl`, `ui/pro/FxPanel.tsx`, 2026-11-09): `DevelopParams.fx`,
+  up to `MAX_EFFECTS` (4) lomo effects (lightning, sparks, trails, swirl) after the leaks (`applyLightFx`, only in web
+  `Shaders.ts`; Android/iOS don't include the file and ignore `fx` in edits). Placement is a radial shape's (overlay: plain
+  radial, `grabInside`); the pattern is generated from `seed` + `amount` (mulberry32, cached) as segments in the effect's
+  own -1..1 frame, widths in its mean radius. `packEffects` lays them into an RGBA32F texture (unit 15, `FxTexture`),
+  rows of `FX_CHUNK` (16) segments after a bounding-box texel; the same object is reused while only placement/colour
+  change, so drags don't re-upload. Shader: core = max of Gaussians (≥ ~1 px, dimmer when thinner), glow and halo =
+  Gaussian line integrals (erf via tanh; **clamp its argument**: tanh of a large value was NaN on SwiftShader and blacked
+  out tiles), exposed in per channel (`1 - (1 - c) e^-L`), grain added back like the leaks. `uFxRange.w` (jag) zigzags
+  a lightning core within each segment so it stays jagged at full export size. Not in presets; kept in edits sidecars.
 - Engine JVM tests: `./gradlew :engine:testDebugUnitTest` (`engine/src/test`, junit + org.json; `retouch/Filters.kt`
   keeps `box` out of `SkinSegmenter`, which loads MediaPipe).
 - Brush masks (`develop/BrushRaster.ts`): strokes are vectors in `MaskLayer.strokes` (image fractions), rasterised on

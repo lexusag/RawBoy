@@ -2157,6 +2157,26 @@ line.curve-grid,
   white-space: nowrap;
 }
 
+/* Light effects: four add buttons, two by two beside Done. */
+.geometry-head .fx-add {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  padding: 6px 12px 6px 0;
+  min-width: 0;
+}
+
+.geometry-head .fx-add button {
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+
+.fx-random button {
+  display: inline-flex;
+  align-items: center;
+}
+
 /* They share the row with Done, so they shrink rather than run under it (a phone's sidebar in landscape is ~300 px). */
 .geometry-head .mask-add button {
   flex: 0 1 auto;

@@ -1,6 +1,7 @@
 import { Mat3 } from '../color/Mat3';
 import type { BrushRaster } from '../develop/BrushRaster';
 import { FRAME_WIDTH_UM, type FilmData } from '../film/FilmStocks';
+import type { FxData } from '../develop/LightEffects';
 import type { LensTransform } from '../lens/LensTransform';
 import type { ShadingMap } from '../lens/LensInfo';
 import type { LutData } from '../lut/LutData';
@@ -19,6 +20,8 @@ export const Units = {
   // 10, 11: the wavelet denoise pre-pass; 13: the lens blur passes.
   BOKEH: 12,
   FLARE: 14,
+  /** Light effects' segment data (LightEffects.ts, web only). */
+  FX: 15,
 } as const;
 
 /**
@@ -199,6 +202,7 @@ export class DevelopProgram {
     this.f2('uBloomTailTexel', 1 / (p.bloomTail?.width ?? 1), 1 / (p.bloomTail?.height ?? 1));
     this.f2('uBaseTexel', 1 / (p.base?.width ?? 1), 1 / (p.base?.height ?? 1));
     this.bindMasks(p, g.imageWidth, g.imageHeight);
+    this.bindFx(p);
     this.i1('uBokeh', Units.BOKEH);
     const bokeh = bokehUniforms(p);
     this.f1('uBokehScale', bokeh.scale);
@@ -277,6 +281,18 @@ export class DevelopProgram {
     this.f1('uBokehSrcLod', lod);
     this.f2('uBokehSize', g.width, g.height);
     this.f1('uBokehScale', g.scale);
+  }
+
+  /** Light effects (shaders/light_fx.glsl): their uniforms; the segment data is on Units.FX (FxTexture). */
+  private bindFx(p: ShaderParams) {
+    const gl = this.gl;
+    const fx = p.fx;
+    this.i1('uFx', Units.FX);
+    this.i1('uFxCount', fx.count);
+    gl.uniform4fv(this.loc('uFxGeom'), fx.geom);
+    gl.uniform4fv(this.loc('uFxShape'), fx.shape);
+    gl.uniform4fv(this.loc('uFxColor'), fx.color);
+    gl.uniform4fv(this.loc('uFxRange'), fx.range);
   }
 
   /** Film look (shaders/film_form.glsl); everything 0 = off without one. */
@@ -469,6 +485,35 @@ export class BrushTexture {
   }
 }
 
+/** The light effects' segment data (RGBA32F, FX_ROW x rows, read with texelFetch) on its own unit; uploads when it changes. */
+export class FxTexture {
+  private readonly id: WebGLTexture;
+  private uploaded: FxData | null = null;
+
+  constructor(private readonly gl: WebGL2RenderingContext) {
+    gl.activeTexture(gl.TEXTURE0 + Units.FX);
+    this.id = createTexture(gl, gl.NEAREST);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, 1, 1, 0, gl.RGBA, gl.FLOAT, new Float32Array(4));
+    gl.activeTexture(gl.TEXTURE0);
+  }
+
+  bind(data: FxData | null) {
+    const gl = this.gl;
+    gl.activeTexture(gl.TEXTURE0 + Units.FX);
+    gl.bindTexture(gl.TEXTURE_2D, this.id);
+    if (data && data !== this.uploaded) {
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, data.data.length / 4 / data.rows, data.rows, 0, gl.RGBA, gl.FLOAT, data.data);
+      this.uploaded = data;
+    }
+    gl.activeTexture(gl.TEXTURE0);
+  }
+
+  release() {
+    this.gl.deleteTexture(this.id);
+  }
+}
+
 /** The lens shading gain map (R16F) on its own texture unit; re-uploads when the image changes. */
 export class ShadingTexture {
   private readonly id: WebGLTexture;
@@ -570,6 +615,7 @@ export class DevelopInputs {
   readonly brush: BrushTexture;
   readonly film: FilmTextures;
   readonly bokeh: BokehTexture;
+  readonly fx: FxTexture;
 
   constructor(gl: WebGL2RenderingContext) {
     this.base = new ImageTexture(gl, Units.BASE);
@@ -582,6 +628,7 @@ export class DevelopInputs {
     this.brush = new BrushTexture(gl);
     this.film = new FilmTextures(gl);
     this.bokeh = new BokehTexture(gl);
+    this.fx = new FxTexture(gl);
   }
 
   bind(p: ShaderParams) {
@@ -595,10 +642,11 @@ export class DevelopInputs {
     this.brush.bind(p.layers.brush);
     this.film.bind(p.film);
     this.bokeh.bind(p); // after the brush atlas: its mask pass reads it
+    this.fx.bind(p.fx.data);
   }
 
   release() {
-    for (const t of [this.base, this.halo, this.tail, this.flare, this.skin, this.shading, this.lut, this.brush, this.film, this.bokeh]) t.release();
+    for (const t of [this.base, this.halo, this.tail, this.flare, this.skin, this.shading, this.lut, this.brush, this.film, this.bokeh, this.fx]) t.release();
   }
 }
 
