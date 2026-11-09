@@ -239,6 +239,7 @@ export function App() {
                 </button>
                 <a className="text" href="about.html" target="_blank" rel="noopener">About</a>
                 <a className="text" href="privacy.html" target="_blank" rel="noopener">Privacy</a>
+                <a className="text" href="https://ko-fi.com/U7U011XOE" target="_blank" rel="noopener">Support me on Ko-fi</a>
               </>
             }
           />

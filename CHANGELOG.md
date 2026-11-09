@@ -1,3 +1,7 @@
+**All apps: a "Support me on Ko-fi" link (2026-11-09)**
+
+- A plain link to https://ko-fi.com/U7U011XOE in the help sheet of RawBoy Web (Pro, Auto, Browser and Packer), Android (Pro, Auto and Camera, in the shared `HelpSheet`) and iOS (the shared `HelpView`), on the web About page, in the Readme and as `.github/FUNDING.yml` (GitHub's Sponsor button). Deliberately not Ko-fi's `Widget_2.js`: it would load third-party script into a site that promises nothing leaves the device. Not built or run here (no Android/iOS toolchain, web dependencies not installed); the Play listing is unchanged and Play's donation policy is unchecked.
+
 **RawBoy Pro (web): light effects cover the whole photo and stay crisp on big photos (2026-11-09)**
 
 - New effects start as big as the photo (the box covers the whole frame, any aspect; Size and Stretch reset to that), and switching an effect's kind keeps its place, size and angle. On a 50 MP photo the owner saw blocks: the generated points of a bolt are far apart there, so its straight facets showed. Lightning and sparks now crackle in the shader: the core and glow are bent by two octaves of smooth noise in the effect's own scale (`uFxRange.w`; the wide halo stays unwarped), so the lines have fine detail at any zoom and no facets. Wide soft glows (swirls, trails) banded on dark pictures, so the light is dithered by one level. Segments beyond an effect's reach skip their glow maths, which makes the shader cheaper. Checked on a 6208 x 8280 export and four kinds at fit size in headless Chrome; not on a phone.

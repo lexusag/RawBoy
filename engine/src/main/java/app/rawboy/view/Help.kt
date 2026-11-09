@@ -28,6 +28,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -107,11 +108,16 @@ private fun HelpSheet(title: String, sections: List<HelpSection>, onLicences: ((
                 if (onLicences != null) {
                     TextButton(onClick = onLicences, modifier = Modifier.padding(top = 8.dp)) { Text("Open-source licences") }
                 }
+                // A plain link: the browser opens it, nothing from Ko-fi is loaded into the app.
+                val uriHandler = LocalUriHandler.current
+                TextButton(onClick = { uriHandler.openUri(KOFI_URL) }) { Text("Support me on Ko-fi") }
                 Spacer(Modifier.height(16.dp))
             }
         }
     }
 }
+
+private const val KOFI_URL = "https://ko-fi.com/U7U011XOE"
 
 /** Material "help_outline" icon (Apache 2.0), built here because it isn't in material-icons-core. */
 private val HelpIcon: ImageVector by lazy {
