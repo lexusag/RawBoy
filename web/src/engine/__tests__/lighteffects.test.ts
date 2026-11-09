@@ -73,10 +73,10 @@ describe('light effects', () => {
     expect(withFxKind(e, 'trails')).toMatchObject({ kind: 'trails', cx: 0.2, cy: 0.7, seed: 0.42, rx: 0.1, ry: 0.2, angle: 30 });
   });
 
-  it('starts covering the whole photo, landscape or portrait', () => {
-    expect(fxCoverSize(1.5)).toEqual({ rx: 0.5, ry: 0.5 / 1.5 });
-    expect(fxCoverSize(0.75)).toEqual({ rx: 0.375, ry: 0.5 });
-    for (const kind of FX_KINDS) expect(newLightEffect(kind, 0.5, 0.5, 4 / 3)).toMatchObject({ cx: 0.5, cy: 0.5, rx: 0.5, ry: 0.375 });
+  it('starts 1.75 times the photo, landscape or portrait, so most of it is out of frame', () => {
+    expect(fxCoverSize(1.5)).toEqual({ rx: 0.875, ry: 0.875 / 1.5 });
+    expect(fxCoverSize(0.75)).toEqual({ rx: 0.875 * 0.75, ry: 0.875 });
+    for (const kind of FX_KINDS) expect(newLightEffect(kind, 0.5, 0.5, 4 / 3)).toMatchObject({ cx: 0.5, cy: 0.5, rx: 0.875, ry: 0.875 * 0.75 });
   });
 
   it('colours hues as light neon', () => {

@@ -48,12 +48,17 @@ export const FX_DEFAULTS: Record<FxKind, { angle: number; amount: number; thickn
   swirl: { angle: 0, amount: 40, thickness: 50, glow: 50, hue: 190, spread: 35 },
 };
 
+/** A new effect's box is this many times the photo, so most of the pattern sits outside the frame and only a part of it overlaps the picture. */
+export const FX_START_SCALE = 1.75;
+
 /**
- * The box that covers the whole photo (radii as fractions of its long side) for a photo [aspect] = width / height wide:
- * where a new effect starts, so it fills the frame and the pattern's detail is spread over it.
+ * The box a new effect starts in (radii as fractions of the photo's long side) for a photo [aspect] = width / height wide:
+ * [FX_START_SCALE] times the photo, centred on it.
  */
-export const fxCoverSize = (aspect: number): { rx: number; ry: number } =>
-  aspect >= 1 ? { rx: 0.5, ry: 0.5 / aspect } : { rx: 0.5 * aspect, ry: 0.5 };
+export const fxCoverSize = (aspect: number): { rx: number; ry: number } => {
+  const h = 0.5 * FX_START_SCALE;
+  return aspect >= 1 ? { rx: h, ry: h / aspect } : { rx: h * aspect, ry: h };
+};
 
 /** A seed 0..1 (stored like a leak's); the generator turns it into 32 bits. */
 export const newFxSeed = (): number => Math.floor(Math.random() * 1e9) / 1e9;
@@ -104,7 +109,7 @@ export interface FxSegment {
 }
 
 /** At most this many segments per effect (the shader's data texture holds MAX_EFFECTS of them). */
-export const MAX_SEGMENTS = 512;
+export const MAX_SEGMENTS = 1280;
 /** Segments per chunk: a chunk's bounding box lets the shader skip it where none of its light reaches. */
 export const FX_CHUNK = 16;
 
@@ -169,12 +174,12 @@ function lightning(r: Rng, amount: number): FxSegment[] {
   const density = amount / 100;
   const branch = (from: Pt, dir: number, len: number, level: number, w: number, b: number) => {
     const to: Pt = [from[0] + Math.cos(dir) * len, from[1] + Math.sin(dir) * len];
-    const pts = jagged(r, from, to, level === 0 ? 7 : level === 1 ? 5 : 4, level === 0 ? 0.42 : 0.5);
+    const pts = jagged(r, from, to, level === 0 ? 8 : level === 1 ? 6 : 5, level === 0 ? 0.42 : 0.5);
     polyline(out, r, pts, w, w * (level === 0 ? 0.55 : 0.2), b, b * (level === 0 ? 0.8 : 0.35), (r() - 0.5) * 0.6, 0.25);
     if (level >= 2) return;
     // Forks: more near the bottom of a channel; each heads off 15..55° to one side, its length a part of what's left.
     const forks = Math.round((level === 0 ? 2 + 9 * density : 0.5 + 3 * density) * range(r, 0.7, 1.3));
-    for (let f = 0; f < forks && out.length < MAX_SEGMENTS - 40; ++f) {
+    for (let f = 0; f < forks && out.length < MAX_SEGMENTS - 100; ++f) {
       const t = level === 0 ? 0.12 + 0.8 * Math.sqrt(r()) : 0.15 + 0.7 * r();
       const k = Math.min(pts.length - 2, Math.max(1, Math.floor(t * (pts.length - 1))));
       const [px, py] = pts[k];
@@ -185,8 +190,8 @@ function lightning(r: Rng, amount: number): FxSegment[] {
       branch([px, py], local * 0.4 + dir * 0.6 + turn, left * range(r, 0.3, 0.75), level + 1, w * range(r, 0.4, 0.6), b * range(r, 0.45, 0.7));
     }
   };
-  const x0 = range(r, -0.35, 0.35);
-  const x1 = x0 + range(r, -0.5, 0.5);
+  const x0 = range(r, -0.25, 0.25);
+  const x1 = x0 + range(r, -0.35, 0.35);
   const len = Math.hypot(x1 - x0, 1.9);
   branch([x0, -0.95], Math.atan2(1.9, x1 - x0), len, 0, 0.006, 1);
   return out;
@@ -199,12 +204,12 @@ function lightning(r: Rng, amount: number): FxSegment[] {
 function sparks(r: Rng, amount: number): FxSegment[] {
   const out: FxSegment[] = [];
   const density = amount / 100;
-  const arcs = Math.round(2 + 4 * density * range(r, 0.6, 1.4));
+  const arcs = Math.round(3 + 6 * density * range(r, 0.6, 1.4));
   for (let a = 0; a < arcs; ++a) {
     const dir = r() * Math.PI * 2;
     const len = range(r, 0.25, 0.75);
     const from: Pt = [gauss(r) * 0.04, gauss(r) * 0.04];
-    const pts = jagged(r, from, [from[0] + Math.cos(dir) * len, from[1] + Math.sin(dir) * len], 4, 0.55);
+    const pts = jagged(r, from, [from[0] + Math.cos(dir) * len, from[1] + Math.sin(dir) * len], 5, 0.55);
     polyline(out, r, pts, 0.006, 0.0015, 0.9, 0.25, gauss(r) * 0.35, 0.3);
     // One small fork per arc, sometimes.
     if (r() < 0.6) {
@@ -231,7 +236,7 @@ function sparks(r: Rng, amount: number): FxSegment[] {
     const w = range(r, 0.012, 0.03);
     particles.push({ x0: x, y0: y, x1: x, y1: y, w0: w, w1: w, b: range(r, 0.12, 0.3), h: r() * 2 - 1 });
   }
-  const n = Math.round(30 + 190 * density);
+  const n = Math.round(80 + 520 * density);
   for (let i = 0; i < n; ++i) {
     const dir = r() * Math.PI * 2;
     const dist = Math.min(1, Math.abs(gauss(r)) * 0.45 + 0.03);
@@ -284,7 +289,7 @@ function trails(r: Rng, amount: number): FxSegment[] {
     const b = range(r, 0.55, 1.1);
     const h = s / Math.max(1, strands - 1) * 2 - 1 + gauss(r) * 0.2;
     const pts: Pt[] = [];
-    const N = 56;
+    const N = 128;
     for (let i = 0; i <= N; ++i) {
       const t = i / N;
       const x = xs + (xe - xs) * t;
@@ -319,7 +324,7 @@ function swirl(r: Rng, amount: number): FxSegment[] {
     const w = range(r, 0.004, 0.009);
     const b = range(r, 0.7, 1.1);
     const h = gauss(r) * 0.5;
-    const N = Math.min(140, Math.floor((MAX_SEGMENTS - out.length) / Math.max(1, strands - s)) - 1);
+    const N = Math.min(320, Math.floor((MAX_SEGMENTS - out.length) / Math.max(1, strands - s)) - 1);
     if (N < 8) break;
     const pts: Pt[] = [];
     for (let i = 0; i <= N; ++i) {

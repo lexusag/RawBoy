@@ -607,7 +607,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   unwarped point), so lightning stays crackly at any zoom instead of showing the straight facets of its generated points
   (they were visible as blocks on a 50 MP photo; an in-segment zigzag was tried first). Segments beyond `reach` skip their
   erf work, and the light is dithered ±1 level (hashed from the full-res pixel): a wide glow on a dark picture banded.
-  New effects cover the whole photo (`fxCoverSize(aspect)`). Not in presets; kept in edits sidecars.
+  New effects start `FX_START_SCALE` (1.75) times the photo (`fxCoverSize(aspect)`), most of the pattern out of frame, so the generators are dense (`MAX_SEGMENTS` 1280: only the middle ~57% shows). Not in presets; kept in edits sidecars.
 - Engine JVM tests: `./gradlew :engine:testDebugUnitTest` (`engine/src/test`, junit + org.json; `retouch/Filters.kt`
   keeps `box` out of `SkinSegmenter`, which loads MediaPipe).
 - Portrait retouch (web, 2026-11-09; `engine/retouch/PortraitRetouch.ts`, `worker/retouch.worker.ts`): Reblum-Natural-like
