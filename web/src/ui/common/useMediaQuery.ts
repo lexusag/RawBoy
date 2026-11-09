@@ -35,9 +35,3 @@ export const PHONE_WIDTH = '(max-width: 560px)';
  * "desktop site" mode counts as a desktop).
  */
 export const PHONE_SCREEN = `${PHONE_WIDTH}, (orientation: landscape) and (max-height: 480px)`;
-
-/**
- * Big screens turned sideways: the tool bar's buttons sit at the top of the right sidebar. Keep in step with the
- * query above `.editor:has(> .workspace)` in styles.css.
- */
-export const BIG_LANDSCAPE = '(orientation: landscape) and (min-width: 1000px) and (min-height: 600px)';
