@@ -323,6 +323,8 @@ struct DevelopProgram {
         u.array("uLeakColor", l.color, components: 4)
         u.array("uLeakOuter", l.outer, components: 4)
         u.array("uLeakForm", l.form, components: 4)
+        u.array("uLeakLook", l.look, components: 4)
+        u.array("uLeakRadii", l.radii, components: 4)
     }
 
     private static func bindLayers(_ u: inout UniformBlock, _ l: LayerUniforms) {

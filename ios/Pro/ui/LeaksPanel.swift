@@ -160,6 +160,11 @@ struct LeaksPanel: View {
         ParamSlider(label: "Warp", value: leak.warp, range: 0...100, defaultValue: 0, format: formatPlain) { v in
             set(leak) { $0.warp = v }
         }
+        ParamSlider(label: "Texture", value: leak.texture, range: 0...100, defaultValue: 0, format: formatPlain) { v in
+            set(leak) { $0.texture = v }
+        }
+        ParamSlider(label: "Cover", value: leak.cover, range: 0...100, defaultValue: 0,
+                    format: { "\(Int($0.rounded()))%" }) { v in set(leak) { $0.cover = v } }
         ParamSlider(label: "Softness", value: leak.softness, range: 0...100, defaultValue: leak.kind.softness,
                     format: formatPlain) { v in set(leak) { $0.softness = v } }
         ParamSlider(label: "Glow", value: leak.glow, range: 0...100, defaultValue: leak.kind.glow, format: formatPlain) { v in
@@ -167,8 +172,8 @@ struct LeaksPanel: View {
         }
         ParamSlider(label: "Colour", value: leak.hue, range: LightLeaks.hueMin...LightLeaks.hueMax,
                     defaultValue: LightLeaks.hue, format: hueName, trackGradient: hueTrack) { v in set(leak) { $0.hue = v } }
-        if leak.warp > 0 {
-            Button("New warp") { set(leak, true) { $0.seed = LightLeaks.newSeed() } }
+        if leak.warp > 0 || leak.texture > 0 {
+            Button("New pattern") { set(leak, true) { $0.seed = LightLeaks.newSeed() } }
                 .font(.subheadline)
                 .padding(.vertical, 4)
         }

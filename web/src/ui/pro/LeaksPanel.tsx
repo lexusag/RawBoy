@@ -4,8 +4,12 @@ import {
   LEAK_HUE_MAX,
   LEAK_HUE_MIN,
   LEAK_KINDS,
+  LEAK_TEXTURE,
+  LEAK_WARP,
   MAX_LEAKS,
+  ROUND_RADII,
   leakCss,
+  leakReshaped,
   newLeakSeed,
   withLeakKind,
   type LeakKind,
@@ -71,9 +75,9 @@ export function LeaksPanel({ leaks, selectedId, onSelect, onAdd, onUpdate, onRem
       </div>
       {leaks.length === 0 && (
         <Note>
-          Add a film-style light leak (a streak of light, a round glow or a triangle), then drag it over the photo. It is added in Screen mode,
-          so the photo shows through its glow; at full intensity its white middle (inside the dashed line) hides what is under it, so it can
-          cover part of a photo. The grain stays on top. Up to {MAX_LEAKS}; leaks reset for each new photo.
+          Add a film-style light leak (a streak of light, a round glow or a triangle), then drag it over the photo. Its glow lets the photo show
+          through; with Cover at 100% nothing inside its outline shows, so it can hide part of a photo (drag a glow’s hollow dots to fit its
+          outline to the area). The grain stays on top. Up to {MAX_LEAKS}; leaks reset for each new photo.
         </Note>
       )}
       {leaks.map((l, i) => (
@@ -179,7 +183,25 @@ export function LeaksPanel({ leaks, selectedId, onSelect, onAdd, onUpdate, onRem
           />
           <ParamSlider label="Bend" value={leak.bend} min={-100} max={100} defaultValue={0} format={signed} onChange={(v) => set((l) => ({ ...l, bend: v }))} />
           <ParamSlider label="Taper" value={leak.taper} min={-100} max={100} defaultValue={0} format={signed} onChange={(v) => set((l) => ({ ...l, taper: v }))} />
-          <ParamSlider label="Warp" value={leak.warp} min={0} max={100} defaultValue={0} format={formatPlain} onChange={(v) => set((l) => ({ ...l, warp: v }))} />
+          <ParamSlider label="Warp" value={leak.warp} min={0} max={100} defaultValue={LEAK_WARP} format={formatPlain} onChange={(v) => set((l) => ({ ...l, warp: v }))} />
+          <ParamSlider
+            label="Texture"
+            value={leak.texture}
+            min={0}
+            max={100}
+            defaultValue={LEAK_TEXTURE}
+            format={formatPlain}
+            onChange={(v) => set((l) => ({ ...l, texture: v }))}
+          />
+          <ParamSlider
+            label="Cover"
+            value={leak.cover}
+            min={0}
+            max={100}
+            defaultValue={100}
+            format={(v) => `${Math.round(v)}%`}
+            onChange={(v) => set((l) => ({ ...l, cover: v }))}
+          />
           <ParamSlider
             label="Softness"
             value={leak.softness}
@@ -208,17 +230,26 @@ export function LeaksPanel({ leaks, selectedId, onSelect, onAdd, onUpdate, onRem
             trackGradient={HUE_TRACK}
             onChange={(v) => set((l) => ({ ...l, hue: v }))}
           />
-          {leak.warp > 0 && (
+          {(leak.warp > 0 || leak.texture > 0 || leakReshaped(leak)) && (
             <div className="button-row">
-              <button type="button" className="text" onClick={() => set((l) => ({ ...l, seed: newLeakSeed() }), true)}>
-                New warp
-              </button>
+              {(leak.warp > 0 || leak.texture > 0) && (
+                <button type="button" className="text" onClick={() => set((l) => ({ ...l, seed: newLeakSeed() }), true)}>
+                  New pattern
+                </button>
+              )}
+              {leakReshaped(leak) && (
+                <button type="button" className="text" onClick={() => set((l) => ({ ...l, radii: ROUND_RADII }), true)}>
+                  Round outline
+                </button>
+              )}
             </div>
           )}
           <Note>
             Drag the leak to move it, the dots to resize ({leak.kind === 'streak' ? 'side dots: width, end dots: length' : 'along and across'}),
-            the round knob to turn it, the square to bend it. Inside the dashed line it is pure white at full intensity; the glow around it is
-            added in Screen mode. Leaks aren’t saved in presets: they belong to this photo.
+            {leak.kind === 'glow' ? ' the hollow dots to reshape its outline around what it should hide,' : ''} the round knob to turn it, the square
+            to bend it. Warp makes the outline organic (it only grows), Texture burns the light in like film (white, yellow, orange, red; mottled and
+            streaked), Cover hides the photo inside the outline completely. Texture 0 and Warp 0 give the clean Photoshop look. Leaks aren’t saved in
+            presets: they belong to this photo.
           </Note>
         </>
       )}

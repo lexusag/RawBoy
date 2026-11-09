@@ -214,6 +214,8 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
     private val uLeakColor = GLES30.glGetUniformLocation(id, "uLeakColor")
     private val uLeakOuter = GLES30.glGetUniformLocation(id, "uLeakOuter")
     private val uLeakForm = GLES30.glGetUniformLocation(id, "uLeakForm")
+    private val uLeakLook = GLES30.glGetUniformLocation(id, "uLeakLook")
+    private val uLeakRadii = GLES30.glGetUniformLocation(id, "uLeakRadii")
     private val uLayerBlur = GLES30.glGetUniformLocation(id, "uLayerBlur")
     private val uBokeh = GLES30.glGetUniformLocation(id, "uBokeh")
     private val uBokehScale = GLES30.glGetUniformLocation(id, "uBokehScale")
@@ -416,6 +418,8 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
         GLES30.glUniform4fv(uLeakColor, n, l.color, 0)
         GLES30.glUniform4fv(uLeakOuter, n, l.outer, 0)
         GLES30.glUniform4fv(uLeakForm, n, l.form, 0)
+        GLES30.glUniform4fv(uLeakLook, n, l.look, 0)
+        GLES30.glUniform4fv(uLeakRadii, n * 2, l.radii, 0)
     }
 
     private fun bindLayers(l: LayerUniforms) {

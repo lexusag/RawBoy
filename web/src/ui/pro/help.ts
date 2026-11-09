@@ -55,9 +55,9 @@ export const PRO_HELP: HelpSection[] = [
   {
     title: 'Light leaks',
     items: [
-      { how: '+ Streak, + Glow, + Triangle', text: 'Adds a film-style light leak (up to 4), made like a Photoshop one: a white shape with an orange and a red glow, in Screen mode, so the photo shows through the glow and the grain stays on top. Drag it anywhere inside to move it, the dots to resize, the round knob to turn it, the square to bend it. The switch changes the selected leak\'s shape.' },
-      { how: 'Intensity', text: 'At 100% the white middle (inside the dashed line) hides what is under it: a tasteful way to cover part of a nude. Lower, the light lets the photo through.' },
-      { how: 'Bend, Taper, Warp', text: 'Bend curves the leak into an arc, Taper narrows it towards one end, Warp makes its edge uneven (New warp picks another).' },
+      { how: '+ Streak, + Glow, + Triangle', text: 'Adds a film-style light leak (up to 4), made like a Photoshop one: a white shape with an orange and a red glow, in Screen mode, so the photo shows through the glow and the grain stays on top. Drag it anywhere inside to move it, the dots to resize, a glow\'s hollow dots to reshape its outline (Round outline undoes it), the round knob to turn it, the square to bend it. The switch changes the selected leak\'s shape.' },
+      { how: 'Intensity, Cover', text: 'Cover at 100% hides everything inside the leak\'s outline, however the light falls on it: a natural-looking way to cover part of a nude for social media. Cover 0 lets the photo show through the light; Intensity fades the whole leak.' },
+      { how: 'Bend, Taper, Warp, Texture', text: 'Bend curves the leak into an arc, Taper narrows it towards one end, Warp makes its outline organic (it only grows). Texture burns the light in like film: white in the middle, yellow, orange and red towards the edge, mottled and streaked. New pattern picks another warp and texture.' },
       { how: 'Softness, Glow, Colour', text: 'Softness blurs the white core, Glow sets how far the coloured light reaches, Colour goes from magenta-red to amber. Leaks belong to the photo: presets don\'t keep them.' },
     ],
   },

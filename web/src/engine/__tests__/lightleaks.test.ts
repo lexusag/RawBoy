@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { developParams } from '../develop/DevelopParams';
 import { decodeEdits, encodeEdits } from '../develop/Edits';
-import { LEAK_DEFAULTS, LEAK_HUE, MAX_LEAKS, glowReach, leakColor, leakEdge, leakOuterColor, newLightLeak, packLeaks, parseLeaks, withLeakKind } from '../develop/LightLeaks';
+import { LEAK_DEFAULTS, LEAK_HUE, MAX_LEAKS, ROUND_RADII, glowReach, leakColor, leakEdge, leakOuterColor, leakRadius, newLightLeak, packLeaks, parseLeaks, radiusAngle, withLeakKind } from '../develop/LightLeaks';
 import { applyPreset, capturePreset, PRESET_GROUPS } from '../develop/Presets';
 
 describe('light leaks', () => {
@@ -45,6 +45,31 @@ describe('light leaks', () => {
     expect(leakEdge('triangle', 0, 0.6)).toBeGreaterThan(0);
   });
 
+  it('starts new leaks organic and covering, and packs texture, cover and a reshaped outline', () => {
+    const l = newLightLeak(0.5, 0.5, 'glow');
+    expect(l.texture).toBeGreaterThan(0);
+    expect(l.warp).toBeGreaterThan(0);
+    expect(l.cover).toBe(100);
+    const round = packLeaks([{ ...l, texture: 40, cover: 75 }], 4000, 3000);
+    expect(round.look[0]).toBeCloseTo(0.4, 6);
+    expect(round.look[1]).toBeCloseTo(0.75, 6);
+    expect(Array.from(round.radii)).toEqual(new Array(32).fill(0)); // an ellipse: the shader's plain glow
+    const radii = [1.5, 1, 1, 1, 1, 1, 1, 0.5];
+    const shaped = packLeaks([newLightLeak(), { ...l, radii }], 4000, 3000);
+    expect(Array.from(shaped.radii.slice(0, 8))).toEqual(new Array(8).fill(0)); // a streak has no outline radii
+    expect(Array.from(shaped.radii.slice(8, 16))).toEqual([0.5, 0, 0, 0, 0, 0, 0, -0.5]);
+  });
+
+  it('reshapes a glow through its outline points', () => {
+    const radii = [1.5, 1, 0.7, 1, 1, 1.2, 1, 1];
+    radii.forEach((r, k) => expect(leakRadius(radii, radiusAngle(k))).toBeCloseTo(r, 9)); // the spline passes through them
+    expect(leakRadius(ROUND_RADII, 1.234)).toBeCloseTo(1, 9);
+    const t = radiusAngle(0);
+    expect(leakEdge('glow', 1.5 * Math.cos(t), 1.5 * Math.sin(t), radii)).toBeCloseTo(0, 9);
+    expect(leakEdge('glow', 1.2 * Math.cos(t), 1.2 * Math.sin(t), radii)).toBeLessThan(0); // inside, though out of the ellipse
+    expect(leakEdge('glow', 0.8 * Math.cos(radiusAngle(2)), 0.8 * Math.sin(radiusAngle(2)), radii)).toBeGreaterThan(0);
+  });
+
   it('makes Photoshop\'s colours: orange glow inside a red one', () => {
     const [r, g, b] = leakColor(LEAK_HUE); // (255, 156, 0)
     expect(r).toBe(1);
@@ -66,6 +91,9 @@ describe('light leaks', () => {
     expect(parsed[0].enabled).toBe(true);
     expect(parsed[0].kind).toBe('glow'); // saved before streaks
     expect(parsed[0]).toMatchObject({ bend: 0, taper: 0, warp: 0, glow: LEAK_DEFAULTS.glow.glow }); // saved before bending
+    expect(parsed[0]).toMatchObject({ texture: 0, cover: 0, radii: ROUND_RADII }); // saved before texture: the clean look
+    expect(parseLeaks([{ ...many[0], radii: [1, 2, 3] }])[0].radii).toEqual(ROUND_RADII); // wrong length
+    expect(parseLeaks([{ ...many[0], radii: [0, 9, 1, 1, 1, 1, 1, 1], texture: 150 }])[0]).toMatchObject({ radii: [0.1, 4, 1, 1, 1, 1, 1, 1], texture: 100 });
     expect(parseLeaks([{ ...many[0], kind: 'streak' }])[0].kind).toBe('streak');
     expect(parseLeaks('nope')).toEqual([]);
   });

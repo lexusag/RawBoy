@@ -524,6 +524,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
               onSelect={setSelectedLeak}
               onChange={(id, shape) => store.updateLeak(id, (l) => withLeakShape(l, shape))}
               onBend={(id, bend) => store.updateLeak(id, (l) => ({ ...l, bend }))}
+              onReshape={(id, radii) => store.updateLeak(id, (l) => ({ ...l, radii }))}
               onStrokeBegin={() => {}}
               onStrokeExtend={() => {}}
               onStrokeEnd={() => {}}
@@ -739,7 +740,7 @@ const leakLayer = (l: LightLeak) => ({
   id: l.id,
   enabled: l.enabled,
   strokes: [],
-  leak: { kind: l.kind, bend: l.bend, taper: l.taper },
+  leak: { kind: l.kind, bend: l.bend, taper: l.taper, radii: l.radii },
   shape: { kind: 'radial' as const, cx: l.cx, cy: l.cy, rx: l.rx, ry: l.ry, angle: l.angle, feather: 3 + 0.6 * l.softness },
 });
 
