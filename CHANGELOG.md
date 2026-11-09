@@ -1,3 +1,7 @@
+**RawBoy Pro (web): a Luma contrast slider that leaves colour alone (2026-11-09)**
+
+- New **Luma contrast** (-100..+100) under Contrast in Pro's Light tab (part of the Light preset group). Contrast slopes each of R, G and B in AgX's log space, which scales the channel ratios, so colour saturation followed it (measured on three RAFs in a numpy copy of the path: chroma about 0.66x at -100 and 1.3x at +100). Luma contrast is the same log slope (same 0.7-stop range) on luminance only, `c *= pow(Y / 0.18, slope - 1)` after Saturation and before the tone mapper, so channel ratios, and saturation, hold (within about 5% at +-50). The existing Contrast is unchanged, so saved edits render as before. `uLumaContrast` is in the shared `develop.glsl` as an exponent with 0 neutral, so Android and iOS ignore it until their params and sliders are added; not built there. Checked with `tsc` and the web tests; not looked at in a browser. Research: project files `saturation-contrast/`.
+
 **RawBoy Pro (web, Android, iOS): Save preset starts with Detail unticked (2026-11-09)**
 
 - The Save preset dialog no longer ticks Detail (grain, bloom, flare, local contrast) first, only Lens, Masks and Denoise stay unticked as before; tick it to include it. Not built here (no Android or iOS toolchain); web test added.

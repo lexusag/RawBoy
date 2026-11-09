@@ -4,6 +4,7 @@ uniform sampler2D uImage;
 uniform mat3 uWhiteBalance;
 uniform float uExposure;    // linear gain
 uniform float uContrast;    // slope in AgX log space, 1 = neutral
+uniform float uLumaContrast; // exponent of a luminance-only gain pow(Y / 0.18, x) that keeps channel ratios, 0 = neutral
 uniform float uSaturation;  // 1 = neutral
 uniform float uGamutSoft;   // 1 = purity-limited saturation + soft Rec.709 gamut compression, 0 = hard clipping
 uniform int uToneMapper;    // 0 = AgX, 1 = filmic, 2 = sigmoid
@@ -1027,6 +1028,10 @@ vec3 develop(vec3 c, vec2 fullPx, float lm[MAX_LAYERS]) {
     c *= exp2(2.0 * (shadows * shadowWeight + highlights * highlightWeight));
 
     c = saturateByPurity(c, uSaturation * layerSat);
+
+    // Luma contrast: a slope in log exposure around middle grey on luminance alone, so channel ratios (colour
+    // saturation) are unchanged, unlike Contrast below, which slopes each channel and scales chroma with it.
+    if (uLumaContrast != 0.0) c *= pow(max(dot(c, LUMA_REC2020), 1e-8) / 0.18, uLumaContrast);
 
     // Film negative + print, blended with the AgX render below by uFilmAmount (Strength).
     vec3 film = vec3(0.0);

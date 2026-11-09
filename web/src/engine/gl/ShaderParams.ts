@@ -149,6 +149,8 @@ export class ShaderParams {
     readonly whiteBalance: Float32Array, // column-major 3x3
     readonly exposure: number,
     readonly contrast: number,
+    /** Exponent of the luminance-only contrast gain, `pow(Y / 0.18, lumaContrast)`; 0 = neutral. */
+    readonly lumaContrast: number,
     readonly saturation: number,
     readonly shadows: number,
     readonly highlights: number,
@@ -271,6 +273,7 @@ export class ShaderParams {
       ),
       2 ** (p.exposure + BASE_EXPOSURE_EV),
       2 ** ((p.contrast / 100) * 0.7),
+      2 ** ((p.lumaContrast / 100) * 0.7) - 1,
       1 + p.saturation / 100,
       p.shadows / 100,
       p.highlights / 100,

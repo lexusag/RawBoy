@@ -15,7 +15,7 @@ export const PRESET_GROUPS: readonly { key: PresetGroup; label: string; fields: 
     key: 'light',
     label: 'Light',
     // The film fields belong to the tone mapper: Film is its fourth choice (film != null).
-    fields: ['toneMapper', 'film', 'filmAmount', 'filmGrain', 'halation', 'exposure', 'contrast', 'highlights', 'shadows', 'whites', 'blacks'],
+    fields: ['toneMapper', 'film', 'filmAmount', 'filmGrain', 'halation', 'exposure', 'contrast', 'lumaContrast', 'highlights', 'shadows', 'whites', 'blacks'],
   },
   { key: 'whiteBalance', label: 'White balance', fields: ['temperature', 'tint'] },
   { key: 'curves', label: 'Curves', fields: ['curves'] },

@@ -162,6 +162,7 @@ export class DevelopProgram {
     gl.uniformMatrix3fv(this.loc('uWhiteBalance'), false, p.whiteBalance);
     this.f1('uExposure', p.exposure);
     this.f1('uContrast', p.contrast);
+    this.f1('uLumaContrast', p.lumaContrast);
     this.f1('uSaturation', p.saturation);
     this.f1('uGamutSoft', p.gamutSoft);
     this.i1('uToneMapper', p.toneMapper);
