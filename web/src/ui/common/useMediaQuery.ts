@@ -28,3 +28,10 @@ export const SHORT_SCREEN = '(orientation: portrait) and (max-height: 720px)';
 
 /** Phones upright: the width at which styles.css puts the app switcher on its own line (560 px). */
 export const PHONE_WIDTH = '(max-width: 560px)';
+
+/**
+ * Phones, upright or on their side (a landscape phone is at most about 430 px tall): Browser, the folder-and-photo
+ * browser, needs more room than they have, so it is left out there and stays on tablets and desktops (a phone's
+ * "desktop site" mode counts as a desktop).
+ */
+export const PHONE_SCREEN = `${PHONE_WIDTH}, (orientation: landscape) and (max-height: 480px)`;

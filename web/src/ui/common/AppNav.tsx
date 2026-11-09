@@ -1,6 +1,7 @@
 import { createContext, useContext } from 'react';
 import { HELP_SHORTCUT } from './HelpDialog';
 import type { TabId } from './tabs';
+import { PHONE_SCREEN, useMediaQuery } from './useMediaQuery';
 
 export const TAB_NAMES: Record<TabId, string> = { pro: 'RawBoy', auto: 'Auto', browser: 'Browser' };
 
@@ -19,9 +20,10 @@ export const AppNavContext = createContext<AppNav>({ tab: 'pro', setTab: () => {
  */
 export function AppSwitcher() {
   const { tab, setTab } = useContext(AppNavContext);
+  const phone = useMediaQuery(PHONE_SCREEN);
   return (
     <nav className="app-switcher" aria-label="Apps">
-      {(Object.keys(TAB_NAMES) as TabId[]).map((t) => (
+      {(Object.keys(TAB_NAMES) as TabId[]).filter((t) => t !== 'browser' || !phone).map((t) => (
         <button
           key={t}
           type="button"
