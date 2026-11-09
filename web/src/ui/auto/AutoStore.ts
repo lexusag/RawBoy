@@ -51,6 +51,8 @@ export interface AutoFilter {
   isoMin: number | null;
   isoMax: number | null;
   date: string | null;
+  /** Only photos with nothing applied (see isUnedited). */
+  unedited: boolean;
 }
 
 export const NO_FILTER: AutoFilter = {
@@ -59,10 +61,11 @@ export const NO_FILTER: AutoFilter = {
   isoMin: null,
   isoMax: null,
   date: null,
+  unedited: false,
 };
 
 export const isFilterActive = (f: AutoFilter): boolean =>
-  f.camera !== null || f.lens !== null || f.isoMin !== null || f.isoMax !== null || f.date !== null;
+  f.camera !== null || f.lens !== null || f.isoMin !== null || f.isoMax !== null || f.date !== null || f.unedited;
 
 export function photoCamera(p: AutoPhoto): string | null {
   if (!p.analysis) return null;
@@ -85,7 +88,19 @@ export function photoDate(p: AutoPhoto): string | null {
   return d ? d.slice(0, 10).replace(/:/g, '-') : null;
 }
 
+/**
+ * True for a photo shown "As is" (AS_IS_NAME): added "As is" (plain, so no auto develop) with the Natural look and
+ * nothing on top: no preset, no lens preset, no RawBoy edits, no Auto denoise and every slider at 0. Photos added in
+ * a look mode always have the auto develop, so they never count. Settings kept in a sidecar are restored into these
+ * same fields, so a photo that comes back edited is not unedited.
+ */
+export function isUnedited(p: AutoPhoto): boolean {
+  return p.plain && activeLook(p) === Looks.NATURAL && !p.preset && !p.lensPreset && !p.edits && !p.autoDenoise
+    && sameAdjustments(p.adjust, NO_ADJUSTMENTS);
+}
+
 export function photoMatchesFilter(p: AutoPhoto, filter: AutoFilter): boolean {
+  if (filter.unedited && !isUnedited(p)) return false;
   if (filter.camera !== null && photoCamera(p) !== filter.camera) return false;
   if (filter.lens !== null && photoLens(p) !== filter.lens) return false;
   const iso = photoIso(p);
@@ -511,6 +526,7 @@ export class AutoStore {
     if ('camera' in filter) next.camera = filter.camera ?? null;
     if ('lens' in filter) next.lens = filter.lens ?? null;
     if ('date' in filter) next.date = filter.date ?? null;
+    if ('unedited' in filter) next.unedited = filter.unedited === true;
     if ('isoMin' in filter) {
       next.isoMin = filter.isoMin ?? null;
       if (next.isoMin !== null && next.isoMax !== null && next.isoMin > next.isoMax && !('isoMax' in filter)) {

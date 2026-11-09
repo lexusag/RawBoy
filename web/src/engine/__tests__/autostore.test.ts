@@ -727,3 +727,31 @@ describe('Auto grid filter', () => {
     expect(store.previousPhoto(p0.id)).toBeNull();
   });
 });
+
+describe('Auto grid: unedited filter', () => {
+  it('shows only photos As is with nothing applied', async () => {
+    vi.stubGlobal('window', { setTimeout: () => 0 });
+    const { isFilterActive, isUnedited, NO_FILTER } = await import('../../ui/auto/AutoStore');
+    const { capturePreset } = await import('../develop/Presets');
+    const { developParams } = await import('../develop/DevelopParams');
+    const store = new AutoStore();
+    store.setImportMode('plain');
+    store.add([new File(['a'], 'a.RAF'), new File(['b'], 'b.RAF'), new File(['c'], 'c.RAF'), new File(['d'], 'd.RAF'), new File(['e'], 'e.RAF')]);
+    const [a, b, c, d, e] = store.state.photos.map((p) => p.id);
+    const s = store as unknown as { _state: { photos: Record<string, unknown>[] } };
+    const set = (id: string, patch: Record<string, unknown>) => {
+      s._state.photos = s._state.photos.map((p) => (p.id === id ? { ...p, ...patch } : p));
+    };
+    set(b, { preset: capturePreset('p', developParams({ contrast: 20 }), ['light']) });
+    set(c, { adjust: { ...store.state.photos[2].adjust, contrast: 10 } });
+    set(d, { plain: false });
+    set(e, { autoDenoise: true });
+    expect(store.state.photos.map(isUnedited)).toEqual([true, false, false, false, false]);
+    expect(isFilterActive(NO_FILTER)).toBe(false);
+    store.setFilter({ unedited: true });
+    expect(isFilterActive(store.state.filter)).toBe(true);
+    expect(store.shown.map((p) => p.id)).toEqual([a]);
+    store.clearFilter();
+    expect(store.shown).toHaveLength(5);
+  });
+});

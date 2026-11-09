@@ -306,6 +306,16 @@ button.icon.active {
   color: var(--accent);
 }
 
+.auto-filters .filter-toggle {
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.auto-filters .filter-toggle.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 .auto-filters .clear-filter {
   white-space: nowrap;
   font-size: 13px;

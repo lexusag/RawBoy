@@ -360,6 +360,16 @@ function GridView({ store, scroll, lastViewed }: {
               <option key={d.value} value={d.value}>{d.label} ({d.count})</option>
             ))}
           </select>
+          <button
+            type="button"
+            className={`text filter-toggle${state.filter.unedited ? ' active' : ''}`}
+            aria-pressed={state.filter.unedited}
+            title="Show only photos As is: no look, preset, edits or adjustments"
+            disabled={exporting}
+            onClick={() => store.setFilter({ unedited: !state.filter.unedited })}
+          >
+            Unedited
+          </button>
           {filtered && (
             <>
               <button
