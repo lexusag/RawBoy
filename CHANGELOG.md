@@ -1,3 +1,7 @@
+**RawBoy web: the Browser app is hidden on phones (2026-11-09)**
+
+- The app switcher no longer lists Browser on phones (width up to 560 px, or a landscape phone up to 480 px tall); tablets and desktops, including a phone's "desktop site" mode, keep all three. A phone that had Browser saved as its last app, or is turned from a wide window to a narrow one while Browser is open, shows Auto instead (the Browser page and its folder stay loaded). Code: `PHONE_SCREEN` in `useMediaQuery.ts`, `AppSwitcher`, `App`. Type-checked and unit tests pass; not checked on a real phone.
+
 **RawBoy web, Pro: the look selector drags smoothly on phones and tablets (2026-11-08)**
 
 - Each look of the shown page is developed once, whole, at 640 px (and kept while the edit stays the same, so turning back to a page is instant); moving the window only copies pixels out of those, with no GPU readback or LUT upload per move. Once the window rests for 150 ms its stripes are developed at full resolution for that spot. The owner found the first version "super slow" on the phone and tablet. On software GL in headless Chrome the same 30-step drag went from 2.0-3.0 s with frames up to 217 ms to 0.5-0.6 s with none over 17 ms; not measured on a real phone or tablet. Costs memory: up to about 37 thumbnails of 640 x 480 (~45 MB) per photo and edit.

@@ -19,6 +19,7 @@ import { BROWSER_HELP } from './ui/browser/help';
 import type { TabId } from './ui/common/tabs';
 import { UpdateBanner } from './ui/common/UpdateBanner';
 import { versionLabel } from './ui/common/version';
+import { PHONE_SCREEN, useMediaQuery } from './ui/common/useMediaQuery';
 
 const TABS: TabId[] = ['pro', 'auto', 'browser'];
 const TAB_KEY = 'rawboy.tab';
@@ -54,7 +55,7 @@ let proFromAuto: { id: string; file: File } | null = null;
 const isLutFile = (f: File) => /\.(cube|png)$/i.test(f.name);
 
 export function App() {
-  const [tab, setTab] = useState<TabId>(() => {
+  const [chosenTab, setTab] = useState<TabId>(() => {
     try {
       const saved = localStorage.getItem(TAB_KEY) as TabId;
       return TABS.includes(saved) ? saved : 'pro';
@@ -62,6 +63,9 @@ export function App() {
       return 'pro';
     }
   });
+  // Browser is not offered on phones: a phone that had it open (saved, or turned upright) shows Auto instead.
+  const phone = useMediaQuery(PHONE_SCREEN);
+  const tab: TabId = phone && chosenTab === 'browser' ? 'auto' : chosenTab;
   const [engine, setEngine] = useState<string>('Loading decoder…');
   const [dragging, setDragging] = useState(false);
   const [showLicenses, setShowLicenses] = useState(false);
