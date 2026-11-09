@@ -37,6 +37,8 @@ interface Props {
   lens: LensInfo;
   skin: SkinState;
   blemish: BlemishState;
+  /** Portrait retouch: its map is being made / there is one (none on a ready mask = no face to size it by). */
+  retouch: { working: boolean; ready: boolean };
   /** White balance picker armed: the next click on the photo sets temperature and tint. */
   pickingWhite: boolean;
   onPickWhite: () => void;
@@ -55,7 +57,7 @@ interface Props {
 /** The editor's tabs Light, Color, Detail, LUTs, Lens (port of app-pro's Controls.kt). */
 export function ControlsPanel({
   params, defaults, onChange, lutLoading, onSelectLut, filmLoading, onToneMapper, onFilm, onSelectFilm, onStepFilm,
-  lens, skin, blemish, pickingWhite, onPickWhite, autoWb, onAutoWb, onResetWb, onSaveLensPreset, chosenTab, onTab: setTab,
+  lens, skin, blemish, retouch, pickingWhite, onPickWhite, autoWb, onAutoWb, onResetWb, onSaveLensPreset, chosenTab, onTab: setTab,
 }: Props) {
   // Film replaces the tone mapper and the user LUT (kept, but not rendered), so the LUTs tab hides while Film is on.
   const filmOn = params.film != null;
@@ -154,6 +156,9 @@ export function ControlsPanel({
   const blemishNote =
     skinNote(params.blemishRemoval) ??
     (params.blemishRemoval <= 0 ? null : blemish.working ? 'Removing blemishes…' : blemish.healed === 1 ? '1 spot removed' : `${blemish.healed} spots removed`);
+  const retouchNote =
+    skinNote(params.portraitRetouch) ??
+    (params.portraitRetouch <= 0 ? null : retouch.working ? 'Retouching…' : skin.kind === 'ready' && !retouch.ready ? 'No face found to size the retouch by' : null);
 
   return (
     <div className="controls">
@@ -273,6 +278,8 @@ export function ControlsPanel({
             {skinNote(params.skinRetouch) && <Note>{skinNote(params.skinRetouch)}</Note>}
             {slider('Blemish removal', 'blemishRemoval', 0, 100, formatPlain)}
             {blemishNote && <Note>{blemishNote}</Note>}
+            {slider('Portrait retouch', 'portraitRetouch', 0, 100, formatPlain)}
+            {retouchNote && <Note>{retouchNote}</Note>}
             {slider('Bloom', 'bloom', 0, 100, formatPlain)}
             <AnamorphicSliders params={params} defaults={defaults} onChange={onChange} />
             <GrainSliders params={params} defaults={defaults} onChange={onChange} />

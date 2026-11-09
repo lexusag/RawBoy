@@ -604,6 +604,14 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   a lightning core within each segment so it stays jagged at full export size. Not in presets; kept in edits sidecars.
 - Engine JVM tests: `./gradlew :engine:testDebugUnitTest` (`engine/src/test`, junit + org.json; `retouch/Filters.kt`
   keeps `box` out of `SkinSegmenter`, which loads MediaPipe).
+- Portrait retouch (web, 2026-11-09; `engine/retouch/PortraitRetouch.ts`, `worker/retouch.worker.ts`): Reblum-Natural-like
+  skin retouch, tuned on the owner's Reblum 40 pairs (40 = Reblum Natural 40; the Python prototype and the pairs are in
+  the project's retouch folder, not in the repo). CPU map of log2 gains per linear Rec.2020 channel from the session
+  preview, scales relative to face width (landmarks, `SkinMask.faces`); packed with the skin mask into the skin texture
+  (unit 6, RGBA16F) and applied by `uSkinFix` in main_body before `retouchSkin` (Android/iOS leave it 0). The shader scales
+  the last map while the slider moves (`skinFixOf`); `PhotoSession.scheduleRetouch` redoes it. Auto: `Adjustments.retouch`
+  (0..100, adds to `portraitRetouch`), batch export builds the map in `exportOne`. A `SkinMask` change needs
+  AnalysisCache's `VERSION` bumped.
 - Brush masks (`develop/BrushRaster.ts`): strokes are vectors in `MaskLayer.strokes` (image fractions), rasterised on
   the CPU at the session preview's size into paint/erase channels (stroke order matters; `sync` only adds new dabs
   while a stroke grows, else redraws). `PhotoSession.brushRaster` caches one per layer. GPU: texture unit 7, one RG8

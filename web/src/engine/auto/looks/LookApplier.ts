@@ -8,7 +8,8 @@ import { lutIdOf, type Look } from './Look';
  * exposure; [warmth] -100..100 warms or cools; [tint] -50..50 (+ = magenta), [contrast] -50..50, [saturation]
  * -100..100 and [grain] -50..50 are added to the slider values the auto develop and the look arrive at, except negative
  * [saturation], which moves the saturation they arrive at towards -100 (-100 = black and white). [denoise] -100..100
- * shifts the auto luma and colour denoise, colour first (see denoiseWith).
+ * shifts the auto luma and colour denoise, colour first (see denoiseWith). [retouch] 0..100 adds Portrait retouch
+ * (PortraitRetouch; 40 = about Reblum Natural 40) to what the look, preset or edits hold.
  * [rotation] is clockwise quarter turns (0..3) on top of the photo's own orientation.
  */
 export interface Adjustments {
@@ -19,15 +20,16 @@ export interface Adjustments {
   saturation: number;
   grain: number;
   denoise: number;
+  retouch: number;
   rotation: number;
 }
 
-export const NO_ADJUSTMENTS: Adjustments = { brightness: 0, warmth: 0, tint: 0, contrast: 0, saturation: 0, grain: 0, denoise: 0, rotation: 0 };
+export const NO_ADJUSTMENTS: Adjustments = { brightness: 0, warmth: 0, tint: 0, contrast: 0, saturation: 0, grain: 0, denoise: 0, retouch: 0, rotation: 0 };
 
 export function sameAdjustments(a: Adjustments, b: Adjustments): boolean {
   return a.brightness === b.brightness && a.warmth === b.warmth && a.tint === b.tint
     && a.contrast === b.contrast && a.saturation === b.saturation && a.grain === b.grain && a.denoise === b.denoise
-    && a.rotation === b.rotation;
+    && a.retouch === b.retouch && a.rotation === b.rotation;
 }
 
 /** Combines the auto develop with a look and the user's [Adjustments] (port of LookApplier.kt). */
@@ -90,6 +92,7 @@ export function applyLook(base: DevelopParams, look: Look, strength: number, adj
     vignetteAmount: add(base.vignetteAmount, look.vignette),
     temperature: Math.min(Warmth.MAX_KELVIN, Math.max(Warmth.MIN_KELVIN, base.temperature + look.warmth * k)),
     skinRetouch: hasFace ? add(base.skinRetouch, look.portraitRetouch, 0) : base.skinRetouch,
+    portraitRetouch: clamp(base.portraitRetouch + adjust.retouch, 0, 100),
     lut: k > 0 ? lutIdOf(look) : null,
     lutAmount: look.lutAmount * k,
     // A film look renders the stock in place of AgX; Strength blends it with the AgX render.
@@ -146,6 +149,7 @@ function adjustDevelop(p: DevelopParams, adjust: Adjustments): DevelopParams {
     // With a film stock its grain is the one rendered, so Grain scales that one, as in Film mode.
     grain: p.film != null ? p.grain : clamp(p.grain + adjust.grain, 0, 100),
     filmGrain: p.film != null ? clamp(p.filmGrain * (1 + adjust.grain / 50), 0, 200) : p.filmGrain,
+    portraitRetouch: clamp(p.portraitRetouch + adjust.retouch, 0, 100),
     rotation: (((p.rotation + adjust.rotation) % 4) + 4) % 4,
   };
   const warmed = Warmth.shift(developed, WARMTH_RANGE ** (adjust.warmth / 100));

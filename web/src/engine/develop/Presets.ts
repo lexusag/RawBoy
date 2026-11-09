@@ -32,7 +32,7 @@ export const PRESET_GROUPS: readonly { key: PresetGroup; label: string; fields: 
   // Its own group, off by default: RawBoy Auto measures denoise and sharpening on each photo (its ISO and noise), and
   // a preset overrides that only when it holds this group.
   { key: 'denoise', label: 'Denoise & sharpening', fields: ['denoise', 'colorDenoise', 'sharpening'] },
-  { key: 'retouch', label: 'Retouch', fields: ['skinRetouch', 'blemishRemoval'] },
+  { key: 'retouch', label: 'Retouch', fields: ['skinRetouch', 'blemishRemoval', 'portraitRetouch'] },
   { key: 'lut', label: 'LUT', fields: ['lut', 'lutAmount'] },
   { key: 'lens', label: 'Lens', fields: ['lensProfile', 'lensDistortion', 'lensAnamorphic', 'lensCrop', 'caRed', 'caBlue', 'vignetteAmount', 'vignetteMidpoint'] },
   { key: 'masks', label: 'Masks (gradients only)', fields: ['masks'] },

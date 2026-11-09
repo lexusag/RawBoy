@@ -11,6 +11,7 @@ import { NO_LEAKS, bendCurvature, packLeaks, type LeakUniforms } from '../develo
 import type { FilmData } from '../film/FilmStocks';
 import type { LensTransform } from '../lens/LensTransform';
 import type { LutData } from '../lut/LutData';
+import { skinFixOf, type RetouchMap } from '../retouch/PortraitRetouch';
 import type { SkinMask } from '../retouch/SkinMask';
 import type { BloomSources, PreviewImage } from './PreviewImage';
 import { WAVELET_DENOISE_MARGIN } from './WaveletDenoise';
@@ -209,6 +210,9 @@ export class ShaderParams {
     readonly flareSource: PreviewImage | null = null,
     /** Light effects over the finished picture, after the leaks (shaders/light_fx.glsl). */
     readonly fx: FxUniforms = NO_FX,
+    /** Portrait retouch: the gains map (PortraitRetouch, packed into the skin texture) and `uSkinFix`, 0 = off. */
+    readonly retouchMap: RetouchMap | null = null,
+    readonly skinFix = 0,
   ) {}
 
   /** Extra source pixels needed around an output region for the spatial effects, so tiles join seamlessly. */
@@ -251,6 +255,8 @@ export class ShaderParams {
     bokehSource: PreviewImage | null = null,
     /** The anamorphic flare's source (PhotoSession.flareSource). */
     flareSource: PreviewImage | null = null,
+    /** Portrait retouch's map for this photo (PhotoSession.retouchMap), or null: none (yet). */
+    retouchMap: RetouchMap | null = null,
   ): ShaderParams {
     const filmUsed = film && film.stock.id === p.film ? film : null;
     const sourceWhite = WhiteBalance.xyFromTempTint(asShot.temperature, asShot.tint);
@@ -309,6 +315,8 @@ export class ShaderParams {
       anamorphicBarOf(p.anamorphicColor),
       flareSource,
       packEffects(p.fx ?? [], lens.width, lens.height),
+      retouchMap,
+      skinFixOf(p.portraitRetouch ?? 0, retouchMap),
     );
   }
 }

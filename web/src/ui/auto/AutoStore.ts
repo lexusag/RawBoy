@@ -20,7 +20,8 @@ import { RawImage } from '../../engine/raw/RawImage';
 import { analysisLanes, analysisWorker } from '../../engine/raw/RawWorker';
 import type { SkinMask } from '../../engine/retouch/SkinMask';
 import type { PreviewImage } from '../../engine/gl/PreviewImage';
-import { blemishesToHeal, brushLookup, editTexturesOf, PhotoSession } from '../../engine/session/PhotoSession';
+import { blemishesToHeal, brushLookup, editTexturesOf, PhotoSession, PREVIEW_MAX_DIMENSION } from '../../engine/session/PhotoSession';
+import { retouchMap } from '../../engine/retouch/PortraitRetouch';
 import type { MaskLayer } from '../../engine/develop/Masks';
 import { segmentSkin } from '../../engine/retouch/SkinSegmenter';
 import type { BrushLookup } from '../../engine/gl/ShaderParams';
@@ -197,11 +198,11 @@ const developOf = ({ look, mode, filmLook, strength, adjust, preset, edits, look
  * copied (they hold the source's crop and masks); [p]'s own are replaced by the look.
  */
 function withLookOf(p: AutoPhoto, source: AutoPhoto): AutoPhoto {
-  const { warmth, tint, contrast, saturation, grain } = source.adjust;
+  const { warmth, tint, contrast, saturation, grain, retouch } = source.adjust;
   return {
     ...p, look: source.look, mode: source.mode, filmLook: source.filmLook, strength: source.strength, preset: source.preset,
     edits: null, looksApplied: true,
-    adjust: { ...p.adjust, warmth, tint, contrast, saturation, grain },
+    adjust: { ...p.adjust, warmth, tint, contrast, saturation, grain, retouch },
   };
 }
 
@@ -987,7 +988,7 @@ export class AutoStore {
   }
 
   /**
-   * Gives every photo of the batch the look (or preset), strength, warmth, tint, contrast, saturation and grain of [id], including
+   * Gives every photo of the batch the look (or preset), strength, warmth, tint, contrast, saturation, grain and retouch of [id], including
    * photos still being analysed (they keep it rather than their suggestion); brightness and denoise stay per photo (they follow
    * each photo's exposure and noise). Not while exporting.
    */
@@ -1010,7 +1011,7 @@ export class AutoStore {
 
   /**
    * Gives photo [id] what "Apply to all" copies, from the photo before it ([previousPhoto]): look (or preset), strength,
-   * brightness, warmth, tint, contrast, saturation and grain, as one undo step (a neighbouring shot of the same scene usually wants its
+   * brightness, warmth, tint, contrast, saturation, grain and retouch, as one undo step (a neighbouring shot of the same scene usually wants its
    * brightness too, unlike Apply to all); denoise and rotation stay. Not while exporting.
    */
   copyPrevious(id: string) {
@@ -1352,16 +1353,19 @@ export class AutoStore {
     const img = await RawImage.open(p.file);
     try {
       // A photo added As is has no skin mask; RawBoy edits with skin retouch or blemish removal still need one.
-      const skin = a.skin ?? (params.skinRetouch > 0 || params.blemishRemoval > 0
+      const skin = a.skin ?? (params.skinRetouch > 0 || params.blemishRemoval > 0 || params.portraitRetouch > 0
         ? await segmentSkin(a.base, img.width, img.height).catch(() => null) : null);
       // A preset's Blemish removal heals the full-resolution image, as the detail view does.
       if (params.blemishRemoval > 0 && skin?.hasSkin) await img.healBlemishes(blemishesToHeal(await img.detectBlemishes(skin), params.blemishRemoval));
       // RawBoy edits' painted masks and lens blur, made from the healed image as the detail view makes them.
       const textures = await editTexturesOf(img, params);
+      // Portrait retouch's map from the session preview's size, as the detail view makes it.
+      const retouch = params.portraitRetouch > 0 && skin?.hasSkin
+        ? await retouchMap(await img.createPreview(PREVIEW_MAX_DIMENSION), skin, params.portraitRetouch) : null;
       // The stored 512/128 px copies were made from this same file, so they match.
       const shader = ShaderParams.from(
         params, a.defaults, lut, new LensTransform(img.lens, params), a.base, a.bloom, skin, 1, 1, null, textures.brushFor, film,
-        textures.bokehSource, textures.flareSource,
+        textures.bokehSource, textures.flareSource, retouch,
       );
       return await exportImage(img, shader, settings, onProgress);
     } finally {

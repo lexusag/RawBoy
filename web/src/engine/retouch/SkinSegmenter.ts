@@ -165,7 +165,7 @@ async function segment(image: PreviewImage, fullWidth: number, fullHeight: numbe
 
   // Cut eyes, brows, lips and nostrils out of the mask: the segmentation model labels them face skin, but they
   // must not be smoothed or healed.
-  await excludeFacialFeatures(bitmap, refined, w, h);
+  const faces = await excludeFacialFeatures(bitmap, refined, w, h);
   console.debug(`skin: segmentation ${Math.round(tSeg - t0)} ms, guided filter ${Math.round(tGuided - tSeg)} ms, landmarks ${Math.round(performance.now() - tGuided)} ms`);
 
   // Smoothing scale from the face size: ~1.2% of the face diameter.
@@ -173,14 +173,17 @@ async function segment(image: PreviewImage, fullWidth: number, fullHeight: numbe
   const longEdge = Math.max(fullWidth, fullHeight);
   const faceDiameter = faceArea > 4 ? 2 * Math.sqrt(faceArea / Math.PI) * scale : 0;
   const sigma = Math.min(40, Math.max(3, faceArea > 4 ? 0.012 * faceDiameter : 0.002 * longEdge));
-  return { width: w, height: h, data: refined, sigmaPx: sigma, hasSkin: skinArea > 0.002 * w * h, faceDiameterPx: faceDiameter };
+  return { width: w, height: h, data: refined, sigmaPx: sigma, hasSkin: skinArea > 0.002 * w * h, faceDiameterPx: faceDiameter, face, faces };
 }
 
-/** Zeroes the mask inside each facial feature (polygon grown around its centre), with a soft edge. */
-async function excludeFacialFeatures(image: ImageData, mask: Float32Array, w: number, h: number) {
+/**
+ * Zeroes the mask inside each facial feature (polygon grown around its centre), with a soft edge. Returns the faces'
+ * landmarks (x, y pairs, fractions of the image) for Portrait retouch.
+ */
+async function excludeFacialFeatures(image: ImageData, mask: Float32Array, w: number, h: number): Promise<Float32Array[]> {
   const faces = (await getLandmarker()).detect(image).faceLandmarks;
   console.debug(`Face landmarker: ${faces.length} face(s); protecting eyes, brows, lips, nostrils`);
-  if (faces.length === 0) return;
+  if (faces.length === 0) return [];
   const keep = new Float32Array(w * h).fill(1);
   for (const face of faces) {
     for (const [indices, grow] of FEATURES) {
@@ -198,6 +201,7 @@ async function excludeFacialFeatures(image: ImageData, mask: Float32Array, w: nu
   // Soften the cut so smoothing fades out instead of stopping at a hard line.
   const soft = box(keep, w, h, 1);
   for (let i = 0; i < mask.length; i++) mask[i] *= soft[i];
+  return faces.map((face) => Float32Array.from(face.flatMap((p) => [p.x, p.y])));
 }
 
 /** Sets [keep] to 0 inside the convex hull of the points (monotone chain hull). */
