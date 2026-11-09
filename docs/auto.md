@@ -143,7 +143,7 @@ the photo view, Copy previous and Export all follow the same order (Android, iOS
 **Filter** (web): dropdowns above the grid filter the batch by **Camera**, **Lens**, **ISO range** (Min ISO and Max ISO) and **Shoot date** (each
 showing the count of matching photos in the batch), singly or combined. When a filter is active, the grid, detail
 navigation (‹ ›, Space, Backspace and arrow keys) and Export show and export only the matching photos, with a count of
-visible photos; **Clear filter** resets back to the whole batch.
+visible photos; **Unedited** (a toggle beside the dropdowns) keeps only photos shown **As is**: added "As is", still Natural with no preset, lens preset, RawBoy edits, Auto denoise or adjustment (settings restored from a sidecar count); **Clear filter** resets back to the whole batch.
 **Opening a photo that's still waiting:** tap (web: click) a photo marked *Waiting* and it's analysed next, ahead of
 the rest of the batch (its badge reads *Next*), then opens once it's ready, unless another photo was opened meanwhile.
 **Rotating, removing and exporting photos:** long-press a photo in the grid to start selecting, tap others to add them
