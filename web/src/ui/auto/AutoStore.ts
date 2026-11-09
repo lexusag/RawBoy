@@ -193,16 +193,16 @@ const developOf = ({ look, mode, filmLook, strength, adjust, preset, edits, look
   ({ look, mode, filmLook, strength, adjust, preset, edits, looksApplied, autoDenoise });
 
 /**
- * [p] with the look (or preset), strength, warmth, tint, contrast, saturation and grain of [source] ("Apply to all", "Copy previous");
+ * [p] with the look (or preset), strength, warmth, tint, contrast, luma contrast, saturation and grain of [source] ("Apply to all", "Copy previous");
  * brightness, denoise and rotation stay (they follow this photo's exposure, noise and framing). RawBoy edits aren't
  * copied (they hold the source's crop and masks); [p]'s own are replaced by the look.
  */
 function withLookOf(p: AutoPhoto, source: AutoPhoto): AutoPhoto {
-  const { warmth, tint, contrast, saturation, grain, retouch } = source.adjust;
+  const { warmth, tint, contrast, lumaContrast, saturation, grain, retouch } = source.adjust;
   return {
     ...p, look: source.look, mode: source.mode, filmLook: source.filmLook, strength: source.strength, preset: source.preset,
     edits: null, looksApplied: true,
-    adjust: { ...p.adjust, warmth, tint, contrast, saturation, grain, retouch },
+    adjust: { ...p.adjust, warmth, tint, contrast, lumaContrast, saturation, grain, retouch },
   };
 }
 
@@ -988,7 +988,7 @@ export class AutoStore {
   }
 
   /**
-   * Gives every photo of the batch the look (or preset), strength, warmth, tint, contrast, saturation, grain and retouch of [id], including
+   * Gives every photo of the batch the look (or preset), strength, warmth, tint, contrast, luma contrast, saturation, grain and retouch of [id], including
    * photos still being analysed (they keep it rather than their suggestion); brightness and denoise stay per photo (they follow
    * each photo's exposure and noise). Not while exporting.
    */
@@ -1011,7 +1011,7 @@ export class AutoStore {
 
   /**
    * Gives photo [id] what "Apply to all" copies, from the photo before it ([previousPhoto]): look (or preset), strength,
-   * brightness, warmth, tint, contrast, saturation, grain and retouch, as one undo step (a neighbouring shot of the same scene usually wants its
+   * brightness, warmth, tint, contrast, luma contrast, saturation, grain and retouch, as one undo step (a neighbouring shot of the same scene usually wants its
    * brightness too, unlike Apply to all); denoise and rotation stay. Not while exporting.
    */
   copyPrevious(id: string) {

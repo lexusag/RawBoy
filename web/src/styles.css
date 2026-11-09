@@ -828,17 +828,6 @@ progress {
   -webkit-user-select: none;
 }
 
-/* Two sliders sharing a row (Auto's Adjust tab). */
-.slider-pair {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-}
-
-.slider-pair > .slider {
-  min-width: 0;
-}
-
 .slider-row {
   display: flex;
   align-items: center;

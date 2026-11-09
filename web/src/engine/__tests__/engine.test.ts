@@ -102,9 +102,27 @@ describe('shader params', () => {
     expect(ShaderParams.from(d, d, null, new LensTransform(LensInfo.none(100, 100), d), null, null, null).clipLevel).toBe(0);
   });
 
+  it('Auto adds its Luma contrast adjustment to the develop params', () => {
+    const base = developParams({ lumaContrast: 10 });
+    const out = applyEditsDevelop(base, { ...NO_ADJUSTMENTS, lumaContrast: 20 });
+    expect(out.lumaContrast).toBe(30);
+    expect(out.contrast).toBe(base.contrast);
+    expect(applyEditsDevelop(base, NO_ADJUSTMENTS).lumaContrast).toBe(10);
+  });
+
   it('maps the tone mapper to its shader id', () => {
     const d = developParams({ toneMapper: 'sigmoid' });
     expect(ShaderParams.from(d, d, null, new LensTransform(LensInfo.none(100, 100), d), null, null, null).toneMapper).toBe(2);
+  });
+
+  it('luma contrast is a neutral 0 exponent by default and 2^0.7 - 1 at +100', () => {
+    const u = (lumaContrast: number) => {
+      const d = developParams({ lumaContrast });
+      return ShaderParams.from(d, d, null, new LensTransform(LensInfo.none(100, 100), d), null, null, null).lumaContrast;
+    };
+    expect(u(0)).toBe(0);
+    expect(u(100)).toBeCloseTo(2 ** 0.7 - 1, 6);
+    expect(u(-100)).toBeCloseTo(2 ** -0.7 - 1, 6);
   });
 
   it('the coarse denoise stage starts above 65 and widens the margin', () => {

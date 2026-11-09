@@ -1000,20 +1000,16 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
               </>
             ) : (
               <>
-                {/* Light and colour in pairs, side by side. */}
-                <div className="slider-pair">
-                  {adjustSlider('Brightness', 'brightness', 100)}
-                  {adjustSlider('Contrast', 'contrast', 50)}
-                </div>
+                {adjustSlider('Brightness', 'brightness', 100)}
+                {adjustSlider('Contrast', 'contrast', 50)}
+                {adjustSlider('Luma contrast', 'lumaContrast', 50)}
                 <div className="chips">
                   <button type="button" className={pickingWhite ? 'active' : ''} onClick={() => setPickingWhite(!pickingWhite)}>
                     {pickingWhite ? 'Click something neutral grey' : 'Pick white balance'}
                   </button>
                 </div>
-                <div className="slider-pair">
-                  {adjustSlider('Warmth', 'warmth', 100)}
-                  {adjustSlider('Tint', 'tint', 50)}
-                </div>
+                {adjustSlider('Warmth', 'warmth', 100)}
+                {adjustSlider('Tint', 'tint', 50)}
                 {adjustSlider('Saturation', 'saturation', 100)}
                 {adjustSlider('Grain', 'grain', 50)}
                 {adjustSlider('Denoise', 'denoise', 100)}

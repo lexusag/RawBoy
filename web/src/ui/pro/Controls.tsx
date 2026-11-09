@@ -208,6 +208,7 @@ export function ControlsPanel({
             )}
             {slider('Exposure', 'exposure', -5, 5, formatEv)}
             {slider('Contrast', 'contrast', -100, 100)}
+            {slider('Luma contrast', 'lumaContrast', -100, 100)}
             {slider('Highlights', 'highlights', -100, 100)}
             {slider('Shadows', 'shadows', -100, 100)}
             {slider('Whites', 'whites', -100, 100)}

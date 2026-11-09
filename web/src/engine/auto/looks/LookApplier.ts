@@ -5,7 +5,7 @@ import { lutIdOf, type Look } from './Look';
 
 /**
  * The user's controls on top of the auto develop and the look; all 0 = as suggested. [brightness] -100..100 shifts
- * exposure; [warmth] -100..100 warms or cools; [tint] -50..50 (+ = magenta), [contrast] -50..50, [saturation]
+ * exposure; [warmth] -100..100 warms or cools; [tint] -50..50 (+ = magenta), [contrast] -50..50, [lumaContrast] -50..50 (contrast on luminance only, colour saturation holds), [saturation]
  * -100..100 and [grain] -50..50 are added to the slider values the auto develop and the look arrive at, except negative
  * [saturation], which moves the saturation they arrive at towards -100 (-100 = black and white). [denoise] -100..100
  * shifts the auto luma and colour denoise, colour first (see denoiseWith). [retouch] 0..100 adds Portrait retouch
@@ -17,6 +17,7 @@ export interface Adjustments {
   warmth: number;
   tint: number;
   contrast: number;
+  lumaContrast: number;
   saturation: number;
   grain: number;
   denoise: number;
@@ -24,11 +25,11 @@ export interface Adjustments {
   rotation: number;
 }
 
-export const NO_ADJUSTMENTS: Adjustments = { brightness: 0, warmth: 0, tint: 0, contrast: 0, saturation: 0, grain: 0, denoise: 0, retouch: 0, rotation: 0 };
+export const NO_ADJUSTMENTS: Adjustments = { brightness: 0, warmth: 0, tint: 0, contrast: 0, lumaContrast: 0, saturation: 0, grain: 0, denoise: 0, retouch: 0, rotation: 0 };
 
 export function sameAdjustments(a: Adjustments, b: Adjustments): boolean {
   return a.brightness === b.brightness && a.warmth === b.warmth && a.tint === b.tint
-    && a.contrast === b.contrast && a.saturation === b.saturation && a.grain === b.grain && a.denoise === b.denoise
+    && a.contrast === b.contrast && a.lumaContrast === b.lumaContrast && a.saturation === b.saturation && a.grain === b.grain && a.denoise === b.denoise
     && a.retouch === b.retouch && a.rotation === b.rotation;
 }
 
@@ -80,6 +81,7 @@ export function applyLook(base: DevelopParams, look: Look, strength: number, adj
     ...base,
     exposure: clamp(base.exposure + look.exposure * k + (adjust.brightness / 100) * BRIGHTNESS_EV, -5, 5),
     contrast: clamp(base.contrast + look.contrast * k + adjust.contrast, -100, 100),
+    lumaContrast: clamp(base.lumaContrast + adjust.lumaContrast, -100, 100),
     saturation: saturation(base.saturation + look.saturation * k, adjust.saturation),
     denoise,
     colorDenoise,
@@ -143,6 +145,7 @@ function adjustDevelop(p: DevelopParams, adjust: Adjustments): DevelopParams {
     ...p,
     exposure: clamp(p.exposure + (adjust.brightness / 100) * BRIGHTNESS_EV, -5, 5),
     contrast: clamp(p.contrast + adjust.contrast, -100, 100),
+    lumaContrast: clamp(p.lumaContrast + adjust.lumaContrast, -100, 100),
     saturation: saturation(p.saturation, adjust.saturation),
     denoise,
     colorDenoise,

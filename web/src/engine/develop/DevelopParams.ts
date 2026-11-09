@@ -58,6 +58,7 @@ export const anamorphicBarOf = (c: AnamorphicColor): Float32Array => new Float32
  *
  * - toneMapper: the display transform (AgX by default; Pro only, Auto and Camera stay on AgX)
  * - exposure: EV, -5..+5
+ * - lumaContrast: -100..+100 contrast on luminance only (colour ratios kept), 0 = off
  * - contrast, saturation, highlights, shadows, whites, blacks, tint: -100..+100
  * - temperature: Kelvin; the as-shot value is the default
  * - denoise, grain, sharpening: 0..100, 0 = off; denoise is luminance noise (and colour noise while colorDenoise is null)
@@ -104,6 +105,8 @@ export interface DevelopParams {
   toneMapper: ToneMapper;
   exposure: number;
   contrast: number;
+  /** Luminance-only contrast: a log slope on brightness that keeps channel ratios, so colour saturation holds. */
+  lumaContrast: number;
   highlights: number;
   shadows: number;
   whites: number;
@@ -179,6 +182,7 @@ export const DEFAULT_PARAMS: Readonly<DevelopParams> = Object.freeze({
   toneMapper: 'agx',
   exposure: 0,
   contrast: 0,
+  lumaContrast: 0,
   highlights: 0,
   shadows: 0,
   whites: 0,
