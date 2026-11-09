@@ -1,3 +1,7 @@
+**RawBoy Pro (web, Android, iOS): Save preset starts with Detail unticked (2026-11-09)**
+
+- The Save preset dialog no longer ticks Detail (grain, bloom, flare, local contrast) first, only Lens, Masks and Denoise stay unticked as before; tick it to include it. Not built here (no Android or iOS toolchain); web test added.
+
 **All apps: a "Support me on Ko-fi" link (2026-11-09)**
 
 - A plain link to https://ko-fi.com/U7U011XOE in the help sheet of RawBoy Web (Pro, Auto, Browser and Packer), Android (Pro, Auto and Camera, in the shared `HelpSheet`) and iOS (the shared `HelpView`), on the web About page, in the Readme and as `.github/FUNDING.yml` (GitHub's Sponsor button). Deliberately not Ko-fi's `Widget_2.js`: it would load third-party script into a site that promises nothing leaves the device. Not built or run here (no Android/iOS toolchain, web dependencies not installed); the Play listing is unchanged and Play's donation policy is unchecked.
