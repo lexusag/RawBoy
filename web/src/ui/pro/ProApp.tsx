@@ -10,8 +10,10 @@ import { ControlsPanel, GeometryPanel } from './Controls';
 import { CropOverlay } from './CropOverlay';
 import { MaskOverlay, type BrushSettings, type MaskTool } from './MaskOverlay';
 import { MasksPanel, radiusToSize, sizeToRadius } from './MasksPanel';
+import { FxPanel } from './FxPanel';
 import { LeaksPanel } from './LeaksPanel';
 import { LookSelector } from './LookSelector';
+import type { LightEffect } from '../../engine/develop/LightEffects';
 import type { LightLeak } from '../../engine/develop/LightLeaks';
 import type { MaskShape } from '../../engine/develop/Masks';
 import { PresetsPanel, type PresetActions } from './PresetsPanel';
@@ -83,6 +85,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   const [presetsMode, setPresetsMode] = useState(false);
   const [masksMode, setMasksMode] = useState(false);
   const [leaksMode, setLeaksMode] = useState(false);
+  const [fxMode, setFxMode] = useState(false);
   // White balance picker: armed from the Color tab, the next click on the photo picks.
   const [pickingWhite, setPickingWhite] = useState(false);
   // Auto white balance: armed from the Color tab with a draggable extendable rectangle.
@@ -91,7 +94,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   useEffect(() => {
     setPickingWhite(false);
     setAutoWb(false);
-  }, [geometryMode, masksMode, leaksMode, presetsMode, state.fileName]);
+  }, [geometryMode, masksMode, leaksMode, fxMode, presetsMode, state.fileName]);
   useEffect(() => {
     if (state.controlsTab !== 'Color') {
       setPickingWhite(false);
@@ -108,7 +111,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   useEffect(() => {
     setLooksArmed(false);
     setLooksAt(null);
-  }, [geometryMode, masksMode, leaksMode, presetsMode, autoWb, state.fileName]);
+  }, [geometryMode, masksMode, leaksMode, fxMode, presetsMode, autoWb, state.fileName]);
   const [maskTool, setMaskTool] = useState<MaskTool>('move');
   const [brush, setBrushState] = useState<BrushSettings>(loadBrush);
   const setBrush = (b: BrushSettings) => {
@@ -121,6 +124,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   const viewSize = useRef<[number, number]>([0, 0]);
   const [selectedLayer, setSelectedLayer] = useState<string | null>(null);
   const [selectedLeak, setSelectedLeak] = useState<string | null>(null);
+  const [selectedFx, setSelectedFx] = useState<string | null>(null);
   const [showMask, setShowMask] = useState(false);
   const [showExport, setShowExport] = useState(false);
   // Crop shape lock (UI only; the crop itself is in the params). Portrait null = follow the frame.
@@ -131,14 +135,17 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
     setCropPortrait(null);
     setSelectedLayer(null);
     setSelectedLeak(null);
+    setSelectedFx(null);
   }, [state.fileName]);
   // Keep a layer selected while there are any (after a delete, or a preset brought new ones).
   const layers = state.params.masks;
   const selectedId = layers.some((l) => l.id === selectedLayer) ? selectedLayer : (layers[0]?.id ?? null);
   const leaks = state.params.leaks;
   const leakId = leaks.some((l) => l.id === selectedLeak) ? selectedLeak : (leaks[leaks.length - 1]?.id ?? null);
+  const effects = state.params.fx;
+  const fxId = effects.some((e) => e.id === selectedFx) ? selectedFx : (effects[effects.length - 1]?.id ?? null);
   // Overlay handles, also beyond the photo, in either tool.
-  const shapesMode = masksMode || leaksMode;
+  const shapesMode = masksMode || leaksMode || fxMode;
   // Crop and Auto WB work on the fit view only; masks work at 100% too (frame-colour clicks stay off while masking).
   const zoomable = !geometryMode && !autoWb;
   const maskMargin = useMediaQuery('(max-width: 560px)') ? MASK_MARGIN_NARROW : MASK_MARGIN;
@@ -340,6 +347,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
             setPresetsMode(false);
             setMasksMode(false);
             setLeaksMode(false);
+            setFxMode(false);
           }} disabled={!hasImage || busy}>
           <CropRotateIcon />
           <span className="tool-label">Crop</span>
@@ -353,6 +361,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
             setGeometryMode(false);
             setMasksMode(false);
             setLeaksMode(false);
+            setFxMode(false);
           }}
           disabled={!hasImage || busy}
         >
@@ -368,6 +377,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
             setGeometryMode(false);
             setPresetsMode(false);
             setLeaksMode(false);
+            setFxMode(false);
           }}
           disabled={!hasImage || busy}
         >
@@ -380,6 +390,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
           title="Light leaks"
           onClick={() => {
             setLeaksMode(!leaksMode);
+            setFxMode(false);
             setGeometryMode(false);
             setPresetsMode(false);
             setMasksMode(false);
@@ -388,6 +399,22 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
         >
           <LeakIcon />
           <span className="tool-label">Leaks</span>
+        </button>
+        <button
+          type="button"
+          className={`icon${fxMode ? ' active' : ''}`}
+          title="Light effects: lightning, sparks, trails, swirls"
+          onClick={() => {
+            setFxMode(!fxMode);
+            setGeometryMode(false);
+            setPresetsMode(false);
+            setMasksMode(false);
+            setLeaksMode(false);
+          }}
+          disabled={!hasImage || busy}
+        >
+          <FxIcon />
+          <span className="tool-label">Effects</span>
         </button>
         <button type="button" className="icon" title="Undo (Ctrl/⌘ Z)" aria-label="Undo" onClick={store.undo} disabled={!state.canUndo || busy}>
           <UndoIcon />
@@ -530,6 +557,26 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
               onStrokeEnd={() => {}}
             />
           )}
+          {fxMode && !showOriginal && shaderParams && (
+            <MaskOverlay
+              lens={shaderParams.lens}
+              layers={effects.map(fxLayer)}
+              selectedId={fxId}
+              frame={FRAME_WIDTH + maskMargin}
+              zoomFrame={FRAME_WIDTH}
+              zoomCenter={session.zoomCenter}
+              zoomScale={session.zoomScale}
+              tool="move"
+              brush={brush}
+              passThrough={spaceHeld}
+              grabInside
+              onSelect={setSelectedFx}
+              onChange={(id, shape) => store.updateEffect(id, (e) => withFxShape(e, shape))}
+              onStrokeBegin={() => {}}
+              onStrokeExtend={() => {}}
+              onStrokeEnd={() => {}}
+            />
+          )}
           {looksArmed && looksAt && !showOriginal && (
             <LookSelector
               key={state.fileName ?? ''}
@@ -627,6 +674,19 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
                 onUpdate={store.updateLeak}
                 onRemove={store.removeLeak}
                 onDone={() => setLeaksMode(false)}
+              />
+            ) : fxMode ? (
+              <FxPanel
+                effects={effects}
+                selectedId={fxId}
+                onSelect={setSelectedFx}
+                onAdd={(kind) => {
+                  const id = store.addEffect(kind);
+                  if (id) setSelectedFx(id);
+                }}
+                onUpdate={store.updateEffect}
+                onRemove={store.removeEffect}
+                onDone={() => setFxMode(false)}
               />
             ) : presetsMode ? (
               <PresetsPanel
@@ -746,6 +806,29 @@ const leakLayer = (l: LightLeak) => ({
 
 const withLeakShape = (l: LightLeak, s: MaskShape): LightLeak =>
   s.kind === 'radial' ? { ...l, cx: s.cx, cy: s.cy, rx: s.rx, ry: s.ry, angle: s.angle } : l;
+
+/** A light effect as the overlay draws it: a radial shape (an ellipse round its box) with no feather ring. */
+const fxLayer = (e: LightEffect) => ({
+  id: e.id,
+  enabled: e.enabled,
+  strokes: [],
+  shape: { kind: 'radial' as const, cx: e.cx, cy: e.cy, rx: e.rx, ry: e.ry, angle: e.angle, feather: 1 },
+});
+
+const withFxShape = (e: LightEffect, s: MaskShape): LightEffect =>
+  s.kind === 'radial' ? { ...e, cx: s.cx, cy: s.cy, rx: s.rx, ry: s.ry, angle: s.angle } : e;
+
+/** Light effects: a forked lightning bolt. */
+function FxIcon() {
+  return (
+    <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" style={{ display: 'block' }} aria-hidden="true">
+      <path d="M13 2L8 11h5l-4 11" strokeWidth={2} />
+      <path d="M10.5 16.5L15 19" strokeWidth={1.5} strokeOpacity={0.6} />
+      <circle cx={18} cy={6} r={1} fill="currentColor" stroke="none" />
+      <circle cx={20} cy={11} r={0.8} fill="currentColor" stroke="none" fillOpacity={0.7} />
+    </svg>
+  );
+}
 
 /** Light leaks: a diagonal beam of light with a glow either side, film-burn style. */
 function LeakIcon() {

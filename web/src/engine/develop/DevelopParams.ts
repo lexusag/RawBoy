@@ -1,5 +1,6 @@
 import type { BwFilter } from '../color/BwFilter';
 import type { MaskLayer } from './Masks';
+import type { LightEffect } from './LightEffects';
 import type { LightLeak } from './LightLeaks';
 import { DEFAULT_CURVES, type ToneCurves } from './ToneCurve';
 
@@ -92,6 +93,7 @@ export const anamorphicBarOf = (c: AnamorphicColor): Float32Array => new Float32
  *
  * - masks: up to MAX_LAYERS gradient layers with local adjustments (see Masks.ts); per photo, like the crop.
  * - leaks: up to MAX_LEAKS light leaks over the finished picture (see LightLeaks.ts); per photo, like the masks.
+ * - fx: up to MAX_EFFECTS light effects (lightning, sparks, trails, swirls; LightEffects.ts) over the leaks; per photo.
  *
  * Whites/Blacks follow Lightroom: Blacks < 0 raises the black point (deeper blacks), Blacks > 0 lifts/fades
  * them; Whites > 0 lowers the white point (brighter whites), Whites < 0 dims them.
@@ -157,6 +159,7 @@ export interface DevelopParams {
   cropBottom: number;
   masks: readonly MaskLayer[];
   leaks: readonly LightLeak[];
+  fx: readonly LightEffect[];
   /**
    * The photo is display-referred (JPEG, HEIC: see display_inverse.cpp), rendered with AgX per channel. Set only on
    * a photo's as-shot defaults, from the decoder; never a slider or preset value.
@@ -230,6 +233,7 @@ export const DEFAULT_PARAMS: Readonly<DevelopParams> = Object.freeze({
   cropBottom: 1,
   masks: [],
   leaks: [],
+  fx: [],
 });
 
 /** The colour denoise in effect: colorDenoise, or denoise while it isn't set. */
