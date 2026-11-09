@@ -411,11 +411,11 @@ export class ProStore {
     this.commit({ ...p, leaks: p.leaks.filter((l) => l.id !== id) }, true);
   };
 
-  /** Adds a light effect (up to MAX_EFFECTS) with a new random pattern; returns its id, or null when full. */
-  addEffect = (kind: FxKind = 'lightning', cx = 0.5, cy = 0.5): string | null => {
+  /** Adds a light effect (up to MAX_EFFECTS) with a new random pattern, covering the whole photo of [aspect] (width / height); returns its id, or null when full. */
+  addEffect = (kind: FxKind = 'lightning', aspect = 1.5, cx = 0.5, cy = 0.5): string | null => {
     const p = this._state.params;
     if (p.fx.length >= MAX_EFFECTS) return null;
-    const fx = newLightEffect(kind, cx, cy);
+    const fx = newLightEffect(kind, cx, cy, aspect);
     this.commit({ ...p, fx: [...p.fx, fx] }, true);
     return fx.id;
   };

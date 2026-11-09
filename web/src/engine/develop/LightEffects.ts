@@ -41,22 +41,34 @@ export const MAX_EFFECTS = 4;
 export const FX_KINDS: readonly FxKind[] = ['lightning', 'sparks', 'trails', 'swirl'];
 
 /** Start values of each kind: size, angle, how much, colour (a white-blue bolt, blue/violet/green sparks...). */
-export const FX_DEFAULTS: Record<FxKind, { rx: number; ry: number; angle: number; amount: number; thickness: number; glow: number; hue: number; spread: number }> = {
-  lightning: { rx: 0.3, ry: 0.3, angle: 0, amount: 50, thickness: 50, glow: 50, hue: 222, spread: 10 },
-  sparks: { rx: 0.24, ry: 0.24, angle: 0, amount: 50, thickness: 50, glow: 55, hue: 235, spread: 70 },
-  trails: { rx: 0.42, ry: 0.16, angle: -12, amount: 50, thickness: 50, glow: 45, hue: 285, spread: 45 },
-  swirl: { rx: 0.22, ry: 0.22, angle: 0, amount: 40, thickness: 50, glow: 50, hue: 190, spread: 35 },
+export const FX_DEFAULTS: Record<FxKind, { angle: number; amount: number; thickness: number; glow: number; hue: number; spread: number }> = {
+  lightning: { angle: 0, amount: 50, thickness: 50, glow: 50, hue: 222, spread: 10 },
+  sparks: { angle: 0, amount: 50, thickness: 50, glow: 55, hue: 235, spread: 70 },
+  trails: { angle: 0, amount: 50, thickness: 50, glow: 45, hue: 285, spread: 45 },
+  swirl: { angle: 0, amount: 40, thickness: 50, glow: 50, hue: 190, spread: 35 },
 };
+
+/**
+ * The box that covers the whole photo (radii as fractions of its long side) for a photo [aspect] = width / height wide:
+ * where a new effect starts, so it fills the frame and the pattern's detail is spread over it.
+ */
+export const fxCoverSize = (aspect: number): { rx: number; ry: number } =>
+  aspect >= 1 ? { rx: 0.5, ry: 0.5 / aspect } : { rx: 0.5 * aspect, ry: 0.5 };
 
 /** A seed 0..1 (stored like a leak's); the generator turns it into 32 bits. */
 export const newFxSeed = (): number => Math.floor(Math.random() * 1e9) / 1e9;
 
-export const newLightEffect = (kind: FxKind = 'lightning', cx = 0.5, cy = 0.5): LightEffect => ({
-  id: newId(), enabled: true, kind, cx, cy, ...FX_DEFAULTS[kind], intensity: 100, seed: newFxSeed(),
+/** A new random effect of [kind] covering the whole photo of [aspect] (width / height), centred at ([cx], [cy]). */
+export const newLightEffect = (kind: FxKind = 'lightning', cx = 0.5, cy = 0.5, aspect = 1.5): LightEffect => ({
+  id: newId(), enabled: true, kind, cx, cy, ...fxCoverSize(aspect), ...FX_DEFAULTS[kind], intensity: 100, seed: newFxSeed(),
 });
 
-/** The effect turned into [kind] with that kind's look; place, intensity and seed stay. */
-export const withFxKind = (e: LightEffect, kind: FxKind): LightEffect => (e.kind === kind ? e : { ...e, kind, ...FX_DEFAULTS[kind], cx: e.cx, cy: e.cy });
+/** The effect turned into [kind] with that kind's amount, colour and widths; place, size, angle, intensity and seed stay. */
+export const withFxKind = (e: LightEffect, kind: FxKind): LightEffect => {
+  if (e.kind === kind) return e;
+  const { angle: _angle, ...look } = FX_DEFAULTS[kind];
+  return { ...e, kind, ...look };
+};
 
 export const fxIsIdentity = (e: LightEffect): boolean => !e.enabled || e.intensity <= 0;
 
@@ -222,7 +234,7 @@ function sparks(r: Rng, amount: number): FxSegment[] {
   const n = Math.round(30 + 190 * density);
   for (let i = 0; i < n; ++i) {
     const dir = r() * Math.PI * 2;
-    const dist = Math.min(1, Math.abs(gauss(r)) * 0.32 + 0.03);
+    const dist = Math.min(1, Math.abs(gauss(r)) * 0.45 + 0.03);
     const x = Math.cos(dir) * dist;
     const y = Math.sin(dir) * dist;
     const big = r() ** 6; // most sparks are tiny, a few large
@@ -420,8 +432,8 @@ export const glowRadius = (g: number): number => 2 + (Math.min(100, Math.max(0, 
 /** The glow slider as the halo's radius in the effect's mean radius. */
 export const haloRadius = (g: number): number => 0.02 + (Math.min(100, Math.max(0, g)) / 100) * 0.16;
 
-/** How much each kind's lines zigzag within a segment (lightning and the sparks' arcs crackle; trails stay smooth). */
-const FX_JAG: Record<FxKind, number> = { lightning: 1, sparks: 0.5, trails: 0, swirl: 0 };
+/** How much each kind's lines crackle (the shader bends them with fine noise): lightning and the sparks' arcs do, trails and swirls stay smooth. */
+const FX_WOBBLE: Record<FxKind, number> = { lightning: 1, sparks: 0.6, trails: 0, swirl: 0 };
 
 /** Lays segment lists into chunk rows. */
 function packData(lists: readonly FxSegment[][]): { data: FxData; first: number[]; rows: number[] } {
@@ -475,7 +487,9 @@ export function packEffects(effects: readonly LightEffect[], imageWidth: number,
     u.color.set([((e.hue % 360) + 360) % 360 / 360, Math.min(1, Math.max(0, e.spread / 100)), Math.min(1, Math.max(0, e.intensity / 100)), mean * haloRadius(e.glow)], o);
     // How far the effect's light reaches beyond its lines: past it, the shader skips a chunk.
     const widest = lists[i].reduce((m, s) => Math.max(m, s.w0, s.w1), 0) * u.shape[o + 2];
-    u.range.set([first[i], rows[i], 3.2 * Math.max(u.color[o + 3], widest * u.shape[o + 3]) + 2, FX_JAG[e.kind]], o);
+    // Far enough out that a segment's glow, halo and crackle are all within it (the crackle bends a line by up to ~2% of the size).
+    const reach = 3.2 * Math.max(u.color[o + 3], widest * u.shape[o + 3]) + 2 + 0.02 * mean * FX_WOBBLE[e.kind];
+    u.range.set([first[i], rows[i], reach, FX_WOBBLE[e.kind]], o);
   });
   return u;
 }

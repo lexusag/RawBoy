@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { developParams } from '../develop/DevelopParams';
 import { decodeEdits, encodeEdits } from '../develop/Edits';
 import {
-  FX_CHUNK, FX_KINDS, FX_ROW, MAX_EFFECTS, MAX_SEGMENTS, fxColor, fxRandom, fxSegments, generateFx, newLightEffect, packEffects, parseEffects, thicknessFactor, withFxKind,
+  FX_CHUNK, FX_KINDS, fxCoverSize, FX_ROW, MAX_EFFECTS, MAX_SEGMENTS, fxColor, fxRandom, fxSegments, generateFx, newLightEffect, packEffects, parseEffects, thicknessFactor, withFxKind,
 } from '../develop/LightEffects';
 import { PRESET_GROUPS, capturePreset } from '../develop/Presets';
 
@@ -68,9 +68,15 @@ describe('light effects', () => {
     expect(packEffects([{ ...e, seed: e.seed === 0.5 ? 0.6 : 0.5 }], 4000, 3000).data).not.toBe(first);
   });
 
-  it('switches kind with that kind’s look, keeping place and seed', () => {
-    const e = { ...newLightEffect('lightning', 0.2, 0.7), seed: 0.42 };
-    expect(withFxKind(e, 'trails')).toMatchObject({ kind: 'trails', cx: 0.2, cy: 0.7, seed: 0.42 });
+  it('switches kind with that kind’s look, keeping place, size and seed', () => {
+    const e = { ...newLightEffect('lightning', 0.2, 0.7), seed: 0.42, rx: 0.1, ry: 0.2, angle: 30 };
+    expect(withFxKind(e, 'trails')).toMatchObject({ kind: 'trails', cx: 0.2, cy: 0.7, seed: 0.42, rx: 0.1, ry: 0.2, angle: 30 });
+  });
+
+  it('starts covering the whole photo, landscape or portrait', () => {
+    expect(fxCoverSize(1.5)).toEqual({ rx: 0.5, ry: 0.5 / 1.5 });
+    expect(fxCoverSize(0.75)).toEqual({ rx: 0.375, ry: 0.5 });
+    for (const kind of FX_KINDS) expect(newLightEffect(kind, 0.5, 0.5, 4 / 3)).toMatchObject({ cx: 0.5, cy: 0.5, rx: 0.5, ry: 0.375 });
   });
 
   it('colours hues as light neon', () => {

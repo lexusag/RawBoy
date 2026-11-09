@@ -600,8 +600,12 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   rows of `FX_CHUNK` (16) segments after a bounding-box texel; the same object is reused while only placement/colour
   change, so drags don't re-upload. Shader: core = max of Gaussians (≥ ~1 px, dimmer when thinner), glow and halo =
   Gaussian line integrals (erf via tanh; **clamp its argument**: tanh of a large value was NaN on SwiftShader and blacked
-  out tiles), exposed in per channel (`1 - (1 - c) e^-L`), grain added back like the leaks. `uFxRange.w` (jag) zigzags
-  a lightning core within each segment so it stays jagged at full export size. Not in presets; kept in edits sidecars.
+  out tiles), exposed in per channel (`1 - (1 - c) e^-L`), grain added back like the leaks. `uFxRange.w` (wobble, `FX_WOBBLE`)
+  bends the core and glow with two octaves of value noise laid over the plane in the effect's own scale (the halo uses the
+  unwarped point), so lightning stays crackly at any zoom instead of showing the straight facets of its generated points
+  (they were visible as blocks on a 50 MP photo; an in-segment zigzag was tried first). Segments beyond `reach` skip their
+  erf work, and the light is dithered ±1 level (hashed from the full-res pixel): a wide glow on a dark picture banded.
+  New effects cover the whole photo (`fxCoverSize(aspect)`). Not in presets; kept in edits sidecars.
 - Engine JVM tests: `./gradlew :engine:testDebugUnitTest` (`engine/src/test`, junit + org.json; `retouch/Filters.kt`
   keeps `box` out of `SkinSegmenter`, which loads MediaPipe).
 - Brush masks (`develop/BrushRaster.ts`): strokes are vectors in `MaskLayer.strokes` (image fractions), rasterised on
