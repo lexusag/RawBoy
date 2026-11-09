@@ -101,12 +101,14 @@ fun Modifier.turned(turns: Int): Modifier {
  * The camera screen's parts in one layout, so the viewfinder's GL view stays when the phone turns. Portrait: [bar]
  * on top, then the [viewfinder] in the height the others leave, [controls] and [shutter] under it. Landscape: [bar]
  * a column at the left edge, the viewfinder, [controls] a [controlsWidth] column and [shutter] a column at the right
- * edge, where the right thumb is.
+ * edge, where the right thumb is. With [barAtRight] (big screens) the [bar] column sits between the viewfinder and
+ * the [controls] instead, so every button is on the right.
  */
 @Composable
 fun CameraLayout(
     landscape: Boolean,
     controlsWidth: Dp,
+    barAtRight: Boolean = false,
     modifier: Modifier = Modifier,
     bar: @Composable () -> Unit,
     viewfinder: @Composable () -> Unit,
@@ -126,13 +128,13 @@ fun CameraLayout(
             val shP = shM?.measure(column)
             val cw = min(controlsWidth.roundToPx(), (w * 0.3f).roundToInt())
             val ctlP = ctlM?.measure(Constraints.fixed(cw, h))
-            val left = barP?.width ?: 0
-            val right = (shP?.width ?: 0) + (ctlP?.width ?: 0)
+            val left = if (barAtRight) 0 else barP?.width ?: 0
+            val right = (shP?.width ?: 0) + (ctlP?.width ?: 0) + if (barAtRight) barP?.width ?: 0 else 0
             val vfP = vfM?.measure(Constraints.fixed((w - left - right).coerceAtLeast(0), h))
             layout(w, h) {
-                barP?.place(0, 0)
+                if (barAtRight) barP?.place(w - right, 0) else barP?.place(0, 0)
                 vfP?.place(left, 0)
-                ctlP?.place(w - right, 0)
+                ctlP?.place(w - right + (if (barAtRight) barP?.width ?: 0 else 0), 0)
                 shP?.place(w - (shP.width), 0)
             }
         } else {
