@@ -59,6 +59,12 @@ Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and
 Root files: [CHANGELOG.md](CHANGELOG.md), [CONTRIBUTING.md](CONTRIBUTING.md), [LICENSE.md](LICENSE.md),
 [UI.md](UI.md) (UI backlog) and [CLAUDE.md](CLAUDE.md) (notes on how the code fits together).
 
+## Support
+
+RawBoy is free. If it is useful to you, you can support its development on Ko-fi:
+
+[![Support me on Ko-fi](https://img.shields.io/badge/Support%20me%20on-Ko--fi-f5bb73?logo=ko-fi&logoColor=white)](https://ko-fi.com/U7U011XOE)
+
 ## Licence
 
 RawBoy's own code is licensed under the **PolyForm Shield License 1.0.0** ([LICENSE.md](LICENSE.md)): you can read,

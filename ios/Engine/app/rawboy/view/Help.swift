@@ -80,6 +80,7 @@ private struct HelpView: View {
                 if licences {
                     Section { NavigationLink("Open-source licences") { LicensesView() } }
                 }
+                Section { Link("Support me on Ko-fi", destination: URL(string: "https://ko-fi.com/U7U011XOE")!) }
                 Section { Text("Version \(Self.version)").font(.footnote).foregroundStyle(.secondary) }
             }
             .navigationTitle(title)
