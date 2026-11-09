@@ -33,10 +33,8 @@ struct CameraScreen: View {
         // shutter column at the right edge, all under the right thumb. One layout, so the Metal view stays on a turn.
         GeometryReader { geo in
             let landscape = geo.size.width > geo.size.height
-            // iPads turned sideways: the bar's buttons join the controls on the right.
-            let barAtRight = landscape && min(geo.size.width, geo.size.height) >= 600
             let turns = viewfinderTurns(orientation.value)
-            CameraLayout(landscape: landscape, controlsWidth: Self.landscapeControlsWidth, barAtRight: barAtRight) {
+            CameraLayout(landscape: landscape, controlsWidth: Self.landscapeControlsWidth) {
                 Group {
                     if landscape {
                         VStack(spacing: 0) { barButtons.frame(maxHeight: .infinity) }
@@ -942,8 +940,6 @@ private final class InterfaceOrientation: ObservableObject {
 private struct CameraLayout: Layout {
     let landscape: Bool
     let controlsWidth: CGFloat
-    /// Big screens: the bar column sits between the viewfinder and the controls, so every button is on the right.
-    var barAtRight = false
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         proposal.replacingUnspecifiedDimensions()
@@ -958,10 +954,8 @@ private struct CameraLayout: Layout {
             let shutterW = shutter.sizeThatFits(ProposedViewSize(width: nil, height: h)).width
             let cw = min(controlsWidth, w * 0.3)
             let vw = max(w - barW - cw - shutterW, 0)
-            let vx = barAtRight ? 0 : barW
-            let barX = barAtRight ? bounds.minX + vw : bounds.minX
-            bar.place(at: CGPoint(x: barX, y: bounds.minY), proposal: ProposedViewSize(width: barW, height: h))
-            viewfinder.place(at: CGPoint(x: bounds.minX + vx, y: bounds.minY), proposal: ProposedViewSize(width: vw, height: h))
+            bar.place(at: CGPoint(x: bounds.minX, y: bounds.minY), proposal: ProposedViewSize(width: barW, height: h))
+            viewfinder.place(at: CGPoint(x: bounds.minX + barW, y: bounds.minY), proposal: ProposedViewSize(width: vw, height: h))
             controls.place(at: CGPoint(x: bounds.maxX - shutterW - cw, y: bounds.minY), proposal: ProposedViewSize(width: cw, height: h))
             shutter.place(at: CGPoint(x: bounds.maxX - shutterW, y: bounds.minY), proposal: ProposedViewSize(width: shutterW, height: h))
         } else {

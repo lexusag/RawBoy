@@ -245,8 +245,6 @@ fun CameraScreen(
                 .windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout)),
         ) {
         val landscape = maxWidth > maxHeight
-        // Tablets and foldables turned sideways: the bar's buttons join the controls on the right.
-        val barAtRight = landscape && minOf(maxWidth, maxHeight) >= BIG_SCREEN_MIN_SIDE
         val statusText = when {
             recordingMs != null -> "● " + formatRecordingTime(recordingMs ?: 0L)
             merging -> "Merging frames…"
@@ -337,7 +335,6 @@ fun CameraScreen(
         CameraLayout(
             landscape = landscape,
             controlsWidth = LANDSCAPE_CONTROLS_WIDTH,
-            barAtRight = barAtRight,
             bar = {
                 if (landscape) {
                     Column(
@@ -1501,9 +1498,6 @@ private val FOCUS_HANDLE_SIZE = 96.dp
 private val LOUPE_SIZE = 128.dp
 private val LOUPE_GAP = 64.dp
 private const val LOUPE_ZOOM = 3f
-
-/** A landscape window whose short side is at least this wide (dp) is a big screen: all buttons go to the right. */
-private val BIG_SCREEN_MIN_SIDE = 600.dp
 
 /** Width of the landscape controls column (look menu, S/B/W picker and the tall slider) beside the shutter column. */
 private val LANDSCAPE_CONTROLS_WIDTH = 216.dp
