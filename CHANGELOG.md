@@ -1,3 +1,7 @@
+**RawBoy Pro: a covering light leak is whiter and covers only its middle (2026-11-09)**
+
+- The owner wanted Cover "closer to the centre, far from the borders, and more whitish". Cover now replaces the photo only from the leak's centre to about halfway to its outline (fading out well inside it, so the leak's edge is light and colour over the photo, not a flat patch), the wash under the light is a warm cream instead of a dim orange, and the middle of a covering leak burns whiter. A leak hides a little less area than before at the same size: make it a bit larger than what it covers. Code: `shaders/light_leak.glsl` (all platforms). Checked on two photos with a standalone page around the shader; not on a phone.
+
 **RawBoy Auto (web): an Unedited filter in the grid (2026-11-09)**
 
 - A new **Unedited** toggle beside the grid's filters keeps only photos that are still "As is": added with Import as "As is" (no auto develop), the Natural look, and no preset, lens preset, RawBoy edits, Auto denoise or adjustment slider. These are the same fields Auto keeps in the XMP sidecar, so a photo restored from a sidecar with settings counts as edited. Photos added in a look mode always have the auto develop and are never unedited. Combines with the other filters; Clear filter resets it. Web only (Auto's Android app has no grid filters). Web test added; not looked at in a browser.
