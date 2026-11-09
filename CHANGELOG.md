@@ -1,3 +1,7 @@
+**RawBoy Pro (web): light effects start 1.75 times the photo and are denser (2026-11-09)**
+
+- A new effect now starts as a box 1.75 times the size of the photo, centred on it, so most of the effect sits outside the frame and only a part of it overlaps the picture, like the lightning in the references. Size and Stretch reset to that size by double-tap. The patterns have more detail to match (bolts with one more level of kinks, three times the sparks, twice the points on trails and swirls; up to 1280 segments an effect), so the visible part stays sharp and busy at 12 MP exports as at 100%.
+
 **RawBoy Pro: a covering light leak is whiter and covers only its middle (2026-11-09)**
 
 - The owner wanted Cover "closer to the centre, far from the borders, and more whitish". Cover now replaces the photo only from the leak's centre to about halfway to its outline (fading out well inside it, so the leak's edge is light and colour over the photo, not a flat patch), the wash under the light is a warm cream instead of a dim orange, and the middle of a covering leak burns whiter. A leak hides a little less area than before at the same size: make it a bit larger than what it covers. Code: `shaders/light_leak.glsl` (all platforms). Checked on two photos with a standalone page around the shader; not on a phone.
