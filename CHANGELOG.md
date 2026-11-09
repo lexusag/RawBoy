@@ -1,7 +1,3 @@
-**RawBoy web, Pro and Auto: all buttons on the right on big landscape screens (2026-11-09)**
-
-- On a window at least 1000 x 600 px and wider than tall (tablets, desktops), the top bar's buttons (Open, Crop, Presets, Undo, Export, Help and the rest) move to the top of the right sidebar, so every control is on the right and the photo gets the full height. Pure CSS (the editor becomes a grid, `.workspace` is `display: contents`); smaller and upright windows keep the top bar. Checked on a mock of the markup in headless Chrome, not in the running app (web dependencies not installed here).
-
 **All apps: a "Support me on Ko-fi" link (2026-11-09)**
 
 - A plain link to https://ko-fi.com/U7U011XOE in the help sheet of RawBoy Web (Pro, Auto, Browser and Packer), Android (Pro, Auto and Camera, in the shared `HelpSheet`) and iOS (the shared `HelpView`), on the web About page, in the Readme and as `.github/FUNDING.yml` (GitHub's Sponsor button). Deliberately not Ko-fi's `Widget_2.js`: it would load third-party script into a site that promises nothing leaves the device. Not built or run here (no Android/iOS toolchain, web dependencies not installed); the Play listing is unchanged and Play's donation policy is unchecked.
