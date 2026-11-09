@@ -12,8 +12,14 @@ import { newId } from './Masks';
  * (clockwise), so a leak stays on the same content through crop, rotation and lens corrections.
  * softness 0..100 = the core's blur; glow 0..100 = how far the coloured glow reaches; bend -100..100 curves the shape
  * along its length (100: its ends move one length radius sideways); taper -100..100 narrows it towards one end; warp
- * 0..100 makes its edge uneven (seed 0..1 picks how); intensity 0..100; hue in degrees, -40 (magenta-red) .. 0 (red)
- * .. 37 (orange) .. 60 (yellow), the outer glow 37° redder.
+ * 0..100 makes its outline organic (noise pushes it around and grows lumps, only ever outwards; seed 0..1 picks how);
+ * texture 0..100 turns the clean Photoshop layers into film burn (the light exposed into the picture per channel, so it
+ * burns white through yellow and orange to red, mottled, streaked, its colour drifting between the two hues; same
+ * seed); cover 0..100 replaces the picture inside the outline with a dim wash of the leak's colours under the light,
+ * so nothing shows through however the texture falls (the tool's main use: covering nudity for social media);
+ * radii: a glow's outline as 8 radii (in shape radii, 1 = the ellipse) at 22.5° + k 45° of its own frame, dragged on
+ * the photo to fit the leak to a region; intensity 0..100; hue in degrees, -40 (magenta-red) .. 0 (red) .. 37 (orange)
+ * .. 60 (yellow), the outer glow 37° redder.
  *
  * Leaks belong to one photo's content: they reset for each new photo and presets don't keep them.
  */
@@ -33,10 +39,25 @@ export interface LightLeak {
   bend: number;
   taper: number;
   warp: number;
+  texture: number;
+  cover: number;
+  radii: readonly number[];
   intensity: number;
   hue: number;
   seed: number;
 }
+
+/** Control radii of a glow's outline. */
+export const LEAK_RADII = 8;
+/** A glow's outline radii as an ellipse (unchanged). */
+export const ROUND_RADII: readonly number[] = Array.from({ length: LEAK_RADII }, () => 1);
+export const LEAK_RADIUS_MIN = 0.1;
+export const LEAK_RADIUS_MAX = 4;
+/** The angle (radians, in the leak's own frame) of control radius [k]. */
+export const radiusAngle = (k: number): number => ((k + 0.5) * Math.PI) / 4;
+/** A new leak's warp and texture: organic, like a real one; the old clean look is texture and warp 0. */
+export const LEAK_WARP = 35;
+export const LEAK_TEXTURE = 70;
 
 /** Uniform arrays in the shader are this long. */
 export const MAX_LEAKS = 4;
@@ -60,10 +81,28 @@ export const LEAK_DEFAULTS: Record<LeakKind, { rx: number; ry: number; angle: nu
 
 export const newLeakSeed = (): number => Math.round(Math.random() * 1000) / 1000;
 
-/** A warm orange leak in the middle, solid enough to cover what is under its core. */
+/** A warm orange leak in the middle, organic and burnt like film, opaque enough to cover what is under it. */
 export const newLightLeak = (cx = 0.5, cy = 0.5, kind: LeakKind = 'streak'): LightLeak => ({
-  id: newId(), enabled: true, kind, cx, cy, ...LEAK_DEFAULTS[kind], bend: 0, taper: 0, warp: 0, intensity: 100, hue: LEAK_HUE, seed: newLeakSeed(),
+  id: newId(), enabled: true, kind, cx, cy, ...LEAK_DEFAULTS[kind], bend: 0, taper: 0, warp: LEAK_WARP, texture: LEAK_TEXTURE, cover: 100,
+  radii: ROUND_RADII, intensity: 100, hue: LEAK_HUE, seed: newLeakSeed(),
 });
+
+/** Whether a glow's outline was reshaped (any radius moved off the ellipse). */
+export const leakReshaped = (l: Pick<LightLeak, 'kind' | 'radii'>): boolean => l.kind === 'glow' && l.radii.some((r) => r !== 1);
+
+/**
+ * A glow's outline radius (shape radii) at angle [t] (radians, its own frame): the shader's closed Catmull-Rom spline
+ * through the 8 control radii.
+ */
+export function leakRadius(radii: readonly number[], t: number): number {
+  const x = (t * 4) / Math.PI - 0.5;
+  const fl = Math.floor(x);
+  const f = x - fl;
+  const r = (k: number) => radii[(((fl + k) % LEAK_RADII) + LEAK_RADII) % LEAK_RADII] ?? 1;
+  const [r0, r1, r2, r3] = [r(-1), r(0), r(1), r(2)];
+  const v = 0.5 * (2 * r1 + (r2 - r0) * f + (2 * r0 - 5 * r1 + 4 * r2 - r3) * f * f + (3 * r1 - r0 - 3 * r2 + r3) * f * f * f);
+  return Math.max(v, 0.05);
+}
 
 /** The leak turned into [kind], with that kind's size, angle, softness and glow; place, bend, colour and intensity stay. */
 export const withLeakKind = (l: LightLeak, kind: LeakKind): LightLeak => (l.kind === kind ? l : { ...l, kind, ...LEAK_DEFAULTS[kind] });
@@ -100,9 +139,13 @@ export const bendCurvature = (bend: number, rxPx: number): number => Math.min(1,
  * after bend and taper (the shader's leakEdge, without the warp). Triangle: apex (1, 0), base corners (-1, ±1), exact
  * distance outside, inside scaled by its inradius so the middle is -1 as for the other shapes.
  */
-export function leakEdge(kind: LeakKind, qx: number, qy: number): number {
+export function leakEdge(kind: LeakKind, qx: number, qy: number, radii: readonly number[] = ROUND_RADII): number {
   if (kind === 'streak') return Math.abs(qy) - 1;
-  if (kind === 'glow') return Math.hypot(qx, qy) - 1;
+  if (kind === 'glow') {
+    if (radii.every((r) => r === 1)) return Math.hypot(qx, qy) - 1;
+    const r = leakRadius(radii, Math.atan2(qy, qx + 1e-6));
+    return (Math.hypot(qx, qy) - r) / Math.sqrt(r);
+  }
   const segment = (ax: number, ay: number, bx: number, by: number) => {
     const ex = bx - ax, ey = by - ay;
     const t = Math.min(1, Math.max(0, ((qx - ax) * ex + (qy - ay) * ey) / (ex * ex + ey * ey)));
@@ -142,6 +185,12 @@ export function parseLeak(o: unknown): LightLeak | null {
     bend: num(s.bend, -100, 100) ?? 0,
     taper: num(s.taper, -100, 100) ?? 0,
     warp: num(s.warp, 0, 100) ?? 0,
+    texture: num(s.texture, 0, 100) ?? 0, // leaks saved before texture and cover keep their clean look
+    cover: num(s.cover, 0, 100) ?? 0,
+    radii:
+      Array.isArray(s.radii) && s.radii.length === LEAK_RADII && s.radii.every((r) => num(r, 0, 99) != null)
+        ? s.radii.map((r) => num(r, LEAK_RADIUS_MIN, LEAK_RADIUS_MAX)!)
+        : ROUND_RADII,
     intensity: num(s.intensity, 0, 100) ?? 100,
     hue: num(s.hue, LEAK_HUE_MIN, LEAK_HUE_MAX) ?? LEAK_HUE,
     seed: num(s.seed, 0, 1) ?? 0,
@@ -160,6 +209,8 @@ export interface LeakUniforms {
   color: Float32Array;
   outer: Float32Array;
   form: Float32Array;
+  look: Float32Array;
+  radii: Float32Array; // MAX_LEAKS x 2 vec4: a glow's 8 outline radii minus 1
 }
 
 const emptyLeaks = (): LeakUniforms => ({
@@ -169,6 +220,8 @@ const emptyLeaks = (): LeakUniforms => ({
   color: new Float32Array(MAX_LEAKS * 4),
   outer: new Float32Array(MAX_LEAKS * 4),
   form: new Float32Array(MAX_LEAKS * 4),
+  look: new Float32Array(MAX_LEAKS * 4),
+  radii: new Float32Array(MAX_LEAKS * 8),
 });
 
 export const NO_LEAKS: LeakUniforms = emptyLeaks();
@@ -188,6 +241,8 @@ export function packLeaks(leaks: readonly LightLeak[], imageWidth: number, image
     u.color.set([...leakColor(l.hue), Math.min(1, Math.max(0, l.intensity / 100))], o);
     u.outer.set([...leakOuterColor(l.hue), l.seed], o);
     u.form.set([KIND_INDEX[l.kind], bendCurvature(l.bend, rxPx), Math.min(1, Math.max(0, l.warp / 100)), Math.min(1, Math.max(-1, l.taper / 100))], o);
+    u.look.set([Math.min(1, Math.max(0, l.texture / 100)), Math.min(1, Math.max(0, l.cover / 100)), 0, 0], o);
+    if (leakReshaped(l)) u.radii.set(l.radii.slice(0, LEAK_RADII).map((r) => r - 1), i * 8);
   });
   return u;
 }

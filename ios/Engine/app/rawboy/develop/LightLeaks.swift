@@ -95,6 +95,12 @@ public struct LightLeak: Equatable, Sendable, Identifiable {
     public var bend: Float = 0
     public var taper: Float = 0
     public var warp: Float = 0
+    /** 0..100: film burn (mottled, streaked, burning white through yellow and orange to red); 0 = the clean layers. */
+    public var texture: Float = 0
+    /** 0..100: the photo inside the outline replaced under the light (100: nothing shows through). */
+    public var cover: Float = 0
+    /** A glow's outline as 8 radii at 22.5° + k 45° of its own frame (shape radii, 1 = the ellipse); web's LightLeaks.ts. */
+    public var radii: [Float] = [Float](repeating: 1, count: 8)
     public var intensity: Float = 100
     public var hue: Float = LightLeaks.hue
     public var seed: Float = 0
@@ -240,6 +246,10 @@ public enum LightLeaks {
             put([oc[0], oc[1], oc[2], l.seed], into: &u.outer, at: o)
             put([Float(l.kind.index), bendCurvature(l.bend, rxPx: rxPx), (l.warp / 100).clamped(0, 1),
                  (l.taper / 100).clamped(-1, 1)], into: &u.form, at: o)
+            put([(l.texture / 100).clamped(0, 1), (l.cover / 100).clamped(0, 1), 0, 0], into: &u.look, at: o)
+            if l.kind == .glow, l.radii.count == 8, l.radii.contains(where: { $0 != 1 }) {
+                put(l.radii.map { $0 - 1 }, into: &u.radii, at: i * 8)
+            }
         }
         return u
     }
@@ -253,10 +263,14 @@ public struct LeakUniforms: Sendable {
     public var color: [Float]
     public var outer: [Float]
     public var form: [Float]
+    public var look: [Float]
+    /** maxLeaks x 2 vec4: a glow's 8 outline radii minus 1 (all 0: the ellipse). */
+    public var radii: [Float]
 
     static func empty(_ count: Int) -> LeakUniforms {
         let zeros = [Float](repeating: 0, count: LightLeaks.maxLeaks * 4)
-        return LeakUniforms(count: count, geom: zeros, shape: zeros, color: zeros, outer: zeros, form: zeros)
+        return LeakUniforms(count: count, geom: zeros, shape: zeros, color: zeros, outer: zeros, form: zeros, look: zeros,
+                            radii: zeros + zeros)
     }
 
     public static let none = empty(0)

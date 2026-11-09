@@ -2,7 +2,7 @@ import { useId, useRef, useState } from 'react';
 import { CURVE_SCALE, curveOffset, newId, type BrushStroke, type MaskLayer, type MaskShape } from '../../engine/develop/Masks';
 import { ZoomMath } from '../../engine/gl/Zoom';
 import type { LensTransform } from '../../engine/lens/LensTransform';
-import { bendCurvature, leakEdge, taperWidth, type LeakKind } from '../../engine/develop/LightLeaks';
+import { LEAK_RADIUS_MAX, LEAK_RADIUS_MIN, ROUND_RADII, bendCurvature, leakEdge, leakRadius, radiusAngle, taperWidth, type LeakKind } from '../../engine/develop/LightLeaks';
 
 /** Grab distance around lines and handles, CSS pixels. */
 const GRAB = 14;
@@ -23,6 +23,7 @@ type Handle =
   | 'ry'
   | 'rotate'
   | 'bend' // light leak's bend square
+  | 'outline' // a glow leak's outline point (drag.index: which)
   | 'curve'; // linear centre line's bend
 
 export type MaskTool = 'move' | 'brush' | 'erase';
@@ -40,6 +41,8 @@ export interface LeakForm {
   kind: LeakKind;
   bend: number;
   taper: number;
+  /** A glow's 8 outline radii (LightLeaks' radii); absent or all 1: an ellipse, but still with its outline points. */
+  radii?: readonly number[];
 }
 
 /**
@@ -75,6 +78,8 @@ interface Props {
   onChange: (id: string, shape: MaskShape) => void;
   /** A light leak's bend handle was dragged (bend -100..100). */
   onBend?: (id: string, bend: number) => void;
+  /** A glow leak's outline point was dragged: its new 8 radii. */
+  onReshape?: (id: string, radii: number[]) => void;
   onStrokeBegin: (layerId: string, stroke: BrushStroke) => void;
   onStrokeExtend: (layerId: string, strokeId: string, points: number[]) => void;
   onStrokeEnd: () => void;
@@ -119,7 +124,7 @@ export function MaskOverlay(props: Props) {
   const [box, setBox] = useState<{ w: number; h: number } | null>(null);
   const [hover, setHover] = useState<Handle | 'pin' | null>(null);
   const [cursorAt, setCursorAt] = useState<Pt | null>(null);
-  const drag = useRef<{ id: string; handle: Handle; start: MaskShape; from: Pt } | null>(null);
+  const drag = useRef<{ id: string; handle: Handle; start: MaskShape; from: Pt; index: number } | null>(null);
   const painting = useRef<{ layerId: string; strokeId: string; last: Pt; at: number } | null>(null);
   /** Pointers down over the overlay: a second one is a pinch for the preview, never a handle or a stroke. */
   const down = useRef(new Set<number>());
@@ -211,6 +216,9 @@ export function MaskOverlay(props: Props) {
     const cy = s.cy * H;
     const leak = formOf(l);
     const k = leak ? bendCurvature(leak.bend, rx) : 0;
+    const radii = leak?.kind === 'glow' ? (leak.radii ?? ROUND_RADII) : null;
+    /** A glow's outline radius at angle [t] of its own frame (1 for other shapes). */
+    const radiusAt = (t: number) => (radii ? leakRadius(radii, t) : 1);
     const at = (u: number, v: number): Pt => toScreen(cx + c * u - sn * v, cy + sn * u + c * v);
     /** A point in the leak's own frame (q: 1 = its radii) through its taper and bend, like the shader. */
     const atQ = (qx: number, qy: number): Pt => {
@@ -230,9 +238,12 @@ export function MaskOverlay(props: Props) {
         return polygon([[ex, sc], [-ex, sc], [-ex, -sc], [ex, -sc]], STEPS);
       }
       if (leak?.kind === 'triangle') return polygon([[sc, 0], [-sc, sc], [-sc, -sc]], STEPS);
-      return Array.from({ length: STEPS }, (_, i) => {
-        const t = (i / STEPS) * 2 * Math.PI;
-        return atQ(sc * Math.cos(t), sc * Math.sin(t));
+      return Array.from({ length: STEPS * 2 }, (_, i) => {
+        const t = (i / (STEPS * 2)) * 2 * Math.PI;
+        const rr = radiusAt(t);
+        // The shader's edge is (|q| - r) / sqrt(r): the inner line sits (1 - sc) sqrt(r) inside the outline.
+        const len = radii ? Math.max(0.01, rr - (1 - sc) * Math.sqrt(rr)) : sc;
+        return atQ(len * Math.cos(t), len * Math.sin(t));
       });
     };
     return {
@@ -240,8 +251,15 @@ export function MaskOverlay(props: Props) {
       outer: outline(1),
       inner: outline(1 - Math.max(0.01, Math.min(0.95, s.feather / 100))),
       pin: at(0, 0) as Pt | null,
-      rx: [atQ(1, 0), atQ(-1, 0)],
-      ry: leak?.kind === 'triangle' ? [atQ(-1, 1), atQ(-1, -1)] : [at(0, ry), at(0, -ry)], // a triangle's: its base corners
+      rx: [atQ(radiusAt(0), 0), atQ(-radiusAt(Math.PI), 0)],
+      ry:
+        leak?.kind === 'triangle'
+          ? [atQ(-1, 1), atQ(-1, -1)] // a triangle's: its base corners
+          : radii
+            ? [atQ(0, radiusAt(Math.PI / 2)), atQ(0, -radiusAt(-Math.PI / 2))]
+            : [at(0, ry), at(0, -ry)],
+      /** A glow leak's outline points, between the size dots. */
+      outlinePts: radii ? radii.map((rr, i) => atQ(rr * Math.cos(radiusAngle(i)), rr * Math.sin(radiusAngle(i)))) : [],
       // A thin leak's knob keeps clear of its width handles.
       knob: at(0, -(leak ? Math.max(ry * KNOB, ry + 0.06 * long) : ry * KNOB)),
       knobBase: at(0, -ry),
@@ -267,16 +285,31 @@ export function MaskOverlay(props: Props) {
     pv -= bendCurvature(leak.bend, rx) * pu * pu;
     const qx = pu / rx;
     const qy = pv / (s.ry * long * taperWidth(leak.taper, qx));
-    return leakEdge(leak.kind, qx, qy) < 0 && (leak.kind !== 'streak' || Math.abs(qx) < 1);
+    return leakEdge(leak.kind, qx, qy, leak.radii) < 0 && (leak.kind !== 'streak' || Math.abs(qx) < 1);
   };
 
-  const hit = (p: Pt): { id: string; handle: Handle | 'pin' } | null => {
+  /** Image point [to] in a leak's own frame (q: 1 = its radii), through its bend and taper, like the shader. */
+  const toQ = (s: MaskShape, leak: LeakForm, to: Pt): Pt => {
+    if (s.kind !== 'radial' && s.kind !== 'stripe') return [0, 0];
+    const a = (s.angle * Math.PI) / 180;
+    const dx = to[0] - s.cx * W;
+    const dy = to[1] - s.cy * H;
+    const rx = s.rx * long;
+    const pu = Math.cos(a) * dx + Math.sin(a) * dy;
+    const pv = -Math.sin(a) * dx + Math.cos(a) * dy - bendCurvature(leak.bend, rx) * pu * pu;
+    const qx = pu / rx;
+    return [qx, pv / (s.ry * long * taperWidth(leak.taper, qx))];
+  };
+
+  const hit = (p: Pt): { id: string; handle: Handle | 'pin'; index?: number } | null => {
     if (!r) return null;
     if (selected) {
       const g = geometry(selected);
       if (g.kind === 'radial') {
         if (near(p, g.knob, GRAB)) return { id: selected.id, handle: 'rotate' };
         if (g.bend && near(p, g.bend, GRAB)) return { id: selected.id, handle: 'bend' };
+        const pt = g.outlinePts.findIndex((q) => near(p, q, GRAB));
+        if (pt >= 0) return { id: selected.id, handle: 'outline', index: pt };
         if (g.rx.some((q) => near(p, q, GRAB))) return { id: selected.id, handle: 'rx' };
         if (g.ry.some((q) => near(p, q, GRAB))) return { id: selected.id, handle: 'ry' };
         if (near(p, g.pin!, GRAB * 1.5)) return { id: selected.id, handle: 'move' };
@@ -315,7 +348,7 @@ export function MaskOverlay(props: Props) {
   };
 
   /** The shape after dragging [handle] from image point [from] to [to]. */
-  const dragShape = (s: MaskShape, handle: Handle, from: Pt, to: Pt): MaskShape => {
+  const dragShape = (s: MaskShape, handle: Handle, from: Pt, to: Pt, radii?: readonly number[]): MaskShape => {
     const dx = (to[0] - from[0]) / W;
     const dy = (to[1] - from[1]) / H;
     if (s.kind === 'brush') return s;
@@ -344,10 +377,11 @@ export function MaskOverlay(props: Props) {
       if (deg > 180) deg -= 360;
       return { ...s, angle: Math.round(deg * 10) / 10 };
     }
-    // Radius along the ellipse's own (rotated) axis.
-    const u = Math.abs(Math.cos(a) * vx + Math.sin(a) * vy);
-    const v = Math.abs(-Math.sin(a) * vx + Math.cos(a) * vy);
-    return handle === 'rx' ? { ...s, rx: Math.max(0.01, u / long) } : { ...s, ry: Math.max(0.01, v / long) };
+    // Radius along the ellipse's own (rotated) axis; a reshaped glow's dot sits on its outline, [radii] times out.
+    const su = Math.cos(a) * vx + Math.sin(a) * vy;
+    const sv = -Math.sin(a) * vx + Math.cos(a) * vy;
+    const r = radii ? (handle === 'rx' ? leakRadius(radii, su >= 0 ? 0 : Math.PI) : leakRadius(radii, sv >= 0 ? Math.PI / 2 : -Math.PI / 2)) : 1;
+    return handle === 'rx' ? { ...s, rx: Math.max(0.01, Math.abs(su) / r / long) } : { ...s, ry: Math.max(0.01, Math.abs(sv) / r / long) };
   };
 
   let body = null;
@@ -419,6 +453,7 @@ export function MaskOverlay(props: Props) {
                 {line(`M${g.knobBase[0]},${g.knobBase[1]} L${g.knob[0]},${g.knob[1]}`, 1.2)}
                 {dot(g.knob, 6, false)}
                 {[...g.rx, ...g.ry].map((p, i) => <g key={i}>{dot(p, 5, true)}</g>)}
+                {g.outlinePts.map((p, i) => <g key={`o${i}`}>{dot(p, 4.5, false)}</g>)}
                 {g.bend && <rect x={g.bend[0] - 5} y={g.bend[1] - 5} width={10} height={10} fill="rgba(0,0,0,0.35)" stroke="#fff" strokeWidth={1.5} />}
                 {dot(g.pin!, 7, true)}
               </g>
@@ -432,7 +467,7 @@ export function MaskOverlay(props: Props) {
 
   const cursorStyle = painter
     ? 'none'
-    : hover === 'rotate' || hover === 'curve' || hover === 'bend'
+    : hover === 'rotate' || hover === 'curve' || hover === 'bend' || hover === 'outline'
       ? 'grab'
       : hover === 'pin'
         ? 'pointer'
@@ -500,7 +535,7 @@ export function MaskOverlay(props: Props) {
         if (!layer) return;
         if (h.id !== selectedId) onSelect(h.id);
         e.currentTarget.setPointerCapture(e.pointerId);
-        drag.current = { id: h.id, handle: h.handle, start: layer.shape, from: toImage(p[0], p[1]) };
+        drag.current = { id: h.id, handle: h.handle, start: layer.shape, from: toImage(p[0], p[1]), index: h.index ?? 0 };
       }}
       onPointerMove={(e) => {
         const p = local(e);
@@ -521,6 +556,19 @@ export function MaskOverlay(props: Props) {
           return;
         }
         e.stopPropagation();
+        if (d.handle === 'outline') {
+          // The point follows the pointer along its own direction from the centre.
+          const layer = layers.find((x) => x.id === d.id);
+          const leak = layer && formOf(layer);
+          if (!leak) return;
+          const q = toQ(d.start, leak, toImage(p[0], p[1]));
+          const t = radiusAngle(d.index);
+          const rr = Math.min(LEAK_RADIUS_MAX, Math.max(LEAK_RADIUS_MIN, q[0] * Math.cos(t) + q[1] * Math.sin(t)));
+          const radii = [...(leak.radii ?? ROUND_RADII)];
+          radii[d.index] = Math.round(rr * 1000) / 1000;
+          props.onReshape?.(d.id, radii);
+          return;
+        }
         if (d.handle === 'bend') {
           const b = bendAt(d.start, toImage(p[0], p[1]));
           if (b == null) return;
@@ -528,7 +576,9 @@ export function MaskOverlay(props: Props) {
           else props.onBend?.(d.id, b);
           return;
         }
-        onChange(d.id, dragShape(d.start, d.handle, d.from, toImage(p[0], p[1])));
+        const dl = layers.find((x) => x.id === d.id);
+        const form = dl && formOf(dl);
+        onChange(d.id, dragShape(d.start, d.handle, d.from, toImage(p[0], p[1]), form?.kind === 'glow' ? form.radii : undefined));
       }}
       onPointerUp={(e) => {
         pointerUp(e.pointerId);

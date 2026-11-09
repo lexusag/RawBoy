@@ -574,8 +574,18 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   an outer one 37° redder reaching twice as far, all **screen** blended, no cover term: the white core alone covers at
   100. Kinds: glow (ellipse), streak (|q.y|, fades over 0.6 rx past its ends), triangle (exact SDF outside, scaled by
   the inradius inside; a max-of-half-planes metric spiked the glow past the corners). Bend (v −= k u², k = bend/100/rx),
-  taper (width × 1 + taper·q.x) and warp (edge wobble, only outward) apply to all; `uLeakForm` = kind, k, warp, taper;
-  seed in `uLeakOuter.w`. Applied by each shader assembly **after** the curves line (`applyLeaks(c, srcG, outPx)`; iOS
+  taper (width × 1 + taper·q.x) and warp apply to all; `uLeakForm` = kind, k, warp, taper; seed in `uLeakOuter.w`.
+  Organic leaks (2026-11-09; the owner found the clean shapes "too perfect", their Affinity workflow warps a leak by
+  hand): warp = fbm domain warp + outward lumps, **unioned** with the clean shape (`min(e, ew)`) so it never uncovers
+  anything; `uLeakLook` = texture, cover: texture mixes the screen layers towards a per-channel exposure burn
+  `1 - (1 - c) e^-E` (red fills first: white → yellow → orange → red) with value-noise mottling, rays along the leak's
+  length and hue drift (`leakFbm`, Hoskins hash, no sine); cover mixes the picture towards a dim wash of the two hues
+  *before* the light, solid inside the outline (`eShape`, before texture frays it), for censoring. Glows reshape by 8
+  radii (`uLeakRadii`, 2 vec4 per leak, stored minus 1 so unbound = ellipse) at 22.5° + k 45° through a closed
+  Catmull-Rom (`leakRadius`, the same in TS); edge `(|q| - r) / sqrt(r)`. Web overlay: hollow `outline` dots, size
+  dots sit on the reshaped outline (`dragShape` divides by r). Android/iOS: model, JSON, packing, binding and the
+  Texture/Cover sliders; no outline dots yet. Old edits parse with texture/cover 0 and round radii (the old look).
+  Tuned with a standalone WebGL page that includes `light_leak.glsl` with a stub `grainNoise` (not in the repo). Applied by each shader assembly **after** the curves line (`applyLeaks(c, srcG, outPx)`; iOS
   binds them by name in `MetalCommon.bindLeaks`). The grain lives in `develop()` (log domain), so the
   leak would flatten it: `applyLeaks` adds `grainNoise` back × how much the leaks replaced (display units, ~mid-tone
   strength). UI reuses the mask overlay (`leak` form on web's `OverlayLayer`, `leaks` map on Android and iOS, `LeaksPanel.swift`; iOS's Reset

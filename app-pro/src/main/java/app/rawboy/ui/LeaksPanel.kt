@@ -189,6 +189,8 @@ fun LeaksPanel(
             ParamSlider("Bend", leak.bend, -100f..100f, 0f, format = ::signed) { v -> set { it.copy(bend = v) } }
             ParamSlider("Taper", leak.taper, -100f..100f, 0f, format = ::signed) { v -> set { it.copy(taper = v) } }
             ParamSlider("Warp", leak.warp, 0f..100f, 0f, format = ::formatPlain) { v -> set { it.copy(warp = v) } }
+            ParamSlider("Texture", leak.texture, 0f..100f, 0f, format = ::formatPlain) { v -> set { it.copy(texture = v) } }
+            ParamSlider("Cover", leak.cover, 0f..100f, 0f, format = { "${it.roundToInt()}%" }) { v -> set { it.copy(cover = v) } }
             ParamSlider("Softness", leak.softness, 0f..100f, leak.kind.softness, format = ::formatPlain) { v ->
                 set { it.copy(softness = v) }
             }
@@ -196,8 +198,8 @@ fun LeaksPanel(
             ParamSlider(
                 "Colour", leak.hue, LightLeaks.HUE_MIN..LightLeaks.HUE_MAX, LightLeaks.HUE, format = ::hueName, trackBrush = HUE_TRACK,
             ) { v -> set { it.copy(hue = v) } }
-            if (leak.warp > 0f) {
-                TextButton(onClick = { set(force = true) { it.copy(seed = LightLeaks.newSeed()) } }) { Text("New warp") }
+            if (leak.warp > 0f || leak.texture > 0f) {
+                TextButton(onClick = { set(force = true) { it.copy(seed = LightLeaks.newSeed()) } }) { Text("New pattern") }
             }
             LeakNote(
                 "Drag the leak to move it, the dots to resize (" +

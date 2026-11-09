@@ -60,6 +60,12 @@ data class LightLeak(
     val bend: Float = 0f,
     val taper: Float = 0f,
     val warp: Float = 0f,
+    /** 0..100: film burn (mottled, streaked, burning white through yellow and orange to red); 0 = the clean layers. */
+    val texture: Float = 0f,
+    /** 0..100: the photo inside the outline replaced under the light (100: nothing shows through). */
+    val cover: Float = 0f,
+    /** A glow's outline as [LightLeaks.RADII] radii at 22.5° + k 45° of its own frame (shape radii, 1 = the ellipse). */
+    val radii: List<Float> = LightLeaks.ROUND_RADII,
     val intensity: Float = 100f,
     val hue: Float = LightLeaks.HUE,
     val seed: Float = 0f,
@@ -95,6 +101,10 @@ object LightLeaks {
     /** The leak triangle's inradius in shape radii (base 2, height 2). */
     private const val TRIANGLE_INRADIUS = 0.618f
 
+    /** Control radii of a glow's outline. */
+    const val RADII = 8
+    val ROUND_RADII: List<Float> = List(RADII) { 1f }
+
     fun newSeed(): Float = (Random.nextFloat() * 1000f).roundToInt() / 1000f
 
     /** A warm orange leak, solid enough to cover what is under its core. */
@@ -110,6 +120,8 @@ object LightLeaks {
                 put("cx", num(l.cx)); put("cy", num(l.cy)); put("rx", num(l.rx)); put("ry", num(l.ry))
                 put("angle", num(l.angle)); put("softness", num(l.softness)); put("glow", num(l.glow))
                 put("bend", num(l.bend)); put("taper", num(l.taper)); put("warp", num(l.warp))
+                put("texture", num(l.texture)); put("cover", num(l.cover))
+                if (l.radii.any { it != 1f }) put("radii", JSONArray(l.radii.map { num(it) }))
                 put("intensity", num(l.intensity)); put("hue", num(l.hue)); put("seed", num(l.seed))
             }
         },
@@ -143,6 +155,12 @@ object LightLeaks {
             bend = f("bend", -100f, 100f) ?: 0f,
             taper = f("taper", -100f, 100f) ?: 0f,
             warp = f("warp", 0f, 100f) ?: 0f,
+            texture = f("texture", 0f, 100f) ?: 0f, // leaks saved before texture and cover keep their clean look
+            cover = f("cover", 0f, 100f) ?: 0f,
+            radii = (o.opt("radii") as? JSONArray)
+                ?.takeIf { r -> r.length() == RADII && (0 until RADII).all { (r.opt(it) as? Number)?.toFloat()?.isFinite() == true } }
+                ?.let { r -> List(RADII) { (r.get(it) as Number).toFloat().coerceIn(0.1f, 4f) } }
+                ?: ROUND_RADII,
             intensity = f("intensity", 0f, 100f) ?: 100f,
             hue = f("hue", HUE_MIN, HUE_MAX) ?: HUE,
             seed = f("seed", 0f, 1f) ?: 0f,
@@ -217,6 +235,10 @@ object LightLeaks {
                 l.kind.index.toFloat(), bendCurvature(l.bend, rxPx), (l.warp / 100f).coerceIn(0f, 1f),
                 (l.taper / 100f).coerceIn(-1f, 1f),
             ).copyInto(u.form, o)
+            floatArrayOf((l.texture / 100f).coerceIn(0f, 1f), (l.cover / 100f).coerceIn(0f, 1f), 0f, 0f).copyInto(u.look, o)
+            if (l.kind == LeakKind.GLOW && l.radii.size == RADII && l.radii.any { it != 1f }) {
+                l.radii.forEachIndexed { k, r -> u.radii[i * 8 + k] = r - 1f }
+            }
         }
         return u
     }
@@ -230,11 +252,15 @@ class LeakUniforms(
     val color: FloatArray,
     val outer: FloatArray,
     val form: FloatArray,
+    val look: FloatArray,
+    /** MAX_LEAKS x 2 vec4: a glow's 8 outline radii minus 1 (all 0: the ellipse). */
+    val radii: FloatArray,
 ) {
     companion object {
         private const val N = LightLeaks.MAX_LEAKS * 4
 
-        fun empty(count: Int) = LeakUniforms(count, FloatArray(N), FloatArray(N), FloatArray(N), FloatArray(N), FloatArray(N))
+        fun empty(count: Int) =
+            LeakUniforms(count, FloatArray(N), FloatArray(N), FloatArray(N), FloatArray(N), FloatArray(N), FloatArray(N), FloatArray(N * 2))
 
         val NONE = empty(0)
     }
