@@ -70,6 +70,8 @@ export const anamorphicBarOf = (c: AnamorphicColor): Float32Array => new Float32
  * - anamorphic: 0..100 horizontal anamorphic lens flare, 0 = off; anamorphicColor: 'neutral' | 'blue' | 'golden' | 'magenta'; anamorphicGhosts: faint oval ghosts of the lights
  * - skinRetouch: 0..100 smoothing of skin (found by a segmentation model), 0 = off
  * - blemishRemoval: 0..100 automatic spot healing on skin; higher heals fainter spots, 0 = off
+ * - portraitRetouch: 0..100 natural portrait retouch (spots, under-eyes, lines, evening; PortraitRetouch), 0 = off,
+ *   40 = about Reblum's Natural preset at 40
  * - lut: LutEntry id or null for "No LUT"; lutAmount: 0..100 strength
  * - film: film stock id (film/FilmStocks.ts) or null for none (Auto's Film mode); filmAmount: 0..100 blend of the
  *   film render over the AgX one; filmGrain, halation: 0..200, 100 = the stock's own
@@ -133,6 +135,7 @@ export interface DevelopParams {
   anamorphicGhosts: boolean;
   skinRetouch: number;
   blemishRemoval: number;
+  portraitRetouch: number;
   lut: string | null;
   lutAmount: number;
   film: string | null;
@@ -207,6 +210,7 @@ export const DEFAULT_PARAMS: Readonly<DevelopParams> = Object.freeze({
   anamorphicGhosts: false,
   skinRetouch: 0,
   blemishRemoval: 0,
+  portraitRetouch: 0,
   lut: null,
   lutAmount: 100,
   film: null,

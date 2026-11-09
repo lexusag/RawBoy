@@ -58,7 +58,7 @@ export function decodeAuto(text: string): SavedAuto | null {
   if (!o || typeof o !== 'object' || o.format !== AUTO_FORMAT) return null;
   const a = o.adjust && typeof o.adjust === 'object' ? (o.adjust as Record<string, unknown>) : {};
   const adjust = { ...NO_ADJUSTMENTS };
-  for (const k of Object.keys(NO_ADJUSTMENTS) as (keyof Adjustments)[]) adjust[k] = num(a[k], k === 'rotation' ? 0 : -100, k === 'rotation' ? 3 : 100, 0);
+  for (const k of Object.keys(NO_ADJUSTMENTS) as (keyof Adjustments)[]) adjust[k] = num(a[k], k === 'rotation' || k === 'retouch' ? 0 : -100, k === 'rotation' ? 3 : 100, 0);
   adjust.rotation = Math.round(adjust.rotation);
   let lensPreset: Preset | null = null;
   try {

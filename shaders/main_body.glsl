@@ -21,6 +21,9 @@ void main() {
     }
     // Local contrast and sharpening work on the image as decoded, before lens gains,
     // so the centre pixel and its neighbourhood are compared like for like.
+    // Portrait retouch: per-channel gains (log2) the CPU worked out on the preview (PortraitRetouch), packed in the
+    // skin texture's g, b, a.
+    if (uSkinFix != 0.0) x *= exp2(texture(uSkinMask, srcG / uImageSize).gba * uSkinFix);
     if (uRetouch > 0.0) x = retouchSkin(uvG, srcG, x);
     float g = 1.0;
     if (uSharpen > 0.0) g *= sharpenGain(uvG);

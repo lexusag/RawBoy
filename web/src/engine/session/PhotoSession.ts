@@ -21,6 +21,7 @@ import type { LutData } from '../lut/LutData';
 import { loadLutCached } from '../lut/LutRepository';
 import { RawImage } from '../raw/RawImage';
 import { shotInfoLine } from '../raw/ShotInfo';
+import { retouchMap, type RetouchMap } from '../retouch/PortraitRetouch';
 import { segmentSkin } from '../retouch/SkinSegmenter';
 import type { SkinMask } from '../retouch/SkinMask';
 import { halfToFloat } from '../util/half';
@@ -52,6 +53,9 @@ export interface SessionState {
   flareSource: PreviewImage | null;
   skin: SkinState;
   blemish: BlemishState;
+  /** Portrait retouch's map for the preview (null until made, or with no face), and whether one is being made. */
+  retouchMap: RetouchMap | null;
+  retouchWorking: boolean;
   /** Centre of the 100% view in full-resolution pixels; null = fit to view. */
   zoomCenter: [number, number] | null;
   /** Device pixels per full-resolution pixel while zoomed: 1 = 100%, others from the web's wheel zoom. */
@@ -108,6 +112,8 @@ export class PhotoSession {
     flareSource: null,
     skin: { kind: 'notComputed' },
     blemish: { working: false, healed: 0, detected: 0 },
+    retouchMap: null,
+    retouchWorking: false,
     zoomCenter: null,
     zoomScale: 1,
     detail: null,
@@ -139,6 +145,9 @@ export class PhotoSession {
   /** Bumped to cancel a pending blemish run. */
   private blemishRun = 0;
   private lensCache: { key: unknown[]; crop: number[]; lens: LensTransform } | null = null;
+  /** Bumped to cancel a pending Portrait retouch map; what the current map was made from. */
+  private retouchRun = 0;
+  private retouchFor: { preview: PreviewImage; strength: number } | null = null;
 
   /** [onMessage]: soft failures to show the user (e.g. skin detection failing). */
   constructor(private readonly onMessage: (message: string) => void) {}
@@ -213,6 +222,8 @@ export class PhotoSession {
     this.blemishSpots = null;
     this.brushes.clear();
     this.guide = null;
+    this.retouchRun++;
+    this.retouchFor = null;
     const defaults = asShotDefaults(img);
     this.update({
       lensInfo: img.lens,
@@ -223,6 +234,8 @@ export class PhotoSession {
       flareSource: null,
       skin: { kind: 'notComputed' },
       blemish: { working: false, healed: 0, detected: 0 },
+      retouchMap: null,
+      retouchWorking: false,
     });
     this.params = initialParams(defaults);
     this.ensureSkinMask();
@@ -236,8 +249,9 @@ export class PhotoSession {
   setParams(newParams: DevelopParams) {
     const before = this.params;
     this.params = newParams;
-    if (newParams.skinRetouch > 0 || newParams.blemishRemoval > 0) this.ensureSkinMask();
+    if (newParams.skinRetouch > 0 || newParams.blemishRemoval > 0 || newParams.portraitRetouch > 0) this.ensureSkinMask();
     if (newParams.blemishRemoval !== before.blemishRemoval) this.scheduleBlemishes();
+    if (newParams.portraitRetouch !== before.portraitRetouch) this.scheduleRetouch();
     this.ensureBokehSource();
     this.ensureFlareSource();
     // A 90 degree turn or a new crop changes the output shape, and a flip moves the content, so the zoom position
@@ -290,11 +304,12 @@ export class PhotoSession {
     lut: LutData | null = this._state.lutData,
     maskView: string | null = null,
     film: FilmData | null = this._state.filmData,
+    retouch: RetouchMap | null = this._state.retouchMap,
   ): ShaderParams {
     const s = this._state;
     return ShaderParams.from(
       p, defaults, lut, this.lensFor(p), s.base, s.bloomSources, s.skin.kind === 'ready' ? s.skin.mask : null, 1, 1, maskView,
-      (l) => this.brushRaster(l), film, s.bokehSource, s.flareSource,
+      (l) => this.brushRaster(l), film, s.bokehSource, s.flareSource, retouch,
     );
   }
 
@@ -487,10 +502,14 @@ export class PhotoSession {
     if (img && c) this.ensureDetail(img, c);
   }
 
-  /** Runs skin segmentation once per photo, when Skin retouch or Blemish removal is first non-zero (or when [force]d). */
+  /**
+   * Runs skin segmentation once per photo, when Skin retouch, Blemish removal or Portrait retouch is first non-zero
+   * (or when [force]d).
+   */
   private ensureSkinMask(force = false) {
     const p = this.params;
-    if ((!force && p.skinRetouch <= 0 && p.blemishRemoval <= 0) || this._state.skin.kind !== 'notComputed') return;
+    const wanted = p.skinRetouch > 0 || p.blemishRemoval > 0 || p.portraitRetouch > 0;
+    if ((!force && !wanted) || this._state.skin.kind !== 'notComputed') return;
     const img = this.image;
     const base = this._state.base;
     if (!img || !base) return;
@@ -501,6 +520,7 @@ export class PhotoSession {
         this.update({ skin: { kind: 'ready', mask } });
         this.recheckZoomTile(); // the skin smoothing radius widens the tiles the view needs
         this.scheduleBlemishes();
+        this.scheduleRetouch(0);
       },
       (e: unknown) => {
         if (this.image !== img) return;
@@ -562,10 +582,49 @@ export class PhotoSession {
       this.ensureBokehSource();
       this.ensureFlareSource();
       this.recheckZoomTile();
+      this.scheduleRetouch(0); // the healed preview changes what's left to retouch
     })().catch((e: unknown) => {
       this.onMessage(`Blemish removal failed: ${e instanceof Error ? e.message : String(e)}`);
       this.update({ blemish: { ...this._state.blemish, working: false } });
     });
+  }
+
+  /**
+   * Makes the Portrait retouch map for the current strength, [wait] ms after the slider settles (the shader scales the
+   * last map meanwhile, see skinFixOf). Needs the skin mask; runs again when it's ready or the preview is healed.
+   */
+  private scheduleRetouch(wait = 250) {
+    const run = ++this.retouchRun;
+    void (async () => {
+      try {
+        await delay(wait);
+        const img = this.image;
+        const preview = this._state.preview;
+        const skin = this._state.skin;
+        const strength = this.params.portraitRetouch;
+        if (run !== this.retouchRun || !img || !preview || strength <= 0 || skin.kind !== 'ready') return;
+        const f = this.retouchFor;
+        if (f && f.preview === preview && f.strength === strength) return;
+        this.update({ retouchWorking: true });
+        const map = await retouchMap(preview, skin.mask, strength);
+        if (run !== this.retouchRun || this.image !== img) return;
+        this.retouchFor = { preview, strength };
+        this.update({ retouchMap: map, retouchWorking: false });
+      } finally {
+        if (run === this.retouchRun && this._state.retouchWorking) this.update({ retouchWorking: false });
+      }
+    })().catch((e: unknown) => this.onMessage(`Portrait retouch failed: ${e instanceof Error ? e.message : String(e)}`));
+  }
+
+  /** The Portrait retouch map for exporting [p]: the current one if it fits, else made now from the preview. */
+  private async retouchMapFor(p: DevelopParams): Promise<RetouchMap | null> {
+    if (p.portraitRetouch <= 0) return null;
+    const mask = await this.skinMask();
+    const preview = this._state.preview;
+    if (!mask || !preview) return null;
+    const f = this.retouchFor;
+    if (f && f.preview === preview && f.strength === p.portraitRetouch) return this._state.retouchMap;
+    return retouchMap(preview, mask, p.portraitRetouch);
   }
 
   /** Source pixels needed around a region for the spatial effects (see ShaderParams.spatialMargin). */
@@ -636,7 +695,8 @@ export class PhotoSession {
     this.ensureFlareSource(p);
     await this.bokehJob;
     await this.flareJob;
-    return exportImage(img, this.shaderParams(p, defaults, lut, null, film), settings, onProgress);
+    const retouch = await this.retouchMapFor(p);
+    return exportImage(img, this.shaderParams(p, defaults, lut, null, film, retouch), settings, onProgress);
   }
 
   close() {

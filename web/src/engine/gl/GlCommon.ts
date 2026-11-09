@@ -5,6 +5,7 @@ import type { FxData } from '../develop/LightEffects';
 import type { LensTransform } from '../lens/LensTransform';
 import type { ShadingMap } from '../lens/LensInfo';
 import type { LutData } from '../lut/LutData';
+import type { RetouchMap } from '../retouch/PortraitRetouch';
 import type { SkinMask } from '../retouch/SkinMask';
 import type { PreviewImage } from './PreviewImage';
 import type { ShaderParams } from './ShaderParams';
@@ -187,6 +188,7 @@ export class DevelopProgram {
     this.f1('uRetouch', skin?.hasSkin ? p.skinRetouch : 0);
     this.i1('uSkinMask', Units.SKIN);
     this.f1('uSkinSigma', skin?.sigmaPx ?? 3);
+    this.f1('uSkinFix', p.retouchMap ? p.skinFix : 0);
     const bloomReady = p.bloomHalo != null && p.bloomTail != null;
     this.f1('uBloom', bloomReady ? p.bloom : 0);
     const flare = p.flareSource;
@@ -397,22 +399,30 @@ export class ImageTexture {
   }
 }
 
-/** The skin mask (R16F) on its own unit; re-uploads when it changes. */
+/**
+ * The skin mask (R16F) on its own unit; re-uploads when it changes. With a Portrait retouch map, the map in its place
+ * (RGBA16F: the skin mask resampled to the map's size, then the gains; see PortraitRetouch).
+ */
 export class MaskTexture {
   private readonly id: WebGLTexture;
-  private uploaded: SkinMask | null = null;
+  private uploaded: SkinMask | RetouchMap | null = null;
 
   constructor(private readonly gl: WebGL2RenderingContext) {
     this.id = createTexture(gl, gl.LINEAR);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16F, 1, 1, 0, gl.RED, gl.FLOAT, new Float32Array([0]));
   }
 
-  bind(mask: SkinMask | null) {
+  bind(mask: SkinMask | null, map: RetouchMap | null = null) {
     const gl = this.gl;
     gl.activeTexture(gl.TEXTURE0 + Units.SKIN);
     gl.bindTexture(gl.TEXTURE_2D, this.id);
-    if (mask && mask !== this.uploaded) {
-      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    if (map) {
+      if (map !== this.uploaded) {
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, map.width, map.height, 0, gl.RGBA, gl.FLOAT, map.data);
+        this.uploaded = map;
+      }
+    } else if (mask && mask !== this.uploaded) {
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.R16F, mask.width, mask.height, 0, gl.RED, gl.FLOAT, mask.data);
       this.uploaded = mask;
     }
@@ -638,7 +648,7 @@ export class DevelopInputs {
     this.halo.bind(p.bloomHalo);
     this.tail.bind(p.bloomTail);
     this.flare.bind(p.flareSource);
-    this.skin.bind(p.skinMask);
+    this.skin.bind(p.skinMask, p.retouchMap && p.skinFix !== 0 ? p.retouchMap : null);
     this.brush.bind(p.layers.brush);
     this.film.bind(p.film);
     this.bokeh.bind(p); // after the brush atlas: its mask pass reads it

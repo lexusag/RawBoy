@@ -688,7 +688,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
       ? store.session.shaderParams(shown, analysis.defaults, shown.lut != null ? session.lutData : null, null, shown.film != null ? session.filmData : null)
       : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [loaded, shown, analysis, session.lutData, session.filmData, session.lensInfo, session.base, session.bloomSources, session.bokehSource, session.flareSource, skinMask, session.preview],
+    [loaded, shown, analysis, session.lutData, session.filmData, session.lensInfo, session.base, session.bloomSources, session.bokehSource, session.flareSource, skinMask, session.retouchMap, session.preview],
   );
   // Until the raw is decoded, the photo's cached preview shows its develop (no 100% view yet).
   const cached = !loaded && state.cachedPreview?.id === id ? state.cachedPreview.image : null;
@@ -1017,6 +1017,8 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
                 {adjustSlider('Saturation', 'saturation', 100)}
                 {adjustSlider('Grain', 'grain', 50)}
                 {adjustSlider('Denoise', 'denoise', 100)}
+                <ParamSlider label="Retouch" value={photo.adjust.retouch} min={0} max={100} defaultValue={0} format={formatPlain} onChange={(v) => store.setAdjust(id, { retouch: v })} />
+                {photo.adjust.retouch > 0 && session.retouchWorking && <div className="note">Retouching…</div>}
               </>
             )}
             <div className="note">Double-click the photo for 100%. Press and hold it to see it without the {develop}. Space / Backspace (or ← / →) move through the batch.</div>

@@ -186,7 +186,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   const shaderParams = useMemo(
     () => (session.preview ? store.session.shaderParams(shown, state.defaults, session.lutData, maskView, session.filmData) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [shown, state.defaults, session.lutData, session.filmData, session.lensInfo, session.base, session.bloomSources, session.bokehSource, session.flareSource, skinMask, session.preview, maskView],
+    [shown, state.defaults, session.lutData, session.filmData, session.lensInfo, session.base, session.bloomSources, session.bokehSource, session.flareSource, skinMask, session.retouchMap, session.preview, maskView],
   );
 
   // Histogram of the edited photo (not the crop tool's whole frame, no mask overlay), from the 512 px base copy,
@@ -210,7 +210,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
     }, 150);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editedKey, state.defaults, session.lutData, session.filmData, session.base, session.bloomSources, session.bokehSource, session.flareSource, skinMask, session.preview]);
+  }, [editedKey, state.defaults, session.lutData, session.filmData, session.base, session.bloomSources, session.bokehSource, session.flareSource, skinMask, session.retouchMap, session.preview]);
 
   // Z: 100% at the pointer (or the middle of the photo when the pointer isn't on it), again to fit. Every mode but
   // Crop & rotate, which works on the uncropped fit view.
@@ -713,6 +713,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
                   lens={session.lensInfo}
                   skin={session.skin}
                   blemish={session.blemish}
+                  retouch={{ working: session.retouchWorking, ready: session.retouchMap != null }}
                   pickingWhite={pickingWhite}
                   onPickWhite={() => {
                     const next = !pickingWhite;
