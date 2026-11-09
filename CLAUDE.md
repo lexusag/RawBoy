@@ -679,7 +679,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   `configChanges` keep the activity, so the camera and GL view survive a turn; iOS: all orientations but upside down).
   `CameraLayout` (`ui/CameraLandscape.kt`, a `Layout` in `CameraScreen.swift`) keeps the viewfinder in one slot so its
   GL/Metal view isn't recreated: portrait stacked as before; landscape = bar buttons column | viewfinder | controls
-  (look row, S/B/W chips, one `VerticalSlider`; F + filter column in B&W) | shutter column. The camera turns with the
+  (look row, S/B/W chips, one `VerticalSlider`; F + filter column in B&W) | shutter column. On big screens (landscape, short side ≥ 600 dp/pt: tablets, foldables, iPads) `barAtRight` moves the bar column between the viewfinder and the controls, so all buttons are on the right. The camera turns with the
   phone, so the **picture must stay put on the glass**: everything about the viewfinder stays in the upright portrait
   coordinates it had (taps, focus/AE regions, faces, `Spot.turned`, the loupe) and is only turned for display by
   `viewfinderTurns` ((4 − displayRotation) % 4 clockwise quarter turns, selfie too: turning the mirrored selfie
