@@ -43,6 +43,7 @@ uniform vec4 uFlareInfo;         // texture width, rows of band 0, rows of band 
 uniform float uRetouch;          // 0..1
 uniform sampler2D uSkinMask;     // 0..1 skin probability over the whole image
 uniform float uSkinSigma;        // smoothing sigma, full-resolution px (scaled to face size)
+uniform float uSkinFix;          // Portrait retouch: x *= exp2(uSkinMask.gba * uSkinFix), 0 = off (web only so far)
 uniform highp sampler3D uLut;
 uniform float uLutSize;     // nodes per axis
 uniform float uLutAmount;   // 0 = off, 1 = full LUT

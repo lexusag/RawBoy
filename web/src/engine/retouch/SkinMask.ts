@@ -8,4 +8,8 @@ export interface SkinMask {
   hasSkin: boolean;
   /** Estimated face diameter in full-resolution pixels (0 if no face). */
   faceDiameterPx: number;
+  /** Face-skin confidence alone (the model's face class, 0..1), same size as [data]; Portrait retouch. */
+  face?: Float32Array;
+  /** Face landmarks per face (MediaPipe's 478-point mesh): x, y pairs in fractions of the image; Portrait retouch. */
+  faces?: Float32Array[];
 }
