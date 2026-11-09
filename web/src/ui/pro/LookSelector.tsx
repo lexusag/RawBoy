@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type PointerEvent as ReactPointerEvent } from 'react';
 import type { DevelopParams } from '../../engine/develop/DevelopParams';
-import { renderRegion } from '../../engine/gl/ThumbnailRenderer';
+import { renderRegion, renderThumbnail } from '../../engine/gl/ThumbnailRenderer';
 import { ZoomMath, rect } from '../../engine/gl/Zoom';
 import type { LutData } from '../../engine/lut/LutData';
 import { loadLut } from '../../engine/lut/LutLoader';
@@ -28,8 +28,10 @@ const MIN_HEIGHT = 140;
 const DRAG_SLOP = 5;
 /** How much of the window (CSS px) stays inside the preview when it is dragged out. */
 const KEEP_IN = 96;
-/** While the panel is being dragged the stripes are developed at this fraction of their size and stretched. */
-const DRAG_SCALE = 0.35;
+/** Each look is developed once at this long edge (px) for moving the window; the exact pixels follow when it rests. */
+const THUMB_LONG = 640;
+/** How long the window must rest (ms) before its stripes are developed at full resolution. */
+const REFINE_MS = 150;
 
 /** LUTs parsed for the stripes, by id (the session's own cache holds six, a page of stripes needs more). */
 const parsed = new Map<string, Promise<LutData>>();
@@ -163,96 +165,128 @@ export function LookSelector({ session, state, params, defaults, frame, at, onPi
   const [dragging, setDragging] = useState(false);
   const [loading, setLoading] = useState(0);
   const failed = useRef(new Set<string>());
-  const [, bump] = useState(0);
   const paramsKey = JSON.stringify({ ...params, lut: null, film: null });
   const pw = Math.round(zoneW * dpr);
   const ph = Math.round(zoneH * dpr);
+
+  // Each look of the page developed once, whole, at THUMB_LONG px: moving the window only copies pixels from these
+  // (instant on a phone), and a full-resolution pass replaces them once the window rests. Redone when the edit,
+  // the photo or its textures change.
+  const thumbs = useMemo(
+    () => new Map<string, HTMLCanvasElement>(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [state.preview, state.base, state.bloomSources, state.bokehSource, state.flareSource, state.lensInfo, defaults, paramsKey],
+  );
+
   useEffect(() => {
     const canvas = canvasRef.current;
     const preview = state.preview;
-    if (!canvas || !preview || !region || pw <= 0 || shown.length === 0) return;
+    if (!canvas || !preview || !region || !picture || pw <= 0 || shown.length === 0) return;
     let cancelled = false;
+    let timer = 0;
     const ctx = canvas.getContext('2d')!;
     const n = shown.length;
-    const scale = dragging ? DRAG_SCALE : 1;
-    let small: HTMLCanvasElement | null = null;
-    // Where the picture and the preview sit in the window's pixels: only their overlap is developed, the rest of
-    // the window (over the grey frame, past the preview) stays empty.
-    const sx = outW / picture!.width;
-    const sy = outH / picture!.height;
-    const clipL = Math.max(picture!.left, 0);
-    const clipT = Math.max(picture!.top, 0);
-    const clipR = Math.min(picture!.left + picture!.width, box.w);
-    const clipB = Math.min(picture!.top + picture!.height, box.h);
+    // Where the picture and the preview sit in the window's pixels: only their overlap is drawn, the rest of the
+    // window (over the grey frame, past the preview) stays empty.
+    const sx = outW / picture.width;
+    const sy = outH / picture.height;
+    const clipL = Math.max(picture.left, 0);
+    const clipT = Math.max(picture.top, 0);
+    const clipR = Math.min(picture.left + picture.width, box.w);
+    const clipB = Math.min(picture.top + picture.height, box.h);
     const px0 = Math.max(0, Math.round((clipL - left) * dpr));
     const px1 = Math.min(pw, Math.round((clipR - left) * dpr));
     const py0 = Math.max(0, Math.round((clipT - top) * dpr));
     const py1 = Math.min(ph, Math.round((clipB - top) * dpr));
-    const draw = (i: number, lut: LutData | null, film: FilmData | null) => {
+    /** Stripe [i]'s pixels in the window and the part of the picture (output pixels) they show. */
+    const geometry = (i: number) => {
       const x0 = Math.max(px0, Math.round((i * pw) / n));
       const x1 = Math.min(px1, Math.round(((i + 1) * pw) / n));
-      if (x1 <= x0 || py1 <= py0) return;
+      if (x1 <= x0 || py1 <= py0) return null;
       const slice = rect(
-        (left + x0 / dpr - picture!.left) * sx, (top + py0 / dpr - picture!.top) * sy,
+        (left + x0 / dpr - picture.left) * sx, (top + py0 / dpr - picture.top) * sy,
         ((x1 - x0) / dpr) * sx, ((py1 - py0) / dpr) * sy,
       );
-      const sp = session.shaderParams(withLook(params, shown[i]), defaults, lut, null, film);
-      const w = Math.max(1, Math.round((x1 - x0) * scale));
-      const h = Math.max(1, Math.round((py1 - py0) * scale));
-      const img = renderRegion(sp, preview, slice, w, h);
-      if (scale === 1) return ctx.putImageData(img, x0, py0);
-      // Low resolution while dragging: develop small, stretch.
-      small ??= document.createElement('canvas');
-      small.width = w;
-      small.height = h;
-      small.getContext('2d')!.putImageData(img, 0, 0);
-      ctx.imageSmoothingEnabled = true;
-      ctx.drawImage(small, x0, py0, x1 - x0, py1 - py0);
+      return { x0, x1, slice };
     };
-    const frame = requestAnimationFrame(() => {
-      if (cancelled) return;
+    const looksOf = (item: Item) => ({
+      lut: item.kind === 'lut' && item.id != null ? readyLuts.get(item.id) ?? null : null,
+      film: item.kind === 'film' ? readyFilms.get(item.id!) ?? null : null,
+    });
+    const keyOf = (item: Item) => `${item.kind}:${item.id ?? 'none'}`;
+    const loadedLook = (item: Item): Promise<unknown> =>
+      item.kind === 'film'
+        ? FilmStocks.load(item.id!).then((f) => readyFilms.set(item.id!, f))
+        : item.id == null ? Promise.resolve() : parsedLut(item.id).then((l) => readyLuts.set(item.id!, l));
+
+    /** From the cached thumbnails: a copy per stripe. */
+    const paintCached = () => {
       ctx.clearRect(0, 0, pw, ph);
-      const waiting: number[] = [];
+      ctx.imageSmoothingEnabled = true;
       shown.forEach((item, i) => {
-        if (item.kind === 'film') {
-          const ready = readyFilms.get(item.id!);
-          if (ready) draw(i, null, ready);
-          else if (!failed.current.has(item.id!)) waiting.push(i);
-        } else if (item.id == null) draw(i, null, null);
-        else {
-          const ready = readyLuts.get(item.id);
-          if (ready) draw(i, ready, null);
-          else if (!failed.current.has(item.id)) waiting.push(i);
-        }
+        const t = thumbs.get(keyOf(item));
+        const g = geometry(i);
+        if (!t || !g) return;
+        const k = t.width / outW;
+        ctx.drawImage(t, g.slice.x * k, g.slice.y * (t.height / outH), g.slice.width * k, g.slice.height * (t.height / outH), g.x0, py0, g.x1 - g.x0, py1 - py0);
       });
-      // Looks not loaded yet draw as they arrive.
-      if (waiting.length === 0) return;
-      setLoading((c) => c + waiting.length);
-      for (const i of waiting) {
-        const item = shown[i];
-        const id = item.id!;
-        const loaded: Promise<void> = item.kind === 'film'
-          ? FilmStocks.load(id).then((film) => {
-              readyFilms.set(id, film);
-              if (!cancelled) draw(i, null, film);
-            })
-          : parsedLut(id).then((lut) => {
-              readyLuts.set(id, lut);
-              if (!cancelled) draw(i, lut, null);
-            });
-        loaded.catch(() => {
-          failed.current.add(id);
-          if (!cancelled) bump((c) => c + 1);
-        }).finally(() => setLoading((c) => c - 1));
+    };
+    /** Full resolution, as the preview would show it. */
+    const paintFull = () => {
+      shown.forEach((item, i) => {
+        const g = geometry(i);
+        if (!g) return;
+        const { lut, film } = looksOf(item);
+        if ((item.kind === 'film' && !film) || (item.kind === 'lut' && item.id != null && !lut)) return;
+        const sp = session.shaderParams(withLook(params, item), defaults, lut, null, film);
+        ctx.putImageData(renderRegion(sp, preview, g.slice, g.x1 - g.x0, py1 - py0), g.x0, py0);
+      });
+    };
+    const buildThumb = async (item: Item) => {
+      await loadedLook(item);
+      if (cancelled) return;
+      const { lut, film } = looksOf(item);
+      const sp = session.shaderParams(withLook(params, item), defaults, lut, null, film);
+      const img = renderThumbnail(sp, preview, THUMB_LONG);
+      const c = document.createElement('canvas');
+      c.width = img.width;
+      c.height = img.height;
+      c.getContext('2d')!.putImageData(img, 0, 0);
+      thumbs.set(keyOf(item), c);
+    };
+
+    const frame = requestAnimationFrame(async () => {
+      if (cancelled) return;
+      paintCached();
+      const missing = shown.filter((item) => !thumbs.has(keyOf(item)) && !failed.current.has(keyOf(item)));
+      if (missing.length > 0) {
+        setLoading((c) => c + 1);
+        for (const item of missing) {
+          try {
+            await buildThumb(item);
+          } catch {
+            failed.current.add(keyOf(item));
+          }
+          if (cancelled) break;
+          paintCached();
+        }
+        setLoading((c) => c - 1);
+        if (cancelled) return;
       }
+      if (dragging) return;
+      // At rest: the exact pixels for this spot.
+      timer = window.setTimeout(() => {
+        if (!cancelled) paintFull();
+      }, REFINE_MS);
     });
     return () => {
       cancelled = true;
       cancelAnimationFrame(frame);
+      clearTimeout(timer);
     };
-    // params themselves are covered by paramsKey; session and defaults are stable for one photo.
+    // params themselves are covered by paramsKey (and so by thumbs); session is stable for one photo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state.preview, state.base, state.bloomSources, state.bokehSource, state.flareSource, state.lensInfo, region, box.w, box.h, pw, ph, shown, paramsKey, defaults, dragging]);
+  }, [thumbs, state.preview, region, box.w, box.h, pw, ph, shown, defaults, dragging]);
 
   // Escape closes, arrows turn the page.
   useEffect(() => {
