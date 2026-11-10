@@ -57,6 +57,7 @@ class DevelopRenderer : GLSurfaceView.Renderer {
     private var brushTexture: BrushTexture? = null
     private var filmTextures: FilmTextures? = null
     private var bokehTexture: BokehTexture? = null
+    private var fxTexture: FxTexture? = null
     private var previewTexture = 0
     private var detailTexture = 0
     private var uploadedDetail: DetailTile? = null
@@ -93,6 +94,7 @@ class DevelopRenderer : GLSurfaceView.Renderer {
         brushTexture = BrushTexture()
         filmTextures = FilmTextures()
         bokehTexture = BokehTexture(quad!!)
+        fxTexture = FxTexture()
         previewTexture = GlUtil.createTexture(GLES30.GL_LINEAR)
         detailTexture = GlUtil.createTexture(GLES30.GL_NEAREST) // 1:1, keep pixels crisp
         uploadedDetail = null
@@ -152,6 +154,7 @@ class DevelopRenderer : GLSurfaceView.Renderer {
         brushTexture!!.bind(p.layers.brush)
         filmTextures!!.bind(p.film)
         bokehTexture!!.bind(p) // after the brush atlas: its mask pass reads it
+        fxTexture!!.bind(p.fx.data)
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         val z = zoom
         if (z != null) {

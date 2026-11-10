@@ -108,6 +108,8 @@ data class DevelopParams(
     val masks: List<MaskLayer> = emptyList(),
     /** Up to [LightLeaks.MAX_LEAKS] light leaks over the finished picture (see LightLeaks.kt); per photo, like the masks. */
     val leaks: List<LightLeak> = emptyList(),
+    /** Up to [LightEffects.MAX_EFFECTS] light (lomo) effects over the leaks (see LightEffects.kt); per photo, not in presets. */
+    val fx: List<LightEffect> = emptyList(),
     /**
      * The photo is display-referred (JPEG, HEIC: see display_inverse.cpp), rendered with AgX per channel. Set only on
      * a photo's as-shot defaults, from the decoder; never a slider or preset value.

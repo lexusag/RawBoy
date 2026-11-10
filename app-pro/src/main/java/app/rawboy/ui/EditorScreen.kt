@@ -136,7 +136,8 @@ fun EditorScreen(vm: EditorViewModel) {
     val masksMode = mode == EditorMode.MASKS
     val leaksMode = mode == EditorMode.LEAKS
     // Handles on the photo, also beyond it (the margin), in either tool.
-    val shapesMode = masksMode || leaksMode
+    val fxMode = mode == EditorMode.FX
+    val shapesMode = masksMode || leaksMode || fxMode
     // The histogram sits above the slider tabs, so only while they show (the tools replace them).
     val histogramShown = state.hasImage && mode == EditorMode.NONE
     // White balance picker: armed from the Color tab, the next tap on the photo picks.
@@ -176,6 +177,11 @@ fun EditorScreen(vm: EditorViewModel) {
     val selectedLeak = selectedLeakState?.takeIf { id -> leaks.any { it.id == id } } ?: leaks.lastOrNull()?.id
     val leakShapes = remember(leaks) { leaks.map { MaskLayer(it.id, "", enabled = it.enabled, shape = it.shape) } }
     val leakForms = remember(leaks) { leaks.associate { it.id to LeakForm(it.kind, it.bend, it.taper) } }
+    // Light effects, the same way: radial shapes (an ellipse round the effect's box, no feather ring).
+    var selectedFxState by rememberSaveable { mutableStateOf<String?>(null) }
+    val effects = state.params.fx
+    val selectedFx = selectedFxState?.takeIf { id -> effects.any { it.id == id } } ?: effects.lastOrNull()?.id
+    val fxShapes = remember(effects) { effects.map { MaskLayer(it.id, "", enabled = it.enabled, shape = it.shape) } }
     val marginPx = with(LocalDensity.current) { if (shapesMode) MASK_MARGIN.roundToPx() else 0 }
     var viewSize by remember { mutableStateOf(IntSize.Zero) }
     // Crop shape lock (UI only; the crop itself is in the params). Portrait null = follow the frame.
@@ -186,6 +192,7 @@ fun EditorScreen(vm: EditorViewModel) {
         cropPortrait = null
         selectedLayer = null
         selectedLeakState = null
+        selectedFxState = null
     }
     val frame = vm.lensFor(state.params.withoutCrop())
     val portrait = cropPortrait ?: (frame.frameHeight > frame.frameWidth)
@@ -312,6 +319,21 @@ fun EditorScreen(vm: EditorViewModel) {
                         onBend = { id, bend -> vm.updateLeak(id) { it.copy(bend = bend) } },
                         zoomScale = zoomScale,
                     )
+                    val fxGestures = rememberMaskGestures(
+                        shaderParams.lens, fxShapes, selectedFx, framePx + marginPx, framePx, zoomCenter, MaskTool.MOVE, brush,
+                        MaskActions(
+                            onSelect = { selectedFxState = it },
+                            onChange = { id, shape -> if (shape is MaskShape.Radial) vm.updateEffect(id) { it.withShape(shape) } },
+                            onStrokeBegin = { _, _ -> },
+                            onStrokeExtend = { _, _, _ -> },
+                            onStrokeCancel = {},
+                            onPan = vm::pan,
+                            onZoomBy = { x, y, f -> vm.zoomBy(x, y, f, marginPx) },
+                        ),
+                        onPaintAt = {},
+                        grabInside = true,
+                        zoomScale = zoomScale,
+                    )
                     // Zoom and frame colour work on the cropped view; the crop tool shows the whole frame.
                     val panAndPinch = rememberPanAndPinch(true, vm::pan) { x, y, f -> if (!geometryMode) vm.zoomBy(x, y, f, marginPx) }
 
@@ -350,7 +372,8 @@ fun EditorScreen(vm: EditorViewModel) {
                             .then(panAndPinch)
                             // Last, so it sees each touch first and takes only handles and paint strokes.
                             .then(if (masksMode && preview != null) maskGestures else Modifier)
-                            .then(if (leaksMode && preview != null) leakGestures else Modifier),
+                            .then(if (leaksMode && preview != null) leakGestures else Modifier)
+                            .then(if (fxMode && preview != null) fxGestures else Modifier),
                     )
                     if (masksMode && preview != null && !showOriginal) {
                         MaskOverlay(
@@ -363,6 +386,12 @@ fun EditorScreen(vm: EditorViewModel) {
                         MaskOverlay(
                             shaderParams.lens, leakShapes, selectedLeak, framePx + marginPx, framePx, zoomCenter,
                             MaskTool.MOVE, brush, null, false, Modifier.matchParentSize(), leaks = leakForms, zoomScale = zoomScale,
+                        )
+                    }
+                    if (fxMode && preview != null && !showOriginal) {
+                        MaskOverlay(
+                            shaderParams.lens, fxShapes, selectedFx, framePx + marginPx, framePx, zoomCenter,
+                            MaskTool.MOVE, brush, null, false, Modifier.matchParentSize(), zoomScale = zoomScale,
                         )
                     }
                     if (geometryMode && zoomCenter == null && preview != null) {
@@ -501,6 +530,24 @@ fun EditorScreen(vm: EditorViewModel) {
                     onAdd = { kind -> vm.addLeak(kind)?.let { selectedLeakState = it } },
                     onUpdate = vm::updateLeak,
                     onRemove = vm::removeLeak,
+                    onMode = { mode = it },
+                    onToggleZoom = {
+                        if (zoomCenter != null) vm.exitZoom() else vm.toggleZoom(viewSize.width / 2f, viewSize.height / 2f, marginPx)
+                    },
+                    onDone = { mode = EditorMode.NONE },
+                    modifier = panel,
+                )
+            } else if (state.hasImage && fxMode) {
+                FxPanel(
+                    effects = effects,
+                    selectedId = selectedFx,
+                    aspect = frame.width.toFloat() / frame.height,
+                    zoomed = zoomCenter != null,
+                    onMode = { mode = it },
+                    onSelect = { selectedFxState = it },
+                    onAdd = { kind -> vm.addEffect(kind, frame.width.toFloat() / frame.height)?.let { selectedFxState = it } },
+                    onUpdate = vm::updateEffect,
+                    onRemove = vm::removeEffect,
                     onToggleZoom = {
                         if (zoomCenter != null) vm.exitZoom() else vm.toggleZoom(viewSize.width / 2f, viewSize.height / 2f, marginPx)
                     },

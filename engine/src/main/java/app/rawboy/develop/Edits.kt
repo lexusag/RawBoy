@@ -41,6 +41,7 @@ object Edits {
         values["cropBottom"] = num(p.cropBottom)
         values["masks"] = Masks.toJson(p.masks, strokes = true)
         values["leaks"] = LightLeaks.toJson(p.leaks)
+        values["fx"] = LightEffects.toJson(p.fx)
         return values
     }
 
@@ -94,6 +95,7 @@ object Edits {
             cropBottom = if (cropOk) bottom else p.cropBottom,
             masks = if (v.has("masks")) Masks.parseLayers(v.opt("masks"), strokes = true) else p.masks,
             leaks = if (v.has("leaks")) LightLeaks.parseLeaks(v.opt("leaks")) else p.leaks,
+            fx = if (v.has("fx")) LightEffects.parseEffects(v.opt("fx")) else p.fx,
         )
     }
 

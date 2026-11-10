@@ -594,9 +594,8 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   all moved next to Undo/Redo, as Android's): outlines bent and
   tapered like the shader, `grabInside`, a bend square at q = (0.5, 0). Older edits without kind/bend/… parse as plain
   glows. Not in presets (edits sidecars keep them).
-- Light effects (Pro, web only; `develop/LightEffects.ts`, `shaders/light_fx.glsl`, `ui/pro/FxPanel.tsx`, 2026-11-09): `DevelopParams.fx`,
-  up to `MAX_EFFECTS` (4) lomo effects (lightning, sparks, trails, swirl) after the leaks (`applyLightFx`, only in web
-  `Shaders.ts`; Android/iOS don't include the file and ignore `fx` in edits). Placement is a radial shape's (overlay: plain
+- Light effects (Pro; Android `develop/LightEffects.kt` + `FxPanel.kt`, iOS `develop/LightEffects.swift` + `Pro/ui/FxPanel.swift`, web `develop/LightEffects.ts`; the three generators draw the same random numbers in the same order, `LightEffectsTest.kt`/`LightEffectsTests.swift` hold web's printed checksums; the seed is a Double; Android/iOS reach the tool through the Light button's switch; texture unit 15 / Metal `uFx`; `develop/LightEffects.ts`, `shaders/light_fx.glsl`, `ui/pro/FxPanel.tsx`, 2026-11-09): `DevelopParams.fx`,
+  up to `MAX_EFFECTS` (4) lomo effects (lightning, sparks, trails, swirl) after the leaks (`applyLightFx`, in every shader assembly: `Shaders.ts`, `Shaders.kt`, `ios/shaders/gen.sh`). Placement is a radial shape's (overlay: plain
   radial, `grabInside`); the pattern is generated from `seed` + `amount` (mulberry32, cached) as segments in the effect's
   own -1..1 frame, widths in its mean radius. `packEffects` lays them into an RGBA32F texture (unit 15, `FxTexture`),
   rows of `FX_CHUNK` (16) segments after a bounding-box texel; the same object is reused while only placement/colour

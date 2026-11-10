@@ -9,7 +9,8 @@ package app.rawboy.gl
  *        -> lens gains (vignetting) -> WB re-balance -> exposure -> shadows/highlights (log-luminance gain)
  *        -> purity-limited saturation -> tone mapper: AgX, filmic or sigmoid (log encode, grain, contrast, curve) -> whites/blacks
  *        -> soft gamut compression -> Rec.709 / sRGB encoding -> optional 3D LUT (display-referred, like the film LUTs expect)
- *        -> point curves (Pro's Curves: RGB, then per channel) -> light leaks (Pro, shaders/light_leak.glsl).
+ *        -> point curves (Pro's Curves: RGB, then per channel) -> light leaks (Pro, shaders/light_leak.glsl)
+ *        -> light effects (Pro, shaders/light_fx.glsl).
  * Film looks: scatter + halation before the lens gains, and the film, grain and print in place of the tone mapper,
  *        blended with the AgX render by Strength: shaders/film_form.glsl (RawBoy's own formation) in every app.
  *
@@ -25,6 +26,7 @@ internal object Shaders {
     private const val MAIN_BODY = ShaderSources.MAIN_BODY
     private const val FILM_FORM = ShaderSources.FILM_FORM
     private const val LIGHT_LEAK = ShaderSources.LIGHT_LEAK
+    private const val LIGHT_FX = ShaderSources.LIGHT_FX
 
     private fun header(out: String): String = buildString {
         // highp int: fragment shaders default ints to mediump (16-bit on some GPUs),
@@ -41,10 +43,12 @@ internal object Shaders {
     fun fragment(forExport: Boolean): String = buildString {
         append(header(if (forExport) "out uvec4 fragColor;\n" else "out vec4 fragColor;\n"))
         append(LIGHT_LEAK)
+        append(LIGHT_FX)
         append(MAIN_BODY)
         append("    if (uLutAmount > 0.0) c = clamp(applyLut(c), 0.0, 1.0);\n")
         append("    if (uCurveOn > 0.0) c = applyCurves(c);\n")
         append("    if (uLeakCount > 0) c = applyLeaks(c, srcG, outPx);\n")
+        append("    if (uFxCount > 0) c = applyLightFx(c, srcG, outPx);\n")
         if (forExport) {
             // 16-bit unsigned integer target: exact, core in GLES 3.0, no float-buffer extension needed.
             append("    if (uClipFrame > 0.5) c *= frameMask(srcG);\n")
