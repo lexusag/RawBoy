@@ -588,6 +588,7 @@ class PhotoSession(
         val info = _lensInfo.value
         val key = listOf(
             info, params.lensProfile, params.lensDistortion, params.lensAnamorphic, params.lensCrop,
+            params.lensFisheye, params.lensFisheyeFov, params.lensFisheyeCircle, params.lensFisheyeX, params.lensFisheyeY,
             params.caRed, params.caBlue, params.vignetteAmount, params.vignetteMidpoint,
             params.rotation, params.flipHorizontal, params.flipVertical, params.straighten, params.scale,
         )

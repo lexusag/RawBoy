@@ -109,4 +109,31 @@ class FlipTest {
         assertEquals(1f, scope.right, 1e-6f)
         assertEquals(2.39, ((scope.right - scope.left) * 6000.0) / ((scope.bottom - scope.top) * 4000.0), 1e-5)
     }
+
+    @Test
+    fun fisheyeStraighteningIsOffAtZeroAndFollowsTheEquidistantToRectilinearFormula() {
+        val off = LensTransform(info, DevelopParams(lensFisheye = 0f))
+        assertFalse(off.isGeometric)
+        assertEquals(1.0, off.zoom, 0.0)
+        val l = LensTransform(info, DevelopParams(lensFisheye = 100f, lensCrop = -100f))
+        assertTrue(l.isGeometric)
+        val half = Math.hypot(3000.0, 2000.0)
+        val fe = half / (Math.PI / 2)
+        val t = l.fisheyeT
+        assertEquals(Math.toRadians(75.0) / (Math.PI / 2), t, 1e-9)
+        val s = l.source(3000.0 + 900.0 * l.zoom, 2000.0 + 300.0 * l.zoom)
+        val r = Math.hypot(900.0, 300.0)
+        assertEquals(fe * Math.atan(t * r / fe) / t, Math.hypot(s[0] - 3000.0, s[1] - 2000.0), 1e-6)
+        // Auto zoom keeps every output pixel on real image data, inside the circle of a circular fisheye.
+        val circ = LensTransform(info, DevelopParams(lensFisheye = 60f, lensFisheyeCircle = 40f))
+        for ((x, y) in listOf(0.0 to 0.0, 6000.0 to 0.0, 0.0 to 4000.0, 6000.0 to 4000.0, 3000.0 to 0.0, 0.0 to 2000.0)) {
+            val p = circ.source(x, y)
+            assertTrue(Math.hypot(p[0] - 3000.0, p[1] - 2000.0) <= 0.4 * half + 0.5)
+        }
+        // Moving the circle moves the optical axis: the output centre samples the circle's centre.
+        val moved = LensTransform(info, DevelopParams(lensFisheye = 60f, lensFisheyeX = 10f, lensFisheyeY = -5f))
+        val mid = moved.source(3000.0, 2000.0)
+        assertEquals(3600.0, mid[0], 1e-6)
+        assertEquals(1800.0, mid[1], 1e-6)
+    }
 }

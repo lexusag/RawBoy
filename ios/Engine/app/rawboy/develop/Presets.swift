@@ -36,7 +36,7 @@ public enum PresetGroup: String, CaseIterable, Sendable {
                        "grainRoughness", "grainColor", "bloom", "anamorphic", "anamorphicColor", "anamorphicGhosts"]
         case .retouch: ["skinRetouch", "blemishRemoval"]
         case .lut: ["lut", "lutAmount"]
-        case .lens: ["lensProfile", "lensDistortion", "lensAnamorphic", "lensCrop", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint"]
+        case .lens: ["lensProfile", "lensDistortion", "lensAnamorphic", "lensFisheye", "lensFisheyeFov", "lensFisheyeCircle", "lensFisheyeX", "lensFisheyeY", "lensCrop", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint"]
         case .masks: ["masks"]
         }
     }
@@ -276,7 +276,8 @@ public enum Presets {
         "grainRoughness": \.grainRoughness, "grainColor": \.grainColor, "bloom": \.bloom,
         "anamorphic": \.anamorphic, "skinRetouch": \.skinRetouch,
         "blemishRemoval": \.blemishRemoval, "lutAmount": \.lutAmount, "lensDistortion": \.lensDistortion,
-        "lensAnamorphic": \.lensAnamorphic, "lensCrop": \.lensCrop, "caRed": \.caRed, "caBlue": \.caBlue,
+        "lensAnamorphic": \.lensAnamorphic, "lensFisheye": \.lensFisheye, "lensFisheyeFov": \.lensFisheyeFov,
+        "lensFisheyeCircle": \.lensFisheyeCircle, "lensFisheyeX": \.lensFisheyeX, "lensFisheyeY": \.lensFisheyeY, "lensCrop": \.lensCrop, "caRed": \.caRed, "caBlue": \.caBlue,
         "vignetteAmount": \.vignetteAmount, "vignetteMidpoint": \.vignetteMidpoint,
         "filmAmount": \.filmAmount, "filmGrain": \.filmGrain, "halation": \.halation,
     ]

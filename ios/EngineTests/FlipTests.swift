@@ -121,4 +121,39 @@ final class FlipTests: XCTestCase {
         XCTAssertEqual(scope.right, 1, accuracy: 1e-6)
         XCTAssertEqual(Double(scope.right - scope.left) * 6000 / (Double(scope.bottom - scope.top) * 4000), 2.39, accuracy: 1e-5)
     }
+
+    func testFisheyeStraighteningFollowsTheEquidistantToRectilinearFormula() throws {
+        let off = LensTransform(info: info, params: DevelopParams())
+        XCTAssertFalse(off.isGeometric)
+        XCTAssertEqual(off.zoom, 1.0)
+        var p = DevelopParams()
+        p.lensFisheye = 100
+        p.lensCrop = -100
+        let l = LensTransform(info: info, params: p)
+        XCTAssertTrue(l.isGeometric)
+        let half = hypot(3000.0, 2000.0)
+        let fe = half / (Double.pi / 2)
+        let t = l.fisheyeT
+        XCTAssertEqual(t, 75.0 * Double.pi / 180 / (Double.pi / 2), accuracy: 1e-9)
+        let s = l.source(3000 + 900 * l.zoom, 2000 + 300 * l.zoom)
+        let r = hypot(900.0, 300.0)
+        XCTAssertEqual(hypot(s[0] - 3000, s[1] - 2000), fe * atan(t * r / fe) / t, accuracy: 1e-6)
+        // Auto zoom keeps every output pixel inside the circle of a circular fisheye.
+        var c = DevelopParams()
+        c.lensFisheye = 60
+        c.lensFisheyeCircle = 40
+        let circ = LensTransform(info: info, params: c)
+        for (x, y) in [(0.0, 0.0), (6000.0, 0.0), (0.0, 4000.0), (6000.0, 4000.0), (3000.0, 0.0), (0.0, 2000.0)] {
+            let q = circ.source(x, y)
+            XCTAssertLessThanOrEqual(hypot(q[0] - 3000, q[1] - 2000), 0.4 * half + 0.5)
+        }
+        // Moving the circle moves the optical axis: the output centre samples the circle's centre.
+        var m = DevelopParams()
+        m.lensFisheye = 60
+        m.lensFisheyeX = 10
+        m.lensFisheyeY = -5
+        let mid = LensTransform(info: info, params: m).source(3000, 2000)
+        XCTAssertEqual(mid[0], 3600, accuracy: 1e-6)
+        XCTAssertEqual(mid[1], 1800, accuracy: 1e-6)
+    }
 }
