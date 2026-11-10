@@ -162,6 +162,7 @@ object LookApplier {
             lensAnamorphic = lens.lensAnamorphic,
             lensFisheye = lens.lensFisheye,
             lensFisheyeFov = lens.lensFisheyeFov,
+            lensFisheyeAuto = lens.lensFisheyeAuto,
             lensFisheyeCircle = lens.lensFisheyeCircle,
             lensFisheyeX = lens.lensFisheyeX,
             lensFisheyeY = lens.lensFisheyeY,

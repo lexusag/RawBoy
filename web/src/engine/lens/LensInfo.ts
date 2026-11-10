@@ -1,3 +1,5 @@
+import type { FisheyeCircle } from './FisheyeCircle';
+
 /**
  * Lens data for one decoded image (port of lens/LensInfo.kt). Corrections come from DNG opcodes and are in
  * sensor coordinates (before orientation); [orientation] maps between the two.
@@ -43,6 +45,12 @@ export class LensInfo {
     /** Number of DNG GainMaps applied while decoding (colour + lens shading). */
     readonly gainMapsApplied: number,
   ) {}
+
+  /**
+   * The picture circle of a circular fisheye, found on the base copy (detectFisheyeCircle) by whoever has it; null =
+   * none found or not looked for yet. Used while DevelopParams.lensFisheyeAuto is on.
+   */
+  fisheyeCircle: FisheyeCircle | null = null;
 
   get hasProfile(): boolean {
     return this.warp != null || this.vignette != null || this.shading != null;

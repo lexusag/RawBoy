@@ -72,12 +72,13 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
     val fisheyeT = params.lensFisheye.toDouble().coerceIn(0.0, 100.0) / 100.0 * min(1.0, FISHEYE_MAX_ANGLE / fisheyeHalfFov)
 
     /** The fisheye's image circle radius and its equidistant focal length (source radius = fe * angle), pixels. */
-    val fisheyeRadius = params.lensFisheyeCircle.toDouble().coerceIn(20.0, 100.0) / 100.0 * halfDiagonal
+    private val foundCircle = info.fisheyeCircle.takeIf { params.lensFisheyeAuto }
+    val fisheyeRadius = (foundCircle?.let { it.radius * 100.0 } ?: params.lensFisheyeCircle.toDouble()).coerceIn(20.0, 100.0) / 100.0 * halfDiagonal
     val fisheyeFe = fisheyeRadius / fisheyeHalfFov
 
     /** Optical axis offset from the image centre, pixels. */
-    val fisheyeOffsetX = params.lensFisheyeX.toDouble().coerceIn(-50.0, 50.0) / 100.0 * width
-    val fisheyeOffsetY = params.lensFisheyeY.toDouble().coerceIn(-50.0, 50.0) / 100.0 * height
+    val fisheyeOffsetX = (foundCircle?.let { it.offsetX * 100.0 } ?: params.lensFisheyeX.toDouble()).coerceIn(-50.0, 50.0) / 100.0 * width
+    val fisheyeOffsetY = (foundCircle?.let { it.offsetY * 100.0 } ?: params.lensFisheyeY.toDouble()).coerceIn(-50.0, 50.0) / 100.0 * height
 
     /** Scale relative to the auto crop: 0 = exact Constrain Crop, < 0 zooms out to show curved borders, > 0 crops tighter. */
     private val cropScale = 2.0.pow(params.lensCrop.toDouble().coerceIn(-100.0, 100.0) / 150.0)

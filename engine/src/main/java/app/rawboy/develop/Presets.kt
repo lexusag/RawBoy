@@ -37,7 +37,7 @@ enum class PresetGroup(val key: String, val label: String, val fields: List<Stri
     ),
     RETOUCH("retouch", "Retouch", listOf("skinRetouch", "blemishRemoval")),
     LUT("lut", "LUT", listOf("lut", "lutAmount")),
-    LENS("lens", "Lens", listOf("lensProfile", "lensDistortion", "lensAnamorphic", "lensFisheye", "lensFisheyeFov", "lensFisheyeCircle", "lensFisheyeX", "lensFisheyeY", "lensCrop", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint")),
+    LENS("lens", "Lens", listOf("lensProfile", "lensDistortion", "lensAnamorphic", "lensFisheye", "lensFisheyeFov", "lensFisheyeAuto", "lensFisheyeCircle", "lensFisheyeX", "lensFisheyeY", "lensCrop", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint")),
     MASKS("masks", "Masks (gradients only)", listOf("masks")),
     ;
 
@@ -265,6 +265,7 @@ object Presets {
         "lensAnamorphic" -> p.lensAnamorphic
         "lensFisheye" -> p.lensFisheye
         "lensFisheyeFov" -> p.lensFisheyeFov
+        "lensFisheyeAuto" -> p.lensFisheyeAuto
         "lensFisheyeCircle" -> p.lensFisheyeCircle
         "lensFisheyeX" -> p.lensFisheyeX
         "lensFisheyeY" -> p.lensFisheyeY
@@ -284,6 +285,7 @@ object Presets {
         if (field == "colorDenoise" && value == null) return p.copy(colorDenoise = null)
         if (field == "anamorphicGhosts") return if (value is Boolean) p.copy(anamorphicGhosts = value) else p
         if (field == "lensProfile") return if (value is Boolean) p.copy(lensProfile = value) else p
+        if (field == "lensFisheyeAuto") return if (value is Boolean) p.copy(lensFisheyeAuto = value) else p
         if (field == "toneMapper") return ToneMapper.fromKey(value as? String)?.let { p.copy(toneMapper = it) } ?: p
         if (field == "anamorphicColor") return AnamorphicColor.fromKey(value as? String)?.let { p.copy(anamorphicColor = it) } ?: p
         if (field == "curves") return if (value is ToneCurves) p.copy(curves = value) else p

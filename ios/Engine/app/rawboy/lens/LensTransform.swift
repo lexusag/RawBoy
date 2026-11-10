@@ -136,10 +136,11 @@ public final class LensTransform: @unchecked Sendable {
         anamorphicK = Double(params.lensAnamorphic) / 100 * 0.30
         let fisheyeHalfFov = Double(params.lensFisheyeFov).clamped(90, 220) / 2 * .pi / 180
         fisheyeT = Double(params.lensFisheye).clamped(0, 100) / 100 * min(1, Self.fisheyeMaxAngle / fisheyeHalfFov)
-        fisheyeRadius = Double(params.lensFisheyeCircle).clamped(20, 100) / 100 * halfDiagonal
+        let found = params.lensFisheyeAuto ? info.fisheyeCircle : nil
+        fisheyeRadius = (found.map { $0.radius * 100 } ?? Double(params.lensFisheyeCircle)).clamped(20, 100) / 100 * halfDiagonal
         fisheyeFe = fisheyeRadius / fisheyeHalfFov
-        fisheyeOffsetX = Double(params.lensFisheyeX).clamped(-50, 50) / 100 * Double(width)
-        fisheyeOffsetY = Double(params.lensFisheyeY).clamped(-50, 50) / 100 * Double(height)
+        fisheyeOffsetX = (found.map { $0.offsetX * 100 } ?? Double(params.lensFisheyeX)).clamped(-50, 50) / 100 * Double(width)
+        fisheyeOffsetY = (found.map { $0.offsetY * 100 } ?? Double(params.lensFisheyeY)).clamped(-50, 50) / 100 * Double(height)
         let cropScale = pow(2.0, Double(params.lensCrop).clamped(-100, 100) / 150.0)
         clipFrame = params.lensCrop < 0
         caScaleRed = 1 - Double(params.caRed) / 100 * Self.caMax

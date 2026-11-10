@@ -121,10 +121,15 @@ export class LensTransform {
     const fisheyeHalfFov = (Math.min(220, Math.max(90, params.lensFisheyeFov)) / 2) * (Math.PI / 180);
     // 100 stops at tan(75 deg) at the edge of the lens's view: a true rectilinear picture of 180 degrees is infinitely wide.
     this.fisheyeT = (Math.min(100, Math.max(0, params.lensFisheye)) / 100) * Math.min(1, FISHEYE_MAX_ANGLE / fisheyeHalfFov);
-    this.fisheyeRadius = (Math.min(100, Math.max(20, params.lensFisheyeCircle)) / 100) * this.halfDiagonal;
+    // The detected circle (if asked for and found) replaces the three circle sliders.
+    const found = params.lensFisheyeAuto ? info.fisheyeCircle : null;
+    const circle = found ? found.radius * 100 : params.lensFisheyeCircle;
+    const offsetX = found ? found.offsetX * 100 : params.lensFisheyeX;
+    const offsetY = found ? found.offsetY * 100 : params.lensFisheyeY;
+    this.fisheyeRadius = (Math.min(100, Math.max(20, circle)) / 100) * this.halfDiagonal;
     this.fisheyeFe = this.fisheyeRadius / fisheyeHalfFov;
-    this.fisheyeOffsetX = (Math.min(50, Math.max(-50, params.lensFisheyeX)) / 100) * this.width;
-    this.fisheyeOffsetY = (Math.min(50, Math.max(-50, params.lensFisheyeY)) / 100) * this.height;
+    this.fisheyeOffsetX = (Math.min(50, Math.max(-50, offsetX)) / 100) * this.width;
+    this.fisheyeOffsetY = (Math.min(50, Math.max(-50, offsetY)) / 100) * this.height;
     const cropScale = 2 ** (Math.min(100, Math.max(-100, params.lensCrop)) / 150);
     this.clipFrame = params.lensCrop < 0;
     this.caScaleRed = 1 - (params.caRed / 100) * CA_MAX;

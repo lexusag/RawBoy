@@ -34,7 +34,7 @@ export const PRESET_GROUPS: readonly { key: PresetGroup; label: string; fields: 
   { key: 'denoise', label: 'Denoise & sharpening', fields: ['denoise', 'colorDenoise', 'sharpening'] },
   { key: 'retouch', label: 'Retouch', fields: ['skinRetouch', 'blemishRemoval', 'portraitRetouch'] },
   { key: 'lut', label: 'LUT', fields: ['lut', 'lutAmount'] },
-  { key: 'lens', label: 'Lens', fields: ['lensProfile', 'lensDistortion', 'lensAnamorphic', 'lensFisheye', 'lensFisheyeFov', 'lensFisheyeCircle', 'lensFisheyeX', 'lensFisheyeY', 'lensCrop', 'caRed', 'caBlue', 'vignetteAmount', 'vignetteMidpoint'] },
+  { key: 'lens', label: 'Lens', fields: ['lensProfile', 'lensDistortion', 'lensAnamorphic', 'lensFisheye', 'lensFisheyeFov', 'lensFisheyeAuto', 'lensFisheyeCircle', 'lensFisheyeX', 'lensFisheyeY', 'lensCrop', 'caRed', 'caBlue', 'vignetteAmount', 'vignetteMidpoint'] },
   { key: 'masks', label: 'Masks (gradients only)', fields: ['masks'] },
 ];
 
@@ -197,7 +197,7 @@ export function applyPreset(preset: Preset, params: DevelopParams): DevelopParam
       else if (typeof value === 'string') p[field] = field === 'lut' ? RetiredLooks.lut(value) : RetiredLooks.stock(value);
     } else if (field === 'colorDenoise') {
       if (value === null || (typeof value === 'number' && Number.isFinite(value))) p.colorDenoise = value;
-    } else if (field === 'lensProfile' || field === 'anamorphicGhosts') {
+    } else if (field === 'lensProfile' || field === 'lensFisheyeAuto' || field === 'anamorphicGhosts') {
       if (typeof value === 'boolean') p[field] = value;
     } else if (field === 'toneMapper') {
       if (TONE_MAPPERS.some((m) => m.key === value)) p.toneMapper = value;

@@ -228,7 +228,7 @@ struct ControlsPanel: View {
      * open while any of them is changed, so an edit is never hidden). As `grainSliders`.
      */
     @ViewBuilder private var fisheyeSliders: some View {
-        let changed = params.lensFisheyeFov != defaults.lensFisheyeFov || params.lensFisheyeCircle != defaults.lensFisheyeCircle
+        let changed = params.lensFisheyeAuto != defaults.lensFisheyeAuto || params.lensFisheyeFov != defaults.lensFisheyeFov || params.lensFisheyeCircle != defaults.lensFisheyeCircle
             || params.lensFisheyeX != defaults.lensFisheyeX || params.lensFisheyeY != defaults.lensFisheyeY
         let shown = fisheyeOpen || changed
         ParamSlider(label: shown ? "Fisheye ▾" : "Fisheye ▸", value: params.lensFisheye, range: 0...100, defaultValue: defaults.lensFisheye,
@@ -236,9 +236,17 @@ struct ControlsPanel: View {
         if shown {
             Group {
                 slider("Lens field of view", \.lensFisheyeFov, 90...220, format: { "\(Int($0.rounded()))°" })
-                slider("Image circle size", \.lensFisheyeCircle, 20...100, format: formatPlain)
-                slider("Circle centre X", \.lensFisheyeX, -50...50, format: formatPlain)
-                slider("Circle centre Y", \.lensFisheyeY, -50...50, format: formatPlain)
+                Toggle("Find the circle automatically", isOn: Binding(get: { params.lensFisheyeAuto },
+                                                                      set: { v in set { $0.lensFisheyeAuto = v } }))
+                    .font(.subheadline)
+                if params.lensFisheyeAuto, let found = lens.fisheyeCircle {
+                    Note("Found a circle of \(Int((found.radius * 100).rounded()))% at \(Int((found.offsetX * 100).rounded())), \(Int((found.offsetY * 100).rounded())).")
+                } else {
+                    if params.lensFisheyeAuto { Note("No circle found (the picture fills the frame), so the sliders below are used.") }
+                    slider("Image circle size", \.lensFisheyeCircle, 20...100, format: formatPlain)
+                    slider("Circle centre X", \.lensFisheyeX, -50...50, format: formatPlain)
+                    slider("Circle centre Y", \.lensFisheyeY, -50...50, format: formatPlain)
+                }
                 Note("Assumes an equidistant fisheye. For a circular fisheye, set the circle size and centre so the lens's real picture is the circle; Crop below 0 shows more of it.")
             }
             .padding(.leading, 16)

@@ -146,6 +146,7 @@ public enum LookApplier {
         d.lensAnamorphic = lens.lensAnamorphic
         d.lensFisheye = lens.lensFisheye
         d.lensFisheyeFov = lens.lensFisheyeFov
+        d.lensFisheyeAuto = lens.lensFisheyeAuto
         d.lensFisheyeCircle = lens.lensFisheyeCircle
         d.lensFisheyeX = lens.lensFisheyeX
         d.lensFisheyeY = lens.lensFisheyeY

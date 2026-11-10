@@ -44,6 +44,8 @@ public final class LensInfo: @unchecked Sendable {
     public let shading: ShadingMap?
     /** Number of DNG GainMaps applied while decoding (colour + lens shading). */
     public let gainMapsApplied: Int
+    /** The picture circle of a circular fisheye found on the base copy, nil for other lenses (set after decoding). */
+    public var fisheyeCircle: FisheyeCircle?
 
     public init(lensName: String, width: Int, height: Int, sensorWidth: Int, sensorHeight: Int, orientation: Int,
                 warp: Warp?, vignette: RadialVignette?, shading: ShadingMap?, gainMapsApplied: Int) {

@@ -40,6 +40,9 @@ class LensInfo(
         val gains: FloatBuffer,
     )
 
+    /** The picture circle of a circular fisheye found on the base copy, null for other lenses (set after decoding). */
+    @Volatile var fisheyeCircle: FisheyeCircle? = null
+
     val hasProfile: Boolean get() = warp != null || vignette != null || shading != null
 
     /** One line for the Lens tab, e.g. "vignetting & colour shading, distortion". */

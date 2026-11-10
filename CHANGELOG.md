@@ -1,3 +1,7 @@
+**RawBoy Pro (Android, iOS, web): Fisheye finds the picture circle by itself (2026-11-10)**
+
+- Lens › Fisheye has a switch, **Find the circle automatically** (on by default). On a circular fisheye (Sony 4 mm class, Fuji ~4 mm on a crop body) the circle's size and centre are found on the 512 px copy: the four corners must be black, the bright area round, and the ring just outside it dark, otherwise nothing is found (frame-filling fisheyes such as the 11 mm, and ordinary photos, are left alone). When a circle is found the size and centre sliders are replaced by a line saying what was found; switch it off, or when none is found, they work as before. The switch is in the Lens preset group, so Auto's lens presets use the circle found in each photo. Checked on six of the owner's samples on the web (`FisheyeCircle.ts`, `FisheyeCircle.kt/.swift` are ports of it); the Android and iOS code was not built or run here. Auto's web analysis cache does not keep the circle, it is found again on load.
+
 **RawBoy Pro (Android, iOS, web): Fisheye is on the phones, and its settings are hidden like Grain's (2026-11-10)**
 
 - The auto crop of a straightened fisheye now stops where the picture would be stretched more than 4× along the radius (stretch = 1 + (t·r/fe)², all platforms): beyond that a source pixel is smeared over a strip of blocks and colour fringes with no real detail. Crop below 0 still shows those edges. Picked by the owner from a mock-up of six options (cap at 60°, stretch crop, cubic sampling, chroma fade); cubic sampling and the fade were not done.

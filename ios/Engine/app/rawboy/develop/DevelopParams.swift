@@ -25,7 +25,7 @@ import Foundation
  * - lensDistortion: -100..100, + removes barrel distortion; auto crop/scale follows
  * - lensAnamorphic: -100..100 cylindrical (horizontal) distortion; - bows vertical edges outward like an anamorphic lens
  * - lensFisheye: 0..100 straightens a fisheye lens (equidistant projection assumed) towards rectilinear, 0 = off; lensFisheyeFov: 90..220
- *   degrees across the lens's image circle (the frame's diagonal when the circle fills it), lensFisheyeCircle: 20..100 radius
+ *   degrees across the lens's image circle (the frame's diagonal when the circle fills it), lensFisheyeAuto: use the circle found in the picture instead of the next three, lensFisheyeCircle: 20..100 radius
  *   of that circle in % of the frame's half diagonal, lensFisheyeX/Y: -50..50 offset of the circle's centre in % of width/height
  * - lensCrop: -100..100 scale around the auto crop (0 = no empty edges; < 0 reveals curved borders; > 0 crops tighter)
  * - caRed, caBlue: -100..100, lateral chromatic aberration: + enlarges the red (blue) plane around the image centre
@@ -92,6 +92,7 @@ public struct DevelopParams: Equatable, Sendable {
     public var lensAnamorphic: Float = 0
     public var lensFisheye: Float = 0
     public var lensFisheyeFov: Float = 180
+    public var lensFisheyeAuto: Bool = true
     public var lensFisheyeCircle: Float = 100
     public var lensFisheyeX: Float = 0
     public var lensFisheyeY: Float = 0

@@ -11,6 +11,7 @@ import app.rawboy.auto.analysis.SceneStats
 import app.rawboy.develop.DevelopParams
 import app.rawboy.gl.BloomSources
 import app.rawboy.gl.PreviewImage
+import app.rawboy.lens.FisheyeCircle
 import app.rawboy.lens.LensInfo
 import app.rawboy.raw.RawImage
 import app.rawboy.retouch.SkinMask
@@ -124,7 +125,11 @@ object AutoAnalysis {
         return stats to AutoTone.develop(stats, defaults, noiseIsoScale, cameraMetered, noise, phoneAe, captureEv)
     }
 
-    private fun copiesOf(img: RawImage) = img.createPreview(PhotoSession.BASE_MAX_DIMENSION) to PhotoSession.bloomSourcesOf(img)
+    private fun copiesOf(img: RawImage): Pair<PreviewImage, BloomSources> {
+        val base = img.createPreview(PhotoSession.BASE_MAX_DIMENSION)
+        img.lens.fisheyeCircle = FisheyeCircle.detect(base)
+        return base to PhotoSession.bloomSourcesOf(img)
+    }
 
     private fun analyze(
         context: Context,

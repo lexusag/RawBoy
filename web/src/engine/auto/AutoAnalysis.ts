@@ -1,3 +1,4 @@
+import { detectFisheyeCircle } from '../lens/FisheyeCircle';
 import type { DevelopParams } from '../develop/DevelopParams';
 import type { BloomSources, PreviewImage } from '../gl/PreviewImage';
 import type { LensInfo } from '../lens/LensInfo';
@@ -67,6 +68,8 @@ export async function decodeForAnalysis(
     if (onPreview) onPreview(await img.createPreview(PREVIEW_MAX_DIMENSION));
     const t0 = performance.now();
     const base = await img.createPreview(BASE_MAX_DIMENSION);
+    // A circular fisheye's picture circle, for the lens preset's Auto circle (not kept by the analysis cache).
+    img.lens.fisheyeCircle = detectFisheyeCircle(base);
     const bloom = await bloomSourcesOf(img);
     const noise = plain ? NO_NOISE : await img.measureNoise();
     console.debug(`${TAG} small copies: ${Math.round(performance.now() - t0)} ms`);

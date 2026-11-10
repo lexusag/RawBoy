@@ -26,6 +26,7 @@ import app.rawboy.gl.PreviewImage
 import app.rawboy.gl.ShaderParams
 import app.rawboy.gl.WaveletDenoise
 import app.rawboy.gl.ZoomMath
+import app.rawboy.lens.FisheyeCircle
 import app.rawboy.lens.LensInfo
 import app.rawboy.lens.LensTransform
 import app.rawboy.lut.LutData
@@ -588,7 +589,7 @@ class PhotoSession(
         val info = _lensInfo.value
         val key = listOf(
             info, params.lensProfile, params.lensDistortion, params.lensAnamorphic, params.lensCrop,
-            params.lensFisheye, params.lensFisheyeFov, params.lensFisheyeCircle, params.lensFisheyeX, params.lensFisheyeY,
+            params.lensFisheye, params.lensFisheyeFov, params.lensFisheyeAuto, info.fisheyeCircle, params.lensFisheyeCircle, params.lensFisheyeX, params.lensFisheyeY,
             params.caRed, params.caBlue, params.vignetteAmount, params.vignetteMidpoint,
             params.rotation, params.flipHorizontal, params.flipVertical, params.straighten, params.scale,
         )
@@ -709,10 +710,12 @@ class PhotoSession(
         private fun load(context: Context, uri: Uri): Loaded {
             val img = RawImage.open(context, uri)
             try {
+                val base = img.createPreview(BASE_MAX_DIMENSION)
+                img.lens.fisheyeCircle = FisheyeCircle.detect(base)
                 return Loaded(
                     image = img,
                     preview = img.createPreview(PREVIEW_MAX_DIMENSION),
-                    base = img.createPreview(BASE_MAX_DIMENSION),
+                    base = base,
                     bloom = bloomSourcesOf(img),
                 )
             } catch (t: Throwable) {
