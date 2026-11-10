@@ -45,13 +45,13 @@ import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /** Exponential slider 0..100 <-> [min]..[max], so small sizes are easy to set. */
-private class ExpSlider(val min: Float, val max: Float) {
+private class FxExpSlider(val min: Float, val max: Float) {
     fun to(r: Float) = 100 * ln(r.coerceIn(min, max) / min) / ln(max / min)
     fun from(v: Float) = min * (max / min).pow(v / 100f)
 }
 
 /** The effect's mean radius (fraction of the long side). */
-private val SIZE = ExpSlider(0.03f, 1.5f)
+private val SIZE = FxExpSlider(0.03f, 1.5f)
 private fun sizeOf(e: LightEffect) = sqrt(e.rx * e.ry)
 
 /** Stretch slider -100..100 <-> rx / ry, 1/4..4. */
