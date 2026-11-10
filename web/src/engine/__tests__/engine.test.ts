@@ -13,7 +13,7 @@ import { CROP_ASPECTS, cropAspectLabel, cropAspectRatio, cropHandleAt, cropWithA
 import { developParams, effectiveColorDenoise } from '../develop/DevelopParams';
 import { decodeEdits, encodeEdits } from '../develop/Edits';
 import { BrushRaster, type BrushGuide } from '../develop/BrushRaster';
-import { MAX_LENS_BLUR, NO_ADJUST, curveOffset, forPreset, newBrushLayer, newLinearLayer, newRadialLayer, newStripeLayer, parseLayers, type BrushStroke, type MaskLayer } from '../develop/Masks';
+import { MAX_LENS_BLUR, NO_ADJUST, curveOffset, forPreset, layerIsIdentity, maxLayerRetouch, newBrushLayer, newLinearLayer, newRadialLayer, newStripeLayer, parseLayers, type BrushStroke, type MaskLayer } from '../develop/Masks';
 import {
   CURVE_MIN_GAP,
   CURVE_SIZE,
@@ -679,6 +679,20 @@ describe('mask layers', () => {
     expect(parsed[1].opacity).toBe(100);
     expect(parsed[1].adjust.exposure).toBe(5);
     expect(parsed[1].shape.kind === 'radial' && parsed[1].shape.feather).toBe(100);
+  });
+
+  it('packs a layer\'s portrait retouch relative to the gains map and keeps it in files', () => {
+    const l = { ...newRadialLayer(), adjust: { ...NO_ADJUST, retouch: 30 } };
+    expect(layerIsIdentity(l)).toBe(false);
+    expect(maxLayerRetouch([l, { ...l, enabled: false, adjust: { ...NO_ADJUST, retouch: 90 } }])).toBe(30);
+    expect(packLayers([l], 6000, 4000, 5500, 0, true, null, () => null, 60).retouch[0]).toBeCloseTo(0.5);
+    expect(packLayers([l], 6000, 4000, 5500, 0, true).retouch[0]).toBe(0); // no map yet
+    const [back, big] = parseLayers([
+      { shape: { kind: 'radial', cx: 0.5, cy: 0.5, rx: 0.2, ry: 0.2, angle: 0, feather: 50 }, adjust: { retouch: 30 } },
+      { shape: { kind: 'radial', cx: 0.5, cy: 0.5, rx: 0.2, ry: 0.2, angle: 0, feather: 50 }, adjust: { retouch: 500 } },
+    ]);
+    expect(back.adjust.retouch).toBe(30);
+    expect(big.adjust.retouch).toBe(100);
   });
 
   it('packs lens blur as a radius and sizes the bokeh texture to it', () => {

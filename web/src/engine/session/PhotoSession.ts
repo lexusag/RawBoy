@@ -4,7 +4,7 @@ import { WhitePicker, type WhitePick } from '../color/WhitePicker';
 import { BrushRaster, makeGuide, type BrushGuide } from '../develop/BrushRaster';
 import type { CropRect } from '../develop/CropMath';
 import { developParams, effectiveColorDenoise, type DevelopParams } from '../develop/DevelopParams';
-import type { MaskLayer } from '../develop/Masks';
+import { maxLayerRetouch, type MaskLayer } from '../develop/Masks';
 import { exportImage } from '../export/Exporter';
 import type { ExportSettings } from '../export/ExportSettings';
 import { FilmStocks, type FilmData } from '../film/FilmStocks';
@@ -252,9 +252,9 @@ export class PhotoSession {
   setParams(newParams: DevelopParams) {
     const before = this.params;
     this.params = newParams;
-    if (newParams.skinRetouch > 0 || newParams.blemishRemoval > 0 || newParams.portraitRetouch > 0) this.ensureSkinMask();
+    if (newParams.skinRetouch > 0 || newParams.blemishRemoval > 0 || retouchStrengthOf(newParams) > 0) this.ensureSkinMask();
     if (newParams.blemishRemoval !== before.blemishRemoval) this.scheduleBlemishes();
-    if (newParams.portraitRetouch !== before.portraitRetouch) this.scheduleRetouch();
+    if (retouchStrengthOf(newParams) !== retouchStrengthOf(before)) this.scheduleRetouch();
     this.ensureBokehSource();
     this.ensureFlareSource();
     // A 90 degree turn or a new crop changes the output shape, and a flip moves the content, so the zoom position
@@ -513,7 +513,7 @@ export class PhotoSession {
    */
   private ensureSkinMask(force = false) {
     const p = this.params;
-    const wanted = p.skinRetouch > 0 || p.blemishRemoval > 0 || p.portraitRetouch > 0;
+    const wanted = p.skinRetouch > 0 || p.blemishRemoval > 0 || retouchStrengthOf(p) > 0;
     if ((!force && !wanted) || this._state.skin.kind !== 'notComputed') return;
     const img = this.image;
     const base = this._state.base;
@@ -606,7 +606,7 @@ export class PhotoSession {
         const img = this.image;
         const preview = this._state.preview;
         const skin = this._state.skin;
-        const strength = this.params.portraitRetouch;
+        const strength = retouchStrengthOf(this.params);
         if (run !== this.retouchRun || !img || !preview || strength <= 0 || skin.kind !== 'ready') return;
         const f = this.retouchFor;
         if (f && f.preview === preview && f.strength === strength) return;
@@ -623,13 +623,14 @@ export class PhotoSession {
 
   /** The Portrait retouch map for exporting [p]: the current one if it fits, else made now from the preview. */
   private async retouchMapFor(p: DevelopParams): Promise<RetouchMap | null> {
-    if (p.portraitRetouch <= 0) return null;
+    const strength = retouchStrengthOf(p);
+    if (strength <= 0) return null;
     const mask = await this.skinMask();
     const preview = this._state.preview;
     if (!mask || !preview) return null;
     const f = this.retouchFor;
-    if (f && f.preview === preview && f.strength === p.portraitRetouch) return this._state.retouchMap;
-    return retouchMap(preview, mask, p.portraitRetouch);
+    if (f && f.preview === preview && f.strength === strength) return this._state.retouchMap;
+    return retouchMap(preview, mask, strength);
   }
 
   /** Source pixels needed around a region for the spatial effects (see ShaderParams.spatialMargin). */
@@ -810,3 +811,6 @@ export function autoWhiteArea(
   }
   return WhitePicker.pickFromSum(sumR, sumG, sumB, n, defaults.temperature, defaults.tint);
 }
+
+/** How strong the Portrait retouch map has to be: the global slider or the strongest mask layer's, whichever is more. */
+const retouchStrengthOf = (p: DevelopParams): number => Math.max(p.portraitRetouch, maxLayerRetouch(p.masks));

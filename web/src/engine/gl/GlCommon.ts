@@ -241,6 +241,7 @@ export class DevelopProgram {
     gl.uniform4fv(this.loc('uLayerColor'), layers.color);
     gl.uniformMatrix3fv(this.loc('uLayerWb'), false, layers.whiteBalance);
     gl.uniform1fv(this.loc('uLayerBlur'), layers.blur);
+    gl.uniform1fv(this.loc('uLayerRetouch'), layers.retouch);
     this.i1('uMaskView', layers.view);
     const leaks = p.leaks;
     this.i1('uLeakCount', leaks.count);
@@ -652,7 +653,7 @@ export class DevelopInputs {
     this.halo.bind(p.bloomHalo);
     this.tail.bind(p.bloomTail);
     this.flare.bind(p.flareSource);
-    this.skin.bind(p.skinMask, p.retouchMap && p.skinFix !== 0 ? p.retouchMap : null);
+    this.skin.bind(p.skinMask, p.retouchMap && (p.skinFix !== 0 || p.layers.retouch.some((v) => v > 0)) ? p.retouchMap : null);
     this.brush.bind(p.layers.brush);
     this.film.bind(p.film);
     this.bokeh.bind(p); // after the brush atlas: its mask pass reads it

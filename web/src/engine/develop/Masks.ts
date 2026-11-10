@@ -52,6 +52,8 @@ export interface LayerAdjust {
   clarity: number;
   /** 0..100: lens blur (round, bokeh-like discs), up to MAX_LENS_BLUR of the long side at 100. */
   lensBlur: number;
+  /** 0..100: Portrait retouch inside the mask, as the global slider (needs a face; web only). */
+  retouch: number;
 }
 
 export interface MaskLayer {
@@ -79,14 +81,14 @@ export const curveOffset = (curve: number, s: number, long: number): number => (
 export const MAX_LAYERS = 4;
 
 export const LAYER_ADJUST_KEYS: readonly (keyof LayerAdjust)[] = [
-  'exposure', 'contrast', 'highlights', 'shadows', 'temperature', 'tint', 'saturation', 'clarity', 'lensBlur',
+  'exposure', 'contrast', 'highlights', 'shadows', 'temperature', 'tint', 'saturation', 'clarity', 'lensBlur', 'retouch',
 ];
 
 /** Lens blur radius at 100, a fraction of the image's long side. */
 export const MAX_LENS_BLUR = 0.03;
 
 export const NO_ADJUST: Readonly<LayerAdjust> = Object.freeze({
-  exposure: 0, contrast: 0, highlights: 0, shadows: 0, temperature: 0, tint: 0, saturation: 0, clarity: 0, lensBlur: 0,
+  exposure: 0, contrast: 0, highlights: 0, shadows: 0, temperature: 0, tint: 0, saturation: 0, clarity: 0, lensBlur: 0, retouch: 0,
 });
 
 export const newId = (): string =>
@@ -140,7 +142,7 @@ export const layerIsIdentity = (l: MaskLayer): boolean =>
 
 const ADJUST_RANGE: Record<keyof LayerAdjust, [number, number]> = {
   exposure: [-5, 5], contrast: [-100, 100], highlights: [-100, 100], shadows: [-100, 100], temperature: [-100, 100],
-  tint: [-100, 100], saturation: [-100, 100], clarity: [-100, 100], lensBlur: [0, 100],
+  tint: [-100, 100], saturation: [-100, 100], clarity: [-100, 100], lensBlur: [0, 100], retouch: [0, 100],
 };
 
 const num = (v: unknown, min: number, max: number): number | null =>
@@ -209,3 +211,7 @@ export function parseLayer(o: unknown, strokes = false): MaskLayer | null {
 /** Layers from untrusted JSON: invalid ones are dropped, at most MAX_LAYERS kept; [strokes] as for parseLayer. */
 export const parseLayers = (v: unknown, strokes = false): MaskLayer[] =>
   (Array.isArray(v) ? v : []).map((o) => parseLayer(o, strokes)).filter((l): l is MaskLayer => l != null).slice(0, MAX_LAYERS);
+
+/** The strongest Portrait retouch any layer asks for (0 = none): the gains map has to be made at least that strong. */
+export const maxLayerRetouch = (layers: readonly MaskLayer[]): number =>
+  layers.reduce((m, l) => (l.enabled && l.opacity > 0 && (l.shape.kind !== 'brush' || l.strokes.length > 0) ? Math.max(m, l.adjust.retouch) : m), 0);

@@ -22,7 +22,7 @@ import type { SkinMask } from '../../engine/retouch/SkinMask';
 import type { PreviewImage } from '../../engine/gl/PreviewImage';
 import { blemishesToHeal, brushLookup, editTexturesOf, PhotoSession, PREVIEW_MAX_DIMENSION } from '../../engine/session/PhotoSession';
 import { retouchMap } from '../../engine/retouch/PortraitRetouch';
-import type { MaskLayer } from '../../engine/develop/Masks';
+import { maxLayerRetouch, type MaskLayer } from '../../engine/develop/Masks';
 import { segmentSkin } from '../../engine/retouch/SkinSegmenter';
 import type { BrushLookup } from '../../engine/gl/ShaderParams';
 import { quickImageOf, thumbnailOf } from '../browser/Previews';
@@ -1368,16 +1368,17 @@ export class AutoStore {
     const film = params.film ? await FilmStocks.load(params.film) : null;
     const img = await RawImage.open(p.file);
     try {
+      const wanted = Math.max(params.portraitRetouch, maxLayerRetouch(params.masks));
       // A photo added As is has no skin mask; RawBoy edits with skin retouch or blemish removal still need one.
-      const skin = a.skin ?? (params.skinRetouch > 0 || params.blemishRemoval > 0 || params.portraitRetouch > 0
+      const skin = a.skin ?? (params.skinRetouch > 0 || params.blemishRemoval > 0 || wanted > 0
         ? await segmentSkin(a.base, img.width, img.height).catch(() => null) : null);
       // A preset's Blemish removal heals the full-resolution image, as the detail view does.
       if (params.blemishRemoval > 0 && skin?.hasSkin) await img.healBlemishes(blemishesToHeal(await img.detectBlemishes(skin), params.blemishRemoval));
       // RawBoy edits' painted masks and lens blur, made from the healed image as the detail view makes them.
       const textures = await editTexturesOf(img, params);
       // Portrait retouch's map from the session preview's size, as the detail view makes it.
-      const retouch = params.portraitRetouch > 0 && skin?.hasSkin
-        ? await retouchMap(await img.createPreview(PREVIEW_MAX_DIMENSION), skin, params.portraitRetouch) : null;
+      const retouch = wanted > 0 && skin?.hasSkin
+        ? await retouchMap(await img.createPreview(PREVIEW_MAX_DIMENSION), skin, wanted) : null;
       // The stored 512/128 px copies were made from this same file, so they match.
       const shader = ShaderParams.from(
         params, a.defaults, lut, new LensTransform(img.lens, params), a.base, a.bloom, skin, 1, 1, null, textures.brushFor, film,
