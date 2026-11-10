@@ -19,7 +19,10 @@ import app.rawboy.develop.BrushStroke
 import app.rawboy.develop.DevelopParams
 import app.rawboy.develop.Edits
 import app.rawboy.develop.Histogram
+import app.rawboy.develop.FxKind
 import app.rawboy.develop.LeakKind
+import app.rawboy.develop.LightEffect
+import app.rawboy.develop.LightEffects
 import app.rawboy.develop.LightLeak
 import app.rawboy.develop.LightLeaks
 import app.rawboy.develop.MaskLayer
@@ -295,7 +298,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
      */
     private fun carryOverEdits(previous: EditorState, newDefaults: DevelopParams): DevelopParams {
         if (previous.fileName == null) return newDefaults
-        // Rotation, flips, straightening, crop, masks and light leaks belong to one photo.
+        // Rotation, flips, straightening, crop, masks, light leaks and light effects belong to one photo.
         val p = previous.params
             .copy(
                 rotation = newDefaults.rotation,
@@ -305,6 +308,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
                 scale = newDefaults.scale,
                 masks = newDefaults.masks,
                 leaks = newDefaults.leaks,
+                fx = newDefaults.fx,
             )
             .withCrop(newDefaults.crop)
         val wbEdited = p.temperature != previous.defaults.temperature || p.tint != previous.defaults.tint
@@ -413,6 +417,28 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun removeLeak(id: String) {
         val p = _state.value.params
         commit(p.copy(leaks = p.leaks.filter { it.id != id }), force = true)
+    }
+
+    // Light effects (see LightEffects.kt).
+
+    /** Adds a light effect (up to LightEffects.MAX_EFFECTS) with a new random pattern, covering the photo of [aspect] (width / height); returns its id, or null when full. */
+    fun addEffect(kind: FxKind, aspect: Float): String? {
+        val p = _state.value.params
+        if (p.fx.size >= LightEffects.MAX_EFFECTS) return null
+        val fx = LightEffects.newEffect(kind, aspect = aspect)
+        commit(p.copy(fx = p.fx + fx), force = true)
+        return fx.id
+    }
+
+    /** An effect's slider or drag; [force] for a button (new pattern, show/hide). */
+    fun updateEffect(id: String, force: Boolean = false, change: (LightEffect) -> LightEffect) {
+        val p = _state.value.params
+        commit(p.copy(fx = p.fx.map { if (it.id == id) change(it) else it }), force)
+    }
+
+    fun removeEffect(id: String) {
+        val p = _state.value.params
+        commit(p.copy(fx = p.fx.filter { it.id != id }), force = true)
     }
 
     // Mask layers (see Masks.kt).

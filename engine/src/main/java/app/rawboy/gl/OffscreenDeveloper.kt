@@ -37,6 +37,7 @@ internal class OffscreenDeveloper(
     private val maskTexture: MaskTexture
     private val brushTexture: BrushTexture
     private val bokehTexture: BokehTexture
+    private val fxTexture: FxTexture
     private val inputTexture: Int
     private val outputTexture: Int
     private val framebuffer: Int
@@ -88,6 +89,7 @@ internal class OffscreenDeveloper(
         maskTexture = MaskTexture()
         brushTexture = BrushTexture()
         bokehTexture = BokehTexture(quad)
+        fxTexture = FxTexture()
         inputTexture = GlUtil.createTexture(GLES30.GL_NEAREST)
         outputTexture = GlUtil.createTexture(GLES30.GL_NEAREST)
         val ids = IntArray(1)
@@ -178,6 +180,7 @@ internal class OffscreenDeveloper(
         maskTexture.bind(params.skinMask)
         brushTexture.bind(params.layers.brush)
         bokehTexture.bind(params) // after the brush atlas: its mask pass reads it
+        fxTexture.bind(params.fx.data)
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
     }
 
@@ -235,6 +238,7 @@ internal class OffscreenDeveloper(
         maskTexture.release()
         brushTexture.release()
         bokehTexture.release()
+        fxTexture.release()
         program.release()
         EGL14.eglMakeCurrent(display, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_SURFACE, EGL14.EGL_NO_CONTEXT)
         EGL14.eglDestroySurface(display, surface)

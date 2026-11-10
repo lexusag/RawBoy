@@ -2,7 +2,7 @@ import RawBoyEngine
 import SwiftUI
 
 /** The editor's top-bar tools; at most one replaces the slider tabs. */
-enum EditorMode { case none, geometry, masks, leaks, presets }
+enum EditorMode { case none, geometry, masks, leaks, fx, presets }
 
 /** Frame around the photo in the fit view, points (tap outside the photo to change its colour). */
 private let frameWidthPt: CGFloat = 12
@@ -37,6 +37,8 @@ struct EditorScreen: View {
     @State private var sizeRingAt = Date.distantPast
     // Light leaks (UI state; the leaks are in the params). The overlay draws and drags them as radial shapes.
     @State private var selectedLeak: String?
+    // Light effects, the same way: radial shapes (an ellipse round the effect's box, no feather ring).
+    @State private var selectedFx: String?
     // Crop shape lock (UI only; the crop itself is in the params). Portrait nil = follow the frame.
     @State private var cropAspect = CropAspect.free
     @State private var cropPortrait: Bool?
@@ -55,8 +57,18 @@ struct EditorScreen: View {
     private var leakForms: [String: LeakForm] {
         Dictionary(uniqueKeysWithValues: leaks.map { ($0.id, LeakForm(kind: $0.kind, bend: $0.bend, taper: $0.taper)) })
     }
+    private var effects: [LightEffect] { state.params.fx }
+    private var selectedFxId: String? {
+        selectedFx.flatMap { id in effects.contains { $0.id == id } ? id : nil } ?? effects.last?.id
+    }
+    private var fxShapes: [MaskLayer] { effects.map { MaskLayer(id: $0.id, name: "", enabled: $0.enabled, shape: $0.shape) } }
+    /** The photo's width / height (a new effect covers it). */
+    private var photoAspect: Float {
+        let l = frameLens
+        return Float(l.width) / Float(max(1, l.height))
+    }
     private var framePx: Int { Int(frameWidthPt * scale) }
-    private var marginPx: Int { mode == .masks || mode == .leaks ? Int(maskMarginPt * scale) : 0 }
+    private var marginPx: Int { mode == .masks || mode == .leaks || mode == .fx ? Int(maskMarginPt * scale) : 0 }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -82,6 +94,7 @@ struct EditorScreen: View {
             cropPortrait = nil
             selectedLayer = nil
             selectedLeak = nil
+            selectedFx = nil
             pickingWhite = false
         }
     }
@@ -150,6 +163,23 @@ struct EditorScreen: View {
                         grabInside: true, leaks: leakForms,
                         onBend: { id, bend in vm.updateLeak(id) { $0.bend = bend } }))
                 }
+                if let shader, mode == .fx, session.preview != nil, !showOriginal {
+                    let frame = framePx + marginPx
+                    MaskOverlay(lens: shader.lens, layers: fxShapes, selectedId: selectedFxId, frame: frame,
+                                zoomCenter: session.zoomCenter, zoomScale: session.zoomScale, zoomFrame: framePx,
+                                tool: .move, brush: vm.brush, paintAt: nil, sizeRing: false)
+                    MaskTouchLayer(inputs: MaskInputs(
+                        lens: shader.lens, layers: fxShapes, selectedId: selectedFxId, frame: frame,
+                        zoomCenter: session.zoomCenter, zoomScale: session.zoomScale, zoomFrame: framePx,
+                        tool: .move, brush: vm.brush,
+                        actions: MaskActions(
+                            onSelect: { selectedFx = $0 },
+                            onChange: { id, shape in vm.updateEffect(id) { $0 = $0.withShape(shape) } },
+                            onStrokeBegin: { _, _ in }, onStrokeExtend: { _, _, _ in }, onStrokeCancel: { _ in },
+                            onPan: vm.pan, onZoom: pinchZoom),
+                        onPaintAt: { _ in },
+                        grabInside: true))
+                }
                 if let shader, mode == .geometry, session.zoomCenter == nil, session.preview != nil {
                     CropOverlay(frameWidth: shader.lens.outputWidth, frameHeight: shader.lens.outputHeight,
                                 crop: state.params.crop, ratio: cropRatio, framePx: framePx, onCropChange: vm.setCrop)
@@ -205,7 +235,7 @@ struct EditorScreen: View {
             if mode != .geometry { vm.toggleZoom(Float(e.location.x * scale), Float(e.location.y * scale), extra: marginPx) }
         }
         let tap = SpatialTapGesture().onEnded { e in
-            guard mode != .geometry && mode != .masks && mode != .leaks else { return }
+            guard mode != .geometry && mode != .masks && mode != .leaks && mode != .fx else { return }
             let x = Float(e.location.x * scale)
             let y = Float(e.location.y * scale)
             if pickingWhite {
@@ -313,6 +343,25 @@ struct EditorScreen: View {
                         onAdd: { kind in if let id = vm.addLeak(kind) { selectedLeak = id } },
                         onUpdate: { id, force, change in vm.updateLeak(id, force: force, change) },
                         onRemove: vm.removeLeak,
+                        onFx: { mode = .fx },
+                        onToggleZoom: {
+                            if session.zoomCenter != nil {
+                                vm.exitZoom()
+                            } else {
+                                vm.toggleZoom(Float(viewSize.width * scale / 2), Float(viewSize.height * scale / 2), extra: marginPx)
+                            }
+                        },
+                        onDone: { mode = .none }))
+                .frame(maxHeight: maxHeight)
+            case .fx:
+                FxPanel(
+                    effects: effects, selectedId: selectedFxId, aspect: photoAspect, zoomed: session.zoomCenter != nil,
+                    actions: FxPanelActions(
+                        onSelect: { selectedFx = $0 },
+                        onAdd: { kind in if let id = vm.addEffect(kind, aspect: photoAspect) { selectedFx = id } },
+                        onUpdate: { id, force, change in vm.updateEffect(id, force: force, change) },
+                        onRemove: vm.removeEffect,
+                        onLeaks: { mode = .leaks },
                         onToggleZoom: {
                             if session.zoomCenter != nil {
                                 vm.exitZoom()
@@ -386,7 +435,14 @@ struct EditorTopBar: View {
                 .buttonStyle(BarButtonStyle())
                 modeButton(.geometry, "crop.rotate", "Crop", "Crop & rotate")
                 modeButton(.masks, "square.stack.3d.down.forward", "Masks", "Masks")
-                modeButton(.leaks, "rays", "Leaks", "Light leaks")
+                // Light leaks and light effects share this button (the row is full); each panel has a switch.
+                Button { onMode(mode == .leaks || mode == .fx ? .none : .leaks) } label: {
+                    ToolLabel(icon: "rays", label: "Light")
+                        .foregroundStyle(mode == .leaks || mode == .fx ? Color.accentColor : Color.primary)
+                }
+                .buttonStyle(ToolButtonStyle(name: "Light leaks and effects", tip: $tip))
+                .disabled(!enabled)
+                .accessibilityLabel("Light leaks and effects")
                 modeButton(.presets, "bookmark", "Presets", "Presets")
                 tool("wand.and.stars", "Auto", "Auto light and colour (keeps the LUT)", action: onAuto)
                 Spacer(minLength: 0)
