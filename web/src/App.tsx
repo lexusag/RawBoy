@@ -19,6 +19,7 @@ import { BROWSER_HELP } from './ui/browser/help';
 import type { TabId } from './ui/common/tabs';
 import { UpdateBanner } from './ui/common/UpdateBanner';
 import { versionLabel } from './ui/common/version';
+import { createLeaveGuard } from './ui/common/leaveGuard';
 import { PHONE_SCREEN, useMediaQuery } from './ui/common/useMediaQuery';
 
 const TABS: TabId[] = ['pro', 'auto', 'browser'];
@@ -39,6 +40,10 @@ document.addEventListener('visibilitychange', () => {
   void pro.flushSidecar();
   void auto.flushSidecars();
 });
+// The browser asks before the tab goes away while an export or batch runs, or the RawBoy tab has edits not exported.
+const leaveGuard = createLeaveGuard(() => pro.leaveWarning || auto.leaveWarning);
+pro.subscribe(leaveGuard.refresh);
+auto.subscribe(leaveGuard.refresh);
 // Lens presets live with the RawBoy tab's presets; the Auto tab applies them by lens.
 auto.saveLensPresets = pro.putLensPresets;
 auto.deleteLensPreset = pro.deletePreset;

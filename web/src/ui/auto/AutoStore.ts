@@ -429,6 +429,12 @@ export class AutoStore {
     return this._state;
   }
 
+  /** True while a batch export runs or photos are still being analysed: leaving the page would lose that work. */
+  get leaveWarning() {
+    const { export: batch, photos, opening } = this._state;
+    return batch != null || opening != null || photos.some((p) => p.status === 'analyzing' || p.status === 'queued' || p.status === 'exporting');
+  }
+
   subscribe = (l: () => void) => {
     this.listeners.add(l);
     return () => this.listeners.delete(l);
