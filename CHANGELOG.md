@@ -1,3 +1,7 @@
+**RawBoy Video (web): export quality and format, and a full-size frame view (2026-11-10)**
+
+- The export panel has **Quality** (Compact, Optimal, High quality; Optimal is the default, High quality is what the export always used) and **Format** (H.264 or HEVC). The format list only enables what this browser can encode at the clip's size; if the picked one is not available at export time, the other is used and the status line says so. The real-time export uses the same two choices through MediaRecorder when it supports them. A **Full size** button under the preview opens the current graded frame at the clip's own resolution, fit to the screen or 1:1 with scrolling. Checked in headless Chromium (H.264 only there): the three qualities gave 0.2 / 0.7 / 1.3 MB on a 2 s 720p test clip, and the viewer's fit and 1:1 sizes. HEVC encoding and the real-time export were not run.
+
 **RawBoy Pro (web): light effects start 1.75 times the photo and are denser (2026-11-09)**
 
 - A new effect now starts as a box 1.75 times the size of the photo, centred on it, so most of the effect sits outside the frame and only a part of it overlaps the picture, like the lightning in the references. Size and Stretch reset to that size by double-tap. The patterns have more detail to match (bolts with one more level of kinks, three times the sparks, twice the points on trails and swirls; up to 1280 segments an effect), so the visible part stays sharp and busy at 12 MP exports as at 100%.

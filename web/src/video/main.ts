@@ -1,6 +1,7 @@
 import { FilmStocks } from '../engine/film/FilmStocks';
 import { LutRepository, loadLutCached } from '../engine/lut/LutRepository';
 import { VideoRenderer, type VideoGrade } from './render';
+import { CODECS, QUALITY_PRESETS, codecLabel, encodableCodecs, recorderBitrate, type ExportCodec, type QualityPreset } from './exportOptions';
 import type { ExportMessage, ExportRequest } from './exportWorker';
 
 const app = document.getElementById('app')!;
@@ -9,7 +10,7 @@ app.innerHTML = `
   <div class="layout">
     <div>
       <div class="stage"><canvas id="cv"></canvas><div class="empty" id="empty">Tap to choose a video clip<br>(or drop one here)</div></div>
-      <div class="bar"><button id="play" disabled style="width:auto">Play</button><input id="seek" type="range" min="0" max="1000" value="0" disabled /><span id="time">0:00</span></div>
+      <div class="bar"><button id="play" disabled style="width:auto">Play</button><button id="full" disabled style="width:auto" title="Show this frame at full resolution">Full size</button><input id="seek" type="range" min="0" max="1000" value="0" disabled /><span id="time">0:00</span></div>
     </div>
     <div class="panel">
       <button id="open">Open clip…</button>
@@ -30,12 +31,23 @@ app.innerHTML = `
       <label>Exposure <input id="ev" type="range" min="-30" max="30" value="0" /></label>
       <label>Contrast <input id="contrast" type="range" min="60" max="160" value="100" /></label>
       <label>Grain <input id="grain" type="range" min="0" max="100" value="30" /></label>
+      <label>Quality
+        <select id="quality">${QUALITY_PRESETS.map((q) => `<option value="${q.id}"${q.id === 'optimal' ? ' selected' : ''}>${q.label}</option>`).join('')}</select>
+      </label>
+      <label>Format
+        <select id="codec">${CODECS.map((c) => `<option value="${c.id}">${c.label}</option>`).join('')}</select>
+      </label>
+      <div class="note" id="codecNote"></div>
       <button id="fast" class="primary" disabled>Export graded clip (fast, background)</button>
       <progress id="prog" max="100" value="0" hidden style="width:100%"></progress>
       <button id="cancel" hidden>Cancel export</button>
       <button id="export" disabled>Export in real time (records the preview)</button>
       <div class="note" id="status">Runs in your browser; the clip is not uploaded. Fast export runs in the background; the real-time one records the preview, with sound.</div>
     </div>
+  </div>
+  <div id="viewer" class="viewer" hidden>
+    <div class="viewerBar"><button id="vfit" style="width:auto">Fit to screen</button><button id="v1" style="width:auto">1:1</button><span id="vsize"></span><button id="vclose" style="width:auto;margin-left:auto">Close</button></div>
+    <div class="viewerBody" id="vbody"><canvas id="vcv"></canvas></div>
   </div>`;
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -146,10 +158,62 @@ async function openFile(file: File) {
     video.onerror = () => rej(new Error('This browser cannot play that clip.'));
   }).catch((e: Error) => status(e.message));
   $('empty').style.display = 'none';
-  for (const id of ['play', 'seek', 'export', 'fast']) $<HTMLButtonElement>(id).disabled = false;
+  for (const id of ['play', 'seek', 'export', 'fast', 'full']) $<HTMLButtonElement>(id).disabled = false;
   video.currentTime = 0;
   redraw();
+  void refreshCodecs();
 }
+
+// Export format: only what this browser can encode at the clip's size is enabled; the other is the fallback.
+async function refreshCodecs() {
+  const w = video.videoWidth || 1920, h = video.videoHeight || 1080;
+  const ok = await encodableCodecs(w, h);
+  const sel = $<HTMLSelectElement>('codec');
+  for (const o of Array.from(sel.options)) {
+    const label = CODECS.find((c) => c.id === o.value)!.label;
+    o.disabled = !ok.includes(o.value as ExportCodec);
+    o.textContent = o.disabled ? `${label} (not supported here)` : label;
+  }
+  if (sel.selectedOptions[0]?.disabled && ok[0]) sel.value = ok[0];
+  $('codecNote').textContent = ok.length === 0
+    ? 'This browser cannot encode H.264 or HEVC; use the real-time export.'
+    : ok.length === 1 ? `This browser can only encode ${codecLabel(ok[0])}.` : 'H.264 plays everywhere; HEVC is about 40 % smaller at the same quality.';
+}
+const wantedCodec = () => $<HTMLSelectElement>('codec').value as ExportCodec;
+const wantedQuality = () => $<HTMLSelectElement>('quality').value as QualityPreset;
+
+// Full-size frame: the current graded frame at the clip's own resolution, fit to the screen or 1:1 (scroll to pan).
+const viewer = $('viewer');
+const vcv = $<HTMLCanvasElement>('vcv');
+function setViewerFit(fit: boolean) {
+  viewer.classList.toggle('fit', fit);
+  $('vfit').classList.toggle('on', fit);
+  $('v1').classList.toggle('on', !fit);
+}
+function openViewer() {
+  if (video.readyState < 2) return;
+  video.pause();
+  renderer.draw(video, video.videoWidth, video.videoHeight, grade, frame);
+  vcv.width = canvas.width;
+  vcv.height = canvas.height;
+  vcv.getContext('2d')!.drawImage(canvas, 0, 0);
+  $('vsize').textContent = `${vcv.width} × ${vcv.height} px · ${fmt(video.currentTime)}`;
+  viewer.hidden = false;
+  setViewerFit(true);
+  $<HTMLButtonElement>('vclose').focus();
+}
+const closeViewer = () => { viewer.hidden = true; };
+$('full').onclick = openViewer;
+$('vclose').onclick = closeViewer;
+$('vfit').onclick = () => setViewerFit(true);
+$('v1').onclick = () => setViewerFit(false);
+$('vbody').onclick = (e) => { if (e.target === $('vbody')) closeViewer(); };
+document.addEventListener('keydown', (e) => {
+  if (viewer.hidden) return;
+  if (e.key === 'Escape') closeViewer();
+  else if (e.key === '1') setViewerFit(false);
+  else if (e.key === 'f' || e.key === 'F') setViewerFit(true);
+});
 
 $('open').onclick = () => $<HTMLInputElement>('file').click();
 $('empty').onclick = () => $<HTMLInputElement>('file').click();
@@ -189,6 +253,7 @@ const fastOk = typeof Worker !== 'undefined' && 'VideoDecoder' in window && 'Vid
 if (!fastOk) $('fast').style.display = 'none';
 $('fast').onclick = () => {
   if (!source) return;
+  const wanted = wantedCodec();
   const worker = new Worker(new URL('./exportWorker.ts', import.meta.url), { type: 'module' });
   const t0 = performance.now();
   const prog = $<HTMLProgressElement>('prog');
@@ -212,13 +277,14 @@ $('fast').onclick = () => {
       a.href = URL.createObjectURL(new Blob([m.buffer], { type: 'video/mp4' }));
       a.download = outputName('mp4');
       a.click();
-      finish(`Saved ${a.download} (${((performance.now() - t0) / 1000).toFixed(1)} s).`);
+      const fell = m.fellBack ? ` ${codecLabel(wanted)} is not available here, so it used ${codecLabel(m.codec)}.` : '';
+      finish(`Saved ${a.download} (${codecLabel(m.codec)}, ${((performance.now() - t0) / 1000).toFixed(1)} s).${fell}`);
     } else if (m.type === 'canceled') finish('Export canceled.');
     else finish(`Export failed: ${m.message}. Try the real-time export.`);
   };
   worker.onerror = (e) => finish(`Export failed: ${e.message}. Try the real-time export.`);
   cancel.onclick = () => worker.postMessage({ cancel: true });
-  const request: ExportRequest = { file: source, grade: { ...grade } };
+  const request: ExportRequest = { file: source, grade: { ...grade }, codec: wanted, quality: wantedQuality() };
   worker.postMessage(request);
 };
 
@@ -233,8 +299,12 @@ $('export').onclick = async () => {
   const stream = canvas.captureStream(30);
   const v = video as HTMLVideoElement & { captureStream?: () => MediaStream };
   v.captureStream?.().getAudioTracks().forEach((t) => stream.addTrack(t));
-  const type = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm'].find((t) => MediaRecorder.isTypeSupported(t)) ?? '';
-  const rec = new MediaRecorder(stream, { mimeType: type || undefined, videoBitsPerSecond: 16_000_000 });
+  // The chosen format if MediaRecorder supports it, else the other MP4 codec, else whatever the browser records.
+  const wanted = wantedCodec();
+  const order = [...CODECS].sort((a, b) => Number(b.id === wanted) - Number(a.id === wanted));
+  const pick = order.find((c) => MediaRecorder.isTypeSupported(c.mime));
+  const type = pick?.mime ?? ['video/mp4', 'video/webm;codecs=vp9', 'video/webm'].find((t) => MediaRecorder.isTypeSupported(t)) ?? '';
+  const rec = new MediaRecorder(stream, { mimeType: type || undefined, videoBitsPerSecond: recorderBitrate(wantedQuality(), pick?.id ?? 'avc', canvas.width, canvas.height) });
   const chunks: Blob[] = [];
   rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
   const done = new Promise<void>((r) => (rec.onstop = () => r()));
@@ -250,7 +320,7 @@ $('export').onclick = async () => {
   a.href = URL.createObjectURL(new Blob(chunks, { type: rec.mimeType }));
   a.download = outputName(ext);
   a.click();
-  status(`Saved ${a.download}`);
+  status(`Saved ${a.download}${pick && pick.id !== wanted ? ` (${codecLabel(wanted)} is not available for recording here, used ${codecLabel(pick.id)})` : ''}.`);
   btn.disabled = false;
 };
 
