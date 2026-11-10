@@ -1,6 +1,10 @@
+**RawBoy Pro (web): wheel and trackpad zoom out past the whole photo (2026-11-10)**
+
+- The mouse wheel, a trackpad pinch (Ctrl+wheel) and touch pinch on the web now zoom out past the whole photo like the phones: it stops there once, then shrinks the photo down to a quarter, centred, so masks, light leaks and effects can be dragged and reshaped beyond the picture's edges (handles were never limited to the photo). Double-click, or **Z**, from any zoom goes back to the whole photo. Auto's web photo view shares the zoom. Not tried in a browser here.
+
 **RawBoy Pro (Android, iOS): zoom out past the whole photo (2026-11-10)**
 
-- Pinching out past the whole photo no longer snaps back to it: it stops there once, then shrinks the photo down to a quarter, centred, so masks, light leaks and effects can be dragged and reshaped beyond the picture's edges. A double-tap from any zoom (in or out) goes back to the whole photo. The web's wheel zoom still stops at the whole photo. Not built or run here (no Android or Xcode tooling in the session).
+- Pinching out past the whole photo no longer snaps back to it: it stops there once, then shrinks the photo down to a quarter, centred, so masks, light leaks and effects can be dragged and reshaped beyond the picture's edges. A double-tap from any zoom (in or out) goes back to the whole photo. Not built or run here (no Android or Xcode tooling in the session).
 
 **RawBoy Pro (Android, iOS, web): Fisheye finds the picture circle by itself (2026-11-10)**
 

@@ -20,8 +20,8 @@ export const PRO_HELP: HelpSection[] = [
     title: 'Photo',
     items: [
       { keys: ['Z'], how: 'double-click', text: '100% view at the pointer; again to go back to the whole photo. Drag to pan.' },
-      { how: 'Mouse wheel over the photo', text: 'Zoom in and out around the pointer, up to 400% (stops once at 100%); out past the whole photo goes back to it. A trackpad pinch works too.' },
-      { how: 'Pinch (touch screens)', text: 'Two fingers zoom around their middle, up to 400% (stops once at 100%), and pan with it; the finger left keeps panning. Out past the whole photo goes back to it.' },
+      { how: 'Mouse wheel over the photo', text: 'Zoom in and out around the pointer, from a quarter of the whole photo (stops once at the whole photo, so masks and light leaks can be placed outside its edges) up to 400% (stops once at 100%). A trackpad pinch works too; double-click goes back to the whole photo.' },
+      { how: 'Pinch (touch screens)', text: 'Two fingers zoom around their middle, up to 400% (stops once at 100%), and pan with it; the finger left keeps panning. Out past the whole photo shrinks it to a quarter; a double-tap goes back to the whole photo.' },
       { how: 'Press and hold', text: 'Compare with the as-shot render.' },
       { keys: ['\\'], how: 'or Compare', text: 'Show the as-shot render until pressed again.' },
       { how: 'Click outside the photo', text: 'Change the frame around it: grey, white or black.' },
