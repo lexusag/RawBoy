@@ -22,6 +22,10 @@ batches), on the same engine as the Android apps.
   (to keep shadow detail) that the page undoes before the look: it reads it from the file name
   (`-flat+1.0ev.mp4`; older `-flat.mp4` clips = 0) and has a slider to override it. Looks are the
   bundled `.cube`s; film stocks are the 2-LUT spektrafilm bundles, without halation (grain is simple luma noise).
+  Export options (`exportOptions.ts`): **Quality** Compact / Optimal (default) / High quality (mediabunny quality levels low / high / very-high,
+  so the bitrate follows the picture size and codec; the real-time export uses 0.06 / 0.12 / 0.22 bits per pixel at 30 fps, ×0.6 for HEVC) and **Format** H.264 / HEVC.
+  Only codecs `canEncodeVideo` accepts at the clip's size are enabled; if the chosen one fails at export time the worker falls back to the other and says so. **Full size** (button under the preview) shows the
+  current graded frame at the clip's own resolution, Fit to screen or 1:1 (scroll to pan; keys F, 1, Esc).
 
 ## Run locally
 
