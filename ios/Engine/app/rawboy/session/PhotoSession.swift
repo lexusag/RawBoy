@@ -293,7 +293,7 @@ public final class PhotoSession: ObservableObject {
 
     /**
      * Pinch: scales the view by [factor] keeping the photo point under ([viewX], [viewY]) in place, from the fit view
-     * up to ZoomMath.maxScale. Passing 100% stops there once; zooming out past the fit view returns to it. Port of
+     * up to ZoomMath.maxScale and down to ZoomMath.minOut times the fit scale. Passing 100% or the fit view stops there once. Port of
      * Android's PhotoSession.zoomBy.
      */
     public func zoomBy(_ viewX: Float, _ viewY: Float, factor: Float, frameWidth: Int) {
@@ -311,9 +311,12 @@ public final class PhotoSession: ObservableObject {
         } ?? ZoomMath.fitRect(viewW: vw, viewH: vh, imgW: w, imgH: h, frame: frameWidth)
         let x = (viewX - r[0]) / r[2] * Float(w)
         let y = (viewY - r[1]) / r[3] * Float(h)
-        var to = min(ZoomMath.maxScale, from * factor)
+        var to = min(ZoomMath.maxScale, max(fit * ZoomMath.minOut, from * factor))
         if (from < 1 && to > 1) || (from > 1 && to < 1) { to = 1 }
-        if to <= fit * 1.001 {
+        // Passing the fit view stops there once (like 100%); below it the photo is smaller than the view, so masks,
+        // leaks and effects can be placed and reached beyond its edges.
+        if (from > fit * 1.001 && to < fit) || (from < fit * 0.999 && to > fit) { to = fit }
+        if abs(to / fit - 1) < 0.001 {
             exitZoom()
             return
         }

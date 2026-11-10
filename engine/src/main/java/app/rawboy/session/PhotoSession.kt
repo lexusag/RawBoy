@@ -34,6 +34,7 @@ import app.rawboy.lut.LutLoader
 import app.rawboy.raw.RawImage
 import app.rawboy.retouch.SkinMask
 import app.rawboy.retouch.SkinSegmenter
+import kotlin.math.abs
 import kotlin.math.min
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -410,7 +411,7 @@ class PhotoSession(
 
     /**
      * Pinch: scales the view by [factor] keeping the photo point under ([viewX], [viewY]) in place, from the fit view
-     * up to ZoomMath.MAX_SCALE. Passing 100% stops there once; zooming out past the fit view returns to it. Port of
+     * up to ZoomMath.MAX_SCALE and down to [ZoomMath.MIN_OUT] times the fit scale. Passing 100% or the fit view stops there once. Port of
      * the web's wheel zoom (PhotoSession.ts zoomBy).
      */
     fun zoomBy(viewX: Float, viewY: Float, factor: Float, frameWidth: Int) {
@@ -426,9 +427,12 @@ class PhotoSession(
         val r = if (c != null) ZoomMath.zoomedRect(c.first, c.second, vw, vh, w, h, from, viewFrame) else ZoomMath.fitRect(vw, vh, w, h, frameWidth)
         val x = (viewX - r[0]) / r[2] * w
         val y = (viewY - r[1]) / r[3] * h
-        var to = min(ZoomMath.MAX_SCALE, from * factor)
+        var to = (from * factor).coerceIn(fit * ZoomMath.MIN_OUT, ZoomMath.MAX_SCALE)
         if ((from < 1f && to > 1f) || (from > 1f && to < 1f)) to = 1f
-        if (to <= fit * 1.001f) {
+        // Passing the fit view stops there once (like 100%); below it the photo is smaller than the view, so masks,
+        // leaks and effects can be placed and reached beyond its edges.
+        if ((from > fit * 1.001f && to < fit) || (from < fit * 0.999f && to > fit)) to = fit
+        if (abs(to / fit - 1f) < 0.001f) {
             exitZoom()
             return
         }
