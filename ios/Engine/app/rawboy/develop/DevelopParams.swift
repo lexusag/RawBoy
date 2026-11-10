@@ -105,6 +105,8 @@ public struct DevelopParams: Equatable, Sendable {
     public var masks: [MaskLayer] = []
     /** Up to LightLeaks.maxLeaks light leaks over the finished picture (see LightLeaks.swift); per photo, like the masks. */
     public var leaks: [LightLeak] = []
+    /** Up to LightEffects.maxEffects light (lomo) effects over the leaks (see LightEffects.swift); per photo, not in presets. */
+    public var fx: [LightEffect] = []
     /**
      * The photo is display-referred (JPEG, HEIC: see display_inverse.cpp), rendered with AgX per channel. Set only on
      * a photo's as-shot defaults, from the decoder; never a slider or preset value.

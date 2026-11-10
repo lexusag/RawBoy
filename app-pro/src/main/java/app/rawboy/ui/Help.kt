@@ -11,7 +11,7 @@ internal val PRO_HELP = listOf(
             HelpItem("Open", "Opens a RAW file, or a JPEG, HEIC, PNG or TIFF (lower quality than RAW); or open one with RawBoy from another app."),
             HelpItem("Tabs", "Light, Color, Detail, LUTs and Lens hold the sliders. Edits carry over to the next photo; crop, rotation, flips and scale don't."),
             HelpItem("Lens preset", "Lens tab: name it (the lens by default) and Save lens preset keeps its settings for this photo's lens; Send to Auto also hands it to RawBoy Auto, which corrects every photo taken with that lens on top of its look. Manual lenses record no lens: Auto lets you pick their presets by name."),
-            HelpItem("Top bar", "Crop & rotate (turn, flip, straighten, scale, crop), Masks, Light leaks, Presets, Auto (automatic light and colour, keeps the LUT) and Export; Undo, Redo and Reset all under them. Long-press a tool for its full name."),
+            HelpItem("Top bar", "Crop & rotate (turn, flip, straighten, scale, crop), Masks, Light (leaks and effects), Presets, Auto (automatic light and colour, keeps the LUT) and Export; Undo, Redo and Reset all under them. Long-press a tool for its full name."),
         ),
     ),
     HelpSection(
@@ -37,6 +37,7 @@ internal val PRO_HELP = listOf(
             HelpItem("Lens", "Embedded profile, Distortion, Horizontal distortion (bows verticals like an anamorphic lens), Crop (0 auto-crops empty edges; negative shows the curved edges, positive crops tighter), Vignetting and Chromatic aberration."),
             HelpItem("Masks", "Brush, linear, radial and stripe layers with their own light and colour. Brush or Erase paints on any layer."),
             HelpItem("Light leaks", "Film-style light (up to 4: streaks, glows, triangles), made like a Photoshop light leak: a white shape with an orange and a red glow, in Screen mode, so the photo shows through and the grain stays on top. Drag one anywhere inside to move it, the dots to resize, the round knob to turn it, the square to bend it; Bend, Taper and Warp reshape it, Softness blurs the core, Glow sets how far the colour reaches. At 100% intensity its white middle (inside the dashed line) hides what is under it, a tasteful way to cover part of a nude. Leaks belong to the photo: presets don't keep them."),
+            HelpItem("Light effects", "Effects (the Effects switch at the top of the Light leaks panel): up to 4 \"lomo\" light effects, like light double-exposed onto film: + Lightning, + Sparks, + Trails or + Swirl, a new random one each press. It glows into the photo and the grain stays on top. Drag inside it to move it, the dots to size it, the round knob to turn it; New random draws a new pattern with the same settings, and the switch changes its kind. Effects belong to the photo: presets don't keep them."),
             HelpItem("Presets", "Save the edits by group, apply, import and export .rawboy.json files, or Send to Auto for a whole batch. Select (or long-press) to batch-delete or export."),
             HelpItem("Send to Auto (this photo)", "Export › Send to Auto adds this photo to RawBoy Auto's batch with every edit, crop, masks, lens blur and light leaks included, so Auto's Export all renders it as here. For the same look on a whole batch, use a preset instead: the photo's own crop, brush strokes and leaks don't fit other photos."),
         ),

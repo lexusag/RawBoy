@@ -90,6 +90,7 @@ fun LeaksPanel(
     onAdd: (LeakKind) -> Unit,
     onUpdate: (String, Boolean, (LightLeak) -> LightLeak) -> Unit,
     onRemove: (String) -> Unit,
+    onMode: (EditorMode) -> Unit,
     onToggleZoom: () -> Unit,
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
@@ -98,8 +99,8 @@ fun LeaksPanel(
     var menuFor by remember { mutableStateOf<String?>(null) }
 
     Column(modifier) {
-        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 16.dp, end = 4.dp)) {
-            Text("Light leaks", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp, end = 4.dp)) {
+            LightToolSwitch(EditorMode.LEAKS, onMode, Modifier.weight(1f))
             TextButton(onClick = onToggleZoom) { Text(if (zoomed) "Fit" else "100%") }
             TextButton(onClick = onDone) { Text("Done") }
         }

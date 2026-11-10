@@ -216,7 +216,7 @@ struct DevelopProgram {
             "uImage": image, "uLut": inputs.lut, "uShading": inputs.shading, "uBase": inputs.base,
             "uBloomHalo": inputs.bloomHalo, "uBloomTail": inputs.bloomTail, "uSkinMask": inputs.skinMask,
             "uBrushMask": inputs.brush, "uFilmLut": inputs.filmLut, "uPrintLut": inputs.printLut,
-            "uFlare": inputs.flare,
+            "uFlare": inputs.flare, "uFx": inputs.fx,
             // No lens blur on iOS yet (uBokehScale stays 0); any texture keeps the slot bound.
             "uBokeh": inputs.base,
         ].merging(overrides) { $1 }
@@ -283,6 +283,7 @@ struct DevelopProgram {
         bindLens(&u, p.lens)
         bindLayers(&u, p.layers)
         bindLeaks(&u, p.leaks)
+        bindFx(&u, p.fx)
         bindFilm(&u, p, g)
         return u
     }
@@ -325,6 +326,15 @@ struct DevelopProgram {
         u.array("uLeakForm", l.form, components: 4)
         u.array("uLeakLook", l.look, components: 4)
         u.array("uLeakRadii", l.radii, components: 4)
+    }
+
+    /** Light effects (shaders/light_fx.glsl): count 0 = off; the segment data is the `uFx` texture (DevelopTextures.fx). */
+    private static func bindFx(_ u: inout UniformBlock, _ f: FxUniforms) {
+        u.int("uFxCount", f.count)
+        u.array("uFxGeom", f.geom, components: 4)
+        u.array("uFxShape", f.shape, components: 4)
+        u.array("uFxColor", f.color, components: 4)
+        u.array("uFxRange", f.range, components: 4)
     }
 
     private static func bindLayers(_ u: inout UniformBlock, _ l: LayerUniforms) {
@@ -426,6 +436,8 @@ final class DevelopTextures {
     private(set) var flare: MTLTexture
     private(set) var skinMask: MTLTexture
     private(set) var brush: MTLTexture
+    /** The light effects' segment data (RGBA32F, LightEffects.row texels wide, read with texelFetch). */
+    private(set) var fx: MTLTexture
 
     private var uploadedLut: LutData?
     private var uploadedFilm: LutData?
@@ -436,6 +448,7 @@ final class DevelopTextures {
     private var uploadedTail: [UInt16]?
     private var uploadedFlare: [UInt16]?
     private var uploadedMask: [Float]?
+    private var uploadedFx: FxData?
     private var brushSlotW = 0
     private var brushSlotH = 0
     private var brushSlotRaster = [BrushRaster?](repeating: nil, count: 4)
@@ -462,6 +475,7 @@ final class DevelopTextures {
         flare = empty(.rgba16Float)
         skinMask = empty(.r16Float)
         brush = empty(.rg8Unorm)
+        fx = empty(.rgba32Float)
     }
 
     func bind(_ p: ShaderParams) {
@@ -477,6 +491,19 @@ final class DevelopTextures {
         if let b = p.flareSource { flare = upload(b, into: flare, uploaded: &uploadedFlare) }
         bindMask(p.skinMask)
         bindBrush(p.layers.brush)
+        bindFx(p.fx.data)
+    }
+
+    /** The light effects' segment data; re-uploaded only when the packer hands out new data (not while an effect is dragged). */
+    private func bindFx(_ data: FxData?) {
+        guard let data, data !== uploadedFx else { return }
+        let tex = ctx.makeTexture(.rgba32Float, LightEffects.row, data.rows)!
+        data.data.withUnsafeBufferPointer {
+            tex.replace(region: MTLRegionMake2D(0, 0, LightEffects.row, data.rows), mipmapLevel: 0,
+                        withBytes: $0.baseAddress!, bytesPerRow: LightEffects.row * 16)
+        }
+        fx = tex
+        uploadedFx = data
     }
 
     /** RGB half floats -> an RGBA16F texture (Metal has no 3-channel formats). */

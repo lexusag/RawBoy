@@ -40,6 +40,8 @@ struct LeakPanelActions {
     /** A slider ([force] false) or a button ([force] true). */
     let onUpdate: (String, Bool, (inout LightLeak) -> Void) -> Void
     let onRemove: (String) -> Void
+    /** Switches to the light effects tool (they share one top-bar button). */
+    let onFx: () -> Void
     let onToggleZoom: () -> Void
     let onDone: () -> Void
 }
@@ -58,8 +60,11 @@ struct LeaksPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
-                Text("Light leaks").font(.headline)
-                Spacer()
+                Picker("", selection: Binding(get: { false }, set: { if $0 { actions.onFx() } })) {
+                    Text("Light leaks").tag(false)
+                    Text("Effects").tag(true)
+                }
+                .pickerStyle(.segmented)
                 Button(zoomed ? "Fit" : "100%", action: actions.onToggleZoom)
                 Button("Done", action: actions.onDone).fontWeight(.semibold)
             }

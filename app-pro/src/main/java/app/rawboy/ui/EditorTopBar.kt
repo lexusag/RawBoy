@@ -47,7 +47,7 @@ import app.rawboy.view.RedoIcon
 import app.rawboy.view.UndoIcon
 
 /** The editor's top-bar tools; at most one replaces the slider tabs. */
-enum class EditorMode { NONE, GEOMETRY, MASKS, LEAKS, PRESETS }
+enum class EditorMode { NONE, GEOMETRY, MASKS, LEAKS, FX, PRESETS }
 
 /**
  * Two short rows instead of a 64dp app bar: every action as an icon with a word under it (long-press for the full
@@ -83,7 +83,12 @@ fun EditorTopBar(
             ToolButton(OpenIcon, "Open", "Open", canOpen, onOpen)
             ModeButton(EditorMode.GEOMETRY, CropRotateIcon, "Crop", "Crop & rotate", mode, enabled, onMode)
             ModeButton(EditorMode.MASKS, MasksIcon, "Masks", "Masks", mode, enabled, onMode)
-            ModeButton(EditorMode.LEAKS, LeakIcon, "Leaks", "Light leaks", mode, enabled, onMode)
+            // Light leaks and light effects share this button (the row is full on a 360dp phone); each panel has a switch.
+            ToolButton(
+                LeakIcon, "Light", "Light leaks and effects", enabled,
+                onClick = { onMode(if (mode == EditorMode.LEAKS || mode == EditorMode.FX) EditorMode.NONE else EditorMode.LEAKS) },
+                tint = if (mode == EditorMode.LEAKS || mode == EditorMode.FX) MaterialTheme.colorScheme.primary else LocalContentColor.current,
+            )
             ModeButton(EditorMode.PRESETS, PresetsIcon, "Presets", "Presets", mode, enabled, onMode)
             ToolButton(AutoIcon, "Auto", "Auto light and colour (keeps the LUT)", enabled, onAuto)
             Spacer(Modifier.weight(1f))

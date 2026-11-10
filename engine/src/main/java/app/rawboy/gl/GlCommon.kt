@@ -2,7 +2,10 @@ package app.rawboy.gl
 
 import android.opengl.GLES30
 import app.rawboy.develop.BrushRaster
+import app.rawboy.develop.FxData
+import app.rawboy.develop.FxUniforms
 import app.rawboy.develop.LeakUniforms
+import app.rawboy.develop.LightEffects
 import app.rawboy.develop.LightLeaks
 import app.rawboy.develop.Masks
 import app.rawboy.develop.ToneCurves
@@ -216,6 +219,12 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
     private val uLeakForm = GLES30.glGetUniformLocation(id, "uLeakForm")
     private val uLeakLook = GLES30.glGetUniformLocation(id, "uLeakLook")
     private val uLeakRadii = GLES30.glGetUniformLocation(id, "uLeakRadii")
+    private val uFx = GLES30.glGetUniformLocation(id, "uFx")
+    private val uFxCount = GLES30.glGetUniformLocation(id, "uFxCount")
+    private val uFxGeom = GLES30.glGetUniformLocation(id, "uFxGeom")
+    private val uFxShape = GLES30.glGetUniformLocation(id, "uFxShape")
+    private val uFxColor = GLES30.glGetUniformLocation(id, "uFxColor")
+    private val uFxRange = GLES30.glGetUniformLocation(id, "uFxRange")
     private val uLayerBlur = GLES30.glGetUniformLocation(id, "uLayerBlur")
     private val uBokeh = GLES30.glGetUniformLocation(id, "uBokeh")
     private val uBokehScale = GLES30.glGetUniformLocation(id, "uBokehScale")
@@ -318,6 +327,7 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
         bindLens(p.lens)
         bindLayers(p.layers)
         bindLeaks(p.leaks)
+        bindFx(p.fx)
         GLES30.glUniform1i(uBokeh, BokehTexture.UNIT)
         val bokeh = BokehTexture.geometry(p)
         GLES30.glUniform1f(uBokehScale, bokeh?.scale ?: 0f)
@@ -420,6 +430,17 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
         GLES30.glUniform4fv(uLeakForm, n, l.form, 0)
         GLES30.glUniform4fv(uLeakLook, n, l.look, 0)
         GLES30.glUniform4fv(uLeakRadii, n * 2, l.radii, 0)
+    }
+
+    /** Light effects (shaders/light_fx.glsl): their uniforms; the segment data is on [FxTexture.UNIT]. */
+    private fun bindFx(f: FxUniforms) {
+        val n = LightEffects.MAX_EFFECTS
+        GLES30.glUniform1i(uFx, FxTexture.UNIT)
+        GLES30.glUniform1i(uFxCount, f.count)
+        GLES30.glUniform4fv(uFxGeom, n, f.geom, 0)
+        GLES30.glUniform4fv(uFxShape, n, f.shape, 0)
+        GLES30.glUniform4fv(uFxColor, n, f.color, 0)
+        GLES30.glUniform4fv(uFxRange, n, f.range, 0)
     }
 
     private fun bindLayers(l: LayerUniforms) {
@@ -620,6 +641,46 @@ internal class BrushTexture {
 
     companion object {
         const val UNIT = 7
+    }
+}
+
+/**
+ * The light effects' segment data (RGBA32F, [LightEffects.ROW] x rows, read with texelFetch) on its own unit; uploads
+ * when it changes (the packer hands out the same [FxData] while only placement or colour change).
+ */
+internal class FxTexture {
+    private val id = GlUtil.createTexture(GLES30.GL_NEAREST)
+    private var uploaded: FxData? = null
+
+    init {
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + UNIT)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, id)
+        GLES30.glTexImage2D(
+            GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA32F, 1, 1, 0, GLES30.GL_RGBA, GLES30.GL_FLOAT,
+            java.nio.ByteBuffer.allocateDirect(16).order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer(),
+        )
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+    }
+
+    fun bind(data: FxData?) {
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + UNIT)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, id)
+        if (data != null && data !== uploaded) {
+            val buf = java.nio.ByteBuffer.allocateDirect(data.data.size * 4).order(java.nio.ByteOrder.nativeOrder()).asFloatBuffer()
+            buf.put(data.data).position(0)
+            GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 4)
+            GLES30.glTexImage2D(
+                GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA32F, LightEffects.ROW, data.rows, 0, GLES30.GL_RGBA, GLES30.GL_FLOAT, buf,
+            )
+            uploaded = data
+        }
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+    }
+
+    fun release() = GLES30.glDeleteTextures(1, intArrayOf(id), 0)
+
+    companion object {
+        const val UNIT = 15
     }
 }
 
