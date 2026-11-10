@@ -582,7 +582,7 @@ class PhotoSession(
         return maxOf(ZoomMath.HALO, retouch, wide) + prePass
     }
 
-    private var lensCache: Triple<List<Any>, CropRect, LensTransform>? = null
+    private var lensCache: Triple<List<Any?>, CropRect, LensTransform>? = null
 
     /** Lens geometry for [params] on the current image; cached while the lens sliders are unchanged. */
     fun lensFor(params: DevelopParams): LensTransform {
