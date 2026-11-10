@@ -212,6 +212,52 @@ describe('lens geometry', () => {
     expect(corner[1]).toBeGreaterThan(-0.6);
   });
 
+  it('fisheye straightening is off at 0 and turns an equidistant fisheye into straight lines', () => {
+    const info = LensInfo.none(6000, 4000);
+    const off = new LensTransform(info, developParams({ lensFisheye: 0 }));
+    expect(off.isGeometric).toBe(false);
+    expect(off.zoom).toBe(1);
+    // Fisheye at 180 degrees across the diagonal: a straight horizontal line at height h in the output, imaged by an
+    // equidistant lens, bows. After straightening, output points on a line map back onto the fisheye's bowed curve.
+    const l = new LensTransform(info, developParams({ lensFisheye: 100, lensCrop: -100 }));
+    expect(l.isGeometric).toBe(true);
+    const half = Math.hypot(3000, 2000);
+    const fe = half / (Math.PI / 2);
+    // A rectilinear plane point (u, v) at focal length fe lies at angle theta = atan(r / fe) from the axis and its
+    // equidistant image radius is fe * theta. Check with the transform's own t (100 stops short of 90 degrees).
+    const t = l.fisheyeT;
+    expect(t).toBeCloseTo((75 * Math.PI) / 180 / (Math.PI / 2), 9);
+    const [ox, oy] = [3000 + 900 * l.zoom, 2000 + 300 * l.zoom];
+    const s = l.source(ox, oy);
+    const r = Math.hypot(900, 300);
+    const expected = (fe * Math.atan((t * r) / fe)) / t;
+    expect(Math.hypot(s[0] - 3000, s[1] - 2000)).toBeCloseTo(expected, 6);
+    // The centre stays put and scale there is unchanged (fe * theta ~ r near the axis).
+    const c = l.source(3000 + 1 * l.zoom, 2000);
+    expect(c[0] - 3000).toBeCloseTo(1, 3);
+    // Auto zoom keeps every output pixel on real image data.
+    const auto = new LensTransform(info, developParams({ lensFisheye: 60 }));
+    for (const [x, y] of [[0, 0], [6000, 0], [0, 4000], [6000, 4000], [3000, 0]]) {
+      const p = auto.source(x, y);
+      expect(p[0]).toBeGreaterThan(-0.6);
+      expect(p[0]).toBeLessThan(6000.6);
+      expect(p[1]).toBeGreaterThan(-0.6);
+      expect(p[1]).toBeLessThan(4000.6);
+    }
+    // A circular fisheye (circle radius 40% of the half diagonal): the auto crop stays inside the circle.
+    const circ = new LensTransform(info, developParams({ lensFisheye: 60, lensFisheyeCircle: 40 }));
+    const radius = 0.4 * half;
+    for (const [x, y] of [[0, 0], [6000, 0], [0, 4000], [6000, 4000], [3000, 0], [0, 2000]]) {
+      const p = circ.source(x, y);
+      expect(Math.hypot(p[0] - 3000, p[1] - 2000)).toBeLessThanOrEqual(radius + 0.5);
+    }
+    // Moving the circle moves the optical axis: the output centre samples the circle's centre.
+    const off2 = new LensTransform(info, developParams({ lensFisheye: 60, lensFisheyeX: 10, lensFisheyeY: -5 }));
+    const mid = off2.source(3000, 2000);
+    expect(mid[0]).toBeCloseTo(3600, 6);
+    expect(mid[1]).toBeCloseTo(1800, 6);
+  });
+
   it('anamorphic distortion bows verticals while keeping horizontals straight, and Crop adjusts zoom and frame clipping', () => {
     const info = LensInfo.none(6000, 4000);
     const auto = new LensTransform(info, developParams({ lensAnamorphic: -60 }));
@@ -1024,7 +1070,7 @@ describe('lens presets', () => {
     const [decoded] = decodePresets(encodePresets([lens]));
     expect(decoded.lens).toBe('XF23mmF2 R WR');
     expect(Object.keys(decoded.values).sort()).toEqual([
-      'caBlue', 'caRed', 'lensAnamorphic', 'lensCrop', 'lensDistortion', 'lensProfile', 'vignetteAmount', 'vignetteMidpoint',
+      'caBlue', 'caRed', 'lensAnamorphic', 'lensCrop', 'lensDistortion', 'lensFisheye', 'lensFisheyeCircle', 'lensFisheyeFov', 'lensFisheyeX', 'lensFisheyeY', 'lensProfile', 'vignetteAmount', 'vignetteMidpoint',
     ]);
     const applied = applyPreset(decoded, developParams());
     expect([applied.lensAnamorphic, applied.lensCrop]).toEqual([-45, -30]);
