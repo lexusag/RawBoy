@@ -6,6 +6,7 @@ import { ItemThumbnail, releaseThumbnail } from './ItemThumbnail';
 import { PreviewModal } from './PreviewModal';
 import { HelpDialog, HELP_SHORTCUT, isHelpShortcut } from '../ui/common/HelpDialog';
 import { LicensesDialog } from '../ui/common/LicensesDialog';
+import { createLeaveGuard } from '../ui/common/leaveGuard';
 import { versionLabel } from '../ui/common/version';
 import { PACKER_HELP } from './help';
 import {
@@ -37,6 +38,9 @@ import {
 } from './settings';
 
 const store = new PackerStore();
+// The browser asks before the tab goes away while files are being packed.
+const leaveGuard = createLeaveGuard(() => store.getState().running);
+store.subscribe(leaveGuard.refresh);
 
 const canNotify = () => typeof Notification !== 'undefined';
 

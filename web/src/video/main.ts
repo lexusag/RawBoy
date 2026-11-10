@@ -2,6 +2,7 @@ import { FilmStocks } from '../engine/film/FilmStocks';
 import { LutRepository, loadLutCached } from '../engine/lut/LutRepository';
 import { VideoRenderer, type VideoGrade } from './render';
 import { CODECS, QUALITY_PRESETS, codecLabel, encodableCodecs, recorderBitrate, type ExportCodec, type QualityPreset } from './exportOptions';
+import { createLeaveGuard } from '../ui/common/leaveGuard';
 import type { ExportMessage, ExportRequest } from './exportWorker';
 
 const app = document.getElementById('app')!;
@@ -247,6 +248,14 @@ $('ev').oninput = () => { applyExposure(); redraw(); };
 $('contrast').oninput = () => { grade.contrast = Number($<HTMLInputElement>('contrast').value) / 100; redraw(); };
 $('grain').oninput = () => { grade.grain = Number($<HTMLInputElement>('grain').value) / 100; redraw(); };
 
+// The browser asks before the tab goes away while a clip is being exported.
+let exporting = 0;
+const leaveGuard = createLeaveGuard(() => exporting > 0);
+const exportRunning = (on: boolean) => {
+  exporting = Math.max(0, exporting + (on ? 1 : -1));
+  leaveGuard.refresh();
+};
+
 // Fast export: a worker decodes, grades and encodes the clip faster than real time, without drawing a preview.
 let source: File | null = null;
 const fastOk = typeof Worker !== 'undefined' && 'VideoDecoder' in window && 'VideoEncoder' in window && typeof OffscreenCanvas !== 'undefined';
@@ -265,8 +274,9 @@ $('fast').onclick = () => {
   };
   video.pause();
   busy(true);
+  exportRunning(true);
   status('Exporting in the background…');
-  const finish = (msg: string) => { busy(false); worker.terminate(); status(msg); };
+  const finish = (msg: string) => { exportRunning(false); busy(false); worker.terminate(); status(msg); };
   worker.onmessage = (e: MessageEvent<ExportMessage>) => {
     const m = e.data;
     if (m.type === 'progress') {
@@ -292,6 +302,7 @@ $('fast').onclick = () => {
 $('export').onclick = async () => {
   const btn = $<HTMLButtonElement>('export');
   btn.disabled = true;
+  exportRunning(true);
   video.pause();
   video.currentTime = 0;
   await new Promise((r) => (video.onseeked = () => r(null)));
@@ -320,6 +331,7 @@ $('export').onclick = async () => {
   a.href = URL.createObjectURL(new Blob(chunks, { type: rec.mimeType }));
   a.download = outputName(ext);
   a.click();
+  exportRunning(false);
   status(`Saved ${a.download}${pick && pick.id !== wanted ? ` (${codecLabel(wanted)} is not available for recording here, used ${codecLabel(pick.id)})` : ''}.`);
   btn.disabled = false;
 };

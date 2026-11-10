@@ -80,6 +80,8 @@ export class ProStore {
   private sidecar: EditsSidecar | null = null;
   private sidecarTimer = 0;
   private sidecarDirty = false;
+  /** The params the open photo started with or was last exported with; edits past them are unsaved. */
+  private savedParams: DevelopParams | null = null;
 
   get state() {
     return this._state;
@@ -92,6 +94,16 @@ export class ProStore {
   /** The open photo's file (for "Back to Auto"), or null. */
   get file() {
     return this.hasImage ? this.openFile : null;
+  }
+
+  /** True while the photo has edits that no export (or edits sidecar) has kept: closing the tab would lose them. */
+  get hasUnsavedEdits() {
+    return this.hasImage && this.sidecar == null && this._state.params !== this.savedParams;
+  }
+
+  /** True when leaving the page would lose work: an export or Auto running, or edits not exported. */
+  get leaveWarning() {
+    return this._state.exporting || this._state.autoRunning || this.hasUnsavedEdits;
   }
 
   get busy() {
@@ -136,6 +148,7 @@ export class ProStore {
       this.history.clear();
       this.openFile = file;
       this.sidecar = sidecar;
+      this.savedParams = opened.params;
       this.set({
         loading: false, fileName: file.name, info: opened.description, params: opened.params, defaults: opened.defaults,
         canUndo: false, canRedo: false, message: restored ? `Edits from ${sidecar!.name}` : this._state.message,
@@ -552,16 +565,19 @@ export class ProStore {
     if (!this.session.hasImage || this.busy) return;
     const current = this._state;
     ExportSettingsStore.save(settings);
+    const exported = current.params;
     this.set({ exporting: true, exportProgress: 0, exportSettings: settings });
     try {
       const blob = await this.session.export(current.params, current.defaults, settings, (f) => this.set({ exportProgress: f }));
       const nameFor = (counter: number) => fileName(baseNameOf(current.fileName ?? 'image'), EXTENSIONS[settings.format], counter, { suffix: 'rawboy' });
       if (folder) {
         const name = await folder.write(nameFor, blob);
+        this.savedParams = exported;
         return this.set({ exporting: false, message: `Saved ${name} to ${folder.name}` });
       }
       const name = nameFor(0);
       await saveExports([{ name, blob }], name);
+      this.savedParams = exported;
       // On iOS the Save to Photos sheet comes up instead.
       this.set({ exporting: false, message: savesToPhotos() ? null : `Saved ${name}` });
     } catch (e) {
