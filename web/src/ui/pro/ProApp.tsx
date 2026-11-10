@@ -445,7 +445,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
           <LooksIcon />
           <span className="tool-label">Looks</span>
         </button>
-        <button type="button" className="auto-button" title="Auto light and colour (keeps the LUT)" onClick={store.applyAuto} disabled={!hasImage || busy}>Auto</button>
+        <button type="button" className="auto-button" title="Auto light and colour (keeps the LUT)" onClick={store.applyAuto} disabled={!hasImage || busy}>Auto Dev</button>
         <span className="row-break" />
         <button
           type="button"

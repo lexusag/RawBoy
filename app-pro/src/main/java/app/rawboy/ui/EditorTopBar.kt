@@ -90,7 +90,7 @@ fun EditorTopBar(
                 tint = if (mode == EditorMode.LEAKS || mode == EditorMode.FX) MaterialTheme.colorScheme.primary else LocalContentColor.current,
             )
             ModeButton(EditorMode.PRESETS, PresetsIcon, "Presets", "Presets", mode, enabled, onMode)
-            ToolButton(AutoIcon, "Auto", "Auto light and colour (keeps the LUT)", enabled, onAuto)
+            ToolButton(AutoIcon, "Auto Dev", "Auto light and colour (keeps the LUT)", enabled, onAuto)
             Spacer(Modifier.weight(1f))
             ToolButton(ExportIcon, "Export", "Export", enabled, onExport, tint = MaterialTheme.colorScheme.primary)
             HelpButton("RawBoy", PRO_HELP, licences = true)
