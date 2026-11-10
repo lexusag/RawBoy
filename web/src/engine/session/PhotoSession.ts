@@ -416,8 +416,9 @@ export class PhotoSession {
 
   /**
    * Mouse-wheel zoom (web, desktop): scales the view by [factor] keeping the photo point under ([viewX], [viewY])
-   * in place, from the fit view up to ZoomMath.MAX_SCALE. Passing 100% stops there once; zooming out past the fit
-   * view returns to it.
+   * in place, from a quarter of the fit view (ZoomMath.MIN_OUT) up to ZoomMath.MAX_SCALE. Passing 100% or the fit
+   * view stops there once. Below the fit view the photo is smaller than the view, so masks, leaks and effects can be
+   * placed and reached beyond its edges (like the phones' pinch).
    */
   zoomBy(viewX: number, viewY: number, factor: number, frameWidth: number) {
     const vw = this.viewWidth;
@@ -432,9 +433,10 @@ export class PhotoSession {
     const r = c ? ZoomMath.zoomedRect(c[0], c[1], vw, vh, w, h, from, this.viewFrame) : ZoomMath.fitRect(vw, vh, w, h, frameWidth);
     const x = ((viewX - r[0]) / r[2]) * w;
     const y = ((viewY - r[1]) / r[3]) * h;
-    let to = Math.min(ZoomMath.MAX_SCALE, from * factor);
+    let to = Math.min(ZoomMath.MAX_SCALE, Math.max(fit * ZoomMath.MIN_OUT, from * factor));
     if ((from < 1 && to > 1) || (from > 1 && to < 1)) to = 1;
-    if (to <= fit * 1.001) {
+    if ((from > fit * 1.001 && to < fit) || (from < fit * 0.999 && to > fit)) to = fit;
+    if (Math.abs(to / fit - 1) < 0.001) {
       this.exitZoom();
       return;
     }

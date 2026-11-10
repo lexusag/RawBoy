@@ -26,11 +26,13 @@ const inner = (size: number, frame: number) => Math.max(1, size - 2 * frame);
 
 /**
  * Geometry of the zoomed view, centred on (cx, cy): [scale] device pixels per full-resolution pixel, 1 = the 100% view
- * (the only one the apps have; the web's mouse-wheel zoom on desktop uses other scales).
+ * (the only one the apps have; the wheel and pinch zoom use other scales).
  */
 export const ZoomMath = {
-  /** Wheel zoom's limits, device pixels per full-resolution pixel (out past the fit view goes back to it). */
+  /** Wheel and pinch zoom's upper limit, device pixels per full-resolution pixel. */
   MAX_SCALE: 4,
+  /** Zooming out past the fit view goes down to this fraction of the fit scale (the photo centred, smaller than the view). */
+  MIN_OUT: 0.25,
   /** Margin kept around the visible region so denoise has real neighbours. */
   HALO: 16,
   MIN_TILE: 2048,
