@@ -1,6 +1,9 @@
 **RawBoy Pro (Android, iOS, web): the Auto button is called Auto Dev (2026-11-10)**
 
 - Pro's top-bar **Auto** button (automatic light and colour, keeps the LUT) now reads **Auto Dev**, so it is not confused with **Send to Auto** and the Auto app; those keep their names, as does the app switcher. Help text updated. Not built or run here: the longer label's fit on a 360 dp / narrow phone toolbar is untested.
+**RawBoy web (Pro, Auto, Packer, Video): warning before closing the tab mid-work (2026-11-10)**
+
+- Closing, reloading or leaving the tab now brings up the browser's own "leave site?" confirmation while work would be lost: Pro with an export or Auto button running, or edits not yet exported (not with Edits in sidecars on, which keeps them); Auto with a batch export running or photos still being analysed; Packer while files are being packed; Video during either export. Nothing is asked when idle (the listener is only on the page while work is in progress). The browser's text can't be customised. Checked by type-check and a unit test, not in a browser here.
 
 **RawBoy Pro (web): Portrait retouch inside a mask (2026-11-10)**
 
