@@ -47,6 +47,8 @@ export interface LayerUniforms {
   whiteBalance: Float32Array; // MAX_LAYERS x mat3, column-major
   /** Lens blur radius of each layer at full mask, full-resolution pixels (`uLayerBlur`). */
   blur: Float32Array; // MAX_LAYERS
+  /** Portrait retouch of each layer at full mask, as a multiple of the gains map (`uLayerRetouch`). */
+  retouch: Float32Array; // MAX_LAYERS
   /** 0 = off, else the shown layer's packed index + 1. */
   view: number;
   /** Painted mask of each packed layer (null = no strokes); slot i of the brush atlas. */
@@ -65,6 +67,7 @@ export const NO_LAYERS: LayerUniforms = {
   color: new Float32Array(MAX_LAYERS * 4),
   whiteBalance: new Float32Array(MAX_LAYERS * 9),
   blur: new Float32Array(MAX_LAYERS),
+  retouch: new Float32Array(MAX_LAYERS),
   view: 0,
   brush: [],
 };
@@ -83,6 +86,7 @@ export function packLayers(
   clarityReady: boolean,
   viewId: string | null = null,
   brushFor: BrushLookup = () => null,
+  retouchMapStrength = 0,
 ): LayerUniforms {
   const hasMask = (l: MaskLayer) => l.shape.kind !== 'brush' || l.strokes.length > 0;
   const used = masks.filter((l) => hasMask(l) && (!layerIsIdentity(l) || (l.id === viewId && l.enabled))).slice(0, MAX_LAYERS);
@@ -96,6 +100,7 @@ export function packLayers(
     color: new Float32Array(MAX_LAYERS * 4),
     whiteBalance: new Float32Array(MAX_LAYERS * 9),
     blur: new Float32Array(MAX_LAYERS),
+    retouch: new Float32Array(MAX_LAYERS),
     view: 0,
     brush: [],
   };
@@ -137,6 +142,8 @@ export function packLayers(
     const wb = a.temperature === 0 && a.tint === 0 ? Mat3.diagonal(1, 1, 1) : WhiteBalance.rebalanceMatrix(target, layerWhite);
     u.whiteBalance.set(Mat3.toGlColumnMajor(wb), i * 9);
     u.blur[i] = (a.lensBlur / 100) * MAX_LENS_BLUR * long;
+    // Without a map (none made yet, no face) there is nothing to scale.
+    u.retouch[i] = retouchMapStrength > 0 ? Math.min(2.5, a.retouch / retouchMapStrength) : 0;
     if (l.id === viewId) u.view = i + 1;
     u.brush.push(l.strokes.length ? brushFor(l) : null);
   });
@@ -303,7 +310,7 @@ export class ShaderParams {
       1,
       toneMapperId(p.toneMapper),
       asShot.displaySource ? 1 : 0,
-      packLayers(p.masks, lens.width, lens.height, p.temperature, p.tint, base != null, maskView, brushFor),
+      packLayers(p.masks, lens.width, lens.height, p.temperature, p.tint, base != null, maskView, brushFor, retouchMap?.strength ?? 0),
       filmUsed,
       filmUsed ? Math.min(1, Math.max(0, p.filmAmount / 100)) : 0,
       p.filmGrain / 100,

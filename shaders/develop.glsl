@@ -70,6 +70,7 @@ uniform int uMaskView;                // 0 = off, else layer index + 1 shown as 
 uniform sampler2D uBrushMask;         // painted masks, RG (paint, erase), a 2x2 atlas: one slot per layer
 uniform vec4 uBrushSlot[MAX_LAYERS];  // slot origin.xy and size.zw in atlas uv; size 0 = nothing painted
 uniform vec2 uBrushTexel;             // 1 / atlas size
+uniform float uLayerRetouch[MAX_LAYERS]; // Portrait retouch of each layer at full mask, as a multiple of the gains map (strength / the map's; web only so far, 0 = none)
 uniform float uLayerBlur[MAX_LAYERS]; // lens blur radius at full mask, full-resolution pixels; 0 = none
 // Lens blur (bokeh, see gl/BokehTexture): the whole image disc-blurred by the masks' radii, premultiplied (rgb * a, a).
 uniform sampler2D uBokeh;

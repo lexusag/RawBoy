@@ -21,19 +21,21 @@ void main() {
     }
     // Local contrast and sharpening work on the image as decoded, before lens gains,
     // so the centre pixel and its neighbourhood are compared like for like.
+    float lm[MAX_LAYERS];
+    float clarity = uClarity;
+    float skinFix = uSkinFix;
+    for (int i = 0; i < MAX_LAYERS; ++i) {
+        lm[i] = i < uLayerCount ? layerMask(i, srcG) : 0.0;
+        clarity += lm[i] * uLayerColor[i].y;
+        skinFix += lm[i] * uLayerRetouch[i];
+    }
     // Portrait retouch: per-channel gains (log2) the CPU worked out on the preview (PortraitRetouch), packed in the
-    // skin texture's g, b, a.
-    if (uSkinFix != 0.0) x *= exp2(texture(uSkinMask, srcG / uImageSize).gba * uSkinFix);
+    // skin texture's g, b, a; the global slider and the mask layers' sliders add up (layers by their mask weight).
+    if (skinFix != 0.0) x *= exp2(texture(uSkinMask, srcG / uImageSize).gba * min(skinFix, 2.5));
     if (uRetouch > 0.0) x = retouchSkin(uvG, srcG, x);
     float g = 1.0;
     if (uSharpen > 0.0) g *= sharpenGain(uvG);
     if (uLocalContrast != 0.0) g *= localContrastGain(uvG, uLocalContrast);
-    float lm[MAX_LAYERS];
-    float clarity = uClarity;
-    for (int i = 0; i < MAX_LAYERS; ++i) {
-        lm[i] = i < uLayerCount ? layerMask(i, srcG) : 0.0;
-        clarity += lm[i] * uLayerColor[i].y;
-    }
     clarity = clamp(clarity, -1.0, 1.0);
     if (clarity != 0.0) g *= clarityGain(lum(x), srcG, clarity);
     x *= g;
