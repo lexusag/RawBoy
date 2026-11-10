@@ -18,3 +18,12 @@ button:disabled { opacity:.45; }
 .bar { display:flex; gap:8px; align-items:center; margin-top:8px; }
 .bar input { flex:1; } .bar span { color:var(--dim); font-variant-numeric:tabular-nums; font-size:13px; }
 .note { font-size:12px; color:var(--dim); }
+.viewer { position:fixed; inset:0; z-index:10; background:#000; display:flex; flex-direction:column; }
+.viewer[hidden] { display:none; }
+.viewerBar { display:flex; gap:8px; align-items:center; padding:8px 12px; background:var(--panel); border-bottom:1px solid var(--line); }
+.viewerBar span { color:var(--dim); font-size:13px; font-variant-numeric:tabular-nums; }
+.viewerBar button.on { background:var(--acc); color:#1a1200; border-color:var(--acc); }
+.viewerBody { flex:1; overflow:auto; display:flex; }
+.viewerBody canvas { margin:auto; max-width:none; max-height:none; flex:none; }
+.viewer.fit .viewerBody { overflow:hidden; }
+.viewer.fit .viewerBody canvas { max-width:100%; max-height:100%; flex:0 1 auto; object-fit:contain; }
