@@ -25,6 +25,7 @@ import { retouchMap, type RetouchMap } from '../retouch/PortraitRetouch';
 import { segmentSkin } from '../retouch/SkinSegmenter';
 import type { SkinMask } from '../retouch/SkinMask';
 import { halfToFloat } from '../util/half';
+import { detectFisheyeCircle } from '../lens/FisheyeCircle';
 
 /** On-screen preview size; WebGL2 guarantees 2048 px textures. */
 export const PREVIEW_MAX_DIMENSION = 2048;
@@ -215,6 +216,8 @@ export class PhotoSession {
       img.close();
       throw e;
     }
+    // A circular fisheye's picture circle, for the Fisheye sliders' Auto circle.
+    img.lens.fisheyeCircle = detectFisheyeCircle(loaded.base);
     this.exitZoom();
     this.image?.close();
     this.image = img;
@@ -642,7 +645,7 @@ export class PhotoSession {
     const info = this._state.lensInfo;
     const key = [
       info, params.lensProfile, params.lensDistortion, params.lensAnamorphic, params.lensCrop,
-      params.lensFisheye, params.lensFisheyeFov, params.lensFisheyeCircle, params.lensFisheyeX, params.lensFisheyeY,
+      params.lensFisheye, params.lensFisheyeFov, params.lensFisheyeAuto, info.fisheyeCircle, params.lensFisheyeCircle, params.lensFisheyeX, params.lensFisheyeY,
       params.caRed, params.caBlue, params.vignetteAmount, params.vignetteMidpoint,
       params.rotation, params.flipHorizontal, params.flipVertical, params.straighten, params.scale,
     ];

@@ -465,6 +465,7 @@ public final class PhotoSession: ObservableObject {
         let info = lensInfo
         let key: [AnyHashable] = [
             ObjectIdentifier(info), params.lensProfile, params.lensDistortion, params.lensAnamorphic, params.lensCrop,
+            params.lensFisheye, params.lensFisheyeFov, params.lensFisheyeAuto, info.fisheyeCircle?.radius, info.fisheyeCircle?.offsetX, info.fisheyeCircle?.offsetY, params.lensFisheyeCircle, params.lensFisheyeX, params.lensFisheyeY,
             params.caRed, params.caBlue, params.vignetteAmount,
             params.vignetteMidpoint, params.rotation, params.flipHorizontal, params.flipVertical, params.straighten, params.scale,
         ]
@@ -579,8 +580,10 @@ public final class PhotoSession: ObservableObject {
 
     private nonisolated static func load(_ url: URL) throws -> Loaded {
         let img = try RawImage.open(url: url)
+        let base = img.createPreview(maxDimension: baseMaxDimension)
+        img.lens.fisheyeCircle = FisheyeCircle.detect(base)
         return Loaded(image: img, preview: img.createPreview(maxDimension: previewMaxDimension),
-                      base: img.createPreview(maxDimension: baseMaxDimension), bloom: bloomSourcesOf(img))
+                      base: base, bloom: bloomSourcesOf(img))
     }
 }
 

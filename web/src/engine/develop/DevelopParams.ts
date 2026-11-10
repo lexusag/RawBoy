@@ -80,7 +80,8 @@ export const anamorphicBarOf = (c: AnamorphicColor): Float32Array => new Float32
  * - lensDistortion: -100..100, + removes barrel distortion; auto crop/scale follows
  * - lensAnamorphic: -100..100 cylindrical (horizontal) distortion; - bows vertical edges outward like an anamorphic lens
  * - lensFisheye: 0..100 straightens a fisheye lens (equidistant projection assumed) towards rectilinear, 0 = off; lensFisheyeFov: 90..220
- *   degrees across the lens's image circle (the frame's diagonal when the circle fills it), lensFisheyeCircle: 20..100 radius
+ *   degrees across the lens's image circle (the frame's diagonal when the circle fills it), lensFisheyeAuto: find the circle
+ *   (size and centre) in the photo while the lens info has one (LensInfo.fisheyeCircle), else use the sliders; lensFisheyeCircle: 20..100 radius
  *   of that circle in % of the frame's half diagonal, lensFisheyeX/Y: -50..50 offset of the circle's centre in % of width/height
  * - lensCrop: -100..100 scale around the auto crop (0 = no empty edges; < 0 reveals curved borders; > 0 crops tighter)
  * - caRed, caBlue: -100..100, lateral chromatic aberration: + enlarges the red (blue) plane around the image centre
@@ -154,6 +155,7 @@ export interface DevelopParams {
   lensAnamorphic: number;
   lensFisheye: number;
   lensFisheyeFov: number;
+  lensFisheyeAuto: boolean;
   lensFisheyeCircle: number;
   lensFisheyeX: number;
   lensFisheyeY: number;
@@ -235,6 +237,7 @@ export const DEFAULT_PARAMS: Readonly<DevelopParams> = Object.freeze({
   lensAnamorphic: 0,
   lensFisheye: 0,
   lensFisheyeFov: 180,
+  lensFisheyeAuto: true,
   lensFisheyeCircle: 100,
   lensFisheyeX: 0,
   lensFisheyeY: 0,

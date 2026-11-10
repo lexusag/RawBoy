@@ -82,7 +82,7 @@ class PresetsTest {
         assertEquals("XF23mmF2 R WR", decoded.lens)
         assertTrue(decoded.isLensPreset)
         assertEquals(
-            setOf("lensProfile", "lensDistortion", "lensAnamorphic", "lensCrop", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint"),
+            setOf("lensProfile", "lensDistortion", "lensAnamorphic", "lensFisheye", "lensFisheyeFov", "lensFisheyeAuto", "lensFisheyeCircle", "lensFisheyeX", "lensFisheyeY", "lensCrop", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint"),
             decoded.values.keys,
         )
         val applied = Presets.apply(decoded, DevelopParams())

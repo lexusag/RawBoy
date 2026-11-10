@@ -306,17 +306,7 @@ export function ControlsPanel({
             {slider('Distortion', 'lensDistortion', -100, 100)}
             {slider('Horizontal distortion', 'lensAnamorphic', -100, 100)}
             {slider('Crop', 'lensCrop', -100, 100)}
-            <SectionLabel>Fisheye</SectionLabel>
-            {slider('Straighten fisheye', 'lensFisheye', 0, 100, formatPlain)}
-            {params.lensFisheye > 0 && (
-              <>
-                {slider('Lens field of view', 'lensFisheyeFov', 90, 220, formatDegrees)}
-                {slider('Image circle size', 'lensFisheyeCircle', 20, 100, formatPlain)}
-                {slider('Circle centre X', 'lensFisheyeX', -50, 50)}
-                {slider('Circle centre Y', 'lensFisheyeY', -50, 50)}
-                <Note>Assumes an equidistant fisheye. For a circular fisheye, set the circle size and centre so the lens's real picture is the circle; Crop below 0 shows more of it.</Note>
-              </>
-            )}
+            <FisheyeSliders params={params} defaults={defaults} onChange={onChange} lens={lens} />
             {slider('Vignetting', 'vignetteAmount', -100, 100)}
             {slider('Vignette radius', 'vignetteMidpoint', 0, 100, formatPlain)}
             <Note>At Crop 0, distortion crops automatically so no empty edges show; negative shows the curved edges, positive crops tighter.</Note>
@@ -587,6 +577,66 @@ function GrainSliders({ params, defaults, onChange }: { params: DevelopParams; d
           {slider('Size', 'grainSize')}
           {slider('Roughness', 'grainRoughness')}
           {slider('Color', 'grainColor')}
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
+ * Straighten fisheye, whose name opens the lens's field of view, image circle size and centre under it (shown open
+ * while any of them is changed, so an edit is never hidden). Same pattern as GrainSliders; port of Controls.kt's.
+ */
+function FisheyeSliders({ params, defaults, onChange, lens }: { params: DevelopParams; defaults: DevelopParams; onChange: (p: DevelopParams) => void; lens: LensInfo }) {
+  const [open, setOpen] = useState(false);
+  const changed =
+    params.lensFisheyeFov !== defaults.lensFisheyeFov || params.lensFisheyeCircle !== defaults.lensFisheyeCircle ||
+    params.lensFisheyeX !== defaults.lensFisheyeX || params.lensFisheyeY !== defaults.lensFisheyeY ||
+    params.lensFisheyeAuto !== defaults.lensFisheyeAuto;
+  const found = params.lensFisheyeAuto ? lens.fisheyeCircle : null;
+  const shown = open || changed;
+  type Key = 'lensFisheye' | 'lensFisheyeFov' | 'lensFisheyeCircle' | 'lensFisheyeX' | 'lensFisheyeY';
+  const slider = (label: string, key: Key, min: number, max: number, format: (v: number) => string, onLabelClick?: () => void) => (
+    <ParamSlider
+      key={key}
+      label={label}
+      value={params[key]}
+      min={min}
+      max={max}
+      defaultValue={defaults[key]}
+      format={format}
+      onLabelClick={onLabelClick}
+      onChange={(v) => onChange({ ...params, [key]: v })}
+    />
+  );
+  return (
+    <>
+      {slider(shown ? 'Fisheye ▾' : 'Fisheye ▸', 'lensFisheye', 0, 100, formatPlain, () => setOpen(!shown))}
+      {shown && (
+        <div className="slider-details">
+          {slider('Lens field of view', 'lensFisheyeFov', 90, 220, (v) => `${Math.round(v)}°`)}
+          <label className="switch-row">
+            <span>Find the circle automatically</span>
+            <input
+              type="checkbox"
+              checked={params.lensFisheyeAuto}
+              onChange={(e) => onChange({ ...params, lensFisheyeAuto: e.target.checked })}
+            />
+          </label>
+          {found ? (
+            <Note>
+              Circle found: size {Math.round(found.radius * 100)}, centre {Math.round(found.offsetX * 100)} / {Math.round(found.offsetY * 100)}.
+              Switch the finder off to set it by hand.
+            </Note>
+          ) : (
+            <>
+              {params.lensFisheyeAuto && <Note>No circle found in this photo (it fills the frame or isn't round): set it by hand.</Note>}
+              {slider('Image circle size', 'lensFisheyeCircle', 20, 100, formatPlain)}
+              {slider('Circle centre X', 'lensFisheyeX', -50, 50, formatPlain)}
+              {slider('Circle centre Y', 'lensFisheyeY', -50, 50, formatPlain)}
+            </>
+          )}
+          <Note>Assumes an equidistant fisheye. For a circular fisheye, set the circle size and centre so the lens's real picture is the circle; Crop below 0 shows more of it.</Note>
         </div>
       )}
     </>

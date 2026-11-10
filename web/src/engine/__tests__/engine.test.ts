@@ -39,6 +39,7 @@ import { SampleGeometry } from '../gl/GlCommon';
 import { SCAN_SCALE, filmScanApplies, scanSize } from '../gl/ScanScale';
 import { WAVELET_DENOISE_MARGIN, denoiseLevels } from '../gl/WaveletDenoise';
 import { ZoomMath, rect } from '../gl/Zoom';
+import { detectFisheyeCircleLum } from '../lens/FisheyeCircle';
 import { LensInfo } from '../lens/LensInfo';
 import { LensTransform } from '../lens/LensTransform';
 import { parseCube } from '../lut/LutLoader';
@@ -244,6 +245,11 @@ describe('lens geometry', () => {
       expect(p[1]).toBeGreaterThan(-0.6);
       expect(p[1]).toBeLessThan(4000.6);
     }
+    // The auto crop never stretches the picture along the radius more than 4x (stretch = 1 + x^2).
+    for (const lens of [new LensTransform(info, developParams({ lensFisheye: 100 })), new LensTransform(info, developParams({ lensFisheye: 100, lensFisheyeCircle: 60 }))]) {
+      const x = (lens.fisheyeT * half) / lens.zoom / lens.fisheyeFe;
+      expect(1 + x * x).toBeLessThanOrEqual(4 + 1e-9);
+    }
     // A circular fisheye (circle radius 40% of the half diagonal): the auto crop stays inside the circle.
     const circ = new LensTransform(info, developParams({ lensFisheye: 60, lensFisheyeCircle: 40 }));
     const radius = 0.4 * half;
@@ -256,6 +262,41 @@ describe('lens geometry', () => {
     const mid = off2.source(3000, 2000);
     expect(mid[0]).toBeCloseTo(3600, 6);
     expect(mid[1]).toBeCloseTo(1800, 6);
+  });
+
+  it('finds the picture circle of a circular fisheye on the base copy, and nothing in an ordinary photo', () => {
+    const w = 512;
+    const h = 342;
+    const disc = (cx: number, cy: number, r: number, outside = 0.0005) => {
+      const lum = new Float32Array(w * h).fill(outside);
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (Math.hypot(x + 0.5 - cx, y + 0.5 - cy) < r) lum[y * w + x] = 0.2 + 0.3 * ((x * 7 + y * 3) % 10) / 10;
+      return lum;
+    };
+    const hd = Math.hypot(w / 2, h / 2);
+    const found = detectFisheyeCircleLum(disc(w / 2 + 20, h / 2 - 10, 120), w, h);
+    expect(found).not.toBeNull();
+    expect(found!.offsetX).toBeCloseTo(20 / w, 2);
+    expect(found!.offsetY).toBeCloseTo(-10 / h, 2);
+    expect(found!.radius).toBeCloseTo((120 * 0.97) / hd, 2);
+    // Frame-filling picture (bright corners), a dim photo with a bright middle and dark corners, a long thin bright area.
+    expect(detectFisheyeCircleLum(new Float32Array(w * h).fill(0.3), w, h)).toBeNull();
+    const dim = new Float32Array(w * h).fill(0.01);
+    for (let y = 100; y < 240; y++) for (let x = 150; x < 360; x++) dim[y * w + x] = 0.5;
+    expect(detectFisheyeCircleLum(dim, w, h)).toBeNull();
+    // A circle taller than the frame is sized by its width and centred vertically.
+    const tall = detectFisheyeCircleLum(disc(w / 2, h / 2, 250), w, h);
+    expect(tall).not.toBeNull();
+    expect(tall!.offsetY).toBe(0);
+    // Auto circle: LensTransform uses the detected circle while lensFisheyeAuto is on, else the sliders.
+    const info = LensInfo.none(6000, 4000);
+    info.fisheyeCircle = { offsetX: 0.1, offsetY: -0.05, radius: 0.4 };
+    const auto = new LensTransform(info, developParams({ lensFisheye: 60, lensFisheyeAuto: true, lensFisheyeCircle: 100, lensFisheyeX: -30 }));
+    expect(auto.fisheyeRadius).toBeCloseTo(0.4 * Math.hypot(3000, 2000), 6);
+    expect(auto.fisheyeOffsetX).toBeCloseTo(600, 6);
+    expect(auto.fisheyeOffsetY).toBeCloseTo(-200, 6);
+    const manual = new LensTransform(info, developParams({ lensFisheye: 60, lensFisheyeAuto: false, lensFisheyeCircle: 100, lensFisheyeX: -30 }));
+    expect(manual.fisheyeRadius).toBeCloseTo(Math.hypot(3000, 2000), 6);
+    expect(manual.fisheyeOffsetX).toBeCloseTo(-1800, 6);
   });
 
   it('anamorphic distortion bows verticals while keeping horizontals straight, and Crop adjusts zoom and frame clipping', () => {
@@ -1070,7 +1111,7 @@ describe('lens presets', () => {
     const [decoded] = decodePresets(encodePresets([lens]));
     expect(decoded.lens).toBe('XF23mmF2 R WR');
     expect(Object.keys(decoded.values).sort()).toEqual([
-      'caBlue', 'caRed', 'lensAnamorphic', 'lensCrop', 'lensDistortion', 'lensFisheye', 'lensFisheyeCircle', 'lensFisheyeFov', 'lensFisheyeX', 'lensFisheyeY', 'lensProfile', 'vignetteAmount', 'vignetteMidpoint',
+      'caBlue', 'caRed', 'lensAnamorphic', 'lensCrop', 'lensDistortion', 'lensFisheye', 'lensFisheyeAuto', 'lensFisheyeCircle', 'lensFisheyeFov', 'lensFisheyeX', 'lensFisheyeY', 'lensProfile', 'vignetteAmount', 'vignetteMidpoint',
     ]);
     const applied = applyPreset(decoded, developParams());
     expect([applied.lensAnamorphic, applied.lensCrop]).toEqual([-45, -30]);

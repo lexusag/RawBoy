@@ -17,7 +17,7 @@ final class LensPresetTests: XCTestCase {
         XCTAssertEqual(decoded.lens, "XF23mmF2 R WR")
         XCTAssertEqual(
             Set(decoded.values.keys),
-            ["lensProfile", "lensDistortion", "lensAnamorphic", "lensCrop", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint"]
+            ["lensProfile", "lensDistortion", "lensAnamorphic", "lensFisheye", "lensFisheyeFov", "lensFisheyeAuto", "lensFisheyeCircle", "lensFisheyeX", "lensFisheyeY", "lensCrop", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint"]
         )
         let applied = Presets.apply(decoded, to: DevelopParams())
         XCTAssertEqual(applied.lensAnamorphic, -45)

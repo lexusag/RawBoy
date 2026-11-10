@@ -4,6 +4,7 @@ import app.rawboy.color.Mat3
 import app.rawboy.develop.DevelopParams
 import app.rawboy.develop.crop
 import app.rawboy.gl.PixelRect
+import kotlin.math.atan
 import kotlin.math.floor
 import kotlin.math.hypot
 import kotlin.math.max
@@ -19,7 +20,8 @@ import kotlin.math.sqrt
  *   0. add the user crop's origin (the crop only picks a window of the finished frame), then undo
  *      rotation (90 degree turns + straighten), with auto crop for the straighten angle, and the flips
  *   1. auto scale around the image centre (crop to valid pixels, like Lightroom's Constrain Crop), adjusted by lensCrop
- *   2. manual distortion (spherical + cylindrical anamorphic, around the image centre)
+ *   2. manual distortion (spherical + cylindrical anamorphic, around the image centre), then the fisheye straightening
+ *      (equidistant -> blend towards rectilinear, around the lens's optical axis)
  *   3. embedded DNG WarpRectilinear, in sensor coordinates, per colour plane
  *   4. manual chromatic aberration: red and blue planes scaled around the image centre
  *
@@ -64,6 +66,20 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
     /** Cylindrical (horizontal) distortion k: -100 bows vertical edges outward like an anamorphic lens. */
     val anamorphicK = params.lensAnamorphic / 100.0 * 0.30
 
+    private val fisheyeHalfFov = Math.toRadians(params.lensFisheyeFov.toDouble().coerceIn(90.0, 220.0) / 2.0)
+
+    /** Fisheye straightening 0..1 (0 = off): the output projection is fe * tan(t * theta) / t, 1 = rectilinear. */
+    val fisheyeT = params.lensFisheye.toDouble().coerceIn(0.0, 100.0) / 100.0 * min(1.0, FISHEYE_MAX_ANGLE / fisheyeHalfFov)
+
+    /** The fisheye's image circle radius and its equidistant focal length (source radius = fe * angle), pixels. */
+    private val foundCircle = info.fisheyeCircle.takeIf { params.lensFisheyeAuto }
+    val fisheyeRadius = (foundCircle?.let { it.radius * 100.0 } ?: params.lensFisheyeCircle.toDouble()).coerceIn(20.0, 100.0) / 100.0 * halfDiagonal
+    val fisheyeFe = fisheyeRadius / fisheyeHalfFov
+
+    /** Optical axis offset from the image centre, pixels. */
+    val fisheyeOffsetX = (foundCircle?.let { it.offsetX * 100.0 } ?: params.lensFisheyeX.toDouble()).coerceIn(-50.0, 50.0) / 100.0 * width
+    val fisheyeOffsetY = (foundCircle?.let { it.offsetY * 100.0 } ?: params.lensFisheyeY.toDouble()).coerceIn(-50.0, 50.0) / 100.0 * height
+
     /** Scale relative to the auto crop: 0 = exact Constrain Crop, < 0 zooms out to show curved borders, > 0 crops tighter. */
     private val cropScale = 2.0.pow(params.lensCrop.toDouble().coerceIn(-100.0, 100.0) / 150.0)
 
@@ -101,7 +117,7 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
     val caScaleBlue = 1.0 - params.caBlue / 100.0 * CA_MAX
     val hasManualCa: Boolean get() = caScaleRed != 1.0 || caScaleBlue != 1.0
 
-    val isGeometric: Boolean get() = warp != null || manualK != 0.0 || anamorphicK != 0.0
+    val isGeometric: Boolean get() = warp != null || manualK != 0.0 || anamorphicK != 0.0 || fisheyeT > 0.0
 
     /** Output scale: at lensCrop = 0, >= the value at which every output pixel has real image data. */
     val zoom: Double = knownZoom ?: ((if (isGeometric) autoZoom() else 1.0) * cropScale)
@@ -158,6 +174,12 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
         val rn2 = (dx * dx + dy * dy) / (halfDiagonal * halfDiagonal)
         dx *= distortFactor(manualK + anamorphicK, rn2)
         dy *= distortFactor(manualK, rn2)
+        if (fisheyeT > 0.0) {
+            val x = fisheyeT * hypot(dx, dy) / fisheyeFe
+            val f = if (x > 1e-6) atan(x) / x else 1.0
+            dx = dx * f + fisheyeOffsetX
+            dy = dy * f + fisheyeOffsetY
+        }
         val qx = centerX + dx
         val qy = centerY + dy
         val w = warp ?: return manualCa(qx, qy, plane)
@@ -226,7 +248,17 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
 
     private fun planesToCheck() = if (warpPlanes == 3) listOf(0, 1, 2) else listOf(1)
 
+    /** The auto scale: every output pixel on real picture, and for a fisheye no stretched past [FISHEYE_MAX_STRETCH]. */
     private fun autoZoom(): Double {
+        val valid = validZoom()
+        if (fisheyeT <= 0.0) return valid
+        return max(valid, fisheyeT * halfDiagonal / (fisheyeFe * sqrt(FISHEYE_MAX_STRETCH - 1.0)))
+    }
+
+    private fun validZoom(): Double {
+        val circle = fisheyeT > 0.0 && fisheyeRadius < halfDiagonal * 0.999
+        val circleX = centerX + fisheyeOffsetX
+        val circleY = centerY + fisheyeOffsetY
         fun inside(z: Double): Boolean {
             val steps = 48
             for (plane in planesToCheck()) {
@@ -238,13 +270,16 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
                     )) {
                         val s = lensSource(px, py, plane, z)
                         if (s[0] < -0.5 || s[1] < -0.5 || s[0] > width + 0.5 || s[1] > height + 0.5) return false
+                        // A circular fisheye: nothing outside the image circle is picture.
+                        if (circle && hypot(s[0] - circleX, s[1] - circleY) > fisheyeRadius) return false
                     }
                 }
             }
             return true
         }
-        var lo = 0.7
-        var hi = 1.6
+        // Straightening a wide fisheye needs far more zoom-out than a lens profile does.
+        var lo = if (fisheyeT > 0.0) 0.05 else 0.7
+        var hi = if (fisheyeT > 0.0) 12.0 else 1.6
         if (!inside(hi)) return hi
         if (inside(lo)) return lo
         repeat(30) {
@@ -315,6 +350,16 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
     companion object {
         /** Plane scale at ±100 on a chromatic aberration slider: 0.2%, ~6 px in the corners of a 24 MP photo. */
         const val CA_MAX = 0.002
+
+        /**
+         * The most the auto crop lets a fisheye straightening stretch the picture along the radius: the stretch at a
+         * distance x = t r / fe from the axis is 1 + x^2, so 4 stops at x = sqrt(3). Beyond it a source pixel is smeared
+         * over a strip of blocks and fringes (Crop below 0 still shows it).
+         */
+        const val FISHEYE_MAX_STRETCH = 4.0
+
+        /** The widest angle from the optical axis the Fisheye slider reaches at 100 (radians): 75 degrees. */
+        val FISHEYE_MAX_ANGLE = Math.toRadians(75.0)
 
         /** Affine (continuous pixel coordinates) from display orientation to sensor orientation. */
         fun orientationMatrix(o: Int, w: Double, h: Double): DoubleArray = when (o) {

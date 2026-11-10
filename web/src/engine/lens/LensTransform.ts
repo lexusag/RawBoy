@@ -7,6 +7,13 @@ import type { LensInfo, RadialVignette, Warp } from './LensInfo';
 /** Plane scale at ±100 on a chromatic aberration slider: 0.2%, ~6 px in the corners of a 24 MP photo. */
 export const CA_MAX = 0.002;
 
+/**
+ * The most the auto crop lets a fisheye straightening stretch the picture along the radius: the stretch at a distance
+ * x = t r / fe from the axis is 1 + x^2, so 4 stops at x = sqrt(3). Beyond it a source pixel is smeared over a strip of
+ * blocks and fringes, with no real detail in it (Crop below 0 still shows it).
+ */
+export const FISHEYE_MAX_STRETCH = 4;
+
 /** The widest angle from the optical axis the Fisheye slider reaches at 100 (radians): 75 degrees. */
 export const FISHEYE_MAX_ANGLE = (75 * Math.PI) / 180;
 
@@ -114,10 +121,15 @@ export class LensTransform {
     const fisheyeHalfFov = (Math.min(220, Math.max(90, params.lensFisheyeFov)) / 2) * (Math.PI / 180);
     // 100 stops at tan(75 deg) at the edge of the lens's view: a true rectilinear picture of 180 degrees is infinitely wide.
     this.fisheyeT = (Math.min(100, Math.max(0, params.lensFisheye)) / 100) * Math.min(1, FISHEYE_MAX_ANGLE / fisheyeHalfFov);
-    this.fisheyeRadius = (Math.min(100, Math.max(20, params.lensFisheyeCircle)) / 100) * this.halfDiagonal;
+    // The detected circle (if asked for and found) replaces the three circle sliders.
+    const found = params.lensFisheyeAuto ? info.fisheyeCircle : null;
+    const circle = found ? found.radius * 100 : params.lensFisheyeCircle;
+    const offsetX = found ? found.offsetX * 100 : params.lensFisheyeX;
+    const offsetY = found ? found.offsetY * 100 : params.lensFisheyeY;
+    this.fisheyeRadius = (Math.min(100, Math.max(20, circle)) / 100) * this.halfDiagonal;
     this.fisheyeFe = this.fisheyeRadius / fisheyeHalfFov;
-    this.fisheyeOffsetX = (Math.min(50, Math.max(-50, params.lensFisheyeX)) / 100) * this.width;
-    this.fisheyeOffsetY = (Math.min(50, Math.max(-50, params.lensFisheyeY)) / 100) * this.height;
+    this.fisheyeOffsetX = (Math.min(50, Math.max(-50, offsetX)) / 100) * this.width;
+    this.fisheyeOffsetY = (Math.min(50, Math.max(-50, offsetY)) / 100) * this.height;
     const cropScale = 2 ** (Math.min(100, Math.max(-100, params.lensCrop)) / 150);
     this.clipFrame = params.lensCrop < 0;
     this.caScaleRed = 1 - (params.caRed / 100) * CA_MAX;
@@ -279,7 +291,14 @@ export class LensTransform {
     return this.warpPlanes === 3 ? [0, 1, 2] : [1];
   }
 
+  /** The auto scale: every output pixel on real picture, and for a fisheye no stretched past FISHEYE_MAX_STRETCH. */
   private autoZoom(): number {
+    const valid = this.validZoom();
+    if (this.fisheyeT <= 0) return valid;
+    return Math.max(valid, (this.fisheyeT * this.halfDiagonal) / (this.fisheyeFe * Math.sqrt(FISHEYE_MAX_STRETCH - 1)));
+  }
+
+  private validZoom(): number {
     const { width, height } = this;
     const circle = this.fisheyeT > 0 && this.fisheyeRadius < this.halfDiagonal * 0.999;
     const circleX = this.centerX + this.fisheyeOffsetX;

@@ -37,7 +37,7 @@ enum class PresetGroup(val key: String, val label: String, val fields: List<Stri
     ),
     RETOUCH("retouch", "Retouch", listOf("skinRetouch", "blemishRemoval")),
     LUT("lut", "LUT", listOf("lut", "lutAmount")),
-    LENS("lens", "Lens", listOf("lensProfile", "lensDistortion", "lensAnamorphic", "lensCrop", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint")),
+    LENS("lens", "Lens", listOf("lensProfile", "lensDistortion", "lensAnamorphic", "lensFisheye", "lensFisheyeFov", "lensFisheyeAuto", "lensFisheyeCircle", "lensFisheyeX", "lensFisheyeY", "lensCrop", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint")),
     MASKS("masks", "Masks (gradients only)", listOf("masks")),
     ;
 
@@ -263,6 +263,12 @@ object Presets {
         "lensProfile" -> p.lensProfile
         "lensDistortion" -> p.lensDistortion
         "lensAnamorphic" -> p.lensAnamorphic
+        "lensFisheye" -> p.lensFisheye
+        "lensFisheyeFov" -> p.lensFisheyeFov
+        "lensFisheyeAuto" -> p.lensFisheyeAuto
+        "lensFisheyeCircle" -> p.lensFisheyeCircle
+        "lensFisheyeX" -> p.lensFisheyeX
+        "lensFisheyeY" -> p.lensFisheyeY
         "lensCrop" -> p.lensCrop
         "caRed" -> p.caRed
         "caBlue" -> p.caBlue
@@ -279,6 +285,7 @@ object Presets {
         if (field == "colorDenoise" && value == null) return p.copy(colorDenoise = null)
         if (field == "anamorphicGhosts") return if (value is Boolean) p.copy(anamorphicGhosts = value) else p
         if (field == "lensProfile") return if (value is Boolean) p.copy(lensProfile = value) else p
+        if (field == "lensFisheyeAuto") return if (value is Boolean) p.copy(lensFisheyeAuto = value) else p
         if (field == "toneMapper") return ToneMapper.fromKey(value as? String)?.let { p.copy(toneMapper = it) } ?: p
         if (field == "anamorphicColor") return AnamorphicColor.fromKey(value as? String)?.let { p.copy(anamorphicColor = it) } ?: p
         if (field == "curves") return if (value is ToneCurves) p.copy(curves = value) else p
@@ -325,6 +332,11 @@ object Presets {
             "lutAmount" -> p.copy(lutAmount = f)
             "lensDistortion" -> p.copy(lensDistortion = f)
             "lensAnamorphic" -> p.copy(lensAnamorphic = f)
+            "lensFisheye" -> p.copy(lensFisheye = f)
+            "lensFisheyeFov" -> p.copy(lensFisheyeFov = f)
+            "lensFisheyeCircle" -> p.copy(lensFisheyeCircle = f)
+            "lensFisheyeX" -> p.copy(lensFisheyeX = f)
+            "lensFisheyeY" -> p.copy(lensFisheyeY = f)
             "lensCrop" -> p.copy(lensCrop = f)
             "caRed" -> p.copy(caRed = f)
             "caBlue" -> p.copy(caBlue = f)

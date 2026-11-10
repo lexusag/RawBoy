@@ -26,6 +26,9 @@ import app.rawboy.color.BwFilter
  * - lensProfile: apply the lens corrections embedded in the file (if any)
  * - lensDistortion: -100..100, + removes barrel distortion; auto crop/scale follows
  * - lensAnamorphic: -100..100 cylindrical (horizontal) distortion; - bows vertical edges outward like an anamorphic lens
+ * - lensFisheye: 0..100 straightens a fisheye lens (equidistant projection assumed) towards rectilinear, 0 = off; lensFisheyeFov: 90..220
+ *   degrees across the lens's image circle (the frame's diagonal when the circle fills it), lensFisheyeAuto: use the circle found in the picture instead of the next three, lensFisheyeCircle: 20..100 radius
+ *   of that circle in % of the frame's half diagonal, lensFisheyeX/Y: -50..50 offset of the circle's centre in % of width/height
  * - lensCrop: -100..100 scale around the auto crop (0 = no empty edges; < 0 reveals curved borders; > 0 crops tighter)
  * - caRed, caBlue: -100..100, lateral chromatic aberration: + enlarges the red (blue) plane around the image centre
  * - vignetteAmount: -100..100, + brightens corners; vignetteMidpoint: 0..100 (higher = only the corners)
@@ -90,6 +93,12 @@ data class DevelopParams(
     val lensProfile: Boolean = true,
     val lensDistortion: Float = 0f,
     val lensAnamorphic: Float = 0f,
+    val lensFisheye: Float = 0f,
+    val lensFisheyeFov: Float = 180f,
+    val lensFisheyeAuto: Boolean = true,
+    val lensFisheyeCircle: Float = 100f,
+    val lensFisheyeX: Float = 0f,
+    val lensFisheyeY: Float = 0f,
     val lensCrop: Float = 0f,
     val caRed: Float = 0f,
     val caBlue: Float = 0f,

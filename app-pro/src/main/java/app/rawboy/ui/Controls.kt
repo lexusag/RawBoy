@@ -329,6 +329,7 @@ private fun LensPanel(
     ParamSlider("Crop", params.lensCrop, -100f..100f, defaults.lensCrop) {
         onChange(params.copy(lensCrop = it))
     }
+    FisheyeSliders(params, defaults, lens, onChange)
     ParamSlider("Vignetting", params.vignetteAmount, -100f..100f, defaults.vignetteAmount) {
         onChange(params.copy(vignetteAmount = it))
     }
@@ -625,6 +626,64 @@ private fun GrainSliders(params: DevelopParams, defaults: DevelopParams, onChang
     ParamSlider("Color", params.grainColor, 0f..100f, defaults.grainColor, ::formatPlain, modifier = indent) {
         onChange(params.copy(grainColor = it))
     }
+}
+
+/**
+ * Straighten fisheye, whose name opens the lens's field of view, image circle size and centre under it (shown open
+ * while any of them is changed, so an edit is never hidden). Same pattern as [GrainSliders].
+ */
+@Composable
+private fun FisheyeSliders(params: DevelopParams, defaults: DevelopParams, lens: LensInfo, onChange: (DevelopParams) -> Unit) {
+    val changed = params.lensFisheyeAuto != defaults.lensFisheyeAuto || params.lensFisheyeFov != defaults.lensFisheyeFov || params.lensFisheyeCircle != defaults.lensFisheyeCircle ||
+        params.lensFisheyeX != defaults.lensFisheyeX || params.lensFisheyeY != defaults.lensFisheyeY
+    var open by rememberSaveable { mutableStateOf(false) }
+    val shown = open || changed
+    ParamSlider(
+        if (shown) "Fisheye ▾" else "Fisheye ▸", params.lensFisheye, 0f..100f, defaults.lensFisheye, ::formatPlain,
+        onLabelClick = { open = !shown },
+    ) { onChange(params.copy(lensFisheye = it)) }
+    if (!shown) return
+    val indent = Modifier.padding(start = 16.dp)
+    ParamSlider(
+        "Lens field of view", params.lensFisheyeFov, 90f..220f, defaults.lensFisheyeFov, { "${it.roundToInt()}°" }, modifier = indent,
+    ) { onChange(params.copy(lensFisheyeFov = it)) }
+    Row(verticalAlignment = Alignment.CenterVertically, modifier = indent.fillMaxWidth()) {
+        Text("Find the circle automatically", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+        Switch(checked = params.lensFisheyeAuto, onCheckedChange = { onChange(params.copy(lensFisheyeAuto = it)) })
+    }
+    val found = lens.fisheyeCircle
+    if (params.lensFisheyeAuto && found != null) {
+        Text(
+            "Found a circle of ${(found.radius * 100).roundToInt()}% at ${(found.offsetX * 100).roundToInt()}, ${(found.offsetY * 100).roundToInt()}.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = indent,
+        )
+    } else {
+        if (params.lensFisheyeAuto) {
+            Text(
+                "No circle found (the picture fills the frame), so the sliders below are used.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = indent,
+            )
+        }
+        ParamSlider("Image circle size", params.lensFisheyeCircle, 20f..100f, defaults.lensFisheyeCircle, ::formatPlain, modifier = indent) {
+            onChange(params.copy(lensFisheyeCircle = it))
+        }
+        ParamSlider("Circle centre X", params.lensFisheyeX, -50f..50f, defaults.lensFisheyeX, ::formatPlain, modifier = indent) {
+            onChange(params.copy(lensFisheyeX = it))
+        }
+        ParamSlider("Circle centre Y", params.lensFisheyeY, -50f..50f, defaults.lensFisheyeY, ::formatPlain, modifier = indent) {
+            onChange(params.copy(lensFisheyeY = it))
+        }
+    }
+    Text(
+        "Assumes an equidistant fisheye. For a circular fisheye, set the circle size and centre so the lens's real picture is the circle; Crop below 0 shows more of it.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = indent,
+    )
 }
 
 /** A primaries slider whose track shows the colour it gives at each position ([PrimariesTrack]). */

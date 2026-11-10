@@ -144,6 +144,12 @@ public enum LookApplier {
         d.lensProfile = lens.lensProfile
         d.lensDistortion = lens.lensDistortion
         d.lensAnamorphic = lens.lensAnamorphic
+        d.lensFisheye = lens.lensFisheye
+        d.lensFisheyeFov = lens.lensFisheyeFov
+        d.lensFisheyeAuto = lens.lensFisheyeAuto
+        d.lensFisheyeCircle = lens.lensFisheyeCircle
+        d.lensFisheyeX = lens.lensFisheyeX
+        d.lensFisheyeY = lens.lensFisheyeY
         d.lensCrop = lens.lensCrop
         d.caRed = lens.caRed
         d.caBlue = lens.caBlue

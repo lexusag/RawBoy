@@ -92,7 +92,9 @@ public enum AutoAnalysis {
     }
 
     private static func copiesOf(_ img: RawImage) -> (PreviewImage, BloomSources) {
-        (img.createPreview(maxDimension: PhotoSession.baseMaxDimension), PhotoSession.bloomSourcesOf(img))
+        let base = img.createPreview(maxDimension: PhotoSession.baseMaxDimension)
+        img.lens.fisheyeCircle = FisheyeCircle.detect(base)
+        return (base, PhotoSession.bloomSourcesOf(img))
     }
 
     private static func analyze(_ base: PreviewImage, _ bloom: BloomSources, _ info: Info, _ label: String,

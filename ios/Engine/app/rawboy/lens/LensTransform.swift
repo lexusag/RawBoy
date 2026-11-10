@@ -8,7 +8,8 @@ import Foundation
  *   0. add the user crop's origin (the crop only picks a window of the finished frame), then undo
  *      rotation (90 degree turns + straighten), with auto crop for the straighten angle, and the flips
  *   1. auto scale around the image centre (crop to valid pixels, like Lightroom's Constrain Crop), adjusted by lensCrop
- *   2. manual distortion (spherical + cylindrical anamorphic, around the image centre)
+ *   2. manual distortion (spherical + cylindrical anamorphic, around the image centre), then the fisheye straightening
+ *      (equidistant -> blend towards rectilinear, around the lens's optical axis)
  *   3. embedded DNG WarpRectilinear, in sensor coordinates, per colour plane
  *   4. manual chromatic aberration: red and blue planes scaled around the image centre
  *
@@ -54,6 +55,27 @@ public final class LensTransform: @unchecked Sendable {
     /** Cylindrical (horizontal) distortion k: -100 bows vertical edges outward like an anamorphic lens. */
     public let anamorphicK: Double
 
+    /** Fisheye straightening 0..1 (0 = off): the output projection is fe * tan(t * theta) / t, 1 = rectilinear. */
+    public let fisheyeT: Double
+
+    /** The fisheye's image circle radius and its equidistant focal length (source radius = fe * angle), pixels. */
+    public let fisheyeRadius: Double
+    public let fisheyeFe: Double
+
+    /** Optical axis offset from the image centre, pixels. */
+    public let fisheyeOffsetX: Double
+    public let fisheyeOffsetY: Double
+
+    /**
+     * The most the auto crop lets a fisheye straightening stretch the picture along the radius: the stretch at a
+     * distance x = t r / fe from the axis is 1 + x^2, so 4 stops at x = sqrt(3). Beyond it a source pixel is smeared
+     * over a strip of blocks and fringes (Crop below 0 still shows it).
+     */
+    public static let fisheyeMaxStretch = 4.0
+
+    /** The widest angle from the optical axis the Fisheye slider reaches at 100 (radians): 75 degrees. */
+    public static let fisheyeMaxAngle = 75.0 * .pi / 180
+
     /** True when zoomed out past the auto crop, so pixels outside [0, width] x [0, height] render black. */
     public let clipFrame: Bool
 
@@ -90,7 +112,7 @@ public final class LensTransform: @unchecked Sendable {
     /** Plane scale at ±100 on a chromatic aberration slider: 0.2%, ~6 px in the corners of a 24 MP photo. */
     public static let caMax = 0.002
 
-    public var isGeometric: Bool { warp != nil || manualK != 0 || anamorphicK != 0 }
+    public var isGeometric: Bool { warp != nil || manualK != 0 || anamorphicK != 0 || fisheyeT > 0 }
 
     /** Output scale: at lensCrop = 0, >= the value at which every output pixel has real image data. */
     public private(set) var zoom: Double = 1
@@ -112,6 +134,13 @@ public final class LensTransform: @unchecked Sendable {
         useProfile = params.lensProfile && info.hasProfile
         manualK = Double(params.lensDistortion) / 100 * 0.25
         anamorphicK = Double(params.lensAnamorphic) / 100 * 0.30
+        let fisheyeHalfFov = Double(params.lensFisheyeFov).clamped(90, 220) / 2 * .pi / 180
+        fisheyeT = Double(params.lensFisheye).clamped(0, 100) / 100 * min(1, Self.fisheyeMaxAngle / fisheyeHalfFov)
+        let found = params.lensFisheyeAuto ? info.fisheyeCircle : nil
+        fisheyeRadius = (found.map { $0.radius * 100 } ?? Double(params.lensFisheyeCircle)).clamped(20, 100) / 100 * halfDiagonal
+        fisheyeFe = fisheyeRadius / fisheyeHalfFov
+        fisheyeOffsetX = (found.map { $0.offsetX * 100 } ?? Double(params.lensFisheyeX)).clamped(-50, 50) / 100 * Double(width)
+        fisheyeOffsetY = (found.map { $0.offsetY * 100 } ?? Double(params.lensFisheyeY)).clamped(-50, 50) / 100 * Double(height)
         let cropScale = pow(2.0, Double(params.lensCrop).clamped(-100, 100) / 150.0)
         clipFrame = params.lensCrop < 0
         caScaleRed = 1 - Double(params.caRed) / 100 * Self.caMax
@@ -188,6 +217,12 @@ public final class LensTransform: @unchecked Sendable {
         let rn2 = (dx * dx + dy * dy) / (halfDiagonal * halfDiagonal)
         dx *= distortFactor(manualK + anamorphicK, rn2)
         dy *= distortFactor(manualK, rn2)
+        if fisheyeT > 0 {
+            let x = fisheyeT * hypot(dx, dy) / fisheyeFe
+            let f = x > 1e-6 ? atan(x) / x : 1.0
+            dx = dx * f + fisheyeOffsetX
+            dy = dy * f + fisheyeOffsetY
+        }
         let qx = centerX + dx
         let qy = centerY + dy
         guard let w = warp else { return manualCa(qx, qy, plane) }
@@ -254,7 +289,17 @@ public final class LensTransform: @unchecked Sendable {
 
     private func planesToCheck() -> [Int] { warpPlanes == 3 ? [0, 1, 2] : [1] }
 
+    /** The auto scale: every output pixel on real picture, and for a fisheye no stretched past `fisheyeMaxStretch`. */
     private func autoZoom() -> Double {
+        let valid = validZoom()
+        if fisheyeT <= 0 { return valid }
+        return max(valid, fisheyeT * halfDiagonal / (fisheyeFe * (Self.fisheyeMaxStretch - 1).squareRoot()))
+    }
+
+    private func validZoom() -> Double {
+        let circle = fisheyeT > 0 && fisheyeRadius < halfDiagonal * 0.999
+        let circleX = centerX + fisheyeOffsetX
+        let circleY = centerY + fisheyeOffsetY
         func inside(_ z: Double) -> Bool {
             let steps = 48
             let w = Double(width)
@@ -265,13 +310,16 @@ public final class LensTransform: @unchecked Sendable {
                     for (px, py) in [(t * w, 0.0), (t * w, h), (0.0, t * h), (w, t * h)] {
                         let s = lensSource(px, py, plane, z)
                         if s[0] < -0.5 || s[1] < -0.5 || s[0] > w + 0.5 || s[1] > h + 0.5 { return false }
+                        // A circular fisheye: nothing outside the image circle is picture.
+                        if circle && hypot(s[0] - circleX, s[1] - circleY) > fisheyeRadius { return false }
                     }
                 }
             }
             return true
         }
-        var lo = 0.7
-        var hi = 1.6
+        // Straightening a wide fisheye needs far more zoom-out than a lens profile does.
+        var lo = fisheyeT > 0 ? 0.05 : 0.7
+        var hi = fisheyeT > 0 ? 12.0 : 1.6
         if !inside(hi) { return hi }
         if inside(lo) { return lo }
         for _ in 0..<30 {

@@ -26,6 +26,7 @@ struct ControlsPanel: View {
     @AppStorage("pro.tab") private var chosenTab = 0
     @State private var anamorphicOpen: Bool?
     @State private var grainOpen = false
+    @State private var fisheyeOpen = false
 
     private static let tabNames = ["Light", "Color", "Detail", "LUTs", "Lens"]
     private static let lutsTab = 3
@@ -222,6 +223,36 @@ struct ControlsPanel: View {
         }
     }
 
+    /**
+     * Straighten fisheye, whose name opens the lens's field of view, image circle size and centre under it (shown
+     * open while any of them is changed, so an edit is never hidden). As `grainSliders`.
+     */
+    @ViewBuilder private var fisheyeSliders: some View {
+        let changed = params.lensFisheyeAuto != defaults.lensFisheyeAuto || params.lensFisheyeFov != defaults.lensFisheyeFov || params.lensFisheyeCircle != defaults.lensFisheyeCircle
+            || params.lensFisheyeX != defaults.lensFisheyeX || params.lensFisheyeY != defaults.lensFisheyeY
+        let shown = fisheyeOpen || changed
+        ParamSlider(label: shown ? "Fisheye ▾" : "Fisheye ▸", value: params.lensFisheye, range: 0...100, defaultValue: defaults.lensFisheye,
+                    format: formatPlain, onLabelTap: { fisheyeOpen = !shown }) { v in set { $0.lensFisheye = v } }
+        if shown {
+            Group {
+                slider("Lens field of view", \.lensFisheyeFov, 90...220, format: { "\(Int($0.rounded()))°" })
+                Toggle("Find the circle automatically", isOn: Binding(get: { params.lensFisheyeAuto },
+                                                                      set: { v in set { $0.lensFisheyeAuto = v } }))
+                    .font(.subheadline)
+                if params.lensFisheyeAuto, let found = lens.fisheyeCircle {
+                    Note("Found a circle of \(Int((found.radius * 100).rounded()))% at \(Int((found.offsetX * 100).rounded())), \(Int((found.offsetY * 100).rounded())).")
+                } else {
+                    if params.lensFisheyeAuto { Note("No circle found (the picture fills the frame), so the sliders below are used.") }
+                    slider("Image circle size", \.lensFisheyeCircle, 20...100, format: formatPlain)
+                    slider("Circle centre X", \.lensFisheyeX, -50...50, format: formatPlain)
+                    slider("Circle centre Y", \.lensFisheyeY, -50...50, format: formatPlain)
+                }
+                Note("Assumes an equidistant fisheye. For a circular fisheye, set the circle size and centre so the lens's real picture is the circle; Crop below 0 shows more of it.")
+            }
+            .padding(.leading, 16)
+        }
+    }
+
     private var skinNote: String? {
         switch skin {
         case .computing: "Finding skin…"
@@ -244,6 +275,7 @@ struct ControlsPanel: View {
         slider("Distortion", \.lensDistortion, -100...100)
         slider("Horizontal distortion", \.lensAnamorphic, -100...100)
         slider("Crop", \.lensCrop, -100...100)
+        fisheyeSliders
         slider("Vignetting", \.vignetteAmount, -100...100)
         slider("Vignette radius", \.vignetteMidpoint, 0...100, format: formatPlain)
         Note("At Crop 0, distortion crops automatically so no empty edges show; negative shows the curved edges, positive crops tighter.")

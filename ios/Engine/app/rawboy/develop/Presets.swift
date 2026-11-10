@@ -36,7 +36,7 @@ public enum PresetGroup: String, CaseIterable, Sendable {
                        "grainRoughness", "grainColor", "bloom", "anamorphic", "anamorphicColor", "anamorphicGhosts"]
         case .retouch: ["skinRetouch", "blemishRemoval"]
         case .lut: ["lut", "lutAmount"]
-        case .lens: ["lensProfile", "lensDistortion", "lensAnamorphic", "lensCrop", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint"]
+        case .lens: ["lensProfile", "lensDistortion", "lensAnamorphic", "lensFisheye", "lensFisheyeFov", "lensFisheyeAuto", "lensFisheyeCircle", "lensFisheyeX", "lensFisheyeY", "lensCrop", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint"]
         case .masks: ["masks"]
         }
     }
@@ -276,7 +276,8 @@ public enum Presets {
         "grainRoughness": \.grainRoughness, "grainColor": \.grainColor, "bloom": \.bloom,
         "anamorphic": \.anamorphic, "skinRetouch": \.skinRetouch,
         "blemishRemoval": \.blemishRemoval, "lutAmount": \.lutAmount, "lensDistortion": \.lensDistortion,
-        "lensAnamorphic": \.lensAnamorphic, "lensCrop": \.lensCrop, "caRed": \.caRed, "caBlue": \.caBlue,
+        "lensAnamorphic": \.lensAnamorphic, "lensFisheye": \.lensFisheye, "lensFisheyeFov": \.lensFisheyeFov,
+        "lensFisheyeCircle": \.lensFisheyeCircle, "lensFisheyeX": \.lensFisheyeX, "lensFisheyeY": \.lensFisheyeY, "lensCrop": \.lensCrop, "caRed": \.caRed, "caBlue": \.caBlue,
         "vignetteAmount": \.vignetteAmount, "vignetteMidpoint": \.vignetteMidpoint,
         "filmAmount": \.filmAmount, "filmGrain": \.filmGrain, "halation": \.halation,
     ]
@@ -288,6 +289,7 @@ public enum Presets {
         case "lut": .text(p.lut)
         case "film": .text(p.film)
         case "lensProfile": .flag(p.lensProfile)
+        case "lensFisheyeAuto": .flag(p.lensFisheyeAuto)
         case "anamorphicGhosts": .flag(p.anamorphicGhosts)
         case "colorDenoise": p.colorDenoise.map { PresetValue.number($0) } ?? .text(nil)
         case "masks": .layers(Masks.forPreset(p.masks))  // strokes stay with the photo
@@ -303,6 +305,7 @@ public enum Presets {
         case let ("lut", .text(s)): out.lut = s.map(RetiredLooks.lut)
         case let ("film", .text(s)): out.film = s.map(RetiredLooks.stock)
         case let ("lensProfile", .flag(b)): out.lensProfile = b
+        case let ("lensFisheyeAuto", .flag(b)): out.lensFisheyeAuto = b
         case let ("anamorphicGhosts", .flag(b)): out.anamorphicGhosts = b
         case let ("colorDenoise", .number(n)): if n.isFinite { out.colorDenoise = n }
         case ("colorDenoise", .text(.none)): out.colorDenoise = nil
