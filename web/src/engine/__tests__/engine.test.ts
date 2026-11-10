@@ -244,6 +244,11 @@ describe('lens geometry', () => {
       expect(p[1]).toBeGreaterThan(-0.6);
       expect(p[1]).toBeLessThan(4000.6);
     }
+    // The auto crop never stretches the picture along the radius more than 4x (stretch = 1 + x^2).
+    for (const lens of [new LensTransform(info, developParams({ lensFisheye: 100 })), new LensTransform(info, developParams({ lensFisheye: 100, lensFisheyeCircle: 60 }))]) {
+      const x = (lens.fisheyeT * half) / lens.zoom / lens.fisheyeFe;
+      expect(1 + x * x).toBeLessThanOrEqual(4 + 1e-9);
+    }
     // A circular fisheye (circle radius 40% of the half diagonal): the auto crop stays inside the circle.
     const circ = new LensTransform(info, developParams({ lensFisheye: 60, lensFisheyeCircle: 40 }));
     const radius = 0.4 * half;

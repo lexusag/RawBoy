@@ -66,6 +66,13 @@ public final class LensTransform: @unchecked Sendable {
     public let fisheyeOffsetX: Double
     public let fisheyeOffsetY: Double
 
+    /**
+     * The most the auto crop lets a fisheye straightening stretch the picture along the radius: the stretch at a
+     * distance x = t r / fe from the axis is 1 + x^2, so 4 stops at x = sqrt(3). Beyond it a source pixel is smeared
+     * over a strip of blocks and fringes (Crop below 0 still shows it).
+     */
+    public static let fisheyeMaxStretch = 4.0
+
     /** The widest angle from the optical axis the Fisheye slider reaches at 100 (radians): 75 degrees. */
     public static let fisheyeMaxAngle = 75.0 * .pi / 180
 
@@ -281,7 +288,14 @@ public final class LensTransform: @unchecked Sendable {
 
     private func planesToCheck() -> [Int] { warpPlanes == 3 ? [0, 1, 2] : [1] }
 
+    /** The auto scale: every output pixel on real picture, and for a fisheye no stretched past `fisheyeMaxStretch`. */
     private func autoZoom() -> Double {
+        let valid = validZoom()
+        if fisheyeT <= 0 { return valid }
+        return max(valid, fisheyeT * halfDiagonal / (fisheyeFe * (Self.fisheyeMaxStretch - 1).squareRoot()))
+    }
+
+    private func validZoom() -> Double {
         let circle = fisheyeT > 0 && fisheyeRadius < halfDiagonal * 0.999
         let circleX = centerX + fisheyeOffsetX
         let circleY = centerY + fisheyeOffsetY

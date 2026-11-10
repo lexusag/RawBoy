@@ -124,6 +124,12 @@ class FlipTest {
         val s = l.source(3000.0 + 900.0 * l.zoom, 2000.0 + 300.0 * l.zoom)
         val r = Math.hypot(900.0, 300.0)
         assertEquals(fe * Math.atan(t * r / fe) / t, Math.hypot(s[0] - 3000.0, s[1] - 2000.0), 1e-6)
+        // The auto crop never stretches the picture along the radius more than 4x (stretch = 1 + x^2).
+        for (circle in listOf(100f, 60f)) {
+            val lens = LensTransform(info, DevelopParams(lensFisheye = 100f, lensFisheyeCircle = circle))
+            val x = lens.fisheyeT * half / lens.zoom / lens.fisheyeFe
+            assertTrue(1 + x * x <= 4.0 + 1e-9)
+        }
         // Auto zoom keeps every output pixel on real image data, inside the circle of a circular fisheye.
         val circ = LensTransform(info, DevelopParams(lensFisheye = 60f, lensFisheyeCircle = 40f))
         for ((x, y) in listOf(0.0 to 0.0, 6000.0 to 0.0, 0.0 to 4000.0, 6000.0 to 4000.0, 3000.0 to 0.0, 0.0 to 2000.0)) {

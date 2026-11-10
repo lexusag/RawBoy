@@ -7,6 +7,13 @@ import type { LensInfo, RadialVignette, Warp } from './LensInfo';
 /** Plane scale at ±100 on a chromatic aberration slider: 0.2%, ~6 px in the corners of a 24 MP photo. */
 export const CA_MAX = 0.002;
 
+/**
+ * The most the auto crop lets a fisheye straightening stretch the picture along the radius: the stretch at a distance
+ * x = t r / fe from the axis is 1 + x^2, so 4 stops at x = sqrt(3). Beyond it a source pixel is smeared over a strip of
+ * blocks and fringes, with no real detail in it (Crop below 0 still shows it).
+ */
+export const FISHEYE_MAX_STRETCH = 4;
+
 /** The widest angle from the optical axis the Fisheye slider reaches at 100 (radians): 75 degrees. */
 export const FISHEYE_MAX_ANGLE = (75 * Math.PI) / 180;
 
@@ -279,7 +286,14 @@ export class LensTransform {
     return this.warpPlanes === 3 ? [0, 1, 2] : [1];
   }
 
+  /** The auto scale: every output pixel on real picture, and for a fisheye no stretched past FISHEYE_MAX_STRETCH. */
   private autoZoom(): number {
+    const valid = this.validZoom();
+    if (this.fisheyeT <= 0) return valid;
+    return Math.max(valid, (this.fisheyeT * this.halfDiagonal) / (this.fisheyeFe * Math.sqrt(FISHEYE_MAX_STRETCH - 1)));
+  }
+
+  private validZoom(): number {
     const { width, height } = this;
     const circle = this.fisheyeT > 0 && this.fisheyeRadius < this.halfDiagonal * 0.999;
     const circleX = this.centerX + this.fisheyeOffsetX;

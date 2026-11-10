@@ -247,7 +247,14 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
 
     private fun planesToCheck() = if (warpPlanes == 3) listOf(0, 1, 2) else listOf(1)
 
+    /** The auto scale: every output pixel on real picture, and for a fisheye no stretched past [FISHEYE_MAX_STRETCH]. */
     private fun autoZoom(): Double {
+        val valid = validZoom()
+        if (fisheyeT <= 0.0) return valid
+        return max(valid, fisheyeT * halfDiagonal / (fisheyeFe * sqrt(FISHEYE_MAX_STRETCH - 1.0)))
+    }
+
+    private fun validZoom(): Double {
         val circle = fisheyeT > 0.0 && fisheyeRadius < halfDiagonal * 0.999
         val circleX = centerX + fisheyeOffsetX
         val circleY = centerY + fisheyeOffsetY
@@ -342,6 +349,13 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
     companion object {
         /** Plane scale at ±100 on a chromatic aberration slider: 0.2%, ~6 px in the corners of a 24 MP photo. */
         const val CA_MAX = 0.002
+
+        /**
+         * The most the auto crop lets a fisheye straightening stretch the picture along the radius: the stretch at a
+         * distance x = t r / fe from the axis is 1 + x^2, so 4 stops at x = sqrt(3). Beyond it a source pixel is smeared
+         * over a strip of blocks and fringes (Crop below 0 still shows it).
+         */
+        const val FISHEYE_MAX_STRETCH = 4.0
 
         /** The widest angle from the optical axis the Fisheye slider reaches at 100 (radians): 75 degrees. */
         val FISHEYE_MAX_ANGLE = Math.toRadians(75.0)

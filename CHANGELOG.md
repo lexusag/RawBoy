@@ -1,5 +1,6 @@
 **RawBoy Pro (Android, iOS, web): Fisheye is on the phones, and its settings are hidden like Grain's (2026-11-10)**
 
+- The auto crop of a straightened fisheye now stops where the picture would be stretched more than 4× along the radius (stretch = 1 + (t·r/fe)², all platforms): beyond that a source pixel is smeared over a strip of blocks and colour fringes with no real detail. Crop below 0 still shows those edges. Picked by the owner from a mock-up of six options (cap at 60°, stretch crop, cubic sampling, chroma fade); cubic sampling and the fade were not done.
 - Lens › **Fisheye** (the slider that straightens a fisheye lens) is now in RawBoy on Android and iPhone, with the same maths and defaults as the web (`LensTransform.kt/.swift` mirror `LensTransform.ts`, the shared `lensPre` shader gets the uniforms). Tapping its name opens **Lens field of view**, **Image circle size** and **Circle centre X / Y** under it, as Grain opens Size, Roughness and Color; they open by themselves while any of them is changed. The web's panel works the same way now. Fisheye is in the Lens preset group on all platforms, so Auto applies it with a lens preset. Not built or run here (no Android or Xcode tooling in the session): see the PR.
 
 **RawBoy Pro (web): Straighten fisheye, a fisheye mode in the Lens tab (2026-11-10)**

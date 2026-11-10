@@ -138,6 +138,15 @@ final class FlipTests: XCTestCase {
         let s = l.source(3000 + 900 * l.zoom, 2000 + 300 * l.zoom)
         let r = hypot(900.0, 300.0)
         XCTAssertEqual(hypot(s[0] - 3000, s[1] - 2000), fe * atan(t * r / fe) / t, accuracy: 1e-6)
+        // The auto crop never stretches the picture along the radius more than 4x (stretch = 1 + x^2).
+        for circle: Float in [100, 60] {
+            var q = DevelopParams()
+            q.lensFisheye = 100
+            q.lensFisheyeCircle = circle
+            let lens = LensTransform(info: info, params: q)
+            let x = lens.fisheyeT * half / lens.zoom / lens.fisheyeFe
+            XCTAssertLessThanOrEqual(1 + x * x, 4.0 + 1e-9)
+        }
         // Auto zoom keeps every output pixel inside the circle of a circular fisheye.
         var c = DevelopParams()
         c.lensFisheye = 60
