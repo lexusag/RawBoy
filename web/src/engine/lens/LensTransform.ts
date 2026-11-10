@@ -7,6 +7,9 @@ import type { LensInfo, RadialVignette, Warp } from './LensInfo';
 /** Plane scale at ±100 on a chromatic aberration slider: 0.2%, ~6 px in the corners of a 24 MP photo. */
 export const CA_MAX = 0.002;
 
+/** The widest angle from the optical axis the Fisheye slider reaches at 100 (radians): 75 degrees. */
+export const FISHEYE_MAX_ANGLE = (75 * Math.PI) / 180;
+
 /**
  * Lens geometry for one image and one set of slider values (port of lens/LensTransform.kt): where each output
  * pixel samples the decoded image, and the gains to apply there.
@@ -15,7 +18,8 @@ export const CA_MAX = 0.002;
  *   0. add the user crop's origin (the crop only picks a window of the finished frame), then undo
  *      rotation (90 degree turns + straighten), with auto crop for the straighten angle, and the flips
  *   1. auto scale around the image centre (crop to valid pixels, like Lightroom's Constrain Crop), adjusted by lensCrop
- *   2. manual distortion (spherical + cylindrical anamorphic, around the image centre)
+ *   2. manual distortion (spherical + cylindrical anamorphic, around the image centre), then the fisheye straightening
+ *      (equidistant -> blend towards rectilinear, around the lens's optical axis)
  *   3. embedded DNG WarpRectilinear, in sensor coordinates, per colour plane
  *   4. manual chromatic aberration: red and blue planes scaled around the image centre
  *
@@ -51,6 +55,14 @@ export class LensTransform {
   readonly manualK: number;
   /** Cylindrical (horizontal) distortion k: -100 bows vertical edges outward like an anamorphic lens. */
   readonly anamorphicK: number;
+  /** Fisheye straightening 0..1 (0 = off): the output projection is fe * tan(t * theta) / t, 1 = rectilinear. */
+  readonly fisheyeT: number;
+  /** Equidistant focal length in pixels (source radius = fe * angle) and the image circle's radius, pixels. */
+  readonly fisheyeFe: number;
+  readonly fisheyeRadius: number;
+  /** Optical axis offset from the image centre, pixels. */
+  readonly fisheyeOffsetX: number;
+  readonly fisheyeOffsetY: number;
   /** True when zoomed out past the auto crop, so pixels outside [0, width] x [0, height] render black. */
   readonly clipFrame: boolean;
   readonly warp: Warp | null;
@@ -99,6 +111,13 @@ export class LensTransform {
     const useProfile = params.lensProfile && info.hasProfile;
     this.manualK = (params.lensDistortion / 100) * 0.25;
     this.anamorphicK = (params.lensAnamorphic / 100) * 0.30;
+    const fisheyeHalfFov = (Math.min(220, Math.max(90, params.lensFisheyeFov)) / 2) * (Math.PI / 180);
+    // 100 stops at tan(75 deg) at the edge of the lens's view: a true rectilinear picture of 180 degrees is infinitely wide.
+    this.fisheyeT = (Math.min(100, Math.max(0, params.lensFisheye)) / 100) * Math.min(1, FISHEYE_MAX_ANGLE / fisheyeHalfFov);
+    this.fisheyeRadius = (Math.min(100, Math.max(20, params.lensFisheyeCircle)) / 100) * this.halfDiagonal;
+    this.fisheyeFe = this.fisheyeRadius / fisheyeHalfFov;
+    this.fisheyeOffsetX = (Math.min(50, Math.max(-50, params.lensFisheyeX)) / 100) * this.width;
+    this.fisheyeOffsetY = (Math.min(50, Math.max(-50, params.lensFisheyeY)) / 100) * this.height;
     const cropScale = 2 ** (Math.min(100, Math.max(-100, params.lensCrop)) / 150);
     this.clipFrame = params.lensCrop < 0;
     this.caScaleRed = 1 - (params.caRed / 100) * CA_MAX;
@@ -125,7 +144,7 @@ export class LensTransform {
   }
 
   get isGeometric(): boolean {
-    return this.warp != null || this.manualK !== 0 || this.anamorphicK !== 0;
+    return this.warp != null || this.manualK !== 0 || this.anamorphicK !== 0 || this.fisheyeT > 0;
   }
 
   /** Source position (image, display orientation) of output pixel (x, y) for colour plane 0..2. */
@@ -180,6 +199,12 @@ export class LensTransform {
     const rn2 = (dx * dx + dy * dy) / (this.halfDiagonal * this.halfDiagonal);
     dx *= this.distortFactor(this.manualK + this.anamorphicK, rn2);
     dy *= this.distortFactor(this.manualK, rn2);
+    if (this.fisheyeT > 0) {
+      const x = (this.fisheyeT * Math.hypot(dx, dy)) / this.fisheyeFe;
+      const f = x > 1e-6 ? Math.atan(x) / x : 1;
+      dx = dx * f + this.fisheyeOffsetX;
+      dy = dy * f + this.fisheyeOffsetY;
+    }
     const qx = this.centerX + dx;
     const qy = this.centerY + dy;
     const w = this.warp;
@@ -256,6 +281,9 @@ export class LensTransform {
 
   private autoZoom(): number {
     const { width, height } = this;
+    const circle = this.fisheyeT > 0 && this.fisheyeRadius < this.halfDiagonal * 0.999;
+    const circleX = this.centerX + this.fisheyeOffsetX;
+    const circleY = this.centerY + this.fisheyeOffsetY;
     const inside = (z: number): boolean => {
       const steps = 48;
       for (const plane of this.planesToCheck()) {
@@ -269,13 +297,16 @@ export class LensTransform {
           ]) {
             const s = this.lensSource(px, py, plane, z);
             if (s[0] < -0.5 || s[1] < -0.5 || s[0] > width + 0.5 || s[1] > height + 0.5) return false;
+            // A circular fisheye: nothing outside the image circle is picture.
+            if (circle && Math.hypot(s[0] - circleX, s[1] - circleY) > this.fisheyeRadius) return false;
           }
         }
       }
       return true;
     };
-    let lo = 0.7;
-    let hi = 1.6;
+    // Straightening a wide fisheye needs far more zoom-out than a lens profile does.
+    let lo = this.fisheyeT > 0 ? 0.05 : 0.7;
+    let hi = this.fisheyeT > 0 ? 12 : 1.6;
     if (!inside(hi)) return hi;
     if (inside(lo)) return lo;
     for (let i = 0; i < 30; i++) {

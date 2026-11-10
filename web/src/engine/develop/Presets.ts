@@ -34,7 +34,7 @@ export const PRESET_GROUPS: readonly { key: PresetGroup; label: string; fields: 
   { key: 'denoise', label: 'Denoise & sharpening', fields: ['denoise', 'colorDenoise', 'sharpening'] },
   { key: 'retouch', label: 'Retouch', fields: ['skinRetouch', 'blemishRemoval', 'portraitRetouch'] },
   { key: 'lut', label: 'LUT', fields: ['lut', 'lutAmount'] },
-  { key: 'lens', label: 'Lens', fields: ['lensProfile', 'lensDistortion', 'lensAnamorphic', 'lensCrop', 'caRed', 'caBlue', 'vignetteAmount', 'vignetteMidpoint'] },
+  { key: 'lens', label: 'Lens', fields: ['lensProfile', 'lensDistortion', 'lensAnamorphic', 'lensFisheye', 'lensFisheyeFov', 'lensFisheyeCircle', 'lensFisheyeX', 'lensFisheyeY', 'lensCrop', 'caRed', 'caBlue', 'vignetteAmount', 'vignetteMidpoint'] },
   { key: 'masks', label: 'Masks (gradients only)', fields: ['masks'] },
 ];
 

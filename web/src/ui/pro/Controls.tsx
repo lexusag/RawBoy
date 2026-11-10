@@ -306,6 +306,17 @@ export function ControlsPanel({
             {slider('Distortion', 'lensDistortion', -100, 100)}
             {slider('Horizontal distortion', 'lensAnamorphic', -100, 100)}
             {slider('Crop', 'lensCrop', -100, 100)}
+            <SectionLabel>Fisheye</SectionLabel>
+            {slider('Straighten fisheye', 'lensFisheye', 0, 100, formatPlain)}
+            {params.lensFisheye > 0 && (
+              <>
+                {slider('Lens field of view', 'lensFisheyeFov', 90, 220, formatDegrees)}
+                {slider('Image circle size', 'lensFisheyeCircle', 20, 100, formatPlain)}
+                {slider('Circle centre X', 'lensFisheyeX', -50, 50)}
+                {slider('Circle centre Y', 'lensFisheyeY', -50, 50)}
+                <Note>Assumes an equidistant fisheye. For a circular fisheye, set the circle size and centre so the lens's real picture is the circle; Crop below 0 shows more of it.</Note>
+              </>
+            )}
             {slider('Vignetting', 'vignetteAmount', -100, 100)}
             {slider('Vignette radius', 'vignetteMidpoint', 0, 100, formatPlain)}
             <Note>At Crop 0, distortion crops automatically so no empty edges show; negative shows the curved edges, positive crops tighter.</Note>

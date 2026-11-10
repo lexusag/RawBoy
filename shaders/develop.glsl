@@ -94,6 +94,9 @@ uniform float uHalfDiagonal;
 uniform float uZoom;             // auto crop/scale (adjusted by lensCrop)
 uniform float uManualK;          // manual spherical distortion
 uniform float uAnamorphicK;      // manual cylindrical (horizontal) distortion
+uniform float uFisheyeT;        // fisheye straightening 0..1 (0 = off)
+uniform float uFisheyeFe;       // fisheye focal length in pixels (equidistant: radius = fe * angle)
+uniform vec2 uFisheyeCenter;    // optical axis offset from the image centre, pixels
 uniform float uClipFrame;        // 1 = mask pixels outside [0, uImageSize] to black (when lensCrop < 0)
 uniform float uWarpOn;
 uniform float uWarpPlanes;
@@ -884,7 +887,15 @@ float distortFactor(float k, float rn2) {
 vec2 lensPre(vec2 p) {
     vec2 d = (p - uImageCenter) / uZoom;
     float rn2 = dot(d, d) / (uHalfDiagonal * uHalfDiagonal);
-    return uImageCenter + vec2(d.x * distortFactor(uManualK + uAnamorphicK, rn2), d.y * distortFactor(uManualK, rn2));
+    d = vec2(d.x * distortFactor(uManualK + uAnamorphicK, rn2), d.y * distortFactor(uManualK, rn2));
+    if (uFisheyeT > 0.0) {
+        // Equidistant fisheye -> blend towards rectilinear: the output radius is fe * tan(t * theta) / t, so source
+        // radius = fe * atan(t * r / fe) / t. t = 1 is fully rectilinear, small t is a gentle straightening.
+        float x = uFisheyeT * length(d) / uFisheyeFe;
+        d *= x > 1e-6 ? atan(x) / x : 1.0;
+        d += uFisheyeCenter;
+    }
+    return uImageCenter + d;
 }
 
 // Anti-aliased coverage of the source image [0, uImageSize], so zoomed-out distortion shows clean black borders

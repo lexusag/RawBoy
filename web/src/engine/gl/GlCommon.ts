@@ -341,6 +341,9 @@ export class DevelopProgram {
     this.f1('uZoom', l.zoom);
     this.f1('uManualK', l.manualK);
     this.f1('uAnamorphicK', l.anamorphicK);
+    this.f1('uFisheyeT', l.fisheyeT);
+    this.f1('uFisheyeFe', l.fisheyeFe);
+    this.f2('uFisheyeCenter', l.fisheyeOffsetX, l.fisheyeOffsetY);
     this.f1('uClipFrame', l.clipFrame ? 1 : 0);
     const warp = l.warp;
     this.f1('uWarpOn', warp ? 1 : 0);
