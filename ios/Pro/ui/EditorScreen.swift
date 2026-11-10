@@ -444,7 +444,7 @@ struct EditorTopBar: View {
                 .disabled(!enabled)
                 .accessibilityLabel("Light leaks and effects")
                 modeButton(.presets, "bookmark", "Presets", "Presets")
-                tool("wand.and.stars", "Auto", "Auto light and colour (keeps the LUT)", action: onAuto)
+                tool("wand.and.stars", "Auto Dev", "Auto light and colour (keeps the LUT)", action: onAuto)
                 Spacer(minLength: 0)
                 tool("square.and.arrow.down", "Export", "Export", action: onExport)
                 HelpButton("RawBoy", sections: proHelp, licences: true)

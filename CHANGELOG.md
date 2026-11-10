@@ -1,6 +1,6 @@
-**RawBoy (web): the Auto tab is called Auto Dev (2026-11-10)**
+**RawBoy Pro (Android, iOS, web): the Auto button is called Auto Dev (2026-11-10)**
 
-- The app switcher's **Auto** button now reads **Auto Dev**, so it is not mistaken for Pro's **Auto** (auto light and colour) button or confused with **Send to Auto**, which keeps its name. The Android and iOS apps have no such switcher (Auto is its own app there), so nothing changed on them. Checked by type-check, not in a browser here, so the longer label's fit on narrow toolbars is untested.
+- Pro's top-bar **Auto** button (automatic light and colour, keeps the LUT) now reads **Auto Dev**, so it is not confused with **Send to Auto** and the Auto app; those keep their names, as does the app switcher. Help text updated. Not built or run here: the longer label's fit on a 360 dp / narrow phone toolbar is untested.
 
 **RawBoy Pro (web): Portrait retouch inside a mask (2026-11-10)**
 

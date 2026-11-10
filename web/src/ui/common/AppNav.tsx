@@ -3,7 +3,7 @@ import { HELP_SHORTCUT } from './HelpDialog';
 import type { TabId } from './tabs';
 import { PHONE_SCREEN, useMediaQuery } from './useMediaQuery';
 
-export const TAB_NAMES: Record<TabId, string> = { pro: 'RawBoy', auto: 'Auto Dev', browser: 'Browser' };
+export const TAB_NAMES: Record<TabId, string> = { pro: 'RawBoy', auto: 'Auto', browser: 'Browser' };
 
 interface AppNav {
   tab: TabId;
@@ -29,7 +29,7 @@ export function AppSwitcher() {
           type="button"
           className={t === tab ? 'active' : ''}
           aria-current={t === tab ? 'page' : undefined}
-          title={t === 'pro' ? 'RawBoy: develop one photo' : t === 'auto' ? 'RawBoy Auto: automatic develop and film looks for a batch' : `RawBoy ${TAB_NAMES[t]}`}
+          title={t === 'pro' ? 'RawBoy: develop one photo' : `RawBoy ${TAB_NAMES[t]}`}
           onClick={() => setTab(t)}
         >
           {TAB_NAMES[t]}
