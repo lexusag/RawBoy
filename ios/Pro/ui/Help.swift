@@ -10,7 +10,7 @@ let proHelp = [
     ]),
     HelpSection("Photo", [
         HelpItem("Double-tap", "100% view at that point; drag to pan, double-tap again to go back."),
-        HelpItem("Pinch", "Two fingers zoom around where they started, up to 400% (stops once at 100%); drag to pan. Out past the whole photo goes back to it."),
+        HelpItem("Pinch", "Two fingers zoom around where they started, up to 400% (stops once at 100%); drag to pan. Out past the whole photo (it stops once there) shrinks it to a quarter, leaving room around it for masks, light leaks and effects; double-tap goes back to the whole photo."),
         HelpItem("Press and hold", "Compare with the as-shot render."),
         HelpItem("Tap outside the photo", "Change the frame around it: grey, white or black."),
         HelpItem("Histogram", "Above the tabs: red, green and blue levels of the developed photo, with the share of crushed shadows (left) and clipped highlights (right). Tap it to mark clipped highlights red and crushed shadows blue on the photo."),

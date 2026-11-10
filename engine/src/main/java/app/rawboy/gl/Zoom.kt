@@ -22,8 +22,11 @@ data class PixelRect(val x: Int, val y: Int, val width: Int, val height: Int) {
  * full-resolution pixel, 1 = the 100% view (double tap); a pinch zooms to other scales.
  */
 object ZoomMath {
-    /** Pinch zoom's limit, screen pixels per full-resolution pixel (out past the fit view goes back to it). */
+    /** Pinch zoom's limit, screen pixels per full-resolution pixel. */
     const val MAX_SCALE = 4f
+
+    /** Zooming out past the fit view goes down to this fraction of the fit scale (the photo centred, smaller than the view). */
+    const val MIN_OUT = 0.25f
 
     /** Margin kept around the visible region so denoise has real neighbours. */
     const val HALO = 16

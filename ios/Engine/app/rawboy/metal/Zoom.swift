@@ -36,8 +36,11 @@ public struct PixelRect: Equatable, Hashable, Sendable {
  * full-resolution pixel, 1 = the 100% view (double tap); a pinch zooms to other scales.
  */
 public enum ZoomMath {
-    /** Pinch zoom's limit, screen pixels per full-resolution pixel (out past the fit view goes back to it). */
+    /** Pinch zoom's limit, screen pixels per full-resolution pixel. */
     public static let maxScale: Float = 4
+
+    /// Zooming out past the fit view goes down to this fraction of the fit scale (the photo centred, smaller than the view).
+    public static let minOut: Float = 0.25
 
     /** Margin kept around the visible region so denoise has real neighbours. */
     public static let halo = 16
