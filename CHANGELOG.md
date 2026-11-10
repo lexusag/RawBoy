@@ -1,3 +1,7 @@
+**RawBoy (web): the Auto tab is called Auto Dev (2026-11-10)**
+
+- The app switcher's **Auto** button now reads **Auto Dev**, so it is not mistaken for Pro's **Auto** (auto light and colour) button or confused with **Send to Auto**, which keeps its name. The Android and iOS apps have no such switcher (Auto is its own app there), so nothing changed on them. Checked by type-check, not in a browser here, so the longer label's fit on narrow toolbars is untested.
+
 **RawBoy Pro (web): Portrait retouch inside a mask (2026-11-10)**
 
 - Each mask layer has a **Portrait retouch** slider (0-100) with its other adjustments: the Reblum-style skin retouch (spots, under-eyes, lines, evening) shows only inside the mask, scaled by its weight, opacity and Invert, and adds to the Detail tab's global slider. Brush it over a face, or put a radial on one, to retouch just that person. It needs a face in the photo (as the global slider); the gains map is made at the strongest value any layer or the global slider asks for and scaled for the rest. Masks in RawBoy edits sent to Auto, and Auto's batch export, carry it. Android and iOS have no Portrait retouch yet, so the slider is web only. Checked by type-check and unit tests, not in a browser here.
