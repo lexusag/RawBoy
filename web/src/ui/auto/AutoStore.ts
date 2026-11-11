@@ -196,7 +196,7 @@ export interface AutoPhoto {
   plain: boolean;
   /**
    * "Auto denoise" was pressed on a photo added "As is": its analysis has no auto develop, so it gets the denoise,
-   * colour denoise and sharpening of the ISO table (autoNoiseOf) under its look or preset. Ignored for other photos.
+   * colour denoise and sharpening of the auto develop's noise settings (autoNoiseOf) under its look or preset. Ignored for other photos.
    */
   autoDenoise: boolean;
 }
@@ -237,10 +237,11 @@ const DENOISE_FIELDS = PRESET_GROUPS.find((g) => g.key === 'denoise')!.fields;
 
 /**
  * Denoise, Color denoise and sharpening of the auto develop for analysis [a]: measured on the photo (its noise, ISO and
- * exposure). A photo added "As is" skipped the noise measurement, so it gets the ISO table's values.
+ * exposure). A photo added "As is" has no auto develop: its values are worked out here from the noise measured at import
+ * (the ISO table's when it wasn't measured, e.g. analyses cached before it was).
  */
 export function autoNoiseOf(a: Analysis, plain: boolean): Pick<DevelopParams, 'denoise' | 'colorDenoise' | 'sharpening'> {
-  const auto = plain ? autoDevelop(a.stats, a.defaults) : a.autoBase;
+  const auto = plain ? autoDevelop(a.stats, a.defaults, 1, a.cameraMetered, a.noise) : a.autoBase;
   return { denoise: auto.denoise, colorDenoise: auto.colorDenoise, sharpening: auto.sharpening };
 }
 

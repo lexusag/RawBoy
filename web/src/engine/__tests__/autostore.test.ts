@@ -440,6 +440,19 @@ describe('Auto denoise on a selection', () => {
 });
 
 describe('Auto denoise on "As is" photos', () => {
+  it('uses the noise measured at import, luma below colour, and the ISO table when there is none', async () => {
+    const { developParams } = await import('../develop/DevelopParams');
+    const { autoNoiseOf } = await import('../../ui/auto/AutoStore');
+    const stats = { hasFace: false, iso: 1600, key: 0.04, p5: -5, p98: -1, dynamicRange: 9, skinLuminance: 0, faceArea: 0, fractionAbove: () => 0 };
+    const base = { defaults: developParams(), autoBase: developParams(), stats, cameraMetered: false };
+    // A Sony-like read: colour noise twice the luma noise.
+    const measured = autoNoiseOf({ ...base, noise: { luma: 0.0102, chroma: 0.0196 } } as never, true);
+    expect(measured.denoise!).toBeLessThan(measured.colorDenoise!);
+    expect(measured.colorDenoise).toBeGreaterThan(40);
+    const table = autoNoiseOf({ ...base, noise: { luma: 0, chroma: 0 } } as never, true);
+    expect(table).toMatchObject({ denoise: 10, colorDenoise: 20 });
+  });
+
   it('gives a plain photo the ISO table\'s denoise under its preset, kept in the sidecar and undoable', async () => {
     vi.stubGlobal('window', { setTimeout: () => 0 });
     const { developParams } = await import('../develop/DevelopParams');
@@ -460,8 +473,9 @@ describe('Auto denoise on "As is" photos', () => {
     expect(store.state.message).toBe('Auto denoise on 1 photo');
     const p = store.state.photos[0];
     expect(p.autoDenoise).toBe(true);
-    // ISO 3200 sits halfway (in stops) between the table's 1600 (20, sharpening 15) and 6400 (45, 10).
-    expect(paramsOf(p)).toMatchObject({ denoise: 33, sharpening: 13, contrast: 20, grain: 30 });
+    // ISO 3200 sits halfway (in stops) between the table's 1600 (20, sharpening 15) and 6400 (45, 10): colour 33; luma
+    // is half of it.
+    expect(paramsOf(p)).toMatchObject({ denoise: 17, colorDenoise: 33, sharpening: 13, contrast: 20, grain: 30 });
     expect(decodeAuto(encodeAuto(p))!.autoDenoise).toBe(true);
     store.autoDenoiseAll();
     expect(store.state.message).toBe('Every photo already has its auto denoise');

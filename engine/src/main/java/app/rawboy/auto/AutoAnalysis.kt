@@ -55,6 +55,7 @@ object AutoAnalysis {
      * [detectSkin] false skips skin detection (face metering, skin retouch): the camera saw no face.
      * [meter]: see [SceneAnalyzer.analyze]. [phoneAe]: RawBoy Camera's raw, exposed by the phone's auto exposure (see
      * [AutoTone.exposure]); [captureEv]: the AE compensation it was shot with (see [AutoTone.exposure]).
+     * [splitLuma]: see [AutoTone.develop].
      */
     fun analyze(
         context: Context,
@@ -66,12 +67,13 @@ object AutoAnalysis {
         meter: MeterArea? = null,
         phoneAe: Boolean = false,
         captureEv: Float = 0f,
+        splitLuma: Boolean = true,
     ): Analysis {
         val t0 = System.nanoTime()
         val (base, bloom) = copiesOf(image)
         Log.d(TAG, "small copies: ${(System.nanoTime() - t0) / 1_000_000} ms")
         val info = Info.of(image).let { Info(it.lens, if (it.iso > 0f) it.iso else fallbackIso, it.defaults, phoneAe = phoneAe, captureEv = captureEv) }
-        return analyze(context, base, bloom, info, label, noiseIsoScale, detectSkin, meter)
+        return analyze(context, base, bloom, info, label, noiseIsoScale, detectSkin, meter, splitLuma)
     }
 
     /**
@@ -120,9 +122,10 @@ object AutoAnalysis {
         noise: NoiseLevel = NoiseLevel.NONE,
         phoneAe: Boolean = false,
         captureEv: Float = 0f,
+        splitLuma: Boolean = true,
     ): Pair<SceneStats, DevelopParams> {
         val stats = SceneAnalyzer.analyze(base, skin, iso, meter)
-        return stats to AutoTone.develop(stats, defaults, noiseIsoScale, cameraMetered, noise, phoneAe, captureEv)
+        return stats to AutoTone.develop(stats, defaults, noiseIsoScale, cameraMetered, noise, phoneAe, captureEv, splitLuma)
     }
 
     private fun copiesOf(img: RawImage): Pair<PreviewImage, BloomSources> {
@@ -140,6 +143,7 @@ object AutoAnalysis {
         noiseIsoScale: Float = 1f,
         detectSkin: Boolean = true,
         meter: MeterArea? = null,
+        splitLuma: Boolean = true,
     ): Analysis {
         val t0 = System.nanoTime()
         val skin = if (!detectSkin) null else try {
@@ -149,7 +153,7 @@ object AutoAnalysis {
         }
         Log.d(TAG, "skin detection: ${(System.nanoTime() - t0) / 1_000_000} ms")
         val defaults = info.defaults
-        val (stats, auto) = develop(base, skin, info.iso, defaults, noiseIsoScale, info.cameraMetered, meter, info.noise, info.phoneAe, info.captureEv)
+        val (stats, auto) = develop(base, skin, info.iso, defaults, noiseIsoScale, info.cameraMetered, meter, info.noise, info.phoneAe, info.captureEv, splitLuma)
         Log.d(TAG, "analysis $label: key=${stats.key} p1=${stats.p1} p5=${stats.p5} p50=${stats.p50} p98=${stats.p98} " +
             "p99=${stats.p99} clipped=${stats.clipped} chroma=${stats.chroma} face=${stats.faceArea} " +
             "skin=${stats.skinLuminance} iso=${info.iso} cameraMetered=${info.cameraMetered} phoneAe=${info.phoneAe} captureEv=${info.captureEv} noise=${info.noise.luma}/${info.noise.chroma} " +

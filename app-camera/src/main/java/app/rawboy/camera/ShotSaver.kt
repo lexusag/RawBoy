@@ -405,7 +405,7 @@ internal object ShotSaver {
             // which also calibrates the flash guide.
             val a = AutoAnalysis.analyze(
                 app, img, shot.name, noiseScale, shot.iso, detectSkin = shot.mayHaveFace, meter = shot.meter,
-                phoneAe = shot.flashGuide == null, captureEv = shot.compensationEv,
+                phoneAe = shot.flashGuide == null, captureEv = shot.compensationEv, splitLuma = false,
             )
             val analysisMs = ms(analysisStart)
             val looked = CameraSettings.withPhoneIspLook(s.develop(a.autoBase, a.stats.hasFace), img.make)

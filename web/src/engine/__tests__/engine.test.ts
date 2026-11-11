@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { NO_ADJUSTMENTS, applyEditsDevelop, applyLook, developAuto } from '../auto/looks/LookApplier';
 import { ALL_FILM_LOOKS, FILM_GRAIN, FilmLooks, filmLookById } from '../auto/looks/FilmLooks';
 import { ALL_LOOKS, Looks, isMonochromeLut, lookById, lookSections, lutGroup, lutIdOf } from '../auto/looks/Look';
-import { applyAuto, measuredNoiseSettings } from '../auto/analysis/AutoTone';
+import { applyAuto, measuredNoiseSettings, noiseSettings } from '../auto/analysis/AutoTone';
 import { Warmth } from '../auto/analysis/Warmth';
 import { Mat3 } from '../color/Mat3';
 import { PrimariesTrack } from '../color/PrimariesTrack';
@@ -1056,6 +1056,13 @@ describe('Pro Auto button', () => {
     expect(measuredNoiseSettings({ luma: 0.0107, chroma: 0.0141 }, 2)).toEqual([17, 93, 8]);
     expect(measuredNoiseSettings({ luma: 0.0023, chroma: 0.0019 }, 0)).toEqual([0, 6, 15]);
     expect(measuredNoiseSettings({ luma: 0.05, chroma: 0.05 }, 0)[1]).toBe(100);
+  });
+
+  it('gives the ISO table a luma denoise of half its colour denoise at every ISO', () => {
+    expect(noiseSettings(400)).toEqual([0, 0, 15]);
+    expect(noiseSettings(1600)).toEqual([10, 20, 15]);
+    expect(noiseSettings(6400)).toEqual([23, 45, 10]);
+    expect(noiseSettings(25600)).toEqual([33, 65, 5]);
   });
 });
 

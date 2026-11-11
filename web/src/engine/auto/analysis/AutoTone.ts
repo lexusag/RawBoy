@@ -88,8 +88,15 @@ export function measuredNoiseSettings(noise: NoiseLevel, exposure: number): [num
   return [round(luma), color, round(sharpening)];
 }
 
-/** [denoise, colour denoise = null: follows denoise, sharpening] by ISO, interpolated in stops between measured points; ISO 0 = unknown. */
-function noiseSettings(iso: number): [number, number | null, number] {
+/** The ISO table's luma denoise is this much of its colour denoise at every ISO (the owner always halved it by hand). */
+const ISO_TABLE_LUMA_SHARE = 0.5;
+
+/**
+ * [denoise, colour denoise, sharpening] by ISO, interpolated in stops between measured points; ISO 0 = unknown. The
+ * table's value is the colour denoise and luma is ISO_TABLE_LUMA_SHARE of it. This is what photos get without a noise
+ * measurement (Auto's "As is" with Auto denoise); the measured path has its own split. Keep in step with AutoTone.kt/.swift.
+ */
+export function noiseSettings(iso: number): [number, number | null, number] {
   if (iso <= 0) return [0, null, 15];
   const points = [
     [400, 0, 15],
@@ -99,14 +106,20 @@ function noiseSettings(iso: number): [number, number | null, number] {
   ];
   const first = points[0];
   const last = points[points.length - 1];
-  if (iso <= first[0]) return [first[1], null, first[2]];
-  if (iso >= last[0]) return [last[1], null, last[2]];
-  let i = 0;
-  for (let k = 0; k < points.length; k++) if (points[k][0] <= iso) i = k;
-  const a = points[i];
-  const b = points[Math.min(i + 1, points.length - 1)];
-  const t = clamp(Math.log2(iso / a[0]) / Math.log2(b[0] / a[0]), 0, 1);
-  return [round(a[1] + (b[1] - a[1]) * t), null, round(a[2] + (b[2] - a[2]) * t)];
+  let value: number;
+  let sharpening: number;
+  if (iso <= first[0]) [, value, sharpening] = first;
+  else if (iso >= last[0]) [, value, sharpening] = last;
+  else {
+    let i = 0;
+    for (let k = 0; k < points.length; k++) if (points[k][0] <= iso) i = k;
+    const a = points[i];
+    const b = points[Math.min(i + 1, points.length - 1)];
+    const t = clamp(Math.log2(iso / a[0]) / Math.log2(b[0] / a[0]), 0, 1);
+    value = round(a[1] + (b[1] - a[1]) * t);
+    sharpening = round(a[2] + (b[2] - a[2]) * t);
+  }
+  return [round(value * ISO_TABLE_LUMA_SHARE), value, sharpening];
 }
 
 /**

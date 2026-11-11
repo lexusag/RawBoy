@@ -417,7 +417,7 @@ final class CameraViewModel: ObservableObject {
             let stats = SceneAnalyzer.analyze(base, skin: skin, iso: state.iso, meter: meter)
             // The phone's auto exposure set the frame (and the shot's raw): keep it, lifted where it went dark, as the
             // shot does (see develop).
-            let auto = AutoTone.develop(stats, asShot: defaults, phoneAe: true, captureEv: state.compensationEv)
+            let auto = AutoTone.develop(stats, asShot: defaults, phoneAe: true, captureEv: state.compensationEv, splitLuma: false)
             await MainActor.run {
                 guard let self else { return }
                 self.analysing = false
@@ -762,7 +762,7 @@ final class CameraViewModel: ObservableObject {
                     // exposed by its own AE.
                     let a = AutoAnalysis.analyze(img, label: shot.name, noiseIsoScale: noiseScale, fallbackIso: shot.iso,
                                                  detectSkin: shot.mayHaveFace, meter: shot.meter, phoneAe: true,
-                                                 captureEv: shot.compensationEv)
+                                                 captureEv: shot.compensationEv, splitLuma: false)
                     var params = s.develop(a.autoBase, hasFace: a.stats.hasFace)
                     // High ISO: more denoise than the auto develop's table, up to the coarse stage (denoise > 65).
                     params.denoise = max(params.denoise, Self.highIsoDenoise(a.stats.iso * noiseScale))
