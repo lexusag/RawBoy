@@ -710,7 +710,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val longGain = if (info?.hiRes != true && settings.flash == FlashMode.OFF && activeCaptures == 0 && (state?.exposureNs ?: 0L) < 250_000_000L) {
             settings.longExposureSpec(sceneKey())?.let { controller.longExposureGainOverPreview(it) }
         } else null
-        val scale = settings.previewScale(info?.hiRes == true) / boost * (longGain ?: stillGain)
+        val target = settings.previewScale(info?.hiRes == true) / boost * (longGain ?: stillGain)
+        // The gain eases to its target (a fade) instead of jumping: a long exposure starts and ends with the viewfinder
+        // changing exposure under the preview, and a step there reads as a flash. (Live.scale keeps the key honest.)
+        val scale = if (f.scale > 0f && target > 0f) f.scale * (target / f.scale).coerceIn(1f / SCALE_FADE_STEP, SCALE_FADE_STEP) else target
         // The raw's colours for the ISP's current white balance and colour matrix (they follow AWB).
         val color = state?.previewColor
         if (scale != f.scale || !color.contentEquals(f.color)) _frame.value = f.copy(scale = scale, color = color)
@@ -1273,6 +1276,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         private const val FOCUS_MOVE_INTERVAL_MS = 100L
         /** Most the live develop's exposure moves per update (~3 a second), EV. */
         /** After a shot the viewfinder's frames are still the exposure's manual ones for a moment: don't meter the scene from them. */
+        /** The most the viewfinder's gain moves per analysed frame (about every 300 ms): 0.25 EV, so a stop takes over a second. */
+        private val SCALE_FADE_STEP = 2f.pow(0.25f)
         private const val SCENE_KEY_SETTLE_MS = 2000L
         private const val MAX_EV_STEP = 0.3f
 

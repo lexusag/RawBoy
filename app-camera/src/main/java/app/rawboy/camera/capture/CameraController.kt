@@ -1105,14 +1105,20 @@ class CameraController(context: Context) : AutoCloseable {
         val manualExposure = manual != null
         // What every frame of the exposure shares, the stills and the live preview alike (so the viewfinder keeps showing
         // the picture the stack gets): the preview's colour held, each frame exposed by hand, the lens held where it was.
-        fun CaptureRequest.Builder.heldLook() {
+        fun CaptureRequest.Builder.heldLook(shortenBy: Int = 1) {
             // The preview has converged by now: keep its colour for every frame (flicker otherwise).
             set(CaptureRequest.CONTROL_AE_LOCK, true)
             set(CaptureRequest.CONTROL_AWB_LOCK, true)
             // Exposure: AE tops out at 1/30 s or 1/15 s and a dark scene stays dark however long the stack runs, so
             // each frame is exposed by hand, as long as LONG_EXPOSURE_FRAME_NS allows (ISO falls to match: the same
             // picture with far less noise), and a dark scene is lifted to a normal key with the time AE refused.
-            manual?.let { (t, iso) ->
+            manual?.let { (t0, iso0) ->
+                // The live preview takes the same picture in a shorter frame (same time x ISO), so it holds the sensor
+                // for less of the stills' time; ISO's own ceiling limits how much shorter.
+                val isoMax = inf.characteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)?.upper ?: iso0
+                val k = shortenBy.coerceAtLeast(1).coerceAtMost((isoMax / iso0).coerceAtLeast(1))
+                val t = t0 / k
+                val iso = iso0 * k
                 set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF)
                 setForLens(CaptureRequest.SENSOR_EXPOSURE_TIME, t)
                 setForLens(CaptureRequest.SENSOR_SENSITIVITY, iso)
@@ -1147,7 +1153,7 @@ class CameraController(context: Context) : AutoCloseable {
         val livePreview = if (manualExposure) request(s, CameraDevice.TEMPLATE_PREVIEW).apply {
             addTarget(previewSurface ?: throw IOException("Camera not ready"))
             setCommon(inf)
-            heldLook()
+            heldLook(shortenBy = LONG_EXPOSURE_PREVIEW_SHORTEN)
         }.build() else null
 
         // Camera thread only, apart from the volatile flags.
@@ -1799,6 +1805,8 @@ class CameraController(context: Context) : AutoCloseable {
         private const val BURST_FRAME_TIMEOUT_MS = 250L
 
         /** A long exposure submits [LONG_EXPOSURE_CHUNK] requests whenever fewer than [LONG_EXPOSURE_QUEUE] are in flight. */
+        /** The live preview's frame is this many times shorter than a still's (ISO higher to match), to leave the sensor to the stills. */
+        private const val LONG_EXPOSURE_PREVIEW_SHORTEN = 4
         private const val LONG_EXPOSURE_CHUNK = 3
         private const val LONG_EXPOSURE_QUEUE = 4
         private const val LONG_EXPOSURE_GRACE_MS = 5000L
