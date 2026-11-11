@@ -162,7 +162,8 @@ export function PackerApp() {
   const [previewId, setPreviewId] = useState<number | null>(null);
 
   const groups = useMemo(() => groupByFolder(state.items, state.sort), [state.items, state.sort]);
-  const hasFolders = useMemo(() => groups.some((g) => g.folder != null), [groups]);
+  // Always show group headers: browsers expose no parent folder for picked/dropped loose files, so those sit under "Other files".
+  const hasFolders = groups.length > 0;
   // Follow folder group presentation order so prev/next navigation matches visual queue order
   const orderedItems = useMemo(() => groups.flatMap((g) => g.items), [groups]);
   const previewItem = previewId !== null ? state.items.find((it) => it.id === previewId) ?? null : null;

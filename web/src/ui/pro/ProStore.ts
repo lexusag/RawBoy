@@ -198,6 +198,11 @@ export class ProStore {
   onPreviewClick(x: number, y: number) {
     if (this.session.state.zoomCenter || !this.session.hasImage) return;
     if (this.session.fitToImage(x, y, this.frameWidth)) return;
+    this.cycleFrameColor();
+  }
+
+  /** Next frame colour (grey, white, black), remembered in this browser. Also the D key. */
+  cycleFrameColor() {
     const next = (this._state.frameColor + 1) % FrameColors.length;
     try {
       localStorage.setItem(FRAME_KEY, String(next));

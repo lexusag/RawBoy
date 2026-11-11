@@ -81,6 +81,19 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
     window.addEventListener('keydown', down);
     return () => window.removeEventListener('keydown', down);
   }, []);
+  // D cycles the frame colour around the photo (grey, white, black), like clicking outside the photo.
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (shortcutKey(e) !== 'd' || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || e.repeat) return;
+      const t = e.target;
+      if (t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && t.type !== 'range' && t.type !== 'checkbox')) return;
+      if (!isTabShown('pro')) return;
+      e.preventDefault();
+      store.cycleFrameColor();
+    };
+    window.addEventListener('keydown', down);
+    return () => window.removeEventListener('keydown', down);
+  }, [store]);
   const [geometryMode, setGeometryMode] = useState(false);
   const [presetsMode, setPresetsMode] = useState(false);
   const [masksMode, setMasksMode] = useState(false);
