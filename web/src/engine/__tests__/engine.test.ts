@@ -33,6 +33,7 @@ import { applyPreset, captureLensPreset, capturePreset, chosenLensPreset, decode
 import { BandDownscaler } from '../export/BandDownscaler';
 import { FilmStocks } from '../film/FilmStocks';
 import { baseNameOf, fileName } from '../export/ExportSettings';
+import { applyNameTemplate, sanitizeName, templateFileName } from '../export/NameTemplate';
 import { NO_LAYERS, ShaderParams, WIDE_DENOISE_MARGIN, packLayers } from '../gl/ShaderParams';
 import { BOKEH_RADIUS, bokehGeometry } from '../gl/BokehTexture';
 import { SampleGeometry } from '../gl/GlCommon';
@@ -1035,6 +1036,26 @@ describe('export', () => {
     expect(fileName(baseNameOf('IMG_1234.CR3'), 'jpg', 0, { suffix: 'rawboy' })).toBe('IMG_1234-rawboy.jpg');
     expect(fileName('IMG_1234', 'jpg', 2, { suffix: 'auto' })).toBe('IMG_1234-auto-002.jpg');
     expect(baseNameOf('a:b?.dng')).toBe('a_b_');
+  });
+
+  it('fills in Auto export name templates', () => {
+    const ctx = { fileName: 'DSCF1234.RAF', camera: 'FUJIFILM X-T5', lens: 'XF 35mm F1.4 R', iso: 800, look: 'Portra 400', date: '2026:11:09 14:30:05', index: 7 };
+    expect(applyNameTemplate('{name}-auto', ctx)).toBe('DSCF1234-auto');
+    expect(applyNameTemplate('{date}_{time}_{NAME}_#', ctx)).toBe('2026-11-09_14-30-05_DSCF1234_7');
+    expect(applyNameTemplate('{year}{month}{day}-{hour}{minute}{second}_{yy}', ctx)).toBe('20261109-143005_26');
+    expect(applyNameTemplate('{iso}_{look}_##', ctx)).toBe('800_Portra 400_07');
+    expect(applyNameTemplate('###', { ...ctx, index: 12 })).toBe('012');
+    expect(applyNameTemplate('{name}_####', { ...ctx, index: 12345 })).toBe('DSCF1234_12345');
+    // Missing values are left out; unknown words stay; an empty result falls back.
+    expect(applyNameTemplate('{name}{lens}{foo}', { fileName: 'a.jpg', index: 1 })).toBe('a{foo}');
+    expect(applyNameTemplate('{date}', { fileName: 'a.jpg', index: 1 })).toBe('image');
+    expect(applyNameTemplate('  ', ctx)).toBe('DSCF1234-auto');
+    // Illegal characters (a camera or lens name with a slash, a folder in the template).
+    expect(applyNameTemplate('{lens}/x:y', { ...ctx, lens: 'FE 24-70mm F2.8 GM II / 2' })).toBe('FE 24-70mm F2.8 GM II _ 2_x_y');
+    expect(sanitizeName('a*b?.')).toBe('a_b_');
+    expect(sanitizeName('con')).toBe('_con');
+    expect(templateFileName('a', 'jpg', 0)).toBe('a.jpg');
+    expect(templateFileName('a', 'jpg', 2)).toBe('a-002.jpg');
   });
 
   it('decodes half floats', () => {
