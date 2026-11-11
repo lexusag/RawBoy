@@ -18,7 +18,7 @@ it is turned sideways (or on a tablet or a wide window). Android, iPhone and the
    scenes, less for very wide ones, 0..30); Saturation +30; a fine grain (5) on every photo;
    Denoise, Color denoise and Sharpening come from the noise **measured in the photo** (full resolution, ~30 ms; not
    from ISO, which says little across cameras and phones), scaled by how much the exposure lifts it (luma denoise kept gentler than colour denoise, half of (0.8 of the fit minus 10), about 1 to 2 against colour, to keep fine
-   texture); JPEG/HEIC get none. White balance stays as shot.
+   texture); JPEG/HEIC get none. Photos added "As is" are measured too, so Auto denoise on them gives the same values. When the noise can't be measured (JPEG/HEIC), the ISO table is used instead: its value is the Color denoise and Denoise (luma) is half of it at every ISO. White balance stays as shot.
 3. **Look**, suggested per photo and changeable:
 
 | Look | Character | Suggested for |

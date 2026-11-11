@@ -21,6 +21,9 @@ export interface Analysis {
   bloom: BloomSources;
   skin: SkinMask | null;
   description: string;
+  /** The photo's measured noise (NO_NOISE for display sources), also for "As is" photos, whose auto develop is skipped. */
+  noise: NoiseLevel;
+  cameraMetered: boolean;
 }
 
 /** Tag of the per-photo stats log, used for recalibrating the auto develop. */
@@ -30,8 +33,8 @@ const TAG = 'RawBoyAuto';
  * Decodes [file], keeps its small whole-image copies and works out the auto develop (port of AutoAnalysis.kt):
  * [decodeForAnalysis], then [finishAnalysis]. [onPreview], if given, gets the detail view's preview
  * (PREVIEW_MAX_DIMENSION) made from the same decode, so RawBoy Auto can show the photo before decoding it again.
- * [plain] (Auto's "As is" import): no auto develop (autoBase = the as-shot defaults), and the noise measurement and
- * skin segmentation it needs are skipped, so already finished files (TIFFs from another editor...) import fast and
+ * [plain] (Auto's "As is" import): no auto develop (autoBase = the as-shot defaults), and the skin segmentation it needs
+ * is skipped (the noise is still measured, ~30 ms, for Auto denoise), so already finished files (TIFFs from another editor...) import fast and
  * stay as they are.
  */
 export async function analyzeFile(file: Blob, label: string, onPreview?: (preview: PreviewImage) => void, plain = false): Promise<Analysis> {
@@ -71,7 +74,7 @@ export async function decodeForAnalysis(
     // A circular fisheye's picture circle, for the lens preset's Auto circle (not kept by the analysis cache).
     img.lens.fisheyeCircle = detectFisheyeCircle(base);
     const bloom = await bloomSourcesOf(img);
-    const noise = plain ? NO_NOISE : await img.measureNoise();
+    const noise = await img.measureNoise();
     console.debug(`${TAG} small copies: ${Math.round(performance.now() - t0)} ms`);
     return {
       asShotWhite: img.asShotWhite,
@@ -118,7 +121,7 @@ export async function finishAnalysis(d: DecodedForAnalysis, label: string, known
       `noise=${noise.luma}/${noise.chroma} -> exposure=${auto.exposure} hl=${auto.highlights} denoise=${auto.denoise}/${auto.colorDenoise} sh=${auto.shadows} contrast=${auto.contrast} ` +
       `wb=${Math.trunc(defaults.temperature)}K/${Math.trunc(defaults.tint)} -> ${Math.trunc(auto.temperature)}K/${Math.trunc(auto.tint)}`,
   );
-  return { defaults, autoBase: auto, stats, lens: d.lens, camera: d.camera ?? '', base: d.base, bloom: d.bloom, skin, description: d.description };
+  return { defaults, autoBase: auto, stats, lens: d.lens, camera: d.camera ?? '', base: d.base, bloom: d.bloom, skin, description: d.description, noise, cameraMetered: d.cameraMetered };
 }
 
 /**

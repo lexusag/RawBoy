@@ -719,7 +719,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             val stats = SceneAnalyzer.analyze(base.base, skin, state?.iso ?: 0f, meterArea())
             // The phone's auto exposure set the frame (and the shot's raw): keep it, lifted where it went dark, as the
             // shot does (see develop).
-            val auto = AutoTone.develop(stats, defaults, phoneAe = true, captureEv = controller.appliedCompensationEv(state, ofFrame = true))
+            val auto = AutoTone.develop(stats, defaults, phoneAe = true, captureEv = controller.appliedCompensationEv(state, ofFrame = true), splitLuma = false)
             // A new metering area (a tap, a release, a tracked subject hiding) can move the exposure by a stop at once;
             // the viewfinder eases there over a few updates instead of snapping.
             val last = live?.auto?.exposure

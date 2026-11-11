@@ -45,4 +45,14 @@ class AutoToneTest {
         // Capped at +2 EV.
         assertEquals(2f, AutoTone.exposure(stats(0.001f, -3f), phoneAe = true), 1e-6f)
     }
+
+    @Test
+    fun isoTableLumaIsHalfOfColourAtEveryIso() {
+        assertEquals(Triple(0f, 0f, 15f), AutoTone.noiseSettings(400f))
+        assertEquals(Triple(10f, 20f, 15f), AutoTone.noiseSettings(1600f))
+        assertEquals(Triple(23f, 45f, 10f), AutoTone.noiseSettings(6400f))
+        assertEquals(Triple(33f, 65f, 5f), AutoTone.noiseSettings(25600f))
+        // Camera's luma stays as it was.
+        assertEquals(Triple(45f, null, 10f), AutoTone.noiseSettings(6400f, splitLuma = false))
+    }
 }
