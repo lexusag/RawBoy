@@ -758,6 +758,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
                   onSelectFilm={store.selectFilm}
                   onStepFilm={store.stepFilm}
                   lens={session.lensInfo}
+                  lensfun={store.lensfun}
                   skin={session.skin}
                   blemish={session.blemish}
                   retouch={{ working: session.retouchWorking, ready: session.retouchMap != null }}

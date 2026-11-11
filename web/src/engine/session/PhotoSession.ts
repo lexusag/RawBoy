@@ -15,7 +15,8 @@ import type { BloomSources, PreviewImage } from '../gl/PreviewImage';
 import { WAVELET_DENOISE_MARGIN } from '../gl/WaveletDenoise';
 import { ShaderParams, WIDE_DENOISE_MARGIN, wideDenoise, type BrushLookup } from '../gl/ShaderParams';
 import { ZoomMath, contains, rect, type DetailTile } from '../gl/Zoom';
-import { LensInfo } from '../lens/LensInfo';
+import type { PhotoMetadata } from '../../worker/protocol';
+import { LensInfo, type RadialVignette, type Warp } from '../lens/LensInfo';
 import { LensTransform } from '../lens/LensTransform';
 import type { LutData } from '../lut/LutData';
 import { loadLutCached } from '../lut/LutRepository';
@@ -641,6 +642,21 @@ export class PhotoSession {
     const wide = wideDenoise(Math.max(params.denoise, effectiveColorDenoise(params))) > 0 ? WIDE_DENOISE_MARGIN : 0;
     const prePass = Math.max(params.denoise, effectiveColorDenoise(params)) > 0 ? WAVELET_DENOISE_MARGIN : 0;
     return Math.max(ZoomMath.HALO, retouch, wide) + prePass;
+  }
+
+  /** The open photo's EXIF essentials, or null with no photo. */
+  get metadata(): PhotoMetadata | null {
+    return this.image?.metadata ?? null;
+  }
+
+  /**
+   * Puts a Lensfun profile (distortion/CA warp, vignette) in place of the file's own, or takes it off again (null). The
+   * file's shading stays; [label] names the profile in the Lens tab. Opening another photo clears it.
+   */
+  setLensfun(profile: { warp: Warp | null; vignette: RadialVignette | null; label: string } | null) {
+    const img = this.image;
+    if (!img) return;
+    this.update({ lensInfo: profile ? img.lens.withLensfun(profile.warp, profile.vignette, profile.label) : img.lens });
   }
 
   /** Lens geometry for [params] on the current image; cached while the lens sliders are unchanged. */

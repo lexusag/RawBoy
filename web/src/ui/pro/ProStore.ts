@@ -14,6 +14,7 @@ import { FrameColors } from '../../engine/gl/DevelopRenderer';
 import { PhotoSession } from '../../engine/session/PhotoSession';
 import { EditHistory } from '../common/EditHistory';
 import { saveBlob, saveExports, savesToPhotos, type OutputFolder } from '../common/files';
+import { LensfunStore } from './LensfunStore';
 import { PresetStore } from './PresetStore';
 
 export interface EditorState {
@@ -72,6 +73,8 @@ export class ProStore {
   private readonly listeners = new Set<() => void>();
   /** The open photo; the pipeline state comes from it. */
   readonly session = new PhotoSession((m) => this.set({ message: m }));
+  /** Lens corrections from the Lensfun database (the Lens tab). */
+  readonly lensfun = new LensfunStore(this.session);
   private frameWidth = 0;
   /** This photo's edits, for Undo and Redo. */
   private readonly history = new EditHistory<DevelopParams>();
@@ -154,6 +157,8 @@ export class ProStore {
         canUndo: false, canRedo: false, message: restored ? `Edits from ${sidecar!.name}` : this._state.message,
       });
       this.session.selectLut(opened.params.lut, (m) => this.lutFailed(opened.params.lut, m));
+      const meta = this.session.metadata;
+      if (meta) this.lensfun.photoOpened(meta);
       // Film tone mapper (also from Auto's Film mode, or carried over from the previous photo).
       this.session.selectFilm(opened.params.film, (m) => this.filmFailed(opened.params.film, m));
     } catch (e) {
