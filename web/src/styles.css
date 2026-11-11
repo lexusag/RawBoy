@@ -235,6 +235,29 @@ button.icon.active {
   flex: 1;
 }
 
+.auto-export .export-name {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.auto-export .export-name input {
+  min-width: 0;
+  font-family: ui-monospace, monospace;
+}
+
+.auto-export .export-name small {
+  grid-column: 2;
+  overflow-wrap: anywhere;
+}
+
+.auto-export .export-name-keys button {
+  font-family: ui-monospace, monospace;
+  padding: 0 4px;
+}
+
 .auto-export .export-quality {
   max-width: none;
 }

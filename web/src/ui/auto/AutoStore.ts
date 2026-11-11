@@ -8,7 +8,8 @@ import type { DevelopParams } from '../../engine/develop/DevelopParams';
 import { applyPreset, chosenLensPreset, decodePresets, isLensPreset, layerPreset, NO_LENS_PRESET, PRESET_GROUPS, putLensPreset, replacesLook, sameLensPreset, type Preset } from '../../engine/develop/Presets';
 import { PresetStore } from '../pro/PresetStore';
 import { exportImage } from '../../engine/export/Exporter';
-import { baseNameOf, EXTENSIONS, ExportSettingsStore, fileName, type ExportSettings, type OutputNaming } from '../../engine/export/ExportSettings';
+import { EXTENSIONS, ExportSettingsStore, type ExportSettings } from '../../engine/export/ExportSettings';
+import { applyNameTemplate, DEFAULT_NAME_TEMPLATE, templateFileName } from '../../engine/export/NameTemplate';
 import { FilmStocks, type FilmData } from '../../engine/film/FilmStocks';
 import type { LutData } from '../../engine/lut/LutData';
 import { FrameColors } from '../../engine/gl/DevelopRenderer';
@@ -304,11 +305,11 @@ export interface BatchExport {
   waiting?: ReadonlySet<string>;
 }
 
-export const NAMING: OutputNaming = { suffix: 'auto' };
 export const SETTINGS: ExportSettings = { format: 'jpeg', jpegQuality: 92, tiffBits: 16, maxLongSide: null, filmScan: false };
 /** Export sizes offered (long side in pixels; null = full resolution). */
 export const EXPORT_SIZES: (number | null)[] = [null, 5600, 4096, 2048, 1080];
 const EXPORT_KEY = 'rawboy.auto.export';
+const NAME_TEMPLATE_KEY = 'rawboy.auto.nameTemplate';
 const GRID_THUMBNAIL = 512;
 const LOOK_THUMBNAIL = 192;
 
@@ -329,6 +330,8 @@ export interface AutoState {
   sort: PhotoSort;
   /** Format, JPEG quality, TIFF bit depth and size of exports, chosen in the grid (remembered in this browser). */
   exportSettings: ExportSettings;
+  /** Template of the exported files' names (see NameTemplate), remembered in this browser. */
+  nameTemplate: string;
   /** The RawBoy preset applied to the whole batch, which photos added later get too; null = looks. */
   preset: Preset | null;
   /**
@@ -352,6 +355,14 @@ const FRAME_KEY = 'rawboy.auto.frame';
 function savedExportSettings(): ExportSettings {
   const s = ExportSettingsStore.load(EXPORT_KEY);
   return { ...s, maxLongSide: EXPORT_SIZES.includes(s.maxLongSide) ? s.maxLongSide : null };
+}
+
+function savedNameTemplate(): string {
+  try {
+    return localStorage.getItem(NAME_TEMPLATE_KEY) || DEFAULT_NAME_TEMPLATE;
+  } catch {
+    return DEFAULT_NAME_TEMPLATE;
+  }
 }
 
 function savedFrame(): number {
@@ -388,7 +399,7 @@ class Lock {
 /** RawBoy Auto's batch, look and export logic (port of AutoViewModel.kt). */
 export class AutoStore {
   private _state: AutoState = { photos: [], filter: NO_FILTER, export: null, message: null, selected: null, sessionReady: null, cachedPreview: null, importMode: savedImportMode(), sort: savedSort(SORT_KEY),
-    exportSettings: savedExportSettings(), preset: null, lensPresets: PresetStore.load().filter(isLensPreset), lensChoice: null, frameColor: savedFrame(),
+    exportSettings: savedExportSettings(), nameTemplate: savedNameTemplate(), preset: null, lensPresets: PresetStore.load().filter(isLensPreset), lensChoice: null, frameColor: savedFrame(),
     opening: null };
   /**
    * Keeps lens presets opened from a file with the RawBoy tab's presets (set by the page; null: in this browser's
@@ -812,6 +823,21 @@ export class AutoStore {
   setExportSettings(exportSettings: ExportSettings) {
     this.update({ exportSettings });
     ExportSettingsStore.save(exportSettings, EXPORT_KEY);
+  }
+
+  /** The template of the next exports' file names. */
+  setNameTemplate(nameTemplate: string) {
+    this.update({ nameTemplate });
+    try {
+      localStorage.setItem(NAME_TEMPLATE_KEY, nameTemplate);
+    } catch {
+      // Storage may be unavailable (private mode); it then lasts for the session.
+    }
+  }
+
+  /** The name (without extension) [template] gives [p], numbered [index] in the export; for the export sheet's preview. */
+  nameFor(p: AutoPhoto, index = 1, template = this._state.nameTemplate): string {
+    return exportStem(p, index, template);
   }
 
   /** Takes photos out of the batch (not while exporting). Nothing is deleted from disk. */
@@ -1295,7 +1321,7 @@ export class AutoStore {
       const blob = await this.decodeLock.run(() =>
         this.session.export(params, a.defaults, this._state.exportSettings, (f) => this.update({ export: { ...this._state.export!, current: f } })),
       );
-      const name = await this.save(p, blob, folder, this._state.exportSettings);
+      const name = await this.save(p, blob, folder, this._state.exportSettings, 1);
       // On iOS the Save to Photos sheet comes up instead.
       if (folder || !savesToPhotos()) this.update({ message: `Saved ${name}` });
       ok = true;
@@ -1322,6 +1348,7 @@ export class AutoStore {
     this.update({ sessionReady: null, export: { done: 0, total: todo.length, failed: 0, current: 0, waiting: new Set(todo.map((p) => p.id)) } });
     let failed = 0;
     const settings = this._state.exportSettings;
+    const template = this._state.nameTemplate;
     const zipped: { name: string; blob: Blob }[] = [];
     let attempted = 0;
     let stopped = false;
@@ -1338,8 +1365,8 @@ export class AutoStore {
       let ok = false;
       try {
         const blob = await this.decodeLock.run(() => this.exportOne(p, settings, (f) => this.update({ export: { ...this._state.export!, current: f } })));
-        if (folder) await this.save(p, blob, folder, settings);
-        else zipped.push({ name: uniqueName(zipped, p.name, EXTENSIONS[settings.format]), blob });
+        if (folder) await this.save(p, blob, folder, settings, index + 1);
+        else zipped.push({ name: uniqueName(zipped, exportStem(p, index + 1, template), EXTENSIONS[settings.format]), blob });
         ok = true;
       } catch (e) {
         failed++;
@@ -1397,11 +1424,12 @@ export class AutoStore {
     }
   }
 
-  private async save(p: AutoPhoto, blob: Blob, folder: OutputFolder | null, settings: ExportSettings): Promise<string> {
-    const base = baseNameOf(p.name);
+  /** Saves [blob] under the name template gives photo number [index] of this export; a name already taken gets -001, -002... */
+  private async save(p: AutoPhoto, blob: Blob, folder: OutputFolder | null, settings: ExportSettings, index: number): Promise<string> {
+    const stem = exportStem(p, index, this._state.nameTemplate);
     const ext = EXTENSIONS[settings.format];
-    if (folder) return folder.write((c) => fileName(base, ext, c, NAMING), blob);
-    const name = fileName(base, ext, 0, NAMING);
+    if (folder) return folder.write((c) => templateFileName(stem, ext, c), blob);
+    const name = templateFileName(stem, ext, 0);
     await saveExports([{ name, blob }], name);
     return name;
   }
@@ -1410,12 +1438,20 @@ export class AutoStore {
 /** Film stocks share ids with the LUT looks of the same name (portra400...), so their thumbnails get their own keys. */
 const thumbKey = (id: string, look: Look) => `${id}|${look.film ? `film:${look.film}` : look.id}`;
 
-/** "<name>-auto.jpg" (or .tif), with -001, -002 ... when two photos in one ZIP share a name. */
-function uniqueName(existing: { name: string }[], source: string, ext: string): string {
-  const base = baseNameOf(source);
+/** The exported file's name without extension: [template] filled in from the photo (see NameTemplate). */
+function exportStem(p: AutoPhoto, index: number, template: string): string {
+  const a = p.analysis;
+  return applyNameTemplate(template, {
+    fileName: p.name, camera: a?.camera?.trim(), lens: a?.lens.lensName?.trim(), iso: a?.stats.iso, look: lookName(p), date: p.date, index,
+  });
+}
+
+/** "<stem>.jpg" (or .tif), with -001, -002 ... when two photos in one ZIP get the same name (any letter case: ZIPs unpack on any system). */
+function uniqueName(existing: { name: string }[], stem: string, ext: string): string {
+  const taken = new Set(existing.map((e) => e.name.toLowerCase()));
   for (let c = 0; ; c++) {
-    const name = fileName(base, ext, c, NAMING);
-    if (!existing.some((e) => e.name === name)) return name;
+    const name = templateFileName(stem, ext, c);
+    if (!taken.has(name.toLowerCase())) return name;
   }
 }
 
