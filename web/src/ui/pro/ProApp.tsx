@@ -117,7 +117,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   // already took the key.
   const exportOpen = useRef(false);
   const escState = useRef({ pickingWhite, autoWb, looksArmed, geometryMode, masksMode, leaksMode, fxMode, presetsMode });
-  escState.current = { pickingWhite, autoWb, looksArmed, geometryMode, masksMode, leaksMode, fxMode, presetsMode, showExportOpen };
+  escState.current = { pickingWhite, autoWb, looksArmed, geometryMode, masksMode, leaksMode, fxMode, presetsMode };
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
