@@ -174,8 +174,8 @@ data class CameraSettings(
     val activeSelfTimer: Int get() = if (experimental) selfTimer else 0
 
     /** The long exposure to take, or null when the mode is off. */
-    val longExposureSpec: app.rawboy.camera.capture.LongExposure?
-        get() = if (experimental && longExposure > 0) app.rawboy.camera.capture.LongExposure(longExposure, longExposureLighten) else null
+    fun longExposureSpec(key: Float?): app.rawboy.camera.capture.LongExposure? =
+        if (experimental && longExposure > 0) app.rawboy.camera.capture.LongExposure(longExposure, longExposureLighten, key) else null
 
     companion object {
         /** Self-timer choices in seconds; the button cycles through them. */
