@@ -23,6 +23,8 @@ import { DeleteIcon } from '../common/DeleteIcon';
 import { DenoiseIcon } from '../common/DenoiseIcon';
 import { UndoIcon } from '../common/UndoIcon';
 import { AppSwitcher, HelpButton } from '../common/AppNav';
+import { EXTENSIONS } from '../../engine/export/ExportSettings';
+import { DEFAULT_NAME_TEMPLATE, NAME_KEYWORDS } from '../../engine/export/NameTemplate';
 import { activeLook, availableFilterOptions, EDITS_NAME, EXPORT_SIZES, isFilterActive, lookName, paramsOf, SETTINGS, type AutoPhoto, type AutoStore, type ImportMode, type LookMode } from './AutoStore';
 import { shortcutKey } from '../common/shortcutKey';
 
@@ -448,6 +450,7 @@ function GridView({ store, scroll, lastViewed }: {
         <ExportSheet
           store={store}
           count={exportSheet === 'all' ? exportable : state.photos.filter((p) => p.analysis && exportSheet.has(p.id)).length}
+          sample={(exportSheet === 'all' ? photos : state.photos.filter((p) => exportSheet.has(p.id))).find((p) => p.analysis)}
           onDismiss={() => setExportSheet(null)}
           onExport={async (destination) => {
             const ids = exportSheet === 'all'
@@ -919,6 +922,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
         <ExportSheet
           store={store}
           count={1}
+          sample={state.photos.find((p) => p.id === state.selected)}
           onDismiss={() => setExportOpen(false)}
           onExport={async (destination) => {
             setExportOpen(false);
@@ -1160,9 +1164,11 @@ export function ModeSwitch<M extends string>({ modes, mode, onChange, disabled, 
  * Asked on Export all and the photo view's Export: format, quality or bit depth, and size, kept for the next
  * exports (as RawBoy's export dialog).
  */
-function ExportSheet({ store, count, onDismiss, onExport }: {
+function ExportSheet({ store, count, sample, onDismiss, onExport }: {
   store: AutoStore;
   count: number;
+  /** The photo the file name preview shows (the first to be exported). */
+  sample: AutoPhoto | undefined;
   onDismiss: () => void;
   /** Called from the Export click (Google Drive opens its folder picker from it). */
   onExport: (destination: ExportDestination) => void;
@@ -1183,6 +1189,7 @@ function ExportSheet({ store, count, onDismiss, onExport }: {
       <div className="dialog auto-export" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Export">
         <h2>{count > 1 ? `Export ${count} photos` : 'Export'}</h2>
         <ExportOptions store={store} disabled={false} />
+        <FileNameRow store={store} sample={sample} count={count} />
         {destinationRow}
         <small className="muted">{where}</small>
         <div className="dialog-actions">
@@ -1190,6 +1197,44 @@ function ExportSheet({ store, count, onDismiss, onExport }: {
           <button type="button" className="primary" onClick={() => onExport(destination)}>Export</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** The file name template of exports, its keywords and a live preview (in ExportSheet). */
+function FileNameRow({ store, sample, count }: { store: AutoStore; sample: AutoPhoto | undefined; count: number }) {
+  const template = useSyncExternalStore(store.subscribe, () => store.state.nameTemplate);
+  const ext = useSyncExternalStore(store.subscribe, () => EXTENSIONS[store.state.exportSettings.format]);
+  const [draft, setDraft] = useState(template);
+  const change = (value: string) => {
+    setDraft(value);
+    store.setNameTemplate(value.trim() ? value : DEFAULT_NAME_TEMPLATE);
+  };
+  const shown = draft.trim() ? draft : DEFAULT_NAME_TEMPLATE;
+  const preview = (index: number) => (sample ? `${store.nameFor(sample, index, shown)}.${ext}` : null);
+  return (
+    <div className="export-name">
+      <label className="import-mode-label" htmlFor="export-name-template">File name</label>
+      <input
+        id="export-name-template"
+        type="text"
+        value={draft}
+        spellCheck={false}
+        autoComplete="off"
+        placeholder={DEFAULT_NAME_TEMPLATE}
+        onChange={(e) => change(e.target.value)}
+      />
+      {preview(1) && (
+        <small className="muted export-name-preview">
+          {preview(1)}{count > 1 ? ` … ${preview(count)}` : ''}
+        </small>
+      )}
+      <small className="muted export-name-keys">
+        {NAME_KEYWORDS.map((k) => (
+          <button key={k.token} type="button" className="text" title={k.text} onClick={() => change(draft + k.token)}>{k.token}</button>
+        ))}
+        <button type="button" className="text" onClick={() => change(DEFAULT_NAME_TEMPLATE)}>Reset</button>
+      </small>
     </div>
   );
 }

@@ -153,6 +153,13 @@ selected photos, with the same format and size choices as Export all. Removing o
 raw files stay where they are. On the web, Ctrl/Cmd-click also starts a selection, Shift-click selects every photo between the last
 one picked and the clicked one, and Ctrl/Cmd+A selects all.
 
+**File names (web):** the export sheet's **File name** box names the files from a template, remembered, with a live preview.
+Keywords: `{name}` original name, `{camera}`, `{lens}`, `{iso}`, `{look}` (look, preset or RawBoy edits), `{date}` (2026-11-11),
+`{time}` (14-30-05), `{year}` `{yy}` `{month}` `{day}` `{hour}` `{minute}` `{second}` (shoot date, else the file's date), and
+`#` for the photo's number in the export: `#` = 1, `##` = 01, `###` = 001. The default is `{name}-auto`; `{date}_{name}_###`
+gives `2026-11-09_DSCF1234_001.jpg`. Illegal characters become `_`; a name already taken gets `-001`, `-002`. Android and iOS
+keep `<name>-auto`.
+
 ## JPEG, HEIC, PNG and TIFF
 
 These files are already developed (8 bits per channel mostly, highlights clipped, noise reduction and sharpening baked
