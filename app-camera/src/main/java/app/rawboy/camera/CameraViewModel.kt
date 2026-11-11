@@ -441,6 +441,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     fun onPause() {
         resumed = false
+        cancelSelfTimer()
         stopRecording() // a recording never carries on in the background
         updateLocation()
         // The process may be killed in the background: write settings still waiting for a slider to rest.
@@ -913,6 +914,15 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         change { it.copy(showLevel = on) }
     }
     fun setBurstMode(mode: BurstMode) = change { it.copy(burstMode = mode) }
+    fun cycleSelfTimer() = change {
+        val t = CameraSettings.SELF_TIMERS
+        it.copy(selfTimer = t[(t.indexOf(it.selfTimer) + 1) % t.size])
+    }
+    fun cycleLongExposure() = change {
+        val t = CameraSettings.LONG_EXPOSURES
+        it.copy(longExposure = t[(t.indexOf(it.longExposure) + 1) % t.size])
+    }
+    fun setLongExposureLighten(on: Boolean) = change { it.copy(longExposureLighten = on) }
     fun setShutterSound(on: Boolean) = change { it.copy(shutterSound = on) }
     fun setHdrGainMap(on: Boolean) = change { it.copy(hdrGainMap = on) }
     fun setTrackFocus(on: Boolean) {
@@ -925,6 +935,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setExperimental(on: Boolean) {
         change { it.copy(experimental = on) }
         if (!on) {
+            cancelSelfTimer()
             stopRecording()
             _videoMode.value = false
             applyStabilization()
@@ -983,8 +994,60 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     // ---- Capture ----
 
-    /** Takes a raw now; it is developed into a JPEG in the background. */
+    private val _selfTimerLeft = MutableStateFlow<Int?>(null)
+
+    /** Seconds left on the self-timer's countdown, or null when none runs. */
+    val selfTimerLeft = _selfTimerLeft.asStateFlow()
+    private var selfTimerJob: Job? = null
+
+    /** A long exposure is being shot: the shutter ends it early instead of starting another shot. */
+    private val _longExposing = MutableStateFlow(false)
+    val longExposing = _longExposing.asStateFlow()
+
+    /** Progress 0..1 of the running long exposure. */
+    val longExposureProgress = controller.longExposureProgress
+
+    private fun cancelSelfTimer() {
+        selfTimerJob?.cancel()
+        selfTimerJob = null
+        _selfTimerLeft.value = null
+    }
+
+    /**
+     * The shutter: with the self-timer (Experimental) set, it counts down first so the phone can settle on a tripod,
+     * and a second press cancels the countdown; during a long exposure it ends the exposure early.
+     */
     fun shutter() {
+        if (_longExposing.value) {
+            controller.stopLongExposure()
+            return
+        }
+        if (selfTimerJob != null) {
+            cancelSelfTimer()
+            return
+        }
+        val seconds = _settings.value.activeSelfTimer
+        if (seconds <= 0 || _videoMode.value) {
+            shootNow()
+            return
+        }
+        if (!resumed || _status.value != CameraStatus.READY || _merging.value) return
+        selfTimerJob = viewModelScope.launch {
+            try {
+                for (left in seconds downTo 1) {
+                    _selfTimerLeft.value = left
+                    delay(1000)
+                }
+            } finally {
+                _selfTimerLeft.value = null
+            }
+            selfTimerJob = null
+            shootNow()
+        }
+    }
+
+    /** Takes a raw now; it is developed into a JPEG in the background. */
+    private fun shootNow() {
         if (!resumed || _status.value != CameraStatus.READY || _merging.value) return
         if (_videoMode.value) {
             toggleRecording()
@@ -996,8 +1059,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         // The selfie camera: the screen's frame is the light, the shot itself is an ordinary one exposed by AE.
         val screenFlash = settings.flash != FlashMode.OFF && _screenFlashCamera.value
         // Flash and maximum-resolution shots are single frames (CameraController.captureDng).
-        val burstFrames = if (hiRes || screenFlash) 1 else settings.burstFrames(lowLight.value)
-        val burst = burstFrames > 1 && flash == FlashMode.OFF
+        val longExposure = settings.longExposureSpec.takeIf { !hiRes && !screenFlash && flash == FlashMode.OFF }
+        val burstFrames = if (hiRes || screenFlash || longExposure != null) 1 else settings.burstFrames(lowLight.value)
+        // A long exposure holds the shutter like a merging burst does (the stack and its DNG write).
+        val burst = (burstFrames > 1 || longExposure != null) && flash == FlashMode.OFF
         // Debug note for the saved files' ImageDescription (CameraController.captureDng adds the frames actually merged).
         val mergeNote = "mode=${settings.burstMode.name.lowercase()} lowLight=${if (lowLight.value) 1 else 0}" +
             when {
@@ -1024,6 +1089,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             _merging.value = true
             ShotSaver.beginMerge()
         }
+        if (longExposure != null) _longExposing.value = true
         // Runs in ShotSaver.scope so finishing the lock screen camera never cancels an in-flight capture.
         ShotSaver.scope.launch {
             try {
@@ -1032,7 +1098,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     _screenFlashLit.value = true
                     delay(SCREEN_FLASH_SETTLE_MS)
                 }
-                val shot = capture(shotId, settings, hiRes, viewfinderKey, flash, burstFrames, screenFlash, mergeNote).copy(mayHaveFace = mayHaveFace)
+                val shot = capture(shotId, settings, hiRes, viewfinderKey, flash, burstFrames, screenFlash, mergeNote, longExposure).copy(mayHaveFace = mayHaveFace)
                 ShotSaver.enqueue(app, shot)
             } catch (e: Throwable) {
                 Log.w(TAG, "capture", e)
@@ -1042,6 +1108,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 ShotSaver.cancelCapture()
             } finally {
                 _screenFlashLit.value = false
+                _longExposing.value = false
                 if (burst) {
                     _merging.value = false
                     ShotSaver.endMerge()
@@ -1067,7 +1134,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /** Captures a raw and saves it as DNG (in Pictures/<Edition.FOLDER>/RAW, or a temporary file). */
-    private suspend fun capture(shotId: Long, settings: CameraSettings, hiRes: Boolean, viewfinderKey: Float?, flash: FlashMode, burstFrames: Int, screenFlash: Boolean = false, mergeNote: String = ""): Shot {
+    private suspend fun capture(shotId: Long, settings: CameraSettings, hiRes: Boolean, viewfinderKey: Float?, flash: FlashMode, burstFrames: Int, screenFlash: Boolean = false, mergeNote: String = "", longExposure: app.rawboy.camera.capture.LongExposure? = null): Shot {
         val resolver = app.contentResolver
         val baseName = "IMG_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.ROOT).format(Date())
         val degrees = deviceDegrees
@@ -1083,7 +1150,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             val result = try {
                 withContext(Dispatchers.IO) {
                     val out = resolver.openOutputStream(uri, "w") ?: throw java.io.IOException("Cannot write $name")
-                    val result = out.buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix, mergeNote) { onShutter(screenFlash) } }
+                    val result = out.buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix, longExposure, mergeNote) { onShutter(screenFlash) } }
                     fix?.let { addGps(uri, it) }
                     MediaStoreOutput.publish(resolver, uri)
                     result
@@ -1098,7 +1165,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             val file = File(app.cacheDir, "$baseName-$shotId.dng")
             val result = try {
                 withContext(Dispatchers.IO) {
-                    val result = file.outputStream().buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix, mergeNote) { onShutter(screenFlash) } }
+                    val result = file.outputStream().buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix, longExposure, mergeNote) { onShutter(screenFlash) } }
                     fix?.let { addGps(Uri.fromFile(file), it) }
                     result
                 }

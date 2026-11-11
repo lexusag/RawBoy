@@ -1,6 +1,7 @@
 #include "rawboy.h"
 #include "blemish.h"
 #include "burst_merge.h"
+#include "long_exposure.h"
 
 #include <android/bitmap.h>
 #include <jni.h>
@@ -365,6 +366,52 @@ JNIEXPORT jint JNICALL Java_app_rawboy_raw_BurstNative_maxQueued(JNIEnv*, jclass
 
 JNIEXPORT void JNICALL Java_app_rawboy_raw_BurstNative_destroy(JNIEnv*, jclass, jlong handle) {
     delete burstOf(handle);
+}
+
+}  // extern "C"
+
+// ---- Long exposure stack (RawBoy Camera; LongExposureNative.kt) ----
+
+extern "C" {
+
+namespace {
+rawboy::LongExposure* longOf(jlong handle) { return reinterpret_cast<rawboy::LongExposure*>(handle); }
+}  // namespace
+
+JNIEXPORT jlong JNICALL Java_app_rawboy_raw_LongExposureNative_create(JNIEnv* env, jclass, jint width, jint height,
+                                                                     jboolean lighten) {
+    if (width < 2 || height < 2) {
+        throwJava(env, "java/lang/IllegalArgumentException", "invalid long exposure geometry");
+        return 0;
+    }
+    return reinterpret_cast<jlong>(new rawboy::LongExposure(width, height, lighten));
+}
+
+// Folds one RAW_SENSOR plane (direct buffer, rowStride bytes per row) in; returns the frame count.
+JNIEXPORT jint JNICALL Java_app_rawboy_raw_LongExposureNative_addFrame(JNIEnv* env, jclass, jlong handle, jobject plane,
+                                                                      jint width, jint height, jint rowStride) {
+    const auto* data = static_cast<const uint8_t*>(env->GetDirectBufferAddress(plane));
+    if (!data || rowStride < width * 2 ||
+        env->GetDirectBufferCapacity(plane) < static_cast<jlong>(rowStride) * (height - 1) + width * 2) {
+        throwJava(env, "java/lang/IllegalArgumentException", "invalid raw plane");
+        return -1;
+    }
+    return longOf(handle)->addFrame(data, rowStride);
+}
+
+// The stacked 16-bit samples as a direct buffer, valid until destroy.
+JNIEXPORT jobject JNICALL Java_app_rawboy_raw_LongExposureNative_finish(JNIEnv* env, jclass, jlong handle, jint width,
+                                                                       jint height) {
+    const uint16_t* out = longOf(handle)->finish();
+    if (!out) {
+        throwJava(env, "java/lang/IllegalStateException", "no frames");
+        return nullptr;
+    }
+    return env->NewDirectByteBuffer(const_cast<uint16_t*>(out), static_cast<jlong>(width) * height * 2);
+}
+
+JNIEXPORT void JNICALL Java_app_rawboy_raw_LongExposureNative_destroy(JNIEnv*, jclass, jlong handle) {
+    delete longOf(handle);
 }
 
 }  // extern "C"

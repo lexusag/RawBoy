@@ -36,6 +36,7 @@ import app.rawboy.auto.analysis.MeterArea
 import app.rawboy.color.Mat3
 import app.rawboy.color.WhiteBalance
 import app.rawboy.raw.BurstNative
+import app.rawboy.raw.LongExposureNative
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
@@ -68,6 +69,9 @@ enum class FlashMode {
 }
 
 /** A captured still: the lens's capture result and, for a flash shot, the flash exposure used. */
+/** A long exposure ([CameraController.longExposureDng]): [seconds] of frames, stacked as a mean or, for trails, a per-sample maximum. */
+class LongExposure(val seconds: Int, val lighten: Boolean)
+
 class Still(
     val result: CaptureResult,
     /** The flash guide the still was exposed with (see [CameraController.flashExposure]); null without flash. */
@@ -712,6 +716,8 @@ class CameraController(context: Context) : AutoCloseable {
         guides: FlashGuides = FlashGuides(),
         burstFrames: Int = 1,
         location: Location? = null,
+        /** A long exposure instead of a burst ([longExposureDng]); ignored with flash or at maximum resolution. */
+        longExposure: LongExposure? = null,
         /** Why the shot is a burst or not (mode, light), for the debug note; the frames actually merged are added here. */
         note: String = "",
         onSubmitted: () -> Unit = {},
@@ -721,6 +727,7 @@ class CameraController(context: Context) : AutoCloseable {
             val inf = info ?: throw IOException("Camera not ready")
             val reader = rawReader ?: throw IOException("Camera not ready")
             val mode = if (inf.hasFlash) flash else FlashMode.OFF
+            if (mode == FlashMode.OFF && longExposure != null && !inf.hiRes) return@withLock longExposureDng(s, inf, longExposure, exifOrientation, location, note, out, onSubmitted)
             if (mode == FlashMode.OFF && burstFrames > 1 && !inf.hiRes) return@withLock burstDng(s, inf, burstFrames, exifOrientation, location, note, out, onSubmitted)
             // Ambient exposure before any light comes on: the flash still never needs more.
             val ambient = _frames.value
@@ -1054,6 +1061,152 @@ class CameraController(context: Context) : AutoCloseable {
             return Still(reference, null, effectiveFrames = effective, compensationEv = appliedCompensationEv(_frames.value), description = description)
         } finally {
             BurstNative.destroy(h)
+        }
+    }
+
+    /** Progress of a running [longExposureDng], 0..1; null when none runs. */
+    private val _longExposureProgress = MutableStateFlow<Float?>(null)
+    val longExposureProgress = _longExposureProgress.asStateFlow()
+
+    @Volatile
+    private var longExposureStop = false
+
+    /** Ends the running long exposure early; the frames taken so far are stacked and saved. */
+    fun stopLongExposure() {
+        longExposureStop = true
+    }
+
+    /**
+     * A long exposure: still requests (AE and white balance locked at what the preview had, so every frame is
+     * exposed alike) are submitted back to back for [spec]'s seconds, a few queued at a time so the sensor never
+     * waits, and each frame is folded into one raw as it arrives ([LongExposureNative]). The result is the picture
+     * an ND filter would give: water and clouds smooth in an average, moving lights drawn as trails in a lighten
+     * stack. Written as DNG with the first frame's metadata. Frames that fail are left out.
+     */
+    private suspend fun longExposureDng(
+        s: CameraCaptureSession,
+        inf: Info,
+        spec: LongExposure,
+        exifOrientation: Int,
+        location: Location?,
+        note: String,
+        out: OutputStream,
+        onSubmitted: () -> Unit,
+    ): Still {
+        val reader = rawReader ?: throw IOException("Camera not ready")
+        val width = reader.width
+        val height = reader.height
+        val request = request(s, CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
+            addTarget(reader.surface)
+            addTarget(previewSurface ?: throw IOException("Camera not ready"))
+            setCommon(inf)
+            inf.stillFpsRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
+            set(CaptureRequest.CONTROL_ENABLE_ZSL, false)
+            // The preview has converged by now: keep its exposure and colour for every frame (flicker otherwise).
+            set(CaptureRequest.CONTROL_AE_LOCK, true)
+            set(CaptureRequest.CONTROL_AWB_LOCK, true)
+            if (inf.hasLensShadingMap) {
+                setForLens(CaptureRequest.STATISTICS_LENS_SHADING_MAP_MODE, CameraMetadata.STATISTICS_LENS_SHADING_MAP_MODE_ON)
+            }
+        }.build()
+
+        // Camera thread only, apart from the volatile flags.
+        var handle = 0L
+        var submitted = 0
+        var arrived = 0
+        var failed = 0
+        var closed = false
+        var reference: CaptureResult? = null
+        val totalNs = spec.seconds * 1_000_000_000L
+        var startNs = 0L
+        val done = CompletableDeferred<Unit>()
+        longExposureStop = false
+        fun finished() = longExposureStop || System.nanoTime() - startNs >= totalNs
+        fun checkDone() {
+            if (finished() && reference != null && arrived + failed >= submitted) done.complete(Unit)
+        }
+        lateinit var callback: CameraCaptureSession.CaptureCallback
+        fun submitMore() {
+            if (closed || finished() || submitted - arrived - failed >= LONG_EXPOSURE_QUEUE) return
+            try {
+                s.captureBurst(List(LONG_EXPOSURE_CHUNK) { request }, callback, handler)
+                submitted += LONG_EXPOSURE_CHUNK
+            } catch (e: Exception) {
+                // The session closed under us: stack what there is.
+                Log.w(TAG, "long exposure submit", e)
+                longExposureStop = true
+            }
+        }
+        callback = object : CameraCaptureSession.CaptureCallback() {
+            override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, r: TotalCaptureResult) {
+                if (closed) return
+                val lr = lensResult(r)
+                if (reference == null) reference = lr
+                submitMore()
+                checkDone()
+            }
+
+            override fun onCaptureFailed(session: CameraCaptureSession, request: CaptureRequest, failure: CaptureFailure) {
+                failed++
+                submitMore()
+                checkDone()
+            }
+        }
+        handler.post {
+            pendingBurst = done
+            burstSink = sink@{ img ->
+                if (closed) return@sink
+                if (handle == 0L) handle = LongExposureNative.create(width, height, spec.lighten)
+                val plane = img.planes[0]
+                arrived = LongExposureNative.addFrame(handle, plane.buffer, width, height, plane.rowStride)
+                _longExposureProgress.value = ((System.nanoTime() - startNs).toFloat() / totalNs).coerceIn(0f, 1f)
+                submitMore()
+                checkDone()
+            }
+            startNs = System.nanoTime()
+            submitMore()
+        }
+        onSubmitted()
+        _longExposureProgress.value = 0f
+        val started = System.nanoTime()
+        try {
+            // The exposure's length, then a little for the frames still in the pipeline.
+            withTimeoutOrNull(totalNs / 1_000_000 + LONG_EXPOSURE_GRACE_MS) { done.await() }
+        } catch (e: CancellationException) {
+            handler.post {
+                burstSink = null
+                if (pendingBurst === done) pendingBurst = null
+                closed = true
+                if (handle != 0L) LongExposureNative.destroy(handle)
+            }
+            _longExposureProgress.value = null
+            throw e
+        }
+        val state = CompletableDeferred<Triple<Long, CaptureResult?, Int>>()
+        if (!handler.post {
+            burstSink = null
+            if (pendingBurst === done) pendingBurst = null
+            closed = true
+            state.complete(Triple(handle, reference, arrived))
+        }) state.completeExceptionally(IOException("Camera closed"))
+        val (h, ref, frames) = try { state.await() } finally { _longExposureProgress.value = null }
+        if (h == 0L) throw IOException("Long exposure: no frames")
+        try {
+            if (ref == null) throw IOException("Long exposure: no result for the first frame")
+            val stacked = withContext(Dispatchers.Default) { LongExposureNative.finish(h, width, height) }
+            Log.d(TAG, "long exposure: $frames frames in ${(System.nanoTime() - started) / 1_000_000} ms (${spec.seconds} s, ${if (spec.lighten) "lighten" else "average"}, $failed failed)")
+            val description = "RawBoy long-exposure=${if (spec.lighten) "lighten" else "average"} seconds=${spec.seconds} frames=$frames $note".trim()
+            DngCreator(inf.characteristics, ref).use { dng ->
+                dng.setOrientation(exifOrientation)
+                dng.setDescription(description)
+                location?.let(dng::setLocation)
+                dng.writeByteBuffer(out, Size(width, height), stacked, 0)
+            }
+            // Averaging N frames cuts noise about like merging N (see burstDng); a lighten stack keeps each frame's.
+            val effective = if (spec.lighten) 1f else frames.toFloat().coerceIn(1f, 8f)
+            return Still(ref, null, effectiveFrames = effective, compensationEv = appliedCompensationEv(_frames.value), description = description)
+        } finally {
+            LongExposureNative.destroy(h)
         }
     }
 
@@ -1524,6 +1677,11 @@ class CameraController(context: Context) : AutoCloseable {
         /** A burst waits this long plus [BURST_FRAME_TIMEOUT_MS] per frame for its frames, then merges what came. */
         private const val BURST_TIMEOUT_MS = 2000L
         private const val BURST_FRAME_TIMEOUT_MS = 250L
+
+        /** A long exposure submits [LONG_EXPOSURE_CHUNK] requests whenever fewer than [LONG_EXPOSURE_QUEUE] are in flight. */
+        private const val LONG_EXPOSURE_CHUNK = 3
+        private const val LONG_EXPOSURE_QUEUE = 4
+        private const val LONG_EXPOSURE_GRACE_MS = 5000L
         private const val FOCUS_TIMEOUT_MS = 1500L
 
         /**
