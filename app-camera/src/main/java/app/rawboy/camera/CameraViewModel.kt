@@ -398,7 +398,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /** The latest analysed viewfinder frame. */
-    private class Live(val base: ViewfinderBase, val stats: SceneStats, val defaults: DevelopParams, val auto: DevelopParams)
+    private class Live(val base: ViewfinderBase, val stats: SceneStats, val defaults: DevelopParams, val auto: DevelopParams, val scale: Float = 1f)
 
     @Volatile
     private var live: Live? = null
@@ -705,7 +705,15 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val state = controller.frames.value
         val boost = state?.postRawBoost ?: 1f
         val stillGain = state?.let { controller.stillGain(it) } ?: 1f
-        val scale = _settings.value.previewScale(info?.hiRes == true) / boost * stillGain
+        // With Long exposure on, show what its frames will give (the same maths as the shutter's) instead of the still's.
+        val settings = _settings.value
+        val longGain = if (info?.hiRes != true && settings.flash == FlashMode.OFF && activeCaptures == 0 && (state?.exposureNs ?: 0L) < 250_000_000L) {
+            settings.longExposureSpec(sceneKey())?.let { controller.longExposureGainOverPreview(it) }
+        } else null
+        val target = settings.previewScale(info?.hiRes == true) / boost * (longGain ?: stillGain)
+        // The gain eases to its target (a fade) instead of jumping: a long exposure starts and ends with the viewfinder
+        // changing exposure under the preview, and a step there reads as a flash. (Live.scale keeps the key honest.)
+        val scale = if (f.scale > 0f && target > 0f) f.scale * (target / f.scale).coerceIn(1f / SCALE_FADE_STEP, SCALE_FADE_STEP) else target
         // The raw's colours for the ISP's current white balance and colour matrix (they follow AWB).
         val color = state?.previewColor
         if (scale != f.scale || !color.contentEquals(f.color)) _frame.value = f.copy(scale = scale, color = color)
@@ -727,11 +735,23 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             // Video eases much slower: a 0.3 EV step every 300 ms would pump visibly in a recording.
             val step = if (_videoMode.value) VIDEO_EV_STEP else MAX_EV_STEP
             val eased = if (last == null) auto else auto.copy(exposure = last + (auto.exposure - last).coerceIn(-step, step))
-            live = Live(base, stats, defaults, eased)
+            live = Live(base, stats, defaults, eased, f.scale)
+            if (activeCaptures == 0 && SystemClock.uptimeMillis() - captureEndedAt > SCENE_KEY_SETTLE_MS && f.scale > 0f) sceneKeyHeld = stats.key / f.scale
             publish()
             withContext(Dispatchers.Main) { meterRawIfUncalibrated() }
         }
     }
+
+    /**
+     * The viewfinder's scene key per unit of [ViewfinderRenderer.Frame.scale]: the key of the live frame is measured on
+     * an image already scaled (the long-exposure preview moves that scale), so dividing it out keeps the lift from
+     * feeding back on itself. Null before the first analysed frame.
+     */
+    private fun sceneKey(): Float? = sceneKeyHeld
+
+    /** [sceneKey]'s last reading from a frame the AE preview made (not a long exposure's manual frames, which come after the shutter). */
+    private var sceneKeyHeld: Float? = null
+    private var captureEndedAt = 0L
 
     /** Lens keys whose raw metering ran this session ([meterRawIfUncalibrated]), so a lens is metered once at most. */
     private val rawMetered = mutableSetOf<String>()
@@ -1059,7 +1079,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         // The selfie camera: the screen's frame is the light, the shot itself is an ordinary one exposed by AE.
         val screenFlash = settings.flash != FlashMode.OFF && _screenFlashCamera.value
         // Flash and maximum-resolution shots are single frames (CameraController.captureDng).
-        val longExposure = settings.longExposureSpec(live?.stats?.key).takeIf { !hiRes && !screenFlash && flash == FlashMode.OFF }
+        val longExposure = settings.longExposureSpec(sceneKey()).takeIf { !hiRes && !screenFlash && flash == FlashMode.OFF }
         val burstFrames = if (hiRes || screenFlash || longExposure != null) 1 else settings.burstFrames(lowLight.value)
         // A long exposure holds the shutter like a merging burst does (the stack and its DNG write).
         val burst = (burstFrames > 1 || longExposure != null) && flash == FlashMode.OFF
@@ -1073,7 +1093,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 else -> " reason=not-low-light"
             }
         // A flash shot's raw is lit by the flash, the viewfinder wasn't: no calibration from it.
-        val viewfinderKey = if (flash == FlashMode.OFF && !screenFlash) live?.stats?.key else null
+        // A long exposure's raw is lifted away from what the viewfinder predicted for a still: it must not calibrate the preview.
+        val viewfinderKey = if (flash == FlashMode.OFF && !screenFlash && longExposure == null) live?.stats?.key else null
         val mayHaveFace = info?.hasFaceDetection != true || controller.frames.value?.faces?.isNotEmpty() != false
         controller.frames.value?.let { f ->
             Log.d(TAG, "shutter ${settings.lensKey(hiRes)}: preview ISO ${f.iso.toInt()}, ${f.exposureNs / 1000} µs, boost ${f.postRawBoost}, " +
@@ -1114,6 +1135,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     ShotSaver.endMerge()
                 }
                 activeCaptures--
+                captureEndedAt = SystemClock.uptimeMillis()
                 if (activeCaptures == 0) {
                     if (!resumed) stopCamera() else if (restartAfterCapture) restartCamera()
                 }
@@ -1253,6 +1275,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         /** At most this often a tracked subject's move goes to the camera as a new AF region. */
         private const val FOCUS_MOVE_INTERVAL_MS = 100L
         /** Most the live develop's exposure moves per update (~3 a second), EV. */
+        /** After a shot the viewfinder's frames are still the exposure's manual ones for a moment: don't meter the scene from them. */
+        /** The most the viewfinder's gain moves per analysed frame (about every 300 ms): 0.25 EV, so a stop takes over a second. */
+        private val SCALE_FADE_STEP = 2f.pow(0.25f)
+        private const val SCENE_KEY_SETTLE_MS = 2000L
         private const val MAX_EV_STEP = 0.3f
 
         const val MIN_ZOOM = 1f

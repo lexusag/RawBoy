@@ -1103,19 +1103,22 @@ class CameraController(context: Context) : AutoCloseable {
         val height = reader.height
         val manual = longExposureManual(inf, spec)
         val manualExposure = manual != null
-        val request = request(s, CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
-            addTarget(reader.surface)
-            addTarget(previewSurface ?: throw IOException("Camera not ready"))
-            setCommon(inf)
-            inf.stillFpsRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
-            set(CaptureRequest.CONTROL_ENABLE_ZSL, false)
+        // What every frame of the exposure shares, the stills and the live preview alike (so the viewfinder keeps showing
+        // the picture the stack gets): the preview's colour held, each frame exposed by hand, the lens held where it was.
+        fun CaptureRequest.Builder.heldLook(shortenBy: Int = 1) {
             // The preview has converged by now: keep its colour for every frame (flicker otherwise).
             set(CaptureRequest.CONTROL_AE_LOCK, true)
             set(CaptureRequest.CONTROL_AWB_LOCK, true)
             // Exposure: AE tops out at 1/30 s or 1/15 s and a dark scene stays dark however long the stack runs, so
             // each frame is exposed by hand, as long as LONG_EXPOSURE_FRAME_NS allows (ISO falls to match: the same
             // picture with far less noise), and a dark scene is lifted to a normal key with the time AE refused.
-            manual?.let { (t, iso) ->
+            manual?.let { (t0, iso0) ->
+                // The live preview takes the same picture in a shorter frame (same time x ISO), so it holds the sensor
+                // for less of the stills' time; ISO's own ceiling limits how much shorter.
+                val isoMax = inf.characteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)?.upper ?: iso0
+                val k = shortenBy.coerceAtLeast(1).coerceAtMost((isoMax / iso0).coerceAtLeast(1))
+                val t = t0 / k
+                val iso = iso0 * k
                 set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF)
                 setForLens(CaptureRequest.SENSOR_EXPOSURE_TIME, t)
                 setForLens(CaptureRequest.SENSOR_SENSITIVITY, iso)
@@ -1133,10 +1136,25 @@ class CameraController(context: Context) : AutoCloseable {
                     set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_AUTO)
                 }
             }
+        }
+        val request = request(s, CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
+            addTarget(reader.surface)
+            addTarget(previewSurface ?: throw IOException("Camera not ready"))
+            setCommon(inf)
+            inf.stillFpsRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
+            set(CaptureRequest.CONTROL_ENABLE_ZSL, false)
+            heldLook()
             if (inf.hasLensShadingMap) {
                 setForLens(CaptureRequest.STATISTICS_LENS_SHADING_MAP_MODE, CameraMetadata.STATISTICS_LENS_SHADING_MAP_MODE_ON)
             }
         }.build()
+        // The viewfinder stays live: a repeating preview with the same look runs between the stills (the sensor
+        // alternates, so the stack gets about half the frames a still-only run did, for the viewfinder never to go dark).
+        val livePreview = if (manualExposure) request(s, CameraDevice.TEMPLATE_PREVIEW).apply {
+            addTarget(previewSurface ?: throw IOException("Camera not ready"))
+            setCommon(inf)
+            heldLook(shortenBy = LONG_EXPOSURE_PREVIEW_SHORTEN)
+        }.build() else null
 
         // Camera thread only, apart from the volatile flags.
         var handle = 0L
@@ -1180,9 +1198,31 @@ class CameraController(context: Context) : AutoCloseable {
                 checkDone()
             }
         }
-        // The repeating preview request would keep running continuous AF between our frames: our frames feed the
-        // viewfinder meanwhile, and the preview restarts below.
-        runCatching { s.stopRepeating() }
+        // The AE preview would keep running continuous AF between our frames and meter the viewfinder at its own
+        // exposure: replace it with the held-look preview (or, with no exposure to hold, stop it); the AE preview
+        // restarts below.
+        val previewBefore = _frames.value
+        if (livePreview != null && manual != null && previewBefore != null) {
+            // Until the first manual frame's result arrives the viewfinder would show manual frames with the AE
+            // preview's gain (dark for a second): say what they are now, as the results will.
+            _frames.value = FrameState(
+                iso = manual.second.toFloat(), postRawBoost = 1f, whiteXY = previewBefore.whiteXY, faces = emptyList(),
+                afState = previewBefore.afState, exposureNs = manual.first, tonemapMode = previewBefore.tonemapMode,
+                previewColor = previewBefore.previewColor, focusDiopters = previewBefore.focusDiopters,
+                compensationSteps = previewBefore.compensationSteps,
+            )
+        }
+        if (livePreview != null) {
+            runCatching {
+                s.setRepeatingRequest(livePreview, object : CameraCaptureSession.CaptureCallback() {
+                    override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
+                        _frames.value = frameState(inf, lensResult(result), result.get(CaptureResult.CONTROL_AE_EXPOSURE_COMPENSATION))
+                    }
+                }, handler)
+            }
+        } else {
+            runCatching { s.stopRepeating() }
+        }
         handler.post {
             pendingBurst = done
             burstSink = sink@{ img ->
@@ -1219,6 +1259,8 @@ class CameraController(context: Context) : AutoCloseable {
             burstSink = null
             if (pendingBurst === done) pendingBurst = null
             closed = true
+            // The AE preview's frames come back: until their results arrive, they are what the exposure began with.
+            if (livePreview != null && previewBefore != null) _frames.value = previewBefore
             runCatching { repeatPreview() }
             state.complete(Triple(handle, reference, arrived))
         }) state.completeExceptionally(IOException("Camera closed"))
@@ -1251,15 +1293,35 @@ class CameraController(context: Context) : AutoCloseable {
      */
     private fun longExposureManual(inf: Info, spec: LongExposure): Pair<Long, Int>? {
         val f = _frames.value ?: return null
+        return longExposureFrame(inf, f, spec, log = true)
+    }
+
+    /**
+     * How much brighter a long-exposure frame's raw is than the preview frame's raw (time x ISO), for the viewfinder
+     * to show what the frames will give; null when there is no preview reading. Same maths as the shutter's
+     * ([longExposureFrame]), so the two cannot drift.
+     */
+    fun longExposureGainOverPreview(spec: LongExposure): Float? {
+        val inf = info ?: return null
+        val f = _frames.value ?: return null
+        val (t, iso) = longExposureFrame(inf, f, spec, log = false) ?: return null
+        val preview = f.exposureNs / 1e9f * f.iso
+        return if (preview > 0f) t / 1e9f * iso / preview else null
+    }
+
+    private fun longExposureFrame(inf: Info, f: FrameState, spec: LongExposure, log: Boolean): Pair<Long, Int>? {
         val gain = f.exposureNs / 1e9f * f.iso * f.postRawBoost
         if (gain <= 0f) return null
         val isoRange = inf.characteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE) ?: return null
         val timeRange = inf.characteristics.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE) ?: return null
-        val comp = compensationEv()
+        // The preview's AE already ran with the Brightness compensation, so its gain includes it: don't add it again.
+        // (Still.compensationEv keeps reporting it so the develop takes it back out.) spec.key is the scene's key in
+        // the raw of the preview frame (viewfinder key x the calibrated preview scale; frames shot at the preview's time x ISO x boost give just this key); it
+        // is null when the lens's preview isn't calibrated yet, which leaves the preview's exposure as it is.
         val lift = spec.key?.takeIf { it > 0f }?.let { key ->
-            kotlin.math.log2(LONG_EXPOSURE_KEY / (key * f.postRawBoost * 2f.pow(comp))).coerceIn(0f, LONG_EXPOSURE_MAX_LIFT_EV)
+            kotlin.math.log2(LONG_EXPOSURE_KEY / key).coerceIn(0f, LONG_EXPOSURE_MAX_LIFT_EV)
         } ?: 0f
-        val target = gain * 2f.pow(comp + lift)
+        val target = gain * 2f.pow(lift)
         val tMax = min(LONG_EXPOSURE_FRAME_NS, timeRange.upper)
         var t = tMax
         var iso = target / (t / 1e9f)
@@ -1269,7 +1331,7 @@ class CameraController(context: Context) : AutoCloseable {
             iso = isoRange.lower.toFloat()
         }
         val exposure = t to iso.toInt().coerceIn(isoRange.lower, isoRange.upper)
-        Log.d(TAG, "long exposure frame: preview ${f.exposureNs / 1000} µs ISO ${f.iso.toInt()} boost ${f.postRawBoost}, comp $comp EV, lift $lift EV -> " +
+        if (log) Log.d(TAG, "long exposure frame: preview ${f.exposureNs / 1000} µs ISO ${f.iso.toInt()} boost ${f.postRawBoost}, scene key ${spec.key}, comp ${compensationEv()} EV (already in the preview), lift $lift EV -> " +
             "${exposure.first / 1000} µs ISO ${exposure.second}")
         return exposure
     }
@@ -1743,6 +1805,8 @@ class CameraController(context: Context) : AutoCloseable {
         private const val BURST_FRAME_TIMEOUT_MS = 250L
 
         /** A long exposure submits [LONG_EXPOSURE_CHUNK] requests whenever fewer than [LONG_EXPOSURE_QUEUE] are in flight. */
+        /** The live preview's frame is this many times shorter than a still's (ISO higher to match), to leave the sensor to the stills. */
+        private const val LONG_EXPOSURE_PREVIEW_SHORTEN = 4
         private const val LONG_EXPOSURE_CHUNK = 3
         private const val LONG_EXPOSURE_QUEUE = 4
         private const val LONG_EXPOSURE_GRACE_MS = 5000L
