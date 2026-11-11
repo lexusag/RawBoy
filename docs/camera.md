@@ -184,3 +184,10 @@ In video mode, **AE LOCK** (top right of the viewfinder) holds the exposure and 
 - Film grain moves with the frames in video mode. The live exposure eases much slower than for photos, so brightness does not pump.
 - Skin retouch, the ISO-based denoise and sharpening, bursts, flash and raw are photo-only. The lens and the camera (selfie) can't be changed while recording, and leaving the app stops the recording.
 - Prototype: no video stabilisation, no 4K, no log; the lens/stream setup is the photo one. How it works: `ViewfinderRenderer.videoSink` draws the same develop pass into the `MediaCodec` input surface through an EGL window surface in the viewfinder's own context (`gl/VideoOutput.kt`); `capture/VideoRecorder.kt` runs the encoders and the MP4 muxer. Findings and the plan: `docs/video.md`.
+
+## Self-timer and long exposure (Android prototype)
+
+Both are behind **Settings › Experimental features** (off by default); with it on, two buttons join the top bar. They are meant for a tripod.
+
+- **Timer** cycles Off, 2, 5 and 10 s. The shutter (or a volume key) then counts down over the viewfinder before taking the shot, so the phone can settle; pressing the shutter again cancels. It also applies to burst-merged and long-exposure shots, and is off in video mode.
+- **Long exposure** cycles Off, 5, 10, 30 and 60 s. The camera keeps the preview's exposure and white balance locked and shoots frames back to back for that long, folding each into one raw as it arrives (`long_exposure.h`; memory stays at one accumulator, about 48 MB at 12 MP, however long it runs). **Settings › Average** gives the mean of the frames (smooth water and clouds, less noise, like an ND filter); **Lighten** keeps the brightest value of every frame (light and star trails; the button shows an "L"). The shutter stops it early and keeps the frames taken so far. The result is an ordinary raw, so it is developed with the chosen look and saved as DNG and JPEG like any shot. Frames are not aligned, so use a tripod. Not used with flash or at full sensor resolution (those shoot a single frame).

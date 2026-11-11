@@ -92,6 +92,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
@@ -168,6 +169,9 @@ fun CameraScreen(
     val params by vm.shaderParams.collectAsStateWithLifecycle()
     val pending by vm.pending.collectAsStateWithLifecycle()
     val merging by vm.merging.collectAsStateWithLifecycle()
+    val selfTimerLeft by vm.selfTimerLeft.collectAsStateWithLifecycle()
+    val longExposing by vm.longExposing.collectAsStateWithLifecycle()
+    val longProgress by vm.longExposureProgress.collectAsStateWithLifecycle()
     val lastShot by vm.lastShot.collectAsStateWithLifecycle()
     val compare by vm.compare.collectAsStateWithLifecycle()
     val message by vm.message.collectAsStateWithLifecycle()
@@ -247,12 +251,18 @@ fun CameraScreen(
         val landscape = maxWidth > maxHeight
         val statusText = when {
             recordingMs != null -> "● " + formatRecordingTime(recordingMs ?: 0L)
+            longExposing -> "Long exposure " + ((longProgress ?: 0f) * 100).toInt() + "% · tap to stop"
+            selfTimerLeft != null -> "Timer · tap to cancel"
             merging -> "Merging frames…"
             pending > 0 -> "Saving $pending…"
             else -> ""
         }
         val barButtons = @Composable {
             if (settings.experimental) VideoModeButton(videoMode, enabled = recordingMs == null) { vm.setVideoMode(!videoMode) }
+            if (!videoMode && settings.experimental) {
+                TimerButton(settings.selfTimer) { vm.cycleSelfTimer() }
+                LongExposureButton(settings.longExposure, settings.longExposureLighten, hiRes) { vm.cycleLongExposure() }
+            }
             if (!videoMode) {
                 RawButton(settings.keepDng) { vm.setKeepDng(!settings.keepDng) }
                 BurstButton(settings.burstMode, lowLight, hiRes, flashAvailable && settings.flash != FlashMode.OFF) { vm.setBurstMode(settings.burstMode.next()) }
@@ -280,7 +290,7 @@ fun CameraScreen(
         }
         val shutterButton = @Composable {
             Shutter(
-                enabled = status == CameraStatus.READY && !merging,
+                enabled = status == CameraStatus.READY && (!merging || longExposing),
                 video = videoMode,
                 recording = recordingMs != null,
                 onClick = vm::shutter,
@@ -393,6 +403,21 @@ fun CameraScreen(
                         videoSink = videoSink,
                         videoMode = videoMode,
                     )
+                    // The self-timer's countdown, big and upright over the picture.
+                    selfTimerLeft?.let { left ->
+                        Text(
+                            left.toString(),
+                            style = MaterialTheme.typography.displayLarge.copy(fontSize = 120.sp, fontWeight = FontWeight.Light),
+                            color = Color.White.copy(alpha = 0.9f),
+                        )
+                    }
+                    // A long exposure's progress along the bottom of the picture.
+                    if (longExposing) {
+                        LinearProgressIndicator(
+                            progress = { longProgress ?: 0f },
+                            modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(16.dp),
+                        )
+                    }
                     // Video is a 16:9 (or 9:16) slice of the 4:3 viewfinder: shade what the file will not have.
                     if (videoMode) VideoFrameMask(if (turns % 2 == 1) 16f / 9f else 9f / 16f)
                     // Taps, the focus handle, ring and loupe work in the upright picture's coordinates, turned with it.
@@ -1220,12 +1245,33 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
         Spacer(Modifier.height(16.dp))
         SettingSwitch(
             title = "Experimental features",
-            subtitle = "Features still being tested: video mode (a VIDEO button in the top bar)",
+            subtitle = "Features still being tested: video mode (a VIDEO button in the top bar), self-timer and long exposure",
             checked = settings.experimental,
             accent = EXPERIMENTAL_ORANGE,
             onChange = vm::setExperimental,
         )
         if (settings.experimental) {
+            Spacer(Modifier.height(16.dp))
+            Text("Self-timer and long exposure", style = MaterialTheme.typography.bodyMedium)
+            Text(
+                "Two buttons appear in the top bar. Timer: counts down 2, 5 or 10 s before the shot so the phone can settle on a tripod; " +
+                    "press the shutter again to cancel. Long exposure: shoots frames for 5, 10, 30 or 60 s and stacks them into one photo " +
+                    "(like an ND filter); press the shutter to stop early. Use a tripod; not used with flash or at full sensor resolution",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
+                FilterChip(
+                    selected = !settings.longExposureLighten,
+                    onClick = { vm.setLongExposureLighten(false) },
+                    label = { Text("Average (smooth water)") },
+                )
+                FilterChip(
+                    selected = settings.longExposureLighten,
+                    onClick = { vm.setLongExposureLighten(true) },
+                    label = { Text("Lighten (light trails)") },
+                )
+            }
             Spacer(Modifier.height(16.dp))
             SettingSwitch(
                 title = "Flat video for grading",
@@ -1350,6 +1396,61 @@ private fun BurstButton(mode: BurstMode, lowLight: Boolean, hiRes: Boolean, flas
     }
 }
 
+/** Self-timer (Experimental), cycling Off, 2, 5, 10 s: the seconds in a badge when set. */
+@Composable
+private fun TimerButton(seconds: Int, onClick: () -> Unit) {
+    val on = seconds > 0
+    val tint = if (on) MaterialTheme.colorScheme.primary else LocalContentColor.current.copy(alpha = 0.6f)
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier.size(40.dp).semantics { stateDescription = if (on) "$seconds seconds" else "Off" },
+    ) {
+        Box {
+            Icon(TimerIcon, contentDescription = "Self-timer", tint = tint)
+            if (on) {
+                Text(
+                    seconds.toString(),
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, lineHeight = 9.sp, fontWeight = FontWeight.Bold),
+                    color = tint,
+                    modifier = Modifier.align(Alignment.BottomEnd).offset(x = 5.dp, y = 2.dp),
+                )
+            }
+        }
+    }
+}
+
+/**
+ * Long exposure (Experimental), cycling Off, 5, 10, 30, 60 s of stacked frames. A small "A" (average) or "L" (lighten,
+ * for light trails) shows the stacking while on; the choice is in Settings. Inactive at full sensor resolution.
+ */
+@Composable
+private fun LongExposureButton(seconds: Int, lighten: Boolean, hiRes: Boolean, onClick: () -> Unit) {
+    val on = seconds > 0
+    val tint = if (on && !hiRes) MaterialTheme.colorScheme.primary else LocalContentColor.current.copy(alpha = 0.6f)
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier.size(40.dp).semantics {
+            stateDescription = when {
+                !on -> "Off"
+                hiRes -> "$seconds seconds, inactive (full sensor resolution)"
+                else -> "$seconds seconds, ${if (lighten) "light trails" else "average"}"
+            }
+        },
+    ) {
+        Box {
+            Icon(HourglassIcon, contentDescription = "Long exposure", tint = tint)
+            if (on) {
+                Text(
+                    seconds.toString() + if (lighten) "L" else "",
+                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, lineHeight = 9.sp, fontWeight = FontWeight.Bold),
+                    color = tint,
+                    modifier = Modifier.align(Alignment.BottomEnd).offset(x = 8.dp, y = 2.dp),
+                )
+            }
+        }
+    }
+}
+
 /**
  * Off <-> Focus-flash (the bolt with "AF": the light comes on to focus and meter first, then the flash fires). On the
  * selfie camera, which has no flash unit: Off <-> screen flash (the bolt alone; the screen's frame lights for the shot).
@@ -1406,6 +1507,25 @@ private val CameraSwitchIcon: ImageVector by lazy {
             "M12,14c-1.1,0 -2,-0.9 -2,-2c0,-1.1 0.9,-2 2,-2s2,0.9 2,2C14,13.1 13.1,14 12,14z" +
             "M8.57,0.51l4.48,4.48V2.04c4.72,0.47 8.48,4.23 8.95,8.95c0,0 2,0 2,0C23.34,3.02 15.49,-1.59 8.57,0.51z" +
             "M10.95,21.96C6.23,21.49 2.47,17.73 2,13.01c0,0 -2,0 -2,0c0.66,7.97 8.51,12.58 15.43,10.48l-4.48,-4.48V21.96z",
+    )
+}
+
+/** Material "timer" icon (Apache 2.0). */
+private val TimerIcon: ImageVector by lazy {
+    icon(
+        "Timer",
+        "M15,1H9v2h6V1zM11,14h2V8h-2V14zM19.03,7.39l1.42,-1.42c-0.43,-0.51 -0.9,-0.99 -1.41,-1.41l-1.42,1.42" +
+            "C16.07,4.74 14.12,4 12,4c-4.97,0 -9,4.03 -9,9c0,4.97 4.02,9 9,9s9,-4.03 9,-9C21,10.88 20.26,8.93 19.03,7.39z" +
+            "M12,20c-3.87,0 -7,-3.13 -7,-7c0,-3.87 3.13,-7 7,-7s7,3.13 7,7C19,16.87 15.87,20 12,20z",
+    )
+}
+
+/** Material "hourglass_empty" icon (Apache 2.0). */
+private val HourglassIcon: ImageVector by lazy {
+    icon(
+        "Hourglass",
+        "M6,2v6h0.01L6,8.01 10,12l-4,4 0.01,0.01H6V22h12v-5.99h-0.01L18,16l-4,-4 4,-3.99 -0.01,-0.01H18V2H6z" +
+            "M16,16.5V20H8v-3.5l4,-4 4,4zM12,11.5l-4,-4V4h8v3.5l-4,4z",
     )
 }
 

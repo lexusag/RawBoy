@@ -60,6 +60,12 @@ data class CameraSettings(
     val showLevel: Boolean = false,
     /** Whether each shot (without flash) takes [BURST_FRAMES] raws and merges them into one: see [BurstMode]. */
     val burstMode: BurstMode = BurstMode.AUTO,
+    /** Seconds the shutter waits before shooting, so the phone can settle on a tripod: 0 (off), 2, 5 or 10 ([SELF_TIMERS]). */
+    val selfTimer: Int = 0,
+    /** Long exposure: seconds of frames stacked into each photo, one of [LONG_EXPOSURES], or 0 for an ordinary shot. */
+    val longExposure: Int = 0,
+    /** A long exposure keeps the brightest value of every frame (light and star trails) instead of the average (smooth water). */
+    val longExposureLighten: Boolean = false,
     /** Play the camera shutter click on each shot. Where the law requires it, Android plays it regardless (ShutterSound). */
     val shutterSound: Boolean = false,
     /** Save where each photo was taken (GPS tags in the JPEG and DNG). Needs location permission, asked when turned on. */
@@ -164,7 +170,20 @@ data class CameraSettings(
     /** Raws per shot: [BURST_FRAMES] when the mode merges (for AUTO: when [lowLight]), else 1. */
     fun burstFrames(lowLight: Boolean): Int = if (burstMode.merges(lowLight)) BURST_FRAMES else 1
 
+    /** Self-timer and long exposure are experimental: they do nothing (and their buttons hide) unless [experimental] is on. */
+    val activeSelfTimer: Int get() = if (experimental) selfTimer else 0
+
+    /** The long exposure to take, or null when the mode is off. */
+    val longExposureSpec: app.rawboy.camera.capture.LongExposure?
+        get() = if (experimental && longExposure > 0) app.rawboy.camera.capture.LongExposure(longExposure, longExposureLighten) else null
+
     companion object {
+        /** Self-timer choices in seconds; the button cycles through them. */
+        val SELF_TIMERS = listOf(0, 2, 5, 10)
+
+        /** Long exposure lengths in seconds (0 = off); the button cycles through them. */
+        val LONG_EXPOSURES = listOf(0, 5, 10, 30, 60)
+
         const val MIN_QUALITY = 70
 
         /**
@@ -249,6 +268,9 @@ object CameraSettingsStore {
             showLevel = p.getBoolean("showLevel", d.showLevel),
             showZoomControl = p.getBoolean("showZoomControl", d.showZoomControl),
             burstMode = runCatching { BurstMode.valueOf(p.getString("burstMode", null)!!) }.getOrDefault(d.burstMode),
+            selfTimer = p.getInt("selfTimer", d.selfTimer).takeIf { it in CameraSettings.SELF_TIMERS } ?: d.selfTimer,
+            longExposure = p.getInt("longExposure", d.longExposure).takeIf { it in CameraSettings.LONG_EXPOSURES } ?: d.longExposure,
+            longExposureLighten = p.getBoolean("longExposureLighten", d.longExposureLighten),
             shutterSound = p.getBoolean("shutterSound", d.shutterSound),
             geotag = p.getBoolean("geotag", d.geotag),
             hdrGainMap = p.getBoolean("hdrGainMap", d.hdrGainMap),
@@ -312,6 +334,9 @@ object CameraSettingsStore {
             .putBoolean("showLevel", s.showLevel)
             .putBoolean("showZoomControl", s.showZoomControl)
             .putString("burstMode", s.burstMode.name)
+            .putInt("selfTimer", s.selfTimer)
+            .putInt("longExposure", s.longExposure)
+            .putBoolean("longExposureLighten", s.longExposureLighten)
             .putBoolean("shutterSound", s.shutterSound)
             .putBoolean("geotag", s.geotag)
             .putBoolean("hdrGainMap", s.hdrGainMap)
