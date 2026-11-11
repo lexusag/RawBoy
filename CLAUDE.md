@@ -291,6 +291,16 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   generated TIFF/CR3/RAF files (no real raws needed).
   Shared native pieces: `decode.cpp` (decoder order), `image_ops.cpp` (downsample, copyTile), `band_ops.h`,
   `jpegli_settings.h`, `dng_sdk.cmake` (platform define is a parameter: `qAndroid=1` / `qWeb=1`).
+- **Lensfun** (web Pro, 2026-11-11; Lens tab, `ui/pro/LensfunPanel.tsx`/`LensfunStore.ts`, `engine/lens/Lensfun.ts`/`LensfunData.ts`): the lens database
+  (CC BY-SA 3.0; the library is LGPL and **not used**: never copy its code) converted by `tools/lensfun/convert.mjs` into
+  `web/public/lensfun/` (`index.json` + `calib-<xml file>.json`, fetched lazily, nothing at start-up; licence and upstream commit in its
+  `README.txt`, the notices have it too). `lensfunCorrection` puts ptlens/poly3/poly5 distortion, linear/poly3 TCA and "pa"
+  vignetting (rescaled to the photo's sensor and real focal length like Lensfun's `rescale_polynomial_coefficients`, calibration
+  set by its crop rule, linear interpolation over focal length, IDW over focal/aperture/distance for vignetting) into a
+  `Warp` (3 planes with TCA; u² weighted even-polynomial fit, error ≤ ~1 px at a 24 MP corner) and `RadialVignette`, which
+  `PhotoSession.setLensfun` swaps into `LensInfo` (`withLensfun`, keeps the shading and the fisheye circle): no shader change.
+  Generic lenses are the same data for one focal length; fisheye types only drive the existing Fisheye slider (equidistant).
+  Not in presets/edits; Android/iOS not ported. Update the data by re-running the converter on a newer Lensfun checkout.
 - **RawBoy Packer** (2026-11-01, web only; `docs/packer.md`): `web/packer.html` + `src/packer/` (`PackerApp`, `PackerStore`:
   one `worker/packer.worker.ts` per file at once, each its own rawboy-full instance; `settings.ts`: presets, the live
   summary and the "Opens in" table, numbers measured on the owner's files) → wasm `packInspect`/`pack` →

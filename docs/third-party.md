@@ -6,6 +6,11 @@ Every component's copyright notice and licence is in [licenses/THIRD_PARTY_NOTIC
 which the apps (overflow menu, or Camera's Settings → *Open-source licences*) and RawBoy Web (**Licences** in the help) show.
 Update it when a dependency is added or upgraded.
 
+- [Lensfun](https://lensfun.github.io) lens database (CC BY-SA 3.0; its library code is LGPL-3.0 and **not used**): RawBoy Web's
+  Lens tab can correct distortion, chromatic aberration and vignetting from it. `web/public/lensfun/` holds a compact JSON
+  conversion of the database made by `tools/lensfun/convert.mjs` (licence, upstream commit and our changes in its
+  `README.txt`); the data stays CC BY-SA 3.0, separate from the PolyForm-licensed code, which re-implements the published
+  models in `web/src/engine/lens/Lensfun.ts`. Update the data by re-running the converter on a newer checkout.
 - [spektrafilm](https://github.com/andreavolpato/spektrafilm) by Andrea Volpato (its code is GPLv3; its profiles and
   LUTs are CC BY-SA 4.0, [SPEKTRAFILM_LICENSE.txt](../luts/spektrafilm/SPEKTRAFILM_LICENSE.txt)): the film and print
   LUTs of Camera's and Auto's Film modes. The LUTs in `luts/spektrafilm/` are spektrafilm's own bake

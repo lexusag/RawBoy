@@ -52,6 +52,24 @@ export class LensInfo {
    */
   fisheyeCircle: FisheyeCircle | null = null;
 
+  /**
+   * This lens info with the profile from the Lensfun database in place of the file's distortion/CA warp and vignette
+   * (kept where the database has none). The file's shading gain maps stay (they are already applied while decoding).
+   * [label] describes it in the Lens tab. Keeps the detected fisheye circle.
+   */
+  withLensfun(warp: Warp | null, vignette: RadialVignette | null, label: string): LensInfo {
+    const info = new LensInfo(
+      this.lensName, this.width, this.height, this.sensorWidth, this.sensorHeight, this.orientation,
+      warp ?? this.warp, vignette ?? this.vignette, this.shading, this.gainMapsApplied,
+    );
+    info.fisheyeCircle = this.fisheyeCircle;
+    info.lensfunLabel = label;
+    return info;
+  }
+
+  /** Set when the warp/vignette come from the Lensfun database (see [withLensfun]). */
+  lensfunLabel: string | null = null;
+
   get hasProfile(): boolean {
     return this.warp != null || this.vignette != null || this.shading != null;
   }

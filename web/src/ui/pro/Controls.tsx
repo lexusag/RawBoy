@@ -21,6 +21,8 @@ import {
 } from '../common/ParamSlider';
 import { useTabScroll } from '../common/useTabScroll';
 import { CurvesPanel } from './CurvesPanel';
+import { LensfunPanel } from './LensfunPanel';
+import type { LensfunStore } from './LensfunStore';
 import { CONTROLS_TABS as TABS, type ControlsTab as Tab } from './ProStore';
 
 interface Props {
@@ -35,6 +37,7 @@ interface Props {
   onSelectFilm: (id: string) => void;
   onStepFilm: (delta: number) => void;
   lens: LensInfo;
+  lensfun: LensfunStore;
   skin: SkinState;
   blemish: BlemishState;
   /** Portrait retouch: its map is being made / there is one (none on a ready mask = no face to size it by). */
@@ -57,7 +60,7 @@ interface Props {
 /** The editor's tabs Light, Color, Detail, LUTs, Lens (port of app-pro's Controls.kt). */
 export function ControlsPanel({
   params, defaults, onChange, lutLoading, onSelectLut, filmLoading, onToneMapper, onFilm, onSelectFilm, onStepFilm,
-  lens, skin, blemish, retouch, pickingWhite, onPickWhite, autoWb, onAutoWb, onResetWb, onSaveLensPreset, chosenTab, onTab: setTab,
+  lens, lensfun, skin, blemish, retouch, pickingWhite, onPickWhite, autoWb, onAutoWb, onResetWb, onSaveLensPreset, chosenTab, onTab: setTab,
 }: Props) {
   // Film replaces the tone mapper and the user LUT (kept, but not rendered), so the LUTs tab hides while Film is on.
   const filmOn = params.film != null;
@@ -292,9 +295,13 @@ export function ControlsPanel({
           <>
             <SectionLabel>Lens profile</SectionLabel>
             <div>{lens.lensName.trim() || 'Unknown lens'}</div>
-            <Note>{lens.profileSummary ? `Embedded in file: ${lens.profileSummary}` : 'No lens correction data in this file'}</Note>
+            <Note>
+              {lens.lensfunLabel
+                ? `Lensfun: ${lens.lensfunLabel}`
+                : lens.profileSummary ? `Embedded in file: ${lens.profileSummary}` : 'No lens correction data in this file'}
+            </Note>
             <label className="switch-row">
-              <span>Use embedded profile</span>
+              <span>{lens.lensfunLabel ? 'Use Lensfun / embedded profile' : 'Use embedded profile'}</span>
               <input
                 type="checkbox"
                 checked={params.lensProfile && lens.hasProfile}
@@ -302,6 +309,7 @@ export function ControlsPanel({
                 onChange={(e) => onChange({ ...params, lensProfile: e.target.checked })}
               />
             </label>
+            <LensfunPanel store={lensfun} params={params} onChange={onChange} hasFileProfile={lens.lensfunLabel != null && lens.profileSummary != null && lens.profileSummary !== ''} />
             <SectionLabel>Manual</SectionLabel>
             {slider('Distortion', 'lensDistortion', -100, 100)}
             {slider('Horizontal distortion', 'lensAnamorphic', -100, 100)}

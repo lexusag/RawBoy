@@ -2147,6 +2147,22 @@ freely, subject to the following restrictions:
 3. This notice may not be removed or altered from any source distribution.
 
 ================================================================================
+Lensfun lens database (RawBoy Web: Lens tab, Lensfun profiles)
+================================================================================
+
+Lens distortion, lateral chromatic aberration and vignetting profiles, and the
+camera and lens lists, come from the Lensfun lens database
+(https://lensfun.github.io), copyright the Lensfun project and its
+contributors, licensed under the Creative Commons Attribution-ShareAlike 3.0
+licence (https://creativecommons.org/licenses/by-sa/3.0/; the full text is
+served with the data as lensfun/LICENSE-CC-BY-SA-3.0.txt).
+
+The data is a reformatted copy (XML converted to compact JSON, numbers
+unchanged; see lensfun/README.txt) and stays CC BY-SA 3.0. Lensfun's code
+(LGPL-3.0) is not used: the calibration models are re-implemented in
+RawBoy's own code.
+
+================================================================================
 spektrafilm film and print LUTs (Film looks: negative and print)
 ================================================================================
 
