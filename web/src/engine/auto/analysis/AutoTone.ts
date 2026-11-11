@@ -88,8 +88,21 @@ export function measuredNoiseSettings(noise: NoiseLevel, exposure: number): [num
   return [round(luma), color, round(sharpening)];
 }
 
-/** [denoise, colour denoise = null: follows denoise, sharpening] by ISO, interpolated in stops between measured points; ISO 0 = unknown. */
-function noiseSettings(iso: number): [number, number | null, number] {
+/**
+ * ISO from which the table's luma denoise falls below its colour denoise (2026-11-11: at high ISO luma used to equal
+ * colour, and the owner always pulled luma down to about half by hand), the ISO from which it is HIGH_ISO_LUMA_SHARE
+ * of it, and that share. In between the share falls in stops. Keep in step with AutoTone.kt/.swift.
+ */
+const LUMA_SPLIT_FROM_ISO = 1600;
+const LUMA_SPLIT_FULL_ISO = 6400;
+const HIGH_ISO_LUMA_SHARE = 0.5;
+
+/**
+ * [denoise, colour denoise, sharpening] by ISO, interpolated in stops between measured points; ISO 0 = unknown. Colour
+ * denoise is null (follows denoise) up to LUMA_SPLIT_FROM_ISO; above it colour keeps the table's value and luma drops
+ * towards HIGH_ISO_LUMA_SHARE of it.
+ */
+export function noiseSettings(iso: number): [number, number | null, number] {
   if (iso <= 0) return [0, null, 15];
   const points = [
     [400, 0, 15],
@@ -99,14 +112,22 @@ function noiseSettings(iso: number): [number, number | null, number] {
   ];
   const first = points[0];
   const last = points[points.length - 1];
-  if (iso <= first[0]) return [first[1], null, first[2]];
-  if (iso >= last[0]) return [last[1], null, last[2]];
-  let i = 0;
-  for (let k = 0; k < points.length; k++) if (points[k][0] <= iso) i = k;
-  const a = points[i];
-  const b = points[Math.min(i + 1, points.length - 1)];
-  const t = clamp(Math.log2(iso / a[0]) / Math.log2(b[0] / a[0]), 0, 1);
-  return [round(a[1] + (b[1] - a[1]) * t), null, round(a[2] + (b[2] - a[2]) * t)];
+  let value: number;
+  let sharpening: number;
+  if (iso <= first[0]) [, value, sharpening] = first;
+  else if (iso >= last[0]) [, value, sharpening] = last;
+  else {
+    let i = 0;
+    for (let k = 0; k < points.length; k++) if (points[k][0] <= iso) i = k;
+    const a = points[i];
+    const b = points[Math.min(i + 1, points.length - 1)];
+    const t = clamp(Math.log2(iso / a[0]) / Math.log2(b[0] / a[0]), 0, 1);
+    value = round(a[1] + (b[1] - a[1]) * t);
+    sharpening = round(a[2] + (b[2] - a[2]) * t);
+  }
+  if (iso <= LUMA_SPLIT_FROM_ISO) return [value, null, sharpening];
+  const s = clamp(Math.log2(iso / LUMA_SPLIT_FROM_ISO) / Math.log2(LUMA_SPLIT_FULL_ISO / LUMA_SPLIT_FROM_ISO), 0, 1);
+  return [round(value * (1 + (HIGH_ISO_LUMA_SHARE - 1) * s)), value, sharpening];
 }
 
 /**

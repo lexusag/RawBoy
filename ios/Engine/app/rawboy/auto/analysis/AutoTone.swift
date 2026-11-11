@@ -85,7 +85,8 @@ public enum AutoTone {
      */
     public static func develop(_ stats: SceneStats, asShot: DevelopParams, noiseIsoScale: Float = 1,
                                cameraMetered: Bool = false, noise: NoiseLevel = .none,
-                               phoneAe: Bool = false, captureEv: Float = 0) -> DevelopParams {
+                               phoneAe: Bool = false, captureEv: Float = 0,
+                               splitLuma: Bool = true) -> DevelopParams {
         if asShot.displaySource {
             var p = asShot
             p.grain = baseGrain
@@ -106,7 +107,7 @@ public enum AutoTone {
         let contrast = (baseContrast + (9 - stats.dynamicRange) * 4).clamped(0, 30)
 
         let (denoise, colorDenoise, sharpening) = noise.measured
-            ? measuredNoiseSettings(noise, exposure: exposure) : noiseSettings(stats.iso * noiseIsoScale)
+            ? measuredNoiseSettings(noise, exposure: exposure) : noiseSettings(stats.iso * noiseIsoScale, splitLuma: splitLuma)
         var p = asShot
         p.exposure = Float((exposure * 20).roundToInt()) / 20  // 0.05 EV steps, as the slider shows
         p.highlights = Float(highlights.roundToInt())
@@ -190,18 +191,37 @@ public enum AutoTone {
         return (Float(luma.roundToInt()), color, Float(sharpening.roundToInt()))
     }
 
-    /** (denoise, colour denoise = nil: follows denoise, sharpening) by ISO, interpolated between measured points; ISO 0 = unknown. */
-    private static func noiseSettings(_ iso: Float) -> (Float, Float?, Float) {
+    /// ISO from which the table's luma denoise falls below its colour denoise (2026-11-11: at high ISO luma used to equal
+    /// colour, and the owner always pulled luma down to about half by hand), the ISO from which it is `highIsoLumaShare`
+    /// of it, and that share. In between the share falls in stops.
+    static let lumaSplitFromIso: Float = 1600
+    static let lumaSplitFullIso: Float = 6400
+    static let highIsoLumaShare: Float = 0.5
+
+    /**
+     * (denoise, colour denoise, sharpening) by ISO, interpolated between measured points; ISO 0 = unknown. Colour denoise
+     * is nil (follows denoise) up to `lumaSplitFromIso` or without `splitLuma`; above it colour keeps the table's value
+     * and luma drops towards `highIsoLumaShare` of it.
+     */
+    static func noiseSettings(_ iso: Float, splitLuma: Bool = true) -> (Float, Float?, Float) {
         if iso <= 0 { return (0, nil, 15) }
         let points: [[Float]] = [[400, 0, 15], [1600, 20, 15], [6400, 45, 10], [25600, 65, 5]]
-        if iso <= points.first![0] { return (points.first![1], nil, points.first![2]) }
-        if iso >= points.last![0] { return (points.last![1], nil, points.last![2]) }
-        let i = points.lastIndex { $0[0] <= iso }!
-        let a = points[i]
-        let b = points[min(i + 1, points.count - 1)]
-        // Interpolate in stops, as noise grows per stop.
-        let t = (log2f(iso / a[0]) / log2f(b[0] / a[0])).clamped(0, 1)
-        return (Float((a[1] + (b[1] - a[1]) * t).roundToInt()), nil, Float((a[2] + (b[2] - a[2]) * t).roundToInt()))
+        let value: Float
+        let sharpening: Float
+        if iso <= points.first![0] { value = points.first![1]; sharpening = points.first![2] }
+        else if iso >= points.last![0] { value = points.last![1]; sharpening = points.last![2] }
+        else {
+            let i = points.lastIndex { $0[0] <= iso }!
+            let a = points[i]
+            let b = points[min(i + 1, points.count - 1)]
+            // Interpolate in stops, as noise grows per stop.
+            let t = (log2f(iso / a[0]) / log2f(b[0] / a[0])).clamped(0, 1)
+            value = Float((a[1] + (b[1] - a[1]) * t).roundToInt())
+            sharpening = Float((a[2] + (b[2] - a[2]) * t).roundToInt())
+        }
+        if !splitLuma || iso <= lumaSplitFromIso { return (value, nil, sharpening) }
+        let s = (log2f(iso / lumaSplitFromIso) / log2f(lumaSplitFullIso / lumaSplitFromIso)).clamped(0, 1)
+        return (Float((value * (1 + (highIsoLumaShare - 1) * s)).roundToInt()), value, sharpening)
     }
 }
 

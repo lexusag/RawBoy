@@ -39,10 +39,11 @@ public enum AutoAnalysis {
      * [detectSkin] false skips skin detection (face metering, skin retouch): the camera saw no face.
      * [meter]: see SceneAnalyzer.analyze. [phoneAe]: RawBoy Camera's raw, exposed by the phone's auto exposure (see
      * AutoTone.exposure); [captureEv]: the AE compensation it was shot with (see AutoTone.exposure).
+     * [splitLuma]: see AutoTone.noiseSettings (Camera turns it off).
      */
     public static func analyze(_ image: RawImage, label: String, noiseIsoScale: Float = 1, fallbackIso: Float = 0,
                                detectSkin: Bool = true, meter: MeterArea? = nil, phoneAe: Bool = false,
-                               captureEv: Float = 0) -> Analysis {
+                               captureEv: Float = 0, splitLuma: Bool = true) -> Analysis {
         let start = Date()
         let (base, bloom) = copiesOf(image)
         log.notice("small copies: \(Int(Date().timeIntervalSince(start) * 1000)) ms")
@@ -50,7 +51,7 @@ public enum AutoAnalysis {
         if info.iso <= 0 { info = Info(lens: info.lens, iso: fallbackIso, defaults: info.defaults) }
         info.phoneAe = phoneAe
         info.captureEv = captureEv
-        return analyze(base, bloom, info, label, noiseIsoScale, detectSkin, meter)
+        return analyze(base, bloom, info, label, noiseIsoScale, detectSkin, meter, splitLuma)
     }
 
     /**
@@ -85,10 +86,11 @@ public enum AutoAnalysis {
     private static func develop(_ base: PreviewImage, _ skin: SkinMask?, _ iso: Float, _ defaults: DevelopParams,
                                 _ noiseIsoScale: Float, _ cameraMetered: Bool,
                                 _ meter: MeterArea?, _ noise: NoiseLevel = .none,
-                                _ phoneAe: Bool = false, _ captureEv: Float = 0) -> (SceneStats, DevelopParams) {
+                                _ phoneAe: Bool = false, _ captureEv: Float = 0,
+                                _ splitLuma: Bool = true) -> (SceneStats, DevelopParams) {
         let stats = SceneAnalyzer.analyze(base, skin: skin, iso: iso, meter: meter)
         return (stats, AutoTone.develop(stats, asShot: defaults, noiseIsoScale: noiseIsoScale, cameraMetered: cameraMetered,
-                                        noise: noise, phoneAe: phoneAe, captureEv: captureEv))
+                                        noise: noise, phoneAe: phoneAe, captureEv: captureEv, splitLuma: splitLuma))
     }
 
     private static func copiesOf(_ img: RawImage) -> (PreviewImage, BloomSources) {
@@ -99,14 +101,14 @@ public enum AutoAnalysis {
 
     private static func analyze(_ base: PreviewImage, _ bloom: BloomSources, _ info: Info, _ label: String,
                                 _ noiseIsoScale: Float = 1, _ detectSkin: Bool = true,
-                                _ meter: MeterArea? = nil) -> Analysis {
+                                _ meter: MeterArea? = nil, _ splitLuma: Bool = true) -> Analysis {
         let start = Date()
         // Segmentation can fail; the photo is then just treated as having no face.
         let skin = detectSkin ? try? SkinSegmenter.segment(base, fullWidth: base.fullWidth, fullHeight: base.fullHeight) : nil
         log.notice("skin detection: \(Int(Date().timeIntervalSince(start) * 1000)) ms")
         let defaults = info.defaults
         let (stats, auto) = develop(base, skin, info.iso, defaults, noiseIsoScale, info.cameraMetered, meter, info.noise,
-                                    info.phoneAe, info.captureEv)
+                                    info.phoneAe, info.captureEv, splitLuma)
         log.notice("""
             analysis \(label): key=\(stats.key) p1=\(stats.p1) p5=\(stats.p5) p50=\(stats.p50) p98=\(stats.p98) \
             p99=\(stats.p99) clipped=\(stats.clipped) chroma=\(stats.chroma) face=\(stats.faceArea) \

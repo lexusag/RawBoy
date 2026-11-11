@@ -100,7 +100,8 @@ object AutoTone {
      * A display source (JPEG, HEIC: [DevelopParams.displaySource]) is already exposed, toned, denoised and sharpened
      * by the camera, and its neutral render is the file itself: it gets only the base grain.
      * [phoneAe]: RawBoy Camera's raw, exposed by the phone's AE (see [exposure]). [captureEv]: AE compensation the raw
-     * was shot with (Camera's Brightness, see [exposure]); 0 = none.
+     * was shot with (Camera's Brightness, see [exposure]); 0 = none. [splitLuma]: the ISO table's luma is weaker than its
+     * colour at high ISO (see [noiseSettings]); Camera turns it off, its luma was tuned on the table as it was.
      */
     fun develop(
         stats: SceneStats,
@@ -110,6 +111,7 @@ object AutoTone {
         noise: NoiseLevel = NoiseLevel.NONE,
         phoneAe: Boolean = false,
         captureEv: Float = 0f,
+        splitLuma: Boolean = true,
     ): DevelopParams {
         if (asShot.displaySource) return asShot.copy(grain = BASE_GRAIN)
         val exposure = exposure(stats, cameraMetered, phoneAe, captureEv)
@@ -127,7 +129,7 @@ object AutoTone {
         val contrast = (BASE_CONTRAST + (9f - stats.dynamicRange) * 4f).coerceIn(0f, 30f)
 
         val (denoise, colorDenoise, sharpening) =
-            if (noise.measured) measuredNoiseSettings(noise, exposure) else noiseSettings(stats.iso * noiseIsoScale)
+            if (noise.measured) measuredNoiseSettings(noise, exposure) else noiseSettings(stats.iso * noiseIsoScale, splitLuma)
         return asShot.copy(
             exposure = (exposure * 20f).roundToInt() / 20f, // 0.05 EV steps, as the slider shows
             highlights = highlights.roundToInt().toFloat(),
@@ -211,8 +213,21 @@ object AutoTone {
         return Triple(luma.roundToInt().toFloat(), color, sharpening)
     }
 
-    /** (denoise, colour denoise = null: follows denoise, sharpening) by ISO, interpolated between measured points; ISO 0 = unknown. */
-    private fun noiseSettings(iso: Float): Triple<Float, Float?, Float> {
+    /**
+     * ISO from which the table's luma denoise falls below its colour denoise (2026-11-11: at high ISO luma used to equal
+     * colour, and the owner always pulled luma down to about half by hand), and the ISO from which it is [HIGH_ISO_LUMA_SHARE].
+     * In between the share falls in stops.
+     */
+    private const val LUMA_SPLIT_FROM_ISO = 1600f
+    private const val LUMA_SPLIT_FULL_ISO = 6400f
+    private const val HIGH_ISO_LUMA_SHARE = 0.5f
+
+    /**
+     * (denoise, colour denoise, sharpening) by ISO, interpolated between measured points; ISO 0 = unknown. Colour denoise
+     * is null (follows denoise) up to [LUMA_SPLIT_FROM_ISO] or without [splitLuma]; above it colour keeps the table's
+     * value and luma drops to [HIGH_ISO_LUMA_SHARE] of it by [LUMA_SPLIT_FULL_ISO].
+     */
+    internal fun noiseSettings(iso: Float, splitLuma: Boolean = true): Triple<Float, Float?, Float> {
         if (iso <= 0f) return Triple(0f, null, 15f)
         val points = arrayOf(
             floatArrayOf(400f, 0f, 15f),
@@ -220,14 +235,23 @@ object AutoTone {
             floatArrayOf(6400f, 45f, 10f),
             floatArrayOf(25600f, 65f, 5f),
         )
-        if (iso <= points.first()[0]) return Triple(points.first()[1], null, points.first()[2])
-        if (iso >= points.last()[0]) return Triple(points.last()[1], null, points.last()[2])
-        val i = points.indexOfLast { it[0] <= iso }
-        val a = points[i]
-        val b = points[min(i + 1, points.lastIndex)]
-        // Interpolate in stops, as noise grows per stop.
-        val t = (log2(iso / a[0]) / log2(b[0] / a[0])).coerceIn(0f, 1f)
-        return Triple((a[1] + (b[1] - a[1]) * t).roundToInt().toFloat(), null, (a[2] + (b[2] - a[2]) * t).roundToInt().toFloat())
+        val value: Float
+        val sharpening: Float
+        if (iso <= points.first()[0]) { value = points.first()[1]; sharpening = points.first()[2] }
+        else if (iso >= points.last()[0]) { value = points.last()[1]; sharpening = points.last()[2] }
+        else {
+            val i = points.indexOfLast { it[0] <= iso }
+            val a = points[i]
+            val b = points[min(i + 1, points.lastIndex)]
+            // Interpolate in stops, as noise grows per stop.
+            val t = (log2(iso / a[0]) / log2(b[0] / a[0])).coerceIn(0f, 1f)
+            value = (a[1] + (b[1] - a[1]) * t).roundToInt().toFloat()
+            sharpening = (a[2] + (b[2] - a[2]) * t).roundToInt().toFloat()
+        }
+        if (!splitLuma || iso <= LUMA_SPLIT_FROM_ISO) return Triple(value, null, sharpening)
+        val s = ((log2(iso / LUMA_SPLIT_FROM_ISO) / log2(LUMA_SPLIT_FULL_ISO / LUMA_SPLIT_FROM_ISO))).coerceIn(0f, 1f)
+        val share = 1f + (HIGH_ISO_LUMA_SHARE - 1f) * s
+        return Triple((value * share).roundToInt().toFloat(), value, sharpening)
     }
 
     private fun exp2(v: Float): Float = Math.pow(2.0, v.toDouble()).toFloat()

@@ -460,8 +460,9 @@ describe('Auto denoise on "As is" photos', () => {
     expect(store.state.message).toBe('Auto denoise on 1 photo');
     const p = store.state.photos[0];
     expect(p.autoDenoise).toBe(true);
-    // ISO 3200 sits halfway (in stops) between the table's 1600 (20, sharpening 15) and 6400 (45, 10).
-    expect(paramsOf(p)).toMatchObject({ denoise: 33, sharpening: 13, contrast: 20, grain: 30 });
+    // ISO 3200 sits halfway (in stops) between the table's 1600 (20, sharpening 15) and 6400 (45, 10): colour 33; luma
+    // is 0.75 of it (the share falls from 1 at ISO 1600 to 0.5 at 6400).
+    expect(paramsOf(p)).toMatchObject({ denoise: 25, colorDenoise: 33, sharpening: 13, contrast: 20, grain: 30 });
     expect(decodeAuto(encodeAuto(p))!.autoDenoise).toBe(true);
     store.autoDenoiseAll();
     expect(store.state.message).toBe('Every photo already has its auto denoise');
