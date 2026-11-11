@@ -991,15 +991,14 @@ private fun VideoFrameMask(target: Float) {
     }
 }
 
-/** Photo / video switch in the top bar: "VIDEO", lit while video mode is on. */
+/** Photo / video switch in the top bar: a movie camera, lit while video mode is on. */
 @Composable
 private fun VideoModeButton(on: Boolean, enabled: Boolean, onClick: () -> Unit) {
     IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.semantics { stateDescription = if (on) "On" else "Off" }) {
-        Text(
-            "VIDEO",
-            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-            color = if (on) MaterialTheme.colorScheme.primary else LocalContentColor.current.copy(alpha = 0.6f),
-            modifier = Modifier.semantics { contentDescription = "Video mode" },
+        Icon(
+            VideocamIcon,
+            contentDescription = "Video mode",
+            tint = if (on) MaterialTheme.colorScheme.primary else LocalContentColor.current.copy(alpha = 0.6f),
         )
     }
 }
@@ -1494,6 +1493,11 @@ private val FilmIcon: ImageVector by lazy {
         "Film",
         "M18,3v2h-2L16,3L8,3v2L6,5L6,3L4,3v18h2v-2h2v2h8v-2h2v2h2L20,3h-2zM8,17L6,17v-2h2v2zM8,13L6,13v-2h2v2zM8,9L6,9L6,7h2v2zM18,17h-2v-2h2v2zM18,13h-2v-2h2v2zM18,9h-2L16,7h2v2z",
     )
+}
+
+/** Material "videocam" icon (Apache 2.0): a movie camera, the Video mode button in the top bar. */
+private val VideocamIcon: ImageVector by lazy {
+    icon("Videocam", "M17,10.5V7c0,-0.55 -0.45,-1 -1,-1H4c-0.55,0 -1,0.45 -1,1v10c0,0.55 0.45,1 1,1h12c0.55,0 1,-0.45 1,-1v-3.5l4,4v-11l-4,4z")
 }
 
 /** Material "flash_on" icon (Apache 2.0), built here because it isn't in material-icons-core. */
