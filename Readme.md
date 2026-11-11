@@ -54,7 +54,7 @@ Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and
 | `third_party/` | Where the Adobe DNG SDK goes for builds (see [third_party/README.md](third_party/README.md)). |
 | `licenses/` | Third-party notices shipped with the apps. |
 | `gradle/`, `*.gradle.kts`, `gradlew` | The Gradle build for the Android modules. |
-| `.github/workflows/` | CI: `release.yml` (release APKs of all three apps, and the web deploy) and `play.yml` (run by hand: signed bundles uploaded to Google Play). |
+| `.github/workflows/` | CI: `ci.yml` (pull request checks: web build and tests, Android compile; the single required job is `pr-check`), `release.yml` (release APKs of all three apps, and the web deploy) and `play.yml` (run by hand: signed bundles uploaded to Google Play). |
 
 Root files: [CHANGELOG.md](CHANGELOG.md), [CONTRIBUTING.md](CONTRIBUTING.md), [LICENSE.md](LICENSE.md),
 [UI.md](UI.md) (UI backlog) and [CLAUDE.md](CLAUDE.md) (notes on how the code fits together).

@@ -1,0 +1,142 @@
+# Pull request and main checks in one workflow, so a single required job ("pr-check") can gate merging.
+#
+# Path filtering is done by the `changes` job, not by `on.<event>.paths`: a workflow skipped by a workflow-level
+# path filter never reports its checks, and a required check that never reports blocks the merge forever. Jobs
+# skipped by `if:` report as skipped, and `pr-check` (always runs) turns "passed or legitimately skipped" into one
+# green check.
+#
+# Branch protection / ruleset: require ONLY "pr-check". Add new jobs to `pr-check`'s `needs`.
+#
+# Android: fast compile check for pull requests: Kotlin only, no NDK/CMake, no DNG SDK, no lint, no R8, no APK
+# packaging. It catches what broke #276 (duplicate declarations, missing imports) in a few minutes instead of a full
+# assembleDebug. The native build and the APKs stay in release.yml / play.yml.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      web: ${{ steps.filter.outputs.web }}
+      android: ${{ steps.filter.outputs.android }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            web:
+              - 'web/**'
+              - 'shaders/**'
+              - 'luts/**'
+              - 'engine/src/main/assets/models/**'
+              - 'licenses/**'
+              - '.github/workflows/ci.yml'
+            android:
+              - 'engine/**'
+              - 'app-pro/**'
+              - 'app-auto/**'
+              - 'app-camera/**'
+              - 'shaders/**'
+              - 'luts/**'
+              - 'licenses/**'
+              - 'gradle/**'
+              - 'build.gradle.kts'
+              - 'settings.gradle.kts'
+              - 'gradle.properties'
+              - '.github/workflows/ci.yml'
+
+  web:
+    name: Web Build & Test
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Build web application
+        run: npm run build
+
+  android:
+    name: Android Kotlin compile
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.android == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      # ubuntu-latest already has the SDK platforms; this only accepts licences and adds anything missing.
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+
+      # Gradle caches are written on main only; pull requests restore them read-only.
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      # Compile-only tasks do not run CMake, so the NDK, CMake and third_party/dng_sdk are not needed.
+      # The unit-test sources are compiled too (they are not run: that is for a later, slower job).
+      - name: Compile Kotlin (all modules, with unit-test sources)
+        run: >
+          ./gradlew --parallel --configuration-cache --console=plain
+          :engine:compileDebugKotlin :app-pro:compileDebugKotlin :app-auto:compileDebugKotlin :app-camera:compileDebugKotlin
+          :engine:compileDebugUnitTestKotlin :app-camera:compileDebugUnitTestKotlin
+
+  # The one required check. Passes when every needed job succeeded or was skipped (nothing relevant changed);
+  # fails when any failed or was cancelled. `if: always()` makes it run (and report) even when a dependency is skipped.
+  pr-check:
+    name: pr-check
+    needs: [changes, web, android]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require all jobs to pass or be skipped
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          if echo "$RESULTS" | jq -e '[.[].result] | any(. != "success" and . != "skipped")' >/dev/null; then
+            echo "::error::A required job failed or was cancelled"
+            exit 1
+          fi
