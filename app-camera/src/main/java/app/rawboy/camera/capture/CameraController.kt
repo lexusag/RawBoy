@@ -70,7 +70,12 @@ enum class FlashMode {
 
 /** A captured still: the lens's capture result and, for a flash shot, the flash exposure used. */
 /** A long exposure ([CameraController.longExposureDng]): [seconds] of frames, stacked as a mean or, for trails, a per-sample maximum. */
-class LongExposure(val seconds: Int, val lighten: Boolean)
+class LongExposure(
+    val seconds: Int,
+    val lighten: Boolean,
+    /** The viewfinder's metered key (1 = sensor clip) at the preview's exposure, to lift a dark scene towards [LONG_EXPOSURE_KEY]; null = no lift. */
+    val key: Float? = null,
+)
 
 class Still(
     val result: CaptureResult,
@@ -1096,15 +1101,27 @@ class CameraController(context: Context) : AutoCloseable {
         val reader = rawReader ?: throw IOException("Camera not ready")
         val width = reader.width
         val height = reader.height
+        val manual = longExposureManual(inf, spec)
+        val manualExposure = manual != null
         val request = request(s, CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
             addTarget(reader.surface)
             addTarget(previewSurface ?: throw IOException("Camera not ready"))
             setCommon(inf)
             inf.stillFpsRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
             set(CaptureRequest.CONTROL_ENABLE_ZSL, false)
-            // The preview has converged by now: keep its exposure and colour for every frame (flicker otherwise).
+            // The preview has converged by now: keep its colour for every frame (flicker otherwise).
             set(CaptureRequest.CONTROL_AE_LOCK, true)
             set(CaptureRequest.CONTROL_AWB_LOCK, true)
+            // Exposure: AE tops out at 1/30 s or 1/15 s and a dark scene stays dark however long the stack runs, so
+            // each frame is exposed by hand, as long as LONG_EXPOSURE_FRAME_NS allows (ISO falls to match: the same
+            // picture with far less noise), and a dark scene is lifted to a normal key with the time AE refused.
+            manual?.let { (t, iso) ->
+                set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF)
+                setForLens(CaptureRequest.SENSOR_EXPOSURE_TIME, t)
+                setForLens(CaptureRequest.SENSOR_SENSITIVITY, iso)
+                setForLens(CaptureRequest.SENSOR_FRAME_DURATION, t)
+                setForLens(CaptureRequest.CONTROL_POST_RAW_SENSITIVITY_BOOST, 100)
+            }
             // Continuous AF hunts over a long exposure (dark scene, nothing changing): hold the lens where the preview
             // had it. A tap's focus lock is already AUTO from setCommon.
             if (focusPoint == null) {
@@ -1220,10 +1237,41 @@ class CameraController(context: Context) : AutoCloseable {
             }
             // Averaging N frames cuts noise about like merging N (see burstDng); a lighten stack keeps each frame's.
             val effective = if (spec.lighten) 1f else frames.toFloat().coerceIn(1f, 8f)
-            return Still(ref, null, effectiveFrames = effective, compensationEv = appliedCompensationEv(_frames.value), description = description)
+            return Still(ref, null, effectiveFrames = effective, compensationEv = if (manualExposure) compensationEv() else appliedCompensationEv(_frames.value), description = description)
         } finally {
             LongExposureNative.destroy(h)
         }
+    }
+
+    /**
+     * The (exposure ns, ISO) of one long-exposure frame, or null to leave it to AE (no preview reading yet). The
+     * exposure is the preview's whole gain (time x ISO x the post-raw boost, which a manual raw doesn't get) times
+     * Brightness's compensation and a lift of up to [LONG_EXPOSURE_MAX_LIFT_EV] that brings a dark scene to
+     * [LONG_EXPOSURE_KEY], spent as time first (up to [LONG_EXPOSURE_FRAME_NS], the sensor's limit) then as ISO.
+     */
+    private fun longExposureManual(inf: Info, spec: LongExposure): Pair<Long, Int>? {
+        val f = _frames.value ?: return null
+        val gain = f.exposureNs / 1e9f * f.iso * f.postRawBoost
+        if (gain <= 0f) return null
+        val isoRange = inf.characteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE) ?: return null
+        val timeRange = inf.characteristics.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE) ?: return null
+        val comp = compensationEv()
+        val lift = spec.key?.takeIf { it > 0f }?.let { key ->
+            kotlin.math.log2(LONG_EXPOSURE_KEY / (key * f.postRawBoost * 2f.pow(comp))).coerceIn(0f, LONG_EXPOSURE_MAX_LIFT_EV)
+        } ?: 0f
+        val target = gain * 2f.pow(comp + lift)
+        val tMax = min(LONG_EXPOSURE_FRAME_NS, timeRange.upper)
+        var t = tMax
+        var iso = target / (t / 1e9f)
+        if (iso < isoRange.lower) {
+            // Bright scene: a shorter frame at the lowest ISO.
+            t = (target / isoRange.lower * 1e9f).toLong().coerceIn(timeRange.lower, tMax)
+            iso = isoRange.lower.toFloat()
+        }
+        val exposure = t to iso.toInt().coerceIn(isoRange.lower, isoRange.upper)
+        Log.d(TAG, "long exposure frame: preview ${f.exposureNs / 1000} µs ISO ${f.iso.toInt()} boost ${f.postRawBoost}, comp $comp EV, lift $lift EV -> " +
+            "${exposure.first / 1000} µs ISO ${exposure.second}")
+        return exposure
     }
 
     /** A frame's exposure as the merge scales it: time x ISO, or null if the result doesn't say. */
@@ -1698,6 +1746,13 @@ class CameraController(context: Context) : AutoCloseable {
         private const val LONG_EXPOSURE_CHUNK = 3
         private const val LONG_EXPOSURE_QUEUE = 4
         private const val LONG_EXPOSURE_GRACE_MS = 5000L
+
+        /** Longest single frame of a long exposure: long enough to gather light, short enough that Stop answers within a second. */
+        private const val LONG_EXPOSURE_FRAME_NS = 500_000_000L
+
+        /** A dark scene is exposed up to this much (EV) brighter than the preview, towards the key AutoTone aims for. */
+        private const val LONG_EXPOSURE_MAX_LIFT_EV = 4f
+        private const val LONG_EXPOSURE_KEY = 0.06f
         private const val FOCUS_TIMEOUT_MS = 1500L
 
         /**

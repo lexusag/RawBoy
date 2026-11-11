@@ -1059,7 +1059,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         // The selfie camera: the screen's frame is the light, the shot itself is an ordinary one exposed by AE.
         val screenFlash = settings.flash != FlashMode.OFF && _screenFlashCamera.value
         // Flash and maximum-resolution shots are single frames (CameraController.captureDng).
-        val longExposure = settings.longExposureSpec.takeIf { !hiRes && !screenFlash && flash == FlashMode.OFF }
+        val longExposure = settings.longExposureSpec(live?.stats?.key).takeIf { !hiRes && !screenFlash && flash == FlashMode.OFF }
         val burstFrames = if (hiRes || screenFlash || longExposure != null) 1 else settings.burstFrames(lowLight.value)
         // A long exposure holds the shutter like a merging burst does (the stack and its DNG write).
         val burst = (burstFrames > 1 || longExposure != null) && flash == FlashMode.OFF
