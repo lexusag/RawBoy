@@ -112,6 +112,37 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
     setLooksArmed(false);
     setLooksAt(null);
   }, [geometryMode, masksMode, leaksMode, fxMode, presetsMode, autoWb, state.fileName]);
+  // Esc puts down the active tool (white picker, auto WB rectangle, Looks, Crop & rotate, Masks, Leaks, Light effects,
+  // Presets), one per press. Not while typing, over a dialog (they handle Esc themselves) or when something else
+  // already took the key.
+  const exportOpen = useRef(false);
+  const escState = useRef({ pickingWhite, autoWb, looksArmed, geometryMode, masksMode, leaksMode, fxMode, presetsMode });
+  escState.current = { pickingWhite, autoWb, looksArmed, geometryMode, masksMode, leaksMode, fxMode, presetsMode, showExportOpen };
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
+      if (!isTabShown('pro')) return;
+      const t = e.target;
+      if (t instanceof HTMLTextAreaElement || t instanceof HTMLSelectElement || (t instanceof HTMLInputElement && t.type !== 'range' && t.type !== 'checkbox')) return;
+      if (document.querySelector('[role="dialog"], [aria-modal="true"], dialog[open]')) return;
+      const k = escState.current;
+      if (exportOpen.current) return;
+      if (k.pickingWhite) setPickingWhite(false);
+      else if (k.autoWb) setAutoWb(false);
+      else if (k.looksArmed) {
+        setLooksArmed(false);
+        setLooksAt(null);
+      } else if (k.geometryMode) setGeometryMode(false);
+      else if (k.masksMode) setMasksMode(false);
+      else if (k.leaksMode) setLeaksMode(false);
+      else if (k.fxMode) setFxMode(false);
+      else if (k.presetsMode) setPresetsMode(false);
+      else return;
+      e.preventDefault();
+    };
+    window.addEventListener('keydown', down);
+    return () => window.removeEventListener('keydown', down);
+  }, []);
   const [maskTool, setMaskTool] = useState<MaskTool>('move');
   const [brush, setBrushState] = useState<BrushSettings>(loadBrush);
   const setBrush = (b: BrushSettings) => {
@@ -127,6 +158,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   const [selectedFx, setSelectedFx] = useState<string | null>(null);
   const [showMask, setShowMask] = useState(false);
   const [showExport, setShowExport] = useState(false);
+  exportOpen.current = showExport;
   // Crop shape lock (UI only; the crop itself is in the params). Portrait null = follow the frame.
   const [cropAspect, setCropAspect] = useState<CropAspect>('free');
   const [cropPortrait, setCropPortrait] = useState<boolean | null>(null);

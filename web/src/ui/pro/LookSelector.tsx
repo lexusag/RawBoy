@@ -19,9 +19,11 @@ import type { PhotoSession, SessionState } from '../../engine/session/PhotoSessi
  */
 
 /** Narrowest a stripe may be (CSS px) before the looks are split over pages. */
-const MIN_STRIPE = 88;
+const MIN_STRIPE = 176;
+/** Most looks on one page. */
+const MAX_PER_PAGE = 8;
 /** Widest and tallest the panel grows (CSS px). */
-const MAX_WIDTH = 1200;
+const MAX_WIDTH = 2400;
 const MAX_HEIGHT = 360;
 const MIN_HEIGHT = 140;
 /** Pointer travel (CSS px) before a press is a drag, not a click on a stripe. */
@@ -129,7 +131,7 @@ export function LookSelector({ session, state, params, defaults, frame, at, onPi
 
   const zoneW = visible ? Math.floor(Math.min(visible.w, MAX_WIDTH)) : 0;
   const zoneH = visible ? Math.floor(Math.max(Math.min(visible.h, MIN_HEIGHT), Math.min(visible.h * 0.6, MAX_HEIGHT))) : 0;
-  const perPage = Math.max(1, Math.min(items.length, Math.floor(zoneW / MIN_STRIPE)));
+  const perPage = Math.max(1, Math.min(items.length, MAX_PER_PAGE, Math.floor(zoneW / MIN_STRIPE)));
   const pages = Math.ceil(items.length / perPage);
   const currentIndex = Math.max(0, items.findIndex((i) => isCurrent(params, i)));
   const [pageChoice, setPage] = useState<number | null>(null);
