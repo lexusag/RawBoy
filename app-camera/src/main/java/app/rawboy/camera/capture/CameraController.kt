@@ -1103,12 +1103,9 @@ class CameraController(context: Context) : AutoCloseable {
         val height = reader.height
         val manual = longExposureManual(inf, spec)
         val manualExposure = manual != null
-        val request = request(s, CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
-            addTarget(reader.surface)
-            addTarget(previewSurface ?: throw IOException("Camera not ready"))
-            setCommon(inf)
-            inf.stillFpsRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
-            set(CaptureRequest.CONTROL_ENABLE_ZSL, false)
+        // What every frame of the exposure shares, the stills and the live preview alike (so the viewfinder keeps showing
+        // the picture the stack gets): the preview's colour held, each frame exposed by hand, the lens held where it was.
+        fun CaptureRequest.Builder.heldLook() {
             // The preview has converged by now: keep its colour for every frame (flicker otherwise).
             set(CaptureRequest.CONTROL_AE_LOCK, true)
             set(CaptureRequest.CONTROL_AWB_LOCK, true)
@@ -1133,10 +1130,25 @@ class CameraController(context: Context) : AutoCloseable {
                     set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_AUTO)
                 }
             }
+        }
+        val request = request(s, CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
+            addTarget(reader.surface)
+            addTarget(previewSurface ?: throw IOException("Camera not ready"))
+            setCommon(inf)
+            inf.stillFpsRange?.let { set(CaptureRequest.CONTROL_AE_TARGET_FPS_RANGE, it) }
+            set(CaptureRequest.CONTROL_ENABLE_ZSL, false)
+            heldLook()
             if (inf.hasLensShadingMap) {
                 setForLens(CaptureRequest.STATISTICS_LENS_SHADING_MAP_MODE, CameraMetadata.STATISTICS_LENS_SHADING_MAP_MODE_ON)
             }
         }.build()
+        // The viewfinder stays live: a repeating preview with the same look runs between the stills (the sensor
+        // alternates, so the stack gets about half the frames a still-only run did, for the viewfinder never to go dark).
+        val livePreview = if (manualExposure) request(s, CameraDevice.TEMPLATE_PREVIEW).apply {
+            addTarget(previewSurface ?: throw IOException("Camera not ready"))
+            setCommon(inf)
+            heldLook()
+        }.build() else null
 
         // Camera thread only, apart from the volatile flags.
         var handle = 0L
@@ -1180,9 +1192,31 @@ class CameraController(context: Context) : AutoCloseable {
                 checkDone()
             }
         }
-        // The repeating preview request would keep running continuous AF between our frames: our frames feed the
-        // viewfinder meanwhile, and the preview restarts below.
-        runCatching { s.stopRepeating() }
+        // The AE preview would keep running continuous AF between our frames and meter the viewfinder at its own
+        // exposure: replace it with the held-look preview (or, with no exposure to hold, stop it); the AE preview
+        // restarts below.
+        val previewBefore = _frames.value
+        if (livePreview != null && manual != null && previewBefore != null) {
+            // Until the first manual frame's result arrives the viewfinder would show manual frames with the AE
+            // preview's gain (dark for a second): say what they are now, as the results will.
+            _frames.value = FrameState(
+                iso = manual.second.toFloat(), postRawBoost = 1f, whiteXY = previewBefore.whiteXY, faces = emptyList(),
+                afState = previewBefore.afState, exposureNs = manual.first, tonemapMode = previewBefore.tonemapMode,
+                previewColor = previewBefore.previewColor, focusDiopters = previewBefore.focusDiopters,
+                compensationSteps = previewBefore.compensationSteps,
+            )
+        }
+        if (livePreview != null) {
+            runCatching {
+                s.setRepeatingRequest(livePreview, object : CameraCaptureSession.CaptureCallback() {
+                    override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
+                        _frames.value = frameState(inf, lensResult(result), result.get(CaptureResult.CONTROL_AE_EXPOSURE_COMPENSATION))
+                    }
+                }, handler)
+            }
+        } else {
+            runCatching { s.stopRepeating() }
+        }
         handler.post {
             pendingBurst = done
             burstSink = sink@{ img ->
@@ -1219,6 +1253,8 @@ class CameraController(context: Context) : AutoCloseable {
             burstSink = null
             if (pendingBurst === done) pendingBurst = null
             closed = true
+            // The AE preview's frames come back: until their results arrive, they are what the exposure began with.
+            if (livePreview != null && previewBefore != null) _frames.value = previewBefore
             runCatching { repeatPreview() }
             state.complete(Triple(handle, reference, arrived))
         }) state.completeExceptionally(IOException("Camera closed"))
