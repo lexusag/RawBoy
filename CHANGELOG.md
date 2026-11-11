@@ -1,3 +1,7 @@
+**RawBoy Pro (web): D changes the frame colour (2026-11-11)**
+
+- Press **D** to cycle the frame around the photo (grey, white, black), the same as clicking outside the photo, which still works; the choice is remembered. It does nothing while typing in a text field or with a modifier key held. Help text updated. Web only. Checked by reading the code; not type-checked or run in a browser here.
+
 **RawBoy Pro (web): Looks window at most 8 stripes and wider; Esc puts down the active tool (2026-11-11)**
 
 - The Looks window shows at most 8 looks a page, and each stripe is at least twice as wide as before (176 px; the window may grow to 2400 px), so big screens get fewer, larger stripes and more pages. Esc now also deselects the active tool, one per press: white picker, auto white balance rectangle, Looks, Crop & rotate, Masks, Light leaks, Light effects, Presets. It does nothing while typing in a text field or with a dialog (Export, Help, menus) open. Checked by reading the code; not type-checked or run in a browser here.
