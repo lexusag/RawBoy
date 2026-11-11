@@ -1757,6 +1757,26 @@ select {
   background: #111;
 }
 
+/* Mouse-only resize grip in the bottom-right corner; touch keeps the default size. */
+.look-resize {
+  display: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .look-resize {
+    display: block;
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 18px;
+    height: 18px;
+    cursor: nwse-resize;
+    z-index: 2;
+    background: linear-gradient(135deg, transparent 50%, rgba(255, 255, 255, 0.85) 50%, rgba(255, 255, 255, 0.85) 58%, transparent 58%, transparent 70%, rgba(255, 255, 255, 0.85) 70%, rgba(255, 255, 255, 0.85) 78%, transparent 78%);
+    filter: drop-shadow(0 0 1px rgba(0, 0, 0, 0.8));
+  }
+}
+
 .look-selector.dragging {
   cursor: grabbing;
 }

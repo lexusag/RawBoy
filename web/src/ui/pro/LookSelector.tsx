@@ -26,6 +26,30 @@ const MAX_PER_PAGE = 8;
 const MAX_WIDTH = 2400;
 const MAX_HEIGHT = 360;
 const MIN_HEIGHT = 140;
+/** Smallest the user may drag the window to: two stripes wide. */
+const MIN_USER_WIDTH = MIN_STRIPE * 2;
+/** Tallest the user may drag it (CSS px); the visible part of the photo limits it first. */
+const MAX_USER_HEIGHT = 1600;
+/** The dragged size is remembered between sessions. */
+const SIZE_KEY = 'rawboy.pro.lookWindow';
+
+interface Size { w: number; h: number }
+function loadSize(): Size | null {
+  try {
+    const v = JSON.parse(localStorage.getItem(SIZE_KEY) ?? 'null') as Partial<Size> | null;
+    return v && Number.isFinite(v.w) && Number.isFinite(v.h) ? { w: v.w!, h: v.h! } : null;
+  } catch {
+    return null;
+  }
+}
+function saveSize(size: Size | null) {
+  try {
+    if (size) localStorage.setItem(SIZE_KEY, JSON.stringify(size));
+    else localStorage.removeItem(SIZE_KEY);
+  } catch {
+    /* storage unavailable: the size just isn't remembered */
+  }
+}
 /** Pointer travel (CSS px) before a press is a drag, not a click on a stripe. */
 const DRAG_SLOP = 5;
 /** How much of the window (CSS px) stays inside the preview when it is dragged out. */
@@ -129,8 +153,14 @@ export function LookSelector({ session, state, params, defaults, frame, at, onPi
     return r - l >= 40 && b - t >= 40 ? { l, t, w: r - l, h: b - t } : null;
   }, [picture, box.w, box.h]);
 
-  const zoneW = visible ? Math.floor(Math.min(visible.w, MAX_WIDTH)) : 0;
-  const zoneH = visible ? Math.floor(Math.max(Math.min(visible.h, MIN_HEIGHT), Math.min(visible.h * 0.6, MAX_HEIGHT))) : 0;
+  // null = the default size; a size dragged with the resize handle (mouse) replaces it, clamped to what fits.
+  const [userSize, setUserSize] = useState<Size | null>(loadSize);
+  const clampW = (w: number) => (visible ? Math.floor(Math.min(Math.max(w, Math.min(MIN_USER_WIDTH, visible.w)), Math.min(visible.w, MAX_WIDTH))) : 0);
+  const clampH = (h: number) => (visible ? Math.floor(Math.min(Math.max(h, Math.min(MIN_HEIGHT, visible.h)), Math.min(visible.h, MAX_USER_HEIGHT))) : 0);
+  const zoneW = visible ? (userSize ? clampW(userSize.w) : Math.floor(Math.min(visible.w, MAX_WIDTH))) : 0;
+  const zoneH = visible
+    ? userSize ? clampH(userSize.h) : Math.floor(Math.max(Math.min(visible.h, MIN_HEIGHT), Math.min(visible.h * 0.6, MAX_HEIGHT)))
+    : 0;
   const perPage = Math.max(1, Math.min(items.length, MAX_PER_PAGE, Math.floor(zoneW / MIN_STRIPE)));
   const pages = Math.ceil(items.length / perPage);
   const currentIndex = Math.max(0, items.findIndex((i) => isCurrent(params, i)));
@@ -315,14 +345,27 @@ export function LookSelector({ session, state, params, defaults, frame, at, onPi
 
   // Pointer: a press that stays put picks the stripe under it; one that travels moves the panel.
   const press = useRef<{ id: number; x: number; y: number; px: number; py: number; moved: boolean; onBar: boolean } | null>(null);
+  const resize = useRef<{ id: number; x: number; y: number; w: number; h: number; size: Size } | null>(null);
   const onDown = (e: ReactPointerEvent<HTMLDivElement>) => {
     e.stopPropagation(); // the photo underneath must not pan, compare or take the click
     if ((e.target as Element).closest('button') || e.button !== 0) return;
+    if ((e.target as Element).closest('.look-resize')) {
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+      resize.current = { id: e.pointerId, x: e.clientX, y: e.clientY, w: zoneW, h: zoneH, size: { w: zoneW, h: zoneH } };
+      setDragging(true);
+      return;
+    }
     e.currentTarget.setPointerCapture?.(e.pointerId);
     press.current = { id: e.pointerId, x: e.clientX, y: e.clientY, px: left, py: top, moved: false, onBar: (e.target as Element).closest('.look-bar') != null };
   };
   const onMove = (e: ReactPointerEvent<HTMLDivElement>) => {
     e.stopPropagation();
+    const r = resize.current;
+    if (r && r.id === e.pointerId) {
+      r.size = { w: clampW(r.w + e.clientX - r.x), h: clampH(r.h + e.clientY - r.y) };
+      setUserSize(r.size);
+      return;
+    }
     const g = press.current;
     if (!g || g.id !== e.pointerId) return;
     const dx = e.clientX - g.x;
@@ -336,6 +379,13 @@ export function LookSelector({ session, state, params, defaults, frame, at, onPi
   };
   const onUp = (e: ReactPointerEvent<HTMLDivElement>) => {
     e.stopPropagation();
+    const rz = resize.current;
+    if (rz && rz.id === e.pointerId) {
+      resize.current = null;
+      setDragging(false);
+      saveSize(rz.size);
+      return;
+    }
     const g = press.current;
     if (!g || g.id !== e.pointerId) return;
     press.current = null;
@@ -348,6 +398,8 @@ export function LookSelector({ session, state, params, defaults, frame, at, onPi
   const onCancel = (e: ReactPointerEvent<HTMLDivElement>) => {
     e.stopPropagation();
     press.current = null;
+    if (resize.current) saveSize(resize.current.size);
+    resize.current = null;
     setDragging(false);
   };
 
@@ -375,6 +427,17 @@ export function LookSelector({ session, state, params, defaults, frame, at, onPi
               </div>
             ))}
           </div>
+          <div
+            className="look-resize"
+            role="separator"
+            aria-label="Resize the Looks window (double-click for the default size)"
+            title="Drag to resize; double-click for the default size"
+            onDoubleClick={(e) => {
+              e.stopPropagation();
+              setUserSize(null);
+              saveSize(null);
+            }}
+          />
           <div className="look-bar" style={{ left: Math.max(0, -left), right: hangRight }}>
             <span className="look-title">Looks{loading > 0 ? ' …' : ''}</span>
             {pages > 1 && (
