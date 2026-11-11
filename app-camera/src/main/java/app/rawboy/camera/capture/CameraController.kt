@@ -1105,6 +1105,17 @@ class CameraController(context: Context) : AutoCloseable {
             // The preview has converged by now: keep its exposure and colour for every frame (flicker otherwise).
             set(CaptureRequest.CONTROL_AE_LOCK, true)
             set(CaptureRequest.CONTROL_AWB_LOCK, true)
+            // Continuous AF hunts over a long exposure (dark scene, nothing changing): hold the lens where the preview
+            // had it. A tap's focus lock is already AUTO from setCommon.
+            if (focusPoint == null) {
+                val diopters = _frames.value?.focusDiopters
+                if (diopters != null && diopters > 0f) {
+                    set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_OFF)
+                    set(CaptureRequest.LENS_FOCUS_DISTANCE, diopters)
+                } else {
+                    set(CaptureRequest.CONTROL_AF_MODE, CameraMetadata.CONTROL_AF_MODE_AUTO)
+                }
+            }
             if (inf.hasLensShadingMap) {
                 setForLens(CaptureRequest.STATISTICS_LENS_SHADING_MAP_MODE, CameraMetadata.STATISTICS_LENS_SHADING_MAP_MODE_ON)
             }
@@ -1152,6 +1163,9 @@ class CameraController(context: Context) : AutoCloseable {
                 checkDone()
             }
         }
+        // The repeating preview request would keep running continuous AF between our frames: our frames feed the
+        // viewfinder meanwhile, and the preview restarts below.
+        runCatching { s.stopRepeating() }
         handler.post {
             pendingBurst = done
             burstSink = sink@{ img ->
@@ -1178,6 +1192,7 @@ class CameraController(context: Context) : AutoCloseable {
                 if (pendingBurst === done) pendingBurst = null
                 closed = true
                 if (handle != 0L) LongExposureNative.destroy(handle)
+                runCatching { repeatPreview() }
             }
             _longExposureProgress.value = null
             throw e
@@ -1187,6 +1202,7 @@ class CameraController(context: Context) : AutoCloseable {
             burstSink = null
             if (pendingBurst === done) pendingBurst = null
             closed = true
+            runCatching { repeatPreview() }
             state.complete(Triple(handle, reference, arrived))
         }) state.completeExceptionally(IOException("Camera closed"))
         val (h, ref, frames) = try { state.await() } finally { _longExposureProgress.value = null }

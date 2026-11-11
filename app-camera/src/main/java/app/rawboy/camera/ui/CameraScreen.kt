@@ -1412,7 +1412,8 @@ private fun TimerButton(seconds: Int, onClick: () -> Unit) {
                     seconds.toString(),
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, lineHeight = 9.sp, fontWeight = FontWeight.Bold),
                     color = tint,
-                    modifier = Modifier.align(Alignment.BottomEnd).offset(x = 5.dp, y = 2.dp),
+                    modifier = Modifier.align(Alignment.BottomEnd).offset(x = 2.dp, y = 2.dp)
+                        .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(3.dp)).padding(horizontal = 1.dp),
                 )
             }
         }
@@ -1444,7 +1445,9 @@ private fun LongExposureButton(seconds: Int, lighten: Boolean, hiRes: Boolean, o
                     seconds.toString() + if (lighten) "L" else "",
                     style = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, lineHeight = 9.sp, fontWeight = FontWeight.Bold),
                     color = tint,
-                    modifier = Modifier.align(Alignment.BottomEnd).offset(x = 8.dp, y = 2.dp),
+                    // Inside the button's bounds, which clip: "30L" is the widest label.
+                    modifier = Modifier.align(Alignment.BottomEnd).offset(x = 2.dp, y = 2.dp)
+                        .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(3.dp)).padding(horizontal = 1.dp),
                 )
             }
         }
