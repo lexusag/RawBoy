@@ -627,6 +627,12 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   each dab by luminance/chroma likeness to the centre, from a blurred guide (`makeGuide`; noise floor tuned on the
   ISO-high night shot `IMG_4914.CR2`). Presets drop strokes (`forPreset`).
 - Grain and denoise are sized in full-res pixels; fit-view strength is scaled by footprint.
+  Grain (`grainNoise(fullPx, tone)` in develop.glsl, 2026-11-11): three octaves (cell 1.4 × `uGrainSize`, ½, ¼, the small
+  ones faded out below ~1 px), each one jittered Gaussian grain per cell summed over the **4x4** nearest cells (3x3 cut
+  grains 1 cell away: seams along the lattice). `tone` (display 0..1) skews it (exp of the field, re-normalised): light
+  specks in shadows, dark in highlights. Strength per tone is unchanged from the single-octave version. A Poisson count
+  per cell (no lattice in the statistics) was tried: ~2.3× slower in SwiftShader for a ±10% gradient modulation the
+  old grain had too and nobody saw. Leaks/effects pass their display value as `tone`.
 - Tone mappers (`DevelopParams.toneMapper` → `uToneMapper`: 0 AgX, 1 filmic, 2 sigmoid). Filmic and sigmoid reuse AgX's
   log range, grey (display 0.4967 at `AGX_PIVOT`) and slope there (2.057), so slider meanings and `BASE_EXPOSURE_EV`
   hold for all three; they skip AgX's inset/outset and output the same 2.2 display encoding. Their constants were

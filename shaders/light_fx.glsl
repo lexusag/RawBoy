@@ -142,7 +142,7 @@ vec3 applyLightFx(vec3 c, vec2 p, vec2 fullPx) {
     }
     if (uGrain > 0.0 && covered > 0.0) {
         // The light flattens the grain under it; lay it back as much as the light took away, so it sits under the grain.
-        c += grainNoise(fullPx) * (uGrain * 0.03 * min(1.0, uGrainSize / fp) * covered);
+        c += grainNoise(fullPx, (c.r + c.g + c.b) * (1.0 / 3.0)) * (uGrain * 0.03 * min(1.0, uGrainSize / fp) * covered);
     }
     return clamp(c, 0.0, 1.0);
 }

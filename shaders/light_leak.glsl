@@ -199,7 +199,7 @@ vec3 applyLeaks(vec3 c, vec2 p, vec2 fullPx) {
         // Screen flattens the grain under the light; lay it back as much as the leaks took away (display units, about
         // the grain's mid-tone strength), so the leak sits under the grain.
         float footprint = max(max(fwidth(fullPx.x), fwidth(fullPx.y)), 1.0);
-        c += grainNoise(fullPx) * (uGrain * 0.03 * min(1.0, uGrainSize / footprint) * covered);
+        c += grainNoise(fullPx, (c.r + c.g + c.b) * (1.0 / 3.0)) * (uGrain * 0.03 * min(1.0, uGrainSize / footprint) * covered);
     }
     return clamp(c, 0.0, 1.0);
 }
