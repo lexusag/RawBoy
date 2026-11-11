@@ -398,7 +398,7 @@ interface GeometryProps {
 }
 
 /**
- * Rotate in 90 degree steps, flip, straighten the horizon (auto-cropped) and crop, optionally to a fixed aspect ratio.
+ * Rotate in 90 degree steps, flip, straighten the horizon, correct perspective (both auto-cropped) and crop, optionally to a fixed aspect ratio.
  */
 export function GeometryPanel({ params, onChange, onRotate, onFlip, aspect, portrait, onAspect, onResetCrop, onDone }: GeometryProps) {
   return (
@@ -441,6 +441,22 @@ export function GeometryPanel({ params, onChange, onRotate, onFlip, aspect, port
         onChange={(v) => onChange({ ...params, straighten: Math.round(v * 100) / 100 })}
       />
       <ParamSlider
+        label="Vertical"
+        value={params.perspectiveVertical}
+        min={-100}
+        max={100}
+        defaultValue={0}
+        onChange={(v) => onChange({ ...params, perspectiveVertical: Math.round(v) })}
+      />
+      <ParamSlider
+        label="Horizontal"
+        value={params.perspectiveHorizontal}
+        min={-100}
+        max={100}
+        defaultValue={0}
+        onChange={(v) => onChange({ ...params, perspectiveHorizontal: Math.round(v) })}
+      />
+      <ParamSlider
         label="Scale"
         value={params.scale}
         min={100}
@@ -450,7 +466,7 @@ export function GeometryPanel({ params, onChange, onRotate, onFlip, aspect, port
         format={(v) => `${Math.round(v)}%`}
         onChange={(v) => onChange({ ...params, scale: Math.round(v) })}
       />
-      <Note>Drag the corners, edges or inside of the frame to crop. Straightening crops automatically so no empty corners show. Resets for each new photo.</Note>
+      <Note>Drag the corners, edges or inside of the frame to crop. Vertical and Horizontal correct perspective: Vertical below 0 widens the top (buildings shot looking up), Horizontal above 0 widens the right side. Straightening and perspective crop automatically so no empty corners show. Resets for each new photo.</Note>
     </div>
   );
 }

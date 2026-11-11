@@ -9,7 +9,7 @@ import { Mat3 } from '../color/Mat3';
 import { PrimariesTrack } from '../color/PrimariesTrack';
 import { Primaries } from '../color/Primaries';
 import { WhiteBalance } from '../color/WhiteBalance';
-import { CROP_ASPECTS, cropAspectLabel, cropAspectRatio, cropHandleAt, cropWithAspect, dragCrop, FULL_CROP, flipped, rotateCrop, withCrop } from '../develop/CropMath';
+import { CROP_ASPECTS, cropAspectLabel, cropAspectRatio, cropHandleAt, cropWithAspect, dragCrop, FULL_CROP, flipped, rotateCrop, rotatePerspective, withCrop } from '../develop/CropMath';
 import { developParams, effectiveColorDenoise } from '../develop/DevelopParams';
 import { decodeEdits, encodeEdits } from '../develop/Edits';
 import { BrushRaster, type BrushGuide } from '../develop/BrushRaster';
@@ -41,7 +41,7 @@ import { WAVELET_DENOISE_MARGIN, denoiseLevels } from '../gl/WaveletDenoise';
 import { ZoomMath, rect } from '../gl/Zoom';
 import { detectFisheyeCircleLum } from '../lens/FisheyeCircle';
 import { LensInfo } from '../lens/LensInfo';
-import { LensTransform } from '../lens/LensTransform';
+import { LensTransform, project } from '../lens/LensTransform';
 import { parseCube } from '../lut/LutLoader';
 import { floatToHalf, halfToFloat } from '../util/half';
 import { flareCoarseRows, flareRows, makeFlareSource } from '../gl/FlareSource';
@@ -425,6 +425,69 @@ describe('crop', () => {
     close(plain.source(100, 50), [5900, 50], 1e-6);
     // After a quarter turn the picture's left-right is the photo's top-bottom.
     expect(flipped(developParams({ rotation: 1 }), false).flipVertical).toBe(true);
+  });
+
+  it('perspective straightens converging lines, keeps the centre and auto-crops to real picture', () => {
+    const info = LensInfo.none(6000, 4000);
+    // Off = the plain affine map, bit for bit.
+    expect(new LensTransform(info, developParams({ perspectiveVertical: 0 })).outToImage).toEqual(new LensTransform(info, developParams()).outToImage);
+    for (const [v, h] of [[-60, 0], [45, 0], [0, -70], [0, 100], [-100, 100], [35, -25]]) {
+      const lens = new LensTransform(info, developParams({ perspectiveVertical: v, perspectiveHorizontal: h, straighten: 4 }));
+      const w = lens.outputWidth;
+      const ht = lens.outputHeight;
+      close(lens.source(w / 2, ht / 2), [3000, 2000], 1e-6);
+      // Every edge point is on the picture, and the crop is tight: some corner touches an edge.
+      let slack = Infinity;
+      for (let i = 0; i <= 20; i++) {
+        for (const [x, y] of [[(i / 20) * w, 0], [(i / 20) * w, ht], [0, (i / 20) * ht], [w, (i / 20) * ht]]) {
+          const [sx, sy] = lens.source(x, y);
+          expect(sx).toBeGreaterThan(-1e-3);
+          expect(sy).toBeGreaterThan(-1e-3);
+          expect(sx).toBeLessThan(6000 + 1e-3);
+          expect(sy).toBeLessThan(4000 + 1e-3);
+          slack = Math.min(slack, sx, sy, 6000 - sx, 4000 - sy);
+        }
+      }
+      expect(slack).toBeLessThan(0.5);
+    }
+    // Vertical below 0 widens the top: two output verticals sample closer source columns at the top than at the bottom,
+    // i.e. lines converging upwards in the photo come out parallel.
+    const up = new LensTransform(info, developParams({ perspectiveVertical: -50 }));
+    const spread = (y: number) => up.source(up.outputWidth * 0.75, y)[0] - up.source(up.outputWidth * 0.25, y)[0];
+    expect(spread(0)).toBeLessThan(spread(up.outputHeight) * 0.9);
+    // A source line through the vanishing point maps to an output vertical.
+    const inv = Mat3.inverse(up.outToImage);
+    const a = project(inv, ...(up.source(1000, 100) as [number, number]));
+    expect(a[0]).toBeCloseTo(1000, 6);
+    // Horizontal above 0 widens the right side.
+    const right = new LensTransform(info, developParams({ perspectiveHorizontal: 50 }));
+    const tall = (x: number) => right.source(x, right.outputHeight * 0.75)[1] - right.source(x, right.outputHeight * 0.25)[1];
+    expect(tall(right.outputWidth)).toBeLessThan(tall(0) * 0.9);
+  });
+
+  it('perspective turns and mirrors with the picture', () => {
+    const info = LensInfo.none(6000, 4000);
+    for (const rotation of [0, 1, 2, 3]) {
+      for (const [v, h] of [[-40, 0], [0, 55]]) {
+        const before = developParams({ rotation, perspectiveVertical: v, perspectiveHorizontal: h, straighten: 3 });
+        const a = new LensTransform(info, before);
+        const turned = rotatePerspective({ ...before, rotation: (rotation + 1) % 4 }, 1);
+        const b = new LensTransform(info, turned);
+        expect([b.outputWidth, b.outputHeight]).toEqual([a.outputHeight, a.outputWidth]);
+        // Clockwise: output (x, y) moves to (height - y, x).
+        for (const [x, y] of [[0, 0], [a.outputWidth, 0], [137.5, 401.25], [a.outputWidth, a.outputHeight]]) {
+          close(b.source(a.outputHeight - y, x), a.source(x, y), 1e-6);
+        }
+        expect(rotatePerspective(rotatePerspective(before, 1), -1)).toEqual(before);
+        for (const vertical of [false, true]) {
+          const f = new LensTransform(info, flipped(before, vertical));
+          for (const [x, y] of [[0, 0], [a.outputWidth, 0], [137.5, 401.25]]) {
+            const m = vertical ? [x, a.outputHeight - y] : [a.outputWidth - x, y];
+            close(f.source(m[0], m[1]), a.source(x, y), 1e-6);
+          }
+        }
+      }
+    }
   });
 
   it('aspect ratios and drags keep the shape and stay inside the frame, including cinema 2:1 and 2.39:1', () => {

@@ -206,12 +206,14 @@ final class EditorViewModel: ObservableObject {
      */
     private func carryOverEdits(_ previous: EditorState, _ newDefaults: DevelopParams) -> DevelopParams {
         if previous.fileName == nil { return newDefaults }
-        // Rotation, flips, straightening, crop, masks, light leaks and light effects belong to one photo.
+        // Rotation, flips, straightening, perspective, crop, masks, light leaks and light effects belong to one photo.
         var p = previous.params
         p.rotation = newDefaults.rotation
         p.flipHorizontal = newDefaults.flipHorizontal
         p.flipVertical = newDefaults.flipVertical
         p.straighten = newDefaults.straighten
+        p.perspectiveVertical = newDefaults.perspectiveVertical
+        p.perspectiveHorizontal = newDefaults.perspectiveHorizontal
         p.scale = newDefaults.scale
         p.masks = newDefaults.masks
         p.leaks = newDefaults.leaks
@@ -458,6 +460,7 @@ final class EditorViewModel: ObservableObject {
 
     func rotate(_ quarterTurns: Int) {
         edit(force: true) { p in
+            p = CropMath.rotatePerspective(p, quarterTurns: quarterTurns)
             p.rotation = ((p.rotation + quarterTurns) % 4 + 4) % 4
             p = p.withCrop(CropMath.rotate(p.crop, quarterTurns: quarterTurns))  // the crop turns with the picture
         }

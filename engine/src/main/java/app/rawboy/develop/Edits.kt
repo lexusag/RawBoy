@@ -5,7 +5,7 @@ import org.json.JSONObject
 /**
  * One photo's complete edit as JSON (port of web's Edits.ts, the same format): what RawBoy's "Send to Auto" hands
  * RawBoy Auto with a photo, so Auto develops and batch exports it exactly as RawBoy showed it. Unlike a preset it holds
- * every field: geometry (rotation, flips, straighten, crop), mask layers with their brush strokes and lens blur, and
+ * every field: geometry (rotation, flips, straighten, perspective, crop), mask layers with their brush strokes and lens blur, and
  * light leaks. Only fields that differ from the photo's as-shot defaults are kept: absolute values, but a small file.
  */
 object Edits {
@@ -34,6 +34,8 @@ object Edits {
         values["flipHorizontal"] = p.flipHorizontal
         values["flipVertical"] = p.flipVertical
         values["straighten"] = num(p.straighten)
+        values["perspectiveVertical"] = num(p.perspectiveVertical)
+        values["perspectiveHorizontal"] = num(p.perspectiveHorizontal)
         values["scale"] = num(p.scale)
         values["cropLeft"] = num(p.cropLeft)
         values["cropTop"] = num(p.cropTop)
@@ -88,6 +90,8 @@ object Edits {
             flipHorizontal = v.opt("flipHorizontal") as? Boolean ?: p.flipHorizontal,
             flipVertical = v.opt("flipVertical") as? Boolean ?: p.flipVertical,
             straighten = f("straighten", -45f, 45f) ?: p.straighten,
+            perspectiveVertical = f("perspectiveVertical", -100f, 100f) ?: p.perspectiveVertical,
+            perspectiveHorizontal = f("perspectiveHorizontal", -100f, 100f) ?: p.perspectiveHorizontal,
             scale = f("scale", 100f, 200f) ?: p.scale,
             cropLeft = if (cropOk) left else p.cropLeft,
             cropTop = if (cropOk) top else p.cropTop,

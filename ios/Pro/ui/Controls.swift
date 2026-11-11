@@ -362,7 +362,7 @@ struct Note: View {
 }
 
 /**
- * Rotate in 90 degree steps, flip, straighten the horizon (auto-cropped) and crop, optionally to a fixed aspect ratio.
+ * Rotate in 90 degree steps, flip, straighten the horizon, correct perspective (both auto-cropped) and crop, optionally to a fixed aspect ratio.
  */
 struct GeometryPanel: View {
     let params: DevelopParams
@@ -410,13 +410,23 @@ struct GeometryPanel: View {
                 p.straighten = v
                 onChange(p)
             }
+            ParamSlider(label: "Vertical", value: params.perspectiveVertical, range: -100...100, defaultValue: 0) { v in
+                var p = params
+                p.perspectiveVertical = v.rounded()
+                onChange(p)
+            }
+            ParamSlider(label: "Horizontal", value: params.perspectiveHorizontal, range: -100...100, defaultValue: 0) { v in
+                var p = params
+                p.perspectiveHorizontal = v.rounded()
+                onChange(p)
+            }
             ParamSlider(label: "Scale", value: params.scale, range: 100...200, defaultValue: 100,
                         format: { "\(Int(round($0)))%" }) { v in
                 var p = params
                 p.scale = v
                 onChange(p)
             }
-            Note("Drag the corners, edges or inside of the frame to crop. Straightening crops automatically so no empty corners show. Resets for each new photo.")
+            Note("Drag the corners, edges or inside of the frame to crop. Vertical and Horizontal correct perspective: Vertical below 0 widens the top (buildings shot looking up), Horizontal above 0 widens the right side. Straightening and perspective crop automatically so no empty corners show. Resets for each new photo.")
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)

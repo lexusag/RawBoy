@@ -469,7 +469,7 @@ internal fun SectionLabel(text: String) {
 }
 
 /**
- * Rotate in 90 degree steps, flip, straighten the horizon (auto-cropped) and crop, optionally to a fixed aspect ratio.
+ * Rotate in 90 degree steps, flip, straighten the horizon, correct perspective (both auto-cropped) and crop, optionally to a fixed aspect ratio.
  */
 @Composable
 fun GeometryPanel(
@@ -518,13 +518,20 @@ fun GeometryPanel(
             "Straighten", params.straighten, -45f..45f, 0f,
             format = { String.format(Locale.ROOT, "%+.1f°", if (kotlin.math.abs(it) < 0.05f) 0f else it) },
         ) { onChange(params.copy(straighten = it)) }
+        ParamSlider("Vertical", params.perspectiveVertical, -100f..100f, 0f) {
+            onChange(params.copy(perspectiveVertical = it.roundToInt().toFloat()))
+        }
+        ParamSlider("Horizontal", params.perspectiveHorizontal, -100f..100f, 0f) {
+            onChange(params.copy(perspectiveHorizontal = it.roundToInt().toFloat()))
+        }
         ParamSlider(
             "Scale", params.scale, 100f..200f, 100f,
             format = { "${it.roundToInt()}%" },
         ) { onChange(params.copy(scale = it)) }
         Text(
-            "Drag the corners, edges or inside of the frame to crop. Straightening crops automatically so no " +
-                "empty corners show. Resets for each new photo.",
+            "Drag the corners, edges or inside of the frame to crop. Vertical and Horizontal correct perspective: " +
+                "Vertical below 0 widens the top (buildings shot looking up), Horizontal above 0 widens the right " +
+                "side. Straightening and perspective crop automatically so no empty corners show. Resets for each new photo.",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )

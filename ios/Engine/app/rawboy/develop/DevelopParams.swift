@@ -36,10 +36,13 @@ import Foundation
  * - bwFilter: colour filter for black and white (BwFilter, RawBoy Camera's B&W mode; .off = identity), channel gains
  *   after white balance and the RGB primaries
  * - rotation: clockwise quarter turns; straighten: degrees -45..45, + turns clockwise (auto crop).
+ * - perspectiveVertical/perspectiveHorizontal: -100..100 keystone correction, a virtual tilt of the camera (auto crop):
+ *   Vertical - widens the top (buildings shot looking up), Horizontal + widens the right side. Both act on the frame
+ *   as shown (after the turns and flips), before straighten. See LensTransform.
  * - flipHorizontal/flipVertical: mirror the photo (display orientation, before rotation) left-right / top-bottom.
  * - cropLeft/Top/Right/Bottom: 0..1 edges of the user crop within the rotated + straightened frame
  *   (0, 0, 1, 1 = no crop). See CropMath.
- *   Rotation, flips, straighten and crop are per photo: they reset when another file is opened.
+ *   Rotation, flips, straighten, perspective and crop are per photo: they reset when another file is opened.
  *
  * Whites/Blacks follow Lightroom: Blacks < 0 raises the black point (deeper
  * blacks), Blacks > 0 lifts/fades them; Whites > 0 lowers the white point
@@ -105,6 +108,8 @@ public struct DevelopParams: Equatable, Sendable {
     public var flipHorizontal: Bool = false
     public var flipVertical: Bool = false
     public var straighten: Float = 0
+    public var perspectiveVertical: Float = 0
+    public var perspectiveHorizontal: Float = 0
     public var scale: Float = 100
     public var cropLeft: Float = 0
     public var cropTop: Float = 0

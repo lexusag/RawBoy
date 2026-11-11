@@ -99,6 +99,21 @@ public enum CropMath {
     }
 
     /**
+     * [p]'s perspective sliders after turning the picture by [quarterTurns] clockwise quarter turns, so the keystone
+     * stays on the same edges of the picture: clockwise, the vertical tilt becomes the horizontal one and the
+     * horizontal the vertical (exact for one slider; with both set the two tilts apply in the other order).
+     */
+    public static func rotatePerspective(_ p: DevelopParams, quarterTurns: Int) -> DevelopParams {
+        var r = p
+        for _ in 0..<(((quarterTurns % 4) + 4) % 4) {
+            let v = r.perspectiveVertical
+            r.perspectiveVertical = r.perspectiveHorizontal
+            r.perspectiveHorizontal = v == 0 ? 0 : -v
+        }
+        return r
+    }
+
+    /**
      * [p] with the picture as shown mirrored left-right ([vertical] false) or top-bottom. The flips are stored on the
      * unturned photo, so a sideways turn swaps the axis; the straighten angle and the crop mirror with the picture.
      */
@@ -106,6 +121,12 @@ public enum CropMath {
         var f = p
         if vertical != (p.rotation % 2 != 0) { f.flipVertical.toggle() } else { f.flipHorizontal.toggle() }
         f.straighten = p.straighten == 0 ? 0 : -p.straighten
+        // The keystone mirrors too: a left-right mirror turns the horizontal tilt the other way, top-bottom the vertical one.
+        if vertical {
+            f.perspectiveVertical = p.perspectiveVertical == 0 ? 0 : -p.perspectiveVertical
+        } else {
+            f.perspectiveHorizontal = p.perspectiveHorizontal == 0 ? 0 : -p.perspectiveHorizontal
+        }
         let r = p.crop
         return f.withCrop(vertical ? CropRect(r.left, 1 - r.bottom, r.right, 1 - r.top) : CropRect(1 - r.right, r.top, 1 - r.left, r.bottom))
     }

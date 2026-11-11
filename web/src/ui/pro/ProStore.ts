@@ -1,7 +1,7 @@
 import { autoBase } from '../../engine/auto/AutoAnalysis';
 import { applyAuto } from '../../engine/auto/analysis/AutoTone';
 import { FILM_STOCKS } from '../../engine/auto/looks/FilmLooks';
-import { cropOf, flipped, rotateCrop, withCrop, type CropRect } from '../../engine/develop/CropMath';
+import { cropOf, flipped, rotateCrop, rotatePerspective, withCrop, type CropRect } from '../../engine/develop/CropMath';
 import type { EditsSidecar } from '../../engine/browse/XmpSidecar';
 import { developParams, type DevelopParams } from '../../engine/develop/DevelopParams';
 import { decodeEdits, encodeEdits } from '../../engine/develop/Edits';
@@ -161,7 +161,7 @@ export class ProStore {
     }
   }
 
-  /** Edits carry over to the next file. White balance only if the user changed it; rotation, flips, crop, masks, light leaks and effects never. */
+  /** Edits carry over to the next file. White balance only if the user changed it; rotation, flips, perspective, crop, masks, light leaks and effects never. */
   private carryOverEdits(previous: EditorState, newDefaults: DevelopParams): DevelopParams {
     if (previous.fileName == null) return newDefaults;
     const p = withCrop(
@@ -171,6 +171,8 @@ export class ProStore {
         flipHorizontal: newDefaults.flipHorizontal,
         flipVertical: newDefaults.flipVertical,
         straighten: newDefaults.straighten,
+        perspectiveVertical: newDefaults.perspectiveVertical,
+        perspectiveHorizontal: newDefaults.perspectiveHorizontal,
         scale: newDefaults.scale,
         masks: newDefaults.masks,
         leaks: newDefaults.leaks,
@@ -374,7 +376,7 @@ export class ProStore {
   rotate = (quarterTurns: number) => {
     const p = this._state.params;
     // The crop turns with the picture.
-    this.commit(withCrop({ ...p, rotation: (((p.rotation + quarterTurns) % 4) + 4) % 4 }, rotateCrop(cropOf(p), quarterTurns)), true);
+    this.commit(withCrop({ ...rotatePerspective(p, quarterTurns), rotation: (((p.rotation + quarterTurns) % 4) + 4) % 4 }, rotateCrop(cropOf(p), quarterTurns)), true);
   };
 
   /** Mirrors the picture as shown, left-right or top-bottom ([vertical]); the crop and straighten mirror with it. */

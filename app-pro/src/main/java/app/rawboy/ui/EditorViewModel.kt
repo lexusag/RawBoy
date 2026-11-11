@@ -298,13 +298,15 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
      */
     private fun carryOverEdits(previous: EditorState, newDefaults: DevelopParams): DevelopParams {
         if (previous.fileName == null) return newDefaults
-        // Rotation, flips, straightening, crop, masks, light leaks and light effects belong to one photo.
+        // Rotation, flips, straightening, perspective, crop, masks, light leaks and light effects belong to one photo.
         val p = previous.params
             .copy(
                 rotation = newDefaults.rotation,
                 flipHorizontal = newDefaults.flipHorizontal,
                 flipVertical = newDefaults.flipVertical,
                 straighten = newDefaults.straighten,
+                perspectiveVertical = newDefaults.perspectiveVertical,
+                perspectiveHorizontal = newDefaults.perspectiveHorizontal,
                 scale = newDefaults.scale,
                 masks = newDefaults.masks,
                 leaks = newDefaults.leaks,
@@ -525,7 +527,7 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun rotate(quarterTurns: Int) {
         val p = _state.value.params
         commit(
-            p.copy(rotation = ((p.rotation + quarterTurns) % 4 + 4) % 4)
+            CropMath.rotatePerspective(p, quarterTurns).copy(rotation = ((p.rotation + quarterTurns) % 4 + 4) % 4)
                 .withCrop(CropMath.rotate(p.crop, quarterTurns)), // the crop turns with the picture
             force = true,
         )

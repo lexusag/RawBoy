@@ -87,7 +87,7 @@ uniform vec2 uOutOrigin;    // full-resolution output pixel at vUv (0,0)
 uniform vec2 uOutSpan;      // full-resolution output pixels covered by the quad
 
 // Lens (see LensTransform.kt, which mirrors this math for tiling and auto scale).
-uniform mat3 uOutToImage;        // output px (rotated/straightened) -> image px
+uniform mat3 uOutToImage;        // output px (rotated/straightened/keystoned) -> image px, homogeneous
 uniform mat3 uToSensor;          // display-oriented px -> sensor px
 uniform mat3 uFromSensor;
 uniform vec2 uImageCenter;       // display-oriented px
