@@ -1,6 +1,6 @@
 **RawBoy Pro (web): resize the Looks window with the mouse (2026-11-11)**
 
-- A grip in the bottom-right corner of the Looks window lets you drag it larger or smaller (mouse only; touch devices keep the default size and nothing changes for them). The size is kept within what fits: at least two stripes wide, at most the visible part of the photo (and 2400 px wide), and still at most 8 looks a page, so a wider window shows more stripes per page up to 8. The size is remembered between sessions (browser storage); double-click the grip to go back to the default size. Help text updated. Web only. Checked by type-check and tests where noted below.
+- A grip in the bottom-right corner of the Looks window lets you drag it larger or smaller (mouse only; touch devices keep the default size and nothing changes for them). The size is kept within what fits: at least two stripes wide, at most the visible part of the photo (and 2400 px wide), and still at most 8 looks a page, so a wider window shows more stripes per page up to 8. The size is remembered between sessions (browser storage); double-click the grip to go back to the default size. Help text updated. Web only. Type-checked and the existing web tests pass; not tried in a browser here.
 
 **Auto (web): Auto denoise on "As is" photos uses the measured noise; the ISO table's luma is half of its colour (2026-11-11)**
 
