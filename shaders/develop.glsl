@@ -450,36 +450,58 @@ vec3 denoise(vec2 uv, vec2 fullPx, vec3 rgb, float colorNoise) {
 }
 
 // Film-like grain, added in the log (density-like) domain.
-// Sparse convolution noise: one randomly placed soft Gaussian "grain" per cell,
-// cells sized relative to the image (like a film frame), mostly luminance with
-// some per-layer colour. Seeded by full-resolution position so tiles match.
-// One field of soft grains on cells of `size` full-resolution pixels, ~unit variance per channel.
-vec3 grainField(vec2 fullPx, float size, uint seed) {
+// Sparse convolution noise: soft Gaussian "grains" at random places, seeded by full-resolution position so tiles
+// match. Polydisperse like film: grains of the set size plus half and quarter sizes, so a large grain keeps a crisp
+// fine texture inside its clumps instead of turning into blur. Mostly luminance with some per-layer colour.
+const float GRAIN_FALLOFF = 2.6;  // Gaussian grain exp(-F d^2), sigma ~0.44 cell
+const float GRAIN_CELL = 1.4;     // largest grains' cell in uGrainSize units: keeps the old default's correlation length
+
+// One size of grain on cells of `size` full-resolution pixels, one grain at a random place in each, ~unit variance
+// per channel. One hash per grain: centre from the high 16 bits, the per-channel amplitude (-1..1) from the low ones.
+vec3 grainOctave(vec2 fullPx, float size, uint seed) {
     vec2 q = fullPx / size;
-    vec2 base = floor(q);
+    // The 4x4 cells nearest q, so every grain within 1.5 cells counts (3x3 around floor(q) cut grains 1 cell away
+    // and drew seams along the cell lattice).
+    vec2 base = floor(q - 0.5);
     vec3 sum = vec3(0.0);
     float w2 = 0.0;
-    for (int j = -2; j <= 2; ++j) {
-        for (int i = -2; i <= 2; ++i) {
+    for (int j = -1; j <= 2; ++j) {
+        for (int i = -1; i <= 2; ++i) {
             vec2 cell = base + vec2(i, j);
-            ivec2 id = ivec2(cell);
-            vec2 d = q - (cell + unitHash(id, 0x9e37u + seed).xy); // jittered grain centre
-            float w = exp(-dot(d, d) * 2.0);                         // Gaussian, sigma = 0.5 cell
-            sum += w * (unitHash(id, 0x2545u + seed) * 2.0 - 1.0);
+            uvec3 h = pcg3d(uvec3(uvec2(ivec2(cell) + 32768), 0x9e37u + seed));
+            vec2 d = q - (cell + vec2(h.xy >> 16u) * (1.0 / 65536.0));
+            float w = exp(-dot(d, d) * GRAIN_FALLOFF);
+            sum += w * (vec3(uvec3(h.x & 0xffffu, h.y & 0xffffu, h.z >> 16u)) * (2.0 / 65535.0) - 1.0);
             w2 += w * w;
         }
     }
-    return sum * inversesqrt(max(w2, 1e-6) / 3.0); // ~unit variance everywhere
+    return sum * inversesqrt(max(w2, 1e-6) / 3.0);
 }
 
-vec3 grainNoise(vec2 fullPx) {
+// Grain at a full-resolution pixel, ~unit variance per channel. `tone` (display 0..1, 0.5 ~ middle grey) skews it as
+// film's grain is: sparse light specks in the shadows, sparse dark ones in the highlights, even in the midtones.
+vec3 grainNoise(vec2 fullPx, float tone) {
     uint fs = uint(uGrainFrame) * 0x9e3779b1u;
-    vec3 g = grainField(fullPx, uGrainSize, fs);
+    float s = uGrainSize * GRAIN_CELL;
+    vec3 g = grainOctave(fullPx, s, fs);
+    float v = 1.0;
+    // Finer grains, fading out below about one full-resolution pixel (they would only add per-pixel noise).
+    float w1 = 0.75 * smoothstep(0.6, 1.1, s * 0.5);
+    if (w1 > 0.0) { g += w1 * grainOctave(fullPx, s * 0.5, 0x7f4au + fs); v += w1 * w1; }
+    float w2 = 0.55 * smoothstep(0.6, 1.1, s * 0.25);
+    if (w2 > 0.0) { g += w2 * grainOctave(fullPx, s * 0.25, 0x3c6eu + fs); v += w2 * w2; }
     if (uGrainRoughness > 0.0) {
-        // Uneven grain: grains twice as large mixed in, as clumps among the fine ones. Same variance, so Amount
-        // keeps its meaning.
-        float w = uGrainRoughness * 1.5;
-        g = (g + w * grainField(fullPx, uGrainSize * 2.0, 0x51edu + fs)) * inversesqrt(1.0 + w * w);
+        // Uneven grain: clumps twice the size. Same variance, so Amount keeps its meaning.
+        float w = uGrainRoughness * 1.2;
+        g += w * grainOctave(fullPx, s * 2.0, 0x51edu + fs);
+        v += w * w;
+    }
+    g *= inversesqrt(v);
+    // Skew: an exponential of the field, re-centred and scaled back to unit variance (sign keeps it increasing).
+    float b = clamp((0.5 - tone) * 0.9, -0.4, 0.4);
+    if (abs(b) > 0.01) {
+        float e = exp(b * b);
+        g = (exp(b * g) - sqrt(e)) * (sign(b) * inversesqrt((e - 1.0) * e));
     }
     float mono = (g.r + g.g + g.b) * 0.57735;
     // Each channel's variance dips between mono and full colour (they are correlated); keep it at the default 0.15's.
@@ -1064,7 +1086,8 @@ vec3 develop(vec3 c, vec2 fullPx, float lm[MAX_LAYERS]) {
         // pixel covers several grains (fit view), show their average instead of
         // aliased speckle.
         float footprint = max(max(fwidth(fullPx.x), fwidth(fullPx.y)), 1.0);
-        c += grainNoise(fullPx) * (uGrain * 0.015 * min(1.0, uGrainSize / footprint));
+        float tone = agxSigmoid(vec3((c.r + c.g + c.b) * (1.0 / 3.0))).x; // display brightness, for the skew
+        c += grainNoise(fullPx, tone) * (uGrain * 0.015 * min(1.0, uGrainSize / footprint));
     }
     c = clamp((c - AGX_PIVOT) * (uContrast * exp2(layerContrast)) + AGX_PIVOT, 0.0, 1.0);
     if (uToneMapper == 1) {
