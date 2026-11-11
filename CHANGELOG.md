@@ -1,3 +1,7 @@
+**RawBoy Camera (Android): the Video button is a movie camera icon (2026-11-11)**
+
+- The experimental video mode switch in the top bar was the word VIDEO; it is now a movie camera icon (Material "videocam", drawn like the other top bar icons), dimmed when off and in the accent colour when video mode is on. TalkBack still reads "Video mode". Help and `docs/camera.md` updated. Android only (iOS Camera has no video button, the web has no Video entry in the app switchers). Not built here (no Android SDK in the session).
+
 **RawBoy Camera (Android): long exposure gathers light in dark scenes (2026-11-11)**
 
 - A long exposure kept AE's exposure (at most 1/30 s), so a dark scene stayed dark however long it ran and Brightness could not lift it. Each frame is now exposed by hand: the preview's whole gain (time x ISO x post-raw boost) times Brightness's compensation and a lift of up to +4 EV that brings a dark scene to the key AutoTone aims for (0.06), spent as exposure time first (up to 0.5 s a frame, the ISO falls to match, so the same picture with much less noise) and then as ISO. A bright scene still uses a short frame at the lowest ISO. The Brightness slider now raises or lowers the exposure of the frames. Not built or run on a phone here; the lift (`LONG_EXPOSURE_MAX_LIFT_EV`, `LONG_EXPOSURE_KEY`) and the 0.5 s frame are first guesses to tune on the Pixel.
