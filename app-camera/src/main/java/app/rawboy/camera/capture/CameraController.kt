@@ -1251,15 +1251,35 @@ class CameraController(context: Context) : AutoCloseable {
      */
     private fun longExposureManual(inf: Info, spec: LongExposure): Pair<Long, Int>? {
         val f = _frames.value ?: return null
+        return longExposureFrame(inf, f, spec, log = true)
+    }
+
+    /**
+     * How much brighter a long-exposure frame's raw is than the preview frame's raw (time x ISO), for the viewfinder
+     * to show what the frames will give; null when there is no preview reading. Same maths as the shutter's
+     * ([longExposureFrame]), so the two cannot drift.
+     */
+    fun longExposureGainOverPreview(spec: LongExposure): Float? {
+        val inf = info ?: return null
+        val f = _frames.value ?: return null
+        val (t, iso) = longExposureFrame(inf, f, spec, log = false) ?: return null
+        val preview = f.exposureNs / 1e9f * f.iso
+        return if (preview > 0f) t / 1e9f * iso / preview else null
+    }
+
+    private fun longExposureFrame(inf: Info, f: FrameState, spec: LongExposure, log: Boolean): Pair<Long, Int>? {
         val gain = f.exposureNs / 1e9f * f.iso * f.postRawBoost
         if (gain <= 0f) return null
         val isoRange = inf.characteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE) ?: return null
         val timeRange = inf.characteristics.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE) ?: return null
-        val comp = compensationEv()
+        // The preview's AE already ran with the Brightness compensation, so its gain includes it: don't add it again.
+        // (Still.compensationEv keeps reporting it so the develop takes it back out.) spec.key is the scene's key in
+        // the raw of the preview frame (viewfinder key x the calibrated preview scale; frames shot at the preview's time x ISO x boost give just this key); it
+        // is null when the lens's preview isn't calibrated yet, which leaves the preview's exposure as it is.
         val lift = spec.key?.takeIf { it > 0f }?.let { key ->
-            kotlin.math.log2(LONG_EXPOSURE_KEY / (key * f.postRawBoost * 2f.pow(comp))).coerceIn(0f, LONG_EXPOSURE_MAX_LIFT_EV)
+            kotlin.math.log2(LONG_EXPOSURE_KEY / key).coerceIn(0f, LONG_EXPOSURE_MAX_LIFT_EV)
         } ?: 0f
-        val target = gain * 2f.pow(comp + lift)
+        val target = gain * 2f.pow(lift)
         val tMax = min(LONG_EXPOSURE_FRAME_NS, timeRange.upper)
         var t = tMax
         var iso = target / (t / 1e9f)
@@ -1269,7 +1289,7 @@ class CameraController(context: Context) : AutoCloseable {
             iso = isoRange.lower.toFloat()
         }
         val exposure = t to iso.toInt().coerceIn(isoRange.lower, isoRange.upper)
-        Log.d(TAG, "long exposure frame: preview ${f.exposureNs / 1000} µs ISO ${f.iso.toInt()} boost ${f.postRawBoost}, comp $comp EV, lift $lift EV -> " +
+        if (log) Log.d(TAG, "long exposure frame: preview ${f.exposureNs / 1000} µs ISO ${f.iso.toInt()} boost ${f.postRawBoost}, scene key ${spec.key}, comp ${compensationEv()} EV (already in the preview), lift $lift EV -> " +
             "${exposure.first / 1000} µs ISO ${exposure.second}")
         return exposure
     }

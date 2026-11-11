@@ -175,7 +175,7 @@ data class CameraSettings(
 
     /** The long exposure to take, or null when the mode is off. */
     fun longExposureSpec(key: Float?): app.rawboy.camera.capture.LongExposure? =
-        if (experimental && longExposure > 0) app.rawboy.camera.capture.LongExposure(longExposure, longExposureLighten, key) else null
+        if (experimental && longExposure > 0) app.rawboy.camera.capture.LongExposure(longExposure, longExposureLighten, key?.takeIf { lensKey in previewScales }?.let { it * previewScale }) else null
 
     companion object {
         /** Self-timer choices in seconds; the button cycles through them. */
