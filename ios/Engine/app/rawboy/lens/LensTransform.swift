@@ -6,7 +6,8 @@ import Foundation
  *
  * Output pixel p (full resolution, after rotation and crop) maps to its source by:
  *   0. add the user crop's origin (the crop only picks a window of the finished frame), then undo
- *      rotation (90 degree turns + straighten), with auto crop for the straighten angle, and the flips
+ *      straighten, the perspective (keystone) correction, the 90 degree turns and the flips, with auto crop for the
+ *      straighten angle and perspective ([outToImage], projective when the perspective sliders are set)
  *   1. auto scale around the image centre (crop to valid pixels, like Lightroom's Constrain Crop), adjusted by lensCrop
  *   2. manual distortion (spherical + cylindrical anamorphic, around the image centre), then the fisheye straightening
  *      (equidistant -> blend towards rectilinear, around the lens's optical axis)
@@ -43,8 +44,10 @@ public final class LensTransform: @unchecked Sendable {
 
     private let straightenRadians: Double
     private let scaleFactor: Double
+    /** Keystone homography in frame-centred pixels ([perspectiveMatrix]), nil without one. */
+    public let perspective: [Double]?
 
-    /** Output pixel -> image pixel (display orientation), row-major 3x3 affine. */
+    /** Output pixel -> image pixel (display orientation), row-major 3x3: affine, projective with a perspective (see [project]). */
     public private(set) var outToImage: [Double] = []
 
     private let useProfile: Bool
@@ -131,6 +134,7 @@ public final class LensTransform: @unchecked Sendable {
         frameHeight = quarterTurns % 2 == 1 ? width : height
         straightenRadians = Double(params.straighten).clamped(-45, 45) * .pi / 180
         scaleFactor = Double(params.scale).clamped(100, 200) / 100
+        perspective = Self.perspectiveMatrix(Double(params.perspectiveVertical), Double(params.perspectiveHorizontal), Double(frameWidth), Double(frameHeight))
         useProfile = params.lensProfile && info.hasProfile
         manualK = Double(params.lensDistortion) / 100 * 0.25
         anamorphicK = Double(params.lensAnamorphic) / 100 * 0.30
@@ -166,8 +170,8 @@ public final class LensTransform: @unchecked Sendable {
 
     /** Source position (image, display orientation) of output pixel (x, y) for colour plane 0..2. */
     public func source(_ x: Double, _ y: Double, plane: Int = 1) -> [Double] {
-        let m = outToImage
-        return lensSource(m[0] * x + m[1] * y + m[2], m[3] * x + m[4] * y + m[5], plane, zoom)
+        let p = Self.project(outToImage, x, y)
+        return lensSource(p[0], p[1], plane, zoom)
     }
 
     /**
@@ -176,9 +180,9 @@ public final class LensTransform: @unchecked Sendable {
      * estimate: far outside the photo (overlay handles) the distortion polynomial can fold.
      */
     public func output(_ x: Double, _ y: Double) -> [Double] {
-        let inv = Mat3.inverse(outToImage)
-        var ox = inv[0] * x + inv[1] * y + inv[2]
-        var oy = inv[3] * x + inv[4] * y + inv[5]
+        let guess = Self.project(Mat3.inverse(outToImage), x, y)
+        var ox = guess[0]
+        var oy = guess[1]
         let h = 0.5
         var best = [ox, oy]
         var bestErr = Double.infinity
@@ -260,7 +264,7 @@ public final class LensTransform: @unchecked Sendable {
 
     /** Source pixels needed to render [out], plus [margin], clamped to the image. */
     public func sourceBounds(_ out: PixelRect, margin: Int) -> PixelRect {
-        if !isGeometric && !hasManualCa && zoom == 1.0 && quarterTurns == 0 && !flipHorizontal && !flipVertical && straightenRadians == 0 && scaleFactor == 1.0 && cropRect.x == 0 && cropRect.y == 0 {
+        if !isGeometric && !hasManualCa && zoom == 1.0 && quarterTurns == 0 && !flipHorizontal && !flipVertical && straightenRadians == 0 && perspective == nil && scaleFactor == 1.0 && cropRect.x == 0 && cropRect.y == 0 {
             return out.expand(margin, maxW: width, maxH: height)
         }
         var minX = Double.greatestFiniteMagnitude
@@ -345,9 +349,10 @@ public final class LensTransform: @unchecked Sendable {
     }
 
     /**
-     * image = c_img + F R(-90k) R(-theta) (out + crop - c_frame) / s, in y-down coordinates where
-     * positive angles turn the picture clockwise; F mirrors the image about its centre (the flips). s crops the straightened frame to the
-     * largest same-aspect rectangle inside the image; it depends on the frame, not the user crop.
+     * image = c_img + F R(-90k) P(R(-theta) (out + crop - c_frame) / s), in y-down coordinates where positive angles
+     * turn the picture clockwise; P is the perspective homography (identity without one, so the whole map is affine);
+     * F mirrors the image about its centre (the flips). s crops the straightened (and keystoned) frame to the largest
+     * same-aspect rectangle inside the image; it depends on the frame, not the user crop.
      */
     private func rotationMatrix() -> [Double] {
         let t = straightenRadians
@@ -355,7 +360,8 @@ public final class LensTransform: @unchecked Sendable {
         let sn = sin(t)
         let ow = Double(frameWidth)
         let oh = Double(frameHeight)
-        let s = (c + max(ow / oh, oh / ow) * abs(sn)) * scaleFactor
+        let fit = perspective.map { Self.perspectiveFit($0, c, sn, ow, oh) } ?? (c + max(ow / oh, oh / ow) * abs(sn))
+        let s = fit * scaleFactor
         // R(-theta) = [[c, s], [-s, c]]
         let r = [c / s, sn / s, -sn / s, c / s]
         // R(-90 k): k=1 [[0,1],[-1,0]], k=2 [[-1,0],[0,-1]], k=3 [[0,-1],[1,0]]
@@ -368,18 +374,81 @@ public final class LensTransform: @unchecked Sendable {
         }
         let fx: Double = flipHorizontal ? -1 : 1
         let fy: Double = flipVertical ? -1 : 1
+        // Frame centre in output (cropped) pixels.
+        let cox = ow / 2 - Double(cropRect.x)
+        let coy = oh / 2 - Double(cropRect.y)
+        if let persp = perspective {
+            let fq = [fx * q[0], fx * q[1], centerX, fy * q[2], fy * q[3], centerY, 0, 0, 1]
+            let rs = [r[0], r[1], -(r[0] * cox + r[1] * coy), r[2], r[3], -(r[2] * cox + r[3] * coy), 0, 0, 1]
+            let m = Mat3.multiply(Mat3.multiply(fq, persp), rs)
+            return m.map { $0 / m[8] }
+        }
         let a = fx * (q[0] * r[0] + q[1] * r[2])
         let b = fx * (q[0] * r[1] + q[1] * r[3])
         let d = fy * (q[2] * r[0] + q[3] * r[2])
         let e = fy * (q[2] * r[1] + q[3] * r[3])
-        // Frame centre in output (cropped) pixels.
-        let cox = ow / 2 - Double(cropRect.x)
-        let coy = oh / 2 - Double(cropRect.y)
         return [
             a, b, centerX - (a * cox + b * coy),
             d, e, centerY - (d * cox + e * coy),
             0, 0, 1,
         ]
+    }
+
+    /** The camera tilt a perspective slider reaches at ±100 (radians): 30 degrees, about Lightroom's range. */
+    public static let perspectiveMaxAngle = 30.0 * .pi / 180
+
+    /**
+     * Keystone correction as a homography in frame-centred pixels (y down), output point -> source point, or nil when
+     * both sliders are 0. The picture is re-projected as if the camera had been turned by [vertical] about the frame's
+     * horizontal axis and by [horizontal] about its vertical one (Rx(a) Ry(b), a focal length of the frame's long side,
+     * about a 36 mm lens on full frame), with the lens shifted so the frame centre stays put: K R K^-1 T(t0).
+     * Vertical - widens the top (buildings shot looking up), Horizontal + widens the right side.
+     */
+    public static func perspectiveMatrix(_ vertical: Double, _ horizontal: Double, _ frameWidth: Double, _ frameHeight: Double) -> [Double]? {
+        if vertical == 0 && horizontal == 0 { return nil }
+        let a = vertical.clamped(-100, 100) / 100 * perspectiveMaxAngle
+        let b = -horizontal.clamped(-100, 100) / 100 * perspectiveMaxAngle
+        let f = max(frameWidth, frameHeight)
+        // R = Rx(a) Ry(b)
+        let r = Mat3.multiply([1, 0, 0, 0, cos(a), -sin(a), 0, sin(a), cos(a)], [cos(b), 0, sin(b), 0, 1, 0, -sin(b), 0, cos(b)])
+        let h = Mat3.multiply(Mat3.multiply(Mat3.diagonal(f, f, 1), r), Mat3.diagonal(1 / f, 1 / f, 1))
+        // The output point whose ray R turns onto the optical axis: f R^T e3, projected.
+        let t0x = f * r[6] / r[8]
+        let t0y = f * r[7] / r[8]
+        let m = Mat3.multiply(h, [1, 0, t0x, 0, 1, t0y, 0, 0, 1])
+        return m.map { $0 / m[8] }
+    }
+
+    /** Point (x, y) through the projective 3x3 [m] (row-major). */
+    public static func project(_ m: [Double], _ x: Double, _ y: Double) -> [Double] {
+        let w = m[6] * x + m[7] * y + m[8]
+        return [(m[0] * x + m[1] * y + m[2]) / w, (m[3] * x + m[4] * y + m[5]) / w]
+    }
+
+    /**
+     * The smallest s for which the frame's corners, turned by the straighten angle (cos [c], sin [sn]), divided by s and
+     * taken through the keystone homography [persp], all land inside the frame: the corners suffice, since a homography
+     * keeps lines straight and the frame is convex. Shrinking the frame only shrinks its image, so bisection finds it.
+     */
+    public static func perspectiveFit(_ persp: [Double], _ c: Double, _ sn: Double, _ ow: Double, _ oh: Double) -> Double {
+        func inside(_ s: Double) -> Bool {
+            for (x, y) in [(-ow / 2, -oh / 2), (ow / 2, -oh / 2), (-ow / 2, oh / 2), (ow / 2, oh / 2)] {
+                let px = (c * x + sn * y) / s
+                let py = (-sn * x + c * y) / s
+                if persp[6] * px + persp[7] * py + persp[8] <= 0 { return false }
+                let uv = project(persp, px, py)
+                if abs(uv[0]) > ow / 2 + 1e-6 || abs(uv[1]) > oh / 2 + 1e-6 { return false }
+            }
+            return true
+        }
+        var lo = 0.25
+        var hi = 16.0
+        if inside(lo) { return lo }
+        for _ in 0..<50 {
+            let mid = (lo + hi) / 2
+            if inside(mid) { hi = mid } else { lo = mid }
+        }
+        return hi
     }
 
     private func maxCornerDistance(_ cx: Double, _ cy: Double) -> Double {

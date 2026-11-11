@@ -470,7 +470,7 @@ public final class PhotoSession: ObservableObject {
             ObjectIdentifier(info), params.lensProfile, params.lensDistortion, params.lensAnamorphic, params.lensCrop,
             params.lensFisheye, params.lensFisheyeFov, params.lensFisheyeAuto, info.fisheyeCircle?.radius, info.fisheyeCircle?.offsetX, info.fisheyeCircle?.offsetY, params.lensFisheyeCircle, params.lensFisheyeX, params.lensFisheyeY,
             params.caRed, params.caBlue, params.vignetteAmount,
-            params.vignetteMidpoint, params.rotation, params.flipHorizontal, params.flipVertical, params.straighten, params.scale,
+            params.vignetteMidpoint, params.rotation, params.flipHorizontal, params.flipVertical, params.straighten, params.perspectiveVertical, params.perspectiveHorizontal, params.scale,
         ]
         let crop = params.crop
         if let c = lensCache {

@@ -78,7 +78,9 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
     Detail tiles upload in bands (`LiveRender.TILE_UPLOAD_PIXELS`, 0.5 MP a frame) into a staging texture swapped in
     when complete: one texImage2D of a ~6 MP RGB16F tile held the Tab S11 Ultra's GPU (Mali-G925 via ANGLE) 200-320 ms.
     Profiled over adb (`connectOverCDP`, trace + rAF monitor); the drag itself ran at 120 fps.
-  - `lens/LensTransform.kt` — output→source geometry: user crop → rotation/straighten → flips (a mirror in `outToImage`, so masks, which sit on the
+  - `lens/LensTransform.kt` — output→source geometry: user crop → straighten → perspective (Crop & rotate's Vertical/Horizontal:
+    a homography `perspectiveMatrix`, so `outToImage` is **projective** when set: use `project()`, the shader divides by z;
+    auto crop `perspectiveFit` bisects on the frame corners; `CropMath.flip`/`rotatePerspective` mirror and turn it) → quarter turns → flips (a mirror in `outToImage`, so masks, which sit on the
     image, follow with no shader change) → auto-scale → manual
     distortion → DNG warp. **Mirrors the shader math**; Kotlin uses it for tile bounds and auto crop.
     `frameWidth/Height` = rotated frame, `outputWidth/Height` = the crop; the crop is only a translation in

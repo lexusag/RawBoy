@@ -82,7 +82,23 @@ export function flipped(p: DevelopParams, vertical: boolean): DevelopParams {
   const f = vertical !== (p.rotation % 2 === 1) ? { ...p, flipVertical: !p.flipVertical } : { ...p, flipHorizontal: !p.flipHorizontal };
   const r = cropOf(p);
   const crop = vertical ? { ...r, top: 1 - r.bottom, bottom: 1 - r.top } : { ...r, left: 1 - r.right, right: 1 - r.left };
-  return withCrop({ ...f, straighten: p.straighten === 0 ? 0 : -p.straighten }, crop);
+  // The keystone mirrors too: a left-right mirror turns the horizontal tilt the other way, top-bottom the vertical one.
+  const perspective = vertical
+    ? { perspectiveVertical: p.perspectiveVertical === 0 ? 0 : -p.perspectiveVertical }
+    : { perspectiveHorizontal: p.perspectiveHorizontal === 0 ? 0 : -p.perspectiveHorizontal };
+  return withCrop({ ...f, ...perspective, straighten: p.straighten === 0 ? 0 : -p.straighten }, crop);
+}
+
+/**
+ * p's perspective sliders after turning the picture by quarterTurns clockwise quarter turns, so the keystone stays on
+ * the same edges of the picture: clockwise, the vertical tilt becomes the horizontal one and the horizontal the
+ * vertical (exact for one slider; with both set the two tilts apply in the other order, a small difference).
+ */
+export function rotatePerspective(p: DevelopParams, quarterTurns: number): DevelopParams {
+  let v = p.perspectiveVertical;
+  let h = p.perspectiveHorizontal;
+  for (let i = 0; i < ((quarterTurns % 4) + 4) % 4; i++) [v, h] = [h, v === 0 ? 0 : -v];
+  return { ...p, perspectiveVertical: v, perspectiveHorizontal: h };
 }
 
 /**

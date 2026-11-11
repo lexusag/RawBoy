@@ -89,7 +89,9 @@ struct MaskGeometry {
         return [CGPoint(x: 0, y: 0), CGPoint(x: viewW, y: 0), CGPoint(x: 0, y: viewH), CGPoint(x: viewW, y: viewH)].map {
             let ox = Double(($0.x - r[0]) / r[2] * CGFloat(lens.outputWidth))
             let oy = Double(($0.y - r[1]) / r[3] * CGFloat(lens.outputHeight))
-            return CGPoint(x: m[0] * ox + m[1] * oy + m[2], y: m[3] * ox + m[4] * oy + m[5])
+            // Projective with a perspective correction; past its horizon (w <= 0) clamp w, which only widens the extent.
+            let w = max(m[6] * ox + m[7] * oy + m[8], 0.05)
+            return CGPoint(x: (m[0] * ox + m[1] * oy + m[2]) / w, y: (m[3] * ox + m[4] * oy + m[5]) / w)
         }
     }
 

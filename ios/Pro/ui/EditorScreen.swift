@@ -110,6 +110,8 @@ struct EditorScreen: View {
             d.flipHorizontal = state.params.flipHorizontal
             d.flipVertical = state.params.flipVertical
             d.straighten = state.params.straighten
+            d.perspectiveVertical = state.params.perspectiveVertical
+            d.perspectiveHorizontal = state.params.perspectiveHorizontal
             d.scale = state.params.scale
             edited = d.withCrop(state.params.crop)
         }

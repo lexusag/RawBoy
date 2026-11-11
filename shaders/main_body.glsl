@@ -1,7 +1,8 @@
 
 void main() {
     vec2 outPx = uOutOrigin + vUv * uOutSpan;
-    vec2 sQ = toSensor(lensPre((uOutToImage * vec3(outPx, 1.0)).xy));
+    vec3 imgH = uOutToImage * vec3(outPx, 1.0); // projective with a perspective correction, else z = 1
+    vec2 sQ = toSensor(lensPre(imgH.xy / imgH.z));
     bool perPlane = uWarpOn > 0.5 && uWarpPlanes > 2.5;
     vec2 sG = uWarpOn > 0.5 ? warpPlane(sQ, perPlane ? 1 : 0) : sQ;
     vec2 srcG = fromSensor(sG);

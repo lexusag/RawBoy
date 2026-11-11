@@ -174,7 +174,9 @@ export function MaskOverlay(props: Props) {
     return [[0, 0], [box!.w, 0], [0, box!.h], [box!.w, box!.h]].map(([sx, sy]) => {
       const ox = ((sx - r![0]) / r![2]) * lens.outputWidth;
       const oy = ((sy - r![1]) / r![3]) * lens.outputHeight;
-      return [m[0] * ox + m[1] * oy + m[2], m[3] * ox + m[4] * oy + m[5]];
+      // Projective with a perspective correction; past its horizon (w <= 0) clamp w, which only widens the extent.
+      const w = Math.max(m[6] * ox + m[7] * oy + m[8], 0.05);
+      return [(m[0] * ox + m[1] * oy + m[2]) / w, (m[3] * ox + m[4] * oy + m[5]) / w];
     });
   };
 

@@ -17,13 +17,51 @@ export const FISHEYE_MAX_STRETCH = 4;
 /** The widest angle from the optical axis the Fisheye slider reaches at 100 (radians): 75 degrees. */
 export const FISHEYE_MAX_ANGLE = (75 * Math.PI) / 180;
 
+/** The camera tilt a perspective slider reaches at ±100 (radians): 30 degrees, about Lightroom's range. */
+export const PERSPECTIVE_MAX_ANGLE = (30 * Math.PI) / 180;
+
+/**
+ * Keystone correction as a homography in frame-centred pixels (y down), output point -> source point, or null when
+ * both sliders are 0. The picture is re-projected as if the camera had been turned by [vertical] about the frame's
+ * horizontal axis and by [horizontal] about its vertical one (Rx(a) Ry(b), a focal length of the frame's long side,
+ * about a 36 mm lens on full frame), with the lens shifted so the frame centre stays put: K R K^-1 T(t0).
+ * Vertical - turns the top of the picture towards the viewer (widens it: buildings shot looking up), Horizontal +
+ * widens the right side.
+ */
+export function perspectiveMatrix(vertical: number, horizontal: number, frameWidth: number, frameHeight: number): M3 | null {
+  const clamp = (v: number) => Math.min(100, Math.max(-100, v));
+  if (vertical === 0 && horizontal === 0) return null;
+  const a = (clamp(vertical) / 100) * PERSPECTIVE_MAX_ANGLE;
+  const b = (-clamp(horizontal) / 100) * PERSPECTIVE_MAX_ANGLE;
+  const f = Math.max(frameWidth, frameHeight);
+  const ca = Math.cos(a);
+  const sa = Math.sin(a);
+  const cb = Math.cos(b);
+  const sb = Math.sin(b);
+  // R = Rx(a) Ry(b)
+  const r = Mat3.multiply([1, 0, 0, 0, ca, -sa, 0, sa, ca], [cb, 0, sb, 0, 1, 0, -sb, 0, cb]);
+  const h = Mat3.multiply(Mat3.multiply(Mat3.diagonal(f, f, 1), r), Mat3.diagonal(1 / f, 1 / f, 1));
+  // The output point whose ray R turns onto the optical axis: f R^T e3, projected.
+  const t0x = (f * r[6]) / r[8];
+  const t0y = (f * r[7]) / r[8];
+  const m = Mat3.multiply(h, [1, 0, t0x, 0, 1, t0y, 0, 0, 1]);
+  return m.map((v) => v / m[8]);
+}
+
+/** Point (x, y) through the projective 3x3 [m] (row-major). */
+export function project(m: M3, x: number, y: number): number[] {
+  const w = m[6] * x + m[7] * y + m[8];
+  return [(m[0] * x + m[1] * y + m[2]) / w, (m[3] * x + m[4] * y + m[5]) / w];
+}
+
 /**
  * Lens geometry for one image and one set of slider values (port of lens/LensTransform.kt): where each output
  * pixel samples the decoded image, and the gains to apply there.
  *
  * Output pixel p (full resolution, after rotation and crop) maps to its source by:
  *   0. add the user crop's origin (the crop only picks a window of the finished frame), then undo
- *      rotation (90 degree turns + straighten), with auto crop for the straighten angle, and the flips
+ *      straighten, the perspective (keystone) correction, the 90 degree turns and the flips, with auto crop for the
+ *      straighten angle and perspective (outToImage, projective when the perspective sliders are set)
  *   1. auto scale around the image centre (crop to valid pixels, like Lightroom's Constrain Crop), adjusted by lensCrop
  *   2. manual distortion (spherical + cylindrical anamorphic, around the image centre), then the fisheye straightening
  *      (equidistant -> blend towards rectilinear, around the lens's optical axis)
@@ -56,7 +94,9 @@ export class LensTransform {
   readonly outputHeight: number;
   private readonly straightenRadians: number;
   private readonly scaleFactor: number;
-  /** Output pixel -> image pixel (display orientation), row-major 3x3 affine. */
+  /** Keystone homography in frame-centred pixels (perspectiveMatrix), null without one. */
+  readonly perspective: M3 | null;
+  /** Output pixel -> image pixel (display orientation), row-major 3x3: affine, projective with a perspective (see project). */
   readonly outToImage: M3;
   /** k in src_r = r * (1 - k r^2); +100 on the slider removes strong barrel distortion. */
   readonly manualK: number;
@@ -114,6 +154,7 @@ export class LensTransform {
     this.outputHeight = this.cropRect.height;
     this.straightenRadians = (Math.min(45, Math.max(-45, params.straighten)) * Math.PI) / 180;
     this.scaleFactor = Math.min(200, Math.max(100, params.scale ?? 100)) / 100;
+    this.perspective = perspectiveMatrix(params.perspectiveVertical ?? 0, params.perspectiveHorizontal ?? 0, this.frameWidth, this.frameHeight);
     this.outToImage = this.rotationMatrix();
     const useProfile = params.lensProfile && info.hasProfile;
     this.manualK = (params.lensDistortion / 100) * 0.25;
@@ -161,8 +202,8 @@ export class LensTransform {
 
   /** Source position (image, display orientation) of output pixel (x, y) for colour plane 0..2. */
   source(x: number, y: number, plane = 1): number[] {
-    const m = this.outToImage;
-    return this.lensSource(m[0] * x + m[1] * y + m[2], m[3] * x + m[4] * y + m[5], plane, this.zoom);
+    const p = project(this.outToImage, x, y);
+    return this.lensSource(p[0], p[1], plane, this.zoom);
   }
 
   /**
@@ -170,9 +211,7 @@ export class LensTransform {
    * image-space shapes (mask gradients) over the preview. Newton steps from the lens-free guess; distortion is mild.
    */
   output(x: number, y: number): number[] {
-    const inv = Mat3.inverse(this.outToImage);
-    let ox = inv[0] * x + inv[1] * y + inv[2];
-    let oy = inv[3] * x + inv[4] * y + inv[5];
+    let [ox, oy] = project(Mat3.inverse(this.outToImage), x, y);
     const h = 0.5;
     // Keep the best estimate: far outside the photo (overlay handles) the distortion polynomial can fold.
     let best = [ox, oy];
@@ -248,7 +287,7 @@ export class LensTransform {
 
   /** Source pixels needed to render [out], plus [margin], clamped to the image. */
   sourceBounds(out: PixelRect, margin: number): PixelRect {
-    if (!this.isGeometric && !this.hasManualCa && this.zoom === 1 && this.quarterTurns === 0 && !this.flipHorizontal && !this.flipVertical && this.straightenRadians === 0 && this.scaleFactor === 1 && this.cropRect.x === 0 && this.cropRect.y === 0) {
+    if (!this.isGeometric && !this.hasManualCa && this.zoom === 1 && this.quarterTurns === 0 && !this.flipHorizontal && !this.flipVertical && this.straightenRadians === 0 && this.perspective == null && this.scaleFactor === 1 && this.cropRect.x === 0 && this.cropRect.y === 0) {
       const x0 = Math.max(0, out.x - margin);
       const y0 = Math.max(0, out.y - margin);
       const x1 = Math.min(this.width, right(out) + margin);
@@ -352,9 +391,10 @@ export class LensTransform {
   }
 
   /**
-   * image = c_img + F R(-90k) R(-theta) (out + crop - c_frame) / s, in y-down coordinates where positive angles
-   * turn the picture clockwise; F mirrors the image about its centre (the flips). s crops the straightened frame to
-   * the largest same-aspect rectangle inside the image; it depends on the frame, not the user crop.
+   * image = c_img + F R(-90k) P(R(-theta) (out + crop - c_frame) / s), in y-down coordinates where positive angles
+   * turn the picture clockwise; P is the perspective homography (identity without one, so the whole map is affine);
+   * F mirrors the image about its centre (the flips). s crops the straightened (and keystoned) frame to the largest
+   * same-aspect rectangle inside the image; it depends on the frame, not the user crop.
    */
   private rotationMatrix(): M3 {
     const t = this.straightenRadians;
@@ -362,20 +402,55 @@ export class LensTransform {
     const sn = Math.sin(t);
     const ow = this.frameWidth;
     const oh = this.frameHeight;
-    const s = (c + Math.max(ow / oh, oh / ow) * Math.abs(sn)) * this.scaleFactor;
+    const persp = this.perspective;
+    const fit = persp ? LensTransform.perspectiveFit(persp, c, sn, ow, oh) : c + Math.max(ow / oh, oh / ow) * Math.abs(sn);
+    const s = fit * this.scaleFactor;
     const r = [c / s, sn / s, -sn / s, c / s];
     const q =
       this.quarterTurns === 1 ? [0, 1, -1, 0] : this.quarterTurns === 2 ? [-1, 0, 0, -1] : this.quarterTurns === 3 ? [0, -1, 1, 0] : [1, 0, 0, 1];
     const fx = this.flipHorizontal ? -1 : 1;
     const fy = this.flipVertical ? -1 : 1;
+    // Frame centre in output (cropped) pixels.
+    const cox = ow / 2 - this.cropRect.x;
+    const coy = oh / 2 - this.cropRect.y;
+    if (persp) {
+      const fq = [fx * q[0], fx * q[1], this.centerX, fy * q[2], fy * q[3], this.centerY, 0, 0, 1];
+      const rs = [r[0], r[1], -(r[0] * cox + r[1] * coy), r[2], r[3], -(r[2] * cox + r[3] * coy), 0, 0, 1];
+      const m = Mat3.multiply(Mat3.multiply(fq, persp), rs);
+      return m.map((v) => v / m[8]);
+    }
     const a = fx * (q[0] * r[0] + q[1] * r[2]);
     const b = fx * (q[0] * r[1] + q[1] * r[3]);
     const d = fy * (q[2] * r[0] + q[3] * r[2]);
     const e = fy * (q[2] * r[1] + q[3] * r[3]);
-    // Frame centre in output (cropped) pixels.
-    const cox = ow / 2 - this.cropRect.x;
-    const coy = oh / 2 - this.cropRect.y;
     return [a, b, this.centerX - (a * cox + b * coy), d, e, this.centerY - (d * cox + e * coy), 0, 0, 1];
+  }
+
+  /**
+   * The smallest s for which the frame's corners, turned by the straighten angle (cos [c], sin [sn]), divided by s and
+   * taken through the keystone homography [persp], all land inside the frame: the corners suffice, since a homography
+   * keeps lines straight and the frame is convex. Shrinking the frame only shrinks its image, so bisection finds it.
+   */
+  static perspectiveFit(persp: M3, c: number, sn: number, ow: number, oh: number): number {
+    const inside = (s: number): boolean => {
+      for (const [x, y] of [[-ow / 2, -oh / 2], [ow / 2, -oh / 2], [-ow / 2, oh / 2], [ow / 2, oh / 2]]) {
+        const px = (c * x + sn * y) / s;
+        const py = (-sn * x + c * y) / s;
+        if (persp[6] * px + persp[7] * py + persp[8] <= 0) return false;
+        const [u, v] = project(persp, px, py);
+        if (Math.abs(u) > ow / 2 + 1e-6 || Math.abs(v) > oh / 2 + 1e-6) return false;
+      }
+      return true;
+    };
+    let lo = 0.25;
+    let hi = 16;
+    if (inside(lo)) return lo;
+    for (let i = 0; i < 50; i++) {
+      const mid = (lo + hi) / 2;
+      if (inside(mid)) hi = mid;
+      else lo = mid;
+    }
+    return hi;
   }
 
   private maxCornerDistance(cx: number, cy: number): number {

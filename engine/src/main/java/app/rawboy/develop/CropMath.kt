@@ -87,7 +87,29 @@ object CropMath {
         val f = if (vertical != (p.rotation % 2 != 0)) p.copy(flipVertical = !p.flipVertical) else p.copy(flipHorizontal = !p.flipHorizontal)
         val r = p.crop
         val crop = if (vertical) r.copy(top = 1f - r.bottom, bottom = 1f - r.top) else r.copy(left = 1f - r.right, right = 1f - r.left)
-        return f.copy(straighten = if (p.straighten == 0f) 0f else -p.straighten).withCrop(crop)
+        // The keystone mirrors too: a left-right mirror turns the horizontal tilt the other way, top-bottom the vertical one.
+        val g = if (vertical) {
+            f.copy(perspectiveVertical = if (p.perspectiveVertical == 0f) 0f else -p.perspectiveVertical)
+        } else {
+            f.copy(perspectiveHorizontal = if (p.perspectiveHorizontal == 0f) 0f else -p.perspectiveHorizontal)
+        }
+        return g.copy(straighten = if (p.straighten == 0f) 0f else -p.straighten).withCrop(crop)
+    }
+
+    /**
+     * [p]'s perspective sliders after turning the picture by [quarterTurns] clockwise quarter turns, so the keystone
+     * stays on the same edges of the picture: clockwise, the vertical tilt becomes the horizontal one and the
+     * horizontal the vertical (exact for one slider; with both set the two tilts apply in the other order).
+     */
+    fun rotatePerspective(p: DevelopParams, quarterTurns: Int): DevelopParams {
+        var v = p.perspectiveVertical
+        var h = p.perspectiveHorizontal
+        repeat(((quarterTurns % 4) + 4) % 4) {
+            val nv = h
+            h = if (v == 0f) 0f else -v
+            v = nv
+        }
+        return p.copy(perspectiveVertical = v, perspectiveHorizontal = h)
     }
 
     /**

@@ -39,10 +39,13 @@ import app.rawboy.color.BwFilter
  *   red/green/bluePurity -200..200 (0 = unchanged), tintHue degrees (-180..180), tintPurity 0..100
  * - rotation: clockwise quarter turns; straighten: degrees -45..45, + turns clockwise (auto crop).
  * - scale: 100..200%, 100% = normal (scales image within the full frame to preserve final resolution).
+ * - perspectiveVertical/perspectiveHorizontal: -100..100 keystone correction, a virtual tilt of the camera (auto crop):
+ *   Vertical - widens the top (buildings shot looking up), Horizontal + widens the right side. Both act on the frame
+ *   as shown (after the turns and flips), before straighten. See [app.rawboy.lens.LensTransform].
  * - flipHorizontal/flipVertical: mirror the photo (display orientation, before rotation) left-right / top-bottom.
  * - cropLeft/Top/Right/Bottom: 0..1 edges of the user crop within the rotated + straightened frame
  *   (0, 0, 1, 1 = no crop). See [CropMath].
- *   Rotation, flips, straighten, scale and crop are per photo: they reset when another file is opened.
+ *   Rotation, flips, straighten, perspective, scale and crop are per photo: they reset when another file is opened.
  *
  * Whites/Blacks follow Lightroom: Blacks < 0 raises the black point (deeper
  * blacks), Blacks > 0 lifts/fades them; Whites > 0 lowers the white point
@@ -108,6 +111,8 @@ data class DevelopParams(
     val flipHorizontal: Boolean = false,
     val flipVertical: Boolean = false,
     val straighten: Float = 0f,
+    val perspectiveVertical: Float = 0f,
+    val perspectiveHorizontal: Float = 0f,
     val scale: Float = 100f,
     val cropLeft: Float = 0f,
     val cropTop: Float = 0f,

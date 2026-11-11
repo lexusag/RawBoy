@@ -504,7 +504,7 @@ private fun ReplacedLook(name: String, detail: String, action: @Composable () ->
 private fun editsSummary(e: DevelopParams): String {
     fun count(n: Int, one: String) = if (n == 1) "1 $one" else "$n ${one}s"
     val parts = buildList {
-        if (e.crop != CropMath.FULL || e.straighten != 0f) add("crop")
+        if (e.crop != CropMath.FULL || e.straighten != 0f || e.perspectiveVertical != 0f || e.perspectiveHorizontal != 0f) add("crop")
         val masks = e.masks.count { !it.isIdentity && it.hasMask }
         if (masks > 0) add(count(masks, "mask"))
         if (e.masks.any { it.enabled && it.opacity > 0f && it.adjust.lensBlur > 0f }) add("lens blur")

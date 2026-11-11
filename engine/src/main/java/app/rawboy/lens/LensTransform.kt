@@ -18,7 +18,8 @@ import kotlin.math.sqrt
  *
  * Output pixel p (full resolution, after rotation and crop) maps to its source by:
  *   0. add the user crop's origin (the crop only picks a window of the finished frame), then undo
- *      rotation (90 degree turns + straighten), with auto crop for the straighten angle, and the flips
+ *      straighten, the perspective (keystone) correction, the 90 degree turns and the flips, with auto crop for the
+ *      straighten angle and perspective ([outToImage], projective when the perspective sliders are set)
  *   1. auto scale around the image centre (crop to valid pixels, like Lightroom's Constrain Crop), adjusted by lensCrop
  *   2. manual distortion (spherical + cylindrical anamorphic, around the image centre), then the fisheye straightening
  *      (equidistant -> blend towards rectilinear, around the lens's optical axis)
@@ -55,7 +56,10 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
     private val straightenRadians = Math.toRadians(params.straighten.toDouble().coerceIn(-45.0, 45.0))
     private val scaleFactor = params.scale.toDouble().coerceIn(100.0, 200.0) / 100.0
 
-    /** Output pixel -> image pixel (display orientation), row-major 3x3 affine. */
+    /** Keystone homography in frame-centred pixels ([perspectiveMatrix]), null without one. */
+    val perspective: DoubleArray? = perspectiveMatrix(params.perspectiveVertical.toDouble(), params.perspectiveHorizontal.toDouble(), frameWidth.toDouble(), frameHeight.toDouble())
+
+    /** Output pixel -> image pixel (display orientation), row-major 3x3: affine, projective with a perspective (see [project]). */
     val outToImage: DoubleArray = rotationMatrix()
 
     private val useProfile = params.lensProfile && info.hasProfile
@@ -124,8 +128,8 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
 
     /** Source position (image, display orientation) of output pixel (x, y) for colour plane 0..2. */
     fun source(x: Double, y: Double, plane: Int = 1): DoubleArray {
-        val m = outToImage
-        return lensSource(m[0] * x + m[1] * y + m[2], m[3] * x + m[4] * y + m[5], plane, zoom)
+        val p = project(outToImage, x, y)
+        return lensSource(p[0], p[1], plane, zoom)
     }
 
     /**
@@ -134,9 +138,9 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
      * estimate: far outside the photo (overlay handles) the distortion polynomial can fold.
      */
     fun output(x: Double, y: Double): DoubleArray {
-        val inv = Mat3.inverse(outToImage)
-        var ox = inv[0] * x + inv[1] * y + inv[2]
-        var oy = inv[3] * x + inv[4] * y + inv[5]
+        val guess = project(Mat3.inverse(outToImage), x, y)
+        var ox = guess[0]
+        var oy = guess[1]
         val h = 0.5
         var best = doubleArrayOf(ox, oy)
         var bestErr = Double.POSITIVE_INFINITY
@@ -216,7 +220,7 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
 
     /** Source pixels needed to render [out], plus [margin], clamped to the image. */
     fun sourceBounds(out: PixelRect, margin: Int): PixelRect {
-        if (!isGeometric && !hasManualCa && zoom == 1.0 && quarterTurns == 0 && !flipHorizontal && !flipVertical && straightenRadians == 0.0 && scaleFactor == 1.0 && cropRect.x == 0 && cropRect.y == 0) {
+        if (!isGeometric && !hasManualCa && zoom == 1.0 && quarterTurns == 0 && !flipHorizontal && !flipVertical && straightenRadians == 0.0 && perspective == null && scaleFactor == 1.0 && cropRect.x == 0 && cropRect.y == 0) {
             return out.expand(margin, width, height)
         }
         var minX = Double.MAX_VALUE
@@ -305,9 +309,10 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
     }
 
     /**
-     * image = c_img + F R(-90k) R(-theta) (out + crop - c_frame) / s, in y-down coordinates where
-     * positive angles turn the picture clockwise; F mirrors the image about its centre (the flips). s crops the straightened frame to the
-     * largest same-aspect rectangle inside the image; it depends on the frame, not the user crop.
+     * image = c_img + F R(-90k) P(R(-theta) (out + crop - c_frame) / s), in y-down coordinates where positive angles
+     * turn the picture clockwise; P is the perspective homography (identity without one, so the whole map is affine);
+     * F mirrors the image about its centre (the flips). s crops the straightened (and keystoned) frame to the largest
+     * same-aspect rectangle inside the image; it depends on the frame, not the user crop.
      */
     private fun rotationMatrix(): DoubleArray {
         val t = straightenRadians
@@ -315,7 +320,9 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
         val sn = kotlin.math.sin(t)
         val ow = frameWidth.toDouble()
         val oh = frameHeight.toDouble()
-        val s = (c + max(ow / oh, oh / ow) * kotlin.math.abs(sn)) * scaleFactor
+        val persp = perspective
+        val fit = if (persp != null) perspectiveFit(persp, c, sn, ow, oh) else c + max(ow / oh, oh / ow) * kotlin.math.abs(sn)
+        val s = fit * scaleFactor
         // R(-theta) = [[c, s], [-s, c]]
         val r = doubleArrayOf(c / s, sn / s, -sn / s, c / s)
         // R(-90 k): k=1 [[0,1],[-1,0]], k=2 [[-1,0],[0,-1]], k=3 [[0,-1],[1,0]]
@@ -327,13 +334,19 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
         }
         val fx = if (flipHorizontal) -1.0 else 1.0
         val fy = if (flipVertical) -1.0 else 1.0
+        // Frame centre in output (cropped) pixels.
+        val cox = ow / 2 - cropRect.x
+        val coy = oh / 2 - cropRect.y
+        if (persp != null) {
+            val fq = doubleArrayOf(fx * q[0], fx * q[1], centerX, fy * q[2], fy * q[3], centerY, 0.0, 0.0, 1.0)
+            val rs = doubleArrayOf(r[0], r[1], -(r[0] * cox + r[1] * coy), r[2], r[3], -(r[2] * cox + r[3] * coy), 0.0, 0.0, 1.0)
+            val m = Mat3.multiply(Mat3.multiply(fq, persp), rs)
+            return DoubleArray(9) { m[it] / m[8] }
+        }
         val a = fx * (q[0] * r[0] + q[1] * r[2])
         val b = fx * (q[0] * r[1] + q[1] * r[3])
         val d = fy * (q[2] * r[0] + q[3] * r[2])
         val e = fy * (q[2] * r[1] + q[3] * r[3])
-        // Frame centre in output (cropped) pixels.
-        val cox = ow / 2 - cropRect.x
-        val coy = oh / 2 - cropRect.y
         return doubleArrayOf(
             a, b, centerX - (a * cox + b * coy),
             d, e, centerY - (d * cox + e * coy),
@@ -360,6 +373,68 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
 
         /** The widest angle from the optical axis the Fisheye slider reaches at 100 (radians): 75 degrees. */
         val FISHEYE_MAX_ANGLE = Math.toRadians(75.0)
+
+        /** The camera tilt a perspective slider reaches at ±100 (radians): 30 degrees, about Lightroom's range. */
+        val PERSPECTIVE_MAX_ANGLE = Math.toRadians(30.0)
+
+        /**
+         * Keystone correction as a homography in frame-centred pixels (y down), output point -> source point, or null
+         * when both sliders are 0. The picture is re-projected as if the camera had been turned by [vertical] about the
+         * frame's horizontal axis and by [horizontal] about its vertical one (Rx(a) Ry(b), a focal length of the frame's
+         * long side, about a 36 mm lens on full frame), with the lens shifted so the frame centre stays put:
+         * K R K^-1 T(t0). Vertical - widens the top (buildings shot looking up), Horizontal + widens the right side.
+         */
+        fun perspectiveMatrix(vertical: Double, horizontal: Double, frameWidth: Double, frameHeight: Double): DoubleArray? {
+            if (vertical == 0.0 && horizontal == 0.0) return null
+            val a = vertical.coerceIn(-100.0, 100.0) / 100.0 * PERSPECTIVE_MAX_ANGLE
+            val b = -horizontal.coerceIn(-100.0, 100.0) / 100.0 * PERSPECTIVE_MAX_ANGLE
+            val f = max(frameWidth, frameHeight)
+            val ca = kotlin.math.cos(a)
+            val sa = kotlin.math.sin(a)
+            val cb = kotlin.math.cos(b)
+            val sb = kotlin.math.sin(b)
+            // R = Rx(a) Ry(b)
+            val r = Mat3.multiply(doubleArrayOf(1.0, 0.0, 0.0, 0.0, ca, -sa, 0.0, sa, ca), doubleArrayOf(cb, 0.0, sb, 0.0, 1.0, 0.0, -sb, 0.0, cb))
+            val h = Mat3.multiply(Mat3.multiply(Mat3.diagonal(f, f, 1.0), r), Mat3.diagonal(1 / f, 1 / f, 1.0))
+            // The output point whose ray R turns onto the optical axis: f R^T e3, projected.
+            val t0x = f * r[6] / r[8]
+            val t0y = f * r[7] / r[8]
+            val m = Mat3.multiply(h, doubleArrayOf(1.0, 0.0, t0x, 0.0, 1.0, t0y, 0.0, 0.0, 1.0))
+            return DoubleArray(9) { m[it] / m[8] }
+        }
+
+        /** Point (x, y) through the projective 3x3 [m] (row-major). */
+        fun project(m: DoubleArray, x: Double, y: Double): DoubleArray {
+            val w = m[6] * x + m[7] * y + m[8]
+            return doubleArrayOf((m[0] * x + m[1] * y + m[2]) / w, (m[3] * x + m[4] * y + m[5]) / w)
+        }
+
+        /**
+         * The smallest s for which the frame's corners, turned by the straighten angle (cos [c], sin [sn]), divided by s
+         * and taken through the keystone homography [persp], all land inside the frame: the corners suffice, since a
+         * homography keeps lines straight and the frame is convex. Shrinking the frame only shrinks its image, so
+         * bisection finds it.
+         */
+        fun perspectiveFit(persp: DoubleArray, c: Double, sn: Double, ow: Double, oh: Double): Double {
+            fun inside(s: Double): Boolean {
+                for ((x, y) in listOf(-ow / 2 to -oh / 2, ow / 2 to -oh / 2, -ow / 2 to oh / 2, ow / 2 to oh / 2)) {
+                    val px = (c * x + sn * y) / s
+                    val py = (-sn * x + c * y) / s
+                    if (persp[6] * px + persp[7] * py + persp[8] <= 0) return false
+                    val (u, v) = project(persp, px, py).let { it[0] to it[1] }
+                    if (kotlin.math.abs(u) > ow / 2 + 1e-6 || kotlin.math.abs(v) > oh / 2 + 1e-6) return false
+                }
+                return true
+            }
+            var lo = 0.25
+            var hi = 16.0
+            if (inside(lo)) return lo
+            repeat(50) {
+                val mid = (lo + hi) / 2
+                if (inside(mid)) hi = mid else lo = mid
+            }
+            return hi
+        }
 
         /** Affine (continuous pixel coordinates) from display orientation to sensor orientation. */
         fun orientationMatrix(o: Int, w: Double, h: Double): DoubleArray = when (o) {

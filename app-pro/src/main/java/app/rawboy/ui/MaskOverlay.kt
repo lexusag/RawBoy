@@ -110,7 +110,9 @@ private class MaskGeometry(
             .map {
                 val ox = ((it.x - r[0]) / r[2] * lens.outputWidth).toDouble()
                 val oy = ((it.y - r[1]) / r[3] * lens.outputHeight).toDouble()
-                Offset((m[0] * ox + m[1] * oy + m[2]).toFloat(), (m[3] * ox + m[4] * oy + m[5]).toFloat())
+                // Projective with a perspective correction; past its horizon (w <= 0) clamp w, which only widens the extent.
+                val w = max(m[6] * ox + m[7] * oy + m[8], 0.05)
+                Offset(((m[0] * ox + m[1] * oy + m[2]) / w).toFloat(), ((m[3] * ox + m[4] * oy + m[5]) / w).toFloat())
             }
     }
 
