@@ -123,11 +123,13 @@ jobs:
           :engine:compileDebugUnitTestKotlin :app-camera:compileDebugUnitTestKotlin
 
   # The one required check. Passes when every needed job succeeded or was skipped (nothing relevant changed);
-  # fails when any failed or was cancelled. `if: always()` makes it run (and report) even when a dependency is skipped.
+  # fails when any failed or was cancelled. `always()` makes it run (and report) even when a dependency is skipped;
+  # it runs on pull requests only.
   pr-check:
     name: pr-check
     needs: [changes, web, android]
-    if: always()
+    # Only meaningful (and only required) on pull requests; pushes to main run the jobs above without it.
+    if: always() && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
