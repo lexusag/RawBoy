@@ -42,6 +42,17 @@ describe('Auto import mode', () => {
   });
 });
 
+describe('"As is" lens presets', () => {
+  it('a non-raw "As is" photo is not matched to a lens preset by its EXIF lens; a raw is', async () => {
+    const { matchLensName } = await import('../../ui/auto/AutoStore');
+    const photo = (plain: boolean, displaySource: boolean) =>
+      [{ plain }, { defaults: { displaySource }, lens: { lensName: 'XF 23mm' } }] as unknown as Parameters<typeof matchLensName>;
+    expect(matchLensName(...photo(true, true))).toBe('');
+    expect(matchLensName(...photo(true, false))).toBe('XF 23mm');
+    expect(matchLensName(...photo(false, true))).toBe('XF 23mm');
+  });
+});
+
 describe('Non-RAW import note', () => {
   it('shows only when an import includes JPEG, HEIC, PNG or TIFF files', () => {
     expect(nonRawNote(['a.CR2', 'b.dng'])).toBeNull();

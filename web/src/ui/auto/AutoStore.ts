@@ -285,6 +285,15 @@ export function paramsOf(p: AutoPhoto): DevelopParams | null {
   return developAuto(autoBaseOf(p, a), activeLook(p), p.strength, p.adjust, a.stats.hasFace, p.preset, p.lensPreset);
 }
 
+/**
+ * The lens name a by-lens preset is matched on. A photo added "As is" that isn't a raw (JPEG, HEIC, PNG, TIFF: already
+ * corrected by whatever made it) is never matched automatically, so importing it changes nothing; a preset picked by
+ * hand still applies.
+ */
+export function matchLensName(p: AutoPhoto, a: Analysis): string {
+  return p.plain && a.defaults.displaySource ? '' : a.lens.lensName;
+}
+
 /** The auto develop under [p]'s look or preset: [a]'s, with the ISO table's denoise on a plain photo given Auto denoise. */
 function autoBaseOf(p: AutoPhoto, a: Analysis): DevelopParams {
   return p.plain && p.autoDenoise ? { ...a.autoBase, ...autoNoiseOf(a, true) } : a.autoBase;
@@ -753,7 +762,7 @@ export class AutoStore {
       const lensChoice = kept(p.lensChoice);
       if (lensChoice !== p.lensChoice) this.updatePhoto(p.id, (q) => ({ ...q, lensChoice }));
       if (!p.analysis) continue;
-      const next = chosenLensPreset(lensPresets, lensChoice, p.analysis.lens.lensName);
+      const next = chosenLensPreset(lensPresets, lensChoice, matchLensName(p, p.analysis));
       if (next !== p.lensPreset) this.changeDevelop(p.id, (q) => ({ ...q, lensPreset: next }), null);
     }
   }
@@ -768,7 +777,7 @@ export class AutoStore {
     const photos = this._state.photos.filter((p) => !ids || ids.has(p.id));
     for (const p of photos) {
       // Before analysis by-lens finds nothing yet, but a picked preset is known (and kept in the photo's sidecar).
-      const lensPreset = chosenLensPreset(this._state.lensPresets, choice, p.analysis?.lens.lensName ?? '');
+      const lensPreset = chosenLensPreset(this._state.lensPresets, choice, p.analysis ? matchLensName(p, p.analysis) : '');
       this.changeDevelop(p.id, (q) => ({ ...q, lensChoice: choice, lensPreset }), null);
     }
     const what = choice === null ? 'Lens presets by lens' : choice === NO_LENS_PRESET ? 'No lens preset'
@@ -944,7 +953,7 @@ export class AutoStore {
       const filmLook = suggestFilm(analysis.stats, analysis.defaults.temperature);
       this.updatePhoto(next.id, (p) => ({
         ...p, status: 'ready', analysis, suggested: look, suggestedFilm: filmLook,
-        lensPreset: chosenLensPreset(this._state.lensPresets, p.lensChoice, analysis.lens.lensName),
+        lensPreset: chosenLensPreset(this._state.lensPresets, p.lensChoice, matchLensName(p, analysis)),
         // A plain photo stays Natural (nothing added); its film suggestion is there if it switches to Film.
         look: p.looksApplied || p.plain ? p.look : look, filmLook: p.looksApplied ? p.filmLook : filmLook,
       }));
