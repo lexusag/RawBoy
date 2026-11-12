@@ -13,6 +13,9 @@ struct DetailScreen: View {
     @State private var page: String?
     @State private var showExport = false
     @State private var pickingWhite = false
+    /** Crop & rotate's shape lock (UI only; the crop itself is in the photo's adjustments). Portrait nil = follow the frame. */
+    @State private var cropAspect = CropAspect.free
+    @State private var cropPortrait: Bool?
 
     /** Photos that can be opened, in grid order. */
     private var pages: [AutoPhoto] { vm.photos.filter { $0.analysis != nil } }
@@ -22,6 +25,9 @@ struct DetailScreen: View {
             NavigationStack {
                 // The looks and sliders under the photo in portrait, beside it in landscape.
                 PhotoWithControls { pager } controls: { beside in
+                    if vm.cropping {
+                        cropPanel(photo)
+                    } else {
                     if let preset = photo.preset {
                         // A RawBoy preset develops this photo in place of the look strip.
                         HStack {
@@ -72,6 +78,7 @@ struct DetailScreen: View {
                     }
                     .id(tab)  // one scroll position per tab
                     .frame(height: beside ? nil : ValueSlider.rowHeight * 3 + 8)
+                    }
                 }
                 .toolbar { toolbar(photo) }
                 .sheet(isPresented: $showExport) {
@@ -88,7 +95,7 @@ struct DetailScreen: View {
         ScrollView(.horizontal) {
             LazyHStack(spacing: 0) {
                 ForEach(pages) { p in
-                    PhotoPage(vm: vm, session: session, photo: p, current: p.id == id, pickingWhite: $pickingWhite)
+                    PhotoPage(vm: vm, session: session, photo: p, current: p.id == id, pickingWhite: $pickingWhite, cropRatio: cropRatio)
                         .containerRelativeFrame(.horizontal)
                         .id(p.id)
                 }
@@ -99,13 +106,15 @@ struct DetailScreen: View {
         .scrollPosition(id: $page)
         .scrollIndicators(.hidden)
         // Drags pan the 100% view; an export holds the photo still.
-        .scrollDisabled(session.zoomCenter != nil || vm.export != nil)
+        .scrollDisabled(session.zoomCenter != nil || vm.export != nil || vm.cropping)
         .background(Color(white: 0.07))
         .onAppear { page = id }
         .onChange(of: page) { _, new in if let new, new != id { vm.openDetail(new) } }
         .onChange(of: id) { _, new in
             if page != new { page = new }
             pickingWhite = false
+            cropAspect = .free
+            cropPortrait = nil
         }
         .onChange(of: tab) { _, _ in pickingWhite = false }
         .overlay(alignment: .bottom) {
@@ -160,6 +169,79 @@ struct DetailScreen: View {
         }
     }
 
+    private var cropRatio: Double? {
+        guard let f = frameLens else { return nil }
+        let portrait = cropPortrait ?? (f.frameHeight > f.frameWidth)
+        return cropAspect.ratio(frameWidth: f.frameWidth, frameHeight: f.frameHeight, portrait: portrait)
+    }
+
+    private var frameLens: LensTransform? {
+        guard let p = vm.photo(id)?.params, vm.sessionReady == id else { return nil }
+        return session.lensFor(p.withoutCrop())
+    }
+
+    /** Crop & rotate in place of the look strip and sliders: shapes, quarter turns and the horizon. */
+    @ViewBuilder
+    private func cropPanel(_ photo: AutoPhoto) -> some View {
+        let f = frameLens
+        let portrait = cropPortrait ?? ((f?.frameHeight ?? 0) > (f?.frameWidth ?? 0))
+        let a = photo.adjust
+        ScrollView {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    Text("Crop & rotate").font(.headline)
+                    Spacer()
+                    Button("Reset") {
+                        cropAspect = .free
+                        cropPortrait = nil
+                        vm.resetCrop(photo.id)
+                    }
+                    .disabled(a.crop == nil && a.straighten == 0 && cropAspect == .free)
+                    Button("Done") { vm.cropping = false }.fontWeight(.semibold)
+                }
+                HStack(spacing: 12) {
+                    Button("↺  Left") { turn(-1) }.buttonStyle(.bordered)
+                    Button("Right  ↻") { turn(1) }.buttonStyle(.bordered)
+                    Button(portrait ? "Portrait" : "Landscape") { chooseAspect(cropAspect, !portrait) }
+                        .buttonStyle(.bordered)
+                        .disabled(cropAspect == .free || cropAspect == .square)
+                }
+                ScrollView(.horizontal) {
+                    HStack(spacing: 8) {
+                        ForEach(CropAspect.allCases, id: \.self) { shape in
+                            Button(shape.label(portrait: portrait)) { chooseAspect(shape, portrait) }
+                                .buttonStyle(.bordered)
+                                .tint(shape == cropAspect ? .accentColor : .gray)
+                        }
+                    }
+                }
+                .scrollIndicators(.hidden)
+                ValueSlider("Straighten", value: a.straighten, range: -45...45, defaultValue: 0,
+                            format: { String(format: "%+.1f°", abs($0) < 0.05 ? 0 : $0) }) { v in
+                    vm.setStraighten(photo.id, v)
+                }
+                Text("Drag the corners, edges or inside of the frame to crop. Straightening crops automatically so no empty corners show.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 8)
+        }
+    }
+
+    private func turn(_ quarterTurns: Int) {
+        vm.rotate([id], by: quarterTurns)
+        cropPortrait = cropPortrait.map { !$0 }  // a locked shape turns with the picture
+    }
+
+    private func chooseAspect(_ aspect: CropAspect, _ toPortrait: Bool) {
+        guard let f = frameLens, let photo = vm.photo(id) else { return }
+        cropAspect = aspect
+        cropPortrait = toPortrait
+        let ratio = aspect.ratio(frameWidth: f.frameWidth, frameHeight: f.frameHeight, portrait: toPortrait)
+        vm.setCrop(id, CropMath.withAspect(photo.adjust.crop ?? CropMath.full, ratio: ratio, frameWidth: f.frameWidth,
+                                           frameHeight: f.frameHeight), force: true)
+    }
+
     @ToolbarContentBuilder
     private func toolbar(_ photo: AutoPhoto) -> some ToolbarContent {
         ToolbarItemGroup(placement: .topBarLeading) {
@@ -183,6 +265,11 @@ struct DetailScreen: View {
         ToolbarItemGroup(placement: .topBarTrailing) {
             // Apply to all and Remove share a menu: the bar is full on phones and the name needs the room.
             Menu {
+                Button("Crop & rotate", systemImage: "crop.rotate") {
+                    session.exitZoom()  // the crop tool works on the fit view
+                    vm.cropping = true
+                }
+                .disabled(vm.export != nil || vm.sessionReady != id)
                 if let pickPreset {
                     Button("Apply RawBoy preset…") { pickPreset([id]) }
                         .disabled(vm.export != nil)
@@ -211,6 +298,8 @@ private struct PhotoPage: View {
     let photo: AutoPhoto
     let current: Bool
     @Binding var pickingWhite: Bool
+    /** Crop & rotate's locked shape, width / height in pixels (nil = free). */
+    let cropRatio: Double?
 
     /** Press and hold shows the auto develop without the look. */
     @State private var showAuto = false
@@ -229,7 +318,9 @@ private struct PhotoPage: View {
                 let cached = current && !live ? vm.cachedPreview.flatMap { $0.id == photo.id ? $0.image : nil } : nil
                 if let analysis = photo.analysis, live || cached != nil {
                     // Press and hold shows the auto develop without the look.
-                    let shown = showAuto && live ? analysis.autoBase : photo.params ?? analysis.autoBase
+                    let uncropped = showAuto && live ? analysis.autoBase : photo.params ?? analysis.autoBase
+                    let cropping = live && vm.cropping
+                    let shown = cropping ? uncropped.withoutCrop() : uncropped
                     // One view for both, so it stays when the decoded preview replaces the cached one.
                     DevelopPreview(
                         image: live ? session.preview : cached,
@@ -239,10 +330,17 @@ private struct PhotoPage: View {
                             : vm.cachedShaderParams(photo.id, shown),
                         zoomCenter: live ? session.zoomCenter : nil, detail: live ? session.detail : nil,
                         frameWidth: framePx, frameColor: vm.frameColor, zoomScale: live ? session.zoomScale : 1)
-                    .gesture(previewGestures(live: live))
+                    .gesture(previewGestures(live: live && !cropping))
                     .onAppear { session.setViewSize(Int(geo.size.width * scale), Int(geo.size.height * scale), frame: framePx) }
                     .onChange(of: geo.size) { _, s in
                         session.setViewSize(Int(s.width * scale), Int(s.height * scale), frame: framePx)
+                    }
+                    if cropping, session.zoomCenter == nil, session.preview != nil {
+                        let shader = session.shaderParams(shown, defaults: analysis.defaults, useSelectedLut: shown.lut != nil,
+                                                          film: shown.film != nil ? session.filmData : nil)
+                        CropOverlay(frameWidth: shader.lens.outputWidth, frameHeight: shader.lens.outputHeight,
+                                    crop: photo.adjust.crop ?? CropMath.full, ratio: cropRatio, framePx: framePx,
+                                    onCropChange: { vm.setCrop(photo.id, $0) })
                     }
                     if live, showAuto || session.zoomCenter != nil {
                         OverlayLabel(!showAuto ? ZoomMath.label(session.zoomScale) : photo.preset != nil ? "Without preset" : "Without look")
