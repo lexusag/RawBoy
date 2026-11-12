@@ -946,25 +946,30 @@ private struct GridOverlay: View {
 /// upright). Yellow within one degree of straight, with a short fixed mark each side to compare it with.
 private struct LevelOverlay: View {
     let tilt: Double
+    /// Straight is entered within one degree and left past 1.5, so the colour doesn't flicker on the edge.
+    @State private var level = false
 
     var body: some View {
-        Canvas { context, size in
-            let level = abs(tilt) <= 1
-            let colour: Color = level ? Color(red: 1, green: 0.84, blue: 0.31) : .white.opacity(0.7)
-            let c = CGPoint(x: size.width / 2, y: size.height / 2)
-            let half = min(size.width, size.height) * 0.22
-            var marks = Path()
-            marks.move(to: CGPoint(x: c.x - half * 1.5, y: c.y)); marks.addLine(to: CGPoint(x: c.x - half * 1.25, y: c.y))
-            marks.move(to: CGPoint(x: c.x + half * 1.25, y: c.y)); marks.addLine(to: CGPoint(x: c.x + half * 1.5, y: c.y))
-            context.stroke(marks, with: .color(colour.opacity(0.5)), lineWidth: 2)
-            var line = Path()
-            line.move(to: CGPoint(x: c.x - half, y: c.y)); line.addLine(to: CGPoint(x: c.x + half, y: c.y))
-            var turned = context
-            turned.translateBy(x: c.x, y: c.y)
-            turned.rotate(by: .degrees(-tilt))
-            turned.translateBy(x: -c.x, y: -c.y)
-            turned.stroke(line, with: .color(colour), lineWidth: 2)
+        let colour: Color = level ? Color(red: 1, green: 0.84, blue: 0.31) : .white.opacity(0.7)
+        // The line is a view turned with rotationEffect (a Canvas redraws without interpolating), so the spring can animate it.
+        GeometryReader { geo in
+            let half = min(geo.size.width, geo.size.height) * 0.22
+            ZStack {
+                Canvas { context, size in
+                    let c = CGPoint(x: size.width / 2, y: size.height / 2)
+                    var marks = Path()
+                    marks.move(to: CGPoint(x: c.x - half * 1.5, y: c.y)); marks.addLine(to: CGPoint(x: c.x - half * 1.25, y: c.y))
+                    marks.move(to: CGPoint(x: c.x + half * 1.25, y: c.y)); marks.addLine(to: CGPoint(x: c.x + half * 1.5, y: c.y))
+                    context.stroke(marks, with: .color(colour.opacity(0.5)), lineWidth: 2)
+                }
+                Rectangle().fill(colour).frame(width: half * 2, height: 2)
+                    .rotationEffect(.degrees(-tilt))
+            }
+            .frame(width: geo.size.width, height: geo.size.height)
         }
+        .animation(.spring(response: 0.25, dampingFraction: 1), value: tilt)
+        .animation(.easeInOut(duration: 0.15), value: level)
+        .onChange(of: tilt, initial: true) { _, t in level = abs(t) <= (level ? 1.5 : 1) }
         .allowsHitTesting(false)
     }
 }

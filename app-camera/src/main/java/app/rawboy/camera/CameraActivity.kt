@@ -1,5 +1,6 @@
 package app.rawboy.camera
 
+import android.hardware.SensorManager
 import android.Manifest
 import android.app.KeyguardManager
 import android.content.BroadcastReceiver
@@ -61,7 +62,7 @@ class CameraActivity : ComponentActivity() {
      * viewfinder's GL view survive a turn.
      */
     private val orientation by lazy {
-        object : OrientationEventListener(this) {
+        object : OrientationEventListener(this, SensorManager.SENSOR_DELAY_UI) {
             override fun onOrientationChanged(degrees: Int) {
                 viewModel.onTilt(degrees.takeIf { it != ORIENTATION_UNKNOWN })
                 if (degrees == ORIENTATION_UNKNOWN) return
