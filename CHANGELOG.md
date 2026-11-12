@@ -1,3 +1,7 @@
+**RawBoy Web, Pro: Enter finishes the healing session (2026-11-12)**
+
+- In the Healing brush, Enter does what Done does: the tool closes and the strokes stay. Ignored while typing in a text field and on a focused button (which keeps its own Enter).
+
 **RawBoy Web, Auto: the next photo is decoded ahead of time (2026-11-12)**
 
 - On desktop-class devices (the same ones that get several analysis lanes: not phones, 8 GB or more) Auto also decodes the photo after the open one at full resolution once the open photo is ready and the browser is idle. Stepping forward then swaps it in at once instead of waiting seconds for the decode; the zoom, taps and Export are ready as soon as you arrive. It holds a second raw in the WASM heap, freed when you open anything else, go back to the grid, hand the photo to the RawBoy tab or export. A decode already running can't be cancelled, so stepping elsewhere during it waits for it to finish. The previous two photos are still only warmed (preview), not decoded. Typecheck only, not run in a browser.

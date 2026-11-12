@@ -397,7 +397,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
     return () => window.removeEventListener('keydown', down);
   }, [masksMode]);
 
-  // Healing brush keys: [ ] brush size (new strokes only), Delete removes the selected spot, Space pans.
+  // Healing brush keys: [ ] brush size (new strokes only), Delete removes the selected spot, Enter finishes, Space pans.
   const healKeys = useRef({ healId, healBrush });
   healKeys.current = { healId, healBrush };
   useEffect(() => {
@@ -414,6 +414,9 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
         const size = healSize.to(k.healBrush.radius) + (key === ']' ? 5 : -5);
         const radius = Math.min(HEAL_RADIUS_MAX, Math.max(HEAL_RADIUS_MIN, healSize.from(Math.min(100, Math.max(0, size)))));
         setHealBrush({ ...k.healBrush, radius });
+      } else if (e.key === 'Enter' && !e.shiftKey && !e.repeat && !(e.target instanceof HTMLButtonElement)) {
+        // Enter finishes the session like Done (a focused button keeps its own Enter).
+        setHealMode(false);
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && k.healId) {
         store.removeHeal(k.healId);
         setSelectedHeal(null);
