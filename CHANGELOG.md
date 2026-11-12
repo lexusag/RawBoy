@@ -1,3 +1,8 @@
+**RawBoy Camera (Android): video is no longer experimental; Photo / Video switch by the shutter (2026-11-12)**
+
+- Video mode is always available. The movie camera button left the top bar: a **PHOTO | VIDEO** pill now sits above the shutter row (swipe sideways on the shutter area for the same; in landscape the pill is in the shutter column), the way Google Camera does it. The flat video and optical stabilization settings no longer need Experimental features.
+- Experimental features now cover only the self-timer and long exposure, and their buttons moved from the top bar to either side of the pill (hidden in video mode). The top bar keeps RAW, Burst, Flash, ? and Settings. iOS has no video mode and its top bar has no experimental buttons, so nothing changes there. Help and `docs/camera.md` updated. Not compiled or tried on a phone yet (no Android SDK in the cloud session).
+
 **RawBoy Camera (Android): the Video button is a movie camera icon (2026-11-11)**
 
 - The experimental video mode switch in the top bar was the word VIDEO; it is now a movie camera icon (Material "videocam", drawn like the other top bar icons), dimmed when off and in the accent colour when video mode is on. TalkBack still reads "Video mode". Help and `docs/camera.md` updated. Android only (iOS Camera has no video button, the web has no Video entry in the app switchers). Not built here (no Android SDK in the session).

@@ -261,7 +261,6 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     fun setVideoMode(on: Boolean) {
         if (_recordingMs.value != null) return
-        if (on && !_settings.value.experimental) return
         _videoMode.value = on
         controller.setExposureBias(exposureBias(_settings.value)) // flat video raises it
         if (!on) setExposureLock(false) // the lock is video mode's: photos meter as always
@@ -282,7 +281,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Optical stabilization is video mode's, and only when switched on in Settings. */
     private fun applyStabilization() {
-        controller.setVideoStabilization(_videoMode.value && _settings.value.experimental && _settings.value.videoStabilization)
+        controller.setVideoStabilization(_videoMode.value && _settings.value.videoStabilization)
     }
 
     /** Not in the middle of a recording: the file's format is fixed when it starts. */
@@ -884,7 +883,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private fun exposureBias(s: CameraSettings): Float =
         s.brightness / 100f * LookApplier.BRIGHTNESS_EV +
             // Flat video exposes this much higher for the shadows (the file keeps the lift, see VideoRecorder.FLAT_RAISE_EV).
-            if (_videoMode.value && s.experimental && s.flatVideo) VideoRecorder.FLAT_RAISE_EV else 0f
+            if (_videoMode.value && s.flatVideo) VideoRecorder.FLAT_RAISE_EV else 0f
 
     /** Only the newest control values matter: a newer publish replaces one still running. */
     private fun republish() {
@@ -951,15 +950,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         if (!on && _tracking.value) _focusPoint.value?.let { (x, y) -> focusAt(x, y) }
     }
 
-    /** Experimental features (video) on or off; off leaves video mode, ending a recording. */
+    /** Experimental features (self-timer, long exposure) on or off. */
     fun setExperimental(on: Boolean) {
         change { it.copy(experimental = on) }
-        if (!on) {
-            cancelSelfTimer()
-            stopRecording()
-            _videoMode.value = false
-            applyStabilization()
-        }
+        if (!on) cancelSelfTimer()
     }
 
     fun setScanQr(on: Boolean) {

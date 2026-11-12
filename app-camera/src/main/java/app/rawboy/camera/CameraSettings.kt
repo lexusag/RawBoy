@@ -76,11 +76,11 @@ data class CameraSettings(
     val scanQr: Boolean = true,
     /** After a tap, keep focus on what was tapped as it moves (CameraViewModel's tracker); off = the focus stays put. */
     val trackFocus: Boolean = false,
-    /** Features still in testing (video mode today); hidden until switched on in Settings. */
+    /** Features still in testing (self-timer and long exposure today); hidden until switched on in Settings. */
     val experimental: Boolean = false,
-    /** Video stabilization while recording (video mode only; it crops the picture a little). Needs [experimental]. */
+    /** Video stabilization while recording (video mode only; it crops the picture a little). */
     val videoStabilization: Boolean = false,
-    /** Video mode records a flat Apple Log picture without the look, to be graded later (the web video page). Needs [experimental]. */
+    /** Video mode records a flat Apple Log picture without the look, to be graded later (the web video page). */
     val flatVideo: Boolean = false,
     /**
      * Per camera ([lensKey]): gain from the linearised preview to raw units (1.0 = sensor clip), learned

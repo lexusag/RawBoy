@@ -68,6 +68,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -258,11 +259,6 @@ fun CameraScreen(
             else -> ""
         }
         val barButtons = @Composable {
-            if (settings.experimental) VideoModeButton(videoMode, enabled = recordingMs == null) { vm.setVideoMode(!videoMode) }
-            if (!videoMode && settings.experimental) {
-                TimerButton(settings.selfTimer) { vm.cycleSelfTimer() }
-                LongExposureButton(settings.longExposure, settings.longExposureLighten, hiRes) { vm.cycleLongExposure() }
-            }
             if (!videoMode) {
                 RawButton(settings.keepDng) { vm.setKeepDng(!settings.keepDng) }
                 BurstButton(settings.burstMode, lowLight, hiRes, flashAvailable && settings.flash != FlashMode.OFF) { vm.setBurstMode(settings.burstMode.next()) }
@@ -271,6 +267,13 @@ fun CameraScreen(
             HelpButton(appName, CAMERA_HELP, onOpenChange = { showHelp = it })
             IconButton(onClick = { showSettings = true }) {
                 Icon(Icons.Filled.Settings, contentDescription = "Settings")
+            }
+        }
+        // Next to the shutter, under the thumb: the Photo / Video switch, with the experimental timer and long exposure beside it.
+        val extras = @Composable {
+            if (!videoMode && settings.experimental) {
+                TimerButton(settings.selfTimer) { vm.cycleSelfTimer() }
+                LongExposureButton(settings.longExposure, settings.longExposureLighten, hiRes) { vm.cycleLongExposure() }
             }
         }
         val lastPhoto = @Composable {
@@ -635,22 +638,54 @@ fun CameraScreen(
                         verticalArrangement = Arrangement.SpaceEvenly,
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
+                        extras()
+                        ModeSwitch(videoMode, enabled = recordingMs == null, vertical = true) { vm.setVideoMode(it) }
                         switchButton()
                         shutterButton()
                         lastPhoto()
                     }
                 } else {
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 24.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
+                    // Swiping sideways anywhere on the shutter area switches too: left for video, right back to photo.
+                    Column(
+                        Modifier.pointerInput(recordingMs == null) {
+                            if (recordingMs != null) return@pointerInput
+                            var drag = 0f
+                            detectHorizontalDragGestures(
+                                onDragStart = { drag = 0f },
+                                onDragEnd = {
+                                    if (drag < -48.dp.toPx()) vm.setVideoMode(true) else if (drag > 48.dp.toPx()) vm.setVideoMode(false)
+                                },
+                                onHorizontalDrag = { _, d -> drag += d },
+                            )
+                        },
+                        horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        lastPhoto()
-                        Spacer(Modifier.weight(1f))
-                        shutterButton()
-                        Spacer(Modifier.weight(1f))
-                        switchButton()
+                        Row(
+                            Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                                if (!videoMode && settings.experimental) TimerButton(settings.selfTimer) { vm.cycleSelfTimer() }
+                            }
+                            ModeSwitch(videoMode, enabled = recordingMs == null) { vm.setVideoMode(it) }
+                            Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                                if (!videoMode && settings.experimental) {
+                                    LongExposureButton(settings.longExposure, settings.longExposureLighten, hiRes) { vm.cycleLongExposure() }
+                                }
+                            }
+                        }
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 24.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            lastPhoto()
+                            Spacer(Modifier.weight(1f))
+                            shutterButton()
+                            Spacer(Modifier.weight(1f))
+                            switchButton()
+                        }
                     }
                 }
             },
@@ -991,15 +1026,31 @@ private fun VideoFrameMask(target: Float) {
     }
 }
 
-/** Photo / video switch in the top bar: a movie camera, lit while video mode is on. */
+/**
+ * Photo / Video pill under the viewfinder, by the shutter (as Google Camera has it): the active side is filled. Vertical in
+ * landscape, where the shutter has its own column. Locked while recording.
+ */
 @Composable
-private fun VideoModeButton(on: Boolean, enabled: Boolean, onClick: () -> Unit) {
-    IconButton(onClick = onClick, enabled = enabled, modifier = Modifier.semantics { stateDescription = if (on) "On" else "Off" }) {
-        Icon(
-            VideocamIcon,
-            contentDescription = "Video mode",
-            tint = if (on) MaterialTheme.colorScheme.primary else LocalContentColor.current.copy(alpha = 0.6f),
+private fun ModeSwitch(video: Boolean, enabled: Boolean, vertical: Boolean = false, onSelect: (Boolean) -> Unit) {
+    val item = @Composable { label: String, selected: Boolean, target: Boolean ->
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold, letterSpacing = 0.8.sp),
+            color = if (selected) Color.Black else Color.White.copy(alpha = if (enabled) 0.8f else 0.4f),
+            modifier = Modifier
+                .clip(RoundedCornerShape(16.dp))
+                .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent)
+                .clickable(enabled = enabled && !selected) { onSelect(target) }
+                .semantics { stateDescription = if (selected) "Selected" else "Not selected" }
+                .padding(horizontal = 14.dp, vertical = 8.dp),
         )
+    }
+    val shape = RoundedCornerShape(20.dp)
+    val mod = Modifier.clip(shape).background(Color(0xFF2A2A2A)).padding(3.dp)
+    if (vertical) {
+        Column(mod, horizontalAlignment = Alignment.CenterHorizontally) { item("PHOTO", !video, false); item("VIDEO", video, true) }
+    } else {
+        Row(mod) { item("PHOTO", !video, false); item("VIDEO", video, true) }
     }
 }
 
@@ -1243,8 +1294,24 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
         )
         Spacer(Modifier.height(16.dp))
         SettingSwitch(
+            title = "Flat video for grading",
+            subtitle = "Records without the look: an Apple Log picture with no grain, bloom or colour grading, to apply a look later on the web video page. Changes apply to the next recording",
+            checked = settings.flatVideo,
+            accent = EXPERIMENTAL_ORANGE,
+            onChange = vm::setFlatVideo,
+        )
+        Spacer(Modifier.height(16.dp))
+        SettingSwitch(
+            title = "Optical video stabilization",
+            subtitle = "Uses the lens's own stabilizer while filming (video mode only). No crop and no delay, but a gentler effect than software stabilization",
+            checked = settings.videoStabilization,
+            accent = EXPERIMENTAL_ORANGE,
+            onChange = vm::setVideoStabilization,
+        )
+        Spacer(Modifier.height(16.dp))
+        SettingSwitch(
             title = "Experimental features",
-            subtitle = "Features still being tested: video mode (a VIDEO button in the top bar), self-timer and long exposure",
+            subtitle = "Features still being tested: self-timer and long exposure (two buttons beside the Photo / Video switch)",
             checked = settings.experimental,
             accent = EXPERIMENTAL_ORANGE,
             onChange = vm::setExperimental,
@@ -1253,7 +1320,7 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             Spacer(Modifier.height(16.dp))
             Text("Self-timer and long exposure", style = MaterialTheme.typography.bodyMedium)
             Text(
-                "Two buttons appear in the top bar. Timer: counts down 2, 5 or 10 s before the shot so the phone can settle on a tripod; " +
+                "Two buttons appear beside the Photo / Video switch. Timer: counts down 2, 5 or 10 s before the shot so the phone can settle on a tripod; " +
                     "press the shutter again to cancel. Long exposure: shoots frames for 5, 10, 30 or 60 s and stacks them into one photo " +
                     "(like an ND filter); press the shutter to stop early. Use a tripod; not used with flash or at full sensor resolution",
                 style = MaterialTheme.typography.bodySmall,
@@ -1271,22 +1338,6 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
                     label = { Text("Lighten (light trails)") },
                 )
             }
-            Spacer(Modifier.height(16.dp))
-            SettingSwitch(
-                title = "Flat video for grading",
-                subtitle = "Records without the look: an Apple Log picture with no grain, bloom or colour grading, to apply a look later on the web video page. Changes apply to the next recording",
-                checked = settings.flatVideo,
-                accent = EXPERIMENTAL_ORANGE,
-                onChange = vm::setFlatVideo,
-            )
-            Spacer(Modifier.height(16.dp))
-            SettingSwitch(
-                title = "Optical video stabilization",
-                subtitle = "Uses the lens's own stabilizer while filming (video mode only). No crop and no delay, but a gentler effect than software stabilization",
-                checked = settings.videoStabilization,
-                accent = EXPERIMENTAL_ORANGE,
-                onChange = vm::setVideoStabilization,
-            )
         }
         Spacer(Modifier.height(16.dp))
         SettingSwitch(
