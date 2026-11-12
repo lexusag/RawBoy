@@ -175,7 +175,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   const [selectedLeak, setSelectedLeak] = useState<string | null>(null);
   const [selectedFx, setSelectedFx] = useState<string | null>(null);
   const [selectedHeal, setSelectedHeal] = useState<string | null>(null);
-  const [healBrush, setHealBrush] = useState<HealBrush>({ radius: 0.008, feather: DEFAULT_HEAL_FEATHER, chooseSource: false });
+  const [healBrush, setHealBrush] = useState<HealBrush>({ radius: 0.008, feather: DEFAULT_HEAL_FEATHER, chooseSource: false, offset: [0.04, 0] });
   const [showMask, setShowMask] = useState(false);
   const [showExport, setShowExport] = useState(false);
   exportOpen.current = showExport;
@@ -704,28 +704,26 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
               selectedId={healId}
               radius={healBrush.radius}
               chooseSource={healBrush.chooseSource}
+              sourceOffset={healBrush.offset}
               frame={FRAME_WIDTH + maskMargin}
               zoomFrame={FRAME_WIDTH}
               zoomCenter={session.zoomCenter}
               zoomScale={session.zoomScale}
               passThrough={spaceHeld}
-              onSelect={setSelectedHeal}
               onAdd={(x, y, source) => {
                 const spot = newHealSpot(x, y, healBrush.radius, source, healBrush.feather);
                 if (!store.addHeal(spot)) return null;
                 setSelectedHeal(spot.id);
                 return spot.id;
               }}
+              onExtend={(id, x, y) => store.extendHeal(id, [x, y])}
+              onEnd={store.endHeal}
               onCancelAdd={store.cancelHeal}
-              onMove={(id, x, y) =>
-                store.updateHeal(id, (h) => ({
-                  ...h,
-                  x,
-                  y,
-                  source: h.source ? [Math.min(1, Math.max(0, h.source[0] + x - h.x)), Math.min(1, Math.max(0, h.source[1] + y - h.y))] : null,
-                }))
-              }
-              onSource={(id, x, y) => store.updateHeal(id, (h) => ({ ...h, source: [x, y] }))}
+              onSource={(id, x, y) => {
+                const spot = healSpots.find((h) => h.id === id);
+                if (spot) setHealBrush({ ...healBrush, offset: [x - spot.x, y - spot.y] });
+                store.updateHeal(id, (h) => ({ ...h, source: [x, y] }));
+              }}
             />
           )}
           {looksArmed && looksAt && !showOriginal && (

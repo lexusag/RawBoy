@@ -14,6 +14,8 @@ export interface HealBrush {
   feather: number;
   /** New spots clone from a source circle you place (otherwise the engine picks the texture donor). */
   chooseSource: boolean;
+  /** Where a new stroke's source lies relative to its start (image fractions), when [chooseSource]. */
+  offset: readonly [number, number];
 }
 
 interface Props {
@@ -31,9 +33,9 @@ interface Props {
 }
 
 /**
- * Healing brush: click or tap a dust spot, blemish or small object on the photo (HealOverlay) and it is healed away:
- * the tone is filled in from around it, the texture borrowed from a nearby clean area that the engine picks, or from
- * a source circle you drag into place (clone-stamp style). A top-bar mode like Masks and Light leaks.
+ * Healing brush: click, tap or paint over a dust spot, blemish or small object on the photo (HealOverlay) and it is
+ * healed away: seamless cloning, the tone from around it, the detail borrowed from a nearby clean area that the engine
+ * picks, or from a source you drag into place (clone-stamp style). A top-bar mode like Masks and Light leaks.
  */
 export function HealPanel({ spots, selectedId, brush, working, onSelect, onBrush, onUpdate, onRemove, onClear, onDone }: Props) {
   const spot = spots.find((s) => s.id === selectedId) ?? null;
@@ -55,7 +57,7 @@ export function HealPanel({ spots, selectedId, brush, working, onSelect, onBrush
     if (!spot) return;
     onUpdate(
       spot.id,
-      (s) => ({ ...s, source: choose ? [Math.min(0.98, s.x + 0.03), s.y] : null }),
+      (s) => ({ ...s, source: choose ? [Math.min(1, Math.max(0, s.x + brush.offset[0])), Math.min(1, Math.max(0, s.y + brush.offset[1]))] : null }),
       true,
     );
   };
@@ -70,9 +72,9 @@ export function HealPanel({ spots, selectedId, brush, working, onSelect, onBrush
       </div>
       {spots.length === 0 && (
         <Note>
-          Click or tap a dust spot, blemish or small object on the photo to heal it away (drag to place the circle exactly; at 100% for the
-          fine ones: double-click or Z). The tone is filled in from around it and the texture borrowed from a nearby clean area. Up to{' '}
-          {MAX_HEAL_SPOTS} spots; they belong to this photo and aren’t kept in presets.
+          Paint over a dust spot, blemish or small object on the photo to heal it away: click for one spot, drag to paint a stroke (zoom to 100%
+          for the fine ones: double-click or Z; Space pans). The tone is filled in from around it and the detail borrowed from a nearby clean
+          area. Up to {MAX_HEAL_SPOTS} strokes; they belong to this photo and aren’t kept in presets.
         </Note>
       )}
       <ParamSlider
@@ -84,7 +86,7 @@ export function HealPanel({ spots, selectedId, brush, working, onSelect, onBrush
         format={(v) => `${(healSize.from(v) * 200).toFixed(1)}%`}
         onChange={(v) => setRadius(healSize.from(v))}
       />
-      <ParamSlider label="Feather" value={feather} min={0} max={100} defaultValue={40} format={(v) => `${Math.round(v)}`} onChange={setFeather} />
+      <ParamSlider label="Feather" value={feather} min={0} max={100} defaultValue={80} format={(v) => `${Math.round(v)}`} onChange={setFeather} />
       <div className="segmented" role="group" aria-label="Texture from">
         <button type="button" className={!chooseSource ? 'active' : ''} onClick={() => setChoose(false)} title="The engine picks the cleanest nearby area">
           Auto source
@@ -94,14 +96,14 @@ export function HealPanel({ spots, selectedId, brush, working, onSelect, onBrush
         </button>
       </div>
       {working && <Note>Healing…</Note>}
-      {full && <Note>That is the most spots a photo takes; delete one to add another.</Note>}
+      {full && <Note>That is the most strokes a photo takes; delete one to add another.</Note>}
       {spots.map((s, i) => (
         <div key={s.id} className={`preset-row mask-row${s.id === selectedId ? ' active' : ''}`}>
           <button type="button" className="preset-apply" onClick={() => onSelect(s.id === selectedId ? null : s.id)}>
-            <span className="preset-name">Spot {i + 1}</span>
+            <span className="preset-name">{s.path.length ? 'Stroke' : 'Spot'} {i + 1}</span>
             <span className="preset-groups">{`${s.source ? 'Chosen source' : 'Auto source'} · ${(s.radius * 200).toFixed(1)}%`}</span>
           </button>
-          <button type="button" className="icon" title="Delete spot" onClick={() => onRemove(s.id)}>
+          <button type="button" className="icon" title="Delete" onClick={() => onRemove(s.id)}>
             ×
           </button>
         </div>
@@ -114,8 +116,9 @@ export function HealPanel({ spots, selectedId, brush, working, onSelect, onBrush
             </button>
           </div>
           <Note>
-            Drag a circle to move it. With Choose source, drag the dashed circle onto clean skin, sky or background of the same kind as the
-            surroundings. Delete removes the selected spot, [ and ] change the size.
+            Pick a stroke in the list to change its size, feather or source. With Choose source, drag the dashed copy onto clean skin, sky or
+            background of the same kind as the surroundings; new strokes keep that offset. Undo removes the last stroke, Delete the selected
+            one, [ and ] change the size.
           </Note>
         </>
       )}
