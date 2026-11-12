@@ -99,7 +99,7 @@ export function capturePreset(name: string, params: DevelopParams, groups: reado
   const chosen = PRESET_GROUPS.filter((g) => groups.includes(g.key));
   for (const g of chosen) {
     for (const f of g.fields) {
-      if (f === 'leaks' || f === 'fx') continue; // in no group: light leaks and effects stay with the photo
+      if (f === 'leaks' || f === 'fx' || f === 'healSpots') continue; // in no group: leaks, effects and healing spots stay with the photo
       values[f] = f === 'masks' ? forPreset(params.masks) : params[f]; // strokes stay with the photo
     }
   }

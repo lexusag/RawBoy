@@ -1,5 +1,6 @@
 import type { BwFilter } from '../color/BwFilter';
 import type { MaskLayer } from './Masks';
+import type { HealSpot } from './HealSpots';
 import type { LightEffect } from './LightEffects';
 import type { LightLeak } from './LightLeaks';
 import { DEFAULT_CURVES, type ToneCurves } from './ToneCurve';
@@ -103,6 +104,7 @@ export const anamorphicBarOf = (c: AnamorphicColor): Float32Array => new Float32
  *
  * - masks: up to MAX_LAYERS gradient layers with local adjustments (see Masks.ts); per photo, like the crop.
  * - leaks: up to MAX_LEAKS light leaks over the finished picture (see LightLeaks.ts); per photo, like the masks.
+ * - healSpots: up to MAX_HEAL_SPOTS healing brush spots (see HealSpots.ts), healed in the full-resolution image; per photo.
  * - fx: up to MAX_EFFECTS light effects (lightning, sparks, trails, swirls; LightEffects.ts) over the leaks; per photo.
  *
  * Whites/Blacks follow Lightroom: Blacks < 0 raises the black point (deeper blacks), Blacks > 0 lifts/fades
@@ -181,6 +183,7 @@ export interface DevelopParams {
   masks: readonly MaskLayer[];
   leaks: readonly LightLeak[];
   fx: readonly LightEffect[];
+  healSpots: readonly HealSpot[];
   /**
    * The photo is display-referred (JPEG, HEIC: see display_inverse.cpp), rendered with AgX per channel. Set only on
    * a photo's as-shot defaults, from the decoder; never a slider or preset value.
@@ -265,6 +268,7 @@ export const DEFAULT_PARAMS: Readonly<DevelopParams> = Object.freeze({
   masks: [],
   leaks: [],
   fx: [],
+  healSpots: [],
 });
 
 /** The colour denoise in effect: colorDenoise, or denoise while it isn't set. */

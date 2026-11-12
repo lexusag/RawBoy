@@ -71,7 +71,7 @@ export type Request =
   | { op: 'copyTile'; handle: number; x: number; y: number; width: number; height: number }
   | { op: 'noiseLevel'; handle: number }
   | { op: 'detectBlemishes'; handle: number; mask: Float32Array; maskW: number; maskH: number; faceDiameter: number }
-  | { op: 'healBlemishes'; handle: number; spots: Float32Array }
+  | { op: 'healBlemishes'; handle: number; spots: Float32Array; strokes: Float32Array }
   | { op: 'downscalerCreate'; inW: number; inH: number; outW: number; outH: number }
   | { op: 'downscalerPush'; id: number; rows: Uint16Array; count: number }
   | { op: 'downscalerFinish'; id: number }

@@ -94,7 +94,7 @@ function run(req: Request): [unknown, Transferable[]] {
       return [spots, [spots.buffer]];
     }
     case 'healBlemishes':
-      m.healBlemishes(req.handle, req.spots);
+      m.healBlemishes(req.handle, req.spots, req.strokes);
       return [null, []];
     case 'downscalerCreate': {
       const id = nextId++;

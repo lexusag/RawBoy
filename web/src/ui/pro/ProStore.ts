@@ -7,6 +7,7 @@ import { developParams, type DevelopParams } from '../../engine/develop/DevelopP
 import { decodeEdits, encodeEdits } from '../../engine/develop/Edits';
 import { MAX_LAYERS, SHAPE_NAMES, newBrushLayer, newLinearLayer, newRadialLayer, newStripeLayer, type BrushStroke, type MaskLayer } from '../../engine/develop/Masks';
 import { MAX_EFFECTS, newLightEffect, type FxKind, type LightEffect } from '../../engine/develop/LightEffects';
+import { MAX_HEAL_SPOTS, type HealSpot } from '../../engine/develop/HealSpots';
 import { MAX_LEAKS, newLightLeak, type LeakKind, type LightLeak } from '../../engine/develop/LightLeaks';
 import { applyPreset, captureLensPreset, capturePreset, decodePresets, encodePresets, putLensPreset, type Preset, type PresetGroup } from '../../engine/develop/Presets';
 import { EXTENSIONS, ExportSettingsStore, baseNameOf, fileName, type ExportSettings } from '../../engine/export/ExportSettings';
@@ -166,7 +167,7 @@ export class ProStore {
     }
   }
 
-  /** Edits carry over to the next file. White balance only if the user changed it; rotation, flips, perspective, crop, masks, light leaks and effects never. */
+  /** Edits carry over to the next file. White balance only if the user changed it; rotation, flips, perspective, crop, masks, light leaks, effects and healing spots never. */
   private carryOverEdits(previous: EditorState, newDefaults: DevelopParams): DevelopParams {
     if (previous.fileName == null) return newDefaults;
     const p = withCrop(
@@ -182,6 +183,7 @@ export class ProStore {
         masks: newDefaults.masks,
         leaks: newDefaults.leaks,
         fx: newDefaults.fx,
+        healSpots: newDefaults.healSpots,
       },
       cropOf(newDefaults),
     );
@@ -434,6 +436,36 @@ export class ProStore {
   removeLeak = (id: string) => {
     const p = this._state.params;
     this.commit({ ...p, leaks: p.leaks.filter((l) => l.id !== id) }, true);
+  };
+
+  /** Adds a healing brush spot (up to MAX_HEAL_SPOTS); false when full. Healing follows ~300 ms after the edits rest. */
+  addHeal = (spot: HealSpot): boolean => {
+    const p = this._state.params;
+    if (p.healSpots.length >= MAX_HEAL_SPOTS) return false;
+    this.commit({ ...p, healSpots: [...p.healSpots, spot] }, true);
+    return true;
+  };
+
+  /** A spot's drag or slider; [force] for a button (source on/off). */
+  updateHeal = (id: string, change: (s: HealSpot) => HealSpot, force = false) => {
+    const p = this._state.params;
+    this.commit({ ...p, healSpots: p.healSpots.map((s) => (s.id === id ? change(s) : s)) }, force);
+  };
+
+  /** Drops the spot just added, with no redo step (a second finger turned the press into a pinch). */
+  cancelHeal = () => {
+    const p = this.history.drop();
+    if (p) this.show(p);
+  };
+
+  removeHeal = (id: string) => {
+    const p = this._state.params;
+    this.commit({ ...p, healSpots: p.healSpots.filter((s) => s.id !== id) }, true);
+  };
+
+  clearHeal = () => {
+    const p = this._state.params;
+    if (p.healSpots.length) this.commit({ ...p, healSpots: [] }, true);
   };
 
   /** Adds a light effect (up to MAX_EFFECTS) with a new random pattern, covering the whole photo of [aspect] (width / height); returns its id, or null when full. */

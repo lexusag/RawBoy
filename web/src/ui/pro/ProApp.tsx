@@ -12,6 +12,9 @@ import { MaskOverlay, type BrushSettings, type MaskTool } from './MaskOverlay';
 import { MasksPanel, radiusToSize, sizeToRadius } from './MasksPanel';
 import { FxPanel } from './FxPanel';
 import { LeaksPanel } from './LeaksPanel';
+import { HealOverlay } from './HealOverlay';
+import { HealPanel, healSize, type HealBrush } from './HealPanel';
+import { DEFAULT_HEAL_FEATHER, HEAL_RADIUS_MAX, HEAL_RADIUS_MIN, newHealSpot } from '../../engine/develop/HealSpots';
 import { LookSelector } from './LookSelector';
 import type { LightEffect } from '../../engine/develop/LightEffects';
 import type { LightLeak } from '../../engine/develop/LightLeaks';
@@ -99,6 +102,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   const [masksMode, setMasksMode] = useState(false);
   const [leaksMode, setLeaksMode] = useState(false);
   const [fxMode, setFxMode] = useState(false);
+  const [healMode, setHealMode] = useState(false);
   // White balance picker: armed from the Color tab, the next click on the photo picks.
   const [pickingWhite, setPickingWhite] = useState(false);
   // Auto white balance: armed from the Color tab with a draggable extendable rectangle.
@@ -107,7 +111,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   useEffect(() => {
     setPickingWhite(false);
     setAutoWb(false);
-  }, [geometryMode, masksMode, leaksMode, fxMode, presetsMode, state.fileName]);
+  }, [geometryMode, masksMode, leaksMode, fxMode, healMode, presetsMode, state.fileName]);
   useEffect(() => {
     if (state.controlsTab !== 'Color') {
       setPickingWhite(false);
@@ -124,13 +128,13 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   useEffect(() => {
     setLooksArmed(false);
     setLooksAt(null);
-  }, [geometryMode, masksMode, leaksMode, fxMode, presetsMode, autoWb, state.fileName]);
+  }, [geometryMode, masksMode, leaksMode, fxMode, healMode, presetsMode, autoWb, state.fileName]);
   // Esc puts down the active tool (white picker, auto WB rectangle, Looks, Crop & rotate, Masks, Leaks, Light effects,
   // Presets), one per press. Not while typing, over a dialog (they handle Esc themselves) or when something else
   // already took the key.
   const exportOpen = useRef(false);
-  const escState = useRef({ pickingWhite, autoWb, looksArmed, geometryMode, masksMode, leaksMode, fxMode, presetsMode });
-  escState.current = { pickingWhite, autoWb, looksArmed, geometryMode, masksMode, leaksMode, fxMode, presetsMode };
+  const escState = useRef({ pickingWhite, autoWb, looksArmed, geometryMode, masksMode, leaksMode, fxMode, healMode, presetsMode });
+  escState.current = { pickingWhite, autoWb, looksArmed, geometryMode, masksMode, leaksMode, fxMode, healMode, presetsMode };
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
@@ -149,6 +153,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
       else if (k.masksMode) setMasksMode(false);
       else if (k.leaksMode) setLeaksMode(false);
       else if (k.fxMode) setFxMode(false);
+      else if (k.healMode) setHealMode(false);
       else if (k.presetsMode) setPresetsMode(false);
       else return;
       e.preventDefault();
@@ -169,6 +174,8 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   const [selectedLayer, setSelectedLayer] = useState<string | null>(null);
   const [selectedLeak, setSelectedLeak] = useState<string | null>(null);
   const [selectedFx, setSelectedFx] = useState<string | null>(null);
+  const [selectedHeal, setSelectedHeal] = useState<string | null>(null);
+  const [healBrush, setHealBrush] = useState<HealBrush>({ radius: 0.008, feather: DEFAULT_HEAL_FEATHER, chooseSource: false });
   const [showMask, setShowMask] = useState(false);
   const [showExport, setShowExport] = useState(false);
   exportOpen.current = showExport;
@@ -181,6 +188,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
     setSelectedLayer(null);
     setSelectedLeak(null);
     setSelectedFx(null);
+    setSelectedHeal(null);
   }, [state.fileName]);
   // Keep a layer selected while there are any (after a delete, or a preset brought new ones).
   const layers = state.params.masks;
@@ -188,9 +196,11 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   const leaks = state.params.leaks;
   const leakId = leaks.some((l) => l.id === selectedLeak) ? selectedLeak : (leaks[leaks.length - 1]?.id ?? null);
   const effects = state.params.fx;
+  const healSpots = state.params.healSpots;
+  const healId = healSpots.some((h) => h.id === selectedHeal) ? selectedHeal : null;
   const fxId = effects.some((e) => e.id === selectedFx) ? selectedFx : (effects[effects.length - 1]?.id ?? null);
   // Overlay handles, also beyond the photo, in either tool.
-  const shapesMode = masksMode || leaksMode || fxMode;
+  const shapesMode = masksMode || leaksMode || fxMode || healMode;
   // Crop and Auto WB work on the fit view only; masks work at 100% too (frame-colour clicks stay off while masking).
   const zoomable = !geometryMode && !autoWb;
   const maskMargin = useMediaQuery('(max-width: 560px)') ? MASK_MARGIN_NARROW : MASK_MARGIN;
@@ -347,6 +357,47 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [masksMode, store]);
 
+  // Healing brush keys: [ ] size, Delete removes the selected spot, Space pans.
+  const healKeys = useRef({ healId, healBrush });
+  healKeys.current = { healId, healBrush };
+  useEffect(() => {
+    if (!healMode) return;
+    const typing = (t: EventTarget | null) =>
+      t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && t.type !== 'range' && t.type !== 'checkbox');
+    const down = (e: KeyboardEvent) => {
+      if (!isTabShown('pro') || typing(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
+      const k = healKeys.current;
+      const key = shortcutKey(e);
+      if (key === ' ') {
+        setSpaceHeld(true);
+      } else if (key === '[' || key === ']') {
+        const size = healSize.to(k.healBrush.radius) + (key === ']' ? 5 : -5);
+        const radius = Math.min(HEAL_RADIUS_MAX, Math.max(HEAL_RADIUS_MIN, healSize.from(Math.min(100, Math.max(0, size)))));
+        setHealBrush({ ...k.healBrush, radius });
+        if (k.healId) store.updateHeal(k.healId, (h) => ({ ...h, radius }));
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && k.healId) {
+        store.removeHeal(k.healId);
+        setSelectedHeal(null);
+      } else {
+        return;
+      }
+      e.preventDefault();
+    };
+    const up = (e: KeyboardEvent) => {
+      if (e.key === ' ') setSpaceHeld(false);
+    };
+    const blur = () => setSpaceHeld(false);
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    window.addEventListener('blur', blur);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+      window.removeEventListener('blur', blur);
+      setSpaceHeld(false);
+    };
+  }, [healMode, store]);
+
   const presetActions = useMemo<PresetActions>(
     () => ({
       apply: store.applyPreset,
@@ -391,6 +442,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
           onClick={() => {
             if (!geometryMode && session.zoomCenter) store.session.exitZoom(); // the crop tool works on the fit view
             setGeometryMode(!geometryMode);
+            setHealMode(false);
             setPresetsMode(false);
             setMasksMode(false);
             setLeaksMode(false);
@@ -405,6 +457,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
           title="Presets"
           onClick={() => {
             setPresetsMode(!presetsMode);
+            setHealMode(false);
             setGeometryMode(false);
             setMasksMode(false);
             setLeaksMode(false);
@@ -421,6 +474,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
           title="Masks"
           onClick={() => {
             setMasksMode(!masksMode);
+            setHealMode(false);
             setGeometryMode(false);
             setPresetsMode(false);
             setLeaksMode(false);
@@ -437,6 +491,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
           title="Light leaks"
           onClick={() => {
             setLeaksMode(!leaksMode);
+            setHealMode(false);
             setFxMode(false);
             setGeometryMode(false);
             setPresetsMode(false);
@@ -453,6 +508,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
           title="Light effects: lightning, sparks, trails, swirls"
           onClick={() => {
             setFxMode(!fxMode);
+            setHealMode(false);
             setGeometryMode(false);
             setPresetsMode(false);
             setMasksMode(false);
@@ -462,6 +518,23 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
         >
           <FxIcon />
           <span className="tool-label">Effects</span>
+        </button>
+        <button
+          type="button"
+          className={`icon${healMode ? ' active' : ''}`}
+          title="Healing brush: remove dust, blemishes and small objects"
+          onClick={() => {
+            setHealMode(!healMode);
+            setFxMode(false);
+            setGeometryMode(false);
+            setPresetsMode(false);
+            setMasksMode(false);
+            setLeaksMode(false);
+          }}
+          disabled={!hasImage || busy}
+        >
+          <HealIcon />
+          <span className="tool-label">Heal</span>
         </button>
         <button type="button" className="icon" title="Undo (Ctrl/⌘ Z)" aria-label="Undo" onClick={store.undo} disabled={!state.canUndo || busy}>
           <UndoIcon />
@@ -624,6 +697,37 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
               onStrokeEnd={() => {}}
             />
           )}
+          {healMode && !showOriginal && shaderParams && (
+            <HealOverlay
+              lens={shaderParams.lens}
+              spots={healSpots}
+              selectedId={healId}
+              radius={healBrush.radius}
+              chooseSource={healBrush.chooseSource}
+              frame={FRAME_WIDTH + maskMargin}
+              zoomFrame={FRAME_WIDTH}
+              zoomCenter={session.zoomCenter}
+              zoomScale={session.zoomScale}
+              passThrough={spaceHeld}
+              onSelect={setSelectedHeal}
+              onAdd={(x, y, source) => {
+                const spot = newHealSpot(x, y, healBrush.radius, source, healBrush.feather);
+                if (!store.addHeal(spot)) return null;
+                setSelectedHeal(spot.id);
+                return spot.id;
+              }}
+              onCancelAdd={store.cancelHeal}
+              onMove={(id, x, y) =>
+                store.updateHeal(id, (h) => ({
+                  ...h,
+                  x,
+                  y,
+                  source: h.source ? [Math.min(1, Math.max(0, h.source[0] + x - h.x)), Math.min(1, Math.max(0, h.source[1] + y - h.y))] : null,
+                }))
+              }
+              onSource={(id, x, y) => store.updateHeal(id, (h) => ({ ...h, source: [x, y] }))}
+            />
+          )}
           {looksArmed && looksAt && !showOriginal && (
             <LookSelector
               key={state.fileName ?? ''}
@@ -735,6 +839,25 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
                 onUpdate={store.updateEffect}
                 onRemove={store.removeEffect}
                 onDone={() => setFxMode(false)}
+              />
+            ) : healMode ? (
+              <HealPanel
+                spots={healSpots}
+                selectedId={healId}
+                brush={healBrush}
+                working={session.blemish.working}
+                onSelect={setSelectedHeal}
+                onBrush={setHealBrush}
+                onUpdate={store.updateHeal}
+                onRemove={(id) => {
+                  store.removeHeal(id);
+                  if (id === healId) setSelectedHeal(null);
+                }}
+                onClear={() => {
+                  store.clearHeal();
+                  setSelectedHeal(null);
+                }}
+                onDone={() => setHealMode(false)}
               />
             ) : presetsMode ? (
               <PresetsPanel
@@ -912,6 +1035,16 @@ function MasksIcon() {
       <path d="M3 12h18" strokeOpacity={0.6} />
       <path d="M3 16h18" strokeOpacity={0.3} />
       <circle cx={15} cy={14} r={4} fill="currentColor" stroke="none" fillOpacity={0.5} />
+    </svg>
+  );
+}
+
+/** Healing brush: a bandage across a circle. */
+function HealIcon() {
+  return (
+    <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" style={{ display: 'block' }} aria-hidden="true">
+      <rect x={2.5} y={8.5} width={19} height={7} rx={3.5} transform="rotate(-45 12 12)" />
+      <path d="M10.5 10.5l3 3" strokeWidth={1.6} />
     </svg>
   );
 }
