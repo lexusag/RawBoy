@@ -1,3 +1,7 @@
+**RawBoy Web, Pro: the healing stroke shows in red while you paint (2026-11-12)**
+
+- While you drag a healing stroke it is drawn as a red semi-transparent band at the brush size (one shape, so overlaps don't get darker), then returns to the usual outline when you lift. Before, only a faint white tint showed, which was hard to see.
+
 **RawBoy Web, Pro: Enter finishes the healing session (2026-11-12)**
 
 - In the Healing brush, Enter does what Done does: the tool closes and the strokes stay. Ignored while typing in a text field and on a focused button (which keeps its own Enter).
