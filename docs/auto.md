@@ -146,7 +146,7 @@ navigation (‹ ›, Space, Backspace and arrow keys) and Export show and export
 visible photos; **Unedited** (a toggle beside the dropdowns) keeps only photos shown **As is**: added "As is", still Natural with no preset, lens preset, RawBoy edits, Auto denoise or adjustment (settings restored from a sidecar count); **Clear filter** resets back to the whole batch.
 **Opening a photo that's still waiting:** tap (web: click) a photo marked *Waiting* and it's analysed next, ahead of
 the rest of the batch (its badge reads *Next*), then opens once it's ready, unless another photo was opened meanwhile.
-**Cropping a photo (web):** the **Crop** button in the photo view's top bar (on phones, **Crop & rotate** in the ⋯ menu)
+**Cropping a photo (web, Android):** the **Crop** button in the photo view's top bar (on phones and in the Android app, **Crop & rotate** in the ⋯ menu)
 shows the whole frame with a crop box; drag its corners, edges or inside. The panel has the shapes (Free, Original, 1:1,
 5:4, 4:3, 3:2, 16:9, 2:1, 2.39:1, with a Portrait / Landscape switch), **↺ Left** / **Right ↻**, a **Straighten** slider
 (±45°, crops automatically so no empty corners show) and **Reset** / **Done** (on the web Esc also closes it). The crop and the
