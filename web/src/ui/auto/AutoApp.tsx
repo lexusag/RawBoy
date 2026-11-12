@@ -25,7 +25,7 @@ import { UndoIcon } from '../common/UndoIcon';
 import { AppSwitcher, HelpButton } from '../common/AppNav';
 import { EXTENSIONS } from '../../engine/export/ExportSettings';
 import { DEFAULT_NAME_TEMPLATE, NAME_KEYWORDS } from '../../engine/export/NameTemplate';
-import { activeLook, availableFilterOptions, EDITS_NAME, EXPORT_SIZES, isFilterActive, lookName, paramsOf, SETTINGS, type AutoPhoto, type AutoStore, type ImportMode, type LookMode } from './AutoStore';
+import { activeLook, availableFilterOptions, EDITS_NAME, EXPORT_SIZES, isFilterActive, lookName, paramsOf, SETTINGS, type AutoPhoto, type AutoStore, type BatchExport, type ImportMode, type LookMode } from './AutoStore';
 import { shortcutKey } from '../common/shortcutKey';
 
 /** The frame around the photo in the fit view, CSS pixels, as RawBoy's (grey, white or black: click outside the photo). */
@@ -401,6 +401,7 @@ function GridView({ store, scroll, lastViewed }: {
             )}
           </div>
           <progress value={Math.min(1, (state.export.done + state.export.current) / state.export.total)} max={1} />
+          <BatchTime batch={state.export} />
         </div>
       )}
       {photos.length === 0 ? (
@@ -485,6 +486,33 @@ function GridView({ store, scroll, lastViewed }: {
       )}
     </div>
   );
+}
+
+/** "1:05 elapsed · about 2:30 left" in "Export all". The estimate waits for a first photo (or a tenth of the work). */
+function BatchTime({ batch }: { batch: BatchExport }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  if (batch.startedAt == null) return null;
+  const elapsed = Math.max(0, now - batch.startedAt);
+  const fraction = Math.min(1, (batch.done + batch.current) / batch.total);
+  const left = (fraction >= 0.1 || batch.done >= 1) && fraction > 0 && !batch.stopping ? elapsed * (1 - fraction) / fraction : null;
+  return (
+    <span className="batch-time" aria-live="off">
+      {formatDuration(elapsed)} elapsed{left != null ? ` · about ${left < 5000 ? 'a few seconds' : formatDuration(left)} left` : ''}
+    </span>
+  );
+}
+
+/** m:ss, or h:mm:ss from an hour. */
+function formatDuration(ms: number): string {
+  const total = Math.round(ms / 1000);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const sec = String(total % 60).padStart(2, '0');
+  return h > 0 ? `${h}:${String(m).padStart(2, '0')}:${sec}` : `${m}:${sec}`;
 }
 
 /**
