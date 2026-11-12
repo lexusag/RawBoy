@@ -1379,6 +1379,11 @@ select {
   width: 100%;
 }
 
+.batch-time {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .grid {
   flex: 1;
   overflow-y: auto;
