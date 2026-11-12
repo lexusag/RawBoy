@@ -817,7 +817,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
       if (cropMode) {
         // Enter confirms the crop and Esc puts the tool down (the crop stays as drawn); the batch keys wait until it is.
         // Enter on a focused button presses that button instead.
-        if (e.key === 'Escape' || (e.code === 'KeyC' && e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey && !isTextEntry(e.target)) || (e.key === 'Enter' && !(e.target instanceof HTMLButtonElement) && !isTextEntry(e.target))) {
+        if (e.key === 'Escape' || (e.code === 'KeyC' && !e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey && !isTextEntry(e.target)) || (e.key === 'Enter' && !(e.target instanceof HTMLButtonElement) && !isTextEntry(e.target))) {
           e.preventDefault();
           setCropMode(false);
         }
@@ -836,14 +836,14 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
         store.removeOpened(id);
         return;
       }
-      // Shift+C: Crop & rotate.
-      if (e.code === 'KeyC' && e.shiftKey && !e.repeat) {
+      // C: Crop & rotate (Shift+C is Copy previous).
+      if (e.code === 'KeyC' && !e.shiftKey && !e.repeat) {
         e.preventDefault();
         if (loaded) startCrop();
         return;
       }
-      // C: Copy previous. By key position (code), so it works on any layout (e.g. Ukrainian).
-      if (e.code === 'KeyC' && !e.shiftKey) {
+      // Shift+C: Copy previous. By key position (code), so it works on any layout (e.g. Ukrainian).
+      if (e.code === 'KeyC' && e.shiftKey) {
         e.preventDefault();
         store.copyPrevious(id);
         return;
@@ -936,7 +936,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
         type="button"
         className="text copy-previous"
         disabled={state.export != null || index < 1}
-        title={index > 0 ? `Copy the look and settings of ${pages[index - 1].name} (C)` : 'Copy the look and settings of the photo before this one (C)'}
+        title={index > 0 ? `Copy the look and settings of ${pages[index - 1].name} (Shift+C)` : 'Copy the look and settings of the photo before this one (Shift+C)'}
         onClick={() => store.copyPrevious(id)}
       >
         Copy previous
@@ -978,7 +978,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
           />
         ) : (
           <>
-            <button type="button" className={`icon${cropMode ? ' active' : ''}`} title="Crop & rotate" aria-label="Crop" disabled={!loaded || state.export != null} onClick={() => (cropMode ? setCropMode(false) : startCrop())}>
+            <button type="button" className={`icon${cropMode ? ' active' : ''}`} title="Crop & rotate (C)" aria-label="Crop" disabled={!loaded || state.export != null} onClick={() => (cropMode ? setCropMode(false) : startCrop())}>
               <CropRotateIcon />
             </button>
             <button

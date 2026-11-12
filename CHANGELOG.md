@@ -1,3 +1,7 @@
+**RawBoy Web, Auto and Pro: C is Crop & rotate, Shift+C is Copy previous (2026-11-12)**
+
+- Swapped: **C** opens Crop & rotate in Auto's photo view and in Pro (Pro has no other use for C; it closes the tool too), and **Shift+C** is Copy previous in Auto (it used to be C). Help sheets and the button tooltips follow. Typecheck only, not run in a browser.
+
 **RawBoy Web, Auto: neighbouring photos preload in the photo view (2026-11-12)**
 
 - Once the open photo has finished decoding, Auto quietly warms the next three photos and the previous two (their cached previews are read back and their LUT or film stock loaded), one at a time while the browser is idle, so stepping through photos shows them at once. Moving to another photo cancels the running preload and starts around the new one, and only those five are kept in memory. The full-resolution decode still happens only for the open photo (a full decode per neighbour would hold hundreds of MB each in the WASM heap). Typecheck and unit tests only, not run in a browser.

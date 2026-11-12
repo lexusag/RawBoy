@@ -24,7 +24,7 @@ export const PRO_HELP: HelpSection[] = [
       { how: 'Pinch (touch screens)', text: 'Two fingers zoom around their middle, up to 400% (stops once at 100%), and pan with it; the finger left keeps panning. Out past the whole photo shrinks it to a quarter; a double-tap goes back to the whole photo.' },
       { how: 'Press and hold', text: 'Compare with the as-shot render.' },
       { keys: ['\\'], how: 'or Compare', text: 'Show the as-shot render until pressed again.' },
-      { keys: ['Shift+C'], how: 'or Crop (top bar)', text: 'Open or close Crop & rotate.' },
+      { keys: ['C'], how: 'or Crop (top bar)', text: 'Open or close Crop & rotate.' },
       { keys: ['D'], how: 'or click outside the photo', text: 'Change the frame around it: grey, white or black.' },
       { how: 'Histogram', text: 'Above the tabs: red, green and blue levels of the developed photo, with the share of crushed shadows (left) and clipped highlights (right). Click it to mark them blue and red on the photo.' },
     ],
