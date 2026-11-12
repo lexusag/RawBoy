@@ -161,7 +161,7 @@ export function Preview({ session, params, frame, frameGrey, margin = 0, placeho
   // pinch only pan.
   // Before, the second finger replaced the first's gesture and left its compare timer running, so a pinch could
   // switch to the as-shot render with nothing left to switch it back.
-  const gesture = useRef<{ id: number; x: number; y: number; moved: boolean; timer: number; comparing: boolean } | null>(null);
+  const gesture = useRef<{ id: number; x: number; y: number; moved: boolean; timer: number; comparing: boolean; middle: boolean } | null>(null);
   /** Fingers (and other pointers) down, at their last client positions. */
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   /** The pinch: its two pointers and their last middle and distance (client pixels). */
@@ -183,7 +183,7 @@ export function Preview({ session, params, frame, frameGrey, margin = 0, placeho
       pinch.current = { a, b, cx: (p.x + q.x) / 2, cy: (p.y + q.y) / 2, dist: Math.hypot(q.x - p.x, q.y - p.y) };
     } else if (down.length === 1 && was) {
       const [[id, p]] = down;
-      gesture.current = { id, x: p.x, y: p.y, moved: true, comparing: false, timer: 0 };
+      gesture.current = { id, x: p.x, y: p.y, moved: true, comparing: false, timer: 0, middle: false };
     }
   };
   const pointerGone = (id: number) => {
@@ -219,6 +219,7 @@ export function Preview({ session, params, frame, frameGrey, margin = 0, placeho
     <div
       ref={boxRef}
       className="preview"
+      onMouseDown={(e) => { if (e.button === 1) e.preventDefault(); }} // no autoscroll cursor
       onPointerDown={(e) => {
         // A primary pointer means no other finger is down: forget any whose up we missed.
         if (e.isPrimary) {
@@ -232,8 +233,14 @@ export function Preview({ session, params, frame, frameGrey, margin = 0, placeho
           if (!pinch.current) settlePinch();
           return;
         }
+        if (e.button === 1) {
+          // The middle button pans whatever tool is open (a drag with the left one may paint): no click, no compare.
+          e.preventDefault(); // no autoscroll cursor
+          gesture.current = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, comparing: false, timer: 0, middle: true };
+          return;
+        }
         if (e.button !== 0) return;
-        const g = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, comparing: false, timer: 0 };
+        const g = { id: e.pointerId, x: e.clientX, y: e.clientY, moved: false, comparing: false, timer: 0, middle: false };
         g.timer = window.setTimeout(() => {
           if (!g.moved && gesture.current === g) {
             g.comparing = true;
@@ -253,7 +260,7 @@ export function Preview({ session, params, frame, frameGrey, margin = 0, placeho
         if (!g || g.id !== e.pointerId) return;
         const dx = e.clientX - g.x;
         const dy = e.clientY - g.y;
-        if (!g.moved && Math.hypot(dx, dy) < 4) return;
+        if (!g.moved && Math.hypot(dx, dy) < (g.middle ? 1 : 4)) return;
         if (!g.moved) {
           g.moved = true;
           clearTimeout(g.timer);
@@ -274,7 +281,7 @@ export function Preview({ session, params, frame, frameGrey, margin = 0, placeho
         gesture.current = null;
         clearTimeout(g.timer);
         if (g.comparing) callbacks.current.onCompare(false);
-        else if (!g.moved) {
+        else if (!g.moved && !g.middle) {
           const [x, y] = toDevice(e);
           callbacks.current.onClick?.(x, y);
         }
