@@ -208,6 +208,25 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   const zoomExtra = shapesMode ? maskMargin * dpr : 0;
   const hasImage = store.hasImage;
   const busy = store.busy;
+  // Shift+C toggles Crop & rotate, like its top bar button.
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.code !== 'KeyC' || !e.shiftKey || e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+      const t = e.target;
+      if (t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && t.type !== 'range' && t.type !== 'checkbox')) return;
+      if (!isTabShown('pro') || !hasImage || busy) return;
+      e.preventDefault();
+      if (!geometryMode && store.session.state.zoomCenter) store.session.exitZoom();
+      setGeometryMode(!geometryMode);
+      setHealMode(false);
+      setPresetsMode(false);
+      setMasksMode(false);
+      setLeaksMode(false);
+      setFxMode(false);
+    };
+    window.addEventListener('keydown', down);
+    return () => window.removeEventListener('keydown', down);
+  }, [store, hasImage, busy, geometryMode]);
   const skinMask = session.skin.kind === 'ready' ? session.skin.mask : null;
 
   // Compare keeps the current rotation, flips and crop so the frame doesn't jump; the crop tool shows the whole frame.
