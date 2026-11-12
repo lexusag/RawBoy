@@ -1,3 +1,7 @@
+**RawBoy Web, Pro: middle mouse button pans (2026-11-12)**
+
+- Dragging with the middle mouse button now pans the zoomed photo in every tool, including the Healing brush where the left button paints (Space+drag still works). A middle press never counts as a click or a hold-to-compare.
+
 **RawBoy Web, Auto: Crop & rotate (2026-11-12)**
 
 - New **Crop** button in the photo view (phones: **Crop & rotate** in the ⋯ menu) with Pro's crop frame and a small panel: shapes (Free, Original, 1:1, 5:4, 4:3, 3:2, 16:9, 2:1, 2.39:1 and Portrait / Landscape), turn left / right and **Straighten** (±45°, auto-cropped). The crop and straighten angle are part of the photo's `Adjustments` (`crop`, `straighten`), applied after the look, preset or RawBoy edits by `LookApplier` (a crop replaces the edits' own), so the photo view, thumbnails, Export all and Export, the sidecar (`rawboy:Auto`) and Undo / Redo all follow. Turning a photo turns its crop with it. Apply to all and Copy previous leave the crop alone, as they do rotation. Flip and perspective stay in the RawBoy tab. Help, `docs/auto.md` and a test (`autostore.test.ts`) updated. Typecheck and the Auto store tests only: no WASM build in the cloud session, so the screen itself wasn't run. Android and iOS Auto still to port.
