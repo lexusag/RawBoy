@@ -133,10 +133,13 @@ export class RawImage {
     });
   }
 
-  /** Replaces any earlier healing with healing of exactly [spots]. Previews must be rebuilt afterwards. */
-  async healBlemishes(spots: Float32Array): Promise<void> {
+  /**
+   * Replaces any earlier healing with healing of exactly [spots] (detected blemishes) and [strokes] (the healing brush's,
+   * see healStrokes). Previews must be rebuilt afterwards.
+   */
+  async healBlemishes(spots: Float32Array, strokes: Float32Array = new Float32Array(0)): Promise<void> {
     this.check(true);
-    await this.worker.call({ op: 'healBlemishes', handle: this.handle, spots });
+    await this.worker.call({ op: 'healBlemishes', handle: this.handle, spots, strokes });
   }
 
   close() {

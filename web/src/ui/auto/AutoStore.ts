@@ -21,6 +21,7 @@ import { RawImage } from '../../engine/raw/RawImage';
 import { analysisLanes, analysisWorker } from '../../engine/raw/RawWorker';
 import type { SkinMask } from '../../engine/retouch/SkinMask';
 import type { PreviewImage } from '../../engine/gl/PreviewImage';
+import { healStrokes } from '../../engine/develop/HealSpots';
 import { blemishesToHeal, brushLookup, editTexturesOf, PhotoSession, PREVIEW_MAX_DIMENSION } from '../../engine/session/PhotoSession';
 import { retouchMap } from '../../engine/retouch/PortraitRetouch';
 import { maxLayerRetouch, type MaskLayer } from '../../engine/develop/Masks';
@@ -1416,7 +1417,9 @@ export class AutoStore {
       const skin = a.skin ?? (params.skinRetouch > 0 || params.blemishRemoval > 0 || wanted > 0
         ? await segmentSkin(a.base, img.width, img.height).catch(() => null) : null);
       // A preset's Blemish removal heals the full-resolution image, as the detail view does.
-      if (params.blemishRemoval > 0 && skin?.hasSkin) await img.healBlemishes(blemishesToHeal(await img.detectBlemishes(skin), params.blemishRemoval));
+      // RawBoy edits' healing brush spots go in with it.
+      const auto = params.blemishRemoval > 0 && skin?.hasSkin ? blemishesToHeal(await img.detectBlemishes(skin), params.blemishRemoval) : null;
+      if (auto || params.healSpots.length) await img.healBlemishes(auto ?? new Float32Array(0), healStrokes(params.healSpots, img.width, img.height));
       // RawBoy edits' painted masks and lens blur, made from the healed image as the detail view makes them.
       const textures = await editTexturesOf(img, params);
       // Portrait retouch's map from the session preview's size, as the detail view makes it.

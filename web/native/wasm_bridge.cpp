@@ -301,12 +301,18 @@ val detectBlemishes(uintptr_t h, const val& mask, int maskW, int maskH, float fa
     return toTyped(flat.data(), flat.size());
 }
 
-/** Undoes any previous healing, then heals the given spots (x, y, radius, score)*n. */
-void healBlemishes(uintptr_t h, const val& spots) {
+/**
+ * Undoes any previous healing, then heals the given spots (x, y, radius, score)*n and the healing brush's strokes
+ * (x, y, radius, srcX, srcY, feather)*m: radius is the disk's, srcX < 0 = no source (the texture donor is searched).
+ */
+void healBlemishes(uintptr_t h, const val& spots, const val& strokes) {
     DecodedImage* img = fromHandle(h);
     rawboy::restoreBackups(*img, img->healBackups);
     const std::vector<float> v = fromTyped<float>(spots);
     for (size_t i = 0; i + 3 < v.size(); i += 4) rawboy::healBlemish(*img, {v[i], v[i + 1], v[i + 2], v[i + 3]}, img->healBackups);
+    const std::vector<float> m = fromTyped<float>(strokes);
+    for (size_t i = 0; i + 5 < m.size(); i += 6)
+        rawboy::healStroke(*img, {m[i], m[i + 1], m[i + 2], m[i + 3] >= 0, m[i + 3], m[i + 4], m[i + 5]}, img->healBackups);
 }
 
 /** The streaming area downscaler of the export path (BandDownscaler); 16-bit RGB in and out. */
