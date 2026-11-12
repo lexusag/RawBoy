@@ -5,7 +5,9 @@ import Foundation
  * exposure; [warmth] -100..100 warms or cools; [tint] -50..50 (+ = magenta), [contrast] -50..50, [saturation]
  * -100..100 and [grain] -50..50 are added to the slider values the auto develop and the look arrive at, except negative
  * [saturation], which moves the saturation they arrive at towards -100 (-100 = black and white). [denoise] -100..100
- * shifts the auto luma and colour denoise, colour first (see LookApplier.denoise). [rotation] is clockwise quarter turns (0..3) on top of the photo's own orientation.
+ * shifts the auto luma and colour denoise, colour first (see LookApplier.denoise). [rotation] is clockwise quarter turns (0..3) on top of the photo's own orientation. [straighten] (degrees, -45..45)
+ * adds to the develop's straighten angle and [crop] (fractions of the rotated + straightened frame, nil = the whole
+ * frame) replaces its crop: Auto's Crop & rotate.
  */
 public struct Adjustments: Equatable, Sendable {
     public var brightness: Float = 0
@@ -16,9 +18,11 @@ public struct Adjustments: Equatable, Sendable {
     public var grain: Float = 0
     public var denoise: Float = 0
     public var rotation: Int = 0
+    public var straighten: Float = 0
+    public var crop: CropRect?
 
     public init(brightness: Float = 0, warmth: Float = 0, tint: Float = 0, contrast: Float = 0, saturation: Float = 0,
-                grain: Float = 0, denoise: Float = 0, rotation: Int = 0) {
+                grain: Float = 0, denoise: Float = 0, rotation: Int = 0, straighten: Float = 0, crop: CropRect? = nil) {
         self.brightness = brightness
         self.warmth = warmth
         self.tint = tint
@@ -27,6 +31,8 @@ public struct Adjustments: Equatable, Sendable {
         self.grain = grain
         self.denoise = denoise
         self.rotation = rotation
+        self.straighten = straighten
+        self.crop = crop
     }
 
     public static let none = Adjustments()
@@ -93,9 +99,17 @@ public enum LookApplier {
         d.filmGrain = (look.filmGrain * (1 + adjust.grain / 50)).clamped(0, 200)
         d.halation = look.halation
         d.rotation = ((base.rotation + adjust.rotation) % 4 + 4) % 4
-        var warmed = Warmth.shift(d, powf(warmthRange, adjust.warmth / 100))
+        var warmed = Warmth.shift(framed(d, adjust), powf(warmthRange, adjust.warmth / 100))
         if adjust.tint != 0 { warmed.tint = (warmed.tint + adjust.tint).clamped(-100, 100) }
         return warmed
+    }
+
+    /** [p] straightened and cropped by [adjust] (Auto's Crop & rotate); [p] itself when it sets neither. */
+    private static func framed(_ p: DevelopParams, _ adjust: Adjustments) -> DevelopParams {
+        if adjust.straighten == 0 && adjust.crop == nil { return p }
+        var d = p
+        if adjust.straighten != 0 { d.straighten = (p.straighten + adjust.straighten).clamped(-45, 45) }
+        return adjust.crop.map { d.withCrop($0) } ?? d
     }
 
     /**
@@ -120,7 +134,7 @@ public enum LookApplier {
             d.grain = (p.grain + adjust.grain).clamped(0, 100)
         }
         d.rotation = ((p.rotation + adjust.rotation) % 4 + 4) % 4
-        var warmed = Warmth.shift(d, powf(warmthRange, adjust.warmth / 100))
+        var warmed = Warmth.shift(framed(d, adjust), powf(warmthRange, adjust.warmth / 100))
         if adjust.tint != 0 { warmed.tint = (warmed.tint + adjust.tint).clamped(-100, 100) }
         return warmed
     }

@@ -1,3 +1,7 @@
+**RawBoy Auto (iOS): Crop & rotate (2026-11-12)**
+
+- Same as the web's and Android's: **Crop & rotate** in the photo view's ⋯ menu opens Pro's crop frame (`CropOverlay.swift`, compiled into the Auto target too) with a panel in place of the look strip and sliders: shape chips (Free, Original, 1:1, 5:4, 4:3, 3:2, 16:9, 2:1, 2.39:1 and Portrait / Landscape), ↺ Left / Right ↻, **Straighten** (±45°, auto-cropped), Reset and Done. `Adjustments` gets `straighten` and `crop` (`LookApplier.swift`), so the photo view, thumbnails, Export all and Export, and Undo / Redo follow; turning a photo turns its crop with it, and Apply to all and Copy previous leave it alone. Swiping between photos, zoom and compare pause while it is open. Help, `docs/auto.md` and `AutoCropTests` updated. **Not built or run** (no Xcode in the cloud session): run `xcodegen` (project.yml gained the shared source), build `RawBoyAuto` and `xcodebuild test -scheme RawBoyEngineTests`.
+
 **RawBoy Web, Pro: middle mouse button pans (2026-11-12)**
 
 - Dragging with the middle mouse button now pans the zoomed photo in every tool, including the Healing brush where the left button paints (Space+drag still works). A middle press never counts as a click or a hold-to-compare.
