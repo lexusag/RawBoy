@@ -817,7 +817,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
       if (cropMode) {
         // Enter confirms the crop and Esc puts the tool down (the crop stays as drawn); the batch keys wait until it is.
         // Enter on a focused button presses that button instead.
-        if (e.key === 'Escape' || (e.key === 'Enter' && !(e.target instanceof HTMLButtonElement) && !isTextEntry(e.target))) {
+        if (e.key === 'Escape' || (e.code === 'KeyC' && e.shiftKey && !e.metaKey && !e.ctrlKey && !e.altKey && !isTextEntry(e.target)) || (e.key === 'Enter' && !(e.target instanceof HTMLButtonElement) && !isTextEntry(e.target))) {
           e.preventDefault();
           setCropMode(false);
         }
@@ -834,6 +834,12 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
       if (e.key === 'Delete') {
         e.preventDefault();
         store.removeOpened(id);
+        return;
+      }
+      // Shift+C: Crop & rotate.
+      if (e.code === 'KeyC' && e.shiftKey && !e.repeat) {
+        e.preventDefault();
+        if (loaded) startCrop();
         return;
       }
       // C: Copy previous. By key position (code), so it works on any layout (e.g. Ukrainian).
