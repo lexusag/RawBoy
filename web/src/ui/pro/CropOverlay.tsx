@@ -15,6 +15,12 @@ interface Props {
   /** Frame around the photo, CSS pixels. */
   frame: number;
   onChange: (crop: CropRect) => void;
+  /**
+   * Drag outside the crop frame to rotate (Auto's Crop & rotate): [angle] is the straighten angle in degrees (+ turns
+   * clockwise) and [onChange] gets the new one while the pointer circles the frame's centre. Without it, presses
+   * outside fall through to the preview.
+   */
+  rotate?: { angle: number; onChange: (degrees: number) => void };
 }
 
 const CURSORS: Record<CropHandle, string> = {
@@ -34,10 +40,12 @@ const CURSORS: Record<CropHandle, string> = {
  * straightening, and edits the crop by dragging corners, edges or the inside. Presses outside the crop fall
  * through to the preview (press and hold still compares).
  */
-export function CropOverlay({ frameWidth, frameHeight, crop, ratio, frame, onChange }: Props) {
+export function CropOverlay({ frameWidth, frameHeight, crop, ratio, frame, onChange, rotate }: Props) {
   const [box, setBox] = useState<{ w: number; h: number } | null>(null);
   const [hover, setHover] = useState<CropHandle | null>(null);
   const drag = useRef<{ handle: CropHandle; start: CropRect; x: number; y: number } | null>(null);
+  /** A rotate drag: the frame's centre in client pixels, the pointer's last angle and the angle it started from. */
+  const turning = useRef<{ cx: number; cy: number; last: number; angle: number } | null>(null);
   const r = box ? ZoomMath.fitRect(box.w, box.h, frameWidth, frameHeight, frame) : null;
 
   const handleAt = (e: React.PointerEvent<SVGSVGElement>): CropHandle | null => {
@@ -100,7 +108,7 @@ export function CropOverlay({ frameWidth, frameHeight, crop, ratio, frame, onCha
   return (
     <svg
       className="overlay crop-overlay"
-      style={{ cursor: hover ? CURSORS[hover] : undefined }}
+      style={{ cursor: hover ? CURSORS[hover] : rotate ? 'grab' : undefined }}
       ref={(el) => {
         if (!el) return;
         const b = el.getBoundingClientRect();
@@ -109,12 +117,34 @@ export function CropOverlay({ frameWidth, frameHeight, crop, ratio, frame, onCha
       onPointerDown={(e) => {
         if (e.button !== 0) return;
         const handle = handleAt(e);
-        if (!handle) return; // outside the crop: the preview's own gestures
+        if (!handle) {
+          if (!rotate || !r) return; // outside the crop: the preview's own gestures
+          const b = e.currentTarget.getBoundingClientRect();
+          const cx = b.left + r[0] + ((crop.left + crop.right) / 2) * r[2];
+          const cy = b.top + r[1] + ((crop.top + crop.bottom) / 2) * r[3];
+          e.stopPropagation();
+          e.currentTarget.setPointerCapture(e.pointerId);
+          turning.current = { cx, cy, last: Math.atan2(e.clientY - cy, e.clientX - cx), angle: rotate.angle };
+          return;
+        }
         e.stopPropagation();
         e.currentTarget.setPointerCapture(e.pointerId);
         drag.current = { handle, start: crop, x: e.clientX, y: e.clientY };
       }}
       onPointerMove={(e) => {
+        const t = turning.current;
+        if (t && rotate) {
+          e.stopPropagation();
+          // Clockwise on screen is a positive angle (y points down); the step is wrapped so crossing ±180° is smooth.
+          const now = Math.atan2(e.clientY - t.cy, e.clientX - t.cx);
+          let step = now - t.last;
+          if (step > Math.PI) step -= 2 * Math.PI;
+          else if (step < -Math.PI) step += 2 * Math.PI;
+          t.last = now;
+          t.angle = Math.min(45, Math.max(-45, t.angle + (step * 180) / Math.PI));
+          rotate.onChange(Math.round(t.angle * 100) / 100);
+          return;
+        }
         const d = drag.current;
         if (!d) {
           setHover(handleAt(e));
@@ -125,12 +155,18 @@ export function CropOverlay({ frameWidth, frameHeight, crop, ratio, frame, onCha
         onChange(dragCrop(d.start, d.handle, (e.clientX - d.x) / r[2], (e.clientY - d.y) / r[3], ratio, frameWidth, frameHeight));
       }}
       onPointerUp={(e) => {
+        if (turning.current) {
+          e.stopPropagation();
+          turning.current = null;
+          return;
+        }
         if (!drag.current) return;
         e.stopPropagation();
         drag.current = null;
       }}
       onPointerCancel={() => {
         drag.current = null;
+        turning.current = null;
       }}
     >
       {body}

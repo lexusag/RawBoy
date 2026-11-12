@@ -1070,6 +1070,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
                 ratio={cropRatio}
                 frame={FRAME_WIDTH}
                 onChange={(c) => store.setCrop(id, c)}
+                rotate={{ angle: photo.adjust.straighten, onChange: (deg) => store.setStraighten(id, deg) }}
               />
             )}
             {!loaded && quick && <span className="spinner corner" />}
