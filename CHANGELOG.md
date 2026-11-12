@@ -1,3 +1,7 @@
+**RawBoy Web, Pro: much smaller healing brush (2026-11-12)**
+
+- The Healing brush's smallest size is now 0.04% of the photo's long side (about 2-3 px on a 6000 px photo, was 12 px), for single hot pixels and hairline dust. The Size slider stays logarithmic over the whole range, so the small end keeps fine steps; `[` and `]` step it the same way. Saved sizes are unchanged (only the slider position moves).
+
 **RawBoy Web, Auto: drag to rotate in Crop & rotate (2026-11-12)**
 
 - In Crop & rotate, press outside the crop box and drag around it to rotate the photo, as in Lightroom: the angle follows the pointer around the frame's centre (clockwise = clockwise, ±45°, smooth across the 180° line) and the **Straighten** slider moves with it; the usual Undo step and auto crop apply. `CropOverlay` (shared with Pro) takes an optional `rotate` prop, which only Auto passes; Pro's presses outside the box still fall through to the preview. The cursor over the area outside the box is a grab hand. Touch rotate on Android and iOS isn't done. Typecheck only, not run in a browser.
