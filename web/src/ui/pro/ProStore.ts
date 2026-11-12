@@ -7,7 +7,7 @@ import { developParams, type DevelopParams } from '../../engine/develop/DevelopP
 import { decodeEdits, encodeEdits } from '../../engine/develop/Edits';
 import { MAX_LAYERS, SHAPE_NAMES, newBrushLayer, newLinearLayer, newRadialLayer, newStripeLayer, type BrushStroke, type MaskLayer } from '../../engine/develop/Masks';
 import { MAX_EFFECTS, newLightEffect, type FxKind, type LightEffect } from '../../engine/develop/LightEffects';
-import { MAX_HEAL_SPOTS, type HealSpot } from '../../engine/develop/HealSpots';
+import { MAX_HEAL_POINTS, MAX_HEAL_SPOTS, type HealSpot } from '../../engine/develop/HealSpots';
 import { MAX_LEAKS, newLightLeak, type LeakKind, type LightLeak } from '../../engine/develop/LightLeaks';
 import { applyPreset, captureLensPreset, capturePreset, decodePresets, encodePresets, putLensPreset, type Preset, type PresetGroup } from '../../engine/develop/Presets';
 import { EXTENSIONS, ExportSettingsStore, baseNameOf, fileName, type ExportSettings } from '../../engine/export/ExportSettings';
@@ -438,27 +438,59 @@ export class ProStore {
     this.commit({ ...p, leaks: p.leaks.filter((l) => l.id !== id) }, true);
   };
 
-  /** Adds a healing brush spot (up to MAX_HEAL_SPOTS); false when full. Healing follows ~300 ms after the edits rest. */
+  /** Starts a healing brush stroke (up to MAX_HEAL_SPOTS); false when full. Healing follows ~300 ms after the edits rest. */
   addHeal = (spot: HealSpot): boolean => {
+    this.flushHeal();
     const p = this._state.params;
     if (p.healSpots.length >= MAX_HEAL_SPOTS) return false;
     this.commit({ ...p, healSpots: [...p.healSpots, spot] }, true);
     return true;
   };
 
-  /** A spot's drag or slider; [force] for a button (source on/off). */
+  /** A stroke's slider or source drag; [force] for a button (source on/off). */
   updateHeal = (id: string, change: (s: HealSpot) => HealSpot, force = false) => {
     const p = this._state.params;
     this.commit({ ...p, healSpots: p.healSpots.map((s) => (s.id === id ? change(s) : s)) }, force);
   };
 
-  /** Drops the spot just added, with no redo step (a second finger turned the press into a pinch). */
+  /** Points of the stroke being painted that haven't reached the params yet (one update per frame). */
+  private pendingHeal: { id: string; points: number[] } | null = null;
+  private healFrame = 0;
+
+  /** The healing brush stroke [id] grows by flat x, y image fractions [points]; part of the step addHeal started. */
+  extendHeal = (id: string, points: number[]) => {
+    if (this.pendingHeal && this.pendingHeal.id !== id) this.flushHeal();
+    if (!this.pendingHeal) this.pendingHeal = { id, points: [] };
+    this.pendingHeal.points.push(...points);
+    if (!this.healFrame) this.healFrame = requestAnimationFrame(() => this.flushHeal());
+  };
+
+  endHeal = () => this.flushHeal();
+
+  private flushHeal() {
+    cancelAnimationFrame(this.healFrame);
+    this.healFrame = 0;
+    const pending = this.pendingHeal;
+    this.pendingHeal = null;
+    if (!pending || pending.points.length === 0) return;
+    const params = this._state.params;
+    this.show({
+      ...params,
+      healSpots: params.healSpots.map((s) =>
+        s.id === pending.id ? { ...s, path: [...s.path, ...pending.points].slice(0, MAX_HEAL_POINTS * 2) } : s,
+      ),
+    });
+  }
+
+  /** Drops the stroke just begun, with no redo step (a second finger turned the press into a pinch). */
   cancelHeal = () => {
+    this.flushHeal();
     const p = this.history.drop();
     if (p) this.show(p);
   };
 
   removeHeal = (id: string) => {
+    this.flushHeal();
     const p = this._state.params;
     this.commit({ ...p, healSpots: p.healSpots.filter((s) => s.id !== id) }, true);
   };

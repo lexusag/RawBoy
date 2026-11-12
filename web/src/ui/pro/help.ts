@@ -64,11 +64,11 @@ export const PRO_HELP: HelpSection[] = [
   {
     title: 'Healing brush',
     items: [
-      { how: 'Click or tap the photo', text: 'Heals a dust spot, blemish or small object away (up to 64 spots a photo). The circle can be dragged to place it exactly; the picture is redone in full resolution about a second after you stop, so export has it too. Zoom in (double-click, Z, wheel or pinch) for fine spots; Space pans, a second finger pinches.' },
-      { how: 'Size, Feather', text: 'Size is the circle\'s diameter as a share of the photo\'s long side (the circle should just cover the spot). Feather sets how softly the repair fades into the photo.' },
-      { how: 'Auto source, Choose source', text: 'The tone inside the circle is filled in from around it; the texture (grain, skin, leaves) comes from a nearby clean area picked automatically, or from a dashed circle you drag onto an area of the same kind (clone-stamp style). Moving a spot takes its source along. Spots belong to this photo and aren\'t kept in presets.' },
-      { keys: ['[', ']'], text: 'Smaller or larger circle' },
-      { keys: ['Delete'], text: 'Removes the selected spot' },
+      { how: 'Paint on the photo', text: 'Click for one spot, drag to paint a stroke over dust, a blemish or a small object (up to 64 strokes a photo). It is healed in full resolution about a second after you stop, so export has it too. Zoom in (double-click, Z, wheel or pinch) for fine spots; Space pans, a second finger pinches.' },
+      { how: 'Size, Feather', text: 'Size is the brush diameter as a share of the photo\'s long side (the brush should just cover the spot). The repair always matches its surroundings at the edge; Feather sets how much of the old picture is kept near it (80 by default; lower heals harder).' },
+      { how: 'Auto source, Choose source', text: 'The tone comes from around the stroke; the detail (grain, skin, leaves) from a nearby clean area picked automatically, or from a dashed copy of the stroke you drag onto an area of the same kind (clone-stamp style; new strokes keep that offset). Pick a stroke in the list to change it. Strokes belong to this photo and aren\'t kept in presets.' },
+      { keys: ['[', ']'], text: 'Smaller or larger brush' },
+      { keys: ['Delete'], text: 'Removes the selected stroke' },
     ],
   },
   {

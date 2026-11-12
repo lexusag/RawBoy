@@ -276,27 +276,34 @@ void healBlemish(DecodedImage& img, const Blemish& spot, std::vector<HealBackup>
 }
 
 void healStroke(DecodedImage& img, const HealStroke& spot, std::vector<HealBackup>& backups) {
+    // Seamless cloning (Poisson) in the log domain, the way healing brushes work: inside the disk the picture is the
+    // solution of  laplace(f) = laplace(donor detail)  with f = the photo itself just outside the disk. The edge matches
+    // the surroundings exactly, whatever the donor's tone, so the feather only decides how much of the old picture is
+    // kept, never whether a seam shows. The donor's detail is its high-pass (tone excluded): the tone inside is the smooth
+    // interpolation of the surroundings, so a dark spot's own tone can't leak into it.
     const int W = img.width, H = img.height;
     const float R = std::max(2.0f, spot.radius);
-    // Room for the smoothing around the disk; without a source the texture donor is searched 2.2R away.
-    const int B = static_cast<int>(std::ceil(R * (spot.hasSource ? 2.0f : 3.6f))) + 4;
+    const float sigma = std::max(1.5f, R * 0.3f);
+    const int B = static_cast<int>(std::ceil(R + 3 * sigma)) + 3;
     const int cx = std::clamp(static_cast<int>(std::lround(spot.x)), 0, W - 1);
     const int cy = std::clamp(static_cast<int>(std::lround(spot.y)), 0, H - 1);
     const int n = 2 * B + 1;
     const size_t cells = static_cast<size_t>(n) * n;
+    auto dist = [&](int x, int y) { return std::hypot(float(x - B), float(y - B)); };
 
-    /** The patch of side n centred on (px, py), edges replicated where it leaves the photo. */
+    /** The log of the patch of side n centred on (px, py), edges replicated where it leaves the photo. */
     auto load = [&](int px, int py) {
-        std::vector<Plane> P(3, Plane(cells));
+        std::vector<Plane> L(3, Plane(cells));
         for (int y = 0; y < n; ++y) {
             const int sy = std::clamp(py - B + y, 0, H - 1);
             for (int x = 0; x < n; ++x) {
                 const int sx = std::clamp(px - B + x, 0, W - 1);
                 const size_t src = (static_cast<size_t>(sy) * W + sx) * 3;
-                for (int c = 0; c < 3; ++c) P[c][static_cast<size_t>(y) * n + x] = halfToFloat(img.rgb[src + c]);
+                for (int c = 0; c < 3; ++c)
+                    L[c][static_cast<size_t>(y) * n + x] = std::log(std::max(halfToFloat(img.rgb[src + c]), 1e-5f));
             }
         }
-        return P;
+        return L;
     };
 
     // Backup of the part of the patch inside the photo.
@@ -308,90 +315,98 @@ void healStroke(DecodedImage& img, const HealStroke& spot, std::vector<HealBacku
         std::copy_n(img.rgb.data() + (static_cast<size_t>(by0 + y) * W + bx0) * 3, static_cast<size_t>(backup.width) * 3,
                     backup.pixels.data() + static_cast<size_t>(y) * backup.width * 3);
 
-    std::vector<Plane> P = load(cx, cy);
-    const float sigma = R * 0.25f;
-    auto dist = [&](int x, int y) { return std::hypot(float(x - B), float(y - B)); };
-    std::vector<Plane> smooth(3), low(3);
-    for (int c = 0; c < 3; ++c) smooth[c] = gaussian(P[c], n, n, sigma);
-
-    // Low frequency: membrane (Laplace) fill of the smoothed image over the disk, only within its bounding box.
+    const std::vector<Plane> T = load(cx, cy);
     const int lo = std::max(1, B - static_cast<int>(std::ceil(R)) - 1), hi = std::min(n - 2, B + static_cast<int>(std::ceil(R)) + 1);
-    for (int c = 0; c < 3; ++c) {
-        low[c] = smooth[c];
-        double ringSum = 0;
+
+    /** The donor's high-pass (log detail) for a patch loaded at some other place. */
+    auto detail = [&](const std::vector<Plane>& L) {
+        std::vector<Plane> D(3);
+        for (int c = 0; c < 3; ++c) {
+            const Plane s = gaussian(L[c], n, n, sigma);
+            D[c].resize(cells);
+            for (size_t i = 0; i < cells; ++i) D[c][i] = L[c][i] - s[i];
+        }
+        return D;
+    };
+
+    std::vector<Plane> D;
+    if (spot.hasSource) {
+        D = detail(load(std::clamp(static_cast<int>(std::lround(spot.srcX)), 0, W - 1),
+                        std::clamp(static_cast<int>(std::lround(spot.srcY)), 0, H - 1)));
+    } else {
+        // The cleanest donor disk around: the least detail variation (no spots of its own) and the tone nearest the target's.
+        double ring = 0;
         int ringCount = 0;
         for (int y = lo; y <= hi; ++y)
             for (int x = lo; x <= hi; ++x) {
                 const float d = dist(x, y);
-                if (d >= R && d < R + 2) { ringSum += smooth[c][static_cast<size_t>(y) * n + x]; ++ringCount; }
+                if (d >= R && d < R + 3) { ring += T[1][static_cast<size_t>(y) * n + x]; ++ringCount; }
             }
-        const float ring = ringCount ? float(ringSum / ringCount) : 0.0f;
-        for (int y = lo; y <= hi; ++y)
-            for (int x = lo; x <= hi; ++x)
-                if (dist(x, y) < R) low[c][static_cast<size_t>(y) * n + x] = ring;
-        const int iterations = static_cast<int>(R * 3) + 30;
-        Plane next = low[c];
-        for (int it = 0; it < iterations; ++it) {
+        const double targetTone = ringCount ? ring / ringCount : 0.0;
+        float bestCost = 1e30f;
+        std::vector<Plane> bestLog;
+        for (int k = 0; k < 16; ++k) {
+            const double a = k * 0.392699;
+            const double reach = (k % 2 ? 3.4 : 2.4) * R + 2;
+            const int dx = static_cast<int>(std::lround(cx + std::cos(a) * reach)), dy = static_cast<int>(std::lround(cy + std::sin(a) * reach));
+            if (dx < 0 || dy < 0 || dx >= W || dy >= H) continue;
+            std::vector<Plane> L = load(dx, dy);
+            const Plane s = gaussian(L[1], n, n, sigma);
+            double sum = 0, sum2 = 0, tone = 0;
+            int count = 0;
             for (int y = lo; y <= hi; ++y)
                 for (int x = lo; x <= hi; ++x) {
                     if (dist(x, y) >= R) continue;
                     const size_t i = static_cast<size_t>(y) * n + x;
-                    next[i] = 0.25f * (low[c][i - 1] + low[c][i + 1] + low[c][i - n] + low[c][i + n]);
+                    const double hf = L[1][i] - s[i];
+                    sum += hf; sum2 += hf * hf; tone += s[i]; ++count;
                 }
-            std::swap(low[c], next);
+            if (count == 0) continue;
+            const double sd = std::sqrt(std::max(0.0, sum2 / count - (sum / count) * (sum / count)));
+            const float cost = static_cast<float>(sd + 0.5 * std::fabs(tone / count - targetTone));
+            if (cost < bestCost) { bestCost = cost; bestLog = std::move(L); }
         }
+        if (bestLog.empty()) D.assign(3, Plane(cells, 0.0f));  // no room anywhere: plain smooth fill
+        else D = detail(bestLog);
     }
 
-    // Texture: the donor disk's detail relative to its own smooth tone (a ratio, so it takes the target's tone).
-    std::vector<Plane> tex(3, Plane(cells, 1.0f));
-    if (spot.hasSource) {
-        const int dx = std::clamp(static_cast<int>(std::lround(spot.srcX)), 0, W - 1);
-        const int dy = std::clamp(static_cast<int>(std::lround(spot.srcY)), 0, H - 1);
-        const std::vector<Plane> D = load(dx, dy);
-        for (int c = 0; c < 3; ++c) {
-            const Plane ds = gaussian(D[c], n, n, sigma);
-            for (size_t i = 0; i < cells; ++i) tex[c][i] = std::clamp(D[c][i] / std::max(ds[i], 1e-5f), 0.6f, 1.6f);
-        }
-    } else {
-        int bestDx = 0, bestDy = 0;
-        float bestCost = 1e30f;
-        double lowMean = 0;
-        int lowCount = 0;
+    // Poisson solve per channel (Gauss-Seidel with over-relaxation) over the disk's box; outside the disk f stays the photo.
+    std::vector<Plane> F = T;
+    const int maxIter = static_cast<int>(R * 4) + 60;
+    for (int c = 0; c < 3; ++c) {
+        Plane& f = F[c];
+        Plane rhs(cells, 0.0f);
+        double ring = 0;
+        int ringCount = 0;
+        for (int y = lo; y <= hi; ++y)
+            for (int x = lo; x <= hi; ++x) {
+                const float d = dist(x, y);
+                const size_t i = static_cast<size_t>(y) * n + x;
+                if (d < R) rhs[i] = D[c][i - 1] + D[c][i + 1] + D[c][i - n] + D[c][i + n] - 4 * D[c][i];
+                else if (d < R + 3) { ring += f[i]; ++ringCount; }
+            }
+        const float start = ringCount ? static_cast<float>(ring / ringCount) : 0.0f;
         for (int y = lo; y <= hi; ++y)
             for (int x = lo; x <= hi; ++x)
-                if (dist(x, y) < R) { lowMean += low[1][static_cast<size_t>(y) * n + x]; ++lowCount; }
-        lowMean /= std::max(lowCount, 1);
-        for (int a = 0; a < 8; ++a) {
-            const int dx = static_cast<int>(std::lround(std::cos(a * 0.785398) * 2.2 * R));
-            const int dy = static_cast<int>(std::lround(std::sin(a * 0.785398) * 2.2 * R));
-            double s = 0, s2 = 0, tone = 0;
-            int count = 0;
-            for (int y = lo; y <= hi && count >= 0; ++y)
-                for (int x = lo; x <= hi; ++x) {
-                    if (dist(x, y) >= R) continue;
-                    const int sx = x + dx, sy = y + dy;
-                    if (sx < 0 || sy < 0 || sx >= n || sy >= n) { count = -1; break; }
-                    const size_t j = static_cast<size_t>(sy) * n + sx;
-                    const float hf = std::log(std::max(P[1][j], 1e-5f)) - std::log(std::max(smooth[1][j], 1e-5f));
-                    s += hf; s2 += hf * hf; tone += smooth[1][j];
-                    ++count;
-                }
-            if (count <= 0) continue;
-            const double sd = std::sqrt(std::max(0.0, s2 / count - (s / count) * (s / count)));
-            const double cost = sd + std::fabs(std::log(tone / count + 1e-6) - std::log(lowMean + 1e-6));
-            if (cost < bestCost) { bestCost = static_cast<float>(cost); bestDx = dx; bestDy = dy; }
-        }
-        for (int c = 0; c < 3; ++c)
+                if (dist(x, y) < R) f[static_cast<size_t>(y) * n + x] = start;
+        const float omega = 1.85f;
+        for (int it = 0; it < maxIter; ++it) {
+            float change = 0;
             for (int y = lo; y <= hi; ++y)
                 for (int x = lo; x <= hi; ++x) {
-                    const int sx = std::clamp(x + bestDx, 0, n - 1), sy = std::clamp(y + bestDy, 0, n - 1);
-                    const size_t j = static_cast<size_t>(sy) * n + sx;
-                    tex[c][static_cast<size_t>(y) * n + x] = std::clamp(P[c][j] / std::max(smooth[c][j], 1e-5f), 0.6f, 1.6f);
+                    if (dist(x, y) >= R) continue;
+                    const size_t i = static_cast<size_t>(y) * n + x;
+                    const float target = 0.25f * (f[i - 1] + f[i + 1] + f[i - n] + f[i + n] - rhs[i]);
+                    const float delta = omega * (target - f[i]);
+                    f[i] += delta;
+                    change = std::max(change, std::fabs(delta));
                 }
+            if (change < 2e-4f) break;
+        }
     }
 
-    // Composite: membrane tone x donor texture, feathered into the original.
-    const float fade = std::max(0.02f, std::clamp(spot.feather, 0.0f, 1.0f)) * R;
+    // Composite: the healed log picture over the original, kept near the edge by the feather (fraction of half the radius).
+    const float fade = std::max(0.75f, std::clamp(spot.feather, 0.0f, 1.0f) * 0.5f * R);
     for (int y = lo; y <= hi; ++y)
         for (int x = lo; x <= hi; ++x) {
             const float d = dist(x, y);
@@ -402,10 +417,7 @@ void healStroke(DecodedImage& img, const HealStroke& spot, std::vector<HealBacku
             a = a * a * (3 - 2 * a);
             const size_t i = static_cast<size_t>(y) * n + x;
             const size_t dst = (static_cast<size_t>(iy) * W + ix) * 3;
-            for (int c = 0; c < 3; ++c) {
-                const float healed = low[c][i] * tex[c][i];
-                img.rgb[dst + c] = floatToHalf(P[c][i] * (1 - a) + healed * a);
-            }
+            for (int c = 0; c < 3; ++c) img.rgb[dst + c] = floatToHalf(std::exp(T[c][i] + a * (F[c][i] - T[c][i])));
         }
     backups.push_back(std::move(backup));
 }
