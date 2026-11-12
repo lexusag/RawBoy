@@ -1164,7 +1164,10 @@ private val FILTER_COLORS = mapOf(
     BwFilter.GREEN to Color(0xFF22AA22),
 )
 
-/** Slider with its value; double-tap the slider or tap the value to reset. */
+/**
+ * Slider with its value; double-tap the slider or tap the value to reset. The label and the value take the same
+ * width, so the track, and the zero mark of a signed one, sit exactly at the middle of the screen.
+ */
 @Composable
 private fun LookSlider(
     label: String,
@@ -1172,7 +1175,9 @@ private fun LookSlider(
     range: ClosedFloatingPointRange<Float>,
     default: Float,
     onChange: (Float) -> Unit,
-) = CompactSlider(label, value, range, default, rowHeight = 36.dp, labelWidth = 88.dp, valueWidth = 44.dp, onChange = onChange)
+) = CompactSlider(label, value, range, default, rowHeight = 36.dp, labelWidth = LOOK_LABEL_WIDTH, valueWidth = LOOK_LABEL_WIDTH, onChange = onChange)
+
+private val LOOK_LABEL_WIDTH = 88.dp
 
 @Composable
 private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, requestLocation: () -> Unit) {
