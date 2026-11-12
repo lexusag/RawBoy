@@ -1222,7 +1222,7 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
         if (settings.keepDng) {
             SettingSwitch(
                 title = "Lossy JPEG XL DNG",
-                subtitle = "A fraction of the size, visually lossless; saves a few seconds slower",
+                subtitle = "Much smaller, visually lossless; saving takes longer",
                 checked = settings.lossyDng,
                 onChange = vm::setLossyDng,
                 indent = true,
