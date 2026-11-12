@@ -1,5 +1,6 @@
 import { decodeForAnalysis, finishAnalysis, type Analysis, type DecodedForAnalysis } from '../../engine/auto/AutoAnalysis';
 import { ALL_LOOKS, Looks, type Look } from '../../engine/auto/looks/Look';
+import { isFullCrop, rotateCrop, type CropRect } from '../../engine/develop/CropMath';
 import { DEFAULT_STRENGTH, NO_ADJUSTMENTS, applyEditsDevelop, developAuto, sameAdjustments, whiteBalanceAdjust, type Adjustments } from '../../engine/auto/looks/LookApplier';
 import { ALL_FILM_LOOKS, FilmLooks } from '../../engine/auto/looks/FilmLooks';
 import { suggestFilm, suggestLook } from '../../engine/auto/looks/LookSuggester';
@@ -1044,9 +1045,21 @@ export class AutoStore {
   rotate(ids: Set<string>, quarterTurns: number) {
     if (this._state.export) return;
     for (const p of this._state.photos) {
-      if (ids.has(p.id) && p.analysis) this.setAdjust(p.id, { rotation: (((p.adjust.rotation + quarterTurns) % 4) + 4) % 4 }, true);
+      if (ids.has(p.id) && p.analysis) {
+        // The crop turns with the picture (and the straighten angle stays: it is relative to the turned frame).
+        const crop = p.adjust.crop ? rotateCrop(p.adjust.crop, quarterTurns) : null;
+        this.setAdjust(p.id, { rotation: (((p.adjust.rotation + quarterTurns) % 4) + 4) % 4, crop }, true);
+      }
     }
   }
+
+  /** Crop & rotate: crops [id] to [crop] (fractions of the rotated + straightened frame; null or the whole frame = uncropped). */
+  setCrop = (id: string, crop: CropRect | null, force = false) =>
+    this.setAdjust(id, { crop: crop && !isFullCrop(crop) ? crop : null }, force);
+
+  /** Crop & rotate: straightens [id] by [degrees] (-45..45). The crop is kept as drawn, so it is redrawn after. */
+  setStraighten = (id: string, degrees: number, force = false) =>
+    this.setAdjust(id, { straighten: Math.round(Math.min(45, Math.max(-45, degrees)) * 100) / 100 }, force);
 
   /**
    * Gives every photo of the batch the look (or preset), strength, warmth, tint, contrast, luma contrast, saturation, grain and retouch of [id], including

@@ -146,6 +146,13 @@ navigation (‹ ›, Space, Backspace and arrow keys) and Export show and export
 visible photos; **Unedited** (a toggle beside the dropdowns) keeps only photos shown **As is**: added "As is", still Natural with no preset, lens preset, RawBoy edits, Auto denoise or adjustment (settings restored from a sidecar count); **Clear filter** resets back to the whole batch.
 **Opening a photo that's still waiting:** tap (web: click) a photo marked *Waiting* and it's analysed next, ahead of
 the rest of the batch (its badge reads *Next*), then opens once it's ready, unless another photo was opened meanwhile.
+**Cropping a photo (web):** the **Crop** button in the photo view's top bar (on phones, **Crop & rotate** in the ⋯ menu)
+shows the whole frame with a crop box; drag its corners, edges or inside. The panel has the shapes (Free, Original, 1:1,
+5:4, 4:3, 3:2, 16:9, 2:1, 2.39:1, with a Portrait / Landscape switch), **↺ Left** / **Right ↻**, a **Straighten** slider
+(±45°, crops automatically so no empty corners show) and **Reset** / **Done** (Esc also closes it). The crop and the
+straighten angle are kept per photo, shown in the photo view, thumbnails, Export all and Export, and saved in the
+sidecar; they are in Undo / Redo, and Apply to all and Copy previous leave them alone. Flip and perspective stay in the
+RawBoy tab, which brings Auto's crop along with the rest of the develop.
 **Rotating, removing and exporting photos:** long-press a photo in the grid to start selecting, tap others to add them
 (or **All**), then **↺** / **↻** to turn them all 90° left or right (thumbnails, photo view and exports follow; Apply to
 all leaves each photo's rotation alone), **Remove** (a bin icon), or **Export** to save only the

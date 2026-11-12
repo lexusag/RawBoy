@@ -464,6 +464,36 @@ describe('Auto denoise on "As is" photos', () => {
     expect(table).toMatchObject({ denoise: 10, colorDenoise: 20 });
   });
 
+  it('crops and straightens a photo, turns the crop with the picture, and keeps it in the sidecar and Undo', async () => {
+    vi.stubGlobal('window', { setTimeout: () => 0 });
+    const { developParams } = await import('../develop/DevelopParams');
+    const { paramsOf } = await import('../../ui/auto/AutoStore');
+    const { encodeAuto, decodeAuto } = await import('../../ui/auto/AutoSidecar');
+    const store = new AutoStore();
+    store.add([new File(['a'], 'a.RAF')]);
+    const defaults = developParams();
+    const s = store as unknown as { _state: { photos: object[] } };
+    s._state.photos = s._state.photos.map((p) => ({ ...p, analysis: { defaults, autoBase: defaults, stats: { hasFace: false } } }));
+    const id = store.state.photos[0].id;
+    expect(paramsOf(store.state.photos[0])).toMatchObject({ cropLeft: 0, cropRight: 1, straighten: 0 });
+    store.setCrop(id, { left: 0.1, top: 0.2, right: 0.6, bottom: 0.9 }, true);
+    store.setStraighten(id, 2.5, true);
+    expect(paramsOf(store.state.photos[0])).toMatchObject({ cropLeft: 0.1, cropTop: 0.2, cropRight: 0.6, cropBottom: 0.9, straighten: 2.5 });
+    // Saved and restored with the photo's other settings.
+    expect(decodeAuto(encodeAuto(store.state.photos[0]))!.adjust).toMatchObject({ straighten: 2.5, crop: { left: 0.1, top: 0.2, right: 0.6, bottom: 0.9 } });
+    // A quarter turn right: frame point (x, y) moves to (1 - y, x).
+    store.rotate(new Set([id]), 1);
+    const turned = paramsOf(store.state.photos[0])!;
+    expect(turned.rotation).toBe(1);
+    expect([turned.cropLeft, turned.cropTop, turned.cropRight, turned.cropBottom].map((v) => Math.round(v * 100) / 100)).toEqual([0.1, 0.1, 0.8, 0.6]);
+    store.undo(id);
+    store.undo(id);
+    store.undo(id);
+    expect(paramsOf(store.state.photos[0])).toMatchObject({ cropLeft: 0, cropRight: 1, straighten: 0 });
+    store.setCrop(id, { left: 0, top: 0, right: 1, bottom: 1 }, true);
+    expect(store.state.photos[0].adjust.crop).toBeNull();
+  });
+
   it('gives a plain photo the ISO table\'s denoise under its preset, kept in the sidecar and undoable', async () => {
     vi.stubGlobal('window', { setTimeout: () => 0 });
     const { developParams } = await import('../develop/DevelopParams');

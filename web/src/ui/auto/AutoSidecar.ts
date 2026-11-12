@@ -1,5 +1,6 @@
 import { filmLookById } from '../../engine/auto/looks/FilmLooks';
 import { lookById, type Look } from '../../engine/auto/looks/Look';
+import { isFullCrop, type CropRect } from '../../engine/develop/CropMath';
 import { NO_ADJUSTMENTS, type Adjustments } from '../../engine/auto/looks/LookApplier';
 import { developParams, type DevelopParams } from '../../engine/develop/DevelopParams';
 import { decodeEdits, encodeEdits, EDITS_FORMAT, EDITS_VERSION } from '../../engine/develop/Edits';
@@ -47,6 +48,14 @@ export function encodeAuto(s: SavedAuto): string {
 const num = (v: unknown, min: number, max: number, fallback: number) =>
   typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback;
 
+/** A saved crop: four edges in 0..1 with something left between them, else none. */
+function decodeCrop(v: unknown): CropRect | null {
+  if (!v || typeof v !== 'object') return null;
+  const c = v as Record<string, unknown>;
+  const r = { left: num(c.left, 0, 1, 0), top: num(c.top, 0, 1, 0), right: num(c.right, 0, 1, 1), bottom: num(c.bottom, 0, 1, 1) };
+  return r.right - r.left > 0.001 && r.bottom - r.top > 0.001 && !isFullCrop(r) ? r : null;
+}
+
 /** The settings in [text]; unknown or broken parts fall back to Auto's defaults. null when it isn't Auto's JSON. */
 export function decodeAuto(text: string): SavedAuto | null {
   let o: Record<string, unknown>;
@@ -58,8 +67,12 @@ export function decodeAuto(text: string): SavedAuto | null {
   if (!o || typeof o !== 'object' || o.format !== AUTO_FORMAT) return null;
   const a = o.adjust && typeof o.adjust === 'object' ? (o.adjust as Record<string, unknown>) : {};
   const adjust = { ...NO_ADJUSTMENTS };
-  for (const k of Object.keys(NO_ADJUSTMENTS) as (keyof Adjustments)[]) adjust[k] = num(a[k], k === 'rotation' || k === 'retouch' ? 0 : -100, k === 'rotation' ? 3 : 100, 0);
+  for (const k of Object.keys(NO_ADJUSTMENTS) as (keyof Adjustments)[]) {
+    if (k === 'crop') continue;
+    adjust[k] = num(a[k], k === 'rotation' || k === 'retouch' ? 0 : k === 'straighten' ? -45 : -100, k === 'rotation' ? 3 : k === 'straighten' ? 45 : 100, 0);
+  }
   adjust.rotation = Math.round(adjust.rotation);
+  adjust.crop = decodeCrop(a.crop);
   let lensPreset: Preset | null = null;
   try {
     lensPreset = o.lens && typeof o.lens === 'object' ? decodePresets(JSON.stringify(o.lens)).find(isLensPreset) ?? null : null;
