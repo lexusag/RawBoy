@@ -71,6 +71,7 @@ export const PRO_HELP: HelpSection[] = [
       { how: 'Auto source, Choose source', text: 'The tone comes from around the stroke; the detail (grain, skin, leaves) from a nearby clean area picked automatically, or from a dashed copy of the stroke you drag onto an area of the same kind (clone-stamp style; new strokes keep that offset). Pick a stroke in the list to change it. Strokes belong to this photo and aren\'t kept in presets.' },
       { keys: ['B'], text: 'Open or close the Healing brush (inside Masks, B is that tool\'s brush)' },
       { keys: ['[', ']'], text: 'Smaller or larger brush' },
+      { keys: ['Enter'], text: 'Finish the healing session, same as Done (the strokes stay)' },
       { keys: ['Delete'], text: 'Removes the selected stroke' },
     ],
   },
