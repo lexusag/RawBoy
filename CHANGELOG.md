@@ -1,3 +1,7 @@
+**RawBoy Web, Auto: "As is" leaves JPEG, HEIC, PNG and TIFF files untouched (2026-11-12)**
+
+- Auditing "As is" for files that aren't raws: no auto develop, no look, no auto denoise, no skin detection and no lens correction was already the case, except that a lens preset was still matched automatically by the file's EXIF lens name, adding distortion and vignette corrections to an already finished picture. Non-raw "As is" photos are no longer matched by lens; a lens preset picked by hand (per photo, selection or batch) still applies. Batch presets (e.g. grain) still apply, as documented.
+
 **RawBoy Camera (Android): video is no longer experimental; Photo / Video switch by the shutter (2026-11-12)**
 
 - Video mode is always available. The movie camera button left the top bar: a **PHOTO | VIDEO** pill now sits above the shutter row (swipe sideways on the shutter area for the same; in landscape the pill is in the shutter column), the way Google Camera does it. The flat video and optical stabilization settings no longer need Experimental features.
