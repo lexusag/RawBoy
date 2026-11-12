@@ -1,3 +1,7 @@
+**RawBoy Web, Pro: middle mouse button pans (2026-11-12)**
+
+- Dragging with the middle mouse button now pans the zoomed photo in every tool, including the Healing brush where the left button paints (Space+drag still works). A middle press never counts as a click or a hold-to-compare.
+
 **RawBoy Web, Pro: healing brush paints, seamless at any feather (2026-11-12)**
 
 - **Heal now works as a brush**: drag to paint a stroke over what should go (a click is still one spot). Strokes are healed as overlapping disks along the path, each with the stroke's source offset when you chose a source (drag the dashed copy of the stroke; new strokes keep the offset). The list holds strokes; Delete and `[` `]` as before.
