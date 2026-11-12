@@ -1,3 +1,7 @@
+**RawBoy Camera (Android, iOS): Settings regrouped, one line per setting (2026-11-12)**
+
+- Settings is now in groups: **Photo** (JPEG quality, Look strength, Smaller photos, 50 MP, Keep raw, HDR gain map), **Capture** (Merge 8 frames, Shutter sound, Geotag, Track subject, QR codes), **Video** (Android), **Viewfinder** (Zoom buttons, Grid, Level, Histogram), **Opening the camera** and **Experimental**. The two sliders take one row each (double-tap resets), the long descriptions are cut to one line, the Merge choice is a segmented control, and the whole row toggles, not just the switch. The Experimental switch now reads "Self-timer and long exposure"; its Average / Lighten choice appears below it. No setting was added, removed or renamed in behaviour. Android: Brightness and Warmth now have a value area as wide as their label, so the slider's centre (the zero mark) sits at the middle of the screen. Not checked on a device yet.
+
 **RawBoy Camera (Android, iOS): Strength moved to Settings; video settings are no longer orange (2026-11-12)**
 
 - The **Strength** slider left the main screen (and its **S** chip in landscape); it is now **Settings › Look strength**, with the same 0-100 range and default. Brightness and Warmth stay under the look menu. The value is still remembered and used by the viewfinder and the shots. Help and `docs/camera.md` updated.

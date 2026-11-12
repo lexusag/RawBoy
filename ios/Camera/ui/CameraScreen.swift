@@ -614,109 +614,60 @@ private struct LookPicker: View {
 private struct SettingsSheet: View {
     @ObservedObject var vm: CameraViewModel
 
+    /** A switch with a one-line hint; same rows and wording as Android's Settings. */
+    private func row(_ title: String, _ hint: String?, _ isOn: Binding<Bool>) -> some View {
+        Toggle(isOn: isOn) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                if let hint { Text(hint).font(.caption).foregroundStyle(.secondary) }
+            }
+        }
+    }
+
+    private func slider(_ title: String, value: Double, range: ClosedRange<Double>, set: @escaping (Double) -> Void) -> some View {
+        HStack {
+            Text(title)
+            Slider(value: Binding(get: { value }, set: { set($0.rounded()) }), in: range, step: 1)
+            Text("\(Int(value))").foregroundStyle(Color.cameraAccent).monospacedDigit().frame(width: 36, alignment: .trailing)
+        }
+    }
+
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    VStack(alignment: .leading) {
-                        HStack {
-                            Text("JPEG quality")
-                            Spacer()
-                            Text("\(vm.settings.jpegQuality)").foregroundStyle(Color.cameraAccent)
-                        }
-                        Slider(value: Binding(get: { Double(vm.settings.jpegQuality) }, set: { vm.setJpegQuality(Int($0.rounded())) }),
-                               in: Double(CameraSettings.minQuality)...100, step: 1)
-                        Text("Encoded with jpegli, full-resolution colour (4:4:4). Default 95.")
-                            .font(.caption).foregroundStyle(.secondary)
+                Section("Photo") {
+                    slider("JPEG quality", value: Double(vm.settings.jpegQuality), range: Double(CameraSettings.minQuality)...100) {
+                        vm.setJpegQuality(Int($0))
                     }
-                    VStack(alignment: .leading) {
-                        HStack {
-                            Text("Look strength")
-                            Spacer()
-                            Text("\(Int(vm.settings.strength.rounded()))").foregroundStyle(Color.cameraAccent)
-                        }
-                        Slider(value: Binding(get: { Double(vm.settings.strength) }, set: { vm.setStrength(Float($0.rounded())) }),
-                               in: 0...100, step: 1)
-                        Text("How much of the look the photo gets. Default \(Int(LookApplier.defaultStrength)).")
-                            .font(.caption).foregroundStyle(.secondary)
-                    }
-                }
-                Section {
-                    Toggle(isOn: Binding(get: { vm.settings.keepDng }, set: vm.setKeepDng)) {
-                        VStack(alignment: .leading) {
-                            Text("Keep raw (DNG)")
-                            Text("Saved to Photos › RawBoy Camera RAW").font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
+                    slider("Look strength", value: Double(vm.settings.strength), range: 0...100) { vm.setStrength(Float($0)) }
+                    row("Smaller photos", "\(CameraSettings.smallLongSide) px long side; off saves full size",
+                        Binding(get: { vm.settings.smallExport }, set: vm.setSmallExport))
+                    row("Keep raw (DNG)", "Saved to Photos › RawBoy Camera RAW",
+                        Binding(get: { vm.settings.keepDng }, set: vm.setKeepDng))
                     Picker("Raw format", selection: Binding(get: { vm.settings.rawFormat }, set: vm.setRawFormat)) {
                         Text("ProRAW: cleaner in low light").tag(RawFormat.proRaw)
                         Text("RAW: single exposure").tag(RawFormat.bayer)
                     }
-                    Toggle(isOn: Binding(get: { vm.settings.smallExport }, set: vm.setSmallExport)) {
-                        VStack(alignment: .leading) {
-                            Text("Smaller photos")
-                            Text("\(CameraSettings.smallLongSide) px on the long side; off saves full resolution")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    Toggle(isOn: Binding(get: { vm.settings.geotag }, set: vm.setGeotag)) {
-                        VStack(alignment: .leading) {
-                            Text("Geotag")
-                            Text("Save where each photo was taken (GPS) in the JPEG and DNG. Asks for location access")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
+                }
+                Section("Capture") {
                     // Where the law requires the click, iOS plays it anyway: shown on and locked.
-                    Toggle(isOn: Binding(get: { vm.settings.shutterSound || vm.shutterSoundRequired }, set: vm.setShutterSound)) {
-                        VStack(alignment: .leading) {
-                            Text("Shutter sound")
-                            Text(vm.shutterSoundRequired ? "Can't be turned off on this iPhone; always on" : "A click on each shot")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    .disabled(vm.shutterSoundRequired)
-                    Toggle(isOn: Binding(get: { vm.settings.scanQr }, set: vm.setScanQr)) {
-                        VStack(alignment: .leading) {
-                            Text("QR codes")
-                            Text("Show what a QR code in the viewfinder holds; tap to open the link or copy the text or Wi-Fi password")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    Toggle(isOn: Binding(get: { vm.settings.trackFocus }, set: vm.setTrackFocus)) {
-                        VStack(alignment: .leading) {
-                            Text("Track subject after tap")
-                            Text("Focus follows what you tapped as it moves; back to autofocus when it's lost")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    Toggle(isOn: Binding(get: { vm.settings.showGrid }, set: vm.setShowGrid)) {
-                        VStack(alignment: .leading) {
-                            Text("Grid")
-                            Text("A 3 x 3 grid over the viewfinder to line up the frame")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    Toggle(isOn: Binding(get: { vm.settings.showLevel }, set: vm.setShowLevel)) {
-                        VStack(alignment: .leading) {
-                            Text("Level")
-                            Text("A line over the viewfinder that turns yellow when the phone is straight")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    Toggle(isOn: Binding(get: { vm.settings.showHistogram }, set: vm.setShowHistogram)) {
-                        VStack(alignment: .leading) {
-                            Text("Histogram")
-                            Text("A live RGB histogram in a corner of the viewfinder")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
-                    Toggle(isOn: Binding(get: { vm.settings.rememberLast }, set: vm.setRememberLast)) {
-                        VStack(alignment: .leading) {
-                            Text("Remember camera & settings")
-                            Text("Otherwise each start uses W, Yellow Portrait 400 and default sliders")
-                                .font(.caption).foregroundStyle(.secondary)
-                        }
-                    }
+                    row("Shutter sound", vm.shutterSoundRequired ? "Required on this iPhone" : nil,
+                        Binding(get: { vm.settings.shutterSound || vm.shutterSoundRequired }, set: vm.setShutterSound))
+                        .disabled(vm.shutterSoundRequired)
+                    row("Geotag", "GPS position in the JPEG and DNG", Binding(get: { vm.settings.geotag }, set: vm.setGeotag))
+                    row("Track subject after tap", "Focus follows what you tapped",
+                        Binding(get: { vm.settings.trackFocus }, set: vm.setTrackFocus))
+                    row("QR codes", "Tap to open a link or copy the text or Wi-Fi password",
+                        Binding(get: { vm.settings.scanQr }, set: vm.setScanQr))
+                }
+                Section("Viewfinder") {
+                    row("Grid", nil, Binding(get: { vm.settings.showGrid }, set: vm.setShowGrid))
+                    row("Level", nil, Binding(get: { vm.settings.showLevel }, set: vm.setShowLevel))
+                    row("Histogram", nil, Binding(get: { vm.settings.showHistogram }, set: vm.setShowHistogram))
+                }
+                Section("Opening the camera") {
+                    row("Remember camera & settings", "Off: each start uses W, Yellow Portrait 400, default sliders",
+                        Binding(get: { vm.settings.rememberLast }, set: vm.setRememberLast))
                 }
                 Section {
                     ForEach(Edition.credits, id: \.self) { line in
