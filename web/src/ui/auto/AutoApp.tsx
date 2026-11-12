@@ -12,6 +12,10 @@ import { isTabShown } from '../common/tabs';
 import { ParamSlider, formatPlain, formatSigned } from '../common/ParamSlider';
 import { isPressedSlider } from '../common/sliderFocus';
 import { Preview, PreviewLabel, zoomLabel } from '../common/Preview';
+import { CropOverlay } from '../pro/CropOverlay';
+import { CropRotateIcon } from '../pro/ProApp';
+import { CropPanel } from './CropPanel';
+import { cropAspectRatio, cropWithAspect, withoutCrop, type CropAspect } from '../../engine/develop/CropMath';
 import { useTabScroll } from '../common/useTabScroll';
 import { PHONE_WIDTH, SHORT_SCREEN, useMediaQuery } from '../common/useMediaQuery';
 import { ALL_FILM_LOOKS } from '../../engine/auto/looks/FilmLooks';
@@ -709,6 +713,15 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
   const [tab, setTab] = useState<'Look' | 'Adjust'>('Look');
   const [pickingWhite, setPickingWhite] = useState(false);
   useEffect(() => { setPickingWhite(false); }, [id, tab]);
+  // Crop & rotate: the photo shows whole with a crop frame on it; the shape lock is UI only (portrait null = follow the frame).
+  const [cropMode, setCropMode] = useState(false);
+  const [cropAspect, setCropAspect] = useState<CropAspect>('free');
+  const [cropPortrait, setCropPortrait] = useState<boolean | null>(null);
+  useEffect(() => {
+    setCropMode(false);
+    setCropAspect('free');
+    setCropPortrait(null);
+  }, [id]);
   const scroll = useTabScroll(tab);
   // Regular iPhones in Safari: the tabs go on top and the look strip into the Look tab, so Adjust gets the whole panel.
   const short = useMediaQuery(SHORT_SCREEN);
@@ -723,7 +736,8 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
   const skinMask = session.skin.kind === 'ready' ? session.skin.mask : null;
   const params = useMemo(() => (photo ? paramsOf(photo) : null), [photo]);
   // Press and hold shows the auto develop without the look.
-  const shown = showAuto ? analysis?.autoBase : params ?? analysis?.autoBase;
+  const shownUncropped = showAuto ? analysis?.autoBase : params ?? analysis?.autoBase;
+  const shown = useMemo(() => (cropMode && shownUncropped ? withoutCrop(shownUncropped) : shownUncropped), [cropMode, shownUncropped]);
   const shaderParams = useMemo(
     () => (loaded && shown && analysis && session.preview
       ? store.session.shaderParams(shown, analysis.defaults, shown.lut != null ? session.lutData : null, null, shown.film != null ? session.filmData : null)
@@ -744,6 +758,21 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
       live = false;
     };
   }, [store, id, cached, params]);
+  const frameLens = loaded && params ? store.session.lensFor(withoutCrop(params)) : null;
+  const cropPortraitNow = cropPortrait ?? (frameLens ? frameLens.frameHeight > frameLens.frameWidth : false);
+  const cropRatio = frameLens ? cropAspectRatio(cropAspect, frameLens.frameWidth, frameLens.frameHeight, cropPortraitNow) : null;
+  const chooseAspect = (aspect: CropAspect, toPortrait: boolean) => {
+    if (!frameLens || !photo) return;
+    setCropAspect(aspect);
+    setCropPortrait(toPortrait);
+    const ratio = cropAspectRatio(aspect, frameLens.frameWidth, frameLens.frameHeight, toPortrait);
+    const current = photo.adjust.crop ?? { left: 0, top: 0, right: 1, bottom: 1 };
+    store.setCrop(id, cropWithAspect(current, ratio, frameLens.frameWidth, frameLens.frameHeight), true);
+  };
+  const startCrop = () => {
+    if (session.zoomCenter) store.session.exitZoom(); // the crop tool works on the fit view
+    setCropMode(true);
+  };
   const quick = cached && cachedParams?.image === cached ? cachedParams : null;
   const previewSession = useMemo(
     () => (loaded || !quick ? session : { ...session, preview: quick.image, zoomCenter: null, detail: null }),
@@ -769,6 +798,11 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
         e.preventDefault();
         if (key === 'z' && !e.shiftKey) store.undo(id);
         else store.redo(id);
+        return;
+      }
+      if (cropMode) {
+        // Esc puts the crop tool down; the batch keys wait until it is.
+        if (e.key === 'Escape') setCropMode(false);
         return;
       }
       if (isTextEntry(e.target) || e.metaKey || e.ctrlKey || e.altKey || document.querySelector('.dialog')) return;
@@ -806,7 +840,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
   if (!photo || !analysis) return null;
   // What the look strip's place holds and what press-and-hold takes away: RawBoy edits, a preset or the look.
   const develop = photo.edits ? 'RawBoy edits' : photo.preset ? 'preset' : 'look';
-  const adjustSlider = (label: string, key: keyof Adjustments, range: number) => (
+  const adjustSlider = (label: string, key: Exclude<keyof Adjustments, 'crop'>, range: number) => (
     <ParamSlider label={label} value={photo.adjust[key]} min={-range} max={range} defaultValue={0} format={formatSigned} onChange={(v) => store.setAdjust(id, { [key]: v })} />
   );
 
@@ -911,6 +945,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
           <MoreMenu
             disabled={state.export != null}
             items={[
+              { label: 'Crop & rotate', disabled: !loaded, onClick: startCrop },
               { label: 'Apply RawBoy preset…', onClick: () => setChoosingPreset(true) },
               { label: 'Apply to all', disabled: state.photos.length < 2, onClick: () => store.applyLookToAll(id) },
               { label: 'Edit in RawBoy', onClick: () => onEditInRawBoy(id) },
@@ -919,6 +954,9 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
           />
         ) : (
           <>
+            <button type="button" className={`icon${cropMode ? ' active' : ''}`} title="Crop & rotate" aria-label="Crop" disabled={!loaded || state.export != null} onClick={() => (cropMode ? setCropMode(false) : startCrop())}>
+              <CropRotateIcon />
+            </button>
             <button
               type="button"
               className="icon"
@@ -991,7 +1029,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
             frameGrey={FrameColors[state.frameColor].level}
             placeholderSize={thumbSize?.src === photo.thumbnail ? thumbSize.size : null}
             onViewSize={(w, h, f) => store.setViewSize(w, h, f)}
-            onToggleZoom={(x, y) => loaded && store.toggleZoom(x, y)}
+            onToggleZoom={(x, y) => loaded && !cropMode && store.toggleZoom(x, y)}
             onClick={(x, y) => {
               if (!loaded) return;
               if (pickingWhite) {
@@ -1001,11 +1039,21 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
                 store.onPreviewClick(x, y);
               }
             }}
-            onPan={(dx, dy) => store.session.pan(dx, dy)}
-            onZoomBy={(x, y, f) => loaded && store.zoomBy(x, y, f)}
+            onPan={(dx, dy) => !cropMode && store.session.pan(dx, dy)}
+            onZoomBy={(x, y, f) => loaded && !cropMode && store.zoomBy(x, y, f)}
             onCompare={setShowAuto}
-            zoomHint={loaded}
+            zoomHint={loaded && !cropMode}
           >
+            {cropMode && loaded && !session.zoomCenter && shaderParams && (
+              <CropOverlay
+                frameWidth={shaderParams.lens.outputWidth}
+                frameHeight={shaderParams.lens.outputHeight}
+                crop={photo.adjust.crop ?? { left: 0, top: 0, right: 1, bottom: 1 }}
+                ratio={cropRatio}
+                frame={FRAME_WIDTH}
+                onChange={(c) => store.setCrop(id, c)}
+              />
+            )}
             {!loaded && quick && <span className="spinner corner" />}
             {!loaded && !quick && (
               <>
@@ -1030,6 +1078,26 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
           {index < pages.length - 1 && <button type="button" className="nav next" onClick={() => go(1)} title="Next (→ or Space)">›</button>}
         </div>
         <aside className="sidebar auto-controls">
+          {cropMode ? (
+            <CropPanel
+              photo={photo}
+              aspect={cropAspect}
+              portrait={cropPortraitNow}
+              onAspect={chooseAspect}
+              onRotate={(q) => {
+                store.rotate(new Set([id]), q);
+                if (cropPortrait != null) setCropPortrait(!cropPortrait); // a locked shape turns with the picture
+              }}
+              onStraighten={(v) => store.setStraighten(id, v)}
+              onReset={() => {
+                setCropAspect('free');
+                setCropPortrait(null);
+                store.setAdjust(id, { crop: null, straighten: 0 }, true);
+              }}
+              onDone={() => setCropMode(false)}
+            />
+          ) : (
+          <>
           {short ? tabs : lookControls}
           <div className="controls-body" ref={scroll.ref} onScroll={scroll.onScroll}>
             {!short && tabs}
@@ -1061,6 +1129,8 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
             )}
             <div className="note">Double-click the photo for 100%. Press and hold it to see it without the {develop}. Space / Backspace (or ← / →) move through the batch.</div>
           </div>
+          </>
+          )}
         </aside>
       </div>
     </div>

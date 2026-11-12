@@ -946,7 +946,7 @@ function OpenIcon() {
 }
 
 /** Material "crop_rotate" icon (Apache 2.0), as in app-pro: an arrow glyph looked like Reset next to it. */
-function CropRotateIcon() {
+export function CropRotateIcon() {
   return (
     <svg width={20} height={20} viewBox="0 0 24 24" fill="currentColor" style={{ display: 'block' }} aria-hidden="true">
       <path d="M7.47,21.49C4.2,19.93 1.86,16.76 1.5,13H0c0.51,6.16 5.66,11 11.95,11 0.23,0 0.44,-0.02 0.66,-0.03L8.8,20.15l-1.33,1.34zM12.05,0c-0.23,0 -0.44,0.02 -0.66,0.04l3.81,3.81 1.33,-1.33C19.8,4.07 22.14,7.24 22.5,11H24c-0.51,-6.16 -5.66,-11 -11.95,-11zM16,14h2V8c0,-1.11 -0.9,-2 -2,-2h-6v2h6v6zM8,16V4H6v2H4v2h2v8c0,1.1 0.89,2 2,2h8v2h2v-2h2v-2H8z" />
