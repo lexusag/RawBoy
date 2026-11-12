@@ -37,6 +37,7 @@ import { compareNames, fileDate, saveSort, savedSort, sortPhotos, type PhotoSort
 import { decodeAuto, encodeAuto } from './AutoSidecar';
 import { AnalysisCache } from './AnalysisCache';
 import { PreviewCache } from './PreviewCache';
+import { NeighbourPreloader } from './NeighbourPreload';
 
 /** Where a photo is in the batch. */
 export type PhotoStatus = 'queued' | 'analyzing' | 'ready' | 'failed' | 'exporting' | 'exported';
@@ -427,6 +428,21 @@ export class AutoStore {
   private readonly decodeLock = new Lock();
   /** Each analysed photo's detail preview, so a photo shows at once while [session] decodes it. */
   private readonly previews = new PreviewCache();
+  /**
+   * The next three and previous two photos' previews read back from [previews] ahead of time, with their LUT / film
+   * stock warmed, so stepping to them shows at once. Starts only while the open photo has nothing pending, one photo
+   * at a time and yielding to the browser between them; dropped again outside the window.
+   */
+  private readonly neighbours = new NeighbourPreloader<PreviewImage>(
+    async (id) => {
+      const image = await this.previews.get(id);
+      const params = this.photo(id) && paramsOf(this.photo(id)!);
+      if (params?.lut) await loadLutCached(params.lut).catch(() => null);
+      if (params?.film) await FilmStocks.load(params.film).catch(() => null);
+      return image;
+    },
+    () => this.whenIdle(),
+  );
   /** Each analysed photo's small copies and skin mask, kept across visits. */
   private readonly analyses = new AnalysisCache();
   /** The open photo's full-resolution image was freed for the RawBoy tab ([editInRawBoy]); [resume] decodes it again. */
@@ -868,6 +884,7 @@ export class AutoStore {
       if (this.saveTimers.has(p.id)) void this.saveSidecar(p.id); // the photo's last change still reaches its sidecar
       this.histories.delete(p.id);
       void this.previews.remove(p.id);
+      this.neighbours.forget(p.id);
     }
     if (this._state.cachedPreview && ids.has(this._state.cachedPreview.id)) this.update({ cachedPreview: null });
     if (this._state.opening && ids.has(this._state.opening)) this.update({ opening: null });
@@ -1242,18 +1259,37 @@ export class AutoStore {
     else if (p.status === 'queued' || p.status === 'analyzing') this.update({ opening: id });
   }
 
+  /** Resolves once the open photo is decoded (or nothing is open) and the browser has a spare moment. */
+  private async whenIdle(): Promise<void> {
+    while (this._state.selected !== null && this._state.sessionReady !== this._state.selected) {
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    await new Promise<void>((r) => {
+      const ric = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => void }).requestIdleCallback;
+      if (ric) ric(() => r(), { timeout: 1000 });
+      else setTimeout(r, 50);
+    });
+  }
+
+  private preloadNeighbours(id: string | null) {
+    if (id === null) return this.neighbours.clear();
+    this.neighbours.start(this.shown.filter((q) => q.analysis).map((q) => q.id), id);
+  }
+
   openDetail(id: string) {
     const p = this.photo(id);
     if (!p?.analysis || this._state.export) return;
     // Another photo (arrow keys, the ‹ › buttons, Delete) opens fitted, also when the last one was zoomed in.
     if (this._state.selected !== id) this.session.exitZoom();
     this.update({ selected: id });
+    this.preloadNeighbours(id);
     if (this._state.sessionReady === id) return;
     this.released = false;
     this.update({ sessionReady: null });
     if (this._state.cachedPreview?.id !== id) {
-      this.update({ cachedPreview: null });
-      void this.previews.get(id).then((image) => {
+      const warm = this.neighbours.get(id);
+      this.update({ cachedPreview: warm ? { id, image: warm } : null });
+      if (!warm) void this.previews.get(id).then((image) => {
         if (image && this._state.selected === id && this._state.sessionReady !== id) this.update({ cachedPreview: { id, image } });
       });
     }
@@ -1283,6 +1319,7 @@ export class AutoStore {
   closeDetail() {
     this.session.exitZoom();
     this.update({ selected: null, cachedPreview: null });
+    this.preloadNeighbours(null);
   }
 
   /**
