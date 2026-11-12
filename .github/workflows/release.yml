@@ -10,7 +10,7 @@
 # and tick "Skip building the APKs" to only redeploy the website.
 # Each app's APK is built only when something it reads changed since the last release with APKs: its own module, or
 # anything shared (engine, shaders, luts, licences, Gradle files, third_party). The other apps' APKs from that release
-# (named with its own tag) are attached to this one. "Build the APKs even if unchanged" forces all three.
+# (named with the tag they were built for) are attached to this one. "Build the APKs even if unchanged" forces all three.
 # Publishing a release only dispatches this workflow on the default branch: caches saved by a run on a tag
 # can't be restored by later tags, so the builds run on main (sources still come from the tag).
 name: Release RawBoy
@@ -96,16 +96,16 @@ jobs:
           assets=$(gh release view "$base" --json assets -q '.assets[].name')
           shared=$(git diff --name-only "$base" HEAD -- . $NOT_APP_PATHS)
           [ -n "$shared" ] && echo "Shared changes since $base (every app rebuilds):" && echo "$shared"
-          decide() {  # decide <output> <dir> <apk name in the base release>
+          decide() {  # decide <output> <dir> <APK name prefix>; a carried-over APK keeps the tag it was built for
             if [ -n "$shared" ]; then r=true
-            elif ! echo "$assets" | grep -qx "$3"; then echo "$2: no APK in $base"; r=true
+            elif ! echo "$assets" | grep -qE "^$3-v[0-9.]+\.apk$"; then echo "$2: no APK in $base"; r=true
             elif [ -n "$(git diff --name-only "$base" HEAD -- "$2")" ]; then echo "$2 changed"; r=true
             else echo "$2 unchanged since $base"; r=false; fi
             eval "$1=$r"
           }
-          decide pro app-pro "RawBoy-$base.apk"
-          decide auto app-auto "RawBoy-Auto-$base.apk"
-          decide camera app-camera "RawBoy-Camera-$base.apk"
+          decide pro app-pro RawBoy
+          decide auto app-auto RawBoy-Auto
+          decide camera app-camera RawBoy-Camera
           out $pro $auto $camera
 
   # Unchanged apps: attach the last build's APKs for them, unless this release already has them.
@@ -127,7 +127,9 @@ jobs:
           reuse() {  # reuse <built flag> <name prefix>
             [ "$1" = false ] || return 0
             if echo "$have" | grep -q "^$2-v"; then echo "$TAG already has $2"; return 0; fi
-            gh release download "$BASE" --repo "$GITHUB_REPOSITORY" --pattern "$2-$BASE.apk" --dir dist
+            # BASE's APK may carry an older tag, if BASE itself reused it
+            name=$(gh release view "$BASE" --repo "$GITHUB_REPOSITORY" --json assets -q '.assets[].name' | grep -E "^$2-v[0-9.]+\.apk$" | head -n 1)
+            gh release download "$BASE" --repo "$GITHUB_REPOSITORY" --pattern "$name" --dir dist
           }
           reuse "$PRO" RawBoy
           reuse "$AUTO" RawBoy-Auto
