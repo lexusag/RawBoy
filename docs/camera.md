@@ -2,7 +2,7 @@
 
 A camera for the back lenses (made for the Pixel 9 Pro; any phone whose camera offers RAW works). The
 viewfinder shows the photo developed live: RawBoy Auto's automatic develop plus the **look** chosen from the
-**Look** menu under the viewfinder, with **Strength**, **Brightness** and **Warmth** as in Auto (one thin row each). **Brightness** also changes the exposure the camera shoots with (exposure compensation, up to the camera's limit, usually ±2 to ±4 EV): a brighter setting gathers more light, so its shadows are cleaner, and a darker one keeps more highlights; the picture's brightness is the same as before. Flash shots keep their own exposure. **Tap** to lock focus and exposure at that point: a ring
+**Look** menu under the viewfinder, with **Brightness** and **Warmth** as in Auto (one thin row each; **Strength** is in Settings › Look strength, so the viewfinder keeps the room). **Brightness** also changes the exposure the camera shoots with (exposure compensation, up to the camera's limit, usually ±2 to ±4 EV): a brighter setting gathers more light, so its shadows are cleaner, and a darker one keeps more highlights; the picture's brightness is the same as before. Flash shots keep their own exposure. **Tap** to lock focus and exposure at that point: a ring
 shows it (pulsing while focusing, white when locked, red when focus wasn't found) and stays locked, also for the
 shot, until you tap **AF LOCK ✕** or tap somewhere else. Exposure is metered on a box about the ring's size; focus
 uses the small square inside it (5% of the frame's short side), so a thin subject in front of a busy background
@@ -29,8 +29,8 @@ it was unlocked since, so the next double press on a locked phone always starts 
 still finishes saving in the background). Unlocked
 while it is open, it carries on as the ordinary camera.
 **Held sideways** the controls move to the right edge, under your right thumb: the shutter in the middle of the
-edge (the selfie switch above it, the last photo below), one tall slider beside it, and round **S**, **B** and **W**
-buttons (Strength, Brightness, Warmth) to pick what the slider changes, with the lens buttons in a column beside them
+edge (the selfie switch above it, the last photo below), one tall slider beside it, and round **B** and **W**
+buttons (Brightness, Warmth) to pick what the slider changes, with the lens buttons in a column beside them
 (the longest lens at the top); each shows its value, Brightness is picked
 first, and a double tap on a letter or the slider resets it. In B&W mode **W** becomes **F** (the filter), which lists
 the filters beside the shutter. The Look menu is above them, with the Film and B&W buttons under it; RAW, Burst, Flash, ? and
@@ -94,7 +94,7 @@ shows them.
 - **HDR gain map** (Android, **Settings → HDR gain map**, off by default): saves the JPEG as an **Ultra HDR JPEG**. The picture itself is unchanged; a small second image (the gain map) tells HDR screens to show highlights brighter, up to 2 stops, starting from the brightest quarter of the tones. Apps that don't know gain maps show the normal photo. The gain map is worked out from the finished picture, so it makes the highlights brighter on an HDR screen but doesn't bring back detail the picture already lost; a photo with nothing bright stays an ordinary JPEG.. Not yet checked on a phone or in the viewers (Google Photos, Chrome, iOS Photos): tell me if the highlights look too strong or too weak (`kKnee`, `kHeadroomEv` in `ultrahdr.h`).
 - **RAW:** the **RAW** button in the top bar keeps the DNG next to the JPEG (lit) or not (struck through); the same
   setting as in Settings.
-- **Settings:** JPEG quality; whether to keep the DNG (off by default: only the JPEG is saved); **Lossy JPEG XL DNG** (Android, shown while the DNG
+- **Settings:** JPEG quality; **Look strength** (0-100, how much of the look the photo gets; it used to be a slider under the look menu); whether to keep the DNG (off by default: only the JPEG is saved); **Lossy JPEG XL DNG** (Android, shown while the DNG
   is kept; off by default: once the JPEG is saved from the uncompressed raw, the DNG is re-saved as a DNG 1.7.1 with
   lossy JPEG XL compression, visually lossless and about a quarter of the size; it stays uncompressed if that fails); **Smaller photos**
   (on by default: 3000 px on the long side, area-downscaled from the full-resolution develop, with the grain sized to

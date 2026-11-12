@@ -1,3 +1,8 @@
+**RawBoy Camera (Android, iOS): Strength moved to Settings; video settings are no longer orange (2026-11-12)**
+
+- The **Strength** slider left the main screen (and its **S** chip in landscape); it is now **Settings › Look strength**, with the same 0-100 range and default. Brightness and Warmth stay under the look menu. The value is still remembered and used by the viewfinder and the shots. Help and `docs/camera.md` updated.
+- Android: **Flat video for grading** and **Optical video stabilization** are drawn like any other setting; only **Experimental features** (self-timer, long exposure) stays orange. iOS has no video settings or orange entries. Not built here (no Android SDK or Xcode in the cloud session).
+
 **RawBoy Web, Auto: "As is" leaves JPEG, HEIC, PNG and TIFF files untouched (2026-11-12)**
 
 - Auditing "As is" for files that aren't raws: no auto develop, no look, no auto denoise, no skin detection and no lens correction was already the case, except that a lens preset was still matched automatically by the file's EXIF lens name, adding distortion and vignette corrections to an already finished picture. Non-raw "As is" photos are no longer matched by lens; a lens preset picked by hand (per photo, selection or batch) still applies. Batch presets (e.g. grain) still apply, as documented.

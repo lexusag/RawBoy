@@ -620,7 +620,6 @@ fun CameraScreen(
                     // A menu instead of a strip of chips, and one thin row per slider: the viewfinder keeps the screen.
                     Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp)) {
                         lookRow(88.dp)
-                        LookSlider("Strength", settings.strength, 0f..100f, LookApplier.DEFAULT_STRENGTH, vm::setStrength)
                         LookSlider("Brightness", settings.brightness, -100f..100f, 0f, vm::setBrightness)
                         if (settings.monoMode) {
                             FilterRow(settings.filter, vm::setFilter)
@@ -1203,6 +1202,21 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
         )
         Spacer(Modifier.height(16.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Look strength", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+            Text("${settings.strength.roundToInt()}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+        }
+        Slider(
+            value = settings.strength,
+            onValueChange = { vm.setStrength(it.roundToInt().toFloat()) },
+            valueRange = 0f..100f,
+        )
+        Text(
+            "How much of the look the photo gets. Default ${LookApplier.DEFAULT_STRENGTH.roundToInt()}.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(16.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text("Keep raw (DNG)", style = MaterialTheme.typography.bodyMedium)
                 Text(
@@ -1297,7 +1311,6 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             title = "Flat video for grading",
             subtitle = "Records without the look: an Apple Log picture with no grain, bloom or colour grading, to apply a look later on the web video page. Changes apply to the next recording",
             checked = settings.flatVideo,
-            accent = EXPERIMENTAL_ORANGE,
             onChange = vm::setFlatVideo,
         )
         Spacer(Modifier.height(16.dp))
@@ -1305,7 +1318,6 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             title = "Optical video stabilization",
             subtitle = "Uses the lens's own stabilizer while filming (video mode only). No crop and no delay, but a gentler effect than software stabilization",
             checked = settings.videoStabilization,
-            accent = EXPERIMENTAL_ORANGE,
             onChange = vm::setVideoStabilization,
         )
         Spacer(Modifier.height(16.dp))
@@ -1680,12 +1692,12 @@ private const val LOUPE_ZOOM = 3f
 /** Width of the landscape controls column (look menu, S/B/W picker and the tall slider) beside the shutter column. */
 private val LANDSCAPE_CONTROLS_WIDTH = 216.dp
 
-/** What the landscape slider changes: Strength, Brightness, or Warmth (Filter in B&W mode). */
-private enum class Adjust { STRENGTH, BRIGHTNESS, WARMTH }
+/** What the landscape slider changes: Brightness or Warmth (Filter in B&W mode). */
+private enum class Adjust { BRIGHTNESS, WARMTH }
 
 /**
  * Landscape controls, all within the right thumb's reach: the status line and the look row on top; below, the lens
- * buttons in a column, then round S / B / W chips (F, the filter, in B&W mode) pick what the tall slider beside the shutter changes. With F picked the
+ * buttons in a column, then round B / W chips (F, the filter, in B&W mode) pick what the tall slider beside the shutter changes. With F picked the
  * filters stand there instead of the slider. A double tap on a chip or the slider resets that setting.
  */
 @Composable
@@ -1729,8 +1741,6 @@ private fun LandscapeControls(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                AdjustChip("S", "Strength", settings.strength.roundToInt().toString(), adjust == Adjust.STRENGTH,
-                    onSelect = { onAdjust(Adjust.STRENGTH) }, onReset = { vm.setStrength(LookApplier.DEFAULT_STRENGTH) })
                 AdjustChip("B", "Brightness", formatSliderValue(settings.brightness, -100f..100f), adjust == Adjust.BRIGHTNESS,
                     onSelect = { onAdjust(Adjust.BRIGHTNESS) }, onReset = { vm.setBrightness(0f) })
                 if (mono) {
@@ -1747,14 +1757,12 @@ private fun LandscapeControls(
                 adjust == Adjust.WARMTH && mono -> FilterColumn(settings.filter, vm::setFilter)
                 else -> {
                     val (value, range, default, set) = when (adjust) {
-                        Adjust.STRENGTH -> SliderSpec(settings.strength, 0f..100f, LookApplier.DEFAULT_STRENGTH, vm::setStrength)
                         Adjust.BRIGHTNESS -> SliderSpec(settings.brightness, -100f..100f, 0f, vm::setBrightness)
                         Adjust.WARMTH -> SliderSpec(settings.warmth, -100f..100f, 0f, vm::setWarmth)
                     }
                     VerticalSlider(
                         value, range, default, set,
                         label = when (adjust) {
-                            Adjust.STRENGTH -> "Strength"
                             Adjust.BRIGHTNESS -> "Brightness"
                             Adjust.WARMTH -> "Warmth"
                         },
