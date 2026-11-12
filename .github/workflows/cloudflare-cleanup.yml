@@ -1,10 +1,14 @@
-# Manual cleanup of old Cloudflare Pages deployments.
+# Cleanup of old Cloudflare Pages deployments.
+# Runs every Monday at 06:00 UTC (08:00/09:00 Europe/Kyiv) and can also be started manually.
 # Keeps the current production deployment plus the newest N deployments per project; deletes the rest.
-# Defaults to a dry run: nothing is deleted unless "dry_run" is unticked.
+# Manual runs default to a dry run: nothing is deleted unless "dry_run" is unticked.
+# Scheduled runs clean all projects, keep the newest 5 and really delete (no dry run).
 # Uses the same secrets as release.yml: CLOUDFLARE_API_TOKEN (Account > Cloudflare Pages > Edit), CLOUDFLARE_ACCOUNT_ID.
 name: Cloudflare cleanup
 
 on:
+  schedule:
+    - cron: "0 6 * * 1"
   workflow_dispatch:
     inputs:
       project:
@@ -34,9 +38,10 @@ jobs:
     env:
       CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CF_ACCOUNT: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      INPUT_PROJECT: ${{ inputs.project }}
-      INPUT_KEEP: ${{ inputs.keep }}
-      DRY_RUN: ${{ inputs.dry_run }}
+      # Inputs are empty on scheduled runs, so fall back to the scheduled defaults.
+      INPUT_PROJECT: ${{ inputs.project || 'all' }}
+      INPUT_KEEP: ${{ inputs.keep || '5' }}
+      DRY_RUN: ${{ github.event_name == 'schedule' && 'false' || inputs.dry_run }}
     steps:
       - name: Clean up deployments
         shell: bash
