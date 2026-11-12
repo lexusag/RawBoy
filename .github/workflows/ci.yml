@@ -33,7 +33,10 @@ jobs:
     timeout-minutes: 5
     outputs:
       web: ${{ steps.filter.outputs.web }}
-      android: ${{ steps.filter.outputs.android }}
+      pro: ${{ steps.filter.outputs.pro }}
+      auto: ${{ steps.filter.outputs.auto }}
+      camera: ${{ steps.filter.outputs.camera }}
+      engine: ${{ steps.filter.outputs.engine }}
     steps:
       - uses: actions/checkout@v4
 
@@ -48,11 +51,9 @@ jobs:
               - 'engine/src/main/assets/models/**'
               - 'licenses/**'
               - '.github/workflows/ci.yml'
-            android:
+            # Everything all three apps (and the engine) are built from. A change here rebuilds every app.
+            shared: &shared
               - 'engine/**'
-              - 'app-pro/**'
-              - 'app-auto/**'
-              - 'app-camera/**'
               - 'shaders/**'
               - 'luts/**'
               - 'licenses/**'
@@ -61,6 +62,17 @@ jobs:
               - 'settings.gradle.kts'
               - 'gradle.properties'
               - '.github/workflows/ci.yml'
+            # The apps are independent of each other: each depends on :engine and its own module only.
+            engine: *shared
+            pro:
+              - *shared
+              - 'app-pro/**'
+            auto:
+              - *shared
+              - 'app-auto/**'
+            camera:
+              - *shared
+              - 'app-camera/**'
 
   web:
     name: Web Build & Test
@@ -93,7 +105,9 @@ jobs:
   android:
     name: Android Kotlin compile
     needs: changes
-    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.android == 'true'
+    if: >-
+      github.event_name == 'workflow_dispatch' || needs.changes.outputs.pro == 'true' ||
+      needs.changes.outputs.auto == 'true' || needs.changes.outputs.camera == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -116,11 +130,25 @@ jobs:
 
       # Compile-only tasks do not run CMake, so the NDK, CMake and third_party/dng_sdk are not needed.
       # The unit-test sources are compiled too (they are not run: that is for a later, slower job).
-      - name: Compile Kotlin (all modules, with unit-test sources)
-        run: >
-          ./gradlew --parallel --configuration-cache --console=plain
-          :engine:compileDebugKotlin :app-pro:compileDebugKotlin :app-auto:compileDebugKotlin :app-camera:compileDebugKotlin
-          :engine:compileDebugUnitTestKotlin :app-camera:compileDebugUnitTestKotlin
+      # Only the modules whose inputs changed: an app-only change compiles :engine (up to date from the cache) and
+      # that app, not the other two. Anything shared (engine, shaders, luts, Gradle files) turns every flag on.
+      # Manual runs compile everything.
+      - name: Compile Kotlin (changed modules, with unit-test sources)
+        env:
+          ALL: ${{ github.event_name == 'workflow_dispatch' }}
+          PRO: ${{ needs.changes.outputs.pro }}
+          AUTO: ${{ needs.changes.outputs.auto }}
+          CAMERA: ${{ needs.changes.outputs.camera }}
+          ENGINE: ${{ needs.changes.outputs.engine }}
+        run: |
+          tasks=":engine:compileDebugKotlin"
+          [ "$ALL" = true ] && PRO=true AUTO=true CAMERA=true ENGINE=true
+          [ "$ENGINE" = true ] && tasks="$tasks :engine:compileDebugUnitTestKotlin"
+          [ "$PRO" = true ] && tasks="$tasks :app-pro:compileDebugKotlin"
+          [ "$AUTO" = true ] && tasks="$tasks :app-auto:compileDebugKotlin"
+          [ "$CAMERA" = true ] && tasks="$tasks :app-camera:compileDebugKotlin :app-camera:compileDebugUnitTestKotlin"
+          echo "Tasks: $tasks"
+          ./gradlew --parallel --configuration-cache --console=plain $tasks
 
   # The one required check. Passes when every needed job succeeded or was skipped (nothing relevant changed);
   # fails when any failed or was cancelled. `always()` makes it run (and report) even when a dependency is skipped;
