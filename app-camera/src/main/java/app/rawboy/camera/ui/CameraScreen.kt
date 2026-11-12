@@ -47,7 +47,11 @@ import android.net.Uri
 import android.provider.MediaStore
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import android.hardware.camera2.CameraMetadata
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -1918,17 +1922,26 @@ private fun GridOverlay(modifier: Modifier = Modifier) {
  */
 @Composable
 private fun LevelOverlay(tilt: Float?, modifier: Modifier = Modifier) {
-    if (tilt == null) return
-    Canvas(modifier) {
-        val level = kotlin.math.abs(tilt) <= LEVEL_TOLERANCE
-        val colour = if (level) Color(0xFFFFD54F) else Color.White.copy(alpha = 0.7f)
+    // Keep the last angle while the phone is flat so the line fades out in place instead of snapping to 0.
+    var last by remember { mutableStateOf(0f) }
+    if (tilt != null) last = tilt
+    // Straight is entered at LEVEL_TOLERANCE and left at 1.5x that, so the colour doesn't flicker on the edge.
+    var level by remember { mutableStateOf(false) }
+    if (tilt != null) level = kotlin.math.abs(tilt) <= if (level) LEVEL_TOLERANCE * 1.5f else LEVEL_TOLERANCE
+    val angle by animateFloatAsState(last, spring(dampingRatio = 1f, stiffness = Spring.StiffnessMedium), label = "levelAngle")
+    val colour by animateColorAsState(
+        if (level) Color(0xFFFFD54F) else Color.White.copy(alpha = 0.7f), tween(150), label = "levelColour",
+    )
+    val shown by animateFloatAsState(if (tilt == null) 0f else 1f, tween(150), label = "levelShown")
+    if (shown == 0f) return
+    Canvas(modifier.graphicsLayer { alpha = shown }) {
         val c = Offset(size.width / 2f, size.height / 2f)
         val half = minOf(size.width, size.height) * 0.22f
         val w = 2.dp.toPx()
         // Fixed marks at the sides, the line itself turns.
-        drawLine(colour.copy(alpha = 0.5f), Offset(c.x - half * 1.5f, c.y), Offset(c.x - half * 1.25f, c.y), w)
-        drawLine(colour.copy(alpha = 0.5f), Offset(c.x + half * 1.25f, c.y), Offset(c.x + half * 1.5f, c.y), w)
-        rotate(-tilt, c) { drawLine(colour, Offset(c.x - half, c.y), Offset(c.x + half, c.y), w) }
+        drawLine(colour.copy(alpha = colour.alpha * 0.5f), Offset(c.x - half * 1.5f, c.y), Offset(c.x - half * 1.25f, c.y), w)
+        drawLine(colour.copy(alpha = colour.alpha * 0.5f), Offset(c.x + half * 1.25f, c.y), Offset(c.x + half * 1.5f, c.y), w)
+        rotate(-angle, c) { drawLine(colour, Offset(c.x - half, c.y), Offset(c.x + half, c.y), w) }
     }
 }
 

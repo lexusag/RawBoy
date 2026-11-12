@@ -1,3 +1,7 @@
+**RawBoy Camera (Android, iOS): the Level line moves smoothly (2026-11-12)**
+
+- The level line no longer jumps in whole degrees. The phone's angle is low-passed (about 0.2 s, averaged as a direction so 359 to 1 degrees doesn't swing through 180), a hair either side of straight (under 0.4 degrees) reads as straight, and the line turns with a critically damped spring while its colour fades to yellow over 150 ms. Yellow is entered within 1 degree and left only past 1.5, so it doesn't flicker on the edge; the line fades out when the phone lies flat. Android reads the orientation sensor at the UI rate (about 60 ms) for this. Not built or run here (no Android SDK or Xcode in the cloud session).
+
 **RawBoy Web, Auto: Export all shows elapsed time and time left (2026-11-12)**
 
 - The progress bar under the toolbar now has a line below it: "1:05 elapsed · about 2:30 left". The estimate comes from the time spent so far, counting the photo being exported by its progress, and appears once the first photo is done (or a tenth of the work). It is left out while Stop is pending. Single-photo exports from the photo view show the elapsed time too. Not run in a browser here (typecheck only).

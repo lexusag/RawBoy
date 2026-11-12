@@ -70,8 +70,12 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.cos
 import kotlin.math.max
 import kotlin.math.pow
+import kotlin.math.roundToInt
+import kotlin.math.sin
 
 enum class CameraStatus { NEEDS_PERMISSION, OPENING, READY, FAILED }
 
@@ -389,12 +393,29 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     /** From the activity's orientation sensor: [degrees] is the device's turn clockwise from portrait, 0..359, or null when flat. */
     fun onTilt(degrees: Int?) {
         if (degrees == null || !_settings.value.showLevel) {
+            tiltSin = Float.NaN
             _tilt.value = null
             return
         }
-        // Whole degrees: the line doesn't need finer, and the screen isn't redrawn for sensor noise.
-        _tilt.value = (((degrees + 45) % 90) - 45).toFloat()
+        // Low-pass the raw angle as a unit vector (so 359 -> 1 degrees doesn't average through 180): an exponential
+        // filter, alpha 0.3 per ~60 ms sensor step (about a 0.2 s time constant): steady, still follows a turn.
+        val r = Math.toRadians(degrees.toDouble())
+        if (tiltSin.isNaN()) {
+            tiltSin = sin(r).toFloat(); tiltCos = cos(r).toFloat()
+        } else {
+            tiltSin += TILT_ALPHA * (sin(r).toFloat() - tiltSin)
+            tiltCos += TILT_ALPHA * (cos(r).toFloat() - tiltCos)
+        }
+        val smooth = Math.toDegrees(atan2(tiltSin.toDouble(), tiltCos.toDouble())).toFloat()
+        var off = ((smooth + 405f) % 90f) - 45f
+        // Deadband: a hair either side of straight reads as straight, so the line doesn't tremble at zero.
+        if (abs(off) < TILT_DEADBAND) off = 0f
+        // Tenths of a degree: the screen isn't redrawn for sensor noise below that.
+        _tilt.value = (off * 10f).roundToInt() / 10f
     }
+
+    private var tiltSin = Float.NaN
+    private var tiltCos = 0f
 
     /** The latest analysed viewfinder frame. */
     private class Live(val base: ViewfinderBase, val stats: SceneStats, val defaults: DevelopParams, val auto: DevelopParams, val scale: Float = 1f)
@@ -1256,6 +1277,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     companion object {
         private const val TAG = "RawBoyCamera"
+        private const val TILT_ALPHA = 0.3f
+        private const val TILT_DEADBAND = 0.4f
         private const val DNG_MIME = "image/x-adobe-dng"
         private const val SAVE_DELAY_MS = 500L
 

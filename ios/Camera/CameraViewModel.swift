@@ -64,6 +64,7 @@ final class CameraViewModel: ObservableObject {
      */
     @Published private(set) var tilt: Double?
     private let motion = CMMotionManager()
+    private var tiltSmooth: (x: Double, y: Double)?
     /** The QR code in the viewfinder (settings.scanQr), or nil. */
     @Published private(set) var qrCode: QrPayload?
     private var qrTracker = QrTracker()
@@ -532,18 +533,26 @@ final class CameraViewModel: ObservableObject {
             // Gravity along the screen's axes: flat on a table (z dominates) there is no horizon to show.
             if abs(a.z) > 0.9 {
                 if self.tilt != nil { self.tilt = nil }
+                self.tiltSmooth = nil
                 return
             }
             // Portrait upright: gravity is -y. Turned clockwise, it moves to +x.
-            let degrees = atan2(a.x, -a.y) * 180 / .pi
-            // Whole degrees from the nearest upright: the line doesn't need finer, and the screen isn't redrawn for noise.
-            let off = ((degrees + 405).truncatingRemainder(dividingBy: 90) - 45).rounded()
+            let r = atan2(a.x, -a.y)
+            // Low-pass the angle as a unit vector (no jump across 360), alpha 0.2 at 20 Hz (about a 0.2 s time constant).
+            let v = self.tiltSmooth.map { (x: $0.x + 0.2 * (sin(r) - $0.x), y: $0.y + 0.2 * (cos(r) - $0.y)) } ?? (x: sin(r), y: cos(r))
+            self.tiltSmooth = v
+            let degrees = atan2(v.x, v.y) * 180 / .pi
+            var off = (degrees + 405).truncatingRemainder(dividingBy: 90) - 45
+            // Deadband: a hair either side of straight reads as straight. Tenths of a degree: no redraw for noise.
+            if abs(off) < 0.4 { off = 0 }
+            off = (off * 10).rounded() / 10
             if self.tilt != off { self.tilt = off }
         }
     }
 
     private func stopTilt() {
         motion.stopAccelerometerUpdates()
+        tiltSmooth = nil
         tilt = nil
     }
 
