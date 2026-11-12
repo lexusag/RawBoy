@@ -49,7 +49,7 @@ export function CropPanel({ photo, aspect, portrait, onAspect, onRotate, onStrai
         ))}
       </div>
       <ParamSlider label="Straighten" value={straighten} min={-45} max={45} step={0.01} defaultValue={0} format={formatDegrees} onChange={onStraighten} />
-      <div className="note">Drag the corners, edges or inside of the frame to crop. Straightening crops automatically so no empty corners show. Enter or Done confirms it. The crop is part of the export.</div>
+      <div className="note">Drag the corners, edges or inside of the frame to crop, or drag outside it to rotate. Straightening crops automatically so no empty corners show. Enter or Done confirms it. The crop is part of the export.</div>
     </div>
   );
 }

@@ -1,3 +1,7 @@
+**RawBoy Web, Auto: drag to rotate in Crop & rotate (2026-11-12)**
+
+- In Crop & rotate, press outside the crop box and drag around it to rotate the photo, as in Lightroom: the angle follows the pointer around the frame's centre (clockwise = clockwise, ±45°, smooth across the 180° line) and the **Straighten** slider moves with it; the usual Undo step and auto crop apply. `CropOverlay` (shared with Pro) takes an optional `rotate` prop, which only Auto passes; Pro's presses outside the box still fall through to the preview. The cursor over the area outside the box is a grab hand. Touch rotate on Android and iOS isn't done. Typecheck only, not run in a browser.
+
 **RawBoy Auto (web, Android, iOS): Crop starts on Original, remembers the shape, Enter confirms (2026-11-12)**
 
 - The crop shape now starts on **Original** (the frame keeps the photo's own proportions while dragging; Free is one tap away) and the last shape chosen stays for the session (until the page or app is closed), so the next photo opens with it; a remembered shape other than Original / Free shapes the frame as the tool opens. Reset goes back to Original. Web: **Enter** confirms the crop like Done (Esc too). Typecheck only on the web; Android and iOS not built here.
