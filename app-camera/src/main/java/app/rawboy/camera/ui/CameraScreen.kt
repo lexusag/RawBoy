@@ -1184,230 +1184,221 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             .padding(bottom = 32.dp),
     ) {
         Text("Settings", style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.height(16.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("JPEG quality", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            Text("${settings.jpegQuality}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-        }
-        Slider(
-            value = settings.jpegQuality.toFloat(),
-            onValueChange = { vm.setJpegQuality(it.roundToInt()) },
-            valueRange = CameraSettings.MIN_QUALITY.toFloat()..100f,
-            steps = 100 - CameraSettings.MIN_QUALITY - 1,
+
+        SettingsSection("Photo", first = true)
+        // One row each; double-tap a slider to reset it.
+        CompactSlider(
+            "JPEG quality", settings.jpegQuality.toFloat(), CameraSettings.MIN_QUALITY.toFloat()..100f, 95f,
+            rowHeight = 40.dp, labelWidth = 104.dp, valueWidth = 44.dp,
+            format = { it.roundToInt().toString() },
+            onChange = { vm.setJpegQuality(it.roundToInt()) },
         )
-        Text(
-            "Encoded with jpegli, full-resolution colour (4:4:4). Default 95.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        CompactSlider(
+            "Look strength", settings.strength, 0f..100f, LookApplier.DEFAULT_STRENGTH,
+            rowHeight = 40.dp, labelWidth = 104.dp, valueWidth = 44.dp,
+            format = { it.roundToInt().toString() },
+            onChange = { vm.setStrength(it.roundToInt().toFloat()) },
         )
-        Spacer(Modifier.height(16.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Look strength", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-            Text("${settings.strength.roundToInt()}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-        }
-        Slider(
-            value = settings.strength,
-            onValueChange = { vm.setStrength(it.roundToInt().toFloat()) },
-            valueRange = 0f..100f,
-        )
-        Text(
-            "How much of the look the photo gets. Default ${LookApplier.DEFAULT_STRENGTH.roundToInt()}.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(16.dp))
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text("Keep raw (DNG)", style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    "Saved to Pictures/${Edition.FOLDER}/RAW",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Switch(checked = settings.keepDng, onCheckedChange = vm::setKeepDng)
-        }
-        if (settings.keepDng) {
-            Spacer(Modifier.height(16.dp))
-            SettingSwitch(
-                title = "Lossy JPEG XL DNG",
-                subtitle = "Compress the raw to a fraction of the size, visually lossless, instead of an uncompressed DNG. Takes a few seconds more to save",
-                checked = settings.lossyDng,
-                onChange = vm::setLossyDng,
-            )
-        }
-        Spacer(Modifier.height(16.dp))
         SettingSwitch(
             title = "Smaller photos",
-            subtitle = "${CameraSettings.SMALL_LONG_SIDE} px on the long side; off saves full resolution",
+            subtitle = "${CameraSettings.SMALL_LONG_SIDE} px long side; off saves full size",
             checked = settings.smallExport,
             onChange = vm::setSmallExport,
         )
         if (maxResMp > 0) {
-            Spacer(Modifier.height(16.dp))
             SettingSwitch(
                 title = "$maxResMp MP",
-                subtitle = "Full sensor resolution on lenses that have it. Slower to save, no frame merging, no live viewfinder while it shoots",
+                subtitle = "Full sensor size: slower, no merging, viewfinder pauses",
                 checked = settings.maxRes,
                 onChange = vm::setMaxRes,
             )
         }
-        Spacer(Modifier.height(16.dp))
-        Text("Merge ${CameraSettings.BURST_FRAMES} frames", style = MaterialTheme.typography.bodyMedium)
-        Text(
-            "Each shot takes ${CameraSettings.BURST_FRAMES} raws and merges them into one: less noise, takes a little " +
-                "longer to save. Auto does it in low light only. Hold still; not used with flash",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        SettingSwitch(
+            title = "Keep raw (DNG)",
+            subtitle = "Saved to Pictures/${Edition.FOLDER}/RAW",
+            checked = settings.keepDng,
+            onChange = vm::setKeepDng,
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
-            for (m in listOf(BurstMode.ON, BurstMode.AUTO, BurstMode.OFF)) {
-                FilterChip(
-                    selected = settings.burstMode == m,
-                    onClick = { vm.setBurstMode(m) },
-                    label = { Text(m.name.lowercase().replaceFirstChar { it.uppercase() }) },
-                )
-            }
+        if (settings.keepDng) {
+            SettingSwitch(
+                title = "Lossy JPEG XL DNG",
+                subtitle = "A fraction of the size, visually lossless; saves a few seconds slower",
+                checked = settings.lossyDng,
+                onChange = vm::setLossyDng,
+                indent = true,
+            )
         }
-        Spacer(Modifier.height(16.dp))
+        SettingSwitch(
+            title = "HDR gain map",
+            subtitle = "Ultra HDR JPEGs with extra highlight range",
+            checked = settings.hdrGainMap,
+            onChange = vm::setHdrGainMap,
+        )
+
+        SettingsSection("Capture")
+        SettingChoice(
+            title = "Merge ${CameraSettings.BURST_FRAMES} frames",
+            subtitle = "Less noise; hold still. Auto: low light only. Not with flash",
+            options = listOf(BurstMode.ON, BurstMode.AUTO, BurstMode.OFF),
+            selected = settings.burstMode,
+            label = { it.name.lowercase().replaceFirstChar { c -> c.uppercase() } },
+            onSelect = vm::setBurstMode,
+        )
         // Where the law requires the click, Android plays it anyway: shown on and locked.
         SettingSwitch(
             title = "Shutter sound",
-            subtitle = if (vm.shutterSoundRequired) "Required by law in this region; always on" else "A click on each shot",
+            subtitle = if (vm.shutterSoundRequired) "Required by law in this region" else null,
             checked = settings.shutterSound || vm.shutterSoundRequired,
             enabled = !vm.shutterSoundRequired,
             onChange = vm::setShutterSound,
         )
-        Spacer(Modifier.height(16.dp))
         SettingSwitch(
             title = "Geotag",
-            subtitle = "Save where each photo was taken (GPS) in the JPEG and DNG. Asks for location access",
+            subtitle = "GPS position in the JPEG and DNG",
             checked = settings.geotag,
             onChange = { on -> if (on && !vm.hasLocationPermission) requestLocation() else vm.setGeotag(on) },
         )
-        Spacer(Modifier.height(16.dp))
-        SettingSwitch(
-            title = "HDR gain map",
-            subtitle = "Save Ultra HDR JPEGs: the same picture, with extra highlight range for HDR screens. Off by default",
-            checked = settings.hdrGainMap,
-            onChange = vm::setHdrGainMap,
-        )
-        Spacer(Modifier.height(16.dp))
-        SettingSwitch(
-            title = "QR codes",
-            subtitle = "Show what a QR code in the viewfinder holds; tap to open the link, join the Wi-Fi or copy the text",
-            checked = settings.scanQr,
-            onChange = vm::setScanQr,
-        )
-        Spacer(Modifier.height(16.dp))
         SettingSwitch(
             title = "Track subject after tap",
-            subtitle = "Focus follows what you tapped as it moves; back to autofocus when it's lost",
+            subtitle = "Focus follows what you tapped",
             checked = settings.trackFocus,
             onChange = vm::setTrackFocus,
         )
-        Spacer(Modifier.height(16.dp))
+        SettingSwitch(
+            title = "QR codes",
+            subtitle = "Tap to open a link, join Wi-Fi or copy",
+            checked = settings.scanQr,
+            onChange = vm::setScanQr,
+        )
+
+        SettingsSection("Video")
         SettingSwitch(
             title = "Flat video for grading",
-            subtitle = "Records without the look: an Apple Log picture with no grain, bloom or colour grading, to apply a look later on the web video page. Changes apply to the next recording",
+            subtitle = "No look: Apple Log, to grade on the web video page",
             checked = settings.flatVideo,
             onChange = vm::setFlatVideo,
         )
-        Spacer(Modifier.height(16.dp))
         SettingSwitch(
-            title = "Optical video stabilization",
-            subtitle = "Uses the lens's own stabilizer while filming (video mode only). No crop and no delay, but a gentler effect than software stabilization",
+            title = "Optical stabilization",
+            subtitle = "The lens's own; no crop, gentler than software",
             checked = settings.videoStabilization,
             onChange = vm::setVideoStabilization,
         )
-        Spacer(Modifier.height(16.dp))
+
+        SettingsSection("Viewfinder")
+        SettingSwitch("Zoom buttons", null, settings.showZoomControl, onChange = vm::setShowZoomControl)
+        SettingSwitch("Grid", null, settings.showGrid, onChange = vm::setShowGrid)
+        SettingSwitch("Level", null, settings.showLevel, onChange = vm::setShowLevel)
+        SettingSwitch("Histogram", null, settings.showHistogram, onChange = vm::setShowHistogram)
+
+        SettingsSection("Opening the camera")
+        DefaultCameraChoice(
+            MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA,
+            title = "Unlocked camera",
+            whenSet = "Power button double press opens RawBoy Camera",
+            whenNotSet = "Choose RawBoy Camera, then Always",
+        )
+        DefaultCameraChoice(
+            MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE,
+            title = "Lock screen camera",
+            whenSet = "Works on a locked phone",
+            whenNotSet = "Choose RawBoy Camera, then Always",
+        )
         SettingSwitch(
-            title = "Experimental features",
-            subtitle = "Features still being tested: self-timer and long exposure (two buttons beside the Photo / Video switch)",
+            title = "Remember camera & settings",
+            subtitle = "Off: each start uses W, Yellow Portrait 400, default sliders",
+            checked = settings.rememberLast,
+            onChange = vm::setRememberLast,
+        )
+
+        // Experimental sits last: its extra controls open below the switch.
+        SettingsSection("Experimental")
+        SettingSwitch(
+            title = "Self-timer and long exposure",
+            subtitle = "Two buttons beside the Photo / Video switch",
             checked = settings.experimental,
             accent = EXPERIMENTAL_ORANGE,
             onChange = vm::setExperimental,
         )
         if (settings.experimental) {
-            Spacer(Modifier.height(16.dp))
-            Text("Self-timer and long exposure", style = MaterialTheme.typography.bodyMedium)
-            Text(
-                "Two buttons appear beside the Photo / Video switch. Timer: counts down 2, 5 or 10 s before the shot so the phone can settle on a tripod; " +
-                    "press the shutter again to cancel. Long exposure: shoots frames for 5, 10, 30 or 60 s and stacks them into one photo " +
-                    "(like an ND filter); press the shutter to stop early. Use a tripod; not used with flash or at full sensor resolution",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            SettingChoice(
+                title = "Long exposure stacks as",
+                subtitle = "5 to 60 s; use a tripod; not with flash or full sensor size. Timer: 2, 5 or 10 s",
+                options = listOf(false, true),
+                selected = settings.longExposureLighten,
+                label = { if (it) "Lighten (trails)" else "Average (water)" },
+                onSelect = vm::setLongExposureLighten,
+                indent = true,
             )
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 4.dp)) {
-                FilterChip(
-                    selected = !settings.longExposureLighten,
-                    onClick = { vm.setLongExposureLighten(false) },
-                    label = { Text("Average (smooth water)") },
-                )
-                FilterChip(
-                    selected = settings.longExposureLighten,
-                    onClick = { vm.setLongExposureLighten(true) },
-                    label = { Text("Lighten (light trails)") },
-                )
+        }
+
+        Spacer(Modifier.height(16.dp))
+        for (line in Edition.credits) {
+            Text(line, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(4.dp))
+        }
+        var showLicences by remember { mutableStateOf(false) }
+        TextButton(onClick = { showLicences = true }, contentPadding = PaddingValues(0.dp)) { Text("Open-source licences") }
+        if (showLicences) LicensesDialog(onDismiss = { showLicences = false })
+    }
+}
+
+/** A group heading in Settings: amber, small, with room above to separate it from the group before. */
+@Composable
+private fun SettingsSection(title: String, first: Boolean = false) {
+    Text(
+        title,
+        style = MaterialTheme.typography.labelLarge,
+        color = MaterialTheme.colorScheme.primary,
+        modifier = Modifier.padding(top = if (first) 12.dp else 24.dp, bottom = 4.dp),
+    )
+}
+
+/** A row with a title, an optional one-line hint and a segmented choice under them. */
+@Composable
+private fun <T> SettingChoice(
+    title: String,
+    subtitle: String?,
+    options: List<T>,
+    selected: T,
+    label: (T) -> String,
+    onSelect: (T) -> Unit,
+    indent: Boolean = false,
+) {
+    Column(Modifier.padding(start = if (indent) 16.dp else 0.dp, top = 8.dp, bottom = 8.dp)) {
+        Text(title, style = MaterialTheme.typography.bodyMedium)
+        if (subtitle != null) {
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Row(
+            Modifier
+                .padding(top = 8.dp)
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+        ) {
+            for (o in options) {
+                val on = o == selected
+                Box(
+                    Modifier
+                        .weight(1f)
+                        .heightIn(min = 40.dp)
+                        .padding(2.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .background(if (on) MaterialTheme.colorScheme.primary else Color.Transparent)
+                        .clickable { onSelect(o) }
+                        .semantics { stateDescription = if (on) "Selected" else "Not selected" },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        label(o),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                        maxLines = 1,
+                    )
+                }
             }
         }
-        Spacer(Modifier.height(16.dp))
-        SettingSwitch(
-            title = "Zoom buttons",
-            subtitle = "The + and − buttons and zoom level over the viewfinder. Pinching still zooms",
-            checked = settings.showZoomControl,
-            onChange = vm::setShowZoomControl,
-        )
-        Spacer(Modifier.height(16.dp))
-        SettingSwitch(
-            title = "Grid",
-            subtitle = "A 3 x 3 grid over the viewfinder to line up the frame",
-            checked = settings.showGrid,
-            onChange = vm::setShowGrid,
-        )
-        Spacer(Modifier.height(16.dp))
-        SettingSwitch(
-            title = "Level",
-            subtitle = "A line over the viewfinder that turns yellow when the phone is straight",
-            checked = settings.showLevel,
-            onChange = vm::setShowLevel,
-        )
-        Spacer(Modifier.height(16.dp))
-        SettingSwitch(
-            title = "Histogram",
-            subtitle = "A live RGB histogram in a corner of the viewfinder",
-            checked = settings.showHistogram,
-            onChange = vm::setShowHistogram,
-        )
-        Spacer(Modifier.height(16.dp))
-        DefaultCameraChoice(
-            MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA,
-            title = "Unlocked camera",
-            whenSet = "The power button's double press opens RawBoy Camera",
-            whenNotSet = "Choose RawBoy Camera, then Always, so the power button's double press opens it",
-        )
-        Spacer(Modifier.height(16.dp))
-        DefaultCameraChoice(
-            MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE,
-            title = "Lock screen camera",
-            whenSet = "The power button's double press opens RawBoy Camera on a locked phone",
-            whenNotSet = "Choose RawBoy Camera, then Always, so a double press on a locked phone opens it without the passcode",
-        )
-        Spacer(Modifier.height(16.dp))
-        SettingSwitch(
-            title = "Remember camera & settings",
-            subtitle = "Otherwise each start uses W, Yellow Portrait 400 and default sliders",
-            checked = settings.rememberLast,
-            onChange = vm::setRememberLast,
-        )
-        for (line in Edition.credits) {
-            Spacer(Modifier.height(8.dp))
-            Text(line, style = MaterialTheme.typography.bodySmall)
-        }
-        Spacer(Modifier.height(8.dp))
-        var showLicences by remember { mutableStateOf(false) }
-        TextButton(onClick = { showLicences = true }) { Text("Open-source licences") }
-        if (showLicences) LicensesDialog(onDismiss = { showLicences = false })
     }
 }
 
@@ -1640,7 +1631,7 @@ private fun DefaultCameraChoice(action: String, title: String, whenSet: String, 
             ?.activityInfo?.packageName == context.packageName
         onPauseOrDispose {}
     }
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.heightIn(min = 48.dp).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyMedium)
             Text(
@@ -1656,20 +1647,32 @@ private fun DefaultCameraChoice(action: String, title: String, whenSet: String, 
 @Composable
 private fun SettingSwitch(
     title: String,
-    subtitle: String,
+    subtitle: String?,
     checked: Boolean,
     enabled: Boolean = true,
     accent: Color? = null,
+    indent: Boolean = false,
     onChange: (Boolean) -> Unit,
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    // The whole row toggles, not just the switch; a hint is one line, so rows stay close to the 48 dp minimum.
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .toggleable(value = checked, enabled = enabled, role = Role.Switch, onValueChange = onChange)
+            .padding(start = if (indent) 16.dp else 0.dp, top = 4.dp, bottom = 4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.bodyMedium, color = accent ?: Color.Unspecified)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (subtitle != null) {
+                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
         }
+        Spacer(Modifier.width(12.dp))
         Switch(
             checked = checked,
-            onCheckedChange = onChange,
+            onCheckedChange = null,
             enabled = enabled,
             colors = if (accent == null) SwitchDefaults.colors() else SwitchDefaults.colors(checkedTrackColor = accent, checkedThumbColor = Color.White),
         )
