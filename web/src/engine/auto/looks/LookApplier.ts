@@ -2,6 +2,7 @@ import { Warmth } from '../analysis/Warmth';
 import type { DevelopParams } from '../../develop/DevelopParams';
 import { applyPreset, replacesLook, type Preset } from '../../develop/Presets';
 import { lutIdOf, type Look } from './Look';
+import { withCrop, type CropRect } from '../../develop/CropMath';
 
 /**
  * The user's controls on top of the auto develop and the look; all 0 = as suggested. [brightness] -100..100 shifts
@@ -10,7 +11,9 @@ import { lutIdOf, type Look } from './Look';
  * [saturation], which moves the saturation they arrive at towards -100 (-100 = black and white). [denoise] -100..100
  * shifts the auto luma and colour denoise, colour first (see denoiseWith). [retouch] 0..100 adds Portrait retouch
  * (PortraitRetouch; 40 = about Reblum Natural 40) to what the look, preset or edits hold.
- * [rotation] is clockwise quarter turns (0..3) on top of the photo's own orientation.
+ * [rotation] is clockwise quarter turns (0..3) on top of the photo's own orientation. [straighten] (degrees, -45..45)
+ * adds to the develop's straighten angle and [crop] (fractions of the rotated + straightened frame, null = the whole
+ * frame) replaces its crop: Auto's Crop & rotate.
  */
 export interface Adjustments {
   brightness: number;
@@ -23,14 +26,28 @@ export interface Adjustments {
   denoise: number;
   retouch: number;
   rotation: number;
+  straighten: number;
+  crop: CropRect | null;
 }
 
-export const NO_ADJUSTMENTS: Adjustments = { brightness: 0, warmth: 0, tint: 0, contrast: 0, lumaContrast: 0, saturation: 0, grain: 0, denoise: 0, retouch: 0, rotation: 0 };
+export const NO_ADJUSTMENTS: Adjustments = { brightness: 0, warmth: 0, tint: 0, contrast: 0, lumaContrast: 0, saturation: 0, grain: 0, denoise: 0, retouch: 0, rotation: 0, straighten: 0, crop: null };
+
+function sameCrop(a: CropRect | null, b: CropRect | null): boolean {
+  if (!a || !b) return a === b;
+  return a.left === b.left && a.top === b.top && a.right === b.right && a.bottom === b.bottom;
+}
+
+/** [p] straightened and cropped by [adjust] (Auto's Crop & rotate); [p] itself when it sets neither. */
+function framed(p: DevelopParams, adjust: Adjustments): DevelopParams {
+  if (adjust.straighten === 0 && !adjust.crop) return p;
+  const straightened = adjust.straighten === 0 ? p : { ...p, straighten: Math.min(45, Math.max(-45, p.straighten + adjust.straighten)) };
+  return adjust.crop ? withCrop(straightened, adjust.crop) : straightened;
+}
 
 export function sameAdjustments(a: Adjustments, b: Adjustments): boolean {
   return a.brightness === b.brightness && a.warmth === b.warmth && a.tint === b.tint
     && a.contrast === b.contrast && a.lumaContrast === b.lumaContrast && a.saturation === b.saturation && a.grain === b.grain && a.denoise === b.denoise
-    && a.retouch === b.retouch && a.rotation === b.rotation;
+    && a.retouch === b.retouch && a.rotation === b.rotation && a.straighten === b.straighten && sameCrop(a.crop, b.crop);
 }
 
 /** Combines the auto develop with a look and the user's [Adjustments] (port of LookApplier.kt). */
@@ -105,7 +122,7 @@ export function applyLook(base: DevelopParams, look: Look, strength: number, adj
     halation: look.halation,
     rotation: (((base.rotation + adjust.rotation) % 4) + 4) % 4,
   };
-  const warmed = Warmth.shift(developed, WARMTH_RANGE ** (adjust.warmth / 100));
+  const warmed = Warmth.shift(framed(developed, adjust), WARMTH_RANGE ** (adjust.warmth / 100));
   return adjust.tint === 0 ? warmed : { ...warmed, tint: clamp(warmed.tint + adjust.tint, -100, 100) };
 }
 
@@ -155,7 +172,7 @@ function adjustDevelop(p: DevelopParams, adjust: Adjustments): DevelopParams {
     portraitRetouch: clamp(p.portraitRetouch + adjust.retouch, 0, 100),
     rotation: (((p.rotation + adjust.rotation) % 4) + 4) % 4,
   };
-  const warmed = Warmth.shift(developed, WARMTH_RANGE ** (adjust.warmth / 100));
+  const warmed = Warmth.shift(framed(developed, adjust), WARMTH_RANGE ** (adjust.warmth / 100));
   return adjust.tint === 0 ? warmed : { ...warmed, tint: clamp(warmed.tint + adjust.tint, -100, 100) };
 }
 
