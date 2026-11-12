@@ -14,7 +14,6 @@ struct DetailScreen: View {
     @State private var showExport = false
     @State private var pickingWhite = false
     /** Crop & rotate's shape lock (UI only; the crop itself is in the photo's adjustments). Portrait nil = follow the frame. */
-    @State private var cropAspect = CropAspect.free
     @State private var cropPortrait: Bool?
 
     /** Photos that can be opened, in grid order. */
@@ -113,7 +112,6 @@ struct DetailScreen: View {
         .onChange(of: id) { _, new in
             if page != new { page = new }
             pickingWhite = false
-            cropAspect = .free
             cropPortrait = nil
         }
         .onChange(of: tab) { _, _ in pickingWhite = false }
@@ -172,7 +170,7 @@ struct DetailScreen: View {
     private var cropRatio: Double? {
         guard let f = frameLens else { return nil }
         let portrait = cropPortrait ?? (f.frameHeight > f.frameWidth)
-        return cropAspect.ratio(frameWidth: f.frameWidth, frameHeight: f.frameHeight, portrait: portrait)
+        return vm.cropAspect.ratio(frameWidth: f.frameWidth, frameHeight: f.frameHeight, portrait: portrait)
     }
 
     private var frameLens: LensTransform? {
@@ -192,26 +190,26 @@ struct DetailScreen: View {
                     Text("Crop & rotate").font(.headline)
                     Spacer()
                     Button("Reset") {
-                        cropAspect = .free
+                        vm.cropAspect = .original
                         cropPortrait = nil
                         vm.resetCrop(photo.id)
                     }
-                    .disabled(a.crop == nil && a.straighten == 0 && cropAspect == .free)
+                    .disabled(a.crop == nil && a.straighten == 0 && vm.cropAspect == .original)
                     Button("Done") { vm.cropping = false }.fontWeight(.semibold)
                 }
                 HStack(spacing: 12) {
                     Button("↺  Left") { turn(-1) }.buttonStyle(.bordered)
                     Button("Right  ↻") { turn(1) }.buttonStyle(.bordered)
-                    Button(portrait ? "Portrait" : "Landscape") { chooseAspect(cropAspect, !portrait) }
+                    Button(portrait ? "Portrait" : "Landscape") { chooseAspect(vm.cropAspect, !portrait) }
                         .buttonStyle(.bordered)
-                        .disabled(cropAspect == .free || cropAspect == .square)
+                        .disabled(vm.cropAspect == .free || vm.cropAspect == .square)
                 }
                 ScrollView(.horizontal) {
                     HStack(spacing: 8) {
                         ForEach(CropAspect.allCases, id: \.self) { shape in
                             Button(shape.label(portrait: portrait)) { chooseAspect(shape, portrait) }
                                 .buttonStyle(.bordered)
-                                .tint(shape == cropAspect ? .accentColor : .gray)
+                                .tint(shape == vm.cropAspect ? .accentColor : .gray)
                         }
                     }
                 }
@@ -235,7 +233,7 @@ struct DetailScreen: View {
 
     private func chooseAspect(_ aspect: CropAspect, _ toPortrait: Bool) {
         guard let f = frameLens, let photo = vm.photo(id) else { return }
-        cropAspect = aspect
+        vm.cropAspect = aspect
         cropPortrait = toPortrait
         let ratio = aspect.ratio(frameWidth: f.frameWidth, frameHeight: f.frameHeight, portrait: toPortrait)
         vm.setCrop(id, CropMath.withAspect(photo.adjust.crop ?? CropMath.full, ratio: ratio, frameWidth: f.frameWidth,
@@ -268,6 +266,13 @@ struct DetailScreen: View {
                 Button("Crop & rotate", systemImage: "crop.rotate") {
                     session.exitZoom()  // the crop tool works on the fit view
                     vm.cropping = true
+                    // A remembered shape other than Original / Free shapes the frame at once, so the chip and the frame agree.
+                    if let f = frameLens, photo.adjust.crop == nil, vm.cropAspect != .free, vm.cropAspect != .original {
+                        let portrait = cropPortrait ?? (f.frameHeight > f.frameWidth)
+                        let ratio = vm.cropAspect.ratio(frameWidth: f.frameWidth, frameHeight: f.frameHeight, portrait: portrait)
+                        vm.setCrop(id, CropMath.withAspect(CropMath.full, ratio: ratio, frameWidth: f.frameWidth,
+                                                           frameHeight: f.frameHeight), force: true)
+                    }
                 }
                 .disabled(vm.export != nil || vm.sessionReady != id)
                 if let pickPreset {

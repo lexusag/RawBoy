@@ -150,11 +150,10 @@ fun DetailScreen(
     LaunchedEffect(id) { pickingWhite = false }
     // Crop & rotate: the photo shows whole with a crop frame on it. The shape lock is UI only (portrait null = follow the frame).
     var cropping by rememberSaveable { mutableStateOf(false) }
-    var cropAspect by rememberSaveable { mutableStateOf(CropAspect.FREE) }
+    val cropAspect by vm.cropAspect.collectAsStateWithLifecycle() // kept for the session: the next photo opens with it
     var cropPortrait by rememberSaveable { mutableStateOf<Boolean?>(null) }
     LaunchedEffect(id) {
         cropping = false
-        cropAspect = CropAspect.FREE
         cropPortrait = null
     }
     val loaded = ready == id
@@ -224,6 +223,12 @@ fun DetailScreen(
                                     menu = false
                                     if (zoomCenter != null) session.exitZoom() // the crop tool works on the fit view
                                     cropping = true
+                                    // A remembered shape other than Original / Free shapes the frame at once, so the chip and the frame agree.
+                                    val f = cropFrame
+                                    if (f != null && photo.adjust.crop == null && cropAspect != CropAspect.FREE && cropAspect != CropAspect.ORIGINAL) {
+                                        val ratio = cropAspect.ratio(f.frameWidth, f.frameHeight, cropPortraitNow)
+                                        vm.setCrop(id, CropMath.withAspect(CropMath.FULL, ratio, f.frameWidth, f.frameHeight), force = true)
+                                    }
                                 },
                                 enabled = loaded && export == null,
                             )
@@ -420,7 +425,7 @@ fun DetailScreen(
                 CropPanel(
                     photo.adjust, cropAspect, cropPortraitNow, panel,
                     onAspect = { aspect, toPortrait ->
-                        cropAspect = aspect
+                        vm.setCropAspect(aspect)
                         cropPortrait = toPortrait
                         cropFrame?.let { f ->
                             val ratio = aspect.ratio(f.frameWidth, f.frameHeight, toPortrait)
@@ -433,7 +438,7 @@ fun DetailScreen(
                     },
                     onStraighten = { vm.setStraighten(id, it) },
                     onReset = {
-                        cropAspect = CropAspect.FREE
+                        vm.setCropAspect(CropAspect.ORIGINAL)
                         cropPortrait = null
                         vm.resetCrop(id)
                     },
@@ -756,7 +761,7 @@ private fun CropPanel(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Crop & rotate", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-            TextButton(onClick = onReset, enabled = adjust.crop != null || adjust.straighten != 0f || aspect != CropAspect.FREE) { Text("Reset") }
+            TextButton(onClick = onReset, enabled = adjust.crop != null || adjust.straighten != 0f || aspect != CropAspect.ORIGINAL) { Text("Reset") }
             TextButton(onClick = onDone) { Text("Done") }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(vertical = 4.dp)) {

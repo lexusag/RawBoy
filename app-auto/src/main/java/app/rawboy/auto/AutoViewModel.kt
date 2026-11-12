@@ -9,6 +9,7 @@ import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.rawboy.auto.looks.Adjustments
+import app.rawboy.develop.CropAspect
 import app.rawboy.develop.CropMath
 import app.rawboy.develop.CropRect
 import app.rawboy.auto.looks.FilmLooks
@@ -217,6 +218,11 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
         runCatching { FrameColor.valueOf(prefs.getString(KEY_FRAME, null)!!) }.getOrDefault(FrameColor.GREY),
     )
     val frameColor = _frameColor.asStateFlow()
+
+    /** Crop & rotate's shape: Original until changed, then the last one chosen, for this run of the app (not saved). */
+    private val _cropAspect = MutableStateFlow(CropAspect.ORIGINAL)
+    val cropAspect = _cropAspect.asStateFlow()
+    fun setCropAspect(aspect: CropAspect) { _cropAspect.value = aspect }
 
     /** The RawBoy preset applied to the whole batch, which photos added later get too; null = looks. */
     private val _preset = MutableStateFlow<Preset?>(null)
