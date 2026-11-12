@@ -76,6 +76,8 @@ targets:
     platform: iOS
     sources:
       - path: Auto
+      # Pro's crop frame, shared (Auto's Crop & rotate).
+      - path: Pro/ui/CropOverlay.swift
     dependencies:
       - target: RawBoyEngine
       - framework: native/out/RawBoyNative.xcframework

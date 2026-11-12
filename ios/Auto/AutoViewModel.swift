@@ -126,6 +126,8 @@ final class AutoViewModel: ObservableObject {
     @Published private(set) var photos: [AutoPhoto] = []
     @Published private(set) var export: BatchExport?
     @Published var message: String?
+    /** Crop & rotate is open on the selected photo: it shows whole with a crop frame. */
+    @Published var cropping = false
     /** Photo shown in the detail view, or nil for the grid. */
     @Published private(set) var selected: String?
     /** A waiting photo tapped in the grid: analysed next, ahead of the rest, then opened (nil: none). */
@@ -580,8 +582,28 @@ final class AutoViewModel: ObservableObject {
     func rotate(_ ids: Set<String>, by quarterTurns: Int) {
         if export != nil { return }
         for p in photos where ids.contains(p.id) && p.analysis != nil {
-            changeDevelop(p.id, force: true) { $0.adjust.rotation = (($0.adjust.rotation + quarterTurns) % 4 + 4) % 4 }
+            changeDevelop(p.id, force: true) {
+                $0.adjust.rotation = (($0.adjust.rotation + quarterTurns) % 4 + 4) % 4
+                // The crop turns with the picture (the straighten angle stays: it is relative to the turned frame).
+                $0.adjust.crop = $0.adjust.crop.map { CropMath.rotate($0, quarterTurns: quarterTurns) }
+            }
         }
+    }
+
+    /** Crop & rotate: crops [id] to [crop] (fractions of the rotated + straightened frame; nil or the whole frame = uncropped). */
+    func setCrop(_ id: String, _ crop: CropRect?, force: Bool = false) {
+        let kept = crop.flatMap { $0.isFull ? nil : $0 }
+        setAdjust(id, force: force) { $0.crop = kept }
+    }
+
+    /** Crop & rotate: straightens [id] by [degrees] (-45..45). */
+    func setStraighten(_ id: String, _ degrees: Float, force: Bool = false) {
+        setAdjust(id, force: force) { $0.straighten = degrees.clamped(-45, 45) }
+    }
+
+    /** Crop & rotate's Reset: no crop and a level horizon, one undo step. */
+    func resetCrop(_ id: String) {
+        setAdjust(id, force: true) { $0.crop = nil; $0.straighten = 0 }
     }
 
     /**
@@ -745,6 +767,7 @@ final class AutoViewModel: ObservableObject {
 
     func openDetail(_ id: String) {
         guard let p = photo(id), p.analysis != nil, export == nil else { return }
+        if selected != id { cropping = false }
         selected = id
         if sessionReady == id { return }
         sessionReady = nil
@@ -782,6 +805,7 @@ final class AutoViewModel: ObservableObject {
     }
 
     func closeDetail() {
+        cropping = false
         session.exitZoom()
         selected = nil
         cachedPreview = nil
