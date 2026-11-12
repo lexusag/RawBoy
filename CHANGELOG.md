@@ -1,3 +1,8 @@
+**RawBoy Web, Pro: much smaller healing brush (2026-11-12)**
+
+- The Healing brush's smallest size is now 0.04% of the photo's long side (about 2-3 px on a 6000 px photo, was 12 px), for single hot pixels and hairline dust. The Size slider stays logarithmic over the whole range, so the small end keeps fine steps; `[` and `]` step it the same way. Saved sizes are unchanged (only the slider position moves).
+- **B** opens and closes the Healing brush from any other tool (inside Masks, B remains the mask brush).
+
 **RawBoy Web (Auto and Pro): Shift+C opens Crop & rotate (2026-11-12)**
 
 - **Shift+C** opens Crop & rotate in Auto's photo view and in Pro (in Pro it also closes it, like the top bar button; in Auto it closes it too). It works by key position, so it also works on a Ukrainian layout, and is ignored while typing in a field. Listed in both help sheets. Typecheck only, not run in a browser.

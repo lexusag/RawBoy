@@ -31,8 +31,8 @@ export const MAX_HEAL_SPOTS = 64;
 /** Points per stroke (a longer drag stops adding), and disks per photo's healing (the spacing widens past it). */
 export const MAX_HEAL_POINTS = 1500;
 const MAX_HEAL_DABS = 3000;
-/** The brush radius range, fractions of the image's long side (0.2% of 6000 px = 12 px, 3% = 180 px). */
-export const HEAL_RADIUS_MIN = 0.002;
+/** The brush radius range, fractions of the image's long side (0.04% of 6000 px = 2.4 px, 3% = 180 px; the engine floors a disk at 2 px). */
+export const HEAL_RADIUS_MIN = 0.0004;
 export const HEAL_RADIUS_MAX = 0.03;
 export const DEFAULT_HEAL_FEATHER = 80;
 
