@@ -52,8 +52,6 @@ struct CameraScreen: View {
                         // A menu instead of a strip of chips, and one row per slider: the viewfinder keeps the screen.
                         VStack(spacing: 0) {
                             lookPicker
-                            ValueSlider("Strength", value: vm.settings.strength, range: 0...100,
-                                        defaultValue: LookApplier.defaultStrength, onChange: vm.setStrength)
                             ValueSlider("Brightness", value: vm.settings.brightness, range: -100...100, defaultValue: 0,
                                         onChange: vm.setBrightness)
                             if vm.settings.monoMode {
@@ -356,7 +354,7 @@ struct CameraScreen: View {
 
     /**
      * Landscape controls, all within the right thumb's reach: the status line and the look row on top; below, round
-     * S / B / W chips (F, the filter, in B&W mode) pick what the tall slider beside the shutter changes. With F picked
+     * B / W chips (F, the filter, in B&W mode) pick what the tall slider beside the shutter changes. With F picked
      * the filters stand there instead of the slider. A double tap on a chip or the slider resets that setting.
      */
     private var landscapeControls: some View {
@@ -366,8 +364,6 @@ struct CameraScreen: View {
             lookPicker
             HStack(spacing: 8) {
                 VStack(spacing: 12) {
-                    AdjustChip(letter: "S", name: "Strength", value: "\(Int(s.strength.rounded()))", selected: adjust == .strength,
-                               onSelect: { adjust = .strength }, onReset: { vm.setStrength(LookApplier.defaultStrength) })
                     AdjustChip(letter: "B", name: "Brightness", value: Self.signed(s.brightness), selected: adjust == .brightness,
                                onSelect: { adjust = .brightness }, onReset: { vm.setBrightness(0) })
                     if s.monoMode {
@@ -383,9 +379,6 @@ struct CameraScreen: View {
                     FilterColumn(selected: s.filter, onSelect: vm.setFilter)
                 } else {
                     switch adjust {
-                    case .strength:
-                        VerticalSlider(label: "Strength", value: s.strength, range: 0...100, defaultValue: LookApplier.defaultStrength,
-                                       onChange: vm.setStrength)
                     case .brightness:
                         VerticalSlider(label: "Brightness", value: s.brightness, range: -100...100, defaultValue: 0, onChange: vm.setBrightness)
                     case .warmth:
@@ -636,6 +629,17 @@ private struct SettingsSheet: View {
                         Text("Encoded with jpegli, full-resolution colour (4:4:4). Default 95.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
+                    VStack(alignment: .leading) {
+                        HStack {
+                            Text("Look strength")
+                            Spacer()
+                            Text("\(Int(vm.settings.strength.rounded()))").foregroundStyle(Color.cameraAccent)
+                        }
+                        Slider(value: Binding(get: { Double(vm.settings.strength) }, set: { vm.setStrength(Float($0.rounded())) }),
+                               in: 0...100, step: 1)
+                        Text("How much of the look the photo gets. Default \(Int(LookApplier.defaultStrength)).")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                 }
                 Section {
                     Toggle(isOn: Binding(get: { vm.settings.keepDng }, set: vm.setKeepDng)) {
@@ -747,8 +751,8 @@ private struct HardwareShutter: ViewModifier {
     }
 }
 
-/** What the landscape slider changes: Strength, Brightness, or Warmth (Filter in B&W mode). */
-private enum Adjust { case strength, brightness, warmth }
+/** What the landscape slider changes: Brightness or Warmth (Filter in B&W mode). */
+private enum Adjust { case brightness, warmth }
 
 /** A round picker chip: the setting's letter with its value under it; filled while its setting is on the slider. */
 private struct AdjustChip: View {
