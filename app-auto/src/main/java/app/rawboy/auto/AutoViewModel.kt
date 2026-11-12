@@ -9,6 +9,8 @@ import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.rawboy.auto.looks.Adjustments
+import app.rawboy.develop.CropMath
+import app.rawboy.develop.CropRect
 import app.rawboy.auto.looks.FilmLooks
 import app.rawboy.auto.looks.Look
 import app.rawboy.auto.looks.LookApplier
@@ -685,9 +687,26 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
     fun rotate(ids: Set<String>, quarterTurns: Int) {
         if (_export.value != null) return
         _photos.value.filter { it.id in ids && it.analysis != null }.forEach { p ->
-            changeDevelop(p.id, force = true) { q -> q.copy(adjust = q.adjust.copy(rotation = Math.floorMod(q.adjust.rotation + quarterTurns, 4))) }
+            changeDevelop(p.id, force = true) { q ->
+                // The crop turns with the picture (the straighten angle stays: it is relative to the turned frame).
+                q.copy(adjust = q.adjust.copy(
+                    rotation = Math.floorMod(q.adjust.rotation + quarterTurns, 4),
+                    crop = q.adjust.crop?.let { CropMath.rotate(it, quarterTurns) },
+                ))
+            }
         }
     }
+
+    /** Crop & rotate: crops [id] to [crop] (fractions of the rotated + straightened frame; null or the whole frame = uncropped). */
+    fun setCrop(id: String, crop: CropRect?, force: Boolean = false) =
+        setAdjust(id, force) { it.copy(crop = crop?.takeUnless { c -> c.isFull }) }
+
+    /** Crop & rotate: straightens [id] by [degrees] (-45..45). */
+    fun setStraighten(id: String, degrees: Float, force: Boolean = false) =
+        setAdjust(id, force) { it.copy(straighten = degrees.coerceIn(-45f, 45f)) }
+
+    /** Crop & rotate's Reset: no crop and a level horizon, one undo step. */
+    fun resetCrop(id: String) = setAdjust(id, force = true) { it.copy(crop = null, straighten = 0f) }
 
     /**
      * Gives every photo of the batch the look (or preset), strength, warmth, tint, contrast, saturation and grain of [id], including

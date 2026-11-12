@@ -63,6 +63,7 @@ import app.rawboy.develop.withoutCrop
 import app.rawboy.gl.ShaderParams
 import androidx.compose.ui.platform.LocalDensity
 import app.rawboy.lut.LutRepository
+import app.rawboy.view.CropOverlay
 import app.rawboy.view.DevelopPreview
 import app.rawboy.view.HistogramView
 import app.rawboy.view.PhotoWithControls

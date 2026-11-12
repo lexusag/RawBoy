@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -43,6 +44,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
@@ -84,16 +86,20 @@ import app.rawboy.auto.AutoPhoto
 import app.rawboy.auto.AutoViewModel
 import app.rawboy.auto.LookMode
 import app.rawboy.auto.UndoState
+import app.rawboy.auto.looks.Adjustments
 import app.rawboy.auto.looks.FilmLooks
 import app.rawboy.auto.looks.Look
 import app.rawboy.auto.looks.LookApplier
 import app.rawboy.auto.looks.Looks
+import app.rawboy.develop.CropAspect
 import app.rawboy.develop.CropMath
 import app.rawboy.develop.DevelopParams
 import app.rawboy.develop.crop
+import app.rawboy.develop.withoutCrop
 import app.rawboy.gl.ShaderParams
 import app.rawboy.session.SkinState
 import app.rawboy.view.CompactSlider
+import app.rawboy.view.CropOverlay
 import app.rawboy.view.DevelopPreview
 import app.rawboy.view.HelpButton
 import app.rawboy.view.RedoIcon
@@ -142,7 +148,19 @@ fun DetailScreen(
     var showAuto by remember { mutableStateOf(false) }
     var pickingWhite by remember { mutableStateOf(false) }
     LaunchedEffect(id) { pickingWhite = false }
+    // Crop & rotate: the photo shows whole with a crop frame on it. The shape lock is UI only (portrait null = follow the frame).
+    var cropping by rememberSaveable { mutableStateOf(false) }
+    var cropAspect by rememberSaveable { mutableStateOf(CropAspect.FREE) }
+    var cropPortrait by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(id) {
+        cropping = false
+        cropAspect = CropAspect.FREE
+        cropPortrait = null
+    }
     val loaded = ready == id
+    val cropFrame = if (loaded) photo.params?.let { session.lensFor(it.withoutCrop()) } else null
+    val cropPortraitNow = cropPortrait ?: (cropFrame?.let { it.frameHeight > it.frameWidth } ?: false)
+    val cropRatio = cropFrame?.let { cropAspect.ratio(it.frameWidth, it.frameHeight, cropPortraitNow) }
     // Photos that can be opened, in grid order.
     val pages = remember(photos) { photos.filter { it.analysis != null } }
     // The pager reads pages through this state: its page count and keys update at different times as photos finish
@@ -201,6 +219,15 @@ fun DetailScreen(
                         }
                         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                             DropdownMenuItem(
+                                text = { Text("Crop & rotate") },
+                                onClick = {
+                                    menu = false
+                                    if (zoomCenter != null) session.exitZoom() // the crop tool works on the fit view
+                                    cropping = true
+                                },
+                                enabled = loaded && export == null,
+                            )
+                            DropdownMenuItem(
                                 text = { Text("Apply RawBoy preset…") },
                                 onClick = { menu = false; pickPreset(setOf(id)) },
                                 enabled = export == null,
@@ -244,13 +271,14 @@ fun DetailScreen(
                         state = pagerState,
                         modifier = Modifier.fillMaxSize(),
                         // Drags pan the zoomed view; an export holds the photo still.
-                        userScrollEnabled = zoomCenter == null && export == null,
+                        userScrollEnabled = zoomCenter == null && export == null && !cropping,
                         key = { currentPages.getOrNull(it)?.id ?: it },
                     ) { page ->
                         val pagePhoto = currentPages.getOrNull(page) ?: return@HorizontalPager
                         // Until the raw is decoded, the photo's cached preview shows its develop (no 100% view yet).
                         val cachedImage = cached?.takeIf { pagePhoto.id == id && !loaded && it.first == id }?.second
-                        val shownParams = if (showAuto && loaded) analysis.autoBase else photo.params ?: analysis.autoBase
+                        val shownParams = (if (showAuto && loaded) analysis.autoBase else photo.params ?: analysis.autoBase)
+                            .let { if (cropping) it.withoutCrop() else it }
                         val cachedParams by produceState<ShaderParams?>(null, cachedImage, shownParams) {
                             value = cachedImage?.let { vm.cachedShaderParams(id, shownParams) }
                         }
@@ -301,6 +329,12 @@ fun DetailScreen(
                                         Box(Modifier.fillMaxSize().background(Color(0xFF121212))) { thumbnail() }
                                     },
                                 )
+                                if (live && cropping && zoomCenter == null) {
+                                    CropOverlay(
+                                        shaderParams.lens.outputWidth, shaderParams.lens.outputHeight, photo.adjust.crop ?: CropMath.FULL,
+                                        cropRatio, framePx, { vm.setCrop(id, it) }, Modifier.matchParentSize(),
+                                    )
+                                }
                             }
                             if (!live && quickParams != null) {
                                 CircularProgressIndicator(
@@ -310,6 +344,8 @@ fun DetailScreen(
                                         .size(20.dp),
                                     strokeWidth = 2.dp,
                                 )
+                            } else if (live && cropping) {
+                                // The crop frame takes the touches; no zoom, compare or tap-to-pick meanwhile.
                             } else if (live) {
                                 val zoomed = zoomCenter != null
                                 // One finger pans only while zoomed: otherwise the drag belongs to the pager. Two fingers
@@ -380,6 +416,31 @@ fun DetailScreen(
                 }
             },
         ) { panel ->
+            if (cropping) {
+                CropPanel(
+                    photo.adjust, cropAspect, cropPortraitNow, panel,
+                    onAspect = { aspect, toPortrait ->
+                        cropAspect = aspect
+                        cropPortrait = toPortrait
+                        cropFrame?.let { f ->
+                            val ratio = aspect.ratio(f.frameWidth, f.frameHeight, toPortrait)
+                            vm.setCrop(id, CropMath.withAspect(photo.adjust.crop ?: CropMath.FULL, ratio, f.frameWidth, f.frameHeight), force = true)
+                        }
+                    },
+                    onRotate = {
+                        vm.rotate(setOf(id), it)
+                        cropPortrait = cropPortrait?.not() // a locked shape turns with the picture
+                    },
+                    onStraighten = { vm.setStraighten(id, it) },
+                    onReset = {
+                        cropAspect = CropAspect.FREE
+                        cropPortrait = null
+                        vm.resetCrop(id)
+                    },
+                    onDone = { cropping = false },
+                )
+                return@PhotoWithControls
+            }
             val preset = photo.preset
             if (photo.edits != null) {
                 // RawBoy's own develop of this photo, crop, masks and light leaks included, in place of the look strip.
@@ -669,3 +730,58 @@ private val LOOK_HEADING = 16.dp
 private val SLIDER_ROW = 40.dp
 private val SLIDER_PAIR_ROW = 48.dp
 private const val COMPARE_DELAY_MS = 250L
+
+/**
+ * Auto's Crop & rotate: shapes, turning in quarter steps and the horizon slider; the frame is dragged on the photo.
+ * Flip and perspective stay in RawBoy.
+ */
+@Composable
+private fun CropPanel(
+    adjust: Adjustments,
+    aspect: CropAspect,
+    portrait: Boolean,
+    modifier: Modifier,
+    onAspect: (CropAspect, Boolean) -> Unit,
+    onRotate: (Int) -> Unit,
+    onStraighten: (Float) -> Unit,
+    onReset: () -> Unit,
+    onDone: () -> Unit,
+) {
+    Column(
+        Modifier
+            .navigationBarsPadding()
+            .then(modifier)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Crop & rotate", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+            TextButton(onClick = onReset, enabled = adjust.crop != null || adjust.straighten != 0f || aspect != CropAspect.FREE) { Text("Reset") }
+            TextButton(onClick = onDone) { Text("Done") }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(vertical = 4.dp)) {
+            OutlinedButton(onClick = { onRotate(-1) }) { Text("↺  Left") }
+            OutlinedButton(onClick = { onRotate(1) }) { Text("Right  ↻") }
+            OutlinedButton(
+                onClick = { onAspect(aspect, !portrait) },
+                enabled = aspect != CropAspect.FREE && aspect != CropAspect.SQUARE,
+            ) { Text(if (portrait) "Portrait" else "Landscape") }
+        }
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.horizontalScroll(rememberScrollState())) {
+            for (a in CropAspect.entries) {
+                FilterChip(selected = a == aspect, onClick = { onAspect(a, portrait) }, label = { Text(a.label(portrait)) })
+            }
+        }
+        CompactSlider(
+            "Straighten", adjust.straighten, -45f..45f, 0f,
+            rowHeight = SLIDER_ROW, labelWidth = 88.dp, valueWidth = 56.dp,
+            format = { String.format(java.util.Locale.ROOT, "%+.1f°", if (kotlin.math.abs(it) < 0.05f) 0f else it) },
+            onChange = onStraighten,
+        )
+        Text(
+            "Drag the corners, edges or inside of the frame to crop. Straightening crops automatically so no empty corners show.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+}

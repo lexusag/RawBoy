@@ -41,6 +41,7 @@ internal val AUTO_HELP = listOf(
             HelpItem("Press and hold", "See the photo without the look."),
             HelpItem("Look, Adjust", "Look, Strength, Brightness and Warmth; Adjust has the auto develop's own sliders."),
             HelpItem("Pick white balance", "Adjust tab: tap something neutral grey and Warmth and Tint make it grey."),
+            HelpItem("Crop & rotate (⋮)", "Drag the corners, edges or inside of the frame, pick a shape (Original, 1:1, 4:3, 3:2, 16:9...), turn the photo in quarter steps and straighten the horizon. The crop is in the exports and in Undo; Apply to all leaves each photo's crop alone."),
             HelpItem("Apply RawBoy preset… (⋮)", "Develop this photo with a RawBoy preset instead of its look."),
             HelpItem("Remove from batch (⋮)", "Takes this photo out of the batch (the file stays) and goes on to the next."),
             HelpItem("Apply to all (⋮)", "Copies the look and its settings to every photo (brightness and denoise stay per photo)."),

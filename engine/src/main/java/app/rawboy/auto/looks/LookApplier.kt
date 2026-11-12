@@ -1,7 +1,9 @@
 package app.rawboy.auto.looks
 
 import app.rawboy.auto.analysis.Warmth
+import app.rawboy.develop.CropRect
 import app.rawboy.develop.DevelopParams
+import app.rawboy.develop.withCrop
 import app.rawboy.develop.Preset
 import app.rawboy.develop.Presets
 import kotlin.math.abs
@@ -14,7 +16,9 @@ import kotlin.math.roundToInt
  * -100..100 and [grain] -50..50 are added to the slider values the auto develop and the look arrive at, except negative
  * [saturation], which moves the saturation they arrive at towards -100 (-100 = black and white). [denoise] -100..100
  * shifts the auto luma and colour denoise, colour first (see [LookApplier.denoise]).
- * [rotation] is clockwise quarter turns (0..3) on top of the photo's own orientation.
+ * [rotation] is clockwise quarter turns (0..3) on top of the photo's own orientation. [straighten] (degrees, -45..45)
+ * adds to the develop's straighten angle and [crop] (fractions of the rotated + straightened frame, null = the whole
+ * frame) replaces its crop: Auto's Crop & rotate.
  */
 data class Adjustments(
     val brightness: Float = 0f,
@@ -25,6 +29,8 @@ data class Adjustments(
     val grain: Float = 0f,
     val denoise: Float = 0f,
     val rotation: Int = 0,
+    val straighten: Float = 0f,
+    val crop: CropRect? = null,
 ) {
     companion object {
         val NONE = Adjustments()
@@ -98,8 +104,15 @@ object LookApplier {
             halation = look.halation,
             rotation = Math.floorMod(base.rotation + adjust.rotation, 4),
         )
-        val warmed = Warmth.shift(developed, WARMTH_RANGE.pow(adjust.warmth / 100f))
+        val warmed = Warmth.shift(framed(developed, adjust), WARMTH_RANGE.pow(adjust.warmth / 100f))
         return if (adjust.tint == 0f) warmed else warmed.copy(tint = (warmed.tint + adjust.tint).coerceIn(-100f, 100f))
+    }
+
+    /** [p] straightened and cropped by [adjust] (Auto's Crop & rotate); [p] itself when it sets neither. */
+    private fun framed(p: DevelopParams, adjust: Adjustments): DevelopParams {
+        if (adjust.straighten == 0f && adjust.crop == null) return p
+        val straightened = if (adjust.straighten == 0f) p else p.copy(straighten = (p.straighten + adjust.straighten).coerceIn(-45f, 45f))
+        return adjust.crop?.let { straightened.withCrop(it) } ?: straightened
     }
 
     /**
@@ -133,7 +146,7 @@ object LookApplier {
             filmGrain = if (p.film != null) (p.filmGrain * (1f + adjust.grain / 50f)).coerceIn(0f, 200f) else p.filmGrain,
             rotation = Math.floorMod(p.rotation + adjust.rotation, 4),
         )
-        val warmed = Warmth.shift(developed, WARMTH_RANGE.pow(adjust.warmth / 100f))
+        val warmed = Warmth.shift(framed(developed, adjust), WARMTH_RANGE.pow(adjust.warmth / 100f))
         return if (adjust.tint == 0f) warmed else warmed.copy(tint = (warmed.tint + adjust.tint).coerceIn(-100f, 100f))
     }
 

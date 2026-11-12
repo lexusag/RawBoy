@@ -118,6 +118,21 @@ class LookApplierTest {
     }
 
     @Test
+    fun cropAndStraightenArePartOfTheAdjustments() {
+        val crop = app.rawboy.develop.CropRect(0.1f, 0.2f, 0.6f, 0.9f)
+        val adjust = Adjustments(straighten = 2.5f, crop = crop)
+        // On a look, and over RawBoy edits (where the crop replaces the edits' own and the angle adds to theirs).
+        val p = LookApplier.apply(DevelopParams(), Looks.NATURAL, 100f, adjust, hasFace = false)
+        assertEquals(crop, app.rawboy.develop.CropRect(p.cropLeft, p.cropTop, p.cropRight, p.cropBottom))
+        assertEquals(2.5f, p.straighten, 0f)
+        val e = LookApplier.applyEdits(DevelopParams(cropLeft = 0.3f, straighten = 1f), adjust)
+        assertEquals(0.1f, e.cropLeft, 0f)
+        assertEquals(3.5f, e.straighten, 1e-6f)
+        // Nothing set: the develop's own crop stays.
+        assertEquals(0.3f, LookApplier.applyEdits(DevelopParams(cropLeft = 0.3f), Adjustments.NONE).cropLeft, 0f)
+    }
+
+    @Test
     fun whiteBalanceAdjustSolvesForWarmthAndTint() {
         val base = DevelopParams(temperature = 5000f, tint = 0f)
         val unadjusted = LookApplier.develop(base, Looks.NATURAL, 100f, Adjustments.NONE, hasFace = false, preset = null, lensPreset = null)

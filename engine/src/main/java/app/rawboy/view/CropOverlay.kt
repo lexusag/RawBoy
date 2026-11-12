@@ -1,4 +1,4 @@
-package app.rawboy.ui
+package app.rawboy.view
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.detectDragGestures
