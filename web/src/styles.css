@@ -2191,6 +2191,12 @@ line.curve-grid,
   min-width: 0;
 }
 
+/* Healing brush: the pinned heading is a title beside Done. */
+.heal-title {
+  padding: 6px 0;
+  font-size: 13px;
+}
+
 /* Light leaks: the add buttons stay on one row beside Done, so the pinned heading stays short in the sidebar. */
 .geometry-head .leak-add {
   flex-wrap: nowrap;

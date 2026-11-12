@@ -4,6 +4,7 @@ import { WhitePicker, type WhitePick } from '../color/WhitePicker';
 import { BrushRaster, makeGuide, type BrushGuide } from '../develop/BrushRaster';
 import type { CropRect } from '../develop/CropMath';
 import { developParams, effectiveColorDenoise, type DevelopParams } from '../develop/DevelopParams';
+import { healKey, healStrokes } from '../develop/HealSpots';
 import { maxLayerRetouch, type MaskLayer } from '../develop/Masks';
 import { exportImage } from '../export/Exporter';
 import type { ExportSettings } from '../export/ExportSettings';
@@ -140,6 +141,8 @@ export class PhotoSession {
   private selectedFilm: string | null = null;
   /** (x, y, radius, score) per candidate, most obvious first; detected once per photo. */
   private blemishSpots: Float32Array | null = null;
+  /** What the full-resolution image is healed with now: the automatic spots' count and the healing brush's spots (healKey). */
+  private healedKey = '';
   /** Painted masks by layer id (see brushRaster). */
   private readonly brushes = new Map<string, BrushRaster>();
   private guide: BrushGuide | null = null;
@@ -224,6 +227,7 @@ export class PhotoSession {
     this.image = img;
     this.blemishRun++;
     this.blemishSpots = null;
+    this.healedKey = '';
     this.brushes.clear();
     this.guide = null;
     this.retouchRun++;
@@ -243,6 +247,7 @@ export class PhotoSession {
     });
     this.params = initialParams(defaults);
     this.ensureSkinMask();
+    if (this.params.healSpots.length) this.scheduleBlemishes(); // restored from a sidecar
     this.ensureBokehSource();
     this.ensureFlareSource();
     // Camera and exposure (ISO, shutter, aperture, focal length); the decoder's summary if none of it is known.
@@ -254,7 +259,7 @@ export class PhotoSession {
     const before = this.params;
     this.params = newParams;
     if (newParams.skinRetouch > 0 || newParams.blemishRemoval > 0 || retouchStrengthOf(newParams) > 0) this.ensureSkinMask();
-    if (newParams.blemishRemoval !== before.blemishRemoval) this.scheduleBlemishes();
+    if (newParams.blemishRemoval !== before.blemishRemoval || healKey(newParams.healSpots) !== healKey(before.healSpots)) this.scheduleBlemishes();
     if (retouchStrengthOf(newParams) !== retouchStrengthOf(before)) this.scheduleRetouch();
     this.ensureBokehSource();
     this.ensureFlareSource();
@@ -548,29 +553,35 @@ export class PhotoSession {
       const img = this.image;
       if (run !== this.blemishRun || !img) return;
       const level = this.params.blemishRemoval;
-      let wanted: Float32Array;
-      if (level <= 0) {
-        wanted = new Float32Array(0);
-      } else {
+      const brush = this.params.healSpots;
+      let wanted = new Float32Array(0);
+      if (level > 0) {
         const skin = this._state.skin;
-        if (skin.kind !== 'ready' || !skin.mask.hasSkin) return; // runs again when the mask is ready
-        if (!this.blemishSpots) {
-          this.update({ blemish: { ...this._state.blemish, working: true } });
-          const spots = await img.detectBlemishes(skin.mask);
-          if (this.image !== img) return;
-          this.blemishSpots = spots;
-          if (run !== this.blemishRun) return;
+        // The healing brush doesn't wait for the skin mask; the automatic spots follow when it's ready.
+        if (skin.kind !== 'ready' && !brush.length) return; // runs again when the mask is ready
+        if (skin.kind === 'ready' && skin.mask.hasSkin) {
+          if (!this.blemishSpots) {
+            this.update({ blemish: { ...this._state.blemish, working: true } });
+            const spots = await img.detectBlemishes(skin.mask);
+            if (this.image !== img) return;
+            this.blemishSpots = spots;
+            if (run !== this.blemishRun) return;
+          }
+          wanted = blemishesToHeal(this.blemishSpots, level);
+        } else if (!brush.length) {
+          return;
         }
-        wanted = blemishesToHeal(this.blemishSpots, level);
       }
       const count = wanted.length / 4;
-      if (count === this._state.blemish.healed) {
+      const key = `${count}|${healKey(brush)}`;
+      if (key === this.healedKey) {
         this.update({ blemish: { ...this._state.blemish, working: false } });
         return;
       }
       this.update({ blemish: { ...this._state.blemish, working: true } });
       // Not cancelled from here on: the full-resolution image and its previews must stay in step.
-      await img.healBlemishes(wanted);
+      await img.healBlemishes(wanted, healStrokes(brush, img.width, img.height));
+      this.healedKey = key;
       const preview = await img.createPreview(PREVIEW_MAX_DIMENSION);
       const base = await img.createPreview(BASE_MAX_DIMENSION);
       const bloom = await bloomSourcesOf(img);

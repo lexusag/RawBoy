@@ -1,4 +1,5 @@
 import type { DevelopParams } from './DevelopParams';
+import { parseHealSpots, type HealSpot } from './HealSpots';
 import { parseEffects, type LightEffect } from './LightEffects';
 import { parseLeaks, type LightLeak } from './LightLeaks';
 import { parseLayers, type MaskLayer } from './Masks';
@@ -26,6 +27,7 @@ const valuesOf = (params: DevelopParams): Record<string, unknown> => {
     })),
     leaks: params.leaks.map(({ id: _id, ...l }: LightLeak) => l),
     fx: params.fx.map(({ id: _id, ...l }: LightEffect) => l),
+    healSpots: params.healSpots.map(({ id: _id, ...l }: HealSpot) => l),
   };
 };
 
@@ -50,7 +52,7 @@ export function decodeEdits(text: string, defaults: DevelopParams): DevelopParam
   }
   if (!parsed || typeof parsed !== 'object' || (parsed as { format?: unknown }).format !== EDITS_FORMAT) return null;
   const raw = (parsed as { values?: unknown }).values;
-  const { masks, leaks, fx, flipHorizontal, flipVertical, ...values } = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const { masks, leaks, fx, healSpots, flipHorizontal, flipVertical, ...values } = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const p = applyPreset({ id: '', name: '', groups: [], values: values as never }, defaults);
   return {
     ...p,
@@ -60,5 +62,6 @@ export function decodeEdits(text: string, defaults: DevelopParams): DevelopParam
     masks: masks === undefined ? defaults.masks : parseLayers(masks, true),
     leaks: leaks === undefined ? defaults.leaks : parseLeaks(leaks),
     fx: fx === undefined ? defaults.fx : parseEffects(fx),
+    healSpots: healSpots === undefined ? defaults.healSpots : parseHealSpots(healSpots),
   };
 }

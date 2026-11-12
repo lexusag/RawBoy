@@ -11,7 +11,7 @@ export const PRO_HELP: HelpSection[] = [
       ...(driveConfigured() ? [{ how: 'Google Drive', text: 'Open › From Google Drive picks a photo in your Drive; Export › Save to Google Drive puts the export in a Drive folder you pick. RawBoy only sees the files you pick and the ones it saves.' }] : []),
       { how: 'Tabs', text: 'Light, Color, Detail, LUTs and Lens hold the sliders. Edits carry over to the next photo; crop, rotation, flips and scale don\'t.' },
       { how: 'Lens preset', text: 'Lens tab: name it (the lens by default) and Save lens preset keeps its settings for this photo\'s lens; the Auto tab corrects every photo taken with that lens with it, on top of its look. Manual lenses record no lens: the Auto tab lets you pick their presets by name.' },
-      { how: 'Top bar', text: 'Crop & rotate (turn, flip, straighten, Vertical and Horizontal perspective, scale, crop), Presets, Masks, Light leaks, Effects, Undo and Redo (Ctrl/⌘ Z, Shift Ctrl/⌘ Z), Reset all, Auto Dev (automatic light and colour, keeps the LUT) and Export.' },
+      { how: 'Top bar', text: 'Crop & rotate (turn, flip, straighten, Vertical and Horizontal perspective, scale, crop), Presets, Masks, Light leaks, Effects, Heal, Undo and Redo (Ctrl/⌘ Z, Shift Ctrl/⌘ Z), Reset all, Auto Dev (automatic light and colour, keeps the LUT) and Export.' },
       { how: 'Looks', text: 'Click the photo to see the area there through every LUT and film stock as vertical stripes; click a stripe to use that LUT (Film off) or stock (Film on). Drag the window to look elsewhere, also past the photo\'s edges (it shows a quick copy while moving and the exact pixels once it rests). Several pages when the looks do not fit (‹ ›, or the arrow keys), at most 8 looks a page. With a mouse, drag the grip in the window\'s bottom-right corner to make it larger or smaller (it is remembered; double-click the grip for the default size). Esc closes it.' },
       { how: 'Back to Auto', text: 'Returns a photo opened from the Auto tab (Edit in RawBoy) there with these edits; Send to Auto adds any other photo to Auto\'s batch with them.' },
     ],
@@ -59,6 +59,16 @@ export const PRO_HELP: HelpSection[] = [
       { how: 'Intensity, Cover', text: 'Cover at 100% hides everything in the leak\'s whitish middle (about half way out to its outline), however the light falls on it; make the leak a little larger than what it hides: a natural-looking way to cover part of a nude for social media. Cover 0 lets the photo show through the light; Intensity fades the whole leak.' },
       { how: 'Bend, Taper, Warp, Texture', text: 'Bend curves the leak into an arc, Taper narrows it towards one end, Warp makes its outline organic (it only grows). Texture burns the light in like film: white in the middle, yellow, orange and red towards the edge, mottled and streaked. New pattern picks another warp and texture.' },
       { how: 'Softness, Glow, Colour', text: 'Softness blurs the white core, Glow sets how far the coloured light reaches, Colour goes from magenta-red to amber. Leaks belong to the photo: presets don\'t keep them.' },
+    ],
+  },
+  {
+    title: 'Healing brush',
+    items: [
+      { how: 'Click or tap the photo', text: 'Heals a dust spot, blemish or small object away (up to 64 spots a photo). The circle can be dragged to place it exactly; the picture is redone in full resolution about a second after you stop, so export has it too. Zoom in (double-click, Z, wheel or pinch) for fine spots; Space pans, a second finger pinches.' },
+      { how: 'Size, Feather', text: 'Size is the circle\'s diameter as a share of the photo\'s long side (the circle should just cover the spot). Feather sets how softly the repair fades into the photo.' },
+      { how: 'Auto source, Choose source', text: 'The tone inside the circle is filled in from around it; the texture (grain, skin, leaves) comes from a nearby clean area picked automatically, or from a dashed circle you drag onto an area of the same kind (clone-stamp style). Moving a spot takes its source along. Spots belong to this photo and aren\'t kept in presets.' },
+      { keys: ['[', ']'], text: 'Smaller or larger circle' },
+      { keys: ['Delete'], text: 'Removes the selected spot' },
     ],
   },
   {

@@ -275,6 +275,141 @@ void healBlemish(DecodedImage& img, const Blemish& spot, std::vector<HealBackup>
     backups.push_back(std::move(backup));
 }
 
+void healStroke(DecodedImage& img, const HealStroke& spot, std::vector<HealBackup>& backups) {
+    const int W = img.width, H = img.height;
+    const float R = std::max(2.0f, spot.radius);
+    // Room for the smoothing around the disk; without a source the texture donor is searched 2.2R away.
+    const int B = static_cast<int>(std::ceil(R * (spot.hasSource ? 2.0f : 3.6f))) + 4;
+    const int cx = std::clamp(static_cast<int>(std::lround(spot.x)), 0, W - 1);
+    const int cy = std::clamp(static_cast<int>(std::lround(spot.y)), 0, H - 1);
+    const int n = 2 * B + 1;
+    const size_t cells = static_cast<size_t>(n) * n;
+
+    /** The patch of side n centred on (px, py), edges replicated where it leaves the photo. */
+    auto load = [&](int px, int py) {
+        std::vector<Plane> P(3, Plane(cells));
+        for (int y = 0; y < n; ++y) {
+            const int sy = std::clamp(py - B + y, 0, H - 1);
+            for (int x = 0; x < n; ++x) {
+                const int sx = std::clamp(px - B + x, 0, W - 1);
+                const size_t src = (static_cast<size_t>(sy) * W + sx) * 3;
+                for (int c = 0; c < 3; ++c) P[c][static_cast<size_t>(y) * n + x] = halfToFloat(img.rgb[src + c]);
+            }
+        }
+        return P;
+    };
+
+    // Backup of the part of the patch inside the photo.
+    const int bx0 = std::max(0, cx - B), by0 = std::max(0, cy - B);
+    const int bx1 = std::min(W, cx + B + 1), by1 = std::min(H, cy + B + 1);
+    HealBackup backup{bx0, by0, bx1 - bx0, by1 - by0, {}};
+    backup.pixels.resize(static_cast<size_t>(backup.width) * backup.height * 3);
+    for (int y = 0; y < backup.height; ++y)
+        std::copy_n(img.rgb.data() + (static_cast<size_t>(by0 + y) * W + bx0) * 3, static_cast<size_t>(backup.width) * 3,
+                    backup.pixels.data() + static_cast<size_t>(y) * backup.width * 3);
+
+    std::vector<Plane> P = load(cx, cy);
+    const float sigma = R * 0.25f;
+    auto dist = [&](int x, int y) { return std::hypot(float(x - B), float(y - B)); };
+    std::vector<Plane> smooth(3), low(3);
+    for (int c = 0; c < 3; ++c) smooth[c] = gaussian(P[c], n, n, sigma);
+
+    // Low frequency: membrane (Laplace) fill of the smoothed image over the disk, only within its bounding box.
+    const int lo = std::max(1, B - static_cast<int>(std::ceil(R)) - 1), hi = std::min(n - 2, B + static_cast<int>(std::ceil(R)) + 1);
+    for (int c = 0; c < 3; ++c) {
+        low[c] = smooth[c];
+        double ringSum = 0;
+        int ringCount = 0;
+        for (int y = lo; y <= hi; ++y)
+            for (int x = lo; x <= hi; ++x) {
+                const float d = dist(x, y);
+                if (d >= R && d < R + 2) { ringSum += smooth[c][static_cast<size_t>(y) * n + x]; ++ringCount; }
+            }
+        const float ring = ringCount ? float(ringSum / ringCount) : 0.0f;
+        for (int y = lo; y <= hi; ++y)
+            for (int x = lo; x <= hi; ++x)
+                if (dist(x, y) < R) low[c][static_cast<size_t>(y) * n + x] = ring;
+        const int iterations = static_cast<int>(R * 3) + 30;
+        Plane next = low[c];
+        for (int it = 0; it < iterations; ++it) {
+            for (int y = lo; y <= hi; ++y)
+                for (int x = lo; x <= hi; ++x) {
+                    if (dist(x, y) >= R) continue;
+                    const size_t i = static_cast<size_t>(y) * n + x;
+                    next[i] = 0.25f * (low[c][i - 1] + low[c][i + 1] + low[c][i - n] + low[c][i + n]);
+                }
+            std::swap(low[c], next);
+        }
+    }
+
+    // Texture: the donor disk's detail relative to its own smooth tone (a ratio, so it takes the target's tone).
+    std::vector<Plane> tex(3, Plane(cells, 1.0f));
+    if (spot.hasSource) {
+        const int dx = std::clamp(static_cast<int>(std::lround(spot.srcX)), 0, W - 1);
+        const int dy = std::clamp(static_cast<int>(std::lround(spot.srcY)), 0, H - 1);
+        const std::vector<Plane> D = load(dx, dy);
+        for (int c = 0; c < 3; ++c) {
+            const Plane ds = gaussian(D[c], n, n, sigma);
+            for (size_t i = 0; i < cells; ++i) tex[c][i] = std::clamp(D[c][i] / std::max(ds[i], 1e-5f), 0.6f, 1.6f);
+        }
+    } else {
+        int bestDx = 0, bestDy = 0;
+        float bestCost = 1e30f;
+        double lowMean = 0;
+        int lowCount = 0;
+        for (int y = lo; y <= hi; ++y)
+            for (int x = lo; x <= hi; ++x)
+                if (dist(x, y) < R) { lowMean += low[1][static_cast<size_t>(y) * n + x]; ++lowCount; }
+        lowMean /= std::max(lowCount, 1);
+        for (int a = 0; a < 8; ++a) {
+            const int dx = static_cast<int>(std::lround(std::cos(a * 0.785398) * 2.2 * R));
+            const int dy = static_cast<int>(std::lround(std::sin(a * 0.785398) * 2.2 * R));
+            double s = 0, s2 = 0, tone = 0;
+            int count = 0;
+            for (int y = lo; y <= hi && count >= 0; ++y)
+                for (int x = lo; x <= hi; ++x) {
+                    if (dist(x, y) >= R) continue;
+                    const int sx = x + dx, sy = y + dy;
+                    if (sx < 0 || sy < 0 || sx >= n || sy >= n) { count = -1; break; }
+                    const size_t j = static_cast<size_t>(sy) * n + sx;
+                    const float hf = std::log(std::max(P[1][j], 1e-5f)) - std::log(std::max(smooth[1][j], 1e-5f));
+                    s += hf; s2 += hf * hf; tone += smooth[1][j];
+                    ++count;
+                }
+            if (count <= 0) continue;
+            const double sd = std::sqrt(std::max(0.0, s2 / count - (s / count) * (s / count)));
+            const double cost = sd + std::fabs(std::log(tone / count + 1e-6) - std::log(lowMean + 1e-6));
+            if (cost < bestCost) { bestCost = static_cast<float>(cost); bestDx = dx; bestDy = dy; }
+        }
+        for (int c = 0; c < 3; ++c)
+            for (int y = lo; y <= hi; ++y)
+                for (int x = lo; x <= hi; ++x) {
+                    const int sx = std::clamp(x + bestDx, 0, n - 1), sy = std::clamp(y + bestDy, 0, n - 1);
+                    const size_t j = static_cast<size_t>(sy) * n + sx;
+                    tex[c][static_cast<size_t>(y) * n + x] = std::clamp(P[c][j] / std::max(smooth[c][j], 1e-5f), 0.6f, 1.6f);
+                }
+    }
+
+    // Composite: membrane tone x donor texture, feathered into the original.
+    const float fade = std::max(0.02f, std::clamp(spot.feather, 0.0f, 1.0f)) * R;
+    for (int y = lo; y <= hi; ++y)
+        for (int x = lo; x <= hi; ++x) {
+            const float d = dist(x, y);
+            if (d >= R) continue;
+            const int ix = cx - B + x, iy = cy - B + y;
+            if (ix < 0 || iy < 0 || ix >= W || iy >= H) continue;
+            float a = std::clamp((R - d) / fade, 0.0f, 1.0f);
+            a = a * a * (3 - 2 * a);
+            const size_t i = static_cast<size_t>(y) * n + x;
+            const size_t dst = (static_cast<size_t>(iy) * W + ix) * 3;
+            for (int c = 0; c < 3; ++c) {
+                const float healed = low[c][i] * tex[c][i];
+                img.rgb[dst + c] = floatToHalf(P[c][i] * (1 - a) + healed * a);
+            }
+        }
+    backups.push_back(std::move(backup));
+}
+
 void restoreBackups(DecodedImage& img, std::vector<HealBackup>& backups) {
     // Newest first, so overlapping patches unwind correctly.
     for (auto it = backups.rbegin(); it != backups.rend(); ++it) {
