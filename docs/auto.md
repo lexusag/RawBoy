@@ -149,7 +149,7 @@ the rest of the batch (its badge reads *Next*), then opens once it's ready, unle
 **Cropping a photo (web, Android):** the **Crop** button in the photo view's top bar (on phones and in the Android app, **Crop & rotate** in the ⋯ menu)
 shows the whole frame with a crop box; drag its corners, edges or inside. The panel has the shapes (Free, Original, 1:1,
 5:4, 4:3, 3:2, 16:9, 2:1, 2.39:1, with a Portrait / Landscape switch), **↺ Left** / **Right ↻**, a **Straighten** slider
-(±45°, crops automatically so no empty corners show) and **Reset** / **Done** (on the web Esc also closes it). The crop and the
+(±45°, crops automatically so no empty corners show) and **Reset** / **Done** (on the web Enter confirms and Esc closes it). The shape starts on **Original** (the photo's own proportions) and the last one chosen is kept for the session, not saved. The crop and the
 straighten angle are kept per photo, shown in the photo view, thumbnails, Export all and Export, and saved in the
 sidecar; they are in Undo / Redo, and Apply to all and Copy previous leave them alone. Flip and perspective stay in the
 RawBoy tab, which brings Auto's crop along with the rest of the develop.

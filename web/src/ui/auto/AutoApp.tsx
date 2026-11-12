@@ -703,6 +703,10 @@ function isoLabel(photo: AutoPhoto): string | null {
   return iso > 0 ? `ISO ${Math.round(iso)}` : null;
 }
 
+/** Crop & rotate starts on the photo's own shape; the last one chosen is kept until the page is closed. */
+const DEFAULT_CROP_ASPECT: CropAspect = 'original';
+let sessionCropAspect: CropAspect = DEFAULT_CROP_ASPECT;
+
 function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: string; onEditInRawBoy: (id: string) => void }) {
   const state = useSyncExternalStore(store.subscribe, () => store.state);
   const session = useSyncExternalStore(store.session.subscribe, () => store.session.state);
@@ -715,11 +719,16 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
   useEffect(() => { setPickingWhite(false); }, [id, tab]);
   // Crop & rotate: the photo shows whole with a crop frame on it; the shape lock is UI only (portrait null = follow the frame).
   const [cropMode, setCropMode] = useState(false);
-  const [cropAspect, setCropAspect] = useState<CropAspect>('free');
+  const [cropAspect, setCropAspectState] = useState<CropAspect>(sessionCropAspect);
   const [cropPortrait, setCropPortrait] = useState<boolean | null>(null);
+  // The shape is remembered for the session (not saved): the next photo opens with the last one used.
+  const setCropAspect = (aspect: CropAspect) => {
+    sessionCropAspect = aspect;
+    setCropAspectState(aspect);
+  };
   useEffect(() => {
     setCropMode(false);
-    setCropAspect('free');
+    setCropAspectState(sessionCropAspect);
     setCropPortrait(null);
   }, [id]);
   const scroll = useTabScroll(tab);
@@ -772,6 +781,11 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
   const startCrop = () => {
     if (session.zoomCenter) store.session.exitZoom(); // the crop tool works on the fit view
     setCropMode(true);
+    // A remembered shape other than Original / Free shapes the frame at once, so the chip and the frame agree.
+    if (frameLens && photo && !photo.adjust.crop && cropAspect !== 'free' && cropAspect !== 'original') {
+      const ratio = cropAspectRatio(cropAspect, frameLens.frameWidth, frameLens.frameHeight, cropPortraitNow);
+      store.setCrop(id, cropWithAspect({ left: 0, top: 0, right: 1, bottom: 1 }, ratio, frameLens.frameWidth, frameLens.frameHeight), true);
+    }
   };
   const quick = cached && cachedParams?.image === cached ? cachedParams : null;
   const previewSession = useMemo(
@@ -801,8 +815,12 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
         return;
       }
       if (cropMode) {
-        // Esc puts the crop tool down; the batch keys wait until it is.
-        if (e.key === 'Escape') setCropMode(false);
+        // Enter confirms the crop and Esc puts the tool down (the crop stays as drawn); the batch keys wait until it is.
+        // Enter on a focused button presses that button instead.
+        if (e.key === 'Escape' || (e.key === 'Enter' && !(e.target instanceof HTMLButtonElement) && !isTextEntry(e.target))) {
+          e.preventDefault();
+          setCropMode(false);
+        }
         return;
       }
       if (isTextEntry(e.target) || e.metaKey || e.ctrlKey || e.altKey || document.querySelector('.dialog')) return;
@@ -1090,7 +1108,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
               }}
               onStraighten={(v) => store.setStraighten(id, v)}
               onReset={() => {
-                setCropAspect('free');
+                setCropAspect(DEFAULT_CROP_ASPECT);
                 setCropPortrait(null);
                 store.setAdjust(id, { crop: null, straighten: 0 }, true);
               }}

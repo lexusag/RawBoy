@@ -128,6 +128,8 @@ final class AutoViewModel: ObservableObject {
     @Published var message: String?
     /** Crop & rotate is open on the selected photo: it shows whole with a crop frame. */
     @Published var cropping = false
+    /** Crop & rotate's shape: Original until changed, then the last one chosen, for this run of the app (not saved). */
+    @Published var cropAspect = CropAspect.original
     /** Photo shown in the detail view, or nil for the grid. */
     @Published private(set) var selected: String?
     /** A waiting photo tapped in the grid: analysed next, ahead of the rest, then opened (nil: none). */
