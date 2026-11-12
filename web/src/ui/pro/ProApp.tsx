@@ -357,6 +357,27 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [masksMode, store]);
 
+  // B opens (or closes) the Healing brush from any other tool; inside Masks it stays that tool's brush.
+  const healToggle = useRef({ healMode, usable: false });
+  healToggle.current = { healMode, usable: hasImage && !busy };
+  useEffect(() => {
+    if (masksMode) return;
+    const down = (e: KeyboardEvent) => {
+      if (shortcutKey(e) !== 'b' || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey || e.repeat) return;
+      const t = e.target;
+      if (t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && t.type !== 'range' && t.type !== 'checkbox')) return;
+      if (!isTabShown('pro') || !healToggle.current.usable) return;
+      e.preventDefault();
+      setHealMode(!healToggle.current.healMode);
+      setFxMode(false);
+      setGeometryMode(false);
+      setPresetsMode(false);
+      setLeaksMode(false);
+    };
+    window.addEventListener('keydown', down);
+    return () => window.removeEventListener('keydown', down);
+  }, [masksMode]);
+
   // Healing brush keys: [ ] size, Delete removes the selected spot, Space pans.
   const healKeys = useRef({ healId, healBrush });
   healKeys.current = { healId, healBrush };
@@ -522,7 +543,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
         <button
           type="button"
           className={`icon${healMode ? ' active' : ''}`}
-          title="Healing brush: remove dust, blemishes and small objects"
+          title="Healing brush (B): remove dust, blemishes and small objects"
           onClick={() => {
             setHealMode(!healMode);
             setFxMode(false);
