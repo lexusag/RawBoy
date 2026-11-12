@@ -50,7 +50,7 @@ export const AUTO_HELP: HelpSection[] = [
       { how: 'Click outside the photo', text: 'Change the frame around it: grey, white or black.' },
       { how: 'Press and hold', text: 'See the photo without the look.' },
       { how: 'Look, Adjust', text: 'Look, Strength, Brightness and Warmth; Adjust has the auto develop\'s own sliders, and Retouch: a natural portrait retouch like Reblum\'s Natural (40 is about Reblum Natural 40), which Apply to all copies to the batch.' },
-      { how: 'Crop (toolbar)', text: 'Crop & rotate: drag the corners, edges or inside of the frame (or outside it, to rotate), pick a shape (Original, 1:1, 4:3, 3:2, 16:9...), turn the photo in quarter steps and straighten the horizon. The crop is in the exports and in Undo; Apply to all leaves each photo\'s crop alone.' },
+      { keys: ['Shift+C'], how: 'Crop (toolbar)', text: 'Crop & rotate: drag the corners, edges or inside of the frame (or outside it, to rotate), pick a shape (Original, 1:1, 4:3, 3:2, 16:9...), turn the photo in quarter steps and straighten the horizon. The crop is in the exports and in Undo; Apply to all leaves each photo\'s crop alone.' },
       { how: 'Pick white balance', text: 'Adjust tab: click something neutral grey and Warmth and Tint make it grey.' },
       { how: 'Apply to all', text: 'Copies the look and its settings to every photo (brightness and denoise stay per photo).' },
       { keys: ['C'], how: 'Copy previous', text: 'Gives this photo the look, brightness and settings of the photo before it (denoise stays).' },

@@ -1,3 +1,7 @@
+**RawBoy Web (Auto and Pro): Shift+C opens Crop & rotate (2026-11-12)**
+
+- **Shift+C** opens Crop & rotate in Auto's photo view and in Pro (in Pro it also closes it, like the top bar button; in Auto it closes it too). It works by key position, so it also works on a Ukrainian layout, and is ignored while typing in a field. Listed in both help sheets. Typecheck only, not run in a browser.
+
 **RawBoy Web, Auto: drag to rotate in Crop & rotate (2026-11-12)**
 
 - In Crop & rotate, press outside the crop box and drag around it to rotate the photo, as in Lightroom: the angle follows the pointer around the frame's centre (clockwise = clockwise, ±45°, smooth across the 180° line) and the **Straighten** slider moves with it; the usual Undo step and auto crop apply. `CropOverlay` (shared with Pro) takes an optional `rotate` prop, which only Auto passes; Pro's presses outside the box still fall through to the preview. The cursor over the area outside the box is a grab hand. Touch rotate on Android and iOS isn't done. Typecheck only, not run in a browser.
