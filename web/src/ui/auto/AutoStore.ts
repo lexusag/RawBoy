@@ -23,7 +23,7 @@ import { analysisLanes, analysisWorker } from '../../engine/raw/RawWorker';
 import type { SkinMask } from '../../engine/retouch/SkinMask';
 import type { PreviewImage } from '../../engine/gl/PreviewImage';
 import { healStrokes } from '../../engine/develop/HealSpots';
-import { blemishesToHeal, brushLookup, editTexturesOf, PhotoSession, PREVIEW_MAX_DIMENSION } from '../../engine/session/PhotoSession';
+import { blemishesToHeal, brushLookup, editTexturesOf, PhotoSession, PREVIEW_MAX_DIMENSION, type Prepared } from '../../engine/session/PhotoSession';
 import { retouchMap } from '../../engine/retouch/PortraitRetouch';
 import { maxLayerRetouch, type MaskLayer } from '../../engine/develop/Masks';
 import { segmentSkin } from '../../engine/retouch/SkinSegmenter';
@@ -874,6 +874,7 @@ export class AutoStore {
     if (!ids.size || this._state.export) return;
     if (this._state.selected && ids.has(this._state.selected)) this.closeDetail();
     if (this._state.sessionReady && ids.has(this._state.sessionReady)) {
+      this.discardNext();
       this.session.close(); // frees the full-resolution image
       this.update({ sessionReady: null });
     }
@@ -1271,8 +1272,44 @@ export class AutoStore {
     });
   }
 
+  /**
+   * The photo after the open one, decoded at full resolution ahead of time (desktop-class devices only: it holds a
+   * second raw in the WASM heap). Used by [openDetail] when stepping to it, thrown away when anything else opens.
+   */
+  private next: { id: string; ready: Promise<Prepared | null> } | null = null;
+
+  /** Frees the pre-decoded next photo (once its decode finishes, if it's still running). */
+  private discardNext() {
+    const n = this.next;
+    this.next = null;
+    void n?.ready.then((prep) => prep?.img.close());
+  }
+
+  /** Starts decoding the photo after [id] once [id] is open and the browser is idle; the open photo's work goes first. */
+  private prefetchNext(id: string) {
+    if (analysisLanes() <= 1) return; // phones and small-memory devices: a second full raw doesn't fit
+    const list = this.shown.filter((q) => q.analysis);
+    const nextPhoto = list[list.findIndex((q) => q.id === id) + 1];
+    if (!nextPhoto || nextPhoto.id === id) return this.discardNext();
+    if (this.next?.id === nextPhoto.id) return;
+    this.discardNext();
+    const ready = (async (): Promise<Prepared | null> => {
+      await this.whenIdle();
+      // The user moved on while waiting: nothing to decode.
+      if (this._state.selected !== id || this.next?.id !== nextPhoto.id) return null;
+      return this.decodeLock.run(async () => {
+        if (this._state.selected !== id || this.next?.id !== nextPhoto.id || this._state.export) return null;
+        return this.session.prepare(nextPhoto.file).catch(() => null);
+      });
+    })();
+    this.next = { id: nextPhoto.id, ready };
+  }
+
   private preloadNeighbours(id: string | null) {
-    if (id === null) return this.neighbours.clear();
+    if (id === null) {
+      this.discardNext();
+      return this.neighbours.clear();
+    }
     this.neighbours.start(this.shown.filter((q) => q.analysis).map((q) => q.id), id);
   }
 
@@ -1283,7 +1320,9 @@ export class AutoStore {
     if (this._state.selected !== id) this.session.exitZoom();
     this.update({ selected: id });
     this.preloadNeighbours(id);
-    if (this._state.sessionReady === id) return;
+    if (this.next && this.next.id !== id && this._state.sessionReady !== id) this.discardNext();
+    if (this._state.sessionReady === id) return this.prefetchNext(id);
+
     this.released = false;
     this.update({ sessionReady: null });
     if (this._state.cachedPreview?.id !== id) {
@@ -1297,7 +1336,12 @@ export class AutoStore {
     void this.decodeLock
       .run(async () => {
         if (this._state.selected !== id) return false;
-        await this.session.open(p.file, (d) => (this.photo(id) && paramsOf(this.photo(id)!)) || d);
+        const initial = (d: DevelopParams) => (this.photo(id) && paramsOf(this.photo(id)!)) || d;
+        const ahead = this.next?.id === id ? this.next : null;
+        if (ahead) this.next = null;
+        const prep = ahead ? await ahead.ready : null;
+        if (prep) this.session.adopt(prep, initial);
+        else await this.session.open(p.file, initial);
         return true;
       })
       .then((opened) => {
@@ -1310,6 +1354,7 @@ export class AutoStore {
         this.session.selectLut(params?.lut ?? null, (m) => this.update({ message: m }));
         this.session.selectFilm(params?.film ?? null, (m) => this.update({ message: m }));
         this.update({ sessionReady: id, cachedPreview: null });
+        this.prefetchNext(id);
       })
       .catch((e: unknown) => {
         this.update({ message: e instanceof Error ? e.message : `Could not open ${p.name}`, selected: null });
@@ -1343,6 +1388,7 @@ export class AutoStore {
     const params = p && paramsOf(p);
     if (!p || !params || this._state.export) return null;
     this.session.exitZoom();
+    this.discardNext();
     this.session.close();
     this.released = true;
     this.update({ sessionReady: null });

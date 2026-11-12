@@ -79,6 +79,14 @@ export interface Opened {
   params: DevelopParams;
 }
 
+/** A decoded photo with its previews, not yet shown ([PhotoSession.prepare]). */
+export interface Prepared {
+  img: RawImage;
+  preview: PreviewImage;
+  base: PreviewImage;
+  bloom: BloomSources;
+}
+
 /** The file's own white balance as slider defaults; everything else untouched. */
 export function asShotDefaults(image: RawImage): DevelopParams {
   return asShotDefaultsOf(image.asShotWhite, image.displayReferred, image.clipLevel);
@@ -208,10 +216,18 @@ export class PhotoSession {
    * (e.g. carrying edits over from the previous photo). Throws on failure; the previous photo stays open then.
    */
   async open(file: Blob, initialParams: (defaults: DevelopParams) => DevelopParams): Promise<Opened> {
+    return this.adopt(await this.prepare(file), initialParams);
+  }
+
+  /**
+   * Decodes [file] and builds its previews without touching the open photo, so the next photo can be ready before it
+   * is shown (hand it to [adopt], or [RawImage.close] [Prepared.img] if it isn't needed). Holds a second full-resolution image.
+   */
+  async prepare(file: Blob): Promise<Prepared> {
     const img = await RawImage.open(file);
-    let loaded;
     try {
-      loaded = {
+      return {
+        img,
         preview: await img.createPreview(PREVIEW_MAX_DIMENSION),
         base: await img.createPreview(BASE_MAX_DIMENSION),
         bloom: await bloomSourcesOf(img),
@@ -220,6 +236,12 @@ export class PhotoSession {
       img.close();
       throw e;
     }
+  }
+
+  /** Swaps in a photo made by [prepare] (what [open] does after decoding). */
+  adopt(prepared: Prepared, initialParams: (defaults: DevelopParams) => DevelopParams): Opened {
+    const img = prepared.img;
+    const loaded = prepared;
     // A circular fisheye's picture circle, for the Fisheye sliders' Auto circle.
     img.lens.fisheyeCircle = detectFisheyeCircle(loaded.base);
     this.exitZoom();
