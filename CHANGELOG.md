@@ -1,3 +1,7 @@
+**RawBoy Web, Pro: healing brush size only affects new strokes (2026-11-12)**
+
+- Changing Size, Feather or `[` `]` after painting a stroke no longer resizes that stroke (the last stroke stays selected, so the sliders used to edit it). They set the brush for the next strokes only; strokes keep the size and feather they were painted with. The Auto/Choose source switch still applies to the selected stroke.
+
 **RawBoy Web, Pro: much smaller healing brush (2026-11-12)**
 
 - The Healing brush's smallest size is now 0.04% of the photo's long side (about 2-3 px on a 6000 px photo, was 12 px), for single hot pixels and hairline dust. The Size slider stays logarithmic over the whole range, so the small end keeps fine steps; `[` and `]` step it the same way. Saved sizes are unchanged (only the slider position moves).

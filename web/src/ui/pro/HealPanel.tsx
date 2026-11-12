@@ -8,7 +8,7 @@ export const healSize = {
   from: (v: number) => HEAL_RADIUS_MIN * (HEAL_RADIUS_MAX / HEAL_RADIUS_MIN) ** (v / 100),
 };
 
-/** What new spots start with (and what the sliders show while no spot is selected). */
+/** What new strokes start with: the Size and Feather sliders set this and never touch strokes already painted. */
 export interface HealBrush {
   radius: number;
   feather: number;
@@ -39,18 +39,17 @@ interface Props {
  */
 export function HealPanel({ spots, selectedId, brush, working, onSelect, onBrush, onUpdate, onRemove, onClear, onDone }: Props) {
   const spot = spots.find((s) => s.id === selectedId) ?? null;
-  const radius = spot?.radius ?? brush.radius;
-  const feather = spot?.feather ?? brush.feather;
+  // Size and Feather belong to the brush: they only apply to strokes painted afterwards, never to ones already there.
+  const radius = brush.radius;
+  const feather = brush.feather;
   const chooseSource = spot ? spot.source != null : brush.chooseSource;
   const full = spots.length >= MAX_HEAL_SPOTS;
 
   const setRadius = (r: number) => {
     onBrush({ ...brush, radius: r });
-    if (spot) onUpdate(spot.id, (s) => ({ ...s, radius: r }));
   };
   const setFeather = (f: number) => {
     onBrush({ ...brush, feather: f });
-    if (spot) onUpdate(spot.id, (s) => ({ ...s, feather: f }));
   };
   const setChoose = (choose: boolean) => {
     onBrush({ ...brush, chooseSource: choose });
