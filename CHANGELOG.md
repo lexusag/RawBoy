@@ -1,3 +1,7 @@
+**RawBoy Web, Auto: Export all shows elapsed time and time left (2026-11-12)**
+
+- The progress bar under the toolbar now has a line below it: "1:05 elapsed · about 2:30 left". The estimate comes from the time spent so far, counting the photo being exported by its progress, and appears once the first photo is done (or a tenth of the work). It is left out while Stop is pending. Single-photo exports from the photo view show the elapsed time too. Not run in a browser here (typecheck only).
+
 **RawBoy Camera (Android, iOS): Settings regrouped, one line per setting (2026-11-12)**
 
 - Settings is now in groups: **Photo** (JPEG quality, Look strength, Smaller photos, 50 MP, Keep raw, HDR gain map), **Capture** (Merge 8 frames, Shutter sound, Geotag, Track subject, QR codes), **Video** (Android), **Viewfinder** (Zoom buttons, Grid, Level, Histogram), **Opening the camera** and **Experimental**. The two sliders take one row each (double-tap resets), the long descriptions are cut to one line, the Merge choice is a segmented control, and the whole row toggles, not just the switch. The Experimental switch now reads "Self-timer and long exposure"; its Average / Lighten choice appears below it. No setting was added, removed or renamed in behaviour. Android: Brightness and Warmth now have a value area as wide as their label, so the slider's centre (the zero mark) sits at the middle of the screen. Not checked on a device yet.

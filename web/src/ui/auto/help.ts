@@ -16,7 +16,7 @@ export const AUTO_HELP: HelpSection[] = [
       { how: 'Sort', text: 'Photos are in the order they were shot (from each file\'s EXIF date; a photo without one by its file\'s date). Sort: File name orders them by name instead; remembered in this browser.' },
       { how: 'Filter', text: 'Filter the batch by camera, lens, ISO range (Min ISO and Max ISO) and shoot date, and with Unedited keep only photos As is (no look, preset, edits or adjustments). Navigation in the photo view and Export follow the filtered set; Clear filter shows all photos again.' },
       { how: 'Auto denoise all', text: 'Once a series is done: every photo gets the denoise and sharpening measured on it (its noise and ISO), in place of what a preset, RawBoy edits or its Denoise slider set. Looks, presets, lens corrections and the other settings stay; Undo in a photo takes it back for that photo.' },
-      { how: 'Export all', text: 'Saves every photo into a folder you pick (or one ZIP; on iPhone and iPad, to Photos through the share sheet). Stop ends it after the current photo; saved ones stay.' },
+      { how: 'Export all', text: 'Saves every photo into a folder you pick (or one ZIP; on iPhone and iPad, to Photos through the share sheet). While it runs, the elapsed time and an estimate of the time left show under the progress bar. Stop ends it after the current photo; saved ones stay.' },
       { how: 'Click a waiting photo', text: 'It\'s analysed next, ahead of the rest (marked Next), and opens when it\'s ready.' },
       { how: 'ISO', text: 'Each photo shows its ISO (from the file) beside its name in the grid and in the bottom-left corner of the photo view, to judge its noise without zooming in.' },
     ],

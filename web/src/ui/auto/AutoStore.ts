@@ -305,6 +305,8 @@ export interface BatchExport {
   total: number;
   failed: number;
   current: number;
+  /** When the batch started (`Date.now()`), for the elapsed time and the estimate of the time left. */
+  startedAt?: number;
   /** Stop was pressed: the photo being exported finishes, the rest are left as they are. */
   stopping?: boolean;
   /**
@@ -1323,7 +1325,7 @@ export class AutoStore {
     const params = p && paramsOf(p);
     if (!id || !p || !a || !params || this._state.export) return;
     this.clearExported(new Set([id]));
-    this.update({ export: { done: 0, total: 1, failed: 0, current: 0 } });
+    this.update({ export: { done: 0, total: 1, failed: 0, current: 0, startedAt: Date.now() } });
     this.updatePhoto(id, (q) => ({ ...q, status: 'exporting' }));
     let ok = false;
     try {
@@ -1354,7 +1356,7 @@ export class AutoStore {
     // The detail view's full-resolution image would double the memory each export needs.
     this.session.close();
     this.clearExported(ids);
-    this.update({ sessionReady: null, export: { done: 0, total: todo.length, failed: 0, current: 0, waiting: new Set(todo.map((p) => p.id)) } });
+    this.update({ sessionReady: null, export: { done: 0, total: todo.length, failed: 0, current: 0, startedAt: Date.now(), waiting: new Set(todo.map((p) => p.id)) } });
     let failed = 0;
     const settings = this._state.exportSettings;
     const template = this._state.nameTemplate;
