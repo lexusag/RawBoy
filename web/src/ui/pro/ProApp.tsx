@@ -208,10 +208,10 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   const zoomExtra = shapesMode ? maskMargin * dpr : 0;
   const hasImage = store.hasImage;
   const busy = store.busy;
-  // Shift+C toggles Crop & rotate, like its top bar button.
+  // C toggles Crop & rotate, like its top bar button.
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (e.code !== 'KeyC' || !e.shiftKey || e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+      if (e.code !== 'KeyC' || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
       const t = e.target;
       if (t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && t.type !== 'range' && t.type !== 'checkbox')) return;
       if (!isTabShown('pro') || !hasImage || busy) return;
