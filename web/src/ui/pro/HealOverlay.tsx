@@ -124,6 +124,8 @@ export function HealOverlay(props: Props) {
     const id = `heal-${uid}-${key}`;
     const w = 2 * rad;
     const dash = dashed ? '7 6' : undefined;
+    // The stroke being painted is shown as a red see-through band (one path, so overlaps don't darken) until the pointer lifts.
+    const live = painting.current?.id === key;
     return (
       <g key={key}>
         <defs>
@@ -132,7 +134,7 @@ export function HealOverlay(props: Props) {
             <path d={pathOf(pts)} fill="none" stroke="#000" strokeWidth={Math.max(0, w - 2)} strokeLinecap="round" strokeLinejoin="round" />
           </mask>
         </defs>
-        <path d={pathOf(pts)} fill="none" stroke={sel ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.07)'} strokeWidth={w} strokeLinecap="round" strokeLinejoin="round" />
+        <path d={pathOf(pts)} fill="none" stroke={live ? 'rgba(255,40,40,0.45)' : sel ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.07)'} strokeWidth={w} strokeLinecap="round" strokeLinejoin="round" />
         <g mask={`url(#${id})`}>
           <path d={pathOf(pts)} fill="none" stroke="rgba(0,0,0,0.55)" strokeWidth={w + 3.5} strokeLinecap="round" strokeLinejoin="round" strokeDasharray={dash} />
           <path d={pathOf(pts)} fill="none" stroke={sel ? '#fff' : 'rgba(255,255,255,0.75)'} strokeWidth={w + 1.5} strokeLinecap="round" strokeLinejoin="round" strokeDasharray={dash} />
