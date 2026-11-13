@@ -59,12 +59,13 @@ final class CameraViewModel: ObservableObject {
     /** RGB levels of the live develop (settings.showHistogram), nil when off or before the first one. */
     @Published private(set) var histogram: Histogram?
     /**
-     * How far the phone is turned clockwise from the nearest upright (portrait or landscape), -45...45 degrees, for the
+     * How far the phone is turned clockwise from upright portrait (continuous degrees, unwrapped across 360°), for the
      * level line; nil while the level is off or the phone lies flat.
      */
     @Published private(set) var tilt: Double?
     private let motion = CMMotionManager()
     private var tiltSmooth: (x: Double, y: Double)?
+    private var tiltLast: Double = 0
     /** The QR code in the viewfinder (settings.scanQr), or nil. */
     @Published private(set) var qrCode: QrPayload?
     private var qrTracker = QrTracker()
@@ -542,11 +543,14 @@ final class CameraViewModel: ObservableObject {
             let v = self.tiltSmooth.map { (x: $0.x + 0.2 * (sin(r) - $0.x), y: $0.y + 0.2 * (cos(r) - $0.y)) } ?? (x: sin(r), y: cos(r))
             self.tiltSmooth = v
             let degrees = atan2(v.x, v.y) * 180 / .pi
-            var off = (degrees + 405).truncatingRemainder(dividingBy: 90) - 45
+            let nearest = (degrees / 90).rounded() * 90
             // Deadband: a hair either side of straight reads as straight. Tenths of a degree: no redraw for noise.
-            if abs(off) < 0.4 { off = 0 }
-            off = (off * 10).rounded() / 10
-            if self.tilt != off { self.tilt = off }
+            let snapped = abs(degrees - nearest) < 0.4 ? nearest : degrees
+            var delta = (snapped - self.tiltLast).truncatingRemainder(dividingBy: 360)
+            if delta > 180 { delta -= 360 } else if delta <= -180 { delta += 360 }
+            let next = ((self.tiltLast + delta) * 10).rounded() / 10
+            self.tiltLast = next
+            if self.tilt != next { self.tilt = next }
         }
     }
 

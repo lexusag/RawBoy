@@ -547,7 +547,7 @@ fun CameraScreen(
                         }
                     }
                     if (settings.showGrid) GridOverlay(Modifier.matchParentSize())
-                    if (settings.showLevel) LevelOverlay(tilt, Modifier.matchParentSize())
+                    if (settings.showLevel) LevelOverlay(tilt, Modifier.matchParentSize().turned(turns))
                     // Shutter blink over the viewfinder.
                     if (blink.value > 0f) {
                         Box(
@@ -1916,19 +1916,21 @@ private fun GridOverlay(modifier: Modifier = Modifier) {
 }
 
 /**
- * A horizon line through the middle of the viewfinder, turned against the phone's tilt ([tilt] degrees clockwise from
- * upright, null when flat: nothing is drawn). Yellow within [LEVEL_TOLERANCE] degrees of straight, with a short fixed
- * mark each side to compare it with.
+ * A horizon line through the middle of the viewfinder, turned against the phone's tilt ([tilt] continuous degrees
+ * clockwise from upright portrait, null when flat: nothing is drawn). Yellow within [LEVEL_TOLERANCE] degrees of the
+ * nearest 90° upright, with a short fixed mark each side along that axis to compare it with.
  */
 @Composable
 private fun LevelOverlay(tilt: Float?, modifier: Modifier = Modifier) {
     // Keep the last angle while the phone is flat so the line fades out in place instead of snapping to 0.
-    var last by remember { mutableStateOf(0f) }
+    var last by remember { mutableStateOf(tilt) }
     if (tilt != null) last = tilt
+    val target = last ?: return
+    val nearest = (target / 90f).roundToInt() * 90f
     // Straight is entered at LEVEL_TOLERANCE and left at 1.5x that, so the colour doesn't flicker on the edge.
     var level by remember { mutableStateOf(false) }
-    if (tilt != null) level = kotlin.math.abs(tilt) <= if (level) LEVEL_TOLERANCE * 1.5f else LEVEL_TOLERANCE
-    val angle by animateFloatAsState(last, spring(dampingRatio = 1f, stiffness = Spring.StiffnessMedium), label = "levelAngle")
+    if (tilt != null) level = kotlin.math.abs(tilt - nearest) <= if (level) LEVEL_TOLERANCE * 1.5f else LEVEL_TOLERANCE
+    val angle by animateFloatAsState(target, spring(dampingRatio = 1f, stiffness = Spring.StiffnessMedium), label = "levelAngle")
     val colour by animateColorAsState(
         if (level) Color(0xFFFFD54F) else Color.White.copy(alpha = 0.7f), tween(150), label = "levelColour",
     )
@@ -1938,9 +1940,11 @@ private fun LevelOverlay(tilt: Float?, modifier: Modifier = Modifier) {
         val c = Offset(size.width / 2f, size.height / 2f)
         val half = minOf(size.width, size.height) * 0.22f
         val w = 2.dp.toPx()
-        // Fixed marks at the sides, the line itself turns.
-        drawLine(colour.copy(alpha = colour.alpha * 0.5f), Offset(c.x - half * 1.5f, c.y), Offset(c.x - half * 1.25f, c.y), w)
-        drawLine(colour.copy(alpha = colour.alpha * 0.5f), Offset(c.x + half * 1.25f, c.y), Offset(c.x + half * 1.5f, c.y), w)
+        // Fixed marks at the sides of the nearest upright axis, the line itself turns with the horizon.
+        rotate(-nearest, c) {
+            drawLine(colour.copy(alpha = colour.alpha * 0.5f), Offset(c.x - half * 1.5f, c.y), Offset(c.x - half * 1.25f, c.y), w)
+            drawLine(colour.copy(alpha = colour.alpha * 0.5f), Offset(c.x + half * 1.25f, c.y), Offset(c.x + half * 1.5f, c.y), w)
+        }
         rotate(-angle, c) { drawLine(colour, Offset(c.x - half, c.y), Offset(c.x + half, c.y), w) }
     }
 }

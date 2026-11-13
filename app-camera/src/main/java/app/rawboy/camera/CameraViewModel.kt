@@ -383,9 +383,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     var deviceDegrees = 0
 
     private val _tilt = MutableStateFlow<Float?>(null)
+    private val tiltFilter = TiltFilter()
 
     /**
-     * How far the phone is turned clockwise from the nearest upright (portrait or landscape), -45..45 degrees, for the
+     * How far the phone is turned clockwise from upright portrait (continuous degrees, unwrapped across 360°), for the
      * level line; null while the phone lies flat (no usable direction) or the level is off.
      */
     val tilt = _tilt.asStateFlow()
@@ -393,29 +394,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     /** From the activity's orientation sensor: [degrees] is the device's turn clockwise from portrait, 0..359, or null when flat. */
     fun onTilt(degrees: Int?) {
         if (degrees == null || !_settings.value.showLevel) {
-            tiltSin = Float.NaN
+            tiltFilter.reset()
             _tilt.value = null
             return
         }
-        // Low-pass the raw angle as a unit vector (so 359 -> 1 degrees doesn't average through 180): an exponential
-        // filter, alpha 0.3 per ~60 ms sensor step (about a 0.2 s time constant): steady, still follows a turn.
-        val r = Math.toRadians(degrees.toDouble())
-        if (tiltSin.isNaN()) {
-            tiltSin = sin(r).toFloat(); tiltCos = cos(r).toFloat()
-        } else {
-            tiltSin += TILT_ALPHA * (sin(r).toFloat() - tiltSin)
-            tiltCos += TILT_ALPHA * (cos(r).toFloat() - tiltCos)
-        }
-        val smooth = Math.toDegrees(atan2(tiltSin.toDouble(), tiltCos.toDouble())).toFloat()
-        var off = ((smooth + 405f) % 90f) - 45f
-        // Deadband: a hair either side of straight reads as straight, so the line doesn't tremble at zero.
-        if (abs(off) < TILT_DEADBAND) off = 0f
-        // Tenths of a degree: the screen isn't redrawn for sensor noise below that.
-        _tilt.value = (off * 10f).roundToInt() / 10f
+        _tilt.value = tiltFilter.update(degrees)
     }
-
-    private var tiltSin = Float.NaN
-    private var tiltCos = 0f
 
     /** The latest analysed viewfinder frame. */
     private class Live(val base: ViewfinderBase, val stats: SceneStats, val defaults: DevelopParams, val auto: DevelopParams, val scale: Float = 1f)
@@ -950,7 +934,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setShowZoomControl(on: Boolean) = change { it.copy(showZoomControl = on) }
     fun setShowGrid(on: Boolean) = change { it.copy(showGrid = on) }
     fun setShowLevel(on: Boolean) {
-        if (!on) _tilt.value = null
+        if (!on) {
+            tiltFilter.reset()
+            _tilt.value = null
+        }
         change { it.copy(showLevel = on) }
     }
     fun setBurstMode(mode: BurstMode) = change { it.copy(burstMode = mode) }
@@ -1277,8 +1264,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     companion object {
         private const val TAG = "RawBoyCamera"
-        private const val TILT_ALPHA = 0.3f
-        private const val TILT_DEADBAND = 0.4f
+        internal const val TILT_ALPHA = 0.3f
+        internal const val TILT_DEADBAND = 0.4f
         private const val DNG_MIME = "image/x-adobe-dng"
         private const val SAVE_DELAY_MS = 500L
 
@@ -1359,5 +1346,50 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             }
             return SkinMask(w, h, data, sigmaPx = 3f, hasSkin = diameter > 0f, faceDiameterPx = diameter)
         }
+    }
+}
+
+/**
+ * Smooths device tilt readings ([degrees] clockwise from upright portrait, 0..359, or null when flat) into a
+ * continuous angle in degrees (tenths of a degree, snapped within [deadband] of each 90° upright) without wrapping
+ * modulo 90° or jumping across 360°.
+ */
+internal class TiltFilter(
+    private val alpha: Float = CameraViewModel.TILT_ALPHA,
+    private val deadband: Float = CameraViewModel.TILT_DEADBAND,
+) {
+    private var sinSum = Float.NaN
+    private var cosSum = 0f
+    private var last = 0f
+
+    fun reset() {
+        sinSum = Float.NaN
+    }
+
+    fun update(degrees: Int?): Float? {
+        if (degrees == null) {
+            reset()
+            return null
+        }
+        // Low-pass the raw angle as a unit vector (so 359 -> 1 degrees doesn't average through 180): an exponential
+        // filter, alpha 0.3 per ~60 ms sensor step (about a 0.2 s time constant): steady, still follows a turn.
+        val r = Math.toRadians(degrees.toDouble())
+        if (sinSum.isNaN()) {
+            sinSum = sin(r).toFloat()
+            cosSum = cos(r).toFloat()
+        } else {
+            sinSum += alpha * (sin(r).toFloat() - sinSum)
+            cosSum += alpha * (cos(r).toFloat() - cosSum)
+        }
+        val smooth = Math.toDegrees(atan2(sinSum.toDouble(), cosSum.toDouble())).toFloat()
+        val nearest = (smooth / 90f).roundToInt() * 90f
+        // Deadband: a hair either side of straight reads as straight, so the line doesn't tremble at zero.
+        val snapped = if (abs(smooth - nearest) < deadband) nearest else smooth
+        var delta = (snapped - last) % 360f
+        if (delta > 180f) delta -= 360f else if (delta <= -180f) delta += 360f
+        // Tenths of a degree: the screen isn't redrawn for sensor noise below that.
+        val next = ((last + delta) * 10f).roundToInt() / 10f
+        last = next
+        return next
     }
 }
