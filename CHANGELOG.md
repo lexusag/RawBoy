@@ -1,3 +1,7 @@
+**RawBoy Camera (Android, iOS): the date stamp looks like a real film data back (2026-11-13)**
+
+- The **Date stamp** is now drawn the way a quartz date back exposes it: orange LED light shining through the film base. The digits are light added to the picture (bright on dark areas, fading into bright ones, where they only leave a faint yellow tint), soft-edged as the out-of-focus LEDs are, with a hot yellow core that falls off to red-orange at the fringe, a wider reddish halation glow, segments a little uneven in brightness (90-100%, fixed per segment) and grain in the light. Before, they were crisp flat digits painted over the picture. Same rendering on Android (`DateStamp.kt`) and iOS (`DateStamp` in `ExportSettings.swift`). Checked by unit tests (`DateStampTest`), a rendered preview from the Swift code, and the iOS `xcodebuild`; not yet run on a phone.
+
 **RawBoy Camera (Android, iOS): film-style date stamp option, off by default (2026-11-13)**
 
 - New Settings switch **Date stamp** in the Photo section, off by default. When turned on, each exported JPEG gets today's (the shot's) date imprinted in classic 35mm data-back format (`'YY MM DD`, e.g. `'26 11 13`) in the bottom-right corner, drawn in a slanted 7-segment clock font in yellowy-orange (`#FFB81A` with a warm orange halo). Checked by unit tests (`DateStampTest`, `CameraSettingsTest`), Android debug build, and iOS `xcodebuild` (`RawBoyCamera`); not yet run on a physical device.

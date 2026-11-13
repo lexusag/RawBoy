@@ -43,18 +43,26 @@ public struct ExportSettings: Equatable, Sendable {
 }
 
 /**
- * Imprints a classic 35mm film data-back date stamp (`'YY MM DD`) in the bottom-right corner of an exported image,
- * using a slanted 7-segment clock font in yellowy-orange with a subtle warm orange halo.
+ * Imprints a 35mm film data-back date (`'YY MM DD`) in the bottom-right corner of an exported image, rendered the way
+ * a quartz date back does it: orange LED segments shining through the film base onto the emulsion. So the digits are
+ * light added to the picture (they show on dark areas and fade into bright ones), soft-edged (the LEDs sit behind the
+ * base, out of focus), with a hot yellow core that falls off to red-orange at the fringes, a reddish halation glow,
+ * slightly uneven segment brightness and grain. Same output as engine's DateStamp.kt.
  */
 public enum DateStamp {
     /** Formats [date] in classic film date-back order: `'YY MM DD` (for example `'26 11 13`). */
     public static func format(_ date: Date = Date(), calendar: Calendar = .current) -> String {
         let comps = calendar.dateComponents([.year, .month, .day], from: date)
-        let year = (comps.year ?? 0) % 100
-        let month = comps.month ?? 1
-        let day = comps.day ?? 1
-        return String(format: "'%02d %02d %02d", year, month, day)
+        return String(format: "'%02d %02d %02d", (comps.year ?? 0) % 100, comps.month ?? 1, comps.day ?? 1)
     }
+
+    /** The LED's light per film layer, for the response `1 - exp(-gain * E * c)`: red saturates first (yellow core). */
+    private static let ledR: Float = 1.0
+    private static let ledG: Float = 0.42
+    private static let ledB: Float = 0.035
+    private static let gain: Float = 3
+    /** How much the stamp still darkens blue where the picture is already bright, so it reads (faintly) on a sky. */
+    private static let blueAbsorb: Float = 0.55
 
     /**
      * Burns [text] into the 16-bit interleaved RGB [band] covering rows `[bandY, bandY + bandRows)` of an image of
@@ -67,10 +75,9 @@ public enum DateStamp {
         let shortSide = Float(min(width, height))
         let charH = max(14 as Float, shortSide * 0.028)
         let charW = charH * 0.56
-        let thick = charH * 0.13
+        let thick = charH * 0.14
         let gap = charH * 0.24
         let tickAdv = charW * 0.35
-        let digitAdv = charW
 
         let chars = Array(text)
         let count = chars.count
@@ -78,11 +85,10 @@ public enum DateStamp {
         var cellW = [Float](repeating: 0, count: count)
         var masks = [Int](repeating: 0, count: count)
         var isTick = [Bool](repeating: false, count: count)
-
         var cursorX: Float = 0
         for i in 0..<count {
             let ch = chars[i]
-            let adv = ch == "'" ? tickAdv : digitAdv
+            let adv = ch == "'" ? tickAdv : charW
             cellX[i] = cursorX
             cellW[i] = adv
             isTick[i] = ch == "'"
@@ -91,37 +97,36 @@ public enum DateStamp {
         }
         let totalW = cursorX
 
-        let marginRight = shortSide * 0.055
-        let marginBottom = shortSide * 0.050
-        let x0 = Float(width) - marginRight - totalW
-        let y0 = Float(height) - marginBottom - charH
-        let glowRadius = thick * 1.6
+        let x0 = Float(width) - shortSide * 0.055 - totalW
+        let y0 = Float(height) - shortSide * 0.050 - charH
+        let reach = thick * 3  // the halation's extent
         let slant: Float = 0.14
         let slantMaxShift = charH * 0.5 * slant
 
-        let minY = max(0, Int(y0 - glowRadius))
-        let maxY = min(height - 1, Int(y0 + charH + glowRadius))
+        let minY = max(0, Int(y0 - reach))
+        let maxY = min(height - 1, Int(y0 + charH + reach))
         if bandY + bandRows <= minY || bandY > maxY { return }
-
-        let minX = max(0, Int(x0 - glowRadius - slantMaxShift))
-        let maxX = min(width - 1, Int(x0 + totalW + glowRadius + slantMaxShift))
+        let minX = max(0, Int(x0 - reach - slantMaxShift))
+        let maxX = min(width - 1, Int(x0 + totalW + reach + slantMaxShift))
         if minX > maxX { return }
+
+        let segGap = thick * 0.6
+        let halfH = charH * 0.5
+        let halfThick = thick * 0.5
+        // Out-of-focus LED: the segment edge is a soft ramp, not a pixel-sharp line.
+        let soft = max(thick * 0.6, 1)
+        let haloInv = 1 / (thick * 1.3)
+        let grainCell = max(1, thick * 0.22)
 
         let rowStart = max(bandY, minY)
         let rowEnd = min(bandY + bandRows - 1, maxY)
-        let segGap = thick * 0.58
-        let halfH = charH * 0.5
-        let halfThick = thick * 0.5
-        let aa: Float = 1.2
-        let glowInvSigma: Float = 1 / (thick * 0.65)
-        let cullDistance = halfThick + aa * 0.5 + glowRadius
-
         for py in rowStart...rowEnd {
             let vy = (Float(py) + 0.5) - y0
             let slantOffset = (halfH - vy) * slant
             let rowOffset = (py - bandY) * width
             for px in minX...maxX {
                 let ux = (Float(px) + 0.5) - x0 - slantOffset
+                var core: Float = 0
                 var minDist = Float.greatestFiniteMagnitude
                 for i in 0..<count {
                     let m = masks[i]
@@ -129,42 +134,52 @@ public enum DateStamp {
                     if m == 0 && !tick { continue }
                     let cx = cellX[i]
                     let cw = cellW[i]
-                    if ux < cx - cullDistance || ux > cx + cw + cullDistance { continue }
+                    if ux < cx - reach || ux > cx + cw + reach { continue }
                     let lx = ux - cx
-                    let d = tick
-                        ? distToSegment(lx, vy, cw * 0.5, charH * 0.04, cw * 0.5, charH * 0.38)
-                        : distToDigitSegments(lx, vy, cw, charH, halfH, segGap, m)
-                    if d < minDist { minDist = d }
+                    if tick {
+                        let d = distToSegment(lx, vy, cw * 0.5, charH * 0.04, cw * 0.5, charH * 0.38)
+                        if d < minDist { minDist = d }
+                        core = max(core, ledBrightness(i, 7) * edge(d, halfThick, soft))
+                        continue
+                    }
+                    for s in 0..<7 where (m >> s) & 1 != 0 {
+                        let d = distToDigitSegment(s, lx, vy, cw, charH, halfH, segGap)
+                        if d < minDist { minDist = d }
+                        core = max(core, ledBrightness(i, s) * edge(d, halfThick, soft))
+                    }
                 }
+                let excess = max(minDist - halfThick, 0) * haloInv
+                let halo = 0.35 * exp(-excess * excess)
+                if core <= 0.002 && halo < 0.004 { continue }
 
-                let tCore = min(max((halfThick + aa * 0.5 - minDist) / aa, 0), 1)
-                let core = tCore * tCore * (3 - 2 * tCore)
-                let excess = max(minDist - halfThick, 0)
-                let tGlow = excess * glowInvSigma
-                let glow = 0.38 * exp(-tGlow * tGlow)
-                if core <= 0 && glow < 0.005 { continue }
+                // Grain: the exposure varies a little from clump to clump, as it does in the emulsion.
+                let grain = 0.9 + 0.2 * hash(Int(Float(px) / grainCell), Int(Float(py) / grainCell))
+                let e = (core + halo * (1 - core)) * grain
+
+                let lr = 1 - exp(-gain * e * ledR)
+                let lg = 1 - exp(-gain * e * ledG)
+                let lb = 1 - exp(-gain * e * ledB)
 
                 let idx = (rowOffset + px) * 3
                 let r = Float(band[idx]) / 65535
                 let g = Float(band[idx + 1]) / 65535
                 let b = Float(band[idx + 2]) / 65535
-
-                // Warm orange halo screen-blended on red/green with subtle blue absorption so it reads on bright areas too.
-                let r1 = 1 - (1 - r) * (1 - glow)
-                let g1 = 1 - (1 - g) * (1 - glow * 0.45)
-                let b1 = b * (1 - glow * 0.40) + 0.02 * glow
-
-                let alpha = core * 0.94
-                let rOut = r1 + (1.00 - r1) * alpha
-                let gOut = g1 + (0.72 - g1) * alpha
-                let bOut = b1 + (0.10 - b1) * alpha
-
-                band[idx] = toU16(rOut)
-                band[idx + 1] = toU16(gOut)
-                band[idx + 2] = toU16(bOut)
+                // Light adds to the picture (screen); blue is held back where the LED is strong.
+                band[idx] = toU16(1 - (1 - r) * (1 - lr))
+                band[idx + 1] = toU16(1 - (1 - g) * (1 - lg))
+                band[idx + 2] = toU16((1 - (1 - b) * (1 - lb)) * (1 - blueAbsorb * lr))
             }
         }
     }
+
+    /** Soft segment edge: 1 inside, easing to 0 across [soft] pixels around the segment's outline. */
+    private static func edge(_ d: Float, _ halfThick: Float, _ soft: Float) -> Float {
+        let t = min(max((halfThick + soft * 0.5 - d) / soft, 0), 1)
+        return t * t * (3 - 2 * t)
+    }
+
+    /** Each LED segment is a little brighter or dimmer than the others (90-100%), the same for every photo. */
+    private static func ledBrightness(_ char: Int, _ segment: Int) -> Float { 0.9 + 0.1 * hash(char * 8 + segment, 911) }
 
     private static func segmentMask(_ ch: Character) -> Int {
         switch ch {
@@ -183,17 +198,18 @@ public enum DateStamp {
         }
     }
 
-    private static func distToDigitSegments(_ x: Float, _ y: Float, _ w: Float, _ h: Float,
-                                            _ halfH: Float, _ segGap: Float, _ mask: Int) -> Float {
-        var minD = Float.greatestFiniteMagnitude
-        if (mask & 0x01) != 0 { minD = min(minD, distToSegment(x, y, segGap, 0, w - segGap, 0)) }
-        if (mask & 0x02) != 0 { minD = min(minD, distToSegment(x, y, w, segGap, w, halfH - segGap * 0.5)) }
-        if (mask & 0x04) != 0 { minD = min(minD, distToSegment(x, y, w, halfH + segGap * 0.5, w, h - segGap)) }
-        if (mask & 0x08) != 0 { minD = min(minD, distToSegment(x, y, segGap, h, w - segGap, h)) }
-        if (mask & 0x10) != 0 { minD = min(minD, distToSegment(x, y, 0, halfH + segGap * 0.5, 0, h - segGap)) }
-        if (mask & 0x20) != 0 { minD = min(minD, distToSegment(x, y, 0, segGap, 0, halfH - segGap * 0.5)) }
-        if (mask & 0x40) != 0 { minD = min(minD, distToSegment(x, y, segGap, halfH, w - segGap, halfH)) }
-        return minD
+    /** Distance to segment [s] (a..g = 0..6) of a digit cell [w] x [h]. */
+    private static func distToDigitSegment(_ s: Int, _ x: Float, _ y: Float, _ w: Float, _ h: Float,
+                                           _ halfH: Float, _ segGap: Float) -> Float {
+        switch s {
+        case 0: distToSegment(x, y, segGap, 0, w - segGap, 0)
+        case 1: distToSegment(x, y, w, segGap, w, halfH - segGap * 0.5)
+        case 2: distToSegment(x, y, w, halfH + segGap * 0.5, w, h - segGap)
+        case 3: distToSegment(x, y, segGap, h, w - segGap, h)
+        case 4: distToSegment(x, y, 0, halfH + segGap * 0.5, 0, h - segGap)
+        case 5: distToSegment(x, y, 0, segGap, 0, halfH - segGap * 0.5)
+        default: distToSegment(x, y, segGap, halfH, w - segGap, halfH)
+        }
     }
 
     private static func distToSegment(_ px: Float, _ py: Float, _ ax: Float, _ ay: Float, _ bx: Float, _ by: Float) -> Float {
@@ -202,14 +218,18 @@ public enum DateStamp {
         let lenSq = abx * abx + aby * aby
         if lenSq <= 0 { return hypot(px - ax, py - ay) }
         let t = min(max(((px - ax) * abx + (py - ay) * aby) / lenSq, 0), 1)
-        let cx = ax + t * abx
-        let cy = ay + t * aby
-        return hypot(px - cx, py - cy)
+        return hypot(px - (ax + t * abx), py - (ay + t * aby))
     }
 
-    private static func toU16(_ v: Float) -> UInt16 {
-        UInt16(min(max((min(max(v, 0), 1) * 65535).rounded(), 0), 65535))
+    /** Deterministic 0..1 hash of an integer pair (matches the Kotlin version bit for bit). */
+    private static func hash(_ x: Int, _ y: Int) -> Float {
+        var h = UInt32(truncatingIfNeeded: x) &* 374761393 &+ UInt32(truncatingIfNeeded: y) &* 668265263
+        h = (h ^ (h >> 13)) &* 1274126177
+        h ^= h >> 16
+        return Float(h & 0xFFFFFF) / 16777215
     }
+
+    private static func toU16(_ v: Float) -> UInt16 { UInt16((min(max(v, 0), 1) * 65535).rounded()) }
 }
 
 public enum ExportSettingsStore {
