@@ -30,7 +30,7 @@ enum PhotoFrame: String, CaseIterable, Sendable {
     }
 }
 
-/** Individual shoot-info items that can be toggled on the PhotoFrame.pentax645 top rebate. */
+/** Individual shoot-info items that can be toggled and reordered on the PhotoFrame.pentax645 rebate. */
 enum Pentax645Field: String, CaseIterable, Sendable {
     case frameNumber = "frame"
     case mode = "mode"
@@ -40,7 +40,8 @@ enum Pentax645Field: String, CaseIterable, Sendable {
     case metering = "metering"
     case focalLength = "focal"
     case iso = "iso"
-    case dateTime = "datetime"
+    case date = "date"
+    case time = "time"
 
     var label: String {
         switch self {
@@ -52,20 +53,54 @@ enum Pentax645Field: String, CaseIterable, Sendable {
         case .metering: return "Metering"
         case .focalLength: return "Focal length"
         case .iso: return "ISO"
-        case .dateTime: return "Date & time"
+        case .date: return "Date"
+        case .time: return "Time"
         }
     }
 
     static let defaultSet: Set<Pentax645Field> = Set(allCases)
+    static let defaultOrder: [Pentax645Field] = Array(allCases)
 
     static func parseSet(_ raw: String?) -> Set<Pentax645Field> {
         guard let raw else { return defaultSet }
         if raw.trimmingCharacters(in: .whitespaces).isEmpty { return [] }
-        return Set(raw.split(separator: ",").compactMap { Pentax645Field(rawValue: $0.trimmingCharacters(in: .whitespaces)) })
+        var result: Set<Pentax645Field> = []
+        for token in raw.split(separator: ",") {
+            let k = token.trimmingCharacters(in: .whitespaces)
+            if k == "datetime" {
+                result.insert(.date)
+                result.insert(.time)
+            } else if let f = Pentax645Field(rawValue: k) {
+                result.insert(f)
+            }
+        }
+        return result
     }
 
     static func serialize(_ fields: Set<Pentax645Field>) -> String {
         allCases.filter { fields.contains($0) }.map(\.rawValue).joined(separator: ",")
+    }
+
+    static func parseOrder(_ raw: String?) -> [Pentax645Field] {
+        guard let raw, !raw.trimmingCharacters(in: .whitespaces).isEmpty else { return defaultOrder }
+        var result: [Pentax645Field] = []
+        for token in raw.split(separator: ",") {
+            let k = token.trimmingCharacters(in: .whitespaces)
+            if k == "datetime" {
+                if !result.contains(.date) { result.append(.date) }
+                if !result.contains(.time) { result.append(.time) }
+            } else if let f = Pentax645Field(rawValue: k), !result.contains(f) {
+                result.append(f)
+            }
+        }
+        for f in allCases where !result.contains(f) {
+            result.append(f)
+        }
+        return result
+    }
+
+    static func serializeOrder(_ order: [Pentax645Field]) -> String {
+        order.map(\.rawValue).joined(separator: ",")
     }
 }
 
@@ -113,10 +148,16 @@ struct CameraSettings: Equatable {
     var geotag = false
     /** Frame / stamp option: Off by default, or Date stamp / Pentax 645 (mutually exclusive). */
     var photoFrame = PhotoFrame.none
-    /** Date order for PhotoFrame.dateStamp and Pentax645Field.dateTime: DD MM 'YY by default. */
+    /** Date order for PhotoFrame.dateStamp and Pentax645Field.date: DD MM 'YY by default. */
     var dateStampFormat = DateStampFormat.dmy
+    /** Time format for Pentax645Field.time: 24h by default. */
+    var timeStampFormat = TimeStampFormat.h24
     /** Shoot-info items imprinted on the PhotoFrame.pentax645 rebate (all on by default). */
     var pentax645Fields: Set<Pentax645Field> = Pentax645Field.defaultSet
+    /** Display order of shoot-info items on the PhotoFrame.pentax645 rebate. */
+    var pentax645Order: [Pentax645Field] = Pentax645Field.defaultOrder
+    /** Rotate the PhotoFrame.pentax645 shoot-info LED text 180° upside down (like on real film). */
+    var pentax645Flip = false
     /** Play the camera shutter click on each shot. Where the law requires it, iOS plays it regardless. */
     var shutterSound = false
     /** Look for QR codes in the viewfinder and offer to open them, as the system camera does. */
@@ -229,7 +270,10 @@ enum CameraSettingsStore {
         s.photoFrame = d.string(forKey: "camera.photoFrame").flatMap(PhotoFrame.init(rawValue:))
             ?? ((d.object(forKey: "camera.dateStamp") as? Bool ?? false) ? .dateStamp : def.photoFrame)
         s.dateStampFormat = d.string(forKey: "camera.dateStampFormat").flatMap(DateStampFormat.init(rawValue:)) ?? def.dateStampFormat
+        s.timeStampFormat = d.string(forKey: "camera.timeStampFormat").flatMap(TimeStampFormat.init(rawValue:)) ?? def.timeStampFormat
         s.pentax645Fields = Pentax645Field.parseSet(d.string(forKey: "camera.pentax645Fields"))
+        s.pentax645Order = Pentax645Field.parseOrder(d.string(forKey: "camera.pentax645Order"))
+        s.pentax645Flip = d.object(forKey: "camera.pentax645Flip") as? Bool ?? def.pentax645Flip
         s.shutterSound = d.object(forKey: "camera.shutterSound") as? Bool ?? def.shutterSound
         s.scanQr = d.object(forKey: "camera.scanQr") as? Bool ?? def.scanQr
         s.trackFocus = d.object(forKey: "camera.trackFocus") as? Bool ?? def.trackFocus
@@ -279,7 +323,10 @@ enum CameraSettingsStore {
         d.set(s.photoFrame.rawValue, forKey: "camera.photoFrame")
         d.set(s.photoFrame == .dateStamp, forKey: "camera.dateStamp")
         d.set(s.dateStampFormat.rawValue, forKey: "camera.dateStampFormat")
+        d.set(s.timeStampFormat.rawValue, forKey: "camera.timeStampFormat")
         d.set(Pentax645Field.serialize(s.pentax645Fields), forKey: "camera.pentax645Fields")
+        d.set(Pentax645Field.serializeOrder(s.pentax645Order), forKey: "camera.pentax645Order")
+        d.set(s.pentax645Flip, forKey: "camera.pentax645Flip")
         d.set(s.shutterSound, forKey: "camera.shutterSound")
         d.set(s.scanQr, forKey: "camera.scanQr")
         d.set(s.trackFocus, forKey: "camera.trackFocus")

@@ -572,9 +572,16 @@ final class CameraViewModel: ObservableObject {
     }
     func setPhotoFrame(_ frame: PhotoFrame) { change { $0.photoFrame = frame } }
     func setDateStampFormat(_ format: DateStampFormat) { change { $0.dateStampFormat = format } }
+    func setTimeStampFormat(_ format: TimeStampFormat) { change { $0.timeStampFormat = format } }
+    func setPentax645Flip(_ on: Bool) { change { $0.pentax645Flip = on } }
     func setPentax645Field(_ field: Pentax645Field, _ on: Bool) {
         change {
             if on { $0.pentax645Fields.insert(field) } else { $0.pentax645Fields.remove(field) }
+        }
+    }
+    func movePentax645Fields(fromOffsets source: IndexSet, toOffset destination: Int) {
+        change {
+            $0.pentax645Order.move(fromOffsets: source, toOffset: destination)
         }
     }
     /** Turning it on asks for location access first (the system prompt the first time). */
@@ -817,7 +824,10 @@ final class CameraViewModel: ObservableObject {
                             spotMetered: fields.contains(.metering) ? shot.spotMetered : nil,
                             focalLengthMm: fields.contains(.focalLength) ? focalMm : nil,
                             iso: fields.contains(.iso) ? isoVal : nil,
-                            dateTime: fields.contains(.dateTime) ? Pentax645Frame.formatDateTime(shot.date, format: s.dateStampFormat) : nil)
+                            date: fields.contains(.date) ? Pentax645Frame.formatDate(shot.date, format: s.dateStampFormat) : nil,
+                            time: fields.contains(.time) ? Pentax645Frame.formatTime(shot.date, format: s.timeStampFormat) : nil,
+                            flipped: s.pentax645Flip,
+                            fieldOrder: s.pentax645Order.map(\.rawValue))
                     }() : nil
                     let export = ExportSettings(format: .jpeg, jpegQuality: s.jpegQuality, jpegEncoder: .jpegli,
                                                 maxLongSide: s.maxLongSide,

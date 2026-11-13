@@ -716,32 +716,53 @@ private struct FramesSettingsView: View {
             }
             if vm.settings.photoFrame == .dateStamp {
                 Section {
-                    Picker("Date format", selection: Binding(get: { vm.settings.dateStampFormat }, set: vm.setDateStampFormat)) {
-                        ForEach(DateStampFormat.allCases, id: \.self) { fmt in
+                    Picker("Date format", selection: Binding(
+                        get: { vm.settings.dateStampFormat == .mmmYy ? .dmy : vm.settings.dateStampFormat },
+                        set: vm.setDateStampFormat
+                    )) {
+                        ForEach([DateStampFormat.dmy, .ymd, .mdy], id: \.self) { fmt in
                             Text(fmt.label).tag(fmt)
                         }
                     }
                 }
             }
             if vm.settings.photoFrame == .pentax645 {
-                Section("Shoot info") {
-                    ForEach(Pentax645Field.allCases, id: \.self) { field in
-                        Toggle(field.label, isOn: Binding(
-                            get: { vm.settings.pentax645Fields.contains(field) },
-                            set: { vm.setPentax645Field(field, $0) }
-                        ))
-                        .tint(Color.cameraAccent)
+                Section {
+                    Toggle(isOn: Binding(get: { vm.settings.pentax645Flip }, set: vm.setPentax645Flip)) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Flip info upside down")
+                            Text("Rotate shoot info 180° like on real film").font(.caption).foregroundStyle(.secondary)
+                        }
                     }
-                }
-                if vm.settings.pentax645Fields.contains(.dateTime) {
-                    Section {
+                    .tint(Color.cameraAccent)
+                    if vm.settings.pentax645Fields.contains(.date) {
                         Picker("Date format", selection: Binding(get: { vm.settings.dateStampFormat }, set: vm.setDateStampFormat)) {
                             ForEach(DateStampFormat.allCases, id: \.self) { fmt in
                                 Text(fmt.label).tag(fmt)
                             }
                         }
                     }
+                    if vm.settings.pentax645Fields.contains(.time) {
+                        Picker("Time format", selection: Binding(get: { vm.settings.timeStampFormat }, set: vm.setTimeStampFormat)) {
+                            ForEach(TimeStampFormat.allCases, id: \.self) { fmt in
+                                Text(fmt.label).tag(fmt)
+                            }
+                        }
+                    }
                 }
+                Section("Shoot info (drag to reorder)") {
+                    ForEach(vm.settings.pentax645Order, id: \.self) { field in
+                        Toggle(field.label, isOn: Binding(
+                            get: { vm.settings.pentax645Fields.contains(field) },
+                            set: { vm.setPentax645Field(field, $0) }
+                        ))
+                        .tint(Color.cameraAccent)
+                    }
+                    .onMove { source, destination in
+                        vm.movePentax645Fields(fromOffsets: source, toOffset: destination)
+                    }
+                }
+                .environment(\.editMode, .constant(.active))
             }
         }
         .navigationTitle("Frames")
