@@ -20,10 +20,16 @@
 
 namespace rawboy::uhdr {
 
-/** log2 of the largest boost the gain map asks for (content boost 4x at display white). First guess: tune on a phone. */
-constexpr float kHeadroomEv = 2.0f;
+/**
+ * log2 of the largest boost the gain map asks for (8x). The first version asked for 2 EV from a knee of 0.75 up to 1.0,
+ * but the tone mapper's brightest output is only ~0.9 (a lamp measured 228/255), so a bare lamp got 0.56 EV and the
+ * rest of the picture nothing: the setting looked dead on a phone.
+ */
+constexpr float kHeadroomEv = 3.0f;
 /** Display-encoded luma where the boost starts. */
-constexpr float kKnee = 0.75f;
+constexpr float kKnee = 0.6f;
+/** Display-encoded luma that gets the full boost: about the brightest the tone mapper outputs. */
+constexpr float kWhite = 0.9f;
 /** The gain map is this many times smaller than the picture on each side. */
 constexpr int kScale = 4;
 /** hdrgm:OffsetSDR / OffsetHDR (libultrahdr's default). */
@@ -31,10 +37,10 @@ constexpr float kOffset = 1.0f / 64.0f;
 /** A gain map whose largest value is below this (of 255) asks for nothing visible: the file stays a plain JPEG. */
 constexpr int kMinPeak = 3;
 
-/** Share of kHeadroomEv asked for a pixel of display-encoded luma [y] (0..1): 0 below the knee, 1 at white. */
+/** Share of kHeadroomEv asked for a pixel of display-encoded luma [y] (0..1): 0 below the knee, 1 from kWhite up. */
 inline float gainWeight(float y) {
-    const float t = std::clamp((y - kKnee) / (1.0f - kKnee), 0.0f, 1.0f);
-    return t * t * (3.0f - 2.0f * t) * std::sqrt(t);  // smoothstep, eased in a little more
+    const float t = std::clamp((y - kKnee) / (kWhite - kKnee), 0.0f, 1.0f);
+    return t * t * (3.0f - 2.0f * t);  // smoothstep
 }
 
 /**

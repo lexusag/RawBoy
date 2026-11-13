@@ -1,3 +1,8 @@
+**RawBoy Camera (Android): the HDR gain map now lifts highlights visibly (2026-11-13)**
+
+- The setting wrote a valid Ultra HDR file, but the gain map asked for almost nothing: a photo of a dim desk with a bright lamp got a peak boost of 0.56 stops on about 2% of the picture (map peak 72/255 measured from a shot), because the boost started at 75% brightness and reached its 2 stops only at pure white, which the tone mapper's output (about 90%) never hits. Now the boost starts at 60%, reaches the full amount at 90%, and the full amount is 3 stops (`kKnee` 0.6, `kWhite` 0.9, `kHeadroomEv` 3), so the lamp and bright screens get about 3 stops and bright midtones about 1. The SDR picture is unchanged. HDR needs screen headroom to show: raise the brightness and view in an app that supports Ultra HDR (Google Photos, Chrome).
+- Host test `tools/ultrahdr/run.sh` updated for 3 stops. Not run on a device (no Android SDK in the sandbox).
+
 **RawBoy Web, Pro: the healing stroke shows in red while you paint (2026-11-12)**
 
 - While you drag a healing stroke it is drawn as a red semi-transparent band at the brush size (one shape, so overlaps don't get darker), then returns to the usual outline when you lift. Before, only a faint white tint showed, which was hard to see.

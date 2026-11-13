@@ -57,8 +57,8 @@ assert 'hdrgm:Version="1.0"' in xmp
 # --- the gain map file
 gsegs = segments(d, second)
 gxmp = next(s for m, s, _ in gsegs if s.startswith(b"http://ns.adobe.com/xap/1.0/")).decode()
-for k, v in [("GainMapMin", "0"), ("GainMapMax", "2"), ("Gamma", "1"), ("OffsetSDR", "0.015625"), ("OffsetHDR", "0.015625"),
-             ("HDRCapacityMax", "2"), ("BaseRenditionIsHDR", "False")]:
+for k, v in [("GainMapMin", "0"), ("GainMapMax", "3"), ("Gamma", "1"), ("OffsetSDR", "0.015625"), ("OffsetHDR", "0.015625"),
+             ("HDRCapacityMax", "3"), ("BaseRenditionIsHDR", "False")]:
     assert f'hdrgm:{k}="{v}"' in gxmp, k
 giso = next(s for m, s, _ in gsegs if s.startswith(b"urn:iso:std:iso:ts:21496:-1"))[28:]
 # the ISO reader of decoder_display.cpp (fromIso), step for step
@@ -71,7 +71,7 @@ assert u(2) == 0; u(2)
 flags = u(1); assert flags == 0x08 and not flags & 0x80 and not flags & 0x04
 den = u(4); base, alt = u(4), u(4)
 mn, mx, gamma, osdr, ohdr = s32() / den, s32() / den, u(4) / den, s32() / den, s32() / den
-assert (mn, mx, gamma, osdr, ohdr) == (0, 2, 1, 1 / 64, 1 / 64) and alt / den == 2 and p == len(giso), (mn, mx, gamma, osdr, ohdr, p, len(giso))
+assert (mn, mx, gamma, osdr, ohdr) == (0, 3, 1, 1 / 64, 1 / 64) and alt / den == 3 and p == len(giso), (mn, mx, gamma, osdr, ohdr, p, len(giso))
 
 # --- viewers that read MPF
 mpo = Image.open(io.BytesIO(d)); assert mpo.size == (W, H)
