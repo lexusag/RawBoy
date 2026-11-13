@@ -85,7 +85,7 @@ public enum DateStampStyle: String, CaseIterable, Sendable {
     }
 }
 
-/** Time format for the Pentax 645 shoot-info imprint (`24h` by default, or `12h (am/pm)`). */
+/** Time format for the Pentax 645 / Contax 645 shoot-info imprint (`24h` by default, or `12h (AM/PM)`). */
 public enum TimeStampFormat: String, CaseIterable, Sendable {
     case h24 = "H24"
     case h12 = "H12"
@@ -93,7 +93,7 @@ public enum TimeStampFormat: String, CaseIterable, Sendable {
     public var label: String {
         switch self {
         case .h24: "24h"
-        case .h12: "12h (am/pm)"
+        case .h12: "12h (AM/PM)"
         }
     }
 }
@@ -587,7 +587,7 @@ public enum Pentax645Frame {
             return String(format: "%02d:%02d", hour24, minute)
         case .h12:
             let hour12 = hour24 % 12 == 0 ? 12 : hour24 % 12
-            let amPm = hour24 < 12 ? "am" : "pm"
+            let amPm = hour24 < 12 ? "AM" : "PM"
             return String(format: "%d:%02d%@", hour12, minute, amPm)
         }
     }
@@ -1170,6 +1170,7 @@ public enum Pentax645Frame {
         case "7": return [0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b01000, 0b01000]
         case "8": return [0b01110, 0b10001, 0b10001, 0b01110, 0b10001, 0b10001, 0b01110]
         case "9": return [0b01110, 0b10001, 0b10001, 0b01111, 0b00001, 0b00010, 0b01100]
+        case "A": return [0b01110, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001]
         case "B": return [0b11110, 0b10001, 0b10001, 0b11110, 0b10001, 0b10001, 0b11110]
         case "E": return [0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b11111]
         case "F": return [0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b10000]
@@ -1178,6 +1179,7 @@ public enum Pentax645Frame {
         case "L": return [0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b11111]
         case "M": return [0b10001, 0b11011, 0b10101, 0b10101, 0b10001, 0b10001, 0b10001]
         case "O": return [0b01110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110]
+        case "P": return [0b11110, 0b10001, 0b10001, 0b11110, 0b10000, 0b10000, 0b10000]
         case "S": return [0b01111, 0b10000, 0b10000, 0b01110, 0b00001, 0b00001, 0b11110]
         case "V": return [0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01010, 0b00100]
         case "W": return [0b10001, 0b10001, 0b10001, 0b10101, 0b10101, 0b11011, 0b10001]

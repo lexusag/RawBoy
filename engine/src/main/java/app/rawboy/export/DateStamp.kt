@@ -28,11 +28,11 @@ enum class DateStampStyle(val label: String) {
 }
 
 /**
- * Time format for the Pentax 645 shoot-info imprint (`24h` by default, or `12h (am/pm)`).
+ * Time format for the Pentax 645 / Contax 645 shoot-info imprint (`24h` by default, or `12h (AM/PM)`).
  */
 enum class TimeStampFormat(val label: String) {
     H24("24h"),
-    H12("12h (am/pm)"),
+    H12("12h (AM/PM)"),
 }
 
 /**

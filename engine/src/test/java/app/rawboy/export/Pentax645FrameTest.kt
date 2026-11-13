@@ -40,10 +40,10 @@ class Pentax645FrameTest {
         assertEquals("nov 26", Pentax645Frame.formatDate(1794581160000L, DateStampFormat.MMM_YY, utc))
 
         assertEquals("14:46", Pentax645Frame.formatTime(1794581160000L, TimeStampFormat.H24, utc))
-        assertEquals("2:46pm", Pentax645Frame.formatTime(1794581160000L, TimeStampFormat.H12, utc))
+        assertEquals("2:46PM", Pentax645Frame.formatTime(1794581160000L, TimeStampFormat.H12, utc))
         // 2026-01-13 00:05:00 UTC = 1768262700000L
         assertEquals("jan 26", Pentax645Frame.formatDate(1768262700000L, DateStampFormat.MMM_YY, utc))
-        assertEquals("12:05am", Pentax645Frame.formatTime(1768262700000L, TimeStampFormat.H12, utc))
+        assertEquals("12:05AM", Pentax645Frame.formatTime(1768262700000L, TimeStampFormat.H12, utc))
 
         assertEquals("13.11.26 14:46", Pentax645Frame.formatDateTime(1794581160000L, DateStampFormat.DMY, utc))
         assertEquals("26.11.13 14:46", Pentax645Frame.formatDateTime(1794581160000L, DateStampFormat.YMD, utc))
@@ -56,7 +56,7 @@ class Pentax645FrameTest {
         val infoNormal = Pentax645Info(
             frameNumber = 1,
             date = "jan 26",
-            time = "4:46pm",
+            time = "4:46PM",
             flipped = false,
             fieldOrder = listOf("time", "date", "frame"),
         )
