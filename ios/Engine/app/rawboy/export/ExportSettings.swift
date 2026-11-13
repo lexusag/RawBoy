@@ -291,16 +291,19 @@ public enum DateStamp {
  * Matches `Pentax645Info` / `Pentax645Frame` in engine `Pentax645Frame.kt`.
  */
 public struct Pentax645Info: Equatable, Sendable {
-    public let frameNumber: Int
-    public let mode: String
-    public let exposureTime: Double
-    public let fNumber: Double
-    public let compensationEv: Float
-    public let spotMetered: Bool
-    public let focalLengthMm: Double
+    public let frameNumber: Int?
+    public let mode: String?
+    public let exposureTime: Double?
+    public let fNumber: Double?
+    public let compensationEv: Float?
+    public let spotMetered: Bool?
+    public let focalLengthMm: Double?
+    public let iso: Double?
+    public let dateTime: String?
 
-    public init(frameNumber: Int, mode: String, exposureTime: Double, fNumber: Double,
-                compensationEv: Float, spotMetered: Bool, focalLengthMm: Double) {
+    public init(frameNumber: Int? = nil, mode: String? = nil, exposureTime: Double? = nil, fNumber: Double? = nil,
+                compensationEv: Float? = nil, spotMetered: Bool? = nil, focalLengthMm: Double? = nil,
+                iso: Double? = nil, dateTime: String? = nil) {
         self.frameNumber = frameNumber
         self.mode = mode
         self.exposureTime = exposureTime
@@ -308,6 +311,8 @@ public struct Pentax645Info: Equatable, Sendable {
         self.compensationEv = compensationEv
         self.spotMetered = spotMetered
         self.focalLengthMm = focalLengthMm
+        self.iso = iso
+        self.dateTime = dateTime
     }
 }
 
@@ -354,6 +359,26 @@ public enum Pentax645Frame {
         return "\(Int(mm.rounded())) mm"
     }
 
+    public static func formatIso(_ iso: Double) -> String {
+        guard iso.isFinite && iso > 0 else { return "ISO---" }
+        return "ISO\(Int(iso.rounded()))"
+    }
+
+    public static func formatDateTime(_ date: Date = Date(), format: DateStampFormat = .dmy,
+                                      calendar: Calendar = .current) -> String {
+        let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+        let year = (comps.year ?? 0) % 100
+        let month = comps.month ?? 1
+        let day = comps.day ?? 1
+        let hour = comps.hour ?? 0
+        let minute = comps.minute ?? 0
+        switch format {
+        case .dmy: return String(format: "%02d.%02d.%02d %02d:%02d", day, month, year, hour, minute)
+        case .ymd: return String(format: "%02d.%02d.%02d %02d:%02d", year, month, day, hour, minute)
+        case .mdy: return String(format: "%02d.%02d.%02d %02d:%02d", month, day, year, hour, minute)
+        }
+    }
+
     private static func trimOneDecimal(_ v: Double) -> String {
         let s = String(format: "%.1f", v)
         return s.hasSuffix(".0") ? String(s.dropLast(2)) : s
@@ -374,6 +399,13 @@ public enum Pentax645Frame {
         case metering(spot: Bool)
     }
 
+    private static func charCols(_ ch: Character) -> Int {
+        switch ch {
+        case ".", ":", "'", " ": return 3
+        default: return 5
+        }
+    }
+
     public static func renderTopBarBand(band: UnsafeMutablePointer<UInt16>, layout: Layout,
                                           bandY: Int, bandRows: Int, info: Pentax645Info,
                                           monochrome: Bool = false) {
@@ -381,33 +413,35 @@ public enum Pentax645Frame {
         let topBar = layout.topBar
         let grainCell = max(1, Float(topBar) * 0.03)
 
-        let tokens: [Token] = [
-            .text(formatFrameNumber(info.frameNumber)),
-            .text(info.mode),
-            .text(formatShutter(info.exposureTime)),
-            .text(formatAperture(info.fNumber)),
-            .text(formatEv(info.compensationEv)),
-            .metering(spot: info.spotMetered),
-            .text(formatFocalLength(info.focalLengthMm)),
-        ]
+        var tokens: [Token] = []
+        if let f = info.frameNumber { tokens.append(.text(formatFrameNumber(f))) }
+        if let m = info.mode, !m.isEmpty { tokens.append(.text(m)) }
+        if let s = info.exposureTime { tokens.append(.text(formatShutter(s))) }
+        if let a = info.fNumber { tokens.append(.text(formatAperture(a))) }
+        if let ev = info.compensationEv { tokens.append(.text(formatEv(ev))) }
+        if let spot = info.spotMetered { tokens.append(.metering(spot: spot)) }
+        if let mm = info.focalLengthMm { tokens.append(.text(formatFocalLength(mm))) }
+        if let iso = info.iso { tokens.append(.text(formatIso(iso))) }
+        if let dt = info.dateTime, !dt.isEmpty { tokens.append(.text(dt)) }
 
         var charH = Float(topBar) * 0.56
         var dotPitch = charH / 7
-        var charGap = dotPitch * 1.3
-        var groupGap = dotPitch * 5.2
+        var charGap = dotPitch * 1.15
+        var groupGap = dotPitch * 3.8
 
         func tokenWidth(_ t: Token) -> Float {
             switch t {
             case .text(let s):
-                let n = s.count
-                return n == 0 ? 0 : Float(n) * (5 * dotPitch) + Float(n - 1) * charGap
+                if s.isEmpty { return 0 }
+                let cols = s.reduce(0) { $0 + charCols($1) }
+                return Float(cols) * dotPitch + Float(s.count - 1) * charGap
             case .metering:
                 return 7 * dotPitch
             }
         }
 
-        let rawTotalW = tokens.reduce(Float(0)) { $0 + tokenWidth($1) } + Float(tokens.count - 1) * groupGap
-        let maxContentW = Float(layout.photoWidth) * 0.90
+        let rawTotalW = tokens.isEmpty ? 0 : tokens.reduce(Float(0)) { $0 + tokenWidth($1) } + Float(tokens.count - 1) * groupGap
+        let maxContentW = Float(layout.photoWidth) * 0.94
         if rawTotalW > maxContentW && rawTotalW > 0 {
             let scale = maxContentW / rawTotalW
             charH *= scale
@@ -416,7 +450,7 @@ public enum Pentax645Frame {
             groupGap *= scale
         }
 
-        let totalW = tokens.reduce(Float(0)) { $0 + tokenWidth($1) } + Float(tokens.count - 1) * groupGap
+        let totalW = tokens.isEmpty ? 0 : tokens.reduce(Float(0)) { $0 + tokenWidth($1) } + Float(tokens.count - 1) * groupGap
         let x0 = (Float(outW) - totalW) * 0.5
         let y0 = (Float(topBar) - charH) * 0.5
 
@@ -428,9 +462,9 @@ public enum Pentax645Frame {
         var dotX: [Float] = []
         var dotY: [Float] = []
         var dotBright: [Float] = []
-        dotX.reserveCapacity(180)
-        dotY.reserveCapacity(180)
-        dotBright.reserveCapacity(180)
+        dotX.reserveCapacity(256)
+        dotY.reserveCapacity(256)
+        dotBright.reserveCapacity(256)
 
         var cursorX: Float = 0
         var glyphIdx = 0
@@ -439,17 +473,22 @@ public enum Pentax645Frame {
             case .text(let s):
                 let chars = Array(s)
                 for (ci, ch) in chars.enumerated() {
+                    let cols = charCols(ch)
                     if let rows = glyph5x7(ch) {
+                        let colShift = (5 - cols) / 2
                         for r in 0..<7 {
                             let bits = rows[r]
-                            for c in 0..<5 where ((bits >> (4 - c)) & 1) != 0 {
-                                dotX.append(cursorX + (Float(c) + 0.5) * dotPitch)
-                                dotY.append((Float(r) + 0.5) * dotPitch)
-                                dotBright.append(0.90 + 0.10 * hash(glyphIdx * 64 + r * 8 + c, 733))
+                            for c in 0..<cols {
+                                let srcCol = c + colShift
+                                if srcCol >= 0 && srcCol <= 4 && ((bits >> (4 - srcCol)) & 1) != 0 {
+                                    dotX.append(cursorX + (Float(c) + 0.5) * dotPitch)
+                                    dotY.append((Float(r) + 0.5) * dotPitch)
+                                    dotBright.append(0.90 + 0.10 * hash(glyphIdx * 64 + r * 8 + c, 733))
+                                }
                             }
                         }
                     }
-                    cursorX += 5 * dotPitch + (ci + 1 < chars.count ? charGap : 0)
+                    cursorX += Float(cols) * dotPitch + (ci + 1 < chars.count ? charGap : 0)
                     glyphIdx += 1
                 }
             case .metering(let spot):
@@ -476,7 +515,7 @@ public enum Pentax645Frame {
 
         for py in bandY..<(bandY + bandRows) {
             let rowOffset = (py - bandY) * outW
-            let inStampY = py >= minY && py <= maxY
+            let inStampY = dotCount > 0 && py >= minY && py <= maxY
             let vy = Float(py) + 0.5 - y0
             for px in 0..<outW {
                 let grain = 0.90 + 0.20 * hash(Int(Float(px) / grainCell), Int(Float(py) / grainCell))
@@ -631,12 +670,15 @@ public enum Pentax645Frame {
         case "L": return [0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b11111]
         case "M": return [0b10001, 0b11011, 0b10101, 0b10101, 0b10001, 0b10001, 0b10001]
         case "O": return [0b01110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110]
+        case "S": return [0b01111, 0b10000, 0b10000, 0b01110, 0b00001, 0b00001, 0b11110]
         case "V": return [0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01010, 0b00100]
         case "W": return [0b10001, 0b10001, 0b10001, 0b10101, 0b10101, 0b11011, 0b10001]
         case "m": return [0b00000, 0b00000, 0b11010, 0b10101, 0b10101, 0b10001, 0b10001]
         case "s": return [0b00000, 0b00000, 0b01111, 0b10000, 0b01110, 0b00001, 0b11110]
         case "/": return [0b00001, 0b00010, 0b00010, 0b00100, 0b01000, 0b01000, 0b10000]
-        case ".": return [0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b01100, 0b01100]
+        case ".": return [0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b00100, 0b00100]
+        case ":": return [0b00000, 0b00100, 0b00100, 0b00000, 0b00100, 0b00100, 0b00000]
+        case "'": return [0b00100, 0b00100, 0b01000, 0b00000, 0b00000, 0b00000, 0b00000]
         case "+": return [0b00000, 0b00100, 0b00100, 0b11111, 0b00100, 0b00100, 0b00000]
         case "-": return [0b00000, 0b00000, 0b00000, 0b11111, 0b00000, 0b00000, 0b00000]
         case "±": return [0b00100, 0b00100, 0b11111, 0b00100, 0b00100, 0b00000, 0b11111]

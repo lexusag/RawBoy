@@ -1,6 +1,8 @@
 package app.rawboy.export
 
+import java.util.Calendar
 import java.util.Locale
+import java.util.TimeZone
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.roundToInt
@@ -8,22 +10,25 @@ import kotlin.math.sqrt
 
 /**
  * Shoot metadata imprinted into the top film rebate of a Pentax 645-style frame.
- * Unknown exposure / focal-length values (NaN or <= 0) are shown as dashes (`---`, `F--`, `-- mm`).
+ * A `null` field means that item is disabled in Settings and omitted from the rebate;
+ * a non-null unknown exposure / focal-length / ISO value (`NaN` or `<= 0`) is shown as dashes (`---`, `F--`, `-- mm`, `ISO---`).
  */
 data class Pentax645Info(
-    val frameNumber: Int,
-    val mode: String,
-    val exposureTime: Double,
-    val fNumber: Double,
-    val compensationEv: Float,
-    val spotMetered: Boolean,
-    val focalLengthMm: Double,
+    val frameNumber: Int? = null,
+    val mode: String? = null,
+    val exposureTime: Double? = null,
+    val fNumber: Double? = null,
+    val compensationEv: Float? = null,
+    val spotMetered: Boolean? = null,
+    val focalLengthMm: Double? = null,
+    val iso: Double? = null,
+    val dateTime: String? = null,
 )
 
 /**
  * Renders a Pentax 645N-style black film rebate around the photo with 5x7 dot-matrix amber-orange LED shoot info
  * along the top edge: frame number, mode (FILM / LOOK / BW), shutter speed, aperture, exposure correction,
- * metering icon (large matrix icon for auto, small spot icon for tap), and lens focal length.
+ * metering icon (large matrix icon for auto, small spot icon for tap), lens focal length, ISO, and date-time.
  *
  * Uses the same film-emulsion LED response as [DateStamp] (`1 - exp(-GAIN * E * c)`), and matches the Swift
  * implementation in `ios/Engine/app/rawboy/export/ExportSettings.swift`.
@@ -72,6 +77,29 @@ object Pentax645Frame {
         return "${mm.roundToInt()} mm"
     }
 
+    fun formatIso(iso: Double): String {
+        if (!iso.isFinite() || iso <= 0.0) return "ISO---"
+        return "ISO${iso.roundToInt()}"
+    }
+
+    fun formatDateTime(
+        timeMs: Long,
+        format: DateStampFormat = DateStampFormat.DMY,
+        timeZone: TimeZone = TimeZone.getDefault(),
+    ): String {
+        val cal = Calendar.getInstance(timeZone).apply { timeInMillis = timeMs }
+        val year = cal.get(Calendar.YEAR) % 100
+        val month = cal.get(Calendar.MONTH) + 1
+        val day = cal.get(Calendar.DAY_OF_MONTH)
+        val hour = cal.get(Calendar.HOUR_OF_DAY)
+        val minute = cal.get(Calendar.MINUTE)
+        return when (format) {
+            DateStampFormat.DMY -> String.format(Locale.US, "%02d.%02d.%02d %02d:%02d", day, month, year, hour, minute)
+            DateStampFormat.YMD -> String.format(Locale.US, "%02d.%02d.%02d %02d:%02d", year, month, day, hour, minute)
+            DateStampFormat.MDY -> String.format(Locale.US, "%02d.%02d.%02d %02d:%02d", month, day, year, hour, minute)
+        }
+    }
+
     private fun trimOneDecimal(v: Double): String {
         val s = String.format(Locale.ROOT, "%.1f", v)
         return if (s.endsWith(".0")) s.dropLast(2) else s
@@ -94,6 +122,11 @@ object Pentax645Frame {
         class Metering(val spot: Boolean) : Token
     }
 
+    private fun charCols(ch: Char): Int = when (ch) {
+        '.', ':', '\'', ' ' -> 3
+        else -> 5
+    }
+
     /**
      * Renders rows `[bandY, bandY + bandRows)` of the top film rebate (`0 <= bandY < layout.topBar`) into [band].
      * When [monochrome] is true (B&W mode), both the rebate and LED dots are neutral greyscale.
@@ -108,34 +141,41 @@ object Pentax645Frame {
     ) {
         val outW = layout.outWidth
         val topBar = layout.topBar
-        val shortSide = minOf(layout.photoWidth, layout.photoHeight).toFloat()
         val grainCell = maxOf(1f, topBar * 0.03f)
 
-        val tokens = listOf(
-            Token.Text(formatFrameNumber(info.frameNumber)),
-            Token.Text(info.mode),
-            Token.Text(formatShutter(info.exposureTime)),
-            Token.Text(formatAperture(info.fNumber)),
-            Token.Text(formatEv(info.compensationEv)),
-            Token.Metering(info.spotMetered),
-            Token.Text(formatFocalLength(info.focalLengthMm)),
-        )
+        val tokens = buildList {
+            info.frameNumber?.let { add(Token.Text(formatFrameNumber(it))) }
+            info.mode?.takeIf { it.isNotEmpty() }?.let { add(Token.Text(it)) }
+            info.exposureTime?.let { add(Token.Text(formatShutter(it))) }
+            info.fNumber?.let { add(Token.Text(formatAperture(it))) }
+            info.compensationEv?.let { add(Token.Text(formatEv(it))) }
+            info.spotMetered?.let { add(Token.Metering(it)) }
+            info.focalLengthMm?.let { add(Token.Text(formatFocalLength(it))) }
+            info.iso?.let { add(Token.Text(formatIso(it))) }
+            info.dateTime?.takeIf { it.isNotEmpty() }?.let { add(Token.Text(it)) }
+        }
 
         var charH = topBar * 0.56f
         var dotPitch = charH / 7f
-        var charGap = dotPitch * 1.3f
-        var groupGap = dotPitch * 5.2f
+        var charGap = dotPitch * 1.15f
+        var groupGap = dotPitch * 3.8f
 
         fun tokenWidth(t: Token): Float = when (t) {
             is Token.Text -> {
-                val n = t.value.length
-                if (n == 0) 0f else n * (5f * dotPitch) + (n - 1) * charGap
+                val s = t.value
+                if (s.isEmpty()) 0f
+                else {
+                    var cols = 0
+                    for (ch in s) cols += charCols(ch)
+                    cols * dotPitch + (s.length - 1) * charGap
+                }
             }
             is Token.Metering -> 7f * dotPitch
         }
 
-        val rawTotalW = tokens.sumOf { tokenWidth(it).toDouble() }.toFloat() + (tokens.size - 1) * groupGap
-        val maxContentW = layout.photoWidth * 0.90f
+        val rawTotalW = if (tokens.isEmpty()) 0f
+        else tokens.sumOf { tokenWidth(it).toDouble() }.toFloat() + (tokens.size - 1) * groupGap
+        val maxContentW = layout.photoWidth * 0.94f
         if (rawTotalW > maxContentW && rawTotalW > 0f) {
             val scale = maxContentW / rawTotalW
             charH *= scale
@@ -144,7 +184,8 @@ object Pentax645Frame {
             groupGap *= scale
         }
 
-        val totalW = tokens.sumOf { tokenWidth(it).toDouble() }.toFloat() + (tokens.size - 1) * groupGap
+        val totalW = if (tokens.isEmpty()) 0f
+        else tokens.sumOf { tokenWidth(it).toDouble() }.toFloat() + (tokens.size - 1) * groupGap
         val x0 = (outW - totalW) * 0.5f
         val y0 = (topBar - charH) * 0.5f
 
@@ -153,22 +194,24 @@ object Pentax645Frame {
         val reach = dotPitch * 1.8f
         val haloInv = 1f / (dotPitch * 0.85f)
 
-        // Precompute dot positions (in local x, y relative to x0, y0) and their deterministic brightness.
-        val dotX = ArrayList<Float>(180)
-        val dotY = ArrayList<Float>(180)
-        val dotBright = ArrayList<Float>(180)
+        val dotX = ArrayList<Float>(256)
+        val dotY = ArrayList<Float>(256)
+        val dotBright = ArrayList<Float>(256)
         var cursorX = 0f
         var glyphIdx = 0
         for ((ti, token) in tokens.withIndex()) {
             when (token) {
                 is Token.Text -> {
                     for ((ci, ch) in token.value.withIndex()) {
+                        val cols = charCols(ch)
                         val rows = glyph5x7(ch)
                         if (rows != null) {
+                            val colShift = (5 - cols) / 2
                             for (r in 0 until 7) {
                                 val bits = rows[r]
-                                for (c in 0 until 5) {
-                                    if ((bits shr (4 - c)) and 1 != 0) {
+                                for (c in 0 until cols) {
+                                    val srcCol = c + colShift
+                                    if (srcCol in 0..4 && ((bits shr (4 - srcCol)) and 1 != 0)) {
                                         dotX += cursorX + (c + 0.5f) * dotPitch
                                         dotY += (r + 0.5f) * dotPitch
                                         dotBright += 0.90f + 0.10f * hash(glyphIdx * 64 + r * 8 + c, 733)
@@ -176,7 +219,7 @@ object Pentax645Frame {
                                 }
                             }
                         }
-                        cursorX += 5f * dotPitch + if (ci + 1 < token.value.length) charGap else 0f
+                        cursorX += cols * dotPitch + if (ci + 1 < token.value.length) charGap else 0f
                         glyphIdx++
                     }
                 }
@@ -207,7 +250,7 @@ object Pentax645Frame {
 
         for (py in bandY until bandY + bandRows) {
             val rowOffset = (py - bandY) * outW
-            val inStampY = py in minY..maxY
+            val inStampY = dotCount > 0 && py in minY..maxY
             val vy = (py + 0.5f) - y0
             for (px in 0 until outW) {
                 val grain = 0.90f + 0.20f * hash((px / grainCell).toInt(), (py / grainCell).toInt())
@@ -257,9 +300,6 @@ object Pentax645Frame {
                 band[idx + 2] = toU16Short(b)
             }
         }
-        // Keep shortSide referenced cleanly if needed for future scaling; currently topBar drives scale.
-        @Suppress("UNUSED_VARIABLE")
-        val unused = shortSide
     }
 
     /** Fills [band] (`outWidth * bandRows * 3`) with dark film-base black for the bottom border. */
@@ -368,12 +408,15 @@ object Pentax645Frame {
         'L' -> intArrayOf(0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b11111)
         'M' -> intArrayOf(0b10001, 0b11011, 0b10101, 0b10101, 0b10001, 0b10001, 0b10001)
         'O' -> intArrayOf(0b01110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110)
+        'S' -> intArrayOf(0b01111, 0b10000, 0b10000, 0b01110, 0b00001, 0b00001, 0b11110)
         'V' -> intArrayOf(0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01010, 0b00100)
         'W' -> intArrayOf(0b10001, 0b10001, 0b10001, 0b10101, 0b10101, 0b11011, 0b10001)
         'm' -> intArrayOf(0b00000, 0b00000, 0b11010, 0b10101, 0b10101, 0b10001, 0b10001)
         's' -> intArrayOf(0b00000, 0b00000, 0b01111, 0b10000, 0b01110, 0b00001, 0b11110)
         '/' -> intArrayOf(0b00001, 0b00010, 0b00010, 0b00100, 0b01000, 0b01000, 0b10000)
-        '.' -> intArrayOf(0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b01100, 0b01100)
+        '.' -> intArrayOf(0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b00100, 0b00100)
+        ':' -> intArrayOf(0b00000, 0b00100, 0b00100, 0b00000, 0b00100, 0b00100, 0b00000)
+        '\'' -> intArrayOf(0b00100, 0b00100, 0b01000, 0b00000, 0b00000, 0b00000, 0b00000)
         '+' -> intArrayOf(0b00000, 0b00100, 0b00100, 0b11111, 0b00100, 0b00100, 0b00000)
         '-' -> intArrayOf(0b00000, 0b00000, 0b00000, 0b11111, 0b00000, 0b00000, 0b00000)
         '±' -> intArrayOf(0b00100, 0b00100, 0b11111, 0b00100, 0b00100, 0b00000, 0b11111)

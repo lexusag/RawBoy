@@ -30,6 +30,45 @@ enum PhotoFrame: String, CaseIterable, Sendable {
     }
 }
 
+/** Individual shoot-info items that can be toggled on the PhotoFrame.pentax645 top rebate. */
+enum Pentax645Field: String, CaseIterable, Sendable {
+    case frameNumber = "frame"
+    case mode = "mode"
+    case shutter = "shutter"
+    case aperture = "aperture"
+    case exposureComp = "ev"
+    case metering = "metering"
+    case focalLength = "focal"
+    case iso = "iso"
+    case dateTime = "datetime"
+
+    var label: String {
+        switch self {
+        case .frameNumber: return "Frame #"
+        case .mode: return "Mode"
+        case .shutter: return "Shutter"
+        case .aperture: return "Aperture"
+        case .exposureComp: return "EV"
+        case .metering: return "Metering"
+        case .focalLength: return "Focal length"
+        case .iso: return "ISO"
+        case .dateTime: return "Date & time"
+        }
+    }
+
+    static let defaultSet: Set<Pentax645Field> = Set(allCases)
+
+    static func parseSet(_ raw: String?) -> Set<Pentax645Field> {
+        guard let raw else { return defaultSet }
+        if raw.trimmingCharacters(in: .whitespaces).isEmpty { return [] }
+        return Set(raw.split(separator: ",").compactMap { Pentax645Field(rawValue: $0.trimmingCharacters(in: .whitespaces)) })
+    }
+
+    static func serialize(_ fields: Set<Pentax645Field>) -> String {
+        allCases.filter { fields.contains($0) }.map(\.rawValue).joined(separator: ",")
+    }
+}
+
 /** The look controls, camera choice and output settings. */
 struct CameraSettings: Equatable {
     var lookId = Edition.defaultLookId
@@ -74,8 +113,10 @@ struct CameraSettings: Equatable {
     var geotag = false
     /** Frame / stamp option: Off by default, or Date stamp / Pentax 645 (mutually exclusive). */
     var photoFrame = PhotoFrame.none
-    /** Date order for PhotoFrame.dateStamp: DD MM 'YY by default. */
+    /** Date order for PhotoFrame.dateStamp and Pentax645Field.dateTime: DD MM 'YY by default. */
     var dateStampFormat = DateStampFormat.dmy
+    /** Shoot-info items imprinted on the PhotoFrame.pentax645 rebate (all on by default). */
+    var pentax645Fields: Set<Pentax645Field> = Pentax645Field.defaultSet
     /** Play the camera shutter click on each shot. Where the law requires it, iOS plays it regardless. */
     var shutterSound = false
     /** Look for QR codes in the viewfinder and offer to open them, as the system camera does. */
@@ -185,6 +226,7 @@ enum CameraSettingsStore {
         s.photoFrame = d.string(forKey: "camera.photoFrame").flatMap(PhotoFrame.init(rawValue:))
             ?? ((d.object(forKey: "camera.dateStamp") as? Bool ?? false) ? .dateStamp : def.photoFrame)
         s.dateStampFormat = d.string(forKey: "camera.dateStampFormat").flatMap(DateStampFormat.init(rawValue:)) ?? def.dateStampFormat
+        s.pentax645Fields = Pentax645Field.parseSet(d.string(forKey: "camera.pentax645Fields"))
         s.shutterSound = d.object(forKey: "camera.shutterSound") as? Bool ?? def.shutterSound
         s.scanQr = d.object(forKey: "camera.scanQr") as? Bool ?? def.scanQr
         s.trackFocus = d.object(forKey: "camera.trackFocus") as? Bool ?? def.trackFocus
@@ -234,6 +276,7 @@ enum CameraSettingsStore {
         d.set(s.photoFrame.rawValue, forKey: "camera.photoFrame")
         d.set(s.photoFrame == .dateStamp, forKey: "camera.dateStamp")
         d.set(s.dateStampFormat.rawValue, forKey: "camera.dateStampFormat")
+        d.set(Pentax645Field.serialize(s.pentax645Fields), forKey: "camera.pentax645Fields")
         d.set(s.shutterSound, forKey: "camera.shutterSound")
         d.set(s.scanQr, forKey: "camera.scanQr")
         d.set(s.trackFocus, forKey: "camera.trackFocus")

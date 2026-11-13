@@ -572,6 +572,11 @@ final class CameraViewModel: ObservableObject {
     }
     func setPhotoFrame(_ frame: PhotoFrame) { change { $0.photoFrame = frame } }
     func setDateStampFormat(_ format: DateStampFormat) { change { $0.dateStampFormat = format } }
+    func setPentax645Field(_ field: Pentax645Field, _ on: Bool) {
+        change {
+            if on { $0.pentax645Fields.insert(field) } else { $0.pentax645Fields.remove(field) }
+        }
+    }
     /** Turning it on asks for location access first (the system prompt the first time). */
     func setGeotag(_ on: Bool) {
         guard on else {
@@ -799,12 +804,20 @@ final class CameraViewModel: ObservableObject {
                                                    film: film)
                     let pentax645: Pentax645Info? = s.photoFrame == .pentax645 ? {
                         let info = img.shotInfo
+                        let fields = s.pentax645Fields
                         let focalMm = info.focalLength35mm.isFinite && info.focalLength35mm > 0 ? info.focalLength35mm : info.focalLength
+                        let isoVal = info.iso.isFinite && info.iso > 0 ? info.iso : Double(shot.iso)
                         let mode = s.monoMode ? "BW" : s.filmMode ? "FILM" : "LOOK"
-                        return Pentax645Info(frameNumber: shot.frameNumber, mode: mode,
-                                             exposureTime: info.exposureTime, fNumber: info.fNumber,
-                                             compensationEv: shot.compensationEv, spotMetered: shot.spotMetered,
-                                             focalLengthMm: focalMm)
+                        return Pentax645Info(
+                            frameNumber: fields.contains(.frameNumber) ? shot.frameNumber : nil,
+                            mode: fields.contains(.mode) ? mode : nil,
+                            exposureTime: fields.contains(.shutter) ? info.exposureTime : nil,
+                            fNumber: fields.contains(.aperture) ? info.fNumber : nil,
+                            compensationEv: fields.contains(.exposureComp) ? shot.compensationEv : nil,
+                            spotMetered: fields.contains(.metering) ? shot.spotMetered : nil,
+                            focalLengthMm: fields.contains(.focalLength) ? focalMm : nil,
+                            iso: fields.contains(.iso) ? isoVal : nil,
+                            dateTime: fields.contains(.dateTime) ? Pentax645Frame.formatDateTime(shot.date, format: s.dateStampFormat) : nil)
                     }() : nil
                     let export = ExportSettings(format: .jpeg, jpegQuality: s.jpegQuality, jpegEncoder: .jpegli,
                                                 maxLongSide: s.maxLongSide,

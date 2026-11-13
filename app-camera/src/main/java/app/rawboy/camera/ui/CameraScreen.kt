@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
 import app.rawboy.camera.capture.FlashMode
+import app.rawboy.camera.Pentax645Field
 import app.rawboy.camera.PhotoFrame
 import app.rawboy.export.DateStampFormat
 import app.rawboy.camera.qr.QrPayload
@@ -1421,12 +1422,26 @@ private fun FramesSettingsContent(settings: CameraSettings, vm: CameraViewModel,
             )
         }
         if (settings.photoFrame == PhotoFrame.PENTAX_645) {
-            Text(
-                "Adds a black film rebate with today's frame #, mode (FILM / LOOK / BW), shutter speed, aperture, EV, metering, and focal length.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 8.dp),
-            )
+            SettingsSection("Shoot info")
+            for (field in Pentax645Field.entries) {
+                SettingSwitch(
+                    title = field.label,
+                    subtitle = null,
+                    checked = field in settings.pentax645Fields,
+                    onChange = { vm.togglePentax645Field(field) },
+                )
+            }
+            if (Pentax645Field.DATE_TIME in settings.pentax645Fields) {
+                SettingChoice(
+                    title = "Date format",
+                    subtitle = null,
+                    options = listOf(DateStampFormat.DMY, DateStampFormat.YMD, DateStampFormat.MDY),
+                    selected = settings.dateStampFormat,
+                    label = { it.label },
+                    onSelect = vm::setDateStampFormat,
+                    indent = true,
+                )
+            }
         }
     }
 }

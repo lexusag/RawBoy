@@ -12,6 +12,9 @@ class CameraSettingsTest {
         val s = CameraSettings()
         assertEquals(PhotoFrame.NONE, s.photoFrame)
         assertEquals(DateStampFormat.DMY, s.dateStampFormat)
+        assertEquals(Pentax645Field.DEFAULT, s.pentax645Fields)
+        val subset = setOf(Pentax645Field.SHUTTER, Pentax645Field.ISO, Pentax645Field.DATE_TIME)
+        assertEquals(subset, Pentax645Field.parseSet(Pentax645Field.serialize(subset)))
     }
 
     @Test

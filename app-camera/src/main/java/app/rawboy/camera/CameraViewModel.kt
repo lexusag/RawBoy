@@ -955,6 +955,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setHdrGainMap(on: Boolean) = change { it.copy(hdrGainMap = on) }
     fun setPhotoFrame(frame: PhotoFrame) = change { it.copy(photoFrame = frame) }
     fun setDateStampFormat(format: DateStampFormat) = change { it.copy(dateStampFormat = format) }
+    fun togglePentax645Field(field: Pentax645Field) = change {
+        val next = if (field in it.pentax645Fields) it.pentax645Fields - field else it.pentax645Fields + field
+        it.copy(pentax645Fields = next)
+    }
     fun setTrackFocus(on: Boolean) {
         change { it.copy(trackFocus = on) }
         // A subject being followed: a plain lock where it is now.

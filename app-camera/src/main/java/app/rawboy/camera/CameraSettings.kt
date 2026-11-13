@@ -22,6 +22,33 @@ enum class PhotoFrame(val label: String) {
     PENTAX_645("Pentax 645"),
 }
 
+/** Individual shoot-info items that can be toggled on the [PhotoFrame.PENTAX_645] top rebate. */
+enum class Pentax645Field(val key: String, val label: String) {
+    FRAME_NUMBER("frame", "Frame #"),
+    MODE("mode", "Mode"),
+    SHUTTER("shutter", "Shutter"),
+    APERTURE("aperture", "Aperture"),
+    EXPOSURE_COMP("ev", "EV"),
+    METERING("metering", "Metering"),
+    FOCAL_LENGTH("focal", "Focal length"),
+    ISO("iso", "ISO"),
+    DATE_TIME("datetime", "Date & time");
+
+    companion object {
+        val DEFAULT: Set<Pentax645Field> = entries.toSet()
+
+        fun parseSet(raw: String?): Set<Pentax645Field> {
+            if (raw == null) return DEFAULT
+            if (raw.isBlank()) return emptySet()
+            val byKey = entries.associateBy { it.key }
+            return raw.split(',').mapNotNull { byKey[it.trim()] }.toSet()
+        }
+
+        fun serialize(fields: Set<Pentax645Field>): String =
+            entries.filter { it in fields }.joinToString(",") { it.key }
+    }
+}
+
 /** The look controls, camera choice and output settings. */
 data class CameraSettings(
     val lookId: String = Edition.defaultLookId,
@@ -86,8 +113,10 @@ data class CameraSettings(
     val hdrGainMap: Boolean = false,
     /** Frame / stamp option: Off by default, or Date stamp / Pentax 645 (mutually exclusive). */
     val photoFrame: PhotoFrame = PhotoFrame.NONE,
-    /** Date order for [PhotoFrame.DATE_STAMP]: `DD MM 'YY` by default. */
+    /** Date order for [PhotoFrame.DATE_STAMP] and [Pentax645Field.DATE_TIME]: `DD MM 'YY` by default. */
     val dateStampFormat: DateStampFormat = DateStampFormat.DMY,
+    /** Shoot-info items imprinted on the [PhotoFrame.PENTAX_645] rebate (all on by default). */
+    val pentax645Fields: Set<Pentax645Field> = Pentax645Field.DEFAULT,
     /** Look for QR codes in the viewfinder and offer to open them, as the phone's own camera does. */
     val scanQr: Boolean = true,
     /** After a tap, keep focus on what was tapped as it moves (CameraViewModel's tracker); off = the focus stays put. */
@@ -294,6 +323,7 @@ object CameraSettingsStore {
                 ?.let { runCatching { PhotoFrame.valueOf(it) }.getOrNull() }
                 ?: if (p.getBoolean("dateStamp", false)) PhotoFrame.DATE_STAMP else d.photoFrame,
             dateStampFormat = runCatching { DateStampFormat.valueOf(p.getString("dateStampFormat", null)!!) }.getOrDefault(d.dateStampFormat),
+            pentax645Fields = Pentax645Field.parseSet(p.getString("pentax645Fields", null)),
             scanQr = p.getBoolean("scanQr", d.scanQr),
             trackFocus = p.getBoolean("trackFocus", d.trackFocus),
             experimental = p.getBoolean("experimental", d.experimental),
@@ -363,6 +393,7 @@ object CameraSettingsStore {
             .putString("photoFrame", s.photoFrame.name)
             .putBoolean("dateStamp", s.photoFrame == PhotoFrame.DATE_STAMP)
             .putString("dateStampFormat", s.dateStampFormat.name)
+            .putString("pentax645Fields", Pentax645Field.serialize(s.pentax645Fields))
             .putBoolean("scanQr", s.scanQr)
             .putBoolean("trackFocus", s.trackFocus)
             .putBoolean("experimental", s.experimental)

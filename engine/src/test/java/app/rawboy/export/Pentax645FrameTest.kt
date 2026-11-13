@@ -1,5 +1,6 @@
 package app.rawboy.export
 
+import java.util.TimeZone
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -26,6 +27,15 @@ class Pentax645FrameTest {
 
         assertEquals("24 mm", Pentax645Frame.formatFocalLength(24.0))
         assertEquals("-- mm", Pentax645Frame.formatFocalLength(Double.NaN))
+
+        assertEquals("ISO400", Pentax645Frame.formatIso(400.0))
+        assertEquals("ISO---", Pentax645Frame.formatIso(0.0))
+
+        val utc = TimeZone.getTimeZone("UTC")
+        // 2026-11-13 14:46:00 UTC = 1794581160000L
+        assertEquals("13.11.26 14:46", Pentax645Frame.formatDateTime(1794581160000L, DateStampFormat.DMY, utc))
+        assertEquals("26.11.13 14:46", Pentax645Frame.formatDateTime(1794581160000L, DateStampFormat.YMD, utc))
+        assertEquals("11.13.26 14:46", Pentax645Frame.formatDateTime(1794581160000L, DateStampFormat.MDY, utc))
     }
 
     @Test
@@ -45,6 +55,8 @@ class Pentax645FrameTest {
             compensationEv = 0f,
             spotMetered = false,
             focalLengthMm = 24.0,
+            iso = 400.0,
+            dateTime = "13.11.26 14:46",
         )
         Pentax645Frame.renderTopBarBand(topBand, layout, 0, layout.topBar, info)
 

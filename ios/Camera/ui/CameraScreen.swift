@@ -723,6 +723,26 @@ private struct FramesSettingsView: View {
                     }
                 }
             }
+            if vm.settings.photoFrame == .pentax645 {
+                Section("Shoot info") {
+                    ForEach(Pentax645Field.allCases, id: \.self) { field in
+                        Toggle(field.label, isOn: Binding(
+                            get: { vm.settings.pentax645Fields.contains(field) },
+                            set: { vm.setPentax645Field(field, $0) }
+                        ))
+                        .tint(Color.cameraAccent)
+                    }
+                }
+                if vm.settings.pentax645Fields.contains(.dateTime) {
+                    Section {
+                        Picker("Date format", selection: Binding(get: { vm.settings.dateStampFormat }, set: vm.setDateStampFormat)) {
+                            ForEach(DateStampFormat.allCases, id: \.self) { fmt in
+                                Text(fmt.label).tag(fmt)
+                            }
+                        }
+                    }
+                }
+            }
         }
         .navigationTitle("Frames")
         .navigationBarTitleDisplayMode(.inline)
