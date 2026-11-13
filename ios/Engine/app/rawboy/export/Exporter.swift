@@ -169,8 +169,8 @@ public final class Exporter {
                 if framedBand.count < need { framedBand = [UInt16](repeating: 0, count: need) }
                 try framedBand.withUnsafeMutableBufferPointer { dst in
                     guard let base = dst.baseAddress else { return }
-                    Pentax645Frame.wrapPhotoBand(src: band, dst: base, layout: layout, photoY: y, bandRows: rows, monochrome: monochrome)
-                    try consume(layout.topBar + y, rows, base)
+                    Pentax645Frame.wrapPhotoBand(src: band, dst: base, layout: layout, photoY: y, bandRows: rows, monochrome: monochrome, info: pentax645)
+                    try consume(layout.topPad + y, rows, base)
                 }
             }
         } else if !dateStamp.isEmpty {
@@ -183,8 +183,8 @@ public final class Exporter {
         }
         if let layout, let pentax645 {
             var barY = 0
-            while barY < layout.topBar {
-                let rows = min(Self.tileHeight, layout.topBar - barY)
+            while barY < layout.topPad {
+                let rows = min(Self.tileHeight, layout.topPad - barY)
                 let need = layout.outWidth * rows * 3
                 if framedBand.count < need { framedBand = [UInt16](repeating: 0, count: need) }
                 try framedBand.withUnsafeMutableBufferPointer { dst in
@@ -198,14 +198,14 @@ public final class Exporter {
         let emitBottom: () throws -> Void = {
             if let layout {
                 var botY = 0
-                while botY < layout.border {
-                    let rows = min(Self.tileHeight, layout.border - botY)
+                while botY < layout.bottomPad {
+                    let rows = min(Self.tileHeight, layout.bottomPad - botY)
                     let need = layout.outWidth * rows * 3
                     if framedBand.count < need { framedBand = [UInt16](repeating: 0, count: need) }
                     try framedBand.withUnsafeMutableBufferPointer { dst in
                         guard let base = dst.baseAddress else { return }
-                        Pentax645Frame.renderBorderBand(band: base, layout: layout, bandY: layout.topBar + layout.photoHeight + botY, bandRows: rows, monochrome: monochrome)
-                        try consume(layout.topBar + layout.photoHeight + botY, rows, base)
+                        Pentax645Frame.renderBorderBand(band: base, layout: layout, bandY: layout.topPad + layout.photoHeight + botY, bandRows: rows, monochrome: monochrome, info: pentax645)
+                        try consume(layout.topPad + layout.photoHeight + botY, rows, base)
                     }
                     botY += rows
                 }

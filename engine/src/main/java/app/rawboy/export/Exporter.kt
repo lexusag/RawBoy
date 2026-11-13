@@ -215,8 +215,8 @@ class Exporter(private val context: Context) {
             layout != null -> { y, rows, band ->
                 val need = layout.outWidth * rows * 3
                 if (framedBand.size < need) framedBand = ShortArray(need)
-                Pentax645Frame.wrapPhotoBand(band, framedBand, layout, y, rows, monochrome)
-                consume(layout.topBar + y, rows, framedBand)
+                Pentax645Frame.wrapPhotoBand(band, framedBand, layout, y, rows, monochrome, pentax645)
+                consume(layout.topPad + y, rows, framedBand)
             }
             dateStamp.isNotEmpty() -> { y, rows, band ->
                 DateStamp.imprint(band, size.first, size.second, y, rows, dateStamp, monochrome)
@@ -226,8 +226,8 @@ class Exporter(private val context: Context) {
         }
         if (layout != null && pentax645 != null) {
             var barY = 0
-            while (barY < layout.topBar) {
-                val rows = minOf(TILE_HEIGHT, layout.topBar - barY)
+            while (barY < layout.topPad) {
+                val rows = minOf(TILE_HEIGHT, layout.topPad - barY)
                 val need = layout.outWidth * rows * 3
                 if (framedBand.size < need) framedBand = ShortArray(need)
                 Pentax645Frame.renderTopBarBand(framedBand, layout, barY, rows, pentax645, monochrome)
@@ -238,12 +238,12 @@ class Exporter(private val context: Context) {
         val emitBottom: () -> Unit = {
             if (layout != null) {
                 var botY = 0
-                while (botY < layout.border) {
-                    val rows = minOf(TILE_HEIGHT, layout.border - botY)
+                while (botY < layout.bottomPad) {
+                    val rows = minOf(TILE_HEIGHT, layout.bottomPad - botY)
                     val need = layout.outWidth * rows * 3
                     if (framedBand.size < need) framedBand = ShortArray(need)
-                    Pentax645Frame.renderBorderBand(framedBand, layout, layout.topBar + layout.photoHeight + botY, rows, monochrome)
-                    consume(layout.topBar + layout.photoHeight + botY, rows, framedBand)
+                    Pentax645Frame.renderBorderBand(framedBand, layout, layout.topPad + layout.photoHeight + botY, rows, monochrome, pentax645)
+                    consume(layout.topPad + layout.photoHeight + botY, rows, framedBand)
                     botY += rows
                 }
             }

@@ -8,8 +8,9 @@ import org.junit.Test
 class Pentax645FrameTest {
     @Test
     fun formattersMatchPentax645Conventions() {
-        assertEquals("3", Pentax645Frame.formatFrameNumber(3))
-        assertEquals("--", Pentax645Frame.formatFrameNumber(0))
+        assertEquals("#3", Pentax645Frame.formatFrameNumber(3))
+        assertEquals("#17", Pentax645Frame.formatFrameNumber(17))
+        assertEquals("#--", Pentax645Frame.formatFrameNumber(0))
 
         assertEquals("1/125", Pentax645Frame.formatShutter(1.0 / 125.0))
         assertEquals("2.5s", Pentax645Frame.formatShutter(2.5))
@@ -25,8 +26,8 @@ class Pentax645FrameTest {
         assertEquals("+0.7EV", Pentax645Frame.formatEv(0.7f))
         assertEquals("-1.3EV", Pentax645Frame.formatEv(-1.3f))
 
-        assertEquals("24 mm", Pentax645Frame.formatFocalLength(24.0))
-        assertEquals("-- mm", Pentax645Frame.formatFocalLength(Double.NaN))
+        assertEquals("24mm", Pentax645Frame.formatFocalLength(24.0))
+        assertEquals("--mm", Pentax645Frame.formatFocalLength(Double.NaN))
 
         assertEquals("ISO400", Pentax645Frame.formatIso(400.0))
         assertEquals("ISO---", Pentax645Frame.formatIso(0.0))
@@ -76,14 +77,49 @@ class Pentax645FrameTest {
         assertTrue("Expected glowing amber-orange LED dots in top rebate", brightOrangePixels > 50)
         assertTrue(maxR > maxG && maxG > maxB)
 
-        // Photo wrapping preserves inner pixels and fills side borders darkly.
+        // Photo wrapping preserves inner pixels, fills side borders darkly, and rounds top-left corner.
         val src = ShortArray(600 * 4 * 3) { 20000.toShort() }
         val dst = ShortArray(layout.outWidth * 4 * 3)
         Pentax645Frame.wrapPhotoBand(src, dst, layout, 0, 4)
         val leftBorderR = dst[0].toInt() and 0xFFFF
-        val photoStartR = dst[layout.border * 3].toInt() and 0xFFFF
+        val topLeftCornerR = dst[layout.leftPad * 3].toInt() and 0xFFFF
+        val photoInnerR = dst[(layout.leftPad + 100) * 3].toInt() and 0xFFFF
         assertTrue(leftBorderR < 2000)
-        assertEquals(20000, photoStartR)
+        assertTrue("Expected rounded corner at (0,0) of photo gate to be dark rebate", topLeftCornerR < 2000)
+        assertEquals(20000, photoInnerR)
+    }
+
+    @Test
+    fun landscapePhotoPlacesPentax645InfoOnShorterLeftSide() {
+        val layout = Pentax645Frame.layout(800, 600)
+        assertTrue(layout.infoOnLeft)
+        assertEquals(layout.infoBar, layout.leftPad)
+        assertEquals(layout.border, layout.topPad)
+        assertEquals(800 + layout.infoBar + layout.border, layout.outWidth)
+        assertEquals(600 + 2 * layout.border, layout.outHeight)
+
+        val info = Pentax645Info(
+            frameNumber = 7,
+            mode = "FILM",
+            exposureTime = 1.0 / 250.0,
+            fNumber = 2.8,
+            focalLengthMm = 24.0,
+        )
+        val src = ShortArray(800 * 600 * 3) { 20000.toShort() }
+        val dst = ShortArray(layout.outWidth * 600 * 3)
+        Pentax645Frame.wrapPhotoBand(src, dst, layout, 0, 600, monochrome = false, info = info)
+
+        var brightLeftRebatePixels = 0
+        for (y in 0 until 600) {
+            for (x in 0 until layout.leftPad) {
+                val idx = (y * layout.outWidth + x) * 3
+                val r = dst[idx].toInt() and 0xFFFF
+                val g = dst[idx + 1].toInt() and 0xFFFF
+                val b = dst[idx + 2].toInt() and 0xFFFF
+                if (r > 30000 && r > g && g > b) brightLeftRebatePixels++
+            }
+        }
+        assertTrue("Expected glowing LED dots in left shorter-side rebate for landscape photo", brightLeftRebatePixels > 50)
     }
 
     @Test

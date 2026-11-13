@@ -813,7 +813,7 @@ final class CameraViewModel: ObservableObject {
                             mode: fields.contains(.mode) ? mode : nil,
                             exposureTime: fields.contains(.shutter) ? info.exposureTime : nil,
                             fNumber: fields.contains(.aperture) ? info.fNumber : nil,
-                            compensationEv: fields.contains(.exposureComp) ? shot.compensationEv : nil,
+                            compensationEv: fields.contains(.exposureComp) ? s.exposureCompensationEv : nil,
                             spotMetered: fields.contains(.metering) ? shot.spotMetered : nil,
                             focalLengthMm: fields.contains(.focalLength) ? focalMm : nil,
                             iso: fields.contains(.iso) ? isoVal : nil,

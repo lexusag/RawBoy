@@ -321,20 +321,26 @@ public enum Pentax645Frame {
         public let photoWidth: Int
         public let photoHeight: Int
         public let border: Int
-        public let topBar: Int
-        public var outWidth: Int { photoWidth + 2 * border }
-        public var outHeight: Int { photoHeight + topBar + border }
+        public let infoBar: Int
+        public var infoOnLeft: Bool { photoWidth > photoHeight }
+        public var topPad: Int { infoOnLeft ? border : infoBar }
+        public var bottomPad: Int { border }
+        public var leftPad: Int { infoOnLeft ? infoBar : border }
+        public var rightPad: Int { border }
+        public var outWidth: Int { photoWidth + leftPad + rightPad }
+        public var outHeight: Int { photoHeight + topPad + bottomPad }
+        public var topBar: Int { infoBar }
     }
 
     public static func layout(photoWidth: Int, photoHeight: Int) -> Layout {
         let shortSide = Float(min(photoWidth, photoHeight))
         let border = max(3, Int((shortSide * 0.005).rounded()))
-        let topBar = max(28, Int((shortSide * 0.036).rounded()))
-        return Layout(photoWidth: photoWidth, photoHeight: photoHeight, border: border, topBar: topBar)
+        let infoBar = max(28, Int((shortSide * 0.036).rounded()))
+        return Layout(photoWidth: photoWidth, photoHeight: photoHeight, border: border, infoBar: infoBar)
     }
 
     public static func formatFrameNumber(_ frameNumber: Int) -> String {
-        frameNumber > 0 ? String(frameNumber) : "--"
+        frameNumber > 0 ? "#\(frameNumber)" : "#--"
     }
 
     public static func formatShutter(_ t: Double) -> String {
@@ -355,8 +361,8 @@ public enum Pentax645Frame {
     }
 
     public static func formatFocalLength(_ mm: Double) -> String {
-        guard mm.isFinite && mm > 0 else { return "-- mm" }
-        return "\(Int(mm.rounded())) mm"
+        guard mm.isFinite && mm > 0 else { return "--mm" }
+        return "\(Int(mm.rounded()))mm"
     }
 
     public static func formatIso(_ iso: Double) -> String {
@@ -406,12 +412,24 @@ public enum Pentax645Frame {
         }
     }
 
-    public static func renderTopBarBand(band: UnsafeMutablePointer<UInt16>, layout: Layout,
-                                          bandY: Int, bandRows: Int, info: Pentax645Info,
-                                          monochrome: Bool = false) {
-        let outW = layout.outWidth
-        let topBar = layout.topBar
-        let grainCell = max(1, Float(topBar) * 0.03)
+    private struct StampDots {
+        let u0: Float
+        let v0: Float
+        let totalU: Float
+        let charH: Float
+        let dotR: Float
+        let soft: Float
+        let reach: Float
+        let haloInv: Float
+        let dotU: [Float]
+        let dotV: [Float]
+        let dotBright: [Float]
+    }
+
+    private static func buildStampDots(layout: Layout, info: Pentax645Info) -> StampDots {
+        let barLength = Float(layout.infoOnLeft ? layout.outHeight : layout.outWidth)
+        let photoShortSide = Float(min(layout.photoWidth, layout.photoHeight))
+        let infoBar = Float(layout.infoBar)
 
         var tokens: [Token] = []
         if let f = info.frameNumber { tokens.append(.text(formatFrameNumber(f))) }
@@ -424,10 +442,10 @@ public enum Pentax645Frame {
         if let iso = info.iso { tokens.append(.text(formatIso(iso))) }
         if let dt = info.dateTime, !dt.isEmpty { tokens.append(.text(dt)) }
 
-        var charH = Float(topBar) * 0.56
+        var charH = infoBar * 0.56
         var dotPitch = charH / 7
         var charGap = dotPitch * 1.15
-        var groupGap = dotPitch * 3.8
+        var minGroupGap = dotPitch * 5.0
 
         func tokenWidth(_ t: Token) -> Float {
             switch t {
@@ -440,33 +458,44 @@ public enum Pentax645Frame {
             }
         }
 
-        let rawTotalW = tokens.isEmpty ? 0 : tokens.reduce(Float(0)) { $0 + tokenWidth($1) } + Float(tokens.count - 1) * groupGap
-        let maxContentW = Float(layout.photoWidth) * 0.94
-        if rawTotalW > maxContentW && rawTotalW > 0 {
-            let scale = maxContentW / rawTotalW
+        var sumTokensW = tokens.reduce(Float(0)) { $0 + tokenWidth($1) }
+        let maxContentW = photoShortSide * 0.92
+        let minTotalW = tokens.isEmpty ? 0 : sumTokensW + Float(tokens.count - 1) * minGroupGap
+        if minTotalW > maxContentW && minTotalW > 0 {
+            let scale = maxContentW / minTotalW
             charH *= scale
             dotPitch *= scale
             charGap *= scale
-            groupGap *= scale
+            minGroupGap *= scale
+            sumTokensW = tokens.reduce(Float(0)) { $0 + tokenWidth($1) }
         }
 
-        let totalW = tokens.isEmpty ? 0 : tokens.reduce(Float(0)) { $0 + tokenWidth($1) } + Float(tokens.count - 1) * groupGap
-        let x0 = (Float(outW) - totalW) * 0.5
-        let y0 = (Float(topBar) - charH) * 0.5
+        let groupGap: Float
+        if tokens.count <= 1 {
+            groupGap = 0
+        } else {
+            let targetSpan = min(photoShortSide * 0.86, maxContentW)
+            let idealGap = (targetSpan - sumTokensW) / Float(tokens.count - 1)
+            groupGap = min(max(idealGap, minGroupGap), dotPitch * 14)
+        }
+
+        let totalU = tokens.isEmpty ? 0 : sumTokensW + Float(tokens.count - 1) * groupGap
+        let u0 = (barLength - totalU) * 0.5
+        let v0 = (infoBar - charH) * 0.5
 
         let dotR = dotPitch * 0.36
         let soft = max(dotPitch * 0.36, 0.8)
         let reach = dotPitch * 1.8
         let haloInv = 1 / (dotPitch * 0.85)
 
-        var dotX: [Float] = []
-        var dotY: [Float] = []
+        var dotU: [Float] = []
+        var dotV: [Float] = []
         var dotBright: [Float] = []
-        dotX.reserveCapacity(256)
-        dotY.reserveCapacity(256)
+        dotU.reserveCapacity(256)
+        dotV.reserveCapacity(256)
         dotBright.reserveCapacity(256)
 
-        var cursorX: Float = 0
+        var cursorU: Float = 0
         var glyphIdx = 0
         for (ti, token) in tokens.enumerated() {
             switch token {
@@ -481,14 +510,14 @@ public enum Pentax645Frame {
                             for c in 0..<cols {
                                 let srcCol = c + colShift
                                 if srcCol >= 0 && srcCol <= 4 && ((bits >> (4 - srcCol)) & 1) != 0 {
-                                    dotX.append(cursorX + (Float(c) + 0.5) * dotPitch)
-                                    dotY.append((Float(r) + 0.5) * dotPitch)
+                                    dotU.append(cursorU + (Float(c) + 0.5) * dotPitch)
+                                    dotV.append((Float(r) + 0.5) * dotPitch)
                                     dotBright.append(0.90 + 0.10 * hash(glyphIdx * 64 + r * 8 + c, 733))
                                 }
                             }
                         }
                     }
-                    cursorX += Float(cols) * dotPitch + (ci + 1 < chars.count ? charGap : 0)
+                    cursorU += Float(cols) * dotPitch + (ci + 1 < chars.count ? charGap : 0)
                     glyphIdx += 1
                 }
             case .metering(let spot):
@@ -496,122 +525,203 @@ public enum Pentax645Frame {
                 for r in 0..<7 {
                     let bits = rows[r]
                     for c in 0..<7 where ((bits >> (6 - c)) & 1) != 0 {
-                        dotX.append(cursorX + (Float(c) + 0.5) * dotPitch)
-                        dotY.append((Float(r) + 0.5) * dotPitch)
+                        dotU.append(cursorU + (Float(c) + 0.5) * dotPitch)
+                        dotV.append((Float(r) + 0.5) * dotPitch)
                         dotBright.append(0.92 + 0.08 * hash(glyphIdx * 64 + r * 8 + c, 733))
                     }
                 }
-                cursorX += 7 * dotPitch
+                cursorU += 7 * dotPitch
                 glyphIdx += 1
             }
-            if ti + 1 < tokens.count { cursorX += groupGap }
+            if ti + 1 < tokens.count { cursorU += groupGap }
         }
 
-        let minY = max(bandY, Int(y0 - reach))
-        let maxY = min(bandY + bandRows - 1, Int(y0 + charH + reach))
-        let minX = max(0, Int(x0 - reach))
-        let maxX = min(outW - 1, Int(x0 + totalW + reach))
-        let dotCount = dotX.count
+        return StampDots(
+            u0: u0, v0: v0, totalU: totalU, charH: charH,
+            dotR: dotR, soft: soft, reach: reach, haloInv: haloInv,
+            dotU: dotU, dotV: dotV, dotBright: dotBright
+        )
+    }
+
+    private static func sampleRebatePixel(
+        px: Int, py: Int, u: Float, v: Float, dots: StampDots?,
+        grainCell: Float, monochrome: Bool,
+        out: UnsafeMutablePointer<UInt16>, idx: Int
+    ) {
+        let grain = 0.90 + 0.20 * hash(Int(Float(px) / grainCell), Int(Float(py) / grainCell))
+        var r = (monochrome ? baseMono : baseR) * grain
+        var g = (monochrome ? baseMono : baseG) * grain
+        var b = (monochrome ? baseMono : baseB) * grain
+
+        if let dots, !dots.dotU.isEmpty {
+            let lu = u - dots.u0
+            let lv = v - dots.v0
+            let reach = dots.reach
+            if lu >= -reach && lu <= dots.totalU + reach && lv >= -reach && lv <= dots.charH + reach {
+                var core: Float = 0
+                var minDist = Float.greatestFiniteMagnitude
+                let dotCount = dots.dotU.count
+                for k in 0..<dotCount {
+                    let du = abs(lu - dots.dotU[k])
+                    if du > reach { continue }
+                    let dv = abs(lv - dots.dotV[k])
+                    if dv > reach { continue }
+                    let d = sqrt(du * du + dv * dv) - dots.dotR
+                    if d < minDist { minDist = d }
+                    if d < dots.soft * 0.5 {
+                        let e = dots.dotBright[k] * edge(d, dots.soft)
+                        if e > core { core = e }
+                    }
+                }
+                let excess = max(0, minDist) * dots.haloInv
+                let halo = 0.16 * exp(-excess * excess)
+                if core > 0.002 || halo >= 0.004 {
+                    let e = (core + halo * (1 - core)) * grain
+                    if monochrome {
+                        let l = 1 - exp(-gain * e * ledMono)
+                        r = 1 - (1 - r) * (1 - l)
+                        g = 1 - (1 - g) * (1 - l)
+                        b = 1 - (1 - b) * (1 - l)
+                    } else {
+                        let lr = 1 - exp(-gain * e * ledR)
+                        let lg = 1 - exp(-gain * e * ledG)
+                        let lb = 1 - exp(-gain * e * ledB)
+                        r = 1 - (1 - r) * (1 - lr)
+                        g = 1 - (1 - g) * (1 - lg)
+                        b = 1 - (1 - b) * (1 - lb)
+                    }
+                }
+            }
+        }
+
+        out[idx] = toU16(r)
+        out[idx + 1] = toU16(g)
+        out[idx + 2] = toU16(b)
+    }
+
+    public static func renderTopBarBand(band: UnsafeMutablePointer<UInt16>, layout: Layout,
+                                          bandY: Int, bandRows: Int, info: Pentax645Info,
+                                          monochrome: Bool = false) {
+        let outW = layout.outWidth
+        let outH = layout.outHeight
+        let grainCell = max(1, Float(layout.infoBar) * 0.03)
+        let dots = buildStampDots(layout: layout, info: info)
+        let onLeft = layout.infoOnLeft
 
         for py in bandY..<(bandY + bandRows) {
             let rowOffset = (py - bandY) * outW
-            let inStampY = dotCount > 0 && py >= minY && py <= maxY
-            let vy = Float(py) + 0.5 - y0
             for px in 0..<outW {
-                let grain = 0.90 + 0.20 * hash(Int(Float(px) / grainCell), Int(Float(py) / grainCell))
-                var r = (monochrome ? baseMono : baseR) * grain
-                var g = (monochrome ? baseMono : baseG) * grain
-                var b = (monochrome ? baseMono : baseB) * grain
-
-                if inStampY && px >= minX && px <= maxX {
-                    let ux = Float(px) + 0.5 - x0
-                    var core: Float = 0
-                    var minDist = Float.greatestFiniteMagnitude
-                    for k in 0..<dotCount {
-                        let dx = abs(ux - dotX[k])
-                        if dx > reach { continue }
-                        let dy = abs(vy - dotY[k])
-                        if dy > reach { continue }
-                        let d = sqrt(dx * dx + dy * dy) - dotR
-                        if d < minDist { minDist = d }
-                        if d < soft * 0.5 {
-                            let e = dotBright[k] * edge(d, soft)
-                            if e > core { core = e }
-                        }
-                    }
-                    let excess = max(0, minDist) * haloInv
-                    let halo = 0.16 * exp(-excess * excess)
-                    if core > 0.002 || halo >= 0.004 {
-                        let e = (core + halo * (1 - core)) * grain
-                        if monochrome {
-                            let l = 1 - exp(-gain * e * ledMono)
-                            r = 1 - (1 - r) * (1 - l)
-                            g = 1 - (1 - g) * (1 - l)
-                            b = 1 - (1 - b) * (1 - l)
-                        } else {
-                            let lr = 1 - exp(-gain * e * ledR)
-                            let lg = 1 - exp(-gain * e * ledG)
-                            let lb = 1 - exp(-gain * e * ledB)
-                            r = 1 - (1 - r) * (1 - lr)
-                            g = 1 - (1 - g) * (1 - lg)
-                            b = 1 - (1 - b) * (1 - lb)
-                        }
-                    }
-                }
-
                 let idx = (rowOffset + px) * 3
-                band[idx] = toU16(r)
-                band[idx + 1] = toU16(g)
-                band[idx + 2] = toU16(b)
+                if !onLeft {
+                    sampleRebatePixel(px: px, py: py, u: Float(px) + 0.5, v: Float(py) + 0.5, dots: dots, grainCell: grainCell, monochrome: monochrome, out: band, idx: idx)
+                } else if px < layout.infoBar {
+                    sampleRebatePixel(px: px, py: py, u: Float(outH - 1 - py) + 0.5, v: Float(px) + 0.5, dots: dots, grainCell: grainCell, monochrome: monochrome, out: band, idx: idx)
+                } else {
+                    sampleRebatePixel(px: px, py: py, u: 0, v: 0, dots: nil, grainCell: grainCell, monochrome: monochrome, out: band, idx: idx)
+                }
             }
         }
     }
 
     public static func renderBorderBand(band: UnsafeMutablePointer<UInt16>, layout: Layout,
-                                        bandY: Int, bandRows: Int, monochrome: Bool = false) {
+                                        bandY: Int, bandRows: Int, monochrome: Bool = false,
+                                        info: Pentax645Info? = nil) {
         let outW = layout.outWidth
-        let grainCell = max(1, Float(layout.topBar) * 0.03)
-        let br = monochrome ? baseMono : baseR
-        let bg = monochrome ? baseMono : baseG
-        let bb = monochrome ? baseMono : baseB
+        let outH = layout.outHeight
+        let grainCell = max(1, Float(layout.infoBar) * 0.03)
+        let dots: StampDots? = (layout.infoOnLeft && info != nil) ? buildStampDots(layout: layout, info: info!) : nil
         for py in bandY..<(bandY + bandRows) {
             let rowOffset = (py - bandY) * outW
             for px in 0..<outW {
-                let grain = 0.90 + 0.20 * hash(Int(Float(px) / grainCell), Int(Float(py) / grainCell))
                 let idx = (rowOffset + px) * 3
-                band[idx] = toU16(br * grain)
-                band[idx + 1] = toU16(bg * grain)
-                band[idx + 2] = toU16(bb * grain)
+                if let dots, px < layout.infoBar {
+                    sampleRebatePixel(px: px, py: py, u: Float(outH - 1 - py) + 0.5, v: Float(px) + 0.5, dots: dots, grainCell: grainCell, monochrome: monochrome, out: band, idx: idx)
+                } else {
+                    sampleRebatePixel(px: px, py: py, u: 0, v: 0, dots: nil, grainCell: grainCell, monochrome: monochrome, out: band, idx: idx)
+                }
             }
         }
     }
 
     public static func wrapPhotoBand(src: UnsafePointer<UInt16>, dst: UnsafeMutablePointer<UInt16>,
-                                     layout: Layout, photoY: Int, bandRows: Int, monochrome: Bool = false) {
+                                     layout: Layout, photoY: Int, bandRows: Int, monochrome: Bool = false,
+                                     info: Pentax645Info? = nil) {
         let pw = layout.photoWidth
+        let ph = layout.photoHeight
         let ow = layout.outWidth
-        let b = layout.border
-        let grainCell = max(1, Float(layout.topBar) * 0.03)
+        let oh = layout.outHeight
+        let leftPad = layout.leftPad
+        let onLeft = layout.infoOnLeft
+        let grainCell = max(1, Float(layout.infoBar) * 0.03)
+        let dots: StampDots? = (onLeft && info != nil) ? buildStampDots(layout: layout, info: info!) : nil
+
         let br = monochrome ? baseMono : baseR
         let bg = monochrome ? baseMono : baseG
         let bb = monochrome ? baseMono : baseB
+
+        let rStripe = Float(layout.infoBar) * 0.65
+        let rOther = Float(layout.infoBar) * 0.30
+        let rTopLeft = rStripe
+        let rTopRight = onLeft ? rOther : rStripe
+        let rBottomLeft = onLeft ? rStripe : rOther
+        let rBottomRight = rOther
+        let maxR = max(max(rTopLeft, rTopRight), max(rBottomLeft, rBottomRight))
+
         for r in 0..<bandRows {
-            let py = layout.topBar + photoY + r
+            let y = photoY + r
+            let py = layout.topPad + y
             let dstRow = r * ow
-            for px in 0..<b {
-                let grain = 0.90 + 0.20 * hash(Int(Float(px) / grainCell), Int(Float(py) / grainCell))
+            for px in 0..<leftPad {
                 let idx = (dstRow + px) * 3
-                dst[idx] = toU16(br * grain)
-                dst[idx + 1] = toU16(bg * grain)
-                dst[idx + 2] = toU16(bb * grain)
+                if let dots {
+                    sampleRebatePixel(px: px, py: py, u: Float(oh - 1 - py) + 0.5, v: Float(px) + 0.5, dots: dots, grainCell: grainCell, monochrome: monochrome, out: dst, idx: idx)
+                } else {
+                    sampleRebatePixel(px: px, py: py, u: 0, v: 0, dots: nil, grainCell: grainCell, monochrome: monochrome, out: dst, idx: idx)
+                }
             }
-            dst.advanced(by: (dstRow + b) * 3).update(from: src.advanced(by: r * pw * 3), count: pw * 3)
-            for px in (b + pw)..<ow {
-                let grain = 0.90 + 0.20 * hash(Int(Float(px) / grainCell), Int(Float(py) / grainCell))
+            dst.advanced(by: (dstRow + leftPad) * 3).update(from: src.advanced(by: r * pw * 3), count: pw * 3)
+            for px in (leftPad + pw)..<ow {
                 let idx = (dstRow + px) * 3
-                dst[idx] = toU16(br * grain)
-                dst[idx + 1] = toU16(bg * grain)
-                dst[idx + 2] = toU16(bb * grain)
+                sampleRebatePixel(px: px, py: py, u: 0, v: 0, dots: nil, grainCell: grainCell, monochrome: monochrome, out: dst, idx: idx)
+            }
+
+            let dyTop = Float(y) + 0.5
+            let dyBottom = Float(ph - y) - 0.5
+            if dyTop < maxR || dyBottom < maxR {
+                for x in 0..<pw {
+                    let dxLeft = Float(x) + 0.5
+                    let dxRight = Float(pw - x) - 0.5
+                    if dxLeft >= maxR && dxRight >= maxR { continue }
+
+                    let rad: Float
+                    let cx: Float
+                    let cy: Float
+                    if dxLeft < rTopLeft && dyTop < rTopLeft {
+                        rad = rTopLeft; cx = rTopLeft - dxLeft; cy = rTopLeft - dyTop
+                    } else if dxRight < rTopRight && dyTop < rTopRight {
+                        rad = rTopRight; cx = rTopRight - dxRight; cy = rTopRight - dyTop
+                    } else if dxLeft < rBottomLeft && dyBottom < rBottomLeft {
+                        rad = rBottomLeft; cx = rBottomLeft - dxLeft; cy = rBottomLeft - dyBottom
+                    } else if dxRight < rBottomRight && dyBottom < rBottomRight {
+                        rad = rBottomRight; cx = rBottomRight - dxRight; cy = rBottomRight - dyBottom
+                    } else {
+                        continue
+                    }
+
+                    let d = sqrt(cx * cx + cy * cy) - rad
+                    if d <= -0.6 { continue }
+                    let t = min(max((d + 0.6) / 1.2, 0), 1)
+                    let mask = t * t * (3 - 2 * t)
+                    let px = leftPad + x
+                    let grain = 0.90 + 0.20 * hash(Int(Float(px) / grainCell), Int(Float(py) / grainCell))
+                    let idx = (dstRow + px) * 3
+                    let pr = Float(dst[idx]) / 65535
+                    let pg = Float(dst[idx + 1]) / 65535
+                    let pb = Float(dst[idx + 2]) / 65535
+                    dst[idx] = toU16(pr * (1 - mask) + br * grain * mask)
+                    dst[idx + 1] = toU16(pg * (1 - mask) + bg * grain * mask)
+                    dst[idx + 2] = toU16(pb * (1 - mask) + bb * grain * mask)
+                }
             }
         }
     }
@@ -679,6 +789,7 @@ public enum Pentax645Frame {
         case ".": return [0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b00100, 0b00100]
         case ":": return [0b00000, 0b00100, 0b00100, 0b00000, 0b00100, 0b00100, 0b00000]
         case "'": return [0b00100, 0b00100, 0b01000, 0b00000, 0b00000, 0b00000, 0b00000]
+        case "#": return [0b01010, 0b01010, 0b11111, 0b01010, 0b11111, 0b01010, 0b01010]
         case "+": return [0b00000, 0b00100, 0b00100, 0b11111, 0b00100, 0b00100, 0b00000]
         case "-": return [0b00000, 0b00000, 0b00000, 0b11111, 0b00000, 0b00000, 0b00000]
         case "±": return [0b00100, 0b00100, 0b11111, 0b00100, 0b00100, 0b00000, 0b11111]
