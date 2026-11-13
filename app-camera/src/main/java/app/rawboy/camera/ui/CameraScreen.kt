@@ -41,6 +41,7 @@ import app.rawboy.camera.Pentax645Field
 import app.rawboy.camera.PhotoFrame
 import app.rawboy.export.DateStampFormat
 import app.rawboy.export.DateStampStyle
+import app.rawboy.export.FilmFrameColor
 import app.rawboy.export.TimeStampFormat
 import androidx.compose.runtime.key
 import androidx.compose.ui.zIndex
@@ -1410,7 +1411,7 @@ private fun FramesSettingsContent(settings: CameraSettings, vm: CameraViewModel,
         SettingChoice(
             title = "Frame",
             subtitle = "Choose either a film frame or a date stamp",
-            options = listOf(PhotoFrame.NONE, PhotoFrame.DATE_STAMP, PhotoFrame.PENTAX_645),
+            options = listOf(PhotoFrame.NONE, PhotoFrame.DATE_STAMP, PhotoFrame.PENTAX_645, PhotoFrame.CONTAX_645),
             selected = settings.photoFrame,
             label = { it.label },
             onSelect = vm::setPhotoFrame,
@@ -1435,7 +1436,16 @@ private fun FramesSettingsContent(settings: CameraSettings, vm: CameraViewModel,
                 indent = true,
             )
         }
-        if (settings.photoFrame == PhotoFrame.PENTAX_645) {
+        if (settings.photoFrame == PhotoFrame.PENTAX_645 || settings.photoFrame == PhotoFrame.CONTAX_645) {
+            SettingChoice(
+                title = "Color",
+                subtitle = null,
+                options = FilmFrameColor.entries,
+                selected = settings.frameColor,
+                label = { it.label },
+                onSelect = vm::setFrameColor,
+                indent = true,
+            )
             SettingSwitch(
                 title = "Flip info upside down",
                 subtitle = "Rotate shoot info 180° like on real film",

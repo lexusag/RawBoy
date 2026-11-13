@@ -70,7 +70,7 @@ public final class Exporter {
         try? FileManager.default.removeItem(at: url)
         let size = BandDownscaler.outputSize(params.lens.outputWidth, params.lens.outputHeight,
                                              maxLongSide: settings.maxLongSide)
-        let frameLayout = settings.pentax645.map { _ in Pentax645Frame.layout(photoWidth: size.0, photoHeight: size.1) }
+        let frameLayout = settings.pentax645.map { Pentax645Frame.layout(photoWidth: size.0, photoHeight: size.1, style: $0.style) }
         let outSize = frameLayout.map { ($0.outWidth, $0.outHeight) } ?? size
         let dateStamp = settings.pentax645 == nil ? settings.dateStamp : ""
         let dateStampStyle = settings.dateStampStyle
@@ -162,7 +162,7 @@ public final class Exporter {
                               _ consume: @escaping (Int, Int, UnsafeMutablePointer<UInt16>) throws -> Void) throws {
         let w = params.lens.outputWidth
         let h = params.lens.outputHeight
-        let layout = pentax645.map { _ in Pentax645Frame.layout(photoWidth: size.0, photoHeight: size.1) }
+        let layout = pentax645.map { Pentax645Frame.layout(photoWidth: size.0, photoHeight: size.1, style: $0.style) }
         var framedBand: [UInt16] = []
         let stamped: (Int, Int, UnsafeMutablePointer<UInt16>) throws -> Void
         if let layout {

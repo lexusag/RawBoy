@@ -203,4 +203,103 @@ class Pentax645FrameTest {
         }
         assertTrue("Expected neutral white date stamp digits in BW mode", brightDatePixels > 30)
     }
+
+    @Test
+    fun slideAndRedColorsRenderExpectedHues() {
+        val layout = Pentax645Frame.layout(600, 800)
+        val src = ShortArray(600 * layout.infoBar * 3) { 20000.toShort() }
+
+        val slideDst = ShortArray(layout.outWidth * layout.infoBar * 3)
+        Pentax645Frame.wrapPhotoBand(
+            src, slideDst, layout, 0, layout.infoBar, monochrome = false,
+            info = Pentax645Info(frameNumber = 14, mode = "FILM", exposureTime = 1.0 / 125.0, fNumber = 4.5, color = FilmFrameColor.SLIDE),
+        )
+        var slidePixels = 0
+        for (i in 0 until layout.outWidth * layout.infoBar) {
+            val r = slideDst[i * 3].toInt() and 0xFFFF
+            val g = slideDst[i * 3 + 1].toInt() and 0xFFFF
+            val b = slideDst[i * 3 + 2].toInt() and 0xFFFF
+            if (g > 30000 && g > r && r > b) slidePixels++
+        }
+        assertTrue("Expected yellow-green Slide LED dots", slidePixels > 50)
+
+        val redDst = ShortArray(layout.outWidth * layout.infoBar * 3)
+        Pentax645Frame.wrapPhotoBand(
+            src, redDst, layout, 0, layout.infoBar, monochrome = false,
+            info = Pentax645Info(frameNumber = 14, mode = "FILM", exposureTime = 1.0 / 125.0, fNumber = 4.5, color = FilmFrameColor.RED),
+        )
+        var redPixels = 0
+        for (i in 0 until layout.outWidth * layout.infoBar) {
+            val r = redDst[i * 3].toInt() and 0xFFFF
+            val g = redDst[i * 3 + 1].toInt() and 0xFFFF
+            val b = redDst[i * 3 + 2].toInt() and 0xFFFF
+            if (r > 30000 && r > g * 2 && g > b) redPixels++
+        }
+        assertTrue("Expected Red LED dots", redPixels > 50)
+
+        val greenDst = ShortArray(layout.outWidth * layout.infoBar * 3)
+        Pentax645Frame.wrapPhotoBand(
+            src, greenDst, layout, 0, layout.infoBar, monochrome = false,
+            info = Pentax645Info(frameNumber = 14, mode = "FILM", exposureTime = 1.0 / 125.0, fNumber = 4.5, color = FilmFrameColor.GREEN),
+        )
+        var greenPixels = 0
+        for (i in 0 until layout.outWidth * layout.infoBar) {
+            val r = greenDst[i * 3].toInt() and 0xFFFF
+            val g = greenDst[i * 3 + 1].toInt() and 0xFFFF
+            val b = greenDst[i * 3 + 2].toInt() and 0xFFFF
+            if (g > 30000 && g > r * 2 && g > b * 2) greenPixels++
+        }
+        assertTrue("Expected Green LED dots", greenPixels > 50)
+    }
+
+    @Test
+    fun contax645RendersTopShootInfoAndBottomTriangleFrameNumber() {
+        assertEquals("10", Pentax645Frame.formatContaxFrameNumber(10))
+        assertEquals("--", Pentax645Frame.formatContaxFrameNumber(0))
+        assertEquals("4000", Pentax645Frame.formatContaxShutter(1.0 / 4000.0))
+        assertEquals("2s", Pentax645Frame.formatContaxShutter(2.0))
+        assertEquals("F 2.8", Pentax645Frame.formatContaxAperture(2.8))
+        assertEquals("F 4", Pentax645Frame.formatContaxAperture(4.0))
+
+        val layout = Pentax645Frame.layout(600, 800, FilmFrameStyle.CONTAX_645)
+        assertEquals(layout.infoBar, layout.topPad)
+        assertEquals(layout.infoBar, layout.bottomPad)
+        assertTrue(!layout.infoOnLeft)
+
+        val info = Pentax645Info(
+            frameNumber = 10,
+            mode = "FILM",
+            exposureTime = 1.0 / 4000.0,
+            fNumber = 2.8,
+            focalLengthMm = 80.0,
+            color = FilmFrameColor.RED,
+            style = FilmFrameStyle.CONTAX_645,
+        )
+
+        val topBand = ShortArray(layout.outWidth * layout.topPad * 3)
+        Pentax645Frame.renderTopBarBand(topBand, layout, 0, layout.topPad, info, monochrome = false)
+        var topRedPixels = 0
+        for (i in 0 until layout.outWidth * layout.topPad) {
+            val r = topBand[i * 3].toInt() and 0xFFFF
+            val g = topBand[i * 3 + 1].toInt() and 0xFFFF
+            if (r > 30000 && r > g * 2) topRedPixels++
+        }
+        assertTrue("Expected Red LED shoot info in Contax 645 top bar", topRedPixels > 50)
+
+        // Photo corners are untouched (no Pentax rounded stripe overlay).
+        val photoSrc = ShortArray(600 * 10 * 3) { 20000.toShort() }
+        val photoDst = ShortArray(layout.outWidth * 10 * 3)
+        Pentax645Frame.wrapPhotoBand(photoSrc, photoDst, layout, 0, 10, monochrome = false, info = info)
+        assertEquals(20000, photoDst[layout.leftPad * 3].toInt() and 0xFFFF)
+
+        val bottomBand = ShortArray(layout.outWidth * layout.bottomPad * 3)
+        Pentax645Frame.renderBorderBand(bottomBand, layout, layout.topPad + layout.photoHeight, layout.bottomPad, monochrome = false, info = info)
+        var bottomRedPixels = 0
+        for (i in 0 until layout.outWidth * layout.bottomPad) {
+            val r = bottomBand[i * 3].toInt() and 0xFFFF
+            val g = bottomBand[i * 3 + 1].toInt() and 0xFFFF
+            if (r > 30000 && r > g * 2) bottomRedPixels++
+        }
+        assertTrue("Expected triangle + frame number in Contax 645 bottom bar", bottomRedPixels > 25)
+    }
 }

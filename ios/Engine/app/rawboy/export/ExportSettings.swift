@@ -420,8 +420,31 @@ public enum DateStamp {
     private static func toU16(_ v: Float) -> UInt16 { UInt16((min(max(v, 0), 1) * 65535).rounded()) }
 }
 
+/** LED imprint color for film rebate frames (`Pentax 645` and `Contax 645`). */
+public enum FilmFrameColor: String, CaseIterable, Sendable {
+    case amber = "AMBER"
+    case slide = "SLIDE"
+    case red = "RED"
+    case green = "GREEN"
+
+    public var label: String {
+        switch self {
+        case .amber: return "Amber"
+        case .slide: return "Slide"
+        case .red: return "Red"
+        case .green: return "Green"
+        }
+    }
+}
+
+/** Film rebate frame layout style. */
+public enum FilmFrameStyle: String, CaseIterable, Sendable {
+    case pentax645 = "PENTAX_645"
+    case contax645 = "CONTAX_645"
+}
+
 /**
- * Shoot metadata imprinted into the top film rebate of a Pentax 645-style frame.
+ * Shoot metadata imprinted into the film rebate of a Pentax 645 or Contax 645-style frame.
  * Matches `Pentax645Info` / `Pentax645Frame` in engine `Pentax645Frame.kt`.
  */
 public struct Pentax645Info: Equatable, Sendable {
@@ -438,11 +461,14 @@ public struct Pentax645Info: Equatable, Sendable {
     public let dateTime: String?
     public let flipped: Bool
     public let fieldOrder: [String]?
+    public let color: FilmFrameColor
+    public let style: FilmFrameStyle
 
     public init(frameNumber: Int? = nil, mode: String? = nil, exposureTime: Double? = nil, fNumber: Double? = nil,
                 compensationEv: Float? = nil, spotMetered: Bool? = nil, focalLengthMm: Double? = nil,
                 iso: Double? = nil, date: String? = nil, time: String? = nil, dateTime: String? = nil,
-                flipped: Bool = false, fieldOrder: [String]? = nil) {
+                flipped: Bool = false, fieldOrder: [String]? = nil,
+                color: FilmFrameColor = .amber, style: FilmFrameStyle = .pentax645) {
         self.frameNumber = frameNumber
         self.mode = mode
         self.exposureTime = exposureTime
@@ -456,6 +482,8 @@ public struct Pentax645Info: Equatable, Sendable {
         self.dateTime = dateTime
         self.flipped = flipped
         self.fieldOrder = fieldOrder
+        self.color = color
+        self.style = style
     }
 }
 
@@ -465,9 +493,10 @@ public enum Pentax645Frame {
         public let photoHeight: Int
         public let border: Int
         public let infoBar: Int
-        public var infoOnLeft: Bool { photoWidth > photoHeight }
-        public var topPad: Int { border }
-        public var bottomPad: Int { border }
+        public let style: FilmFrameStyle
+        public var infoOnLeft: Bool { style == .pentax645 && photoWidth > photoHeight }
+        public var topPad: Int { style == .contax645 ? infoBar : border }
+        public var bottomPad: Int { style == .contax645 ? infoBar : border }
         public var leftPad: Int { border }
         public var rightPad: Int { border }
         public var outWidth: Int { photoWidth + leftPad + rightPad }
@@ -475,15 +504,22 @@ public enum Pentax645Frame {
         public var topBar: Int { infoBar }
     }
 
-    public static func layout(photoWidth: Int, photoHeight: Int) -> Layout {
+    public static func layout(photoWidth: Int, photoHeight: Int, style: FilmFrameStyle = .pentax645) -> Layout {
         let shortSide = Float(min(photoWidth, photoHeight))
-        let border = max(3, Int((shortSide * 0.005).rounded()))
+        let border: Int = switch style {
+        case .pentax645: max(3, Int((shortSide * 0.005).rounded()))
+        case .contax645: max(6, Int((shortSide * 0.012).rounded()))
+        }
         let infoBar = max(28, Int((shortSide * 0.036).rounded()))
-        return Layout(photoWidth: photoWidth, photoHeight: photoHeight, border: border, infoBar: infoBar)
+        return Layout(photoWidth: photoWidth, photoHeight: photoHeight, border: border, infoBar: infoBar, style: style)
     }
 
     public static func formatFrameNumber(_ frameNumber: Int) -> String {
         frameNumber > 0 ? "#\(frameNumber)" : "#--"
+    }
+
+    public static func formatContaxFrameNumber(_ frameNumber: Int) -> String {
+        frameNumber > 0 ? "\(frameNumber)" : "--"
     }
 
     public static func formatShutter(_ t: Double) -> String {
@@ -491,10 +527,20 @@ public enum Pentax645Frame {
         return t >= 0.95 ? "\(trimOneDecimal(t))s" : "1/\(Int((1.0 / t).rounded()))"
     }
 
+    public static func formatContaxShutter(_ t: Double) -> String {
+        guard t.isFinite && t > 0 else { return "---" }
+        return t >= 0.95 ? "\(trimOneDecimal(t))s" : "\(Int((1.0 / t).rounded()))"
+    }
+
     public static func formatAperture(_ f: Double) -> String {
         guard f.isFinite && f > 0 else { return "F--" }
         let rounded = Int(f.rounded())
         return abs(f - Double(rounded)) < 0.05 && rounded < 10 ? "F \(rounded)" : "F\(trimOneDecimal(f))"
+    }
+
+    public static func formatContaxAperture(_ f: Double) -> String {
+        guard f.isFinite && f > 0 else { return "F--" }
+        return "F \(trimOneDecimal(f))"
     }
 
     public static func formatEv(_ ev: Float) -> String {
@@ -557,9 +603,15 @@ public enum Pentax645Frame {
         return s.hasSuffix(".0") ? String(s.dropLast(2)) : s
     }
 
-    private static let ledR: Float = 1.0
-    private static let ledG: Float = 0.44
-    private static let ledB: Float = 0.04
+    private static func ledRgb(_ color: FilmFrameColor) -> (Float, Float, Float) {
+        switch color {
+        case .amber: return (1.0, 0.44, 0.04)
+        case .slide: return (0.76, 0.90, 0.14)
+        case .red: return (1.0, 0.13, 0.05)
+        case .green: return (0.08, 0.95, 0.08)
+        }
+    }
+
     private static let gain: Float = 3.0
     private static let baseR: Float = 0.011
     private static let baseG: Float = 0.010
@@ -570,6 +622,7 @@ public enum Pentax645Frame {
     private enum Token {
         case text(String)
         case metering(spot: Bool)
+        case triangle
     }
 
     private static func charCols(_ ch: Character) -> Int {
@@ -598,13 +651,18 @@ public enum Pentax645Frame {
         let barLength = Float(layout.infoOnLeft ? layout.outHeight : layout.outWidth)
         let photoShortSide = Float(min(layout.photoWidth, layout.photoHeight))
         let infoBar = Float(layout.infoBar)
+        let isContax = info.style == .contax645
 
         func tokenForKey(_ key: String) -> Token? {
             switch key {
-            case "frame": return info.frameNumber.map { .text(formatFrameNumber($0)) }
+            case "frame": return isContax ? nil : info.frameNumber.map { .text(formatFrameNumber($0)) }
             case "mode": return info.mode.flatMap { $0.isEmpty ? nil : .text($0) }
-            case "shutter": return info.exposureTime.map { .text(formatShutter($0)) }
-            case "aperture": return info.fNumber.map { .text(formatAperture($0)) }
+            case "shutter": return info.exposureTime.map {
+                .text(isContax ? formatContaxShutter($0) : formatShutter($0))
+            }
+            case "aperture": return info.fNumber.map {
+                .text(isContax ? formatContaxAperture($0) : formatAperture($0))
+            }
             case "ev": return info.compensationEv.map { .text(formatEv($0)) }
             case "metering": return info.spotMetered.map { .metering(spot: $0) }
             case "focal": return info.focalLengthMm.map { .text(formatFocalLength($0)) }
@@ -628,6 +686,25 @@ public enum Pentax645Frame {
             if let t = tokenForKey(key) { tokens.append(t) }
         }
 
+        let vTop: Float = isContax ? 0 : Float(layout.border)
+        return buildDotsFromTokens(tokens, barLength: barLength, photoShortSide: photoShortSide,
+                                   infoBar: infoBar, vTop: vTop, flipped: info.flipped)
+    }
+
+    private static func buildContaxBottomDots(layout: Layout, info: Pentax645Info) -> StampDots? {
+        guard let frameNum = info.frameNumber else { return nil }
+        let barLength = Float(layout.outWidth)
+        let photoShortSide = Float(min(layout.photoWidth, layout.photoHeight))
+        let infoBar = Float(layout.infoBar)
+        let tokens: [Token] = [.triangle, .text(formatContaxFrameNumber(frameNum))]
+        return buildDotsFromTokens(tokens, barLength: barLength, photoShortSide: photoShortSide,
+                                   infoBar: infoBar, vTop: 0, flipped: info.flipped, maxGroupGapMul: 2.2)
+    }
+
+    private static func buildDotsFromTokens(
+        _ tokens: [Token], barLength: Float, photoShortSide: Float,
+        infoBar: Float, vTop: Float, flipped: Bool, maxGroupGapMul: Float = 14
+    ) -> StampDots {
         var charH = infoBar * 0.56
         var dotPitch = charH / 7
         var charGap = dotPitch * 1.15
@@ -641,6 +718,8 @@ public enum Pentax645Frame {
                 return Float(cols) * dotPitch + Float(s.count - 1) * charGap
             case .metering:
                 return 7 * dotPitch
+            case .triangle:
+                return 6 * dotPitch
             }
         }
 
@@ -662,12 +741,13 @@ public enum Pentax645Frame {
         } else {
             let targetSpan = min(photoShortSide * 0.86, maxContentW)
             let idealGap = (targetSpan - sumTokensW) / Float(tokens.count - 1)
-            groupGap = min(max(idealGap, minGroupGap), dotPitch * 14)
+            let maxGap = dotPitch * maxGroupGapMul
+            groupGap = min(max(idealGap, min(minGroupGap, maxGap)), maxGap)
         }
 
         let totalU = tokens.isEmpty ? 0 : sumTokensW + Float(tokens.count - 1) * groupGap
         let u0 = (barLength - totalU) * 0.5
-        let v0 = Float(layout.border) + (infoBar - charH) * 0.5
+        let v0 = vTop + (infoBar - charH) * 0.5
 
         let dotR = dotPitch * 0.36
         let soft = max(dotPitch * 0.36, 0.8)
@@ -718,6 +798,17 @@ public enum Pentax645Frame {
                 }
                 cursorU += 7 * dotPitch
                 glyphIdx += 1
+            case .triangle:
+                for r in 0..<7 {
+                    let bits = triangle7x6[r]
+                    for c in 0..<6 where ((bits >> (5 - c)) & 1) != 0 {
+                        dotU.append(cursorU + (Float(c) + 0.5) * dotPitch)
+                        dotV.append((Float(r) + 0.5) * dotPitch)
+                        dotBright.append(0.92 + 0.08 * hash(glyphIdx * 64 + r * 8 + c, 733))
+                    }
+                }
+                cursorU += 6 * dotPitch
+                glyphIdx += 1
             }
             if ti + 1 < tokens.count { cursorU += groupGap }
         }
@@ -725,14 +816,14 @@ public enum Pentax645Frame {
         return StampDots(
             u0: u0, v0: v0, totalU: totalU, charH: charH,
             dotR: dotR, soft: soft, reach: reach, haloInv: haloInv,
-            flipped: info.flipped,
+            flipped: flipped,
             dotU: dotU, dotV: dotV, dotBright: dotBright
         )
     }
 
     private static func sampleRebatePixel(
         px: Int, py: Int, u: Float, v: Float, dots: StampDots?,
-        grainCell: Float, monochrome: Bool,
+        grainCell: Float, monochrome: Bool, color: FilmFrameColor,
         out: UnsafeMutablePointer<UInt16>, idx: Int
     ) {
         let grain = 0.90 + 0.20 * hash(Int(Float(px) / grainCell), Int(Float(py) / grainCell))
@@ -772,6 +863,7 @@ public enum Pentax645Frame {
                         g = 1 - (1 - g) * (1 - l)
                         b = 1 - (1 - b) * (1 - l)
                     } else {
+                        let (ledR, ledG, ledB) = ledRgb(color)
                         let lr = 1 - exp(-gain * e * ledR)
                         let lg = 1 - exp(-gain * e * ledG)
                         let lb = 1 - exp(-gain * e * ledB)
@@ -791,7 +883,22 @@ public enum Pentax645Frame {
     public static func renderTopBarBand(band: UnsafeMutablePointer<UInt16>, layout: Layout,
                                           bandY: Int, bandRows: Int, info: Pentax645Info,
                                           monochrome: Bool = false) {
-        renderBorderBand(band: band, layout: layout, bandY: bandY, bandRows: bandRows, monochrome: monochrome)
+        if layout.style == .contax645 {
+            let outW = layout.outWidth
+            let grainCell = max(1, Float(layout.infoBar) * 0.03)
+            let dots = buildStampDots(layout: layout, info: info)
+            for py in bandY..<(bandY + bandRows) {
+                let rowOffset = (py - bandY) * outW
+                for px in 0..<outW {
+                    let idx = (rowOffset + px) * 3
+                    sampleRebatePixel(px: px, py: py, u: Float(px) + 0.5, v: Float(py) + 0.5,
+                                      dots: dots, grainCell: grainCell, monochrome: monochrome,
+                                      color: info.color, out: band, idx: idx)
+                }
+            }
+        } else {
+            renderBorderBand(band: band, layout: layout, bandY: bandY, bandRows: bandRows, monochrome: monochrome, info: info)
+        }
     }
 
     public static func renderBorderBand(band: UnsafeMutablePointer<UInt16>, layout: Layout,
@@ -799,11 +906,17 @@ public enum Pentax645Frame {
                                         info: Pentax645Info? = nil) {
         let outW = layout.outWidth
         let grainCell = max(1, Float(layout.infoBar) * 0.03)
+        let bottomStart = layout.topPad + layout.photoHeight
+        let isContaxBottom = layout.style == .contax645 && bandY >= bottomStart
+        let dots: StampDots? = (isContaxBottom && info != nil) ? buildContaxBottomDots(layout: layout, info: info!) : nil
+        let color = info?.color ?? .amber
         for py in bandY..<(bandY + bandRows) {
             let rowOffset = (py - bandY) * outW
+            let v: Float = isContaxBottom ? Float(py - bottomStart) + 0.5 : 0
             for px in 0..<outW {
                 let idx = (rowOffset + px) * 3
-                sampleRebatePixel(px: px, py: py, u: 0, v: 0, dots: nil, grainCell: grainCell, monochrome: monochrome, out: band, idx: idx)
+                sampleRebatePixel(px: px, py: py, u: Float(px) + 0.5, v: v, dots: dots,
+                                  grainCell: grainCell, monochrome: monochrome, color: color, out: band, idx: idx)
             }
         }
     }
@@ -820,7 +933,9 @@ public enum Pentax645Frame {
         let infoBar = Float(layout.infoBar)
         let cornerSpan = infoBar * 1.6
         let grainCell = max(1, infoBar * 0.03)
-        let dots: StampDots? = info.map { buildStampDots(layout: layout, info: $0) }
+        let color = info?.color ?? .amber
+        let isPentax = layout.style == .pentax645
+        let dots: StampDots? = isPentax ? info.map { buildStampDots(layout: layout, info: $0) } : nil
         var tmp: [UInt16] = [0, 0, 0]
 
         for r in 0..<bandRows {
@@ -828,12 +943,14 @@ public enum Pentax645Frame {
             let py = layout.topPad + y
             let dstRow = r * ow
             for px in 0..<leftPad {
-                sampleRebatePixel(px: px, py: py, u: 0, v: 0, dots: nil, grainCell: grainCell, monochrome: monochrome, out: dst, idx: (dstRow + px) * 3)
+                sampleRebatePixel(px: px, py: py, u: 0, v: 0, dots: nil, grainCell: grainCell, monochrome: monochrome, color: color, out: dst, idx: (dstRow + px) * 3)
             }
             dst.advanced(by: (dstRow + leftPad) * 3).update(from: src.advanced(by: r * pw * 3), count: pw * 3)
             for px in (leftPad + pw)..<ow {
-                sampleRebatePixel(px: px, py: py, u: 0, v: 0, dots: nil, grainCell: grainCell, monochrome: monochrome, out: dst, idx: (dstRow + px) * 3)
+                sampleRebatePixel(px: px, py: py, u: 0, v: 0, dots: nil, grainCell: grainCell, monochrome: monochrome, color: color, out: dst, idx: (dstRow + px) * 3)
             }
+
+            if !isPentax { continue }
 
             if !onLeft {
                 if y >= layout.infoBar + 2 { continue }
@@ -855,7 +972,7 @@ public enum Pentax645Frame {
                     let px = leftPad + x
                     let idx = (dstRow + px) * 3
                     tmp.withUnsafeMutableBufferPointer { buf in
-                        sampleRebatePixel(px: px, py: py, u: Float(px) + 0.5, v: Float(py) + 0.5, dots: dots, grainCell: grainCell, monochrome: monochrome, out: buf.baseAddress!, idx: 0)
+                        sampleRebatePixel(px: px, py: py, u: Float(px) + 0.5, v: Float(py) + 0.5, dots: dots, grainCell: grainCell, monochrome: monochrome, color: color, out: buf.baseAddress!, idx: 0)
                     }
                     blendPixel(dst: dst, idx: idx, stripe: tmp, mask: mask)
                 }
@@ -878,7 +995,7 @@ public enum Pentax645Frame {
                     let px = leftPad + x
                     let idx = (dstRow + px) * 3
                     tmp.withUnsafeMutableBufferPointer { buf in
-                        sampleRebatePixel(px: px, py: py, u: Float(oh - 1 - py) + 0.5, v: Float(px) + 0.5, dots: dots, grainCell: grainCell, monochrome: monochrome, out: buf.baseAddress!, idx: 0)
+                        sampleRebatePixel(px: px, py: py, u: Float(oh - 1 - py) + 0.5, v: Float(px) + 0.5, dots: dots, grainCell: grainCell, monochrome: monochrome, color: color, out: buf.baseAddress!, idx: 0)
                     }
                     blendPixel(dst: dst, idx: idx, stripe: tmp, mask: mask)
                 }
@@ -931,6 +1048,16 @@ public enum Pentax645Frame {
         0b0001000,
         0b0000000,
         0b0000000,
+    ]
+
+    private static let triangle7x6 = [
+        0b100000,
+        0b111000,
+        0b111110,
+        0b111111,
+        0b111110,
+        0b111000,
+        0b100000,
     ]
 
     private static func glyph5x7(_ ch: Character) -> [Int]? {

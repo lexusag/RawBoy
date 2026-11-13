@@ -31,6 +31,7 @@ import app.rawboy.export.ExportGpu
 import app.rawboy.export.ExportSettings
 import app.rawboy.export.Exporter
 import app.rawboy.export.JpegEncoder
+import app.rawboy.export.FilmFrameStyle
 import app.rawboy.export.Pentax645Frame
 import app.rawboy.export.Pentax645Info
 import app.rawboy.film.FilmData
@@ -439,7 +440,7 @@ internal object ShotSaver {
                 description = shot.description,
                 dateStamp = if (s.photoFrame == PhotoFrame.DATE_STAMP) DateStamp.format(shot.timeMs, s.dateStampFormat) else "",
                 dateStampStyle = s.dateStampStyle,
-                pentax645 = if (s.photoFrame == PhotoFrame.PENTAX_645) {
+                pentax645 = if (s.photoFrame == PhotoFrame.PENTAX_645 || s.photoFrame == PhotoFrame.CONTAX_645) {
                     val info = img.shotInfo
                     val fields = s.pentax645Fields
                     val focalMm = info.focalLength35mm.takeIf { it.isFinite() && it > 0 } ?: info.focalLength
@@ -462,6 +463,8 @@ internal object ShotSaver {
                         time = if (Pentax645Field.TIME in fields) Pentax645Frame.formatTime(shot.timeMs, s.timeStampFormat) else null,
                         flipped = s.pentax645Flip,
                         fieldOrder = s.pentax645Order.map { it.key },
+                        color = s.frameColor,
+                        style = if (s.photoFrame == PhotoFrame.CONTAX_645) FilmFrameStyle.CONTAX_645 else FilmFrameStyle.PENTAX_645,
                     )
                 } else {
                     null

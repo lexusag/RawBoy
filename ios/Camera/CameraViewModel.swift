@@ -590,6 +590,7 @@ final class CameraViewModel: ObservableObject {
     func setDateStampFormat(_ format: DateStampFormat) { change { $0.dateStampFormat = format } }
     func setDateStampStyle(_ style: DateStampStyle) { change { $0.dateStampStyle = style } }
     func setTimeStampFormat(_ format: TimeStampFormat) { change { $0.timeStampFormat = format } }
+    func setFrameColor(_ color: FilmFrameColor) { change { $0.frameColor = color } }
     func setPentax645Flip(_ on: Bool) { change { $0.pentax645Flip = on } }
     func setPentax645Field(_ field: Pentax645Field, _ on: Bool) {
         change {
@@ -826,7 +827,7 @@ final class CameraViewModel: ObservableObject {
                                                    bloomSources: a.bloom, skinMask: a.skin,
                                                    grainSizeScale: Self.grainSizeScale, grainStrength: Self.grainStrength(s),
                                                    film: film)
-                    let pentax645: Pentax645Info? = s.photoFrame == .pentax645 ? {
+                    let pentax645: Pentax645Info? = (s.photoFrame == .pentax645 || s.photoFrame == .contax645) ? {
                         let info = img.shotInfo
                         let fields = s.pentax645Fields
                         let focalMm = info.focalLength35mm.isFinite && info.focalLength35mm > 0 ? info.focalLength35mm : info.focalLength
@@ -844,7 +845,9 @@ final class CameraViewModel: ObservableObject {
                             date: fields.contains(.date) ? Pentax645Frame.formatDate(shot.date, format: s.dateStampFormat) : nil,
                             time: fields.contains(.time) ? Pentax645Frame.formatTime(shot.date, format: s.timeStampFormat) : nil,
                             flipped: s.pentax645Flip,
-                            fieldOrder: s.pentax645Order.map(\.rawValue))
+                            fieldOrder: s.pentax645Order.map(\.rawValue),
+                            color: s.frameColor,
+                            style: s.photoFrame == .contax645 ? .contax645 : .pentax645)
                     }() : nil
                     let export = ExportSettings(format: .jpeg, jpegQuality: s.jpegQuality, jpegEncoder: .jpegli,
                                                 maxLongSide: s.maxLongSide,
