@@ -24,6 +24,7 @@ import app.rawboy.camera.capture.FlashMode
 import app.rawboy.camera.capture.LocationTracker
 import app.rawboy.camera.capture.ShutterSound
 import app.rawboy.export.DateStampFormat
+import app.rawboy.export.TimeStampFormat
 import app.rawboy.camera.qr.QrPayload
 import app.rawboy.camera.qr.QrReader
 import app.rawboy.camera.qr.QrTracker
@@ -955,9 +956,18 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setHdrGainMap(on: Boolean) = change { it.copy(hdrGainMap = on) }
     fun setPhotoFrame(frame: PhotoFrame) = change { it.copy(photoFrame = frame) }
     fun setDateStampFormat(format: DateStampFormat) = change { it.copy(dateStampFormat = format) }
+    fun setTimeStampFormat(format: TimeStampFormat) = change { it.copy(timeStampFormat = format) }
+    fun setPentax645Flip(on: Boolean) = change { it.copy(pentax645Flip = on) }
     fun togglePentax645Field(field: Pentax645Field) = change {
         val next = if (field in it.pentax645Fields) it.pentax645Fields - field else it.pentax645Fields + field
         it.copy(pentax645Fields = next)
+    }
+    fun movePentax645Field(fromIndex: Int, toIndex: Int) = change {
+        val list = it.pentax645Order.toMutableList()
+        if (fromIndex !in list.indices || toIndex !in list.indices || fromIndex == toIndex) return@change it
+        val item = list.removeAt(fromIndex)
+        list.add(toIndex, item)
+        it.copy(pentax645Order = list)
     }
     fun setTrackFocus(on: Boolean) {
         change { it.copy(trackFocus = on) }

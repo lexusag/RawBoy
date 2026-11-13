@@ -40,6 +40,9 @@ import app.rawboy.camera.capture.FlashMode
 import app.rawboy.camera.Pentax645Field
 import app.rawboy.camera.PhotoFrame
 import app.rawboy.export.DateStampFormat
+import app.rawboy.export.TimeStampFormat
+import androidx.compose.runtime.key
+import androidx.compose.ui.zIndex
 import app.rawboy.camera.qr.QrPayload
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.text.style.TextOverflow
@@ -1415,32 +1418,123 @@ private fun FramesSettingsContent(settings: CameraSettings, vm: CameraViewModel,
                 title = "Date format",
                 subtitle = null,
                 options = listOf(DateStampFormat.DMY, DateStampFormat.YMD, DateStampFormat.MDY),
-                selected = settings.dateStampFormat,
+                selected = settings.dateStampFormat.takeIf { it != DateStampFormat.MMM_YY } ?: DateStampFormat.DMY,
                 label = { it.label },
                 onSelect = vm::setDateStampFormat,
                 indent = true,
             )
         }
         if (settings.photoFrame == PhotoFrame.PENTAX_645) {
-            SettingsSection("Shoot info")
-            for (field in Pentax645Field.entries) {
-                SettingSwitch(
-                    title = field.label,
-                    subtitle = null,
-                    checked = field in settings.pentax645Fields,
-                    onChange = { vm.togglePentax645Field(field) },
-                )
-            }
-            if (Pentax645Field.DATE_TIME in settings.pentax645Fields) {
+            SettingSwitch(
+                title = "Flip info upside down",
+                subtitle = "Rotate shoot info 180° like on real film",
+                checked = settings.pentax645Flip,
+                onChange = vm::setPentax645Flip,
+            )
+            if (Pentax645Field.DATE in settings.pentax645Fields) {
                 SettingChoice(
                     title = "Date format",
                     subtitle = null,
-                    options = listOf(DateStampFormat.DMY, DateStampFormat.YMD, DateStampFormat.MDY),
+                    options = DateStampFormat.entries,
                     selected = settings.dateStampFormat,
                     label = { it.label },
                     onSelect = vm::setDateStampFormat,
                     indent = true,
                 )
+            }
+            if (Pentax645Field.TIME in settings.pentax645Fields) {
+                SettingChoice(
+                    title = "Time format",
+                    subtitle = null,
+                    options = TimeStampFormat.entries,
+                    selected = settings.timeStampFormat,
+                    label = { it.label },
+                    onSelect = vm::setTimeStampFormat,
+                    indent = true,
+                )
+            }
+            SettingsSection("Shoot info (drag ≡ to reorder)")
+            val currentOrder by rememberUpdatedState(settings.pentax645Order)
+            var draggingField by remember { mutableStateOf<Pentax645Field?>(null) }
+            var dragOffsetY by remember { mutableStateOf(0f) }
+            var rowHeightPx by remember { mutableStateOf(0f) }
+            for (field in settings.pentax645Order) {
+                key(field) {
+                    val isDragging = draggingField == field
+                    val checked = field in settings.pentax645Fields
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 48.dp)
+                            .zIndex(if (isDragging) 1f else 0f)
+                            .graphicsLayer {
+                                translationY = if (isDragging) dragOffsetY else 0f
+                            }
+                            .onSizeChanged {
+                                if (it.height > 0) rowHeightPx = it.height.toFloat()
+                            }
+                            .toggleable(
+                                value = checked,
+                                role = Role.Switch,
+                                onValueChange = { vm.togglePentax645Field(field) },
+                            )
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            Modifier
+                                .size(40.dp)
+                                .pointerInput(field) {
+                                    detectDragGestures(
+                                        onDragStart = {
+                                            draggingField = field
+                                            dragOffsetY = 0f
+                                        },
+                                        onDragEnd = {
+                                            draggingField = null
+                                            dragOffsetY = 0f
+                                        },
+                                        onDragCancel = {
+                                            draggingField = null
+                                            dragOffsetY = 0f
+                                        },
+                                        onDrag = { change, dragAmount ->
+                                            change.consume()
+                                            dragOffsetY += dragAmount.y
+                                            val step = rowHeightPx.takeIf { it > 0f } ?: return@detectDragGestures
+                                            val idx = currentOrder.indexOf(field)
+                                            if (idx >= 0) {
+                                                val target = (idx + (dragOffsetY / step).roundToInt())
+                                                    .coerceIn(0, currentOrder.lastIndex)
+                                                if (target != idx) {
+                                                    vm.movePentax645Field(idx, target)
+                                                    dragOffsetY -= (target - idx) * step
+                                                }
+                                            }
+                                        },
+                                    )
+                                },
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Text(
+                                "≡",
+                                style = MaterialTheme.typography.titleMedium,
+                                color = if (isDragging) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            field.label,
+                            style = MaterialTheme.typography.bodyMedium,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Switch(
+                            checked = checked,
+                            onCheckedChange = null,
+                        )
+                    }
+                }
             }
         }
     }

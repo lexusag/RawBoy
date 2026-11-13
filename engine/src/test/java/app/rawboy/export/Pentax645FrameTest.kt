@@ -34,9 +34,49 @@ class Pentax645FrameTest {
 
         val utc = TimeZone.getTimeZone("UTC")
         // 2026-11-13 14:46:00 UTC = 1794581160000L
+        assertEquals("13.11.26", Pentax645Frame.formatDate(1794581160000L, DateStampFormat.DMY, utc))
+        assertEquals("26.11.13", Pentax645Frame.formatDate(1794581160000L, DateStampFormat.YMD, utc))
+        assertEquals("11.13.26", Pentax645Frame.formatDate(1794581160000L, DateStampFormat.MDY, utc))
+        assertEquals("nov 26", Pentax645Frame.formatDate(1794581160000L, DateStampFormat.MMM_YY, utc))
+
+        assertEquals("14:46", Pentax645Frame.formatTime(1794581160000L, TimeStampFormat.H24, utc))
+        assertEquals("2:46pm", Pentax645Frame.formatTime(1794581160000L, TimeStampFormat.H12, utc))
+        // 2026-01-13 00:05:00 UTC = 1768262700000L
+        assertEquals("jan 26", Pentax645Frame.formatDate(1768262700000L, DateStampFormat.MMM_YY, utc))
+        assertEquals("12:05am", Pentax645Frame.formatTime(1768262700000L, TimeStampFormat.H12, utc))
+
         assertEquals("13.11.26 14:46", Pentax645Frame.formatDateTime(1794581160000L, DateStampFormat.DMY, utc))
         assertEquals("26.11.13 14:46", Pentax645Frame.formatDateTime(1794581160000L, DateStampFormat.YMD, utc))
         assertEquals("11.13.26 14:46", Pentax645Frame.formatDateTime(1794581160000L, DateStampFormat.MDY, utc))
+    }
+
+    @Test
+    fun flippedAndCustomFieldOrderRenderLedDots() {
+        val layout = Pentax645Frame.layout(600, 800)
+        val infoNormal = Pentax645Info(
+            frameNumber = 1,
+            date = "jan 26",
+            time = "4:46pm",
+            flipped = false,
+            fieldOrder = listOf("time", "date", "frame"),
+        )
+        val infoFlipped = infoNormal.copy(flipped = true)
+        val src = ShortArray(600 * layout.infoBar * 3) { 20000.toShort() }
+        val dstNormal = ShortArray(layout.outWidth * layout.infoBar * 3)
+        val dstFlipped = ShortArray(layout.outWidth * layout.infoBar * 3)
+        Pentax645Frame.wrapPhotoBand(src, dstNormal, layout, 0, layout.infoBar, monochrome = false, info = infoNormal)
+        Pentax645Frame.wrapPhotoBand(src, dstFlipped, layout, 0, layout.infoBar, monochrome = false, info = infoFlipped)
+
+        var diffCount = 0
+        var brightFlipped = 0
+        for (i in 0 until layout.outWidth * layout.infoBar) {
+            val rn = dstNormal[i * 3].toInt() and 0xFFFF
+            val rf = dstFlipped[i * 3].toInt() and 0xFFFF
+            if (rn != rf) diffCount++
+            if (rf > 30000) brightFlipped++
+        }
+        assertTrue("Expected flipped LED text to render bright dots", brightFlipped > 30)
+        assertTrue("Expected flipped LED text to differ from unflipped", diffCount > 50)
     }
 
     @Test

@@ -8,12 +8,21 @@ import kotlin.math.exp
 import kotlin.math.roundToInt
 
 /**
- * Display order for the film data-back date stamp (`DD MM 'YY` by default).
+ * Display order for the film data-back date stamp (`DD MM 'YY` by default) and Pentax 645 date imprint.
  */
 enum class DateStampFormat(val label: String) {
     DMY("DD MM 'YY"),
     YMD("'YY MM DD"),
     MDY("MM DD 'YY"),
+    MMM_YY("jan 26"),
+}
+
+/**
+ * Time format for the Pentax 645 shoot-info imprint (`24h` by default, or `12h (am/pm)`).
+ */
+enum class TimeStampFormat(val label: String) {
+    H24("24h"),
+    H12("12h (am/pm)"),
 }
 
 /**
@@ -40,6 +49,7 @@ object DateStamp {
             DateStampFormat.DMY -> String.format(Locale.US, "%02d %02d '%02d", day, month, year)
             DateStampFormat.YMD -> String.format(Locale.US, "'%02d %02d %02d", year, month, day)
             DateStampFormat.MDY -> String.format(Locale.US, "%02d %02d '%02d", month, day, year)
+            DateStampFormat.MMM_YY -> String.format(Locale.US, "%02d %02d '%02d", day, month, year)
         }
     }
 

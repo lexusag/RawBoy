@@ -22,7 +22,11 @@ data class Pentax645Info(
     val spotMetered: Boolean? = null,
     val focalLengthMm: Double? = null,
     val iso: Double? = null,
+    val date: String? = null,
+    val time: String? = null,
     val dateTime: String? = null,
+    val flipped: Boolean = false,
+    val fieldOrder: List<String>? = null,
 )
 
 /**
@@ -91,7 +95,9 @@ object Pentax645Frame {
         return "ISO${iso.roundToInt()}"
     }
 
-    fun formatDateTime(
+    private val MONTHS = arrayOf("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
+
+    fun formatDate(
         timeMs: Long,
         format: DateStampFormat = DateStampFormat.DMY,
         timeZone: TimeZone = TimeZone.getDefault(),
@@ -100,14 +106,41 @@ object Pentax645Frame {
         val year = cal.get(Calendar.YEAR) % 100
         val month = cal.get(Calendar.MONTH) + 1
         val day = cal.get(Calendar.DAY_OF_MONTH)
+        return when (format) {
+            DateStampFormat.DMY -> String.format(Locale.US, "%02d.%02d.%02d", day, month, year)
+            DateStampFormat.YMD -> String.format(Locale.US, "%02d.%02d.%02d", year, month, day)
+            DateStampFormat.MDY -> String.format(Locale.US, "%02d.%02d.%02d", month, day, year)
+            DateStampFormat.MMM_YY -> String.format(Locale.US, "%s %02d", MONTHS[(month - 1).coerceIn(0, 11)], year)
+        }
+    }
+
+    fun formatTime(
+        timeMs: Long,
+        format: TimeStampFormat = TimeStampFormat.H24,
+        timeZone: TimeZone = TimeZone.getDefault(),
+    ): String {
+        val cal = Calendar.getInstance(timeZone).apply { timeInMillis = timeMs }
         val hour = cal.get(Calendar.HOUR_OF_DAY)
         val minute = cal.get(Calendar.MINUTE)
         return when (format) {
-            DateStampFormat.DMY -> String.format(Locale.US, "%02d.%02d.%02d %02d:%02d", day, month, year, hour, minute)
-            DateStampFormat.YMD -> String.format(Locale.US, "%02d.%02d.%02d %02d:%02d", year, month, day, hour, minute)
-            DateStampFormat.MDY -> String.format(Locale.US, "%02d.%02d.%02d %02d:%02d", month, day, year, hour, minute)
+            TimeStampFormat.H24 -> String.format(Locale.US, "%02d:%02d", hour, minute)
+            TimeStampFormat.H12 -> {
+                val h12 = when (val h = hour % 12) {
+                    0 -> 12
+                    else -> h
+                }
+                val ampm = if (hour < 12) "am" else "pm"
+                String.format(Locale.US, "%d:%02d%s", h12, minute, ampm)
+            }
         }
     }
+
+    fun formatDateTime(
+        timeMs: Long,
+        format: DateStampFormat = DateStampFormat.DMY,
+        timeZone: TimeZone = TimeZone.getDefault(),
+        timeFormat: TimeStampFormat = TimeStampFormat.H24,
+    ): String = "${formatDate(timeMs, format, timeZone)} ${formatTime(timeMs, timeFormat, timeZone)}"
 
     private fun trimOneDecimal(v: Double): String {
         val s = String.format(Locale.ROOT, "%.1f", v)
@@ -136,6 +169,10 @@ object Pentax645Frame {
         else -> 5
     }
 
+    private val DEFAULT_FIELD_ORDER = listOf(
+        "frame", "mode", "shutter", "aperture", "ev", "metering", "focal", "iso", "date", "time", "datetime",
+    )
+
     private class StampDots(
         val u0: Float,
         val v0: Float,
@@ -145,6 +182,7 @@ object Pentax645Frame {
         val soft: Float,
         val reach: Float,
         val haloInv: Float,
+        val flipped: Boolean,
         val dotU: FloatArray,
         val dotV: FloatArray,
         val dotBright: FloatArray,
@@ -155,16 +193,27 @@ object Pentax645Frame {
         val photoShortSide = minOf(layout.photoWidth, layout.photoHeight).toFloat()
         val infoBar = layout.infoBar.toFloat()
 
+        val order = if (info.fieldOrder.isNullOrEmpty()) {
+            DEFAULT_FIELD_ORDER
+        } else {
+            info.fieldOrder + DEFAULT_FIELD_ORDER.filter { it !in info.fieldOrder }
+        }
         val tokens = buildList {
-            info.frameNumber?.let { add(Token.Text(formatFrameNumber(it))) }
-            info.mode?.takeIf { it.isNotEmpty() }?.let { add(Token.Text(it)) }
-            info.exposureTime?.let { add(Token.Text(formatShutter(it))) }
-            info.fNumber?.let { add(Token.Text(formatAperture(it))) }
-            info.compensationEv?.let { add(Token.Text(formatEv(it))) }
-            info.spotMetered?.let { add(Token.Metering(it)) }
-            info.focalLengthMm?.let { add(Token.Text(formatFocalLength(it))) }
-            info.iso?.let { add(Token.Text(formatIso(it))) }
-            info.dateTime?.takeIf { it.isNotEmpty() }?.let { add(Token.Text(it)) }
+            for (key in order) {
+                when (key) {
+                    "frame" -> info.frameNumber?.let { add(Token.Text(formatFrameNumber(it))) }
+                    "mode" -> info.mode?.takeIf { it.isNotEmpty() }?.let { add(Token.Text(it)) }
+                    "shutter" -> info.exposureTime?.let { add(Token.Text(formatShutter(it))) }
+                    "aperture" -> info.fNumber?.let { add(Token.Text(formatAperture(it))) }
+                    "ev" -> info.compensationEv?.let { add(Token.Text(formatEv(it))) }
+                    "metering" -> info.spotMetered?.let { add(Token.Metering(it)) }
+                    "focal" -> info.focalLengthMm?.let { add(Token.Text(formatFocalLength(it))) }
+                    "iso" -> info.iso?.let { add(Token.Text(formatIso(it))) }
+                    "date" -> info.date?.takeIf { it.isNotEmpty() }?.let { add(Token.Text(it)) }
+                    "time" -> info.time?.takeIf { it.isNotEmpty() }?.let { add(Token.Text(it)) }
+                    "datetime" -> info.dateTime?.takeIf { it.isNotEmpty() }?.let { add(Token.Text(it)) }
+                }
+            }
         }
 
         var charH = infoBar * 0.56f
@@ -272,6 +321,7 @@ object Pentax645Frame {
             soft = soft,
             reach = reach,
             haloInv = haloInv,
+            flipped = info.flipped,
             dotU = uList.toFloatArray(),
             dotV = vList.toFloatArray(),
             dotBright = bList.toFloatArray(),
@@ -295,8 +345,10 @@ object Pentax645Frame {
         var b = (if (monochrome) BASE_MONO else BASE_B) * grain
 
         if (dots != null && dots.dotU.isNotEmpty()) {
-            val lu = u - dots.u0
-            val lv = v - dots.v0
+            val rawLu = u - dots.u0
+            val rawLv = v - dots.v0
+            val lu = if (dots.flipped) dots.totalU - rawLu else rawLu
+            val lv = if (dots.flipped) dots.charH - rawLv else rawLv
             val reach = dots.reach
             if (lu >= -reach && lu <= dots.totalU + reach && lv >= -reach && lv <= dots.charH + reach) {
                 var core = 0f
@@ -534,8 +586,32 @@ object Pentax645Frame {
         'S' -> intArrayOf(0b01111, 0b10000, 0b10000, 0b01110, 0b00001, 0b00001, 0b11110)
         'V' -> intArrayOf(0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01010, 0b00100)
         'W' -> intArrayOf(0b10001, 0b10001, 0b10001, 0b10101, 0b10101, 0b11011, 0b10001)
+        'a' -> intArrayOf(0b00000, 0b00000, 0b01110, 0b00001, 0b01111, 0b10001, 0b01111)
+        'b' -> intArrayOf(0b10000, 0b10000, 0b11110, 0b10001, 0b10001, 0b10001, 0b11110)
+        'c' -> intArrayOf(0b00000, 0b00000, 0b01110, 0b10001, 0b10000, 0b10001, 0b01110)
+        'd' -> intArrayOf(0b00001, 0b00001, 0b01111, 0b10001, 0b10001, 0b10001, 0b01111)
+        'e' -> intArrayOf(0b00000, 0b00000, 0b01110, 0b10001, 0b11111, 0b10000, 0b01110)
+        'f' -> intArrayOf(0b00110, 0b01001, 0b01000, 0b11100, 0b01000, 0b01000, 0b01000)
+        'g' -> intArrayOf(0b00000, 0b01111, 0b10001, 0b10001, 0b01111, 0b00001, 0b01110)
+        'h' -> intArrayOf(0b10000, 0b10000, 0b10110, 0b11001, 0b10001, 0b10001, 0b10001)
+        'i' -> intArrayOf(0b00100, 0b00000, 0b01100, 0b00100, 0b00100, 0b00100, 0b01110)
+        'j' -> intArrayOf(0b00010, 0b00000, 0b00110, 0b00010, 0b00010, 0b10010, 0b01100)
+        'k' -> intArrayOf(0b10000, 0b10000, 0b10010, 0b10100, 0b11000, 0b10100, 0b10010)
+        'l' -> intArrayOf(0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110)
         'm' -> intArrayOf(0b00000, 0b00000, 0b11010, 0b10101, 0b10101, 0b10001, 0b10001)
+        'n' -> intArrayOf(0b00000, 0b00000, 0b10110, 0b11001, 0b10001, 0b10001, 0b10001)
+        'o' -> intArrayOf(0b00000, 0b00000, 0b01110, 0b10001, 0b10001, 0b10001, 0b01110)
+        'p' -> intArrayOf(0b00000, 0b11110, 0b10001, 0b10001, 0b11110, 0b10000, 0b10000)
+        'q' -> intArrayOf(0b00000, 0b01111, 0b10001, 0b10001, 0b01111, 0b00001, 0b00001)
+        'r' -> intArrayOf(0b00000, 0b00000, 0b10110, 0b11001, 0b10000, 0b10000, 0b10000)
         's' -> intArrayOf(0b00000, 0b00000, 0b01111, 0b10000, 0b01110, 0b00001, 0b11110)
+        't' -> intArrayOf(0b01000, 0b01000, 0b11100, 0b01000, 0b01000, 0b01001, 0b00110)
+        'u' -> intArrayOf(0b00000, 0b00000, 0b10001, 0b10001, 0b10001, 0b10011, 0b01101)
+        'v' -> intArrayOf(0b00000, 0b00000, 0b10001, 0b10001, 0b10001, 0b01010, 0b00100)
+        'w' -> intArrayOf(0b00000, 0b00000, 0b10001, 0b10001, 0b10101, 0b10101, 0b01010)
+        'x' -> intArrayOf(0b00000, 0b00000, 0b10001, 0b01010, 0b00100, 0b01010, 0b10001)
+        'y' -> intArrayOf(0b00000, 0b10001, 0b10001, 0b10001, 0b01111, 0b00001, 0b01110)
+        'z' -> intArrayOf(0b00000, 0b00000, 0b11111, 0b00010, 0b00100, 0b01000, 0b11111)
         '/' -> intArrayOf(0b00001, 0b00010, 0b00010, 0b00100, 0b01000, 0b01000, 0b10000)
         '.' -> intArrayOf(0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b00100, 0b00100)
         ':' -> intArrayOf(0b00000, 0b00100, 0b00100, 0b00000, 0b00100, 0b00100, 0b00000)

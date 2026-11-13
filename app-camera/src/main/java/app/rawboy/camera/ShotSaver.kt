@@ -457,7 +457,10 @@ internal object ShotSaver {
                         spotMetered = if (Pentax645Field.METERING in fields) shot.meter is MeterArea.Spot else null,
                         focalLengthMm = if (Pentax645Field.FOCAL_LENGTH in fields) focalMm else null,
                         iso = if (Pentax645Field.ISO in fields) isoVal else null,
-                        dateTime = if (Pentax645Field.DATE_TIME in fields) Pentax645Frame.formatDateTime(shot.timeMs, s.dateStampFormat) else null,
+                        date = if (Pentax645Field.DATE in fields) Pentax645Frame.formatDate(shot.timeMs, s.dateStampFormat) else null,
+                        time = if (Pentax645Field.TIME in fields) Pentax645Frame.formatTime(shot.timeMs, s.timeStampFormat) else null,
+                        flipped = s.pentax645Flip,
+                        fieldOrder = s.pentax645Order.map { it.key },
                     )
                 } else {
                     null

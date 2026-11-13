@@ -11,6 +11,7 @@ import app.rawboy.camera.capture.CameraController
 import app.rawboy.camera.capture.FlashGuides
 import app.rawboy.camera.capture.FlashMode
 import app.rawboy.export.DateStampFormat
+import app.rawboy.export.TimeStampFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -22,7 +23,7 @@ enum class PhotoFrame(val label: String) {
     PENTAX_645("Pentax 645"),
 }
 
-/** Individual shoot-info items that can be toggled on the [PhotoFrame.PENTAX_645] top rebate. */
+/** Individual shoot-info items that can be toggled and reordered on the [PhotoFrame.PENTAX_645] rebate. */
 enum class Pentax645Field(val key: String, val label: String) {
     FRAME_NUMBER("frame", "Frame #"),
     MODE("mode", "Mode"),
@@ -32,20 +33,55 @@ enum class Pentax645Field(val key: String, val label: String) {
     METERING("metering", "Metering"),
     FOCAL_LENGTH("focal", "Focal length"),
     ISO("iso", "ISO"),
-    DATE_TIME("datetime", "Date & time");
+    DATE("date", "Date"),
+    TIME("time", "Time");
 
     companion object {
         val DEFAULT: Set<Pentax645Field> = entries.toSet()
+        val DEFAULT_ORDER: List<Pentax645Field> = entries.toList()
 
         fun parseSet(raw: String?): Set<Pentax645Field> {
             if (raw == null) return DEFAULT
             if (raw.isBlank()) return emptySet()
             val byKey = entries.associateBy { it.key }
-            return raw.split(',').mapNotNull { byKey[it.trim()] }.toSet()
+            val result = mutableSetOf<Pentax645Field>()
+            for (token in raw.split(',')) {
+                val k = token.trim()
+                if (k == "datetime") {
+                    result += DATE
+                    result += TIME
+                } else {
+                    byKey[k]?.let { result += it }
+                }
+            }
+            return result
         }
 
         fun serialize(fields: Set<Pentax645Field>): String =
             entries.filter { it in fields }.joinToString(",") { it.key }
+
+        fun parseOrder(raw: String?): List<Pentax645Field> {
+            if (raw.isNullOrBlank()) return DEFAULT_ORDER
+            val byKey = entries.associateBy { it.key }
+            val result = mutableListOf<Pentax645Field>()
+            for (token in raw.split(',')) {
+                val k = token.trim()
+                if (k == "datetime") {
+                    if (DATE !in result) result += DATE
+                    if (TIME !in result) result += TIME
+                } else {
+                    val f = byKey[k]
+                    if (f != null && f !in result) result += f
+                }
+            }
+            for (f in entries) {
+                if (f !in result) result += f
+            }
+            return result
+        }
+
+        fun serializeOrder(order: List<Pentax645Field>): String =
+            order.joinToString(",") { it.key }
     }
 }
 
@@ -113,10 +149,16 @@ data class CameraSettings(
     val hdrGainMap: Boolean = false,
     /** Frame / stamp option: Off by default, or Date stamp / Pentax 645 (mutually exclusive). */
     val photoFrame: PhotoFrame = PhotoFrame.NONE,
-    /** Date order for [PhotoFrame.DATE_STAMP] and [Pentax645Field.DATE_TIME]: `DD MM 'YY` by default. */
+    /** Date order for [PhotoFrame.DATE_STAMP] and [Pentax645Field.DATE]: `DD MM 'YY` by default. */
     val dateStampFormat: DateStampFormat = DateStampFormat.DMY,
+    /** Time format for [Pentax645Field.TIME]: `24h` by default. */
+    val timeStampFormat: TimeStampFormat = TimeStampFormat.H24,
     /** Shoot-info items imprinted on the [PhotoFrame.PENTAX_645] rebate (all on by default). */
     val pentax645Fields: Set<Pentax645Field> = Pentax645Field.DEFAULT,
+    /** Display order of shoot-info items on the [PhotoFrame.PENTAX_645] rebate. */
+    val pentax645Order: List<Pentax645Field> = Pentax645Field.DEFAULT_ORDER,
+    /** Rotate the [PhotoFrame.PENTAX_645] shoot-info LED text 180° upside down (like on real film). */
+    val pentax645Flip: Boolean = false,
     /** Look for QR codes in the viewfinder and offer to open them, as the phone's own camera does. */
     val scanQr: Boolean = true,
     /** After a tap, keep focus on what was tapped as it moves (CameraViewModel's tracker); off = the focus stays put. */
@@ -326,7 +368,10 @@ object CameraSettingsStore {
                 ?.let { runCatching { PhotoFrame.valueOf(it) }.getOrNull() }
                 ?: if (p.getBoolean("dateStamp", false)) PhotoFrame.DATE_STAMP else d.photoFrame,
             dateStampFormat = runCatching { DateStampFormat.valueOf(p.getString("dateStampFormat", null)!!) }.getOrDefault(d.dateStampFormat),
+            timeStampFormat = runCatching { TimeStampFormat.valueOf(p.getString("timeStampFormat", null)!!) }.getOrDefault(d.timeStampFormat),
             pentax645Fields = Pentax645Field.parseSet(p.getString("pentax645Fields", null)),
+            pentax645Order = Pentax645Field.parseOrder(p.getString("pentax645Order", null)),
+            pentax645Flip = p.getBoolean("pentax645Flip", d.pentax645Flip),
             scanQr = p.getBoolean("scanQr", d.scanQr),
             trackFocus = p.getBoolean("trackFocus", d.trackFocus),
             experimental = p.getBoolean("experimental", d.experimental),
@@ -396,7 +441,10 @@ object CameraSettingsStore {
             .putString("photoFrame", s.photoFrame.name)
             .putBoolean("dateStamp", s.photoFrame == PhotoFrame.DATE_STAMP)
             .putString("dateStampFormat", s.dateStampFormat.name)
+            .putString("timeStampFormat", s.timeStampFormat.name)
             .putString("pentax645Fields", Pentax645Field.serialize(s.pentax645Fields))
+            .putString("pentax645Order", Pentax645Field.serializeOrder(s.pentax645Order))
+            .putBoolean("pentax645Flip", s.pentax645Flip)
             .putBoolean("scanQr", s.scanQr)
             .putBoolean("trackFocus", s.trackFocus)
             .putBoolean("experimental", s.experimental)

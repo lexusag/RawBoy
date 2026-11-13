@@ -51,17 +51,32 @@ public struct ExportSettings: Equatable, Sendable {
     }
 }
 
-/** Display order for the film data-back date stamp (`DD MM 'YY` by default). */
+/** Display order for the film data-back date stamp (`DD MM 'YY` by default) and Pentax 645 date imprint. */
 public enum DateStampFormat: String, CaseIterable, Sendable {
     case dmy = "DMY"
     case ymd = "YMD"
     case mdy = "MDY"
+    case mmmYy = "MMM_YY"
 
     public var label: String {
         switch self {
         case .dmy: "DD MM 'YY"
         case .ymd: "'YY MM DD"
         case .mdy: "MM DD 'YY"
+        case .mmmYy: "jan 26"
+        }
+    }
+}
+
+/** Time format for the Pentax 645 shoot-info imprint (`24h` by default, or `12h (am/pm)`). */
+public enum TimeStampFormat: String, CaseIterable, Sendable {
+    case h24 = "H24"
+    case h12 = "H12"
+
+    public var label: String {
+        switch self {
+        case .h24: "24h"
+        case .h12: "12h (am/pm)"
         }
     }
 }
@@ -86,6 +101,7 @@ public enum DateStamp {
         case .dmy: return String(format: "%02d %02d '%02d", day, month, year)
         case .ymd: return String(format: "'%02d %02d %02d", year, month, day)
         case .mdy: return String(format: "%02d %02d '%02d", month, day, year)
+        case .mmmYy: return String(format: "%02d %02d '%02d", day, month, year)
         }
     }
 
@@ -299,11 +315,16 @@ public struct Pentax645Info: Equatable, Sendable {
     public let spotMetered: Bool?
     public let focalLengthMm: Double?
     public let iso: Double?
+    public let date: String?
+    public let time: String?
     public let dateTime: String?
+    public let flipped: Bool
+    public let fieldOrder: [String]?
 
     public init(frameNumber: Int? = nil, mode: String? = nil, exposureTime: Double? = nil, fNumber: Double? = nil,
                 compensationEv: Float? = nil, spotMetered: Bool? = nil, focalLengthMm: Double? = nil,
-                iso: Double? = nil, dateTime: String? = nil) {
+                iso: Double? = nil, date: String? = nil, time: String? = nil, dateTime: String? = nil,
+                flipped: Bool = false, fieldOrder: [String]? = nil) {
         self.frameNumber = frameNumber
         self.mode = mode
         self.exposureTime = exposureTime
@@ -312,7 +333,11 @@ public struct Pentax645Info: Equatable, Sendable {
         self.spotMetered = spotMetered
         self.focalLengthMm = focalLengthMm
         self.iso = iso
+        self.date = date
+        self.time = time
         self.dateTime = dateTime
+        self.flipped = flipped
+        self.fieldOrder = fieldOrder
     }
 }
 
@@ -370,19 +395,43 @@ public enum Pentax645Frame {
         return "ISO\(Int(iso.rounded()))"
     }
 
-    public static func formatDateTime(_ date: Date = Date(), format: DateStampFormat = .dmy,
-                                      calendar: Calendar = .current) -> String {
-        let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+    private static let monthAbbr = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+    private static let defaultFieldOrder = ["frame", "mode", "shutter", "aperture", "ev", "metering", "focal", "iso", "date", "time"]
+
+    public static func formatDate(_ date: Date = Date(), format: DateStampFormat = .dmy,
+                                  calendar: Calendar = .current) -> String {
+        let comps = calendar.dateComponents([.year, .month, .day], from: date)
         let year = (comps.year ?? 0) % 100
-        let month = comps.month ?? 1
+        let monthIdx = min(max((comps.month ?? 1) - 1, 0), 11)
+        let month = monthIdx + 1
         let day = comps.day ?? 1
-        let hour = comps.hour ?? 0
+        switch format {
+        case .dmy: return String(format: "%02d.%02d.%02d", day, month, year)
+        case .ymd: return String(format: "%02d.%02d.%02d", year, month, day)
+        case .mdy: return String(format: "%02d.%02d.%02d", month, day, year)
+        case .mmmYy: return String(format: "%@ %02d", monthAbbr[monthIdx], year)
+        }
+    }
+
+    public static func formatTime(_ date: Date = Date(), format: TimeStampFormat = .h24,
+                                  calendar: Calendar = .current) -> String {
+        let comps = calendar.dateComponents([.hour, .minute], from: date)
+        let hour24 = comps.hour ?? 0
         let minute = comps.minute ?? 0
         switch format {
-        case .dmy: return String(format: "%02d.%02d.%02d %02d:%02d", day, month, year, hour, minute)
-        case .ymd: return String(format: "%02d.%02d.%02d %02d:%02d", year, month, day, hour, minute)
-        case .mdy: return String(format: "%02d.%02d.%02d %02d:%02d", month, day, year, hour, minute)
+        case .h24:
+            return String(format: "%02d:%02d", hour24, minute)
+        case .h12:
+            let hour12 = hour24 % 12 == 0 ? 12 : hour24 % 12
+            let amPm = hour24 < 12 ? "am" : "pm"
+            return String(format: "%d:%02d%@", hour12, minute, amPm)
         }
+    }
+
+    public static func formatDateTime(_ date: Date = Date(), format: DateStampFormat = .dmy,
+                                      timeFormat: TimeStampFormat = .h24,
+                                      calendar: Calendar = .current) -> String {
+        "\(formatDate(date, format: format, calendar: calendar)) \(formatTime(date, format: timeFormat, calendar: calendar))"
     }
 
     private static func trimOneDecimal(_ v: Double) -> String {
@@ -421,6 +470,7 @@ public enum Pentax645Frame {
         let soft: Float
         let reach: Float
         let haloInv: Float
+        let flipped: Bool
         let dotU: [Float]
         let dotV: [Float]
         let dotBright: [Float]
@@ -431,16 +481,34 @@ public enum Pentax645Frame {
         let photoShortSide = Float(min(layout.photoWidth, layout.photoHeight))
         let infoBar = Float(layout.infoBar)
 
+        func tokenForKey(_ key: String) -> Token? {
+            switch key {
+            case "frame": return info.frameNumber.map { .text(formatFrameNumber($0)) }
+            case "mode": return info.mode.flatMap { $0.isEmpty ? nil : .text($0) }
+            case "shutter": return info.exposureTime.map { .text(formatShutter($0)) }
+            case "aperture": return info.fNumber.map { .text(formatAperture($0)) }
+            case "ev": return info.compensationEv.map { .text(formatEv($0)) }
+            case "metering": return info.spotMetered.map { .metering(spot: $0) }
+            case "focal": return info.focalLengthMm.map { .text(formatFocalLength($0)) }
+            case "iso": return info.iso.map { .text(formatIso($0)) }
+            case "date":
+                let d = info.date ?? info.dateTime
+                return d.flatMap { $0.isEmpty ? nil : .text($0) }
+            case "time":
+                return info.time.flatMap { $0.isEmpty ? nil : .text($0) }
+            default: return nil
+            }
+        }
+
+        let order = info.fieldOrder?.isEmpty == false ? info.fieldOrder! : defaultFieldOrder
         var tokens: [Token] = []
-        if let f = info.frameNumber { tokens.append(.text(formatFrameNumber(f))) }
-        if let m = info.mode, !m.isEmpty { tokens.append(.text(m)) }
-        if let s = info.exposureTime { tokens.append(.text(formatShutter(s))) }
-        if let a = info.fNumber { tokens.append(.text(formatAperture(a))) }
-        if let ev = info.compensationEv { tokens.append(.text(formatEv(ev))) }
-        if let spot = info.spotMetered { tokens.append(.metering(spot: spot)) }
-        if let mm = info.focalLengthMm { tokens.append(.text(formatFocalLength(mm))) }
-        if let iso = info.iso { tokens.append(.text(formatIso(iso))) }
-        if let dt = info.dateTime, !dt.isEmpty { tokens.append(.text(dt)) }
+        var seen = Set<String>()
+        for key in order where seen.insert(key).inserted {
+            if let t = tokenForKey(key) { tokens.append(t) }
+        }
+        for key in defaultFieldOrder where seen.insert(key).inserted {
+            if let t = tokenForKey(key) { tokens.append(t) }
+        }
 
         var charH = infoBar * 0.56
         var dotPitch = charH / 7
@@ -539,6 +607,7 @@ public enum Pentax645Frame {
         return StampDots(
             u0: u0, v0: v0, totalU: totalU, charH: charH,
             dotR: dotR, soft: soft, reach: reach, haloInv: haloInv,
+            flipped: info.flipped,
             dotU: dotU, dotV: dotV, dotBright: dotBright
         )
     }
@@ -554,8 +623,10 @@ public enum Pentax645Frame {
         var b = (monochrome ? baseMono : baseB) * grain
 
         if let dots, !dots.dotU.isEmpty {
-            let lu = u - dots.u0
-            let lv = v - dots.v0
+            let rawLu = u - dots.u0
+            let rawLv = v - dots.v0
+            let lu = dots.flipped ? (dots.totalU - rawLu) : rawLu
+            let lv = dots.flipped ? (dots.charH - rawLv) : rawLv
             let reach = dots.reach
             if lu >= -reach && lu <= dots.totalU + reach && lv >= -reach && lv <= dots.charH + reach {
                 var core: Float = 0
@@ -767,8 +838,28 @@ public enum Pentax645Frame {
         case "S": return [0b01111, 0b10000, 0b10000, 0b01110, 0b00001, 0b00001, 0b11110]
         case "V": return [0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01010, 0b00100]
         case "W": return [0b10001, 0b10001, 0b10001, 0b10101, 0b10101, 0b11011, 0b10001]
+        case "a": return [0b00000, 0b00000, 0b01110, 0b00001, 0b01111, 0b10001, 0b01111]
+        case "b": return [0b10000, 0b10000, 0b11110, 0b10001, 0b10001, 0b10001, 0b11110]
+        case "c": return [0b00000, 0b00000, 0b01110, 0b10000, 0b10000, 0b10001, 0b01110]
+        case "d": return [0b00001, 0b00001, 0b01111, 0b10001, 0b10001, 0b10001, 0b01111]
+        case "e": return [0b00000, 0b00000, 0b01110, 0b10001, 0b11111, 0b10000, 0b01110]
+        case "f": return [0b00110, 0b01001, 0b01000, 0b11100, 0b01000, 0b01000, 0b01000]
+        case "g": return [0b00000, 0b01111, 0b10001, 0b10001, 0b01111, 0b00001, 0b01110]
+        case "h": return [0b10000, 0b10000, 0b11110, 0b10001, 0b10001, 0b10001, 0b10001]
+        case "i": return [0b00100, 0b00000, 0b01100, 0b00100, 0b00100, 0b00100, 0b01110]
+        case "j": return [0b00010, 0b00000, 0b00110, 0b00010, 0b00010, 0b10010, 0b01100]
+        case "k": return [0b10000, 0b10000, 0b10010, 0b10100, 0b11000, 0b10100, 0b10010]
+        case "l": return [0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110]
         case "m": return [0b00000, 0b00000, 0b11010, 0b10101, 0b10101, 0b10001, 0b10001]
+        case "n": return [0b00000, 0b00000, 0b11110, 0b10001, 0b10001, 0b10001, 0b10001]
+        case "o": return [0b00000, 0b00000, 0b01110, 0b10001, 0b10001, 0b10001, 0b01110]
+        case "p": return [0b00000, 0b11110, 0b10001, 0b10001, 0b11110, 0b10000, 0b10000]
+        case "r": return [0b00000, 0b00000, 0b10110, 0b11001, 0b10000, 0b10000, 0b10000]
         case "s": return [0b00000, 0b00000, 0b01111, 0b10000, 0b01110, 0b00001, 0b11110]
+        case "t": return [0b01000, 0b01000, 0b11100, 0b01000, 0b01000, 0b01001, 0b00110]
+        case "u": return [0b00000, 0b00000, 0b10001, 0b10001, 0b10001, 0b10011, 0b01101]
+        case "v": return [0b00000, 0b00000, 0b10001, 0b10001, 0b10001, 0b01010, 0b00100]
+        case "y": return [0b00000, 0b10001, 0b10001, 0b10001, 0b01111, 0b00001, 0b01110]
         case "/": return [0b00001, 0b00010, 0b00010, 0b00100, 0b01000, 0b01000, 0b10000]
         case ".": return [0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b00100, 0b00100]
         case ":": return [0b00000, 0b00100, 0b00100, 0b00000, 0b00100, 0b00100, 0b00000]
