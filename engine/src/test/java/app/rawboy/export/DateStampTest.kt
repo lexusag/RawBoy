@@ -61,24 +61,44 @@ class DateStampTest {
     }
 
     @Test
-    fun imprintStandsOutOnPureWhiteBackground() {
+    fun imprintFadesIntoBrightAreasButStillTintsThem() {
         val width = 400
         val height = 300
         val bottomBand = ShortArray(width * 100 * 3) { 0xFFFF.toShort() }
         DateStamp.imprint(bottomBand, width, height, bandY = 200, bandRows = 100, text = "'26 11 13")
 
+        // Light added to the film can't brighten white: red and green stay white, only blue is held back (yellow tint).
         var tintedPixels = 0
-        for (py in 0 until 100) {
-            for (px in width / 2 until width) {
-                val idx = (py * width + px) * 3
-                val r = bottomBand[idx].toInt() and 0xFFFF
-                val g = bottomBand[idx + 1].toInt() and 0xFFFF
-                val b = bottomBand[idx + 2].toInt() and 0xFFFF
-                if (r > 60_000 && g in 40_000..58_000 && b < 20_000) {
-                    tintedPixels++
-                }
-            }
+        for (i in 0 until width * 100) {
+            val r = bottomBand[i * 3].toInt() and 0xFFFF
+            val g = bottomBand[i * 3 + 1].toInt() and 0xFFFF
+            val b = bottomBand[i * 3 + 2].toInt() and 0xFFFF
+            assertEquals(0xFFFF, r)
+            assertEquals(0xFFFF, g)
+            if (b < 35_000) tintedPixels++
         }
-        assertTrue("Expected readable yellow-orange digits over white background, found $tintedPixels", tintedPixels > 20)
+        assertTrue("Expected a yellow tint where the digits are, found $tintedPixels", tintedPixels > 20)
+    }
+
+    @Test
+    fun fringeIsRedderThanCore() {
+        val width = 400
+        val height = 300
+        val band = ShortArray(width * 100 * 3)
+        DateStamp.imprint(band, width, height, bandY = 200, bandRows = 100, text = "'26 11 13")
+
+        // Like a real data back: the hot core goes yellow-orange, the dim glow around it stays red-orange.
+        var coreRatio = 0.0
+        var coreN = 0
+        var fringeRatio = 0.0
+        var fringeN = 0
+        for (i in 0 until width * 100) {
+            val r = band[i * 3].toInt() and 0xFFFF
+            val g = band[i * 3 + 1].toInt() and 0xFFFF
+            if (r > 55_000) { coreRatio += g.toDouble() / r; coreN++ }
+            else if (r in 3_000..20_000) { fringeRatio += g.toDouble() / r; fringeN++ }
+        }
+        assertTrue(coreN > 0 && fringeN > 0)
+        assertTrue("core g/r ${coreRatio / coreN} should exceed fringe g/r ${fringeRatio / fringeN}", coreRatio / coreN > fringeRatio / fringeN + 0.1)
     }
 }
