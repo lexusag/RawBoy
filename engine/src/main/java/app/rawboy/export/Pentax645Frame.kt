@@ -613,12 +613,11 @@ object Pentax645Frame {
                             val cutoutEnd = infoBar * (1.15f + 0.35f * hash(cornerSeed, 101))
                             val ramp = infoBar * (0.28f + 0.12f * hash(cornerSeed, 202))
                             val t = ((xFromEdge - cutoutEnd) / ramp).coerceIn(0f, 1f)
-                            val baseDepth = gateInset * t * t * (3f - 2f * t)
+                            val cutoutDepth = sideInset * (0.85f + 0.25f * gateImperfection(xc, infoBar, cornerSeed * 17 + 11))
+                            val baseDepth = cutoutDepth + (gateInset - cutoutDepth) * t * t * (3f - 2f * t)
                             val wobble = gateImperfection(xc, infoBar, cornerSeed * 17 + 7) * gateInset * 0.22f * t
                             val edgeDepth = (baseDepth + wobble).coerceAtLeast(0f)
-                            if (edgeDepth > 0.01f) {
-                                mask = maxOf(mask, gateMask(yFromEdge - edgeDepth, softEdge))
-                            }
+                            mask = maxOf(mask, gateMask(yFromEdge - edgeDepth, softEdge))
                         } else {
                             val horizSeed = if (isTop) 31 else 53
                             val horizDepth = (sideInset * (0.85f + 0.25f * gateImperfection(xc, infoBar, horizSeed))).coerceAtLeast(0f)
@@ -631,12 +630,11 @@ object Pentax645Frame {
                             val cutoutEnd = infoBar * (1.15f + 0.35f * hash(cornerSeed, 101))
                             val ramp = infoBar * (0.28f + 0.12f * hash(cornerSeed, 202))
                             val t = ((yFromEdge - cutoutEnd) / ramp).coerceIn(0f, 1f)
-                            val baseDepth = gateInset * t * t * (3f - 2f * t)
+                            val cutoutDepth = sideInset * (0.85f + 0.25f * gateImperfection(yc, infoBar, cornerSeed * 17 + 11))
+                            val baseDepth = cutoutDepth + (gateInset - cutoutDepth) * t * t * (3f - 2f * t)
                             val wobble = gateImperfection(yc, infoBar, cornerSeed * 17 + 7) * gateInset * 0.22f * t
                             val edgeDepth = (baseDepth + wobble).coerceAtLeast(0f)
-                            if (edgeDepth > 0.01f) {
-                                mask = maxOf(mask, gateMask(xFromEdge - edgeDepth, softEdge))
-                            }
+                            mask = maxOf(mask, gateMask(xFromEdge - edgeDepth, softEdge))
                         } else {
                             val sideSeed = if (isLeft) 31 else 53
                             val sideDepth = (sideInset * (0.85f + 0.25f * gateImperfection(yc, infoBar, sideSeed))).coerceAtLeast(0f)

@@ -1003,12 +1003,11 @@ public enum Pentax645Frame {
                             let cutoutEnd = infoBar * (1.15 + 0.35 * hash(cornerSeed, 101))
                             let ramp = infoBar * (0.28 + 0.12 * hash(cornerSeed, 202))
                             let t = min(max((xFromEdge - cutoutEnd) / ramp, 0), 1)
-                            let baseDepth = gateInset * t * t * (3 - 2 * t)
+                            let cutoutDepth = sideInset * (0.85 + 0.25 * gateImperfection(xc, infoBar: infoBar, seed: cornerSeed * 17 + 11))
+                            let baseDepth = cutoutDepth + (gateInset - cutoutDepth) * t * t * (3 - 2 * t)
                             let wobble = gateImperfection(xc, infoBar: infoBar, seed: cornerSeed * 17 + 7) * gateInset * 0.22 * t
                             let edgeDepth = max(0, baseDepth + wobble)
-                            if edgeDepth > 0.01 {
-                                mask = max(mask, gateMask(yFromEdge - edgeDepth, softEdge: softEdge))
-                            }
+                            mask = max(mask, gateMask(yFromEdge - edgeDepth, softEdge: softEdge))
                         } else {
                             let horizSeed = isTop ? 31 : 53
                             let horizDepth = max(0, sideInset * (0.85 + 0.25 * gateImperfection(xc, infoBar: infoBar, seed: horizSeed)))
@@ -1021,12 +1020,11 @@ public enum Pentax645Frame {
                             let cutoutEnd = infoBar * (1.15 + 0.35 * hash(cornerSeed, 101))
                             let ramp = infoBar * (0.28 + 0.12 * hash(cornerSeed, 202))
                             let t = min(max((yFromEdge - cutoutEnd) / ramp, 0), 1)
-                            let baseDepth = gateInset * t * t * (3 - 2 * t)
+                            let cutoutDepth = sideInset * (0.85 + 0.25 * gateImperfection(yc, infoBar: infoBar, seed: cornerSeed * 17 + 11))
+                            let baseDepth = cutoutDepth + (gateInset - cutoutDepth) * t * t * (3 - 2 * t)
                             let wobble = gateImperfection(yc, infoBar: infoBar, seed: cornerSeed * 17 + 7) * gateInset * 0.22 * t
                             let edgeDepth = max(0, baseDepth + wobble)
-                            if edgeDepth > 0.01 {
-                                mask = max(mask, gateMask(xFromEdge - edgeDepth, softEdge: softEdge))
-                            }
+                            mask = max(mask, gateMask(xFromEdge - edgeDepth, softEdge: softEdge))
                         } else {
                             let sideSeed = isLeft ? 31 : 53
                             let sideDepth = max(0, sideInset * (0.85 + 0.25 * gateImperfection(yc, infoBar: infoBar, seed: sideSeed)))
