@@ -306,4 +306,42 @@ class Pentax645FrameTest {
         }
         assertTrue("Expected triangle + frame number in Contax 645 bottom bar", bottomRedPixels > 25)
     }
+
+    @Test
+    fun landscapePhotoPlacesContax645BarsOnShorterLeftAndRightSides() {
+        val layout = Pentax645Frame.layout(800, 600, FilmFrameStyle.CONTAX_645)
+        assertTrue(layout.infoOnLeft)
+        assertEquals(layout.infoBar, layout.leftPad)
+        assertEquals(layout.infoBar, layout.rightPad)
+        assertEquals(layout.border, layout.topPad)
+        assertEquals(layout.border, layout.bottomPad)
+
+        val info = Pentax645Info(
+            frameNumber = 10,
+            mode = "FILM",
+            exposureTime = 1.0 / 4000.0,
+            fNumber = 2.8,
+            focalLengthMm = 80.0,
+            color = FilmFrameColor.RED,
+            style = FilmFrameStyle.CONTAX_645,
+        )
+        val src = ShortArray(800 * 600 * 3) { 20000.toShort() }
+        val dst = ShortArray(layout.outWidth * 600 * 3)
+        Pentax645Frame.wrapPhotoBand(src, dst, layout, 0, 600, monochrome = false, info = info)
+
+        var leftBarPixels = 0
+        var rightBarPixels = 0
+        for (y in 0 until 600) {
+            for (x in 0 until layout.leftPad) {
+                val r = dst[(y * layout.outWidth + x) * 3].toInt() and 0xFFFF
+                if (r > 30000) leftBarPixels++
+            }
+            for (x in (layout.leftPad + layout.photoWidth) until layout.outWidth) {
+                val r = dst[(y * layout.outWidth + x) * 3].toInt() and 0xFFFF
+                if (r > 30000) rightBarPixels++
+            }
+        }
+        assertTrue("Expected shoot info in Contax 645 left short-side bar", leftBarPixels > 50)
+        assertTrue("Expected triangle + frame number in Contax 645 right short-side bar", rightBarPixels > 25)
+    }
 }

@@ -131,17 +131,37 @@ object DateStamp {
         }
         val totalW = cursorX
 
-        val x0 = width - shortSide * 0.055f - totalW
-        val y0 = height - shortSide * 0.050f - charH
+        // Real 35mm quartz date back stays fixed along the film's long side (bottom in landscape, right in portrait).
+        val vertical = height > width
         val reach = thick * if (redLed) 2.6f else 2.2f // the halation's extent
         val slant = if (redLed) 0f else 0.14f
         val slantMaxShift = charH * 0.5f * slant
 
-        val minY = (y0 - reach).toInt().coerceAtLeast(0)
-        val maxY = (y0 + charH + reach).toInt().coerceAtMost(height - 1)
+        val x0: Float
+        val y0: Float
+        val uEnd: Float
+        val minY: Int
+        val maxY: Int
+        val minX: Int
+        val maxX: Int
+        if (!vertical) {
+            x0 = width - shortSide * 0.055f - totalW
+            y0 = height - shortSide * 0.050f - charH
+            uEnd = 0f
+            minY = (y0 - reach).toInt().coerceAtLeast(0)
+            maxY = (y0 + charH + reach).toInt().coerceAtMost(height - 1)
+            minX = (x0 - reach - slantMaxShift).toInt().coerceAtLeast(0)
+            maxX = (x0 + totalW + reach + slantMaxShift).toInt().coerceAtMost(width - 1)
+        } else {
+            x0 = width - shortSide * 0.050f - charH
+            uEnd = height - shortSide * 0.055f
+            y0 = uEnd - totalW
+            minY = (y0 - reach - slantMaxShift).toInt().coerceAtLeast(0)
+            maxY = (uEnd + reach + slantMaxShift).toInt().coerceAtMost(height - 1)
+            minX = (x0 - reach).toInt().coerceAtLeast(0)
+            maxX = (x0 + charH + reach).toInt().coerceAtMost(width - 1)
+        }
         if (bandY + bandRows <= minY || bandY > maxY) return
-        val minX = (x0 - reach - slantMaxShift).toInt().coerceAtLeast(0)
-        val maxX = (x0 + totalW + reach + slantMaxShift).toInt().coerceAtMost(width - 1)
         if (minX > maxX) return
 
         val halfH = charH * 0.5f
@@ -163,11 +183,15 @@ object DateStamp {
         val rowStart = maxOf(bandY, minY)
         val rowEnd = minOf(bandY + bandRows - 1, maxY)
         for (py in rowStart..rowEnd) {
-            val vy = (py + 0.5f) - y0
-            val slantOffset = (halfH - vy) * slant
             val rowOffset = (py - bandY) * width
             for (px in minX..maxX) {
-                val ux = (px + 0.5f) - x0 - slantOffset
+                val vy = if (!vertical) (py + 0.5f) - y0 else (px + 0.5f) - x0
+                val slantOffset = (halfH - vy) * slant
+                val ux = if (!vertical) {
+                    (px + 0.5f) - x0 - slantOffset
+                } else {
+                    uEnd - (py + 0.5f) - slantOffset
+                }
                 var core = 0f
                 var minDist = Float.MAX_VALUE
                 for (i in 0 until count) {

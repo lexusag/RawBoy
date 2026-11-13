@@ -134,4 +134,30 @@ class DateStampTest {
         }
         assertTrue("Expected red-orange 7-segment pixels in bottom-right corner, found $redLedCorePixels", redLedCorePixels > 20)
     }
+
+    @Test
+    fun portraitPhotoPlacesDateStampVerticallyAlongRightLongSide() {
+        val width = 300
+        val height = 400
+        val text = "'26 11 13"
+        val band = ShortArray(width * 200 * 3)
+        DateStamp.imprint(band, width, height, bandY = 200, bandRows = 200, text = text)
+
+        var rightEdgeCorePixels = 0
+        for (py in 0 until 200) {
+            for (px in (width - 50) until width) {
+                val idx = (py * width + px) * 3
+                val r = band[idx].toInt() and 0xFFFF
+                if (r > 50_000) rightEdgeCorePixels++
+            }
+        }
+        assertTrue("Expected vertical date stamp along right long side, found $rightEdgeCorePixels", rightEdgeCorePixels > 20)
+
+        // Left side of the bottom half must stay untouched (stamp stays narrow along the right edge).
+        for (py in 0 until 200) {
+            for (px in 0 until width / 2) {
+                assertEquals(0.toShort(), band[(py * width + px) * 3])
+            }
+        }
+    }
 }
