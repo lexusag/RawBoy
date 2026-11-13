@@ -131,14 +131,22 @@ public enum DateStamp {
     /** How much the stamp still darkens blue where the picture is already bright, so it reads (faintly) on a sky. */
     private static let blueAbsorb: Float = 0.55
 
+    /**
+     * Red LED data back (Red LED style), matched to a real scan: hot core about (255, 115, 80), fringe about
+     * (205, 55, 45) fading to a dark red glow. Blue is barely held back: the out-of-focus LED floods the dark around
+     * it with a faint pink-red bloom rather than tinting it yellow.
+     */
     private static let redLedR: Float = 1.0
-    private static let redLedG: Float = 0.14
-    private static let redLedB: Float = 0.015
-    private static let redBlueAbsorb: Float = 0.50
+    private static let redLedG: Float = 0.13
+    private static let redLedB: Float = 0.05
+    private static let redBlueAbsorb: Float = 0.12
+    private static let redGain: Float = 4
 
     /**
      * Burns [text] into the 16-bit interleaved RGB [band] covering rows `[bandY, bandY + bandRows)` of an image of
      * size [width] x [height]. Bands outside the bottom-right stamp box return immediately.
+     * Red LED draws fat, short, blobby capsule segments with wide gaps, each brightest in its middle like a defocused
+     * LED, with a wide red bloom, uneven segment brightness and coarse grain.
      */
     public static func imprint(band: UnsafeMutablePointer<UInt16>, width: Int, height: Int,
                                bandY: Int, bandRows: Int, text: String, monochrome: Bool = false,
@@ -147,10 +155,10 @@ public enum DateStamp {
 
         let redLed = style == .redLed
         let shortSide = Float(min(width, height))
-        let charH = max(14 as Float, shortSide * 0.028)
-        let charW = charH * (redLed ? 0.56 : 0.52)
-        let thick = charH * (redLed ? 0.135 : 0.115)
-        let gap = charH * (redLed ? 0.24 : 0.22)
+        let charH = max(14 as Float, shortSide * (redLed ? 0.036 : 0.028))
+        let charW = charH * (redLed ? 0.60 : 0.52)
+        let thick = charH * (redLed ? 0.19 : 0.115)
+        let gap = charH * (redLed ? 0.26 : 0.22)
         let tickAdv = charW * 0.35
 
         let chars = Array(text)
@@ -186,16 +194,19 @@ public enum DateStamp {
 
         let halfH = charH * 0.5
         let halfThick = thick * 0.5
-        let segGap = thick * (redLed ? 0.72 : 0.22)
-        // Slightly out-of-focus LED: soft segment edge with halation glow.
-        let soft = max(thick * (redLed ? 0.55 : 0.45), redLed ? 0.9 : 0.8)
-        let haloAmp: Float = redLed ? 0.26 : 0.175
-        let haloInv = 1 / (thick * (redLed ? 1.15 : 0.9))
-        let grainCell = max(1, thick * 0.22)
+        let segGap = thick * (redLed ? 0.30 : 0.22)
+        // Out-of-focus LED: soft segment edge with halation glow (blurrier and wider for Red LED).
+        let soft = redLed ? max(thick * 0.55, 1.0) : max(thick * 0.45, 0.8)
+        let haloAmp: Float = redLed ? 0.22 : 0.175
+        let haloInv = 1 / (thick * (redLed ? 1.1 : 0.9))
+        let grainCell = max(1, thick * (redLed ? 0.3 : 0.22))
+        let grainBase: Float = redLed ? 0.78 : 0.9
+        let grainAmp: Float = redLed ? 0.44 : 0.2
         let curLedR = redLed ? redLedR : ledR
         let curLedG = redLed ? redLedG : ledG
         let curLedB = redLed ? redLedB : ledB
         let curBlueAbsorb = redLed ? redBlueAbsorb : blueAbsorb
+        let curGain = redLed ? redGain : gain
 
         let rowStart = max(bandY, minY)
         let rowEnd = min(bandY + bandRows - 1, maxY)
@@ -220,21 +231,30 @@ public enum DateStamp {
                             ? distRoundVBar(lx, vy, cw * 0.5, charH * 0.21, charH * 0.17, halfThick)
                             : distVBar(lx, vy, cw * 0.5, charH * 0.21, charH * 0.17, halfThick)
                         if d < minDist { minDist = d }
-                        core = max(core, ledBrightness(i, 7) * edge(d, soft))
+                        let lum = redLed ? redLedBrightness(i, 7) : ledBrightness(i, 7)
+                        core = max(core, lum * edge(d, soft))
                         continue
                     }
                     for s in 0..<7 where (m >> s) & 1 != 0 {
                         let d = distToDigitSegment(s, lx, vy, cw, charH, halfH, halfThick, segGap, rounded: redLed)
                         if d < minDist { minDist = d }
-                        core = max(core, ledBrightness(i, s) * edge(d, soft))
+                        let lum: Float
+                        if redLed {
+                            // A defocused LED is brightest in its middle and dims toward the segment's ends.
+                            let a = segmentAlong(s, lx, vy, cw, charH, halfH, halfThick, segGap)
+                            lum = redLedBrightness(i, s) * (1 - 0.35 * a * a)
+                        } else {
+                            lum = ledBrightness(i, s)
+                        }
+                        core = max(core, lum * edge(d, soft))
                     }
                 }
                 let excess = max(minDist, 0) * haloInv
                 let halo = haloAmp * exp(-excess * excess)
                 if core <= 0.002 && halo < 0.004 { continue }
 
-                // Grain: the exposure varies a little from clump to clump, as it does in the emulsion.
-                let grain = 0.9 + 0.2 * hash(Int(Float(px) / grainCell), Int(Float(py) / grainCell))
+                // Grain: the exposure varies from clump to clump, as it does in the emulsion.
+                let grain = grainBase + grainAmp * hash(Int(Float(px) / grainCell), Int(Float(py) / grainCell))
                 let e = (core + halo * (1 - core)) * grain
 
                 let lr: Float
@@ -248,9 +268,9 @@ public enum DateStamp {
                     lb = l
                     absorb = 0
                 } else {
-                    lr = 1 - exp(-gain * e * curLedR)
-                    lg = 1 - exp(-gain * e * curLedG)
-                    lb = 1 - exp(-gain * e * curLedB)
+                    lr = 1 - exp(-curGain * e * curLedR)
+                    lg = 1 - exp(-curGain * e * curLedG)
+                    lb = 1 - exp(-curGain * e * curLedB)
                     absorb = curBlueAbsorb
                 }
 
@@ -275,6 +295,23 @@ public enum DateStamp {
     /** Each LED segment is a little brighter or dimmer than the others (90-100%), the same for every photo. */
     private static func ledBrightness(_ char: Int, _ segment: Int) -> Float { 0.9 + 0.1 * hash(char * 8 + segment, 911) }
 
+    /** Red LED segments vary more (78-100%), like the uneven LEDs of a cheap data back. */
+    private static func redLedBrightness(_ char: Int, _ segment: Int) -> Float { 0.78 + 0.22 * hash(char * 8 + segment, 911) }
+
+    /** 0 at the middle of rounded segment [s], 1 at its ends (same geometry as distToDigitSegment rounded). */
+    private static func segmentAlong(_ s: Int, _ x: Float, _ y: Float, _ w: Float, _ h: Float,
+                                     _ halfH: Float, _ ht: Float, _ segGap: Float) -> Float {
+        let hx = w * 0.5 - segGap * 1.4
+        let hy = (halfH - ht) * 0.5 - segGap
+        let a: Float
+        switch s {
+        case 0, 3, 6: a = abs(x - w * 0.5) / hx
+        case 1, 5: a = abs(y - (ht + halfH) * 0.5) / hy
+        default: a = abs(y - (halfH + h - ht) * 0.5) / hy
+        }
+        return min(max(a, 0), 1)
+    }
+
     private static func segmentMask(_ ch: Character) -> Int {
         switch ch {
         case "0": 0x3F
@@ -296,7 +333,7 @@ public enum DateStamp {
     private static func distToDigitSegment(_ s: Int, _ x: Float, _ y: Float, _ w: Float, _ h: Float,
                                            _ halfH: Float, _ ht: Float, _ segGap: Float,
                                            rounded: Bool = false) -> Float {
-        let hx = w * 0.5 - (rounded ? segGap * 1.1 : segGap)
+        let hx = w * 0.5 - (rounded ? segGap * 1.4 : segGap)
         let hy = (halfH - ht) * 0.5 - segGap
         if rounded {
             switch s {

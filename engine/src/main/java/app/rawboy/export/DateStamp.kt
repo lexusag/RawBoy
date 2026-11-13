@@ -75,15 +75,23 @@ object DateStamp {
     /** How much the stamp still darkens blue where the picture is already bright, so it reads (faintly) on a sky. */
     private const val BLUE_ABSORB = 0.55f
 
+    /**
+     * Red LED data back (Red LED style), matched to a real scan: hot core about (255, 115, 80), fringe about
+     * (205, 55, 45) fading to a dark red glow. Blue is not held back: the out-of-focus LED floods the dark around it
+     * with a faint pink-red bloom rather than tinting it yellow.
+     */
     private const val RED_LED_R = 1.0f
-    private const val RED_LED_G = 0.14f
-    private const val RED_LED_B = 0.015f
-    private const val RED_BLUE_ABSORB = 0.50f
+    private const val RED_LED_G = 0.13f
+    private const val RED_LED_B = 0.05f
+    private const val RED_BLUE_ABSORB = 0.12f
+    private const val RED_GAIN = 4f
 
     /**
      * Burns [text] into the 16-bit interleaved RGB [band] covering rows `[bandY, bandY + bandRows)` of an image of
      * size [width] x [height]. Bands outside the bottom-right stamp box return immediately.
      * When [monochrome] is true (B&W mode), the LED exposes neutral white/grey instead of amber-orange / red.
+     * [DateStampStyle.RED_LED] draws fat, short, blobby capsule segments with wide gaps, each brightest in its middle
+     * like a defocused LED, with strong blur, a wide red bloom, uneven segment brightness and coarse grain.
      */
     fun imprint(
         band: ShortArray,
@@ -99,10 +107,10 @@ object DateStamp {
 
         val redLed = style == DateStampStyle.RED_LED
         val shortSide = minOf(width, height).toFloat()
-        val charH = (shortSide * 0.028f).coerceAtLeast(14f)
-        val charW = charH * if (redLed) 0.56f else 0.52f
-        val thick = charH * if (redLed) 0.135f else 0.115f
-        val gap = charH * if (redLed) 0.24f else 0.22f
+        val charH = (shortSide * if (redLed) 0.036f else 0.028f).coerceAtLeast(14f)
+        val charW = charH * if (redLed) 0.60f else 0.52f
+        val thick = charH * if (redLed) 0.19f else 0.115f
+        val gap = charH * if (redLed) 0.26f else 0.22f
         val tickAdv = charW * 0.35f
 
         val count = text.length
@@ -137,16 +145,19 @@ object DateStamp {
 
         val halfH = charH * 0.5f
         val halfThick = thick * 0.5f
-        val segGap = thick * if (redLed) 0.72f else 0.22f
-        // Slightly out-of-focus LED: soft segment edge with halation glow.
-        val soft = maxOf(thick * if (redLed) 0.55f else 0.45f, if (redLed) 0.9f else 0.8f)
-        val haloAmp = if (redLed) 0.26f else 0.175f
-        val haloInv = 1f / (thick * if (redLed) 1.15f else 0.9f)
-        val grainCell = maxOf(1f, thick * 0.22f)
+        val segGap = thick * if (redLed) 0.30f else 0.22f
+        // Out-of-focus LED: soft segment edge with halation glow (much blurrier and wider for Red LED).
+        val soft = if (redLed) maxOf(thick * 0.55f, 1.0f) else maxOf(thick * 0.45f, 0.8f)
+        val haloAmp = if (redLed) 0.22f else 0.175f
+        val haloInv = 1f / (thick * if (redLed) 1.1f else 0.9f)
+        val grainCell = maxOf(1f, thick * if (redLed) 0.3f else 0.22f)
+        val grainBase = if (redLed) 0.78f else 0.9f
+        val grainAmp = if (redLed) 0.44f else 0.2f
         val ledR = if (redLed) RED_LED_R else LED_R
         val ledG = if (redLed) RED_LED_G else LED_G
         val ledB = if (redLed) RED_LED_B else LED_B
         val absorbB = if (redLed) RED_BLUE_ABSORB else BLUE_ABSORB
+        val gain = if (redLed) RED_GAIN else GAIN
 
         val rowStart = maxOf(bandY, minY)
         val rowEnd = minOf(bandY + bandRows - 1, maxY)
@@ -173,22 +184,30 @@ object DateStamp {
                             distVBar(lx, vy, cw * 0.5f, charH * 0.21f, charH * 0.17f, halfThick)
                         }
                         if (d < minDist) minDist = d
-                        core = maxOf(core, ledBrightness(i, 7) * edge(d, soft))
+                        val lum = if (redLed) redLedBrightness(i, 7) else ledBrightness(i, 7)
+                        core = maxOf(core, lum * edge(d, soft))
                         continue
                     }
                     for (s in 0 until 7) {
                         if ((m shr s) and 1 == 0) continue
                         val d = distToDigitSegment(s, lx, vy, cw, charH, halfH, halfThick, segGap, rounded = redLed)
                         if (d < minDist) minDist = d
-                        core = maxOf(core, ledBrightness(i, s) * edge(d, soft))
+                        val lum = if (redLed) {
+                            // A defocused LED is brightest in its middle and dims toward the segment's ends.
+                            val a = segmentAlong(s, lx, vy, cw, charH, halfH, halfThick, segGap)
+                            redLedBrightness(i, s) * (1f - 0.35f * a * a)
+                        } else {
+                            ledBrightness(i, s)
+                        }
+                        core = maxOf(core, lum * edge(d, soft))
                     }
                 }
                 val excess = minDist.coerceAtLeast(0f) * haloInv
                 val halo = haloAmp * exp(-excess * excess)
                 if (core <= 0.002f && halo < 0.004f) continue
 
-                // Grain: the exposure varies a little from clump to clump, as it does in the emulsion.
-                val grain = 0.9f + 0.2f * hash((px / grainCell).toInt(), (py / grainCell).toInt())
+                // Grain: the exposure varies from clump to clump, as it does in the emulsion.
+                val grain = grainBase + grainAmp * hash((px / grainCell).toInt(), (py / grainCell).toInt())
                 val e = (core + halo * (1f - core)) * grain
 
                 val lr: Float
@@ -202,9 +221,9 @@ object DateStamp {
                     lb = l
                     blueAbsorb = 0f
                 } else {
-                    lr = 1f - exp(-GAIN * e * ledR)
-                    lg = 1f - exp(-GAIN * e * ledG)
-                    lb = 1f - exp(-GAIN * e * ledB)
+                    lr = 1f - exp(-gain * e * ledR)
+                    lg = 1f - exp(-gain * e * ledG)
+                    lb = 1f - exp(-gain * e * ledB)
                     blueAbsorb = absorbB
                 }
 
@@ -228,6 +247,21 @@ object DateStamp {
 
     /** Each LED segment is a little brighter or dimmer than the others (90-100%), the same for every photo. */
     private fun ledBrightness(char: Int, segment: Int): Float = 0.9f + 0.1f * hash(char * 8 + segment, 911)
+
+    /** Red LED segments vary more (78-100%), like the uneven LEDs of a cheap data back. */
+    private fun redLedBrightness(char: Int, segment: Int): Float = 0.78f + 0.22f * hash(char * 8 + segment, 911)
+
+    /** 0 at the middle of rounded segment [s], 1 at its ends (same geometry as [distToDigitSegment] `rounded`). */
+    private fun segmentAlong(s: Int, x: Float, y: Float, w: Float, h: Float, halfH: Float, ht: Float, segGap: Float): Float {
+        val hx = w * 0.5f - segGap * 1.4f
+        val hy = (halfH - ht) * 0.5f - segGap
+        val a = when (s) {
+            0, 3, 6 -> abs(x - w * 0.5f) / hx
+            1, 5 -> abs(y - (ht + halfH) * 0.5f) / hy
+            else -> abs(y - (halfH + h - ht) * 0.5f) / hy
+        }
+        return a.coerceIn(0f, 1f)
+    }
 
     private fun segmentMask(ch: Char): Int = when (ch) {
         '0' -> 0x3F
@@ -256,7 +290,7 @@ object DateStamp {
         segGap: Float,
         rounded: Boolean = false,
     ): Float {
-        val hx = w * 0.5f - if (rounded) segGap * 1.1f else segGap
+        val hx = w * 0.5f - if (rounded) segGap * 1.4f else segGap
         val hy = (halfH - ht) * 0.5f - segGap
         return if (rounded) {
             when (s) {
