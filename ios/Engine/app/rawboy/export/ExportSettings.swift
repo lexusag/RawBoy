@@ -199,9 +199,9 @@ public enum DateStamp {
         let soft = redLed ? max(thick * 0.55, 1.0) : max(thick * 0.45, 0.8)
         let haloAmp: Float = redLed ? 0.22 : 0.175
         let haloInv = 1 / (thick * (redLed ? 1.1 : 0.9))
-        let grainCell = max(1, thick * (redLed ? 0.3 : 0.22))
-        let grainBase: Float = redLed ? 0.78 : 0.9
-        let grainAmp: Float = redLed ? 0.44 : 0.2
+        let grainCell = max(1, thick * 0.22)
+        let grainBase: Float = redLed ? 0.88 : 0.9
+        let grainAmp: Float = redLed ? 0.24 : 0.2
         let curLedR = redLed ? redLedR : ledR
         let curLedG = redLed ? redLedG : ledG
         let curLedB = redLed ? redLedB : ledB
@@ -254,7 +254,14 @@ public enum DateStamp {
                 if core <= 0.002 && halo < 0.004 { continue }
 
                 // Grain: the exposure varies from clump to clump, as it does in the emulsion.
-                let grain = grainBase + grainAmp * hash(Int(Float(px) / grainCell), Int(Float(py) / grainCell))
+                let noise: Float
+                if redLed {
+                    noise = 0.7 * smoothNoise(Float(px) / grainCell, Float(py) / grainCell)
+                        + 0.3 * smoothNoise(Float(px) / (grainCell * 0.5), Float(py) / (grainCell * 0.5))
+                } else {
+                    noise = hash(Int(Float(px) / grainCell), Int(Float(py) / grainCell))
+                }
+                let grain = grainBase + grainAmp * noise
                 let e = (core + halo * (1 - core)) * grain
 
                 let lr: Float
@@ -383,6 +390,23 @@ public enum DateStamp {
         let dx = abs(x - cx)
         let dy = max(0, abs(y - cy) - max(0, hy - ht))
         return hypot(dx, dy) - ht
+    }
+
+    /** Smooth 0..1 bilinear value noise on a unit lattice (avoids blocky nearest-neighbor squares). */
+    private static func smoothNoise(_ x: Float, _ y: Float) -> Float {
+        let ix = Int(floor(x))
+        let iy = Int(floor(y))
+        let fx = x - Float(ix)
+        let fy = y - Float(iy)
+        let u = fx * fx * (3 - 2 * fx)
+        let v = fy * fy * (3 - 2 * fy)
+        let a = hash(ix, iy)
+        let b = hash(ix + 1, iy)
+        let c = hash(ix, iy + 1)
+        let d = hash(ix + 1, iy + 1)
+        let ab = a + (b - a) * u
+        let cd = c + (d - c) * u
+        return ab + (cd - ab) * v
     }
 
     /** Deterministic 0..1 hash of an integer pair (matches the Kotlin version bit for bit). */

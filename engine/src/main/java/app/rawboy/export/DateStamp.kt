@@ -5,6 +5,7 @@ import java.util.Locale
 import java.util.TimeZone
 import kotlin.math.abs
 import kotlin.math.exp
+import kotlin.math.floor
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
@@ -150,9 +151,9 @@ object DateStamp {
         val soft = if (redLed) maxOf(thick * 0.55f, 1.0f) else maxOf(thick * 0.45f, 0.8f)
         val haloAmp = if (redLed) 0.22f else 0.175f
         val haloInv = 1f / (thick * if (redLed) 1.1f else 0.9f)
-        val grainCell = maxOf(1f, thick * if (redLed) 0.3f else 0.22f)
-        val grainBase = if (redLed) 0.78f else 0.9f
-        val grainAmp = if (redLed) 0.44f else 0.2f
+        val grainCell = maxOf(1f, thick * 0.22f)
+        val grainBase = if (redLed) 0.88f else 0.9f
+        val grainAmp = if (redLed) 0.24f else 0.2f
         val ledR = if (redLed) RED_LED_R else LED_R
         val ledG = if (redLed) RED_LED_G else LED_G
         val ledB = if (redLed) RED_LED_B else LED_B
@@ -207,7 +208,13 @@ object DateStamp {
                 if (core <= 0.002f && halo < 0.004f) continue
 
                 // Grain: the exposure varies from clump to clump, as it does in the emulsion.
-                val grain = grainBase + grainAmp * hash((px / grainCell).toInt(), (py / grainCell).toInt())
+                val noise = if (redLed) {
+                    0.7f * smoothNoise(px / grainCell, py / grainCell) +
+                        0.3f * smoothNoise(px / (grainCell * 0.5f), py / (grainCell * 0.5f))
+                } else {
+                    hash((px / grainCell).toInt(), (py / grainCell).toInt())
+                }
+                val grain = grainBase + grainAmp * noise
                 val e = (core + halo * (1f - core)) * grain
 
                 val lr: Float
@@ -341,6 +348,23 @@ object DateStamp {
         val dx = abs(x - cx)
         val dy = maxOf(0f, abs(y - cy) - maxOf(0f, hy - ht))
         return sqrt(dx * dx + dy * dy) - ht
+    }
+
+    /** Smooth 0..1 bilinear value noise on a unit lattice (avoids blocky nearest-neighbor squares). */
+    private fun smoothNoise(x: Float, y: Float): Float {
+        val ix = floor(x).toInt()
+        val iy = floor(y).toInt()
+        val fx = x - ix
+        val fy = y - iy
+        val u = fx * fx * (3f - 2f * fx)
+        val v = fy * fy * (3f - 2f * fy)
+        val a = hash(ix, iy)
+        val b = hash(ix + 1, iy)
+        val c = hash(ix, iy + 1)
+        val d = hash(ix + 1, iy + 1)
+        val ab = a + (b - a) * u
+        val cd = c + (d - c) * u
+        return ab + (cd - ab) * v
     }
 
     /** Deterministic 0..1 hash of an integer pair (matches the Swift version bit for bit). */
