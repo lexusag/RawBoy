@@ -8,8 +8,22 @@ import kotlin.math.exp
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
+/** LED imprint color for film rebate frames ([PhotoFrame.PENTAX_645] and [PhotoFrame.CONTAX_645]). */
+enum class FilmFrameColor(val label: String) {
+    AMBER("Amber"),
+    SLIDE("Slide"),
+    RED("Red"),
+    GREEN("Green"),
+}
+
+/** Film rebate frame layout style. */
+enum class FilmFrameStyle {
+    PENTAX_645,
+    CONTAX_645,
+}
+
 /**
- * Shoot metadata imprinted into the film rebate of a Pentax 645-style frame.
+ * Shoot metadata imprinted into the film rebate of a Pentax 645 or Contax 645-style frame.
  * A `null` field means that item is disabled in Settings and omitted from the rebate;
  * a non-null unknown exposure / focal-length / ISO value (`NaN` or `<= 0`) is shown as dashes (`---`, `F--`, `--mm`, `ISO---`).
  */
@@ -27,6 +41,8 @@ data class Pentax645Info(
     val dateTime: String? = null,
     val flipped: Boolean = false,
     val fieldOrder: List<String>? = null,
+    val color: FilmFrameColor = FilmFrameColor.AMBER,
+    val style: FilmFrameStyle = FilmFrameStyle.PENTAX_645,
 )
 
 /**
@@ -44,11 +60,12 @@ object Pentax645Frame {
         val photoHeight: Int,
         val border: Int,
         val infoBar: Int,
+        val style: FilmFrameStyle = FilmFrameStyle.PENTAX_645,
     ) {
-        /** True when the photo is landscape (`photoWidth > photoHeight`), so the shorter side is vertical (left edge). */
-        val infoOnLeft: Boolean get() = photoWidth > photoHeight
-        val topPad: Int get() = border
-        val bottomPad: Int get() = border
+        /** True when the photo is landscape (`photoWidth > photoHeight`) in Pentax 645, so the shorter side is vertical (left edge). */
+        val infoOnLeft: Boolean get() = style == FilmFrameStyle.PENTAX_645 && photoWidth > photoHeight
+        val topPad: Int get() = if (style == FilmFrameStyle.CONTAX_645) infoBar else border
+        val bottomPad: Int get() = if (style == FilmFrameStyle.CONTAX_645) infoBar else border
         val leftPad: Int get() = border
         val rightPad: Int get() = border
         val outWidth: Int get() = photoWidth + leftPad + rightPad
@@ -58,25 +75,41 @@ object Pentax645Frame {
         val topBar: Int get() = infoBar
     }
 
-    fun layout(photoWidth: Int, photoHeight: Int): Layout {
+    fun layout(photoWidth: Int, photoHeight: Int, style: FilmFrameStyle = FilmFrameStyle.PENTAX_645): Layout {
         val shortSide = minOf(photoWidth, photoHeight).toFloat()
-        val border = (shortSide * 0.005f).roundToInt().coerceAtLeast(3)
+        val border = when (style) {
+            FilmFrameStyle.PENTAX_645 -> (shortSide * 0.005f).roundToInt().coerceAtLeast(3)
+            FilmFrameStyle.CONTAX_645 -> (shortSide * 0.012f).roundToInt().coerceAtLeast(6)
+        }
         val infoBar = (shortSide * 0.036f).roundToInt().coerceAtLeast(28)
-        return Layout(photoWidth, photoHeight, border, infoBar)
+        return Layout(photoWidth, photoHeight, border, infoBar, style)
     }
 
     fun formatFrameNumber(frameNumber: Int): String =
         if (frameNumber > 0) "#$frameNumber" else "#--"
+
+    fun formatContaxFrameNumber(frameNumber: Int): String =
+        if (frameNumber > 0) "$frameNumber" else "--"
 
     fun formatShutter(t: Double): String {
         if (!t.isFinite() || t <= 0.0) return "---"
         return if (t >= 0.95) "${trimOneDecimal(t)}s" else "1/${(1.0 / t).roundToInt()}"
     }
 
+    fun formatContaxShutter(t: Double): String {
+        if (!t.isFinite() || t <= 0.0) return "---"
+        return if (t >= 0.95) "${trimOneDecimal(t)}s" else "${(1.0 / t).roundToInt()}"
+    }
+
     fun formatAperture(f: Double): String {
         if (!f.isFinite() || f <= 0.0) return "F--"
         val rounded = f.roundToInt()
         return if (abs(f - rounded) < 0.05 && rounded < 10) "F $rounded" else "F${trimOneDecimal(f)}"
+    }
+
+    fun formatContaxAperture(f: Double): String {
+        if (!f.isFinite() || f <= 0.0) return "F--"
+        return "F ${trimOneDecimal(f)}"
     }
 
     fun formatEv(ev: Float): String {
@@ -147,9 +180,13 @@ object Pentax645Frame {
         return if (s.endsWith(".0")) s.dropLast(2) else s
     }
 
-    private const val LED_R = 1.0f
-    private const val LED_G = 0.44f
-    private const val LED_B = 0.04f
+    private fun ledRgb(color: FilmFrameColor): Triple<Float, Float, Float> = when (color) {
+        FilmFrameColor.AMBER -> Triple(1.0f, 0.44f, 0.04f)
+        FilmFrameColor.SLIDE -> Triple(0.76f, 0.90f, 0.14f)
+        FilmFrameColor.RED -> Triple(1.0f, 0.13f, 0.05f)
+        FilmFrameColor.GREEN -> Triple(0.08f, 0.95f, 0.08f)
+    }
+
     private const val GAIN = 3.0f
 
     // Deep film-base black (not pure 0 so subtle emulsion grain and LED halation read naturally).
@@ -162,6 +199,7 @@ object Pentax645Frame {
     private sealed interface Token {
         class Text(val value: String) : Token
         class Metering(val spot: Boolean) : Token
+        data object Triangle : Token
     }
 
     private fun charCols(ch: Char): Int = when (ch) {
@@ -192,6 +230,7 @@ object Pentax645Frame {
         val barLength = (if (layout.infoOnLeft) layout.outHeight else layout.outWidth).toFloat()
         val photoShortSide = minOf(layout.photoWidth, layout.photoHeight).toFloat()
         val infoBar = layout.infoBar.toFloat()
+        val isContax = info.style == FilmFrameStyle.CONTAX_645
 
         val order = if (info.fieldOrder.isNullOrEmpty()) {
             DEFAULT_FIELD_ORDER
@@ -201,10 +240,15 @@ object Pentax645Frame {
         val tokens = buildList {
             for (key in order) {
                 when (key) {
-                    "frame" -> info.frameNumber?.let { add(Token.Text(formatFrameNumber(it))) }
+                    // Contax 645 places the frame number in the bottom bar with a triangle.
+                    "frame" -> if (!isContax) info.frameNumber?.let { add(Token.Text(formatFrameNumber(it))) }
                     "mode" -> info.mode?.takeIf { it.isNotEmpty() }?.let { add(Token.Text(it)) }
-                    "shutter" -> info.exposureTime?.let { add(Token.Text(formatShutter(it))) }
-                    "aperture" -> info.fNumber?.let { add(Token.Text(formatAperture(it))) }
+                    "shutter" -> info.exposureTime?.let {
+                        add(Token.Text(if (isContax) formatContaxShutter(it) else formatShutter(it)))
+                    }
+                    "aperture" -> info.fNumber?.let {
+                        add(Token.Text(if (isContax) formatContaxAperture(it) else formatAperture(it)))
+                    }
                     "ev" -> info.compensationEv?.let { add(Token.Text(formatEv(it))) }
                     "metering" -> info.spotMetered?.let { add(Token.Metering(it)) }
                     "focal" -> info.focalLengthMm?.let { add(Token.Text(formatFocalLength(it))) }
@@ -216,6 +260,36 @@ object Pentax645Frame {
             }
         }
 
+        val vTop = if (isContax) 0f else layout.border.toFloat()
+        return buildDotsFromTokens(tokens, barLength, photoShortSide, infoBar, vTop, info.flipped)
+    }
+
+    private fun buildContaxBottomDots(layout: Layout, info: Pentax645Info): StampDots? {
+        val frameNum = info.frameNumber ?: return null
+        val barLength = layout.outWidth.toFloat()
+        val photoShortSide = minOf(layout.photoWidth, layout.photoHeight).toFloat()
+        val infoBar = layout.infoBar.toFloat()
+        val tokens = listOf(Token.Triangle, Token.Text(formatContaxFrameNumber(frameNum)))
+        return buildDotsFromTokens(
+            tokens = tokens,
+            barLength = barLength,
+            photoShortSide = photoShortSide,
+            infoBar = infoBar,
+            vTop = 0f,
+            flipped = info.flipped,
+            maxGroupGapMul = 2.2f,
+        )
+    }
+
+    private fun buildDotsFromTokens(
+        tokens: List<Token>,
+        barLength: Float,
+        photoShortSide: Float,
+        infoBar: Float,
+        vTop: Float,
+        flipped: Boolean,
+        maxGroupGapMul: Float = 14f,
+    ): StampDots {
         var charH = infoBar * 0.56f
         var dotPitch = charH / 7f
         var charGap = dotPitch * 1.15f
@@ -232,6 +306,7 @@ object Pentax645Frame {
                 }
             }
             is Token.Metering -> 7f * dotPitch
+            is Token.Triangle -> 6f * dotPitch
         }
 
         var sumTokensW = tokens.sumOf { tokenWidth(it).toDouble() }.toFloat()
@@ -246,18 +321,18 @@ object Pentax645Frame {
             sumTokensW = tokens.sumOf { tokenWidth(it).toDouble() }.toFloat()
         }
 
-        // Give wider spacing between items when fewer items are selected, up to 14x dotPitch.
+        // Give wider spacing between items when fewer items are selected, up to maxGroupGapMul * dotPitch.
         val groupGap = if (tokens.size <= 1) {
             0f
         } else {
             val targetSpan = (photoShortSide * 0.86f).coerceAtMost(maxContentW)
             val idealGap = (targetSpan - sumTokensW) / (tokens.size - 1)
-            idealGap.coerceIn(minGroupGap, dotPitch * 14f)
+            idealGap.coerceIn(minGroupGap.coerceAtMost(dotPitch * maxGroupGapMul), dotPitch * maxGroupGapMul)
         }
 
         val totalU = if (tokens.isEmpty()) 0f else sumTokensW + (tokens.size - 1) * groupGap
         val u0 = (barLength - totalU) * 0.5f
-        val v0 = layout.border + (infoBar - charH) * 0.5f
+        val v0 = vTop + (infoBar - charH) * 0.5f
 
         val dotR = dotPitch * 0.36f
         val soft = maxOf(dotPitch * 0.36f, 0.8f)
@@ -308,6 +383,20 @@ object Pentax645Frame {
                     cursorU += 7f * dotPitch
                     glyphIdx++
                 }
+                is Token.Triangle -> {
+                    for (r in 0 until 7) {
+                        val bits = TRIANGLE_7X6[r]
+                        for (c in 0 until 6) {
+                            if ((bits shr (5 - c)) and 1 != 0) {
+                                uList += cursorU + (c + 0.5f) * dotPitch
+                                vList += (r + 0.5f) * dotPitch
+                                bList += 0.92f + 0.08f * hash(glyphIdx * 64 + r * 8 + c, 733)
+                            }
+                        }
+                    }
+                    cursorU += 6f * dotPitch
+                    glyphIdx++
+                }
             }
             if (ti + 1 < tokens.size) cursorU += groupGap
         }
@@ -321,7 +410,7 @@ object Pentax645Frame {
             soft = soft,
             reach = reach,
             haloInv = haloInv,
-            flipped = info.flipped,
+            flipped = flipped,
             dotU = uList.toFloatArray(),
             dotV = vList.toFloatArray(),
             dotBright = bList.toFloatArray(),
@@ -336,6 +425,7 @@ object Pentax645Frame {
         dots: StampDots?,
         grainCell: Float,
         monochrome: Boolean,
+        color: FilmFrameColor,
         out: ShortArray,
         idx: Int,
     ) {
@@ -380,9 +470,10 @@ object Pentax645Frame {
                         g = 1f - (1f - g) * (1f - l)
                         b = 1f - (1f - b) * (1f - l)
                     } else {
-                        val lr = 1f - exp(-GAIN * e * LED_R)
-                        val lg = 1f - exp(-GAIN * e * LED_G)
-                        val lb = 1f - exp(-GAIN * e * LED_B)
+                        val (ledR, ledG, ledB) = ledRgb(color)
+                        val lr = 1f - exp(-GAIN * e * ledR)
+                        val lg = 1f - exp(-GAIN * e * ledG)
+                        val lb = 1f - exp(-GAIN * e * ledB)
                         r = 1f - (1f - r) * (1f - lr)
                         g = 1f - (1f - g) * (1f - lg)
                         b = 1f - (1f - b) * (1f - lb)
@@ -398,45 +489,63 @@ object Pentax645Frame {
 
     /**
      * Renders rows `[bandY, bandY + bandRows)` of the top border (`0 <= bandY < layout.topPad`) into [band].
-     * The Pentax 645 black data stripe itself is composited in [wrapPhotoBand] so its rounded ends reveal the photo
-     * corners underneath.
+     * In [FilmFrameStyle.PENTAX_645], the black data stripe itself is composited in [wrapPhotoBand] so its rounded
+     * ends reveal the photo corners underneath. In [FilmFrameStyle.CONTAX_645], the top rebate carries the shoot info.
      */
     fun renderTopBarBand(
         band: ShortArray,
         layout: Layout,
         bandY: Int,
         bandRows: Int,
-        @Suppress("UNUSED_PARAMETER") info: Pentax645Info,
+        info: Pentax645Info,
         monochrome: Boolean = false,
     ) {
-        renderBorderBand(band, layout, bandY, bandRows, monochrome)
+        if (layout.style == FilmFrameStyle.CONTAX_645) {
+            val outW = layout.outWidth
+            val grainCell = maxOf(1f, layout.infoBar * 0.03f)
+            val dots = buildStampDots(layout, info)
+            for (py in bandY until bandY + bandRows) {
+                val rowOffset = (py - bandY) * outW
+                for (px in 0 until outW) {
+                    val idx = (rowOffset + px) * 3
+                    sampleRebatePixel(px, py, px + 0.5f, py + 0.5f, dots, grainCell, monochrome, info.color, band, idx)
+                }
+            }
+        } else {
+            renderBorderBand(band, layout, bandY, bandRows, monochrome, info)
+        }
     }
 
-    /** Fills [band] (`outWidth * bandRows * 3`) with dark film-base black for the top/bottom border. */
+    /** Fills [band] (`outWidth * bandRows * 3`) with dark film-base black for the top/bottom border (and Contax bottom frame number). */
     fun renderBorderBand(
         band: ShortArray,
         layout: Layout,
         bandY: Int,
         bandRows: Int,
         monochrome: Boolean = false,
-        @Suppress("UNUSED_PARAMETER") info: Pentax645Info? = null,
+        info: Pentax645Info? = null,
     ) {
         val outW = layout.outWidth
         val grainCell = maxOf(1f, layout.infoBar * 0.03f)
+        val bottomStart = layout.topPad + layout.photoHeight
+        val isContaxBottom = layout.style == FilmFrameStyle.CONTAX_645 && bandY >= bottomStart
+        val dots = if (isContaxBottom && info != null) buildContaxBottomDots(layout, info) else null
+        val color = info?.color ?: FilmFrameColor.AMBER
         for (py in bandY until bandY + bandRows) {
             val rowOffset = (py - bandY) * outW
+            val v = if (isContaxBottom) (py - bottomStart) + 0.5f else 0f
             for (px in 0 until outW) {
                 val idx = (rowOffset + px) * 3
-                sampleRebatePixel(px, py, 0f, 0f, null, grainCell, monochrome, band, idx)
+                sampleRebatePixel(px, py, px + 0.5f, v, dots, grainCell, monochrome, color, band, idx)
             }
         }
     }
 
     /**
      * Wraps a developed photo band [src] (`photoWidth * bandRows * 3`) into [dst] (`outWidth * bandRows * 3`),
-     * adding thin dark rebate borders on all sides and compositing the Pentax 645 black data stripe along the
-     * shorter edge (`y < infoBar` for portrait/square, `x < infoBar` for landscape) with convex rounded ends
-     * so the photo wraps naturally into the corners.
+     * adding thin dark rebate borders on all sides and (for [FilmFrameStyle.PENTAX_645]) compositing the black data
+     * stripe along the shorter edge (`y < infoBar` for portrait/square, `x < infoBar` for landscape) with convex
+     * rounded ends so the photo wraps naturally into the corners.
      */
     fun wrapPhotoBand(
         src: ShortArray,
@@ -456,7 +565,9 @@ object Pentax645Frame {
         val infoBar = layout.infoBar.toFloat()
         val cornerSpan = infoBar * 1.6f
         val grainCell = maxOf(1f, infoBar * 0.03f)
-        val dots = info?.let { buildStampDots(layout, it) }
+        val color = info?.color ?: FilmFrameColor.AMBER
+        val isPentax = layout.style == FilmFrameStyle.PENTAX_645
+        val dots = if (isPentax) info?.let { buildStampDots(layout, it) } else null
         val tmp = ShortArray(3)
 
         for (r in 0 until bandRows) {
@@ -464,12 +575,14 @@ object Pentax645Frame {
             val py = layout.topPad + y
             val dstRow = r * ow
             for (px in 0 until leftPad) {
-                sampleRebatePixel(px, py, 0f, 0f, null, grainCell, monochrome, dst, (dstRow + px) * 3)
+                sampleRebatePixel(px, py, 0f, 0f, null, grainCell, monochrome, color, dst, (dstRow + px) * 3)
             }
             System.arraycopy(src, r * pw * 3, dst, (dstRow + leftPad) * 3, pw * 3)
             for (px in (leftPad + pw) until ow) {
-                sampleRebatePixel(px, py, 0f, 0f, null, grainCell, monochrome, dst, (dstRow + px) * 3)
+                sampleRebatePixel(px, py, 0f, 0f, null, grainCell, monochrome, color, dst, (dstRow + px) * 3)
             }
+
+            if (!isPentax) continue
 
             if (!onLeft) {
                 if (y >= layout.infoBar + 2) continue
@@ -488,7 +601,7 @@ object Pentax645Frame {
                     val mask = ((0.6f - d) / 1.2f).coerceIn(0f, 1f).let { it * it * (3f - 2f * it) }
                     val px = leftPad + x
                     val idx = (dstRow + px) * 3
-                    sampleRebatePixel(px, py, px + 0.5f, py + 0.5f, dots, grainCell, monochrome, tmp, 0)
+                    sampleRebatePixel(px, py, px + 0.5f, py + 0.5f, dots, grainCell, monochrome, color, tmp, 0)
                     blendPixel(dst, idx, tmp, mask)
                 }
             } else {
@@ -507,7 +620,7 @@ object Pentax645Frame {
                     val mask = ((0.6f - d) / 1.2f).coerceIn(0f, 1f).let { it * it * (3f - 2f * it) }
                     val px = leftPad + x
                     val idx = (dstRow + px) * 3
-                    sampleRebatePixel(px, py, (oh - 1 - py) + 0.5f, px + 0.5f, dots, grainCell, monochrome, tmp, 0)
+                    sampleRebatePixel(px, py, (oh - 1 - py) + 0.5f, px + 0.5f, dots, grainCell, monochrome, color, tmp, 0)
                     blendPixel(dst, idx, tmp, mask)
                 }
             }
@@ -562,6 +675,17 @@ object Pentax645Frame {
         0b0001000,
         0b0000000,
         0b0000000,
+    )
+
+    // Filled right-pointing triangle (7x6) for Contax 645 bottom frame number.
+    private val TRIANGLE_7X6 = intArrayOf(
+        0b100000,
+        0b111000,
+        0b111110,
+        0b111111,
+        0b111110,
+        0b111000,
+        0b100000,
     )
 
     private fun glyph5x7(ch: Char): IntArray? = when (ch) {

@@ -25,6 +25,7 @@ import app.rawboy.camera.capture.LocationTracker
 import app.rawboy.camera.capture.ShutterSound
 import app.rawboy.export.DateStampFormat
 import app.rawboy.export.DateStampStyle
+import app.rawboy.export.FilmFrameColor
 import app.rawboy.export.TimeStampFormat
 import app.rawboy.camera.qr.QrPayload
 import app.rawboy.camera.qr.QrReader
@@ -972,6 +973,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setDateStampFormat(format: DateStampFormat) = change { it.copy(dateStampFormat = format) }
     fun setDateStampStyle(style: DateStampStyle) = change { it.copy(dateStampStyle = style) }
     fun setTimeStampFormat(format: TimeStampFormat) = change { it.copy(timeStampFormat = format) }
+    fun setFrameColor(color: FilmFrameColor) = change { it.copy(frameColor = color) }
     fun setPentax645Flip(on: Boolean) = change { it.copy(pentax645Flip = on) }
     fun togglePentax645Field(field: Pentax645Field) = change {
         val next = if (field in it.pentax645Fields) it.pentax645Fields - field else it.pentax645Fields + field

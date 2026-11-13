@@ -718,6 +718,8 @@ private struct FramesSettingsView: View {
                     Text("Imprints today's date in the bottom-right corner.")
                 case .pentax645:
                     Text("Adds a black film rebate with today's frame #, mode (FILM / LOOK / BW), shutter speed, aperture, EV, metering, and focal length.")
+                case .contax645:
+                    Text("Adds a black film rebate with shoot info along the top edge and the frame number below.")
                 }
             }
             if vm.settings.photoFrame == .dateStamp {
@@ -737,8 +739,13 @@ private struct FramesSettingsView: View {
                     }
                 }
             }
-            if vm.settings.photoFrame == .pentax645 {
+            if vm.settings.photoFrame == .pentax645 || vm.settings.photoFrame == .contax645 {
                 Section {
+                    Picker("Color", selection: Binding(get: { vm.settings.frameColor }, set: vm.setFrameColor)) {
+                        ForEach(FilmFrameColor.allCases, id: \.self) { color in
+                            Text(color.label).tag(color)
+                        }
+                    }
                     Toggle(isOn: Binding(get: { vm.settings.pentax645Flip }, set: vm.setPentax645Flip)) {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Flip info upside down")

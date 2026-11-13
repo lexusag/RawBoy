@@ -20,12 +20,14 @@ enum PhotoFrame: String, CaseIterable, Sendable {
     case none = "NONE"
     case dateStamp = "DATE_STAMP"
     case pentax645 = "PENTAX_645"
+    case contax645 = "CONTAX_645"
 
     var label: String {
         switch self {
         case .none: return "Off"
         case .dateStamp: return "Date stamp"
         case .pentax645: return "Pentax 645"
+        case .contax645: return "Contax 645"
         }
     }
 }
@@ -160,8 +162,10 @@ struct CameraSettings: Equatable {
     var pentax645Fields: Set<Pentax645Field> = Pentax645Field.defaultSet
     /** Display order of shoot-info items on the PhotoFrame.pentax645 rebate. */
     var pentax645Order: [Pentax645Field] = Pentax645Field.defaultOrder
-    /** Rotate the PhotoFrame.pentax645 shoot-info LED text 180° upside down (like on real film). */
+    /** Rotate the PhotoFrame.pentax645 / contax645 shoot-info LED text 180° upside down (like on real film). */
     var pentax645Flip = false
+    /** LED imprint color for PhotoFrame.pentax645 and PhotoFrame.contax645 (Amber, Slide, or Red). */
+    var frameColor = FilmFrameColor.amber
     /** Play the camera shutter click on each shot. Where the law requires it, iOS plays it regardless. */
     var shutterSound = false
     /** Look for QR codes in the viewfinder and offer to open them, as the system camera does. */
@@ -282,6 +286,7 @@ enum CameraSettingsStore {
         s.pentax645Fields = Pentax645Field.parseSet(d.string(forKey: "camera.pentax645Fields"))
         s.pentax645Order = Pentax645Field.parseOrder(d.string(forKey: "camera.pentax645Order"))
         s.pentax645Flip = d.object(forKey: "camera.pentax645Flip") as? Bool ?? def.pentax645Flip
+        s.frameColor = d.string(forKey: "camera.frameColor").flatMap(FilmFrameColor.init(rawValue:)) ?? def.frameColor
         s.shutterSound = d.object(forKey: "camera.shutterSound") as? Bool ?? def.shutterSound
         s.scanQr = d.object(forKey: "camera.scanQr") as? Bool ?? def.scanQr
         s.trackFocus = d.object(forKey: "camera.trackFocus") as? Bool ?? def.trackFocus
@@ -337,6 +342,7 @@ enum CameraSettingsStore {
         d.set(Pentax645Field.serialize(s.pentax645Fields), forKey: "camera.pentax645Fields")
         d.set(Pentax645Field.serializeOrder(s.pentax645Order), forKey: "camera.pentax645Order")
         d.set(s.pentax645Flip, forKey: "camera.pentax645Flip")
+        d.set(s.frameColor.rawValue, forKey: "camera.frameColor")
         d.set(s.shutterSound, forKey: "camera.shutterSound")
         d.set(s.scanQr, forKey: "camera.scanQr")
         d.set(s.trackFocus, forKey: "camera.trackFocus")

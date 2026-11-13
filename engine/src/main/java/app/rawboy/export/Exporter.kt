@@ -84,7 +84,7 @@ class Exporter(private val context: Context) {
         val (uri, name) = MediaStoreOutput.create(resolver, MediaStoreOutput.baseNameOf(sourceName), settings.format, naming)
         val size = if (scan) ScanScale.size(params.lens.outputWidth, params.lens.outputHeight)
         else BandDownscaler.outputSize(params.lens.outputWidth, params.lens.outputHeight, settings.maxLongSide)
-        val frameLayout = settings.pentax645?.let { Pentax645Frame.layout(size.first, size.second) }
+        val frameLayout = settings.pentax645?.let { Pentax645Frame.layout(size.first, size.second, it.style) }
         val outSize = frameLayout?.let { it.outWidth to it.outHeight } ?: size
         val dateStamp = if (settings.pentax645 == null) settings.dateStamp else ""
         val dateStampStyle = settings.dateStampStyle
@@ -213,7 +213,7 @@ class Exporter(private val context: Context) {
     ) {
         val w = params.lens.outputWidth
         val h = params.lens.outputHeight
-        val layout = pentax645?.let { Pentax645Frame.layout(size.first, size.second) }
+        val layout = pentax645?.let { Pentax645Frame.layout(size.first, size.second, it.style) }
         var framedBand = ShortArray(0)
         val stamped: (Int, Int, ShortArray) -> Unit = when {
             layout != null -> { y, rows, band ->

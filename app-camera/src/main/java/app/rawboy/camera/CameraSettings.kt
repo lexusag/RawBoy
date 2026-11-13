@@ -12,6 +12,7 @@ import app.rawboy.camera.capture.FlashGuides
 import app.rawboy.camera.capture.FlashMode
 import app.rawboy.export.DateStampFormat
 import app.rawboy.export.DateStampStyle
+import app.rawboy.export.FilmFrameColor
 import app.rawboy.export.TimeStampFormat
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -22,6 +23,7 @@ enum class PhotoFrame(val label: String) {
     NONE("Off"),
     DATE_STAMP("Date stamp"),
     PENTAX_645("Pentax 645"),
+    CONTAX_645("Contax 645"),
 }
 
 /** Individual shoot-info items that can be toggled and reordered on the [PhotoFrame.PENTAX_645] rebate. */
@@ -162,8 +164,10 @@ data class CameraSettings(
     val pentax645Fields: Set<Pentax645Field> = Pentax645Field.DEFAULT,
     /** Display order of shoot-info items on the [PhotoFrame.PENTAX_645] rebate. */
     val pentax645Order: List<Pentax645Field> = Pentax645Field.DEFAULT_ORDER,
-    /** Rotate the [PhotoFrame.PENTAX_645] shoot-info LED text 180° upside down (like on real film). */
+    /** Rotate the [PhotoFrame.PENTAX_645] / [PhotoFrame.CONTAX_645] shoot-info LED text 180° upside down (like on real film). */
     val pentax645Flip: Boolean = false,
+    /** LED imprint color for [PhotoFrame.PENTAX_645] and [PhotoFrame.CONTAX_645] (`Amber`, `Slide`, or `Red`). */
+    val frameColor: FilmFrameColor = FilmFrameColor.AMBER,
     /** Look for QR codes in the viewfinder and offer to open them, as the phone's own camera does. */
     val scanQr: Boolean = true,
     /** After a tap, keep focus on what was tapped as it moves (CameraViewModel's tracker); off = the focus stays put. */
@@ -385,6 +389,7 @@ object CameraSettingsStore {
             pentax645Fields = Pentax645Field.parseSet(p.getString("pentax645Fields", null)),
             pentax645Order = Pentax645Field.parseOrder(p.getString("pentax645Order", null)),
             pentax645Flip = p.getBoolean("pentax645Flip", d.pentax645Flip),
+            frameColor = runCatching { FilmFrameColor.valueOf(p.getString("frameColor", null)!!) }.getOrDefault(d.frameColor),
             scanQr = p.getBoolean("scanQr", d.scanQr),
             trackFocus = p.getBoolean("trackFocus", d.trackFocus),
             experimental = p.getBoolean("experimental", d.experimental),
@@ -460,6 +465,7 @@ object CameraSettingsStore {
             .putString("pentax645Fields", Pentax645Field.serialize(s.pentax645Fields))
             .putString("pentax645Order", Pentax645Field.serializeOrder(s.pentax645Order))
             .putBoolean("pentax645Flip", s.pentax645Flip)
+            .putString("frameColor", s.frameColor.name)
             .putBoolean("scanQr", s.scanQr)
             .putBoolean("trackFocus", s.trackFocus)
             .putBoolean("experimental", s.experimental)
