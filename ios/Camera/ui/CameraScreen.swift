@@ -224,6 +224,7 @@ struct CameraScreen: View {
                             }
                         }
                         .coordinateSpace(.named(Self.viewfinderSpace))
+                        if vm.settings.showLevel, let tilt = vm.tilt { LevelOverlay(tilt: tilt) }
                     }
                 }
                 switch vm.status {
@@ -281,7 +282,6 @@ struct CameraScreen: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
                 if vm.settings.showGrid { GridOverlay() }
-                if vm.settings.showLevel, let tilt = vm.tilt { LevelOverlay(tilt: tilt) }
                 Color.black.opacity(blink).allowsHitTesting(false)
             }
             .aspectRatio(turns % 2 == 1 ? 1 / vm.aspect : vm.aspect, contentMode: .fit)
@@ -942,8 +942,9 @@ private struct GridOverlay: View {
     }
 }
 
-/// A horizon line through the middle of the viewfinder, turned against the phone's tilt (degrees clockwise from
-/// upright). Yellow within one degree of straight, with a short fixed mark each side to compare it with.
+/// A horizon line through the middle of the viewfinder, turned against the phone's tilt (continuous degrees clockwise
+/// from upright portrait). Yellow within one degree of the nearest 90° upright, with a short fixed mark each side
+/// along that axis to compare it with.
 private struct LevelOverlay: View {
     let tilt: Double
     /// Straight is entered within one degree and left past 1.5, so the colour doesn't flicker on the edge.
@@ -951,6 +952,7 @@ private struct LevelOverlay: View {
 
     var body: some View {
         let colour: Color = level ? Color(red: 1, green: 0.84, blue: 0.31) : .white.opacity(0.7)
+        let nearest = (tilt / 90).rounded() * 90
         // The line is a view turned with rotationEffect (a Canvas redraws without interpolating), so the spring can animate it.
         GeometryReader { geo in
             let half = min(geo.size.width, geo.size.height) * 0.22
@@ -960,7 +962,11 @@ private struct LevelOverlay: View {
                     var marks = Path()
                     marks.move(to: CGPoint(x: c.x - half * 1.5, y: c.y)); marks.addLine(to: CGPoint(x: c.x - half * 1.25, y: c.y))
                     marks.move(to: CGPoint(x: c.x + half * 1.25, y: c.y)); marks.addLine(to: CGPoint(x: c.x + half * 1.5, y: c.y))
-                    context.stroke(marks, with: .color(colour.opacity(0.5)), lineWidth: 2)
+                    var turned = context
+                    turned.translateBy(x: c.x, y: c.y)
+                    turned.rotate(by: .degrees(-nearest))
+                    turned.translateBy(x: -c.x, y: -c.y)
+                    turned.stroke(marks, with: .color(colour.opacity(0.5)), lineWidth: 2)
                 }
                 Rectangle().fill(colour).frame(width: half * 2, height: 2)
                     .rotationEffect(.degrees(-tilt))
@@ -969,7 +975,10 @@ private struct LevelOverlay: View {
         }
         .animation(.spring(response: 0.25, dampingFraction: 1), value: tilt)
         .animation(.easeInOut(duration: 0.15), value: level)
-        .onChange(of: tilt, initial: true) { _, t in level = abs(t) <= (level ? 1.5 : 1) }
+        .onChange(of: tilt, initial: true) { _, t in
+            let nearest = (t / 90).rounded() * 90
+            level = abs(t - nearest) <= (level ? 1.5 : 1)
+        }
         .allowsHitTesting(false)
     }
 }
