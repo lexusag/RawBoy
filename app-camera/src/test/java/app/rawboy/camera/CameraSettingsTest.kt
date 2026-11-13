@@ -3,15 +3,14 @@ package app.rawboy.camera
 import app.rawboy.develop.DevelopParams
 import app.rawboy.export.DateStampFormat
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Test
 
 class CameraSettingsTest {
     @Test
-    fun defaultsHaveDateStampDisabled() {
+    fun defaultsHaveFramesDisabled() {
         val s = CameraSettings()
-        assertFalse(s.dateStamp)
+        assertEquals(PhotoFrame.NONE, s.photoFrame)
         assertEquals(DateStampFormat.DMY, s.dateStampFormat)
     }
 

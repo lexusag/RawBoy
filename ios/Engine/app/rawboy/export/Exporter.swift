@@ -70,17 +70,21 @@ public final class Exporter {
         try? FileManager.default.removeItem(at: url)
         let size = BandDownscaler.outputSize(params.lens.outputWidth, params.lens.outputHeight,
                                              maxLongSide: settings.maxLongSide)
+        let frameLayout = settings.pentax645.map { _ in Pentax645Frame.layout(photoWidth: size.0, photoHeight: size.1) }
+        let outSize = frameLayout.map { ($0.outWidth, $0.outHeight) } ?? size
+        let dateStamp = settings.pentax645 == nil ? settings.dateStamp : ""
+        let mono = settings.monochromeImprint
         do {
             switch settings.format {
             case .jpeg:
                 if settings.jpegEncoder == .jpegli {
-                    try writeJpegli(image, url, params, size, settings.jpegQuality, settings.downscaleSharpen, settings.dateStamp, onProgress)
+                    try writeJpegli(image, url, params, size, outSize, settings.jpegQuality, settings.downscaleSharpen, dateStamp, settings.pentax645, mono, onProgress)
                 } else {
-                    try writeSystemJpeg(image, url, params, size, settings.jpegQuality, settings.downscaleSharpen, settings.dateStamp, onProgress)
+                    try writeSystemJpeg(image, url, params, size, outSize, settings.jpegQuality, settings.downscaleSharpen, dateStamp, settings.pentax645, mono, onProgress)
                 }
                 ExifWriter.addExif(to: url, metadata: image.metadata)
             case .tiff:
-                try writeTiff(image, url, params, size, settings.tiffBits, settings.downscaleSharpen, settings.dateStamp, onProgress)
+                try writeTiff(image, url, params, size, outSize, settings.tiffBits, settings.downscaleSharpen, dateStamp, settings.pentax645, mono, onProgress)
             }
             return url
         } catch {
@@ -90,12 +94,12 @@ public final class Exporter {
     }
 
     /** ImageIO's JPEG: 8-bit input, so the whole image is held as 8-bit RGBA. */
-    private func writeSystemJpeg(_ image: RawImage, _ url: URL, _ params: ShaderParams, _ size: (Int, Int),
-                                 _ quality: Int, _ sharpen: Float, _ dateStamp: String,
-                                 _ onProgress: (Float) -> Void) throws {
-        let (w, h) = size
+    private func writeSystemJpeg(_ image: RawImage, _ url: URL, _ params: ShaderParams, _ size: (Int, Int), _ outSize: (Int, Int),
+                                 _ quality: Int, _ sharpen: Float, _ dateStamp: String, _ pentax645: Pentax645Info?,
+                                 _ monochrome: Bool, _ onProgress: (Float) -> Void) throws {
+        let (w, h) = outSize
         var rgba = [UInt8](repeating: 255, count: w * h * 4)
-        try renderOutput(image, params, size, sharpen, dateStamp, onProgress) { y, rows, band in
+        try renderOutput(image, params, size, sharpen, dateStamp, pentax645, monochrome, onProgress) { y, rows, band in
             rgba.withUnsafeMutableBufferPointer { dst in
                 for i in 0..<(w * rows) {
                     let o = (y * w + i) * 4
@@ -114,13 +118,14 @@ public final class Exporter {
     }
 
     /** jpegli streams each band as it is developed, at full 16-bit precision, so no full-size image is held. */
-    private func writeJpegli(_ image: RawImage, _ url: URL, _ params: ShaderParams, _ size: (Int, Int), _ quality: Int,
-                             _ sharpen: Float, _ dateStamp: String, _ onProgress: (Float) -> Void) throws {
+    private func writeJpegli(_ image: RawImage, _ url: URL, _ params: ShaderParams, _ size: (Int, Int), _ outSize: (Int, Int),
+                             _ quality: Int, _ sharpen: Float, _ dateStamp: String, _ pentax645: Pentax645Info?,
+                             _ monochrome: Bool, _ onProgress: (Float) -> Void) throws {
         var error = [CChar](repeating: 0, count: 256)
-        guard let encoder = rb_jpeg_begin(url.path, Int32(size.0), Int32(size.1), Int32(quality), &error, error.count)
+        guard let encoder = rb_jpeg_begin(url.path, Int32(outSize.0), Int32(outSize.1), Int32(quality), &error, error.count)
         else { throw MetalError(message: String(cString: error)) }
         do {
-            try renderOutput(image, params, size, sharpen, dateStamp, onProgress) { _, rows, band in
+            try renderOutput(image, params, size, sharpen, dateStamp, pentax645, monochrome, onProgress) { _, rows, band in
                 if !rb_jpeg_write_rows(encoder, band, Int32(rows), &error, error.count) {
                     throw MetalError(message: String(cString: error))
                 }
@@ -132,14 +137,15 @@ public final class Exporter {
         if !rb_jpeg_finish(encoder, &error, error.count) { throw MetalError(message: String(cString: error)) }
     }
 
-    private func writeTiff(_ image: RawImage, _ url: URL, _ params: ShaderParams, _ size: (Int, Int), _ bits: Int,
-                           _ sharpen: Float, _ dateStamp: String, _ onProgress: (Float) -> Void) throws {
+    private func writeTiff(_ image: RawImage, _ url: URL, _ params: ShaderParams, _ size: (Int, Int), _ outSize: (Int, Int),
+                           _ bits: Int, _ sharpen: Float, _ dateStamp: String, _ pentax645: Pentax645Info?,
+                           _ monochrome: Bool, _ onProgress: (Float) -> Void) throws {
         FileManager.default.createFile(atPath: url.path, contents: nil)
         let handle = try FileHandle(forWritingTo: url)
         defer { try? handle.close() }
-        let writer = try TiffWriter(handle, width: size.0, height: size.1, bitsPerSample: bits,
+        let writer = try TiffWriter(handle, width: outSize.0, height: outSize.1, bitsPerSample: bits,
                                    metadata: image.metadata)
-        try renderOutput(image, params, size, sharpen, dateStamp, onProgress) { _, rows, band in try writer.writeRows(band, rows: rows) }
+        try renderOutput(image, params, size, sharpen, dateStamp, pentax645, monochrome, onProgress) { _, rows, band in try writer.writeRows(band, rows: rows) }
         try writer.finish()
     }
 
@@ -149,21 +155,74 @@ public final class Exporter {
      * Same callback as renderBands.
      */
     private func renderOutput(_ image: RawImage, _ params: ShaderParams, _ size: (Int, Int), _ sharpen: Float,
-                              _ dateStamp: String = "", _ onProgress: (Float) -> Void,
+                              _ dateStamp: String = "", _ pentax645: Pentax645Info? = nil, _ monochrome: Bool = false,
+                              _ onProgress: (Float) -> Void,
                               _ consume: @escaping (Int, Int, UnsafeMutablePointer<UInt16>) throws -> Void) throws {
         let w = params.lens.outputWidth
         let h = params.lens.outputHeight
-        let stamped: (Int, Int, UnsafeMutablePointer<UInt16>) throws -> Void = dateStamp.isEmpty ? consume : { y, rows, band in
-            DateStamp.imprint(band: band, width: size.0, height: size.1, bandY: y, bandRows: rows, text: dateStamp)
-            try consume(y, rows, band)
+        let layout = pentax645.map { _ in Pentax645Frame.layout(photoWidth: size.0, photoHeight: size.1) }
+        var framedBand: [UInt16] = []
+        let stamped: (Int, Int, UnsafeMutablePointer<UInt16>) throws -> Void
+        if let layout {
+            stamped = { y, rows, band in
+                let need = layout.outWidth * rows * 3
+                if framedBand.count < need { framedBand = [UInt16](repeating: 0, count: need) }
+                try framedBand.withUnsafeMutableBufferPointer { dst in
+                    guard let base = dst.baseAddress else { return }
+                    Pentax645Frame.wrapPhotoBand(src: band, dst: base, layout: layout, photoY: y, bandRows: rows, monochrome: monochrome)
+                    try consume(layout.topBar + y, rows, base)
+                }
+            }
+        } else if !dateStamp.isEmpty {
+            stamped = { y, rows, band in
+                DateStamp.imprint(band: band, width: size.0, height: size.1, bandY: y, bandRows: rows, text: dateStamp, monochrome: monochrome)
+                try consume(y, rows, band)
+            }
+        } else {
+            stamped = consume
         }
-        if size.0 == w && size.1 == h { return try renderBands(image, params, 1, onProgress, stamped) }
+        if let layout, let pentax645 {
+            var barY = 0
+            while barY < layout.topBar {
+                let rows = min(Self.tileHeight, layout.topBar - barY)
+                let need = layout.outWidth * rows * 3
+                if framedBand.count < need { framedBand = [UInt16](repeating: 0, count: need) }
+                try framedBand.withUnsafeMutableBufferPointer { dst in
+                    guard let base = dst.baseAddress else { return }
+                    Pentax645Frame.renderTopBarBand(band: base, layout: layout, bandY: barY, bandRows: rows, info: pentax645, monochrome: monochrome)
+                    try consume(barY, rows, base)
+                }
+                barY += rows
+            }
+        }
+        let emitBottom: () throws -> Void = {
+            if let layout {
+                var botY = 0
+                while botY < layout.border {
+                    let rows = min(Self.tileHeight, layout.border - botY)
+                    let need = layout.outWidth * rows * 3
+                    if framedBand.count < need { framedBand = [UInt16](repeating: 0, count: need) }
+                    try framedBand.withUnsafeMutableBufferPointer { dst in
+                        guard let base = dst.baseAddress else { return }
+                        Pentax645Frame.renderBorderBand(band: base, layout: layout, bandY: layout.topBar + layout.photoHeight + botY, bandRows: rows, monochrome: monochrome)
+                        try consume(layout.topBar + layout.photoHeight + botY, rows, base)
+                    }
+                    botY += rows
+                }
+            }
+        }
+        if size.0 == w && size.1 == h {
+            try renderBands(image, params, 1, onProgress, stamped)
+            try emitBottom()
+            return
+        }
         let scaler = BandDownscaler(inWidth: w, inHeight: h, outWidth: size.0, outHeight: size.1,
                                     maxRowsPerPush: Self.tileHeight, sharpen: sharpen, emit: stamped)
         // A grain cell at least one output pixel, as a full-size render of the smaller image would have.
         let minGrain = Float(max(w, h)) / Float(max(size.0, size.1))
         try renderBands(image, params, minGrain, onProgress) { _, rows, band in try scaler.push(rows, band) }
         try scaler.finish()
+        try emitBottom()
     }
 
     /**

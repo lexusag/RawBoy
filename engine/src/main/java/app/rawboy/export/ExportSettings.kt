@@ -39,6 +39,13 @@ data class ExportSettings(
      * yellow-orange 7-segment clock font. Empty string = no date stamp.
      */
     val dateStamp: String = "",
+    /**
+     * Optional Pentax 645N-style black film rebate with dot-matrix shoot info along the top edge.
+     * Mutually exclusive with [dateStamp]; when non-null, [pentax645] takes precedence.
+     */
+    val pentax645: Pentax645Info? = null,
+    /** When true (B&W mode), both [dateStamp] and [pentax645] render in neutral black-and-white. */
+    val monochromeImprint: Boolean = false,
 )
 
 object ExportSettingsStore {

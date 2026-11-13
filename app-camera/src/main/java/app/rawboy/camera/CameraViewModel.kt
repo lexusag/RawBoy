@@ -953,7 +953,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setLongExposureLighten(on: Boolean) = change { it.copy(longExposureLighten = on) }
     fun setShutterSound(on: Boolean) = change { it.copy(shutterSound = on) }
     fun setHdrGainMap(on: Boolean) = change { it.copy(hdrGainMap = on) }
-    fun setDateStamp(on: Boolean) = change { it.copy(dateStamp = on) }
+    fun setPhotoFrame(frame: PhotoFrame) = change { it.copy(photoFrame = frame) }
     fun setDateStampFormat(format: DateStampFormat) = change { it.copy(dateStampFormat = format) }
     fun setTrackFocus(on: Boolean) {
         change { it.copy(trackFocus = on) }
@@ -1169,6 +1169,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         // The photo is level with the horizon; the tap was on the (portrait) viewfinder.
         val meter = meterArea().let { if (it is MeterArea.Spot) it.turned(degrees) else it }
         val fix = if (settings.geotag) location.current() else null
+        val frameNumber = CameraSettingsStore.nextFrameNumber(app)
         return if (settings.keepDng) {
             val (uri, name) = withContext(Dispatchers.IO) {
                 MediaStoreOutput.create(resolver, baseName, "dng", DNG_MIME, RAW_NAMING)
@@ -1187,7 +1188,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 throw t
             }
             Log.d(TAG, "$name: capture + DNG write ${(System.nanoTime() - dngStart) / 1_000_000} ms")
-            Shot(shotId, uri, name, null, settings, viewfinderKey, isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description)
+            Shot(shotId, uri, name, null, settings, viewfinderKey, isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber)
         } else {
             val file = File(app.cacheDir, "$baseName-$shotId.dng")
             val result = try {
@@ -1200,7 +1201,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 file.delete()
                 throw t
             }
-            Shot(shotId, Uri.fromFile(file), "$baseName.dng", file, settings, viewfinderKey, isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description)
+            Shot(shotId, Uri.fromFile(file), "$baseName.dng", file, settings, viewfinderKey, isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber)
         }
     }
 

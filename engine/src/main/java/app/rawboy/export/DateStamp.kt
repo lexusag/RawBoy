@@ -59,8 +59,17 @@ object DateStamp {
     /**
      * Burns [text] into the 16-bit interleaved RGB [band] covering rows `[bandY, bandY + bandRows)` of an image of
      * size [width] x [height]. Bands outside the bottom-right stamp box return immediately.
+     * When [monochrome] is true (B&W mode), the LED exposes neutral white/grey instead of amber-orange.
      */
-    fun imprint(band: ShortArray, width: Int, height: Int, bandY: Int, bandRows: Int, text: String) {
+    fun imprint(
+        band: ShortArray,
+        width: Int,
+        height: Int,
+        bandY: Int,
+        bandRows: Int,
+        text: String,
+        monochrome: Boolean = false,
+    ) {
         if (text.isEmpty() || width <= 0 || height <= 0 || bandRows <= 0) return
 
         val shortSide = minOf(width, height).toFloat()
@@ -147,18 +156,31 @@ object DateStamp {
                 val grain = 0.9f + 0.2f * hash((px / grainCell).toInt(), (py / grainCell).toInt())
                 val e = (core + halo * (1f - core)) * grain
 
-                val lr = 1f - exp(-GAIN * e * LED_R)
-                val lg = 1f - exp(-GAIN * e * LED_G)
-                val lb = 1f - exp(-GAIN * e * LED_B)
+                val lr: Float
+                val lg: Float
+                val lb: Float
+                val blueAbsorb: Float
+                if (monochrome) {
+                    val l = 1f - exp(-GAIN * e * 0.85f)
+                    lr = l
+                    lg = l
+                    lb = l
+                    blueAbsorb = 0f
+                } else {
+                    lr = 1f - exp(-GAIN * e * LED_R)
+                    lg = 1f - exp(-GAIN * e * LED_G)
+                    lb = 1f - exp(-GAIN * e * LED_B)
+                    blueAbsorb = BLUE_ABSORB
+                }
 
                 val idx = (rowOffset + px) * 3
                 val r = (band[idx].toInt() and 0xFFFF) / 65535f
                 val g = (band[idx + 1].toInt() and 0xFFFF) / 65535f
                 val b = (band[idx + 2].toInt() and 0xFFFF) / 65535f
-                // Light adds to the picture (screen); blue is held back where the LED is strong.
+                // Light adds to the picture (screen); blue is held back where the LED is strong (color mode only).
                 band[idx] = toU16Short(1f - (1f - r) * (1f - lr))
                 band[idx + 1] = toU16Short(1f - (1f - g) * (1f - lg))
-                band[idx + 2] = toU16Short((1f - (1f - b) * (1f - lb)) * (1f - BLUE_ABSORB * lr))
+                band[idx + 2] = toU16Short((1f - (1f - b) * (1f - lb)) * (1f - blueAbsorb * lr))
             }
         }
     }

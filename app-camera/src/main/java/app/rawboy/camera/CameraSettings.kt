@@ -1,6 +1,7 @@
 package app.rawboy.camera
 
 import android.content.Context
+import android.content.SharedPreferences
 import app.rawboy.auto.looks.Adjustments
 import app.rawboy.auto.looks.Look
 import app.rawboy.auto.looks.LookApplier
@@ -10,6 +11,16 @@ import app.rawboy.camera.capture.CameraController
 import app.rawboy.camera.capture.FlashGuides
 import app.rawboy.camera.capture.FlashMode
 import app.rawboy.export.DateStampFormat
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+/** Mutually exclusive film frame / stamp imprint options in the Frames settings submenu. */
+enum class PhotoFrame(val label: String) {
+    NONE("Off"),
+    DATE_STAMP("Date stamp"),
+    PENTAX_645("Pentax 645"),
+}
 
 /** The look controls, camera choice and output settings. */
 data class CameraSettings(
@@ -73,9 +84,9 @@ data class CameraSettings(
     val geotag: Boolean = false,
     /** Save the JPEG as an Ultra HDR JPEG: the same picture plus a gain map that lets HDR screens show brighter highlights (`ultrahdr.h`). */
     val hdrGainMap: Boolean = false,
-    /** Imprint the shot's date in a yellow-orange clock font in the bottom-right corner of the JPEG. Off by default. */
-    val dateStamp: Boolean = false,
-    /** Date order for [dateStamp]: `DD MM 'YY` by default. */
+    /** Frame / stamp option: Off by default, or Date stamp / Pentax 645 (mutually exclusive). */
+    val photoFrame: PhotoFrame = PhotoFrame.NONE,
+    /** Date order for [PhotoFrame.DATE_STAMP]: `DD MM 'YY` by default. */
     val dateStampFormat: DateStampFormat = DateStampFormat.DMY,
     /** Look for QR codes in the viewfinder and offer to open them, as the phone's own camera does. */
     val scanQr: Boolean = true,
@@ -279,7 +290,9 @@ object CameraSettingsStore {
             shutterSound = p.getBoolean("shutterSound", d.shutterSound),
             geotag = p.getBoolean("geotag", d.geotag),
             hdrGainMap = p.getBoolean("hdrGainMap", d.hdrGainMap),
-            dateStamp = p.getBoolean("dateStamp", d.dateStamp),
+            photoFrame = p.getString("photoFrame", null)
+                ?.let { runCatching { PhotoFrame.valueOf(it) }.getOrNull() }
+                ?: if (p.getBoolean("dateStamp", false)) PhotoFrame.DATE_STAMP else d.photoFrame,
             dateStampFormat = runCatching { DateStampFormat.valueOf(p.getString("dateStampFormat", null)!!) }.getOrDefault(d.dateStampFormat),
             scanQr = p.getBoolean("scanQr", d.scanQr),
             trackFocus = p.getBoolean("trackFocus", d.trackFocus),
@@ -347,7 +360,8 @@ object CameraSettingsStore {
             .putBoolean("shutterSound", s.shutterSound)
             .putBoolean("geotag", s.geotag)
             .putBoolean("hdrGainMap", s.hdrGainMap)
-            .putBoolean("dateStamp", s.dateStamp)
+            .putString("photoFrame", s.photoFrame.name)
+            .putBoolean("dateStamp", s.photoFrame == PhotoFrame.DATE_STAMP)
             .putString("dateStampFormat", s.dateStampFormat.name)
             .putBoolean("scanQr", s.scanQr)
             .putBoolean("trackFocus", s.trackFocus)
@@ -383,6 +397,23 @@ object CameraSettingsStore {
         val updated = guides + (key to guide)
         p.edit().putString(FLASH_GUIDES_KEY, updated.entries.joinToString(";") { "${it.key}=${it.value}" }).apply()
         return guide
+    }
+
+    /**
+     * Increments and returns today's 1-based frame counter (resetting to 1 at the start of each local calendar day).
+     */
+    @Synchronized
+    fun nextFrameNumber(context: Context, timeMs: Long = System.currentTimeMillis()): Int {
+        val day = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(timeMs))
+        val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return nextFrameNumberForDay(p, day)
+    }
+
+    internal fun nextFrameNumberForDay(p: SharedPreferences, day: String): Int {
+        val storedDay = p.getString("frameCountDay", null)
+        val next = if (storedDay == day) p.getInt("frameCount", 0) + 1 else 1
+        p.edit().putString("frameCountDay", day).putInt("frameCount", next).apply()
+        return next
     }
 
     /** "W=1.1;T=0.95;FW=1.0" -> map; malformed entries are skipped. */

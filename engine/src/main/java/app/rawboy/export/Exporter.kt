@@ -84,18 +84,22 @@ class Exporter(private val context: Context) {
         val (uri, name) = MediaStoreOutput.create(resolver, MediaStoreOutput.baseNameOf(sourceName), settings.format, naming)
         val size = if (scan) ScanScale.size(params.lens.outputWidth, params.lens.outputHeight)
         else BandDownscaler.outputSize(params.lens.outputWidth, params.lens.outputHeight, settings.maxLongSide)
+        val frameLayout = settings.pentax645?.let { Pentax645Frame.layout(size.first, size.second) }
+        val outSize = frameLayout?.let { it.outWidth to it.outHeight } ?: size
+        val dateStamp = if (settings.pentax645 == null) settings.dateStamp else ""
+        val mono = settings.monochromeImprint
         try {
             when (settings.format) {
                 ExportFormat.JPEG -> if (settings.jpegEncoder == JpegEncoder.JPEGLI) {
                     // jpegli writes the EXIF as it starts the file: no rewrite of the finished JPEG.
                     val exif = source?.let { readExif(it) ?: ExifMetadata() }
                         ?.let { if (settings.description.isBlank()) it else it.copy(description = settings.description) }
-                    writeJpegli(image, uri, params, size, settings.jpegQuality, settings.downscaleSharpen, exif, settings.hdrGainMap, settings.dateStamp, onProgress)
+                    writeJpegli(image, uri, params, size, outSize, settings.jpegQuality, settings.downscaleSharpen, exif, settings.hdrGainMap, dateStamp, settings.pentax645, mono, onProgress)
                 } else {
-                    writeJpeg(image, uri, params, size, settings.jpegQuality, settings.downscaleSharpen, settings.dateStamp, onProgress)
+                    writeJpeg(image, uri, params, size, outSize, settings.jpegQuality, settings.downscaleSharpen, dateStamp, settings.pentax645, mono, onProgress)
                 }
-                ExportFormat.TIFF -> writeTiff(image, uri, params, size, settings.tiffBits, source?.let(::readExif)
-                    ?.let { if (settings.description.isBlank()) it else it.copy(description = settings.description) }, settings.downscaleSharpen, settings.dateStamp, onProgress)
+                ExportFormat.TIFF -> writeTiff(image, uri, params, size, outSize, settings.tiffBits, source?.let(::readExif)
+                    ?.let { if (settings.description.isBlank()) it else it.copy(description = settings.description) }, settings.downscaleSharpen, dateStamp, settings.pentax645, mono, onProgress)
             }
             val t = System.nanoTime()
             if (settings.format == ExportFormat.JPEG && settings.jpegEncoder != JpegEncoder.JPEGLI && source != null) copyExif(source, uri)
@@ -108,12 +112,12 @@ class Exporter(private val context: Context) {
         }
     }
 
-    private fun writeJpeg(image: RawImage, uri: Uri, params: ShaderParams, size: Pair<Int, Int>, quality: Int, sharpen: Float, dateStamp: String, onProgress: (Float) -> Unit) {
-        val w = size.first
-        val bitmap = Bitmap.createBitmap(w, size.second, Bitmap.Config.ARGB_8888)
+    private fun writeJpeg(image: RawImage, uri: Uri, params: ShaderParams, size: Pair<Int, Int>, outSize: Pair<Int, Int>, quality: Int, sharpen: Float, dateStamp: String, pentax645: Pentax645Info?, monochrome: Boolean, onProgress: (Float) -> Unit) {
+        val w = outSize.first
+        val bitmap = Bitmap.createBitmap(w, outSize.second, Bitmap.Config.ARGB_8888)
         try {
             var argb = IntArray(0)
-            renderOutput(image, params, size, sharpen, dateStamp, onProgress) { y, rows, band ->
+            renderOutput(image, params, size, sharpen, dateStamp, pentax645, monochrome, onProgress) { y, rows, band ->
                 val n = w * rows
                 if (argb.size < n) argb = IntArray(n)
                 for (i in 0 until n) {
@@ -136,22 +140,25 @@ class Exporter(private val context: Context) {
         uri: Uri,
         params: ShaderParams,
         size: Pair<Int, Int>,
+        outSize: Pair<Int, Int>,
         quality: Int,
         sharpen: Float,
         exif: ExifMetadata?,
         hdrGainMap: Boolean,
         dateStamp: String,
+        pentax645: Pentax645Info?,
+        monochrome: Boolean,
         onProgress: (Float) -> Unit,
     ) {
         // Laid out before the encoder starts; metadata is best effort, as copyExif's was.
         val app1 = exif?.let { runCatching { ExifWriter.jpegApp1Payload(it) }.getOrNull() }
         val pfd = context.contentResolver.openFileDescriptor(uri, "w") ?: throw IOException("Cannot write $uri")
         pfd.use {
-            val handle = if (hdrGainMap) JpegNative.beginGainMap(it.fd, size.first, size.second, quality)
-            else JpegNative.begin(it.fd, size.first, size.second, quality)
+            val handle = if (hdrGainMap) JpegNative.beginGainMap(it.fd, outSize.first, outSize.second, quality)
+            else JpegNative.begin(it.fd, outSize.first, outSize.second, quality)
             try {
                 app1?.let { bytes -> JpegNative.writeExif(handle, bytes) }
-                renderOutput(image, params, size, sharpen, dateStamp, onProgress) { _, rows, band -> JpegNative.writeRows(handle, band, rows) }
+                renderOutput(image, params, size, sharpen, dateStamp, pentax645, monochrome, onProgress) { _, rows, band -> JpegNative.writeRows(handle, band, rows) }
             } catch (t: Throwable) {
                 JpegNative.abort(handle)
                 throw t
@@ -165,18 +172,21 @@ class Exporter(private val context: Context) {
         uri: Uri,
         params: ShaderParams,
         size: Pair<Int, Int>,
+        outSize: Pair<Int, Int>,
         bits: Int,
         exif: ExifMetadata?,
         sharpen: Float,
         dateStamp: String,
+        pentax645: Pentax645Info?,
+        monochrome: Boolean,
         onProgress: (Float) -> Unit,
     ) {
         // Read-write: the header goes in last, in front of the compressed strips.
         val pfd = context.contentResolver.openFileDescriptor(uri, "rw") ?: throw IOException("Cannot write $uri")
         pfd.use {
             // The stream doesn't own the descriptor; closing pfd closes it.
-            val writer = TiffWriter(FileOutputStream(it.fileDescriptor).channel, size.first, size.second, bits, exif)
-            renderOutput(image, params, size, sharpen, dateStamp, onProgress) { _, rows, band -> writer.writeRows(band, rows) }
+            val writer = TiffWriter(FileOutputStream(it.fileDescriptor).channel, outSize.first, outSize.second, bits, exif)
+            renderOutput(image, params, size, sharpen, dateStamp, pentax645, monochrome, onProgress) { _, rows, band -> writer.writeRows(band, rows) }
             writer.finish()
         }
     }
@@ -192,17 +202,62 @@ class Exporter(private val context: Context) {
         size: Pair<Int, Int>,
         sharpen: Float,
         dateStamp: String = "",
+        pentax645: Pentax645Info? = null,
+        monochrome: Boolean = false,
         onProgress: (Float) -> Unit,
         consume: (y: Int, rows: Int, band: ShortArray) -> Unit,
     ) {
         val w = params.lens.outputWidth
         val h = params.lens.outputHeight
-        val stamped: (Int, Int, ShortArray) -> Unit = if (dateStamp.isEmpty()) consume else { y, rows, band ->
-            DateStamp.imprint(band, size.first, size.second, y, rows, dateStamp)
-            consume(y, rows, band)
+        val layout = pentax645?.let { Pentax645Frame.layout(size.first, size.second) }
+        var framedBand = ShortArray(0)
+        val stamped: (Int, Int, ShortArray) -> Unit = when {
+            layout != null -> { y, rows, band ->
+                val need = layout.outWidth * rows * 3
+                if (framedBand.size < need) framedBand = ShortArray(need)
+                Pentax645Frame.wrapPhotoBand(band, framedBand, layout, y, rows, monochrome)
+                consume(layout.topBar + y, rows, framedBand)
+            }
+            dateStamp.isNotEmpty() -> { y, rows, band ->
+                DateStamp.imprint(band, size.first, size.second, y, rows, dateStamp, monochrome)
+                consume(y, rows, band)
+            }
+            else -> consume
         }
-        if (scan) return renderBands(image, params, 1f, ScanScale.SCALE, onProgress, stamped)
-        if (size.first == w && size.second == h) return renderBands(image, params, 1f, 1f, onProgress, stamped)
+        if (layout != null && pentax645 != null) {
+            var barY = 0
+            while (barY < layout.topBar) {
+                val rows = minOf(TILE_HEIGHT, layout.topBar - barY)
+                val need = layout.outWidth * rows * 3
+                if (framedBand.size < need) framedBand = ShortArray(need)
+                Pentax645Frame.renderTopBarBand(framedBand, layout, barY, rows, pentax645, monochrome)
+                consume(barY, rows, framedBand)
+                barY += rows
+            }
+        }
+        val emitBottom: () -> Unit = {
+            if (layout != null) {
+                var botY = 0
+                while (botY < layout.border) {
+                    val rows = minOf(TILE_HEIGHT, layout.border - botY)
+                    val need = layout.outWidth * rows * 3
+                    if (framedBand.size < need) framedBand = ShortArray(need)
+                    Pentax645Frame.renderBorderBand(framedBand, layout, layout.topBar + layout.photoHeight + botY, rows, monochrome)
+                    consume(layout.topBar + layout.photoHeight + botY, rows, framedBand)
+                    botY += rows
+                }
+            }
+        }
+        if (scan) {
+            renderBands(image, params, 1f, ScanScale.SCALE, onProgress, stamped)
+            emitBottom()
+            return
+        }
+        if (size.first == w && size.second == h) {
+            renderBands(image, params, 1f, 1f, onProgress, stamped)
+            emitBottom()
+            return
+        }
         var encodeNs = 0L
         var scaleNs = 0L
         BandDownscaler(w, h, size.first, size.second, TILE_HEIGHT, sharpen) { y, rows, band ->
@@ -221,6 +276,7 @@ class Exporter(private val context: Context) {
             scaler.finish()
             scaleNs += System.nanoTime() - t
         }
+        emitBottom()
         Log.d(TAG, "export to ${size.first}x${size.second}: downscale ${(scaleNs - encodeNs) / 1_000_000} ms, encode ${encodeNs / 1_000_000} ms")
     }
 

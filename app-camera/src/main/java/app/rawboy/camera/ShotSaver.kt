@@ -31,6 +31,7 @@ import app.rawboy.export.ExportGpu
 import app.rawboy.export.ExportSettings
 import app.rawboy.export.Exporter
 import app.rawboy.export.JpegEncoder
+import app.rawboy.export.Pentax645Info
 import app.rawboy.film.FilmData
 import app.rawboy.film.FilmStocks
 import app.rawboy.gl.ShaderParams
@@ -91,8 +92,10 @@ internal data class Shot(
     val compensationEv: Float = 0f,
     /** Debug note on whether the burst merge ran, saved in the JPEG's ImageDescription (and the DNG's). */
     val description: String = "",
-    /** Capture timestamp (ms since epoch), used when [CameraSettings.dateStamp] is on. */
+    /** Capture timestamp (ms since epoch), used when [PhotoFrame.DATE_STAMP] is selected. */
     val timeMs: Long = System.currentTimeMillis(),
+    /** 1-based daily frame counter, used when [PhotoFrame.PENTAX_645] is selected. */
+    val frameNumber: Int = 0,
 )
 
 /** A finished shot and the sequence number assigned at its shutter, so lock screen launches hide earlier ones. */
@@ -433,7 +436,27 @@ internal object ShotSaver {
                 downscaleSharpen = CameraSettings.SMALL_SHARPEN,
                 hdrGainMap = s.hdrGainMap,
                 description = shot.description,
-                dateStamp = if (s.dateStamp) DateStamp.format(shot.timeMs, s.dateStampFormat) else "",
+                dateStamp = if (s.photoFrame == PhotoFrame.DATE_STAMP) DateStamp.format(shot.timeMs, s.dateStampFormat) else "",
+                pentax645 = if (s.photoFrame == PhotoFrame.PENTAX_645) {
+                    val info = img.shotInfo
+                    val focalMm = info.focalLength35mm.takeIf { it.isFinite() && it > 0 } ?: info.focalLength
+                    Pentax645Info(
+                        frameNumber = shot.frameNumber,
+                        mode = when {
+                            s.monoMode -> "BW"
+                            s.filmMode -> "FILM"
+                            else -> "LOOK"
+                        },
+                        exposureTime = info.exposureTime,
+                        fNumber = info.fNumber,
+                        compensationEv = shot.compensationEv,
+                        spotMetered = shot.meter is MeterArea.Spot,
+                        focalLengthMm = focalMm,
+                    )
+                } else {
+                    null
+                },
+                monochromeImprint = s.monoMode,
             )
             Log.d(TAG, "${shot.name}: decode $decodeMs ms, analysis $analysisMs ms")
             return Prepared(app, shot, img, shader, export, a.stats.key, a.autoBase.exposure, started)

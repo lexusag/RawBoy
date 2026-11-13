@@ -1,3 +1,9 @@
+**RawBoy Camera (Android, iOS): Pentax 645 film frame with shoot info, Frames submenu, and B&W frame rendering (2026-11-13)**
+
+- Moved **Date stamp** into a **Frames** submenu in Settings (`PhotoFrame`: **Off**, **Date stamp**, or **Pentax 645**, mutually exclusive; migrates existing `dateStamp` preferences).
+- Added **Pentax 645** (`Pentax645Frame` in `Pentax645Frame.kt` and `ExportSettings.swift`), wrapping the photo in a dark film-base rebate with 5×7 dot-matrix LED shoot info along the top edge: today's 1-based frame counter (`CameraSettingsStore.nextFrameNumber`), mode (`FILM` / `LOOK` / `BW`), shutter speed, aperture, exposure compensation EV, metering icon (larger 7×7 multi-pattern frame for auto metering, smaller spot icon for tap metering), and lens focal length (`focalLength35mm` or `focalLength`).
+- In **B&W** mode (`monoMode`), both **Date stamp** and **Pentax 645** render in neutral black and white (`monochromeImprint`). Checked by unit tests (`Pentax645FrameTest`, `DateStampTest`, `CameraSettingsTest`) and iOS `xcodebuild`; not yet run on a device.
+
 **RawBoy Camera (Android, iOS): date stamp format option (`DD MM 'YY` default, `'YY MM DD`, `MM DD 'YY`) (2026-11-13)**
 
 - Added a **Date format** choice under **Date stamp** (shown while Date stamp is on) supporting `DD MM 'YY` (now the default), `'YY MM DD`, and `MM DD 'YY` (`DateStampFormat` in `DateStamp.kt` and `ExportSettings.swift`). Checked by unit tests (`DateStampTest`, `CameraSettingsTest`) and iOS `xcodebuild`; not yet run on a device.
