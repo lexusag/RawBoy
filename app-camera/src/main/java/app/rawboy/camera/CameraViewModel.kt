@@ -952,6 +952,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setLongExposureLighten(on: Boolean) = change { it.copy(longExposureLighten = on) }
     fun setShutterSound(on: Boolean) = change { it.copy(shutterSound = on) }
     fun setHdrGainMap(on: Boolean) = change { it.copy(hdrGainMap = on) }
+    fun setDateStamp(on: Boolean) = change { it.copy(dateStamp = on) }
     fun setTrackFocus(on: Boolean) {
         change { it.copy(trackFocus = on) }
         // A subject being followed: a plain lock where it is now.

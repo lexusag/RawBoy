@@ -102,7 +102,7 @@ shows them.
   (shown when a lens offers a maximum-resolution raw stream of the same field of view, such as 50 MP `RAW10` on the Pixel 9 Pro's main `W` lens: writes a 16-bit Bayer DNG via `MaxResDngWriter` — remosaicing 4×4 Quad-Bayer streams into standard 2×2 Bayer — and develops the JPEG from it, while keeping normal resolution on virtual crop lenses; frame merging is off on full-resolution lenses); **Merge 8 frames** (see above); **Shutter sound** (off by default: a click on each
   shot; where the law requires it, such as Japan and Korea, Android or iOS reports so and it is always on and greyed out,
   as it is on iPhones before iOS 18);
-  **Geotag** (off by default; see below); **QR codes** (on by default; see above); **Track subject after tap** (off by
+  **Geotag** (off by default; see below); **Date stamp** (off by default: imprints today's date as `'YY MM DD` in a yellow-orange 7-segment clock font in the bottom-right corner of the JPEG); **QR codes** (on by default; see above); **Track subject after tap** (off by
   default; see above);
   **Remember camera & settings** (off by default: each start uses the
   back W lens, Yellow Portrait 400 and default sliders; on keeps lens, side, look and sliders).

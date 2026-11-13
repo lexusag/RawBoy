@@ -25,6 +25,7 @@ import app.rawboy.auto.AutoAnalysis
 import app.rawboy.auto.analysis.AutoTone
 import app.rawboy.auto.analysis.MeterArea
 import app.rawboy.auto.analysis.SceneStats
+import app.rawboy.export.DateStamp
 import app.rawboy.export.ExportFormat
 import app.rawboy.export.ExportGpu
 import app.rawboy.export.ExportSettings
@@ -90,6 +91,8 @@ internal data class Shot(
     val compensationEv: Float = 0f,
     /** Debug note on whether the burst merge ran, saved in the JPEG's ImageDescription (and the DNG's). */
     val description: String = "",
+    /** Capture timestamp (ms since epoch), used when [CameraSettings.dateStamp] is on. */
+    val timeMs: Long = System.currentTimeMillis(),
 )
 
 /** A finished shot and the sequence number assigned at its shutter, so lock screen launches hide earlier ones. */
@@ -430,6 +433,7 @@ internal object ShotSaver {
                 downscaleSharpen = CameraSettings.SMALL_SHARPEN,
                 hdrGainMap = s.hdrGainMap,
                 description = shot.description,
+                dateStamp = if (s.dateStamp) DateStamp.format(shot.timeMs) else "",
             )
             Log.d(TAG, "${shot.name}: decode $decodeMs ms, analysis $analysisMs ms")
             return Prepared(app, shot, img, shader, export, a.stats.key, a.autoBase.exposure, started)

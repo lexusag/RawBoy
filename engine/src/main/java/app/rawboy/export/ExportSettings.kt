@@ -34,6 +34,11 @@ data class ExportSettings(
     val hdrGainMap: Boolean = false,
     /** JPEGLI/TIFF: written as the file's ImageDescription instead of the source's (blank: the source's). */
     val description: String = "",
+    /**
+     * Optional film-style date stamp (e.g. `'26 11 13`) imprinted in the bottom-right corner of the exported image in a
+     * yellow-orange 7-segment clock font. Empty string = no date stamp.
+     */
+    val dateStamp: String = "",
 )
 
 object ExportSettingsStore {

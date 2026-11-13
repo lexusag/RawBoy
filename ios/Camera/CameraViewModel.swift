@@ -109,6 +109,8 @@ final class CameraViewModel: ObservableObject {
         let viewfinder: PreviewImage?
         /** Where the photo is metered, in the photo's own (level) orientation: see meterArea. */
         let meter: MeterArea
+        /** Capture timestamp, used when settings.dateStamp is on. */
+        let date: Date
     }
     private var shots: [Shot] = []
     private var developing = false
@@ -564,6 +566,7 @@ final class CameraViewModel: ObservableObject {
         change { $0.showHistogram = on }
         if !on { histogram = nil }
     }
+    func setDateStamp(_ on: Bool) { change { $0.dateStamp = on } }
     /** Turning it on asks for location access first (the system prompt the first time). */
     func setGeotag(_ on: Bool) {
         guard on else {
@@ -711,7 +714,7 @@ final class CameraViewModel: ObservableObject {
                     Task { @MainActor in self?.shutterCount += 1 }
                 }
                 shots.append(Shot(dng: result.dng, name: name, settings: s, viewfinderKey: viewfinderKey,
-                                  iso: result.iso, compensationEv: result.compensationEv, mayHaveFace: mayHaveFace, viewfinder: live?.base, meter: meter))
+                                  iso: result.iso, compensationEv: result.compensationEv, mayHaveFace: mayHaveFace, viewfinder: live?.base, meter: meter, date: Date()))
                 developNext()
             } catch {
                 Self.log.error("capture: \(error.localizedDescription)")
@@ -789,7 +792,8 @@ final class CameraViewModel: ObservableObject {
                                                    film: film)
                     let export = ExportSettings(format: .jpeg, jpegQuality: s.jpegQuality, jpegEncoder: .jpegli,
                                                 maxLongSide: s.maxLongSide,
-                                                downscaleSharpen: CameraSettings.smallSharpen)
+                                                downscaleSharpen: CameraSettings.smallSharpen,
+                                                dateStamp: s.dateStamp ? DateStamp.format(shot.date) : "")
                     let exportStart = Date()
                     let file = try Exporter().export(img, sourceName: shot.name, params: shader, settings: export,
                                                      naming: Self.jpegNaming, gpu: gpu)
