@@ -568,6 +568,7 @@ object Pentax645Frame {
         val color = info?.color ?: FilmFrameColor.AMBER
         val isPentax = layout.style == FilmFrameStyle.PENTAX_645
         val dots = if (isPentax) info?.let { buildStampDots(layout, it) } else null
+        val softEdge = maxOf(1.6f, infoBar * 0.055f)
         val tmp = ShortArray(3)
 
         for (r in 0 until bandRows) {
@@ -584,38 +585,82 @@ object Pentax645Frame {
 
             if (!isPentax) {
                 val gateInset = maxOf(2f, infoBar * 0.11f)
+                val sideInset = maxOf(1.2f, infoBar * 0.045f)
+                val cornerR = maxOf(2f, infoBar * 0.10f)
                 val yc = y + 0.5f
                 val isTop = yc < ph * 0.5f
                 val yFromEdge = if (isTop) yc else (ph - yc)
-                if (yFromEdge < gateInset * 1.4f + 2f) {
-                    val noisePeriod = maxOf(4f, infoBar * 0.45f)
-                    for (x in 0 until pw) {
-                        val xc = x + 0.5f
-                        val isLeft = xc < pw * 0.5f
-                        val distFromEnd = if (isLeft) xc else (pw - xc)
-                        val cornerSeed = (if (isTop) 0 else 2) + (if (isLeft) 0 else 1)
+                val nearHorizEdge = yFromEdge < gateInset * 1.8f + softEdge + cornerR
+                val sideSpan = minOf(pw / 2, (sideInset * 2.2f + softEdge + cornerR).toInt() + 1)
+
+                fun contaxEdgeMask(x: Int): Float {
+                    val xc = x + 0.5f
+                    val isLeft = xc < pw * 0.5f
+                    val xFromEdge = if (isLeft) xc else (pw - xc)
+                    val cornerSeed = (if (isTop) 0 else 2) + (if (isLeft) 0 else 1)
+
+                    var mask = 0f
+                    if (nearHorizEdge) {
                         val cutoutEnd = infoBar * (1.15f + 0.35f * hash(cornerSeed, 101))
-                        if (distFromEnd < cutoutEnd) continue
                         val ramp = infoBar * (0.28f + 0.12f * hash(cornerSeed, 202))
-                        val t = ((distFromEnd - cutoutEnd) / ramp).coerceIn(0f, 1f)
+                        val t = ((xFromEdge - cutoutEnd) / ramp).coerceIn(0f, 1f)
                         val baseDepth = gateInset * t * t * (3f - 2f * t)
-                        val wobble = (smoothNoise1D(xc / noisePeriod, cornerSeed * 17 + 7) - 0.5f) * gateInset * 0.35f * t
+                        val wobble = gateImperfection(xc, infoBar, cornerSeed * 17 + 7) * gateInset * 0.45f * t
                         val edgeDepth = (baseDepth + wobble).coerceAtLeast(0f)
-                        if (edgeDepth <= 0.01f) continue
-                        val d = yFromEdge - edgeDepth
-                        if (d >= 0.6f) continue
-                        val mask = ((0.6f - d) / 1.2f).coerceIn(0f, 1f).let { it * it * (3f - 2f * it) }
+                        if (edgeDepth > 0.01f) {
+                            mask = maxOf(mask, gateMask(yFromEdge - edgeDepth, softEdge))
+                        }
+                    }
+
+                    if (xFromEdge < sideSpan) {
+                        val sideSeed = if (isLeft) 31 else 53
+                        val sideDepth = (sideInset * (0.75f + 0.65f * gateImperfection(yc, infoBar, sideSeed))).coerceAtLeast(0f)
+                        mask = maxOf(mask, gateMask(xFromEdge - sideDepth, softEdge))
+
+                        if (yFromEdge < cornerR && xFromEdge < cornerR) {
+                            val dx = cornerR - xFromEdge
+                            val dy = cornerR - yFromEdge
+                            val cornerDist = cornerR - sqrt(dx * dx + dy * dy)
+                            mask = maxOf(mask, gateMask(cornerDist, softEdge))
+                        }
+                    }
+                    return mask
+                }
+
+                if (nearHorizEdge) {
+                    for (x in 0 until pw) {
+                        val mask = contaxEdgeMask(x)
+                        if (mask <= 0.001f) continue
                         val px = leftPad + x
                         val idx = (dstRow + px) * 3
                         sampleRebatePixel(px, py, 0f, 0f, null, grainCell, monochrome, color, tmp, 0)
                         blendPixel(dst, idx, tmp, mask)
+                    }
+                } else {
+                    for (x in 0 until sideSpan) {
+                        val mask = contaxEdgeMask(x)
+                        if (mask > 0.001f) {
+                            val px = leftPad + x
+                            val idx = (dstRow + px) * 3
+                            sampleRebatePixel(px, py, 0f, 0f, null, grainCell, monochrome, color, tmp, 0)
+                            blendPixel(dst, idx, tmp, mask)
+                        }
+                    }
+                    for (x in maxOf(sideSpan, pw - sideSpan) until pw) {
+                        val mask = contaxEdgeMask(x)
+                        if (mask > 0.001f) {
+                            val px = leftPad + x
+                            val idx = (dstRow + px) * 3
+                            sampleRebatePixel(px, py, 0f, 0f, null, grainCell, monochrome, color, tmp, 0)
+                            blendPixel(dst, idx, tmp, mask)
+                        }
                     }
                 }
                 continue
             }
 
             if (!onLeft) {
-                if (y >= layout.infoBar + 2) continue
+                if (y >= layout.infoBar + softEdge.toInt() + 2) continue
                 val yc = y + 0.5f
                 for (x in 0 until pw) {
                     val xc = x + 0.5f
@@ -626,9 +671,8 @@ object Pentax645Frame {
                     } else {
                         infoBar
                     }
-                    val d = yc - edgeY
-                    if (d >= 0.6f) continue
-                    val mask = ((0.6f - d) / 1.2f).coerceIn(0f, 1f).let { it * it * (3f - 2f * it) }
+                    val mask = gateMask(yc - edgeY, softEdge)
+                    if (mask <= 0.001f) continue
                     val px = leftPad + x
                     val idx = (dstRow + px) * 3
                     sampleRebatePixel(px, py, px + 0.5f, py + 0.5f, dots, grainCell, monochrome, color, tmp, 0)
@@ -643,11 +687,10 @@ object Pentax645Frame {
                 } else {
                     infoBar
                 }
-                val xMax = minOf(pw, (edgeX + 1.5f).toInt())
+                val xMax = minOf(pw, (edgeX + softEdge + 1.5f).toInt())
                 for (x in 0 until xMax) {
-                    val d = (x + 0.5f) - edgeX
-                    if (d >= 0.6f) continue
-                    val mask = ((0.6f - d) / 1.2f).coerceIn(0f, 1f).let { it * it * (3f - 2f * it) }
+                    val mask = gateMask((x + 0.5f) - edgeX, softEdge)
+                    if (mask <= 0.001f) continue
                     val px = leftPad + x
                     val idx = (dstRow + px) * 3
                     sampleRebatePixel(px, py, (oh - 1 - py) + 0.5f, px + 0.5f, dots, grainCell, monochrome, color, tmp, 0)
@@ -682,6 +725,20 @@ object Pentax645Frame {
         h = (h xor (h ushr 13)) * 1274126177
         h = h xor (h ushr 16)
         return (h and 0xFFFFFF) / 16777215f
+    }
+
+    private fun gateMask(d: Float, softEdge: Float): Float {
+        if (d >= softEdge) return 0f
+        val t = ((softEdge - d) / (2f * softEdge)).coerceIn(0f, 1f)
+        return t * t * (3f - 2f * t)
+    }
+
+    private fun gateImperfection(pos: Float, infoBar: Float, seed: Int): Float {
+        val slow = smoothNoise1D(pos / maxOf(6f, infoBar * 0.65f), seed) - 0.5f
+        val med = smoothNoise1D(pos / maxOf(2f, infoBar * 0.16f), seed + 101) - 0.5f
+        val fine = smoothNoise1D(pos / maxOf(1.5f, infoBar * 0.05f), seed + 203)
+        val nib = if (fine > 0.86f) (fine - 0.86f) * 3.5f else 0f
+        return slow * 0.8f + med * 0.6f + nib
     }
 
     private fun smoothNoise1D(x: Float, seed: Int): Float {

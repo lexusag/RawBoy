@@ -936,6 +936,7 @@ public enum Pentax645Frame {
         let color = info?.color ?? .amber
         let isPentax = layout.style == .pentax645
         let dots: StampDots? = isPentax ? info.map { buildStampDots(layout: layout, info: $0) } : nil
+        let softEdge = max(1.6, infoBar * 0.055)
         var tmp: [UInt16] = [0, 0, 0]
 
         for r in 0..<bandRows {
@@ -952,28 +953,52 @@ public enum Pentax645Frame {
 
             if !isPentax {
                 let gateInset = max(2, infoBar * 0.11)
+                let sideInset = max(1.2, infoBar * 0.045)
+                let cornerR = max(2, infoBar * 0.10)
                 let yc = Float(y) + 0.5
                 let isTop = yc < Float(ph) * 0.5
                 let yFromEdge = isTop ? yc : (Float(ph) - yc)
-                if yFromEdge < gateInset * 1.4 + 2 {
-                    let noisePeriod = max(4, infoBar * 0.45)
-                    for x in 0..<pw {
-                        let xc = Float(x) + 0.5
-                        let isLeft = xc < Float(pw) * 0.5
-                        let distFromEnd = isLeft ? xc : (Float(pw) - xc)
-                        let cornerSeed = (isTop ? 0 : 2) + (isLeft ? 0 : 1)
+                let nearHorizEdge = yFromEdge < gateInset * 1.8 + softEdge + cornerR
+                let sideSpan = min(pw / 2, Int(sideInset * 2.2 + softEdge + cornerR) + 1)
+
+                func contaxEdgeMask(_ x: Int) -> Float {
+                    let xc = Float(x) + 0.5
+                    let isLeft = xc < Float(pw) * 0.5
+                    let xFromEdge = isLeft ? xc : (Float(pw) - xc)
+                    let cornerSeed = (isTop ? 0 : 2) + (isLeft ? 0 : 1)
+
+                    var mask: Float = 0
+                    if nearHorizEdge {
                         let cutoutEnd = infoBar * (1.15 + 0.35 * hash(cornerSeed, 101))
-                        if distFromEnd < cutoutEnd { continue }
                         let ramp = infoBar * (0.28 + 0.12 * hash(cornerSeed, 202))
-                        let t = min(max((distFromEnd - cutoutEnd) / ramp, 0), 1)
+                        let t = min(max((xFromEdge - cutoutEnd) / ramp, 0), 1)
                         let baseDepth = gateInset * t * t * (3 - 2 * t)
-                        let wobble = (smoothNoise1D(xc / noisePeriod, seed: cornerSeed * 17 + 7) - 0.5) * gateInset * 0.35 * t
+                        let wobble = gateImperfection(xc, infoBar: infoBar, seed: cornerSeed * 17 + 7) * gateInset * 0.45 * t
                         let edgeDepth = max(0, baseDepth + wobble)
-                        if edgeDepth <= 0.01 { continue }
-                        let d = yFromEdge - edgeDepth
-                        if d >= 0.6 { continue }
-                        let u = min(max((0.6 - d) / 1.2, 0), 1)
-                        let mask = u * u * (3 - 2 * u)
+                        if edgeDepth > 0.01 {
+                            mask = max(mask, gateMask(yFromEdge - edgeDepth, softEdge: softEdge))
+                        }
+                    }
+
+                    if Int(xFromEdge) < sideSpan {
+                        let sideSeed = isLeft ? 31 : 53
+                        let sideDepth = max(0, sideInset * (0.75 + 0.65 * gateImperfection(yc, infoBar: infoBar, seed: sideSeed)))
+                        mask = max(mask, gateMask(xFromEdge - sideDepth, softEdge: softEdge))
+
+                        if yFromEdge < cornerR && xFromEdge < cornerR {
+                            let dx = cornerR - xFromEdge
+                            let dy = cornerR - yFromEdge
+                            let cornerDist = cornerR - sqrt(dx * dx + dy * dy)
+                            mask = max(mask, gateMask(cornerDist, softEdge: softEdge))
+                        }
+                    }
+                    return mask
+                }
+
+                if nearHorizEdge {
+                    for x in 0..<pw {
+                        let mask = contaxEdgeMask(x)
+                        if mask <= 0.001 { continue }
                         let px = leftPad + x
                         let idx = (dstRow + px) * 3
                         tmp.withUnsafeMutableBufferPointer { buf in
@@ -981,12 +1006,35 @@ public enum Pentax645Frame {
                         }
                         blendPixel(dst: dst, idx: idx, stripe: tmp, mask: mask)
                     }
+                } else {
+                    for x in 0..<sideSpan {
+                        let mask = contaxEdgeMask(x)
+                        if mask > 0.001 {
+                            let px = leftPad + x
+                            let idx = (dstRow + px) * 3
+                            tmp.withUnsafeMutableBufferPointer { buf in
+                                sampleRebatePixel(px: px, py: py, u: 0, v: 0, dots: nil, grainCell: grainCell, monochrome: monochrome, color: color, out: buf.baseAddress!, idx: 0)
+                            }
+                            blendPixel(dst: dst, idx: idx, stripe: tmp, mask: mask)
+                        }
+                    }
+                    for x in max(sideSpan, pw - sideSpan)..<pw {
+                        let mask = contaxEdgeMask(x)
+                        if mask > 0.001 {
+                            let px = leftPad + x
+                            let idx = (dstRow + px) * 3
+                            tmp.withUnsafeMutableBufferPointer { buf in
+                                sampleRebatePixel(px: px, py: py, u: 0, v: 0, dots: nil, grainCell: grainCell, monochrome: monochrome, color: color, out: buf.baseAddress!, idx: 0)
+                            }
+                            blendPixel(dst: dst, idx: idx, stripe: tmp, mask: mask)
+                        }
+                    }
                 }
                 continue
             }
 
             if !onLeft {
-                if y >= layout.infoBar + 2 { continue }
+                if y >= layout.infoBar + Int(softEdge) + 2 { continue }
                 let yc = Float(y) + 0.5
                 for x in 0..<pw {
                     let xc = Float(x) + 0.5
@@ -998,10 +1046,8 @@ public enum Pentax645Frame {
                     } else {
                         edgeY = infoBar
                     }
-                    let d = yc - edgeY
-                    if d >= 0.6 { continue }
-                    let u = min(max((0.6 - d) / 1.2, 0), 1)
-                    let mask = u * u * (3 - 2 * u)
+                    let mask = gateMask(yc - edgeY, softEdge: softEdge)
+                    if mask <= 0.001 { continue }
                     let px = leftPad + x
                     let idx = (dstRow + px) * 3
                     tmp.withUnsafeMutableBufferPointer { buf in
@@ -1019,12 +1065,10 @@ public enum Pentax645Frame {
                 } else {
                     edgeX = infoBar
                 }
-                let xMax = min(pw, Int(edgeX + 1.5))
+                let xMax = min(pw, Int(edgeX + softEdge + 1.5))
                 for x in 0..<xMax {
-                    let d = (Float(x) + 0.5) - edgeX
-                    if d >= 0.6 { continue }
-                    let u = min(max((0.6 - d) / 1.2, 0), 1)
-                    let mask = u * u * (3 - 2 * u)
+                    let mask = gateMask((Float(x) + 0.5) - edgeX, softEdge: softEdge)
+                    if mask <= 0.001 { continue }
                     let px = leftPad + x
                     let idx = (dstRow + px) * 3
                     tmp.withUnsafeMutableBufferPointer { buf in
@@ -1059,6 +1103,20 @@ public enum Pentax645Frame {
         h = (h ^ (h >> 13)) &* 1274126177
         h ^= h >> 16
         return Float(h & 0xFFFFFF) / 16777215
+    }
+
+    private static func gateMask(_ d: Float, softEdge: Float) -> Float {
+        if d >= softEdge { return 0 }
+        let t = min(max((softEdge - d) / (2 * softEdge), 0), 1)
+        return t * t * (3 - 2 * t)
+    }
+
+    private static func gateImperfection(_ pos: Float, infoBar: Float, seed: Int) -> Float {
+        let slow = smoothNoise1D(pos / max(6, infoBar * 0.65), seed: seed) - 0.5
+        let med = smoothNoise1D(pos / max(2, infoBar * 0.16), seed: seed + 101) - 0.5
+        let fine = smoothNoise1D(pos / max(1.5, infoBar * 0.05), seed: seed + 203)
+        let nib: Float = fine > 0.86 ? (fine - 0.86) * 3.5 : 0
+        return slow * 0.8 + med * 0.6 + nib
     }
 
     private static func smoothNoise1D(_ x: Float, seed: Int) -> Float {
