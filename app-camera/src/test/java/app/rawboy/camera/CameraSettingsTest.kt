@@ -13,6 +13,7 @@ class CameraSettingsTest {
     fun defaultsHaveFramesDisabled() {
         val s = CameraSettings()
         assertEquals(PhotoFrame.NONE, s.photoFrame)
+        assertEquals(PhotoFrame.PENTAX_645, s.lastPhotoFrame)
         assertEquals(DateStampFormat.DMY, s.dateStampFormat)
         assertEquals(TimeStampFormat.H24, s.timeStampFormat)
         assertFalse(s.pentax645Flip)

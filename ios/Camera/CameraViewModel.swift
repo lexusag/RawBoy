@@ -570,7 +570,23 @@ final class CameraViewModel: ObservableObject {
         change { $0.showHistogram = on }
         if !on { histogram = nil }
     }
-    func setPhotoFrame(_ frame: PhotoFrame) { change { $0.photoFrame = frame } }
+    func setPhotoFrame(_ frame: PhotoFrame) {
+        change {
+            $0.photoFrame = frame
+            if frame != .none { $0.lastPhotoFrame = frame }
+        }
+    }
+    /** Toggles frames off or back on using the last enabled frame (Pentax 645 by default). */
+    func togglePhotoFrame() {
+        change {
+            if $0.photoFrame == .none {
+                $0.photoFrame = $0.lastPhotoFrame != .none ? $0.lastPhotoFrame : .pentax645
+            } else {
+                $0.lastPhotoFrame = $0.photoFrame
+                $0.photoFrame = .none
+            }
+        }
+    }
     func setDateStampFormat(_ format: DateStampFormat) { change { $0.dateStampFormat = format } }
     func setTimeStampFormat(_ format: TimeStampFormat) { change { $0.timeStampFormat = format } }
     func setPentax645Flip(_ on: Bool) { change { $0.pentax645Flip = on } }

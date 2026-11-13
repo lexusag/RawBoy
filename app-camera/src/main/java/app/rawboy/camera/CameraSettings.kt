@@ -149,6 +149,8 @@ data class CameraSettings(
     val hdrGainMap: Boolean = false,
     /** Frame / stamp option: Off by default, or Date stamp / Pentax 645 (mutually exclusive). */
     val photoFrame: PhotoFrame = PhotoFrame.NONE,
+    /** Last enabled frame / stamp option, restored when toggling frames back on from the top bar. */
+    val lastPhotoFrame: PhotoFrame = PhotoFrame.PENTAX_645,
     /** Date order for [PhotoFrame.DATE_STAMP] and [Pentax645Field.DATE]: `DD MM 'YY` by default. */
     val dateStampFormat: DateStampFormat = DateStampFormat.DMY,
     /** Time format for [Pentax645Field.TIME]: `24h` by default. */
@@ -367,6 +369,13 @@ object CameraSettingsStore {
             photoFrame = p.getString("photoFrame", null)
                 ?.let { runCatching { PhotoFrame.valueOf(it) }.getOrNull() }
                 ?: if (p.getBoolean("dateStamp", false)) PhotoFrame.DATE_STAMP else d.photoFrame,
+            lastPhotoFrame = p.getString("lastPhotoFrame", null)
+                ?.let { runCatching { PhotoFrame.valueOf(it) }.getOrNull() }
+                ?.takeIf { it != PhotoFrame.NONE }
+                ?: (p.getString("photoFrame", null)
+                    ?.let { runCatching { PhotoFrame.valueOf(it) }.getOrNull() }
+                    ?.takeIf { it != PhotoFrame.NONE }
+                    ?: if (p.getBoolean("dateStamp", false)) PhotoFrame.DATE_STAMP else d.lastPhotoFrame),
             dateStampFormat = runCatching { DateStampFormat.valueOf(p.getString("dateStampFormat", null)!!) }.getOrDefault(d.dateStampFormat),
             timeStampFormat = runCatching { TimeStampFormat.valueOf(p.getString("timeStampFormat", null)!!) }.getOrDefault(d.timeStampFormat),
             pentax645Fields = Pentax645Field.parseSet(p.getString("pentax645Fields", null)),
@@ -439,6 +448,7 @@ object CameraSettingsStore {
             .putBoolean("geotag", s.geotag)
             .putBoolean("hdrGainMap", s.hdrGainMap)
             .putString("photoFrame", s.photoFrame.name)
+            .putString("lastPhotoFrame", (if (s.photoFrame != PhotoFrame.NONE) s.photoFrame else s.lastPhotoFrame).name)
             .putBoolean("dateStamp", s.photoFrame == PhotoFrame.DATE_STAMP)
             .putString("dateStampFormat", s.dateStampFormat.name)
             .putString("timeStampFormat", s.timeStampFormat.name)

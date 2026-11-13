@@ -120,6 +120,12 @@ struct CameraScreen: View {
                     .foregroundStyle(vm.settings.keepDng ? Color.cameraAccent : .white.opacity(0.6))
             }
             .accessibilityLabel("Keep RAW (DNG)")
+            Button(action: vm.togglePhotoFrame) {
+                Image(systemName: "photo.artframe")
+                    .foregroundStyle(vm.settings.photoFrame != .none ? Color.cameraAccent : .white.opacity(0.6))
+            }
+            .accessibilityLabel("Frames")
+            .accessibilityValue(vm.settings.photoFrame != .none ? vm.settings.photoFrame.label : "Off")
             if vm.flashAvailable {
                 Button(action: vm.toggleFlash) {
                     Image(systemName: vm.settings.flash == .on ? "bolt.fill" : "bolt.slash")

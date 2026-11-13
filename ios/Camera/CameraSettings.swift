@@ -148,6 +148,8 @@ struct CameraSettings: Equatable {
     var geotag = false
     /** Frame / stamp option: Off by default, or Date stamp / Pentax 645 (mutually exclusive). */
     var photoFrame = PhotoFrame.none
+    /** Last enabled frame / stamp option, restored when toggling frames back on from the top bar. */
+    var lastPhotoFrame = PhotoFrame.pentax645
     /** Date order for PhotoFrame.dateStamp and Pentax645Field.date: DD MM 'YY by default. */
     var dateStampFormat = DateStampFormat.dmy
     /** Time format for Pentax645Field.time: 24h by default. */
@@ -269,6 +271,9 @@ enum CameraSettingsStore {
         s.geotag = d.object(forKey: "camera.geotag") as? Bool ?? def.geotag
         s.photoFrame = d.string(forKey: "camera.photoFrame").flatMap(PhotoFrame.init(rawValue:))
             ?? ((d.object(forKey: "camera.dateStamp") as? Bool ?? false) ? .dateStamp : def.photoFrame)
+        let savedLastFrame = d.string(forKey: "camera.lastPhotoFrame").flatMap(PhotoFrame.init(rawValue:))
+        s.lastPhotoFrame = (savedLastFrame != nil && savedLastFrame != .none) ? savedLastFrame!
+            : (s.photoFrame != .none ? s.photoFrame : def.lastPhotoFrame)
         s.dateStampFormat = d.string(forKey: "camera.dateStampFormat").flatMap(DateStampFormat.init(rawValue:)) ?? def.dateStampFormat
         s.timeStampFormat = d.string(forKey: "camera.timeStampFormat").flatMap(TimeStampFormat.init(rawValue:)) ?? def.timeStampFormat
         s.pentax645Fields = Pentax645Field.parseSet(d.string(forKey: "camera.pentax645Fields"))
@@ -321,6 +326,7 @@ enum CameraSettingsStore {
         d.set(s.showLevel, forKey: "camera.showLevel")
         d.set(s.geotag, forKey: "camera.geotag")
         d.set(s.photoFrame.rawValue, forKey: "camera.photoFrame")
+        d.set((s.photoFrame != .none ? s.photoFrame : s.lastPhotoFrame).rawValue, forKey: "camera.lastPhotoFrame")
         d.set(s.photoFrame == .dateStamp, forKey: "camera.dateStamp")
         d.set(s.dateStampFormat.rawValue, forKey: "camera.dateStampFormat")
         d.set(s.timeStampFormat.rawValue, forKey: "camera.timeStampFormat")

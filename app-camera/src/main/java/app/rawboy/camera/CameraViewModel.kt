@@ -954,7 +954,20 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setLongExposureLighten(on: Boolean) = change { it.copy(longExposureLighten = on) }
     fun setShutterSound(on: Boolean) = change { it.copy(shutterSound = on) }
     fun setHdrGainMap(on: Boolean) = change { it.copy(hdrGainMap = on) }
-    fun setPhotoFrame(frame: PhotoFrame) = change { it.copy(photoFrame = frame) }
+    fun setPhotoFrame(frame: PhotoFrame) = change {
+        it.copy(
+            photoFrame = frame,
+            lastPhotoFrame = if (frame != PhotoFrame.NONE) frame else it.lastPhotoFrame,
+        )
+    }
+    /** Toggles frames off or back on using the last enabled frame (Pentax 645 by default). */
+    fun togglePhotoFrame() = change {
+        if (it.photoFrame == PhotoFrame.NONE) {
+            it.copy(photoFrame = it.lastPhotoFrame.takeIf { f -> f != PhotoFrame.NONE } ?: PhotoFrame.PENTAX_645)
+        } else {
+            it.copy(lastPhotoFrame = it.photoFrame, photoFrame = PhotoFrame.NONE)
+        }
+    }
     fun setDateStampFormat(format: DateStampFormat) = change { it.copy(dateStampFormat = format) }
     fun setTimeStampFormat(format: TimeStampFormat) = change { it.copy(timeStampFormat = format) }
     fun setPentax645Flip(on: Boolean) = change { it.copy(pentax645Flip = on) }
