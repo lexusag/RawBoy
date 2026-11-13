@@ -109,8 +109,12 @@ final class CameraViewModel: ObservableObject {
         let viewfinder: PreviewImage?
         /** Where the photo is metered, in the photo's own (level) orientation: see meterArea. */
         let meter: MeterArea
-        /** Capture timestamp, used when settings.dateStamp is on. */
+        /** Capture timestamp, used when settings.photoFrame is .dateStamp. */
         let date: Date
+        /** 1-based daily frame counter, used when settings.photoFrame is .pentax645. */
+        let frameNumber: Int
+        /** True when metered on a tapped focus point, false for auto centre metering. */
+        let spotMetered: Bool
     }
     private var shots: [Shot] = []
     private var developing = false
@@ -566,8 +570,13 @@ final class CameraViewModel: ObservableObject {
         change { $0.showHistogram = on }
         if !on { histogram = nil }
     }
-    func setDateStamp(_ on: Bool) { change { $0.dateStamp = on } }
+    func setPhotoFrame(_ frame: PhotoFrame) { change { $0.photoFrame = frame } }
     func setDateStampFormat(_ format: DateStampFormat) { change { $0.dateStampFormat = format } }
+    func setPentax645Field(_ field: Pentax645Field, _ on: Bool) {
+        change {
+            if on { $0.pentax645Fields.insert(field) } else { $0.pentax645Fields.remove(field) }
+        }
+    }
     /** Turning it on asks for location access first (the system prompt the first time). */
     func setGeotag(_ on: Bool) {
         guard on else {
@@ -706,6 +715,8 @@ final class CameraViewModel: ObservableObject {
         let mayHaveFace = !controller.frames.faces.isEmpty
         // The photo is level with the horizon; the tap was on the (portrait) viewfinder.
         let meter = meterArea.turned(currentDeviceDegrees())
+        let spotMetered = focusPoint != nil && !(tracking && subjectHidden)
+        let frameNumber = CameraSettingsStore.nextFrameNumber()
         let name = "IMG_" + Self.timestamp()
         let gps = s.geotag ? location.current.map(LocationTracker.gpsMetadata) : nil
         pending += 1
@@ -715,7 +726,7 @@ final class CameraViewModel: ObservableObject {
                     Task { @MainActor in self?.shutterCount += 1 }
                 }
                 shots.append(Shot(dng: result.dng, name: name, settings: s, viewfinderKey: viewfinderKey,
-                                  iso: result.iso, compensationEv: result.compensationEv, mayHaveFace: mayHaveFace, viewfinder: live?.base, meter: meter, date: Date()))
+                                  iso: result.iso, compensationEv: result.compensationEv, mayHaveFace: mayHaveFace, viewfinder: live?.base, meter: meter, date: Date(), frameNumber: frameNumber, spotMetered: spotMetered))
                 developNext()
             } catch {
                 Self.log.error("capture: \(error.localizedDescription)")
@@ -791,10 +802,29 @@ final class CameraViewModel: ObservableObject {
                                                    bloomSources: a.bloom, skinMask: a.skin,
                                                    grainSizeScale: Self.grainSizeScale, grainStrength: Self.grainStrength(s),
                                                    film: film)
+                    let pentax645: Pentax645Info? = s.photoFrame == .pentax645 ? {
+                        let info = img.shotInfo
+                        let fields = s.pentax645Fields
+                        let focalMm = info.focalLength35mm.isFinite && info.focalLength35mm > 0 ? info.focalLength35mm : info.focalLength
+                        let isoVal = info.iso.isFinite && info.iso > 0 ? info.iso : Double(shot.iso)
+                        let mode = s.monoMode ? "BW" : s.filmMode ? "FILM" : "LOOK"
+                        return Pentax645Info(
+                            frameNumber: fields.contains(.frameNumber) ? shot.frameNumber : nil,
+                            mode: fields.contains(.mode) ? mode : nil,
+                            exposureTime: fields.contains(.shutter) ? info.exposureTime : nil,
+                            fNumber: fields.contains(.aperture) ? info.fNumber : nil,
+                            compensationEv: fields.contains(.exposureComp) ? shot.compensationEv : nil,
+                            spotMetered: fields.contains(.metering) ? shot.spotMetered : nil,
+                            focalLengthMm: fields.contains(.focalLength) ? focalMm : nil,
+                            iso: fields.contains(.iso) ? isoVal : nil,
+                            dateTime: fields.contains(.dateTime) ? Pentax645Frame.formatDateTime(shot.date, format: s.dateStampFormat) : nil)
+                    }() : nil
                     let export = ExportSettings(format: .jpeg, jpegQuality: s.jpegQuality, jpegEncoder: .jpegli,
                                                 maxLongSide: s.maxLongSide,
                                                 downscaleSharpen: CameraSettings.smallSharpen,
-                                                dateStamp: s.dateStamp ? DateStamp.format(shot.date, format: s.dateStampFormat) : "")
+                                                dateStamp: s.photoFrame == .dateStamp ? DateStamp.format(shot.date, format: s.dateStampFormat) : "",
+                                                pentax645: pentax645,
+                                                monochromeImprint: s.monoMode)
                     let exportStart = Date()
                     let file = try Exporter().export(img, sourceName: shot.name, params: shader, settings: export,
                                                      naming: Self.jpegNaming, gpu: gpu)

@@ -37,6 +37,8 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
 import app.rawboy.camera.capture.FlashMode
+import app.rawboy.camera.Pentax645Field
+import app.rawboy.camera.PhotoFrame
 import app.rawboy.export.DateStampFormat
 import app.rawboy.camera.qr.QrPayload
 import androidx.compose.foundation.layout.widthIn
@@ -91,6 +93,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -1187,6 +1191,11 @@ private val LOOK_LABEL_WIDTH = 88.dp
 @Composable
 private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, requestLocation: () -> Unit) {
     val maxResMp by vm.maxResMp.collectAsState()
+    var showFrames by remember { mutableStateOf(false) }
+    if (showFrames) {
+        FramesSettingsContent(settings, vm, onBack = { showFrames = false })
+        return
+    }
     Column(
         Modifier
             .verticalScroll(rememberScrollState())
@@ -1244,21 +1253,30 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             checked = settings.hdrGainMap,
             onChange = vm::setHdrGainMap,
         )
-        SettingSwitch(
-            title = "Date stamp",
-            subtitle = "Imprint today's date in the corner of each photo",
-            checked = settings.dateStamp,
-            onChange = vm::setDateStamp,
-        )
-        if (settings.dateStamp) {
-            SettingChoice(
-                title = "Date format",
-                subtitle = null,
-                options = listOf(DateStampFormat.DMY, DateStampFormat.YMD, DateStampFormat.MDY),
-                selected = settings.dateStampFormat,
-                label = { it.label },
-                onSelect = vm::setDateStampFormat,
-                indent = true,
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { showFrames = true }
+                .padding(vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                Text("Frames", style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    "Film border, shoot info or date stamp",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Text(
+                settings.photoFrame.label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Icon(
+                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
 
@@ -1367,6 +1385,64 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
         var showLicences by remember { mutableStateOf(false) }
         TextButton(onClick = { showLicences = true }, contentPadding = PaddingValues(0.dp)) { Text("Open-source licences") }
         if (showLicences) LicensesDialog(onDismiss = { showLicences = false })
+    }
+}
+
+@Composable
+private fun FramesSettingsContent(settings: CameraSettings, vm: CameraViewModel, onBack: () -> Unit) {
+    Column(
+        Modifier
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 24.dp)
+            .padding(bottom = 32.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
+            IconButton(onClick = onBack, modifier = Modifier.padding(end = 4.dp)) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            }
+            Text("Frames", style = MaterialTheme.typography.titleMedium)
+        }
+        SettingChoice(
+            title = "Frame",
+            subtitle = "Choose either a film frame or a date stamp",
+            options = listOf(PhotoFrame.NONE, PhotoFrame.DATE_STAMP, PhotoFrame.PENTAX_645),
+            selected = settings.photoFrame,
+            label = { it.label },
+            onSelect = vm::setPhotoFrame,
+        )
+        if (settings.photoFrame == PhotoFrame.DATE_STAMP) {
+            SettingChoice(
+                title = "Date format",
+                subtitle = null,
+                options = listOf(DateStampFormat.DMY, DateStampFormat.YMD, DateStampFormat.MDY),
+                selected = settings.dateStampFormat,
+                label = { it.label },
+                onSelect = vm::setDateStampFormat,
+                indent = true,
+            )
+        }
+        if (settings.photoFrame == PhotoFrame.PENTAX_645) {
+            SettingsSection("Shoot info")
+            for (field in Pentax645Field.entries) {
+                SettingSwitch(
+                    title = field.label,
+                    subtitle = null,
+                    checked = field in settings.pentax645Fields,
+                    onChange = { vm.togglePentax645Field(field) },
+                )
+            }
+            if (Pentax645Field.DATE_TIME in settings.pentax645Fields) {
+                SettingChoice(
+                    title = "Date format",
+                    subtitle = null,
+                    options = listOf(DateStampFormat.DMY, DateStampFormat.YMD, DateStampFormat.MDY),
+                    selected = settings.dateStampFormat,
+                    label = { it.label },
+                    onSelect = vm::setDateStampFormat,
+                    indent = true,
+                )
+            }
+        }
     }
 }
 

@@ -3,16 +3,18 @@ package app.rawboy.camera
 import app.rawboy.develop.DevelopParams
 import app.rawboy.export.DateStampFormat
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Test
 
 class CameraSettingsTest {
     @Test
-    fun defaultsHaveDateStampDisabled() {
+    fun defaultsHaveFramesDisabled() {
         val s = CameraSettings()
-        assertFalse(s.dateStamp)
+        assertEquals(PhotoFrame.NONE, s.photoFrame)
         assertEquals(DateStampFormat.DMY, s.dateStampFormat)
+        assertEquals(Pentax645Field.DEFAULT, s.pentax645Fields)
+        val subset = setOf(Pentax645Field.SHUTTER, Pentax645Field.ISO, Pentax645Field.DATE_TIME)
+        assertEquals(subset, Pentax645Field.parseSet(Pentax645Field.serialize(subset)))
     }
 
     @Test

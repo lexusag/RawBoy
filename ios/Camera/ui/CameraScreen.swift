@@ -648,13 +648,13 @@ private struct SettingsSheet: View {
                         Text("ProRAW: cleaner in low light").tag(RawFormat.proRaw)
                         Text("RAW: single exposure").tag(RawFormat.bayer)
                     }
-                    row("Date stamp", "Imprint today's date in the corner of each photo",
-                        Binding(get: { vm.settings.dateStamp }, set: vm.setDateStamp))
-                    if vm.settings.dateStamp {
-                        Picker("Date format", selection: Binding(get: { vm.settings.dateStampFormat }, set: vm.setDateStampFormat)) {
-                            ForEach(DateStampFormat.allCases, id: \.self) { fmt in
-                                Text(fmt.label).tag(fmt)
-                            }
+                    NavigationLink {
+                        FramesSettingsView(vm: vm)
+                    } label: {
+                        HStack {
+                            Text("Frames")
+                            Spacer()
+                            Text(vm.settings.photoFrame.label).foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -689,6 +689,63 @@ private struct SettingsSheet: View {
             .navigationBarTitleDisplayMode(.inline)
         }
         .presentationDetents([.medium, .large])
+    }
+}
+
+private struct FramesSettingsView: View {
+    @ObservedObject var vm: CameraViewModel
+
+    var body: some View {
+        Form {
+            Section {
+                Picker("Frame", selection: Binding(get: { vm.settings.photoFrame }, set: vm.setPhotoFrame)) {
+                    ForEach(PhotoFrame.allCases, id: \.self) { frame in
+                        Text(frame.label).tag(frame)
+                    }
+                }
+                .pickerStyle(.inline)
+            } footer: {
+                switch vm.settings.photoFrame {
+                case .none:
+                    Text("Choose either a film frame or a date stamp.")
+                case .dateStamp:
+                    Text("Imprints today's date in the bottom-right corner.")
+                case .pentax645:
+                    Text("Adds a black film rebate with today's frame #, mode (FILM / LOOK / BW), shutter speed, aperture, EV, metering, and focal length.")
+                }
+            }
+            if vm.settings.photoFrame == .dateStamp {
+                Section {
+                    Picker("Date format", selection: Binding(get: { vm.settings.dateStampFormat }, set: vm.setDateStampFormat)) {
+                        ForEach(DateStampFormat.allCases, id: \.self) { fmt in
+                            Text(fmt.label).tag(fmt)
+                        }
+                    }
+                }
+            }
+            if vm.settings.photoFrame == .pentax645 {
+                Section("Shoot info") {
+                    ForEach(Pentax645Field.allCases, id: \.self) { field in
+                        Toggle(field.label, isOn: Binding(
+                            get: { vm.settings.pentax645Fields.contains(field) },
+                            set: { vm.setPentax645Field(field, $0) }
+                        ))
+                        .tint(Color.cameraAccent)
+                    }
+                }
+                if vm.settings.pentax645Fields.contains(.dateTime) {
+                    Section {
+                        Picker("Date format", selection: Binding(get: { vm.settings.dateStampFormat }, set: vm.setDateStampFormat)) {
+                            ForEach(DateStampFormat.allCases, id: \.self) { fmt in
+                                Text(fmt.label).tag(fmt)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        .navigationTitle("Frames")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

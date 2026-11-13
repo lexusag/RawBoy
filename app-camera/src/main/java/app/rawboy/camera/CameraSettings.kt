@@ -1,6 +1,7 @@
 package app.rawboy.camera
 
 import android.content.Context
+import android.content.SharedPreferences
 import app.rawboy.auto.looks.Adjustments
 import app.rawboy.auto.looks.Look
 import app.rawboy.auto.looks.LookApplier
@@ -10,6 +11,43 @@ import app.rawboy.camera.capture.CameraController
 import app.rawboy.camera.capture.FlashGuides
 import app.rawboy.camera.capture.FlashMode
 import app.rawboy.export.DateStampFormat
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+/** Mutually exclusive film frame / stamp imprint options in the Frames settings submenu. */
+enum class PhotoFrame(val label: String) {
+    NONE("Off"),
+    DATE_STAMP("Date stamp"),
+    PENTAX_645("Pentax 645"),
+}
+
+/** Individual shoot-info items that can be toggled on the [PhotoFrame.PENTAX_645] top rebate. */
+enum class Pentax645Field(val key: String, val label: String) {
+    FRAME_NUMBER("frame", "Frame #"),
+    MODE("mode", "Mode"),
+    SHUTTER("shutter", "Shutter"),
+    APERTURE("aperture", "Aperture"),
+    EXPOSURE_COMP("ev", "EV"),
+    METERING("metering", "Metering"),
+    FOCAL_LENGTH("focal", "Focal length"),
+    ISO("iso", "ISO"),
+    DATE_TIME("datetime", "Date & time");
+
+    companion object {
+        val DEFAULT: Set<Pentax645Field> = entries.toSet()
+
+        fun parseSet(raw: String?): Set<Pentax645Field> {
+            if (raw == null) return DEFAULT
+            if (raw.isBlank()) return emptySet()
+            val byKey = entries.associateBy { it.key }
+            return raw.split(',').mapNotNull { byKey[it.trim()] }.toSet()
+        }
+
+        fun serialize(fields: Set<Pentax645Field>): String =
+            entries.filter { it in fields }.joinToString(",") { it.key }
+    }
+}
 
 /** The look controls, camera choice and output settings. */
 data class CameraSettings(
@@ -73,10 +111,12 @@ data class CameraSettings(
     val geotag: Boolean = false,
     /** Save the JPEG as an Ultra HDR JPEG: the same picture plus a gain map that lets HDR screens show brighter highlights (`ultrahdr.h`). */
     val hdrGainMap: Boolean = false,
-    /** Imprint the shot's date in a yellow-orange clock font in the bottom-right corner of the JPEG. Off by default. */
-    val dateStamp: Boolean = false,
-    /** Date order for [dateStamp]: `DD MM 'YY` by default. */
+    /** Frame / stamp option: Off by default, or Date stamp / Pentax 645 (mutually exclusive). */
+    val photoFrame: PhotoFrame = PhotoFrame.NONE,
+    /** Date order for [PhotoFrame.DATE_STAMP] and [Pentax645Field.DATE_TIME]: `DD MM 'YY` by default. */
     val dateStampFormat: DateStampFormat = DateStampFormat.DMY,
+    /** Shoot-info items imprinted on the [PhotoFrame.PENTAX_645] rebate (all on by default). */
+    val pentax645Fields: Set<Pentax645Field> = Pentax645Field.DEFAULT,
     /** Look for QR codes in the viewfinder and offer to open them, as the phone's own camera does. */
     val scanQr: Boolean = true,
     /** After a tap, keep focus on what was tapped as it moves (CameraViewModel's tracker); off = the focus stays put. */
@@ -279,8 +319,11 @@ object CameraSettingsStore {
             shutterSound = p.getBoolean("shutterSound", d.shutterSound),
             geotag = p.getBoolean("geotag", d.geotag),
             hdrGainMap = p.getBoolean("hdrGainMap", d.hdrGainMap),
-            dateStamp = p.getBoolean("dateStamp", d.dateStamp),
+            photoFrame = p.getString("photoFrame", null)
+                ?.let { runCatching { PhotoFrame.valueOf(it) }.getOrNull() }
+                ?: if (p.getBoolean("dateStamp", false)) PhotoFrame.DATE_STAMP else d.photoFrame,
             dateStampFormat = runCatching { DateStampFormat.valueOf(p.getString("dateStampFormat", null)!!) }.getOrDefault(d.dateStampFormat),
+            pentax645Fields = Pentax645Field.parseSet(p.getString("pentax645Fields", null)),
             scanQr = p.getBoolean("scanQr", d.scanQr),
             trackFocus = p.getBoolean("trackFocus", d.trackFocus),
             experimental = p.getBoolean("experimental", d.experimental),
@@ -347,8 +390,10 @@ object CameraSettingsStore {
             .putBoolean("shutterSound", s.shutterSound)
             .putBoolean("geotag", s.geotag)
             .putBoolean("hdrGainMap", s.hdrGainMap)
-            .putBoolean("dateStamp", s.dateStamp)
+            .putString("photoFrame", s.photoFrame.name)
+            .putBoolean("dateStamp", s.photoFrame == PhotoFrame.DATE_STAMP)
             .putString("dateStampFormat", s.dateStampFormat.name)
+            .putString("pentax645Fields", Pentax645Field.serialize(s.pentax645Fields))
             .putBoolean("scanQr", s.scanQr)
             .putBoolean("trackFocus", s.trackFocus)
             .putBoolean("experimental", s.experimental)
@@ -383,6 +428,23 @@ object CameraSettingsStore {
         val updated = guides + (key to guide)
         p.edit().putString(FLASH_GUIDES_KEY, updated.entries.joinToString(";") { "${it.key}=${it.value}" }).apply()
         return guide
+    }
+
+    /**
+     * Increments and returns today's 1-based frame counter (resetting to 1 at the start of each local calendar day).
+     */
+    @Synchronized
+    fun nextFrameNumber(context: Context, timeMs: Long = System.currentTimeMillis()): Int {
+        val day = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(timeMs))
+        val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return nextFrameNumberForDay(p, day)
+    }
+
+    internal fun nextFrameNumberForDay(p: SharedPreferences, day: String): Int {
+        val storedDay = p.getString("frameCountDay", null)
+        val next = if (storedDay == day) p.getInt("frameCount", 0) + 1 else 1
+        p.edit().putString("frameCountDay", day).putInt("frameCount", next).apply()
+        return next
     }
 
     /** "W=1.1;T=0.95;FW=1.0" -> map; malformed entries are skipped. */

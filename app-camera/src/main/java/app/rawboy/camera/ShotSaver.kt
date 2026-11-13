@@ -31,6 +31,8 @@ import app.rawboy.export.ExportGpu
 import app.rawboy.export.ExportSettings
 import app.rawboy.export.Exporter
 import app.rawboy.export.JpegEncoder
+import app.rawboy.export.Pentax645Frame
+import app.rawboy.export.Pentax645Info
 import app.rawboy.film.FilmData
 import app.rawboy.film.FilmStocks
 import app.rawboy.gl.ShaderParams
@@ -91,8 +93,10 @@ internal data class Shot(
     val compensationEv: Float = 0f,
     /** Debug note on whether the burst merge ran, saved in the JPEG's ImageDescription (and the DNG's). */
     val description: String = "",
-    /** Capture timestamp (ms since epoch), used when [CameraSettings.dateStamp] is on. */
+    /** Capture timestamp (ms since epoch), used when [PhotoFrame.DATE_STAMP] is selected. */
     val timeMs: Long = System.currentTimeMillis(),
+    /** 1-based daily frame counter, used when [PhotoFrame.PENTAX_645] is selected. */
+    val frameNumber: Int = 0,
 )
 
 /** A finished shot and the sequence number assigned at its shutter, so lock screen launches hide earlier ones. */
@@ -433,7 +437,32 @@ internal object ShotSaver {
                 downscaleSharpen = CameraSettings.SMALL_SHARPEN,
                 hdrGainMap = s.hdrGainMap,
                 description = shot.description,
-                dateStamp = if (s.dateStamp) DateStamp.format(shot.timeMs, s.dateStampFormat) else "",
+                dateStamp = if (s.photoFrame == PhotoFrame.DATE_STAMP) DateStamp.format(shot.timeMs, s.dateStampFormat) else "",
+                pentax645 = if (s.photoFrame == PhotoFrame.PENTAX_645) {
+                    val info = img.shotInfo
+                    val fields = s.pentax645Fields
+                    val focalMm = info.focalLength35mm.takeIf { it.isFinite() && it > 0 } ?: info.focalLength
+                    val isoVal = info.iso.takeIf { it.isFinite() && it > 0 } ?: shot.iso.toDouble()
+                    val mode = when {
+                        s.monoMode -> "BW"
+                        s.filmMode -> "FILM"
+                        else -> "LOOK"
+                    }
+                    Pentax645Info(
+                        frameNumber = if (Pentax645Field.FRAME_NUMBER in fields) shot.frameNumber else null,
+                        mode = if (Pentax645Field.MODE in fields) mode else null,
+                        exposureTime = if (Pentax645Field.SHUTTER in fields) info.exposureTime else null,
+                        fNumber = if (Pentax645Field.APERTURE in fields) info.fNumber else null,
+                        compensationEv = if (Pentax645Field.EXPOSURE_COMP in fields) shot.compensationEv else null,
+                        spotMetered = if (Pentax645Field.METERING in fields) shot.meter is MeterArea.Spot else null,
+                        focalLengthMm = if (Pentax645Field.FOCAL_LENGTH in fields) focalMm else null,
+                        iso = if (Pentax645Field.ISO in fields) isoVal else null,
+                        dateTime = if (Pentax645Field.DATE_TIME in fields) Pentax645Frame.formatDateTime(shot.timeMs, s.dateStampFormat) else null,
+                    )
+                } else {
+                    null
+                },
+                monochromeImprint = s.monoMode,
             )
             Log.d(TAG, "${shot.name}: decode $decodeMs ms, analysis $analysisMs ms")
             return Prepared(app, shot, img, shader, export, a.stats.key, a.autoBase.exposure, started)

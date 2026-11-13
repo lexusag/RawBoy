@@ -28,10 +28,17 @@ public struct ExportSettings: Equatable, Sendable {
      * yellow-orange 7-segment clock font. Empty string = no date stamp.
      */
     public var dateStamp: String = ""
+    /**
+     * Optional Pentax 645N-style black film rebate with dot-matrix shoot info along the top edge.
+     * Mutually exclusive with dateStamp; when non-nil, pentax645 takes precedence.
+     */
+    public var pentax645: Pentax645Info?
+    /** When true (B&W mode), both dateStamp and pentax645 render in neutral black-and-white. */
+    public var monochromeImprint: Bool = false
 
     public init(format: ExportFormat = .jpeg, jpegQuality: Int = 92, tiffBits: Int = 16,
                 jpegEncoder: JpegEncoder = .system, maxLongSide: Int? = nil, downscaleSharpen: Float = 0,
-                dateStamp: String = "") {
+                dateStamp: String = "", pentax645: Pentax645Info? = nil, monochromeImprint: Bool = false) {
         self.format = format
         self.jpegQuality = jpegQuality
         self.tiffBits = tiffBits
@@ -39,6 +46,8 @@ public struct ExportSettings: Equatable, Sendable {
         self.maxLongSide = maxLongSide
         self.downscaleSharpen = downscaleSharpen
         self.dateStamp = dateStamp
+        self.pentax645 = pentax645
+        self.monochromeImprint = monochromeImprint
     }
 }
 
@@ -94,7 +103,7 @@ public enum DateStamp {
      * size [width] x [height]. Bands outside the bottom-right stamp box return immediately.
      */
     public static func imprint(band: UnsafeMutablePointer<UInt16>, width: Int, height: Int,
-                               bandY: Int, bandRows: Int, text: String) {
+                               bandY: Int, bandRows: Int, text: String, monochrome: Bool = false) {
         guard !text.isEmpty, width > 0, height > 0, bandRows > 0 else { return }
 
         let shortSide = Float(min(width, height))
@@ -181,18 +190,31 @@ public enum DateStamp {
                 let grain = 0.9 + 0.2 * hash(Int(Float(px) / grainCell), Int(Float(py) / grainCell))
                 let e = (core + halo * (1 - core)) * grain
 
-                let lr = 1 - exp(-gain * e * ledR)
-                let lg = 1 - exp(-gain * e * ledG)
-                let lb = 1 - exp(-gain * e * ledB)
+                let lr: Float
+                let lg: Float
+                let lb: Float
+                let absorb: Float
+                if monochrome {
+                    let l = 1 - exp(-gain * e * 0.85)
+                    lr = l
+                    lg = l
+                    lb = l
+                    absorb = 0
+                } else {
+                    lr = 1 - exp(-gain * e * ledR)
+                    lg = 1 - exp(-gain * e * ledG)
+                    lb = 1 - exp(-gain * e * ledB)
+                    absorb = blueAbsorb
+                }
 
                 let idx = (rowOffset + px) * 3
                 let r = Float(band[idx]) / 65535
                 let g = Float(band[idx + 1]) / 65535
                 let b = Float(band[idx + 2]) / 65535
-                // Light adds to the picture (screen); blue is held back where the LED is strong.
+                // Light adds to the picture (screen); blue is held back where the LED is strong (color mode only).
                 band[idx] = toU16(1 - (1 - r) * (1 - lr))
                 band[idx + 1] = toU16(1 - (1 - g) * (1 - lg))
-                band[idx + 2] = toU16((1 - (1 - b) * (1 - lb)) * (1 - blueAbsorb * lr))
+                band[idx + 2] = toU16((1 - (1 - b) * (1 - lb)) * (1 - absorb * lr))
             }
         }
     }
@@ -262,6 +284,407 @@ public enum DateStamp {
     }
 
     private static func toU16(_ v: Float) -> UInt16 { UInt16((min(max(v, 0), 1) * 65535).rounded()) }
+}
+
+/**
+ * Shoot metadata imprinted into the top film rebate of a Pentax 645-style frame.
+ * Matches `Pentax645Info` / `Pentax645Frame` in engine `Pentax645Frame.kt`.
+ */
+public struct Pentax645Info: Equatable, Sendable {
+    public let frameNumber: Int?
+    public let mode: String?
+    public let exposureTime: Double?
+    public let fNumber: Double?
+    public let compensationEv: Float?
+    public let spotMetered: Bool?
+    public let focalLengthMm: Double?
+    public let iso: Double?
+    public let dateTime: String?
+
+    public init(frameNumber: Int? = nil, mode: String? = nil, exposureTime: Double? = nil, fNumber: Double? = nil,
+                compensationEv: Float? = nil, spotMetered: Bool? = nil, focalLengthMm: Double? = nil,
+                iso: Double? = nil, dateTime: String? = nil) {
+        self.frameNumber = frameNumber
+        self.mode = mode
+        self.exposureTime = exposureTime
+        self.fNumber = fNumber
+        self.compensationEv = compensationEv
+        self.spotMetered = spotMetered
+        self.focalLengthMm = focalLengthMm
+        self.iso = iso
+        self.dateTime = dateTime
+    }
+}
+
+public enum Pentax645Frame {
+    public struct Layout: Equatable, Sendable {
+        public let photoWidth: Int
+        public let photoHeight: Int
+        public let border: Int
+        public let topBar: Int
+        public var outWidth: Int { photoWidth + 2 * border }
+        public var outHeight: Int { photoHeight + topBar + border }
+    }
+
+    public static func layout(photoWidth: Int, photoHeight: Int) -> Layout {
+        let shortSide = Float(min(photoWidth, photoHeight))
+        let border = max(3, Int((shortSide * 0.005).rounded()))
+        let topBar = max(28, Int((shortSide * 0.036).rounded()))
+        return Layout(photoWidth: photoWidth, photoHeight: photoHeight, border: border, topBar: topBar)
+    }
+
+    public static func formatFrameNumber(_ frameNumber: Int) -> String {
+        frameNumber > 0 ? String(frameNumber) : "--"
+    }
+
+    public static func formatShutter(_ t: Double) -> String {
+        guard t.isFinite && t > 0 else { return "---" }
+        return t >= 0.95 ? "\(trimOneDecimal(t))s" : "1/\(Int((1.0 / t).rounded()))"
+    }
+
+    public static func formatAperture(_ f: Double) -> String {
+        guard f.isFinite && f > 0 else { return "F--" }
+        let rounded = Int(f.rounded())
+        return abs(f - Double(rounded)) < 0.05 && rounded < 10 ? "F \(rounded)" : "F\(trimOneDecimal(f))"
+    }
+
+    public static func formatEv(_ ev: Float) -> String {
+        guard ev.isFinite && abs(ev) >= 0.05 else { return "±0.0EV" }
+        let sign = ev > 0 ? "+" : "-"
+        return String(format: "%@%.1fEV", sign, abs(ev))
+    }
+
+    public static func formatFocalLength(_ mm: Double) -> String {
+        guard mm.isFinite && mm > 0 else { return "-- mm" }
+        return "\(Int(mm.rounded())) mm"
+    }
+
+    public static func formatIso(_ iso: Double) -> String {
+        guard iso.isFinite && iso > 0 else { return "ISO---" }
+        return "ISO\(Int(iso.rounded()))"
+    }
+
+    public static func formatDateTime(_ date: Date = Date(), format: DateStampFormat = .dmy,
+                                      calendar: Calendar = .current) -> String {
+        let comps = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+        let year = (comps.year ?? 0) % 100
+        let month = comps.month ?? 1
+        let day = comps.day ?? 1
+        let hour = comps.hour ?? 0
+        let minute = comps.minute ?? 0
+        switch format {
+        case .dmy: return String(format: "%02d.%02d.%02d %02d:%02d", day, month, year, hour, minute)
+        case .ymd: return String(format: "%02d.%02d.%02d %02d:%02d", year, month, day, hour, minute)
+        case .mdy: return String(format: "%02d.%02d.%02d %02d:%02d", month, day, year, hour, minute)
+        }
+    }
+
+    private static func trimOneDecimal(_ v: Double) -> String {
+        let s = String(format: "%.1f", v)
+        return s.hasSuffix(".0") ? String(s.dropLast(2)) : s
+    }
+
+    private static let ledR: Float = 1.0
+    private static let ledG: Float = 0.44
+    private static let ledB: Float = 0.04
+    private static let gain: Float = 3.0
+    private static let baseR: Float = 0.011
+    private static let baseG: Float = 0.010
+    private static let baseB: Float = 0.009
+    private static let baseMono: Float = 0.010
+    private static let ledMono: Float = 0.85
+
+    private enum Token {
+        case text(String)
+        case metering(spot: Bool)
+    }
+
+    private static func charCols(_ ch: Character) -> Int {
+        switch ch {
+        case ".", ":", "'", " ": return 3
+        default: return 5
+        }
+    }
+
+    public static func renderTopBarBand(band: UnsafeMutablePointer<UInt16>, layout: Layout,
+                                          bandY: Int, bandRows: Int, info: Pentax645Info,
+                                          monochrome: Bool = false) {
+        let outW = layout.outWidth
+        let topBar = layout.topBar
+        let grainCell = max(1, Float(topBar) * 0.03)
+
+        var tokens: [Token] = []
+        if let f = info.frameNumber { tokens.append(.text(formatFrameNumber(f))) }
+        if let m = info.mode, !m.isEmpty { tokens.append(.text(m)) }
+        if let s = info.exposureTime { tokens.append(.text(formatShutter(s))) }
+        if let a = info.fNumber { tokens.append(.text(formatAperture(a))) }
+        if let ev = info.compensationEv { tokens.append(.text(formatEv(ev))) }
+        if let spot = info.spotMetered { tokens.append(.metering(spot: spot)) }
+        if let mm = info.focalLengthMm { tokens.append(.text(formatFocalLength(mm))) }
+        if let iso = info.iso { tokens.append(.text(formatIso(iso))) }
+        if let dt = info.dateTime, !dt.isEmpty { tokens.append(.text(dt)) }
+
+        var charH = Float(topBar) * 0.56
+        var dotPitch = charH / 7
+        var charGap = dotPitch * 1.15
+        var groupGap = dotPitch * 3.8
+
+        func tokenWidth(_ t: Token) -> Float {
+            switch t {
+            case .text(let s):
+                if s.isEmpty { return 0 }
+                let cols = s.reduce(0) { $0 + charCols($1) }
+                return Float(cols) * dotPitch + Float(s.count - 1) * charGap
+            case .metering:
+                return 7 * dotPitch
+            }
+        }
+
+        let rawTotalW = tokens.isEmpty ? 0 : tokens.reduce(Float(0)) { $0 + tokenWidth($1) } + Float(tokens.count - 1) * groupGap
+        let maxContentW = Float(layout.photoWidth) * 0.94
+        if rawTotalW > maxContentW && rawTotalW > 0 {
+            let scale = maxContentW / rawTotalW
+            charH *= scale
+            dotPitch *= scale
+            charGap *= scale
+            groupGap *= scale
+        }
+
+        let totalW = tokens.isEmpty ? 0 : tokens.reduce(Float(0)) { $0 + tokenWidth($1) } + Float(tokens.count - 1) * groupGap
+        let x0 = (Float(outW) - totalW) * 0.5
+        let y0 = (Float(topBar) - charH) * 0.5
+
+        let dotR = dotPitch * 0.36
+        let soft = max(dotPitch * 0.36, 0.8)
+        let reach = dotPitch * 1.8
+        let haloInv = 1 / (dotPitch * 0.85)
+
+        var dotX: [Float] = []
+        var dotY: [Float] = []
+        var dotBright: [Float] = []
+        dotX.reserveCapacity(256)
+        dotY.reserveCapacity(256)
+        dotBright.reserveCapacity(256)
+
+        var cursorX: Float = 0
+        var glyphIdx = 0
+        for (ti, token) in tokens.enumerated() {
+            switch token {
+            case .text(let s):
+                let chars = Array(s)
+                for (ci, ch) in chars.enumerated() {
+                    let cols = charCols(ch)
+                    if let rows = glyph5x7(ch) {
+                        let colShift = (5 - cols) / 2
+                        for r in 0..<7 {
+                            let bits = rows[r]
+                            for c in 0..<cols {
+                                let srcCol = c + colShift
+                                if srcCol >= 0 && srcCol <= 4 && ((bits >> (4 - srcCol)) & 1) != 0 {
+                                    dotX.append(cursorX + (Float(c) + 0.5) * dotPitch)
+                                    dotY.append((Float(r) + 0.5) * dotPitch)
+                                    dotBright.append(0.90 + 0.10 * hash(glyphIdx * 64 + r * 8 + c, 733))
+                                }
+                            }
+                        }
+                    }
+                    cursorX += Float(cols) * dotPitch + (ci + 1 < chars.count ? charGap : 0)
+                    glyphIdx += 1
+                }
+            case .metering(let spot):
+                let rows = spot ? spotMeter7x7 : autoMeter7x7
+                for r in 0..<7 {
+                    let bits = rows[r]
+                    for c in 0..<7 where ((bits >> (6 - c)) & 1) != 0 {
+                        dotX.append(cursorX + (Float(c) + 0.5) * dotPitch)
+                        dotY.append((Float(r) + 0.5) * dotPitch)
+                        dotBright.append(0.92 + 0.08 * hash(glyphIdx * 64 + r * 8 + c, 733))
+                    }
+                }
+                cursorX += 7 * dotPitch
+                glyphIdx += 1
+            }
+            if ti + 1 < tokens.count { cursorX += groupGap }
+        }
+
+        let minY = max(bandY, Int(y0 - reach))
+        let maxY = min(bandY + bandRows - 1, Int(y0 + charH + reach))
+        let minX = max(0, Int(x0 - reach))
+        let maxX = min(outW - 1, Int(x0 + totalW + reach))
+        let dotCount = dotX.count
+
+        for py in bandY..<(bandY + bandRows) {
+            let rowOffset = (py - bandY) * outW
+            let inStampY = dotCount > 0 && py >= minY && py <= maxY
+            let vy = Float(py) + 0.5 - y0
+            for px in 0..<outW {
+                let grain = 0.90 + 0.20 * hash(Int(Float(px) / grainCell), Int(Float(py) / grainCell))
+                var r = (monochrome ? baseMono : baseR) * grain
+                var g = (monochrome ? baseMono : baseG) * grain
+                var b = (monochrome ? baseMono : baseB) * grain
+
+                if inStampY && px >= minX && px <= maxX {
+                    let ux = Float(px) + 0.5 - x0
+                    var core: Float = 0
+                    var minDist = Float.greatestFiniteMagnitude
+                    for k in 0..<dotCount {
+                        let dx = abs(ux - dotX[k])
+                        if dx > reach { continue }
+                        let dy = abs(vy - dotY[k])
+                        if dy > reach { continue }
+                        let d = sqrt(dx * dx + dy * dy) - dotR
+                        if d < minDist { minDist = d }
+                        if d < soft * 0.5 {
+                            let e = dotBright[k] * edge(d, soft)
+                            if e > core { core = e }
+                        }
+                    }
+                    let excess = max(0, minDist) * haloInv
+                    let halo = 0.16 * exp(-excess * excess)
+                    if core > 0.002 || halo >= 0.004 {
+                        let e = (core + halo * (1 - core)) * grain
+                        if monochrome {
+                            let l = 1 - exp(-gain * e * ledMono)
+                            r = 1 - (1 - r) * (1 - l)
+                            g = 1 - (1 - g) * (1 - l)
+                            b = 1 - (1 - b) * (1 - l)
+                        } else {
+                            let lr = 1 - exp(-gain * e * ledR)
+                            let lg = 1 - exp(-gain * e * ledG)
+                            let lb = 1 - exp(-gain * e * ledB)
+                            r = 1 - (1 - r) * (1 - lr)
+                            g = 1 - (1 - g) * (1 - lg)
+                            b = 1 - (1 - b) * (1 - lb)
+                        }
+                    }
+                }
+
+                let idx = (rowOffset + px) * 3
+                band[idx] = toU16(r)
+                band[idx + 1] = toU16(g)
+                band[idx + 2] = toU16(b)
+            }
+        }
+    }
+
+    public static func renderBorderBand(band: UnsafeMutablePointer<UInt16>, layout: Layout,
+                                        bandY: Int, bandRows: Int, monochrome: Bool = false) {
+        let outW = layout.outWidth
+        let grainCell = max(1, Float(layout.topBar) * 0.03)
+        let br = monochrome ? baseMono : baseR
+        let bg = monochrome ? baseMono : baseG
+        let bb = monochrome ? baseMono : baseB
+        for py in bandY..<(bandY + bandRows) {
+            let rowOffset = (py - bandY) * outW
+            for px in 0..<outW {
+                let grain = 0.90 + 0.20 * hash(Int(Float(px) / grainCell), Int(Float(py) / grainCell))
+                let idx = (rowOffset + px) * 3
+                band[idx] = toU16(br * grain)
+                band[idx + 1] = toU16(bg * grain)
+                band[idx + 2] = toU16(bb * grain)
+            }
+        }
+    }
+
+    public static func wrapPhotoBand(src: UnsafePointer<UInt16>, dst: UnsafeMutablePointer<UInt16>,
+                                     layout: Layout, photoY: Int, bandRows: Int, monochrome: Bool = false) {
+        let pw = layout.photoWidth
+        let ow = layout.outWidth
+        let b = layout.border
+        let grainCell = max(1, Float(layout.topBar) * 0.03)
+        let br = monochrome ? baseMono : baseR
+        let bg = monochrome ? baseMono : baseG
+        let bb = monochrome ? baseMono : baseB
+        for r in 0..<bandRows {
+            let py = layout.topBar + photoY + r
+            let dstRow = r * ow
+            for px in 0..<b {
+                let grain = 0.90 + 0.20 * hash(Int(Float(px) / grainCell), Int(Float(py) / grainCell))
+                let idx = (dstRow + px) * 3
+                dst[idx] = toU16(br * grain)
+                dst[idx + 1] = toU16(bg * grain)
+                dst[idx + 2] = toU16(bb * grain)
+            }
+            dst.advanced(by: (dstRow + b) * 3).update(from: src.advanced(by: r * pw * 3), count: pw * 3)
+            for px in (b + pw)..<ow {
+                let grain = 0.90 + 0.20 * hash(Int(Float(px) / grainCell), Int(Float(py) / grainCell))
+                let idx = (dstRow + px) * 3
+                dst[idx] = toU16(br * grain)
+                dst[idx + 1] = toU16(bg * grain)
+                dst[idx + 2] = toU16(bb * grain)
+            }
+        }
+    }
+
+    private static func edge(_ d: Float, _ soft: Float) -> Float {
+        let t = min(max((soft * 0.5 - d) / soft, 0), 1)
+        return t * t * (3 - 2 * t)
+    }
+
+    private static func hash(_ x: Int, _ y: Int) -> Float {
+        var h = UInt32(truncatingIfNeeded: x) &* 374761393 &+ UInt32(truncatingIfNeeded: y) &* 668265263
+        h = (h ^ (h >> 13)) &* 1274126177
+        h ^= h >> 16
+        return Float(h & 0xFFFFFF) / 16777215
+    }
+
+    private static func toU16(_ v: Float) -> UInt16 { UInt16((min(max(v, 0), 1) * 65535).rounded()) }
+
+    private static let autoMeter7x7 = [
+        0b1111111,
+        0b1000001,
+        0b1001001,
+        0b1011101,
+        0b1001001,
+        0b1000001,
+        0b1111111,
+    ]
+
+    private static let spotMeter7x7 = [
+        0b0000000,
+        0b0000000,
+        0b0001000,
+        0b0011100,
+        0b0001000,
+        0b0000000,
+        0b0000000,
+    ]
+
+    private static func glyph5x7(_ ch: Character) -> [Int]? {
+        switch ch {
+        case "0": return [0b01110, 0b10001, 0b10011, 0b10101, 0b11001, 0b10001, 0b01110]
+        case "1": return [0b00100, 0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110]
+        case "2": return [0b01110, 0b10001, 0b00001, 0b00110, 0b01000, 0b10000, 0b11111]
+        case "3": return [0b11111, 0b00010, 0b00100, 0b00110, 0b00001, 0b10001, 0b01110]
+        case "4": return [0b00010, 0b00110, 0b01010, 0b10010, 0b11111, 0b00010, 0b00010]
+        case "5": return [0b11111, 0b10000, 0b11110, 0b00001, 0b00001, 0b10001, 0b01110]
+        case "6": return [0b00110, 0b01000, 0b10000, 0b11110, 0b10001, 0b10001, 0b01110]
+        case "7": return [0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b01000, 0b01000]
+        case "8": return [0b01110, 0b10001, 0b10001, 0b01110, 0b10001, 0b10001, 0b01110]
+        case "9": return [0b01110, 0b10001, 0b10001, 0b01111, 0b00001, 0b00010, 0b01100]
+        case "B": return [0b11110, 0b10001, 0b10001, 0b11110, 0b10001, 0b10001, 0b11110]
+        case "E": return [0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b11111]
+        case "F": return [0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b10000]
+        case "I": return [0b01110, 0b00100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110]
+        case "K": return [0b10001, 0b10010, 0b10100, 0b11000, 0b10100, 0b10010, 0b10001]
+        case "L": return [0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b11111]
+        case "M": return [0b10001, 0b11011, 0b10101, 0b10101, 0b10001, 0b10001, 0b10001]
+        case "O": return [0b01110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110]
+        case "S": return [0b01111, 0b10000, 0b10000, 0b01110, 0b00001, 0b00001, 0b11110]
+        case "V": return [0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01010, 0b00100]
+        case "W": return [0b10001, 0b10001, 0b10001, 0b10101, 0b10101, 0b11011, 0b10001]
+        case "m": return [0b00000, 0b00000, 0b11010, 0b10101, 0b10101, 0b10001, 0b10001]
+        case "s": return [0b00000, 0b00000, 0b01111, 0b10000, 0b01110, 0b00001, 0b11110]
+        case "/": return [0b00001, 0b00010, 0b00010, 0b00100, 0b01000, 0b01000, 0b10000]
+        case ".": return [0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b00100, 0b00100]
+        case ":": return [0b00000, 0b00100, 0b00100, 0b00000, 0b00100, 0b00100, 0b00000]
+        case "'": return [0b00100, 0b00100, 0b01000, 0b00000, 0b00000, 0b00000, 0b00000]
+        case "+": return [0b00000, 0b00100, 0b00100, 0b11111, 0b00100, 0b00100, 0b00000]
+        case "-": return [0b00000, 0b00000, 0b00000, 0b11111, 0b00000, 0b00000, 0b00000]
+        case "±": return [0b00100, 0b00100, 0b11111, 0b00100, 0b00100, 0b00000, 0b11111]
+        default: return nil
+        }
+    }
 }
 
 public enum ExportSettingsStore {
