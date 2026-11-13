@@ -605,7 +605,7 @@ object Pentax645Frame {
                         val ramp = infoBar * (0.28f + 0.12f * hash(cornerSeed, 202))
                         val t = ((xFromEdge - cutoutEnd) / ramp).coerceIn(0f, 1f)
                         val baseDepth = gateInset * t * t * (3f - 2f * t)
-                        val wobble = gateImperfection(xc, infoBar, cornerSeed * 17 + 7) * gateInset * 0.45f * t
+                        val wobble = gateImperfection(xc, infoBar, cornerSeed * 17 + 7) * gateInset * 0.22f * t
                         val edgeDepth = (baseDepth + wobble).coerceAtLeast(0f)
                         if (edgeDepth > 0.01f) {
                             mask = maxOf(mask, gateMask(yFromEdge - edgeDepth, softEdge))
@@ -614,7 +614,7 @@ object Pentax645Frame {
 
                     if (xFromEdge < sideSpan) {
                         val sideSeed = if (isLeft) 31 else 53
-                        val sideDepth = (sideInset * (0.75f + 0.65f * gateImperfection(yc, infoBar, sideSeed))).coerceAtLeast(0f)
+                        val sideDepth = (sideInset * (0.85f + 0.25f * gateImperfection(yc, infoBar, sideSeed))).coerceAtLeast(0f)
                         mask = maxOf(mask, gateMask(xFromEdge - sideDepth, softEdge))
 
                         if (yFromEdge < cornerR && xFromEdge < cornerR) {
@@ -734,11 +734,9 @@ object Pentax645Frame {
     }
 
     private fun gateImperfection(pos: Float, infoBar: Float, seed: Int): Float {
-        val slow = smoothNoise1D(pos / maxOf(6f, infoBar * 0.65f), seed) - 0.5f
-        val med = smoothNoise1D(pos / maxOf(2f, infoBar * 0.16f), seed + 101) - 0.5f
-        val fine = smoothNoise1D(pos / maxOf(1.5f, infoBar * 0.05f), seed + 203)
-        val nib = if (fine > 0.86f) (fine - 0.86f) * 3.5f else 0f
-        return slow * 0.8f + med * 0.6f + nib
+        val slow = smoothNoise1D(pos / maxOf(12f, infoBar * 1.4f), seed) - 0.5f
+        val med = smoothNoise1D(pos / maxOf(5f, infoBar * 0.45f), seed + 101) - 0.5f
+        return slow * 0.45f + med * 0.25f
     }
 
     private fun smoothNoise1D(x: Float, seed: Int): Float {

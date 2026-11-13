@@ -973,7 +973,7 @@ public enum Pentax645Frame {
                         let ramp = infoBar * (0.28 + 0.12 * hash(cornerSeed, 202))
                         let t = min(max((xFromEdge - cutoutEnd) / ramp, 0), 1)
                         let baseDepth = gateInset * t * t * (3 - 2 * t)
-                        let wobble = gateImperfection(xc, infoBar: infoBar, seed: cornerSeed * 17 + 7) * gateInset * 0.45 * t
+                        let wobble = gateImperfection(xc, infoBar: infoBar, seed: cornerSeed * 17 + 7) * gateInset * 0.22 * t
                         let edgeDepth = max(0, baseDepth + wobble)
                         if edgeDepth > 0.01 {
                             mask = max(mask, gateMask(yFromEdge - edgeDepth, softEdge: softEdge))
@@ -982,7 +982,7 @@ public enum Pentax645Frame {
 
                     if Int(xFromEdge) < sideSpan {
                         let sideSeed = isLeft ? 31 : 53
-                        let sideDepth = max(0, sideInset * (0.75 + 0.65 * gateImperfection(yc, infoBar: infoBar, seed: sideSeed)))
+                        let sideDepth = max(0, sideInset * (0.85 + 0.25 * gateImperfection(yc, infoBar: infoBar, seed: sideSeed)))
                         mask = max(mask, gateMask(xFromEdge - sideDepth, softEdge: softEdge))
 
                         if yFromEdge < cornerR && xFromEdge < cornerR {
@@ -1112,11 +1112,9 @@ public enum Pentax645Frame {
     }
 
     private static func gateImperfection(_ pos: Float, infoBar: Float, seed: Int) -> Float {
-        let slow = smoothNoise1D(pos / max(6, infoBar * 0.65), seed: seed) - 0.5
-        let med = smoothNoise1D(pos / max(2, infoBar * 0.16), seed: seed + 101) - 0.5
-        let fine = smoothNoise1D(pos / max(1.5, infoBar * 0.05), seed: seed + 203)
-        let nib: Float = fine > 0.86 ? (fine - 0.86) * 3.5 : 0
-        return slow * 0.8 + med * 0.6 + nib
+        let slow = smoothNoise1D(pos / max(12, infoBar * 1.4), seed: seed) - 0.5
+        let med = smoothNoise1D(pos / max(5, infoBar * 0.45), seed: seed + 101) - 0.5
+        return slow * 0.45 + med * 0.25
     }
 
     private static func smoothNoise1D(_ x: Float, seed: Int) -> Float {
