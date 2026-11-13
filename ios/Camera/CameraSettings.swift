@@ -57,8 +57,10 @@ struct CameraSettings: Equatable {
     var showLevel = false
     /** Save where each photo was taken (GPS tags in the JPEG and DNG). Location access is asked for when turned on. */
     var geotag = false
-    /** Imprint the shot's date ('YY MM DD) in a yellow-orange clock font in the bottom-right corner of the JPEG. Off by default. */
+    /** Imprint the shot's date in a yellow-orange clock font in the bottom-right corner of the JPEG. Off by default. */
     var dateStamp = false
+    /** Date order for dateStamp: DD MM 'YY by default. */
+    var dateStampFormat = DateStampFormat.dmy
     /** Play the camera shutter click on each shot. Where the law requires it, iOS plays it regardless. */
     var shutterSound = false
     /** Look for QR codes in the viewfinder and offer to open them, as the system camera does. */
@@ -166,6 +168,7 @@ enum CameraSettingsStore {
         s.showLevel = d.object(forKey: "camera.showLevel") as? Bool ?? def.showLevel
         s.geotag = d.object(forKey: "camera.geotag") as? Bool ?? def.geotag
         s.dateStamp = d.object(forKey: "camera.dateStamp") as? Bool ?? def.dateStamp
+        s.dateStampFormat = d.string(forKey: "camera.dateStampFormat").flatMap(DateStampFormat.init(rawValue:)) ?? def.dateStampFormat
         s.shutterSound = d.object(forKey: "camera.shutterSound") as? Bool ?? def.shutterSound
         s.scanQr = d.object(forKey: "camera.scanQr") as? Bool ?? def.scanQr
         s.trackFocus = d.object(forKey: "camera.trackFocus") as? Bool ?? def.trackFocus
@@ -213,6 +216,7 @@ enum CameraSettingsStore {
         d.set(s.showLevel, forKey: "camera.showLevel")
         d.set(s.geotag, forKey: "camera.geotag")
         d.set(s.dateStamp, forKey: "camera.dateStamp")
+        d.set(s.dateStampFormat.rawValue, forKey: "camera.dateStampFormat")
         d.set(s.shutterSound, forKey: "camera.shutterSound")
         d.set(s.scanQr, forKey: "camera.scanQr")
         d.set(s.trackFocus, forKey: "camera.trackFocus")

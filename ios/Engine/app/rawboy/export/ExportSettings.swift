@@ -42,19 +42,42 @@ public struct ExportSettings: Equatable, Sendable {
     }
 }
 
+/** Display order for the film data-back date stamp (`DD MM 'YY` by default). */
+public enum DateStampFormat: String, CaseIterable, Sendable {
+    case dmy = "DMY"
+    case ymd = "YMD"
+    case mdy = "MDY"
+
+    public var label: String {
+        switch self {
+        case .dmy: "DD MM 'YY"
+        case .ymd: "'YY MM DD"
+        case .mdy: "MM DD 'YY"
+        }
+    }
+}
+
 /**
- * Imprints a 35mm film data-back date (`'YY MM DD`) in the bottom-right corner of an exported image, using a
- * Digital-7 style chamfered 7-segment clock geometry rendered the way a quartz date back exposes film: orange LED
- * segments shining through the film base onto the emulsion. So the digits are light added to the picture (they show on
- * dark areas and fade into bright ones), slightly soft-edged, with a hot yellow core that falls off to red-orange at
- * the fringes, a subtle reddish halation glow, slightly uneven segment brightness and grain. Same output as engine's
- * DateStamp.kt.
+ * Imprints a 35mm film data-back date (`DD MM 'YY`, `'YY MM DD`, or `MM DD 'YY`) in the bottom-right corner of an
+ * exported image, using a Digital-7 style chamfered 7-segment clock geometry rendered the way a quartz date back exposes
+ * film: orange LED segments shining through the film base onto the emulsion. So the digits are light added to the
+ * picture (they show on dark areas and fade into bright ones), slightly soft-edged, with a hot yellow core that falls
+ * off to red-orange at the fringes, a subtle reddish halation glow, slightly uneven segment brightness and grain. Same
+ * output as engine's DateStamp.kt.
  */
 public enum DateStamp {
-    /** Formats [date] in classic film date-back order: `'YY MM DD` (for example `'26 11 13`). */
-    public static func format(_ date: Date = Date(), calendar: Calendar = .current) -> String {
+    /** Formats [date] in classic film date-back order (defaults to `DD MM 'YY`, e.g. `13 11 '26`). */
+    public static func format(_ date: Date = Date(), format: DateStampFormat = .dmy,
+                              calendar: Calendar = .current) -> String {
         let comps = calendar.dateComponents([.year, .month, .day], from: date)
-        return String(format: "'%02d %02d %02d", (comps.year ?? 0) % 100, comps.month ?? 1, comps.day ?? 1)
+        let year = (comps.year ?? 0) % 100
+        let month = comps.month ?? 1
+        let day = comps.day ?? 1
+        switch format {
+        case .dmy: return String(format: "%02d %02d '%02d", day, month, year)
+        case .ymd: return String(format: "'%02d %02d %02d", year, month, day)
+        case .mdy: return String(format: "%02d %02d '%02d", month, day, year)
+        }
     }
 
     /** The LED's light per film layer, for the response `1 - exp(-gain * E * c)`: red saturates first (yellow core). */

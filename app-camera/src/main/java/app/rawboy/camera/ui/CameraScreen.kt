@@ -37,6 +37,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.addPathNodes
 import app.rawboy.camera.capture.FlashMode
+import app.rawboy.export.DateStampFormat
 import app.rawboy.camera.qr.QrPayload
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.ui.text.style.TextOverflow
@@ -1245,10 +1246,21 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
         )
         SettingSwitch(
             title = "Date stamp",
-            subtitle = "Imprint today's date ('YY MM DD) in the corner of each photo",
+            subtitle = "Imprint today's date in the corner of each photo",
             checked = settings.dateStamp,
             onChange = vm::setDateStamp,
         )
+        if (settings.dateStamp) {
+            SettingChoice(
+                title = "Date format",
+                subtitle = null,
+                options = listOf(DateStampFormat.DMY, DateStampFormat.YMD, DateStampFormat.MDY),
+                selected = settings.dateStampFormat,
+                label = { it.label },
+                onSelect = vm::setDateStampFormat,
+                indent = true,
+            )
+        }
 
         SettingsSection("Capture")
         SettingChoice(

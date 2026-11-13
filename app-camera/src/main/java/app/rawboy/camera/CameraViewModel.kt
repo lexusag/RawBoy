@@ -23,6 +23,7 @@ import app.rawboy.camera.capture.CameraController
 import app.rawboy.camera.capture.FlashMode
 import app.rawboy.camera.capture.LocationTracker
 import app.rawboy.camera.capture.ShutterSound
+import app.rawboy.export.DateStampFormat
 import app.rawboy.camera.qr.QrPayload
 import app.rawboy.camera.qr.QrReader
 import app.rawboy.camera.qr.QrTracker
@@ -953,6 +954,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setShutterSound(on: Boolean) = change { it.copy(shutterSound = on) }
     fun setHdrGainMap(on: Boolean) = change { it.copy(hdrGainMap = on) }
     fun setDateStamp(on: Boolean) = change { it.copy(dateStamp = on) }
+    fun setDateStampFormat(format: DateStampFormat) = change { it.copy(dateStampFormat = format) }
     fun setTrackFocus(on: Boolean) {
         change { it.copy(trackFocus = on) }
         // A subject being followed: a plain lock where it is now.

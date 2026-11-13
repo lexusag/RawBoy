@@ -433,7 +433,7 @@ internal object ShotSaver {
                 downscaleSharpen = CameraSettings.SMALL_SHARPEN,
                 hdrGainMap = s.hdrGainMap,
                 description = shot.description,
-                dateStamp = if (s.dateStamp) DateStamp.format(shot.timeMs) else "",
+                dateStamp = if (s.dateStamp) DateStamp.format(shot.timeMs, s.dateStampFormat) else "",
             )
             Log.d(TAG, "${shot.name}: decode $decodeMs ms, analysis $analysisMs ms")
             return Prepared(app, shot, img, shader, export, a.stats.key, a.autoBase.exposure, started)
