@@ -273,6 +273,7 @@ fun CameraScreen(
         val barButtons = @Composable {
             if (!videoMode) {
                 RawButton(settings.keepDng) { vm.setKeepDng(!settings.keepDng) }
+                FrameButton(settings.photoFrame) { vm.togglePhotoFrame() }
                 BurstButton(settings.burstMode, lowLight, hiRes, flashAvailable && settings.flash != FlashMode.OFF) { vm.setBurstMode(settings.burstMode.next()) }
                 if (flashAvailable) FlashButton(settings.flash, screenFlashCamera, vm::cycleFlash)
             }
@@ -1615,6 +1616,19 @@ private fun RawButton(keep: Boolean, onClick: () -> Unit) {
     }
 }
 
+/** Enable or disable photo frames (restoring the last chosen frame, or Pentax 645 by default). */
+@Composable
+private fun FrameButton(frame: PhotoFrame, onClick: () -> Unit) {
+    val active = frame != PhotoFrame.NONE
+    val tint = if (active) MaterialTheme.colorScheme.primary else LocalContentColor.current.copy(alpha = 0.6f)
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier.semantics { stateDescription = if (active) frame.label else "Off" },
+    ) {
+        Icon(FrameIcon, contentDescription = "Frames", tint = tint)
+    }
+}
+
 /**
  * Merge 8 frames, cycling On -> Auto -> Off (the same setting as in Settings). Coloured while it will merge the next
  * shot (On, or Auto in low light; never with the flash or at full sensor resolution), gray otherwise; Auto carries a
@@ -1743,6 +1757,14 @@ private val FilmIcon: ImageVector by lazy {
     icon(
         "Film",
         "M18,3v2h-2L16,3L8,3v2L6,5L6,3L4,3v18h2v-2h2v2h8v-2h2v2h2L20,3h-2zM8,17L6,17v-2h2v2zM8,13L6,13v-2h2v2zM8,9L6,9L6,7h2v2zM18,17h-2v-2h2v2zM18,13h-2v-2h2v2zM18,9h-2L16,7h2v2z",
+    )
+}
+
+/** Framed picture icon for the top-bar Frames toggle (iOS: SF Symbol "photo.artframe"). */
+private val FrameIcon: ImageVector by lazy {
+    icon(
+        "Frame",
+        "M19,4H5C3.9,4 3,4.9 3,6v12c0,1.1 0.9,2 2,2h14c1.1,0 2,-0.9 2,-2V6C21,4.9 20.1,4 19,4zM19,18H5V6h14V18zM7,8h10v8H7z",
     )
 }
 
