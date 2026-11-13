@@ -179,17 +179,37 @@ public enum DateStamp {
         }
         let totalW = cursorX
 
-        let x0 = Float(width) - shortSide * 0.055 - totalW
-        let y0 = Float(height) - shortSide * 0.050 - charH
+        // Real 35mm quartz date back stays fixed along the film's long side (bottom in landscape, right in portrait).
+        let vertical = height > width
         let reach = thick * (redLed ? 2.6 : 2.2)  // the halation's extent
         let slant: Float = redLed ? 0 : 0.14
         let slantMaxShift = charH * 0.5 * slant
 
-        let minY = max(0, Int(y0 - reach))
-        let maxY = min(height - 1, Int(y0 + charH + reach))
+        let x0: Float
+        let y0: Float
+        let uEnd: Float
+        let minY: Int
+        let maxY: Int
+        let minX: Int
+        let maxX: Int
+        if !vertical {
+            x0 = Float(width) - shortSide * 0.055 - totalW
+            y0 = Float(height) - shortSide * 0.050 - charH
+            uEnd = 0
+            minY = max(0, Int(y0 - reach))
+            maxY = min(height - 1, Int(y0 + charH + reach))
+            minX = max(0, Int(x0 - reach - slantMaxShift))
+            maxX = min(width - 1, Int(x0 + totalW + reach + slantMaxShift))
+        } else {
+            x0 = Float(width) - shortSide * 0.050 - charH
+            uEnd = Float(height) - shortSide * 0.055
+            y0 = uEnd - totalW
+            minY = max(0, Int(y0 - reach - slantMaxShift))
+            maxY = min(height - 1, Int(uEnd + reach + slantMaxShift))
+            minX = max(0, Int(x0 - reach))
+            maxX = min(width - 1, Int(x0 + charH + reach))
+        }
         if bandY + bandRows <= minY || bandY > maxY { return }
-        let minX = max(0, Int(x0 - reach - slantMaxShift))
-        let maxX = min(width - 1, Int(x0 + totalW + reach + slantMaxShift))
         if minX > maxX { return }
 
         let halfH = charH * 0.5
@@ -211,11 +231,13 @@ public enum DateStamp {
         let rowStart = max(bandY, minY)
         let rowEnd = min(bandY + bandRows - 1, maxY)
         for py in rowStart...rowEnd {
-            let vy = (Float(py) + 0.5) - y0
-            let slantOffset = (halfH - vy) * slant
             let rowOffset = (py - bandY) * width
             for px in minX...maxX {
-                let ux = (Float(px) + 0.5) - x0 - slantOffset
+                let vy = !vertical ? (Float(py) + 0.5) - y0 : (Float(px) + 0.5) - x0
+                let slantOffset = (halfH - vy) * slant
+                let ux = !vertical
+                    ? (Float(px) + 0.5) - x0 - slantOffset
+                    : uEnd - (Float(py) + 0.5) - slantOffset
                 var core: Float = 0
                 var minDist = Float.greatestFiniteMagnitude
                 for i in 0..<count {
@@ -494,11 +516,11 @@ public enum Pentax645Frame {
         public let border: Int
         public let infoBar: Int
         public let style: FilmFrameStyle
-        public var infoOnLeft: Bool { style == .pentax645 && photoWidth > photoHeight }
-        public var topPad: Int { style == .contax645 ? infoBar : border }
-        public var bottomPad: Int { style == .contax645 ? infoBar : border }
-        public var leftPad: Int { border }
-        public var rightPad: Int { border }
+        public var infoOnLeft: Bool { photoWidth > photoHeight }
+        public var topPad: Int { (style == .contax645 && !infoOnLeft) ? infoBar : border }
+        public var bottomPad: Int { (style == .contax645 && !infoOnLeft) ? infoBar : border }
+        public var leftPad: Int { (style == .contax645 && infoOnLeft) ? infoBar : border }
+        public var rightPad: Int { (style == .contax645 && infoOnLeft) ? infoBar : border }
         public var outWidth: Int { photoWidth + leftPad + rightPad }
         public var outHeight: Int { photoHeight + topPad + bottomPad }
         public var topBar: Int { infoBar }
@@ -693,7 +715,7 @@ public enum Pentax645Frame {
 
     private static func buildContaxBottomDots(layout: Layout, info: Pentax645Info) -> StampDots? {
         guard let frameNum = info.frameNumber else { return nil }
-        let barLength = Float(layout.outWidth)
+        let barLength = Float(layout.infoOnLeft ? layout.outHeight : layout.outWidth)
         let photoShortSide = Float(min(layout.photoWidth, layout.photoHeight))
         let infoBar = Float(layout.infoBar)
         let tokens: [Token] = [.triangle, .text(formatContaxFrameNumber(frameNum))]
@@ -883,7 +905,7 @@ public enum Pentax645Frame {
     public static func renderTopBarBand(band: UnsafeMutablePointer<UInt16>, layout: Layout,
                                           bandY: Int, bandRows: Int, info: Pentax645Info,
                                           monochrome: Bool = false) {
-        if layout.style == .contax645 {
+        if layout.style == .contax645 && !layout.infoOnLeft {
             let outW = layout.outWidth
             let grainCell = max(1, Float(layout.infoBar) * 0.03)
             let dots = buildStampDots(layout: layout, info: info)
@@ -907,7 +929,7 @@ public enum Pentax645Frame {
         let outW = layout.outWidth
         let grainCell = max(1, Float(layout.infoBar) * 0.03)
         let bottomStart = layout.topPad + layout.photoHeight
-        let isContaxBottom = layout.style == .contax645 && bandY >= bottomStart
+        let isContaxBottom = layout.style == .contax645 && !layout.infoOnLeft && bandY >= bottomStart
         let dots: StampDots? = (isContaxBottom && info != nil) ? buildContaxBottomDots(layout: layout, info: info!) : nil
         let color = info?.color ?? .amber
         for py in bandY..<(bandY + bandRows) {
@@ -935,7 +957,9 @@ public enum Pentax645Frame {
         let grainCell = max(1, infoBar * 0.03)
         let color = info?.color ?? .amber
         let isPentax = layout.style == .pentax645
-        let dots: StampDots? = isPentax ? info.map { buildStampDots(layout: layout, info: $0) } : nil
+        let isContaxVertical = !isPentax && onLeft
+        let dots: StampDots? = (isPentax || isContaxVertical) ? info.map { buildStampDots(layout: layout, info: $0) } : nil
+        let contaxRightDots: StampDots? = isContaxVertical ? info.flatMap { buildContaxBottomDots(layout: layout, info: $0) } : nil
         let softEdge = max(1.6, infoBar * 0.055)
         var tmp: [UInt16] = [0, 0, 0]
 
@@ -944,11 +968,15 @@ public enum Pentax645Frame {
             let py = layout.topPad + y
             let dstRow = r * ow
             for px in 0..<leftPad {
-                sampleRebatePixel(px: px, py: py, u: 0, v: 0, dots: nil, grainCell: grainCell, monochrome: monochrome, color: color, out: dst, idx: (dstRow + px) * 3)
+                let u: Float = isContaxVertical ? Float(oh - 1 - py) + 0.5 : 0
+                let v: Float = isContaxVertical ? Float(px) + 0.5 : 0
+                sampleRebatePixel(px: px, py: py, u: u, v: v, dots: isContaxVertical ? dots : nil, grainCell: grainCell, monochrome: monochrome, color: color, out: dst, idx: (dstRow + px) * 3)
             }
             dst.advanced(by: (dstRow + leftPad) * 3).update(from: src.advanced(by: r * pw * 3), count: pw * 3)
             for px in (leftPad + pw)..<ow {
-                sampleRebatePixel(px: px, py: py, u: 0, v: 0, dots: nil, grainCell: grainCell, monochrome: monochrome, color: color, out: dst, idx: (dstRow + px) * 3)
+                let u: Float = isContaxVertical ? Float(oh - 1 - py) + 0.5 : 0
+                let v: Float = isContaxVertical ? Float(px - (leftPad + pw)) + 0.5 : 0
+                sampleRebatePixel(px: px, py: py, u: u, v: v, dots: contaxRightDots, grainCell: grainCell, monochrome: monochrome, color: color, out: dst, idx: (dstRow + px) * 3)
             }
 
             if !isPentax {
@@ -958,8 +986,10 @@ public enum Pentax645Frame {
                 let yc = Float(y) + 0.5
                 let isTop = yc < Float(ph) * 0.5
                 let yFromEdge = isTop ? yc : (Float(ph) - yc)
-                let nearHorizEdge = yFromEdge < gateInset * 1.8 + softEdge + cornerR
-                let sideSpan = min(pw / 2, Int(sideInset * 2.2 + softEdge + cornerR) + 1)
+                let horizDepthLimit = isContaxVertical ? sideInset : gateInset
+                let vertDepthLimit = isContaxVertical ? gateInset : sideInset
+                let nearHorizEdge = yFromEdge < horizDepthLimit * 1.8 + softEdge + cornerR
+                let sideSpan = min(pw / 2, Int(vertDepthLimit * 2.2 + softEdge + cornerR) + 1)
 
                 func contaxEdgeMask(_ x: Int) -> Float {
                     let xc = Float(x) + 0.5
@@ -969,21 +999,39 @@ public enum Pentax645Frame {
 
                     var mask: Float = 0
                     if nearHorizEdge {
-                        let cutoutEnd = infoBar * (1.15 + 0.35 * hash(cornerSeed, 101))
-                        let ramp = infoBar * (0.28 + 0.12 * hash(cornerSeed, 202))
-                        let t = min(max((xFromEdge - cutoutEnd) / ramp, 0), 1)
-                        let baseDepth = gateInset * t * t * (3 - 2 * t)
-                        let wobble = gateImperfection(xc, infoBar: infoBar, seed: cornerSeed * 17 + 7) * gateInset * 0.22 * t
-                        let edgeDepth = max(0, baseDepth + wobble)
-                        if edgeDepth > 0.01 {
-                            mask = max(mask, gateMask(yFromEdge - edgeDepth, softEdge: softEdge))
+                        if !isContaxVertical {
+                            let cutoutEnd = infoBar * (1.15 + 0.35 * hash(cornerSeed, 101))
+                            let ramp = infoBar * (0.28 + 0.12 * hash(cornerSeed, 202))
+                            let t = min(max((xFromEdge - cutoutEnd) / ramp, 0), 1)
+                            let baseDepth = gateInset * t * t * (3 - 2 * t)
+                            let wobble = gateImperfection(xc, infoBar: infoBar, seed: cornerSeed * 17 + 7) * gateInset * 0.22 * t
+                            let edgeDepth = max(0, baseDepth + wobble)
+                            if edgeDepth > 0.01 {
+                                mask = max(mask, gateMask(yFromEdge - edgeDepth, softEdge: softEdge))
+                            }
+                        } else {
+                            let horizSeed = isTop ? 31 : 53
+                            let horizDepth = max(0, sideInset * (0.85 + 0.25 * gateImperfection(xc, infoBar: infoBar, seed: horizSeed)))
+                            mask = max(mask, gateMask(yFromEdge - horizDepth, softEdge: softEdge))
                         }
                     }
 
                     if Int(xFromEdge) < sideSpan {
-                        let sideSeed = isLeft ? 31 : 53
-                        let sideDepth = max(0, sideInset * (0.85 + 0.25 * gateImperfection(yc, infoBar: infoBar, seed: sideSeed)))
-                        mask = max(mask, gateMask(xFromEdge - sideDepth, softEdge: softEdge))
+                        if isContaxVertical {
+                            let cutoutEnd = infoBar * (1.15 + 0.35 * hash(cornerSeed, 101))
+                            let ramp = infoBar * (0.28 + 0.12 * hash(cornerSeed, 202))
+                            let t = min(max((yFromEdge - cutoutEnd) / ramp, 0), 1)
+                            let baseDepth = gateInset * t * t * (3 - 2 * t)
+                            let wobble = gateImperfection(yc, infoBar: infoBar, seed: cornerSeed * 17 + 7) * gateInset * 0.22 * t
+                            let edgeDepth = max(0, baseDepth + wobble)
+                            if edgeDepth > 0.01 {
+                                mask = max(mask, gateMask(xFromEdge - edgeDepth, softEdge: softEdge))
+                            }
+                        } else {
+                            let sideSeed = isLeft ? 31 : 53
+                            let sideDepth = max(0, sideInset * (0.85 + 0.25 * gateImperfection(yc, infoBar: infoBar, seed: sideSeed)))
+                            mask = max(mask, gateMask(xFromEdge - sideDepth, softEdge: softEdge))
+                        }
 
                         if yFromEdge < cornerR && xFromEdge < cornerR {
                             let dx = cornerR - xFromEdge
