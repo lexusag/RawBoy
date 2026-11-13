@@ -24,10 +24,12 @@ public struct ExportSettings: Equatable, Sendable {
     /** Light sharpening after the downscale (0 = none, ~0.5 subtle); only when maxLongSide makes the image smaller. */
     public var downscaleSharpen: Float = 0
     /**
-     * Optional film-style date stamp (e.g. `'26 11 13`) imprinted in the bottom-right corner of the exported image in a
-     * yellow-orange 7-segment clock font. Empty string = no date stamp.
+     * Optional film-style date stamp (e.g. `'26 11 13`) imprinted in the bottom-right corner of the exported image.
+     * Empty string = no date stamp.
      */
     public var dateStamp: String = ""
+    /** Visual style for [dateStamp] (`Classic` yellow-orange Digital-7 or `Red LED` rounded segments). */
+    public var dateStampStyle: DateStampStyle = .classic
     /**
      * Optional Pentax 645N-style black film rebate with dot-matrix shoot info along the top edge.
      * Mutually exclusive with dateStamp; when non-nil, pentax645 takes precedence.
@@ -38,7 +40,8 @@ public struct ExportSettings: Equatable, Sendable {
 
     public init(format: ExportFormat = .jpeg, jpegQuality: Int = 92, tiffBits: Int = 16,
                 jpegEncoder: JpegEncoder = .system, maxLongSide: Int? = nil, downscaleSharpen: Float = 0,
-                dateStamp: String = "", pentax645: Pentax645Info? = nil, monochromeImprint: Bool = false) {
+                dateStamp: String = "", dateStampStyle: DateStampStyle = .classic,
+                pentax645: Pentax645Info? = nil, monochromeImprint: Bool = false) {
         self.format = format
         self.jpegQuality = jpegQuality
         self.tiffBits = tiffBits
@@ -46,6 +49,7 @@ public struct ExportSettings: Equatable, Sendable {
         self.maxLongSide = maxLongSide
         self.downscaleSharpen = downscaleSharpen
         self.dateStamp = dateStamp
+        self.dateStampStyle = dateStampStyle
         self.pentax645 = pentax645
         self.monochromeImprint = monochromeImprint
     }
@@ -64,6 +68,19 @@ public enum DateStampFormat: String, CaseIterable, Sendable {
         case .ymd: "'YY MM DD"
         case .mdy: "MM DD 'YY"
         case .mmmYy: "jan 26"
+        }
+    }
+}
+
+/** Visual style for the 35mm film data-back date stamp (`Classic` by default, or `Red LED`). */
+public enum DateStampStyle: String, CaseIterable, Sendable {
+    case classic = "CLASSIC"
+    case redLed = "RED_LED"
+
+    public var label: String {
+        switch self {
+        case .classic: "Classic"
+        case .redLed: "Red LED"
         }
     }
 }
@@ -114,19 +131,26 @@ public enum DateStamp {
     /** How much the stamp still darkens blue where the picture is already bright, so it reads (faintly) on a sky. */
     private static let blueAbsorb: Float = 0.55
 
+    private static let redLedR: Float = 1.0
+    private static let redLedG: Float = 0.14
+    private static let redLedB: Float = 0.015
+    private static let redBlueAbsorb: Float = 0.50
+
     /**
      * Burns [text] into the 16-bit interleaved RGB [band] covering rows `[bandY, bandY + bandRows)` of an image of
      * size [width] x [height]. Bands outside the bottom-right stamp box return immediately.
      */
     public static func imprint(band: UnsafeMutablePointer<UInt16>, width: Int, height: Int,
-                               bandY: Int, bandRows: Int, text: String, monochrome: Bool = false) {
+                               bandY: Int, bandRows: Int, text: String, monochrome: Bool = false,
+                               style: DateStampStyle = .classic) {
         guard !text.isEmpty, width > 0, height > 0, bandRows > 0 else { return }
 
+        let redLed = style == .redLed
         let shortSide = Float(min(width, height))
         let charH = max(14 as Float, shortSide * 0.028)
-        let charW = charH * 0.52
-        let thick = charH * 0.115
-        let gap = charH * 0.22
+        let charW = charH * (redLed ? 0.56 : 0.52)
+        let thick = charH * (redLed ? 0.135 : 0.115)
+        let gap = charH * (redLed ? 0.24 : 0.22)
         let tickAdv = charW * 0.35
 
         let chars = Array(text)
@@ -149,8 +173,8 @@ public enum DateStamp {
 
         let x0 = Float(width) - shortSide * 0.055 - totalW
         let y0 = Float(height) - shortSide * 0.050 - charH
-        let reach = thick * 2.2  // the halation's extent
-        let slant: Float = 0.14
+        let reach = thick * (redLed ? 2.6 : 2.2)  // the halation's extent
+        let slant: Float = redLed ? 0 : 0.14
         let slantMaxShift = charH * 0.5 * slant
 
         let minY = max(0, Int(y0 - reach))
@@ -162,11 +186,16 @@ public enum DateStamp {
 
         let halfH = charH * 0.5
         let halfThick = thick * 0.5
-        let segGap = thick * 0.22
-        // Slightly out-of-focus LED: soft segment edge with halved halation glow.
-        let soft = max(thick * 0.45, 0.8)
-        let haloInv = 1 / (thick * 0.9)
+        let segGap = thick * (redLed ? 0.72 : 0.22)
+        // Slightly out-of-focus LED: soft segment edge with halation glow.
+        let soft = max(thick * (redLed ? 0.55 : 0.45), redLed ? 0.9 : 0.8)
+        let haloAmp: Float = redLed ? 0.26 : 0.175
+        let haloInv = 1 / (thick * (redLed ? 1.15 : 0.9))
         let grainCell = max(1, thick * 0.22)
+        let curLedR = redLed ? redLedR : ledR
+        let curLedG = redLed ? redLedG : ledG
+        let curLedB = redLed ? redLedB : ledB
+        let curBlueAbsorb = redLed ? redBlueAbsorb : blueAbsorb
 
         let rowStart = max(bandY, minY)
         let rowEnd = min(bandY + bandRows - 1, maxY)
@@ -187,19 +216,21 @@ public enum DateStamp {
                     if ux < cx - reach || ux > cx + cw + reach { continue }
                     let lx = ux - cx
                     if tick {
-                        let d = distVBar(lx, vy, cw * 0.5, charH * 0.21, charH * 0.17, halfThick)
+                        let d = redLed
+                            ? distRoundVBar(lx, vy, cw * 0.5, charH * 0.21, charH * 0.17, halfThick)
+                            : distVBar(lx, vy, cw * 0.5, charH * 0.21, charH * 0.17, halfThick)
                         if d < minDist { minDist = d }
                         core = max(core, ledBrightness(i, 7) * edge(d, soft))
                         continue
                     }
                     for s in 0..<7 where (m >> s) & 1 != 0 {
-                        let d = distToDigitSegment(s, lx, vy, cw, charH, halfH, halfThick, segGap)
+                        let d = distToDigitSegment(s, lx, vy, cw, charH, halfH, halfThick, segGap, rounded: redLed)
                         if d < minDist { minDist = d }
                         core = max(core, ledBrightness(i, s) * edge(d, soft))
                     }
                 }
                 let excess = max(minDist, 0) * haloInv
-                let halo = 0.175 * exp(-excess * excess)
+                let halo = haloAmp * exp(-excess * excess)
                 if core <= 0.002 && halo < 0.004 { continue }
 
                 // Grain: the exposure varies a little from clump to clump, as it does in the emulsion.
@@ -217,10 +248,10 @@ public enum DateStamp {
                     lb = l
                     absorb = 0
                 } else {
-                    lr = 1 - exp(-gain * e * ledR)
-                    lg = 1 - exp(-gain * e * ledG)
-                    lb = 1 - exp(-gain * e * ledB)
-                    absorb = blueAbsorb
+                    lr = 1 - exp(-gain * e * curLedR)
+                    lg = 1 - exp(-gain * e * curLedG)
+                    lb = 1 - exp(-gain * e * curLedB)
+                    absorb = curBlueAbsorb
                 }
 
                 let idx = (rowOffset + px) * 3
@@ -261,11 +292,23 @@ public enum DateStamp {
         }
     }
 
-    /** Signed distance to Digital-7 style chamfered segment [s] (a..g = 0..6) of a digit cell [w] x [h]. */
+    /** Signed distance to segment [s] (a..g = 0..6) of a digit cell [w] x [h], chamfered or rounded-capsule. */
     private static func distToDigitSegment(_ s: Int, _ x: Float, _ y: Float, _ w: Float, _ h: Float,
-                                           _ halfH: Float, _ ht: Float, _ segGap: Float) -> Float {
-        let hx = w * 0.5 - segGap
+                                           _ halfH: Float, _ ht: Float, _ segGap: Float,
+                                           rounded: Bool = false) -> Float {
+        let hx = w * 0.5 - (rounded ? segGap * 1.1 : segGap)
         let hy = (halfH - ht) * 0.5 - segGap
+        if rounded {
+            switch s {
+            case 0: return distRoundHBar(x, y, w * 0.5, ht, hx, ht)
+            case 1: return distRoundVBar(x, y, w - ht, (ht + halfH) * 0.5, hy, ht)
+            case 2: return distRoundVBar(x, y, w - ht, (halfH + h - ht) * 0.5, hy, ht)
+            case 3: return distRoundHBar(x, y, w * 0.5, h - ht, hx, ht)
+            case 4: return distRoundVBar(x, y, ht, (halfH + h - ht) * 0.5, hy, ht)
+            case 5: return distRoundVBar(x, y, ht, (ht + halfH) * 0.5, hy, ht)
+            default: return distRoundHBar(x, y, w * 0.5, halfH, hx, ht)
+            }
+        }
         switch s {
         case 0: return distHBar(x, y, w * 0.5, ht, hx, ht)
         case 1: return distVBar(x, y, w - ht, (ht + halfH) * 0.5, hy, ht)
@@ -289,6 +332,20 @@ public enum DateStamp {
         let dx = abs(x - cx)
         let dy = abs(y - cy)
         return max(dx - ht, (dx + dy - hy) * invSqrt2)
+    }
+
+    /** Signed distance to a rounded-capsule horizontal 7-segment bar centered at ([cx], [cy]). */
+    private static func distRoundHBar(_ x: Float, _ y: Float, _ cx: Float, _ cy: Float, _ hx: Float, _ ht: Float) -> Float {
+        let dx = max(0, abs(x - cx) - max(0, hx - ht))
+        let dy = abs(y - cy)
+        return hypot(dx, dy) - ht
+    }
+
+    /** Signed distance to a rounded-capsule vertical 7-segment bar centered at ([cx], [cy]). */
+    private static func distRoundVBar(_ x: Float, _ y: Float, _ cx: Float, _ cy: Float, _ hy: Float, _ ht: Float) -> Float {
+        let dx = abs(x - cx)
+        let dy = max(0, abs(y - cy) - max(0, hy - ht))
+        return hypot(dx, dy) - ht
     }
 
     /** Deterministic 0..1 hash of an integer pair (matches the Kotlin version bit for bit). */

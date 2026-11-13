@@ -106,4 +106,32 @@ class DateStampTest {
         assertTrue(coreN > 0 && fringeN > 0)
         assertTrue("core g/r ${coreRatio / coreN} should exceed fringe g/r ${fringeRatio / fringeN}", coreRatio / coreN > fringeRatio / fringeN + 0.1)
     }
+
+    @Test
+    fun redLedImprintBurnsRedOrangeInBottomRight() {
+        val width = 400
+        val height = 300
+        val text = "'26 11 13"
+
+        val topBand = ShortArray(width * 100 * 3)
+        DateStamp.imprint(topBand, width, height, bandY = 0, bandRows = 100, text = text, style = DateStampStyle.RED_LED)
+        assertTrue("Top band should stay completely untouched", topBand.all { it == 0.toShort() })
+
+        val bottomBand = ShortArray(width * 100 * 3)
+        DateStamp.imprint(bottomBand, width, height, bandY = 200, bandRows = 100, text = text, style = DateStampStyle.RED_LED)
+
+        var redLedCorePixels = 0
+        for (py in 0 until 100) {
+            for (px in width / 2 until width) {
+                val idx = (py * width + px) * 3
+                val r = bottomBand[idx].toInt() and 0xFFFF
+                val g = bottomBand[idx + 1].toInt() and 0xFFFF
+                val b = bottomBand[idx + 2].toInt() and 0xFFFF
+                if (r > 50_000 && g in 10_000..28_000 && b < 8_000 && r > g && g > b) {
+                    redLedCorePixels++
+                }
+            }
+        }
+        assertTrue("Expected red-orange 7-segment pixels in bottom-right corner, found $redLedCorePixels", redLedCorePixels > 20)
+    }
 }

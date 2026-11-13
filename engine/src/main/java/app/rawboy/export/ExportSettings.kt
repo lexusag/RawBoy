@@ -35,10 +35,12 @@ data class ExportSettings(
     /** JPEGLI/TIFF: written as the file's ImageDescription instead of the source's (blank: the source's). */
     val description: String = "",
     /**
-     * Optional film-style date stamp (e.g. `'26 11 13`) imprinted in the bottom-right corner of the exported image in a
-     * yellow-orange 7-segment clock font. Empty string = no date stamp.
+     * Optional film-style date stamp (e.g. `'26 11 13`) imprinted in the bottom-right corner of the exported image.
+     * Empty string = no date stamp.
      */
     val dateStamp: String = "",
+    /** Visual style for [dateStamp] (`Classic` yellow-orange Digital-7 or `Red LED` rounded segments). */
+    val dateStampStyle: DateStampStyle = DateStampStyle.CLASSIC,
     /**
      * Optional Pentax 645N-style black film rebate with dot-matrix shoot info along the top edge.
      * Mutually exclusive with [dateStamp]; when non-null, [pentax645] takes precedence.

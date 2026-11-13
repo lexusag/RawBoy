@@ -6,6 +6,7 @@ import java.util.TimeZone
 import kotlin.math.abs
 import kotlin.math.exp
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 /**
  * Display order for the film data-back date stamp (`DD MM 'YY` by default) and Pentax 645 date imprint.
@@ -15,6 +16,14 @@ enum class DateStampFormat(val label: String) {
     YMD("'YY MM DD"),
     MDY("MM DD 'YY"),
     MMM_YY("jan 26"),
+}
+
+/**
+ * Visual style for the 35mm film data-back date stamp (`Classic` by default, or `Red LED`).
+ */
+enum class DateStampStyle(val label: String) {
+    CLASSIC("Classic"),
+    RED_LED("Red LED"),
 }
 
 /**
@@ -66,10 +75,15 @@ object DateStamp {
     /** How much the stamp still darkens blue where the picture is already bright, so it reads (faintly) on a sky. */
     private const val BLUE_ABSORB = 0.55f
 
+    private const val RED_LED_R = 1.0f
+    private const val RED_LED_G = 0.14f
+    private const val RED_LED_B = 0.015f
+    private const val RED_BLUE_ABSORB = 0.50f
+
     /**
      * Burns [text] into the 16-bit interleaved RGB [band] covering rows `[bandY, bandY + bandRows)` of an image of
      * size [width] x [height]. Bands outside the bottom-right stamp box return immediately.
-     * When [monochrome] is true (B&W mode), the LED exposes neutral white/grey instead of amber-orange.
+     * When [monochrome] is true (B&W mode), the LED exposes neutral white/grey instead of amber-orange / red.
      */
     fun imprint(
         band: ShortArray,
@@ -79,14 +93,16 @@ object DateStamp {
         bandRows: Int,
         text: String,
         monochrome: Boolean = false,
+        style: DateStampStyle = DateStampStyle.CLASSIC,
     ) {
         if (text.isEmpty() || width <= 0 || height <= 0 || bandRows <= 0) return
 
+        val redLed = style == DateStampStyle.RED_LED
         val shortSide = minOf(width, height).toFloat()
         val charH = (shortSide * 0.028f).coerceAtLeast(14f)
-        val charW = charH * 0.52f
-        val thick = charH * 0.115f
-        val gap = charH * 0.22f
+        val charW = charH * if (redLed) 0.56f else 0.52f
+        val thick = charH * if (redLed) 0.135f else 0.115f
+        val gap = charH * if (redLed) 0.24f else 0.22f
         val tickAdv = charW * 0.35f
 
         val count = text.length
@@ -108,8 +124,8 @@ object DateStamp {
 
         val x0 = width - shortSide * 0.055f - totalW
         val y0 = height - shortSide * 0.050f - charH
-        val reach = thick * 2.2f // the halation's extent
-        val slant = 0.14f
+        val reach = thick * if (redLed) 2.6f else 2.2f // the halation's extent
+        val slant = if (redLed) 0f else 0.14f
         val slantMaxShift = charH * 0.5f * slant
 
         val minY = (y0 - reach).toInt().coerceAtLeast(0)
@@ -121,11 +137,16 @@ object DateStamp {
 
         val halfH = charH * 0.5f
         val halfThick = thick * 0.5f
-        val segGap = thick * 0.22f
-        // Slightly out-of-focus LED: soft segment edge with halved halation glow.
-        val soft = maxOf(thick * 0.45f, 0.8f)
-        val haloInv = 1f / (thick * 0.9f)
+        val segGap = thick * if (redLed) 0.72f else 0.22f
+        // Slightly out-of-focus LED: soft segment edge with halation glow.
+        val soft = maxOf(thick * if (redLed) 0.55f else 0.45f, if (redLed) 0.9f else 0.8f)
+        val haloAmp = if (redLed) 0.26f else 0.175f
+        val haloInv = 1f / (thick * if (redLed) 1.15f else 0.9f)
         val grainCell = maxOf(1f, thick * 0.22f)
+        val ledR = if (redLed) RED_LED_R else LED_R
+        val ledG = if (redLed) RED_LED_G else LED_G
+        val ledB = if (redLed) RED_LED_B else LED_B
+        val absorbB = if (redLed) RED_BLUE_ABSORB else BLUE_ABSORB
 
         val rowStart = maxOf(bandY, minY)
         val rowEnd = minOf(bandY + bandRows - 1, maxY)
@@ -146,20 +167,24 @@ object DateStamp {
                     if (ux < cx - reach || ux > cx + cw + reach) continue
                     val lx = ux - cx
                     if (tick) {
-                        val d = distVBar(lx, vy, cw * 0.5f, charH * 0.21f, charH * 0.17f, halfThick)
+                        val d = if (redLed) {
+                            distRoundVBar(lx, vy, cw * 0.5f, charH * 0.21f, charH * 0.17f, halfThick)
+                        } else {
+                            distVBar(lx, vy, cw * 0.5f, charH * 0.21f, charH * 0.17f, halfThick)
+                        }
                         if (d < minDist) minDist = d
                         core = maxOf(core, ledBrightness(i, 7) * edge(d, soft))
                         continue
                     }
                     for (s in 0 until 7) {
                         if ((m shr s) and 1 == 0) continue
-                        val d = distToDigitSegment(s, lx, vy, cw, charH, halfH, halfThick, segGap)
+                        val d = distToDigitSegment(s, lx, vy, cw, charH, halfH, halfThick, segGap, rounded = redLed)
                         if (d < minDist) minDist = d
                         core = maxOf(core, ledBrightness(i, s) * edge(d, soft))
                     }
                 }
                 val excess = minDist.coerceAtLeast(0f) * haloInv
-                val halo = 0.175f * exp(-excess * excess)
+                val halo = haloAmp * exp(-excess * excess)
                 if (core <= 0.002f && halo < 0.004f) continue
 
                 // Grain: the exposure varies a little from clump to clump, as it does in the emulsion.
@@ -177,10 +202,10 @@ object DateStamp {
                     lb = l
                     blueAbsorb = 0f
                 } else {
-                    lr = 1f - exp(-GAIN * e * LED_R)
-                    lg = 1f - exp(-GAIN * e * LED_G)
-                    lb = 1f - exp(-GAIN * e * LED_B)
-                    blueAbsorb = BLUE_ABSORB
+                    lr = 1f - exp(-GAIN * e * ledR)
+                    lg = 1f - exp(-GAIN * e * ledG)
+                    lb = 1f - exp(-GAIN * e * ledB)
+                    blueAbsorb = absorbB
                 }
 
                 val idx = (rowOffset + px) * 3
@@ -219,7 +244,7 @@ object DateStamp {
         else -> 0
     }
 
-    /** Signed distance to Digital-7 style chamfered segment [s] (a..g = 0..6) of a digit cell [w] x [h]. */
+    /** Signed distance to segment [s] (a..g = 0..6) of a digit cell [w] x [h], chamfered or rounded-capsule. */
     private fun distToDigitSegment(
         s: Int,
         x: Float,
@@ -229,17 +254,30 @@ object DateStamp {
         halfH: Float,
         ht: Float,
         segGap: Float,
+        rounded: Boolean = false,
     ): Float {
-        val hx = w * 0.5f - segGap
+        val hx = w * 0.5f - if (rounded) segGap * 1.1f else segGap
         val hy = (halfH - ht) * 0.5f - segGap
-        return when (s) {
-            0 -> distHBar(x, y, w * 0.5f, ht, hx, ht)
-            1 -> distVBar(x, y, w - ht, (ht + halfH) * 0.5f, hy, ht)
-            2 -> distVBar(x, y, w - ht, (halfH + h - ht) * 0.5f, hy, ht)
-            3 -> distHBar(x, y, w * 0.5f, h - ht, hx, ht)
-            4 -> distVBar(x, y, ht, (halfH + h - ht) * 0.5f, hy, ht)
-            5 -> distVBar(x, y, ht, (ht + halfH) * 0.5f, hy, ht)
-            else -> distHBar(x, y, w * 0.5f, halfH, hx, ht)
+        return if (rounded) {
+            when (s) {
+                0 -> distRoundHBar(x, y, w * 0.5f, ht, hx, ht)
+                1 -> distRoundVBar(x, y, w - ht, (ht + halfH) * 0.5f, hy, ht)
+                2 -> distRoundVBar(x, y, w - ht, (halfH + h - ht) * 0.5f, hy, ht)
+                3 -> distRoundHBar(x, y, w * 0.5f, h - ht, hx, ht)
+                4 -> distRoundVBar(x, y, ht, (halfH + h - ht) * 0.5f, hy, ht)
+                5 -> distRoundVBar(x, y, ht, (ht + halfH) * 0.5f, hy, ht)
+                else -> distRoundHBar(x, y, w * 0.5f, halfH, hx, ht)
+            }
+        } else {
+            when (s) {
+                0 -> distHBar(x, y, w * 0.5f, ht, hx, ht)
+                1 -> distVBar(x, y, w - ht, (ht + halfH) * 0.5f, hy, ht)
+                2 -> distVBar(x, y, w - ht, (halfH + h - ht) * 0.5f, hy, ht)
+                3 -> distHBar(x, y, w * 0.5f, h - ht, hx, ht)
+                4 -> distVBar(x, y, ht, (halfH + h - ht) * 0.5f, hy, ht)
+                5 -> distVBar(x, y, ht, (ht + halfH) * 0.5f, hy, ht)
+                else -> distHBar(x, y, w * 0.5f, halfH, hx, ht)
+            }
         }
     }
 
@@ -255,6 +293,20 @@ object DateStamp {
         val dx = abs(x - cx)
         val dy = abs(y - cy)
         return maxOf(dx - ht, (dx + dy - hy) * INV_SQRT2)
+    }
+
+    /** Signed distance to a rounded-capsule horizontal 7-segment bar centered at ([cx], [cy]). */
+    private fun distRoundHBar(x: Float, y: Float, cx: Float, cy: Float, hx: Float, ht: Float): Float {
+        val dx = maxOf(0f, abs(x - cx) - maxOf(0f, hx - ht))
+        val dy = abs(y - cy)
+        return sqrt(dx * dx + dy * dy) - ht
+    }
+
+    /** Signed distance to a rounded-capsule vertical 7-segment bar centered at ([cx], [cy]). */
+    private fun distRoundVBar(x: Float, y: Float, cx: Float, cy: Float, hy: Float, ht: Float): Float {
+        val dx = abs(x - cx)
+        val dy = maxOf(0f, abs(y - cy) - maxOf(0f, hy - ht))
+        return sqrt(dx * dx + dy * dy) - ht
     }
 
     /** Deterministic 0..1 hash of an integer pair (matches the Swift version bit for bit). */

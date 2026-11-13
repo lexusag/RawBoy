@@ -722,6 +722,11 @@ private struct FramesSettingsView: View {
             }
             if vm.settings.photoFrame == .dateStamp {
                 Section {
+                    Picker("Style", selection: Binding(get: { vm.settings.dateStampStyle }, set: vm.setDateStampStyle)) {
+                        ForEach(DateStampStyle.allCases, id: \.self) { style in
+                            Text(style.label).tag(style)
+                        }
+                    }
                     Picker("Date format", selection: Binding(
                         get: { vm.settings.dateStampFormat == .mmmYy ? .dmy : vm.settings.dateStampFormat },
                         set: vm.setDateStampFormat

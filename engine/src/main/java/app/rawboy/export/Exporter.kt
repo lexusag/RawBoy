@@ -87,6 +87,7 @@ class Exporter(private val context: Context) {
         val frameLayout = settings.pentax645?.let { Pentax645Frame.layout(size.first, size.second) }
         val outSize = frameLayout?.let { it.outWidth to it.outHeight } ?: size
         val dateStamp = if (settings.pentax645 == null) settings.dateStamp else ""
+        val dateStampStyle = settings.dateStampStyle
         val mono = settings.monochromeImprint
         try {
             when (settings.format) {
@@ -94,12 +95,12 @@ class Exporter(private val context: Context) {
                     // jpegli writes the EXIF as it starts the file: no rewrite of the finished JPEG.
                     val exif = source?.let { readExif(it) ?: ExifMetadata() }
                         ?.let { if (settings.description.isBlank()) it else it.copy(description = settings.description) }
-                    writeJpegli(image, uri, params, size, outSize, settings.jpegQuality, settings.downscaleSharpen, exif, settings.hdrGainMap, dateStamp, settings.pentax645, mono, onProgress)
+                    writeJpegli(image, uri, params, size, outSize, settings.jpegQuality, settings.downscaleSharpen, exif, settings.hdrGainMap, dateStamp, dateStampStyle, settings.pentax645, mono, onProgress)
                 } else {
-                    writeJpeg(image, uri, params, size, outSize, settings.jpegQuality, settings.downscaleSharpen, dateStamp, settings.pentax645, mono, onProgress)
+                    writeJpeg(image, uri, params, size, outSize, settings.jpegQuality, settings.downscaleSharpen, dateStamp, dateStampStyle, settings.pentax645, mono, onProgress)
                 }
                 ExportFormat.TIFF -> writeTiff(image, uri, params, size, outSize, settings.tiffBits, source?.let(::readExif)
-                    ?.let { if (settings.description.isBlank()) it else it.copy(description = settings.description) }, settings.downscaleSharpen, dateStamp, settings.pentax645, mono, onProgress)
+                    ?.let { if (settings.description.isBlank()) it else it.copy(description = settings.description) }, settings.downscaleSharpen, dateStamp, dateStampStyle, settings.pentax645, mono, onProgress)
             }
             val t = System.nanoTime()
             if (settings.format == ExportFormat.JPEG && settings.jpegEncoder != JpegEncoder.JPEGLI && source != null) copyExif(source, uri)
@@ -112,12 +113,12 @@ class Exporter(private val context: Context) {
         }
     }
 
-    private fun writeJpeg(image: RawImage, uri: Uri, params: ShaderParams, size: Pair<Int, Int>, outSize: Pair<Int, Int>, quality: Int, sharpen: Float, dateStamp: String, pentax645: Pentax645Info?, monochrome: Boolean, onProgress: (Float) -> Unit) {
+    private fun writeJpeg(image: RawImage, uri: Uri, params: ShaderParams, size: Pair<Int, Int>, outSize: Pair<Int, Int>, quality: Int, sharpen: Float, dateStamp: String, dateStampStyle: DateStampStyle, pentax645: Pentax645Info?, monochrome: Boolean, onProgress: (Float) -> Unit) {
         val w = outSize.first
         val bitmap = Bitmap.createBitmap(w, outSize.second, Bitmap.Config.ARGB_8888)
         try {
             var argb = IntArray(0)
-            renderOutput(image, params, size, sharpen, dateStamp, pentax645, monochrome, onProgress) { y, rows, band ->
+            renderOutput(image, params, size, sharpen, dateStamp, dateStampStyle, pentax645, monochrome, onProgress) { y, rows, band ->
                 val n = w * rows
                 if (argb.size < n) argb = IntArray(n)
                 for (i in 0 until n) {
@@ -146,6 +147,7 @@ class Exporter(private val context: Context) {
         exif: ExifMetadata?,
         hdrGainMap: Boolean,
         dateStamp: String,
+        dateStampStyle: DateStampStyle,
         pentax645: Pentax645Info?,
         monochrome: Boolean,
         onProgress: (Float) -> Unit,
@@ -158,7 +160,7 @@ class Exporter(private val context: Context) {
             else JpegNative.begin(it.fd, outSize.first, outSize.second, quality)
             try {
                 app1?.let { bytes -> JpegNative.writeExif(handle, bytes) }
-                renderOutput(image, params, size, sharpen, dateStamp, pentax645, monochrome, onProgress) { _, rows, band -> JpegNative.writeRows(handle, band, rows) }
+                renderOutput(image, params, size, sharpen, dateStamp, dateStampStyle, pentax645, monochrome, onProgress) { _, rows, band -> JpegNative.writeRows(handle, band, rows) }
             } catch (t: Throwable) {
                 JpegNative.abort(handle)
                 throw t
@@ -177,6 +179,7 @@ class Exporter(private val context: Context) {
         exif: ExifMetadata?,
         sharpen: Float,
         dateStamp: String,
+        dateStampStyle: DateStampStyle,
         pentax645: Pentax645Info?,
         monochrome: Boolean,
         onProgress: (Float) -> Unit,
@@ -186,7 +189,7 @@ class Exporter(private val context: Context) {
         pfd.use {
             // The stream doesn't own the descriptor; closing pfd closes it.
             val writer = TiffWriter(FileOutputStream(it.fileDescriptor).channel, outSize.first, outSize.second, bits, exif)
-            renderOutput(image, params, size, sharpen, dateStamp, pentax645, monochrome, onProgress) { _, rows, band -> writer.writeRows(band, rows) }
+            renderOutput(image, params, size, sharpen, dateStamp, dateStampStyle, pentax645, monochrome, onProgress) { _, rows, band -> writer.writeRows(band, rows) }
             writer.finish()
         }
     }
@@ -202,6 +205,7 @@ class Exporter(private val context: Context) {
         size: Pair<Int, Int>,
         sharpen: Float,
         dateStamp: String = "",
+        dateStampStyle: DateStampStyle = DateStampStyle.CLASSIC,
         pentax645: Pentax645Info? = null,
         monochrome: Boolean = false,
         onProgress: (Float) -> Unit,
@@ -219,7 +223,7 @@ class Exporter(private val context: Context) {
                 consume(layout.topPad + y, rows, framedBand)
             }
             dateStamp.isNotEmpty() -> { y, rows, band ->
-                DateStamp.imprint(band, size.first, size.second, y, rows, dateStamp, monochrome)
+                DateStamp.imprint(band, size.first, size.second, y, rows, dateStamp, monochrome, dateStampStyle)
                 consume(y, rows, band)
             }
             else -> consume
