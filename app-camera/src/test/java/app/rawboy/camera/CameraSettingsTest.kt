@@ -2,10 +2,16 @@ package app.rawboy.camera
 
 import app.rawboy.develop.DevelopParams
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Test
 
 class CameraSettingsTest {
+    @Test
+    fun defaultsHaveDateStampDisabled() {
+        assertFalse(CameraSettings().dateStamp)
+    }
+
     @Test
     fun samsungGetsTheIspLook() {
         val base = DevelopParams()

@@ -1243,6 +1243,12 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             checked = settings.hdrGainMap,
             onChange = vm::setHdrGainMap,
         )
+        SettingSwitch(
+            title = "Date stamp",
+            subtitle = "Imprint today's date ('YY MM DD) in the corner of each photo",
+            checked = settings.dateStamp,
+            onChange = vm::setDateStamp,
+        )
 
         SettingsSection("Capture")
         SettingChoice(

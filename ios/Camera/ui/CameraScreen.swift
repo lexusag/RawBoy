@@ -648,6 +648,8 @@ private struct SettingsSheet: View {
                         Text("ProRAW: cleaner in low light").tag(RawFormat.proRaw)
                         Text("RAW: single exposure").tag(RawFormat.bayer)
                     }
+                    row("Date stamp", "Imprint today's date ('YY MM DD) in the corner of each photo",
+                        Binding(get: { vm.settings.dateStamp }, set: vm.setDateStamp))
                 }
                 Section("Capture") {
                     // Where the law requires the click, iOS plays it anyway: shown on and locked.

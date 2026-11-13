@@ -20,10 +20,10 @@ final class BandDownscaler {
     private let handle: OpaquePointer
     private var out: [UInt16]
     private var outY = 0
-    private let emit: (Int, Int, UnsafePointer<UInt16>) throws -> Void
+    private let emit: (Int, Int, UnsafeMutablePointer<UInt16>) throws -> Void
 
     init(inWidth: Int, inHeight: Int, outWidth: Int, outHeight: Int, maxRowsPerPush: Int, sharpen: Float = 0,
-         emit: @escaping (Int, Int, UnsafePointer<UInt16>) throws -> Void) {
+         emit: @escaping (Int, Int, UnsafeMutablePointer<UInt16>) throws -> Void) {
         precondition((1...inWidth).contains(outWidth) && (1...inHeight).contains(outHeight), "only downscaling")
         self.outWidth = outWidth
         self.outHeight = outHeight
@@ -49,7 +49,7 @@ final class BandDownscaler {
 
     private func emitRows(_ rows: Int) throws {
         if rows == 0 { return }
-        try out.withUnsafeBufferPointer { try emit(outY, rows, $0.baseAddress!) }
+        try out.withUnsafeMutableBufferPointer { try emit(outY, rows, $0.baseAddress!) }
         outY += rows
     }
 

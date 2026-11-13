@@ -1,3 +1,7 @@
+**RawBoy Camera (Android, iOS): film-style date stamp option, off by default (2026-11-13)**
+
+- New Settings switch **Date stamp** in the Photo section, off by default. When turned on, each exported JPEG gets today's (the shot's) date imprinted in classic 35mm data-back format (`'YY MM DD`, e.g. `'26 11 13`) in the bottom-right corner, drawn in a slanted 7-segment clock font in yellowy-orange (`#FFB81A` with a warm orange halo). Checked by unit tests (`DateStampTest`, `CameraSettingsTest`), Android debug build, and iOS `xcodebuild` (`RawBoyCamera`); not yet run on a physical device.
+
 **RawBoy Camera (Android, iOS): the Level line always follows the horizon (2026-11-13)**
 
 - The level line is no longer affected by the app's own orientation (or auto-rotate being off). Previously, the tilt angle was wrapped modulo 90° and drawn in window coordinates, so turning the phone past 45° with auto-rotate off flipped the line perpendicular to the horizon, and turning with auto-rotate on jumped it twice (at 45° and again when the window rotated). Now `CameraViewModel` reports the continuous unwrapped angle from upright portrait with deadband around every 90° upright, and `LevelOverlay` is drawn in the fixed upright viewfinder coordinates (`turned`) with its reference marks aligned to the nearest 90° axis. Checked by unit tests (`TiltFilterTest`) and Android debug compilation; iOS not built here, and neither app was run on a device.

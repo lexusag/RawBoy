@@ -90,12 +90,12 @@ class Exporter(private val context: Context) {
                     // jpegli writes the EXIF as it starts the file: no rewrite of the finished JPEG.
                     val exif = source?.let { readExif(it) ?: ExifMetadata() }
                         ?.let { if (settings.description.isBlank()) it else it.copy(description = settings.description) }
-                    writeJpegli(image, uri, params, size, settings.jpegQuality, settings.downscaleSharpen, exif, settings.hdrGainMap, onProgress)
+                    writeJpegli(image, uri, params, size, settings.jpegQuality, settings.downscaleSharpen, exif, settings.hdrGainMap, settings.dateStamp, onProgress)
                 } else {
-                    writeJpeg(image, uri, params, size, settings.jpegQuality, settings.downscaleSharpen, onProgress)
+                    writeJpeg(image, uri, params, size, settings.jpegQuality, settings.downscaleSharpen, settings.dateStamp, onProgress)
                 }
                 ExportFormat.TIFF -> writeTiff(image, uri, params, size, settings.tiffBits, source?.let(::readExif)
-                    ?.let { if (settings.description.isBlank()) it else it.copy(description = settings.description) }, settings.downscaleSharpen, onProgress)
+                    ?.let { if (settings.description.isBlank()) it else it.copy(description = settings.description) }, settings.downscaleSharpen, settings.dateStamp, onProgress)
             }
             val t = System.nanoTime()
             if (settings.format == ExportFormat.JPEG && settings.jpegEncoder != JpegEncoder.JPEGLI && source != null) copyExif(source, uri)
@@ -108,12 +108,12 @@ class Exporter(private val context: Context) {
         }
     }
 
-    private fun writeJpeg(image: RawImage, uri: Uri, params: ShaderParams, size: Pair<Int, Int>, quality: Int, sharpen: Float, onProgress: (Float) -> Unit) {
+    private fun writeJpeg(image: RawImage, uri: Uri, params: ShaderParams, size: Pair<Int, Int>, quality: Int, sharpen: Float, dateStamp: String, onProgress: (Float) -> Unit) {
         val w = size.first
         val bitmap = Bitmap.createBitmap(w, size.second, Bitmap.Config.ARGB_8888)
         try {
             var argb = IntArray(0)
-            renderOutput(image, params, size, sharpen, onProgress) { y, rows, band ->
+            renderOutput(image, params, size, sharpen, dateStamp, onProgress) { y, rows, band ->
                 val n = w * rows
                 if (argb.size < n) argb = IntArray(n)
                 for (i in 0 until n) {
@@ -140,6 +140,7 @@ class Exporter(private val context: Context) {
         sharpen: Float,
         exif: ExifMetadata?,
         hdrGainMap: Boolean,
+        dateStamp: String,
         onProgress: (Float) -> Unit,
     ) {
         // Laid out before the encoder starts; metadata is best effort, as copyExif's was.
@@ -150,7 +151,7 @@ class Exporter(private val context: Context) {
             else JpegNative.begin(it.fd, size.first, size.second, quality)
             try {
                 app1?.let { bytes -> JpegNative.writeExif(handle, bytes) }
-                renderOutput(image, params, size, sharpen, onProgress) { _, rows, band -> JpegNative.writeRows(handle, band, rows) }
+                renderOutput(image, params, size, sharpen, dateStamp, onProgress) { _, rows, band -> JpegNative.writeRows(handle, band, rows) }
             } catch (t: Throwable) {
                 JpegNative.abort(handle)
                 throw t
@@ -167,6 +168,7 @@ class Exporter(private val context: Context) {
         bits: Int,
         exif: ExifMetadata?,
         sharpen: Float,
+        dateStamp: String,
         onProgress: (Float) -> Unit,
     ) {
         // Read-write: the header goes in last, in front of the compressed strips.
@@ -174,7 +176,7 @@ class Exporter(private val context: Context) {
         pfd.use {
             // The stream doesn't own the descriptor; closing pfd closes it.
             val writer = TiffWriter(FileOutputStream(it.fileDescriptor).channel, size.first, size.second, bits, exif)
-            renderOutput(image, params, size, sharpen, onProgress) { _, rows, band -> writer.writeRows(band, rows) }
+            renderOutput(image, params, size, sharpen, dateStamp, onProgress) { _, rows, band -> writer.writeRows(band, rows) }
             writer.finish()
         }
     }
@@ -189,18 +191,23 @@ class Exporter(private val context: Context) {
         params: ShaderParams,
         size: Pair<Int, Int>,
         sharpen: Float,
+        dateStamp: String = "",
         onProgress: (Float) -> Unit,
         consume: (y: Int, rows: Int, band: ShortArray) -> Unit,
     ) {
         val w = params.lens.outputWidth
         val h = params.lens.outputHeight
-        if (scan) return renderBands(image, params, 1f, ScanScale.SCALE, onProgress, consume)
-        if (size.first == w && size.second == h) return renderBands(image, params, 1f, 1f, onProgress, consume)
+        val stamped: (Int, Int, ShortArray) -> Unit = if (dateStamp.isEmpty()) consume else { y, rows, band ->
+            DateStamp.imprint(band, size.first, size.second, y, rows, dateStamp)
+            consume(y, rows, band)
+        }
+        if (scan) return renderBands(image, params, 1f, ScanScale.SCALE, onProgress, stamped)
+        if (size.first == w && size.second == h) return renderBands(image, params, 1f, 1f, onProgress, stamped)
         var encodeNs = 0L
         var scaleNs = 0L
         BandDownscaler(w, h, size.first, size.second, TILE_HEIGHT, sharpen) { y, rows, band ->
             val t = System.nanoTime()
-            consume(y, rows, band)
+            stamped(y, rows, band)
             encodeNs += System.nanoTime() - t
         }.use { scaler ->
             // A grain cell at least one output pixel, as a full-size render of the smaller image would have.

@@ -72,6 +72,8 @@ data class CameraSettings(
     val geotag: Boolean = false,
     /** Save the JPEG as an Ultra HDR JPEG: the same picture plus a gain map that lets HDR screens show brighter highlights (`ultrahdr.h`). */
     val hdrGainMap: Boolean = false,
+    /** Imprint the shot's date ('YY MM DD) in a yellow-orange clock font in the bottom-right corner of the JPEG. Off by default. */
+    val dateStamp: Boolean = false,
     /** Look for QR codes in the viewfinder and offer to open them, as the phone's own camera does. */
     val scanQr: Boolean = true,
     /** After a tap, keep focus on what was tapped as it moves (CameraViewModel's tracker); off = the focus stays put. */
@@ -274,6 +276,7 @@ object CameraSettingsStore {
             shutterSound = p.getBoolean("shutterSound", d.shutterSound),
             geotag = p.getBoolean("geotag", d.geotag),
             hdrGainMap = p.getBoolean("hdrGainMap", d.hdrGainMap),
+            dateStamp = p.getBoolean("dateStamp", d.dateStamp),
             scanQr = p.getBoolean("scanQr", d.scanQr),
             trackFocus = p.getBoolean("trackFocus", d.trackFocus),
             experimental = p.getBoolean("experimental", d.experimental),
@@ -340,6 +343,7 @@ object CameraSettingsStore {
             .putBoolean("shutterSound", s.shutterSound)
             .putBoolean("geotag", s.geotag)
             .putBoolean("hdrGainMap", s.hdrGainMap)
+            .putBoolean("dateStamp", s.dateStamp)
             .putBoolean("scanQr", s.scanQr)
             .putBoolean("trackFocus", s.trackFocus)
             .putBoolean("experimental", s.experimental)
