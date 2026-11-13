@@ -85,7 +85,7 @@ public enum DateStampStyle: String, CaseIterable, Sendable {
     }
 }
 
-/** Time format for the Pentax 645 shoot-info imprint (`24h` by default, or `12h (am/pm)`). */
+/** Time format for the Pentax 645 / Contax 645 shoot-info imprint (`24h` by default, or `12h (AM/PM)`). */
 public enum TimeStampFormat: String, CaseIterable, Sendable {
     case h24 = "H24"
     case h12 = "H12"
@@ -93,7 +93,7 @@ public enum TimeStampFormat: String, CaseIterable, Sendable {
     public var label: String {
         switch self {
         case .h24: "24h"
-        case .h12: "12h (am/pm)"
+        case .h12: "12h (AM/PM)"
         }
     }
 }
@@ -587,7 +587,7 @@ public enum Pentax645Frame {
             return String(format: "%02d:%02d", hour24, minute)
         case .h12:
             let hour12 = hour24 % 12 == 0 ? 12 : hour24 % 12
-            let amPm = hour24 < 12 ? "am" : "pm"
+            let amPm = hour24 < 12 ? "AM" : "PM"
             return String(format: "%d:%02d%@", hour12, minute, amPm)
         }
     }
@@ -973,7 +973,7 @@ public enum Pentax645Frame {
                         let ramp = infoBar * (0.28 + 0.12 * hash(cornerSeed, 202))
                         let t = min(max((xFromEdge - cutoutEnd) / ramp, 0), 1)
                         let baseDepth = gateInset * t * t * (3 - 2 * t)
-                        let wobble = gateImperfection(xc, infoBar: infoBar, seed: cornerSeed * 17 + 7) * gateInset * 0.45 * t
+                        let wobble = gateImperfection(xc, infoBar: infoBar, seed: cornerSeed * 17 + 7) * gateInset * 0.22 * t
                         let edgeDepth = max(0, baseDepth + wobble)
                         if edgeDepth > 0.01 {
                             mask = max(mask, gateMask(yFromEdge - edgeDepth, softEdge: softEdge))
@@ -982,7 +982,7 @@ public enum Pentax645Frame {
 
                     if Int(xFromEdge) < sideSpan {
                         let sideSeed = isLeft ? 31 : 53
-                        let sideDepth = max(0, sideInset * (0.75 + 0.65 * gateImperfection(yc, infoBar: infoBar, seed: sideSeed)))
+                        let sideDepth = max(0, sideInset * (0.85 + 0.25 * gateImperfection(yc, infoBar: infoBar, seed: sideSeed)))
                         mask = max(mask, gateMask(xFromEdge - sideDepth, softEdge: softEdge))
 
                         if yFromEdge < cornerR && xFromEdge < cornerR {
@@ -1112,11 +1112,9 @@ public enum Pentax645Frame {
     }
 
     private static func gateImperfection(_ pos: Float, infoBar: Float, seed: Int) -> Float {
-        let slow = smoothNoise1D(pos / max(6, infoBar * 0.65), seed: seed) - 0.5
-        let med = smoothNoise1D(pos / max(2, infoBar * 0.16), seed: seed + 101) - 0.5
-        let fine = smoothNoise1D(pos / max(1.5, infoBar * 0.05), seed: seed + 203)
-        let nib: Float = fine > 0.86 ? (fine - 0.86) * 3.5 : 0
-        return slow * 0.8 + med * 0.6 + nib
+        let slow = smoothNoise1D(pos / max(12, infoBar * 1.4), seed: seed) - 0.5
+        let med = smoothNoise1D(pos / max(5, infoBar * 0.45), seed: seed + 101) - 0.5
+        return slow * 0.45 + med * 0.25
     }
 
     private static func smoothNoise1D(_ x: Float, seed: Int) -> Float {
@@ -1170,6 +1168,7 @@ public enum Pentax645Frame {
         case "7": return [0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b01000, 0b01000]
         case "8": return [0b01110, 0b10001, 0b10001, 0b01110, 0b10001, 0b10001, 0b01110]
         case "9": return [0b01110, 0b10001, 0b10001, 0b01111, 0b00001, 0b00010, 0b01100]
+        case "A": return [0b01110, 0b10001, 0b10001, 0b11111, 0b10001, 0b10001, 0b10001]
         case "B": return [0b11110, 0b10001, 0b10001, 0b11110, 0b10001, 0b10001, 0b11110]
         case "E": return [0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b11111]
         case "F": return [0b11111, 0b10000, 0b10000, 0b11110, 0b10000, 0b10000, 0b10000]
@@ -1178,6 +1177,7 @@ public enum Pentax645Frame {
         case "L": return [0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b10000, 0b11111]
         case "M": return [0b10001, 0b11011, 0b10101, 0b10101, 0b10001, 0b10001, 0b10001]
         case "O": return [0b01110, 0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01110]
+        case "P": return [0b11110, 0b10001, 0b10001, 0b11110, 0b10000, 0b10000, 0b10000]
         case "S": return [0b01111, 0b10000, 0b10000, 0b01110, 0b00001, 0b00001, 0b11110]
         case "V": return [0b10001, 0b10001, 0b10001, 0b10001, 0b10001, 0b01010, 0b00100]
         case "W": return [0b10001, 0b10001, 0b10001, 0b10101, 0b10101, 0b11011, 0b10001]
