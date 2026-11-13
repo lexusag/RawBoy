@@ -62,7 +62,7 @@ object Pentax645Frame {
     }
 
     fun formatFrameNumber(frameNumber: Int): String =
-        if (frameNumber > 0) frameNumber.toString() else "--"
+        if (frameNumber > 0) "#$frameNumber" else "#--"
 
     fun formatShutter(t: Double): String {
         if (!t.isFinite() || t <= 0.0) return "---"
@@ -567,6 +567,7 @@ object Pentax645Frame {
         '.' -> intArrayOf(0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b00100, 0b00100)
         ':' -> intArrayOf(0b00000, 0b00100, 0b00100, 0b00000, 0b00100, 0b00100, 0b00000)
         '\'' -> intArrayOf(0b00100, 0b00100, 0b01000, 0b00000, 0b00000, 0b00000, 0b00000)
+        '#' -> intArrayOf(0b01010, 0b01010, 0b11111, 0b01010, 0b11111, 0b01010, 0b01010)
         '+' -> intArrayOf(0b00000, 0b00100, 0b00100, 0b11111, 0b00100, 0b00100, 0b00000)
         '-' -> intArrayOf(0b00000, 0b00000, 0b00000, 0b11111, 0b00000, 0b00000, 0b00000)
         '±' -> intArrayOf(0b00100, 0b00100, 0b11111, 0b00100, 0b00100, 0b00000, 0b11111)

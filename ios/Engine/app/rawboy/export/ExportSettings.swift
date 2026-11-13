@@ -340,7 +340,7 @@ public enum Pentax645Frame {
     }
 
     public static func formatFrameNumber(_ frameNumber: Int) -> String {
-        frameNumber > 0 ? String(frameNumber) : "--"
+        frameNumber > 0 ? "#\(frameNumber)" : "#--"
     }
 
     public static func formatShutter(_ t: Double) -> String {
@@ -789,6 +789,7 @@ public enum Pentax645Frame {
         case ".": return [0b00000, 0b00000, 0b00000, 0b00000, 0b00000, 0b00100, 0b00100]
         case ":": return [0b00000, 0b00100, 0b00100, 0b00000, 0b00100, 0b00100, 0b00000]
         case "'": return [0b00100, 0b00100, 0b01000, 0b00000, 0b00000, 0b00000, 0b00000]
+        case "#": return [0b01010, 0b01010, 0b11111, 0b01010, 0b11111, 0b01010, 0b01010]
         case "+": return [0b00000, 0b00100, 0b00100, 0b11111, 0b00100, 0b00100, 0b00000]
         case "-": return [0b00000, 0b00000, 0b00000, 0b11111, 0b00000, 0b00000, 0b00000]
         case "±": return [0b00100, 0b00100, 0b11111, 0b00100, 0b00100, 0b00000, 0b11111]

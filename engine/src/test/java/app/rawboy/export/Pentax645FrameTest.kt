@@ -8,8 +8,9 @@ import org.junit.Test
 class Pentax645FrameTest {
     @Test
     fun formattersMatchPentax645Conventions() {
-        assertEquals("3", Pentax645Frame.formatFrameNumber(3))
-        assertEquals("--", Pentax645Frame.formatFrameNumber(0))
+        assertEquals("#3", Pentax645Frame.formatFrameNumber(3))
+        assertEquals("#17", Pentax645Frame.formatFrameNumber(17))
+        assertEquals("#--", Pentax645Frame.formatFrameNumber(0))
 
         assertEquals("1/125", Pentax645Frame.formatShutter(1.0 / 125.0))
         assertEquals("2.5s", Pentax645Frame.formatShutter(2.5))

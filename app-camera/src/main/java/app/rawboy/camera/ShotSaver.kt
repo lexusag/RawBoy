@@ -453,7 +453,7 @@ internal object ShotSaver {
                         mode = if (Pentax645Field.MODE in fields) mode else null,
                         exposureTime = if (Pentax645Field.SHUTTER in fields) info.exposureTime else null,
                         fNumber = if (Pentax645Field.APERTURE in fields) info.fNumber else null,
-                        compensationEv = if (Pentax645Field.EXPOSURE_COMP in fields) shot.compensationEv else null,
+                        compensationEv = if (Pentax645Field.EXPOSURE_COMP in fields) s.exposureCompensationEv else null,
                         spotMetered = if (Pentax645Field.METERING in fields) shot.meter is MeterArea.Spot else null,
                         focalLengthMm = if (Pentax645Field.FOCAL_LENGTH in fields) focalMm else null,
                         iso = if (Pentax645Field.ISO in fields) isoVal else null,

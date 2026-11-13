@@ -209,6 +209,9 @@ data class CameraSettings(
         )
     }
 
+    /** Exposure compensation (EV) set by the Brightness slider (`brightness` in -100..+100 -> -3.0..+3.0 EV). */
+    val exposureCompensationEv: Float get() = brightness / 100f * LookApplier.BRIGHTNESS_EV
+
     /** The long side to save at, or null for full size. */
     val maxLongSide: Int? get() = if (smallExport) SMALL_LONG_SIDE else null
 

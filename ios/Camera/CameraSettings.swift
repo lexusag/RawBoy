@@ -190,6 +190,9 @@ struct CameraSettings: Equatable {
     static let lookContrast: Float = 6
     static let lookSaturation: Float = 8
 
+    /** Exposure compensation (EV) set by the Brightness slider (`brightness` in -100..+100 -> -3.0..+3.0 EV). */
+    var exposureCompensationEv: Float { brightness / 100 * LookApplier.brightnessEv }
+
     /** The long side to save at, or nil for full size. */
     var maxLongSide: Int? { smallExport ? Self.smallLongSide : nil }
 
