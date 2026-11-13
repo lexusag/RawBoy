@@ -3,16 +3,17 @@ package app.rawboy.export
 import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
+import kotlin.math.abs
 import kotlin.math.exp
-import kotlin.math.hypot
 import kotlin.math.roundToInt
 
 /**
- * Imprints a 35mm film data-back date (`'YY MM DD`) in the bottom-right corner of an exported image, rendered the way
- * a quartz date back does it: orange LED segments shining through the film base onto the emulsion. So the digits are
- * light added to the picture (they show on dark areas and fade into bright ones), soft-edged (the LEDs sit behind the
- * base, out of focus), with a hot yellow core that falls off to red-orange at the fringes, a reddish halation glow,
- * slightly uneven segment brightness and grain. Same output as `DateStamp` in ios/Engine ExportSettings.swift.
+ * Imprints a 35mm film data-back date (`'YY MM DD`) in the bottom-right corner of an exported image, using a
+ * Digital-7 style chamfered 7-segment clock geometry rendered the way a quartz date back exposes film: orange LED
+ * segments shining through the film base onto the emulsion. So the digits are light added to the picture (they show on
+ * dark areas and fade into bright ones), slightly soft-edged, with a hot yellow core that falls off to red-orange at
+ * the fringes, a subtle reddish halation glow, slightly uneven segment brightness and grain. Same output as `DateStamp`
+ * in ios/Engine ExportSettings.swift.
  */
 object DateStamp {
 
@@ -33,6 +34,7 @@ object DateStamp {
     private const val LED_G = 0.42f
     private const val LED_B = 0.035f
     private const val GAIN = 3f
+    private const val INV_SQRT2 = 0.70710678f
 
     /** How much the stamp still darkens blue where the picture is already bright, so it reads (faintly) on a sky. */
     private const val BLUE_ABSORB = 0.55f
@@ -46,9 +48,9 @@ object DateStamp {
 
         val shortSide = minOf(width, height).toFloat()
         val charH = (shortSide * 0.028f).coerceAtLeast(14f)
-        val charW = charH * 0.56f
-        val thick = charH * 0.14f
-        val gap = charH * 0.24f
+        val charW = charH * 0.52f
+        val thick = charH * 0.115f
+        val gap = charH * 0.22f
         val tickAdv = charW * 0.35f
 
         val count = text.length
@@ -70,7 +72,7 @@ object DateStamp {
 
         val x0 = width - shortSide * 0.055f - totalW
         val y0 = height - shortSide * 0.050f - charH
-        val reach = thick * 3f // the halation's extent
+        val reach = thick * 2.2f // the halation's extent
         val slant = 0.14f
         val slantMaxShift = charH * 0.5f * slant
 
@@ -81,12 +83,12 @@ object DateStamp {
         val maxX = (x0 + totalW + reach + slantMaxShift).toInt().coerceAtMost(width - 1)
         if (minX > maxX) return
 
-        val segGap = thick * 0.6f
         val halfH = charH * 0.5f
         val halfThick = thick * 0.5f
-        // Out-of-focus LED: the segment edge is a soft ramp, not a pixel-sharp line.
-        val soft = maxOf(thick * 0.6f, 1f)
-        val haloInv = 1f / (thick * 1.3f)
+        val segGap = thick * 0.22f
+        // Slightly out-of-focus LED: soft segment edge with halved halation glow.
+        val soft = maxOf(thick * 0.45f, 0.8f)
+        val haloInv = 1f / (thick * 0.9f)
         val grainCell = maxOf(1f, thick * 0.22f)
 
         val rowStart = maxOf(bandY, minY)
@@ -108,20 +110,20 @@ object DateStamp {
                     if (ux < cx - reach || ux > cx + cw + reach) continue
                     val lx = ux - cx
                     if (tick) {
-                        val d = distToSegment(lx, vy, cw * 0.5f, charH * 0.04f, cw * 0.5f, charH * 0.38f)
+                        val d = distVBar(lx, vy, cw * 0.5f, charH * 0.21f, charH * 0.17f, halfThick)
                         if (d < minDist) minDist = d
-                        core = maxOf(core, ledBrightness(i, 7) * edge(d, halfThick, soft))
+                        core = maxOf(core, ledBrightness(i, 7) * edge(d, soft))
                         continue
                     }
                     for (s in 0 until 7) {
                         if ((m shr s) and 1 == 0) continue
-                        val d = distToDigitSegment(s, lx, vy, cw, charH, halfH, segGap)
+                        val d = distToDigitSegment(s, lx, vy, cw, charH, halfH, halfThick, segGap)
                         if (d < minDist) minDist = d
-                        core = maxOf(core, ledBrightness(i, s) * edge(d, halfThick, soft))
+                        core = maxOf(core, ledBrightness(i, s) * edge(d, soft))
                     }
                 }
-                val excess = (minDist - halfThick).coerceAtLeast(0f) * haloInv
-                val halo = 0.35f * exp(-excess * excess)
+                val excess = minDist.coerceAtLeast(0f) * haloInv
+                val halo = 0.175f * exp(-excess * excess)
                 if (core <= 0.002f && halo < 0.004f) continue
 
                 // Grain: the exposure varies a little from clump to clump, as it does in the emulsion.
@@ -144,9 +146,9 @@ object DateStamp {
         }
     }
 
-    /** Soft segment edge: 1 inside, easing to 0 across [soft] pixels around the segment's outline. */
-    private fun edge(d: Float, halfThick: Float, soft: Float): Float {
-        val t = ((halfThick + soft * 0.5f - d) / soft).coerceIn(0f, 1f)
+    /** Soft segment edge: 1 inside (`d <= -soft/2`), easing to 0 across [soft] pixels around the boundary (`d == 0`). */
+    private fun edge(d: Float, soft: Float): Float {
+        val t = ((soft * 0.5f - d) / soft).coerceIn(0f, 1f)
         return t * t * (3f - 2f * t)
     }
 
@@ -168,25 +170,42 @@ object DateStamp {
         else -> 0
     }
 
-    /** Distance to segment [s] (a..g = 0..6) of a digit cell [w] x [h]. */
-    private fun distToDigitSegment(s: Int, x: Float, y: Float, w: Float, h: Float, halfH: Float, segGap: Float): Float =
-        when (s) {
-            0 -> distToSegment(x, y, segGap, 0f, w - segGap, 0f)
-            1 -> distToSegment(x, y, w, segGap, w, halfH - segGap * 0.5f)
-            2 -> distToSegment(x, y, w, halfH + segGap * 0.5f, w, h - segGap)
-            3 -> distToSegment(x, y, segGap, h, w - segGap, h)
-            4 -> distToSegment(x, y, 0f, halfH + segGap * 0.5f, 0f, h - segGap)
-            5 -> distToSegment(x, y, 0f, segGap, 0f, halfH - segGap * 0.5f)
-            else -> distToSegment(x, y, segGap, halfH, w - segGap, halfH)
+    /** Signed distance to Digital-7 style chamfered segment [s] (a..g = 0..6) of a digit cell [w] x [h]. */
+    private fun distToDigitSegment(
+        s: Int,
+        x: Float,
+        y: Float,
+        w: Float,
+        h: Float,
+        halfH: Float,
+        ht: Float,
+        segGap: Float,
+    ): Float {
+        val hx = w * 0.5f - segGap
+        val hy = (halfH - ht) * 0.5f - segGap
+        return when (s) {
+            0 -> distHBar(x, y, w * 0.5f, ht, hx, ht)
+            1 -> distVBar(x, y, w - ht, (ht + halfH) * 0.5f, hy, ht)
+            2 -> distVBar(x, y, w - ht, (halfH + h - ht) * 0.5f, hy, ht)
+            3 -> distHBar(x, y, w * 0.5f, h - ht, hx, ht)
+            4 -> distVBar(x, y, ht, (halfH + h - ht) * 0.5f, hy, ht)
+            5 -> distVBar(x, y, ht, (ht + halfH) * 0.5f, hy, ht)
+            else -> distHBar(x, y, w * 0.5f, halfH, hx, ht)
         }
+    }
 
-    private fun distToSegment(px: Float, py: Float, ax: Float, ay: Float, bx: Float, by: Float): Float {
-        val abx = bx - ax
-        val aby = by - ay
-        val lenSq = abx * abx + aby * aby
-        if (lenSq <= 0f) return hypot(px - ax, py - ay)
-        val t = (((px - ax) * abx + (py - ay) * aby) / lenSq).coerceIn(0f, 1f)
-        return hypot(px - (ax + t * abx), py - (ay + t * aby))
+    /** Signed distance to a 45°-chamfered horizontal 7-segment bar centered at ([cx], [cy]). */
+    private fun distHBar(x: Float, y: Float, cx: Float, cy: Float, hx: Float, ht: Float): Float {
+        val dx = abs(x - cx)
+        val dy = abs(y - cy)
+        return maxOf(dy - ht, (dx + dy - hx) * INV_SQRT2)
+    }
+
+    /** Signed distance to a 45°-chamfered vertical 7-segment bar centered at ([cx], [cy]). */
+    private fun distVBar(x: Float, y: Float, cx: Float, cy: Float, hy: Float, ht: Float): Float {
+        val dx = abs(x - cx)
+        val dy = abs(y - cy)
+        return maxOf(dx - ht, (dx + dy - hy) * INV_SQRT2)
     }
 
     /** Deterministic 0..1 hash of an integer pair (matches the Swift version bit for bit). */

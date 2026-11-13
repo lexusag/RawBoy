@@ -43,11 +43,12 @@ public struct ExportSettings: Equatable, Sendable {
 }
 
 /**
- * Imprints a 35mm film data-back date (`'YY MM DD`) in the bottom-right corner of an exported image, rendered the way
- * a quartz date back does it: orange LED segments shining through the film base onto the emulsion. So the digits are
- * light added to the picture (they show on dark areas and fade into bright ones), soft-edged (the LEDs sit behind the
- * base, out of focus), with a hot yellow core that falls off to red-orange at the fringes, a reddish halation glow,
- * slightly uneven segment brightness and grain. Same output as engine's DateStamp.kt.
+ * Imprints a 35mm film data-back date (`'YY MM DD`) in the bottom-right corner of an exported image, using a
+ * Digital-7 style chamfered 7-segment clock geometry rendered the way a quartz date back exposes film: orange LED
+ * segments shining through the film base onto the emulsion. So the digits are light added to the picture (they show on
+ * dark areas and fade into bright ones), slightly soft-edged, with a hot yellow core that falls off to red-orange at
+ * the fringes, a subtle reddish halation glow, slightly uneven segment brightness and grain. Same output as engine's
+ * DateStamp.kt.
  */
 public enum DateStamp {
     /** Formats [date] in classic film date-back order: `'YY MM DD` (for example `'26 11 13`). */
@@ -61,6 +62,7 @@ public enum DateStamp {
     private static let ledG: Float = 0.42
     private static let ledB: Float = 0.035
     private static let gain: Float = 3
+    private static let invSqrt2: Float = 0.70710678
     /** How much the stamp still darkens blue where the picture is already bright, so it reads (faintly) on a sky. */
     private static let blueAbsorb: Float = 0.55
 
@@ -74,9 +76,9 @@ public enum DateStamp {
 
         let shortSide = Float(min(width, height))
         let charH = max(14 as Float, shortSide * 0.028)
-        let charW = charH * 0.56
-        let thick = charH * 0.14
-        let gap = charH * 0.24
+        let charW = charH * 0.52
+        let thick = charH * 0.115
+        let gap = charH * 0.22
         let tickAdv = charW * 0.35
 
         let chars = Array(text)
@@ -99,7 +101,7 @@ public enum DateStamp {
 
         let x0 = Float(width) - shortSide * 0.055 - totalW
         let y0 = Float(height) - shortSide * 0.050 - charH
-        let reach = thick * 3  // the halation's extent
+        let reach = thick * 2.2  // the halation's extent
         let slant: Float = 0.14
         let slantMaxShift = charH * 0.5 * slant
 
@@ -110,12 +112,12 @@ public enum DateStamp {
         let maxX = min(width - 1, Int(x0 + totalW + reach + slantMaxShift))
         if minX > maxX { return }
 
-        let segGap = thick * 0.6
         let halfH = charH * 0.5
         let halfThick = thick * 0.5
-        // Out-of-focus LED: the segment edge is a soft ramp, not a pixel-sharp line.
-        let soft = max(thick * 0.6, 1)
-        let haloInv = 1 / (thick * 1.3)
+        let segGap = thick * 0.22
+        // Slightly out-of-focus LED: soft segment edge with halved halation glow.
+        let soft = max(thick * 0.45, 0.8)
+        let haloInv = 1 / (thick * 0.9)
         let grainCell = max(1, thick * 0.22)
 
         let rowStart = max(bandY, minY)
@@ -137,19 +139,19 @@ public enum DateStamp {
                     if ux < cx - reach || ux > cx + cw + reach { continue }
                     let lx = ux - cx
                     if tick {
-                        let d = distToSegment(lx, vy, cw * 0.5, charH * 0.04, cw * 0.5, charH * 0.38)
+                        let d = distVBar(lx, vy, cw * 0.5, charH * 0.21, charH * 0.17, halfThick)
                         if d < minDist { minDist = d }
-                        core = max(core, ledBrightness(i, 7) * edge(d, halfThick, soft))
+                        core = max(core, ledBrightness(i, 7) * edge(d, soft))
                         continue
                     }
                     for s in 0..<7 where (m >> s) & 1 != 0 {
-                        let d = distToDigitSegment(s, lx, vy, cw, charH, halfH, segGap)
+                        let d = distToDigitSegment(s, lx, vy, cw, charH, halfH, halfThick, segGap)
                         if d < minDist { minDist = d }
-                        core = max(core, ledBrightness(i, s) * edge(d, halfThick, soft))
+                        core = max(core, ledBrightness(i, s) * edge(d, soft))
                     }
                 }
-                let excess = max(minDist - halfThick, 0) * haloInv
-                let halo = 0.35 * exp(-excess * excess)
+                let excess = max(minDist, 0) * haloInv
+                let halo = 0.175 * exp(-excess * excess)
                 if core <= 0.002 && halo < 0.004 { continue }
 
                 // Grain: the exposure varies a little from clump to clump, as it does in the emulsion.
@@ -172,9 +174,9 @@ public enum DateStamp {
         }
     }
 
-    /** Soft segment edge: 1 inside, easing to 0 across [soft] pixels around the segment's outline. */
-    private static func edge(_ d: Float, _ halfThick: Float, _ soft: Float) -> Float {
-        let t = min(max((halfThick + soft * 0.5 - d) / soft, 0), 1)
+    /** Soft segment edge: 1 inside (`d <= -soft/2`), easing to 0 across [soft] pixels around the boundary (`d == 0`). */
+    private static func edge(_ d: Float, _ soft: Float) -> Float {
+        let t = min(max((soft * 0.5 - d) / soft, 0), 1)
         return t * t * (3 - 2 * t)
     }
 
@@ -198,27 +200,34 @@ public enum DateStamp {
         }
     }
 
-    /** Distance to segment [s] (a..g = 0..6) of a digit cell [w] x [h]. */
+    /** Signed distance to Digital-7 style chamfered segment [s] (a..g = 0..6) of a digit cell [w] x [h]. */
     private static func distToDigitSegment(_ s: Int, _ x: Float, _ y: Float, _ w: Float, _ h: Float,
-                                           _ halfH: Float, _ segGap: Float) -> Float {
+                                           _ halfH: Float, _ ht: Float, _ segGap: Float) -> Float {
+        let hx = w * 0.5 - segGap
+        let hy = (halfH - ht) * 0.5 - segGap
         switch s {
-        case 0: distToSegment(x, y, segGap, 0, w - segGap, 0)
-        case 1: distToSegment(x, y, w, segGap, w, halfH - segGap * 0.5)
-        case 2: distToSegment(x, y, w, halfH + segGap * 0.5, w, h - segGap)
-        case 3: distToSegment(x, y, segGap, h, w - segGap, h)
-        case 4: distToSegment(x, y, 0, halfH + segGap * 0.5, 0, h - segGap)
-        case 5: distToSegment(x, y, 0, segGap, 0, halfH - segGap * 0.5)
-        default: distToSegment(x, y, segGap, halfH, w - segGap, halfH)
+        case 0: return distHBar(x, y, w * 0.5, ht, hx, ht)
+        case 1: return distVBar(x, y, w - ht, (ht + halfH) * 0.5, hy, ht)
+        case 2: return distVBar(x, y, w - ht, (halfH + h - ht) * 0.5, hy, ht)
+        case 3: return distHBar(x, y, w * 0.5, h - ht, hx, ht)
+        case 4: return distVBar(x, y, ht, (halfH + h - ht) * 0.5, hy, ht)
+        case 5: return distVBar(x, y, ht, (ht + halfH) * 0.5, hy, ht)
+        default: return distHBar(x, y, w * 0.5, halfH, hx, ht)
         }
     }
 
-    private static func distToSegment(_ px: Float, _ py: Float, _ ax: Float, _ ay: Float, _ bx: Float, _ by: Float) -> Float {
-        let abx = bx - ax
-        let aby = by - ay
-        let lenSq = abx * abx + aby * aby
-        if lenSq <= 0 { return hypot(px - ax, py - ay) }
-        let t = min(max(((px - ax) * abx + (py - ay) * aby) / lenSq, 0), 1)
-        return hypot(px - (ax + t * abx), py - (ay + t * aby))
+    /** Signed distance to a 45°-chamfered horizontal 7-segment bar centered at ([cx], [cy]). */
+    private static func distHBar(_ x: Float, _ y: Float, _ cx: Float, _ cy: Float, _ hx: Float, _ ht: Float) -> Float {
+        let dx = abs(x - cx)
+        let dy = abs(y - cy)
+        return max(dy - ht, (dx + dy - hx) * invSqrt2)
+    }
+
+    /** Signed distance to a 45°-chamfered vertical 7-segment bar centered at ([cx], [cy]). */
+    private static func distVBar(_ x: Float, _ y: Float, _ cx: Float, _ cy: Float, _ hy: Float, _ ht: Float) -> Float {
+        let dx = abs(x - cx)
+        let dy = abs(y - cy)
+        return max(dx - ht, (dx + dy - hy) * invSqrt2)
     }
 
     /** Deterministic 0..1 hash of an integer pair (matches the Kotlin version bit for bit). */
