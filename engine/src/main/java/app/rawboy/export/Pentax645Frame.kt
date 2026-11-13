@@ -582,7 +582,37 @@ object Pentax645Frame {
                 sampleRebatePixel(px, py, 0f, 0f, null, grainCell, monochrome, color, dst, (dstRow + px) * 3)
             }
 
-            if (!isPentax) continue
+            if (!isPentax) {
+                val gateInset = maxOf(2f, infoBar * 0.11f)
+                val yc = y + 0.5f
+                val isTop = yc < ph * 0.5f
+                val yFromEdge = if (isTop) yc else (ph - yc)
+                if (yFromEdge < gateInset * 1.4f + 2f) {
+                    val noisePeriod = maxOf(4f, infoBar * 0.45f)
+                    for (x in 0 until pw) {
+                        val xc = x + 0.5f
+                        val isLeft = xc < pw * 0.5f
+                        val distFromEnd = if (isLeft) xc else (pw - xc)
+                        val cornerSeed = (if (isTop) 0 else 2) + (if (isLeft) 0 else 1)
+                        val cutoutEnd = infoBar * (1.15f + 0.35f * hash(cornerSeed, 101))
+                        if (distFromEnd < cutoutEnd) continue
+                        val ramp = infoBar * (0.28f + 0.12f * hash(cornerSeed, 202))
+                        val t = ((distFromEnd - cutoutEnd) / ramp).coerceIn(0f, 1f)
+                        val baseDepth = gateInset * t * t * (3f - 2f * t)
+                        val wobble = (smoothNoise1D(xc / noisePeriod, cornerSeed * 17 + 7) - 0.5f) * gateInset * 0.35f * t
+                        val edgeDepth = (baseDepth + wobble).coerceAtLeast(0f)
+                        if (edgeDepth <= 0.01f) continue
+                        val d = yFromEdge - edgeDepth
+                        if (d >= 0.6f) continue
+                        val mask = ((0.6f - d) / 1.2f).coerceIn(0f, 1f).let { it * it * (3f - 2f * it) }
+                        val px = leftPad + x
+                        val idx = (dstRow + px) * 3
+                        sampleRebatePixel(px, py, 0f, 0f, null, grainCell, monochrome, color, tmp, 0)
+                        blendPixel(dst, idx, tmp, mask)
+                    }
+                }
+                continue
+            }
 
             if (!onLeft) {
                 if (y >= layout.infoBar + 2) continue
@@ -652,6 +682,13 @@ object Pentax645Frame {
         h = (h xor (h ushr 13)) * 1274126177
         h = h xor (h ushr 16)
         return (h and 0xFFFFFF) / 16777215f
+    }
+
+    private fun smoothNoise1D(x: Float, seed: Int): Float {
+        val i = kotlin.math.floor(x.toDouble()).toInt()
+        val f = x - i
+        val u = f * f * (3f - 2f * f)
+        return hash(i, seed) * (1f - u) + hash(i + 1, seed) * u
     }
 
     private fun toU16Short(v: Float): Short = (v.coerceIn(0f, 1f) * 65535f).roundToInt().toShort()
