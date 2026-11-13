@@ -73,18 +73,19 @@ public final class Exporter {
         let frameLayout = settings.pentax645.map { _ in Pentax645Frame.layout(photoWidth: size.0, photoHeight: size.1) }
         let outSize = frameLayout.map { ($0.outWidth, $0.outHeight) } ?? size
         let dateStamp = settings.pentax645 == nil ? settings.dateStamp : ""
+        let dateStampStyle = settings.dateStampStyle
         let mono = settings.monochromeImprint
         do {
             switch settings.format {
             case .jpeg:
                 if settings.jpegEncoder == .jpegli {
-                    try writeJpegli(image, url, params, size, outSize, settings.jpegQuality, settings.downscaleSharpen, dateStamp, settings.pentax645, mono, onProgress)
+                    try writeJpegli(image, url, params, size, outSize, settings.jpegQuality, settings.downscaleSharpen, dateStamp, dateStampStyle, settings.pentax645, mono, onProgress)
                 } else {
-                    try writeSystemJpeg(image, url, params, size, outSize, settings.jpegQuality, settings.downscaleSharpen, dateStamp, settings.pentax645, mono, onProgress)
+                    try writeSystemJpeg(image, url, params, size, outSize, settings.jpegQuality, settings.downscaleSharpen, dateStamp, dateStampStyle, settings.pentax645, mono, onProgress)
                 }
                 ExifWriter.addExif(to: url, metadata: image.metadata)
             case .tiff:
-                try writeTiff(image, url, params, size, outSize, settings.tiffBits, settings.downscaleSharpen, dateStamp, settings.pentax645, mono, onProgress)
+                try writeTiff(image, url, params, size, outSize, settings.tiffBits, settings.downscaleSharpen, dateStamp, dateStampStyle, settings.pentax645, mono, onProgress)
             }
             return url
         } catch {
@@ -95,11 +96,11 @@ public final class Exporter {
 
     /** ImageIO's JPEG: 8-bit input, so the whole image is held as 8-bit RGBA. */
     private func writeSystemJpeg(_ image: RawImage, _ url: URL, _ params: ShaderParams, _ size: (Int, Int), _ outSize: (Int, Int),
-                                 _ quality: Int, _ sharpen: Float, _ dateStamp: String, _ pentax645: Pentax645Info?,
-                                 _ monochrome: Bool, _ onProgress: (Float) -> Void) throws {
+                                 _ quality: Int, _ sharpen: Float, _ dateStamp: String, _ dateStampStyle: DateStampStyle,
+                                 _ pentax645: Pentax645Info?, _ monochrome: Bool, _ onProgress: (Float) -> Void) throws {
         let (w, h) = outSize
         var rgba = [UInt8](repeating: 255, count: w * h * 4)
-        try renderOutput(image, params, size, sharpen, dateStamp, pentax645, monochrome, onProgress) { y, rows, band in
+        try renderOutput(image, params, size, sharpen, dateStamp, dateStampStyle, pentax645, monochrome, onProgress) { y, rows, band in
             rgba.withUnsafeMutableBufferPointer { dst in
                 for i in 0..<(w * rows) {
                     let o = (y * w + i) * 4
@@ -119,13 +120,13 @@ public final class Exporter {
 
     /** jpegli streams each band as it is developed, at full 16-bit precision, so no full-size image is held. */
     private func writeJpegli(_ image: RawImage, _ url: URL, _ params: ShaderParams, _ size: (Int, Int), _ outSize: (Int, Int),
-                             _ quality: Int, _ sharpen: Float, _ dateStamp: String, _ pentax645: Pentax645Info?,
-                             _ monochrome: Bool, _ onProgress: (Float) -> Void) throws {
+                             _ quality: Int, _ sharpen: Float, _ dateStamp: String, _ dateStampStyle: DateStampStyle,
+                             _ pentax645: Pentax645Info?, _ monochrome: Bool, _ onProgress: (Float) -> Void) throws {
         var error = [CChar](repeating: 0, count: 256)
         guard let encoder = rb_jpeg_begin(url.path, Int32(outSize.0), Int32(outSize.1), Int32(quality), &error, error.count)
         else { throw MetalError(message: String(cString: error)) }
         do {
-            try renderOutput(image, params, size, sharpen, dateStamp, pentax645, monochrome, onProgress) { _, rows, band in
+            try renderOutput(image, params, size, sharpen, dateStamp, dateStampStyle, pentax645, monochrome, onProgress) { _, rows, band in
                 if !rb_jpeg_write_rows(encoder, band, Int32(rows), &error, error.count) {
                     throw MetalError(message: String(cString: error))
                 }
@@ -138,14 +139,14 @@ public final class Exporter {
     }
 
     private func writeTiff(_ image: RawImage, _ url: URL, _ params: ShaderParams, _ size: (Int, Int), _ outSize: (Int, Int),
-                           _ bits: Int, _ sharpen: Float, _ dateStamp: String, _ pentax645: Pentax645Info?,
-                           _ monochrome: Bool, _ onProgress: (Float) -> Void) throws {
+                           _ bits: Int, _ sharpen: Float, _ dateStamp: String, _ dateStampStyle: DateStampStyle,
+                           _ pentax645: Pentax645Info?, _ monochrome: Bool, _ onProgress: (Float) -> Void) throws {
         FileManager.default.createFile(atPath: url.path, contents: nil)
         let handle = try FileHandle(forWritingTo: url)
         defer { try? handle.close() }
         let writer = try TiffWriter(handle, width: outSize.0, height: outSize.1, bitsPerSample: bits,
                                    metadata: image.metadata)
-        try renderOutput(image, params, size, sharpen, dateStamp, pentax645, monochrome, onProgress) { _, rows, band in try writer.writeRows(band, rows: rows) }
+        try renderOutput(image, params, size, sharpen, dateStamp, dateStampStyle, pentax645, monochrome, onProgress) { _, rows, band in try writer.writeRows(band, rows: rows) }
         try writer.finish()
     }
 
@@ -155,7 +156,8 @@ public final class Exporter {
      * Same callback as renderBands.
      */
     private func renderOutput(_ image: RawImage, _ params: ShaderParams, _ size: (Int, Int), _ sharpen: Float,
-                              _ dateStamp: String = "", _ pentax645: Pentax645Info? = nil, _ monochrome: Bool = false,
+                              _ dateStamp: String = "", _ dateStampStyle: DateStampStyle = .classic,
+                              _ pentax645: Pentax645Info? = nil, _ monochrome: Bool = false,
                               _ onProgress: (Float) -> Void,
                               _ consume: @escaping (Int, Int, UnsafeMutablePointer<UInt16>) throws -> Void) throws {
         let w = params.lens.outputWidth
@@ -175,7 +177,7 @@ public final class Exporter {
             }
         } else if !dateStamp.isEmpty {
             stamped = { y, rows, band in
-                DateStamp.imprint(band: band, width: size.0, height: size.1, bandY: y, bandRows: rows, text: dateStamp, monochrome: monochrome)
+                DateStamp.imprint(band: band, width: size.0, height: size.1, bandY: y, bandRows: rows, text: dateStamp, monochrome: monochrome, style: dateStampStyle)
                 try consume(y, rows, band)
             }
         } else {

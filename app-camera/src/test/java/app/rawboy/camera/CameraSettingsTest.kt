@@ -2,6 +2,7 @@ package app.rawboy.camera
 
 import app.rawboy.develop.DevelopParams
 import app.rawboy.export.DateStampFormat
+import app.rawboy.export.DateStampStyle
 import app.rawboy.export.TimeStampFormat
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -15,6 +16,7 @@ class CameraSettingsTest {
         assertEquals(PhotoFrame.NONE, s.photoFrame)
         assertEquals(PhotoFrame.PENTAX_645, s.lastPhotoFrame)
         assertEquals(DateStampFormat.DMY, s.dateStampFormat)
+        assertEquals(DateStampStyle.CLASSIC, s.dateStampStyle)
         assertEquals(TimeStampFormat.H24, s.timeStampFormat)
         assertFalse(s.pentax645Flip)
         assertEquals(Pentax645Field.DEFAULT, s.pentax645Fields)

@@ -152,6 +152,8 @@ struct CameraSettings: Equatable {
     var lastPhotoFrame = PhotoFrame.pentax645
     /** Date order for PhotoFrame.dateStamp and Pentax645Field.date: DD MM 'YY by default. */
     var dateStampFormat = DateStampFormat.dmy
+    /** Visual style for PhotoFrame.dateStamp: Classic (yellow-orange Digital-7) or Red LED. */
+    var dateStampStyle = DateStampStyle.classic
     /** Time format for Pentax645Field.time: 24h by default. */
     var timeStampFormat = TimeStampFormat.h24
     /** Shoot-info items imprinted on the PhotoFrame.pentax645 rebate (all on by default). */
@@ -275,6 +277,7 @@ enum CameraSettingsStore {
         s.lastPhotoFrame = (savedLastFrame != nil && savedLastFrame != .none) ? savedLastFrame!
             : (s.photoFrame != .none ? s.photoFrame : def.lastPhotoFrame)
         s.dateStampFormat = d.string(forKey: "camera.dateStampFormat").flatMap(DateStampFormat.init(rawValue:)) ?? def.dateStampFormat
+        s.dateStampStyle = d.string(forKey: "camera.dateStampStyle").flatMap(DateStampStyle.init(rawValue:)) ?? def.dateStampStyle
         s.timeStampFormat = d.string(forKey: "camera.timeStampFormat").flatMap(TimeStampFormat.init(rawValue:)) ?? def.timeStampFormat
         s.pentax645Fields = Pentax645Field.parseSet(d.string(forKey: "camera.pentax645Fields"))
         s.pentax645Order = Pentax645Field.parseOrder(d.string(forKey: "camera.pentax645Order"))
@@ -329,6 +332,7 @@ enum CameraSettingsStore {
         d.set((s.photoFrame != .none ? s.photoFrame : s.lastPhotoFrame).rawValue, forKey: "camera.lastPhotoFrame")
         d.set(s.photoFrame == .dateStamp, forKey: "camera.dateStamp")
         d.set(s.dateStampFormat.rawValue, forKey: "camera.dateStampFormat")
+        d.set(s.dateStampStyle.rawValue, forKey: "camera.dateStampStyle")
         d.set(s.timeStampFormat.rawValue, forKey: "camera.timeStampFormat")
         d.set(Pentax645Field.serialize(s.pentax645Fields), forKey: "camera.pentax645Fields")
         d.set(Pentax645Field.serializeOrder(s.pentax645Order), forKey: "camera.pentax645Order")

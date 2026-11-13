@@ -11,6 +11,7 @@ import app.rawboy.camera.capture.CameraController
 import app.rawboy.camera.capture.FlashGuides
 import app.rawboy.camera.capture.FlashMode
 import app.rawboy.export.DateStampFormat
+import app.rawboy.export.DateStampStyle
 import app.rawboy.export.TimeStampFormat
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -153,6 +154,8 @@ data class CameraSettings(
     val lastPhotoFrame: PhotoFrame = PhotoFrame.PENTAX_645,
     /** Date order for [PhotoFrame.DATE_STAMP] and [Pentax645Field.DATE]: `DD MM 'YY` by default. */
     val dateStampFormat: DateStampFormat = DateStampFormat.DMY,
+    /** Visual style for [PhotoFrame.DATE_STAMP]: `Classic` (yellow-orange Digital-7) or `Red LED`. */
+    val dateStampStyle: DateStampStyle = DateStampStyle.CLASSIC,
     /** Time format for [Pentax645Field.TIME]: `24h` by default. */
     val timeStampFormat: TimeStampFormat = TimeStampFormat.H24,
     /** Shoot-info items imprinted on the [PhotoFrame.PENTAX_645] rebate (all on by default). */
@@ -377,6 +380,7 @@ object CameraSettingsStore {
                     ?.takeIf { it != PhotoFrame.NONE }
                     ?: if (p.getBoolean("dateStamp", false)) PhotoFrame.DATE_STAMP else d.lastPhotoFrame),
             dateStampFormat = runCatching { DateStampFormat.valueOf(p.getString("dateStampFormat", null)!!) }.getOrDefault(d.dateStampFormat),
+            dateStampStyle = runCatching { DateStampStyle.valueOf(p.getString("dateStampStyle", null)!!) }.getOrDefault(d.dateStampStyle),
             timeStampFormat = runCatching { TimeStampFormat.valueOf(p.getString("timeStampFormat", null)!!) }.getOrDefault(d.timeStampFormat),
             pentax645Fields = Pentax645Field.parseSet(p.getString("pentax645Fields", null)),
             pentax645Order = Pentax645Field.parseOrder(p.getString("pentax645Order", null)),
@@ -451,6 +455,7 @@ object CameraSettingsStore {
             .putString("lastPhotoFrame", (if (s.photoFrame != PhotoFrame.NONE) s.photoFrame else s.lastPhotoFrame).name)
             .putBoolean("dateStamp", s.photoFrame == PhotoFrame.DATE_STAMP)
             .putString("dateStampFormat", s.dateStampFormat.name)
+            .putString("dateStampStyle", s.dateStampStyle.name)
             .putString("timeStampFormat", s.timeStampFormat.name)
             .putString("pentax645Fields", Pentax645Field.serialize(s.pentax645Fields))
             .putString("pentax645Order", Pentax645Field.serializeOrder(s.pentax645Order))

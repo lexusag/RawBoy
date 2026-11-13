@@ -588,6 +588,7 @@ final class CameraViewModel: ObservableObject {
         }
     }
     func setDateStampFormat(_ format: DateStampFormat) { change { $0.dateStampFormat = format } }
+    func setDateStampStyle(_ style: DateStampStyle) { change { $0.dateStampStyle = style } }
     func setTimeStampFormat(_ format: TimeStampFormat) { change { $0.timeStampFormat = format } }
     func setPentax645Flip(_ on: Bool) { change { $0.pentax645Flip = on } }
     func setPentax645Field(_ field: Pentax645Field, _ on: Bool) {
@@ -849,6 +850,7 @@ final class CameraViewModel: ObservableObject {
                                                 maxLongSide: s.maxLongSide,
                                                 downscaleSharpen: CameraSettings.smallSharpen,
                                                 dateStamp: s.photoFrame == .dateStamp ? DateStamp.format(shot.date, format: s.dateStampFormat) : "",
+                                                dateStampStyle: s.dateStampStyle,
                                                 pentax645: pentax645,
                                                 monochromeImprint: s.monoMode)
                     let exportStart = Date()

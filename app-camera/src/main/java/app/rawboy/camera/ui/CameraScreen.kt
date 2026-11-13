@@ -40,6 +40,7 @@ import app.rawboy.camera.capture.FlashMode
 import app.rawboy.camera.Pentax645Field
 import app.rawboy.camera.PhotoFrame
 import app.rawboy.export.DateStampFormat
+import app.rawboy.export.DateStampStyle
 import app.rawboy.export.TimeStampFormat
 import androidx.compose.runtime.key
 import androidx.compose.ui.zIndex
@@ -1415,6 +1416,15 @@ private fun FramesSettingsContent(settings: CameraSettings, vm: CameraViewModel,
             onSelect = vm::setPhotoFrame,
         )
         if (settings.photoFrame == PhotoFrame.DATE_STAMP) {
+            SettingChoice(
+                title = "Style",
+                subtitle = null,
+                options = DateStampStyle.entries,
+                selected = settings.dateStampStyle,
+                label = { it.label },
+                onSelect = vm::setDateStampStyle,
+                indent = true,
+            )
             SettingChoice(
                 title = "Date format",
                 subtitle = null,

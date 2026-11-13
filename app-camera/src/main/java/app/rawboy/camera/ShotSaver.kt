@@ -438,6 +438,7 @@ internal object ShotSaver {
                 hdrGainMap = s.hdrGainMap,
                 description = shot.description,
                 dateStamp = if (s.photoFrame == PhotoFrame.DATE_STAMP) DateStamp.format(shot.timeMs, s.dateStampFormat) else "",
+                dateStampStyle = s.dateStampStyle,
                 pentax645 = if (s.photoFrame == PhotoFrame.PENTAX_645) {
                     val info = img.shotInfo
                     val fields = s.pentax645Fields
