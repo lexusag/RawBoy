@@ -950,7 +950,40 @@ public enum Pentax645Frame {
                 sampleRebatePixel(px: px, py: py, u: 0, v: 0, dots: nil, grainCell: grainCell, monochrome: monochrome, color: color, out: dst, idx: (dstRow + px) * 3)
             }
 
-            if !isPentax { continue }
+            if !isPentax {
+                let gateInset = max(2, infoBar * 0.11)
+                let yc = Float(y) + 0.5
+                let isTop = yc < Float(ph) * 0.5
+                let yFromEdge = isTop ? yc : (Float(ph) - yc)
+                if yFromEdge < gateInset * 1.4 + 2 {
+                    let noisePeriod = max(4, infoBar * 0.45)
+                    for x in 0..<pw {
+                        let xc = Float(x) + 0.5
+                        let isLeft = xc < Float(pw) * 0.5
+                        let distFromEnd = isLeft ? xc : (Float(pw) - xc)
+                        let cornerSeed = (isTop ? 0 : 2) + (isLeft ? 0 : 1)
+                        let cutoutEnd = infoBar * (1.15 + 0.35 * hash(cornerSeed, 101))
+                        if distFromEnd < cutoutEnd { continue }
+                        let ramp = infoBar * (0.28 + 0.12 * hash(cornerSeed, 202))
+                        let t = min(max((distFromEnd - cutoutEnd) / ramp, 0), 1)
+                        let baseDepth = gateInset * t * t * (3 - 2 * t)
+                        let wobble = (smoothNoise1D(xc / noisePeriod, seed: cornerSeed * 17 + 7) - 0.5) * gateInset * 0.35 * t
+                        let edgeDepth = max(0, baseDepth + wobble)
+                        if edgeDepth <= 0.01 { continue }
+                        let d = yFromEdge - edgeDepth
+                        if d >= 0.6 { continue }
+                        let u = min(max((0.6 - d) / 1.2, 0), 1)
+                        let mask = u * u * (3 - 2 * u)
+                        let px = leftPad + x
+                        let idx = (dstRow + px) * 3
+                        tmp.withUnsafeMutableBufferPointer { buf in
+                            sampleRebatePixel(px: px, py: py, u: 0, v: 0, dots: nil, grainCell: grainCell, monochrome: monochrome, color: color, out: buf.baseAddress!, idx: 0)
+                        }
+                        blendPixel(dst: dst, idx: idx, stripe: tmp, mask: mask)
+                    }
+                }
+                continue
+            }
 
             if !onLeft {
                 if y >= layout.infoBar + 2 { continue }
@@ -1026,6 +1059,13 @@ public enum Pentax645Frame {
         h = (h ^ (h >> 13)) &* 1274126177
         h ^= h >> 16
         return Float(h & 0xFFFFFF) / 16777215
+    }
+
+    private static func smoothNoise1D(_ x: Float, seed: Int) -> Float {
+        let i = Int(floor(x))
+        let f = x - Float(i)
+        let u = f * f * (3 - 2 * f)
+        return hash(i, seed) * (1 - u) + hash(i + 1, seed) * u
     }
 
     private static func toU16(_ v: Float) -> UInt16 { UInt16((min(max(v, 0), 1) * 65535).rounded()) }

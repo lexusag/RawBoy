@@ -286,11 +286,15 @@ class Pentax645FrameTest {
         }
         assertTrue("Expected Red LED shoot info in Contax 645 top bar", topRedPixels > 50)
 
-        // Photo corners are untouched (no Pentax rounded stripe overlay).
+        // Photo corners have cutouts (untouched), while the middle top/bottom edge has a dark gate shoulder.
         val photoSrc = ShortArray(600 * 10 * 3) { 20000.toShort() }
         val photoDst = ShortArray(layout.outWidth * 10 * 3)
         Pentax645Frame.wrapPhotoBand(photoSrc, photoDst, layout, 0, 10, monochrome = false, info = info)
         assertEquals(20000, photoDst[layout.leftPad * 3].toInt() and 0xFFFF)
+        assertTrue(
+            "Expected Contax 645 dark gate shoulder in middle of top edge",
+            (photoDst[(layout.leftPad + 300) * 3].toInt() and 0xFFFF) < 2000,
+        )
 
         val bottomBand = ShortArray(layout.outWidth * layout.bottomPad * 3)
         Pentax645Frame.renderBorderBand(bottomBand, layout, layout.topPad + layout.photoHeight, layout.bottomPad, monochrome = false, info = info)
