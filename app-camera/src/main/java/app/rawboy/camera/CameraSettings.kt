@@ -9,6 +9,7 @@ import app.rawboy.develop.DevelopParams
 import app.rawboy.camera.capture.CameraController
 import app.rawboy.camera.capture.FlashGuides
 import app.rawboy.camera.capture.FlashMode
+import app.rawboy.export.DateStampFormat
 
 /** The look controls, camera choice and output settings. */
 data class CameraSettings(
@@ -72,8 +73,10 @@ data class CameraSettings(
     val geotag: Boolean = false,
     /** Save the JPEG as an Ultra HDR JPEG: the same picture plus a gain map that lets HDR screens show brighter highlights (`ultrahdr.h`). */
     val hdrGainMap: Boolean = false,
-    /** Imprint the shot's date ('YY MM DD) in a yellow-orange clock font in the bottom-right corner of the JPEG. Off by default. */
+    /** Imprint the shot's date in a yellow-orange clock font in the bottom-right corner of the JPEG. Off by default. */
     val dateStamp: Boolean = false,
+    /** Date order for [dateStamp]: `DD MM 'YY` by default. */
+    val dateStampFormat: DateStampFormat = DateStampFormat.DMY,
     /** Look for QR codes in the viewfinder and offer to open them, as the phone's own camera does. */
     val scanQr: Boolean = true,
     /** After a tap, keep focus on what was tapped as it moves (CameraViewModel's tracker); off = the focus stays put. */
@@ -277,6 +280,7 @@ object CameraSettingsStore {
             geotag = p.getBoolean("geotag", d.geotag),
             hdrGainMap = p.getBoolean("hdrGainMap", d.hdrGainMap),
             dateStamp = p.getBoolean("dateStamp", d.dateStamp),
+            dateStampFormat = runCatching { DateStampFormat.valueOf(p.getString("dateStampFormat", null)!!) }.getOrDefault(d.dateStampFormat),
             scanQr = p.getBoolean("scanQr", d.scanQr),
             trackFocus = p.getBoolean("trackFocus", d.trackFocus),
             experimental = p.getBoolean("experimental", d.experimental),
@@ -344,6 +348,7 @@ object CameraSettingsStore {
             .putBoolean("geotag", s.geotag)
             .putBoolean("hdrGainMap", s.hdrGainMap)
             .putBoolean("dateStamp", s.dateStamp)
+            .putString("dateStampFormat", s.dateStampFormat.name)
             .putBoolean("scanQr", s.scanQr)
             .putBoolean("trackFocus", s.trackFocus)
             .putBoolean("experimental", s.experimental)

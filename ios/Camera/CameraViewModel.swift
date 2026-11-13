@@ -567,6 +567,7 @@ final class CameraViewModel: ObservableObject {
         if !on { histogram = nil }
     }
     func setDateStamp(_ on: Bool) { change { $0.dateStamp = on } }
+    func setDateStampFormat(_ format: DateStampFormat) { change { $0.dateStampFormat = format } }
     /** Turning it on asks for location access first (the system prompt the first time). */
     func setGeotag(_ on: Bool) {
         guard on else {
@@ -793,7 +794,7 @@ final class CameraViewModel: ObservableObject {
                     let export = ExportSettings(format: .jpeg, jpegQuality: s.jpegQuality, jpegEncoder: .jpegli,
                                                 maxLongSide: s.maxLongSide,
                                                 downscaleSharpen: CameraSettings.smallSharpen,
-                                                dateStamp: s.dateStamp ? DateStamp.format(shot.date) : "")
+                                                dateStamp: s.dateStamp ? DateStamp.format(shot.date, format: s.dateStampFormat) : "")
                     let exportStart = Date()
                     let file = try Exporter().export(img, sourceName: shot.name, params: shader, settings: export,
                                                      naming: Self.jpegNaming, gpu: gpu)

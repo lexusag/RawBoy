@@ -22,6 +22,6 @@ let cameraHelp = [
     HelpSection("Top bar", [
         HelpItem("RAW", "Keep the DNG next to the JPEG (lit) or not (struck through)."),
         HelpItem("Flash", "Turns the flash on or off."),
-        HelpItem("Settings", "JPEG quality, Look strength, Smaller photos, Date stamp ('YY MM DD in a clock font in the corner of each photo, off by default), Geotag (saves where each photo was taken; asks for location access when turned on), Shutter sound (a click on each shot, off by default; always on where the law requires it), QR codes (on by default), Grid (a 3 x 3 grid over the viewfinder, off by default), Level (a line that turns yellow when the phone is straight, off by default), Histogram (live red, green and blue levels in a corner of the viewfinder), Remember camera & settings and the licences."),
+        HelpItem("Settings", "JPEG quality, Look strength, Smaller photos, Date stamp (DD MM 'YY by default, or 'YY MM DD / MM DD 'YY, in a clock font in the corner of each photo, off by default), Geotag (saves where each photo was taken; asks for location access when turned on), Shutter sound (a click on each shot, off by default; always on where the law requires it), QR codes (on by default), Grid (a 3 x 3 grid over the viewfinder, off by default), Level (a line that turns yellow when the phone is straight, off by default), Histogram (live red, green and blue levels in a corner of the viewfinder), Remember camera & settings and the licences."),
     ]),
 ]

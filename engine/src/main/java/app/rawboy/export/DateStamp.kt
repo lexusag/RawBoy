@@ -8,22 +8,39 @@ import kotlin.math.exp
 import kotlin.math.roundToInt
 
 /**
- * Imprints a 35mm film data-back date (`'YY MM DD`) in the bottom-right corner of an exported image, using a
- * Digital-7 style chamfered 7-segment clock geometry rendered the way a quartz date back exposes film: orange LED
- * segments shining through the film base onto the emulsion. So the digits are light added to the picture (they show on
- * dark areas and fade into bright ones), slightly soft-edged, with a hot yellow core that falls off to red-orange at
- * the fringes, a subtle reddish halation glow, slightly uneven segment brightness and grain. Same output as `DateStamp`
- * in ios/Engine ExportSettings.swift.
+ * Display order for the film data-back date stamp (`DD MM 'YY` by default).
+ */
+enum class DateStampFormat(val label: String) {
+    DMY("DD MM 'YY"),
+    YMD("'YY MM DD"),
+    MDY("MM DD 'YY"),
+}
+
+/**
+ * Imprints a 35mm film data-back date (`DD MM 'YY`, `'YY MM DD`, or `MM DD 'YY`) in the bottom-right corner of an
+ * exported image, using a Digital-7 style chamfered 7-segment clock geometry rendered the way a quartz date back exposes
+ * film: orange LED segments shining through the film base onto the emulsion. So the digits are light added to the
+ * picture (they show on dark areas and fade into bright ones), slightly soft-edged, with a hot yellow core that falls
+ * off to red-orange at the fringes, a subtle reddish halation glow, slightly uneven segment brightness and grain. Same
+ * output as `DateStamp` in ios/Engine ExportSettings.swift.
  */
 object DateStamp {
 
-    /** Formats [timeMs] in classic film date-back order: `'YY MM DD` (for example `'26 11 13`). */
-    fun format(timeMs: Long, timeZone: TimeZone = TimeZone.getDefault()): String {
+    /** Formats [timeMs] in classic film date-back order (defaults to `DD MM 'YY`, e.g. `13 11 '26`). */
+    fun format(
+        timeMs: Long,
+        format: DateStampFormat = DateStampFormat.DMY,
+        timeZone: TimeZone = TimeZone.getDefault(),
+    ): String {
         val cal = Calendar.getInstance(timeZone).apply { timeInMillis = timeMs }
         val year = cal.get(Calendar.YEAR) % 100
         val month = cal.get(Calendar.MONTH) + 1
         val day = cal.get(Calendar.DAY_OF_MONTH)
-        return String.format(Locale.US, "'%02d %02d %02d", year, month, day)
+        return when (format) {
+            DateStampFormat.DMY -> String.format(Locale.US, "%02d %02d '%02d", day, month, year)
+            DateStampFormat.YMD -> String.format(Locale.US, "'%02d %02d %02d", year, month, day)
+            DateStampFormat.MDY -> String.format(Locale.US, "%02d %02d '%02d", month, day, year)
+        }
     }
 
     /**

@@ -15,10 +15,15 @@ class DateStampTest {
             clear()
             set(2026, Calendar.NOVEMBER, 13, 9, 45, 0)
         }
-        assertEquals("'26 11 13", DateStamp.format(cal.timeInMillis, tz))
+        assertEquals("13 11 '26", DateStamp.format(cal.timeInMillis, timeZone = tz))
+        assertEquals("13 11 '26", DateStamp.format(cal.timeInMillis, DateStampFormat.DMY, tz))
+        assertEquals("'26 11 13", DateStamp.format(cal.timeInMillis, DateStampFormat.YMD, tz))
+        assertEquals("11 13 '26", DateStamp.format(cal.timeInMillis, DateStampFormat.MDY, tz))
 
         cal.set(2026, Calendar.MARCH, 5, 0, 0, 0)
-        assertEquals("'26 03 05", DateStamp.format(cal.timeInMillis, tz))
+        assertEquals("05 03 '26", DateStamp.format(cal.timeInMillis, DateStampFormat.DMY, tz))
+        assertEquals("'26 03 05", DateStamp.format(cal.timeInMillis, DateStampFormat.YMD, tz))
+        assertEquals("03 05 '26", DateStamp.format(cal.timeInMillis, DateStampFormat.MDY, tz))
     }
 
     @Test

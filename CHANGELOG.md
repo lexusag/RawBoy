@@ -1,3 +1,7 @@
+**RawBoy Camera (Android, iOS): date stamp format option (`DD MM 'YY` default, `'YY MM DD`, `MM DD 'YY`) (2026-11-13)**
+
+- Added a **Date format** choice under **Date stamp** (shown while Date stamp is on) supporting `DD MM 'YY` (now the default), `'YY MM DD`, and `MM DD 'YY` (`DateStampFormat` in `DateStamp.kt` and `ExportSettings.swift`). Checked by unit tests (`DateStampTest`, `CameraSettingsTest`) and iOS `xcodebuild`; not yet run on a device.
+
 **RawBoy Camera (Android, iOS): Digital-7 style chamfered segments and halved glow on the date stamp (2026-11-13)**
 
 - Switched the **Date stamp**'s 7-segment geometry from rounded-capsule bars to Digital-7 style 45°-chamfered hexagonal segments with tight interlocking corner gaps and slightly crisper proportions (implemented procedurally in `DateStamp.kt` and `ExportSettings.swift` so no commercial-restricted font file is bundled), and cut the outer halation glow in half (`0.35` -> `0.175`, tighter reach and edge ramp). Checked by unit tests (`DateStampTest`, `CameraSettingsTest`), a rendered preview from the Swift code, and the iOS `xcodebuild`; not yet run on a device.
