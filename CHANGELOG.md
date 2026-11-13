@@ -1,3 +1,7 @@
+**Movie Green V2 and Redscale V2 looks (2026-11-13)**
+
+- Added two new Rec.709 AgX `.cube` looks in the **Experimental** section across RawBoy Auto, RawBoy Camera (colour Look menu with Film off) and RawBoy Pro (LUTs tab and Web Look Selector), on Android, iOS and the web: **Movie Green V2** (`Movie Green V2.cube`) and **Redscale V2** (`Redscale V2.cube`), each with grain 20 and vignette -10 on top.
+
 **RawBoy Camera (Android, iOS): the date stamp looks like a real film data back (2026-11-13)**
 
 - The **Date stamp** is now drawn the way a quartz date back exposes it: orange LED light shining through the film base. The digits are light added to the picture (bright on dark areas, fading into bright ones, where they only leave a faint yellow tint), soft-edged as the out-of-focus LEDs are, with a hot yellow core that falls off to red-orange at the fringe, a wider reddish halation glow, segments a little uneven in brightness (90-100%, fixed per segment) and grain in the light. Before, they were crisp flat digits painted over the picture. Same rendering on Android (`DateStamp.kt`) and iOS (`DateStamp` in `ExportSettings.swift`). Checked by unit tests (`DateStampTest`), a rendered preview from the Swift code, and the iOS `xcodebuild`; not yet run on a phone.

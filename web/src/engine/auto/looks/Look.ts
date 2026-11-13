@@ -65,7 +65,9 @@ export const Looks = {
   FILM_FLASH: look('filmflash', 'Film Flash', 'Film Flash.cube', { grain: 20 }),
   /** A strong green-teal film grade with lifted blacks, made by the owner in Affinity Photo. */
   MOVIE_GREEN: look('moviegreen', 'Movie Green', 'Movie Green.cube', { grain: 20, vignette: -10, experimental: true }),
+  MOVIE_GREEN_V2: look('moviegreenv2', 'Movie Green V2', 'Movie Green V2.cube', { grain: 20, vignette: -10, experimental: true }),
   REDSCALE: look('redscale', 'Redscale', 'Redscale.png', { contrast: 5, grain: 30, vignette: -15, experimental: true }),
+  REDSCALE_V2: look('redscalev2', 'Redscale V2', 'Redscale V2.cube', { grain: 20, vignette: -10, experimental: true }),
   /** Colour swap: warm tones and skin turn turquoise, blue sky amber, highlights cream (tools/swap_luts). */
   LAGOON: look('lagoon', 'Lagoon', 'Lagoon.cube', { grain: 20, vignette: -10, experimental: true }),
   /** Colour swap: greens turn violet, blue sky mint, reds stay (tools/swap_luts). */
@@ -88,7 +90,7 @@ export const Looks = {
 
 export const ALL_LOOKS: Look[] = [
   Looks.NATURAL, Looks.PORTRA_400, Looks.PORTRA_800, Looks.EKTAR_100, Looks.GOLD_200,
-  Looks.SUPERIA_400, Looks.FUJI_400H, Looks.VISION3_500T, Looks.VELVIA_50, Looks.FILM_FLASH, Looks.MOVIE_GREEN, Looks.REDSCALE,
+  Looks.SUPERIA_400, Looks.FUJI_400H, Looks.VISION3_500T, Looks.VELVIA_50, Looks.FILM_FLASH, Looks.MOVIE_GREEN, Looks.MOVIE_GREEN_V2, Looks.REDSCALE, Looks.REDSCALE_V2,
   Looks.LAGOON, Looks.VIOLET_DUST, Looks.UNSEEN,
   Looks.TRIX_SOFT, Looks.TRIX_400, Looks.TRIX_PUSH, Looks.TRIX_HARD, Looks.DOUBLE_X, Looks.DOUBLE_X_SOFT,
 ];

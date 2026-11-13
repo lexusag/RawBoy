@@ -109,9 +109,17 @@ object Looks {
         "moviegreen", "Movie Green", "Movie Green.cube",
         grain = 20f, vignette = -10f, experimental = true,
     )
+    val MOVIE_GREEN_V2 = Look(
+        "moviegreenv2", "Movie Green V2", "Movie Green V2.cube",
+        grain = 20f, vignette = -10f, experimental = true,
+    )
     val REDSCALE = Look(
         "redscale", "Redscale", "Redscale.png",
         contrast = 5f, grain = 30f, vignette = -15f, experimental = true,
+    )
+    val REDSCALE_V2 = Look(
+        "redscalev2", "Redscale V2", "Redscale V2.cube",
+        grain = 20f, vignette = -10f, experimental = true,
     )
     /** Colour swap: warm tones and skin turn turquoise, blue sky amber, highlights cream (tools/swap_luts). */
     val LAGOON = Look(
@@ -161,7 +169,7 @@ object Looks {
 
     val ALL = listOf(
         NATURAL, PORTRA_400, PORTRA_800, EKTAR_100, GOLD_200, SUPERIA_400, FUJI_400H,
-        VISION3_500T, VELVIA_50, FILM_FLASH, MOVIE_GREEN, REDSCALE, LAGOON, VIOLET_DUST, UNSEEN, TRIX_SOFT, TRIX_400, TRIX_PUSH, TRIX_HARD, DOUBLE_X, DOUBLE_X_SOFT,
+        VISION3_500T, VELVIA_50, FILM_FLASH, MOVIE_GREEN, MOVIE_GREEN_V2, REDSCALE, REDSCALE_V2, LAGOON, VIOLET_DUST, UNSEEN, TRIX_SOFT, TRIX_400, TRIX_PUSH, TRIX_HARD, DOUBLE_X, DOUBLE_X_SOFT,
     )
 
     fun byId(id: String): Look = RetiredLooks.look(id).let { key -> ALL.firstOrNull { it.id == key } } ?: NATURAL

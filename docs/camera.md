@@ -144,7 +144,7 @@ viewfinder shows black and white live. Each mode keeps its own pick, so switchin
 - Press and hold still shows the photo in colour, without the look.
 - In RawBoy Camera the colour **Look** menu no longer lists the black and white looks; a black and white look remembered
   from before opens in B&W mode. With Film off, it lists the colour looks under **Color** and **Experimental** (Movie
-  Green, Redscale).
+  Green, Movie Green V2, Redscale, Redscale V2, Lagoon, Violet Dust, Unseen).
 
 ## Film mode
 
