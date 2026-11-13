@@ -1,6 +1,6 @@
 **Movie Green V2 and Redscale V2 looks (2026-11-13)**
 
-- Added two new Rec.709 AgX `.cube` looks in the **Experimental** section across RawBoy Auto, RawBoy Camera (colour Look menu with Film off) and RawBoy Pro (LUTs tab and Web Look Selector), on Android, iOS and the web: **Movie Green V2** (`Movie Green V2.cube`, from `AgX_Confusing_Circularity_Rec709.cube`) and **Redscale V2** (`Redscale V2.cube`, from `AgX_Juicy_Watermelon_Rec709.cube`), each with grain 20 and vignette -10 on top.
+- Added two new Rec.709 AgX `.cube` looks in the **Experimental** section across RawBoy Auto, RawBoy Camera (colour Look menu with Film off) and RawBoy Pro (LUTs tab and Web Look Selector), on Android, iOS and the web: **Movie Green V2** (`Movie Green V2.cube`) and **Redscale V2** (`Redscale V2.cube`), each with grain 20 and vignette -10 on top.
 
 **RawBoy Camera (Android, iOS): the date stamp looks like a real film data back (2026-11-13)**
 
