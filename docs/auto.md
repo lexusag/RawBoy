@@ -33,7 +33,9 @@ it is turned sideways (or on a tablet or a wide window). Android, iPhone and the
 | Green Vivid Slide 50 | slide film, vivid | — |
 | Film Flash | direct flash 35mm film scan: vivid cadmium red, warm peach skin, high-key cool background | — (never suggested; pick it by hand) |
 | Movie Green | strong green-teal grade, lifted blacks (RawBoy's own, made in Affinity Photo) | — |
+| Movie Green V2 | cool cyan-green grade with a bit of warmth and lifted teal blacks (RawBoy's own AgX LUT) | — |
 | Redscale | Redscale | — (red/orange redscale film) |
+| Redscale V2 | warm red-orange redscale grade with deep blue-violet shadows (RawBoy's own AgX LUT) | — |
 | Lagoon | colour swap: skin and warm tones turquoise, blue sky amber, cream highlights, low contrast | — |
 | Violet Dust | colour swap: greens violet, blue sky mint, reds kept, low contrast | — |
 | Unseen | false-colour infrared: foliage and yellows crimson, magenta mids, low contrast | — |
@@ -41,7 +43,7 @@ it is turned sideways (or on a tablet or a wide window). Android, iPhone and the
 | Yellow Cine Mono, Yellow Cine Mono Soft | black-and-white cinema negative on print film; developed short on a soft paper grade | — (monochrome) |
 
 Look names are RawBoy's own: "Yellow" and "Green" are two families of film character, not products.
-The look strip lists them in three sections: **Color**, **Experimental** (Movie Green, Redscale, Lagoon, Violet Dust and Unseen:
+The look strip lists them in three sections: **Color**, **Experimental** (Movie Green, Movie Green V2, Redscale, Redscale V2, Lagoon, Violet Dust and Unseen:
 unusual colour looks, never suggested) and **Black & white**.
 
 The film LUTs are generated with [spectral_film_lut](https://github.com/JanLohse/spectral_film_lut) from

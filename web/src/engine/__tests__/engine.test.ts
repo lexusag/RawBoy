@@ -548,11 +548,13 @@ describe('presets', () => {
   it('lists looks and bundled LUTs as Color, Experimental, Black & white', () => {
     const sections = lookSections(ALL_LOOKS);
     expect(sections.map((s) => s.group)).toEqual(['color', 'experimental', 'monochrome']);
-    expect(sections[1].looks).toEqual([Looks.MOVIE_GREEN, Looks.REDSCALE, Looks.LAGOON, Looks.VIOLET_DUST, Looks.UNSEEN]);
+    expect(sections[1].looks).toEqual([Looks.MOVIE_GREEN, Looks.MOVIE_GREEN_V2, Looks.REDSCALE, Looks.REDSCALE_V2, Looks.LAGOON, Looks.VIOLET_DUST, Looks.UNSEEN]);
     expect(sections.reduce((n, s) => n + s.looks.length, 0)).toBe(ALL_LOOKS.length);
     expect(lookSections(ALL_FILM_LOOKS)).toHaveLength(1);
     expect(lutGroup('asset:luts/Redscale.png')).toBe('experimental');
+    expect(lutGroup('asset:luts/Redscale V2.cube')).toBe('experimental');
     expect(lutGroup('asset:luts/Movie Green.cube')).toBe('experimental');
+    expect(lutGroup('asset:luts/Movie Green V2.cube')).toBe('experimental');
     expect(lutGroup('asset:luts/Unseen.cube')).toBe('experimental');
     expect(lutGroup('asset:luts/Yellow Mono 400.cube')).toBe('monochrome');
     expect(lutGroup('asset:luts/Yellow Vivid 100.cube')).toBe('color');

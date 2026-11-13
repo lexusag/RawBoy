@@ -108,8 +108,14 @@ public enum Looks {
     /** A strong green-teal film grade with lifted blacks, made by the owner in Affinity Photo. */
     public static let movieGreen = Look("moviegreen", "Movie Green", "Movie Green.cube", grain: 20, vignette: -10,
                                          experimental: true)
+    /** Cool cyan-green grade with a bit of warmth and lifted teal blacks (AgX Confusing Circularity). */
+    public static let movieGreenV2 = Look("moviegreenv2", "Movie Green V2", "Movie Green V2.cube",
+                                          grain: 20, vignette: -10, experimental: true)
     public static let redscale = Look("redscale", "Redscale", "Redscale.png", contrast: 5, grain: 30, vignette: -15,
                                         experimental: true)
+    /** Warm red-orange redscale grade with deep blue-violet shadows (AgX Juicy Watermelon). */
+    public static let redscaleV2 = Look("redscalev2", "Redscale V2", "Redscale V2.cube",
+                                        grain: 20, vignette: -10, experimental: true)
     /** Colour swap: warm tones and skin turn turquoise, blue sky amber, highlights cream (tools/swap_luts). */
     public static let lagoon = Look("lagoon", "Lagoon", "Lagoon.cube", grain: 20, vignette: -10, experimental: true)
     /** Colour swap: greens turn violet, blue sky mint, reds stay (tools/swap_luts). */
@@ -134,7 +140,7 @@ public enum Looks {
 
     public static let all: [Look] = [
         natural, portra400, portra800, ektar100, gold200, superia400, fuji400h,
-        vision3500t, velvia50, filmFlash, movieGreen, redscale, lagoon, violetDust, unseen, trixSoft, trix400, trixPush, trixHard, doubleX, doubleXSoft,
+        vision3500t, velvia50, filmFlash, movieGreen, movieGreenV2, redscale, redscaleV2, lagoon, violetDust, unseen, trixSoft, trix400, trixPush, trixHard, doubleX, doubleXSoft,
     ]
 
     public static func byId(_ id: String) -> Look {
