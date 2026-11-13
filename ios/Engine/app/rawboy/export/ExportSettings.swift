@@ -323,9 +323,9 @@ public enum Pentax645Frame {
         public let border: Int
         public let infoBar: Int
         public var infoOnLeft: Bool { photoWidth > photoHeight }
-        public var topPad: Int { infoOnLeft ? border : infoBar }
+        public var topPad: Int { border }
         public var bottomPad: Int { border }
-        public var leftPad: Int { infoOnLeft ? infoBar : border }
+        public var leftPad: Int { border }
         public var rightPad: Int { border }
         public var outWidth: Int { photoWidth + leftPad + rightPad }
         public var outHeight: Int { photoHeight + topPad + bottomPad }
@@ -481,7 +481,7 @@ public enum Pentax645Frame {
 
         let totalU = tokens.isEmpty ? 0 : sumTokensW + Float(tokens.count - 1) * groupGap
         let u0 = (barLength - totalU) * 0.5
-        let v0 = (infoBar - charH) * 0.5
+        let v0 = Float(layout.border) + (infoBar - charH) * 0.5
 
         let dotR = dotPitch * 0.36
         let soft = max(dotPitch * 0.36, 0.8)
@@ -602,43 +602,19 @@ public enum Pentax645Frame {
     public static func renderTopBarBand(band: UnsafeMutablePointer<UInt16>, layout: Layout,
                                           bandY: Int, bandRows: Int, info: Pentax645Info,
                                           monochrome: Bool = false) {
-        let outW = layout.outWidth
-        let outH = layout.outHeight
-        let grainCell = max(1, Float(layout.infoBar) * 0.03)
-        let dots = buildStampDots(layout: layout, info: info)
-        let onLeft = layout.infoOnLeft
-
-        for py in bandY..<(bandY + bandRows) {
-            let rowOffset = (py - bandY) * outW
-            for px in 0..<outW {
-                let idx = (rowOffset + px) * 3
-                if !onLeft {
-                    sampleRebatePixel(px: px, py: py, u: Float(px) + 0.5, v: Float(py) + 0.5, dots: dots, grainCell: grainCell, monochrome: monochrome, out: band, idx: idx)
-                } else if px < layout.infoBar {
-                    sampleRebatePixel(px: px, py: py, u: Float(outH - 1 - py) + 0.5, v: Float(px) + 0.5, dots: dots, grainCell: grainCell, monochrome: monochrome, out: band, idx: idx)
-                } else {
-                    sampleRebatePixel(px: px, py: py, u: 0, v: 0, dots: nil, grainCell: grainCell, monochrome: monochrome, out: band, idx: idx)
-                }
-            }
-        }
+        renderBorderBand(band: band, layout: layout, bandY: bandY, bandRows: bandRows, monochrome: monochrome)
     }
 
     public static func renderBorderBand(band: UnsafeMutablePointer<UInt16>, layout: Layout,
                                         bandY: Int, bandRows: Int, monochrome: Bool = false,
                                         info: Pentax645Info? = nil) {
         let outW = layout.outWidth
-        let outH = layout.outHeight
         let grainCell = max(1, Float(layout.infoBar) * 0.03)
-        let dots: StampDots? = (layout.infoOnLeft && info != nil) ? buildStampDots(layout: layout, info: info!) : nil
         for py in bandY..<(bandY + bandRows) {
             let rowOffset = (py - bandY) * outW
             for px in 0..<outW {
                 let idx = (rowOffset + px) * 3
-                if let dots, px < layout.infoBar {
-                    sampleRebatePixel(px: px, py: py, u: Float(outH - 1 - py) + 0.5, v: Float(px) + 0.5, dots: dots, grainCell: grainCell, monochrome: monochrome, out: band, idx: idx)
-                } else {
-                    sampleRebatePixel(px: px, py: py, u: 0, v: 0, dots: nil, grainCell: grainCell, monochrome: monochrome, out: band, idx: idx)
-                }
+                sampleRebatePixel(px: px, py: py, u: 0, v: 0, dots: nil, grainCell: grainCell, monochrome: monochrome, out: band, idx: idx)
             }
         }
     }
@@ -652,77 +628,85 @@ public enum Pentax645Frame {
         let oh = layout.outHeight
         let leftPad = layout.leftPad
         let onLeft = layout.infoOnLeft
-        let grainCell = max(1, Float(layout.infoBar) * 0.03)
-        let dots: StampDots? = (onLeft && info != nil) ? buildStampDots(layout: layout, info: info!) : nil
-
-        let br = monochrome ? baseMono : baseR
-        let bg = monochrome ? baseMono : baseG
-        let bb = monochrome ? baseMono : baseB
-
-        let rStripe = Float(layout.infoBar) * 0.65
-        let rOther = Float(layout.infoBar) * 0.30
-        let rTopLeft = rStripe
-        let rTopRight = onLeft ? rOther : rStripe
-        let rBottomLeft = onLeft ? rStripe : rOther
-        let rBottomRight = rOther
-        let maxR = max(max(rTopLeft, rTopRight), max(rBottomLeft, rBottomRight))
+        let infoBar = Float(layout.infoBar)
+        let cornerSpan = infoBar * 1.6
+        let grainCell = max(1, infoBar * 0.03)
+        let dots: StampDots? = info.map { buildStampDots(layout: layout, info: $0) }
+        var tmp: [UInt16] = [0, 0, 0]
 
         for r in 0..<bandRows {
             let y = photoY + r
             let py = layout.topPad + y
             let dstRow = r * ow
             for px in 0..<leftPad {
-                let idx = (dstRow + px) * 3
-                if let dots {
-                    sampleRebatePixel(px: px, py: py, u: Float(oh - 1 - py) + 0.5, v: Float(px) + 0.5, dots: dots, grainCell: grainCell, monochrome: monochrome, out: dst, idx: idx)
-                } else {
-                    sampleRebatePixel(px: px, py: py, u: 0, v: 0, dots: nil, grainCell: grainCell, monochrome: monochrome, out: dst, idx: idx)
-                }
+                sampleRebatePixel(px: px, py: py, u: 0, v: 0, dots: nil, grainCell: grainCell, monochrome: monochrome, out: dst, idx: (dstRow + px) * 3)
             }
             dst.advanced(by: (dstRow + leftPad) * 3).update(from: src.advanced(by: r * pw * 3), count: pw * 3)
             for px in (leftPad + pw)..<ow {
-                let idx = (dstRow + px) * 3
-                sampleRebatePixel(px: px, py: py, u: 0, v: 0, dots: nil, grainCell: grainCell, monochrome: monochrome, out: dst, idx: idx)
+                sampleRebatePixel(px: px, py: py, u: 0, v: 0, dots: nil, grainCell: grainCell, monochrome: monochrome, out: dst, idx: (dstRow + px) * 3)
             }
 
-            let dyTop = Float(y) + 0.5
-            let dyBottom = Float(ph - y) - 0.5
-            if dyTop < maxR || dyBottom < maxR {
+            if !onLeft {
+                if y >= layout.infoBar + 2 { continue }
+                let yc = Float(y) + 0.5
                 for x in 0..<pw {
-                    let dxLeft = Float(x) + 0.5
-                    let dxRight = Float(pw - x) - 0.5
-                    if dxLeft >= maxR && dxRight >= maxR { continue }
-
-                    let rad: Float
-                    let cx: Float
-                    let cy: Float
-                    if dxLeft < rTopLeft && dyTop < rTopLeft {
-                        rad = rTopLeft; cx = rTopLeft - dxLeft; cy = rTopLeft - dyTop
-                    } else if dxRight < rTopRight && dyTop < rTopRight {
-                        rad = rTopRight; cx = rTopRight - dxRight; cy = rTopRight - dyTop
-                    } else if dxLeft < rBottomLeft && dyBottom < rBottomLeft {
-                        rad = rBottomLeft; cx = rBottomLeft - dxLeft; cy = rBottomLeft - dyBottom
-                    } else if dxRight < rBottomRight && dyBottom < rBottomRight {
-                        rad = rBottomRight; cx = rBottomRight - dxRight; cy = rBottomRight - dyBottom
+                    let xc = Float(x) + 0.5
+                    let distFromEnd = min(xc, Float(pw) - xc)
+                    let edgeY: Float
+                    if distFromEnd < cornerSpan {
+                        let t = distFromEnd / cornerSpan
+                        edgeY = infoBar * (2 * t - t * t)
                     } else {
-                        continue
+                        edgeY = infoBar
                     }
-
-                    let d = sqrt(cx * cx + cy * cy) - rad
-                    if d <= -0.6 { continue }
-                    let t = min(max((d + 0.6) / 1.2, 0), 1)
-                    let mask = t * t * (3 - 2 * t)
+                    let d = yc - edgeY
+                    if d >= 0.6 { continue }
+                    let u = min(max((0.6 - d) / 1.2, 0), 1)
+                    let mask = u * u * (3 - 2 * u)
                     let px = leftPad + x
-                    let grain = 0.90 + 0.20 * hash(Int(Float(px) / grainCell), Int(Float(py) / grainCell))
                     let idx = (dstRow + px) * 3
-                    let pr = Float(dst[idx]) / 65535
-                    let pg = Float(dst[idx + 1]) / 65535
-                    let pb = Float(dst[idx + 2]) / 65535
-                    dst[idx] = toU16(pr * (1 - mask) + br * grain * mask)
-                    dst[idx + 1] = toU16(pg * (1 - mask) + bg * grain * mask)
-                    dst[idx + 2] = toU16(pb * (1 - mask) + bb * grain * mask)
+                    tmp.withUnsafeMutableBufferPointer { buf in
+                        sampleRebatePixel(px: px, py: py, u: Float(px) + 0.5, v: Float(py) + 0.5, dots: dots, grainCell: grainCell, monochrome: monochrome, out: buf.baseAddress!, idx: 0)
+                    }
+                    blendPixel(dst: dst, idx: idx, stripe: tmp, mask: mask)
+                }
+            } else {
+                let yc = Float(y) + 0.5
+                let distFromEnd = min(yc, Float(ph) - yc)
+                let edgeX: Float
+                if distFromEnd < cornerSpan {
+                    let t = distFromEnd / cornerSpan
+                    edgeX = infoBar * (2 * t - t * t)
+                } else {
+                    edgeX = infoBar
+                }
+                let xMax = min(pw, Int(edgeX + 1.5))
+                for x in 0..<xMax {
+                    let d = (Float(x) + 0.5) - edgeX
+                    if d >= 0.6 { continue }
+                    let u = min(max((0.6 - d) / 1.2, 0), 1)
+                    let mask = u * u * (3 - 2 * u)
+                    let px = leftPad + x
+                    let idx = (dstRow + px) * 3
+                    tmp.withUnsafeMutableBufferPointer { buf in
+                        sampleRebatePixel(px: px, py: py, u: Float(oh - 1 - py) + 0.5, v: Float(px) + 0.5, dots: dots, grainCell: grainCell, monochrome: monochrome, out: buf.baseAddress!, idx: 0)
+                    }
+                    blendPixel(dst: dst, idx: idx, stripe: tmp, mask: mask)
                 }
             }
+        }
+    }
+
+    private static func blendPixel(dst: UnsafeMutablePointer<UInt16>, idx: Int, stripe: [UInt16], mask: Float) {
+        if mask >= 0.999 {
+            dst[idx] = stripe[0]
+            dst[idx + 1] = stripe[1]
+            dst[idx + 2] = stripe[2]
+            return
+        }
+        let inv = 1 - mask
+        for c in 0..<3 {
+            dst[idx + c] = UInt16((Float(dst[idx + c]) * inv + Float(stripe[c]) * mask).rounded())
         }
     }
 

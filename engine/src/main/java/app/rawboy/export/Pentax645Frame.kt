@@ -43,9 +43,9 @@ object Pentax645Frame {
     ) {
         /** True when the photo is landscape (`photoWidth > photoHeight`), so the shorter side is vertical (left edge). */
         val infoOnLeft: Boolean get() = photoWidth > photoHeight
-        val topPad: Int get() = if (infoOnLeft) border else infoBar
+        val topPad: Int get() = border
         val bottomPad: Int get() = border
-        val leftPad: Int get() = if (infoOnLeft) infoBar else border
+        val leftPad: Int get() = border
         val rightPad: Int get() = border
         val outWidth: Int get() = photoWidth + leftPad + rightPad
         val outHeight: Int get() = photoHeight + topPad + bottomPad
@@ -208,7 +208,7 @@ object Pentax645Frame {
 
         val totalU = if (tokens.isEmpty()) 0f else sumTokensW + (tokens.size - 1) * groupGap
         val u0 = (barLength - totalU) * 0.5f
-        val v0 = (infoBar - charH) * 0.5f
+        val v0 = layout.border + (infoBar - charH) * 0.5f
 
         val dotR = dotPitch * 0.36f
         val soft = maxOf(dotPitch * 0.36f, 0.8f)
@@ -345,70 +345,46 @@ object Pentax645Frame {
     }
 
     /**
-     * Renders rows `[bandY, bandY + bandRows)` of the top padding (`0 <= bandY < layout.topPad`) into [band].
-     * For portrait/square photos this is the top shoot-info rebate bar; for landscape photos this is the thin top border
-     * (whose left `infoBar` columns belong to the vertical shoot-info rebate bar).
+     * Renders rows `[bandY, bandY + bandRows)` of the top border (`0 <= bandY < layout.topPad`) into [band].
+     * The Pentax 645 black data stripe itself is composited in [wrapPhotoBand] so its rounded ends reveal the photo
+     * corners underneath.
      */
     fun renderTopBarBand(
         band: ShortArray,
         layout: Layout,
         bandY: Int,
         bandRows: Int,
-        info: Pentax645Info,
-        monochrome: Boolean = info.mode == "BW",
+        @Suppress("UNUSED_PARAMETER") info: Pentax645Info,
+        monochrome: Boolean = false,
     ) {
-        val outW = layout.outWidth
-        val outH = layout.outHeight
-        val grainCell = maxOf(1f, layout.infoBar * 0.03f)
-        val dots = buildStampDots(layout, info)
-        val onLeft = layout.infoOnLeft
-
-        for (py in bandY until bandY + bandRows) {
-            val rowOffset = (py - bandY) * outW
-            for (px in 0 until outW) {
-                val idx = (rowOffset + px) * 3
-                if (!onLeft) {
-                    sampleRebatePixel(px, py, px + 0.5f, py + 0.5f, dots, grainCell, monochrome, band, idx)
-                } else if (px < layout.infoBar) {
-                    sampleRebatePixel(px, py, (outH - 1 - py) + 0.5f, px + 0.5f, dots, grainCell, monochrome, band, idx)
-                } else {
-                    sampleRebatePixel(px, py, 0f, 0f, null, grainCell, monochrome, band, idx)
-                }
-            }
-        }
+        renderBorderBand(band, layout, bandY, bandRows, monochrome)
     }
 
-    /** Fills [band] (`outWidth * bandRows * 3`) with dark film-base black for the bottom border. */
+    /** Fills [band] (`outWidth * bandRows * 3`) with dark film-base black for the top/bottom border. */
     fun renderBorderBand(
         band: ShortArray,
         layout: Layout,
         bandY: Int,
         bandRows: Int,
         monochrome: Boolean = false,
-        info: Pentax645Info? = null,
+        @Suppress("UNUSED_PARAMETER") info: Pentax645Info? = null,
     ) {
         val outW = layout.outWidth
-        val outH = layout.outHeight
         val grainCell = maxOf(1f, layout.infoBar * 0.03f)
-        val onLeft = layout.infoOnLeft
-        val dots = if (onLeft && info != null) buildStampDots(layout, info) else null
         for (py in bandY until bandY + bandRows) {
             val rowOffset = (py - bandY) * outW
             for (px in 0 until outW) {
                 val idx = (rowOffset + px) * 3
-                if (dots != null && px < layout.infoBar) {
-                    sampleRebatePixel(px, py, (outH - 1 - py) + 0.5f, px + 0.5f, dots, grainCell, monochrome, band, idx)
-                } else {
-                    sampleRebatePixel(px, py, 0f, 0f, null, grainCell, monochrome, band, idx)
-                }
+                sampleRebatePixel(px, py, 0f, 0f, null, grainCell, monochrome, band, idx)
             }
         }
     }
 
     /**
      * Wraps a developed photo band [src] (`photoWidth * bandRows * 3`) into [dst] (`outWidth * bandRows * 3`),
-     * adding left/right rebate strips and rounding the inner corners of the photo gate (with generous rounded corners
-     * where the photo meets the Pentax 645 black stripe).
+     * adding thin dark rebate borders on all sides and compositing the Pentax 645 black data stripe along the
+     * shorter edge (`y < infoBar` for portrait/square, `x < infoBar` for landscape) with convex rounded ends
+     * so the photo wraps naturally into the corners.
      */
     fun wrapPhotoBand(
         src: ShortArray,
@@ -425,82 +401,79 @@ object Pentax645Frame {
         val oh = layout.outHeight
         val leftPad = layout.leftPad
         val onLeft = layout.infoOnLeft
-        val grainCell = maxOf(1f, layout.infoBar * 0.03f)
-        val dots = if (onLeft && info != null) buildStampDots(layout, info) else null
-
-        val br = if (monochrome) BASE_MONO else BASE_R
-        val bg = if (monochrome) BASE_MONO else BASE_G
-        val bb = if (monochrome) BASE_MONO else BASE_B
-
-        // Generous rounded corners on the black data-stripe side (like Pentax 645 film gate), subtle on opposite corners.
-        val rStripe = layout.infoBar * 0.65f
-        val rOther = layout.infoBar * 0.30f
-        val rTopLeft = rStripe
-        val rTopRight = if (onLeft) rOther else rStripe
-        val rBottomLeft = if (onLeft) rStripe else rOther
-        val rBottomRight = rOther
-        val maxR = maxOf(rTopLeft, rTopRight, rBottomLeft, rBottomRight)
+        val infoBar = layout.infoBar.toFloat()
+        val cornerSpan = infoBar * 1.6f
+        val grainCell = maxOf(1f, infoBar * 0.03f)
+        val dots = info?.let { buildStampDots(layout, it) }
+        val tmp = ShortArray(3)
 
         for (r in 0 until bandRows) {
             val y = photoY + r
             val py = layout.topPad + y
             val dstRow = r * ow
             for (px in 0 until leftPad) {
-                val idx = (dstRow + px) * 3
-                if (dots != null) {
-                    sampleRebatePixel(px, py, (oh - 1 - py) + 0.5f, px + 0.5f, dots, grainCell, monochrome, dst, idx)
-                } else {
-                    sampleRebatePixel(px, py, 0f, 0f, null, grainCell, monochrome, dst, idx)
-                }
+                sampleRebatePixel(px, py, 0f, 0f, null, grainCell, monochrome, dst, (dstRow + px) * 3)
             }
             System.arraycopy(src, r * pw * 3, dst, (dstRow + leftPad) * 3, pw * 3)
             for (px in (leftPad + pw) until ow) {
-                val idx = (dstRow + px) * 3
-                sampleRebatePixel(px, py, 0f, 0f, null, grainCell, monochrome, dst, idx)
+                sampleRebatePixel(px, py, 0f, 0f, null, grainCell, monochrome, dst, (dstRow + px) * 3)
             }
 
-            // Apply rounded film-gate corners to the photo rows near the top or bottom edge.
-            val dyTop = y + 0.5f
-            val dyBottom = (ph - y) - 0.5f
-            if (dyTop < maxR || dyBottom < maxR) {
+            if (!onLeft) {
+                if (y >= layout.infoBar + 2) continue
+                val yc = y + 0.5f
                 for (x in 0 until pw) {
-                    val dxLeft = x + 0.5f
-                    val dxRight = (pw - x) - 0.5f
-                    if (dxLeft >= maxR && dxRight >= maxR) continue
-
-                    val rad: Float
-                    val cx: Float
-                    val cy: Float
-                    when {
-                        dxLeft < rTopLeft && dyTop < rTopLeft -> {
-                            rad = rTopLeft; cx = rTopLeft - dxLeft; cy = rTopLeft - dyTop
-                        }
-                        dxRight < rTopRight && dyTop < rTopRight -> {
-                            rad = rTopRight; cx = rTopRight - dxRight; cy = rTopRight - dyTop
-                        }
-                        dxLeft < rBottomLeft && dyBottom < rBottomLeft -> {
-                            rad = rBottomLeft; cx = rBottomLeft - dxLeft; cy = rBottomLeft - dyBottom
-                        }
-                        dxRight < rBottomRight && dyBottom < rBottomRight -> {
-                            rad = rBottomRight; cx = rBottomRight - dxRight; cy = rBottomRight - dyBottom
-                        }
-                        else -> continue
+                    val xc = x + 0.5f
+                    val distFromEnd = minOf(xc, pw - xc)
+                    val edgeY = if (distFromEnd < cornerSpan) {
+                        val t = distFromEnd / cornerSpan
+                        infoBar * (2f * t - t * t)
+                    } else {
+                        infoBar
                     }
-                    val d = sqrt(cx * cx + cy * cy) - rad
-                    if (d <= -0.6f) continue
-                    val t = ((d + 0.6f) / 1.2f).coerceIn(0f, 1f)
-                    val mask = t * t * (3f - 2f * t) // 0 = photo, 1 = black corner rebate
+                    val d = yc - edgeY
+                    if (d >= 0.6f) continue
+                    val mask = ((0.6f - d) / 1.2f).coerceIn(0f, 1f).let { it * it * (3f - 2f * it) }
                     val px = leftPad + x
-                    val grain = 0.90f + 0.20f * hash((px / grainCell).toInt(), (py / grainCell).toInt())
                     val idx = (dstRow + px) * 3
-                    val pr = (dst[idx].toInt() and 0xFFFF) / 65535f
-                    val pg = (dst[idx + 1].toInt() and 0xFFFF) / 65535f
-                    val pb = (dst[idx + 2].toInt() and 0xFFFF) / 65535f
-                    dst[idx] = toU16Short(pr * (1f - mask) + br * grain * mask)
-                    dst[idx + 1] = toU16Short(pg * (1f - mask) + bg * grain * mask)
-                    dst[idx + 2] = toU16Short(pb * (1f - mask) + bb * grain * mask)
+                    sampleRebatePixel(px, py, px + 0.5f, py + 0.5f, dots, grainCell, monochrome, tmp, 0)
+                    blendPixel(dst, idx, tmp, mask)
+                }
+            } else {
+                val yc = y + 0.5f
+                val distFromEnd = minOf(yc, ph - yc)
+                val edgeX = if (distFromEnd < cornerSpan) {
+                    val t = distFromEnd / cornerSpan
+                    infoBar * (2f * t - t * t)
+                } else {
+                    infoBar
+                }
+                val xMax = minOf(pw, (edgeX + 1.5f).toInt())
+                for (x in 0 until xMax) {
+                    val d = (x + 0.5f) - edgeX
+                    if (d >= 0.6f) continue
+                    val mask = ((0.6f - d) / 1.2f).coerceIn(0f, 1f).let { it * it * (3f - 2f * it) }
+                    val px = leftPad + x
+                    val idx = (dstRow + px) * 3
+                    sampleRebatePixel(px, py, (oh - 1 - py) + 0.5f, px + 0.5f, dots, grainCell, monochrome, tmp, 0)
+                    blendPixel(dst, idx, tmp, mask)
                 }
             }
+        }
+    }
+
+    private fun blendPixel(dst: ShortArray, idx: Int, stripe: ShortArray, mask: Float) {
+        if (mask >= 0.999f) {
+            dst[idx] = stripe[0]
+            dst[idx + 1] = stripe[1]
+            dst[idx + 2] = stripe[2]
+            return
+        }
+        val inv = 1f - mask
+        for (c in 0 until 3) {
+            val p = dst[idx + c].toInt() and 0xFFFF
+            val s = stripe[c].toInt() and 0xFFFF
+            dst[idx + c] = (p * inv + s * mask).roundToInt().toShort()
         }
     }
 

@@ -43,11 +43,10 @@ class Pentax645FrameTest {
     fun topBarRendersOrangeLedOnDarkRebateAndWrapsPhoto() {
         val layout = Pentax645Frame.layout(600, 800)
         assertTrue(layout.border >= 3)
-        assertTrue(layout.topBar >= 28)
+        assertTrue(layout.infoBar >= 28)
         assertEquals(600 + 2 * layout.border, layout.outWidth)
-        assertEquals(800 + layout.topBar + layout.border, layout.outHeight)
+        assertEquals(800 + 2 * layout.border, layout.outHeight)
 
-        val topBand = ShortArray(layout.outWidth * layout.topBar * 3)
         val info = Pentax645Info(
             frameNumber = 3,
             mode = "FILM",
@@ -59,43 +58,43 @@ class Pentax645FrameTest {
             iso = 400.0,
             dateTime = "13.11.26 14:46",
         )
-        Pentax645Frame.renderTopBarBand(topBand, layout, 0, layout.topBar, info)
+        val bandRows = layout.infoBar + 20
+        val src = ShortArray(600 * bandRows * 3) { 20000.toShort() }
+        val dst = ShortArray(layout.outWidth * bandRows * 3)
+        Pentax645Frame.wrapPhotoBand(src, dst, layout, 0, bandRows, monochrome = false, info = info)
 
         var maxR = 0
         var maxG = 0
         var maxB = 0
         var brightOrangePixels = 0
-        for (i in 0 until layout.outWidth * layout.topBar) {
-            val r = topBand[i * 3].toInt() and 0xFFFF
-            val g = topBand[i * 3 + 1].toInt() and 0xFFFF
-            val b = topBand[i * 3 + 2].toInt() and 0xFFFF
+        for (i in 0 until layout.outWidth * layout.infoBar) {
+            val r = dst[i * 3].toInt() and 0xFFFF
+            val g = dst[i * 3 + 1].toInt() and 0xFFFF
+            val b = dst[i * 3 + 2].toInt() and 0xFFFF
             if (r > maxR) maxR = r
             if (g > maxG) maxG = g
             if (b > maxB) maxB = b
             if (r > 30000 && r > g && g > b) brightOrangePixels++
         }
-        assertTrue("Expected glowing amber-orange LED dots in top rebate", brightOrangePixels > 50)
+        assertTrue("Expected glowing amber-orange LED dots in top stripe", brightOrangePixels > 50)
         assertTrue(maxR > maxG && maxG > maxB)
 
-        // Photo wrapping preserves inner pixels, fills side borders darkly, and rounds top-left corner.
-        val src = ShortArray(600 * 4 * 3) { 20000.toShort() }
-        val dst = ShortArray(layout.outWidth * 4 * 3)
-        Pentax645Frame.wrapPhotoBand(src, dst, layout, 0, 4)
         val leftBorderR = dst[0].toInt() and 0xFFFF
-        val topLeftCornerR = dst[layout.leftPad * 3].toInt() and 0xFFFF
-        val photoInnerR = dst[(layout.leftPad + 100) * 3].toInt() and 0xFFFF
+        // Because the black stripe's ends curve upward, (x = 0, y = 10) reveals the photo underneath.
+        val cornerPhotoR = dst[(10 * layout.outWidth + layout.leftPad) * 3].toInt() and 0xFFFF
+        val centerStripeR = dst[(1 * layout.outWidth + layout.leftPad + 300) * 3].toInt() and 0xFFFF
+        val belowStripeR = dst[((layout.infoBar + 10) * layout.outWidth + layout.leftPad + 300) * 3].toInt() and 0xFFFF
         assertTrue(leftBorderR < 2000)
-        assertTrue("Expected rounded corner at (0,0) of photo gate to be dark rebate", topLeftCornerR < 2000)
-        assertEquals(20000, photoInnerR)
+        assertEquals(20000, cornerPhotoR)
+        assertTrue("Expected dark stripe in middle of top edge", centerStripeR < 2000)
+        assertEquals(20000, belowStripeR)
     }
 
     @Test
     fun landscapePhotoPlacesPentax645InfoOnShorterLeftSide() {
         val layout = Pentax645Frame.layout(800, 600)
         assertTrue(layout.infoOnLeft)
-        assertEquals(layout.infoBar, layout.leftPad)
-        assertEquals(layout.border, layout.topPad)
-        assertEquals(800 + layout.infoBar + layout.border, layout.outWidth)
+        assertEquals(800 + 2 * layout.border, layout.outWidth)
         assertEquals(600 + 2 * layout.border, layout.outHeight)
 
         val info = Pentax645Info(
@@ -109,23 +108,24 @@ class Pentax645FrameTest {
         val dst = ShortArray(layout.outWidth * 600 * 3)
         Pentax645Frame.wrapPhotoBand(src, dst, layout, 0, 600, monochrome = false, info = info)
 
-        var brightLeftRebatePixels = 0
+        var brightLeftStripePixels = 0
         for (y in 0 until 600) {
-            for (x in 0 until layout.leftPad) {
+            for (x in layout.leftPad until layout.leftPad + layout.infoBar) {
                 val idx = (y * layout.outWidth + x) * 3
                 val r = dst[idx].toInt() and 0xFFFF
                 val g = dst[idx + 1].toInt() and 0xFFFF
                 val b = dst[idx + 2].toInt() and 0xFFFF
-                if (r > 30000 && r > g && g > b) brightLeftRebatePixels++
+                if (r > 30000 && r > g && g > b) brightLeftStripePixels++
             }
         }
-        assertTrue("Expected glowing LED dots in left shorter-side rebate for landscape photo", brightLeftRebatePixels > 50)
+        assertTrue("Expected glowing LED dots in left shorter-side stripe for landscape photo", brightLeftStripePixels > 50)
     }
 
     @Test
     fun monochromeModeRendersNeutralBlackAndWhiteForBothFrames() {
         val layout = Pentax645Frame.layout(600, 800)
-        val topBand = ShortArray(layout.outWidth * layout.topBar * 3)
+        val src = ShortArray(600 * layout.infoBar * 3) { 20000.toShort() }
+        val topBand = ShortArray(layout.outWidth * layout.infoBar * 3)
         val info = Pentax645Info(
             frameNumber = 5,
             mode = "BW",
@@ -135,9 +135,9 @@ class Pentax645FrameTest {
             spotMetered = true,
             focalLengthMm = 48.0,
         )
-        Pentax645Frame.renderTopBarBand(topBand, layout, 0, layout.topBar, info, monochrome = true)
+        Pentax645Frame.wrapPhotoBand(src, topBand, layout, 0, layout.infoBar, monochrome = true, info = info)
         var brightMonoPixels = 0
-        for (i in 0 until layout.outWidth * layout.topBar) {
+        for (i in 0 until layout.outWidth * layout.infoBar) {
             val r = topBand[i * 3].toInt() and 0xFFFF
             val g = topBand[i * 3 + 1].toInt() and 0xFFFF
             val b = topBand[i * 3 + 2].toInt() and 0xFFFF
