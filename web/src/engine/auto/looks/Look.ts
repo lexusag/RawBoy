@@ -65,10 +65,8 @@ export const Looks = {
   FILM_FLASH: look('filmflash', 'Film Flash', 'Film Flash.cube', { grain: 20 }),
   /** A strong green-teal film grade with lifted blacks, made by the owner in Affinity Photo. */
   MOVIE_GREEN: look('moviegreen', 'Movie Green', 'Movie Green.cube', { grain: 20, vignette: -10, experimental: true }),
-  /** Cool cyan-green grade with a bit of warmth and lifted teal blacks (AgX Confusing Circularity). */
   MOVIE_GREEN_V2: look('moviegreenv2', 'Movie Green V2', 'Movie Green V2.cube', { grain: 20, vignette: -10, experimental: true }),
   REDSCALE: look('redscale', 'Redscale', 'Redscale.png', { contrast: 5, grain: 30, vignette: -15, experimental: true }),
-  /** Warm red-orange redscale grade with deep blue-violet shadows (AgX Juicy Watermelon). */
   REDSCALE_V2: look('redscalev2', 'Redscale V2', 'Redscale V2.cube', { grain: 20, vignette: -10, experimental: true }),
   /** Colour swap: warm tones and skin turn turquoise, blue sky amber, highlights cream (tools/swap_luts). */
   LAGOON: look('lagoon', 'Lagoon', 'Lagoon.cube', { grain: 20, vignette: -10, experimental: true }),

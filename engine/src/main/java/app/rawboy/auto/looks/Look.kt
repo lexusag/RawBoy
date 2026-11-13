@@ -109,7 +109,6 @@ object Looks {
         "moviegreen", "Movie Green", "Movie Green.cube",
         grain = 20f, vignette = -10f, experimental = true,
     )
-    /** Cool cyan-green grade with a bit of warmth and lifted teal blacks (AgX Confusing Circularity). */
     val MOVIE_GREEN_V2 = Look(
         "moviegreenv2", "Movie Green V2", "Movie Green V2.cube",
         grain = 20f, vignette = -10f, experimental = true,
@@ -118,7 +117,6 @@ object Looks {
         "redscale", "Redscale", "Redscale.png",
         contrast = 5f, grain = 30f, vignette = -15f, experimental = true,
     )
-    /** Warm red-orange redscale grade with deep blue-violet shadows (AgX Juicy Watermelon). */
     val REDSCALE_V2 = Look(
         "redscalev2", "Redscale V2", "Redscale V2.cube",
         grain = 20f, vignette = -10f, experimental = true,
