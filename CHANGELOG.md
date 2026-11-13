@@ -1,3 +1,7 @@
+**RawBoy Camera (Android, iOS): Digital-7 style chamfered segments and halved glow on the date stamp (2026-11-13)**
+
+- Switched the **Date stamp**'s 7-segment geometry from rounded-capsule bars to Digital-7 style 45°-chamfered hexagonal segments with tight interlocking corner gaps and slightly crisper proportions (implemented procedurally in `DateStamp.kt` and `ExportSettings.swift` so no commercial-restricted font file is bundled), and cut the outer halation glow in half (`0.35` -> `0.175`, tighter reach and edge ramp). Checked by unit tests (`DateStampTest`, `CameraSettingsTest`), a rendered preview from the Swift code, and the iOS `xcodebuild`; not yet run on a device.
+
 **Movie Green V2 and Redscale V2 looks (2026-11-13)**
 
 - Added two new Rec.709 AgX `.cube` looks in the **Experimental** section across RawBoy Auto, RawBoy Camera (colour Look menu with Film off) and RawBoy Pro (LUTs tab and Web Look Selector), on Android, iOS and the web: **Movie Green V2** (`Movie Green V2.cube`) and **Redscale V2** (`Redscale V2.cube`), each with grain 20 and vignette -10 on top.
