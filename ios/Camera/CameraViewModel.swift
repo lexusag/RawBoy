@@ -657,7 +657,7 @@ final class CameraViewModel: ObservableObject {
             }
         } else if prev.lens != next.lens || prev.rawFormat != next.rawFormat {
             if let target = lenses.first(where: { $0.label == next.lens }) ?? lenses.first {
-                switchTo(target)
+                if target != info || prev.rawFormat != next.rawFormat { switchTo(target) }
                 if target.label != next.lens { change { $0.lens = target.label } }
             }
         }
@@ -675,6 +675,7 @@ final class CameraViewModel: ObservableObject {
         }
         if prev.scanQr != next.scanQr {
             controller.setScanQr(next.scanQr)
+            if !next.scanQr { clearQr() }
         }
     }
 
