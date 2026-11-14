@@ -95,7 +95,7 @@ std::vector<uint8_t> encodeGainMap(const std::vector<uint8_t>& map, int width, i
     return out;
 }
 
-jlong beginEncoder(JNIEnv* env, jint fd, jint width, jint height, jint quality, bool gainMap) {
+jlong beginEncoder(JNIEnv* env, jint fd, jint width, jint height, jint quality, bool gainMap, float whiteY = 1.0f) {
     auto enc = std::make_unique<Encoder>();
     const int own = dup(fd);
     if (own < 0 || !(enc->file = fdopen(own, "wb"))) {
@@ -111,7 +111,7 @@ jlong beginEncoder(JNIEnv* env, jint fd, jint width, jint height, jint quality, 
         if (gainMap) {
             enc->mem = open_memstream(&enc->memBuf, &enc->memSize);
             if (!enc->mem) throw std::runtime_error("no memory stream");
-            enc->gain = std::make_unique<rawboy::uhdr::GainMapBuilder>(width, height);
+            enc->gain = std::make_unique<rawboy::uhdr::GainMapBuilder>(width, height, whiteY);
             jpegli_stdio_dest(&enc->cinfo, enc->mem);
         } else {
             jpegli_stdio_dest(&enc->cinfo, enc->file);
@@ -146,8 +146,8 @@ JNIEXPORT jlong JNICALL Java_app_rawboy_export_JpegNative_begin(JNIEnv* env, jcl
  * picture has nothing bright enough to need one, in which case it is the plain JPEG.
  */
 JNIEXPORT jlong JNICALL Java_app_rawboy_export_JpegNative_beginGainMap(JNIEnv* env, jclass, jint fd, jint width,
-                                                                        jint height, jint quality) {
-    return beginEncoder(env, fd, width, height, quality, true);
+                                                                        jint height, jint quality, jfloat whiteY) {
+    return beginEncoder(env, fd, width, height, quality, true, whiteY);
 }
 
 /**

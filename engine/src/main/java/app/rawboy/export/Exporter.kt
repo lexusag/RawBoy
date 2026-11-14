@@ -156,7 +156,7 @@ class Exporter(private val context: Context) {
         val app1 = exif?.let { runCatching { ExifWriter.jpegApp1Payload(it) }.getOrNull() }
         val pfd = context.contentResolver.openFileDescriptor(uri, "w") ?: throw IOException("Cannot write $uri")
         pfd.use {
-            val handle = if (hdrGainMap) JpegNative.beginGainMap(it.fd, outSize.first, outSize.second, quality)
+            val handle = if (hdrGainMap) JpegNative.beginGainMap(it.fd, outSize.first, outSize.second, quality, lookWhiteLuma(params))
             else JpegNative.begin(it.fd, outSize.first, outSize.second, quality)
             try {
                 app1?.let { bytes -> JpegNative.writeExif(handle, bytes) }
@@ -167,6 +167,36 @@ class Exporter(private val context: Context) {
             }
             JpegNative.finish(handle)
         }
+    }
+
+    /**
+     * Display-encoded white luma of [params]'s active look (1.0 for AgX, ~0.86 for print film stocks), so the HDR
+     * gain map scales its highlight knee and peak to where the look's brightest whites actually land.
+     */
+    private fun lookWhiteLuma(params: ShaderParams): Float {
+        fun luma(data: java.nio.FloatBuffer, index: Int): Float {
+            val o = index * 3
+            return 0.2126f * data.get(o) + 0.7152f * data.get(o + 1) + 0.0722f * data.get(o + 2)
+        }
+        val outWhite = 1f - maxOf(-params.whites, 0f) * 0.15f
+        val outBlack = maxOf(params.blacks, 0f) * 0.15f
+        val film = params.film?.print
+        val white = if (film != null && params.filmAmount > 0f) {
+            val last = film.size * film.size * film.size - 1
+            val w = maxOf(luma(film.data, 0), luma(film.data, last))
+            val leveled = outBlack + (outWhite - outBlack) * w
+            outWhite + (leveled - outWhite) * params.filmAmount
+        } else {
+            val lut = params.lut
+            if (lut != null && params.lutAmount > 0f) {
+                val last = lut.size * lut.size * lut.size - 1
+                val w = luma(lut.data, last)
+                outWhite + (w - outWhite) * params.lutAmount
+            } else {
+                outWhite
+            }
+        }
+        return white.coerceIn(0.5f, 1f)
     }
 
     private fun writeTiff(

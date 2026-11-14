@@ -15,15 +15,16 @@ static std::vector<uint8_t> readAll(const char* path) {
 }
 
 int main(int argc, char** argv) {
-    if (argc == 5 && !strcmp(argv[1], "map")) {
+    if ((argc == 5 || argc == 6) && !strcmp(argv[1], "map")) {
         const int w = atoi(argv[2]), h = atoi(argv[3]);
-        rawboy::uhdr::GainMapBuilder b(w, h);
+        const float whiteY = argc == 6 ? float(atof(argv[5])) : 1.0f;
+        rawboy::uhdr::GainMapBuilder b(w, h, whiteY);
         std::vector<uint16_t> band(size_t(w) * 7 * 3);
         for (int y = 0; y < h; y += 7) {
             const int rows = std::min(7, h - y);
             for (int r = 0; r < rows; ++r)
                 for (int x = 0; x < w; ++x)
-                    for (int c = 0; c < 3; ++c) band[(size_t(r) * w + x) * 3 + c] = uint16_t(65535.0 * x / (w - 1));
+                    for (int c = 0; c < 3; ++c) band[(size_t(r) * w + x) * 3 + c] = uint16_t(65535.0 * whiteY * x / (w - 1));
             b.addRows(band.data(), rows);
         }
         const auto m = b.finish();
