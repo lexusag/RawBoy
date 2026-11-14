@@ -64,6 +64,23 @@ object DateStamp {
     }
 
     /**
+     * Parses an EXIF date string (`"YYYY:MM:DD HH:MM:SS"`) into epoch milliseconds in [timeZone], or null if invalid.
+     */
+    fun parseExifDate(exifDate: String?, timeZone: TimeZone = TimeZone.getDefault()): Long? {
+        if (exifDate == null || exifDate.length < 19) return null
+        val year = exifDate.substring(0, 4).toIntOrNull() ?: return null
+        val month = exifDate.substring(5, 7).toIntOrNull()?.takeIf { it in 1..12 } ?: return null
+        val day = exifDate.substring(8, 10).toIntOrNull()?.takeIf { it in 1..31 } ?: return null
+        val hour = exifDate.substring(11, 13).toIntOrNull()?.takeIf { it in 0..23 } ?: return null
+        val minute = exifDate.substring(14, 16).toIntOrNull()?.takeIf { it in 0..59 } ?: return null
+        val second = exifDate.substring(17, 19).toIntOrNull()?.takeIf { it in 0..59 } ?: return null
+        return Calendar.getInstance(timeZone).apply {
+            clear()
+            set(year, month - 1, day, hour, minute, second)
+        }.timeInMillis
+    }
+
+    /**
      * The LED's light as each film layer sees it, in "exposure per unit" for the response `1 - exp(-GAIN * E * c)`:
      * red saturates first, so the bright core goes yellow and the dim fringe stays red-orange (yellowy-orange overall).
      */
@@ -133,7 +150,7 @@ object DateStamp {
 
         // Real 35mm quartz date back stays fixed along the film's long side (bottom in landscape, right in portrait).
         val vertical = height > width
-        val reach = thick * if (redLed) 2.6f else 2.2f // the halation's extent
+        val reach = thick * if (redLed) 1.82f else 1.54f // the halation's extent
         val slant = if (redLed) 0f else 0.14f
         val slantMaxShift = charH * 0.5f * slant
 
@@ -168,9 +185,9 @@ object DateStamp {
         val halfThick = thick * 0.5f
         val segGap = thick * if (redLed) 0.30f else 0.22f
         // Out-of-focus LED: soft segment edge with halation glow (much blurrier and wider for Red LED).
-        val soft = if (redLed) maxOf(thick * 0.55f, 1.0f) else maxOf(thick * 0.45f, 0.8f)
+        val soft = if (redLed) maxOf(thick * 0.385f, 0.7f) else maxOf(thick * 0.315f, 0.56f)
         val haloAmp = if (redLed) 0.22f else 0.175f
-        val haloInv = 1f / (thick * if (redLed) 1.1f else 0.9f)
+        val haloInv = 1f / (thick * if (redLed) 0.77f else 0.63f)
         val grainCell = maxOf(1f, thick * 0.22f)
         val grainBase = if (redLed) 0.88f else 0.9f
         val grainAmp = if (redLed) 0.24f else 0.2f

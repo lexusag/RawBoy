@@ -1,3 +1,4 @@
+import { isMonochromeLut } from '../auto/looks/Look';
 import type { ShaderParams } from '../gl/ShaderParams';
 import { sharedDeveloper } from '../gl/ThumbnailRenderer';
 import { SCAN_MARGIN, SCAN_SCALE, filmScanApplies, scanSize } from '../gl/ScanScale';
@@ -5,8 +6,10 @@ import { rect, type PixelRect } from '../gl/Zoom';
 import type { RawImage } from '../raw/RawImage';
 import { rawWorker } from '../raw/RawWorker';
 import { BandDownscaler } from './BandDownscaler';
+import { DateStamp, type DateStampStyle } from './DateStamp';
 import { exifSegment, insertExif } from './ExifWriter';
-import { MIME_TYPES, type ExportSettings } from './ExportSettings';
+import { MIME_TYPES, resolveExportFrame, type ExportSettings } from './ExportSettings';
+import { Pentax645Frame, type Pentax645Info } from './Pentax645Frame';
 import { TiffWriter } from './TiffWriter';
 
 const TILE_WIDTH = 1024;
@@ -24,17 +27,48 @@ export async function exportImage(image: RawImage, params: ShaderParams, setting
   const size = scan
     ? scanSize(params.lens.outputWidth, params.lens.outputHeight)
     : BandDownscaler.outputSize(params.lens.outputWidth, params.lens.outputHeight, settings.maxLongSide);
-  if (settings.format === 'tiff') {
-    const writer = new TiffWriter(size[0], size[1], settings.tiffBits, image.metadata);
-    await renderOutput(image, params, size, scan, onProgress, (_, rows, band) => writer.writeRows(band, rows));
+  const isMono = params.saturation <= 0 || (params.lutAmount >= 1 && isMonochromeLut(params.lut?.id));
+  const resolved = resolveExportFrame(settings, image, isMono);
+  const frameLayout = resolved.pentax645
+    ? Pentax645Frame.layout(size[0], size[1], resolved.pentax645.style ?? 'PENTAX_645')
+    : null;
+  const outSize: [number, number] = frameLayout ? [frameLayout.outWidth, frameLayout.outHeight] : size;
+  const dateStamp = resolved.pentax645 == null ? (resolved.dateStamp ?? '') : '';
+  const dateStampStyle: DateStampStyle = resolved.dateStampStyle ?? 'CLASSIC';
+  const mono = Boolean(resolved.monochromeImprint);
+  if (resolved.format === 'tiff') {
+    const writer = new TiffWriter(outSize[0], outSize[1], resolved.tiffBits, image.metadata);
+    await renderOutput(
+      image,
+      params,
+      size,
+      scan,
+      dateStamp,
+      dateStampStyle,
+      resolved.pentax645 ?? null,
+      mono,
+      onProgress,
+      (_, rows, band) => writer.writeRows(band, rows),
+    );
     return writer.finish();
   }
-  const id = await rawWorker().call<number>({ op: 'jpegBegin', width: size[0], height: size[1], quality: settings.jpegQuality });
+  const id = await rawWorker().call<number>({ op: 'jpegBegin', width: outSize[0], height: outSize[1], quality: resolved.jpegQuality });
   try {
     // jpegli streams each band as it is developed, at full 16-bit precision.
-    await renderOutput(image, params, size, scan, onProgress, async (_, rows, band) => {
-      await rawWorker().call({ op: 'jpegWrite', id, rows: band.slice(0, size[0] * rows * 3), count: rows });
-    });
+    await renderOutput(
+      image,
+      params,
+      size,
+      scan,
+      dateStamp,
+      dateStampStyle,
+      resolved.pentax645 ?? null,
+      mono,
+      onProgress,
+      async (_, rows, band) => {
+        await rawWorker().call({ op: 'jpegWrite', id, rows: band.slice(0, outSize[0] * rows * 3), count: rows });
+      },
+    );
   } catch (e) {
     await rawWorker().call({ op: 'release', id });
     throw e;
@@ -54,12 +88,79 @@ export async function exportImage(image: RawImage, params: ShaderParams, setting
  * Renders the image at [size] (the full output size, or smaller: then the full-resolution bands are area-downscaled
  * as they stream, and the grain is sized to the smaller output; or a film scan, [scan]: [SCAN_SCALE] times larger).
  */
-async function renderOutput(image: RawImage, params: ShaderParams, size: [number, number], scan: boolean, onProgress: (f: number) => void, consume: Consume) {
+async function renderOutput(
+  image: RawImage,
+  params: ShaderParams,
+  size: [number, number],
+  scan: boolean,
+  dateStamp: string,
+  dateStampStyle: DateStampStyle,
+  pentax645: Pentax645Info | null,
+  monochrome: boolean,
+  onProgress: (f: number) => void,
+  consume: Consume,
+) {
   const w = params.lens.outputWidth;
   const h = params.lens.outputHeight;
-  if (scan) return renderBands(image, params, 1, onProgress, consume, SCAN_SCALE);
-  if (size[0] === w && size[1] === h) return renderBands(image, params, 1, onProgress, consume);
-  const scaler = await BandDownscaler.create(w, h, size[0], size[1], consume);
+  const layout = pentax645 ? Pentax645Frame.layout(size[0], size[1], pentax645.style ?? 'PENTAX_645') : null;
+  let framedBand = new Uint16Array(0);
+  const stamped: Consume = layout
+    ? async (y, rows, band) => {
+        const need = layout.outWidth * rows * 3;
+        if (framedBand.length < need) framedBand = new Uint16Array(need);
+        Pentax645Frame.wrapPhotoBand(band, framedBand, layout, y, rows, monochrome, pentax645);
+        await consume(layout.topPad + y, rows, framedBand);
+      }
+    : dateStamp
+      ? async (y, rows, band) => {
+          DateStamp.imprint(band, size[0], size[1], y, rows, dateStamp, monochrome, dateStampStyle);
+          await consume(y, rows, band);
+        }
+      : consume;
+
+  if (layout && pentax645) {
+    let barY = 0;
+    while (barY < layout.topPad) {
+      const rows = Math.min(TILE_HEIGHT, layout.topPad - barY);
+      const need = layout.outWidth * rows * 3;
+      if (framedBand.length < need) framedBand = new Uint16Array(need);
+      Pentax645Frame.renderTopBarBand(framedBand, layout, barY, rows, pentax645, monochrome);
+      await consume(barY, rows, framedBand);
+      barY += rows;
+    }
+  }
+
+  const emitBottom = async () => {
+    if (!layout) return;
+    let botY = 0;
+    while (botY < layout.bottomPad) {
+      const rows = Math.min(TILE_HEIGHT, layout.bottomPad - botY);
+      const need = layout.outWidth * rows * 3;
+      if (framedBand.length < need) framedBand = new Uint16Array(need);
+      Pentax645Frame.renderBorderBand(
+        framedBand,
+        layout,
+        layout.topPad + layout.photoHeight + botY,
+        rows,
+        monochrome,
+        pentax645,
+      );
+      await consume(layout.topPad + layout.photoHeight + botY, rows, framedBand);
+      botY += rows;
+    }
+  };
+
+  if (scan) {
+    await renderBands(image, params, 1, onProgress, stamped, SCAN_SCALE);
+    await emitBottom();
+    return;
+  }
+  if (size[0] === w && size[1] === h) {
+    await renderBands(image, params, 1, onProgress, stamped);
+    await emitBottom();
+    return;
+  }
+  const scaler = await BandDownscaler.create(w, h, size[0], size[1], stamped);
   try {
     // A grain cell at least one output pixel, as a full-size render of the smaller image would have.
     const minGrain = Math.max(w, h) / Math.max(size[0], size[1]);
@@ -69,6 +170,7 @@ async function renderOutput(image: RawImage, params: ShaderParams, size: [number
     throw e;
   }
   await scaler.finish();
+  await emitBottom();
 }
 
 /**

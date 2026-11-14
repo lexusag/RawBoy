@@ -13,80 +13,12 @@ import app.rawboy.camera.capture.FlashMode
 import app.rawboy.export.DateStampFormat
 import app.rawboy.export.DateStampStyle
 import app.rawboy.export.FilmFrameColor
+import app.rawboy.export.Pentax645Field
+import app.rawboy.export.PhotoFrame
 import app.rawboy.export.TimeStampFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-
-/** Mutually exclusive film frame / stamp imprint options in the Frames settings submenu. */
-enum class PhotoFrame(val label: String) {
-    NONE("Off"),
-    DATE_STAMP("Date stamp"),
-    PENTAX_645("Pentax 645"),
-    CONTAX_645("Contax 645"),
-}
-
-/** Individual shoot-info items that can be toggled and reordered on the [PhotoFrame.PENTAX_645] rebate. */
-enum class Pentax645Field(val key: String, val label: String) {
-    FRAME_NUMBER("frame", "Frame #"),
-    MODE("mode", "Mode"),
-    SHUTTER("shutter", "Shutter"),
-    APERTURE("aperture", "Aperture"),
-    EXPOSURE_COMP("ev", "EV"),
-    METERING("metering", "Metering"),
-    FOCAL_LENGTH("focal", "Focal length"),
-    ISO("iso", "ISO"),
-    DATE("date", "Date"),
-    TIME("time", "Time");
-
-    companion object {
-        val DEFAULT: Set<Pentax645Field> = entries.toSet()
-        val DEFAULT_ORDER: List<Pentax645Field> = entries.toList()
-
-        fun parseSet(raw: String?): Set<Pentax645Field> {
-            if (raw == null) return DEFAULT
-            if (raw.isBlank()) return emptySet()
-            val byKey = entries.associateBy { it.key }
-            val result = mutableSetOf<Pentax645Field>()
-            for (token in raw.split(',')) {
-                val k = token.trim()
-                if (k == "datetime") {
-                    result += DATE
-                    result += TIME
-                } else {
-                    byKey[k]?.let { result += it }
-                }
-            }
-            return result
-        }
-
-        fun serialize(fields: Set<Pentax645Field>): String =
-            entries.filter { it in fields }.joinToString(",") { it.key }
-
-        fun parseOrder(raw: String?): List<Pentax645Field> {
-            if (raw.isNullOrBlank()) return DEFAULT_ORDER
-            val byKey = entries.associateBy { it.key }
-            val result = mutableListOf<Pentax645Field>()
-            for (token in raw.split(',')) {
-                val k = token.trim()
-                if (k == "datetime") {
-                    if (DATE !in result) result += DATE
-                    if (TIME !in result) result += TIME
-                } else {
-                    val f = byKey[k]
-                    if (f != null && f !in result) result += f
-                }
-            }
-            for (f in entries) {
-                if (f !in result) result += f
-            }
-            return result
-        }
-
-        fun serializeOrder(order: List<Pentax645Field>): String =
-            order.joinToString(",") { it.key }
-    }
-}
 
 /** The look controls, camera choice and output settings. */
 data class CameraSettings(

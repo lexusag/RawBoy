@@ -24,10 +24,16 @@ import app.rawboy.develop.MaskLayer
 import app.rawboy.develop.BrushRaster
 import app.rawboy.develop.Preset
 import app.rawboy.develop.Presets
+import app.rawboy.export.DateStampFormat
+import app.rawboy.export.DateStampStyle
 import app.rawboy.export.ExportFormat
 import app.rawboy.export.ExportSettings
 import app.rawboy.export.Exporter
+import app.rawboy.export.FilmFrameColor
 import app.rawboy.export.OutputNaming
+import app.rawboy.export.Pentax645Field
+import app.rawboy.export.PhotoFrame
+import app.rawboy.export.TimeStampFormat
 import app.rawboy.film.FilmData
 import app.rawboy.film.FilmStocks
 import app.rawboy.gl.FrameColor
@@ -209,6 +215,14 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
             tiffBits = if (prefs.getInt(KEY_EXPORT_BITS, SETTINGS.tiffBits) == 8) 8 else 16,
             maxLongSide = prefs.getInt(KEY_EXPORT_SIZE, 0).takeIf { it in EXPORT_SIZES },
             filmScan = prefs.getBoolean(KEY_EXPORT_SCAN, false),
+            photoFrame = runCatching { PhotoFrame.valueOf(prefs.getString(KEY_EXPORT_FRAME, null)!!) }.getOrDefault(SETTINGS.photoFrame),
+            dateStampFormat = runCatching { DateStampFormat.valueOf(prefs.getString(KEY_EXPORT_DATE_FORMAT, null)!!) }.getOrDefault(SETTINGS.dateStampFormat),
+            dateStampStyle = runCatching { DateStampStyle.valueOf(prefs.getString(KEY_EXPORT_DATE_STYLE, null)!!) }.getOrDefault(SETTINGS.dateStampStyle),
+            timeStampFormat = runCatching { TimeStampFormat.valueOf(prefs.getString(KEY_EXPORT_TIME_FORMAT, null)!!) }.getOrDefault(SETTINGS.timeStampFormat),
+            pentax645Fields = Pentax645Field.parseExportFields(prefs.getString(KEY_EXPORT_P645_FIELDS, null)),
+            pentax645Order = Pentax645Field.parseExportOrder(prefs.getString(KEY_EXPORT_P645_ORDER, null)),
+            pentax645Flip = prefs.getBoolean(KEY_EXPORT_P645_FLIP, SETTINGS.pentax645Flip),
+            frameColor = runCatching { FilmFrameColor.valueOf(prefs.getString(KEY_EXPORT_FRAME_COLOR, null)!!) }.getOrDefault(SETTINGS.frameColor),
         ),
     )
     val exportSettings = _exportSettings.asStateFlow()
@@ -959,7 +973,8 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
         if (_export.value != null) return
         clearExported(setOf(id))
         _export.value = BatchExport(done = 0, total = 1, failed = 0)
-        val settings = _exportSettings.value
+        val frameNum = _photos.value.filter { it.analysis != null }.indexOfFirst { it.id == id }.let { if (it >= 0) it + 1 else 1 }
+        val settings = _exportSettings.value.copy(frameNumber = frameNum, captureDate = p.date)
         exportJob = viewModelScope.launch {
             updatePhoto(id) { it.copy(status = PhotoStatus.EXPORTING) }
             val ok = try {
@@ -1004,8 +1019,9 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
                 val p = photo(photo.id) ?: continue // removed meanwhile
                 updatePhoto(p.id) { it.copy(status = PhotoStatus.EXPORTING) }
                 attempted++
+                val photoSettings = settings.copy(frameNumber = index + 1, captureDate = p.date)
                 val ok = try {
-                    decodeLock.withLock { exportOne(p, settings) { f -> _export.update { it?.copy(current = f) } } }
+                    decodeLock.withLock { exportOne(p, photoSettings) { f -> _export.update { it?.copy(current = f) } } }
                     true
                 } catch (e: CancellationException) {
                     throw e
@@ -1088,6 +1104,14 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
         private const val KEY_EXPORT_QUALITY = "exportJpegQuality"
         private const val KEY_EXPORT_BITS = "exportTiffBits"
         private const val KEY_EXPORT_SCAN = "exportFilmScan"
+        private const val KEY_EXPORT_FRAME = "exportPhotoFrame"
+        private const val KEY_EXPORT_DATE_FORMAT = "exportDateStampFormat"
+        private const val KEY_EXPORT_DATE_STYLE = "exportDateStampStyle"
+        private const val KEY_EXPORT_TIME_FORMAT = "exportTimeStampFormat"
+        private const val KEY_EXPORT_P645_FIELDS = "exportPentax645Fields"
+        private const val KEY_EXPORT_P645_ORDER = "exportPentax645Order"
+        private const val KEY_EXPORT_P645_FLIP = "exportPentax645Flip"
+        private const val KEY_EXPORT_FRAME_COLOR = "exportFrameColor"
         private const val KEY_FRAME = "frame"
         private const val KEY_SORT = "sort"
     }

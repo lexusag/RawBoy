@@ -49,9 +49,10 @@ struct ExportDialog: View {
                         Text(s.map { "\($0) px long side" } ?? "Full resolution").tag(s)
                     }
                 }
+                ExportFrameSections(settings: $settings)
                 Section {
                     Text("Photos › RawBoy › " + OutputNaming().fileName(OutputNaming.baseNameOf(sourceName),
-                                                                       settings.format.fileExtension))
+                                                                        settings.format.fileExtension))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -68,6 +69,6 @@ struct ExportDialog: View {
                 }
             }
         }
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
     }
 }

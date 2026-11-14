@@ -108,3 +108,8 @@ Edits carry over when you open the next file, except rotation, flips, straighten
 `IMG_1234-rawboy-001.jpg`, `-002`, … JPEG keeps the main EXIF fields (camera, lens, exposure, date, GPS).
 
 **Film scan 1.5×** (Export dialog, Android and web; only while the Film tone mapper is on): renders the photo 1.5× larger. The photo is upscaled by iterative back-projection and lightly sharpened before the grain, and the film grain is generated at the finer pitch. The Size setting is ignored for a scan. Needs float render targets, otherwise it is a plain enlargement.
+
+**Frame** (Export dialog, Android, iOS and web; remembered, off by default): imprints a film data-back date stamp or wraps the exported JPEG or TIFF in a medium-format film rebate:
+- **Date stamp**: imprints the photo's EXIF shoot date (or today's date if none) in the bottom-right corner (vertically along the right long edge for portrait photos) in **Classic** (amber-orange quartz LED) or **Red LED** style, and in `DD MM 'YY` (default), `'YY MM DD` or `MM DD 'YY` order.
+- **Pentax 645** / **Contax 645**: wraps the photo in a dark film-base rebate with 5×7 dot-matrix LED shoot info read from the photo's EXIF (**Frame #**, **Shutter**, **Aperture**, **Focal length**, **ISO**, **Date** in `DD MM 'YY` / `'YY MM DD` / `MM DD 'YY` / `jan 26`, and **Time** in `24h` or `12h (AM/PM)`), with **Color** (**Amber**, **Slide**, **Red**, **Green**), **Flip info upside down** (180°), and drag-and-drop / up-down reordering and toggling of the shoot-info fields. When exporting a black-and-white photo (Saturation −100 or a black-and-white LUT at full strength), both Date stamp and the film rebate render in neutral black and white.
+

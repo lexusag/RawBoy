@@ -391,45 +391,43 @@ struct ExportSheet: View {
 
     var body: some View {
         let s = vm.exportSettings
-        func set(_ change: (inout ExportSettings) -> Void) {
-            var next = vm.exportSettings
-            change(&next)
-            vm.setExportSettings(next)
-        }
+        let settingsBinding = Binding<ExportSettings>(
+            get: { vm.exportSettings },
+            set: { vm.setExportSettings($0) }
+        )
         return NavigationStack {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text("Format").font(.subheadline).foregroundStyle(.secondary)
-                    Picker("Format", selection: Binding(get: { s.format }, set: { f in set { $0.format = f } })) {
+            Form {
+                Section {
+                    Picker("Format", selection: settingsBinding.format) {
                         ForEach(ExportFormat.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                     }
                     .pickerStyle(.segmented)
-                    Picker("Size", selection: Binding(get: { s.maxLongSide }, set: { v in set { $0.maxLongSide = v } })) {
+                    switch s.format {
+                    case .jpeg:
+                        VStack(alignment: .leading) {
+                            Text("Quality \(s.jpegQuality)").font(.subheadline).monospacedDigit()
+                            Slider(value: Binding(get: { Double(s.jpegQuality) },
+                                                  set: { settingsBinding.wrappedValue.jpegQuality = Int($0.rounded()) }),
+                                   in: 1...100, step: 1)
+                        }
+                    case .tiff:
+                        Picker("Bit depth", selection: settingsBinding.tiffBits) {
+                            Text("8-bit").tag(8)
+                            Text("16-bit").tag(16)
+                        }
+                        .pickerStyle(.segmented)
+                    }
+                    Picker("Size", selection: settingsBinding.maxLongSide) {
                         ForEach(AutoViewModel.exportSizes, id: \.self) { size in
                             Text(size.map { "\($0) px" } ?? "Original").tag(size)
                         }
                     }
-                    .pickerStyle(.menu)
                 }
-                switch s.format {
-                case .jpeg:
-                    HStack {
-                        Text("Quality \(s.jpegQuality)").font(.subheadline).monospacedDigit()
-                        Slider(value: Binding(get: { Double(s.jpegQuality) },
-                                              set: { q in set { $0.jpegQuality = Int(q.rounded()) } }),
-                               in: 1...100, step: 1)
-                    }
-                case .tiff:
-                    Picker("Bit depth", selection: Binding(get: { s.tiffBits }, set: { b in set { $0.tiffBits = b } })) {
-                        Text("8-bit").tag(8)
-                        Text("16-bit").tag(16)
-                    }
-                    .pickerStyle(.segmented)
+                ExportFrameSections(settings: settingsBinding)
+                Section {
+                    Text("Saved to Photos › \(AutoViewModel.naming.folder)").font(.caption).foregroundStyle(.secondary)
                 }
-                Text("Saved to Photos › \(AutoViewModel.naming.folder)").font(.caption).foregroundStyle(.secondary)
-                Spacer(minLength: 0)
             }
-            .padding(16)
             .navigationTitle(count > 1 ? "Export \(count) photos" : "Export")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -442,7 +440,7 @@ struct ExportSheet: View {
                 }
             }
         }
-        .presentationDetents([.height(260)])
+        .presentationDetents([.medium, .large])
     }
 }
 

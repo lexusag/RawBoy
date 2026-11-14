@@ -149,22 +149,43 @@ final class AutoViewModel: ObservableObject {
     @Published private(set) var sort: PhotoSort =
         UserDefaults.standard.string(forKey: sortKey).flatMap(PhotoSort.init(rawValue:)) ?? .date
     private static let sortKey = "auto.sort"
-    /** Format, JPEG quality, TIFF bit depth and size of exports, chosen in the grid; remembered. */
+    /** Format, JPEG quality, TIFF bit depth, size and frame of exports, chosen in the grid; remembered. */
     @Published private(set) var exportSettings: ExportSettings = {
         var s = AutoViewModel.settings
-        s.format = UserDefaults.standard.string(forKey: AutoViewModel.exportFormatKey)
-            .flatMap(ExportFormat.init(rawValue:)) ?? s.format
         let defaults = UserDefaults.standard
+        s.format = defaults.string(forKey: AutoViewModel.exportFormatKey)
+            .flatMap(ExportFormat.init(rawValue:)) ?? s.format
         let size = defaults.integer(forKey: AutoViewModel.exportSizeKey)
         s.maxLongSide = AutoViewModel.exportSizes.contains(size) ? size : nil
         if let q = defaults.object(forKey: AutoViewModel.exportQualityKey) as? Int { s.jpegQuality = q.clamped(1, 100) }
         if defaults.integer(forKey: AutoViewModel.exportBitsKey) == 8 { s.tiffBits = 8 }
+        s.photoFrame = defaults.string(forKey: AutoViewModel.exportPhotoFrameKey)
+            .flatMap(PhotoFrame.init(rawValue:)) ?? s.photoFrame
+        s.dateStampFormat = defaults.string(forKey: AutoViewModel.exportDateStampFormatKey)
+            .flatMap(DateStampFormat.init(rawValue:)) ?? s.dateStampFormat
+        s.dateStampStyle = defaults.string(forKey: AutoViewModel.exportDateStampStyleKey)
+            .flatMap(DateStampStyle.init(rawValue:)) ?? s.dateStampStyle
+        s.timeStampFormat = defaults.string(forKey: AutoViewModel.exportTimeStampFormatKey)
+            .flatMap(TimeStampFormat.init(rawValue:)) ?? s.timeStampFormat
+        s.pentax645Fields = Pentax645Field.parseExportFields(defaults.string(forKey: AutoViewModel.exportPentax645FieldsKey))
+        s.pentax645Order = Pentax645Field.parseExportOrder(defaults.string(forKey: AutoViewModel.exportPentax645OrderKey))
+        if let flip = defaults.object(forKey: AutoViewModel.exportPentax645FlipKey) as? Bool { s.pentax645Flip = flip }
+        s.frameColor = defaults.string(forKey: AutoViewModel.exportFrameColorKey)
+            .flatMap(FilmFrameColor.init(rawValue:)) ?? s.frameColor
         return s
     }()
     private static let exportFormatKey = "auto.exportFormat"
     private static let exportSizeKey = "auto.exportMaxLongSide"
     private static let exportQualityKey = "auto.exportJpegQuality"
     private static let exportBitsKey = "auto.exportTiffBits"
+    private static let exportPhotoFrameKey = "auto.exportPhotoFrame"
+    private static let exportDateStampFormatKey = "auto.exportDateStampFormat"
+    private static let exportDateStampStyleKey = "auto.exportDateStampStyle"
+    private static let exportTimeStampFormatKey = "auto.exportTimeStampFormat"
+    private static let exportPentax645FieldsKey = "auto.exportPentax645Fields"
+    private static let exportPentax645OrderKey = "auto.exportPentax645Order"
+    private static let exportPentax645FlipKey = "auto.exportPentax645Flip"
+    private static let exportFrameColorKey = "auto.exportFrameColor"
     /** Frame around the photo in the detail view's fit view (as RawBoy's); tap outside the photo to cycle it. Remembered. */
     @Published private(set) var frameColor: FrameColor =
         FrameColor.allCases.first { "\($0)" == UserDefaults.standard.string(forKey: frameKey) } ?? .grey
@@ -431,7 +452,7 @@ final class AutoViewModel: ObservableObject {
     /** Takes the preset off one photo, back to its look; the batch preset stays for photos added later. */
     func removePhotoPreset(_ id: String) { changeDevelop(id, force: true) { $0.preset = nil } }
 
-    /** Format, quality, bit depth and size for the next exports (maxLongSide nil = full resolution). */
+    /** Format, quality, bit depth, size and frame for the next exports (maxLongSide nil = full resolution). */
     func setExportSettings(_ settings: ExportSettings) {
         exportSettings = settings
         let defaults = UserDefaults.standard
@@ -439,6 +460,14 @@ final class AutoViewModel: ObservableObject {
         defaults.set(settings.jpegQuality, forKey: Self.exportQualityKey)
         defaults.set(settings.tiffBits, forKey: Self.exportBitsKey)
         defaults.set(settings.maxLongSide ?? 0, forKey: Self.exportSizeKey)
+        defaults.set(settings.photoFrame.rawValue, forKey: Self.exportPhotoFrameKey)
+        defaults.set(settings.dateStampFormat.rawValue, forKey: Self.exportDateStampFormatKey)
+        defaults.set(settings.dateStampStyle.rawValue, forKey: Self.exportDateStampStyleKey)
+        defaults.set(settings.timeStampFormat.rawValue, forKey: Self.exportTimeStampFormatKey)
+        defaults.set(Pentax645Field.serialize(settings.pentax645Fields), forKey: Self.exportPentax645FieldsKey)
+        defaults.set(Pentax645Field.serializeOrder(settings.pentax645Order), forKey: Self.exportPentax645OrderKey)
+        defaults.set(settings.pentax645Flip, forKey: Self.exportPentax645FlipKey)
+        defaults.set(settings.frameColor.rawValue, forKey: Self.exportFrameColorKey)
     }
 
     /**
@@ -849,7 +878,11 @@ final class AutoViewModel: ObservableObject {
         guard let id = sessionReady, let p = photo(id), let a = p.analysis, let params = p.params, export == nil else { return }
         clearExported(only: [id])
         export = BatchExport(done: 0, total: 1, failed: 0)
-        let settings = exportSettings
+        let analysed = photos.filter { $0.analysis != nil }
+        let frameNum = (analysed.firstIndex { $0.id == id } ?? 0) + 1
+        var settings = exportSettings
+        settings.frameNumber = frameNum
+        settings.captureDate = p.date
         keepAwake(true)
         Task {
             updatePhoto(id) { $0.status = .exporting }
@@ -898,7 +931,10 @@ final class AutoViewModel: ObservableObject {
                 attempted += 1
                 var ok = false
                 do {
-                    let file = try await decodeLock.run { try await exportOne(p, settings) }
+                    var itemSettings = settings
+                    itemSettings.frameNumber = index + 1
+                    itemSettings.captureDate = p.date
+                    let file = try await decodeLock.run { try await exportOne(p, itemSettings) }
                     try await PhotoLibraryOutput.save(file, naming: Self.naming)
                     ok = true
                 } catch {

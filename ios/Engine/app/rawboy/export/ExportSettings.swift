@@ -25,7 +25,7 @@ public struct ExportSettings: Equatable, Sendable {
     public var downscaleSharpen: Float = 0
     /**
      * Optional film-style date stamp (e.g. `'26 11 13`) imprinted in the bottom-right corner of the exported image.
-     * Empty string = no date stamp.
+     * Empty string = no date stamp (unless [photoFrame] is `.dateStamp`, which resolves it at export time).
      */
     public var dateStamp: String = ""
     /** Visual style for [dateStamp] (`Classic` yellow-orange Digital-7 or `Red LED` rounded segments). */
@@ -37,11 +37,35 @@ public struct ExportSettings: Equatable, Sendable {
     public var pentax645: Pentax645Info?
     /** When true (B&W mode), both dateStamp and pentax645 render in neutral black-and-white. */
     public var monochromeImprint: Bool = false
+    /** High-level frame / date-stamp choice from the Pro or Auto Export dialog; `.none` by default. */
+    public var photoFrame: PhotoFrame = .none
+    /** Date order for [PhotoFrame.dateStamp] and [Pentax645Field.date]: `DD MM 'YY` by default. */
+    public var dateStampFormat: DateStampFormat = .dmy
+    /** Time format for [Pentax645Field.time]: `24h` by default. */
+    public var timeStampFormat: TimeStampFormat = .h24
+    /** Shoot-info items imprinted on the [PhotoFrame.pentax645] / [PhotoFrame.contax645] rebate. */
+    public var pentax645Fields: Set<Pentax645Field> = Pentax645Field.exportDefaultSet
+    /** Display order of shoot-info items on the [PhotoFrame.pentax645] / [PhotoFrame.contax645] rebate. */
+    public var pentax645Order: [Pentax645Field] = Pentax645Field.exportFields
+    /** Rotate the [PhotoFrame.pentax645] / [PhotoFrame.contax645] shoot-info LED text 180° upside down. */
+    public var pentax645Flip: Bool = false
+    /** LED imprint color for [PhotoFrame.pentax645] and [PhotoFrame.contax645]. */
+    public var frameColor: FilmFrameColor = .amber
+    /** Optional 1-based frame counter for [Pentax645Field.frameNumber] (e.g. batch index in Auto, 1 in Pro). */
+    public var frameNumber: Int?
+    /** Optional EXIF date string (`YYYY:MM:DD HH:MM:SS`) pre-read for the photo. */
+    public var captureDate: String?
 
     public init(format: ExportFormat = .jpeg, jpegQuality: Int = 92, tiffBits: Int = 16,
                 jpegEncoder: JpegEncoder = .system, maxLongSide: Int? = nil, downscaleSharpen: Float = 0,
                 dateStamp: String = "", dateStampStyle: DateStampStyle = .classic,
-                pentax645: Pentax645Info? = nil, monochromeImprint: Bool = false) {
+                pentax645: Pentax645Info? = nil, monochromeImprint: Bool = false,
+                photoFrame: PhotoFrame = .none, dateStampFormat: DateStampFormat = .dmy,
+                timeStampFormat: TimeStampFormat = .h24,
+                pentax645Fields: Set<Pentax645Field> = Pentax645Field.exportDefaultSet,
+                pentax645Order: [Pentax645Field] = Pentax645Field.exportFields,
+                pentax645Flip: Bool = false, frameColor: FilmFrameColor = .amber,
+                frameNumber: Int? = nil, captureDate: String? = nil) {
         self.format = format
         self.jpegQuality = jpegQuality
         self.tiffBits = tiffBits
@@ -52,6 +76,182 @@ public struct ExportSettings: Equatable, Sendable {
         self.dateStampStyle = dateStampStyle
         self.pentax645 = pentax645
         self.monochromeImprint = monochromeImprint
+        self.photoFrame = photoFrame
+        self.dateStampFormat = dateStampFormat
+        self.timeStampFormat = timeStampFormat
+        self.pentax645Fields = pentax645Fields
+        self.pentax645Order = pentax645Order
+        self.pentax645Flip = pentax645Flip
+        self.frameColor = frameColor
+        self.frameNumber = frameNumber
+        self.captureDate = captureDate
+    }
+
+    /** Pixel dimensions a [width] x [height] image will be saved at (including film rebate border when enabled). */
+    public func outputSize(_ width: Int, _ height: Int) -> (Int, Int) {
+        let photoSize = BandDownscaler.outputSize(width, height, maxLongSide: maxLongSide)
+        let style: FilmFrameStyle? = pentax645?.style ?? {
+            switch photoFrame {
+            case .pentax645: return .pentax645
+            case .contax645: return .contax645
+            default: return nil
+            }
+        }()
+        guard let style else { return photoSize }
+        let layout = Pentax645Frame.layout(photoWidth: photoSize.0, photoHeight: photoSize.1, style: style)
+        return (layout.outWidth, layout.outHeight)
+    }
+
+    /**
+     * Resolves [photoFrame] into [dateStamp] or [pentax645] from [image]'s EXIF metadata and [exifDate]
+     * when [dateStamp] and [pentax645] were not already populated by the caller (e.g. Camera's ShotSaver).
+     */
+    public func resolveFrame(image: RawImage, exifDate: String? = nil, monochrome: Bool = false, now: Date = Date()) -> ExportSettings {
+        if !dateStamp.isEmpty || pentax645 != nil || photoFrame == .none {
+            var copy = self
+            copy.monochromeImprint = monochromeImprint || monochrome
+            return copy
+        }
+        let date = DateStamp.parseExifDate(exifDate ?? captureDate ?? image.metadata.dateTimeOriginal) ?? now
+        let mono = monochromeImprint || monochrome
+        switch photoFrame {
+        case .none:
+            var copy = self
+            copy.monochromeImprint = mono
+            return copy
+        case .dateStamp:
+            let fmt = dateStampFormat == .mmmYy ? .dmy : dateStampFormat
+            var copy = self
+            copy.dateStamp = DateStamp.format(date, format: fmt)
+            copy.monochromeImprint = mono
+            return copy
+        case .pentax645, .contax645:
+            let fields = pentax645Fields
+            let shot = image.shotInfo
+            let focal35 = shot.focalLength35mm > 0 ? shot.focalLength35mm : shot.focalLength
+            var copy = self
+            copy.pentax645 = Pentax645Info(
+                frameNumber: fields.contains(.frameNumber) ? (frameNumber ?? 1) : nil,
+                exposureTime: (fields.contains(.shutter) && shot.exposureTime > 0) ? shot.exposureTime : nil,
+                fNumber: (fields.contains(.aperture) && shot.fNumber > 0) ? shot.fNumber : nil,
+                focalLengthMm: (fields.contains(.focalLength) && focal35 > 0) ? focal35 : nil,
+                iso: (fields.contains(.iso) && shot.iso > 0) ? shot.iso : nil,
+                date: fields.contains(.date) ? Pentax645Frame.formatDate(date, format: dateStampFormat) : nil,
+                time: fields.contains(.time) ? Pentax645Frame.formatTime(date, format: timeStampFormat) : nil,
+                flipped: pentax645Flip,
+                fieldOrder: pentax645Order.map(\.rawValue),
+                color: frameColor,
+                style: photoFrame == .contax645 ? .contax645 : .pentax645
+            )
+            copy.monochromeImprint = mono
+            return copy
+        }
+    }
+}
+
+/** Mutually exclusive film frame / stamp imprint options. */
+public enum PhotoFrame: String, CaseIterable, Sendable {
+    case none = "NONE"
+    case dateStamp = "DATE_STAMP"
+    case pentax645 = "PENTAX_645"
+    case contax645 = "CONTAX_645"
+
+    public var label: String {
+        switch self {
+        case .none: return "Off"
+        case .dateStamp: return "Date stamp"
+        case .pentax645: return "Pentax 645"
+        case .contax645: return "Contax 645"
+        }
+    }
+}
+
+/** Individual shoot-info items that can be toggled and reordered on the PhotoFrame.pentax645 / contax645 rebate. */
+public enum Pentax645Field: String, CaseIterable, Sendable {
+    case frameNumber = "frame"
+    case mode = "mode"
+    case shutter = "shutter"
+    case aperture = "aperture"
+    case exposureComp = "ev"
+    case metering = "metering"
+    case focalLength = "focal"
+    case iso = "iso"
+    case date = "date"
+    case time = "time"
+
+    public var label: String {
+        switch self {
+        case .frameNumber: return "Frame #"
+        case .mode: return "Mode"
+        case .shutter: return "Shutter"
+        case .aperture: return "Aperture"
+        case .exposureComp: return "EV"
+        case .metering: return "Metering"
+        case .focalLength: return "Focal length"
+        case .iso: return "ISO"
+        case .date: return "Date"
+        case .time: return "Time"
+        }
+    }
+
+    public static let defaultSet: Set<Pentax645Field> = Set(allCases)
+    public static let defaultOrder: [Pentax645Field] = Array(allCases)
+
+    /** Shoot-info fields available from photo EXIF in RawBoy Pro and Auto (excludes camera-only mode/EV/metering). */
+    public static let exportFields: [Pentax645Field] = [
+        .frameNumber, .shutter, .aperture, .focalLength, .iso, .date, .time
+    ]
+    public static let exportDefaultSet: Set<Pentax645Field> = Set(exportFields)
+
+    public static func parseSet(_ raw: String?) -> Set<Pentax645Field> {
+        guard let raw else { return defaultSet }
+        if raw.trimmingCharacters(in: .whitespaces).isEmpty { return [] }
+        var result: Set<Pentax645Field> = []
+        for token in raw.split(separator: ",") {
+            let k = token.trimmingCharacters(in: .whitespaces)
+            if k == "datetime" {
+                result.insert(.date)
+                result.insert(.time)
+            } else if let f = Pentax645Field(rawValue: k) {
+                result.insert(f)
+            }
+        }
+        return result
+    }
+
+    public static func parseExportFields(_ raw: String?) -> Set<Pentax645Field> {
+        guard let raw else { return exportDefaultSet }
+        return parseSet(raw).intersection(exportDefaultSet)
+    }
+
+    public static func serialize(_ fields: Set<Pentax645Field>) -> String {
+        allCases.filter { fields.contains($0) }.map(\.rawValue).joined(separator: ",")
+    }
+
+    public static func parseOrder(_ raw: String?) -> [Pentax645Field] {
+        guard let raw, !raw.trimmingCharacters(in: .whitespaces).isEmpty else { return defaultOrder }
+        var result: [Pentax645Field] = []
+        for token in raw.split(separator: ",") {
+            let k = token.trimmingCharacters(in: .whitespaces)
+            if k == "datetime" {
+                if !result.contains(.date) { result.append(.date) }
+                if !result.contains(.time) { result.append(.time) }
+            } else if let f = Pentax645Field(rawValue: k), !result.contains(f) {
+                result.append(f)
+            }
+        }
+        for f in allCases where !result.contains(f) {
+            result.append(f)
+        }
+        return result
+    }
+
+    public static func parseExportOrder(_ raw: String?) -> [Pentax645Field] {
+        parseOrder(raw).filter { exportDefaultSet.contains($0) }
+    }
+
+    public static func serializeOrder(_ order: [Pentax645Field]) -> String {
+        order.map(\.rawValue).joined(separator: ",")
     }
 }
 
@@ -120,6 +320,32 @@ public enum DateStamp {
         case .mdy: return String(format: "%02d %02d '%02d", month, day, year)
         case .mmmYy: return String(format: "%02d %02d '%02d", day, month, year)
         }
+    }
+
+    /**
+     * Parses an EXIF date string (`YYYY:MM:DD HH:MM:SS`, or at least `YYYY:MM:DD`) into a [Date] in [calendar],
+     * or returns `nil` if [exifDate] is nil or malformed.
+     */
+    public static func parseExifDate(_ exifDate: String?, calendar: Calendar = .current) -> Date? {
+        guard let s = exifDate?.trimmingCharacters(in: .whitespaces), s.count >= 10 else { return nil }
+        let chars = Array(s)
+        guard chars[4] == ":", chars[7] == ":" else { return nil }
+        guard let year = Int(String(chars[0..<4])), year >= 1970,
+              let month = Int(String(chars[5..<7])), (1...12).contains(month),
+              let day = Int(String(chars[8..<10])), (1...31).contains(day)
+        else { return nil }
+        var hour = 0
+        var minute = 0
+        var second = 0
+        if chars.count >= 16, chars[10] == " ", chars[13] == ":" {
+            hour = (Int(String(chars[11..<13])) ?? 0).clamped(0, 23)
+            minute = (Int(String(chars[14..<16])) ?? 0).clamped(0, 59)
+            if chars.count >= 19, chars[16] == ":" {
+                second = (Int(String(chars[17..<19])) ?? 0).clamped(0, 59)
+            }
+        }
+        return calendar.date(from: DateComponents(year: year, month: month, day: day,
+                                                  hour: hour, minute: minute, second: second))
     }
 
     /** The LED's light per film layer, for the response `1 - exp(-gain * E * c)`: red saturates first (yellow core). */
@@ -645,7 +871,6 @@ public enum Pentax645Frame {
     private enum Token {
         case text(String)
         case metering(spot: Bool)
-        case triangle
     }
 
     private static func charCols(_ ch: Character) -> Int {
@@ -668,6 +893,25 @@ public enum Pentax645Frame {
         let dotU: [Float]
         let dotV: [Float]
         let dotBright: [Float]
+    }
+
+    private struct ContaxCounterStamp {
+        let u0: Float
+        let v0: Float
+        let totalU: Float
+        let charH: Float
+        let charW: Float
+        let ht: Float
+        let charGap: Float
+        let triLen: Float
+        let triHalfBase: Float
+        let triCornerR: Float
+        let triGap: Float
+        let soft: Float
+        let reach: Float
+        let haloInv: Float
+        let flipped: Bool
+        let chars: [Character]
     }
 
     private static func buildStampDots(layout: Layout, info: Pentax645Info) -> StampDots {
@@ -714,14 +958,31 @@ public enum Pentax645Frame {
                                    infoBar: infoBar, vTop: vTop, flipped: info.flipped)
     }
 
-    private static func buildContaxBottomDots(layout: Layout, info: Pentax645Info) -> StampDots? {
+    private static func buildContaxCounter(layout: Layout, info: Pentax645Info) -> ContaxCounterStamp? {
         guard let frameNum = info.frameNumber else { return nil }
+        let chars = Array(formatContaxFrameNumber(frameNum))
         let barLength = Float(layout.infoOnLeft ? layout.outHeight : layout.outWidth)
-        let photoShortSide = Float(min(layout.photoWidth, layout.photoHeight))
         let infoBar = Float(layout.infoBar)
-        let tokens: [Token] = [.triangle, .text(formatContaxFrameNumber(frameNum))]
-        return buildDotsFromTokens(tokens, barLength: barLength, photoShortSide: photoShortSide,
-                                   infoBar: infoBar, vTop: 0, flipped: info.flipped, maxGroupGapMul: 2.2)
+        let charH = infoBar * 0.54
+        let charW = charH * 0.65
+        let ht = charH * 0.088
+        let charGap = charH * 0.22
+        let triLen = charH * 1.55
+        let triHalfBase = charH * 0.45
+        let triCornerR = charH * 0.035
+        let triGap = charH * 0.42
+        let digitsW: Float = chars.isEmpty ? 0 : Float(chars.count) * charW + Float(chars.count - 1) * charGap
+        let totalU = triLen + triGap + digitsW
+        let u0 = (barLength - totalU) * 0.5
+        let v0 = (infoBar - charH) * 0.5
+        let soft = max(0.56, charH * 0.032)
+        let reach = charH * 0.22
+        let haloInv = 1 / max(0.8, charH * 0.07)
+        return ContaxCounterStamp(
+            u0: u0, v0: v0, totalU: totalU, charH: charH, charW: charW, ht: ht, charGap: charGap,
+            triLen: triLen, triHalfBase: triHalfBase, triCornerR: triCornerR, triGap: triGap,
+            soft: soft, reach: reach, haloInv: haloInv, flipped: info.flipped, chars: chars
+        )
     }
 
     private static func buildDotsFromTokens(
@@ -741,13 +1002,11 @@ public enum Pentax645Frame {
                 return Float(cols) * dotPitch + Float(s.count - 1) * charGap
             case .metering:
                 return 7 * dotPitch
-            case .triangle:
-                return 6 * dotPitch
             }
         }
 
         var sumTokensW = tokens.reduce(Float(0)) { $0 + tokenWidth($1) }
-        let maxContentW = photoShortSide * 0.92
+        let maxContentW = max(photoShortSide * 0.72, photoShortSide - 3.6 * infoBar)
         let minTotalW = tokens.isEmpty ? 0 : sumTokensW + Float(tokens.count - 1) * minGroupGap
         if minTotalW > maxContentW && minTotalW > 0 {
             let scale = maxContentW / minTotalW
@@ -762,7 +1021,7 @@ public enum Pentax645Frame {
         if tokens.count <= 1 {
             groupGap = 0
         } else {
-            let targetSpan = min(photoShortSide * 0.86, maxContentW)
+            let targetSpan = min(photoShortSide * 0.80, maxContentW)
             let idealGap = (targetSpan - sumTokensW) / Float(tokens.count - 1)
             let maxGap = dotPitch * maxGroupGapMul
             groupGap = min(max(idealGap, min(minGroupGap, maxGap)), maxGap)
@@ -773,9 +1032,9 @@ public enum Pentax645Frame {
         let v0 = vTop + (infoBar - charH) * 0.5
 
         let dotR = dotPitch * 0.36
-        let soft = max(dotPitch * 0.36, 0.8)
-        let reach = dotPitch * 1.8
-        let haloInv = 1 / (dotPitch * 0.85)
+        let soft = max(dotPitch * 0.252, 0.56)
+        let reach = dotPitch * 1.26
+        let haloInv = 1 / (dotPitch * 0.595)
 
         var dotU: [Float] = []
         var dotV: [Float] = []
@@ -821,17 +1080,6 @@ public enum Pentax645Frame {
                 }
                 cursorU += 7 * dotPitch
                 glyphIdx += 1
-            case .triangle:
-                for r in 0..<7 {
-                    let bits = triangle7x6[r]
-                    for c in 0..<6 where ((bits >> (5 - c)) & 1) != 0 {
-                        dotU.append(cursorU + (Float(c) + 0.5) * dotPitch)
-                        dotV.append((Float(r) + 0.5) * dotPitch)
-                        dotBright.append(0.92 + 0.08 * hash(glyphIdx * 64 + r * 8 + c, 733))
-                    }
-                }
-                cursorU += 6 * dotPitch
-                glyphIdx += 1
             }
             if ti + 1 < tokens.count { cursorU += groupGap }
         }
@@ -847,7 +1095,8 @@ public enum Pentax645Frame {
     private static func sampleRebatePixel(
         px: Int, py: Int, u: Float, v: Float, dots: StampDots?,
         grainCell: Float, monochrome: Bool, color: FilmFrameColor,
-        out: UnsafeMutablePointer<UInt16>, idx: Int
+        out: UnsafeMutablePointer<UInt16>, idx: Int,
+        counter: ContaxCounterStamp? = nil
     ) {
         let grain = 0.90 + 0.20 * hash(Int(Float(px) / grainCell), Int(Float(py) / grainCell))
         var r = (monochrome ? baseMono : baseR) * grain
@@ -878,6 +1127,45 @@ public enum Pentax645Frame {
                 }
                 let excess = max(0, minDist) * dots.haloInv
                 let halo = 0.16 * exp(-excess * excess)
+                if core > 0.002 || halo >= 0.004 {
+                    let e = (core + halo * (1 - core)) * grain
+                    if monochrome {
+                        let l = 1 - exp(-gain * e * ledMono)
+                        r = 1 - (1 - r) * (1 - l)
+                        g = 1 - (1 - g) * (1 - l)
+                        b = 1 - (1 - b) * (1 - l)
+                    } else {
+                        let (ledR, ledG, ledB) = ledRgb(color)
+                        let lr = 1 - exp(-gain * e * ledR)
+                        let lg = 1 - exp(-gain * e * ledG)
+                        let lb = 1 - exp(-gain * e * ledB)
+                        r = 1 - (1 - r) * (1 - lr)
+                        g = 1 - (1 - g) * (1 - lg)
+                        b = 1 - (1 - b) * (1 - lb)
+                    }
+                }
+            }
+        } else if let counter {
+            let rawLu = u - counter.u0
+            let rawLv = v - counter.v0
+            let lu = counter.flipped ? (counter.totalU - rawLu) : rawLu
+            let lv = counter.flipped ? (counter.charH - rawLv) : rawLv
+            let reach = counter.reach
+            if lu >= -reach && lu <= counter.totalU + reach && lv >= -reach && lv <= counter.charH + reach {
+                var d = sdContaxTriangle(lu, lv, triLen: counter.triLen, halfBase: counter.triHalfBase,
+                                         cy: counter.charH * 0.5, cornerR: counter.triCornerR)
+                let digitsStart = counter.triLen + counter.triGap
+                let step = counter.charW + counter.charGap
+                for i in 0..<counter.chars.count {
+                    let du = lu - (digitsStart + Float(i) * step)
+                    if du >= -reach && du <= counter.charW + reach {
+                        let dd = sdContaxDigit(counter.chars[i], x: du, y: lv, w: counter.charW, h: counter.charH, ht: counter.ht)
+                        if dd < d { d = dd }
+                    }
+                }
+                let core = edge(d, counter.soft)
+                let excess = max(0, d) * counter.haloInv
+                let halo = 0.11 * exp(-excess * excess)
                 if core > 0.002 || halo >= 0.004 {
                     let e = (core + halo * (1 - core)) * grain
                     if monochrome {
@@ -931,15 +1219,16 @@ public enum Pentax645Frame {
         let grainCell = max(1, Float(layout.infoBar) * 0.03)
         let bottomStart = layout.topPad + layout.photoHeight
         let isContaxBottom = layout.style == .contax645 && !layout.infoOnLeft && bandY >= bottomStart
-        let dots: StampDots? = (isContaxBottom && info != nil) ? buildContaxBottomDots(layout: layout, info: info!) : nil
+        let counter: ContaxCounterStamp? = (isContaxBottom && info != nil) ? buildContaxCounter(layout: layout, info: info!) : nil
         let color = info?.color ?? .amber
         for py in bandY..<(bandY + bandRows) {
             let rowOffset = (py - bandY) * outW
             let v: Float = isContaxBottom ? Float(py - bottomStart) + 0.5 : 0
             for px in 0..<outW {
                 let idx = (rowOffset + px) * 3
-                sampleRebatePixel(px: px, py: py, u: Float(px) + 0.5, v: v, dots: dots,
-                                  grainCell: grainCell, monochrome: monochrome, color: color, out: band, idx: idx)
+                sampleRebatePixel(px: px, py: py, u: Float(px) + 0.5, v: v, dots: nil,
+                                  grainCell: grainCell, monochrome: monochrome, color: color, out: band, idx: idx,
+                                  counter: counter)
             }
         }
     }
@@ -954,14 +1243,13 @@ public enum Pentax645Frame {
         let leftPad = layout.leftPad
         let onLeft = layout.infoOnLeft
         let infoBar = Float(layout.infoBar)
-        let cornerSpan = infoBar * 1.6
         let grainCell = max(1, infoBar * 0.03)
         let color = info?.color ?? .amber
         let isPentax = layout.style == .pentax645
         let isContaxVertical = !isPentax && onLeft
         let dots: StampDots? = (isPentax || isContaxVertical) ? info.map { buildStampDots(layout: layout, info: $0) } : nil
-        let contaxRightDots: StampDots? = isContaxVertical ? info.flatMap { buildContaxBottomDots(layout: layout, info: $0) } : nil
-        let softEdge = max(1.6, infoBar * 0.055)
+        let contaxRightCounter: ContaxCounterStamp? = isContaxVertical ? info.flatMap { buildContaxCounter(layout: layout, info: $0) } : nil
+        let softEdge = max(1.12, infoBar * 0.0385)
         var tmp: [UInt16] = [0, 0, 0]
 
         for r in 0..<bandRows {
@@ -977,7 +1265,7 @@ public enum Pentax645Frame {
             for px in (leftPad + pw)..<ow {
                 let u: Float = isContaxVertical ? Float(oh - 1 - py) + 0.5 : 0
                 let v: Float = isContaxVertical ? Float(px - (leftPad + pw)) + 0.5 : 0
-                sampleRebatePixel(px: px, py: py, u: u, v: v, dots: contaxRightDots, grainCell: grainCell, monochrome: monochrome, color: color, out: dst, idx: (dstRow + px) * 3)
+                sampleRebatePixel(px: px, py: py, u: u, v: v, dots: nil, grainCell: grainCell, monochrome: monochrome, color: color, out: dst, idx: (dstRow + px) * 3, counter: contaxRightCounter)
             }
 
             if !isPentax {
@@ -1086,14 +1374,8 @@ public enum Pentax645Frame {
                 for x in 0..<pw {
                     let xc = Float(x) + 0.5
                     let distFromEnd = min(xc, Float(pw) - xc)
-                    let edgeY: Float
-                    if distFromEnd < cornerSpan {
-                        let t = distFromEnd / cornerSpan
-                        edgeY = infoBar * (2 * t - t * t)
-                    } else {
-                        edgeY = infoBar
-                    }
-                    let mask = gateMask(yc - edgeY, softEdge: softEdge)
+                    let d = pentaxMonobrowDist(distFromEnd: distFromEnd, depth: yc, infoBar: infoBar)
+                    let mask = gateMask(d, softEdge: softEdge)
                     if mask <= 0.001 { continue }
                     let px = leftPad + x
                     let idx = (dstRow + px) * 3
@@ -1105,16 +1387,10 @@ public enum Pentax645Frame {
             } else {
                 let yc = Float(y) + 0.5
                 let distFromEnd = min(yc, Float(ph) - yc)
-                let edgeX: Float
-                if distFromEnd < cornerSpan {
-                    let t = distFromEnd / cornerSpan
-                    edgeX = infoBar * (2 * t - t * t)
-                } else {
-                    edgeX = infoBar
-                }
-                let xMax = min(pw, Int(edgeX + softEdge + 1.5))
+                let xMax = min(pw, Int(infoBar + softEdge + 2))
                 for x in 0..<xMax {
-                    let mask = gateMask((Float(x) + 0.5) - edgeX, softEdge: softEdge)
+                    let d = pentaxMonobrowDist(distFromEnd: distFromEnd, depth: Float(x) + 0.5, infoBar: infoBar)
+                    let mask = gateMask(d, softEdge: softEdge)
                     if mask <= 0.001 { continue }
                     let px = leftPad + x
                     let idx = (dstRow + px) * 3
@@ -1125,6 +1401,185 @@ public enum Pentax645Frame {
                 }
             }
         }
+    }
+
+    private static func pentaxMonobrowDist(distFromEnd: Float, depth: Float, infoBar: Float) -> Float {
+        let outerR = infoBar * 0.16
+        var dCorner = Float.greatestFiniteMagnitude
+        if distFromEnd < outerR && depth < outerR {
+            let dx = outerR - distFromEnd
+            let dy = outerR - depth
+            dCorner = outerR - hypot(dx, dy)
+        }
+
+        let x0 = infoBar * 1.25
+        let rTop = infoBar * 0.22
+        let rBot = infoBar * 0.52
+        let sinT: Float = 0.92
+        let cosT: Float = 0.39191836
+        let tanT = sinT / cosT
+        let x1 = x0 + rTop * sinT
+        let y1 = rTop * (1 - cosT)
+        let y2 = infoBar - rBot * (1 - cosT)
+        let x2 = x1 + (y2 - y1) / tanT
+        let x3 = x2 + rBot * sinT
+
+        let edgeDepth: Float
+        let slope: Float
+        if distFromEnd <= x0 {
+            edgeDepth = 0
+            slope = 0
+        } else if distFromEnd < x1 {
+            let dx = distFromEnd - x0
+            let rem = sqrt(max(1e-4, rTop * rTop - dx * dx))
+            edgeDepth = rTop - rem
+            slope = dx / rem
+        } else if distFromEnd < x2 {
+            edgeDepth = y1 + (distFromEnd - x1) * tanT
+            slope = tanT
+        } else if distFromEnd < x3 {
+            let dx = x3 - distFromEnd
+            let rem = sqrt(max(1e-4, rBot * rBot - dx * dx))
+            edgeDepth = (infoBar - rBot) + rem
+            slope = dx / rem
+        } else {
+            edgeDepth = infoBar
+            slope = 0
+        }
+        let dNotch = (depth - edgeDepth) / hypot(1, slope)
+        return min(dCorner, dNotch)
+    }
+
+    private static func sdSegment(_ px: Float, _ py: Float, _ ax: Float, _ ay: Float, _ bx: Float, _ by: Float) -> Float {
+        let vx = bx - ax
+        let vy = by - ay
+        let wx = px - ax
+        let wy = py - ay
+        let len2 = vx * vx + vy * vy
+        let t = len2 > 0 ? min(max((wx * vx + wy * vy) / len2, 0), 1) : 0
+        let dx = wx - vx * t
+        let dy = wy - vy * t
+        return hypot(dx, dy)
+    }
+
+    private static func sdArc(_ px: Float, _ py: Float, _ cx: Float, _ cy: Float, _ r: Float, _ startDeg: Float, _ sweepDeg: Float) -> Float {
+        let midRad = (startDeg + sweepDeg * 0.5) * .pi / 180
+        let halfRad = abs(sweepDeg) * 0.5 * .pi / 180
+        let dx = px - cx
+        let dy = py - cy
+        let cosM = cos(midRad)
+        let sinM = sin(midRad)
+        let ux = dx * cosM + dy * sinM
+        let uy = abs(-dx * sinM + dy * cosM)
+        let cosH = cos(halfRad)
+        let sinH = sin(halfRad)
+        if ux * sinH - uy * cosH >= 0 {
+            return abs(hypot(ux, uy) - r)
+        }
+        return hypot(ux - r * cosH, uy - r * sinH)
+    }
+
+    private static func sdContaxTriangle(_ lu: Float, _ lv: Float, triLen: Float, halfBase: Float, cy: Float, cornerR: Float) -> Float {
+        let x0 = cornerR
+        let x1 = max(x0 + 1, triLen - cornerR * 2.2)
+        let hb = max(1, halfBase - cornerR * 1.2)
+        let dy = abs(lv - cy)
+        let pBaseX = lu - x0
+        let pBaseY = dy - min(dy, hb)
+        let dBase2 = pBaseX * pBaseX + pBaseY * pBaseY
+
+        let ex = x1 - x0
+        let ey = -hb
+        let wx = lu - x0
+        let wy = dy - hb
+        let t = min(max((wx * ex + wy * ey) / (ex * ex + ey * ey), 0), 1)
+        let dx = wx - ex * t
+        let dy2 = wy - ey * t
+        let dSlope2 = dx * dx + dy2 * dy2
+
+        let inside = lu >= x0 && dy * ex <= hb * (x1 - lu)
+        let dist = sqrt(min(dBase2, dSlope2))
+        return (inside ? -dist : dist) - cornerR
+    }
+
+    private static func sdContaxDigit(_ ch: Character, x: Float, y: Float, w: Float, h: Float, ht: Float) -> Float {
+        let xL = ht
+        let xR = w - ht
+        let xC = w * 0.5
+        let yT = ht
+        let yB = h - ht
+        let rx = (xR - xL) * 0.5
+        let d: Float
+        switch ch {
+        case "0":
+            d = min(
+                min(sdArc(x, y, xC, yT + rx, rx, 180, 180), sdArc(x, y, xC, yB - rx, rx, 0, 180)),
+                min(sdSegment(x, y, xL, yT + rx, xL, yB - rx), sdSegment(x, y, xR, yT + rx, xR, yB - rx))
+            )
+        case "1":
+            let stemX = xC + rx * 0.16
+            d = min(
+                sdSegment(x, y, stemX, yT, stemX, yB),
+                sdSegment(x, y, xC - rx * 0.52, yT + rx * 0.45, stemX, yT)
+            )
+        case "2":
+            let aRad: Float = 28 * .pi / 180
+            let startX = xC + rx * cos(aRad)
+            let startY = yT + rx + rx * sin(aRad)
+            d = min(
+                sdArc(x, y, xC, yT + rx, rx, 195, 193),
+                min(sdSegment(x, y, startX, startY, xL, yB), sdSegment(x, y, xL, yB, xR, yB))
+            )
+        case "3":
+            let midY = h * 0.47
+            let rTop = (midY - yT) * 0.5
+            let rBot = (yB - midY) * 0.5
+            d = min(
+                sdArc(x, y, xC, yT + rTop, rTop, 195, 255),
+                min(sdArc(x, y, xC, midY + rBot, rBot, 270, 255), sdSegment(x, y, xC - rx * 0.20, midY, xC, midY))
+            )
+        case "4":
+            let stemX = xL + rx * 1.36
+            let barY = h * 0.64
+            d = min(
+                sdSegment(x, y, stemX, yT, stemX, yB),
+                min(sdSegment(x, y, xL, barY, xR, barY), sdSegment(x, y, stemX - rx * 0.12, yT, xL, barY))
+            )
+        case "5":
+            let midY = h * 0.45
+            let rBot = (yB - midY) * 0.5
+            d = min(
+                sdSegment(x, y, xL + rx * 0.04, yT, xR - rx * 0.08, yT),
+                min(sdSegment(x, y, xL + rx * 0.04, yT, xL, midY + rBot * 0.25), sdArc(x, y, xC, yB - rBot, rBot, 220, 280))
+            )
+        case "6":
+            let topCy = yT + rx
+            let bowlCy = yB - rx
+            d = min(
+                sdArc(x, y, xC, bowlCy, rx, 0, 360),
+                min(sdArc(x, y, xC, topCy, rx, 180, 145), sdSegment(x, y, xL, topCy, xL, bowlCy))
+            )
+        case "7":
+            d = min(
+                sdSegment(x, y, xL, yT, xR, yT),
+                sdSegment(x, y, xR, yT, xC - rx * 0.25, yB)
+            )
+        case "8":
+            let midY = h * 0.47
+            let rTop = (midY - yT) * 0.5
+            let rBot = (yB - midY) * 0.5
+            d = min(
+                sdArc(x, y, xC, yT + rTop, rTop, 0, 360),
+                sdArc(x, y, xC, midY + rBot, rBot, 0, 360)
+            )
+        case "9":
+            return sdContaxDigit("6", x: w - x, y: h - y, w: w, h: h, ht: ht)
+        case "-":
+            d = sdSegment(x, y, xL + rx * 0.1, h * 0.5, xR - rx * 0.1, h * 0.5)
+        default:
+            return 1e9
+        }
+        return d - ht
     }
 
     private static func blendPixel(dst: UnsafeMutablePointer<UInt16>, idx: Int, stripe: [UInt16], mask: Float) {
@@ -1191,16 +1646,6 @@ public enum Pentax645Frame {
         0b0001000,
         0b0000000,
         0b0000000,
-    ]
-
-    private static let triangle7x6 = [
-        0b100000,
-        0b111000,
-        0b111110,
-        0b111111,
-        0b111110,
-        0b111000,
-        0b100000,
     ]
 
     private static func glyph5x7(_ ch: Character) -> [Int]? {
@@ -1271,12 +1716,28 @@ public enum ExportSettingsStore {
         return ExportSettings(
             format: defaults.string(forKey: "export.format").flatMap(ExportFormat.init(rawValue:)) ?? d.format,
             jpegQuality: (defaults.object(forKey: "export.jpegQuality") as? Int ?? d.jpegQuality).clamped(1, 100),
-            tiffBits: defaults.integer(forKey: "export.tiffBits") == 8 ? 8 : 16)
+            tiffBits: defaults.integer(forKey: "export.tiffBits") == 8 ? 8 : 16,
+            dateStampStyle: defaults.string(forKey: "export.dateStampStyle").flatMap(DateStampStyle.init(rawValue:)) ?? d.dateStampStyle,
+            photoFrame: defaults.string(forKey: "export.photoFrame").flatMap(PhotoFrame.init(rawValue:)) ?? d.photoFrame,
+            dateStampFormat: defaults.string(forKey: "export.dateStampFormat").flatMap(DateStampFormat.init(rawValue:)) ?? d.dateStampFormat,
+            timeStampFormat: defaults.string(forKey: "export.timeStampFormat").flatMap(TimeStampFormat.init(rawValue:)) ?? d.timeStampFormat,
+            pentax645Fields: Pentax645Field.parseExportFields(defaults.string(forKey: "export.pentax645Fields")),
+            pentax645Order: Pentax645Field.parseExportOrder(defaults.string(forKey: "export.pentax645Order")),
+            pentax645Flip: defaults.object(forKey: "export.pentax645Flip") as? Bool ?? d.pentax645Flip,
+            frameColor: defaults.string(forKey: "export.frameColor").flatMap(FilmFrameColor.init(rawValue:)) ?? d.frameColor)
     }
 
     public static func save(_ settings: ExportSettings) {
         defaults.set(settings.format.rawValue, forKey: "export.format")
         defaults.set(settings.jpegQuality, forKey: "export.jpegQuality")
         defaults.set(settings.tiffBits, forKey: "export.tiffBits")
+        defaults.set(settings.photoFrame.rawValue, forKey: "export.photoFrame")
+        defaults.set(settings.dateStampFormat.rawValue, forKey: "export.dateStampFormat")
+        defaults.set(settings.dateStampStyle.rawValue, forKey: "export.dateStampStyle")
+        defaults.set(settings.timeStampFormat.rawValue, forKey: "export.timeStampFormat")
+        defaults.set(Pentax645Field.serialize(settings.pentax645Fields), forKey: "export.pentax645Fields")
+        defaults.set(Pentax645Field.serializeOrder(settings.pentax645Order), forKey: "export.pentax645Order")
+        defaults.set(settings.pentax645Flip, forKey: "export.pentax645Flip")
+        defaults.set(settings.frameColor.rawValue, forKey: "export.frameColor")
     }
 }

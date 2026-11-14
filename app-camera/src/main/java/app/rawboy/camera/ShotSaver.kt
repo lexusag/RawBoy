@@ -32,8 +32,10 @@ import app.rawboy.export.ExportSettings
 import app.rawboy.export.Exporter
 import app.rawboy.export.JpegEncoder
 import app.rawboy.export.FilmFrameStyle
+import app.rawboy.export.Pentax645Field
 import app.rawboy.export.Pentax645Frame
 import app.rawboy.export.Pentax645Info
+import app.rawboy.export.PhotoFrame
 import app.rawboy.film.FilmData
 import app.rawboy.film.FilmStocks
 import app.rawboy.gl.ShaderParams

@@ -26,6 +26,8 @@ import app.rawboy.camera.capture.ShutterSound
 import app.rawboy.export.DateStampFormat
 import app.rawboy.export.DateStampStyle
 import app.rawboy.export.FilmFrameColor
+import app.rawboy.export.Pentax645Field
+import app.rawboy.export.PhotoFrame
 import app.rawboy.export.TimeStampFormat
 import app.rawboy.camera.qr.QrPayload
 import app.rawboy.camera.qr.QrReader

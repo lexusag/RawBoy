@@ -27,6 +27,17 @@ class DateStampTest {
     }
 
     @Test
+    fun parseExifDateParsesExifAndIsoTimestamps() {
+        val tz = TimeZone.getTimeZone("UTC")
+        val ms = DateStamp.parseExifDate("2026:11:13 14:46:05", tz)
+        assertEquals("13 11 '26", DateStamp.format(ms!!, DateStampFormat.DMY, tz))
+        assertEquals("14:46", Pentax645Frame.formatTime(ms, TimeStampFormat.H24, tz))
+        assertEquals(ms, DateStamp.parseExifDate("2026-11-13T14:46:05Z", tz))
+        assertEquals(null, DateStamp.parseExifDate(null, tz))
+        assertEquals(null, DateStamp.parseExifDate("invalid", tz))
+    }
+
+    @Test
     fun imprintLeavesTopBandsUntouchedAndBurnsYellowOrangeInBottomRight() {
         val width = 400
         val height = 300

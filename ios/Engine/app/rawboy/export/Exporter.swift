@@ -70,22 +70,24 @@ public final class Exporter {
         try? FileManager.default.removeItem(at: url)
         let size = BandDownscaler.outputSize(params.lens.outputWidth, params.lens.outputHeight,
                                              maxLongSide: settings.maxLongSide)
-        let frameLayout = settings.pentax645.map { Pentax645Frame.layout(photoWidth: size.0, photoHeight: size.1, style: $0.style) }
+        let isMono = params.saturation <= 0 || (params.lutAmount >= 1 && Looks.isMonochromeLut(params.lut?.id))
+        let resolved = settings.resolveFrame(image: image, exifDate: settings.captureDate ?? image.metadata.dateTimeOriginal, monochrome: isMono)
+        let frameLayout = resolved.pentax645.map { Pentax645Frame.layout(photoWidth: size.0, photoHeight: size.1, style: $0.style) }
         let outSize = frameLayout.map { ($0.outWidth, $0.outHeight) } ?? size
-        let dateStamp = settings.pentax645 == nil ? settings.dateStamp : ""
-        let dateStampStyle = settings.dateStampStyle
-        let mono = settings.monochromeImprint
+        let dateStamp = resolved.pentax645 == nil ? resolved.dateStamp : ""
+        let dateStampStyle = resolved.dateStampStyle
+        let mono = resolved.monochromeImprint
         do {
-            switch settings.format {
+            switch resolved.format {
             case .jpeg:
-                if settings.jpegEncoder == .jpegli {
-                    try writeJpegli(image, url, params, size, outSize, settings.jpegQuality, settings.downscaleSharpen, dateStamp, dateStampStyle, settings.pentax645, mono, onProgress)
+                if resolved.jpegEncoder == .jpegli {
+                    try writeJpegli(image, url, params, size, outSize, resolved.jpegQuality, resolved.downscaleSharpen, dateStamp, dateStampStyle, resolved.pentax645, mono, onProgress)
                 } else {
-                    try writeSystemJpeg(image, url, params, size, outSize, settings.jpegQuality, settings.downscaleSharpen, dateStamp, dateStampStyle, settings.pentax645, mono, onProgress)
+                    try writeSystemJpeg(image, url, params, size, outSize, resolved.jpegQuality, resolved.downscaleSharpen, dateStamp, dateStampStyle, resolved.pentax645, mono, onProgress)
                 }
                 ExifWriter.addExif(to: url, metadata: image.metadata)
             case .tiff:
-                try writeTiff(image, url, params, size, outSize, settings.tiffBits, settings.downscaleSharpen, dateStamp, dateStampStyle, settings.pentax645, mono, onProgress)
+                try writeTiff(image, url, params, size, outSize, resolved.tiffBits, resolved.downscaleSharpen, dateStamp, dateStampStyle, resolved.pentax645, mono, onProgress)
             }
             return url
         } catch {
