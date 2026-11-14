@@ -60,4 +60,35 @@ class CameraSettingsTest {
         val p = CameraSettings.withPhoneIspLook(DevelopParams(saturation = -100f), "SAMSUNG")
         assertEquals(-100f, p.saturation, 0f)
     }
+
+    @Test
+    fun resetToDefaultsKeepsCalibration() {
+        val scales = mapOf("W" to 0.42f, "FW" to 0.6f)
+        val guides = mapOf("W" to 12.5f)
+        val modified = CameraSettings(
+            jpegQuality = 80,
+            strength = 50f,
+            brightness = 20f,
+            warmth = -15f,
+            mono = true,
+            film = false,
+            keepDng = true,
+            smallExport = false,
+            rememberLast = true,
+            showGrid = true,
+            showLevel = true,
+            showHistogram = true,
+            grain = false,
+            scanQr = false,
+            photoFrame = PhotoFrame.PENTAX_645,
+            front = true,
+            lens = "T",
+            previewScales = scales,
+            flashGuides = guides,
+        )
+        val reset = modified.resetToDefaults()
+        assertEquals(CameraSettings(previewScales = scales, flashGuides = guides), reset)
+        assertEquals(scales, reset.previewScales)
+        assertEquals(guides, reset.flashGuides)
+    }
 }

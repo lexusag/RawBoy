@@ -642,6 +642,42 @@ final class CameraViewModel: ObservableObject {
         if !on { clearQr() }
     }
 
+    /** Resets all user-configurable settings to defaults while keeping learned camera calibration. */
+    func resetSettings() {
+        let prev = settings
+        let next = prev.resetToDefaults()
+        change { $0 = next }
+        controller.setExposureBias(Self.exposureBias(settings))
+        if prev.front != next.front {
+            let all = CameraController.lenses(front: next.front)
+            if let target = all.first(where: { $0.label == next.lens }) ?? all.first {
+                lenses = all
+                switchTo(target)
+                if target.label != next.lens { change { $0.lens = target.label } }
+            }
+        } else if prev.lens != next.lens || prev.rawFormat != next.rawFormat {
+            if let target = lenses.first(where: { $0.label == next.lens }) ?? lenses.first {
+                switchTo(target)
+                if target.label != next.lens { change { $0.lens = target.label } }
+            }
+        }
+        if prev.showLevel && !next.showLevel {
+            stopTilt()
+        }
+        if prev.showHistogram && !next.showHistogram {
+            histogram = nil
+        }
+        if prev.geotag != next.geotag {
+            updateLocation()
+        }
+        if prev.trackFocus && !next.trackFocus, tracking, let p = focusPoint {
+            focusAt(p.x, p.y)
+        }
+        if prev.scanQr != next.scanQr {
+            controller.setScanQr(next.scanQr)
+        }
+    }
+
     /** A sighting of a code (text) or a frame without one (nil). */
     private func qrSeen(_ text: String?) {
         guard settings.scanQr, status == .ready else { return }

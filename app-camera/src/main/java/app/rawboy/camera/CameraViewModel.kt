@@ -1036,6 +1036,46 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         republish()
     }
 
+    /** Resets all user-configurable settings to defaults while keeping learned camera calibration. */
+    fun resetSettings() {
+        val prev = _settings.value
+        val next = prev.resetToDefaults()
+        change { next }
+        if (_recordingMs.value == null) {
+            if (prev.maxRes != next.maxRes) {
+                lensesBySide = null
+                info = null
+                live = null
+                _shaderParams.value = null
+                if (activeCaptures == 0) restartCamera() else restartAfterCapture = true
+            } else if (prev.front != next.front || prev.lens != next.lens) {
+                val all = lensesBySide?.get(next.front).orEmpty()
+                if (prev.front != next.front) _lenses.value = all
+                val target = all.firstOrNull { it.label == next.lens } ?: all.firstOrNull()
+                if (target != null && target !== info) {
+                    switchTo(target)
+                    if (target.label != next.lens) change { it.copy(lens = target.label) }
+                }
+            }
+        }
+        if (prev.showLevel && !next.showLevel) {
+            tiltFilter.reset()
+            _tilt.value = null
+        }
+        if (prev.trackFocus && !next.trackFocus && _tracking.value) {
+            _focusPoint.value?.let { (x, y) -> focusAt(x, y) }
+        }
+        if (prev.experimental && !next.experimental) {
+            cancelSelfTimer()
+        }
+        if (prev.geotag != next.geotag) {
+            updateLocation()
+        }
+        if (prev.videoStabilization != next.videoStabilization && _recordingMs.value == null) {
+            applyStabilization()
+        }
+    }
+
     private fun change(edit: (CameraSettings) -> CameraSettings) {
         val s = edit(_settings.value)
         _settings.value = s

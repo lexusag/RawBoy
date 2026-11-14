@@ -101,7 +101,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -1386,6 +1388,33 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
                 label = { if (it) "Lighten (trails)" else "Average (water)" },
                 onSelect = vm::setLongExposureLighten,
                 indent = true,
+            )
+        }
+
+        var confirmReset by remember { mutableStateOf(false) }
+        Spacer(Modifier.height(16.dp))
+        TextButton(
+            onClick = { confirmReset = true },
+            contentPadding = PaddingValues(0.dp),
+            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+        ) { Text("Reset settings to defaults") }
+        if (confirmReset) {
+            AlertDialog(
+                onDismissRequest = { confirmReset = false },
+                title = { Text("Reset settings to defaults?") },
+                text = { Text("Photo, capture, viewfinder and look settings return to their defaults. Learned camera calibration is kept.") },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            confirmReset = false
+                            vm.resetSettings()
+                        },
+                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    ) { Text("Reset") }
+                },
+                dismissButton = {
+                    TextButton(onClick = { confirmReset = false }) { Text("Cancel") }
+                },
             )
         }
 

@@ -619,6 +619,7 @@ private struct LookPicker: View {
 
 private struct SettingsSheet: View {
     @ObservedObject var vm: CameraViewModel
+    @State private var confirmReset = false
 
     /** A switch with a one-line hint; same rows and wording as Android's Settings. */
     private func row(_ title: String, _ hint: String?, _ isOn: Binding<Bool>) -> some View {
@@ -687,6 +688,9 @@ private struct SettingsSheet: View {
                         Binding(get: { vm.settings.rememberLast }, set: vm.setRememberLast))
                 }
                 Section {
+                    Button("Reset settings to defaults", role: .destructive) { confirmReset = true }
+                }
+                Section {
                     ForEach(Edition.credits, id: \.self) { line in
                         Text(line).font(.caption).foregroundStyle(.secondary)
                     }
@@ -695,6 +699,12 @@ private struct SettingsSheet: View {
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
+            .confirmationDialog("Reset settings to defaults?", isPresented: $confirmReset, titleVisibility: .visible) {
+                Button("Reset", role: .destructive) { vm.resetSettings() }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Photo, capture, viewfinder and look settings return to their defaults. Learned camera calibration is kept.")
+            }
         }
         .presentationDetents([.medium, .large])
     }
