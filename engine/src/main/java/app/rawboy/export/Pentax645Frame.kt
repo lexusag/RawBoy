@@ -96,10 +96,7 @@ object Pentax645Frame {
         return if (t >= 0.95) "${trimOneDecimal(t)}s" else "1/${(1.0 / t).roundToInt()}"
     }
 
-    fun formatContaxShutter(t: Double): String {
-        if (!t.isFinite() || t <= 0.0) return "---"
-        return if (t >= 0.95) "${trimOneDecimal(t)}s" else "${(1.0 / t).roundToInt()}"
-    }
+    fun formatContaxShutter(t: Double): String = formatShutter(t)
 
     fun formatAperture(f: Double): String {
         if (!f.isFinite() || f <= 0.0) return "F--"

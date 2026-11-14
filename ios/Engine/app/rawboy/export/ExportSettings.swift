@@ -550,8 +550,7 @@ public enum Pentax645Frame {
     }
 
     public static func formatContaxShutter(_ t: Double) -> String {
-        guard t.isFinite && t > 0 else { return "---" }
-        return t >= 0.95 ? "\(trimOneDecimal(t))s" : "\(Int((1.0 / t).rounded()))"
+        formatShutter(t)
     }
 
     public static func formatAperture(_ f: Double) -> String {
