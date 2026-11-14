@@ -70,7 +70,7 @@ public final class Exporter {
         try? FileManager.default.removeItem(at: url)
         let size = BandDownscaler.outputSize(params.lens.outputWidth, params.lens.outputHeight,
                                              maxLongSide: settings.maxLongSide)
-        let isMono = params.saturation <= 0 || (params.lutAmount >= 1 && Looks.isMonochromeLut(params.lut?.id))
+        let isMono = params.saturation <= -100 || (params.lutAmount >= 100 && Looks.isMonochromeLut(params.lut?.id))
         let resolved = settings.resolveFrame(image: image, exifDate: settings.captureDate ?? image.metadata.dateTimeOriginal, monochrome: isMono)
         let frameLayout = resolved.pentax645.map { Pentax645Frame.layout(photoWidth: size.0, photoHeight: size.1, style: $0.style) }
         let outSize = frameLayout.map { ($0.outWidth, $0.outHeight) } ?? size

@@ -27,7 +27,7 @@ export async function exportImage(image: RawImage, params: ShaderParams, setting
   const size = scan
     ? scanSize(params.lens.outputWidth, params.lens.outputHeight)
     : BandDownscaler.outputSize(params.lens.outputWidth, params.lens.outputHeight, settings.maxLongSide);
-  const isMono = params.saturation <= 0 || (params.lutAmount >= 1 && isMonochromeLut(params.lut?.id));
+  const isMono = params.saturation <= -100 || (params.lutAmount >= 100 && isMonochromeLut(params.lut?.id));
   const resolved = resolveExportFrame(settings, image, isMono);
   const frameLayout = resolved.pentax645
     ? Pentax645Frame.layout(size[0], size[1], resolved.pentax645.style ?? 'PENTAX_645')

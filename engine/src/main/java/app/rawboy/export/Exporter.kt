@@ -84,7 +84,7 @@ class Exporter(private val context: Context) {
         val (uri, name) = MediaStoreOutput.create(resolver, MediaStoreOutput.baseNameOf(sourceName), settings.format, naming)
         val size = if (scan) ScanScale.size(params.lens.outputWidth, params.lens.outputHeight)
         else BandDownscaler.outputSize(params.lens.outputWidth, params.lens.outputHeight, settings.maxLongSide)
-        val isMono = params.saturation <= 0f || (params.lutAmount >= 1f && app.rawboy.auto.looks.Looks.isMonochromeLut(params.lut?.id))
+        val isMono = params.saturation <= -100f || (params.lutAmount >= 100f && app.rawboy.auto.looks.Looks.isMonochromeLut(params.lut?.id))
         val exifDate = settings.captureDate ?: if (settings.photoFrame != PhotoFrame.NONE && settings.dateStamp.isEmpty() && settings.pentax645 == null) {
             source?.let { app.rawboy.auto.CaptureDate.read(context, it) }
         } else null
