@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowDropDown
 import androidx.compose.material3.AlertDialog
@@ -32,6 +34,7 @@ import app.rawboy.auto.AutoViewModel
 import app.rawboy.export.ExportFormat
 import app.rawboy.export.ExportSettings
 import app.rawboy.view.CompactSlider
+import app.rawboy.view.ExportFrameControls
 import kotlin.math.roundToInt
 
 /**
@@ -52,7 +55,7 @@ fun ExportSheet(
         onDismissRequest = onDismiss,
         title = { Text(if (count > 1) "Export $count photos" else "Export") },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 ExportOptions(settings, onChange, Modifier.fillMaxWidth(), hasFilm = hasFilm)
                 Text(
                     "Saved to Pictures/${AutoViewModel.NAMING.folder}",
@@ -167,6 +170,12 @@ fun ExportOptions(
                 modifier = Modifier.padding(start = 88.dp),
             )
         }
+        ExportFrameControls(
+            settings = settings,
+            onChange = onChange,
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+            enabled = enabled,
+        )
     }
 }
 

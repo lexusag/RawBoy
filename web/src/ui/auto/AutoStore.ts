@@ -1424,12 +1424,15 @@ export class AutoStore {
     this.clearExported(new Set([id]));
     this.update({ export: { done: 0, total: 1, failed: 0, current: 0, startedAt: Date.now() } });
     this.updatePhoto(id, (q) => ({ ...q, status: 'exporting' }));
+    const pages = this.shown.filter((q) => q.analysis);
+    const frameNumber = Math.max(1, pages.findIndex((q) => q.id === id) + 1);
+    const settings: ExportSettings = { ...this._state.exportSettings, frameNumber, captureDate: p.date };
     let ok = false;
     try {
       const blob = await this.decodeLock.run(() =>
-        this.session.export(params, a.defaults, this._state.exportSettings, (f) => this.update({ export: { ...this._state.export!, current: f } })),
+        this.session.export(params, a.defaults, settings, (f) => this.update({ export: { ...this._state.export!, current: f } })),
       );
-      const name = await this.save(p, blob, folder, this._state.exportSettings, 1);
+      const name = await this.save(p, blob, folder, settings, 1);
       // On iOS the Save to Photos sheet comes up instead.
       if (folder || !savesToPhotos()) this.update({ message: `Saved ${name}` });
       ok = true;
@@ -1472,8 +1475,9 @@ export class AutoStore {
       attempted++;
       let ok = false;
       try {
-        const blob = await this.decodeLock.run(() => this.exportOne(p, settings, (f) => this.update({ export: { ...this._state.export!, current: f } })));
-        if (folder) await this.save(p, blob, folder, settings, index + 1);
+        const itemSettings: ExportSettings = { ...settings, frameNumber: index + 1, captureDate: p.date };
+        const blob = await this.decodeLock.run(() => this.exportOne(p, itemSettings, (f) => this.update({ export: { ...this._state.export!, current: f } })));
+        if (folder) await this.save(p, blob, folder, itemSettings, index + 1);
         else zipped.push({ name: uniqueName(zipped, exportStem(p, index + 1, template), EXTENSIONS[settings.format]), blob });
         ok = true;
       } catch (e) {

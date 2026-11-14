@@ -84,26 +84,31 @@ class Exporter(private val context: Context) {
         val (uri, name) = MediaStoreOutput.create(resolver, MediaStoreOutput.baseNameOf(sourceName), settings.format, naming)
         val size = if (scan) ScanScale.size(params.lens.outputWidth, params.lens.outputHeight)
         else BandDownscaler.outputSize(params.lens.outputWidth, params.lens.outputHeight, settings.maxLongSide)
-        val frameLayout = settings.pentax645?.let { Pentax645Frame.layout(size.first, size.second, it.style) }
+        val isMono = params.saturation <= -100f || (params.lutAmount >= 100f && app.rawboy.auto.looks.Looks.isMonochromeLut(params.lut?.id))
+        val exifDate = settings.captureDate ?: if (settings.photoFrame != PhotoFrame.NONE && settings.dateStamp.isEmpty() && settings.pentax645 == null) {
+            source?.let { app.rawboy.auto.CaptureDate.read(context, it) }
+        } else null
+        val resolved = settings.resolveFrame(image, exifDate = exifDate, monochrome = isMono)
+        val frameLayout = resolved.pentax645?.let { Pentax645Frame.layout(size.first, size.second, it.style) }
         val outSize = frameLayout?.let { it.outWidth to it.outHeight } ?: size
-        val dateStamp = if (settings.pentax645 == null) settings.dateStamp else ""
-        val dateStampStyle = settings.dateStampStyle
-        val mono = settings.monochromeImprint
+        val dateStamp = if (resolved.pentax645 == null) resolved.dateStamp else ""
+        val dateStampStyle = resolved.dateStampStyle
+        val mono = resolved.monochromeImprint
         try {
-            when (settings.format) {
-                ExportFormat.JPEG -> if (settings.jpegEncoder == JpegEncoder.JPEGLI) {
+            when (resolved.format) {
+                ExportFormat.JPEG -> if (resolved.jpegEncoder == JpegEncoder.JPEGLI) {
                     // jpegli writes the EXIF as it starts the file: no rewrite of the finished JPEG.
                     val exif = source?.let { readExif(it) ?: ExifMetadata() }
-                        ?.let { if (settings.description.isBlank()) it else it.copy(description = settings.description) }
-                    writeJpegli(image, uri, params, size, outSize, settings.jpegQuality, settings.downscaleSharpen, exif, settings.hdrGainMap, dateStamp, dateStampStyle, settings.pentax645, mono, onProgress)
+                        ?.let { if (resolved.description.isBlank()) it else it.copy(description = resolved.description) }
+                    writeJpegli(image, uri, params, size, outSize, resolved.jpegQuality, resolved.downscaleSharpen, exif, resolved.hdrGainMap, dateStamp, dateStampStyle, resolved.pentax645, mono, onProgress)
                 } else {
-                    writeJpeg(image, uri, params, size, outSize, settings.jpegQuality, settings.downscaleSharpen, dateStamp, dateStampStyle, settings.pentax645, mono, onProgress)
+                    writeJpeg(image, uri, params, size, outSize, resolved.jpegQuality, resolved.downscaleSharpen, dateStamp, dateStampStyle, resolved.pentax645, mono, onProgress)
                 }
-                ExportFormat.TIFF -> writeTiff(image, uri, params, size, outSize, settings.tiffBits, source?.let(::readExif)
-                    ?.let { if (settings.description.isBlank()) it else it.copy(description = settings.description) }, settings.downscaleSharpen, dateStamp, dateStampStyle, settings.pentax645, mono, onProgress)
+                ExportFormat.TIFF -> writeTiff(image, uri, params, size, outSize, resolved.tiffBits, source?.let(::readExif)
+                    ?.let { if (resolved.description.isBlank()) it else it.copy(description = resolved.description) }, resolved.downscaleSharpen, dateStamp, dateStampStyle, resolved.pentax645, mono, onProgress)
             }
             val t = System.nanoTime()
-            if (settings.format == ExportFormat.JPEG && settings.jpegEncoder != JpegEncoder.JPEGLI && source != null) copyExif(source, uri)
+            if (resolved.format == ExportFormat.JPEG && resolved.jpegEncoder != JpegEncoder.JPEGLI && source != null) copyExif(source, uri)
             MediaStoreOutput.publish(resolver, uri)
             Log.d(TAG, "EXIF + publish ${(System.nanoTime() - t) / 1_000_000} ms")
             return Exported(name, uri)

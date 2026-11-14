@@ -6,6 +6,8 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -27,6 +29,7 @@ import app.rawboy.export.ExportFormat
 import app.rawboy.export.ExportSettings
 import app.rawboy.export.MediaStoreOutput
 import app.rawboy.export.OutputNaming
+import app.rawboy.view.ExportFrameControls
 import kotlin.math.roundToInt
 
 @Composable
@@ -46,7 +49,7 @@ fun ExportDialog(
         onDismissRequest = onDismiss,
         title = { Text("Export") },
         text = {
-            Column {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
                 SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
                     ExportFormat.entries.forEachIndexed { index, format ->
                         SegmentedButton(
@@ -99,6 +102,13 @@ fun ExportDialog(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
+
+                Spacer(Modifier.height(12.dp))
+                ExportFrameControls(
+                    settings = settings,
+                    onChange = { settings = it },
+                    modifier = Modifier.fillMaxWidth(),
+                )
 
                 Spacer(Modifier.height(16.dp))
                 val name = MediaStoreOutput.fileName(

@@ -1,13 +1,19 @@
 import { useState } from 'react';
-import { BandDownscaler } from '../../engine/export/BandDownscaler';
-import { scanSize } from '../../engine/gl/ScanScale';
-import { DEFAULT_EXPORT, EXTENSIONS, baseNameOf, fileName, type ExportSettings } from '../../engine/export/ExportSettings';
+import {
+  DEFAULT_EXPORT,
+  EXTENSIONS,
+  baseNameOf,
+  exportOutputSize,
+  fileName,
+  type ExportSettings,
+} from '../../engine/export/ExportSettings';
+import { ExportFrameControls } from '../common/ExportFrameControls';
 import { ParamSlider, formatPlain } from '../common/ParamSlider';
 import { useExportDestination, type ExportDestination } from '../common/ExportDestination';
 
 const SIZES: (number | null)[] = [null, 6000, 4000, 3000, 2048];
 
-/** Format, quality / bit depth and size of the export (port of app-pro's ExportDialog.kt). */
+/** Format, quality / bit depth, size and frame of the export (port of app-pro's ExportDialog.kt). */
 export function ExportDialog({ initial, sourceName, outputSize, film, onDismiss, onExport }: {
   initial: ExportSettings;
   sourceName: string;
@@ -22,7 +28,7 @@ export function ExportDialog({ initial, sourceName, outputSize, film, onDismiss,
   const [s, setS] = useState(initial);
   const [destination, destinationRow] = useExportDestination(true);
   const scan = film && s.filmScan;
-  const [w, h] = scan ? scanSize(outputSize[0], outputSize[1]) : BandDownscaler.outputSize(outputSize[0], outputSize[1], s.maxLongSide);
+  const [w, h] = exportOutputSize(outputSize[0], outputSize[1], s, scan);
   return (
     <div className="dialog-backdrop" onClick={onDismiss}>
       <div className="dialog" onClick={(e) => e.stopPropagation()} role="dialog" aria-label="Export">
@@ -84,6 +90,7 @@ export function ExportDialog({ initial, sourceName, outputSize, film, onDismiss,
           </select>
           <small>{w} × {h}</small>
         </label>
+        <ExportFrameControls settings={s} onChange={setS} />
         {destinationRow}
         <small className="muted">
           {fileName(baseNameOf(sourceName), EXTENSIONS[s.format], 0, { suffix: 'rawboy' })}

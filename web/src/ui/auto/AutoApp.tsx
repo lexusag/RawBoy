@@ -28,6 +28,7 @@ import { DenoiseIcon } from '../common/DenoiseIcon';
 import { UndoIcon } from '../common/UndoIcon';
 import { AppSwitcher, HelpButton } from '../common/AppNav';
 import { EXTENSIONS } from '../../engine/export/ExportSettings';
+import { ExportFrameControls } from '../common/ExportFrameControls';
 import { DEFAULT_NAME_TEMPLATE, NAME_KEYWORDS } from '../../engine/export/NameTemplate';
 import { activeLook, availableFilterOptions, EDITS_NAME, EXPORT_SIZES, isFilterActive, lookName, paramsOf, SETTINGS, type AutoPhoto, type AutoStore, type BatchExport, type ImportMode, type LookMode } from './AutoStore';
 import { shortcutKey } from '../common/shortcutKey';
@@ -1448,6 +1449,7 @@ function ExportOptions({ store, disabled }: { store: AutoStore; disabled: boolea
           <small className="muted">Film photos only, finer grain</small>
         </div>
       )}
+      <ExportFrameControls settings={s} onChange={(next) => store.setExportSettings(next)} disabled={disabled} />
     </>
   );
 }

@@ -354,4 +354,15 @@ class Pentax645FrameTest {
         assertTrue("Expected shoot info in Contax 645 left short-side bar", leftBarPixels > 50)
         assertTrue("Expected triangle + frame number in Contax 645 right short-side bar", rightBarPixels > 25)
     }
+
+    @Test
+    fun exportFieldsFilterOutCameraOnlyFields() {
+        val parsed = Pentax645Field.parseExportFields("SHUTTER,MODE,APERTURE,EV")
+        assertEquals(setOf(Pentax645Field.SHUTTER, Pentax645Field.APERTURE), parsed)
+
+        val order = Pentax645Field.parseExportOrder("TIME,MODE,SHUTTER")
+        assertEquals(Pentax645Field.TIME, order.first())
+        assertTrue(Pentax645Field.MODE !in order)
+        assertEquals(Pentax645Field.EXPORT_FIELDS.size, order.size)
+    }
 }
