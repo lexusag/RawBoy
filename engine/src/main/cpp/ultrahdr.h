@@ -21,15 +21,16 @@
 namespace rawboy::uhdr {
 
 /**
- * log2 of the largest boost the gain map asks for (8x). The first version asked for 2 EV from a knee of 0.75 up to 1.0,
- * but the tone mapper's brightest output is only ~0.9 (a lamp measured 228/255), so a bare lamp got 0.56 EV and the
- * rest of the picture nothing: the setting looked dead on a phone.
+ * log2 of the largest boost the gain map asks for (4x). Version 1 (2 EV, 0.75..1.0) was invisible on film stocks
+ * whose paper white is ~0.86; version 2 (3 EV, 0.6..0.9, smoothstep) compensated by pulling the knee into midtones
+ * and pushing 8x headroom, which blew out bright surfaces. Normalizing by the look's white luma keeps film and
+ * non-film consistent while keeping the boost in the top highlights.
  */
-constexpr float kHeadroomEv = 3.0f;
-/** Display-encoded luma where the boost starts. */
-constexpr float kKnee = 0.6f;
-/** Display-encoded luma that gets the full boost: about the brightest the tone mapper outputs. */
-constexpr float kWhite = 0.9f;
+constexpr float kHeadroomEv = 2.0f;
+/** Normalized display-encoded luma (y / whiteY) where the boost starts. */
+constexpr float kKnee = 0.72f;
+/** Normalized display-encoded luma (y / whiteY) that gets the full boost. */
+constexpr float kWhite = 0.98f;
 /** The gain map is this many times smaller than the picture on each side. */
 constexpr int kScale = 4;
 /** hdrgm:OffsetSDR / OffsetHDR (libultrahdr's default). */
@@ -37,22 +38,25 @@ constexpr float kOffset = 1.0f / 64.0f;
 /** A gain map whose largest value is below this (of 255) asks for nothing visible: the file stays a plain JPEG. */
 constexpr int kMinPeak = 3;
 
-/** Share of kHeadroomEv asked for a pixel of display-encoded luma [y] (0..1): 0 below the knee, 1 from kWhite up. */
+/** Share of kHeadroomEv asked for a pixel of normalized display-encoded luma [y] (0..1): 0 below the knee, 1 from kWhite up. */
 inline float gainWeight(float y) {
     const float t = std::clamp((y - kKnee) / (kWhite - kKnee), 0.0f, 1.0f);
-    return t * t * (3.0f - 2.0f * t);  // smoothstep
+    return t * t;  // quadratic ease-in: gentle in upper-midtones, full pop in specular highlights
 }
 
 /**
  * Accumulates the gain map while the picture's rows stream past: feed the final 16-bit RGB rows (the same ones the
- * SDR JPEG gets, top to bottom, any band sizes), then [finish] for the 8-bit map.
+ * SDR JPEG gets, top to bottom, any band sizes), then [finish] for the 8-bit map. [whiteY] is the display-encoded
+ * white luma of the active look (1.0 for AgX, ~0.86 for print film stocks), so dimmed film whites still reach full boost.
  */
 class GainMapBuilder {
 public:
-    GainMapBuilder(int width, int height)
+    GainMapBuilder(int width, int height, float whiteY = 1.0f)
         : width_(width), height_(height), gw_((width + kScale - 1) / kScale), gh_((height + kScale - 1) / kScale),
           sum_(static_cast<size_t>(gw_) * gh_, 0) {
-        for (int i = 0; i < 4096; ++i) lut_[i] = static_cast<uint16_t>(std::lround(gainWeight((i + 0.5f) / 4096.0f) * 4095.0f));
+        const float invWhite = 1.0f / std::clamp(whiteY, 0.5f, 1.0f);
+        for (int i = 0; i < 4096; ++i)
+            lut_[i] = static_cast<uint16_t>(std::lround(gainWeight(((i + 0.5f) / 4096.0f) * invWhite) * 4095.0f));
     }
 
     int mapWidth() const { return gw_; }

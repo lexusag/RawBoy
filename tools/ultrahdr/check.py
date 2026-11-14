@@ -16,9 +16,17 @@ g = Image.open(f"{work}/map.pgm")
 gw, gh = g.size
 assert (gw, gh) == ((W + 3) // 4, (H + 3) // 4), (gw, gh)
 row = list(g.tobytes()[:gw])
-assert row[0] == 0 and row[gw // 2] == 0, row[:5]   # knee: nothing at or below luma 0.5
+assert row[0] == 0 and row[gw // 2] == 0 and row[int(gw * 0.7)] == 0, row[:5]  # knee: nothing at or below luma 0.72
 assert row[-1] >= 250, row[-1]                                               # full headroom at white
 assert all(row[i] <= row[i + 1] + 1 for i in range(gw - 1)), "monotonic"
+
+# film stock with dimmed paper white (0.857): normalized ramp should match the 1.0 ramp
+subprocess.check_call([exe, "map", str(W), str(H), f"{work}/map_film.pgm", "0.857"])
+gf = Image.open(f"{work}/map_film.pgm")
+frow = list(gf.tobytes()[:gw])
+assert frow[int(gw * 0.7)] == 0 and frow[-1] >= 250, (frow[int(gw * 0.7)], frow[-1])
+assert max(abs(a - b) for a, b in zip(row, frow)) <= 1, "film white normalization"
+
 g.convert("L").save(f"{work}/gain.jpg", quality=85)
 
 subprocess.check_call([exe, "assemble", f"{work}/primary.jpg", f"{work}/gain.jpg", f"{work}/out.jpg"])
@@ -57,8 +65,8 @@ assert 'hdrgm:Version="1.0"' in xmp
 # --- the gain map file
 gsegs = segments(d, second)
 gxmp = next(s for m, s, _ in gsegs if s.startswith(b"http://ns.adobe.com/xap/1.0/")).decode()
-for k, v in [("GainMapMin", "0"), ("GainMapMax", "3"), ("Gamma", "1"), ("OffsetSDR", "0.015625"), ("OffsetHDR", "0.015625"),
-             ("HDRCapacityMax", "3"), ("BaseRenditionIsHDR", "False")]:
+for k, v in [("GainMapMin", "0"), ("GainMapMax", "2"), ("Gamma", "1"), ("OffsetSDR", "0.015625"), ("OffsetHDR", "0.015625"),
+             ("HDRCapacityMax", "2"), ("BaseRenditionIsHDR", "False")]:
     assert f'hdrgm:{k}="{v}"' in gxmp, k
 giso = next(s for m, s, _ in gsegs if s.startswith(b"urn:iso:std:iso:ts:21496:-1"))[28:]
 # the ISO reader of decoder_display.cpp (fromIso), step for step
@@ -71,7 +79,7 @@ assert u(2) == 0; u(2)
 flags = u(1); assert flags == 0x08 and not flags & 0x80 and not flags & 0x04
 den = u(4); base, alt = u(4), u(4)
 mn, mx, gamma, osdr, ohdr = s32() / den, s32() / den, u(4) / den, s32() / den, s32() / den
-assert (mn, mx, gamma, osdr, ohdr) == (0, 3, 1, 1 / 64, 1 / 64) and alt / den == 3 and p == len(giso), (mn, mx, gamma, osdr, ohdr, p, len(giso))
+assert (mn, mx, gamma, osdr, ohdr) == (0, 2, 1, 1 / 64, 1 / 64) and alt / den == 2 and p == len(giso), (mn, mx, gamma, osdr, ohdr, p, len(giso))
 
 # --- viewers that read MPF
 mpo = Image.open(io.BytesIO(d)); assert mpo.size == (W, H)
