@@ -32,6 +32,16 @@ class CameraSettingsTest {
     }
 
     @Test
+    fun grainIsOnByDefaultAndOffRemovesIt() {
+        val base = DevelopParams(grain = 20f, filmGrain = 75f)
+        val on = CameraSettings()
+        assertEquals(true, on.grain)
+        val off = on.copy(grain = false).develop(base, false)
+        assertEquals(0f, off.grain, 0f)
+        assertEquals(0f, off.filmGrain, 0f)
+    }
+
+    @Test
     fun samsungGetsTheIspLook() {
         val base = DevelopParams()
         val p = CameraSettings.withPhoneIspLook(base, "samsung")

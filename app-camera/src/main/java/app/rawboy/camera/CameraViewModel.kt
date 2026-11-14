@@ -1004,6 +1004,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         if (!on) cancelSelfTimer()
     }
 
+    fun setGrain(on: Boolean) {
+        change { it.copy(grain = on) }
+    }
+
     fun setScanQr(on: Boolean) {
         change { it.copy(scanQr = on) }
         if (!on) clearQr()

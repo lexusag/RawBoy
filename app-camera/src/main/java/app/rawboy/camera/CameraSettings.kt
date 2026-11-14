@@ -170,6 +170,8 @@ data class CameraSettings(
     val frameColor: FilmFrameColor = FilmFrameColor.AMBER,
     /** Look for QR codes in the viewfinder and offer to open them, as the phone's own camera does. */
     val scanQr: Boolean = true,
+    /** Film grain on the viewfinder and the saved photos; off = a clean picture (no look's grain, Film's included). */
+    val grain: Boolean = true,
     /** After a tap, keep focus on what was tapped as it moves (CameraViewModel's tracker); off = the focus stays put. */
     val trackFocus: Boolean = false,
     /** Features still in testing (self-timer and long exposure today); hidden until switched on in Settings. */
@@ -235,6 +237,11 @@ data class CameraSettings(
      * Warmth isn't shown there and doesn't apply. With Film on too ([filmMono]) it has [FILM_MONO_CONTRAST] more contrast.
      */
     fun develop(base: DevelopParams, hasFace: Boolean): DevelopParams {
+        val p = developLook(base, hasFace)
+        return if (grain) p else p.copy(grain = 0f, filmGrain = 0f)
+    }
+
+    private fun developLook(base: DevelopParams, hasFace: Boolean): DevelopParams {
         val bw = monoMode
         val adjust = Adjustments(
             brightness = brightness,
@@ -391,6 +398,7 @@ object CameraSettingsStore {
             pentax645Flip = p.getBoolean("pentax645Flip", d.pentax645Flip),
             frameColor = runCatching { FilmFrameColor.valueOf(p.getString("frameColor", null)!!) }.getOrDefault(d.frameColor),
             scanQr = p.getBoolean("scanQr", d.scanQr),
+            grain = p.getBoolean("grain", d.grain),
             trackFocus = p.getBoolean("trackFocus", d.trackFocus),
             experimental = p.getBoolean("experimental", d.experimental),
             videoStabilization = p.getBoolean("videoStabilization", d.videoStabilization),
@@ -467,6 +475,7 @@ object CameraSettingsStore {
             .putBoolean("pentax645Flip", s.pentax645Flip)
             .putString("frameColor", s.frameColor.name)
             .putBoolean("scanQr", s.scanQr)
+            .putBoolean("grain", s.grain)
             .putBoolean("trackFocus", s.trackFocus)
             .putBoolean("experimental", s.experimental)
             .putBoolean("videoStabilization", s.videoStabilization)

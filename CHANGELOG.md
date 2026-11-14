@@ -1,3 +1,7 @@
+**RawBoy Camera (Android, iOS): Grain setting, on by default (2026-11-14)**
+
+- Added **Settings → Grain** (`CameraSettings.grain`, default on). Off takes the grain out of the viewfinder and the saved photos, Film's included (`develop` zeroes `grain` and `filmGrain`); on is the same as before. Unit test in `CameraSettingsTest`; not built or run on a device (no Android SDK in the sandbox).
+
 **RawBoy Camera (Android, iOS): fixes found reviewing the Frames changes (2026-11-14)**
 
 - Shutter speeds between about 0.67 s and 0.95 s on the Pentax/Contax rebate now read `0.8s` instead of `1/1`.
