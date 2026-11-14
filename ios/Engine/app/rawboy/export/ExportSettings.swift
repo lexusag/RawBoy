@@ -546,7 +546,9 @@ public enum Pentax645Frame {
 
     public static func formatShutter(_ t: Double) -> String {
         guard t.isFinite && t > 0 else { return "---" }
-        return t >= 0.95 ? "\(trimOneDecimal(t))s" : "1/\(Int((1.0 / t).rounded()))"
+        // 1/1 would be a second, not the 0.7-0.9 s it stands for: keep seconds until 1/N reads as a fraction (N >= 2).
+        let n = Int((1.0 / t).rounded())
+        return (t >= 0.95 || n < 2) ? "\(trimOneDecimal(t))s" : "1/\(n)"
     }
 
     public static func formatContaxShutter(_ t: Double) -> String {

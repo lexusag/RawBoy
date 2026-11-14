@@ -960,12 +960,18 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         it.copy(
             photoFrame = frame,
             lastPhotoFrame = if (frame != PhotoFrame.NONE) frame else it.lastPhotoFrame,
+            // The date stamp has no "jan 26" layout (only the Pentax/Contax rebate does).
+            dateStampFormat = if (frame == PhotoFrame.DATE_STAMP && it.dateStampFormat == DateStampFormat.MMM_YY) DateStampFormat.DMY else it.dateStampFormat,
         )
     }
     /** Toggles frames off or back on using the last enabled frame (Pentax 645 by default). */
     fun togglePhotoFrame() = change {
         if (it.photoFrame == PhotoFrame.NONE) {
-            it.copy(photoFrame = it.lastPhotoFrame.takeIf { f -> f != PhotoFrame.NONE } ?: PhotoFrame.PENTAX_645)
+            val frame = it.lastPhotoFrame.takeIf { f -> f != PhotoFrame.NONE } ?: PhotoFrame.PENTAX_645
+            it.copy(
+                photoFrame = frame,
+                dateStampFormat = if (frame == PhotoFrame.DATE_STAMP && it.dateStampFormat == DateStampFormat.MMM_YY) DateStampFormat.DMY else it.dateStampFormat,
+            )
         } else {
             it.copy(lastPhotoFrame = it.photoFrame, photoFrame = PhotoFrame.NONE)
         }
