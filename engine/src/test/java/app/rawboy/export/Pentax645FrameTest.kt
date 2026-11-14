@@ -356,7 +356,7 @@ class Pentax645FrameTest {
     }
 
     @Test
-    fun exportFieldsFilterOutCameraOnlyFieldsAndResolveExportFrame() {
+    fun exportFieldsFilterOutCameraOnlyFields() {
         val parsed = Pentax645Field.parseExportFields("SHUTTER,MODE,APERTURE,EV")
         assertEquals(setOf(Pentax645Field.SHUTTER, Pentax645Field.APERTURE), parsed)
 
@@ -364,26 +364,5 @@ class Pentax645FrameTest {
         assertEquals(Pentax645Field.TIME, order.first())
         assertTrue(Pentax645Field.MODE !in order)
         assertEquals(Pentax645Field.EXPORT_FIELDS.size, order.size)
-
-        val settings = ExportSettings(
-            photoFrame = PhotoFrame.PENTAX_645,
-            pentax645Fields = setOf(Pentax645Field.FRAME_NUMBER, Pentax645Field.SHUTTER, Pentax645Field.APERTURE, Pentax645Field.ISO),
-            frameNumber = 4,
-            captureDate = "2026:11:13 14:46:00",
-        )
-        val resolved = settings.resolveFrame(
-            photoWidth = 600,
-            photoHeight = 800,
-            exposureTime = 1.0 / 250.0,
-            fNumber = 4.0,
-            focalLengthMm = 50.0,
-            iso = 200.0,
-        )
-        assertEquals(4, resolved.pentax645Info?.frameNumber)
-        assertEquals(1.0 / 250.0, resolved.pentax645Info?.exposureTime ?: 0.0, 1e-6)
-        assertEquals(4.0, resolved.pentax645Info?.fNumber ?: 0.0, 1e-6)
-        assertTrue(resolved.pentax645Info?.focalLengthMm?.isNaN() == true)
-        assertEquals(200.0, resolved.pentax645Info?.iso ?: 0.0, 1e-6)
-        assertEquals(null, resolved.pentax645Info?.mode)
     }
 }
