@@ -934,7 +934,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         if (activeCaptures == 0) restartCamera() else restartAfterCapture = true
     }
     fun setRememberLast(on: Boolean) = change { it.copy(rememberLast = on) }
-    fun setShowHistogram(on: Boolean) = change { it.copy(showHistogram = on) }
+    fun setShowHistogram(on: Boolean) {
+        if (!on) _histogram.value = null
+        change { it.copy(showHistogram = on) }
+    }
     fun setShowZoomControl(on: Boolean) = change { it.copy(showZoomControl = on) }
     fun setShowGrid(on: Boolean) = change { it.copy(showGrid = on) }
     fun setShowLevel(on: Boolean) {
@@ -1039,9 +1042,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     /** Resets all user-configurable settings to defaults while keeping learned camera calibration. */
     fun resetSettings() {
         val prev = _settings.value
-        val next = prev.resetToDefaults()
+        val recording = _recordingMs.value != null
+        val next = prev.resetToDefaults().let {
+            if (recording) it.copy(maxRes = prev.maxRes, front = prev.front, lens = prev.lens, flatVideo = prev.flatVideo) else it
+        }
         change { next }
-        if (_recordingMs.value == null) {
+        if (!recording) {
             if (prev.maxRes != next.maxRes) {
                 lensesBySide = null
                 info = null
@@ -1052,11 +1058,14 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 val all = lensesBySide?.get(next.front).orEmpty()
                 if (prev.front != next.front) _lenses.value = all
                 val target = all.firstOrNull { it.label == next.lens } ?: all.firstOrNull()
-                if (target != null && target !== info) {
-                    switchTo(target)
+                if (target != null) {
+                    if (target !== info) switchTo(target)
                     if (target.label != next.lens) change { it.copy(lens = target.label) }
                 }
             }
+        }
+        if (prev.showHistogram && !next.showHistogram) {
+            _histogram.value = null
         }
         if (prev.showLevel && !next.showLevel) {
             tiltFilter.reset()
@@ -1068,10 +1077,13 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         if (prev.experimental && !next.experimental) {
             cancelSelfTimer()
         }
+        if (prev.scanQr && !next.scanQr) {
+            clearQr()
+        }
         if (prev.geotag != next.geotag) {
             updateLocation()
         }
-        if (prev.videoStabilization != next.videoStabilization && _recordingMs.value == null) {
+        if (prev.videoStabilization != next.videoStabilization && !recording) {
             applyStabilization()
         }
     }

@@ -1,3 +1,12 @@
+**RawBoy Camera (Android): scale HDR gain map to the look's white level and tame highlight curve (2026-11-14)**
+
+- **HDR gain map** now normalizes display luma by the active film stock's or LUT's white level (`Exporter.lookWhiteLuma` → `JpegNative.beginGainMap` → `GainMapBuilder` in `ultrahdr.h`): paper-white dimmed print and slide films (~0.81–0.87 luma) reach the same highlight lift as AgX (1.0) without pulling the knee into midtones. For film stocks, white is evaluated through `film.film` at `(1, 1, 1)` into `film.print` (so slide films whose `Dmin` sits at ~0.06 get their true 0.81–0.86 white rather than the unused `(0, 0, 0)` print LUT corner) and full `Whites`/`Blacks` levels.
+- Set `kHeadroomEv = 2.0` (4× max boost), `kKnee = 0.72`, `kWhite = 0.98`, with a quadratic ease-in (`t * t`) so upper midtones stay natural while peak highlights pop. Checked by `tools/ultrahdr/run.sh`.
+
+**RawBoy Camera (Android, iOS): Reset settings to defaults button in Settings (2026-11-14)**
+
+- Added **Reset settings to defaults** with a confirmation dialog at the bottom of Settings (`CameraSettings.resetToDefaults`, `CameraViewModel.resetSettings` on Android and iOS). Resets photo, capture, video, viewfinder, experimental, look and camera/lens settings to their defaults while keeping learned per-lens calibration (`previewScales` and `flashGuides`), and updates the active camera/lens and viewfinder overlays (including clearing the live histogram immediately on Android and keeping the active camera/recording state intact if triggered during video recording). Checked by `CameraSettingsTest`.
+
 **RawBoy Camera (Android, iOS): Grain setting, on by default (2026-11-14)**
 
 - Added **Settings → Grain** (`CameraSettings.grain`, default on). Off takes the grain out of the viewfinder and the saved photos, Film's included (`develop` zeroes `grain` and `filmGrain`); on is the same as before. Unit test in `CameraSettingsTest`; not built or run on a device (no Android SDK in the sandbox).

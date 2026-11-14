@@ -170,27 +170,50 @@ class Exporter(private val context: Context) {
     }
 
     /**
-     * Display-encoded white luma of [params]'s active look (1.0 for AgX, ~0.86 for print film stocks), so the HDR
-     * gain map scales its highlight knee and peak to where the look's brightest whites actually land.
+     * Display-encoded white luma of [params]'s active look (1.0 for AgX, ~0.81–0.87 for print and slide film stocks),
+     * so the HDR gain map scales its highlight knee and peak to where the look's brightest whites actually land.
      */
     private fun lookWhiteLuma(params: ShaderParams): Float {
-        fun luma(data: java.nio.FloatBuffer, index: Int): Float {
-            val o = index * 3
-            return 0.2126f * data.get(o) + 0.7152f * data.get(o + 1) + 0.0722f * data.get(o + 2)
+        fun sampleLut(lut: app.rawboy.lut.LutData, r: Float, g: Float, b: Float): FloatArray {
+            val n = lut.size
+            val s = (n - 1).toFloat()
+            val rx = r.coerceIn(0f, 1f) * s; val r0 = rx.toInt().coerceAtMost(n - 2); val rf = rx - r0
+            val gx = g.coerceIn(0f, 1f) * s; val g0 = gx.toInt().coerceAtMost(n - 2); val gf = gx - g0
+            val bx = b.coerceIn(0f, 1f) * s; val b0 = bx.toInt().coerceAtMost(n - 2); val bf = bx - b0
+            val out = FloatArray(3)
+            val data = lut.data
+            for (db in 0..1) {
+                val wb = if (db == 0) 1f - bf else bf
+                for (dg in 0..1) {
+                    val wbg = wb * (if (dg == 0) 1f - gf else gf)
+                    for (dr in 0..1) {
+                        val w = wbg * (if (dr == 0) 1f - rf else rf)
+                        val o = (((b0 + db) * n + (g0 + dg)) * n + (r0 + dr)) * 3
+                        out[0] += w * data.get(o)
+                        out[1] += w * data.get(o + 1)
+                        out[2] += w * data.get(o + 2)
+                    }
+                }
+            }
+            return out
         }
-        val outWhite = 1f - maxOf(-params.whites, 0f) * 0.15f
+        val inBlack = maxOf(-params.blacks, 0f) * 0.2f
         val outBlack = maxOf(params.blacks, 0f) * 0.15f
-        val film = params.film?.print
+        val inWhite = 1f - maxOf(params.whites, 0f) * 0.2f
+        val outWhite = 1f - maxOf(-params.whites, 0f) * 0.15f
+        fun applyLevels(x: Float): Float =
+            outBlack + (outWhite - outBlack) * ((x - inBlack) / (inWhite - inBlack)).coerceIn(0f, 1f)
+        val film = params.film
         val white = if (film != null && params.filmAmount > 0f) {
-            val last = film.size * film.size * film.size - 1
-            val w = maxOf(luma(film.data, 0), luma(film.data, last))
-            val leveled = outBlack + (outWhite - outBlack) * w
+            val d = sampleLut(film.film, 1f, 1f, 1f)
+            val rgb = sampleLut(film.print, d[0], d[1], d[2])
+            val leveled = 0.2126f * applyLevels(rgb[0]) + 0.7152f * applyLevels(rgb[1]) + 0.0722f * applyLevels(rgb[2])
             outWhite + (leveled - outWhite) * params.filmAmount
         } else {
             val lut = params.lut
             if (lut != null && params.lutAmount > 0f) {
-                val last = lut.size * lut.size * lut.size - 1
-                val w = luma(lut.data, last)
+                val rgb = sampleLut(lut, outWhite, outWhite, outWhite)
+                val w = 0.2126f * rgb[0] + 0.7152f * rgb[1] + 0.0722f * rgb[2]
                 outWhite + (w - outWhite) * params.lutAmount
             } else {
                 outWhite

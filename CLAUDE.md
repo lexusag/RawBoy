@@ -61,7 +61,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
     `--exclude-libs,ALL` because libjxl (DNG SDK path) bundles an older Highway. The DNG SDK's own
     `libjxl/lib/jpegli` is an unbuildable snapshot; don't try to use it.
   - `ultrahdr.h` — Ultra HDR JPEG writing (Camera's **HDR gain map** setting, Android): `GainMapBuilder` makes a 1/4-size luma gain map from the
-    final 16-bit RGB rows (zero below luma 0.75, 2 EV at white: a guess, tune on a phone), `assemble` puts the XMP `hdrgm` + ISO 21496-1 + MPF segments around the SDR JPEG
+    final 16-bit RGB rows (normalized by `Exporter.lookWhiteLuma` so dimmed film/LUT whites reach full boost; quadratic ease-in from `kKnee` 0.72 to `kWhite` 0.98, `kHeadroomEv` 2 EV), `assemble` puts the XMP `hdrgm` + ISO 21496-1 + MPF segments around the SDR JPEG
     and appends the gain map JPEG. `jpeg_jpegli.cpp`'s `beginGainMap` encodes the SDR picture into an `open_memstream` buffer and does that in `finish`
     (any failure falls back to the plain JPEG). Host test: `tools/ultrahdr/run.sh` (the layouts mirror `decoder_display.cpp`'s reader).
 - `engine/src/main/java/app/rawboy/`
