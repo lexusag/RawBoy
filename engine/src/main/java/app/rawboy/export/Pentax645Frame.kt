@@ -3,9 +3,13 @@ package app.rawboy.export
 import java.util.Calendar
 import java.util.Locale
 import java.util.TimeZone
+import kotlin.math.PI
 import kotlin.math.abs
+import kotlin.math.cos
 import kotlin.math.exp
+import kotlin.math.hypot
 import kotlin.math.roundToInt
+import kotlin.math.sin
 import kotlin.math.sqrt
 
 /** Frame / date-stamp overlay applied to exported photos (mutually exclusive). */
