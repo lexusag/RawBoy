@@ -256,6 +256,13 @@ struct CameraSettings: Equatable {
     /** The long side to save at, or nil for full size. */
     var maxLongSide: Int? { smallExport ? Self.smallLongSide : nil }
 
+    /** Resets all user settings to their defaults while keeping learned lens calibration. */
+    func resetToDefaults() -> CameraSettings {
+        var s = CameraSettings()
+        s.previewScales = previewScales
+        return s
+    }
+
     static let minQuality = 70
     static let smallLongSide = 3000
     /** Film + B&W: added to the Contrast slider's value (owner's choice, 2026-10-31: punchier than plain B&W). */

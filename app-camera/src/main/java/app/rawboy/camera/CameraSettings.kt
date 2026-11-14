@@ -283,6 +283,9 @@ data class CameraSettings(
     fun longExposureSpec(key: Float?): app.rawboy.camera.capture.LongExposure? =
         if (experimental && longExposure > 0) app.rawboy.camera.capture.LongExposure(longExposure, longExposureLighten, key?.takeIf { lensKey in previewScales }?.let { it * previewScale }) else null
 
+    /** Resets all user settings to their defaults while keeping learned lens calibration. */
+    fun resetToDefaults(): CameraSettings = CameraSettings(previewScales = previewScales, flashGuides = flashGuides)
+
     companion object {
         /** Self-timer choices in seconds; the button cycles through them. */
         val SELF_TIMERS = listOf(0, 2, 5, 10)
