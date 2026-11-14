@@ -170,6 +170,8 @@ struct CameraSettings: Equatable {
     var shutterSound = false
     /** Look for QR codes in the viewfinder and offer to open them, as the system camera does. */
     var scanQr = true
+    /** Film grain on the viewfinder and the saved photos; off = a clean picture (no look's grain, Film's included). */
+    var grain = true
     /** After a tap, keep focus on what was tapped as it moves (CameraViewModel's tracker); off = the focus stays put. */
     var trackFocus = false
     /**
@@ -208,6 +210,15 @@ struct CameraSettings: Equatable {
      * Mirrors Android's CameraSettings.develop.
      */
     func develop(_ base: DevelopParams, hasFace: Bool) -> DevelopParams {
+        var p = developLook(base, hasFace: hasFace)
+        if !grain {
+            p.grain = 0
+            p.filmGrain = 0
+        }
+        return p
+    }
+
+    private func developLook(_ base: DevelopParams, hasFace: Bool) -> DevelopParams {
         let adjust = Adjustments(brightness: brightness, warmth: monoMode ? 0 : warmth,
                                  contrast: filmMono ? Self.filmMonoContrast : 0)
         var p = LookApplier.apply(base, look: look, strength: strength, adjust: adjust, hasFace: hasFace)
@@ -289,6 +300,7 @@ enum CameraSettingsStore {
         s.frameColor = d.string(forKey: "camera.frameColor").flatMap(FilmFrameColor.init(rawValue:)) ?? def.frameColor
         s.shutterSound = d.object(forKey: "camera.shutterSound") as? Bool ?? def.shutterSound
         s.scanQr = d.object(forKey: "camera.scanQr") as? Bool ?? def.scanQr
+        s.grain = d.object(forKey: "camera.grain") as? Bool ?? def.grain
         s.trackFocus = d.object(forKey: "camera.trackFocus") as? Bool ?? def.trackFocus
         s.previewScales = parseScales(d.string(forKey: "camera.previewScales"))
         s.flash = d.string(forKey: "camera.flash").flatMap(FlashMode.init(rawValue:)) ?? def.flash
@@ -345,6 +357,7 @@ enum CameraSettingsStore {
         d.set(s.frameColor.rawValue, forKey: "camera.frameColor")
         d.set(s.shutterSound, forKey: "camera.shutterSound")
         d.set(s.scanQr, forKey: "camera.scanQr")
+        d.set(s.grain, forKey: "camera.grain")
         d.set(s.trackFocus, forKey: "camera.trackFocus")
         d.set(s.front, forKey: "camera.front")
         d.set(s.lens, forKey: "camera.lens")

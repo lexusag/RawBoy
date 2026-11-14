@@ -1316,6 +1316,12 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             onChange = vm::setTrackFocus,
         )
         SettingSwitch(
+            title = "Grain",
+            subtitle = "Film grain on the viewfinder and photos",
+            checked = settings.grain,
+            onChange = vm::setGrain,
+        )
+        SettingSwitch(
             title = "QR codes",
             subtitle = "Tap to open a link, join Wi-Fi or copy",
             checked = settings.scanQr,

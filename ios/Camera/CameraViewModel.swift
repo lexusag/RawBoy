@@ -632,6 +632,10 @@ final class CameraViewModel: ObservableObject {
 
     // MARK: - QR codes
 
+    func setGrain(_ on: Bool) {
+        change { $0.grain = on }
+    }
+
     func setScanQr(_ on: Bool) {
         change { $0.scanQr = on }
         controller.setScanQr(on)

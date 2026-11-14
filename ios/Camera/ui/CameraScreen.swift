@@ -672,6 +672,8 @@ private struct SettingsSheet: View {
                     row("Geotag", "GPS position in the JPEG and DNG", Binding(get: { vm.settings.geotag }, set: vm.setGeotag))
                     row("Track subject after tap", "Focus follows what you tapped",
                         Binding(get: { vm.settings.trackFocus }, set: vm.setTrackFocus))
+                    row("Grain", "Film grain on the viewfinder and photos",
+                        Binding(get: { vm.settings.grain }, set: vm.setGrain))
                     row("QR codes", "Tap to open a link or copy the text or Wi-Fi password",
                         Binding(get: { vm.settings.scanQr }, set: vm.setScanQr))
                 }
