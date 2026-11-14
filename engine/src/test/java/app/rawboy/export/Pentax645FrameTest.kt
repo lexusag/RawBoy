@@ -256,7 +256,8 @@ class Pentax645FrameTest {
     fun contax645RendersTopShootInfoAndBottomTriangleFrameNumber() {
         assertEquals("10", Pentax645Frame.formatContaxFrameNumber(10))
         assertEquals("--", Pentax645Frame.formatContaxFrameNumber(0))
-        assertEquals("4000", Pentax645Frame.formatContaxShutter(1.0 / 4000.0))
+        assertEquals("1/4000", Pentax645Frame.formatContaxShutter(1.0 / 4000.0))
+        assertEquals("1/30", Pentax645Frame.formatContaxShutter(1.0 / 30.0))
         assertEquals("2s", Pentax645Frame.formatContaxShutter(2.0))
         assertEquals("F 2.8", Pentax645Frame.formatContaxAperture(2.8))
         assertEquals("F 4", Pentax645Frame.formatContaxAperture(4.0))
