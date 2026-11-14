@@ -16,6 +16,8 @@ class Pentax645FrameTest {
         assertEquals("2.5s", Pentax645Frame.formatShutter(2.5))
         assertEquals("1s", Pentax645Frame.formatShutter(1.0))
         assertEquals("---", Pentax645Frame.formatShutter(Double.NaN))
+        assertEquals("0.8s", Pentax645Frame.formatShutter(0.8))
+        assertEquals("1/2", Pentax645Frame.formatShutter(0.5))
 
         assertEquals("F 8", Pentax645Frame.formatAperture(8.0))
         assertEquals("F1.8", Pentax645Frame.formatAperture(1.8))

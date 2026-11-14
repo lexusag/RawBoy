@@ -574,6 +574,8 @@ final class CameraViewModel: ObservableObject {
         change {
             $0.photoFrame = frame
             if frame != .none { $0.lastPhotoFrame = frame }
+            // The date stamp has no "jan 26" layout (only the Pentax/Contax rebate does).
+            if frame == .dateStamp && $0.dateStampFormat == .mmmYy { $0.dateStampFormat = .dmy }
         }
     }
     /** Toggles frames off or back on using the last enabled frame (Pentax 645 by default). */
@@ -581,6 +583,7 @@ final class CameraViewModel: ObservableObject {
         change {
             if $0.photoFrame == .none {
                 $0.photoFrame = $0.lastPhotoFrame != .none ? $0.lastPhotoFrame : .pentax645
+                if $0.photoFrame == .dateStamp && $0.dateStampFormat == .mmmYy { $0.dateStampFormat = .dmy }
             } else {
                 $0.lastPhotoFrame = $0.photoFrame
                 $0.photoFrame = .none

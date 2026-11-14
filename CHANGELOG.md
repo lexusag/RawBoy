@@ -1,3 +1,8 @@
+**RawBoy Camera (Android, iOS): fixes found reviewing the Frames changes (2026-11-14)**
+
+- Shutter speeds between about 0.67 s and 0.95 s on the Pentax/Contax rebate now read `0.8s` instead of `1/1`.
+- Switching to **Date stamp** (or toggling frames back on) with the Pentax/Contax-only `jan 26` date format selected now resets the date format to `DD MM 'YY`, so the setting matches what the Date stamp picker shows. Checked by `Pentax645FrameTest`; not built or run on a device.
+
 **RawBoy Camera (Android, iOS): Pentax 645 film frame with shoot info, Frames submenu, and B&W frame rendering (2026-11-13)**
 
 - Moved **Date stamp** into a **Frames** submenu in Settings (`PhotoFrame`: **Off**, **Date stamp**, or **Pentax 645**, mutually exclusive; migrates existing `dateStamp` preferences).

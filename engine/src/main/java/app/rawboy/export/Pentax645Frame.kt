@@ -93,7 +93,9 @@ object Pentax645Frame {
 
     fun formatShutter(t: Double): String {
         if (!t.isFinite() || t <= 0.0) return "---"
-        return if (t >= 0.95) "${trimOneDecimal(t)}s" else "1/${(1.0 / t).roundToInt()}"
+        // 1/1 would be a second, not the 0.7-0.9 s it stands for: keep seconds until 1/N reads as a fraction (N >= 2).
+        val n = (1.0 / t).roundToInt()
+        return if (t >= 0.95 || n < 2) "${trimOneDecimal(t)}s" else "1/$n"
     }
 
     fun formatContaxShutter(t: Double): String = formatShutter(t)
