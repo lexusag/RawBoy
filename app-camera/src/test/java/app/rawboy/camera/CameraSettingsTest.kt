@@ -3,6 +3,8 @@ package app.rawboy.camera
 import app.rawboy.develop.DevelopParams
 import app.rawboy.export.DateStampFormat
 import app.rawboy.export.DateStampStyle
+import app.rawboy.export.Pentax645Field
+import app.rawboy.export.PhotoFrame
 import app.rawboy.export.TimeStampFormat
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
