@@ -80,6 +80,7 @@ public enum Imports {
     }
 }
 
+#if os(iOS)
 /** The system Photos picker, limited to images; the raw representation is pulled out by Imports.load. */
 public struct PhotoPicker: UIViewControllerRepresentable {
     let selectionLimit: Int
@@ -116,6 +117,8 @@ public struct PhotoPicker: UIViewControllerRepresentable {
         }
     }
 }
+
+#endif
 
 /** Raw file types for the Files importer: every raw UTI plus DNG; some providers report raws as plain data. */
 public let rawFileTypes: [UTType] = [.rawImage, UTType("com.adobe.raw-image") ?? .rawImage, .data]

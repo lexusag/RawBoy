@@ -87,7 +87,9 @@ public struct ExportFrameSections: View {
                     settings.pentax645Order = next
                 }
             }
+            #if os(iOS)
             .environment(\.editMode, .constant(.active))
+            #endif
         }
     }
 }

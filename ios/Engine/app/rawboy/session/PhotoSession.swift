@@ -534,9 +534,9 @@ public final class PhotoSession: ObservableObject {
         return data
     }
 
-    /** Develops the full-resolution photo with [p] and writes it; returns the file (move it to Photos next). */
+    /** Develops the full-resolution photo with [p] and writes it into [directory]; returns the file (iOS: move it to Photos next). */
     public func export(_ p: DevelopParams, defaults: DevelopParams, sourceName: String, settings: ExportSettings,
-                       naming: OutputNaming = OutputNaming(),
+                       naming: OutputNaming = OutputNaming(), directory: URL = FileManager.default.temporaryDirectory,
                        onProgress: @escaping @Sendable (Float) -> Void) async throws -> URL {
         guard let img = image else { throw RawImageError(message: "No photo open") }
         ensureFlareSource(p)
@@ -547,7 +547,7 @@ public final class PhotoSession: ObservableObject {
         let params = shaderParams(p, defaults: defaults, lut: lut, useSelectedLut: false, film: film)
         return try await Task.detached(priority: .userInitiated) {
             try Exporter().export(img, sourceName: sourceName, params: params, settings: settings, naming: naming,
-                                  onProgress: onProgress)
+                                  directory: directory, onProgress: onProgress)
         }.value
     }
 

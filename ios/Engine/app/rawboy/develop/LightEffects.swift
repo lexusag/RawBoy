@@ -191,6 +191,50 @@ public enum LightEffects {
     /** Uniform arrays in the shader are this long. */
     public static let maxEffects = 4
 
+    // A photo's edits (`Edits`; the same JSON as web's LightEffects.ts: kind "lightning", "sparks", "trails" or "swirl").
+
+    public static func toJson(_ effects: [LightEffect]) -> [[String: Any]] {
+        effects.map { e in
+            ["enabled": e.enabled, "kind": e.kind.key,
+             "cx": Masks.num(e.cx), "cy": Masks.num(e.cy), "rx": Masks.num(e.rx), "ry": Masks.num(e.ry),
+             "angle": Masks.num(e.angle), "seed": e.seed, "amount": Masks.num(e.amount),
+             "thickness": Masks.num(e.thickness), "glow": Masks.num(e.glow), "intensity": Masks.num(e.intensity),
+             "hue": Masks.num(e.hue), "spread": Masks.num(e.spread)]
+        }
+    }
+
+    /** Effects from untrusted JSON, each with a fresh id: invalid ones are dropped, ranges clamped, at most [maxEffects]. */
+    public static func parseEffects(_ v: Any?) -> [LightEffect] {
+        guard let a = v as? [Any] else { return [] }
+        return Array(a.compactMap(parseEffect).prefix(maxEffects))
+    }
+
+    private static func parseEffect(_ v: Any) -> LightEffect? {
+        guard let o = v as? [String: Any] else { return nil }
+        func number(_ k: String) -> NSNumber? {
+            guard let n = o[k] as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID() else { return nil }
+            return n
+        }
+        func f(_ k: String, _ lo: Float, _ hi: Float) -> Float? {
+            guard let n = number(k), n.floatValue.isFinite else { return nil }
+            return n.floatValue.clamped(lo, hi)
+        }
+        guard let kind = FxKind.allCases.first(where: { $0.key == o["kind"] as? String }),
+              let cx = f("cx", -1, 2), let cy = f("cy", -1, 2), let rx = f("rx", 0.005, 3), let ry = f("ry", 0.005, 3)
+        else { return nil }
+        var e = LightEffect(id: Masks.newId(), kind: kind, cx: cx, cy: cy, rx: rx, ry: ry)
+        e.enabled = o["enabled"] as? Bool ?? true
+        e.angle = f("angle", -360, 360) ?? 0
+        if let n = number("seed"), n.doubleValue.isFinite { e.seed = min(max(n.doubleValue, 0), 1) }
+        e.amount = f("amount", 0, 100) ?? kind.amount
+        e.thickness = f("thickness", 0, 100) ?? kind.thickness
+        e.glow = f("glow", 0, 100) ?? kind.glow
+        e.intensity = f("intensity", 0, 100) ?? 100
+        e.hue = f("hue", 0, 360) ?? kind.hue
+        e.spread = f("spread", 0, 100) ?? kind.spread
+        return e
+    }
+
     /** A new effect's box is this many times the photo, so most of the pattern sits outside the frame. */
     public static let startScale: Float = 1.75
 

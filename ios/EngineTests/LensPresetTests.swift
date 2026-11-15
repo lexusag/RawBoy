@@ -19,7 +19,7 @@ final class LensPresetTests: XCTestCase {
             Set(decoded.values.keys),
             ["lensProfile", "lensDistortion", "lensAnamorphic", "lensFisheye", "lensFisheyeFov", "lensFisheyeAuto", "lensFisheyeCircle", "lensFisheyeX", "lensFisheyeY", "lensCrop", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint"]
         )
-        let applied = Presets.apply(decoded, to: DevelopParams())
+        let applied = Presets.apply(decoded, DevelopParams())
         XCTAssertEqual(applied.lensAnamorphic, -45)
         XCTAssertEqual(applied.lensCrop, -30)
         let look = Presets.capture("Look", DevelopParams(), [.light, .lens], lens: "XF23mmF2 R WR")

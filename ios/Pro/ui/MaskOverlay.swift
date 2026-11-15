@@ -1,6 +1,10 @@
 import RawBoyEngine
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+#else
+import AppKit
+#endif
 
 enum MaskTool { case move, brush, erase }
 
@@ -368,6 +372,7 @@ struct MaskInputs {
     var onBend: (String, Float) -> Void = { _, _ in }
 }
 
+#if canImport(UIKit)
 /**
  * Mask touches over the preview. Move: a finger on a handle drags it (or on another layer's pin selects it);
  * anywhere else the touch falls through to the preview (double-tap zoom, pan, press-and-hold compare).
@@ -544,6 +549,178 @@ final class MaskTouchView: UIView {
         lastSpread = nil
     }
 }
+#endif
+
+#if !canImport(UIKit)
+/**
+ * macOS: mouse and trackpad on the mask layers, the counterpart of the touch view. Move: a click on a handle drags it
+ * (or on another layer's pin selects it); every other click goes to the preview underneath. Brush / Erase: the left
+ * button paints; the trackpad's two-finger scroll or the middle button pans the 100% view, pinch or wheel zooms.
+ */
+struct MaskTouchLayer: NSViewRepresentable {
+    let inputs: MaskInputs
+
+    func makeNSView(context: Context) -> MaskTouchView { MaskTouchView() }
+
+    func updateNSView(_ view: MaskTouchView, context: Context) { view.inputs = inputs }
+}
+
+final class MaskTouchView: NSView {
+    var inputs: MaskInputs?
+    private static let grab: CGFloat = 24  // points
+
+    private var geometry: MaskGeometry?
+    private var dragLayer: String?
+    private var dragHandle: MaskHandle?
+    private var dragStart: MaskShape?
+    private var dragFrom: CGPoint = .zero
+    private var strokeLayer: String?
+    private var strokeId: String?
+    private var last: CGPoint = .zero
+    private var panFrom: CGPoint?
+
+    override var isFlipped: Bool { true }
+
+    private var scale: CGFloat { window?.backingScaleFactor ?? 2 }
+
+    private func makeGeometry(_ inp: MaskInputs) -> MaskGeometry {
+        MaskGeometry(lens: inp.lens, viewW: Int(bounds.width * scale), viewH: Int(bounds.height * scale), frame: inp.frame,
+                     zoomCenter: inp.zoomCenter, zoomScale: inp.zoomScale, zoomFrame: inp.zoomFrame)
+    }
+
+    private func px(_ p: CGPoint) -> CGPoint { CGPoint(x: p.x * scale, y: p.y * scale) }
+
+    private func local(_ event: NSEvent) -> CGPoint { convert(event.locationInWindow, from: nil) }
+
+    /** Move tool: only handles are ours; other clicks (and the wheel over empty space) go to the preview underneath. */
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let p = convert(point, from: superview)
+        guard let inp = inputs, bounds.contains(p) else { return nil }
+        if inp.tool != .move { return inp.layers.contains { $0.id == inp.selectedId } ? self : nil }
+        return makeGeometry(inp).hit(inp.layers, inp.selectedId, px(p), Self.grab * scale, grabInside: inp.grabInside,
+                                     leaks: inp.leaks) != nil ? self : nil
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        guard let inp = inputs else { return }
+        if NSEvent.pressedMouseButtons & 0b100 != 0 || event.modifierFlags.contains(.option) {  // middle button: pan
+            panFrom = local(event)
+            return
+        }
+        let g = makeGeometry(inp)
+        geometry = g
+        let at = local(event)
+        let p = px(at)
+        if inp.tool == .move {
+            guard let (id, handle) = g.hit(inp.layers, inp.selectedId, p, Self.grab * scale, grabInside: inp.grabInside,
+                                           leaks: inp.leaks) else { return }
+            if handle == .pin {
+                inp.actions.onSelect(id)
+                return
+            }
+            if id != inp.selectedId { inp.actions.onSelect(id) }
+            dragLayer = id
+            dragHandle = handle
+            dragStart = inp.layers.first { $0.id == id }?.shape
+            dragFrom = g.toImage(p)
+            return
+        }
+        guard let layer = inp.layers.first(where: { $0.id == inp.selectedId }) else { return }
+        let start = g.toImage(p)
+        let stroke = BrushStroke(id: Masks.newId(), erase: inp.tool == .erase || event.modifierFlags.contains(.option),
+                                 auto: inp.brush.auto, radius: inp.brush.radius, hardness: inp.brush.hardness,
+                                 flow: inp.brush.flow, points: g.fraction(start))
+        strokeLayer = layer.id
+        strokeId = stroke.id
+        last = start
+        inp.actions.onStrokeBegin(layer.id, stroke)
+        inp.onPaintAt(at)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let inp = inputs, let g = geometry else { return }
+        let at = local(event)
+        if let from = panFrom {
+            inp.actions.onPan(Float((at.x - from.x) * scale), Float((at.y - from.y) * scale))
+            panFrom = at
+            return
+        }
+        let p = px(at)
+        if let id = dragLayer, let handle = dragHandle, let start = dragStart {
+            if handle == .bend {
+                guard let bend = g.bendAt(start, g.toImage(p)) else { return }
+                if case let .stripe(cx, cy, rx, ry, angle, feather, _, taper) = start {
+                    inp.actions.onChange(id, .stripe(cx: cx, cy: cy, rx: rx, ry: ry, angle: angle, feather: feather, bend: bend,
+                                                     taper: taper))
+                } else {
+                    inp.onBend(id, bend)
+                }
+                return
+            }
+            inp.actions.onChange(id, g.drag(start, handle, dragFrom, g.toImage(p)))
+            return
+        }
+        guard let layer = strokeLayer, let sid = strokeId else { return }
+        inp.onPaintAt(at)
+        let img = g.toImage(p)
+        if hypot(img.x - last.x, img.y - last.y) < max(0.5, CGFloat(inp.brush.radius) * g.long * pointStep) { return }
+        last = img
+        inp.actions.onStrokeExtend(layer, sid, g.fraction(img))
+    }
+
+    override func mouseMoved(with event: NSEvent) {
+        guard let inp = inputs, inp.tool != .move else { return }
+        inp.onPaintAt(local(event))
+    }
+
+    override func mouseUp(with event: NSEvent) { finish() }
+
+    override func otherMouseDown(with event: NSEvent) { panFrom = local(event) }
+
+    override func otherMouseDragged(with event: NSEvent) {
+        guard let inp = inputs, let from = panFrom else { return }
+        let at = local(event)
+        inp.actions.onPan(Float((at.x - from.x) * scale), Float((at.y - from.y) * scale))
+        panFrom = at
+    }
+
+    override func otherMouseUp(with event: NSEvent) { panFrom = nil }
+
+    /** Trackpad scroll pans; a wheel (or Cmd + scroll) zooms around the pointer, as over the plain preview. */
+    override func scrollWheel(with event: NSEvent) {
+        guard let inp = inputs else { return }
+        let at = px(local(event))
+        if event.hasPreciseScrollingDeltas && !event.modifierFlags.contains(.command) {
+            inp.actions.onPan(Float(event.scrollingDeltaX * scale), Float(event.scrollingDeltaY * scale))
+        } else {
+            let step = event.hasPreciseScrollingDeltas ? event.scrollingDeltaY / 120 : event.scrollingDeltaY / 6
+            inp.actions.onZoom(Float(at.x), Float(at.y), Float(exp(step * 0.35)))
+        }
+    }
+
+    override func magnify(with event: NSEvent) {
+        guard let inp = inputs else { return }
+        let at = px(local(event))
+        inp.actions.onZoom(Float(at.x), Float(at.y), Float(1 + event.magnification))
+    }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        for a in trackingAreas { removeTrackingArea(a) }
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self))
+    }
+
+    private func finish() {
+        inputs?.onPaintAt(nil)
+        dragLayer = nil
+        dragHandle = nil
+        dragStart = nil
+        strokeLayer = nil
+        strokeId = nil
+        panFrom = nil
+    }
+}
+#endif
 
 /**
  * Draws the masks over the preview (fit or 100% view), Capture One style. Linear: the full-effect, centre and

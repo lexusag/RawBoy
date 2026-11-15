@@ -1,7 +1,9 @@
 import Combine
 import Foundation
 import RawBoyEngine
+#if canImport(UIKit)
 import UIKit
+#endif
 
 struct EditorState: Equatable {
     var loading = false
@@ -47,11 +49,17 @@ final class EditorViewModel: ObservableObject {
     @Published private(set) var histogram: Histogram?
     /** Clipped highlights red and crushed shadows blue on the preview; tap the histogram. Not remembered. */
     @Published private(set) var clipWarning = false
+    /** The last file exported into a folder (RawBoy Desktop), for Show in Finder. */
+    @Published private(set) var lastExport: URL?
 
     /** The open photo; the pipeline state comes from it. */
     let session: PhotoSession
-    /** The app's copy of the open file (deleted when the next one opens). */
+    /** The app's copy of the open file (deleted when the next one opens). RawBoy Desktop opens the file in place. */
     private var source: URL?
+    /** The open photo's file. */
+    var currentURL: URL? { source }
+    /** RawBoy Desktop: keeps each photo's edits in its sidecar; nil on iOS. */
+    var persistence: EditsPersistence?
     private var frameWidth = 0
     private let defaults = UserDefaults.standard
     /** This photo's edits, for Undo and Redo. */
@@ -128,11 +136,12 @@ final class EditorViewModel: ObservableObject {
 
     func open(_ url: URL) {
         if state.busy { return }
+        persistence?.flush()  // the photo that is leaving
         state.loading = true
         Task {
             do {
                 let previous = state
-                let opened = try await session.open(url) { carryOverEdits(previous, $0) }
+                let opened = try await session.open(url) { persistence?.restore(url, defaults: $0) ?? carryOverEdits(previous, $0) }
                 if let old = source, old != url { Imports.delete(old) }
                 source = url
                 state.loading = false
@@ -153,6 +162,12 @@ final class EditorViewModel: ObservableObject {
                 message = error.localizedDescription
             }
         }
+    }
+
+    /** The frame around the photo: grey, white, black (D). */
+    func cycleFrame() {
+        frameColor = frameColor.next()
+        defaults.set("\(frameColor)", forKey: "display.frame")
     }
 
     /** Single tap in the preview: outside the photo (fit view) cycles the frame colour. */
@@ -248,6 +263,7 @@ final class EditorViewModel: ObservableObject {
     private func show(_ params: DevelopParams) {
         let before = state.params
         state.params = params
+        if let source { persistence?.changed(source, params: params, defaults: state.defaults) }
         state.canUndo = history.canUndo
         state.canRedo = history.canRedo
         session.setParams(params)
@@ -585,34 +601,51 @@ final class EditorViewModel: ObservableObject {
         link.host = "preset"
         link.queryItems = [URLQueryItem(name: "json", value: json)]
         guard let url = link.url else { return }
+        #if canImport(UIKit)
         Task {
             if !(await UIApplication.shared.open(url)) { message = "RawBoy Auto isn't installed" }
         }
+        #else
+        message = "Send to Auto works between the iPhone apps"
+        #endif
     }
 
     // MARK: - Export
 
-    func export(_ settings: ExportSettings) {
+    /** [directory] (RawBoy Desktop): where the file goes; nil (iOS): developed into Photos › RawBoy. */
+    func export(_ settings: ExportSettings, to directory: URL? = nil) {
         guard session.hasImage, !state.busy else { return }
         let current = state
         exportSettings = settings
         ExportSettingsStore.save(settings)
         state.exporting = true
         state.exportProgress = 0
+        #if canImport(UIKit)
         UIApplication.shared.isIdleTimerDisabled = true
+        #endif
         Task {
             do {
                 let file = try await session.export(current.params, defaults: current.defaults,
-                                                    sourceName: current.fileName ?? "image", settings: settings) { p in
+                                                    sourceName: current.fileName ?? "image", settings: settings,
+                                                    directory: directory ?? FileManager.default.temporaryDirectory) { p in
                     Task { @MainActor in self.state.exportProgress = p }
                 }
-                try await PhotoLibraryOutput.save(file)
-                message = "Saved \(file.lastPathComponent) to Photos › RawBoy"
+                if let directory {
+                    lastExport = file
+                    message = "Saved \(file.lastPathComponent) to \(directory.lastPathComponent)"
+                } else {
+                    #if canImport(UIKit)
+                    try await PhotoLibraryOutput.save(file)
+                    message = "Saved \(file.lastPathComponent) to Photos › RawBoy"
+                    #endif
+                }
             } catch {
                 message = "Export failed: \(error.localizedDescription)"
             }
             state.exporting = false
+            #if canImport(UIKit)
             UIApplication.shared.isIdleTimerDisabled = false
+            #endif
         }
     }
 }
@@ -620,8 +653,12 @@ final class EditorViewModel: ObservableObject {
 /** The user's presets, as one preset file (`presets.json`, the same format as exported files) in app storage. */
 enum PresetStore {
     private static var file: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("presets.json")
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        #if os(macOS)
+        return support.appendingPathComponent("RawBoy Desktop", isDirectory: true).appendingPathComponent("presets.json")
+        #else
+        return support.appendingPathComponent("presets.json")
+        #endif
     }
 
     static func load() -> [Preset] {

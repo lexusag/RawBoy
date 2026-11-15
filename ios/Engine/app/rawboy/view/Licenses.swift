@@ -17,7 +17,9 @@ public struct LicensesView: View {
                     .padding()
             }
             .navigationTitle("Open-source licences")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar { Button("Done") { dismiss() } }
         }
     }

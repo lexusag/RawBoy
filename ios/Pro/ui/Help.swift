@@ -1,5 +1,45 @@
 import RawBoyEngine
 
+#if os(macOS)
+/** RawBoy Desktop's help sheet (⌘?): the web's, with the Mac's keys. Keep it in step with web/src/ui/pro/help.ts. */
+let proHelp = [
+    HelpSection("Basics", [
+        HelpItem("Open, or drop a file", "⌘O or the Open button, a file dropped on the window, or Open With in Finder: a RAW file, or a HEIC, JPEG, PNG or TIFF (lower quality than RAW)."),
+        HelpItem("Edits are saved with the photo", "As you work, RawBoy writes your edits into the photo's XMP sidecar (NAME.xmp next to it, or darktable's NAME.EXT.xmp if that is the one there), only its own field; everything else in the file is kept. Open the photo again, here or in RawBoy on the web, and it comes back as you left it. Photos with no saved edits take the previous photo's edits, as on the phone."),
+        HelpItem("Tabs", "Light, Color, Detail, LUTs and Lens hold the sliders. Crop, rotation, flips and scale belong to one photo; the other edits carry over to a photo without saved edits."),
+        HelpItem("Top bar", "Crop & rotate, Masks, Light (leaks and effects), Presets, Auto Dev and Export; Reset all, Undo and Redo under them."),
+        HelpItem("Export", "⌘E: JPEG or TIFF, into the folder next to the photo or one you choose. The file is called NAME-rawboy.jpg (or .tif)."),
+    ]),
+    HelpSection("Photo", [
+        HelpItem("Z, or double-click", "100% view at the pointer; again to go back to the whole photo. Drag to pan."),
+        HelpItem("Mouse wheel over the photo", "Zoom in and out around the pointer, from a quarter of the whole photo (it stops once at the whole photo, so masks and light leaks can be placed outside its edges) up to 400% (stops once at 100%). A trackpad pinch works too. The middle button pans the zoomed photo."),
+        HelpItem("Press and hold, or \\", "Compare with the as-shot render (the key toggles it until pressed again)."),
+        HelpItem("C", "Open or close Crop & rotate."),
+        HelpItem("D, or click outside the photo", "Change the frame around it: grey, white or black."),
+        HelpItem("Histogram", "Above the tabs: red, green and blue levels of the developed photo, with the share of crushed shadows (left) and clipped highlights (right). Click it to mark clipped highlights red and crushed shadows blue on the photo."),
+    ]),
+    HelpSection("Sliders and tools", [
+        HelpItem("Double-click a slider", "Reset it (clicking its value does too)."),
+        HelpItem("Mouse wheel over a slider", "Move it without clicking; with Shift in big steps, with ⌘ in fine ones. A wheel that is scrolling the panel keeps scrolling it."),
+        HelpItem("Pick white balance", "Color tab: click something neutral grey and Temperature and Tint make it grey."),
+        HelpItem("Curves", "Light tab: click the curve to add a point, drag it, double-click it to remove."),
+        HelpItem("Detail", "Luma and Color denoise work separately. Local contrast brings out texture; High-pass contrast is wider clarity. Fake anamorphic flare adds horizontal cinema streaks. Click Grain's name for its size, roughness and color."),
+        HelpItem("Lens", "Embedded profile, Distortion, Horizontal distortion, Crop, Fisheye, Vignetting and Chromatic aberration."),
+        HelpItem("Presets", "Save the edits by group, apply, import and export .rawboy.json files."),
+        HelpItem("Skin retouch and blemish removal", "Not available in RawBoy Desktop yet (they need the face detector, which the Mac build doesn't have)."),
+    ]),
+    HelpSection("Masks", [
+        HelpItem("B", "Brush (adds a brush layer if none is selected)"),
+        HelpItem("E", "Erase"),
+        HelpItem("V", "Move: drag a gradient's or stripe's lines and handles"),
+        HelpItem("[ and ]", "Smaller or larger brush"),
+        HelpItem("Space", "Hold to pan while zoomed"),
+        HelpItem("Middle mouse button, drag", "Pan the zoomed photo, also while a tool paints with the left button."),
+        HelpItem("⌘Z", "Undo (each stroke is one step); with Shift, Redo"),
+        HelpItem("Esc or Return", "Close the open tool."),
+    ]),
+]
+#else
 /** RawBoy's "?" sheet. Keep it in step with the controls (Readme's Controls table) and Android's ui/Help.kt. */
 let proHelp = [
     HelpSection("Basics", [
@@ -26,3 +66,4 @@ let proHelp = [
         HelpItem("Presets", "Save the edits by group, apply, import and export .rawboy.json files, or Send to Auto for a whole batch. Select to batch-delete or export."),
     ]),
 ]
+#endif

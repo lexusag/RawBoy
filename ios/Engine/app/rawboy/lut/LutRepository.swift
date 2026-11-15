@@ -15,9 +15,15 @@ public enum LutRepository {
     private final class BundleToken {}
     public static var resourceBundle: Bundle { Bundle(for: BundleToken.self) }
 
-    /** Documents/LUTs, created on first use. */
+    /** Documents/LUTs (macOS: Application Support/RawBoy Desktop/LUTs), created on first use. */
     public static var userFolder: URL {
+        #if os(macOS)
+        // RawBoy Desktop isn't sandboxed: a folder in ~/Documents would trigger a permission prompt, so it lives in Application Support.
+        let docs = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("RawBoy Desktop", isDirectory: true)
+        #else
         let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        #endif
         let dir = docs.appendingPathComponent(userDirName, isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir

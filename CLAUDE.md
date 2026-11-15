@@ -301,6 +301,14 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   `PhotoSession.setLensfun` swaps into `LensInfo` (`withLensfun`, keeps the shading and the fisheye circle): no shader change.
   Generic lenses are the same data for one focal length; fisheye types only drive the existing Fisheye slider (equidistant).
   Not in presets/edits; Android/iOS not ported. Update the data by re-running the converter on a newer Lensfun checkout.
+- **RawBoy Desktop** (macOS, 2026-11-15; `docs/desktop.md`): target `RawBoyDesktop` in `ios/project.yml` = `ios/Pro/` (minus `ProApp.swift`; shared with iOS, UIKit parts fenced
+  with `#if canImport(UIKit)` and macOS replacements: `MaskTouchView`/`CurveTouchView` as mouse NSViews, `DevelopPreview` as NSViewRepresentable) + `ios/Desktop/` (`DesktopApp` app/menus,
+  `DesktopModel`, `SidecarEdits` = `EditsPersistence` writing `rawboy:Develop` 800 ms debounced, `KeyboardShortcuts` = NSEvent monitor on physical `keyCode`s, `DesktopRoot`).
+  Hooks in the shared Pro code: `EditorViewModel.persistence`/`currentURL`/`export(_:to:)`, `EditorCommands` + `EditorAction` and the macOS-only `PointerSurface` / `SliderWheel`
+  (`Pro/ui/DesktopInput.swift`). The engine builds for macOS as `RawBoyEngineMac` (same sources, module `RawBoyEngine`, arm64 only: `Float16` is unavailable on Intel; no MediaPipe, `SkinSegmenter` is a
+  stub that throws). Native: `ios/native/build.sh` adds a universal macOS slice (DNG SDK built with `qiPhone=1`). Needs the Metal toolchain (`xcodebuild -downloadComponent MetalToolchain`).
+  Tests: `xcodebuild test -scheme RawBoyEngineTestsMac -destination 'platform=macOS'`; `DesktopBenchTests` prints decode / frame / export timings. `Edits.swift` is checked against the web's
+  JSON (`tools/edits_fixtures/generate.ts` writes `EngineTests/EditsFixtures.swift`); `XmpSidecar.swift` mirrors web's `XmpSidecar.ts` and RawBoy Viewer's `RawBoyBrowseKit` port.
 - **RawBoy Packer** (2026-11-01, web only; `docs/packer.md`): `web/packer.html` + `src/packer/` (`PackerApp`, `PackerStore`:
   one `worker/packer.worker.ts` per file at once, each its own rawboy-full instance; `settings.ts`: presets, the live
   summary and the "Opens in" table, numbers measured on the owner's files) → wasm `packInspect`/`pack` →

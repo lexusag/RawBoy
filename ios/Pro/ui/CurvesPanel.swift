@@ -1,6 +1,10 @@
 import RawBoyEngine
 import SwiftUI
+#if canImport(UIKit)
 import UIKit
+#else
+import AppKit
+#endif
 
 /**
  * Curves in the Light tab (Android's CurvesPanel.kt, web's CurvesPanel.tsx): a channel picker and a point-curve
@@ -68,7 +72,7 @@ struct CurvesPanel: View {
                     }
                     grid.move(to: CGPoint(x: 0, y: h))
                     grid.addLine(to: CGPoint(x: w, y: 0))
-                    ctx.stroke(grid, with: .color(Color(.systemGray4)), lineWidth: 1)
+                    ctx.stroke(grid, with: .color(Color.rbGray4), lineWidth: 1)
                     let color = Self.color(channel)
                     var curve = Path()
                     for (i, v) in ToneCurves.sample(points, count: 129).enumerated() {
@@ -80,12 +84,12 @@ struct CurvesPanel: View {
                         let r: CGFloat = 6
                         let dot = Path(ellipseIn: CGRect(x: CGFloat(p.x) * w - r, y: (1 - CGFloat(p.y)) * h - r,
                                                          width: 2 * r, height: 2 * r))
-                        ctx.fill(dot, with: .color(i == selected ? Color.accentColor : Color(.systemBackground)))
+                        ctx.fill(dot, with: .color(i == selected ? Color.accentColor : Color.rbBackground))
                         ctx.stroke(dot, with: .color(color), lineWidth: 2)
                     }
                 }
-                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 4))
-                .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color(.systemGray4), lineWidth: 1))  // web's border
+                .background(Color.rbSecondaryBackground, in: RoundedRectangle(cornerRadius: 4))
+                .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.rbGray4, lineWidth: 1))  // web's border
                 .overlay(CurveTouchLayer(points: points, inset: Self.inset, grab: Self.grabRadius, onTouch: { p, began in
                     let w = size.width - 2 * Self.inset
                     let h = size.height - 2 * Self.inset
@@ -137,6 +141,55 @@ struct CurvesPanel: View {
     }
 }
 
+
+#if !canImport(UIKit)
+/**
+ * macOS: the curve box's mouse. Only a click near a point or the curve hits this view (the rest, including the scroll
+ * wheel, falls through to the Canvas underneath and the panel's scroll view).
+ */
+private struct CurveTouchLayer: NSViewRepresentable {
+    let points: [CurvePoint]
+    let inset: CGFloat
+    let grab: CGFloat
+    /** Location in the box (points) and whether the press just began. */
+    let onTouch: (CGPoint, Bool) -> Void
+    let onEnd: () -> Void
+
+    func makeNSView(context: Context) -> CurveTouchView { CurveTouchView() }
+
+    func updateNSView(_ view: CurveTouchView, context: Context) {
+        view.points = points
+        view.inset = inset
+        view.grab = grab
+        view.onTouch = onTouch
+        view.onEnd = onEnd
+    }
+}
+
+private final class CurveTouchView: NSView {
+    var points: [CurvePoint] = []
+    var inset: CGFloat = 0
+    var grab: CGFloat = 24
+    var onTouch: ((CGPoint, Bool) -> Void)?
+    var onEnd: (() -> Void)?
+
+    override var isFlipped: Bool { true }
+
+    override func hitTest(_ point: NSPoint) -> NSView? {
+        let p = convert(point, from: superview)
+        guard bounds.contains(p), !points.isEmpty else { return nil }
+        let w = bounds.width - 2 * inset, h = bounds.height - 2 * inset
+        guard w > 0, h > 0 else { return nil }
+        let x = Float((p.x - inset) / w), y = Float(1 - (p.y - inset) / h)
+        if ToneCurves.nearest(points, x, y, radius: Float(grab / w), aspect: Float(h / w)) != nil { return self }
+        return abs(CGFloat(ToneCurves.evaluate(points, x) - y)) * h <= grab ? self : nil
+    }
+
+    override func mouseDown(with event: NSEvent) { onTouch?(convert(event.locationInWindow, from: nil), true) }
+    override func mouseDragged(with event: NSEvent) { onTouch?(convert(event.locationInWindow, from: nil), false) }
+    override func mouseUp(with event: NSEvent) { onEnd?() }
+}
+#else
 /**
  * The curve box's touches. Only touches near a point or the curve hit this view; the rest fall through to the
  * Canvas underneath, which has no gesture, so the panel's scroll view takes them. A zero-duration press claims a hit
@@ -194,3 +247,4 @@ private final class CurveTouchView: UIView {
         }
     }
 }
+#endif

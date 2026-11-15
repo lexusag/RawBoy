@@ -5,7 +5,13 @@ import SwiftUI
  * The developed photo on screen (Android's DevelopPreview composable): an MTKView drawn by DevelopRenderer,
  * redrawn whenever one of its inputs changes. Sizes are in pixels, like the renderer's.
  */
-public struct DevelopPreview: UIViewRepresentable {
+#if os(macOS)
+public typealias PlatformViewRepresentable = NSViewRepresentable
+#else
+public typealias PlatformViewRepresentable = UIViewRepresentable
+#endif
+
+public struct DevelopPreview: PlatformViewRepresentable {
     public var image: PreviewImage?
     public var params: ShaderParams?
     public var zoomCenter: (Float, Float)?
@@ -35,16 +41,17 @@ public struct DevelopPreview: UIViewRepresentable {
 
     public func makeCoordinator() -> DevelopRenderer { DevelopRenderer() }
 
-    public func makeUIView(context: Context) -> MTKView {
+    private func make(_ coordinator: DevelopRenderer) -> MTKView {
         let view = MTKView()
-        context.coordinator.attach(view)
+        coordinator.attach(view)
         view.autoResizeDrawable = true
+        #if os(iOS)
         view.contentMode = .redraw
+        #endif
         return view
     }
 
-    public func updateUIView(_ view: MTKView, context: Context) {
-        let r = context.coordinator
+    private func update(_ view: MTKView, _ r: DevelopRenderer) {
         r.image = image
         r.params = params
         r.detail = detail
@@ -54,6 +61,18 @@ public struct DevelopPreview: UIViewRepresentable {
         r.frameGrey = frameColor.level
         r.margin = margin
         r.clipWarning = clipWarning
+        #if os(macOS)
+        view.needsDisplay = true
+        #else
         view.setNeedsDisplay()
+        #endif
     }
+
+    #if os(macOS)
+    public func makeNSView(context: Context) -> MTKView { make(context.coordinator) }
+    public func updateNSView(_ view: MTKView, context: Context) { update(view, context.coordinator) }
+    #else
+    public func makeUIView(context: Context) -> MTKView { make(context.coordinator) }
+    public func updateUIView(_ view: MTKView, context: Context) { update(view, context.coordinator) }
+    #endif
 }

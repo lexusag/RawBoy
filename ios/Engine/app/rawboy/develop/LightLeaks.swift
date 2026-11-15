@@ -176,6 +176,73 @@ public enum LightLeaks {
     }
 
     /** Fully saturated light of [hue] (display RGB 0..1), hue 0 = red, negative hues lean to magenta. */
+    // A photo's edits (`Edits`; the same JSON as web's LightLeaks.ts: kind "streak", "glow" or "triangle").
+
+    static func key(_ k: LeakKind) -> String {
+        switch k {
+        case .streak: "streak"
+        case .glow: "glow"
+        case .triangle: "triangle"
+        }
+    }
+
+    public static func toJson(_ leaks: [LightLeak]) -> [[String: Any]] {
+        leaks.map { l in
+            var o: [String: Any] = [
+                "enabled": l.enabled, "kind": key(l.kind),
+                "cx": Masks.num(l.cx), "cy": Masks.num(l.cy), "rx": Masks.num(l.rx), "ry": Masks.num(l.ry),
+                "angle": Masks.num(l.angle), "softness": Masks.num(l.softness), "glow": Masks.num(l.glow),
+                "bend": Masks.num(l.bend), "taper": Masks.num(l.taper), "warp": Masks.num(l.warp),
+                "texture": Masks.num(l.texture), "cover": Masks.num(l.cover),
+                "intensity": Masks.num(l.intensity), "hue": Masks.num(l.hue), "seed": Masks.num(l.seed),
+            ]
+            if l.radii.contains(where: { $0 != 1 }) { o["radii"] = l.radii.map { Masks.num($0) } }
+            return o
+        }
+    }
+
+    /** Leaks from untrusted JSON, each with a fresh id: invalid ones are dropped, ranges clamped, at most [maxLeaks]. */
+    public static func parseLeaks(_ v: Any?) -> [LightLeak] {
+        guard let a = v as? [Any] else { return [] }
+        return Array(a.compactMap(parseLeak).prefix(maxLeaks))
+    }
+
+    private static func parseLeak(_ v: Any) -> LightLeak? {
+        guard let o = v as? [String: Any] else { return nil }
+        func f(_ k: String, _ lo: Float, _ hi: Float) -> Float? {
+            guard let n = o[k] as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID(), n.floatValue.isFinite else { return nil }
+            return n.floatValue.clamped(lo, hi)
+        }
+        let kind: LeakKind
+        switch o["kind"] as? String {
+        case "streak": kind = .streak
+        case "triangle": kind = .triangle
+        default: kind = .glow  // leaks saved before streaks were glows
+        }
+        guard let cx = f("cx", -1, 2), let cy = f("cy", -1, 2), let rx = f("rx", 0.002, 3), let ry = f("ry", 0.002, 3)
+        else { return nil }
+        var l = LightLeak(id: Masks.newId(), kind: kind, cx: cx, cy: cy)
+        l.enabled = o["enabled"] as? Bool ?? true
+        l.rx = rx
+        l.ry = ry
+        l.angle = f("angle", -360, 360) ?? 0
+        l.softness = f("softness", 0, 100) ?? kind.softness
+        l.glow = f("glow", 0, 100) ?? kind.glow
+        l.bend = f("bend", -100, 100) ?? 0
+        l.taper = f("taper", -100, 100) ?? 0
+        l.warp = f("warp", 0, 100) ?? 0
+        l.texture = f("texture", 0, 100) ?? 0  // leaks saved before texture and cover keep their clean look
+        l.cover = f("cover", 0, 100) ?? 0
+        if let r = o["radii"] as? [Any], r.count == 8,
+           r.allSatisfy({ ($0 as? NSNumber).map { CFGetTypeID($0) != CFBooleanGetTypeID() && $0.floatValue.isFinite } ?? false }) {
+            l.radii = r.map { ($0 as! NSNumber).floatValue.clamped(0.1, 4) }
+        }
+        l.intensity = f("intensity", 0, 100) ?? 100
+        l.hue = f("hue", hueMin, hueMax) ?? hue
+        l.seed = f("seed", 0, 1) ?? 0
+        return l
+    }
+
     private static func hueColor(_ hue: Float) -> [Float] {
         let deg = (hue.truncatingRemainder(dividingBy: 360) + 360).truncatingRemainder(dividingBy: 360)
         func f(_ n: Float) -> Float {
