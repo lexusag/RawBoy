@@ -300,7 +300,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   `Warp` (3 planes with TCA; u² weighted even-polynomial fit, error ≤ ~1 px at a 24 MP corner) and `RadialVignette`, which
   `PhotoSession.setLensfun` swaps into `LensInfo` (`withLensfun`, keeps the shading and the fisheye circle): no shader change.
   Generic lenses are the same data for one focal length; fisheye types only drive the existing Fisheye slider (equidistant).
-  Not in presets/edits; Android/iOS not ported. Update the data by re-running the converter on a newer Lensfun checkout.
+  Not in presets/edits. Swift port (2026-11-15, RawBoy Desktop and iOS Pro): `lens/Lensfun.swift`/`LensfunData.swift` (an actor reading the same folder, bundled as the engine's `lensfun/` resource), `Pro/LensfunStore.swift`, `Pro/ui/LensfunPanel.swift`, tests `LensfunTests` (the web's cases); Android not ported. Update the data by re-running the converter on a newer Lensfun checkout.
 - **RawBoy Desktop** (macOS, 2026-11-15; `docs/desktop.md`): target `RawBoyDesktop` in `ios/project.yml` = `ios/Pro/` (minus `ProApp.swift`; shared with iOS, UIKit parts fenced
   with `#if canImport(UIKit)` and macOS replacements: `MaskTouchView`/`CurveTouchView` as mouse NSViews, `DevelopPreview` as NSViewRepresentable) + `ios/Desktop/` (`DesktopApp` app/menus,
   `DesktopModel`, `SidecarEdits` = `EditsPersistence` writing `rawboy:Develop` 800 ms debounced, `KeyboardShortcuts` = NSEvent monitor on physical `keyCode`s, `DesktopRoot`).

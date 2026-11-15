@@ -30,6 +30,10 @@ targets:
       - path: ../luts
         type: folder
         buildPhase: resources
+      # The Lensfun lens database (CC BY-SA 3.0, data only), the web's copy: lens/LensfunData.swift.
+      - path: ../web/public/lensfun
+        type: folder
+        buildPhase: resources
       - path: ../licenses/THIRD_PARTY_NOTICES.txt
         buildPhase: resources
       - path: ../engine/src/main/assets/models
@@ -210,6 +214,10 @@ targets:
         excludes:
           - "*Info.plist"
       - path: ../luts
+        type: folder
+        buildPhase: resources
+      # The Lensfun lens database (CC BY-SA 3.0, data only), the web's copy: lens/LensfunData.swift.
+      - path: ../web/public/lensfun
         type: folder
         buildPhase: resources
       - path: ../licenses/THIRD_PARTY_NOTICES.txt

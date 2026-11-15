@@ -22,6 +22,8 @@ struct ControlsPanel: View {
     var onPickWhite: () -> Void = {}
     /** Lens tab: saves its settings as the lens preset of that name; with true, also sends it to RawBoy Auto. */
     var onSaveLensPreset: (_ name: String, _ sendToAuto: Bool) -> Void = { _, _ in }
+    /** Lens tab: lens corrections from the Lensfun database (nil = not offered). */
+    var lensfun: LensfunStore? = nil
 
     @AppStorage("pro.tab") private var chosenTab = 0
     @State private var anamorphicOpen: Bool?
@@ -265,12 +267,17 @@ struct ControlsPanel: View {
     @ViewBuilder private var lensPanel: some View {
         SectionLabel("Lens profile")
         Text(lens.lensName.trimmingCharacters(in: .whitespaces).isEmpty ? "Unknown lens" : lens.lensName).font(.subheadline)
-        Note(lens.profileSummary.map { "Embedded in file: \($0)" } ?? "No lens correction data in this file")
-        Toggle("Use embedded profile", isOn: Binding(get: { params.lensProfile && lens.hasProfile },
+        Note(lens.lensfunLabel.map { "Lensfun: \($0)" }
+             ?? lens.profileSummary.map { "Embedded in file: \($0)" } ?? "No lens correction data in this file")
+        Toggle(lens.lensfunLabel != nil ? "Use Lensfun / embedded profile" : "Use embedded profile", isOn: Binding(get: { params.lensProfile && lens.hasProfile },
                                                     set: { v in set { $0.lensProfile = v } }))
             .font(.subheadline)
             .disabled(!lens.hasProfile)
             .padding(.vertical, 4)
+        if let lensfun {
+            LensfunPanel(store: lensfun, params: params, onChange: onChange,
+                         hasFileProfile: lens.lensfunLabel != nil && lens.profileSummary != nil)
+        }
         SectionLabel("Manual")
         slider("Distortion", \.lensDistortion, -100...100)
         slider("Horizontal distortion", \.lensAnamorphic, -100...100)

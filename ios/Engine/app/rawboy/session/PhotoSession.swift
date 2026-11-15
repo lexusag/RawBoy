@@ -463,6 +463,20 @@ public final class PhotoSession: ObservableObject {
         return max(ZoomMath.halo, retouch, wide) + prePass
     }
 
+    /** The open photo's EXIF (camera, lens, focal length, aperture), nil with no photo. */
+    public var metadata: PhotoMetadata? { image?.metadata }
+
+    /**
+     * Puts a Lensfun profile (distortion/CA warp, vignette) in place of the file's own, or takes it off again (nil). The
+     * file's shading stays; [label] names the profile in the Lens tab. Opening another photo clears it.
+     */
+    public func setLensfun(_ profile: (warp: LensInfo.Warp?, vignette: LensInfo.RadialVignette?, label: String)?) {
+        guard let img = image else { return }
+        if profile == nil && lensInfo === img.lens { return }
+        lensInfo = profile.map { img.lens.withLensfun(warp: $0.warp, vignette: $0.vignette, label: $0.label) } ?? img.lens
+        recheckZoomTile()
+    }
+
     /** Lens geometry for [params] on the current image; cached while the lens sliders are unchanged. */
     public func lensFor(_ params: DevelopParams) -> LensTransform {
         let info = lensInfo

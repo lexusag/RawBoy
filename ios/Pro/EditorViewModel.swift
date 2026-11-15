@@ -54,6 +54,8 @@ final class EditorViewModel: ObservableObject {
 
     /** The open photo; the pipeline state comes from it. */
     let session: PhotoSession
+    /** Lens corrections from the Lensfun database (Lens tab). */
+    let lensfun: LensfunStore
     /** The app's copy of the open file (deleted when the next one opens). RawBoy Desktop opens the file in place. */
     private var source: URL?
     /** The open photo's file. */
@@ -72,6 +74,8 @@ final class EditorViewModel: ObservableObject {
         let lut: String?
         let film: String?
         let skin: Bool
+        /** The lens data in use (a Lensfun profile swaps it). */
+        let lens: ObjectIdentifier
         let baseWidth: Int
         let baseHeight: Int
     }
@@ -83,7 +87,9 @@ final class EditorViewModel: ObservableObject {
     init() {
         var onMessage: (String) -> Void = { _ in }
         var filmLoader: (String) async throws -> FilmData = { _ in throw RawImageError(message: "no film loader") }
-        session = PhotoSession(filmLoader: { try await filmLoader($0) }, onMessage: { onMessage($0) })
+        let photo = PhotoSession(filmLoader: { try await filmLoader($0) }, onMessage: { onMessage($0) })
+        session = photo
+        lensfun = LensfunStore(session: photo)
         frameColor = FrameColor.allCases.first { "\($0)" == UserDefaults.standard.string(forKey: "display.frame") } ?? .grey
         let d = BrushSettings()
         let s = UserDefaults.standard
@@ -124,7 +130,7 @@ final class EditorViewModel: ObservableObject {
             return
         }
         let key = HistogramKey(params: state.params, defaults: state.defaults, lut: session.lutData?.id,
-                               film: session.filmData?.stock.id, skin: session.skin.mask != nil,
+                               film: session.filmData?.stock.id, skin: session.skin.mask != nil, lens: ObjectIdentifier(session.lensInfo),
                                baseWidth: base.width, baseHeight: base.height)
         if key == histogramKey && histogram != nil { return }
         let shader = session.shaderParams(state.params, defaults: state.defaults)
@@ -155,6 +161,7 @@ final class EditorViewModel: ObservableObject {
                 session.selectLut(opened.params.lut) { [weak self] in self?.message = $0 }
                 // The Film tone mapper, carried over from the previous photo.
                 loadSelectedFilm(opened.params.film)
+                lensfun.photoOpened(session.metadata)
                 scheduleHistogram()
             } catch {
                 state.loading = false
