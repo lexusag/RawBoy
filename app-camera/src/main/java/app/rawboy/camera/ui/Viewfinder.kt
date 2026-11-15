@@ -70,7 +70,7 @@ fun Viewfinder(
         factory = { context ->
             GLSurfaceView(context).apply {
                 setEGLContextClientVersion(3)
-                // After the client version (the chooser filters by it) and before setRenderer (which fixes it).
+                // Before setRenderer, as GLSurfaceView requires.
                 eglConfig?.let { setEGLConfigChooser(it.red, it.green, it.blue, it.alpha, it.depth, it.stencil) }
                 preserveEGLContextOnPause = true
                 setRenderer(renderer)
