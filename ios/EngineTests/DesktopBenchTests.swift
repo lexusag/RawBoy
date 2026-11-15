@@ -17,7 +17,8 @@ final class DesktopBenchTests: XCTestCase {
             let files = (try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.fileSizeKey])) ?? []
             url = files.filter { !$0.hasDirectoryPath }.max { (try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0 < (try? $1.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0 }
         }
-        let file = try XCTUnwrap(url, "no test file")
+        // A benchmark of a real raw: nothing to time without one (CI has no `.raw/`).
+        guard let file = url else { throw XCTSkip("no test file in \(dir.path)") }
 
         func ms(_ since: Date) -> Int { Int(Date().timeIntervalSince(since) * 1000) }
         var t = Date()

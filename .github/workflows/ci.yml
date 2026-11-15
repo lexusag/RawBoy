@@ -216,16 +216,16 @@ jobs:
           cd ios
           set -o pipefail
           xcodebuild build -scheme RawBoyDesktop -configuration Debug -destination 'platform=macOS' \
-            -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGN_IDENTITY=- 2>&1 | tee "$RUNNER_TEMP/build.log" | grep -E "error|warning: unre|BUILD|^\*\*" || true
-          grep -q "BUILD SUCCEEDED" "$RUNNER_TEMP/build.log" || { grep -E "error" -B2 -A6 "$RUNNER_TEMP/build.log" | head -300; exit 1; }
+            -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGN_IDENTITY=- 2>&1 | tee "$RUNNER_TEMP/build.log" | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
+          grep -q "BUILD SUCCEEDED" "$RUNNER_TEMP/build.log" || { grep -E "error:" -B2 -A6 "$RUNNER_TEMP/build.log" | head -300; exit 1; }
 
       - name: Engine tests (macOS)
         run: |
           cd ios
           set -o pipefail
           xcodebuild test -scheme RawBoyEngineTestsMac -destination 'platform=macOS' \
-            -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGN_IDENTITY=- 2>&1 | tee "$RUNNER_TEMP/test.log" | grep -E "error|Test Case .*(failed)|Executed|TEST|^\*\*" || true
-          grep -q "TEST SUCCEEDED" "$RUNNER_TEMP/test.log" || { grep -E "error|failed" -B2 -A6 "$RUNNER_TEMP/test.log" | head -300; exit 1; }
+            -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGN_IDENTITY=- 2>&1 | tee "$RUNNER_TEMP/test.log" | grep -E "error:|Test Case .*(failed|skipped)|Executed .* tests|TEST (SUCCEEDED|FAILED)" || true
+          grep -q "TEST SUCCEEDED" "$RUNNER_TEMP/test.log" || { grep -E "error:|failed" -B2 -A6 "$RUNNER_TEMP/test.log" | head -300; exit 1; }
 
   # The one required check. Passes when every needed job succeeded or was skipped (nothing relevant changed);
   # fails when any failed or was cancelled. `always()` makes it run (and report) even when a dependency is skipped;
