@@ -36,6 +36,8 @@ final class DesktopModel: ObservableObject {
         autoSidecars.onError = { [weak auto] message in Task { @MainActor in auto?.message = message } }
         auto.saveExported = { [weak self] file, source in try self?.saveAutoExport(file, source: source) }
         auto.destinationView = AnyView(ExportDestinationSection(commands: commands, model: self))
+        auto.editInPro = { [weak self] photo in self?.open(photo.url) }
+        commands.sendToAuto = { [weak self] in self?.sendToAuto() }
         updateAutoDestination()
         commands.exportFolder = UserDefaults.standard.string(forKey: Self.folderKey).map { URL(fileURLWithPath: $0, isDirectory: true) }
         commands.exportHandler = { [weak self] settings in self?.export(settings) }
@@ -60,6 +62,8 @@ final class DesktopModel: ObservableObject {
             vm.message = "Wait for the photo that is opening or exporting"
             return
         }
+        // A photo handed over (Finder, RawBoy Viewer) is for the editor, whichever mode the window was in; Auto's batch stays.
+        mode = .pro
         NSDocumentController.shared.noteNewRecentDocumentURL(url)
         vm.open(url)
     }
@@ -106,6 +110,35 @@ final class DesktopModel: ObservableObject {
         panel.canChooseDirectories = false
         panel.message = "Choose a photo to develop"
         if panel.runModal() == .OK, let url = panel.url { open(url) }
+    }
+
+    // MARK: Moving a photo between Pro and Auto
+
+    /** The Auto photo "Edit in Pro" means: the open one, else the only selected one, else the focused one. */
+    var autoPhotoForPro: AutoPhoto? {
+        if let id = auto.selected { return auto.photo(id) }
+        if auto.selection.count == 1, let id = auto.selection.first { return auto.photo(id) }
+        return auto.focusedId.flatMap(auto.photo)
+    }
+
+    func editInPro() {
+        guard let photo = autoPhotoForPro else {
+            auto.message = "Select a photo to edit in Pro"
+            return
+        }
+        open(photo.url)
+    }
+
+    /** The photo open in the editor joins Auto's batch (once) and Auto shows it. */
+    func sendToAuto() {
+        guard let url = vm.currentURL else {
+            vm.message = "Open a photo first"
+            return
+        }
+        sidecars.flush()
+        addToAuto([url])
+        auto.focusedId = url.path
+        auto.selectionAnchor = url.path
     }
 
     // MARK: Auto: adding photos

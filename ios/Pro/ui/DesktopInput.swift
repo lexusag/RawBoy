@@ -42,6 +42,8 @@ final class EditorCommands: ObservableObject {
     var exportDestination: AnyView?
     @Published var exportFolder: URL?
     var exportHandler: ((ExportSettings) -> Void)?
+    /** RawBoy Desktop: adds the open photo to Auto's batch and shows Auto (nil elsewhere: no button). */
+    var sendToAuto: (() -> Void)?
     /** The line under the export options: where the file goes. */
     var exportNote: ((URL?) -> String)?
 

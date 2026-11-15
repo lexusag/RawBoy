@@ -96,7 +96,8 @@ struct ControlsPanel: View {
 
     @ViewBuilder private var light: some View {
         HStack {
-            Text("Tone mapper").font(.subheadline)
+            // A fixed label width (as the sliders') so the row doesn't re-flow when the segments or the stock name change.
+            Text("Tone mapper").font(.subheadline).lineLimit(1).minimumScaleFactor(0.8).frame(width: 104, alignment: .leading)
             // nil = Film: negative + print on a stock, in place of the tone mapper (also what Auto's Film mode sets).
             Picker("", selection: Binding<ToneMapper?>(
                 get: { params.film == nil ? params.toneMapper : nil },
@@ -104,19 +105,24 @@ struct ControlsPanel: View {
                 ForEach(ToneMapper.allCases, id: \.self) { Text($0.label).tag(Optional($0)) }
                 Text("Film").tag(ToneMapper?.none)
             }
+            .labelsHidden()
             .pickerStyle(.segmented)
+            .frame(maxWidth: .infinity)
         }
-        .padding(.vertical, 4)
+        .frame(height: 32)
         if let film = params.film {
             HStack {
-                Text("Stock").font(.subheadline)
+                Text("Stock").font(.subheadline).frame(width: 104, alignment: .leading)
                 Spacer()
                 if filmLoading { ProgressView().controlSize(.small) }
                 Picker("Stock", selection: Binding(get: { film }, set: { onSelectFilm($0) })) {
                     ForEach(FilmLooks.all.filter { $0.film != nil }) { Text($0.name).tag($0.film!) }
                 }
+                .labelsHidden()
                 .pickerStyle(.menu)
+                .frame(width: 190, alignment: .trailing)
             }
+            .frame(height: 32)
             if params.lut != nil {
                 Text("Your LUT is off while Film is on; it returns with another tone mapper.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -508,6 +514,18 @@ struct ParamSlider: View {
         let native = Slider(value: Binding(get: { Double(clamped) }, set: { onChange(Float($0)) }),
                             in: Double(range.lowerBound)...Double(range.upperBound))
             .simultaneousGesture(TapGesture(count: 2).onEnded { onChange(defaultValue) })
+        #if os(macOS)
+        // The Mac's slider (NSSlider) must be drawn to be grabbed: at 2% opacity a click moved it but its thumb couldn't
+        // be dragged. So it stays as the system draws it, with the zero mark of a signed range over it and a colour
+        // gradient (if any) as a bar beneath.
+        VStack(spacing: 1) {
+            native.overlay { ZeroTick(range: range) }
+            if let colors = trackGradient {
+                Capsule().fill(LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing))
+                    .frame(height: 3).padding(.horizontal, 9).allowsHitTesting(false)
+            }
+        }
+        #else
         if let colors = trackGradient {
             // The system slider still takes the touches (and scrolls like the others); it's just not drawn.
             native.opacity(0.02).background {
@@ -530,8 +548,28 @@ struct ParamSlider: View {
         } else {
             native
         }
+        #endif
     }
 }
+
+#if os(macOS)
+/** A small mark at 0 over the Mac's system slider, for ranges that run both ways (it fills from the left end). */
+struct ZeroTick: View {
+    let range: ClosedRange<Float>
+
+    var body: some View {
+        GeometryReader { g in
+            if range.lowerBound < 0 && range.upperBound > 0 {
+                let inset: CGFloat = 9  // about where the system thumb's centre stops
+                let t = CGFloat((0 - range.lowerBound) / (range.upperBound - range.lowerBound))
+                Rectangle().fill(Color.secondary.opacity(0.9)).frame(width: 2, height: 9)
+                    .position(x: inset + t * (g.size.width - 2 * inset), y: g.size.height - 4)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+#endif
 
 extension View {
     /** The wheel over this slider moves it (RawBoy Desktop). */

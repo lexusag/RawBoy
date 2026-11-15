@@ -94,7 +94,7 @@ struct EditorScreen: View {
                          },
                          onReset: vm.reset, onAuto: vm.applyAuto,
                          canUndo: state.canUndo, canRedo: state.canRedo, onUndo: vm.undo, onRedo: vm.redo,
-                         onExport: { showExport = true }, helpShown: $showHelp)
+                         onExport: { showExport = true }, onSendToAuto: commands.sendToAuto, helpShown: $showHelp)
             // Controls under the photo in portrait, beside it in landscape.
             PhotoWithControls { previewArea } controls: { beside in panel(beside: beside) }
         }
@@ -598,6 +598,8 @@ struct EditorTopBar: View {
     let onUndo: () -> Void
     let onRedo: () -> Void
     let onExport: () -> Void
+    /** RawBoy Desktop: "Send to Auto" in the bar (nil: no button). */
+    var onSendToAuto: (() -> Void)? = nil
     @Binding var helpShown: Bool
 
     /** The full name of the tool being long-pressed, shown under the bar for a moment. */
@@ -636,6 +638,9 @@ struct EditorTopBar: View {
                 #endif
                 modeButton(.presets, "bookmark", "Presets", "Presets")
                 tool("wand.and.stars", "Auto Dev", "Auto light and colour (keeps the LUT)", action: onAuto)
+                #if os(macOS)
+                if let onSendToAuto { tool("square.stack.3d.up", "To Auto", "Send this photo to Auto's batch (⇧⌘A)", action: onSendToAuto) }
+                #endif
                 Spacer(minLength: 0)
                 tool("square.and.arrow.down", "Export", "Export", action: onExport)
                 HelpButton("RawBoy", sections: proHelp, licences: true, isPresented: $helpShown)

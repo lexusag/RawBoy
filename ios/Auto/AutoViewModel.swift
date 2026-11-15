@@ -610,6 +610,37 @@ final class AutoViewModel: ObservableObject {
 
     // MARK: - Keyboard (RawBoy Desktop)
 
+    /** The grid's selection (long-press on iPhone; ⌘-click, ⇧-click and ⌘A on the Mac) and where a ⇧-click range starts. */
+    @Published var selection = Set<String>()
+    var selectionAnchor: String?
+    /** Bumped by the "Clear batch" button and menu item: the root asks for confirmation. */
+    @Published private(set) var clearRequest = 0
+    /** RawBoy Desktop: opens a photo in the Pro editor / nil on iOS (the buttons then don't show). */
+    var editInPro: ((AutoPhoto) -> Void)?
+
+    func requestClear() { if export == nil && !photos.isEmpty { clearRequest += 1 } }
+
+    /** Takes every photo out of the batch (files and sidecars stay where they are). */
+    func clearBatch() {
+        guard export == nil else { return }
+        let n = photos.count
+        remove(Set(photos.map(\.id)))
+        selection = []
+        focusedId = nil
+        selectionAnchor = nil
+        if n > 0 { message = n == 1 ? "1 photo removed from the batch" : "\(n) photos removed from the batch" }
+    }
+
+    /** ⇧-click: the photos from the anchor to [id] join the selection (from the first photo when there is no anchor). */
+    func selectRange(to id: String) {
+        guard let end = photos.firstIndex(where: { $0.id == id }) else { return }
+        let start = selectionAnchor.flatMap { a in photos.firstIndex { $0.id == a } } ?? focusedId.flatMap { a in photos.firstIndex { $0.id == a } } ?? 0
+        for p in photos[min(start, end)...max(start, end)] { selection.insert(p.id) }
+        focusedId = id
+    }
+
+    func selectAll() { selection = Set(photos.map(\.id)) }
+
     /** The grid's keyboard focus (arrow keys move it, Return opens it); UI state only. */
     @Published var focusedId: String?
     /** Bumped by the menu and ⌘E: the grid or the photo view opens its export sheet. */
@@ -650,9 +681,11 @@ final class AutoViewModel: ObservableObject {
         openDetail(pages[i + delta].id)
     }
 
-    /** Esc: out of Crop & rotate, else from the photo back to the grid. */
+    /** Esc: out of Crop & rotate, else from the photo back to the grid, else the selection is cleared. */
     func goBack() {
-        if cropping {
+        if selected == nil, !selection.isEmpty {
+            selection = []
+        } else if cropping {
             cropping = false
         } else if selected != nil {
             focusedId = selected

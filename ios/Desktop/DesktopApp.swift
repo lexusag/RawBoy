@@ -43,6 +43,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #if DEBUG
         AutoBatchProbe.runIfRequested(model)
         AutoBatchProbe.openDetailIfRequested(model)
+        AutoBatchProbe.mouseProbeIfRequested(model)
+        AutoBatchProbe.selfTestIfRequested(model)
         #endif
     }
 
@@ -116,6 +118,14 @@ struct DesktopCommands: Commands {
             Divider()
             Button("Previous Photo") { auto.page(-1) }.keyboardShortcut(.leftArrow, modifiers: []).disabled(!autoReady || auto.selected == nil)
             Button("Next Photo") { auto.page(1) }.keyboardShortcut(.rightArrow, modifiers: []).disabled(!autoReady || auto.selected == nil)
+            Button("Edit in Pro") { model.editInPro() }.keyboardShortcut(.return, modifiers: .command)
+                .disabled(!autoReady || model.autoPhotoForPro == nil)
+            Button("Send to Auto") { model.sendToAuto() }.keyboardShortcut("a", modifiers: [.command, .shift])
+                .disabled(!proMode || model.vm.currentURL == nil)
+            Divider()
+            Button("Select All Photos") { auto.selectAll() }.disabled(!autoReady || auto.selected != nil || auto.photos.isEmpty)
+            Button("Clear Batch…") { auto.requestClear() }.disabled(!autoReady || auto.photos.isEmpty)
+            Divider()
             Button("Open Focused Photo") { auto.openFocused() }.keyboardShortcut(.return, modifiers: [])
                 .disabled(!autoReady || auto.selected != nil || auto.focusedId == nil)
             Button("Back to the Grid") { auto.goBack() }.keyboardShortcut(.escape, modifiers: []).disabled(!autoReady || auto.selected == nil)

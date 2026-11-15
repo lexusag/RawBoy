@@ -16,7 +16,7 @@ final class KeyboardShortcuts {
 
     /** ANSI key codes (Carbon's kVK_*). */
     enum Key: UInt16 {
-        case z = 6, d = 2, c = 8, b = 11, e = 14, v = 9, o = 31
+        case a = 0, z = 6, d = 2, c = 8, b = 11, e = 14, v = 9, o = 31
         case leftBracket = 33, rightBracket = 30, backslash = 42
         case left = 123, right = 124, down = 125, up = 126, one = 18, two = 19
         case delete = 51, forwardDelete = 117, space = 49, `return` = 36, keypadEnter = 76, escape = 53, slash = 44
@@ -56,6 +56,8 @@ final class KeyboardShortcuts {
             case .z: if let id = auto.selected { auto.undo(id) }
             case .o: model.addPhotosPanel()
             case .e: if auto.photos.contains(where: { $0.analysis != nil }) { auto.requestExport() }
+            case .a: if auto.selected == nil { auto.selectAll() }
+            case .return, .keypadEnter: model.editInPro()
             case .one: model.mode = .pro
             case .slash: model.commands.send(.help)
             default: return event
@@ -71,6 +73,11 @@ final class KeyboardShortcuts {
             return nil
         }
         guard flags.isEmpty, auto.export == nil else { return event }
+        // Esc with photos selected in the grid clears the selection first.
+        if key == .escape, auto.selected == nil, !auto.selection.isEmpty {
+            auto.selection = []
+            return nil
+        }
         if auto.selected != nil {
             switch key {
             case .left: auto.page(-1)
