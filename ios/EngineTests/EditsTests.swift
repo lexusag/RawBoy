@@ -117,14 +117,22 @@ final class EditsTests: XCTestCase {
         XCTAssertNil(Edits.encode(defaults, defaults: defaults))
     }
 
+    func testPortraitRetouchIsAKnownField() throws {
+        let d = try decode(EditsFixtures.portrait)
+        XCTAssertTrue(d.extras.isEmpty)
+        XCTAssertEqual(d.params.portraitRetouch, 35)
+        XCTAssertEqual(d.params.skinRetouch, 20)
+        let text = try XCTUnwrap(Edits.encode(d.params, defaults: defaults))
+        XCTAssertEqual(try decode(text).params.portraitRetouch, 35)
+    }
+
     func testWebOnlyFieldsSurviveASwiftRoundTrip() throws {
         let d = try decode(EditsFixtures.webOnly)
         XCTAssertEqual(d.params.exposure, 0.3, accuracy: 1e-6)
-        XCTAssertEqual(Set(d.extras.keys), ["portraitRetouch", "lumaContrast"])
+        XCTAssertEqual(Set(d.extras.keys), ["lumaContrast"])
         let again = try XCTUnwrap(Edits.encode(d.params, defaults: defaults, extras: d.extras))
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(again.utf8)) as? [String: Any])
         let values = try XCTUnwrap(object["values"] as? [String: Any])
-        XCTAssertEqual(values["portraitRetouch"] as? Int, 35)
         XCTAssertEqual(values["lumaContrast"] as? Int, 12)
         XCTAssertNil(Edits.encode(defaults, defaults: defaults, extras: [:]))
     }
@@ -132,7 +140,7 @@ final class EditsTests: XCTestCase {
     /** Whatever the web wrote decodes, and encoding that gives the same decode (idempotent through Swift). */
     func testFixturesRoundTripThroughSwift() throws {
         for json in [EditsFixtures.basic, EditsFixtures.geometry, EditsFixtures.looks, EditsFixtures.film,
-                     EditsFixtures.masks, EditsFixtures.leaksFx, EditsFixtures.heal, EditsFixtures.webOnly] {
+                     EditsFixtures.masks, EditsFixtures.leaksFx, EditsFixtures.heal, EditsFixtures.portrait, EditsFixtures.webOnly] {
             let a = try decode(json)
             let text = try XCTUnwrap(Edits.encode(a.params, defaults: defaults, extras: a.extras))
             let b = try XCTUnwrap(Edits.decodeAll(text, defaults: defaults))

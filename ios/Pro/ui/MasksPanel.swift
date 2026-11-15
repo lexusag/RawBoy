@@ -241,5 +241,8 @@ struct MasksPanel: View {
         ParamSlider(label: "Saturation", value: a.saturation, range: -100...100, defaultValue: 0, onChange: set(\.saturation))
         ParamSlider(label: "Clarity", value: a.clarity, range: -100...100, defaultValue: 0, onChange: set(\.clarity))
         ParamSlider(label: "Lens blur", value: a.lensBlur, range: 0...100, defaultValue: 0, format: formatPlain, onChange: set(\.lensBlur))
+        #if !canImport(MediaPipeTasksVision)
+        ParamSlider(label: "Portrait retouch", value: a.retouch, range: 0...100, defaultValue: 0, format: formatPlain, onChange: set(\.retouch))
+        #endif
     }
 }

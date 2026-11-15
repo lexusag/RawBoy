@@ -61,6 +61,9 @@ public final class PhotoSession: ObservableObject {
     @Published public private(set) var flareSource: PreviewImage?
     /** The highlight-boosted whole-image copy the masks' lens blur starts from (BokehTexture), made once a layer blurs. */
     @Published public private(set) var bokehSource: PreviewImage?
+    /** Portrait retouch's gains map for the preview (nil until made, or with no face), and whether one is being made. */
+    @Published public private(set) var retouchMap: RetouchMap?
+    @Published public private(set) var retouchWorking = false
     /** Centre of the zoomed view in full-resolution pixels; nil = fit to view. */
     @Published public private(set) var zoomCenter: (Float, Float)?
     /** View pixels per full-resolution pixel while zoomed: 1 = 100% (double tap), others from a pinch. */
@@ -85,6 +88,9 @@ public final class PhotoSession: ObservableObject {
     private var skinTask: Task<Void, Never>?
     private var flareTask: Task<Void, Never>?
     private var bokehTask: Task<Void, Never>?
+    private var retouchTask: Task<Void, Never>?
+    /** What the current retouch map was made from (the preview's pixel buffer, kept alive, and the strength). */
+    private var retouchFor: (preview: [UInt16], strength: Float)?
     private var blemishTask: Task<Void, Never>?
     /** (x, y, radius, score) per candidate, most obvious first; detected once per photo. */
     private var blemishSpots: [Float]?
@@ -155,6 +161,11 @@ public final class PhotoSession: ObservableObject {
         bokehTask?.cancel()
         bokehTask = nil
         bokehSource = nil
+        retouchTask?.cancel()
+        retouchTask = nil
+        retouchFor = nil
+        retouchMap = nil
+        retouchWorking = false
         skinTask?.cancel()
         skin = .notComputed
         blemishTask?.cancel()
@@ -175,7 +186,8 @@ public final class PhotoSession: ObservableObject {
     public func setParams(_ newParams: DevelopParams) {
         let before = params
         params = newParams
-        if newParams.skinRetouch > 0 || newParams.blemishRemoval > 0 { ensureSkinMask() }
+        if newParams.skinRetouch > 0 || newParams.blemishRemoval > 0 || Self.retouchStrength(newParams) > 0 { ensureSkinMask() }
+        if Self.retouchStrength(newParams) != Self.retouchStrength(before) { scheduleRetouch() }
         if newParams.blemishRemoval != before.blemishRemoval || newParams.healSpots != before.healSpots { scheduleBlemishes() }
         ensureFlareSource()
         ensureBokehSource()
@@ -214,11 +226,11 @@ public final class PhotoSession: ObservableObject {
 
     /** Uniforms for [p] with this photo's current textures; [maskView]: the layer whose mask is shown in red. */
     public func shaderParams(_ p: DevelopParams, defaults: DevelopParams, lut: LutData? = nil, useSelectedLut: Bool = true,
-                             maskView: String? = nil, film: FilmData? = nil) -> ShaderParams {
+                             maskView: String? = nil, film: FilmData? = nil, retouch: RetouchMap? = nil) -> ShaderParams {
         ShaderParams.from(p, asShot: defaults, lut: lut ?? (useSelectedLut ? lutData : nil), lens: lensFor(p), base: base,
                           bloomSources: bloomSources, skinMask: skin.mask, maskView: maskView,
                           brushFor: { [unowned self] in self.brushRaster($0) }, film: film ?? (useSelectedLut ? filmData : nil),
-                          flareSource: flareSource, bokehSource: bokehSource)
+                          flareSource: flareSource, bokehSource: bokehSource, retouchMap: retouch ?? retouchMap)
     }
 
     /**
@@ -417,13 +429,19 @@ public final class PhotoSession: ObservableObject {
     /** Runs skin segmentation once per photo, when Skin retouch is first non-zero (or when [force]d). */
     private func ensureSkinMask(force: Bool = false) {
         let p = params
-        if (!force && p.skinRetouch <= 0 && p.blemishRemoval <= 0) || skin != .notComputed { return }
+        if (!force && p.skinRetouch <= 0 && p.blemishRemoval <= 0 && Self.retouchStrength(p) <= 0) || skin != .notComputed { return }
         guard let img = image, let base else { return }
         skin = .computing
         skinTask = Task {
             do {
                 let mask = try await Task.detached(priority: .userInitiated) {
-                    try SkinSegmenter.segment(base, fullWidth: img.width, fullHeight: img.height)
+                    #if canImport(MediaPipeTasksVision)
+                    let source = base
+                    #else
+                    // Vision finds faces better on a bigger copy than the 512 px base.
+                    let source = img.createPreview(maxDimension: SkinSegmenter.preferredDimension)
+                    #endif
+                    return try SkinSegmenter.segment(source, fullWidth: img.width, fullHeight: img.height)
                 }.value
                 guard image === img, !Task.isCancelled else { return }
                 skin = .ready(mask)
@@ -435,6 +453,7 @@ public final class PhotoSession: ObservableObject {
             }
             recheckZoomTile()  // the skin smoothing radius widens the tiles the view needs
             scheduleBlemishes()
+            scheduleRetouch(wait: 0)
         }
     }
 
@@ -495,10 +514,49 @@ public final class PhotoSession: ObservableObject {
             bokehSource = nil  // made again from the healed image
             ensureFlareSource()
             ensureBokehSource()
-            detail = nil  // the 100% tile shows old pixels; reload it
+            detail = nil
+            scheduleRetouch(wait: 0)  // the healed preview changes what's left to retouch  // the 100% tile shows old pixels; reload it
             recheckZoomTile()
             blemish = BlemishState(working: false, healed: count, detected: (blemishSpots?.count ?? 0) / 4)
         }
+    }
+
+    /** How strong the Portrait retouch map has to be: the global slider or the strongest mask layer's, whichever is more. */
+    static func retouchStrength(_ p: DevelopParams) -> Float { max(p.portraitRetouch, Masks.maxLayerRetouch(p.masks)) }
+
+    /**
+     * Makes the Portrait retouch map for the current strength, [wait] ns after the slider settles (the shader scales the
+     * last map meanwhile, see PortraitRetouch.skinFix). Needs the skin mask; runs again when it's ready or the preview is healed.
+     */
+    private func scheduleRetouch(wait: UInt64 = 250_000_000) {
+        retouchTask?.cancel()
+        retouchTask = Task {
+            if wait > 0 { try? await Task.sleep(nanoseconds: wait) }
+            guard !Task.isCancelled, let img = image, let preview else { return }
+            let strength = Self.retouchStrength(params)
+            guard strength > 0, let mask = skin.mask else { return }
+            if let f = retouchFor, f.strength == strength,
+               f.preview.withUnsafeBufferPointer({ $0.baseAddress }) == preview.pixels.withUnsafeBufferPointer({ $0.baseAddress }) {
+                return
+            }
+            retouchWorking = true
+            let map = await Task.detached(priority: .userInitiated) { PortraitRetouch.buildMap(preview, mask, strength: strength) }.value
+            guard image === img, !Task.isCancelled else { return }
+            retouchFor = (preview.pixels, strength)
+            retouchMap = map
+            retouchWorking = false
+        }
+    }
+
+    /** The Portrait retouch map for exporting [p]: the current one if it fits, else made now from the preview. */
+    private func retouchMapFor(_ p: DevelopParams) async -> RetouchMap? {
+        let strength = Self.retouchStrength(p)
+        guard strength > 0, let mask = await skinMask(), mask.hasSkin, let preview else { return nil }
+        if let f = retouchFor, f.strength == strength,
+           f.preview.withUnsafeBufferPointer({ $0.baseAddress }) == preview.pixels.withUnsafeBufferPointer({ $0.baseAddress }) {
+            return retouchMap
+        }
+        return await Task.detached(priority: .userInitiated) { PortraitRetouch.buildMap(preview, mask, strength: strength) }.value
     }
 
     /** Source pixels needed around a region for the spatial effects (see ShaderParams.spatialMargin). */
@@ -607,7 +665,8 @@ public final class PhotoSession: ObservableObject {
         let lut = try await (p.film == nil ? p.lut : nil).asyncMap { try await loadLut($0) }
         var film: FilmData?
         if let id = p.film, let filmLoader { film = try await filmLoader(id) }
-        let params = shaderParams(p, defaults: defaults, lut: lut, useSelectedLut: false, film: film)
+        let retouch = await retouchMapFor(p)
+        let params = shaderParams(p, defaults: defaults, lut: lut, useSelectedLut: false, film: film, retouch: retouch)
         return try await Task.detached(priority: .userInitiated) {
             try Exporter().export(img, sourceName: sourceName, params: params, settings: settings, naming: naming,
                                   directory: directory, onProgress: onProgress)

@@ -545,7 +545,8 @@ struct EditorScreen: View {
                     filmLoading: state.params.film != nil && session.filmData?.stock.id != state.params.film,
                     onToneMapper: vm.setToneMapper, onFilm: vm.useFilm, onSelectFilm: vm.selectFilm,
                     onLutsTabShown: vm.refreshLuts, lens: session.lensInfo,
-                    skin: session.skin, blemish: session.blemish,
+                    skin: session.skin, blemish: session.blemish, retouchWorking: session.retouchWorking,
+                    retouchReady: session.retouchMap != nil,
                     pickingWhite: pickingWhite,
                     onPickWhite: {
                         pickingWhite.toggle()

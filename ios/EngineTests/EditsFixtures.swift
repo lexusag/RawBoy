@@ -24,8 +24,11 @@ enum EditsFixtures {
     static let heal: String? = #"""
 {"format":"rawboy-edit","version":1,"values":{"healSpots":[{"x":0.4,"y":0.5,"radius":0.01,"source":[0.6,0.5],"feather":25,"path":[0.4,0.5,0.41,0.52]},{"x":0.9,"y":0.1,"radius":0.0004,"source":null,"feather":80,"path":[]}]}}
 """#
+    static let portrait: String? = #"""
+{"format":"rawboy-edit","version":1,"values":{"skinRetouch":20,"portraitRetouch":35}}
+"""#
     static let webOnly: String? = #"""
-{"format":"rawboy-edit","version":1,"values":{"exposure":0.3,"lumaContrast":12,"portraitRetouch":35}}
+{"format":"rawboy-edit","version":1,"values":{"exposure":0.3,"lumaContrast":12}}
 """#
     static let untouched: String? = nil
 }

@@ -19,8 +19,15 @@ public struct SkinMask: @unchecked Sendable {
     public let hasSkin: Bool
     /** Estimated face diameter in full-resolution pixels (0 if no face). */
     public let faceDiameterPx: Float
+    /** Face-skin confidence alone (same size as [data]); Portrait retouch. nil: none (the skin mask stands in). */
+    public let face: [Float]?
+    /** What Portrait retouch needs of each face found (FaceShape); empty if the segmenter has no landmarks. */
+    public let faces: [FaceShape]
 
-    public init(width: Int, height: Int, data: [Float], sigmaPx: Float, hasSkin: Bool, faceDiameterPx: Float) {
+    public init(width: Int, height: Int, data: [Float], sigmaPx: Float, hasSkin: Bool, faceDiameterPx: Float,
+                face: [Float]? = nil, faces: [FaceShape] = []) {
+        self.face = face
+        self.faces = faces
         self.width = width
         self.height = height
         self.data = data
@@ -299,23 +306,6 @@ public enum SkinSegmenter {
         let meanA = Filters.box(a, w, h, radius)
         let meanB = Filters.box(b, w, h, radius)
         return g.indices.map { min(max(meanA[$0] * g[$0] + meanB[$0], 0), 1) }
-    }
-}
-#else
-/**
- * macOS: MediaPipe Tasks ships no macOS slice, so skin detection is off (RawBoy Desktop). `segment` throws, which
- * every caller already treats as "no skin found" (the skin sliders have nothing to act on).
- */
-public enum SkinSegmenter {
-    private static let logger = Logger(subsystem: "app.rawboy", category: "RawBoy")
-    nonisolated(unsafe) private static var logged = false
-
-    public static func segment(_ image: PreviewImage, fullWidth: Int, fullHeight: Int) throws -> SkinMask {
-        if !logged {
-            logged = true
-            logger.notice("skin detection unavailable on macOS (no MediaPipe slice): skin features disabled")
-        }
-        throw SkinSegmenterError(message: "skin detection is not available on macOS")
     }
 }
 #endif

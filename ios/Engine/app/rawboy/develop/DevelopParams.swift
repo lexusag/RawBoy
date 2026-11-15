@@ -18,6 +18,7 @@ import Foundation
  *   anamorphicGhosts: faint oval ghosts of the lights
  * - skinRetouch: 0..100 smoothing of skin (found by a segmentation model), 0 = off
  * - blemishRemoval: 0..100 automatic spot healing on skin; higher heals fainter spots, 0 = off
+ * - portraitRetouch: 0..100 natural portrait retouch (spots, under-eyes, lines, evening; PortraitRetouch), 0 = off, 40 = the tuned Natural look
  * - lut: LutEntry id or nil for "No LUT"; lutAmount: 0..100 strength
  * - film: film stock id (FilmStocks) or nil for none (Pro, Auto, Camera); filmAmount: 0..100 blend of the film
  *   render over the AgX one; filmGrain, halation: 0..200, 100 = the stock as formation.json describes it
@@ -83,6 +84,7 @@ public struct DevelopParams: Equatable, Sendable {
     public var anamorphicGhosts = false
     public var skinRetouch: Float = 0
     public var blemishRemoval: Float = 0
+    public var portraitRetouch: Float = 0
     public var lut: String? = nil
     public var lutAmount: Float = 100
     public var film: String? = nil

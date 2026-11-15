@@ -255,6 +255,7 @@ struct DevelopProgram {
         let skin = p.skinMask
         u.float("uRetouch", skin?.hasSkin == true ? p.skinRetouch : 0)
         u.float("uSkinSigma", skin?.sigmaPx ?? 3)
+        u.float("uSkinFix", p.retouchMap != nil ? p.skinFix : 0)
         let bloomReady = p.bloomHalo != nil && p.bloomTail != nil
         u.float("uBloom", bloomReady ? p.bloom : 0)
         u.float("uAnamorphic", p.flareSource != nil ? p.anamorphic : 0)
@@ -347,6 +348,7 @@ struct DevelopProgram {
         u.array("uMaskShape", l.shape, components: 4)
         u.array("uMaskForm", l.form, components: 4)
         u.array("uLayerBlur", l.blur, components: 1)
+        u.array("uLayerRetouch", l.retouch, components: 1)
         u.array("uLayerTone", l.tone, components: 4)
         u.array("uLayerColor", l.color, components: 4)
         u.mat3("uLayerWb", l.whiteBalance)
@@ -458,6 +460,7 @@ final class DevelopTextures {
     private var uploadedTail: [UInt16]?
     private var uploadedFlare: [UInt16]?
     private var uploadedMask: [Float]?
+    private var uploadedMap: [Float]?
     private var uploadedFx: FxData?
     private var brushSlotW = 0
     private var brushSlotH = 0
@@ -499,7 +502,9 @@ final class DevelopTextures {
         if let b = p.bloomHalo { bloomHalo = upload(b, into: bloomHalo, uploaded: &uploadedHalo) }
         if let b = p.bloomTail { bloomTail = upload(b, into: bloomTail, uploaded: &uploadedTail) }
         if let b = p.flareSource { flare = upload(b, into: flare, uploaded: &uploadedFlare) }
-        bindMask(p.skinMask)
+        // With a Portrait retouch map in use it takes the skin mask's place (RGBA16F: the mask, then the gains).
+        let fixing = p.retouchMap != nil && (p.skinFix != 0 || p.layers.retouch.contains { $0 > 0 })
+        bindMask(p.skinMask, map: fixing ? p.retouchMap : nil)
         bindBrush(p.layers.brush)
         bindFx(p.fx.data)
         bokehTexture.bind(p, brush: brush)
@@ -585,8 +590,24 @@ final class DevelopTextures {
         uploadedShading = map.gains
     }
 
-    private func bindMask(_ mask: SkinMask?) {
+    private func bindMask(_ mask: SkinMask?, map: RetouchMap?) {
+        if let map {
+            if let u = uploadedMap, u.withUnsafeBufferPointer({ $0.baseAddress }) == map.data.withUnsafeBufferPointer({ $0.baseAddress }),
+               skinMask.pixelFormat == .rgba16Float {
+                return
+            }
+            guard let tex = ctx.makeTexture(.rgba16Float, map.width, map.height) else { return }
+            let halves = map.data.map { Float16($0) }
+            tex.replace(region: MTLRegionMake2D(0, 0, map.width, map.height), mipmapLevel: 0, withBytes: halves,
+                        bytesPerRow: map.width * 8)
+            skinMask = tex
+            uploadedMap = map.data
+            uploadedMask = nil
+            return
+        }
+        uploadedMap = nil
         guard let mask else { return }
+        if skinMask.pixelFormat != .r16Float { uploadedMask = nil }
         if let u = uploadedMask, u.withUnsafeBufferPointer({ $0.baseAddress }) == mask.data.withUnsafeBufferPointer({ $0.baseAddress }) {
             return
         }
