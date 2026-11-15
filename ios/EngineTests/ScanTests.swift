@@ -102,7 +102,10 @@ final class ScanTests: XCTestCase {
     func testScanExportOfARealPhoto() throws {
         let repo = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let dir = repo.appendingPathComponent(".raw")
-        let file = try XCTUnwrap(((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []).filter { $0.lowercased().hasSuffix(".dng") }.sorted().first.map { dir.appendingPathComponent($0) }, "no test file")
+        // Needs a DNG in .raw (git-ignored): skipped on CI, as DesktopBenchTests is.
+        guard let file = ((try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []).filter({ $0.lowercased().hasSuffix(".dng") }).sorted().first.map({ dir.appendingPathComponent($0) }) else {
+            throw XCTSkip("no test file in \(dir.path)")
+        }
         let image = try RawImage.open(url: file)
         defer { image.close() }
         var p = RenderTests.asShotDefaults(image)
