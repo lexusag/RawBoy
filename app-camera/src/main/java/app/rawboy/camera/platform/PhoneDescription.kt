@@ -4,7 +4,7 @@ package app.rawboy.camera.platform
 enum class ChipVendor { TENSOR, QUALCOMM, MEDIATEK, EXYNOS, UNKNOWN }
 
 /**
- * The phone the camera runs on, as `PlatformDetector` (session 07) reads it from `android.os.Build`. Pure data: the
+ * The phone the camera runs on, as read from `android.os.Build` ([ActivePlatform]). Pure data: the
  * raw strings are kept as reported (empty when missing), so layers can match on them and the device report can show
  * them; only [chip] is interpreted.
  */

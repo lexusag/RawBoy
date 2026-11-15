@@ -11,8 +11,8 @@ import org.junit.Test
 
 /**
  * The Tensor profile equals what the camera does today. Constants still visible in the shared code are compared
- * directly; private ones (and every value once the constants have moved out, sessions 04-06) as literals, named
- * after the constant they replace.
+ * directly; private ones (and every value once the constants have moved into the profile) as literals, named after
+ * the constant they replace.
  */
 class TensorLayerTest {
     private val tensor = PlatformRegistry.resolve(PhoneDescription(ChipVendor.TENSOR, manufacturer = "Google"))
@@ -63,7 +63,7 @@ class TensorLayerTest {
 
     @Test
     fun tensorPinsItsValuesWhateverTheNeutralProfileSays() {
-        // Decision 37: the Tensor layer repeats the numbers it shares with the neutral profile.
+        // The Tensor layer repeats the numbers it shares with the neutral profile, so changing those doesn't move the Pixel.
         val shifted = PlatformPatch { p ->
             p.copy(
                 still = p.still.copy(extraBlack = 0.01f, maxStillExposureNs = 1L),
