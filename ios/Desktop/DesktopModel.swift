@@ -33,6 +33,8 @@ final class DesktopModel: ObservableObject {
         vm.persistence = sidecars
         sidecars.onError = { [weak vm] in vm?.message = $0 }
         auto.persistence = autoSidecars
+        // Each photo's analysis stays on disk (Caches), so a folder opened again isn't decoded again; RAWBOY_NO_ANALYSIS_CACHE=1 turns it off.
+        if ProcessInfo.processInfo.environment["RAWBOY_NO_ANALYSIS_CACHE"] == nil { auto.analysisCache = AnalysisCache(dir: AnalysisCache.defaultDir) }
         autoSidecars.onError = { [weak auto] message in Task { @MainActor in auto?.message = message } }
         auto.saveExported = { [weak self] file, source in try self?.saveAutoExport(file, source: source) }
         auto.destinationView = AnyView(ExportDestinationSection(commands: commands, model: self))

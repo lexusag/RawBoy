@@ -5,7 +5,7 @@ import Foundation
  * height away from the frame's centre (-0.5..0.5), radius as a fraction of the frame's half diagonal (what the Image
  * circle size slider calls 100%). Port of FisheyeCircle.kt/.ts: keep them in step.
  */
-public struct FisheyeCircle: Sendable {
+public struct FisheyeCircle: Sendable, Codable {
     public let offsetX: Double
     public let offsetY: Double
     public let radius: Double

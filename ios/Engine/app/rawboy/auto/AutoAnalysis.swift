@@ -23,14 +23,36 @@ public enum AutoAnalysis {
      * [onPreview], if given, gets the detail view's preview (PhotoSession.previewMaxDimension) made from the same
      * decode, so RawBoy Auto can show the photo before decoding it again.
      */
-    public static func analyze(_ url: URL, onPreview: ((PreviewImage) -> Void)? = nil) throws -> Analysis {
+    public static func analyze(_ url: URL, cache: AnalysisCache? = nil, onPreview: ((PreviewImage) -> Void)? = nil) throws -> Analysis {
+        // A snapshot of this very file (same path, size and modified time) from an earlier run: no decode, no preview.
+        let key = cache?.key(for: url)
+        if let key, let s = cache?.get(key) { return restore(s, url.lastPathComponent) }
         // The raw is closed before segmentation, which needs only the 512 px copy.
         let img = try RawImage.open(url: url)
         onPreview?(img.createPreview(maxDimension: PhotoSession.previewMaxDimension))
         let copies = copiesOf(img)
         let info = Info.of(img, auto: true)
+        let white = (img.displayReferred, img.clipLevel)
         img.close()
-        return analyze(copies.0, copies.1, info, url.lastPathComponent)
+        let skin = segment(copies.0, true)
+        if let key {
+            cache?.put(key, AnalysisSnapshot(base: copies.0, halo: copies.1.halo, tail: copies.1.tail, lens: info.lens, iso: info.iso,
+                                             temperature: info.defaults.temperature, tint: info.defaults.tint,
+                                             displaySource: white.0, clipLevel: white.1, cameraMetered: info.cameraMetered,
+                                             noise: info.noise, skin: skin, skinDone: true))
+        }
+        return finish(copies.0, copies.1, info, url.lastPathComponent, skin)
+    }
+
+    /** The analysis of a cached [snapshot]: what decoding the file would give, without decoding it. */
+    static func restore(_ s: AnalysisSnapshot, _ label: String) -> Analysis {
+        var defaults = DevelopParams()
+        defaults.temperature = s.temperature
+        defaults.tint = s.tint
+        defaults.displaySource = s.displaySource
+        defaults.clipLevel = s.clipLevel
+        let info = Info(lens: s.lens, iso: s.iso, defaults: defaults, cameraMetered: s.cameraMetered, noise: s.noise)
+        return finish(s.base, BloomSources(halo: s.halo, tail: s.tail), info, label, s.skin)
     }
 
     /**
@@ -99,13 +121,22 @@ public enum AutoAnalysis {
         return (base, PhotoSession.bloomSourcesOf(img))
     }
 
+    /** Skin detection on the 512 px copy; it can fail, and the photo is then just treated as having no face. */
+    private static func segment(_ base: PreviewImage, _ detectSkin: Bool) -> SkinMask? {
+        let start = Date()
+        let skin = detectSkin ? try? SkinSegmenter.segment(base, fullWidth: base.fullWidth, fullHeight: base.fullHeight) : nil
+        log.notice("skin detection: \(Int(Date().timeIntervalSince(start) * 1000)) ms")
+        return skin
+    }
+
     private static func analyze(_ base: PreviewImage, _ bloom: BloomSources, _ info: Info, _ label: String,
                                 _ noiseIsoScale: Float = 1, _ detectSkin: Bool = true,
                                 _ meter: MeterArea? = nil, _ splitLuma: Bool = true) -> Analysis {
-        let start = Date()
-        // Segmentation can fail; the photo is then just treated as having no face.
-        let skin = detectSkin ? try? SkinSegmenter.segment(base, fullWidth: base.fullWidth, fullHeight: base.fullHeight) : nil
-        log.notice("skin detection: \(Int(Date().timeIntervalSince(start) * 1000)) ms")
+        finish(base, bloom, info, label, segment(base, detectSkin), noiseIsoScale, meter, splitLuma)
+    }
+
+    private static func finish(_ base: PreviewImage, _ bloom: BloomSources, _ info: Info, _ label: String, _ skin: SkinMask?,
+                               _ noiseIsoScale: Float = 1, _ meter: MeterArea? = nil, _ splitLuma: Bool = true) -> Analysis {
         let defaults = info.defaults
         let (stats, auto) = develop(base, skin, info.iso, defaults, noiseIsoScale, info.cameraMetered, meter, info.noise,
                                     info.phoneAe, info.captureEv, splitLuma)

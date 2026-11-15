@@ -141,6 +141,15 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   (`AutoStore.processQueue`, at most one behind). Skin segmentation runs in `worker/skin.worker.ts` for all web callers
   (MediaPipe's `importScripts` is shimmed with a synchronous fetch + global eval in the module worker; main-thread
   fallback when the worker can't start). Android/iOS analysis still decodes in full.
+  Desktop Auto speed (2026-11-15, Release, 10 cores): `AutoViewModel.lanes` = min(3, cores/3, GB/6) on the Mac (1 on iOS; lane 0 still goes
+  through `decodeLock`, the others don't, so a detail decode or export can overlap them); `AnalysisCache` (`auto/AnalysisCache.swift`, Library/Caches/<bundle>/analysis,
+  1 GB LRU, key = path + size + mtime + `AnalysisCache.version`, `RAWBOY_NO_ANALYSIS_CACHE=1` off) keeps an `AnalysisSnapshot` (512 px base, bloom copies, lens, ISO, noise,
+  as-shot white scalars, skin mask from Vision): `AutoAnalysis.restore` rebuilds the `Analysis` and works the develop out again, so tuning AutoTone needs no bump;
+  bump `version` when the decode, copies, noise estimate or Vision segmentation change. A hit has no detail preview (the grid thumbnail stands in until decoded).
+  Draft (half-size) decode was tried and NOT used on the Mac: RAF 3.8 → 0.5 s but the noise-based `denoise` suggestion moves (X-E5 RAF 1 → 4 and 2 → 6, CR2 0 → 3: the web's
+  `kDraftChroma/Luma` factors are fitted to GFX/A7 III), CR3/ARW gain 0.3 s and DNGs have no draft, and `base.fullWidth` comes back halved (the web fixes that in `RawImage`).
+  `TiffWriter` compresses strips in parallel batches (identical bytes). Profile of a full decode (RAWBOY_DECODE_TIMING=1 prints LibRaw's stages): iPhone 48 MP DNG is
+  1.5 of 1.9 s in single-threaded `unpack`; X-E5 RAF 3.8 of 5.0 s in X-Trans demosaic; not changed (bit-identical rule).
   Lanes (web): `processQueue` runs `analysisLanes()` lanes (`RawWorker.ts`: cores / 3, max 3; 1 on phones, under 8 GB
   `deviceMemory`, or without Worker), each with its own decoder worker (`analysisWorker`; one lane = the page worker and
   `decodeLock`, as before). A `RawImage` keeps the worker that decoded it. `ui/auto/AnalysisCache.ts` (IndexedDB

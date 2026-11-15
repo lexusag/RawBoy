@@ -19,7 +19,13 @@ final class TiffWriter {
     private var rowsWritten = 0
     private var strip: [UInt8]
     private var stripFill = 0
-    private let lzw = LzwEncoder()
+    /**
+     * Strips are independent LZW streams, so full strips wait here (up to [batch]) and are compressed side by side, one
+     * encoder each, then written in order: the same bytes as compressing them one after the other.
+     */
+    private var pending: [[UInt8]] = []
+    private let batch = max(1, ProcessInfo.processInfo.activeProcessorCount)
+    private lazy var encoders: [LzwEncoder] = (0..<batch).map { _ in LzwEncoder() }
     /** Header size: the IFDs and their values; the strips follow. Doesn't depend on the strip sizes. */
     private var dataOffset = 0
 
@@ -111,13 +117,33 @@ final class TiffWriter {
     }
 
     private func flushStrip() throws {
-        let length = strip.withUnsafeBufferPointer { lzw.encode($0.baseAddress!, stripFill) }
-        try out.write(contentsOf: UnsafeRawBufferPointer(start: lzw.output, count: length))
-        stripSizes.append(length)
+        pending.append(Array(strip[0..<stripFill]))
         stripFill = 0
+        if pending.count >= batch { try flushPending() }
+    }
+
+    /** Compresses the waiting strips in parallel and appends them to the file in order. */
+    private func flushPending() throws {
+        let n = pending.count
+        guard n > 0 else { return }
+        var lengths = [Int](repeating: 0, count: n)
+        let encoders = encoders
+        let strips = pending
+        lengths.withUnsafeMutableBufferPointer { out in
+            let lengths = out
+            DispatchQueue.concurrentPerform(iterations: n) { i in
+                lengths[i] = strips[i].withUnsafeBufferPointer { encoders[i].encode($0.baseAddress!, $0.count) }
+            }
+        }
+        for i in 0..<n {
+            try out.write(contentsOf: UnsafeRawBufferPointer(start: encoders[i].output, count: lengths[i]))
+            stripSizes.append(lengths[i])
+        }
+        pending.removeAll(keepingCapacity: true)
     }
 
     func finish() throws {
+        try flushPending()
         if rowsWritten != height { throw MetalError(message: "TIFF size mismatch: wrote \(rowsWritten) rows") }
         try out.seek(toOffset: 0)
         try out.write(contentsOf: header())
