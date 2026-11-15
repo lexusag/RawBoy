@@ -25,8 +25,8 @@ object StillGain {
 object FlashStart {
     /**
      * Flash still gain (s x ISO) at 1 m ([distanceKnown]) or without a focus distance, for a lens at [fNumber]: the
-     * platform's default, scaled by the lens's light gathering (a tele at f/2.8 passes 2.7x less of the flash's light
-     * than a lens at the f/1.7 the default was set at).
+     * platform's default, scaled by the lens's light gathering relative to [FlashProfile.referenceFNumber] (one stop
+     * slower passes half the flash's light, so it starts at twice the gain), within 0.5x..8x.
      */
     fun gain(flash: FlashProfile, fNumber: Float, distanceKnown: Boolean): Float {
         val apertureScale = (fNumber / flash.referenceFNumber).let { it * it }.coerceIn(0.5f, 8f)

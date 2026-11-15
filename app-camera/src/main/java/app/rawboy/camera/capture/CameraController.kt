@@ -1123,7 +1123,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             // The preview has converged by now: keep its colour for every frame (flicker otherwise).
             set(CaptureRequest.CONTROL_AE_LOCK, true)
             set(CaptureRequest.CONTROL_AWB_LOCK, true)
-            // Exposure: AE tops out at 1/30 s or 1/15 s and a dark scene stays dark however long the stack runs, so
+            // Exposure: AE tops out at the preview's or the still's exposure limit and a dark scene stays dark however long the stack runs, so
             // each frame is exposed by hand, as long as LONG_EXPOSURE_FRAME_NS allows (ISO falls to match: the same
             // picture with far less noise), and a dark scene is lifted to a normal key with the time AE refused.
             manual?.let { (t0, iso0) ->
@@ -1838,7 +1838,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         /** Extra exponent on distances beyond 1 m, see [flashFalloff]: 2 m needs 1.23x (0.3 EV), 4 m 1.5x (0.6 EV) more. */
         private const val FLASH_FAR_EXPONENT = 0.3f
 
-        /** How long [meterRaw] waits for its frame (a still in low light takes up to 1/15 s, plus the pipeline). */
+        /** How long [meterRaw] waits for its frame (a low-light still frame plus the pipeline, with room to spare). */
         private const val METER_TIMEOUT_MS = 2_000L
 
         /** Focus distances the flash exposure trusts (nearer: macro; farther: the flash hardly reaches). */
