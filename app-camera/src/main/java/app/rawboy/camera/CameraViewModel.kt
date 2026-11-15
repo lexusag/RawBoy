@@ -852,7 +852,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val developed = if (_compare.value) l.auto else s.develop(l.auto, l.stats.hasFace, platform.noise)
         // The ISP has already denoised and sharpened the preview stream.
         // Video also drops the colour denoise: its coarse stages are many taps per pixel, drawn twice a frame (screen and
-        // encoder), and a clip on a non-Film look (colour floor 70) ran at 12 fps instead of 30.
+        // encoder), and a clip on a non-Film look (its colour floor reaches the coarse stages) ran at 12 fps instead of 30.
         val p = developed.copy(
             denoise = 0f, sharpening = 0f, skinRetouch = 0f,
             colorDenoise = if (_videoMode.value) 0f else developed.colorDenoise,
