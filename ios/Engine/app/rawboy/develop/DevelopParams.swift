@@ -121,6 +121,8 @@ public struct DevelopParams: Equatable, Sendable {
     public var leaks: [LightLeak] = []
     /** Up to LightEffects.maxEffects light (lomo) effects over the leaks (see LightEffects.swift); per photo, not in presets. */
     public var fx: [LightEffect] = []
+    /** Up to HealSpots.maxSpots healing brush strokes (see HealSpots.swift), healed in the full-resolution image; per photo, not in presets. */
+    public var healSpots: [HealSpot] = []
     /**
      * The photo is display-referred (JPEG, HEIC: see display_inverse.cpp), rendered with AgX per channel. Set only on
      * a photo's as-shot defaults, from the decoder; never a slider or preset value.

@@ -6,13 +6,16 @@ RawBoy's editor as a native Mac app (SwiftUI + Metal, the iOS engine). Phase 1 i
 - Open with ⌘O, drop a file on the window, or Finder's Open With. RAW, HEIC, JPEG, PNG and TIFF open in place (never copied).
 - Edits are written to the photo's XMP sidecar as you work: `rawboy:Develop`, the same JSON as RawBoy on the web. The file is NAME.xmp next to the photo, else darktable's NAME.EXT.xmp, else a new NAME.xmp. Only that field changes; everything else in an existing sidecar is kept. Writes happen 800 ms after the last change, when another photo opens, when the app goes to the background and on quit.
 - A photo with a sidecar reopens with its edits. One without takes the previous photo's edits (as on the phone). RawBoy Viewer's rotation (`tiff:Orientation`) and crop are read; RawBoy's own turn wins.
-- Web-only values in a sidecar (heal spots, portrait retouch) are kept untouched.
+- Healing brush strokes are saved in the sidecar too; web-only values (portrait retouch and others the Mac app doesn't know) are kept untouched.
 
 ## Export
 ⌘E: JPEG or TIFF, into the photo's folder or a folder you choose, named NAME-rawboy.jpg / .tif (an existing file of that name is replaced).
 
 ## Keys and mouse
-Z 100% at the pointer, D frame colour, C Crop & rotate, \ Compare, B / E / V masks, [ ] brush size, Esc or Return closes the tool, Space pans, ⌘Z / ⇧⌘Z, ⌘O, ⌘E, ⌘/ help. Keys are matched by physical position. The wheel zooms around the pointer; over a slider it moves it (Shift big, ⌘ fine); double-click resets a slider.
+Z 100% at the pointer, D frame colour, C Crop & rotate, \ Compare, B healing brush (inside Masks: brush), E / V masks, [ ] brush size, Delete removes the selected healing stroke, Esc or Return closes the tool, Space pans, ⌘Z / ⇧⌘Z, ⌘O, ⌘E, ⌘/ help. Keys are matched by physical position. The wheel zooms around the pointer; over a slider it moves it (Shift big, ⌘ fine); double-click resets a slider.
+
+## Healing brush
+Heal in the top bar, or B: click a dust spot, blemish or small object to heal it away, drag to paint a stroke. Healed in the full-resolution image by seamless cloning (the same native `healStroke` as the web): the tone comes from around it, the detail from a clean area the engine picks (**Auto source**) or one you place (**Choose source**: drag the dashed copy; new strokes keep that offset). Size and Feather apply to the next strokes; pick a stroke in the list to change its source or delete it; up to 64 strokes per photo, reset for each new photo and kept out of presets. Strokes are undone one at a time with ⌘Z. The iPhone build has the engine but no button yet (its top bar is full).
 
 ## Lens corrections
 Lens tab › **Use Lensfun profile**: distortion, chromatic aberration and vignetting from the Lensfun database for raws with no embedded profile, as on the web (Auto match from EXIF, Pick lens, Generic). See [rawboy.md](rawboy.md), Lens corrections. The database is inside the app; nothing is downloaded.

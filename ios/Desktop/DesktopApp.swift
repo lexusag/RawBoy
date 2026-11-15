@@ -92,6 +92,7 @@ struct DesktopCommands: Commands {
         CommandMenu("Photo") {
             Button("Crop & Rotate") { model.commands.send(.toggleMode(.geometry)) }.keyboardShortcut("c", modifiers: []).disabled(!ready)
             Button("Masks") { model.commands.send(.toggleMode(.masks)) }.disabled(!ready)
+            Button("Healing Brush") { model.commands.send(.toggleMode(.heal)) }.disabled(!ready)
             Button("Light Leaks & Effects") { model.commands.send(.toggleMode(.leaks)) }.disabled(!ready)
             Button("Presets") { model.commands.send(.toggleMode(.presets)) }.disabled(!ready)
             Divider()
@@ -112,7 +113,7 @@ struct DesktopCommands: Commands {
             Button("Mark Clipped Highlights and Shadows") { model.vm.toggleClipWarning() }.disabled(!ready)
         }
         CommandMenu("Masks") {
-            Button("Brush") { model.commands.send(.maskTool(.brush)) }.keyboardShortcut("b", modifiers: []).disabled(!ready)
+            Button("Brush (Healing brush outside Masks)") { model.commands.send(.maskTool(.brush)) }.keyboardShortcut("b", modifiers: []).disabled(!ready)
             Button("Erase") { model.commands.send(.maskTool(.erase)) }.keyboardShortcut("e", modifiers: []).disabled(!ready)
             Button("Move") { model.commands.send(.maskTool(.move)) }.keyboardShortcut("v", modifiers: []).disabled(!ready)
             Button("Smaller Brush") { model.commands.send(.brushSize(-1)) }.keyboardShortcut("[", modifiers: []).disabled(!ready)

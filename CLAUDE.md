@@ -308,6 +308,8 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   (`Pro/ui/DesktopInput.swift`). The engine builds for macOS as `RawBoyEngineMac` (same sources, module `RawBoyEngine`, arm64 only: `Float16` is unavailable on Intel; no MediaPipe, `SkinSegmenter` is a
   stub that throws). Native: `ios/native/build.sh` adds a universal macOS slice (DNG SDK built with `qiPhone=1`). Needs the Metal toolchain (`xcodebuild -downloadComponent MetalToolchain`).
   CI's `desktop` job (ci.yml, macos-26, native libs cached by source hash) builds the app and runs these tests on every PR touching `ios/`, `shaders/` or the C++: the only check that compiles Swift.
+  Healing brush (2026-11-15): `develop/HealSpots.swift` (port of web's HealSpots.ts), `DevelopParams.healSpots` + `Edits` (`healSpots`, same JSON), `rb_heal` in `rawboy_native` (spots + brush disks into `blemish.cpp`'s `healStroke`),
+  `PhotoSession.scheduleBlemishes` heals strokes and Blemish removal together (`healedKey`), UI `Pro/ui/HealPanel.swift` + `HealOverlay.swift` (macOS top-bar button and B outside Masks; the iPhone bar is full). Android has no `healStroke` JNI binding yet.
   Tests: `xcodebuild test -scheme RawBoyEngineTestsMac -destination 'platform=macOS'`; `DesktopBenchTests` prints decode / frame / export timings. `Edits.swift` is checked against the web's
   JSON (`tools/edits_fixtures/generate.ts` writes `EngineTests/EditsFixtures.swift`); `XmpSidecar.swift` mirrors web's `XmpSidecar.ts` and RawBoy Viewer's `RawBoyBrowseKit` port.
 - **RawBoy Packer** (2026-11-01, web only; `docs/packer.md`): `web/packer.html` + `src/packer/` (`PackerApp`, `PackerStore`:

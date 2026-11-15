@@ -2,7 +2,7 @@ import RawBoyEngine
 import SwiftUI
 
 /** The editor's top-bar tools; at most one replaces the slider tabs. */
-enum EditorMode { case none, geometry, masks, leaks, fx, presets }
+enum EditorMode { case none, geometry, masks, leaks, fx, heal, presets }
 
 /** Frame around the photo in the fit view, points (tap outside the photo to change its colour). */
 private let frameWidthPt: CGFloat = 12
@@ -46,6 +46,9 @@ struct EditorScreen: View {
     @State private var selectedLeak: String?
     // Light effects, the same way: radial shapes (an ellipse round the effect's box, no feather ring).
     @State private var selectedFx: String?
+    // Healing brush (UI state; the strokes are in the params): the stroke picked in the list, and what new strokes start with.
+    @State private var selectedHeal: String?
+    @State private var healBrush = HealBrush()
     // Crop shape lock (UI only; the crop itself is in the params). Portrait nil = follow the frame.
     @State private var cropAspect = CropAspect.free
     @State private var cropPortrait: Bool?
@@ -74,8 +77,10 @@ struct EditorScreen: View {
         let l = frameLens
         return Float(l.width) / Float(max(1, l.height))
     }
+    private var healSpots: [HealSpot] { state.params.healSpots }
+    private var healId: String? { healSpots.contains { $0.id == selectedHeal } ? selectedHeal : nil }
     private var framePx: Int { Int(frameWidthPt * scale) }
-    private var marginPx: Int { mode == .masks || mode == .leaks || mode == .fx ? Int(maskMarginPt * scale) : 0 }
+    private var marginPx: Int { mode == .masks || mode == .leaks || mode == .fx || mode == .heal ? Int(maskMarginPt * scale) : 0 }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -107,6 +112,7 @@ struct EditorScreen: View {
             selectedLayer = nil
             selectedLeak = nil
             selectedFx = nil
+            selectedHeal = nil
             pickingWhite = false
             autoWb = false
         }
@@ -141,16 +147,30 @@ struct EditorScreen: View {
             vm.cycleFrame()
         case let .maskTool(tool):
             if mode != .masks {
-                guard tool == .brush else { return }  // B opens Masks (and adds a brush layer); E and V only switch tools
-                mode = .masks
+                // B opens (or closes) the healing brush from any other tool, as on the web; inside Masks it stays that tool's brush.
+                guard tool == .brush, !state.busy else { return }
+                mode = mode == .heal ? .none : .heal
+                pickingWhite = false
+                autoWb = false
+                return
             }
             if tool == .brush && selectedId == nil, let id = vm.addLayer(.brush) { selectedLayer = id }
             maskTool = tool
         case let .brushSize(direction):
+            if mode == .heal {
+                let size = (HealSpots.sizeValue(healBrush.radius) + (direction > 0 ? 5 : -5)).clamped(0, 100)
+                healBrush.radius = HealSpots.sizeRadius(size).clamped(HealSpots.radiusMin, HealSpots.radiusMax)
+                return
+            }
             var b = vm.brush
             b.radius = min(max(b.radius * (direction > 0 ? 1.15 : 1 / 1.15), Masks.minBrushRadius), Masks.maxBrushRadius)
             vm.setBrush(b)
             sizeRingAt = Date()
+        case .deleteSelection:
+            if mode == .heal, let id = healId {
+                vm.removeHeal(id)
+                selectedHeal = nil
+            }
         case .done:
             mode = .none
             pickingWhite = false
@@ -252,6 +272,30 @@ struct EditorScreen: View {
                         onPaintAt: { _ in },
                         grabInside: true))
                 }
+                if let shader, mode == .heal, session.preview != nil, !showOriginal {
+                    HealOverlay(
+                        lens: shader.lens, spots: healSpots, selectedId: healId, brush: healBrush, frame: framePx + marginPx,
+                        zoomCenter: session.zoomCenter, zoomScale: session.zoomScale, zoomFrame: framePx,
+                        actions: HealOverlayActions(
+                            onBegin: { x, y in
+                                var source: [Float]?
+                                if healBrush.chooseSource {
+                                    source = [(x + healBrush.offset[0]).clamped(0, 1), (y + healBrush.offset[1]).clamped(0, 1)]
+                                }
+                                let spot = HealSpot(x: x, y: y, radius: healBrush.radius, source: source, feather: healBrush.feather)
+                                guard let id = vm.addHeal(spot) else { return nil }
+                                selectedHeal = id
+                                return id
+                            },
+                            onExtend: vm.extendHeal,
+                            onEnd: {},
+                            onSource: { id, x, y in
+                                if let s = healSpots.first(where: { $0.id == id }) { healBrush.offset = [x - s.x, y - s.y] }
+                                vm.updateHeal(id) { $0.source = [x, y] }
+                            },
+                            onPan: { dx, dy in if session.zoomCenter != nil { vm.pan(dx, dy) } }),
+                        panning: { commands.spaceHeld })
+                }
                 if let shader, mode == .geometry, session.zoomCenter == nil, session.preview != nil {
                     CropOverlay(frameWidth: shader.lens.outputWidth, frameHeight: shader.lens.outputHeight,
                                 crop: state.params.crop, ratio: cropRatio, framePx: framePx, onCropChange: vm.setCrop)
@@ -324,7 +368,7 @@ struct EditorScreen: View {
             if mode != .geometry && !autoWb { vm.toggleZoom(Float(e.location.x * scale), Float(e.location.y * scale), extra: marginPx) }
         }
         let tap = SpatialTapGesture().onEnded { e in
-            guard mode != .geometry && mode != .masks && mode != .leaks && mode != .fx else { return }
+            guard mode != .geometry && mode != .masks && mode != .leaks && mode != .fx && mode != .heal else { return }
             let x = Float(e.location.x * scale)
             let y = Float(e.location.y * scale)
             if pickingWhite {
@@ -460,6 +504,31 @@ struct EditorScreen: View {
                         },
                         onDone: { mode = .none }))
                 .frame(maxHeight: maxHeight)
+            case .heal:
+                HealPanel(
+                    spots: healSpots, selectedId: healId, brush: healBrush, working: session.blemish.working,
+                    zoomed: session.zoomCenter != nil,
+                    actions: HealPanelActions(
+                        onSelect: { selectedHeal = $0 },
+                        onBrush: { healBrush = $0 },
+                        onUpdate: { id, force, change in vm.updateHeal(id, force: force, change) },
+                        onRemove: { id in
+                            vm.removeHeal(id)
+                            if id == selectedHeal { selectedHeal = nil }
+                        },
+                        onClear: {
+                            vm.clearHeal()
+                            selectedHeal = nil
+                        },
+                        onToggleZoom: {
+                            if session.zoomCenter != nil {
+                                vm.exitZoom()
+                            } else {
+                                vm.toggleZoom(Float(viewSize.width * scale / 2), Float(viewSize.height * scale / 2), extra: marginPx)
+                            }
+                        },
+                        onDone: { mode = .none }))
+                .frame(maxHeight: maxHeight)
             case .presets:
                 PresetsPanel(vm: vm, onDone: { mode = .none }, hasStrokes: layers.contains { !$0.strokes.isEmpty })
                     .frame(maxHeight: maxHeight)
@@ -560,6 +629,10 @@ struct EditorTopBar: View {
                 .buttonStyle(ToolButtonStyle(name: "Light leaks and effects", tip: $tip))
                 .disabled(!enabled)
                 .accessibilityLabel("Light leaks and effects")
+                #if os(macOS)
+                // The iPhone's row is full: the healing brush is on the Mac's bar (and B) for now.
+                modeButton(.heal, "bandage", "Heal", "Healing brush (B)")
+                #endif
                 modeButton(.presets, "bookmark", "Presets", "Presets")
                 tool("wand.and.stars", "Auto Dev", "Auto light and colour (keeps the LUT)", action: onAuto)
                 Spacer(minLength: 0)

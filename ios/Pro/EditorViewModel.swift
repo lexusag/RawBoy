@@ -244,7 +244,7 @@ final class EditorViewModel: ObservableObject {
      */
     private func carryOverEdits(_ previous: EditorState, _ newDefaults: DevelopParams) -> DevelopParams {
         if previous.fileName == nil { return newDefaults }
-        // Rotation, flips, straightening, perspective, crop, masks, light leaks and light effects belong to one photo.
+        // Rotation, flips, straightening, perspective, crop, masks, light leaks, light effects and healing strokes belong to one photo.
         var p = previous.params
         p.rotation = newDefaults.rotation
         p.flipHorizontal = newDefaults.flipHorizontal
@@ -256,6 +256,7 @@ final class EditorViewModel: ObservableObject {
         p.masks = newDefaults.masks
         p.leaks = newDefaults.leaks
         p.fx = newDefaults.fx
+        p.healSpots = newDefaults.healSpots
         p = p.withCrop(newDefaults.crop)
         let wbEdited = p.temperature != previous.defaults.temperature || p.tint != previous.defaults.tint
         if !wbEdited {
@@ -438,6 +439,38 @@ final class EditorViewModel: ObservableObject {
 
     func removeLeak(_ id: String) {
         edit(force: true) { $0.leaks.removeAll { $0.id == id } }
+    }
+
+    // MARK: - Healing brush (see HealSpots.swift)
+
+    /** Starts a stroke (up to HealSpots.maxSpots); returns its id, nil when full. Healing follows ~300 ms after the edits rest. */
+    func addHeal(_ spot: HealSpot) -> String? {
+        if state.params.healSpots.count >= HealSpots.maxSpots { return nil }
+        edit(force: true) { $0.healSpots.append(spot) }
+        return spot.id
+    }
+
+    /** A stroke's source dragged or a button ([force]); one history step per [force]d change. */
+    func updateHeal(_ id: String, force: Bool = false, _ change: (inout HealSpot) -> Void) {
+        edit(force: force) { p in
+            if let i = p.healSpots.firstIndex(where: { $0.id == id }) { change(&p.healSpots[i]) }
+        }
+    }
+
+    /** Part of the step addHeal started, however slow the stroke: the stroke grows by flat x, y image fractions. */
+    func extendHeal(_ id: String, _ points: [Float]) {
+        var p = state.params
+        guard let i = p.healSpots.firstIndex(where: { $0.id == id }) else { return }
+        p.healSpots[i].path = Array((p.healSpots[i].path + points).prefix(HealSpots.maxPoints * 2))
+        show(p)
+    }
+
+    func removeHeal(_ id: String) {
+        edit(force: true) { $0.healSpots.removeAll { $0.id == id } }
+    }
+
+    func clearHeal() {
+        if !state.params.healSpots.isEmpty { edit(force: true) { $0.healSpots = [] } }
     }
 
     // MARK: - Light effects (see LightEffects.swift)

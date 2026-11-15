@@ -21,8 +21,11 @@ enum EditsFixtures {
     static let leaksFx: String? = #"""
 {"format":"rawboy-edit","version":1,"values":{"leaks":[{"enabled":true,"kind":"glow","cx":0.3,"cy":0.6,"rx":0.09,"ry":0.09,"angle":0,"softness":45,"glow":18,"bend":-30,"taper":0,"warp":35,"texture":40,"cover":25,"radii":[1,1.2,1,0.8,1,1.1,1,0.9],"intensity":100,"hue":37,"seed":0.123},{"enabled":true,"kind":"streak","cx":0.8,"cy":0.2,"rx":0.6,"ry":0.015,"angle":-20,"softness":60,"glow":55,"bend":0,"taper":0,"warp":35,"texture":70,"cover":100,"radii":[1,1,1,1,1,1,1,1],"intensity":100,"hue":37,"seed":0.5}],"fx":[{"enabled":true,"kind":"sparks","cx":0.5,"cy":0.5,"rx":0.875,"ry":0.5833333333333334,"angle":0,"amount":50,"thickness":50,"glow":55,"hue":235,"spread":70,"intensity":100,"seed":0.123456789}]}}
 """#
+    static let heal: String? = #"""
+{"format":"rawboy-edit","version":1,"values":{"healSpots":[{"x":0.4,"y":0.5,"radius":0.01,"source":[0.6,0.5],"feather":25,"path":[0.4,0.5,0.41,0.52]},{"x":0.9,"y":0.1,"radius":0.0004,"source":null,"feather":80,"path":[]}]}}
+"""#
     static let webOnly: String? = #"""
-{"format":"rawboy-edit","version":1,"values":{"exposure":0.3,"lumaContrast":12,"portraitRetouch":35,"healSpots":[{"x":0.4,"y":0.5,"radius":0.01,"source":[0.6,0.5],"feather":80,"path":[0.4,0.5,0.41,0.52]}]}}
+{"format":"rawboy-edit","version":1,"values":{"exposure":0.3,"lumaContrast":12,"portraitRetouch":35}}
 """#
     static let untouched: String? = nil
 }

@@ -85,6 +85,8 @@ public final class PhotoSession: ObservableObject {
     private var blemishTask: Task<Void, Never>?
     /** (x, y, radius, score) per candidate, most obvious first; detected once per photo. */
     private var blemishSpots: [Float]?
+    /** What the full-resolution image is healed with now: the automatic spots' count and the healing brush's strokes (`HealSpots.key`). */
+    private var healedKey = "0|"
     private var selectedLut: String?
     /** Recently used LUTs, most recent last, so switching back and forth is instant. */
     private var lutCache: [(String, LutData)] = []
@@ -151,6 +153,7 @@ public final class PhotoSession: ObservableObject {
         skin = .notComputed
         blemishTask?.cancel()
         blemishSpots = nil
+        healedKey = "0|"
         blemish = BlemishState()
         brushes.removeAll()
         guide = nil
@@ -167,7 +170,7 @@ public final class PhotoSession: ObservableObject {
         let before = params
         params = newParams
         if newParams.skinRetouch > 0 || newParams.blemishRemoval > 0 { ensureSkinMask() }
-        if newParams.blemishRemoval != before.blemishRemoval { scheduleBlemishes() }
+        if newParams.blemishRemoval != before.blemishRemoval || newParams.healSpots != before.healSpots { scheduleBlemishes() }
         ensureFlareSource()
         // A 90 degree turn or a new crop changes the output shape, and a flip moves the content, so the zoom position
         // no longer applies.
@@ -425,32 +428,41 @@ public final class PhotoSession: ObservableObject {
             try? await Task.sleep(nanoseconds: 300_000_000)
             guard !Task.isCancelled, let img = image else { return }
             let level = params.blemishRemoval
+            let brush = params.healSpots
             var wanted: [Float] = []
             if level > 0 {
-                guard let mask = skin.mask, mask.hasSkin else { return }  // runs again when the mask is ready
-                let spots: [Float]
-                if let known = blemishSpots {
-                    spots = known
-                } else {
-                    blemish.working = true
-                    spots = await Task.detached(priority: .userInitiated) { img.detectBlemishes(mask) }.value
-                    blemishSpots = spots
+                // The healing brush doesn't wait for the skin mask; the automatic spots follow when it's ready.
+                if let mask = skin.mask, mask.hasSkin {
+                    let spots: [Float]
+                    if let known = blemishSpots {
+                        spots = known
+                    } else {
+                        blemish.working = true
+                        spots = await Task.detached(priority: .userInitiated) { img.detectBlemishes(mask) }.value
+                        guard !Task.isCancelled else { return }
+                        blemishSpots = spots
+                    }
+                    wanted = blemishesToHeal(spots, level: level)
+                } else if brush.isEmpty {
+                    return  // runs again when the mask is ready
                 }
-                wanted = blemishesToHeal(spots, level: level)
             }
             let count = wanted.count / 4
-            if count == blemish.healed {
+            let key = "\(count)|\(HealSpots.key(brush))"
+            if key == healedKey {
                 blemish.working = false
                 return
             }
+            let strokes = HealSpots.strokes(brush, width: img.width, height: img.height)
             blemish.working = true
             // Not cancelled midway: the full-resolution image and its previews must stay in step.
             let rebuilt = await Task.detached(priority: .userInitiated) {
-                img.healBlemishes(wanted)
+                img.healBlemishes(wanted, strokes: strokes)
                 return (img.createPreview(maxDimension: Self.previewMaxDimension),
                         img.createPreview(maxDimension: Self.baseMaxDimension), Self.bloomSourcesOf(img))
             }.value
             guard image === img else { return }
+            healedKey = key
             preview = rebuilt.0
             base = rebuilt.1
             bloomSources = rebuilt.2

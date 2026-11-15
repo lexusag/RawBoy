@@ -20,6 +20,8 @@ enum EditorAction: Equatable {
     case maskTool(MaskTool)
     /** Brush size, +1 larger / -1 smaller. */
     case brushSize(Int)
+    /** Removes the selected healing stroke (Delete). */
+    case deleteSelection
     /** Closes the open tool (Esc, Return). */
     case done
     /** The "?" sheet. */

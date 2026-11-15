@@ -1,3 +1,9 @@
+**RawBoy Desktop (macOS): healing brush (2026-11-15)**
+
+- **Heal** in the top bar (or **B** outside Masks; inside Masks B stays the mask brush, as on the web): click a spot or drag a stroke over dust, a blemish or a small object and it is healed away in the full-resolution image by seamless cloning. **Auto source** lets the engine pick the cleanest nearby area; **Choose source** shows a dashed copy to drag onto the area to clone from. Size and Feather (new strokes), the stroke list (pick, change source, delete, Clear all), **[ ]** size, **Delete** removes the selected stroke, Space pans, a ring shows the brush size.
+- Swift port of the web's `HealSpots.ts` (`develop/HealSpots.swift`: parse, `strokes` = the disks the engine heals, `key`), `DevelopParams.healSpots`, `Edits` reads and writes `healSpots` (same JSON; the web's fixtures check it), `PhotoSession` heals the strokes together with Blemish removal (the brush does not wait for the skin mask, which the Mac build never has), `Pro/ui/HealPanel.swift` and `HealOverlay.swift`. The native library gets `rb_heal` (spots + brush disks; `blemish.cpp`'s `healStroke` was only reachable from the web and is now bound for iOS and macOS too). Android is not ported (its JNI has no `healStroke` binding).
+- Tests: `HealSpotsTests` (the web's cases), `EditsTests` (the new `heal` fixture), `HealBrushTests` (a real raw: strokes change only their neighbourhood, an empty list restores the photo). Not tried by hand yet.
+
 **RawBoy Desktop (macOS) and RawBoy (iOS): Auto WB area and Reset WB (2026-11-15)**
 
 - Color tab: **Auto WB** shows a frame on the photo; temperature and tint are solved so what is inside renders neutral (clipped pixels left out), again whenever the frame is dragged or resized. **Reset WB** returns to as shot. As on the web and Android (`WhitePicker.area`, the web's `autoWhiteArea`, with its test). Esc or Close Tool closes the frame on the Mac.

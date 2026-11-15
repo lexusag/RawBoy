@@ -18,7 +18,7 @@ final class KeyboardShortcuts {
     enum Key: UInt16 {
         case z = 6, d = 2, c = 8, b = 11, e = 14, v = 9, o = 31
         case leftBracket = 33, rightBracket = 30, backslash = 42
-        case space = 49, `return` = 36, keypadEnter = 76, escape = 53, slash = 44
+        case delete = 51, forwardDelete = 117, space = 49, `return` = 36, keypadEnter = 76, escape = 53, slash = 44
     }
 
     init(model: DesktopModel) { self.model = model }
@@ -80,6 +80,7 @@ final class KeyboardShortcuts {
         case .v: commands.send(.maskTool(.move))
         case .leftBracket: commands.send(.brushSize(-1))
         case .rightBracket: commands.send(.brushSize(1))
+        case .delete, .forwardDelete: commands.send(.deleteSelection)
         case .escape, .return, .keypadEnter: commands.send(.done)
         default: return event
         }
