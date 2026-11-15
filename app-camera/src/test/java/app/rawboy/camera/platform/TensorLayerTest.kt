@@ -2,7 +2,6 @@ package app.rawboy.camera.platform
 
 import app.rawboy.camera.CameraSettings
 import app.rawboy.camera.ShotSaver
-import app.rawboy.camera.capture.CameraController
 import app.rawboy.camera.platform.tensor.tensorLayer
 import app.rawboy.camera.platform.traits.UndoIspPreviewColor
 import org.junit.Assert.assertEquals
@@ -24,7 +23,7 @@ class TensorLayerTest {
 
     @Test
     fun previewAsToday() {
-        // CameraController.previewToRec2020: the result's ISP matrix and gains are undone.
+        // The former CameraController.previewToRec2020: the result's ISP matrix and gains are undone.
         assertSame(UndoIspPreviewColor, tensor.preview.color)
     }
 
@@ -54,10 +53,8 @@ class TensorLayerTest {
 
     @Test
     fun flashAsToday() {
-        assertEquals(CameraController.DEFAULT_FLASH_GUIDE, tensor.flash.defaultGuide)
-        assertEquals(CameraController.DEFAULT_FLASH_GAIN_NO_DISTANCE, tensor.flash.defaultGainNoDistance)
-        assertEquals(16f, tensor.flash.defaultGuide)
-        assertEquals(4f, tensor.flash.defaultGainNoDistance)
+        assertEquals(16f, tensor.flash.defaultGuide) // CameraController.DEFAULT_FLASH_GUIDE
+        assertEquals(4f, tensor.flash.defaultGainNoDistance) // CameraController.DEFAULT_FLASH_GAIN_NO_DISTANCE
         assertEquals(1.7f, tensor.flash.referenceFNumber) // CameraController.FLASH_REFERENCE_F_NUMBER
     }
 

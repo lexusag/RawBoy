@@ -33,9 +33,11 @@ val tensorLayer = PlatformLayer(
                 experimentalColorFloor = 70f,
             ),
             flash = p.flash.copy(
-                // W (f/1.68): a desk at ~0.4 m exposed well at about 2.5.
+                // Gain (s x ISO) at 1 m: W (f/1.68) exposed a desk at ~0.4 m well at about 2.5 (first tries).
                 defaultGuide = 16f,
+                // The W's aperture, which the guide above was set at.
                 referenceFNumber = 1.7f,
+                // As for 0.5 m at the guide above; UW reports a focus distance of 0 on every frame, so it starts here.
                 defaultGainNoDistance = 4f,
             ),
         )

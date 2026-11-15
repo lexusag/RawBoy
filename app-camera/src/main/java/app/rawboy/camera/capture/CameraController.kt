@@ -32,8 +32,12 @@ import android.util.Log
 import android.util.Range
 import android.view.Surface
 import androidx.exifinterface.media.ExifInterface
+import app.rawboy.auto.analysis.AutoTone
 import app.rawboy.auto.analysis.MeterArea
 import app.rawboy.camera.debug.DebugProbe
+import app.rawboy.camera.platform.CameraPlatform
+import app.rawboy.camera.platform.PreviewColor
+import app.rawboy.camera.platform.PreviewColorInput
 import app.rawboy.color.Mat3
 import app.rawboy.color.WhiteBalance
 import app.rawboy.raw.BurstNative
@@ -74,7 +78,7 @@ enum class FlashMode {
 class LongExposure(
     val seconds: Int,
     val lighten: Boolean,
-    /** The viewfinder's metered key (1 = sensor clip) at the preview's exposure, to lift a dark scene towards [LONG_EXPOSURE_KEY]; null = no lift. */
+    /** The viewfinder's metered key (1 = sensor clip) at the preview's exposure, to lift a dark scene towards [AutoTone.PHONE_KEY]; null = no lift. */
     val key: Float? = null,
 )
 
@@ -108,9 +112,10 @@ class FlashGuides(
  * known tone curve (so it can be linearised), and RAW_SENSOR captures written as DNG: one frame, or a burst merged
  * into one (BurstNative).
  *
- * Camera callbacks run on a private thread; the suspend functions may be called from any thread.
+ * Camera callbacks run on a private thread; the suspend functions may be called from any thread. What differs between
+ * phones (the preview's colour path, black, still exposure limit, flash starting points) comes from [platform].
  */
-class CameraController(context: Context) : AutoCloseable {
+class CameraController(context: Context, private val platform: CameraPlatform) : AutoCloseable {
     private val manager = context.getSystemService(CameraManager::class.java)
     private val thread = HandlerThread("RawBoy-camera").apply { start() }
     private val handler = Handler(thread.looper)
@@ -155,7 +160,7 @@ class CameraController(context: Context) : AutoCloseable {
         /** [rawSize] is the [maxResSize]: the raw stream and its stills use the maximum-resolution sensor mode. */
         val hiRes: Boolean = false,
         /** The lens's aperture (f-number); the flash default for a lens that hasn't learned its own scales with it. */
-        val fNumber: Float = FLASH_REFERENCE_F_NUMBER,
+        val fNumber: Float,
     ) {
         /** The lens can focus (a fixed-focus lens reports a minimum focus distance of 0). */
         val canFocus get() = (characteristics.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f) > 0f
@@ -225,7 +230,7 @@ class CameraController(context: Context) : AutoCloseable {
         val exposureNs: Long,
         /** TONEMAP_MODE the camera actually applied to the preview (null if not reported). */
         val tonemapMode: Int?,
-        /** Linear preview RGB -> Rec.2020 with the raw's colours (see [previewToRec2020]), GL column-major; or null. */
+        /** Linear preview RGB -> Rec.2020 with the raw's colours (the platform's [PreviewColor]), GL column-major; or null. */
         val previewColor: FloatArray?,
         /** LENS_FOCUS_DISTANCE in diopters (0 = infinity), or null if not reported. */
         val focusDiopters: Float? = null,
@@ -403,7 +408,7 @@ class CameraController(context: Context) : AutoCloseable {
             maxResSize = maxRes?.first,
             maxResFormat = maxResFormat,
             hiRes = hiRes,
-            fNumber = c.get(CameraCharacteristics.LENS_INFO_AVAILABLE_APERTURES)?.firstOrNull()?.takeIf { it > 0f } ?: FLASH_REFERENCE_F_NUMBER,
+            fNumber = c.get(CameraCharacteristics.LENS_INFO_AVAILABLE_APERTURES)?.firstOrNull()?.takeIf { it > 0f } ?: platform.flash.referenceFNumber,
         )
     }
 
@@ -935,7 +940,7 @@ class CameraController(context: Context) : AutoCloseable {
         val rowShorts = plane.rowStride / 2
         val step = plane.pixelStride / 2
         val started = System.nanoTime()
-        val key = RawMeter.key(img.width, img.height, cfa, black, white, neutral, meter.fraction, app.rawboy.camera.ShotSaver.EXTRA_BLACK) { x, y ->
+        val key = RawMeter.key(img.width, img.height, cfa, black, white, neutral, meter.fraction, platform.still.extraBlack) { x, y ->
             data.get(y * rowShorts + x * step).toInt() and 0xFFFF
         }
         Log.d(TAG, "raw meter: key $key in ${(System.nanoTime() - started) / 1_000_000} ms (${r.get(CaptureResult.SENSOR_EXPOSURE_TIME)?.div(1000)} µs, " +
@@ -1298,7 +1303,7 @@ class CameraController(context: Context) : AutoCloseable {
      * The (exposure ns, ISO) of one long-exposure frame, or null to leave it to AE (no preview reading yet). The
      * exposure is the preview's whole gain (time x ISO x the post-raw boost, which a manual raw doesn't get) times
      * Brightness's compensation and a lift of up to [LONG_EXPOSURE_MAX_LIFT_EV] that brings a dark scene to
-     * [LONG_EXPOSURE_KEY], spent as time first (up to [LONG_EXPOSURE_FRAME_NS], the sensor's limit) then as ISO.
+     * [AutoTone.PHONE_KEY] (the key Camera's auto develop aims for), spent as time first (up to [LONG_EXPOSURE_FRAME_NS], the sensor's limit) then as ISO.
      */
     private fun longExposureManual(inf: Info, spec: LongExposure): Pair<Long, Int>? {
         val f = _frames.value ?: return null
@@ -1328,7 +1333,7 @@ class CameraController(context: Context) : AutoCloseable {
         // the raw of the preview frame (viewfinder key x the calibrated preview scale; frames shot at the preview's time x ISO x boost give just this key); it
         // is null when the lens's preview isn't calibrated yet, which leaves the preview's exposure as it is.
         val lift = spec.key?.takeIf { it > 0f }?.let { key ->
-            kotlin.math.log2(LONG_EXPOSURE_KEY / key).coerceIn(0f, LONG_EXPOSURE_MAX_LIFT_EV)
+            kotlin.math.log2(AutoTone.PHONE_KEY / key).coerceIn(0f, LONG_EXPOSURE_MAX_LIFT_EV)
         } ?: 0f
         val target = gain * 2f.pow(lift)
         val tMax = min(LONG_EXPOSURE_FRAME_NS, timeRange.upper)
@@ -1391,11 +1396,9 @@ class CameraController(context: Context) : AutoCloseable {
         val ambientGain = ambient?.let { it.exposureNs / 1e9f * it.iso }?.takeIf { it > 0f } ?: Float.MAX_VALUE
         val known = diopters != null && diopters > 0f
         val metres = if (known) (1f / diopters!!).coerceIn(MIN_FLASH_DISTANCE_M, MAX_FLASH_DISTANCE_M) else 1f
-        // A lens that hasn't learned its own guide starts from the default, scaled by its light gathering (a tele at f/2.8
-        // passes 2.7x less of the flash's light than the f/1.7 main lens the default was set on).
-        val apertureScale = (inf.fNumber / FLASH_REFERENCE_F_NUMBER).let { it * it }.coerceIn(0.5f, 8f)
+        // A lens that hasn't learned its own guide starts from the platform's default, scaled by its light gathering.
         val guide = (if (known) guides.byDistance else guides.noDistance)
-            ?: ((if (known) DEFAULT_FLASH_GUIDE else DEFAULT_FLASH_GAIN_NO_DISTANCE) * apertureScale)
+            ?: FlashStart.gain(platform.flash, inf.fNumber, known)
         val falloff = flashFalloff(metres)
         val byFlash = guide * falloff
         val gain = min(byFlash, ambientGain).coerceAtMost(FLASH_EXPOSURE_NS / 1e9f * isoRange.upper)
@@ -1496,16 +1499,13 @@ class CameraController(context: Context) : AutoCloseable {
 
     /**
      * How much brighter the still's raw will be than the preview frame [frame] (in raw terms: exposure time x ISO).
-     * In low light the preview is held at 1/30 s, and for the still AE moves exposure from its post-raw digital
-     * boost back into time, up to 1/15 s, at the same ISO (measured on the Pixel 9 Pro: preview 1/30 s, ISO 1410,
-     * boost 2.39 -> still 1/15 s, ISO 1410, boost 1.2). Otherwise the still matches the preview.
+     * In low light the preview is held at its frame-rate cap, and for the still AE moves exposure from its post-raw
+     * digital boost back into time, up to the platform's still limit, at the same ISO ([StillGain]). Otherwise the
+     * still matches the preview.
      */
     fun stillGain(frame: FrameState): Float {
         val range = info?.previewFpsRange ?: return 1f
-        if (frame.exposureNs <= 0L) return 1f
-        val capNs = 1_000_000_000L / range.upper
-        if (frame.exposureNs < capNs * 9 / 10) return 1f
-        return minOf(MAX_STILL_EXPOSURE_NS.toFloat() / frame.exposureNs, frame.postRawBoost).coerceAtLeast(1f)
+        return StillGain.over(frame.exposureNs, frame.postRawBoost, 1_000_000_000L / range.upper, platform.still.maxStillExposureNs)
     }
 
     /**
@@ -1795,7 +1795,7 @@ class CameraController(context: Context) : AutoCloseable {
             afState = r.get(CaptureResult.CONTROL_AF_STATE),
             exposureNs = r.get(CaptureResult.SENSOR_EXPOSURE_TIME) ?: 0L,
             tonemapMode = r.get(CaptureResult.TONEMAP_MODE),
-            previewColor = previewToRec2020(inf, r, neutral)?.let(Mat3::toGlColumnMajor),
+            previewColor = platform.preview.color.toRec2020(previewColorInput(inf, r, neutral))?.let(Mat3::toGlColumnMajor),
             focusDiopters = r.get(CaptureResult.LENS_FOCUS_DISTANCE),
             compensationSteps = compensationSteps,
         )
@@ -1803,9 +1803,6 @@ class CameraController(context: Context) : AutoCloseable {
 
     companion object {
         private const val TAG = "RawBoyCamera"
-
-        /** Longest still exposure AE uses in low light: 1/15 s (its 15-30 fps range). */
-        private const val MAX_STILL_EXPOSURE_NS = 66_666_667L
 
         /** Focus-flash: how long the torch is on before the AF trigger, and how long AF may take with it. */
         private const val TORCH_WARMUP_MS = 300L
@@ -1825,7 +1822,6 @@ class CameraController(context: Context) : AutoCloseable {
 
         /** A dark scene is exposed up to this much (EV) brighter than the preview, towards the key AutoTone aims for. */
         private const val LONG_EXPOSURE_MAX_LIFT_EV = 4f
-        private const val LONG_EXPOSURE_KEY = 0.06f
         private const val FOCUS_TIMEOUT_MS = 1500L
 
         /**
@@ -1839,23 +1835,11 @@ class CameraController(context: Context) : AutoCloseable {
         private const val FLASH_EXPOSURE_NS = 33_333_333L
         private const val FLASH_FRAME_NS = 33_333_333L
 
-        /** The f-number [DEFAULT_FLASH_GUIDE] was set on (Pixel 9 Pro W, f/1.68). */
-        private const val FLASH_REFERENCE_F_NUMBER = 1.7f
-
         /** Extra exponent on distances beyond 1 m, see [flashFalloff]: 2 m needs 1.23x (0.3 EV), 4 m 1.5x (0.6 EV) more. */
         private const val FLASH_FAR_EXPONENT = 0.3f
 
         /** How long [meterRaw] waits for its frame (a still in low light takes up to 1/15 s, plus the pipeline). */
         private const val METER_TIMEOUT_MS = 2_000L
-
-        /**
-         * Flash still gain (s x ISO) at 1 m before a lens has learned its own: Pixel 9 Pro W exposed a desk at ~0.4 m
-         * well at about 2.5 (first tries).
-         */
-        const val DEFAULT_FLASH_GUIDE = 16f
-
-        /** Flash still gain without a focus distance, before a lens has learned its own: as for 0.5 m at the guide above. */
-        const val DEFAULT_FLASH_GAIN_NO_DISTANCE = 4f
 
         /** Focus distances the flash exposure trusts (nearer: macro; farther: the flash hardly reaches). */
         private const val MIN_FLASH_DISTANCE_M = 0.1f
@@ -1947,28 +1931,18 @@ class CameraController(context: Context) : AutoCloseable {
         }
 
         /**
-         * The ISP renders the preview with its own white balance gains and colour matrix (the Pixel's are more
-         * saturated than the DNG's, ~20-40% in reds), so a plain sRGB -> Rec.2020 viewfinder didn't match the photo.
-         * This undoes both (result COLOR_CORRECTION_GAINS / TRANSFORM) back to camera RGB and applies what the raw
-         * decoder does: 1 / AsShotNeutral, then rgb_cam. Scaled so the ISP's white keeps its luminance, which keeps
-         * the exposure calibration (previewScale) valid. Row-major; null when the camera doesn't report it all.
+         * What the platform's [PreviewColor] needs from a preview frame, as plain numbers: the raw decoder's matrix and
+         * the result's ISP colour matrix, white balance gains (greens averaged) and as-shot neutral, each null when
+         * not reported.
          */
-        private fun previewToRec2020(inf: Info, r: CaptureResult, neutral: Array<android.util.Rational>?): DoubleArray? {
-            val rgbCam = inf.cameraToSrgb ?: return null
-            val ccm = r.get(CaptureResult.COLOR_CORRECTION_TRANSFORM) ?: return null
-            val g = r.get(CaptureResult.COLOR_CORRECTION_GAINS) ?: return null
-            if (neutral == null || neutral.size < 3) return null
-            val n = DoubleArray(3) { neutral[it].toDouble() }
-            val gains = doubleArrayOf(g.red.toDouble(), (g.greenEven + g.greenOdd) / 2.0, g.blue.toDouble())
-            if (n.any { it <= 0.0 } || gains.any { it <= 0.0 }) return null
-            val ispInverse = runCatching { Mat3.inverse(toDoubles(ccm)) }.getOrNull() ?: return null
-            val toCamera = Mat3.multiply(Mat3.diagonal(1 / gains[0], 1 / gains[1], 1 / gains[2]), ispInverse)
-            val balance = Mat3.diagonal(1 / n[0], 1 / n[1], 1 / n[2])
-            val m = Mat3.multiply(SRGB_TO_REC2020, Mat3.multiply(rgbCam, Mat3.multiply(balance, toCamera)))
-            val white = Mat3.apply(m, doubleArrayOf(1.0, 1.0, 1.0))
-            val y = 0.2627 * white[0] + 0.6780 * white[1] + 0.0593 * white[2]
-            if (!(y > 0)) return null
-            return DoubleArray(9) { m[it] / y }
+        private fun previewColorInput(inf: Info, r: CaptureResult, neutral: Array<android.util.Rational>?): PreviewColorInput {
+            val g = r.get(CaptureResult.COLOR_CORRECTION_GAINS)
+            return PreviewColorInput(
+                cameraToSrgb = inf.cameraToSrgb,
+                ispMatrix = r.get(CaptureResult.COLOR_CORRECTION_TRANSFORM)?.let(::toDoubles),
+                ispGains = g?.let { doubleArrayOf(it.red.toDouble(), (it.greenEven + it.greenOdd) / 2.0, it.blue.toDouble()) },
+                neutral = neutral?.takeIf { it.size >= 3 }?.let { n -> DoubleArray(3) { n[it].toDouble() } },
+            )
         }
 
         /**
@@ -1998,13 +1972,6 @@ class CameraController(context: Context) : AutoCloseable {
             0.412453, 0.357580, 0.180423,
             0.212671, 0.715160, 0.072169,
             0.019334, 0.119193, 0.950227,
-        )
-
-        /** As the decoder's kSrgbToRec2020. */
-        private val SRGB_TO_REC2020 = doubleArrayOf(
-            0.6274040, 0.3292820, 0.0433136,
-            0.0690970, 0.9195400, 0.0113612,
-            0.0163916, 0.0880132, 0.8955950,
         )
 
         /** The DNG ColorMatrix for D65 (or the only one given), as the raw decoder sees it. */

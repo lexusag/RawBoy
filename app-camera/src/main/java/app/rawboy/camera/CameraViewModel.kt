@@ -20,6 +20,7 @@ import app.rawboy.auto.analysis.SceneAnalyzer
 import app.rawboy.auto.analysis.SceneStats
 import app.rawboy.auto.looks.LookApplier
 import app.rawboy.camera.capture.CameraController
+import app.rawboy.camera.platform.ActivePlatform
 import app.rawboy.camera.debug.DebugProbe
 import app.rawboy.camera.capture.FlashMode
 import app.rawboy.camera.capture.LocationTracker
@@ -95,7 +96,10 @@ class LastShot(val uri: Uri, val thumbnail: Bitmap)
  */
 class CameraViewModel(application: Application) : AndroidViewModel(application) {
     private val app get() = getApplication<Application>()
-    val controller = CameraController(application)
+
+    /** This phone's platform profile; the only reader of [ActivePlatform], handed on explicitly. */
+    private val platform = ActivePlatform.profile
+    val controller = CameraController(application, platform)
 
     /** The scene is dark enough for [BurstMode.AUTO] to merge frames ([LowLight]); follows the preview's exposure. */
     val lowLight = controller.frames

@@ -26,9 +26,10 @@ object AutoTone {
     /**
      * RawBoy Camera ([phoneAe]): the key a phone's AE gives a normal scene, the neutral camera key above. The Pixel's AE
      * protects highlights for its own local tone mapping: a white bird or a window in the metered box took the whole
-     * frame 1-2 EV down. A key below this is lifted back up to it; a brighter one is kept.
+     * frame 1-2 EV down. A key below this is lifted back up to it; a brighter one is kept. Camera's long exposures
+     * aim for it too.
      */
-    private const val PHONE_KEY = 0.06f
+    const val PHONE_KEY = 0.06f
 
     /** Where the brightest 2% should sit, in EV below sensor clip, before exposure is raised. */
     private const val TARGET_P98 = -1.3f

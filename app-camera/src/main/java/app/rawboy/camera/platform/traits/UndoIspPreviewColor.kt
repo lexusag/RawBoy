@@ -13,8 +13,6 @@ import app.rawboy.color.Mat3
  * On the Pixel 9 Pro the preview's matrix is more saturated than the DNG's (~20-40% in reds), so a plain sRGB ->
  * Rec.2020 viewfinder didn't match the photo. A phone whose result reports an identity matrix while the ISP applies
  * its own (OnePlus 11) must not use this: it oversaturates the viewfinder.
- *
- * Same maths as `CameraController.previewToRec2020`, which this replaces when the controller reads the profile.
  */
 object UndoIspPreviewColor : PreviewColor {
     override fun toRec2020(input: PreviewColorInput): DoubleArray? {
