@@ -187,6 +187,7 @@ final class AutoViewModel: ObservableObject {
         if defaults.integer(forKey: AutoViewModel.exportBitsKey) == 8 { s.tiffBits = 8 }
         s.photoFrame = defaults.string(forKey: AutoViewModel.exportPhotoFrameKey)
             .flatMap(PhotoFrame.init(rawValue:)) ?? s.photoFrame
+        s.filmScan = defaults.bool(forKey: AutoViewModel.exportScanKey)
         s.dateStampFormat = defaults.string(forKey: AutoViewModel.exportDateStampFormatKey)
             .flatMap(DateStampFormat.init(rawValue:)) ?? s.dateStampFormat
         s.dateStampStyle = defaults.string(forKey: AutoViewModel.exportDateStampStyleKey)
@@ -204,6 +205,7 @@ final class AutoViewModel: ObservableObject {
     private static let exportSizeKey = "auto.exportMaxLongSide"
     private static let exportQualityKey = "auto.exportJpegQuality"
     private static let exportBitsKey = "auto.exportTiffBits"
+    private static let exportScanKey = "auto.exportFilmScan"
     private static let exportPhotoFrameKey = "auto.exportPhotoFrame"
     private static let exportDateStampFormatKey = "auto.exportDateStampFormat"
     private static let exportDateStampStyleKey = "auto.exportDateStampStyle"
@@ -533,6 +535,7 @@ final class AutoViewModel: ObservableObject {
         defaults.set(settings.jpegQuality, forKey: Self.exportQualityKey)
         defaults.set(settings.tiffBits, forKey: Self.exportBitsKey)
         defaults.set(settings.maxLongSide ?? 0, forKey: Self.exportSizeKey)
+        defaults.set(settings.filmScan, forKey: Self.exportScanKey)
         defaults.set(settings.photoFrame.rawValue, forKey: Self.exportPhotoFrameKey)
         defaults.set(settings.dateStampFormat.rawValue, forKey: Self.exportDateStampFormatKey)
         defaults.set(settings.dateStampStyle.rawValue, forKey: Self.exportDateStampStyleKey)
@@ -1030,6 +1033,11 @@ final class AutoViewModel: ObservableObject {
         for i in photos.indices where photos[i].status == .exported && (ids?.contains(photos[i].id) ?? true) {
             photos[i].status = .ready
         }
+    }
+
+    /** Some photo of the batch is developed as film (Film mode, or a preset with a film stock): the Film scan option applies to it. */
+    var hasFilmPhotos: Bool {
+        photos.contains { p in p.params.map { $0.film != nil && $0.filmAmount > 0 } ?? false }
     }
 
     /** Exports the detail view's photo from the already decoded image. */

@@ -30,6 +30,9 @@ let proHelp = [
         HelpItem("Lens blur", "Masks, Adjust tab: a round lens-like defocus inside the mask (up to 3% of the long side). Small bright lights become clean discs, and the sharp part next to the mask is never smeared; it follows the mask, so paint or draw the background and leave the subject out."),
         HelpItem("Healing brush", "Heal in the top bar, or B: click a dust spot, blemish or small object to heal it away, drag to paint a stroke (zoom to 100% for the fine ones). The tone is filled in from around it and the detail borrowed from a nearby clean area; Choose source lets you drag a dashed copy onto the area to clone from. Size and Feather set the next strokes; [ and ] change the size, Delete removes the selected stroke, Esc or Return finishes. Strokes belong to the photo (the sidecar keeps them, presets don't)."),
     ]),
+    HelpSection("Export", [
+        HelpItem("Film scan 1.5×", "In the export sheet, shown while a film look is on (the Film tone mapper in Pro, Film photos in Auto): renders the photo 1.5× larger, upscaled with sharp edges and the film grain on a finer pitch, like a finer scan of the negative. The size setting doesn't apply to it."),
+    ]),
     HelpSection("Packer", [
         HelpItem("Pack Raws… (⇧⌘P)", "Opens RawBoy Packer, which re-saves raws and DNGs as smaller DNGs: drop raws or folders, choose Smallest files, Maximum compatibility or Tiny copies, and Pack. The summary under the settings says what each choice does and which programs open the result. Files are saved next to the originals (or in a folder you choose), never over an existing file; the originals are never changed."),
     ]),

@@ -8,6 +8,8 @@ struct ExportDialog: View {
     /** RawBoy Desktop: where the file goes (a section with the folder choice) and the line saying so. */
     var destination: AnyView?
     var destinationNote: String?
+    /** A film look is on (the Film tone mapper): the Film scan option applies. */
+    var filmLook = false
 
     @State private var settings: ExportSettings
     @Environment(\.dismiss) private var dismiss
@@ -15,7 +17,8 @@ struct ExportDialog: View {
     private static let sizes: [Int?] = [nil, 6000, 4000, 3000, 2048]
 
     init(initial: ExportSettings, sourceName: String, destination: AnyView? = nil, destinationNote: String? = nil,
-         onExport: @escaping (ExportSettings) -> Void) {
+         filmLook: Bool = false, onExport: @escaping (ExportSettings) -> Void) {
+        self.filmLook = filmLook
         self.sourceName = sourceName
         self.onExport = onExport
         self.destination = destination
@@ -50,11 +53,21 @@ struct ExportDialog: View {
                     }
                     .pickerStyle(.segmented)
                 }
+                if filmLook {
+                    Picker("Film scan", selection: $settings.filmScan) {
+                        Text("Off").tag(false)
+                        Text("1.5× size").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    Text("Upscales the photo and grows the grain on a finer pitch, as a finer scan of the negative. The size below doesn't apply.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 Picker("Size", selection: $settings.maxLongSide) {
                     ForEach(Self.sizes, id: \.self) { s in
                         Text(s.map { "\($0) px long side" } ?? "Full resolution").tag(s)
                     }
                 }
+                .disabled(filmLook && settings.filmScan)
                 ExportFrameSections(settings: $settings)
                 if let destination { Section { destination } }
                 Section {

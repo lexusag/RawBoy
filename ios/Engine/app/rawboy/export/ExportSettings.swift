@@ -24,6 +24,11 @@ public struct ExportSettings: Equatable, Sendable {
     /** Light sharpening after the downscale (0 = none, ~0.5 subtle); only when maxLongSide makes the image smaller. */
     public var downscaleSharpen: Float = 0
     /**
+     * Film mode only: render 1.5x larger, upscaling the photo and growing the film grain on the finer pitch (ScanScale); the
+     * size setting then doesn't apply. Not stored in a photo's edits or sidecar (the web keeps it with the export settings).
+     */
+    public var filmScan = false
+    /**
      * Optional film-style date stamp (e.g. `'26 11 13`) imprinted in the bottom-right corner of the exported image.
      * Empty string = no date stamp (unless [photoFrame] is `.dateStamp`, which resolves it at export time).
      */
@@ -58,6 +63,7 @@ public struct ExportSettings: Equatable, Sendable {
 
     public init(format: ExportFormat = .jpeg, jpegQuality: Int = 92, tiffBits: Int = 16,
                 jpegEncoder: JpegEncoder = .system, maxLongSide: Int? = nil, downscaleSharpen: Float = 0,
+                filmScan: Bool = false,
                 dateStamp: String = "", dateStampStyle: DateStampStyle = .classic,
                 pentax645: Pentax645Info? = nil, monochromeImprint: Bool = false,
                 photoFrame: PhotoFrame = .none, dateStampFormat: DateStampFormat = .dmy,
@@ -72,6 +78,7 @@ public struct ExportSettings: Equatable, Sendable {
         self.jpegEncoder = jpegEncoder
         self.maxLongSide = maxLongSide
         self.downscaleSharpen = downscaleSharpen
+        self.filmScan = filmScan
         self.dateStamp = dateStamp
         self.dateStampStyle = dateStampStyle
         self.pentax645 = pentax645
@@ -88,8 +95,8 @@ public struct ExportSettings: Equatable, Sendable {
     }
 
     /** Pixel dimensions a [width] x [height] image will be saved at (including film rebate border when enabled). */
-    public func outputSize(_ width: Int, _ height: Int) -> (Int, Int) {
-        let photoSize = BandDownscaler.outputSize(width, height, maxLongSide: maxLongSide)
+    public func outputSize(_ width: Int, _ height: Int, scan: Bool = false) -> (Int, Int) {
+        let photoSize = scan ? ScanScale.size(width, height) : BandDownscaler.outputSize(width, height, maxLongSide: maxLongSide)
         let style: FilmFrameStyle? = pentax645?.style ?? {
             switch photoFrame {
             case .pentax645: return .pentax645
@@ -1717,6 +1724,7 @@ public enum ExportSettingsStore {
             format: defaults.string(forKey: "export.format").flatMap(ExportFormat.init(rawValue:)) ?? d.format,
             jpegQuality: (defaults.object(forKey: "export.jpegQuality") as? Int ?? d.jpegQuality).clamped(1, 100),
             tiffBits: defaults.integer(forKey: "export.tiffBits") == 8 ? 8 : 16,
+            filmScan: defaults.bool(forKey: "export.filmScan"),
             dateStampStyle: defaults.string(forKey: "export.dateStampStyle").flatMap(DateStampStyle.init(rawValue:)) ?? d.dateStampStyle,
             photoFrame: defaults.string(forKey: "export.photoFrame").flatMap(PhotoFrame.init(rawValue:)) ?? d.photoFrame,
             dateStampFormat: defaults.string(forKey: "export.dateStampFormat").flatMap(DateStampFormat.init(rawValue:)) ?? d.dateStampFormat,
@@ -1732,6 +1740,7 @@ public enum ExportSettingsStore {
         defaults.set(settings.jpegQuality, forKey: "export.jpegQuality")
         defaults.set(settings.tiffBits, forKey: "export.tiffBits")
         defaults.set(settings.photoFrame.rawValue, forKey: "export.photoFrame")
+        defaults.set(settings.filmScan, forKey: "export.filmScan")
         defaults.set(settings.dateStampFormat.rawValue, forKey: "export.dateStampFormat")
         defaults.set(settings.dateStampStyle.rawValue, forKey: "export.dateStampStyle")
         defaults.set(settings.timeStampFormat.rawValue, forKey: "export.timeStampFormat")

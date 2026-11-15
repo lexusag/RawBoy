@@ -472,6 +472,15 @@ struct ExportSheet: View {
                         }
                         .pickerStyle(.segmented)
                     }
+                    if vm.hasFilmPhotos {
+                        Picker("Film scan", selection: settingsBinding.filmScan) {
+                            Text("Off").tag(false)
+                            Text("1.5× size").tag(true)
+                        }
+                        .pickerStyle(.segmented)
+                        Text("Film photos only: upscaled, with finer grain. The size below doesn't apply to them.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     Picker("Size", selection: settingsBinding.maxLongSide) {
                         ForEach(AutoViewModel.exportSizes, id: \.self) { size in
                             Text(size.map { "\($0) px" } ?? "Original").tag(size)

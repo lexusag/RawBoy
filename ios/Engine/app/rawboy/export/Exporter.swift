@@ -54,6 +54,8 @@ public final class Exporter {
     private static let tileHeight = 512
 
     private var gpu: ExportGpu?
+    /** The export in progress is a film scan (see ExportSettings.filmScan). */
+    private var scanExport = false
 
     public init() {}
 
@@ -68,8 +70,12 @@ public final class Exporter {
         let name = naming.fileName(OutputNaming.baseNameOf(sourceName), settings.format.fileExtension)
         let url = directory.appendingPathComponent(name)
         try? FileManager.default.removeItem(at: url)
-        let size = BandDownscaler.outputSize(params.lens.outputWidth, params.lens.outputHeight,
-                                             maxLongSide: settings.maxLongSide)
+        // Film scan: Film mode rendered 1.5x larger (the size setting doesn't apply to it).
+        let scan = settings.filmScan && ScanScale.applies(params)
+        scanExport = scan
+        let size = scan
+            ? ScanScale.size(params.lens.outputWidth, params.lens.outputHeight)
+            : BandDownscaler.outputSize(params.lens.outputWidth, params.lens.outputHeight, maxLongSide: settings.maxLongSide)
         let isMono = params.saturation <= -100 || (params.lutAmount >= 100 && Looks.isMonochromeLut(params.lut?.id))
         let resolved = settings.resolveFrame(image: image, exifDate: settings.captureDate ?? image.metadata.dateTimeOriginal, monochrome: isMono)
         let frameLayout = resolved.pentax645.map { Pentax645Frame.layout(photoWidth: size.0, photoHeight: size.1, style: $0.style) }
@@ -215,6 +221,11 @@ public final class Exporter {
                 }
             }
         }
+        if scanExport {
+            try renderBands(image, params, 1, onProgress, stamped, scale: ScanScale.scale)
+            try emitBottom()
+            return
+        }
         if size.0 == w && size.1 == h {
             try renderBands(image, params, 1, onProgress, stamped)
             try emitBottom()
@@ -236,10 +247,12 @@ public final class Exporter {
      */
     private func renderBands(_ image: RawImage, _ params: ShaderParams, _ minGrainPx: Float,
                              _ onProgress: (Float) -> Void,
-                             _ consume: (Int, Int, UnsafeMutablePointer<UInt16>) throws -> Void) throws {
-        // Output size: rotation by 90 degrees swaps width and height.
-        let w = params.lens.outputWidth
-        let h = params.lens.outputHeight
+                             _ consume: (Int, Int, UnsafeMutablePointer<UInt16>) throws -> Void,
+                             scale: Float = 1) throws {
+        // Output size: rotation by 90 degrees swaps width and height. [scale] > 1 (film scan): the tiles are in output
+        // pixels, [scale] times the photo's; each one's source region is upscaled first.
+        let (w, h) = scale > 1 ? ScanScale.size(params.lens.outputWidth, params.lens.outputHeight)
+            : (params.lens.outputWidth, params.lens.outputHeight)
         let tilesX = (w + Self.tileWidth - 1) / Self.tileWidth
         let tilesY = (h + Self.tileHeight - 1) / Self.tileHeight
         var input = [UInt16]()
@@ -262,7 +275,17 @@ public final class Exporter {
                 let cols = min(Self.tileWidth, w - x)
                 // Source pixels this tile needs: lens geometry plus the spatial effects' neighbourhood.
                 let out = PixelRect(x: x, y: y, width: cols, height: rows)
-                let src = params.lens.sourceBounds(out, margin: params.spatialMargin)
+                var src: PixelRect
+                if scale > 1 {
+                    // The photo's pixels under this tile; a scan upscales them whole, so their edges are even (see render).
+                    let fx = Int((Float(x) / scale).rounded(.down)), fy = Int((Float(y) / scale).rounded(.down))
+                    let base = PixelRect(x: fx, y: fy, width: Int((Float(x + cols) / scale).rounded(.up)) - fx,
+                                         height: Int((Float(y + rows) / scale).rounded(.up)) - fy)
+                    src = Self.evenRect(params.lens.sourceBounds(base, margin: params.spatialMargin + ScanScale.margin),
+                                        image.width, image.height)
+                } else {
+                    src = params.lens.sourceBounds(out, margin: params.spatialMargin)
+                }
                 let count = src.width * src.height * 3
                 if input.count < count { input = [UInt16](repeating: 0, count: count) }
                 let t0 = Date()
@@ -270,7 +293,7 @@ public final class Exporter {
                     image.copyTile(x: src.x, y: src.y, w: src.width, h: src.height, out: inBuf.baseAddress!)
                     try output.withUnsafeMutableBufferPointer { outBuf in
                         try developer.render(params, input: inBuf.baseAddress!, inRect: src, out: out,
-                                             output: outBuf.baseAddress!)
+                                             output: outBuf.baseAddress!, scale: scale)
                     }
                 }
                 renderTime += Date().timeIntervalSince(t0)
@@ -286,6 +309,14 @@ public final class Exporter {
         }
         let total = Date().timeIntervalSince(start)
         Self.log.debug("export \(w)x\(h): develop \(Int(renderTime * 1000)) ms, encode/write \(Int((total - renderTime) * 1000)) ms")
+    }
+
+    /** [r] grown to even x, y, width and height inside a [maxW] x [maxH] image (an odd last column or row is dropped). */
+    static func evenRect(_ r: PixelRect, _ maxW: Int, _ maxH: Int) -> PixelRect {
+        let x0 = r.x - (r.x & 1), y0 = r.y - (r.y & 1)
+        let x1 = min(r.x + r.width + ((r.x + r.width) & 1), maxW - (maxW & 1))
+        let y1 = min(r.y + r.height + ((r.y + r.height) & 1), maxH - (maxH & 1))
+        return PixelRect(x: x0, y: y0, width: x1 - x0, height: y1 - y0)
     }
 
     static func to8(_ v: UInt16) -> UInt8 { UInt8((Int(v) * 255 + 32767) / 65535) }
