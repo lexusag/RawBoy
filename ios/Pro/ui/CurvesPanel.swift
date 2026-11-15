@@ -175,6 +175,11 @@ private final class CurveTouchView: NSView {
 
     override var isFlipped: Bool { true }
 
+    override func isAccessibilityElement() -> Bool { !points.isEmpty }
+    override func accessibilityRole() -> NSAccessibility.Role? { .group }
+    override func accessibilityLabel() -> String? { "Tone curve points" }
+    override func accessibilityHelp() -> String? { "Drag a point with the mouse or trackpad; the Reset button puts the curve back." }
+
     override func hitTest(_ point: NSPoint) -> NSView? {
         let p = convert(point, from: superview)
         guard bounds.contains(p), !points.isEmpty else { return nil }

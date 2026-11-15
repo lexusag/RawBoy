@@ -639,6 +639,12 @@ final class MaskTouchView: NSView {
 
     override var isFlipped: Bool { true }
 
+    // VoiceOver: the handles are for the pointer; the panels' sliders do the same from the keyboard.
+    override func isAccessibilityElement() -> Bool { inputs.map { i in i.layers.contains { $0.id == i.selectedId } } ?? false }
+    override func accessibilityRole() -> NSAccessibility.Role? { .group }
+    override func accessibilityLabel() -> String? { "Handles of the selected shape" }
+    override func accessibilityHelp() -> String? { "Drag a handle with the mouse or trackpad. The sliders in the panel change the same values from the keyboard." }
+
     /** A click that brings the window forward also grabs the handle under it (the system slider does the same). */
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 

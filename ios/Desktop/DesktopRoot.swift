@@ -70,14 +70,3 @@ struct DesktopRoot: View {
         }
     }
 }
-
-/** Window details SwiftUI has no modifier for. */
-private struct WindowSetup: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        let v = NSView()
-        DispatchQueue.main.async { v.window?.acceptsMouseMovedEvents = true }
-        return v
-    }
-
-    func updateNSView(_ view: NSView, context: Context) {}
-}

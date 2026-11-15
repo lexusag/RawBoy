@@ -99,7 +99,7 @@ struct ControlsPanel: View {
             // A fixed label width (as the sliders') so the row doesn't re-flow when the segments or the stock name change.
             Text("Tone mapper").font(.subheadline).lineLimit(1).minimumScaleFactor(0.8).frame(width: 104, alignment: .leading)
             // nil = Film: negative + print on a stock, in place of the tone mapper (also what Auto's Film mode sets).
-            Picker("", selection: Binding<ToneMapper?>(
+            Picker("Tone mapper", selection: Binding<ToneMapper?>(
                 get: { params.film == nil ? params.toneMapper : nil },
                 set: { t in if let t { onToneMapper(t) } else { onFilm() } })) {
                 ForEach(ToneMapper.allCases, id: \.self) { Text($0.label).tag(Optional($0)) }
@@ -380,8 +380,7 @@ private struct LutRow: View {
             if loading { ProgressView().controlSize(.small) }
         }
         .padding(.vertical, 6)
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onTap)
+        .tapButton(selected: selected, hint: "Applies this LUT", action: onTap)
     }
 }
 
@@ -392,6 +391,7 @@ struct SectionLabel: View {
 
     var body: some View {
         Text(text).font(.caption.weight(.semibold)).foregroundStyle(Color.accentColor).padding(.top, 12).padding(.bottom, 2)
+            .accessibilityAddTraits(.isHeader)
     }
 }
 
@@ -496,14 +496,19 @@ struct ParamSlider: View {
                 .contentShape(Rectangle())
                 .onTapGesture { onLabelTap?() }
                 .allowsHitTesting(onLabelTap != nil)
+                .accessibilityHidden(true)  // the slider carries the label
             slider.sliderWheel(range, value: { value }, onChange)
+                .accessibilityLabel(label)
+                .accessibilityValue(format(value))
+                .accessibilityHint("Double-tap the slider or use Reset to go back to \(format(defaultValue))")
+                .accessibilityAction(named: "Reset") { onChange(defaultValue) }
             Text(format(value))
                 .font(.subheadline.monospacedDigit())
                 .foregroundStyle(value == defaultValue ? Color.secondary : Color.accentColor)
                 .lineLimit(1)
                 .frame(width: 74, alignment: .trailing)
-                .contentShape(Rectangle())
-                .onTapGesture { onChange(defaultValue) }
+                .tapButton(hint: "Resets \(label)") { onChange(defaultValue) }
+                .accessibilityLabel("Reset \(label), now \(format(value))")
         }
         .frame(height: 40)
     }

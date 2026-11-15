@@ -634,6 +634,7 @@ struct EditorTopBar: View {
                 .buttonStyle(ToolButtonStyle(name: "Light leaks and effects", tip: $tip))
                 .disabled(!enabled)
                 .accessibilityLabel("Light leaks and effects")
+                .accessibilityAddTraits(mode == .leaks || mode == .fx ? .isSelected : [])
                 #if os(macOS)
                 // The iPhone's row is full: the healing brush is on the Mac's bar (and B) for now.
                 modeButton(.heal, "bandage", "Heal", "Healing brush (B)")
@@ -693,7 +694,7 @@ struct EditorTopBar: View {
         .task(id: tip) {
             guard tip != nil else { return }
             try? await Task.sleep(for: .seconds(1.5))
-            withAnimation { tip = nil }
+            Motion.animate { tip = nil }
         }
         .zIndex(1)
     }
@@ -705,6 +706,7 @@ struct EditorTopBar: View {
         .buttonStyle(ToolButtonStyle(name: name, tip: $tip))
         .disabled(!enabled)
         .accessibilityLabel(name)
+        .accessibilityAddTraits(mode == target ? .isSelected : [])
     }
 
     private func tool(_ icon: String, _ label: String, _ name: String, action: @escaping () -> Void) -> some View {
@@ -746,7 +748,7 @@ struct EditorTopBar: View {
                 .contentShape(Rectangle())
                 .onTapGesture { configuration.trigger() }
                 .onLongPressGesture(minimumDuration: 0.5) {
-                    withAnimation { tip = name }
+                    Motion.animate { tip = name }
                 } onPressingChanged: { pressed = $0 }
         }
     }

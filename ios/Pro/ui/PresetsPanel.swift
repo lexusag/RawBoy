@@ -152,6 +152,16 @@ struct PresetsPanel: View {
                 vm.applyPreset(p)
             }
         }
+        .accessibilityElement(children: .contain)  // the options menu stays reachable inside the row
+        .accessibilityLabel(p.name)
+        .accessibilityAddTraits(selecting && selected.contains(p.id) ? .isSelected : [])
+        .accessibilityAction(named: selecting ? "Select" : "Apply") {
+            if selecting {
+                if selected.contains(p.id) { selected.remove(p.id) } else { selected.insert(p.id) }
+            } else {
+                vm.applyPreset(p)
+            }
+        }
         .contextMenu {
             if !selecting {
                 Button {

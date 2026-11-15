@@ -20,6 +20,7 @@ let proHelp = [
     ]),
     HelpSection("Sliders and tools", [
         HelpItem("Double-click a slider", "Reset it (clicking its value does too)."),
+        HelpItem("VoiceOver and the keyboard", "Every slider says its name and value (swipe up or down to change it; Reset in the actions goes back to its default), the chips for masks, leaks, effects, looks and LUTs are buttons that say when they are selected, and the photo is announced as the developed photo. With Full Keyboard Access, Tab moves between controls with a focus ring and Space presses one. Reduce Motion stops the fades and scrolls, and Increase Contrast draws chips with a firmer outline. The handles on the photo are for the pointer; the sliders in the panel do the same from the keyboard."),
         HelpItem("Mouse wheel over a slider", "Move it without clicking; with Shift in big steps, with ⌘ in fine ones. A wheel that is scrolling the panel keeps scrolling it."),
         HelpItem("Pick white balance", "Color tab: click something neutral grey and Temperature and Tint make it grey. Auto WB solves them for a frame you drag over the photo; Reset WB returns to as shot."),
         HelpItem("Curves", "Light tab: click the curve to add a point, drag it, double-click it to remove."),

@@ -2,6 +2,7 @@
 import AppKit
 import Foundation
 import ImageIO
+import MetalKit
 import RawBoyEngine
 
 /**
@@ -98,6 +99,39 @@ enum AutoBatchProbe {
                 }
                 try? await Task.sleep(for: .milliseconds(600))
                 log("after \(step): \(state())")
+            }
+        }
+    }
+
+    /**
+     * RAWBOY_PROBE_SCREEN=1: once a photo is open, prints each visible window's frame and screen, and each photo view's
+     * colour space, backing scale and drawable size (multi-display checks).
+     */
+    static func screenProbeIfRequested(_ model: DesktopModel) {
+        guard ProcessInfo.processInfo.environment["RAWBOY_PROBE_SCREEN"] != nil else { return }
+        Task {
+            while !model.vm.state.hasImage { try? await Task.sleep(for: .milliseconds(300)) }
+            try? await Task.sleep(for: .seconds(3))
+            @MainActor func views(_ v: NSView) {
+                if let m = v as? MTKView {
+                    let space = (m.layer as? CAMetalLayer)?.colorspace?.name.map { $0 as String } ?? "none"
+                    log("preview view: colorspace \(space), screen \(m.window?.screen?.localizedName ?? "-"), scale \(m.window?.backingScaleFactor ?? 0), drawable \(m.drawableSize)")
+                }
+                v.subviews.forEach(views)
+            }
+            for w in NSApp.windows where w.isVisible {
+                log("window \(w.title): frame \(w.frame), screen \(w.screen?.frame ?? .zero), screens \(NSScreen.screens.map(\.frame))")
+                if let c = w.contentView { views(c) }
+            }
+            // RAWBOY_PROBE_SCREEN=offscreen: the window is put where a disconnected display was, then the system's "screens
+            // changed" notice is posted: it must come back onto a screen.
+            if ProcessInfo.processInfo.environment["RAWBOY_PROBE_SCREEN"] == "offscreen", let w = NSApp.windows.first(where: { $0.isVisible }) {
+                w.setFrame(NSRect(x: 9000, y: 200, width: 1280, height: 860), display: true)
+                log("moved off screen: \(w.frame), on a screen \(NSScreen.screens.contains { $0.frame.intersects(w.frame) })")
+                NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: NSApp)
+                try? await Task.sleep(for: .seconds(1))
+                log("after the screens changed: \(w.frame), on a screen \(NSScreen.screens.contains { $0.frame.intersects(w.frame) })")
+                if let c = w.contentView { views(c) }
             }
         }
     }

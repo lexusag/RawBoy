@@ -513,7 +513,8 @@ private struct LookChip: View {
                 .foregroundStyle(selected ? Color.accentColor : .primary)
         }
         .frame(width: Self.size)
-        .onTapGesture { vm.setLook(photo.id, look) }
+        .tapButton(selected: selected, hint: "Applies this look") { vm.setLook(photo.id, look) }
+        .accessibilityLabel(suggested.id == look.id ? "\(look.name), suggested" : look.name)
         // Keeps showing the previous thumbnail while a slider moves; re-renders once it rests.
         .task(id: "\(photo.id)|\(look.film ?? look.id)|\(photo.adjust)") {
             if !vm.hasCurrentLookThumbnail(photo.id, look) { try? await Task.sleep(nanoseconds: 400_000_000) }
