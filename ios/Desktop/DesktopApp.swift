@@ -49,6 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AutoBatchProbe.runIfRequested(model)
         AutoBatchProbe.openDetailIfRequested(model)
         AutoBatchProbe.mouseProbeIfRequested(model)
+        AutoBatchProbe.screenProbeIfRequested(model)
         AutoBatchProbe.selfTestIfRequested(model)
         AutoBatchProbe.packProbeIfRequested(model)
         #endif

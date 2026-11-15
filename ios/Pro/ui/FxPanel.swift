@@ -127,9 +127,8 @@ struct FxPanel: View {
         .font(.subheadline)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(Capsule().fill(selected ? Color.accentColor.opacity(0.3) : Color.clear))
-        .overlay(Capsule().stroke(selected ? Color.accentColor : Color.secondary.opacity(0.5)))
-        .onTapGesture { actions.onSelect(e.id) }
+        .chipStyle(selected: selected)
+        .tapButton(selected: selected, hint: "Selects this light effect") { actions.onSelect(e.id) }
         .contextMenu {
             Button(e.enabled ? "Hide" : "Show") { actions.onUpdate(e.id, true) { $0.enabled.toggle() } }
             Button("Delete", role: .destructive) { actions.onRemove(e.id) }

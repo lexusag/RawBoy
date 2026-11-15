@@ -42,7 +42,7 @@ public struct DevelopPreview: PlatformViewRepresentable {
     public func makeCoordinator() -> DevelopRenderer { DevelopRenderer() }
 
     private func make(_ coordinator: DevelopRenderer) -> MTKView {
-        let view = MTKView()
+        let view = PreviewView()
         coordinator.attach(view)
         view.autoResizeDrawable = true
         #if os(iOS)
@@ -74,5 +74,47 @@ public struct DevelopPreview: PlatformViewRepresentable {
     #else
     public func makeUIView(context: Context) -> MTKView { make(context.coordinator) }
     public func updateUIView(_ view: MTKView, context: Context) { update(view, context.coordinator) }
+    #endif
+}
+
+/**
+ * The MTKView the photo is drawn in. On the Mac it is tagged sRGB (the shader writes display-encoded sRGB), so the system
+ * converts to whichever display the window is on: without a colour space a wide-gamut screen would show the same numbers as
+ * its own primaries, over-saturated, and a window dragged to another display would keep that display's mistake. The view
+ * redraws when its window changes screen, backing scale or colour profile (it only draws on demand). VoiceOver reads it as
+ * the photo.
+ */
+final class PreviewView: MTKView {
+    #if os(macOS)
+    private var observers: [NSObjectProtocol] = []
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        (layer as? CAMetalLayer)?.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
+        observers.forEach(NotificationCenter.default.removeObserver)
+        observers = []
+        guard let window else { return }
+        for name in [NSWindow.didChangeScreenNotification, NSWindow.didChangeBackingPropertiesNotification,
+                     NSWindow.didChangeScreenProfileNotification] {
+            observers.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.autoResizeDrawable = true
+                    self?.needsDisplay = true
+                }
+            })
+        }
+    }
+
+    override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        needsDisplay = true
+    }
+
+    deinit { observers.forEach(NotificationCenter.default.removeObserver) }
+
+    override func isAccessibilityElement() -> Bool { true }
+    override func accessibilityRole() -> NSAccessibility.Role? { .image }
+    override func accessibilityLabel() -> String? { "Developed photo" }
+    override func accessibilityHelp() -> String? { "The photo with your edits. Zoom and pan with the pointer; the panels' sliders change it." }
     #endif
 }

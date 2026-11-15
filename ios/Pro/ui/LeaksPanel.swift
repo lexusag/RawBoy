@@ -107,9 +107,8 @@ struct LeaksPanel: View {
         .font(.subheadline)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(Capsule().fill(selected ? Color.accentColor.opacity(0.3) : Color.clear))
-        .overlay(Capsule().stroke(selected ? Color.accentColor : Color.secondary.opacity(0.5)))
-        .onTapGesture { actions.onSelect(l.id) }
+        .chipStyle(selected: selected)
+        .tapButton(selected: selected, hint: "Selects this light leak") { actions.onSelect(l.id) }
         .contextMenu {
             Button(l.enabled ? "Hide" : "Show") { actions.onUpdate(l.id, true) { $0.enabled.toggle() } }
             Button("Delete", role: .destructive) { actions.onRemove(l.id) }

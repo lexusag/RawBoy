@@ -56,8 +56,8 @@ public struct ValueSlider: View {
         Text(format(value))
             .font(.caption.monospacedDigit())
             .foregroundStyle(value == defaultValue ? Color.secondary : Color.accentColor)
-            .contentShape(Rectangle())
-            .onTapGesture { onChange(defaultValue) }
+            .tapButton(hint: "Resets \(label)") { onChange(defaultValue) }
+            .accessibilityLabel("Reset \(label), now \(format(value))")
     }
 
     @ViewBuilder private var slider: some View {
@@ -69,14 +69,22 @@ public struct ValueSlider: View {
             .simultaneousGesture(TapGesture(count: 2).onEnded { onChange(defaultValue) })
             .overlay { signedMark }
             .accessibilityLabel(label)
+            .accessibilityValue(format(value))
+            .accessibilityHint("Double-tap the slider or use Reset to go back to \(format(defaultValue))")
+            .accessibilityAction(named: "Reset") { onChange(defaultValue) }
         #else
-        if range.lowerBound < 0 && range.upperBound > 0 {
-            signedSlider
-        } else {
-            Slider(value: Binding(get: { Double(value.clamped(range)) }, set: { onChange(Float($0)) }),
-                   in: Double(range.lowerBound)...Double(range.upperBound))
-                .simultaneousGesture(TapGesture(count: 2).onEnded { onChange(defaultValue) })
+        Group {
+            if range.lowerBound < 0 && range.upperBound > 0 {
+                signedSlider
+            } else {
+                Slider(value: Binding(get: { Double(value.clamped(range)) }, set: { onChange(Float($0)) }),
+                       in: Double(range.lowerBound)...Double(range.upperBound))
+                    .simultaneousGesture(TapGesture(count: 2).onEnded { onChange(defaultValue) })
+            }
         }
+        .accessibilityLabel(label)
+        .accessibilityValue(format(value))
+        .accessibilityAction(named: "Reset") { onChange(defaultValue) }
         #endif
     }
 
@@ -207,8 +215,9 @@ public struct Toast: ViewModifier {
                     .padding(.horizontal, 16)
                     .transition(.opacity)
                     .task(id: message) {
+                        AccessibilityNotification.Announcement(message).post()  // VoiceOver reads it as it appears
                         try? await Task.sleep(nanoseconds: 3_500_000_000)
-                        withAnimation { self.message = nil }
+                        Motion.animate { self.message = nil }
                     }
             }
         }

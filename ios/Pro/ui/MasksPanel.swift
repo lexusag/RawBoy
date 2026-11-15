@@ -114,9 +114,8 @@ struct MasksPanel: View {
             .font(.subheadline)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(Capsule().fill(selected ? Color.accentColor.opacity(0.3) : Color.clear))
-            .overlay(Capsule().stroke(selected ? Color.accentColor : Color.secondary.opacity(0.5)))
-            .onTapGesture { actions.onSelect(l.id) }
+            .chipStyle(selected: selected)
+            .tapButton(selected: selected, hint: "Selects this mask") { actions.onSelect(l.id) }
             .contextMenu {
                 Button("Rename") {
                     renameText = l.name

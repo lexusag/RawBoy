@@ -13,6 +13,7 @@ struct PackerView: View {
         }
         .frame(minWidth: 820, minHeight: 560)
         .preferredColorScheme(.dark)
+        .background(WindowSetup())
         .overlay {
             if dropping {
                 RoundedRectangle(cornerRadius: 12).strokeBorder(Color.accentColor, lineWidth: 3).padding(6).allowsHitTesting(false)

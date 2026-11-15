@@ -229,7 +229,7 @@ struct GridScreen: View {
             // The keyboard focus stays in view.
             .onChange(of: vm.focusedId) { _, id in
                 if let id, let i = photos.firstIndex(where: { $0.id == id }), let row = rows.last(where: { $0.start <= i }) {
-                    withAnimation { scroll.scrollTo(photos[row.start].id) }
+                    Motion.animate { scroll.scrollTo(photos[row.start].id) }
                 }
             }
             }
@@ -239,29 +239,57 @@ struct GridScreen: View {
     private func cell(_ photo: AutoPhoto) -> some View {
         PhotoCell(photo: photo, next: vm.opening == photo.id, waiting: vm.export?.waiting.contains(photo.id) ?? false,
                   selected: selection.contains(photo.id), focused: vm.focusedId == photo.id)
-            .onTapGesture {
-                guard !exporting else { return }
-                vm.focusedId = photo.id
-                #if os(macOS)
-                // ⌘-click or ⇧-click selects, as in Finder; a plain click opens.
-                if NSEvent.modifierFlags.contains(.shift) {
-                    vm.selectRange(to: photo.id)  // from the last clicked photo to this one
-                    return
-                }
-                if NSEvent.modifierFlags.contains(.command) {
-                    if selection.contains(photo.id) { selection.remove(photo.id) } else { selection.insert(photo.id) }
-                    vm.selectionAnchor = photo.id
-                    return
-                }
-                vm.selectionAnchor = photo.id
-                #endif
-                if selecting {
-                    if selection.contains(photo.id) { selection.remove(photo.id) } else { selection.insert(photo.id) }
-                } else {
-                    vm.openFromGrid(photo.id)
-                }
-            }
+            .onTapGesture { activate(photo) }
             .onLongPressGesture { if !exporting { selection.insert(photo.id) } }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(photo.name)
+            .accessibilityValue(Self.spokenState(photo, selected: selection.contains(photo.id)))
+            .accessibilityHint(selecting ? "Selects or deselects the photo" : "Opens the photo")
+            .accessibilityAddTraits(selection.contains(photo.id) ? [.isButton, .isSelected] : .isButton)
+            .accessibilityAction { activate(photo) }
+            .accessibilityAction(named: selection.contains(photo.id) ? "Deselect" : "Select") {
+                if selection.contains(photo.id) { selection.remove(photo.id) } else { selection.insert(photo.id) }
+            }
+    }
+
+    /** What VoiceOver adds to a photo's name: where it is in the analysis, its look, and whether it is selected. */
+    private static func spokenState(_ photo: AutoPhoto, selected: Bool) -> String {
+        var parts: [String] = []
+        switch photo.status {
+        case .queued: parts.append("waiting to be analysed")
+        case .analyzing: parts.append("being analysed")
+        case .exporting: parts.append("being saved")
+        case .exported: parts.append("saved")
+        case .failed: parts.append("failed: \(photo.error ?? "unknown error")")
+        case .ready: break
+        }
+        if photo.analysis != nil { parts.append("look \(photo.lookName)") }
+        if selected { parts.append("selected") }
+        return parts.joined(separator: ", ")
+    }
+
+    /** A tap or a VoiceOver activation: opens the photo, or selects it (⇧ and ⌘ select like Finder on the Mac). */
+    private func activate(_ photo: AutoPhoto) {
+        guard !exporting else { return }
+        vm.focusedId = photo.id
+        #if os(macOS)
+        // ⌘-click or ⇧-click selects, as in Finder; a plain click opens.
+        if NSEvent.modifierFlags.contains(.shift) {
+            vm.selectRange(to: photo.id)  // from the last clicked photo to this one
+            return
+        }
+        if NSEvent.modifierFlags.contains(.command) {
+            if selection.contains(photo.id) { selection.remove(photo.id) } else { selection.insert(photo.id) }
+            vm.selectionAnchor = photo.id
+            return
+        }
+        vm.selectionAnchor = photo.id
+        #endif
+        if selecting {
+            if selection.contains(photo.id) { selection.remove(photo.id) } else { selection.insert(photo.id) }
+        } else {
+            vm.openFromGrid(photo.id)
+        }
     }
 
     @ToolbarContentBuilder
@@ -351,7 +379,7 @@ private struct PhotoCell: View {
                         .saturation(waiting ? 0 : 1)
                         .brightness(waiting ? -0.12 : 0)
                         .contrast(waiting ? 0.75 : 1)
-                        .animation(.easeOut(duration: 0.6), value: waiting)
+                        .animation(Motion.easeOut(0.6), value: waiting)
                 }
                 switch photo.status {
                 case .queued: Badge(text: next ? "Next" : "Waiting")
