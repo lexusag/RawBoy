@@ -81,7 +81,12 @@ public enum SkinSegmenter {
             face[i] = min(1, max(core[i], capped)) * soft[i]
         }
         // Edges snap to the photo (jaw, hairline), as the web's guided filter does for the model's mask.
-        let gray = (0..<(w * h)).map { 0.2126 * rgb[$0 * 3] + 0.7152 * rgb[$0 * 3 + 1] + 0.0722 * rgb[$0 * 3 + 2] }
+        // Typed loop: the one-line map timed out the type checker on CI's Xcode.
+        var gray = [Float](repeating: 0, count: w * h)
+        for i in gray.indices {
+            let r: Float = rgb[i * 3], g: Float = rgb[i * 3 + 1], b: Float = rgb[i * 3 + 2]
+            gray[i] = 0.2126 * r + 0.7152 * g + 0.0722 * b
+        }
         face = guidedFilter(gray, face, w, h, radius: 3, eps: 1e-3)
 
         var body = [Float](repeating: 0, count: w * h)
