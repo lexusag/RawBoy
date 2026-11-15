@@ -55,6 +55,16 @@ public enum XmpSidecar {
         try setField(text ?? empty, "tiff:Orientation", "tiff", tiffNS, orientation.map(String.init))
     }
 
+    /// A photo's RawBoy Auto settings (`rawboy:Auto`, escaped `AutoSidecar` JSON) in a sidecar's text, or nil.
+    public static func readAuto(_ text: String) -> String? {
+        fieldValue(text, "rawboy:Auto").flatMap { $0.isEmpty ? nil : unescapeXml($0) }
+    }
+
+    /// [text] with RawBoy's Auto settings set to [json] (nil removes them); the other fields stay as they are.
+    public static func writeAuto(_ text: String?, _ json: String?) throws -> String {
+        try setField(text ?? empty, "rawboy:Auto", "rawboy", rawboyNS, json.map(escapeXml))
+    }
+
     /// RawBoy's edits (`rawboy:Develop`, escaped `Edits` JSON) in a sidecar's text, or nil.
     public static func readDevelop(_ text: String) -> String? {
         fieldValue(text, "rawboy:Develop").flatMap { $0.isEmpty ? nil : unescapeXml($0) }
@@ -234,6 +244,19 @@ public struct PhotoSidecar: Sendable {
 
     /// RawBoy's edits JSON in the sidecar (`rawboy:Develop`), or nil.
     public func readDevelop() -> String? { readText().flatMap(XmpSidecar.readDevelop) }
+
+    /// RawBoy Auto's settings JSON in the sidecar (`rawboy:Auto`), or nil.
+    public func readAuto() -> String? { readText().flatMap(XmpSidecar.readAuto) }
+
+    /// As `writeDevelop`, for RawBoy Auto's settings (`rawboy:Auto`).
+    public func writeAuto(_ json: String?) throws {
+        let url = self.url
+        let old = try? String(contentsOf: url, encoding: .utf8)
+        if old == nil && json == nil { return }
+        let out = try XmpSidecar.writeAuto(old, json)
+        if out == old { return }
+        try Data(out.utf8).write(to: url, options: .atomic)
+    }
 
     /// The sidecar's `tiff:Orientation`, or nil.
     public func readOrientation() -> Int? { readText().flatMap(XmpSidecar.readOrientation) }

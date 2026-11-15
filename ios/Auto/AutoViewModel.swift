@@ -6,9 +6,6 @@ import UIKit
 /** Where a photo is in the batch. */
 enum PhotoStatus { case queued, analyzing, ready, failed, exporting, exported }
 
-/** Which strip the Look tab shows: the LUT looks ([Looks]) or film stocks rendered as negative + print ([FilmLooks]). */
-enum LookMode: String { case looks, film }
-
 /**
  * One photo of the batch. Only small whole-image copies are kept (about 3 MB);
  * the full-resolution raw is decoded again for the detail view and for export.
