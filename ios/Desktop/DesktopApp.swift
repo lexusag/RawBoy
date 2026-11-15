@@ -17,6 +17,11 @@ struct RawBoyDesktopApp: App {
         }
         .defaultSize(width: 1280, height: 860)
         .commands { DesktopCommands(model: model) }
+        // RawBoy Packer: raws to smaller DNGs, in a window of its own (⇧⌘P).
+        Window("RawBoy Packer", id: "packer") {
+            PackerView(model: PackerModel.shared).tint(DesktopTheme.amber)
+        }
+        .defaultSize(width: 980, height: 700)
     }
 }
 
@@ -45,6 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AutoBatchProbe.openDetailIfRequested(model)
         AutoBatchProbe.mouseProbeIfRequested(model)
         AutoBatchProbe.selfTestIfRequested(model)
+        AutoBatchProbe.packProbeIfRequested(model)
         #endif
     }
 
@@ -81,6 +87,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 /** The menu bar: every shortcut of the editor, the way the web lists them in its help. */
 struct DesktopCommands: Commands {
     @ObservedObject var model: DesktopModel
+    @Environment(\.openWindow) private var openWindow
 
     private var state: EditorState { model.vm.state }
     private var proMode: Bool { model.mode == .pro }
@@ -94,6 +101,7 @@ struct DesktopCommands: Commands {
             Button(proMode ? "Open…" : "Add Photos…") { if proMode { model.openPanel() } else { model.addPhotosPanel() } }
                 .keyboardShortcut("o")
             Button("Add a Folder to Auto…") { model.addFolderPanel() }.keyboardShortcut("o", modifiers: [.command, .shift])
+            Button("Pack Raws…") { openWindow(id: "packer") }.keyboardShortcut("p", modifiers: [.command, .shift])
             Divider()
             Button(proMode ? "Export…" : "Export All…") {
                 if proMode { model.commands.send(.export) } else { auto.requestExport() }

@@ -30,6 +30,9 @@ let proHelp = [
         HelpItem("Lens blur", "Masks, Adjust tab: a round lens-like defocus inside the mask (up to 3% of the long side). Small bright lights become clean discs, and the sharp part next to the mask is never smeared; it follows the mask, so paint or draw the background and leave the subject out."),
         HelpItem("Healing brush", "Heal in the top bar, or B: click a dust spot, blemish or small object to heal it away, drag to paint a stroke (zoom to 100% for the fine ones). The tone is filled in from around it and the detail borrowed from a nearby clean area; Choose source lets you drag a dashed copy onto the area to clone from. Size and Feather set the next strokes; [ and ] change the size, Delete removes the selected stroke, Esc or Return finishes. Strokes belong to the photo (the sidecar keeps them, presets don't)."),
     ]),
+    HelpSection("Packer", [
+        HelpItem("Pack Raws… (⇧⌘P)", "Opens RawBoy Packer, which re-saves raws and DNGs as smaller DNGs: drop raws or folders, choose Smallest files, Maximum compatibility or Tiny copies, and Pack. The summary under the settings says what each choice does and which programs open the result. Files are saved next to the originals (or in a folder you choose), never over an existing file; the originals are never changed."),
+    ]),
     HelpSection("Auto mode", [
         HelpItem("Pro | Auto", "The switch in the title bar (⌘1, ⌘2) changes between the full editor for one photo and Auto, which develops a batch automatically: each photo gets a suggested look, adjustable one by one or all at once."),
         HelpItem("Adding photos", "⌘O (Add Photos…), ⇧⌘O (a folder), or drop photos and folders on the window; several photos or a folder opened from the Finder or with --auto go to Auto too. Photos are used in place, never copied."),

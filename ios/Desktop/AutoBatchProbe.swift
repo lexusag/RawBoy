@@ -170,6 +170,58 @@ enum AutoBatchProbe {
         NSApp.terminate(nil)
     }
 
+    /**
+     * RAWBOY_PACK_PROBE=<file or folder>:...: copies them to a scratch folder, opens the Packer window (⇧⌘P), packs them in each
+     * format into the scratch folder with the real model, and prints timings and sizes (a screenshot can be taken meanwhile).
+     */
+    static func packProbeIfRequested(_ model: DesktopModel) {
+        guard let list = ProcessInfo.processInfo.environment["RAWBOY_PACK_PROBE"] else { return }
+        Task { await packProbe(list.split(separator: ":").map { URL(fileURLWithPath: String($0)) }) }
+    }
+
+    private static func packProbe(_ inputs: [URL]) async {
+        let fm = FileManager.default
+        let scratch = fm.temporaryDirectory.appendingPathComponent("rawboy-pack-probe-\(UUID().uuidString.prefix(6))", isDirectory: true)
+        let src = scratch.appendingPathComponent("raws", isDirectory: true)
+        try? fm.createDirectory(at: src, withIntermediateDirectories: true)
+        for (f, _) in PackerModel.rawFiles(in: inputs) { try? fm.copyItem(at: f, to: src.appendingPathComponent(f.lastPathComponent)) }
+        log("pack scratch \(scratch.path)")
+        NSApp.activate(ignoringOtherApps: true)
+        if let window = NSApp.windows.first(where: { $0.isVisible }) {
+            for type in [NSEvent.EventType.keyDown, .keyUp] {
+                let e = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: [.command, .shift], timestamp: ProcessInfo.processInfo.systemUptime,
+                                         windowNumber: window.windowNumber, context: nil, characters: "P", charactersIgnoringModifiers: "p", isARepeat: false, keyCode: 35)!
+                NSApp.postEvent(e, atStart: false)
+            }
+        }
+        try? await Task.sleep(for: .seconds(2))
+        log("windows: \(NSApp.windows.filter(\.isVisible).map { $0.title })")
+        let model = PackerModel.shared
+        model.add([src])
+        while model.items.isEmpty || model.items.contains(where: { $0.status == .inspecting }) { try? await Task.sleep(for: .milliseconds(100)) }
+        log("listed \(model.items.count) files: \(model.items.map { "\($0.url.lastPathComponent) \($0.status)" })")
+        let originals = model.items.map(\.url)
+        if ProcessInfo.processInfo.environment["RAWBOY_PACK_HOLD"] != nil { return }  // leave the window open for a screenshot
+        for (tag, format) in [("small", PackFormat.small), ("lossless", .losslessJpeg), ("micro", .micro), ("losslessjxl", .losslessJxl)] {
+            model.settings.format = format
+            model.settings.maxSize = 2048
+            model.settings.nameSuffix = true
+            let t = Date()
+            model.start()
+            while model.running { try? await Task.sleep(for: .milliseconds(100)) }
+            let done = model.items.filter { $0.status == .done }
+            log("\(tag): \(String(format: "%.1f", Date().timeIntervalSince(t))) s, \(done.count) done, \(model.items.filter { $0.status == .failed }.count) failed, \(model.finished?.body ?? "-")")
+            for i in done { log("  \(i.url.lastPathComponent) -> \(i.output?.lastPathComponent ?? "-") \(i.size) -> \(i.outputSize)") }
+            // A second run gives new names, never overwriting.
+            model.clear()
+            model.add(originals)
+            while model.items.isEmpty || model.items.contains(where: { $0.status == .inspecting }) { try? await Task.sleep(for: .milliseconds(100)) }
+        }
+        let outputs = ((try? fm.contentsOfDirectory(atPath: src.path)) ?? []).filter { $0.contains("-small") || $0.contains("-lossless") || $0.contains("-micro") }.sorted()
+        log("outputs next to the sources: \(outputs)")
+        log("pack probe done")
+    }
+
     private static func log(_ s: String) {
         print("AUTOPROBE \(s)")
         fflush(stdout)
