@@ -23,9 +23,10 @@ public enum AutoAnalysis {
      * [onPreview], if given, gets the detail view's preview (PhotoSession.previewMaxDimension) made from the same
      * decode, so RawBoy Auto can show the photo before decoding it again.
      */
-    public static func analyze(_ url: URL, cache: AnalysisCache? = nil, onPreview: ((PreviewImage) -> Void)? = nil) throws -> Analysis {
+    public static func analyze(_ url: URL, cache: AnalysisCache? = nil, detectSkin: Bool = true, onPreview: ((PreviewImage) -> Void)? = nil) throws -> Analysis {
         // A snapshot of this very file (same path, size and modified time) from an earlier run: no decode, no preview.
-        let key = cache?.key(for: url)
+        // Without skin detection nothing is read from or written to the cache (its snapshots hold the skin mask).
+        let key = detectSkin ? cache?.key(for: url) : nil
         if let key, let s = cache?.get(key) { return restore(s, url.lastPathComponent) }
         // The raw is closed before segmentation, which needs only the 512 px copy.
         let img = try RawImage.open(url: url)
@@ -34,7 +35,7 @@ public enum AutoAnalysis {
         let info = Info.of(img, auto: true)
         let white = (img.displayReferred, img.clipLevel)
         img.close()
-        let skin = segment(copies.0, true)
+        let skin = segment(copies.0, detectSkin)
         if let key {
             cache?.put(key, AnalysisSnapshot(base: copies.0, halo: copies.1.halo, tail: copies.1.tail, lens: info.lens, iso: info.iso,
                                              temperature: info.defaults.temperature, tint: info.defaults.tint,

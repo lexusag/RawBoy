@@ -6,6 +6,7 @@ struct AutoDesktopRoot: View {
     @ObservedObject var model: DesktopModel
     @ObservedObject var vm: AutoViewModel
     @State private var confirmingClear = false
+    @State private var resetting = false
 
     var body: some View {
         Group {
@@ -14,11 +15,14 @@ struct AutoDesktopRoot: View {
             } else {
                 GridScreen(vm: vm, addFromPhotos: nil, addFromFiles: { model.addPhotosPanel() },
                            addFromFolder: { model.addFolderPanel() }, onClearBatch: { vm.requestClear() },
+                           onResetAll: { vm.requestReset() },
                            pickPreset: { ids in model.choosePresetFile(for: ids) })
             }
         }
         .toast($vm.message)
         .onChange(of: vm.clearRequest) { _, _ in confirmingClear = true }
+        .onChange(of: vm.resetRequest) { _, _ in resetting = true }
+        .sheet(isPresented: $resetting) { ResetAllSheet(vm: vm, isPresented: $resetting) }
         .confirmationDialog(
             vm.photos.count == 1 ? "Remove the photo from the batch?" : "Remove all \(vm.photos.count) photos from the batch?",
             isPresented: $confirmingClear, titleVisibility: .visible) {

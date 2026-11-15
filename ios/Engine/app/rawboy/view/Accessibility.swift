@@ -54,3 +54,21 @@ public extension View {
             .accessibilityHint(hint ?? "")
     }
 }
+
+#if DEBUG
+/** Debug only: where a slider reports its laid-out track width (RawBoy Desktop's RAWBOY_PROBE_SLIDERS reads it). */
+public enum SliderWidthLog {
+    nonisolated(unsafe) public static var record: ((String, CGFloat) -> Void)?
+}
+#endif
+
+public extension View {
+    /** Debug builds report the width this view is laid out at to `SliderWidthLog`; nothing in release. */
+    @ViewBuilder func reportsWidth(_ name: String) -> some View {
+        #if DEBUG
+        onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { SliderWidthLog.record?(name, $0) }
+        #else
+        self
+        #endif
+    }
+}

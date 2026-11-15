@@ -50,6 +50,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AutoBatchProbe.openDetailIfRequested(model)
         AutoBatchProbe.mouseProbeIfRequested(model)
         AutoBatchProbe.screenProbeIfRequested(model)
+        AutoBatchProbe.sliderProbeIfRequested(model)
+        AutoBatchProbe.resetProbeIfRequested(model)
         AutoBatchProbe.selfTestIfRequested(model)
         AutoBatchProbe.packProbeIfRequested(model)
         #endif
@@ -133,6 +135,7 @@ struct DesktopCommands: Commands {
                 .disabled(!proMode || model.vm.currentURL == nil)
             Divider()
             Button("Select All Photos") { auto.selectAll() }.disabled(!autoReady || auto.selected != nil || auto.photos.isEmpty)
+            Button("Reset All Photos…") { auto.requestReset() }.disabled(!autoReady || auto.photos.isEmpty)
             Button("Clear Batch…") { auto.requestClear() }.disabled(!autoReady || auto.photos.isEmpty)
             Divider()
             Button("Open Focused Photo") { auto.openFocused() }.keyboardShortcut(.return, modifiers: [])

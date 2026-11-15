@@ -97,6 +97,12 @@ private extension AutoPhoto {
         }
     }
 
+    /** "Reset all photos": see AutoReset. The photo keeps what it was given instead of its suggestion (looksApplied). */
+    mutating func reset(to target: AutoReset.Target) {
+        AutoReset.apply(target, look: &look, mode: &mode, filmLook: &filmLook, strength: &strength, adjust: &adjust, preset: &preset)
+        looksApplied = true
+    }
+
     /**
      * The look (or preset), strength, warmth, tint, contrast, saturation and grain of [source] ("Apply to all", "Copy previous");
      * brightness, denoise and rotation stay (they follow this photo's exposure, noise and framing).
@@ -834,6 +840,31 @@ final class AutoViewModel: ObservableObject {
             changeDevelop(p.id, force: true) { $0.takeLook(of: source) }
         }
         message = "\(source.lookName) applied to all photos"
+    }
+
+    /** Bumped by the "Reset all photos" button and menu item: the root shows its sheet (count, target, a confirmation). */
+    @Published private(set) var resetRequest = 0
+
+    func requestReset() { if export == nil && !photos.isEmpty { resetRequest += 1 } }
+
+    /**
+     * Puts every photo of the batch back to [target] (AutoReset: preset, Strength and every adjustment cleared), photos still
+     * being analysed included. Each photo gets its own undo step (Undo in its photo view brings its look and adjustments back)
+     * and its sidecar is written as for any edit. The file list stays. Not while exporting. Returns how many photos.
+     */
+    @discardableResult
+    func resetAll(to target: AutoReset.Target) -> Int {
+        if export != nil { return 0 }
+        let ids = photos.map(\.id)
+        for id in ids { changeDevelop(id, force: true) { $0.reset(to: target) } }
+        let what: String
+        switch target {
+        case .look(let l): what = l.name
+        case .film(let f): what = f.name
+        case .asIs: what = "As is"
+        }
+        message = ids.count == 1 ? "Photo reset to \(what)" : "\(ids.count) photos reset to \(what)"
+        return ids.count
     }
 
     /** The analysed photo before [id] in the batch (the one Swipe goes back to), for "Copy previous". */

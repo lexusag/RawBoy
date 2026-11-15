@@ -14,6 +14,8 @@ struct GridScreen: View {
     var addFromFolder: (() -> Void)? = nil
     /** RawBoy Desktop: the "Clear batch" button (the root asks first). */
     var onClearBatch: (() -> Void)? = nil
+    /** RawBoy Desktop: the "Reset all photos…" button beside it (the root's sheet asks which look and confirms). */
+    var onResetAll: (() -> Void)? = nil
     /** Opens a RawBoy preset file to apply to the batch (nil), or to the photos with these ids. */
     let pickPreset: (Set<String>?) -> Void
 
@@ -343,6 +345,13 @@ struct GridScreen: View {
                 .disabled(exporting)
             }
             ToolbarItemGroup(placement: .barTrailing) {
+                if onResetAll != nil {
+                    Button("Reset all photos…", systemImage: "arrow.counterclockwise") { onResetAll?() }
+                        .disabled(exporting || vm.photos.isEmpty)
+                        .help("Put every photo back to one look, film stock or As is, clearing its adjustments")
+                        .accessibilityLabel("Reset all photos")
+                        .accessibilityHint("Asks which look, film stock or As is to give every photo, and clears their adjustments")
+                }
                 if onClearBatch != nil {
                     Button("Clear batch", systemImage: "xmark.bin") { onClearBatch?() }
                         .disabled(exporting || vm.photos.isEmpty)
@@ -368,6 +377,15 @@ private struct PhotoCell: View {
     let waiting: Bool
     let selected: Bool
     var focused = false
+
+    /** The Mac's cells are big and its screens too: the name and the look read at caption size there. */
+    private static var nameFont: Font {
+        #if os(macOS)
+        .caption
+        #else
+        .caption2
+        #endif
+    }
 
     var body: some View {
         ZStack {
@@ -398,9 +416,9 @@ private struct PhotoCell: View {
             }
             // Name and look over the bottom of the photo, on a fade so they read on bright skies.
             VStack(alignment: .leading, spacing: 1) {
-                Text(photo.name).font(.caption2).foregroundStyle(.white.opacity(0.85)).lineLimit(1)
+                Text(photo.name).font(Self.nameFont).foregroundStyle(.white.opacity(0.85)).lineLimit(1)
                 if photo.analysis != nil {
-                    Text(photo.lookName).font(.caption2.weight(.semibold)).foregroundStyle(Color.accentColor).lineLimit(1)
+                    Text(photo.lookName).font(Self.nameFont.weight(.semibold)).foregroundStyle(Color.accentColor).lineLimit(1)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -411,6 +429,7 @@ private struct PhotoCell: View {
             .frame(maxHeight: .infinity, alignment: .bottom)
         }
         .clipped()
+        .help(photo.analysis != nil ? "\(photo.name) · \(photo.lookName)" : photo.name)  // the whole text where a cell clips it
         .overlay(Rectangle().stroke(selected ? Color.accentColor : focused ? Color.white.opacity(0.8) : .clear, lineWidth: focused && !selected ? 2 : 3))
         .contentShape(Rectangle())
     }
@@ -606,5 +625,65 @@ private struct LensPresetsSheet: View {
     private static func lensLabel(_ p: Preset) -> String {
         let lens = p.lens?.trimmingCharacters(in: .whitespaces) ?? ""
         return lens.isEmpty ? "Manual lens: pick it here" : "Photos taken with \(lens)"
+    }
+}
+
+/**
+ * RawBoy Desktop's "Reset all photos": which look, film stock or As is every photo goes back to, and the confirmation. The
+ * adjustments are cleared; it can be undone photo by photo (Undo in a photo's view).
+ */
+struct ResetAllSheet: View {
+    @ObservedObject var vm: AutoViewModel
+    @Binding var isPresented: Bool
+
+    private enum Kind: String, CaseIterable { case look = "Look", film = "Film stock", asIs = "As is" }
+    @State private var kind = Kind.look
+    @State private var look = Looks.portra400
+    @State private var film = FilmLooks.portra400
+
+    private var count: Int { vm.photos.count }
+    private var target: AutoReset.Target {
+        switch kind {
+        case .look: .look(look)
+        case .film: .film(film)
+        case .asIs: .asIs
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(count == 1 ? "Reset the photo?" : "Reset all \(count) photos?").font(.headline)
+            Picker("Reset to", selection: $kind) {
+                ForEach(Kind.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .accessibilityHint("Choose what every photo goes back to")
+            switch kind {
+            case .look:
+                Picker("Look", selection: $look) {
+                    ForEach(Looks.all) { Text($0.name).tag($0) }
+                }
+            case .film:
+                Picker("Film stock", selection: $film) {
+                    ForEach(FilmLooks.all) { Text($0.name).tag($0) }
+                }
+            case .asIs:
+                Text("No look: just the automatic exposure and tone.").font(.callout).foregroundStyle(.secondary)
+            }
+            Text("This clears each photo's Strength, brightness, warmth, tint, contrast, saturation, grain, denoise, rotation and crop, and any RawBoy preset. The photos stay in the batch, and their sidecars are updated. Undo in a photo's view brings its edits back.")
+                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel) { isPresented = false }.keyboardShortcut(.cancelAction)
+                Button(count == 1 ? "Reset 1 photo" : "Reset \(count) photos", role: .destructive) {
+                    vm.resetAll(to: target)
+                    isPresented = false
+                }
+                .keyboardShortcut(.defaultAction)
+                .accessibilityHint("Resets \(count == 1 ? "the photo" : "all \(count) photos") and clears their adjustments")
+            }
+        }
+        .padding(20)
+        .frame(width: 440)
     }
 }

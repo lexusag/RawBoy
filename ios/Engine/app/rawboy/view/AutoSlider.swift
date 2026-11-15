@@ -68,6 +68,7 @@ public struct ValueSlider: View {
                in: Double(range.lowerBound)...Double(range.upperBound))
             .simultaneousGesture(TapGesture(count: 2).onEnded { onChange(defaultValue) })
             .overlay { signedMark }
+            .reportsWidth("Auto \(label)")
             .accessibilityLabel(label)
             .accessibilityValue(format(value))
             .accessibilityHint("Double-tap the slider or use Reset to go back to \(format(defaultValue))")

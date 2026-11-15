@@ -137,6 +137,112 @@ enum AutoBatchProbe {
     }
 
     /**
+     * RAWBOY_PROBE_SLIDERS=1: with a photo open (and RAWBOY_PROBE_LEAK's tool, if set), sets Light and Colour values to their
+     * extremes step by step and prints every width `SliderWidthLog` reports (ParamSlider, ValueSlider), so a track whose width
+     * follows the value readout shows up as a spread of widths. Ends with a summary per slider.
+     */
+    static func sliderProbeIfRequested(_ model: DesktopModel) {
+        guard ProcessInfo.processInfo.environment["RAWBOY_PROBE_SLIDERS"] != nil else { return }
+        Task {
+            while !model.vm.state.hasImage { try? await Task.sleep(for: .milliseconds(300)) }
+            if let kind = ProcessInfo.processInfo.environment["RAWBOY_PROBE_LEAK"] {
+                _ = model.vm.addLeak(kind == "glow" ? .glow : kind == "triangle" ? .triangle : .streak)
+                model.commands.send(.toggleMode(.leaks))
+            }
+            try? await Task.sleep(for: .seconds(2))
+            var seen: [String: Set<Int>] = [:]
+            var phase = "start"
+            SliderWidthLog.record = { name, width in
+                seen[name, default: []].insert(Int(width.rounded()))
+                log("slider width [\(phase)] \(name): \(Int(width.rounded()))")
+            }
+            @MainActor func measure(_ label: String) { phase = label }
+            measure("start")
+            let steps: [(String, (inout DevelopParams) -> Void)] = [
+                ("min", { p in p.exposure = -5; p.contrast = -100; p.highlights = -100; p.shadows = -100; p.saturation = -100; p.temperature = 2000; p.tint = -100; p.filmGrain = 0 }),
+                ("max", { p in p.exposure = 5; p.contrast = 100; p.highlights = 100; p.shadows = 100; p.saturation = 100; p.temperature = 12000; p.tint = 100; p.filmGrain = 200 }),
+                ("mid", { p in p.exposure = 0.05; p.contrast = 7; p.highlights = -8; p.shadows = 1; p.saturation = 0; p.temperature = 5500; p.tint = 3; p.filmGrain = 75 }),
+                ("fine", { p in p.exposure = -1.25; p.contrast = -33; p.highlights = 12; p.shadows = -77; p.saturation = 55; p.temperature = 3300; p.tint = -45; p.filmGrain = 111 }),
+            ]
+            for (name, change) in steps {
+                measure(name)
+                model.vm.update(change)
+                try? await Task.sleep(for: .milliseconds(700))
+            }
+            // Every slider tab, then each tool's panel, at the window's own size.
+            for tab in 0...4 {
+                measure("tab \(tab)")
+                UserDefaults.standard.set(tab, forKey: "pro.tab")
+                try? await Task.sleep(for: .milliseconds(700))
+            }
+            UserDefaults.standard.set(0, forKey: "pro.tab")
+            for mode in [EditorMode.geometry, .masks, .leaks, .fx, .heal, .presets] {
+                measure("tool \(mode)")
+                model.commands.send(.toggleMode(mode))
+                try? await Task.sleep(for: .milliseconds(700))
+                model.commands.send(.toggleMode(mode))
+                try? await Task.sleep(for: .milliseconds(300))
+            }
+            // The frame colour (D, or a click outside the photo) cycles; the window is made narrower, wider and as it was.
+            for i in 1...4 {
+                measure("frame colour \(i)")
+                model.commands.send(.cycleFrame)
+                try? await Task.sleep(for: .milliseconds(700))
+            }
+            if let w = NSApp.windows.first(where: { $0.isVisible }) {
+                let original = w.frame
+                for width in [1100.0, 2200.0, original.width] {
+                    measure("window \(Int(width))")
+                    w.setFrame(NSRect(x: original.minX, y: original.minY, width: width, height: original.height), display: true)
+                    try? await Task.sleep(for: .milliseconds(900))
+                }
+            }
+            for (name, ws) in seen.sorted(by: { $0.key < $1.key }) {
+                log("slider \(name): widths \(ws.sorted()) \(ws.count > 1 ? "VARIES" : "constant")")
+            }
+        }
+    }
+
+    /**
+     * RAWBOY_PROBE_RESET=sheet|look|film|asis: once the batch is analysed, gives each photo some adjustments, then shows the
+     * Reset all photos sheet (sheet), or resets to a look / a film stock / As is and prints every photo's state; then undoes the
+     * first photo's reset and prints it again.
+     */
+    static func resetProbeIfRequested(_ model: DesktopModel) {
+        guard let kind = ProcessInfo.processInfo.environment["RAWBOY_PROBE_RESET"] else { return }
+        Task {
+            let auto = model.auto
+            while auto.photos.isEmpty || auto.photos.contains(where: { $0.status == .queued || $0.status == .analyzing }) {
+                try? await Task.sleep(for: .milliseconds(300))
+            }
+            @MainActor func dump(_ label: String) {
+                for p in auto.photos {
+                    log("reset \(label) \(p.name): \(p.mode) look=\(p.look.name) film=\(p.filmLook.name) strength=\(p.strength) brightness=\(p.adjust.brightness) warmth=\(p.adjust.warmth) contrast=\(p.adjust.contrast) preset=\(p.preset?.name ?? "-") shown=\(p.lookName)")
+                }
+            }
+            for p in auto.photos {
+                auto.setAdjust(p.id, force: true) { $0.brightness = 30; $0.warmth = -15; $0.contrast = 12 }
+                auto.setStrength(p.id, 60)
+                auto.setLook(p.id, Looks.ektar100)
+            }
+            dump("before")
+            if kind == "sheet" { auto.requestReset(); return }
+            let target: AutoReset.Target = kind == "film" ? .film(FilmLooks.byId("vision500t")) : kind == "look" ? .look(Looks.gold200) : .asIs
+            let n = auto.resetAll(to: target)
+            log("reset \(n) photos, message: \(auto.message ?? "-")")
+            dump("after")
+            if let first = auto.photos.first {
+                auto.undo(first.id)
+                try? await Task.sleep(for: .milliseconds(200))
+                log("after Undo on the first photo only:")
+                dump("undo")
+            }
+            try? await Task.sleep(for: .seconds(2))
+            log("sidecars: " + auto.photos.map { p in PhotoSidecar(photo: p.url).readAuto().map { _ in "written" } ?? "none" }.joined(separator: ", "))
+        }
+    }
+
+    /**
      * RAWBOY_PROBE_SELFTEST=1: the batch's selection, keys, Clear batch, and the moves between Pro and Auto, checked with
      * real key events posted into the window; prints PASS or FAIL per item.
      */
