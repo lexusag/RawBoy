@@ -33,6 +33,7 @@ import android.util.Range
 import android.view.Surface
 import androidx.exifinterface.media.ExifInterface
 import app.rawboy.auto.analysis.MeterArea
+import app.rawboy.camera.debug.DebugProbe
 import app.rawboy.color.Mat3
 import app.rawboy.color.WhiteBalance
 import app.rawboy.raw.BurstNative
@@ -234,6 +235,11 @@ class CameraController(context: Context) : AutoCloseable {
 
     private val _frames = MutableStateFlow<FrameState?>(null)
     val frames = _frames.asStateFlow()
+
+    /** The last preview result of the streaming lens (DebugProbe's shutter line). */
+    @Volatile
+    var lastPreviewResult: CaptureResult? = null
+        private set
 
     private var info: Info? = null
     private var device: CameraDevice? = null
@@ -437,6 +443,7 @@ class CameraController(context: Context) : AutoCloseable {
                 device = camera
                 try {
                     session = createSession(camera, outputs)
+                    DebugProbe.logTemplates(camera, info.label)
                     streamingPhysical = physical
                     repeatPreview()
                     return
@@ -455,6 +462,7 @@ class CameraController(context: Context) : AutoCloseable {
         val camera = open(physical ?: info.openId)
         device = camera
         session = createSession(camera, outputs(preview, reader, null, info.hiRes))
+        DebugProbe.logTemplates(camera, info.label)
         streamingPhysical = null
         repeatPreview()
     }
@@ -566,6 +574,7 @@ class CameraController(context: Context) : AutoCloseable {
         s.setRepeatingRequest(request, object : CameraCaptureSession.CaptureCallback() {
             override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
                 val lens = lensResult(result)
+                lastPreviewResult = lens
                 val state = frameState(inf, lens, result.get(CaptureResult.CONTROL_AE_EXPOSURE_COMPENSATION))
                 if (state.compensationSteps == 0) residualAtZero = residual(state)
                 _frames.value = state

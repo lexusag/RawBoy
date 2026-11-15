@@ -20,6 +20,7 @@ import app.rawboy.auto.analysis.SceneAnalyzer
 import app.rawboy.auto.analysis.SceneStats
 import app.rawboy.auto.looks.LookApplier
 import app.rawboy.camera.capture.CameraController
+import app.rawboy.camera.debug.DebugProbe
 import app.rawboy.camera.capture.FlashMode
 import app.rawboy.camera.capture.LocationTracker
 import app.rawboy.camera.capture.ShutterSound
@@ -415,6 +416,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private var liveJob: Job? = null
 
     init {
+        DebugProbe.init(app)
         ShotSaver.attachView()
         viewModelScope.launch(Dispatchers.Main.immediate) {
             ShotSaver.calibrations.collect { cal ->
@@ -1204,6 +1206,13 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 "${live?.auto?.let { "${it.temperature.toInt()}K/${it.tint.toInt()}" }}")
         }
         val shotId = ShotSaver.beginCapture(app)
+        DebugProbe.describe(controller.lastPreviewResult).takeIf { it.isNotEmpty() }?.let { probe ->
+            Log.d(TAG, "shutter $shotId ${settings.lensKey(hiRes)} result: $probe")
+            live?.let { l ->
+                DebugProbe.dump(app, "$shotId-vf", l.base.base, "lens ${settings.lensKey(hiRes)} scale ${l.scale} key ${l.stats.key} " +
+                    "colour ${_frame.value?.color?.joinToString(" ")} $probe")
+            }
+        }
         activeCaptures++
         _capturing.value = activeCaptures
         if (burst) {

@@ -22,6 +22,7 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import app.rawboy.auto.AutoAnalysis
+import app.rawboy.camera.debug.DebugProbe
 import app.rawboy.auto.analysis.AutoTone
 import app.rawboy.auto.analysis.MeterArea
 import app.rawboy.auto.analysis.SceneStats
@@ -418,6 +419,8 @@ internal object ShotSaver {
                 phoneAe = shot.flashGuide == null, captureEv = shot.compensationEv, splitLuma = false,
             )
             val analysisMs = ms(analysisStart)
+            DebugProbe.dump(app, "${shot.id}-raw", a.base, "lens ${s.lensKey(shot.hiRes)} key ${a.stats.key} iso ${shot.iso} frames ${shot.effectiveFrames} " +
+                "make ${img.make} exposure ${a.autoBase.exposure}")
             val looked = CameraSettings.withPhoneIspLook(s.develop(a.autoBase, a.stats.hasFace), img.make)
             // High ISO: more denoise than the auto develop's table, up to the coarse stage (denoise > 65).
             val denoise = maxOf(looked.denoise, highIsoDenoise(a.stats.iso * noiseScale))
