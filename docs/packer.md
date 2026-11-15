@@ -2,7 +2,7 @@
 
 A web page that repackages camera raws and DNGs as DNGs, like Adobe DNG Converter, with plain controls and a live
 summary of what each choice does. Everything runs in the browser (WASM: LibRaw and the Adobe DNG SDK); files are never
-uploaded. Deployed as its own Cloudflare Pages project, `rawboy-packer` (see [Cloudflare](cloudflare.md)).
+uploaded. RawBoy Desktop (Mac) has the same Packer natively: [desktop.md](desktop.md). Deployed as its own Cloudflare Pages project, `rawboy-packer` (see [Cloudflare](cloudflare.md)).
 
 ## Formats
 

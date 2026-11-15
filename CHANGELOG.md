@@ -1,3 +1,10 @@
+**RawBoy Desktop (macOS): Packer (2026-11-15)**
+
+- **File › Pack Raws…** (⇧⌘P): RawBoy Packer in a window of its own, the web's Packer on the Mac: camera raws and DNGs re-saved as DNG 1.7 (Small raw, Lossless, Lossless JPEG XL, Micro) through `dng_pack.cpp` and the Adobe DNG SDK. Presets, Advanced settings, the live summary and the "Opens in" table are the web's `settings.ts`, ported (`PackSettings.swift`, with its tests); drop or add raws and folders, output next to each file or in a folder, never over an existing file, originals untouched, files in parallel (Auto: a third of the cores, one under 8 GB), per-file progress, Stop after the current files.
+- Native: `rb_pack_inspect` / `rb_pack` in `ios/native/rawboy_pack.cpp` (macOS slice only: the iOS slices don't build `dng_pack.cpp`), the Swift wrapper `Packer` (macOS), previews rendered by ImageIO instead of jpegli, each pack on a 64 MB-stack thread, the source memory-mapped.
+- Checked against the web's own WASM Packer run in Node on the same files (a Sony A7 III JPEG XL DNG and a Pixel 9 Pro DNG, all four formats): output sizes within 0–3.6%, and the packed DNGs decode to the same picture and size in RawBoy's decoder (means equal to 6 digits); ImageIO and `sips` open them.
+- Not tried by hand beyond launching the window and driving it from a debug probe; no camera raw (ARW, RAF…) was available on this Mac: only DNG sources were packed.
+
 **RawBoy Desktop (macOS): fixes from the first hand test (2026-11-15)**
 
 - **Sliders** didn't respond to the mouse. Cause (found by driving the app with posted mouse events): the Mac's slider was kept at 2% opacity over a hand-drawn track, and a hand-drawn drag gesture took no mouse in Auto's signed sliders. On the Mac the system slider is now drawn as it is (a small mark at 0 on signed ranges, a colour bar beneath for colour sliders); click, drag and the double-click reset work in Pro and Auto.

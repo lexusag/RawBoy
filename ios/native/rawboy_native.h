@@ -103,6 +103,51 @@ RB_API void rb_heal_blemishes(RBImage* image, const float* spots, size_t count);
  */
 RB_API void rb_heal(RBImage* image, const float* spots, size_t count, const float* strokes, size_t strokeCount);
 
+
+// ---- RawBoy Packer (macOS builds only: dng_pack.cpp needs the Adobe DNG SDK; the iOS slices don't have these) ----
+
+/** What a file is and what packing it did (rawboy::PackInfo); strings are NUL-terminated and may be empty. */
+typedef struct {
+    char make[64], model[64], lens[96], format[16];
+    int width, height;
+    bool dng, mosaic, bayer;
+    char lensData[16];  // "Sony", "Fujifilm" or ""
+    bool lensDistortion, lensVignetting, lensCa, adobeHints;
+    int bits;
+    char compression[48], dngVersion[16];
+    // rb_pack only:
+    int modeUsed;  // RBPackMode
+    bool linear, lensWritten;
+    char preview[16];  // "camera", "rendered", "none"
+    int outWidth, outHeight;
+    double seconds;
+} RBPackInfo;
+
+typedef enum { RB_PACK_LOSSLESS_JPEG = 0, RB_PACK_LOSSLESS_JXL = 1, RB_PACK_SMALL_RAW = 2, RB_PACK_MICRO = 3 } RBPackMode;
+
+typedef struct {
+    int mode;  // RBPackMode
+    float distance;
+    int effort, maxSize, previewSize;
+    bool lensCorrections, keepGps;
+    int threads;
+} RBPackOptions;
+
+/** Encodes 8-bit sRGB RGB as a JPEG: on success *jpeg is a malloc'd buffer (the packer frees it) and true is returned. */
+typedef bool (*RBPreviewEncoder)(const uint8_t* rgb, int width, int height, uint8_t** jpeg, size_t* size, void* context);
+
+/** Reads what [data] (a camera raw or a DNG) is without decoding the image. false with [error] when it can't. */
+RB_API bool rb_pack_inspect(const uint8_t* data, size_t size, RBPackInfo* info, char* error, size_t errorSize);
+
+/**
+ * Packs [data] into a DNG: *out is a malloc'd buffer of *outSize bytes (free with rb_pack_free). Blocks until done
+ * (seconds, 100+ MB of memory): run it on its own thread, with a big stack. false with [error] when it fails.
+ */
+RB_API bool rb_pack(const uint8_t* data, size_t size, const RBPackOptions* options, RBPreviewEncoder encoder, void* context,
+                    uint8_t** out, size_t* outSize, RBPackInfo* info, char* error, size_t errorSize);
+
+RB_API void rb_pack_free(uint8_t* buffer);
+
 #ifdef __cplusplus
 }
 #endif
