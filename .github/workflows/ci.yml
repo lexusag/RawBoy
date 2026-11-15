@@ -37,6 +37,7 @@ jobs:
       auto: ${{ steps.filter.outputs.auto }}
       camera: ${{ steps.filter.outputs.camera }}
       engine: ${{ steps.filter.outputs.engine }}
+      desktop: ${{ steps.filter.outputs.desktop }}
     steps:
       - uses: actions/checkout@v4
 
@@ -73,6 +74,13 @@ jobs:
             camera:
               - *shared
               - 'app-camera/**'
+            # RawBoy Desktop (macOS): the Swift engine, Pro's and the Desktop's sources, the shaders and native code.
+            desktop:
+              - 'ios/**'
+              - 'shaders/**'
+              - 'luts/**'
+              - 'engine/src/main/cpp/**'
+              - '.github/workflows/ci.yml'
 
   web:
     name: Web Build & Test
@@ -150,12 +158,81 @@ jobs:
           echo "Tasks: $tasks"
           ./gradlew --parallel --configuration-cache --console=plain $tasks
 
+  # RawBoy Desktop (macOS): builds the app and runs the Swift engine's tests on a Mac. The only check that compiles
+  # the Swift code (iOS shares the engine and Pro's sources), so Swift written without a Mac at hand is checked here.
+  # The native libraries (LibRaw, DNG SDK, jpegli: ~10 min) are cached by their sources' hash.
+  desktop:
+    name: Desktop (macOS) build & engine tests
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.desktop == 'true'
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      # Runner images keep an older Xcode as the default; the project needs 26+ (see release.yml's desktop job).
+      - name: Select the newest Xcode
+        run: |
+          xcode=$(ls -d /Applications/Xcode_*.app | grep -iv -e beta -e rc | sort -V | tail -1)
+          sudo xcode-select -s "$xcode/Contents/Developer"
+          xcodebuild -version
+
+      - name: Tools
+        run: |
+          brew install xcodegen glslang spirv-cross
+          xcodebuild -downloadComponent MetalToolchain || xcrun -f metal
+
+      - uses: actions/cache@v4
+        id: native
+        with:
+          path: ios/native/out
+          key: desktop-native-${{ runner.os }}-${{ hashFiles('engine/src/main/cpp/**', 'ios/native/**', 'engine/src/main/cpp/dng_sdk.cmake') }}
+
+      - uses: actions/cache@v4
+        if: steps.native.outputs.cache-hit != 'true'
+        with:
+          path: third_party/dng_sdk_1_7_1.zip
+          key: dng_sdk_1_7_1.zip
+
+      - name: Build the native libraries (macOS slice)
+        if: steps.native.outputs.cache-hit != 'true'
+        run: |
+          cd third_party
+          [ -f dng_sdk_1_7_1.zip ] || curl -fsSLO https://download.adobe.com/pub/adobe/dng/dng_sdk_1_7_1.zip
+          unzip -q dng_sdk_1_7_1.zip && mv dng_sdk_1_7_1 dng_sdk
+          cd ..
+          ios/native/build.sh macos
+
+      # project.yml's preGenCommand also fetches MediaPipe (iOS only); the macOS targets don't use it.
+      - name: Generate the project
+        run: |
+          cd ios
+          sh shaders/gen.sh
+          sed -i '' 's| && mediapipe/fetch.sh||' project.yml
+          xcodegen
+
+      - name: Build RawBoy Desktop
+        run: |
+          cd ios
+          set -o pipefail
+          xcodebuild build -scheme RawBoyDesktop -configuration Debug -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGN_IDENTITY=- 2>&1 | tee "$RUNNER_TEMP/build.log" | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
+          grep -q "BUILD SUCCEEDED" "$RUNNER_TEMP/build.log" || { grep -E "error:" -B2 -A6 "$RUNNER_TEMP/build.log" | head -300; exit 1; }
+
+      - name: Engine tests (macOS)
+        run: |
+          cd ios
+          set -o pipefail
+          xcodebuild test -scheme RawBoyEngineTestsMac -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGN_IDENTITY=- 2>&1 | tee "$RUNNER_TEMP/test.log" | grep -E "error:|Test Case .*(failed|skipped)|Executed .* tests|TEST (SUCCEEDED|FAILED)" || true
+          grep -q "TEST SUCCEEDED" "$RUNNER_TEMP/test.log" || { grep -E "error:|failed" -B2 -A6 "$RUNNER_TEMP/test.log" | head -300; exit 1; }
+
   # The one required check. Passes when every needed job succeeded or was skipped (nothing relevant changed);
   # fails when any failed or was cancelled. `always()` makes it run (and report) even when a dependency is skipped;
   # it runs on pull requests only.
   pr-check:
     name: pr-check
-    needs: [changes, web, android]
+    needs: [changes, web, android, desktop]
     # Only meaningful (and only required) on pull requests; pushes to main run the jobs above without it.
     if: always() && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
