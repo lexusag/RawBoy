@@ -10,6 +10,7 @@ import app.rawboy.develop.DevelopParams
 import app.rawboy.camera.capture.CameraController
 import app.rawboy.camera.capture.FlashGuides
 import app.rawboy.camera.capture.FlashMode
+import app.rawboy.camera.platform.NoiseProfile
 import app.rawboy.export.DateStampFormat
 import app.rawboy.export.DateStampStyle
 import app.rawboy.export.FilmFrameColor
@@ -167,13 +168,14 @@ data class CameraSettings(
      * the filter, then grey (Saturation -100 makes the scene grey before the stock and keeps the stock's output grey, see
      * `applyLut`), so Strength blends the stock's tones with plain AgX grey and the picture stays black and white;
      * Warmth isn't shown there and doesn't apply. With Film on too ([filmMono]) it has [FILM_MONO_CONTRAST] more contrast.
+     * [noise] gives the denoise floors of the non-Film colour looks (the phone's platform profile).
      */
-    fun develop(base: DevelopParams, hasFace: Boolean): DevelopParams {
-        val p = developLook(base, hasFace)
+    fun develop(base: DevelopParams, hasFace: Boolean, noise: NoiseProfile): DevelopParams {
+        val p = developLook(base, hasFace, noise)
         return if (grain) p else p.copy(grain = 0f, filmGrain = 0f)
     }
 
-    private fun developLook(base: DevelopParams, hasFace: Boolean): DevelopParams {
+    private fun developLook(base: DevelopParams, hasFace: Boolean, noise: NoiseProfile): DevelopParams {
         val bw = monoMode
         val adjust = Adjustments(
             brightness = brightness,
@@ -186,8 +188,8 @@ data class CameraSettings(
         // LUT and neutral looks have no film grain and scatter to hide shadow noise, and a LUT steepens the shadows
         // (Redscale ~4x): clean the shadows more than the ISO table does. Mirrors iOS CameraSettings.develop.
         val experimental = look.experimental
-        val luma = if (experimental) LUT_LUMA_DENOISE_EXPERIMENTAL else LUT_LUMA_DENOISE
-        val color = if (experimental) LUT_COLOR_DENOISE_EXPERIMENTAL else LUT_COLOR_DENOISE
+        val luma = if (experimental) noise.experimentalLumaFloor else noise.lutLumaFloor
+        val color = if (experimental) noise.experimentalColorFloor else noise.lutColorFloor
         // Neutral and plain LUT looks start a little punchier than Auto's base (2026-11-07, tuned on Pixel night/stage DNGs
         // through the web develop); the colour-swap looks keep their own colour.
         val punch = !experimental
@@ -227,25 +229,6 @@ data class CameraSettings(
 
         const val MIN_QUALITY = 70
 
-        /**
-         * Samsung (2026-11-08, Galaxy S25 pair of viewfinder screenshot and saved JPEG, same Film look): the preview
-         * the viewfinder shows is the ISP's own rendering and ignores the plain sRGB curve we ask for, so it can't be
-         * undone like the Pixel's. It is an S-curve (darks x0.55-0.65, highlights x1.2 around display grey 0.33, in
-         * log-log slope ~1.14) with ~+30% chroma in the midtones, while the raw decoded here has neither, so the saved
-         * photo came out flat next to the viewfinder. Added to the shot's develop to match; first estimate from one
-         * pair, tune on more Samsung shots. Camera only, saved photos only (the viewfinder already has it).
-         */
-        const val SAMSUNG_CONTRAST = 25f
-        const val SAMSUNG_SATURATION = 25f
-
-        /** [p] with the Samsung ISP look added when the DNG's [make] is Samsung; B&W keeps its grey (saturation -100). */
-        fun withPhoneIspLook(p: DevelopParams, make: String): DevelopParams {
-            if (!make.equals("samsung", ignoreCase = true)) return p
-            return p.copy(
-                contrast = (p.contrast + SAMSUNG_CONTRAST).coerceAtMost(100f),
-                saturation = if (p.saturation <= -100f) p.saturation else (p.saturation + SAMSUNG_SATURATION).coerceAtMost(100f),
-            )
-        }
         const val SMALL_LONG_SIDE = 3000
         /** Light sharpening after the downscale to [SMALL_LONG_SIDE] (luma unsharp mask, `band_ops.h`); full size gets none. */
         const val SMALL_SHARPEN = 0.5f
@@ -253,17 +236,6 @@ data class CameraSettings(
         const val BURST_FRAMES = 8
         /** Film + B&W: added to the Contrast slider's value (owner's choice, 2026-10-31: punchier than plain B&W). */
         const val FILM_MONO_CONTRAST = 20f
-
-        /**
-         * Denoise floors for non-Film colour looks (2026-11-07): shadows of LUT and neutral shots were noisy, Redscale
-         * with blocky coarse colour blotches. Experimental looks (colour swaps, Redscale) get more; 70 colour reaches
-         * the shader's coarse stage (> 65). Unverified on device: tune against Pixel night shots.
-         */
-        const val LUT_LUMA_DENOISE = 12f
-        /** 70 reaches the coarse chroma stage: Natural's shadow colour mottle (σ10 chroma std) 3.95 → 2.55 (35 → 70), 1.34 at 100 with colour fading at edges. */
-        const val LUT_COLOR_DENOISE = 70f
-        const val LUT_LUMA_DENOISE_EXPERIMENTAL = 22f
-        const val LUT_COLOR_DENOISE_EXPERIMENTAL = 70f
 
         /** Added to Contrast / Saturation for Natural and the plain LUT looks (not Film, B&W or the experimental looks). */
         const val LOOK_CONTRAST = 6f

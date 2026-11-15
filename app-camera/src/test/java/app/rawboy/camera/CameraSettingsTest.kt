@@ -1,5 +1,6 @@
 package app.rawboy.camera
 
+import app.rawboy.camera.platform.generic.neutralPlatform
 import app.rawboy.develop.DevelopParams
 import app.rawboy.export.DateStampFormat
 import app.rawboy.export.DateStampStyle
@@ -8,7 +9,6 @@ import app.rawboy.export.PhotoFrame
 import app.rawboy.export.TimeStampFormat
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertSame
 import org.junit.Test
 
 class CameraSettingsTest {
@@ -38,29 +38,9 @@ class CameraSettingsTest {
         val base = DevelopParams(grain = 20f, filmGrain = 75f)
         val on = CameraSettings()
         assertEquals(true, on.grain)
-        val off = on.copy(grain = false).develop(base, false)
+        val off = on.copy(grain = false).develop(base, false, neutralPlatform.noise)
         assertEquals(0f, off.grain, 0f)
         assertEquals(0f, off.filmGrain, 0f)
-    }
-
-    @Test
-    fun samsungGetsTheIspLook() {
-        val base = DevelopParams()
-        val p = CameraSettings.withPhoneIspLook(base, "samsung")
-        assertEquals(base.contrast + CameraSettings.SAMSUNG_CONTRAST, p.contrast, 1e-4f)
-        assertEquals(base.saturation + CameraSettings.SAMSUNG_SATURATION, p.saturation, 1e-4f)
-    }
-
-    @Test
-    fun otherMakersAreUntouched() {
-        val base = DevelopParams()
-        assertSame(base, CameraSettings.withPhoneIspLook(base, "Google"))
-    }
-
-    @Test
-    fun blackAndWhiteStaysGrey() {
-        val p = CameraSettings.withPhoneIspLook(DevelopParams(saturation = -100f), "SAMSUNG")
-        assertEquals(-100f, p.saturation, 0f)
     }
 
     @Test

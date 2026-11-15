@@ -13,10 +13,13 @@ class ActivePlatformTest {
         val phones = listOf(
             PhoneDescription(ChipVendor.QUALCOMM, socManufacturer = "QTI", socModel = "SM8550", hardware = "qcom", board = "kalama", manufacturer = "OnePlus", model = "CPH2447"),
             PhoneDescription(ChipVendor.UNKNOWN),
-            PhoneDescription(ChipVendor.MEDIATEK, manufacturer = "samsung"),
             PhoneDescription(ChipVendor.TENSOR, manufacturer = "Google"),
         )
         for (phone in phones) assertEquals("$phone", tensor, PlatformRegistry.resolve(ActivePlatform.untilAutodetect(phone)))
+        // A Samsung on any chip: Tensor plus its own look.
+        val galaxy = PlatformRegistry.resolve(ActivePlatform.untilAutodetect(PhoneDescription(ChipVendor.MEDIATEK, manufacturer = "samsung")))
+        val look = tensor.still.copy(lookContrast = 25f, lookSaturation = 25f)
+        assertEquals(tensor.copy(layers = listOf("neutral", "tensor", "samsung"), still = look), galaxy)
     }
 
     @Test
@@ -27,8 +30,7 @@ class ActivePlatformTest {
 
     @Test
     fun manufacturerLayersStillApply() {
-        val samsung = PlatformLayer("samsung", LayerLevel.MANUFACTURER, { it.madeBy("samsung") }, PlatformPatch { it.copy(still = it.still.copy(lookContrast = 25f)) })
-        val p = PlatformRegistry.resolve(ActivePlatform.untilAutodetect(PhoneDescription(ChipVendor.QUALCOMM, manufacturer = "samsung")), listOf(tensorLayer, samsung))
+        val p = PlatformRegistry.resolve(ActivePlatform.untilAutodetect(PhoneDescription(ChipVendor.QUALCOMM, manufacturer = "samsung")))
         assertEquals(listOf("neutral", "tensor", "samsung"), p.layers)
         assertEquals(25f, p.still.lookContrast)
         assertEquals(tensor.still.extraBlack, p.still.extraBlack)

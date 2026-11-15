@@ -25,9 +25,15 @@ val tensorLayer = PlatformLayer(
                 maxStillExposureNs = 66_666_667L,
             ),
             noise = p.noise.copy(
+                // The Pixel's sensors are roughly as noisy as the camera raws the ISO table was tuned on at ~4x
+                // (2 stops more) their ISO. Selfie sensors are smaller still: a first guess, to tune on photos.
                 backIsoScale = 4f,
                 frontIsoScale = 8f,
+                // 2026-11-07: shadows of LUT and neutral shots were noisy, Redscale with blocky coarse colour
+                // blotches (Pixel night and stage DNGs through the web develop); unverified on the phone itself.
                 lutLumaFloor = 12f,
+                // Reaches the coarse chroma stage (> 65): Natural's shadow colour mottle (σ10 chroma std) 3.95 ->
+                // 2.55 (35 -> 70), 1.34 at 100 with colour fading at edges.
                 lutColorFloor = 70f,
                 experimentalLumaFloor = 22f,
                 experimentalColorFloor = 70f,

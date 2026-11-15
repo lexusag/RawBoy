@@ -23,6 +23,7 @@ import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import app.rawboy.auto.AutoAnalysis
 import app.rawboy.camera.debug.DebugProbe
+import app.rawboy.camera.platform.CameraPlatform
 import app.rawboy.auto.analysis.AutoTone
 import app.rawboy.auto.analysis.MeterArea
 import app.rawboy.auto.analysis.SceneStats
@@ -77,6 +78,8 @@ internal data class Shot(
     val name: String,
     val temporary: File?,
     val settings: CameraSettings,
+    /** The phone's platform profile the raw was captured with; the shot develops with it. */
+    val platform: CameraPlatform,
     /** The viewfinder's scene key at the shutter, for calibrating [CameraSettings.previewScale]. */
     val viewfinderKey: Float?,
     /** Sensor ISO from the capture, in case the DNG lacks it. */
@@ -128,23 +131,6 @@ internal object ShotSaver {
     private const val FLASH_LIFT_EV = 0.5f
     private const val MIN_FLASH_GUIDE = 1e-2f
     private const val MAX_FLASH_GUIDE = 1e4f
-
-    /**
-     * A phone sensor is roughly as noisy as the camera raws the auto denoise was tuned on at
-     * ~4x (2 stops more) its ISO, so the develop picks denoise/sharpening for that ISO.
-     */
-    private const val PHONE_NOISE_ISO_SCALE = 4f
-
-    /** Selfie sensors are smaller still: a first guess, to tune on photos. */
-    private const val FRONT_NOISE_ISO_SCALE = 8f
-
-    /**
-     * Black beyond the DNG's (a fraction of the white range, ~1.4 DN of 959 on the Pixel 9 Pro): the phone's ISP
-     * renders black that much deeper than the DNG's BlackLevel (which is the frame's dynamic black), measured
-     * against the viewfinder at ISO 170-250. Without it the photo's deepest shadows were lifted, and bluish
-     * after the white balance's blue gain, compared with the viewfinder.
-     */
-    const val EXTRA_BLACK = 1.46e-3f
 
     /** Nice value of the decode and develop threads: normal priority so OpenMP / GPU develop keeps the big cores. */
     private const val DEVELOP_THREAD_PRIORITY = 0
@@ -403,12 +389,12 @@ internal object ShotSaver {
         val started = System.nanoTime()
         val decodeStart = System.nanoTime()
         Log.d(TAG, "${shot.name}: decode starts, ${memoryNote(app)}")
-        val img = RawImage.open(app, shot.dng, EXTRA_BLACK)
+        // The ISP's black beyond the DNG's, so the photo's shadows match the viewfinder (StillProfile.extraBlack).
+        val img = RawImage.open(app, shot.dng, shot.platform.still.extraBlack)
         try {
             val decodeMs = ms(decodeStart)
             val analysisStart = System.nanoTime()
-            // A merged burst is as clean as one frame at 1/frames the ISO: denoise for that.
-            val noiseScale = (if (s.front) FRONT_NOISE_ISO_SCALE else PHONE_NOISE_ISO_SCALE) / shot.effectiveFrames
+            val noiseScale = ShotDevelop.noiseIsoScale(shot.platform.noise, s.front, shot.effectiveFrames)
             // The phone's auto exposure already metered the raw (Camera2 AE on the same box, its post-raw boost in
             // the DNG's BaselineExposure): keep it, but lift it where the AE protected a highlight and took the
             // scene down (AutoTone.PHONE_KEY). Re-metering it to Auto's camera-raw target pulled ordinary rooms 1-2 EV
@@ -421,7 +407,7 @@ internal object ShotSaver {
             val analysisMs = ms(analysisStart)
             DebugProbe.dump(app, "${shot.id}-raw", a.base, "lens ${s.lensKey(shot.hiRes)} key ${a.stats.key} iso ${shot.iso} frames ${shot.effectiveFrames} " +
                 "make ${img.make} exposure ${a.autoBase.exposure}")
-            val looked = CameraSettings.withPhoneIspLook(s.develop(a.autoBase, a.stats.hasFace), img.make)
+            val looked = ShotDevelop.looked(s, a.autoBase, a.stats.hasFace, shot.platform)
             // High ISO: more denoise than the auto develop's table, up to the coarse stage (denoise > 65).
             val denoise = maxOf(looked.denoise, highIsoDenoise(a.stats.iso * noiseScale))
             val params = looked.copy(

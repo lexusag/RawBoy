@@ -849,7 +849,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val l = live ?: return
         val f = _frame.value ?: return
         val s = _settings.value
-        val developed = if (_compare.value) l.auto else s.develop(l.auto, l.stats.hasFace)
+        val developed = if (_compare.value) l.auto else s.develop(l.auto, l.stats.hasFace, platform.noise)
         // The ISP has already denoised and sharpened the preview stream.
         // Video also drops the colour denoise: its coarse stages are many taps per pixel, drawn twice a frame (screen and
         // encoder), and a clip on a non-Film look (colour floor 70) ran at 12 fps instead of 30.
@@ -1296,7 +1296,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 throw t
             }
             Log.d(TAG, "$name: capture + DNG write ${(System.nanoTime() - dngStart) / 1_000_000} ms")
-            Shot(shotId, uri, name, null, settings, viewfinderKey, isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber)
+            Shot(shotId, uri, name, null, settings, platform = platform, viewfinderKey = viewfinderKey, iso = isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber)
         } else {
             val file = File(app.cacheDir, "$baseName-$shotId.dng")
             val result = try {
@@ -1309,7 +1309,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 file.delete()
                 throw t
             }
-            Shot(shotId, Uri.fromFile(file), "$baseName.dng", file, settings, viewfinderKey, isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber)
+            Shot(shotId, Uri.fromFile(file), "$baseName.dng", file, settings, platform = platform, viewfinderKey = viewfinderKey, iso = isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber)
         }
     }
 

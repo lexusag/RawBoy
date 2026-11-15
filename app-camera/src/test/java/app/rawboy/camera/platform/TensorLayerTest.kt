@@ -1,7 +1,5 @@
 package app.rawboy.camera.platform
 
-import app.rawboy.camera.CameraSettings
-import app.rawboy.camera.ShotSaver
 import app.rawboy.camera.platform.tensor.tensorLayer
 import app.rawboy.camera.platform.traits.UndoIspPreviewColor
 import org.junit.Assert.assertEquals
@@ -9,9 +7,8 @@ import org.junit.Assert.assertSame
 import org.junit.Test
 
 /**
- * The Tensor profile equals what the camera does today. Constants still visible in the shared code are compared
- * directly; private ones (and every value once the constants have moved into the profile) as literals, named after
- * the constant they replace.
+ * The Tensor profile equals what the camera did before the profile: every value as a literal, named after the
+ * constant it replaced.
  */
 class TensorLayerTest {
     private val tensor = PlatformRegistry.resolve(PhoneDescription(ChipVendor.TENSOR, manufacturer = "Google"))
@@ -29,8 +26,7 @@ class TensorLayerTest {
 
     @Test
     fun stillAsToday() {
-        assertEquals(ShotSaver.EXTRA_BLACK, tensor.still.extraBlack)
-        assertEquals(1.46e-3f, tensor.still.extraBlack)
+        assertEquals(1.46e-3f, tensor.still.extraBlack) // ShotSaver.EXTRA_BLACK
         assertEquals(66_666_667L, tensor.still.maxStillExposureNs) // CameraController.MAX_STILL_EXPOSURE_NS
         // No Samsung look on a Pixel.
         assertEquals(0f, tensor.still.lookContrast)
@@ -41,14 +37,10 @@ class TensorLayerTest {
     fun noiseAsToday() {
         assertEquals(4f, tensor.noise.backIsoScale) // ShotSaver.PHONE_NOISE_ISO_SCALE
         assertEquals(8f, tensor.noise.frontIsoScale) // ShotSaver.FRONT_NOISE_ISO_SCALE
-        assertEquals(CameraSettings.LUT_LUMA_DENOISE, tensor.noise.lutLumaFloor)
-        assertEquals(CameraSettings.LUT_COLOR_DENOISE, tensor.noise.lutColorFloor)
-        assertEquals(CameraSettings.LUT_LUMA_DENOISE_EXPERIMENTAL, tensor.noise.experimentalLumaFloor)
-        assertEquals(CameraSettings.LUT_COLOR_DENOISE_EXPERIMENTAL, tensor.noise.experimentalColorFloor)
-        assertEquals(12f, tensor.noise.lutLumaFloor)
-        assertEquals(70f, tensor.noise.lutColorFloor)
-        assertEquals(22f, tensor.noise.experimentalLumaFloor)
-        assertEquals(70f, tensor.noise.experimentalColorFloor)
+        assertEquals(12f, tensor.noise.lutLumaFloor) // CameraSettings.LUT_LUMA_DENOISE
+        assertEquals(70f, tensor.noise.lutColorFloor) // CameraSettings.LUT_COLOR_DENOISE
+        assertEquals(22f, tensor.noise.experimentalLumaFloor) // CameraSettings.LUT_LUMA_DENOISE_EXPERIMENTAL
+        assertEquals(70f, tensor.noise.experimentalColorFloor) // CameraSettings.LUT_COLOR_DENOISE_EXPERIMENTAL
     }
 
     @Test

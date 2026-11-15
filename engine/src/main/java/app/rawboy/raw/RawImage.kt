@@ -114,7 +114,7 @@ class RawImage private constructor(private var handle: Long) : AutoCloseable {
 
         /**
          * [extraBlack]: black to take off beyond the file's black level, as a fraction of the white range (LibRaw
-         * path only). RawBoy Camera uses it to match the phone's own rendering, see CameraViewModel.EXTRA_BLACK.
+         * path only). RawBoy Camera passes its phone's value to match the phone's own rendering of black.
          */
         fun open(context: Context, uri: Uri, extraBlack: Float = 0f): RawImage {
             val pfd = context.contentResolver.openFileDescriptor(uri, "r")
