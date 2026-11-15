@@ -99,4 +99,47 @@ final class WhitePickerTests: XCTestCase {
         XCTAssertEqual(wMax, 100, accuracy: 1e-6)
         XCTAssertEqual(tMax, 50, accuracy: 1e-6)
     }
+
+    /** Web's "autoWhiteArea solves for the selected rectangle through crop and leaves clipped pixels out". */
+    func testAreaSolvesForTheRectangleThroughCropAndLeavesClippedPixelsOut() throws {
+        let w = 40
+        let h = 20
+        var pixels = [UInt16](repeating: 0, count: w * h * 3)
+        // Left half: warm; right top: cool; right bottom: clipped.
+        for y in 0..<h {
+            for x in 0..<w {
+                let rgb: [Float] = x < w / 2 ? [0.2, 0.17, 0.12] : y < h / 2 ? [0.1, 0.12, 0.16] : [1, 1, 1]
+                for c in 0..<3 { pixels[(y * w + x) * 3 + c] = Float16(rgb[c]).bitPattern }
+            }
+        }
+        let base = PreviewImage(width: w, height: h, pixels: pixels, fullWidth: 400, fullHeight: 200)
+        let full = LensTransform(info: LensInfo.none(width: 400, height: 200), params: DevelopParams())
+        func pick(_ lens: LensTransform, _ rect: CropRect) -> WhitePicker.Pick? {
+            WhitePicker.area(base: base, imageWidth: 400, imageHeight: 200, lens: lens, rect: rect, asShotKelvin: 5000, asShotTint: 0)
+        }
+
+        let left = white(try XCTUnwrap(pick(full, CropRect(0.05, 0.1, 0.45, 0.9))))
+        let leftOut = developed([0.2, 0.17, 0.12], 5000, 0, Double(left.kelvin), Double(left.tint))
+        XCTAssertEqual(leftOut[0] / leftOut[1], 1, accuracy: 0.005)
+        XCTAssertEqual(leftOut[2] / leftOut[1], 1, accuracy: 0.005)
+
+        // The whole right half: the clipped bottom quadrant is skipped, the cool top one made neutral.
+        let right = white(try XCTUnwrap(pick(full, CropRect(0.55, 0.05, 0.95, 0.95))))
+        let rightOut = developed([0.1, 0.12, 0.16], 5000, 0, Double(right.kelvin), Double(right.tint))
+        XCTAssertEqual(rightOut[0] / rightOut[1], 1, accuracy: 0.005)
+        XCTAssertEqual(rightOut[2] / rightOut[1], 1, accuracy: 0.005)
+
+        // Only the clipped quadrant, and an empty area.
+        XCTAssertEqual(pick(full, CropRect(0.55, 0.55, 0.95, 0.95)), .clipped)
+        XCTAssertNil(pick(full, CropRect(0.5, 0.5, 0.5, 0.9)))
+
+        // Cropped to the top right quarter: a rectangle over most of the output samples only the cool part.
+        var p = DevelopParams()
+        p.cropLeft = 0.5
+        p.cropRight = 1
+        p.cropTop = 0
+        p.cropBottom = 0.5
+        let cropped = white(try XCTUnwrap(pick(LensTransform(info: LensInfo.none(width: 400, height: 200), params: p), CropRect(0.1, 0.1, 0.9, 0.9))))
+        XCTAssertEqual(cropped.kelvin, right.kelvin, accuracy: 5)
+    }
 }

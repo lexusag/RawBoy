@@ -1,3 +1,8 @@
+**RawBoy Desktop (macOS) and RawBoy (iOS): Auto WB area and Reset WB (2026-11-15)**
+
+- Color tab: **Auto WB** shows a frame on the photo; temperature and tint are solved so what is inside renders neutral (clipped pixels left out), again whenever the frame is dragged or resized. **Reset WB** returns to as shot. As on the web and Android (`WhitePicker.area`, the web's `autoWhiteArea`, with its test). Esc or Close Tool closes the frame on the Mac.
+- Compiled and unit-tested by CI on macOS only: not yet tried by hand.
+
 **RawBoy Desktop (macOS) and RawBoy (iOS): lens corrections from the Lensfun database (2026-11-15)**
 
 - The Lens tab's **Use Lensfun profile** switch, as on the web: distortion, chromatic aberration and vignetting from the Lensfun lens database for raws with no embedded profile. **Auto** matches the camera and lens from the EXIF, **Pick lens** searches the camera and lens lists, **Generic** describes a lens that is not in the database (crop factor or sensor size, focal length, aperture, type incl. fisheyes with **Straighten fisheye**, optional known terms). Off by default; the switch, mode, generic lens and picked camera are remembered. Not in presets or sidecars.

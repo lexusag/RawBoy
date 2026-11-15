@@ -21,7 +21,7 @@ let proHelp = [
     HelpSection("Sliders and tools", [
         HelpItem("Double-click a slider", "Reset it (clicking its value does too)."),
         HelpItem("Mouse wheel over a slider", "Move it without clicking; with Shift in big steps, with ⌘ in fine ones. A wheel that is scrolling the panel keeps scrolling it."),
-        HelpItem("Pick white balance", "Color tab: click something neutral grey and Temperature and Tint make it grey."),
+        HelpItem("Pick white balance", "Color tab: click something neutral grey and Temperature and Tint make it grey. Auto WB solves them for a frame you drag over the photo; Reset WB returns to as shot."),
         HelpItem("Curves", "Light tab: click the curve to add a point, drag it, double-click it to remove."),
         HelpItem("Detail", "Luma and Color denoise work separately. Local contrast brings out texture; High-pass contrast is wider clarity. Fake anamorphic flare adds horizontal cinema streaks. Click Grain's name for its size, roughness and color."),
         HelpItem("Lens", "Embedded profile, Distortion, Horizontal distortion, Crop, Fisheye, Vignetting and Chromatic aberration. Use Lensfun profile corrects distortion, chromatic aberration and vignetting from the Lensfun lens database: Auto matches the camera and lens from the photo's EXIF, Pick lens searches the database, Generic describes a lens that is not in it."),
@@ -57,7 +57,7 @@ let proHelp = [
     ]),
     HelpSection("Sliders and tools", [
         HelpItem("Double-tap a slider", "Reset it (tapping its value does too)."),
-        HelpItem("Pick white balance", "Color tab: tap something neutral grey and Temperature and Tint make it grey."),
+        HelpItem("Pick white balance", "Color tab: tap something neutral grey and Temperature and Tint make it grey. Auto WB solves them for a frame you drag over the photo; Reset WB returns to as shot."),
         HelpItem("Detail", "Luma and Color denoise work separately. Local contrast brings out texture; High-pass contrast is wider clarity. Fake anamorphic flare adds horizontal cinema streaks (Neutral, Blue, Golden or Magenta, with optional faint Ghosts; big lit windows and signs do not flare). Tap Grain's name for its size, roughness and color."),
         HelpItem("Lens", "Embedded profile, Distortion, Horizontal distortion (bows verticals like an anamorphic lens), Crop (0 auto-crops empty edges; negative shows the curved edges, positive crops tighter), Fisheye (tap its name: straightens a fisheye lens towards rectilinear; set the lens field of view, and for a circular fisheye the size and centre of its image circle), Vignetting and Chromatic aberration. Use Lensfun profile corrects distortion, chromatic aberration and vignetting from the Lensfun lens database: Auto matches the camera and lens from the photo's EXIF, Pick lens searches the database, Generic describes a lens that is not in it."),
         HelpItem("Masks", "Brush, linear, radial and stripe layers with their own light and colour. Brush or Erase paints on any layer."),
