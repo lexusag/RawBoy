@@ -65,7 +65,7 @@ struct EditorScreen: View {
     }
     private var leakShapes: [MaskLayer] { leaks.map { MaskLayer(id: $0.id, name: "", enabled: $0.enabled, shape: $0.shape) } }
     private var leakForms: [String: LeakForm] {
-        Dictionary(uniqueKeysWithValues: leaks.map { ($0.id, LeakForm(kind: $0.kind, bend: $0.bend, taper: $0.taper)) })
+        Dictionary(uniqueKeysWithValues: leaks.map { ($0.id, LeakForm(kind: $0.kind, bend: $0.bend, taper: $0.taper, radii: $0.radii)) })
     }
     private var effects: [LightEffect] { state.params.fx }
     private var selectedFxId: String? {
@@ -254,7 +254,8 @@ struct EditorScreen: View {
                             onPan: vm.pan, onZoom: pinchZoom),
                         onPaintAt: { _ in },
                         grabInside: true, leaks: leakForms,
-                        onBend: { id, bend in vm.updateLeak(id) { $0.bend = bend } }))
+                        onBend: { id, bend in vm.updateLeak(id) { $0.bend = bend } },
+                        onReshape: { id, radii in vm.updateLeak(id) { $0.radii = radii } }))
                 }
                 if let shader, mode == .fx, session.preview != nil, !showOriginal {
                     let frame = framePx + marginPx

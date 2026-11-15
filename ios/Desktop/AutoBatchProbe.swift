@@ -36,6 +36,12 @@ enum AutoBatchProbe {
         Task {
             if model.mode == .pro {
                 while !model.vm.state.hasImage { try? await Task.sleep(for: .milliseconds(300)) }
+                // RAWBOY_PROBE_LEAK=<kind>: a leak of that kind is added and the Light tool opened, for the mouse script.
+                if let kind = ProcessInfo.processInfo.environment["RAWBOY_PROBE_LEAK"] {
+                    _ = model.vm.addLeak(kind == "glow" ? .glow : kind == "triangle" ? .triangle : .streak)
+                    model.commands.send(.toggleMode(.leaks))
+                    try? await Task.sleep(for: .seconds(2))
+                }
             } else {
                 while model.auto.selected == nil || model.auto.sessionReady == nil { try? await Task.sleep(for: .milliseconds(300)) }
             }
@@ -44,7 +50,9 @@ enum AutoBatchProbe {
                 log("no window")
                 return
             }
+            NSApp.activate(ignoringOtherApps: true)
             window.makeKeyAndOrderFront(nil)
+            try? await Task.sleep(for: .milliseconds(500))
             func point(_ s: Substring) -> NSPoint {
                 let v = s.split(separator: ",").compactMap { Double($0) }
                 return NSPoint(x: v[0], y: view.frame.height - v[1])
@@ -57,6 +65,9 @@ enum AutoBatchProbe {
             @MainActor func state() -> String {
                 if model.mode == .pro {
                     let p = model.vm.state.params
+                    if let l = p.leaks.last, ProcessInfo.processInfo.environment["RAWBOY_PROBE_LEAK"] != nil {
+                        return "leak \(l.kind) radii \(l.radii) rx \(l.rx) ry \(l.ry) angle \(l.angle) cx \(l.cx) cy \(l.cy)"
+                    }
                     return "exposure \(p.exposure) contrast \(p.contrast) highlights \(p.highlights) shadows \(p.shadows) tonemapper \(p.toneMapper) film \(p.film ?? "-")"
                 }
                 guard let id = model.auto.selected, let p = model.auto.photo(id) else { return "-" }
@@ -68,6 +79,10 @@ enum AutoBatchProbe {
                 let body = double ? step.dropLast(2) : step
                 let parts = body.split(separator: ">")
                 let from = point(parts[0])
+                if ProcessInfo.processInfo.environment["RAWBOY_PROBE_HIT"] != nil, let super_ = view.superview {
+                    let hit = view.hitTest(view.convert(from, to: super_))
+                    log("hit at \(step): \(hit.map { String(describing: type(of: $0)) } ?? "nil"), content \(view.frame.size)")
+                }
                 post(.mouseMoved, from)
                 try? await Task.sleep(for: .milliseconds(50))
                 post(.leftMouseDown, from, clicks: double ? 2 : 1)

@@ -613,8 +613,10 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   light towards white (`coreTint`), for censoring. Glows reshape by 8
   radii (`uLeakRadii`, 2 vec4 per leak, stored minus 1 so unbound = ellipse) at 22.5° + k 45° through a closed
   Catmull-Rom (`leakRadius`, the same in TS); edge `(|q| - r) / sqrt(r)`. Web overlay: hollow `outline` dots, size
-  dots sit on the reshaped outline (`dragShape` divides by r). Android/iOS: model, JSON, packing, binding and the
-  Texture/Cover sliders; no outline dots yet. Old edits parse with texture/cover 0 and round radii (the old look).
+  dots sit on the reshaped outline (`dragShape` divides by r). Android: model, JSON, packing, binding and the
+  Texture/Cover sliders; no outline dots yet. iOS and Desktop (2026-11-15; `LightLeaks.radius/radiusAngle/reshaped/edge(radii:)`,
+  `MaskGeometry.reshape/toQ`, `MaskHandle.outline(i)`, `LeakForm.radii`, `MaskInputs.onReshape`, `LeaksPanel`'s Round outline): the
+  same outline dots and drag as the web (`AutoBatchProbe` `RAWBOY_PROBE_LEAK=glow` + `RAWBOY_PROBE_MOUSE` drives it). Old edits parse with texture/cover 0 and round radii (the old look).
   Tuned with a standalone WebGL page that includes `light_leak.glsl` with a stub `grainNoise` (not in the repo). Applied by each shader assembly **after** the curves line (`applyLeaks(c, srcG, outPx)`; iOS
   binds them by name in `MetalCommon.bindLeaks`). The grain lives in `develop()` (log domain), so the
   leak would flatten it: `applyLeaks` adds `grainNoise` back × how much the leaks replaced (display units, ~mid-tone
