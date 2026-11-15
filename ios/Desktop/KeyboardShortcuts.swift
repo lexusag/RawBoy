@@ -18,6 +18,7 @@ final class KeyboardShortcuts {
     enum Key: UInt16 {
         case z = 6, d = 2, c = 8, b = 11, e = 14, v = 9, o = 31
         case leftBracket = 33, rightBracket = 30, backslash = 42
+        case left = 123, right = 124, down = 125, up = 126, one = 18, two = 19
         case delete = 51, forwardDelete = 117, space = 49, `return` = 36, keypadEnter = 76, escape = 53, slash = 44
     }
 
@@ -42,9 +43,58 @@ final class KeyboardShortcuts {
         return window.firstResponder is NSText  // a text field's field editor
     }
 
+    /**
+     * Auto: the arrows move through the grid (and between photos in the photo view), Return opens, Esc goes back; ⌘E, ⌘O, ⌘Z
+     * and the mode keys are the menu's. Nothing here fires while text is being typed or a sheet is open.
+     */
+    private func handleAuto(_ event: NSEvent, _ key: Key) -> NSEvent? {
+        guard event.type == .keyDown, !typing else { return event }
+        let flags = event.modifierFlags.intersection([.command, .control, .option, .shift])
+        let auto = model.auto
+        if flags == [.command] {
+            switch key {
+            case .z: if let id = auto.selected { auto.undo(id) }
+            case .o: model.addPhotosPanel()
+            case .e: if auto.photos.contains(where: { $0.analysis != nil }) { auto.requestExport() }
+            case .one: model.mode = .pro
+            case .slash: model.commands.send(.help)
+            default: return event
+            }
+            return nil
+        }
+        if flags == [.command, .shift] {
+            switch key {
+            case .z: if let id = auto.selected { auto.redo(id) }
+            case .o: model.addFolderPanel()
+            default: return event
+            }
+            return nil
+        }
+        guard flags.isEmpty, auto.export == nil else { return event }
+        if auto.selected != nil {
+            switch key {
+            case .left: auto.page(-1)
+            case .right: auto.page(1)
+            case .escape: auto.goBack()
+            default: return event
+            }
+            return nil
+        }
+        switch key {
+        case .left: auto.moveFocus(dx: -1, dy: 0)
+        case .right: auto.moveFocus(dx: 1, dy: 0)
+        case .up: auto.moveFocus(dx: 0, dy: -1)
+        case .down: auto.moveFocus(dx: 0, dy: 1)
+        case .return, .keypadEnter: auto.openFocused()
+        default: return event
+        }
+        return nil
+    }
+
     private func handle(_ event: NSEvent) -> NSEvent? {
         guard let key = Key(rawValue: event.keyCode) else { return event }
         let commands = model.commands
+        if model.mode == .auto { return handleAuto(event, key) }
         if key == .space {
             if typing { return event }
             let held = event.type == .keyDown

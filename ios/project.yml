@@ -277,6 +277,11 @@ targets:
         excludes:
           - ProApp.swift
           - Assets.xcassets
+      # RawBoy Auto's SwiftUI batch screens, shared the same way (Auto/, minus AutoApp.swift).
+      - path: Auto
+        excludes:
+          - AutoApp.swift
+          - Assets.xcassets
       - path: Desktop
     dependencies:
       - target: RawBoyEngineMac

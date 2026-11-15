@@ -1,7 +1,10 @@
 import CoreGraphics
 import Foundation
 import RawBoyEngine
+import SwiftUI
+#if canImport(UIKit)
 import UIKit
+#endif
 
 /** Where a photo is in the batch. */
 enum PhotoStatus { case queued, analyzing, ready, failed, exporting, exported }
@@ -37,7 +40,24 @@ struct AutoPhoto: Identifiable {
     var looksApplied = false
     var thumbnail: CGImage?
 
+    /** Web-only parts of a photo's `rawboy:Auto` sidecar (RawBoy edits, As is, ...): kept and written back as they were. */
+    var kept: SavedAuto?
+
     var id: String { url.path }
+
+    /** What the sidecar keeps of this photo. */
+    var saved: SavedAuto {
+        var s = kept ?? SavedAuto()
+        s.mode = mode
+        s.look = look
+        s.filmLook = filmLook
+        s.strength = strength
+        s.adjust = adjust
+        s.preset = preset
+        s.lensChoice = lensChoice
+        s.lensPreset = lensChoice == nil || lensChoice == Presets.noLensPreset ? nil : lensPreset
+        return s
+    }
 
     var activeLook: Look { mode == .film ? filmLook : look }
 
@@ -108,6 +128,15 @@ struct BatchExport: Equatable {
     /// "Export all": the photos not yet done, the one being exported included. The grid shows them desaturated, so the
     /// batch can be followed as each turns to colour once saved.
     var waiting: Set<String> = []
+}
+
+/**
+ * Keeps each photo's Auto settings with the photo (RawBoy Desktop: its `rawboy:Auto` sidecar). `restore` runs off the main
+ * actor while photos are added; `changed` after every edit.
+ */
+protocol AutoPersistence: AnyObject, Sendable {
+    func restore(_ url: URL) -> SavedAuto?
+    @MainActor func changed(_ photo: AutoPhoto)
 }
 
 @MainActor
@@ -210,6 +239,22 @@ final class AutoViewModel: ObservableObject {
     /** The photos [presetChoices] are for: nil = the whole batch. */
     private var presetTarget: Set<String>?
 
+    /** Photos' settings kept beside them (RawBoy Desktop's sidecars); nil on iOS. */
+    var persistence: AutoPersistence?
+    /**
+     * Where exports go: the photo library's RawBoy Auto album on iOS; RawBoy Desktop sets a folder. [saveExported] gets the
+     * file the exporter wrote (in the temporary folder: move it) and the photo's file.
+     * [destinationView] is the export sheet's choice of destination, where there is one to make.
+     */
+    #if canImport(UIKit)
+    var saveExported: (URL, URL) async throws -> Void = { file, _ in try await PhotoLibraryOutput.save(file, naming: AutoViewModel.naming) }
+    var destinationLabel = "Photos › \(AutoViewModel.naming.folder)"
+    #else
+    var saveExported: (URL, URL) async throws -> Void = { _, _ in }
+    var destinationLabel = "the export folder"
+    #endif
+    var destinationView: AnyView?
+
     /** The detail view's photo, decoded at full resolution (preview, 100% view, single export). */
     private(set) var session: PhotoSession!
 
@@ -262,14 +307,45 @@ final class AutoViewModel: ObservableObject {
         Task {
             let dates = await Task.detached(priority: .userInitiated) { wanted.map(CaptureDate.read) }.value
             let now = Set(photos.map(\.id))
-            let fresh = zip(wanted, dates).filter { !now.contains($0.0.path) }.map { url, date in
-                AutoPhoto(url: url, name: Imports.displayName(url), date: date, mode: mode, preset: preset, lensChoice: lensChoice)
+            let persistence = persistence
+            let restored = await Task.detached(priority: .userInitiated) { wanted.map { persistence?.restore($0) } }.value
+            let fresh: [AutoPhoto] = zip(zip(wanted, dates), restored).filter { !now.contains($0.0.0.path) }.map { pair, saved in
+                var p = AutoPhoto(url: pair.0, name: Imports.displayName(pair.0), date: pair.1, mode: mode, preset: preset, lensChoice: lensChoice)
+                if let saved { takeSaved(saved, into: &p) }
+                return p
             }
             if fresh.isEmpty { return }
             photos = sorted(photos + fresh)
             if let note = Self.nonRawNote(fresh.map(\.name)) { message = note }
             processQueue()
         }
+    }
+
+    /** A photo's settings from its sidecar: it comes back as it was left (and keeps them instead of a suggestion). */
+    private func takeSaved(_ s: SavedAuto, into p: inout AutoPhoto) {
+        p.mode = s.mode
+        p.look = s.look
+        p.filmLook = s.filmLook
+        p.strength = s.strength
+        p.adjust = s.adjust
+        p.preset = s.preset
+        p.looksApplied = true
+        p.kept = s
+        p.lensChoice = s.lensChoice
+        if let picked = s.lensPreset {
+            // The picked lens preset travels with the photo; the one in the list for that lens (if any) stands in for it.
+            if let known = lensPresets.first(where: { Self.sameLens($0, picked) }) {
+                p.lensChoice = known.id
+            } else {
+                setLensPresets(Presets.putLensPreset(lensPresets, picked))
+                p.lensChoice = picked.id
+            }
+        }
+    }
+
+    private static func sameLens(_ a: Preset, _ b: Preset) -> Bool {
+        (a.lens ?? "").trimmingCharacters(in: .whitespaces).lowercased() == (b.lens ?? "").trimmingCharacters(in: .whitespaces).lowercased()
+            && a.name == b.name
     }
 
     /** File types Auto opens besides raws: already processed by the camera, so they give lower-quality results. */
@@ -408,7 +484,7 @@ final class AutoViewModel: ObservableObject {
         for p in photos {
             guard let lens = p.analysis?.lens.lensName else { continue }
             let next = Presets.chosenLensPreset(list, choice: p.lensChoice, lens: lens)
-            if next != p.lensPreset { changeDevelop(p.id, force: nil) { $0.lensPreset = next } }
+            if next != p.lensPreset { changeDevelop(p.id, force: nil, persist: false) { $0.lensPreset = next } }
         }
     }
 
@@ -529,6 +605,58 @@ final class AutoViewModel: ObservableObject {
                 }
             }
             analysisTask = nil
+        }
+    }
+
+    // MARK: - Keyboard (RawBoy Desktop)
+
+    /** The grid's keyboard focus (arrow keys move it, Return opens it); UI state only. */
+    @Published var focusedId: String?
+    /** Bumped by the menu and ⌘E: the grid or the photo view opens its export sheet. */
+    @Published private(set) var exportRequest = 0
+    /** Index of the first photo of each grid row, as the grid last laid them out (for the up and down arrows). */
+    var rowStarts: [Int] = []
+
+    func requestExport() { exportRequest += 1 }
+
+    /** Moves the grid's focus by [dx] photos and [dy] rows (the first arrow press focuses the first photo). */
+    func moveFocus(dx: Int, dy: Int) {
+        guard !photos.isEmpty else { return }
+        guard let id = focusedId, let i = photos.firstIndex(where: { $0.id == id }) else {
+            focusedId = photos[0].id
+            return
+        }
+        var target = i + dx
+        if dy != 0, !rowStarts.isEmpty {
+            let row = rowStarts.lastIndex { $0 <= i } ?? 0
+            let next = min(max(row + dy, 0), rowStarts.count - 1)
+            let column = i - rowStarts[row]
+            let end = next + 1 < rowStarts.count ? rowStarts[next + 1] : photos.count
+            target = min(rowStarts[next] + column, end - 1)
+        }
+        focusedId = photos[min(max(target, 0), photos.count - 1)].id
+    }
+
+    /** Return in the grid: opens the focused photo (analysing it first if it still waits). */
+    func openFocused() {
+        if let id = focusedId { openFromGrid(id) }
+    }
+
+    /** Left and right in the photo view: the previous or next analysed photo. */
+    func page(_ delta: Int) {
+        guard let id = selected, export == nil, !cropping else { return }
+        let pages = photos.filter { $0.analysis != nil }
+        guard let i = pages.firstIndex(where: { $0.id == id }), pages.indices.contains(i + delta) else { return }
+        openDetail(pages[i + delta].id)
+    }
+
+    /** Esc: out of Crop & rotate, else from the photo back to the grid. */
+    func goBack() {
+        if cropping {
+            cropping = false
+        } else if selected != nil {
+            focusedId = selected
+            closeDetail()
         }
     }
 
@@ -671,7 +799,7 @@ final class AutoViewModel: ObservableObject {
     }
 
     /** [force]: its own undo step (false: a slider, coalesced; nil: Undo or Redo itself, not recorded). */
-    private func changeDevelop(_ id: String, force: Bool? = false, _ change: (inout AutoPhoto) -> Void) {
+    private func changeDevelop(_ id: String, force: Bool? = false, persist: Bool = true, _ change: (inout AutoPhoto) -> Void) {
         let old = photo(id)
         let before = old?.params
         if let old, let force { histories[id, default: EditHistory()].record(old.develop, force: force) }
@@ -684,6 +812,7 @@ final class AutoViewModel: ObservableObject {
             if params.film != before?.film { session.selectFilm(params.film) { [weak self] in self?.message = $0 } }
         }
         refreshThumbnail(id, immediate: false)
+        if persist { persistence?.changed(p) }
     }
 
     /** Re-renders the grid thumbnail; slider drags are debounced. */
@@ -889,8 +1018,8 @@ final class AutoViewModel: ObservableObject {
                     try await session.export(params, defaults: a.defaults, sourceName: p.name, settings: settings,
                                              naming: Self.naming) { f in Task { @MainActor in self.export?.current = f } }
                 }
-                try await PhotoLibraryOutput.save(file, naming: Self.naming)
-                message = "Saved \(file.lastPathComponent) to Photos › \(Self.naming.folder)"
+                try await saveExported(file, p.url)
+                message = "Saved \(file.lastPathComponent) to \(destinationLabel)"
                 ok = true
             } catch {
                 message = "Export failed: \(error.localizedDescription)"
@@ -932,7 +1061,7 @@ final class AutoViewModel: ObservableObject {
                     itemSettings.frameNumber = index + 1
                     itemSettings.captureDate = p.date
                     let file = try await decodeLock.run { try await exportOne(p, itemSettings) }
-                    try await PhotoLibraryOutput.save(file, naming: Self.naming)
+                    try await saveExported(file, p.url)
                     ok = true
                 } catch {
                     failed += 1
@@ -946,7 +1075,7 @@ final class AutoViewModel: ObservableObject {
             }
             let saved = attempted - failed
             // Photos finished before Stop are already in Photos and stay there.
-            message = (stopped ? "Stopped · " : "") + "Saved \(saved) \(saved == 1 ? "photo" : "photos") to Photos › \(Self.naming.folder)"
+            message = (stopped ? "Stopped · " : "") + "Saved \(saved) \(saved == 1 ? "photo" : "photos") to \(destinationLabel)"
                 + (failed > 0 ? " · \(failed) failed" : "")
             export = nil
             keepAwake(false)
@@ -979,7 +1108,19 @@ final class AutoViewModel: ObservableObject {
     }
 
     /** A batch export can take minutes; don't let the screen sleep and suspend it. */
+    #if canImport(UIKit)
     private func keepAwake(_ on: Bool) { UIApplication.shared.isIdleTimerDisabled = on }
+    #else
+    private var activity: NSObjectProtocol?
+    private func keepAwake(_ on: Bool) {
+        if on, activity == nil {
+            activity = ProcessInfo.processInfo.beginActivity(options: [.userInitiated, .idleSystemSleepDisabled], reason: "Exporting photos")
+        } else if !on, let a = activity {
+            ProcessInfo.processInfo.endActivity(a)
+            activity = nil
+        }
+    }
+    #endif
 }
 
 /** One at a time, in order: Swift's counterpart of the Kotlin Mutex around full-resolution decodes. */

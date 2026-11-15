@@ -83,7 +83,8 @@ struct DetailScreen: View {
                 .sheet(isPresented: $showExport) {
                     ExportSheet(vm: vm, count: 1) { vm.exportSelected() }
                 }
-                .navigationBarTitleDisplayMode(.inline)
+                .onChange(of: vm.exportRequest) { _, _ in if vm.export == nil { showExport = true } }
+                .inlineTitle()
             }
         }
     }
@@ -242,7 +243,7 @@ struct DetailScreen: View {
 
     @ToolbarContentBuilder
     private func toolbar(_ photo: AutoPhoto) -> some ToolbarContent {
-        ToolbarItemGroup(placement: .topBarLeading) {
+        ToolbarItemGroup(placement: .barLeading) {
             Button { vm.closeDetail() } label: { Image(systemName: "chevron.backward") }
                 .accessibilityLabel("Back")
             Button { vm.undo(id) } label: { Image(systemName: "arrow.uturn.backward") }
@@ -260,7 +261,7 @@ struct DetailScreen: View {
                 }
             }
         }
-        ToolbarItemGroup(placement: .topBarTrailing) {
+        ToolbarItemGroup(placement: .barTrailing) {
             // Apply to all and Remove share a menu: the bar is full on phones and the name needs the room.
             Menu {
                 Button("Crop & rotate", systemImage: "crop.rotate") {

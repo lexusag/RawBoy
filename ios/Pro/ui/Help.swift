@@ -30,6 +30,13 @@ let proHelp = [
         HelpItem("Lens blur", "Masks, Adjust tab: a round lens-like defocus inside the mask (up to 3% of the long side). Small bright lights become clean discs, and the sharp part next to the mask is never smeared; it follows the mask, so paint or draw the background and leave the subject out."),
         HelpItem("Healing brush", "Heal in the top bar, or B: click a dust spot, blemish or small object to heal it away, drag to paint a stroke (zoom to 100% for the fine ones). The tone is filled in from around it and the detail borrowed from a nearby clean area; Choose source lets you drag a dashed copy onto the area to clone from. Size and Feather set the next strokes; [ and ] change the size, Delete removes the selected stroke, Esc or Return finishes. Strokes belong to the photo (the sidecar keeps them, presets don't)."),
     ]),
+    HelpSection("Auto mode", [
+        HelpItem("Pro | Auto", "The switch in the title bar (⌘1, ⌘2) changes between the full editor for one photo and Auto, which develops a batch automatically: each photo gets a suggested look, adjustable one by one or all at once."),
+        HelpItem("Adding photos", "⌘O (Add Photos…), ⇧⌘O (a folder), or drop photos and folders on the window; several photos or a folder opened from the Finder or with --auto go to Auto too. Photos are used in place, never copied."),
+        HelpItem("Grid", "Arrow keys move, Return opens, a click opens, ⌘-click or ⇧-click selects (then rotate, preset, remove from the batch, export those). Esc returns from a photo to the grid; ← and → go to the previous or next photo."),
+        HelpItem("Export", "⌘E exports the batch (the sheet asks format, quality and size, and the folder: next to each photo, or one you choose). Files are named NAME-auto.jpg and replace an earlier one."),
+        HelpItem("Sidecars", "Each photo's look, strength and adjustments are kept in its XMP sidecar (rawboy:Auto, 800 ms after a change), next to RawBoy's own edits; the photo comes back as you left it when it is added again, and RawBoy Web reads the same field."),
+    ]),
     HelpSection("Masks", [
         HelpItem("B", "Inside Masks: brush (adds a brush layer if none is selected). Elsewhere it opens the Healing brush."),
         HelpItem("E", "Erase"),
