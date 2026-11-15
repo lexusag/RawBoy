@@ -56,6 +56,7 @@ struct DetailScreen: View {
                         .pickerStyle(.segmented)
                         .padding(.horizontal, 16)
                         .padding(.top, 8)
+                        LookNameLine(photo: photo)
                         LookStrip(vm: vm, photo: photo)
                     }
                     // Copy previous sits by the tabs, next to the controls it changes (the top bar is full on phones).
@@ -429,6 +430,30 @@ private struct PhotoPage: View {
     }
 }
 
+/**
+ * The name of the look or film stock the photo has now (the web shows it on each grid cell; here also above the strip, whose
+ * chips only name theirs in small type under each thumbnail): "Yellow Portrait 400", with "suggested" when Auto picked it.
+ */
+private struct LookNameLine: View {
+    let photo: AutoPhoto
+
+    var body: some View {
+        let look = photo.activeLook
+        let suggested = (photo.mode == .film ? photo.suggestedFilm : photo.suggested).id == look.id
+        let kind = photo.mode == .film ? "Film stock" : "Look"
+        HStack(spacing: 6) {
+            Text(look.name).font(.subheadline.weight(.semibold)).foregroundStyle(Color.accentColor).lineLimit(2)
+            if suggested { Text("suggested").font(.caption).foregroundStyle(.secondary) }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(kind): \(look.name)\(suggested ? ", suggested by Auto" : "")")
+        .accessibilityAddTraits(.isHeader)
+    }
+}
+
 private struct LookStrip: View {
     @ObservedObject var vm: AutoViewModel
     let photo: AutoPhoto
@@ -456,7 +481,7 @@ private struct LookStrip: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
             }
-            .scrollIndicators(.hidden)
+            .scrollIndicators(.never)  // `.hidden` still drew the Mac's scroll bar over the chips' names
             .onAppear { proxy.scrollTo(photo.activeLook.id, anchor: .leading) }
             .onChange(of: photo.id) { _, _ in proxy.scrollTo(photo.activeLook.id, anchor: .leading) }
             .onChange(of: photo.mode) { _, _ in proxy.scrollTo(photo.activeLook.id, anchor: .leading) }

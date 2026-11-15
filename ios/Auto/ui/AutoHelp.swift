@@ -34,5 +34,7 @@ let autoHelp = [
         HelpItem("Remove from batch (…)", "Takes this photo out of the batch (the original stays) and goes on to the next."),
         HelpItem("Apply to all (…)", "Copies the look and its settings to every photo (brightness and denoise stay per photo)."),
         HelpItem("Copy previous", "Gives this photo the look, brightness and settings of the photo before it (denoise stays)."),
+        HelpItem("Look name", "The name of the look or film stock a photo has now is on its cell in the grid (hover for the whole text) and in bold above the look strip in the photo view, with \"suggested\" when Auto picked it."),
+        HelpItem("Reset all photos… (Mac)", "Next to Clear batch (and in the Mode menu): puts every photo back to one look, one film stock, or As is (just the automatic exposure and tone), and clears each photo's Strength, brightness, warmth, tint, contrast, saturation, grain, denoise, rotation, crop and any RawBoy preset. The photos stay; Undo in a photo's view brings its edits back."),
     ]),
 ]

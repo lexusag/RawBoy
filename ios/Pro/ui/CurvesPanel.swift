@@ -58,6 +58,7 @@ struct CurvesPanel: View {
                     .font(.subheadline)
                     .disabled(ToneCurves.isIdentity(points))
             }
+            .reportsWidth("curves header row")
             GeometryReader { geo in
                 let size = geo.size
                 Canvas { ctx, s in

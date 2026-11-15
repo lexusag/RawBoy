@@ -73,6 +73,7 @@ struct ControlsPanel: View {
                 }
             }
             .pickerStyle(.segmented)
+            .reportsWidth("tabs picker")
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             ScrollView {
@@ -85,6 +86,7 @@ struct ControlsPanel: View {
                     default: lensPanel
                     }
                 }
+                .reportsWidth("tab content")
                 .padding(.horizontal, 16)
                 .padding(.bottom, 8)
             }
@@ -94,22 +96,37 @@ struct ControlsPanel: View {
         .onAppear { if tab == Self.lutsTab { onLutsTabShown() } }
     }
 
-    @ViewBuilder private var light: some View {
-        HStack {
-            // A fixed label width (as the sliders') so the row doesn't re-flow when the segments or the stock name change.
-            Text("Tone mapper").font(.subheadline).lineLimit(1).minimumScaleFactor(0.8).frame(width: 104, alignment: .leading)
-            // nil = Film: negative + print on a stock, in place of the tone mapper (also what Auto's Film mode sets).
-            Picker("Tone mapper", selection: Binding<ToneMapper?>(
-                get: { params.film == nil ? params.toneMapper : nil },
-                set: { t in if let t { onToneMapper(t) } else { onFilm() } })) {
-                ForEach(ToneMapper.allCases, id: \.self) { Text($0.label).tag(Optional($0)) }
-                Text("Film").tag(ToneMapper?.none)
-            }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .frame(maxWidth: .infinity)
+    /** nil = Film: negative + print on a stock, in place of the tone mapper (also what Auto's Film mode sets). */
+    private var toneMapperPicker: some View {
+        Picker("Tone mapper", selection: Binding<ToneMapper?>(
+            get: { params.film == nil ? params.toneMapper : nil },
+            set: { t in if let t { onToneMapper(t) } else { onFilm() } })) {
+            ForEach(ToneMapper.allCases, id: \.self) { Text($0.label).tag(Optional($0)) }
+            Text("Film").tag(ToneMapper?.none)
         }
-        .frame(height: 32)
+        .labelsHidden()
+        .pickerStyle(.segmented)
+        #if os(macOS)
+        .controlSize(.small)
+        #endif
+        .frame(maxWidth: .infinity)
+    }
+
+    @ViewBuilder private var light: some View {
+        // The label beside the segments when they fit, else above them: a segmented control can't go below its natural width,
+        // and a row wider than the panel made every slider track and the curve box as wide, running off the panel's edge.
+        ViewThatFits(in: .horizontal) {
+            HStack {
+                // A fixed label width (as the sliders') so the row doesn't re-flow when the segments or the stock name change.
+                Text("Tone mapper").font(.subheadline).lineLimit(1).minimumScaleFactor(0.8).frame(width: 88, alignment: .leading)
+                toneMapperPicker
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Tone mapper").font(.subheadline).lineLimit(1)
+                toneMapperPicker
+            }
+        }
+        .reportsWidth("tone mapper row")
         if let film = params.film {
             HStack {
                 Text("Stock").font(.subheadline).frame(width: 104, alignment: .leading)
@@ -498,6 +515,7 @@ struct ParamSlider: View {
                 .allowsHitTesting(onLabelTap != nil)
                 .accessibilityHidden(true)  // the slider carries the label
             slider.sliderWheel(range, value: { value }, onChange)
+                .reportsWidth("Pro \(label)")
                 .accessibilityLabel(label)
                 .accessibilityValue(format(value))
                 .accessibilityHint("Double-tap the slider or use Reset to go back to \(format(defaultValue))")
