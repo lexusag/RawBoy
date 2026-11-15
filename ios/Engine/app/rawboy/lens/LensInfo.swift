@@ -6,7 +6,7 @@ import Foundation
  */
 public final class LensInfo: @unchecked Sendable {
     /** DNG WarpRectilinear: per plane kr0..kr3, kt0, kt1; centre relative to the sensor image. */
-    public struct Warp: Sendable {
+    public struct Warp: Sendable, Codable {
         public let planes: Int
         public let coefficients: [Double]
         public let centerX: Double
@@ -14,14 +14,14 @@ public final class LensInfo: @unchecked Sendable {
     }
 
     /** DNG FixVignetteRadial: gain = 1 + k0 r^2 + ... + k4 r^10. */
-    public struct RadialVignette: Sendable {
+    public struct RadialVignette: Sendable, Codable {
         public let k: [Double]
         public let centerX: Double
         public let centerY: Double
     }
 
     /** Luminance part of the DNG gain maps (already applied), so it can be undone on the GPU. */
-    public struct ShadingMap: Sendable {
+    public struct ShadingMap: Sendable, Codable {
         public let pointsV: Int
         public let pointsH: Int
         public let originV: Double

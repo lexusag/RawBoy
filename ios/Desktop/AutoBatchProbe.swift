@@ -311,6 +311,9 @@ enum AutoBatchProbe {
             log("restored from the sidecar: strength \(p.strength) (was \(before.1)), mode \(p.mode) (was \(before.2)), brightness \(p.adjust.brightness) (was \(before.3)) \(p.strength == before.1 && p.mode == before.2 && p.adjust.brightness == before.3 ? "OK" : "MISMATCH")")
         }
         log("re-analysis: \(String(format: "%.2f", Date().timeIntervalSince(t))) s")
+        var ru = rusage()
+        getrusage(RUSAGE_SELF, &ru)
+        log("peak RSS \(ru.ru_maxrss / 1_048_576) MB")
 
         // 4. Export all.
         t = Date()

@@ -275,7 +275,22 @@ final class AutoViewModel: ObservableObject {
      * time keeps a batch from stacking them up.
      */
     private let decodeLock = AsyncLock()
-    private var analysisTask: Task<Void, Never>?
+    /** How many analyses run side by side: [lanes] (RawBoy Desktop's cores and memory allow more than one). */
+    private var analysisLanes = 0
+    /** RawBoy Desktop: each photo's analysis kept on disk by path, size and modified time (nil: none). */
+    var analysisCache: AnalysisCache?
+    /**
+     * Analysis lanes: the first goes through [decodeLock] (one full decode at a time, with the detail view and export); the
+     * others only run on the Mac, a third of its cores (at most 3) and one per 6 GB of memory, as the web does (`analysisLanes`).
+     */
+    static let lanes: Int = {
+        #if os(macOS)
+        let info = ProcessInfo.processInfo
+        return max(1, min(3, info.activeProcessorCount / 3, Int(info.physicalMemory >> 30) / 6))
+        #else
+        return 1
+        #endif
+    }()
     private var thumbTasks: [String: Task<Void, Never>] = [:]
     /** Each photo's edits, for Undo and Redo in the photo view. */
     private var histories: [String: EditHistory<Develop>] = [:]
@@ -569,45 +584,54 @@ final class AutoViewModel: ObservableObject {
         lookThumbs = lookThumbs.filter { key, _ in !ids.contains(where: { key.hasPrefix($0 + "|") }) }
     }
 
-    /** Analyses queued photos one at a time (each decode needs the full raw in memory). */
+    /** Analyses queued photos, [lanes] at a time (each decode needs the full raw in memory). */
     private func processQueue() {
-        if analysisTask != nil { return }
-        analysisTask = Task {
-            while let next = nextQueued() {
-                updatePhoto(next.id) { $0.status = .analyzing }
-                do {
-                    let previews = previews
-                    let analysis = try await decodeLock.run {
-                        try await Task.detached(priority: .userInitiated) {
-                            try AutoAnalysis.analyze(next.url) { previews.put(next.id, $0) }
-                        }.value
-                    }
-                    if photo(next.id) == nil { previews.remove(next.id) } // removed while it was analysed
-                    let look = LookSuggester.suggest(analysis.stats, asShotKelvin: analysis.defaults.temperature)
-                    let film = LookSuggester.suggestFilm(analysis.stats, asShotKelvin: analysis.defaults.temperature)
-                    updatePhoto(next.id) {
-                        $0.status = .ready
-                        $0.analysis = analysis
-                        $0.suggested = look
-                        $0.suggestedFilm = film
-                        $0.lensPreset = Presets.chosenLensPreset(self.lensPresets, choice: $0.lensChoice, lens: analysis.lens.lensName)
-                        if !$0.looksApplied {
-                            $0.look = look
-                            $0.filmLook = film
-                        }
-                    }
-                    refreshThumbnail(next.id, immediate: true)
-                    await openIfWaiting(next.id)
-                } catch {
-                    // Mark this photo and go on with the rest.
-                    updatePhoto(next.id) {
-                        $0.status = .failed
-                        $0.error = error.localizedDescription
-                    }
-                    if opening == next.id { opening = nil }
-                }
+        while analysisLanes < Self.lanes, nextQueued() != nil {
+            let lane = analysisLanes
+            analysisLanes += 1
+            Task {
+                await runLane(lane)
+                analysisLanes -= 1
             }
-            analysisTask = nil
+        }
+    }
+
+    private func runLane(_ lane: Int) async {
+        while let next = nextQueued() {
+            updatePhoto(next.id) { $0.status = .analyzing }
+            do {
+                let previews = previews
+                let cache = analysisCache
+                let work: @Sendable () async throws -> Analysis = {
+                    try await Task.detached(priority: .userInitiated) {
+                        try AutoAnalysis.analyze(next.url, cache: cache) { previews.put(next.id, $0) }
+                    }.value
+                }
+                let analysis = lane == 0 ? try await decodeLock.run(work) : try await work()
+                if photo(next.id) == nil { previews.remove(next.id) } // removed while it was analysed
+                let look = LookSuggester.suggest(analysis.stats, asShotKelvin: analysis.defaults.temperature)
+                let film = LookSuggester.suggestFilm(analysis.stats, asShotKelvin: analysis.defaults.temperature)
+                updatePhoto(next.id) {
+                    $0.status = .ready
+                    $0.analysis = analysis
+                    $0.suggested = look
+                    $0.suggestedFilm = film
+                    $0.lensPreset = Presets.chosenLensPreset(self.lensPresets, choice: $0.lensChoice, lens: analysis.lens.lensName)
+                    if !$0.looksApplied {
+                        $0.look = look
+                        $0.filmLook = film
+                    }
+                }
+                refreshThumbnail(next.id, immediate: true)
+                await openIfWaiting(next.id)
+            } catch {
+                // Mark this photo and go on with the rest.
+                updatePhoto(next.id) {
+                    $0.status = .failed
+                    $0.error = error.localizedDescription
+                }
+                if opening == next.id { opening = nil }
+            }
         }
     }
 
