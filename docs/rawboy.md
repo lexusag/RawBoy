@@ -107,7 +107,7 @@ Edits carry over when you open the next file, except rotation, flips, straighten
 `IMG_1234.CR3` → `Pictures/RawBoy/IMG_1234-rawboy.jpg`. If that name exists:
 `IMG_1234-rawboy-001.jpg`, `-002`, … JPEG keeps the main EXIF fields (camera, lens, exposure, date, GPS).
 
-**Film scan 1.5×** (Export dialog, Android and web; only while the Film tone mapper is on): renders the photo 1.5× larger. The photo is upscaled by iterative back-projection and lightly sharpened before the grain, and the film grain is generated at the finer pitch. The Size setting is ignored for a scan. Needs float render targets, otherwise it is a plain enlargement.
+**Film scan 1.5×** (Export dialog, Android, web, iOS and RawBoy Desktop; only while the Film tone mapper is on): renders the photo 1.5× larger. The photo is upscaled by iterative back-projection and lightly sharpened before the grain, and the film grain is generated at the finer pitch. The Size setting is ignored for a scan. Needs float render targets, otherwise it is a plain enlargement.
 
 **Frame** (Export dialog, Android, iOS and web; remembered, off by default): imprints a film data-back date stamp or wraps the exported JPEG or TIFF in a medium-format film rebate:
 - **Date stamp**: imprints the photo's EXIF shoot date (or today's date if none) in the bottom-right corner (vertically along the right long edge for portrait photos) in **Classic** (amber-orange quartz LED) or **Red LED** style, and in `DD MM 'YY` (default), `'YY MM DD` or `MM DD 'YY` order.

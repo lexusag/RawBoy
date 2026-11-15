@@ -101,7 +101,8 @@ struct EditorScreen: View {
         .background(Color(white: 0.07))
         .sheet(isPresented: $showExport) {
             ExportDialog(initial: vm.exportSettings, sourceName: state.fileName ?? "image",
-                         destination: commands.exportDestination, destinationNote: commands.exportNote?(commands.exportFolder)) {
+                         destination: commands.exportDestination, destinationNote: commands.exportNote?(commands.exportFolder),
+                         filmLook: state.params.film != nil && state.params.filmAmount > 0) {
                 if let handler = commands.exportHandler { handler($0) } else { vm.export($0) }
             }
         }

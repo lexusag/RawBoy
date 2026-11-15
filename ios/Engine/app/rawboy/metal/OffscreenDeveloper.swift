@@ -16,6 +16,7 @@ final class OffscreenDeveloper {
     private var inputTexture: MTLTexture?
     private var outputTexture: MTLTexture?
     private let denoiser = WaveletDenoise()
+    private lazy var scanner = ScanUpscaler()
     private var uploads = 0
 
     /** Bytes per sample of render/renderPreview output: always 2 on Metal (Android may need 4). */
@@ -40,16 +41,26 @@ final class OffscreenDeveloper {
      * [input] holds RGB half floats for [inRect], which must contain every source
      * pixel [out] needs (lens geometry + denoise neighbourhood), so tiles match
      * seamlessly. [output] receives out.width*out.height*4 values in 0..65535.
+     *
+     * [scale] > 1 (film scan export): [out] is in output pixels, [scale] times the photo's; the input is first upscaled by
+     * [scale] (ScanUpscaler) and [inRect] must have even edges, so the upscaled grid is whole pixels that line up with the
+     * output's (an integer number of output pixels from the photo's origin).
      */
     func render(_ params: ShaderParams, input: UnsafePointer<UInt16>, inRect: PixelRect, out: PixelRect,
-                output: UnsafeMutablePointer<UInt16>) throws {
+                output: UnsafeMutablePointer<UInt16>, scale: Float = 1) throws {
         textures.bind(params)
         let image = DevelopTextures.halfRgbTexture(inRect.width, inRect.height, input, reuse: inputTexture)
         inputTexture = image
         var geometry = SampleGeometry(textureWidth: inRect.width, textureHeight: inRect.height, input: inRect,
                                       output: out, imageWidth: imageWidth, imageHeight: imageHeight)
         geometry.minGrainPx = minGrainPx
-        try draw(params, geometry, image, 1, out.width, out.height, output)
+        var scan: (w: Int, h: Int)?
+        if scale > 1 {
+            let w = Int((Float(inRect.width) * scale).rounded()), h = Int((Float(inRect.height) * scale).rounded())
+            scan = (w, h)
+            geometry.renderScale = scale
+        }
+        try draw(params, geometry, image, 1, out.width, out.height, output, scan: scan)
     }
 
     /**
@@ -76,7 +87,9 @@ final class OffscreenDeveloper {
      * pixel, for the denoise pre-pass.
      */
     private func draw(_ params: ShaderParams, _ geometry: SampleGeometry, _ image: MTLTexture, _ pixelScale: Float,
-                      _ width: Int, _ height: Int, _ output: UnsafeMutablePointer<UInt16>) throws {
+                      _ width: Int, _ height: Int, _ output: UnsafeMutablePointer<UInt16>,
+                      scan: (w: Int, h: Int)? = nil) throws {
+        var geometry = geometry
         let target: MTLTexture
         if let t = outputTexture, t.width == width, t.height == height {
             target = t
@@ -96,10 +109,16 @@ final class OffscreenDeveloper {
         }
         uploads += 1  // every render uploads new pixels
         let denoised = WaveletDenoise.active(params.denoise, params.colorDenoise)
-        let input = denoised
+        var input = denoised
             ? denoiser.encode(commands, src: image, srcKey: uploads, pixelScale: pixelScale, denoise: params.denoise,
                               colorDenoise: params.colorDenoise)
             : image
+        if let scan {
+            input = scanner.encode(commands, src: input, srcW: geometry.textureWidth, srcH: geometry.textureHeight, w: scan.w, h: scan.h,
+                                   denoise: params.denoise)
+            geometry.textureWidth = scan.w
+            geometry.textureHeight = scan.h
+        }
         guard let encoder = commands.makeRenderCommandEncoder(descriptor: pass) else {
             throw MetalError(message: "cannot encode the develop pass")
         }

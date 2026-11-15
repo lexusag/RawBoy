@@ -1,6 +1,7 @@
 #if DEBUG
 import AppKit
 import Foundation
+import ImageIO
 import RawBoyEngine
 
 /**
@@ -243,6 +244,16 @@ enum AutoBatchProbe {
         log("scratch \(scratch.path), \(copies.count) photos")
         model.setExportFolder(exports)
 
+        // RAWBOY_AUTO_SCAN=1: Film mode and the Film scan export option.
+        let scanProbe = ProcessInfo.processInfo.environment["RAWBOY_AUTO_SCAN"] != nil
+        if scanProbe {
+            auto.setImportMode(.film)
+            var settings = auto.exportSettings
+            settings.filmScan = true
+            auto.setExportSettings(settings)
+            log("film scan on: \(auto.exportSettings.filmScan), film photos in the batch (before adding): \(auto.hasFilmPhotos)")
+        }
+
         // 1. Analysis of the batch.
         var t = Date()
         model.addToAuto([photosDir])
@@ -295,6 +306,14 @@ enum AutoBatchProbe {
         var bytes = 0
         for f in files { bytes += ((try? fm.attributesOfItem(atPath: exports.appendingPathComponent(f).path)[.size]) as? Int) ?? 0 }
         log("export all: \(String(format: "%.2f", took)) s, \(files.count) files, \(bytes / 1_000_000) MB: \(files.sorted().joined(separator: ", "))")
+        if scanProbe {
+            for f in files.sorted() {
+                let url = exports.appendingPathComponent(f)
+                if let src = CGImageSourceCreateWithURL(url as CFURL, nil), let p = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any] {
+                    log("  scan \(f): \(p[kCGImagePropertyPixelWidth] ?? 0) x \(p[kCGImagePropertyPixelHeight] ?? 0)")
+                }
+            }
+        }
         log("message: \(auto.message ?? "-")")
         model.autoSidecars.flush()
         log("done")

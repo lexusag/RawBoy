@@ -44,6 +44,9 @@ body() {  # develop.glsl, the film formation, light_leak.glsl, light_fx.glsl, ma
 # The lens blur's mask pass (shaders/bokeh_prep.glsl, after develop.glsl and the film formation: the develop shader's own layerMask).
 { header "out vec4 fragColor;"; cat "$SRC/develop.glsl" "$SRC/film_form.glsl" "$SRC/bokeh_prep.glsl"; } > "$TMP/bokeh_prep.frag"
 
+# The film scan export's upscale pre-pass (shaders/scan.frag: one complete program, run in six passes).
+sed 's/#version 300 es/#version 310 es/' "$SRC/scan.frag" > "$TMP/scan.frag"
+
 sed 's/#version 300 es/#version 310 es/' "$SRC/develop.vert" > "$TMP/develop_vert.vert"
 
 translate() {  # translate <name> <stage file> <entry point>
@@ -56,6 +59,7 @@ translate develop_vert develop_vert.vert developVertex vert
 translate develop_frag develop_frag.frag developFragment frag
 translate develop_export develop_export.frag developExportFragment frag
 translate bokeh_prep bokeh_prep.frag bokehPrepFragment frag
+translate scan scan.frag scanFragment frag
 
 python3 -I - "$TMP" "$OUT/DevelopLayout.swift" << 'EOF'
 import json, sys
@@ -74,6 +78,7 @@ vsize, vbuf, vuni, _ = layout("develop_vert")
 fsize, fbuf, funi, ftex = layout("develop_frag")
 esize, ebuf, euni, etex = layout("develop_export")
 psize, pbuf, puni, ptex = layout("bokeh_prep")
+ssize, sbuf, suni, stex = layout("scan")
 if (fsize, funi, ftex) != (esize, euni, etex):
     sys.exit("gen.sh: preview and export fragment shaders have different layouts")
 
@@ -118,6 +123,16 @@ enum DevelopLayout {{
     ]
     static let bokehTextures: [String: Int] = [
 {chr(10).join(f'        "{n}": {b},' for n, b in sorted(ptex.items(), key=lambda kv: kv[1]))}
+    ]
+
+    /** The film scan export's upscale pre-pass (scan.frag). */
+    static let scanBlockSize = {ssize}
+    static let scanBufferIndex = {sbuf}
+    static let scanUniforms: [String: Uniform] = [
+{table(suni)}
+    ]
+    static let scanTextures: [String: Int] = [
+{chr(10).join(f'        "{n}": {b},' for n, b in sorted(stex.items(), key=lambda kv: kv[1]))}
     ]
 }}
 """

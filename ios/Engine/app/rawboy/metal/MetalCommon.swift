@@ -26,8 +26,8 @@ public struct PreviewImage: @unchecked Sendable {
  * grain) are sized in full-resolution pixels.
  */
 struct SampleGeometry {
-    let textureWidth: Int
-    let textureHeight: Int
+    var textureWidth: Int
+    var textureHeight: Int
     let input: PixelRect
     let output: PixelRect
     /** Full-resolution image size, which sets the grain size. */
@@ -37,6 +37,11 @@ struct SampleGeometry {
     var minGrainPx: Float = 1
     /** [output] with fractional edges, [x, y, width, height] (a pinch zoom's view, ZoomMath.viewRectF); nil = [output]. */
     var outputF: [Float]? = nil
+    /**
+     * Output pixels per full-resolution pixel: 1.5 in a film scan export ([output] is then in output pixels, the texture is
+     * `renderScale` x the input's), else 1.
+     */
+    var renderScale: Float = 1
 
     /** Grain cell in full-resolution pixels: ~1/3200 of the long edge (fine-grain film). */
     var grainSize: Float { max(minGrainPx, Float(max(imageWidth, imageHeight)) / 3200) }
@@ -148,6 +153,13 @@ struct UniformBlock {
         guard let u = slot(name) else { return }
         write(x, at: u.offset)
         write(y, at: u.offset + 4)
+    }
+
+    /** Two 32-bit integers (an ivec2). */
+    mutating func ivec2(_ name: String, _ x: Int, _ y: Int) {
+        guard let u = slot(name) else { return }
+        write(Int32(x), at: u.offset)
+        write(Int32(y), at: u.offset + 4)
     }
 
     mutating func vec3(_ name: String, _ x: Float, _ y: Float, _ z: Float) {
@@ -278,7 +290,9 @@ struct DevelopProgram {
         u.float("uPixelScale", Float(g.textureWidth) / Float(g.input.width))
         u.vec2("uInOrigin", Float(g.input.x), Float(g.input.y))
         u.vec2("uInSpan", Float(g.input.width), Float(g.input.height))
-        let out = g.outputF ?? [Float(g.output.x), Float(g.output.y), Float(g.output.width), Float(g.output.height)]
+        let k = g.renderScale
+        let out = g.outputF ?? [Float(g.output.x) / k, Float(g.output.y) / k, Float(g.output.width) / k, Float(g.output.height) / k]
+        u.float("uRenderScale", k)
         u.vec2("uOutOrigin", out[0], out[1])
         u.vec2("uOutSpan", out[2], out[3])
         bindLens(&u, p.lens)
@@ -311,7 +325,8 @@ struct DevelopProgram {
         u.float("uFilmUmPerPx", FilmStock.frameWidthUm / Float(max(g.imageWidth, g.imageHeight)))
         // Halation and scatter happen before the film, so Strength fades them with the film render.
         let optics = p.halation * amount
-        u.float("uFilmGrain", p.filmGrain)
+        // A film scan export (finer pixels) matches the grain's strength at print size, not per pixel (see ScanScale).
+        u.float("uFilmGrain", p.filmGrain * (g.renderScale > 1 ? ScanScale.grain : 1))
         let form = s.formation
         u.vec3("uFormGrainRms", form.grainRms)
         u.vec3("uFormHalation", form.halation, optics)
