@@ -307,6 +307,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   Hooks in the shared Pro code: `EditorViewModel.persistence`/`currentURL`/`export(_:to:)`, `EditorCommands` + `EditorAction` and the macOS-only `PointerSurface` / `SliderWheel`
   (`Pro/ui/DesktopInput.swift`). The engine builds for macOS as `RawBoyEngineMac` (same sources, module `RawBoyEngine`, arm64 only: `Float16` is unavailable on Intel; no MediaPipe, `SkinSegmenter` is a
   stub that throws). Native: `ios/native/build.sh` adds a universal macOS slice (DNG SDK built with `qiPhone=1`). Needs the Metal toolchain (`xcodebuild -downloadComponent MetalToolchain`).
+  CI's `desktop` job (ci.yml, macos-26, native libs cached by source hash) builds the app and runs these tests on every PR touching `ios/`, `shaders/` or the C++: the only check that compiles Swift.
   Tests: `xcodebuild test -scheme RawBoyEngineTestsMac -destination 'platform=macOS'`; `DesktopBenchTests` prints decode / frame / export timings. `Edits.swift` is checked against the web's
   JSON (`tools/edits_fixtures/generate.ts` writes `EngineTests/EditsFixtures.swift`); `XmpSidecar.swift` mirrors web's `XmpSidecar.ts` and RawBoy Viewer's `RawBoyBrowseKit` port.
 - **RawBoy Packer** (2026-11-01, web only; `docs/packer.md`): `web/packer.html` + `src/packer/` (`PackerApp`, `PackerStore`:
