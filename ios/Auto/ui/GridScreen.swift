@@ -12,10 +12,16 @@ struct GridScreen: View {
     let addFromFiles: () -> Void
     /** RawBoy Desktop: adds the photos in a folder. */
     var addFromFolder: (() -> Void)? = nil
+    /** RawBoy Desktop: the "Clear batch" button (the root asks first). */
+    var onClearBatch: (() -> Void)? = nil
     /** Opens a RawBoy preset file to apply to the batch (nil), or to the photos with these ids. */
     let pickPreset: (Set<String>?) -> Void
 
-    @State private var selection = Set<String>()
+    /** In the view model (⌘A and Esc come from the keyboard); a Binding-like pair for the body's many uses. */
+    private var selection: Set<String> {
+        get { vm.selection }
+        nonmutating set { vm.selection = newValue }
+    }
     @State private var showExport = false
     /** The selection as it was when its Export was tapped; nil = Export all. */
     @State private var exportIds: Set<String>?
@@ -238,10 +244,16 @@ struct GridScreen: View {
                 vm.focusedId = photo.id
                 #if os(macOS)
                 // ⌘-click or ⇧-click selects, as in Finder; a plain click opens.
-                if NSEvent.modifierFlags.contains(.command) || NSEvent.modifierFlags.contains(.shift) {
-                    if selection.contains(photo.id) { selection.remove(photo.id) } else { selection.insert(photo.id) }
+                if NSEvent.modifierFlags.contains(.shift) {
+                    vm.selectRange(to: photo.id)  // from the last clicked photo to this one
                     return
                 }
+                if NSEvent.modifierFlags.contains(.command) {
+                    if selection.contains(photo.id) { selection.remove(photo.id) } else { selection.insert(photo.id) }
+                    vm.selectionAnchor = photo.id
+                    return
+                }
+                vm.selectionAnchor = photo.id
                 #endif
                 if selecting {
                     if selection.contains(photo.id) { selection.remove(photo.id) } else { selection.insert(photo.id) }
@@ -278,6 +290,9 @@ struct GridScreen: View {
                     selection = []
                 }
                 .disabled(exporting)
+                if let edit = vm.editInPro, selection.count == 1, let p = vm.photo(selection.first!) {
+                    Button("Edit in Pro", systemImage: "slider.horizontal.3") { edit(p) }.disabled(exporting)
+                }
                 Button("Remove", systemImage: "trash", role: .destructive) {
                     vm.remove(selection)
                     selection = []
@@ -300,6 +315,11 @@ struct GridScreen: View {
                 .disabled(exporting)
             }
             ToolbarItemGroup(placement: .barTrailing) {
+                if onClearBatch != nil {
+                    Button("Clear batch", systemImage: "xmark.bin") { onClearBatch?() }
+                        .disabled(exporting || vm.photos.isEmpty)
+                        .help("Take every photo out of the batch (files and sidecars stay)")
+                }
                 Button(exportable > 1 ? "Export all (\(exportable))" : "Export") {
                     exportIds = nil
                     showExport = true

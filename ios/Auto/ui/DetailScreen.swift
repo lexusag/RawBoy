@@ -253,6 +253,7 @@ struct DetailScreen: View {
                 .disabled(vm.export != nil || !vm.canRedo(id))
                 .accessibilityLabel("Redo")
         }
+        #if !os(macOS)
         ToolbarItem(placement: .principal) {
             VStack(spacing: 0) {
                 Text(photo.name).font(.subheadline).lineLimit(1)
@@ -261,7 +262,18 @@ struct DetailScreen: View {
                 }
             }
         }
+        #endif
         ToolbarItemGroup(placement: .barTrailing) {
+            #if os(macOS)
+            // The window title has the name; the position in the batch goes here (a title pill beside the mode switch overflowed).
+            if pages.count > 1, let i = pages.firstIndex(where: { $0.id == id }) {
+                Text("\(i + 1) / \(pages.count)").font(.caption).monospacedDigit().foregroundStyle(.secondary)
+            }
+            if let edit = vm.editInPro {
+                Button("Edit in Pro", systemImage: "slider.horizontal.3") { edit(photo) }
+                    .help("Open this photo in the Pro editor (⌘↩)")
+            }
+            #endif
             // Apply to all and Remove share a menu: the bar is full on phones and the name needs the room.
             Menu {
                 Button("Crop & rotate", systemImage: "crop.rotate") {

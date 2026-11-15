@@ -1,3 +1,12 @@
+**RawBoy Desktop (macOS): fixes from the first hand test (2026-11-15)**
+
+- **Sliders** didn't respond to the mouse. Cause (found by driving the app with posted mouse events): the Mac's slider was kept at 2% opacity over a hand-drawn track, and a hand-drawn drag gesture took no mouse in Auto's signed sliders. On the Mac the system slider is now drawn as it is (a small mark at 0 on signed ranges, a colour bar beneath for colour sliders); click, drag and the double-click reset work in Pro and Auto.
+- **Pro | Auto**: **Edit in Pro** (⌘↩; photo view toolbar, Mode menu, one selected photo) opens the Auto photo in the editor with its `rawboy:Develop`; **Send to Auto** (⇧⌘A, the **To Auto** button in the editor's bar) adds the open photo to the batch. A photo opened from the Finder or RawBoy Viewer always opens in Pro (the batch stays).
+- **Auto's grid**: ⌘A selects all, ⇧-click selects the range from the last clicked photo, ⌘-click toggles, Esc clears the selection; **Clear batch** (button and Mode menu) asks first, naming the count, and only takes photos out of the batch.
+- The photo view's title pill (name over "1 / 8", beside the mode switch) overflowed: on the Mac the window title has the name and the position is a small label in the toolbar.
+- Pro's **Tone mapper** row has fixed label, segment and stock widths, so it doesn't re-flow (the label wrapped letter by letter) when Film is chosen.
+- Checked by driving the running app (posted mouse and key events; screenshots) and the debug probes `RAWBOY_PROBE_MOUSE` and `RAWBOY_PROBE_SELFTEST` (⌘A, Esc, ⇧-click range, ⌘↩, the hand-over, Send to Auto, Clear batch, files left alone).
+
 **RawBoy Desktop (macOS): Auto mode, a batch developed automatically (2026-11-15)**
 
 - A **Pro | Auto** switch in the title bar (⌘1 / ⌘2, Mode menu). Auto is RawBoy (iOS) Auto's SwiftUI grid and photo screens, shared by the Desktop target the way Pro's are (`ios/Auto/` minus `AutoApp.swift`; toolbar placements and the Photos library fenced for macOS): add photos with ⌘O, a folder with ⇧⌘O, by drag and drop or `--auto`; grid with thumbnails and keyboard (arrows, Return, Esc, ← →, ⌘-click selects, ⌘E exports); photo view with looks / Film, Strength, adjustments, crop and rotate, presets, Copy previous, Apply to all; **Export all** into a chosen folder or next to each photo (`NAME-auto.jpg`). Files are used in place (the iPhone app copies them).

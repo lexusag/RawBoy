@@ -25,7 +25,155 @@ enum AutoBatchProbe {
         }
     }
 
-    private static func log(_ s: String) { print("AUTOPROBE \(s)") }
+    /**
+     * RAWBOY_PROBE_MOUSE="x,y;x,y>x,y;...": events posted into the window's own queue (no accessibility permission needed),
+     * points in the window's content area from its top left; "a>b" is a drag from a to b, "a" a click, "a*2" a double click.
+     * Prints the open photo's adjustments after each step.
+     */
+    static func mouseProbeIfRequested(_ model: DesktopModel) {
+        guard let script = ProcessInfo.processInfo.environment["RAWBOY_PROBE_MOUSE"] else { return }
+        Task {
+            if model.mode == .pro {
+                while !model.vm.state.hasImage { try? await Task.sleep(for: .milliseconds(300)) }
+            } else {
+                while model.auto.selected == nil || model.auto.sessionReady == nil { try? await Task.sleep(for: .milliseconds(300)) }
+            }
+            try? await Task.sleep(for: .seconds(2))
+            guard let window = NSApp.windows.first(where: { $0.isVisible && $0.contentView != nil }), let view = window.contentView else {
+                log("no window")
+                return
+            }
+            window.makeKeyAndOrderFront(nil)
+            func point(_ s: Substring) -> NSPoint {
+                let v = s.split(separator: ",").compactMap { Double($0) }
+                return NSPoint(x: v[0], y: view.frame.height - v[1])
+            }
+            func post(_ type: NSEvent.EventType, _ p: NSPoint, clicks: Int = 1) {
+                let e = NSEvent.mouseEvent(with: type, location: p, modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                                           windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: clicks, pressure: 1)!
+                NSApp.postEvent(e, atStart: false)
+            }
+            @MainActor func state() -> String {
+                if model.mode == .pro {
+                    let p = model.vm.state.params
+                    return "exposure \(p.exposure) contrast \(p.contrast) highlights \(p.highlights) shadows \(p.shadows) tonemapper \(p.toneMapper) film \(p.film ?? "-")"
+                }
+                guard let id = model.auto.selected, let p = model.auto.photo(id) else { return "-" }
+                return "mode \(p.mode) strength \(p.strength) brightness \(p.adjust.brightness) saturation \(p.adjust.saturation) grain \(p.adjust.grain) warmth \(p.adjust.warmth)"
+            }
+            log("start: \(state())")
+            for step in script.split(separator: ";") {
+                let double = step.hasSuffix("*2")
+                let body = double ? step.dropLast(2) : step
+                let parts = body.split(separator: ">")
+                let from = point(parts[0])
+                post(.mouseMoved, from)
+                try? await Task.sleep(for: .milliseconds(50))
+                post(.leftMouseDown, from, clicks: double ? 2 : 1)
+                // All of a drag's events go in at once: a slider's tracking loop pumps events but not the main queue.
+                if parts.count > 1 {
+                    let to = point(parts[1])
+                    for i in 1...10 {
+                        post(.leftMouseDragged, NSPoint(x: from.x + (to.x - from.x) * Double(i) / 10, y: from.y + (to.y - from.y) * Double(i) / 10))
+                    }
+                    post(.leftMouseUp, to)
+                } else {
+                    post(.leftMouseUp, from, clicks: double ? 2 : 1)
+                }
+                try? await Task.sleep(for: .milliseconds(600))
+                log("after \(step): \(state())")
+            }
+        }
+    }
+
+    /**
+     * RAWBOY_PROBE_SELFTEST=1: the batch's selection, keys, Clear batch, and the moves between Pro and Auto, checked with
+     * real key events posted into the window; prints PASS or FAIL per item.
+     */
+    static func selfTestIfRequested(_ model: DesktopModel) {
+        guard ProcessInfo.processInfo.environment["RAWBOY_PROBE_SELFTEST"] != nil else { return }
+        Task { await selfTest(model) }
+    }
+
+    private static func selfTest(_ model: DesktopModel) async {
+        let auto = model.auto
+        let fm = FileManager.default
+        let dir = fm.temporaryDirectory.appendingPathComponent("rawboy-selftest-\(UUID().uuidString.prefix(6))", isDirectory: true)
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        let sources = DesktopModel.photoFiles(in: [URL(fileURLWithPath: "/Users/oleksiymickevich/_github/RawBoy/.raw")])
+        var files: [URL] = []
+        for f in sources { let to = dir.appendingPathComponent(f.lastPathComponent); try? fm.copyItem(at: f, to: to); files.append(to) }
+        func check(_ name: String, _ ok: Bool, _ detail: String = "") { log("\(ok ? "PASS" : "FAIL") \(name) \(detail)") }
+        func waitIdle() async {
+            while auto.photos.count < files.count || auto.photos.contains(where: { $0.status == .queued || $0.status == .analyzing }) {
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+        }
+        func key(_ code: UInt16, _ flags: NSEvent.ModifierFlags = [], chars: String = "") async {
+            guard let window = NSApp.windows.first(where: { $0.isVisible }) else { return }
+            NSApp.activate(ignoringOtherApps: true)
+            window.makeKeyAndOrderFront(nil)
+            try? await Task.sleep(for: .milliseconds(300))
+            for type in [NSEvent.EventType.keyDown, .keyUp] {
+                let e = NSEvent.keyEvent(with: type, location: .zero, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime,
+                                         windowNumber: window.windowNumber, context: nil, characters: chars, charactersIgnoringModifiers: chars,
+                                         isARepeat: false, keyCode: code)!
+                NSApp.postEvent(e, atStart: false)
+            }
+            try? await Task.sleep(for: .milliseconds(300))
+        }
+        model.mode = .auto
+        model.addToAuto([dir])
+        await waitIdle()
+        let n = auto.photos.count
+        check("batch of \(n) photos", n == files.count)
+
+        // Selection: ⌘A, Esc, ⇧-click range, ⌘-click toggle.
+        await key(0, .command, chars: "a")
+        check("⌘A selects all", auto.selection.count == n, "(\(auto.selection.count) of \(n))")
+        await key(53)
+        check("Esc clears the selection", auto.selection.isEmpty, "(\(auto.selection.count))")
+        auto.selectAll()
+        await key(53)
+        check("Esc clears a selection too", auto.selection.isEmpty && auto.selected == nil, "(\(auto.selection.count))")
+        auto.selectionAnchor = auto.photos[0].id
+        auto.selectRange(to: auto.photos[n - 1].id)
+        check("⇧-click first to last selects the range", auto.selection.count == n, "(\(auto.selection.count) of \(n))")
+        auto.selection = []
+        auto.selectionAnchor = auto.photos[1].id
+        auto.selectRange(to: auto.photos[3].id)
+        check("⇧-click from the anchor", auto.selection == Set(auto.photos[1...3].map(\.id)))
+        auto.selection = []
+
+        // Pro <-> Auto.
+        let first = auto.photos[0]
+        auto.focusedId = first.id
+        await key(36, .command, chars: "\r")
+        try? await Task.sleep(for: .seconds(4))
+        check("⌘↩ edits the focused photo in Pro", model.mode == .pro && model.vm.currentURL?.path == first.url.path, "(\(model.mode), \(model.vm.currentURL?.lastPathComponent ?? "-"))")
+        auto.focusedId = nil
+        check("the batch is kept while in Pro", auto.photos.count == n)
+        model.mode = .auto
+        model.open(auto.photos[1].url)
+        check("a photo handed over while Auto is active opens in Pro", model.mode == .pro)
+        try? await Task.sleep(for: .seconds(3))
+        model.sendToAuto()
+        check("Send to Auto switches to Auto and focuses the photo", model.mode == .auto && auto.focusedId == auto.photos[1].id && auto.photos.count == n)
+
+        // Clear batch: the confirmation is the root's; clearing keeps the files and sidecars.
+        auto.requestClear()
+        check("Clear batch asks first (request raised, nothing removed yet)", auto.photos.count == n)
+        auto.clearBatch()
+        check("clearing the batch empties it", auto.photos.isEmpty)
+        check("and leaves the files", files.allSatisfy { fm.fileExists(atPath: $0.path) })
+        log("selftest done")
+        NSApp.terminate(nil)
+    }
+
+    private static func log(_ s: String) {
+        print("AUTOPROBE \(s)")
+        fflush(stdout)
+    }
 
     private static func run(_ model: DesktopModel, _ inputs: [URL]) async {
         let auto = model.auto

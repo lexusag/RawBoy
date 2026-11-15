@@ -61,6 +61,15 @@ public struct ValueSlider: View {
     }
 
     @ViewBuilder private var slider: some View {
+        #if os(macOS)
+        // The system slider on the Mac, drawn as it is: a drag gesture over a hand-drawn signed track didn't take the mouse,
+        // and a nearly transparent system slider over it couldn't be dragged by its thumb.
+        Slider(value: Binding(get: { Double(value.clamped(range)) }, set: { onChange(Float($0)) }),
+               in: Double(range.lowerBound)...Double(range.upperBound))
+            .simultaneousGesture(TapGesture(count: 2).onEnded { onChange(defaultValue) })
+            .overlay { signedMark }
+            .accessibilityLabel(label)
+        #else
         if range.lowerBound < 0 && range.upperBound > 0 {
             signedSlider
         } else {
@@ -68,7 +77,23 @@ public struct ValueSlider: View {
                    in: Double(range.lowerBound)...Double(range.upperBound))
                 .simultaneousGesture(TapGesture(count: 2).onEnded { onChange(defaultValue) })
         }
+        #endif
     }
+
+    #if os(macOS)
+    /** A mark at 0 over the system slider of a signed range (it fills from the left end). */
+    @ViewBuilder private var signedMark: some View {
+        if range.lowerBound < 0 && range.upperBound > 0 {
+            GeometryReader { g in
+                let inset: CGFloat = 9
+                let t = CGFloat((0 - range.lowerBound) / (range.upperBound - range.lowerBound))
+                Rectangle().fill(Color.secondary.opacity(0.9)).frame(width: 2, height: 9)
+                    .position(x: inset + t * (g.size.width - 2 * inset), y: g.size.height - 4)
+            }
+            .allowsHitTesting(false)
+        }
+    }
+    #endif
 
     /**
      * The signed track with its own drag: a drag anywhere on the row moves the value by the distance dragged, as
