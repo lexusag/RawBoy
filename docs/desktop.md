@@ -14,6 +14,9 @@ RawBoy's editor as a native Mac app (SwiftUI + Metal, the iOS engine). Phase 1 i
 ## Keys and mouse
 Z 100% at the pointer, D frame colour, C Crop & rotate, \ Compare, B / E / V masks, [ ] brush size, Esc or Return closes the tool, Space pans, ⌘Z / ⇧⌘Z, ⌘O, ⌘E, ⌘/ help. Keys are matched by physical position. The wheel zooms around the pointer; over a slider it moves it (Shift big, ⌘ fine); double-click resets a slider.
 
+## Lens corrections
+Lens tab › **Use Lensfun profile**: distortion, chromatic aberration and vignetting from the Lensfun database for raws with no embedded profile, as on the web (Auto match from EXIF, Pick lens, Generic). See [rawboy.md](rawboy.md), Lens corrections. The database is inside the app; nothing is downloaded.
+
 ## Not in yet
 Skin retouch and blemish removal (MediaPipe has no macOS build), Send to Auto, Photos export, a folder browser, Intel Macs, sandboxing and notarisation (the app writes next to your photos, so it is not sandboxed).
 

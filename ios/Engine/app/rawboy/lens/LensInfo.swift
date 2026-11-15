@@ -61,6 +61,24 @@ public final class LensInfo: @unchecked Sendable {
         self.gainMapsApplied = gainMapsApplied
     }
 
+    /** Set when the warp/vignette come from the Lensfun database (see [withLensfun]). */
+    public private(set) var lensfunLabel: String?
+
+    /**
+     * This lens with a Lensfun profile in place of the file's own distortion/CA warp and radial vignette (kept where
+     * the database has none). The file's shading gain maps stay (they are already applied while decoding). [label]
+     * describes it in the Lens tab. Keeps the detected fisheye circle.
+     */
+    public func withLensfun(warp: Warp?, vignette: RadialVignette?, label: String) -> LensInfo {
+        let info = LensInfo(
+            lensName: lensName, width: width, height: height, sensorWidth: sensorWidth, sensorHeight: sensorHeight,
+            orientation: orientation, warp: warp ?? self.warp, vignette: vignette ?? self.vignette, shading: shading,
+            gainMapsApplied: gainMapsApplied)
+        info.fisheyeCircle = fisheyeCircle
+        info.lensfunLabel = label
+        return info
+    }
+
     public var hasProfile: Bool { warp != nil || vignette != nil || shading != nil }
 
     /** One line for the Lens tab, e.g. "vignetting & colour shading, distortion". */

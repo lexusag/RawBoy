@@ -464,7 +464,8 @@ struct EditorScreen: View {
                     onSaveLensPreset: { name, send in
                         let preset = vm.saveLensPreset(name: name)
                         if send { vm.sendPresetToAuto(preset) }
-                    })
+                    },
+                    lensfun: vm.lensfun)
                 .frame(maxHeight: maxHeight)
             }
         }

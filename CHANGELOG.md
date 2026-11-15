@@ -1,3 +1,9 @@
+**RawBoy Desktop (macOS) and RawBoy (iOS): lens corrections from the Lensfun database (2026-11-15)**
+
+- The Lens tab's **Use Lensfun profile** switch, as on the web: distortion, chromatic aberration and vignetting from the Lensfun lens database for raws with no embedded profile. **Auto** matches the camera and lens from the EXIF, **Pick lens** searches the camera and lens lists, **Generic** describes a lens that is not in the database (crop factor or sensor size, focal length, aperture, type incl. fisheyes with **Straighten fisheye**, optional known terms). Off by default; the switch, mode, generic lens and picked camera are remembered. Not in presets or sidecars.
+- Swift port of the web's code (`lens/Lensfun.swift`, `LensfunData.swift`, `Pro/LensfunStore.swift`, `Pro/ui/LensfunPanel.swift`; no Lensfun code), with the web's unit tests (`LensfunTests`). The database (CC BY-SA 3.0, 1.8 MB, the web's `web/public/lensfun` folder) is bundled in the app; nothing is downloaded.
+- Compiled and unit-tested by CI on macOS only: not yet tried by hand on a Mac or an iPhone.
+
 **RawBoy Desktop (macOS, new, in development): RawBoy's editor on the Mac with edits kept in XMP sidecars (2026-11-15)**
 
 - New native macOS app `RawBoyDesktop` (`app.rawboy.desktop`, `ios/Desktop` + RawBoy Pro's SwiftUI views in `ios/Pro`): one window with the full RawBoy editor, Open (⌘O, drop, Finder Open With), export of JPEG or TIFF next to the photo or into a chosen folder, a menu bar with every shortcut and a Help sheet. Documented in [docs/desktop.md](docs/desktop.md).
