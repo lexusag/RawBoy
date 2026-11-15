@@ -8,7 +8,8 @@
 # https://app.rawboy.link; see docs/cloudflare.md).
 # The web deploy is skipped when nothing the web build reads changed since the commit the live site was built from
 # (dist/deployed-commit.txt); run the workflow by hand with "Deploy the web build even if unchanged" to force it,
-# and tick "Skip building the APKs" to only redeploy the website.
+# and tick "Skip building the APKs" to only redeploy the website (and rebuild the DMG; "Skip building RawBoy
+# Desktop's DMG" skips that too).
 # Each app's APK is built only when something it reads changed since the last release with APKs: its own module, or
 # anything shared (engine, shaders, luts, licences, Gradle files, third_party). The other apps' APKs from that release
 # (named with the tag they were built for) are attached to this one. "Build the APKs even if unchanged" forces all three.
@@ -34,6 +35,10 @@ on:
         default: false
       force_apks:
         description: Build the APKs even if unchanged
+        type: boolean
+        default: false
+      skip_desktop:
+        description: Skip building RawBoy Desktop's DMG
         type: boolean
         default: false
 
@@ -248,10 +253,11 @@ jobs:
         run: rm -f keystore.properties "$RUNNER_TEMP/release.jks"
 
   # RawBoy Desktop (macOS): an ad-hoc signed, unnotarised DMG (arm64). First launch: right-click > Open. Built on every
-  # tag build unless the APKs are skipped. The Mac engine has no MediaPipe, so only the macOS native slice is built.
+  # tag build unless "Skip building RawBoy Desktop's DMG" is ticked (independent of skip_apks, so a DMG can be rebuilt
+  # for an existing tag with the APKs skipped). The Mac engine has no MediaPipe, so only the macOS native slice is built.
   desktop:
-    if: github.event_name == 'workflow_dispatch' && !inputs.skip_apks
-    runs-on: macos-15
+    if: github.event_name == 'workflow_dispatch' && !inputs.skip_desktop
+    runs-on: macos-26
     env:
       TAG: ${{ inputs.tag }}
     steps:
@@ -270,10 +276,19 @@ jobs:
           [ -f dng_sdk_1_7_1.zip ] || curl -fsSLO https://download.adobe.com/pub/adobe/dng/dng_sdk_1_7_1.zip
           unzip -q dng_sdk_1_7_1.zip && mv dng_sdk_1_7_1 dng_sdk
 
+      # The project is built with Xcode 26+ (macOS 26 / iOS 26 SDKs, Metal toolchain as a component); runner
+      # images keep older Xcodes as the default, so pick the newest one installed.
+      - name: Select the newest Xcode
+        run: |
+          xcode=$(ls -d /Applications/Xcode_*.app | grep -iv -e beta -e rc | sort -V | tail -1)
+          sudo xcode-select -s "$xcode/Contents/Developer"
+          xcodebuild -version
+
       - name: Tools
         run: |
           brew install xcodegen glslang spirv-cross
-          xcodebuild -downloadComponent MetalToolchain
+          # Xcode 26+ ships the Metal compiler as a separate component.
+          xcodebuild -downloadComponent MetalToolchain || xcrun -f metal
 
       - name: Build the native libraries (macOS slice)
         run: ios/native/build.sh macos
