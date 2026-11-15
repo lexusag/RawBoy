@@ -122,6 +122,14 @@ public enum Masks {
     /** Uniform arrays in the shader are this long. */
     public static let maxLayers = 4
 
+    /** The strongest Portrait retouch any layer asks for (0 = none): the gains map has to be made at least that strong. */
+    public static func maxLayerRetouch(_ layers: [MaskLayer]) -> Float {
+        layers.reduce(0) { m, l in l.enabled && l.opacity > 0 && l.hasMask ? max(m, l.adjust.retouch) : m }
+    }
+
+    /** Lens blur at 100: this fraction of the image's long side is the disc radius (web's MAX_LENS_BLUR). */
+    public static let maxLensBlur: Float = 0.03
+
     /**
      * Linear curvature: at curve 100 the lines' ends, half the image's long side from the middle, are pulled this
      * many long sides along the gradient. Shared by the shader packing and the overlay so both bend alike.

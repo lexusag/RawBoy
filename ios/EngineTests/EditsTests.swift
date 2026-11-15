@@ -100,15 +100,39 @@ final class EditsTests: XCTestCase {
         XCTAssertEqual(p.fx[0].seed, 0.123456789)  // a Double: a Float would pick another pattern
     }
 
+    func testHealingBrushStrokesDecodeAndWriteBack() throws {
+        let d = try decode(EditsFixtures.heal)
+        XCTAssertTrue(d.extras.isEmpty)
+        XCTAssertEqual(d.params.healSpots.count, 2)
+        let a = d.params.healSpots[0]
+        XCTAssertEqual(a.x, 0.4, accuracy: 1e-6)
+        XCTAssertEqual(a.source ?? [], [0.6, 0.5])
+        XCTAssertEqual(a.feather, 25)
+        XCTAssertEqual(a.path, [0.4, 0.5, 0.41, 0.52])
+        XCTAssertNil(d.params.healSpots[1].source)
+        XCTAssertEqual(d.params.healSpots[1].feather, 80)
+        // Written back, it reads the same.
+        let text = try XCTUnwrap(Edits.encode(d.params, defaults: defaults))
+        XCTAssertEqual(stripIds(try decode(text).params), stripIds(d.params))
+        XCTAssertNil(Edits.encode(defaults, defaults: defaults))
+    }
+
+    func testPortraitRetouchIsAKnownField() throws {
+        let d = try decode(EditsFixtures.portrait)
+        XCTAssertTrue(d.extras.isEmpty)
+        XCTAssertEqual(d.params.portraitRetouch, 35)
+        XCTAssertEqual(d.params.skinRetouch, 20)
+        let text = try XCTUnwrap(Edits.encode(d.params, defaults: defaults))
+        XCTAssertEqual(try decode(text).params.portraitRetouch, 35)
+    }
+
     func testWebOnlyFieldsSurviveASwiftRoundTrip() throws {
         let d = try decode(EditsFixtures.webOnly)
         XCTAssertEqual(d.params.exposure, 0.3, accuracy: 1e-6)
-        XCTAssertEqual(Set(d.extras.keys), ["healSpots", "portraitRetouch", "lumaContrast"])
+        XCTAssertEqual(Set(d.extras.keys), ["lumaContrast"])
         let again = try XCTUnwrap(Edits.encode(d.params, defaults: defaults, extras: d.extras))
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(again.utf8)) as? [String: Any])
         let values = try XCTUnwrap(object["values"] as? [String: Any])
-        XCTAssertEqual((values["healSpots"] as? [Any])?.count, 1)
-        XCTAssertEqual(values["portraitRetouch"] as? Int, 35)
         XCTAssertEqual(values["lumaContrast"] as? Int, 12)
         XCTAssertNil(Edits.encode(defaults, defaults: defaults, extras: [:]))
     }
@@ -116,7 +140,7 @@ final class EditsTests: XCTestCase {
     /** Whatever the web wrote decodes, and encoding that gives the same decode (idempotent through Swift). */
     func testFixturesRoundTripThroughSwift() throws {
         for json in [EditsFixtures.basic, EditsFixtures.geometry, EditsFixtures.looks, EditsFixtures.film,
-                     EditsFixtures.masks, EditsFixtures.leaksFx, EditsFixtures.webOnly] {
+                     EditsFixtures.masks, EditsFixtures.leaksFx, EditsFixtures.heal, EditsFixtures.portrait, EditsFixtures.webOnly] {
             let a = try decode(json)
             let text = try XCTUnwrap(Edits.encode(a.params, defaults: defaults, extras: a.extras))
             let b = try XCTUnwrap(Edits.decodeAll(text, defaults: defaults))
@@ -163,6 +187,7 @@ final class EditsTests: XCTestCase {
         p.masks = p.masks.map { var l = $0; l.id = ""; l.strokes = l.strokes.map { var s = $0; s.id = ""; return s }; return l }
         p.leaks = p.leaks.map { var l = $0; l.id = ""; return l }
         p.fx = p.fx.map { var l = $0; l.id = ""; return l }
+        p.healSpots = p.healSpots.map { var l = $0; l.id = ""; return l }
         return p
     }
 }

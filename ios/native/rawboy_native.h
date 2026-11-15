@@ -97,6 +97,11 @@ RB_API float* rb_detect_blemishes(const RBImage* image, const float* mask, int m
 RB_API void rb_free_floats(float* values);
 /** Undoes any previous healing, then heals the given spots (x, y, radius, score) * (count / 4). */
 RB_API void rb_heal_blemishes(RBImage* image, const float* spots, size_t count);
+/**
+ * As rb_heal_blemishes, plus the healing brush's disks: (x, y, radius, srcX, srcY, feather) * (strokeCount / 6) in
+ * full-resolution pixels; srcX < 0 = no source (the engine picks the texture donor), feather 0..1.
+ */
+RB_API void rb_heal(RBImage* image, const float* spots, size_t count, const float* strokes, size_t strokeCount);
 
 #ifdef __cplusplus
 }

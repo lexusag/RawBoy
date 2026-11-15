@@ -68,6 +68,11 @@ public final class ShaderParams: @unchecked Sendable {
     public let anamorphicBar: [Float]
     /** What the flare scatters light from (FlareSource, `uFlare`), or nil: no flare. */
     public let flareSource: PreviewImage?
+    /** The highlight-boosted whole image the masks' lens blur starts from (BokehTexture, `uBokeh`), or nil: no lens blur. */
+    public let bokehSource: PreviewImage?
+    /** Portrait retouch: the gains map (PortraitRetouch, packed into the skin texture) and `uSkinFix`, 0 = off. */
+    public let retouchMap: RetouchMap?
+    public let skinFix: Float
 
     public init(whiteBalance: [Float], exposure: Float, contrast: Float, saturation: Float, shadows: Float,
                 highlights: Float, blacks: Float, whites: Float, denoise: Float, denoiseWide: Float,
@@ -82,7 +87,8 @@ public final class ShaderParams: @unchecked Sendable {
                 filmGrain: Float = 1, halation: Float = 1, curve: [Float]? = nil, clipLevel: Float = 0,
                 anamorphic: Float = 0, anamorphicTint: [Float] = AnamorphicColor.neutral.tintVec(ghosts: false),
                 anamorphicLength: [Float] = AnamorphicColor.neutral.lengthVec,
-                anamorphicBar: [Float] = AnamorphicColor.neutral.barVec, flareSource: PreviewImage? = nil) {
+                anamorphicBar: [Float] = AnamorphicColor.neutral.barVec, flareSource: PreviewImage? = nil,
+                bokehSource: PreviewImage? = nil, retouchMap: RetouchMap? = nil, skinFix: Float = 0) {
         self.whiteBalance = whiteBalance
         self.exposure = exposure
         self.contrast = contrast
@@ -128,6 +134,9 @@ public final class ShaderParams: @unchecked Sendable {
         self.anamorphicLength = anamorphicLength
         self.anamorphicBar = anamorphicBar
         self.flareSource = flareSource
+        self.bokehSource = bokehSource
+        self.retouchMap = retouchMap
+        self.skinFix = skinFix
     }
 
     /**
@@ -179,7 +188,8 @@ public final class ShaderParams: @unchecked Sendable {
                             base: PreviewImage?, bloomSources: BloomSources?, skinMask: SkinMask?,
                             grainSizeScale: Float = 1, grainStrength: Float = 1, maskView: String? = nil,
                             brushFor: (MaskLayer) -> BrushRaster? = { _ in nil },
-                            film: FilmData? = nil, flareSource: PreviewImage? = nil) -> ShaderParams {
+                            film: FilmData? = nil, flareSource: PreviewImage? = nil,
+                            bokehSource: PreviewImage? = nil, retouchMap: RetouchMap? = nil) -> ShaderParams {
         let filmUsed = film.flatMap { $0.stock.id == p.film ? $0 : nil }
         let sourceWhite = WhiteBalance.xyFromTempTint(Double(asShot.temperature), Double(asShot.tint))
         let targetWhite = WhiteBalance.xyFromTempTint(Double(p.temperature), Double(p.tint))
@@ -219,7 +229,8 @@ public final class ShaderParams: @unchecked Sendable {
             toneMapper: p.toneMapper.shaderId,
             displaySource: asShot.displaySource ? 1 : 0,
             layers: packLayers(p.masks, imageWidth: lens.width, imageHeight: lens.height, kelvin: p.temperature,
-                               tint: p.tint, clarityReady: base != nil, viewId: maskView, brushFor: brushFor),
+                               tint: p.tint, clarityReady: base != nil, viewId: maskView, brushFor: brushFor,
+                               retouchMapStrength: retouchMap?.strength ?? 0),
             leaks: LightLeaks.pack(p.leaks, imageWidth: lens.width, imageHeight: lens.height),
             fx: LightEffects.pack(p.fx, imageWidth: lens.width, imageHeight: lens.height),
             film: filmUsed,
@@ -231,7 +242,8 @@ public final class ShaderParams: @unchecked Sendable {
             anamorphic: p.anamorphic / 100 * (0.35 + 0.65 * p.anamorphic / 100),
             anamorphicTint: p.anamorphicColor.tintVec(ghosts: p.anamorphicGhosts),
             anamorphicLength: p.anamorphicColor.lengthVec, anamorphicBar: p.anamorphicColor.barVec,
-            flareSource: flareSource)
+            flareSource: flareSource, bokehSource: bokehSource, retouchMap: retouchMap,
+            skinFix: PortraitRetouch.skinFix(strength: p.portraitRetouch, map: retouchMap))
     }
 
     /** Full layer temperature offset (100) moves the white this many mireds; + = warmer, as the global slider. */
@@ -245,7 +257,8 @@ public final class ShaderParams: @unchecked Sendable {
      */
     public static func packLayers(_ masks: [MaskLayer], imageWidth: Int, imageHeight: Int, kelvin: Float, tint: Float,
                                   clarityReady: Bool, viewId: String? = nil,
-                                  brushFor: (MaskLayer) -> BrushRaster? = { _ in nil }) -> LayerUniforms {
+                                  brushFor: (MaskLayer) -> BrushRaster? = { _ in nil },
+                                  retouchMapStrength: Float = 0) -> LayerUniforms {
         let used = Array(masks.filter { $0.hasMask && (!$0.isIdentity || ($0.id == viewId && $0.enabled)) }
             .prefix(Masks.maxLayers))
         if used.isEmpty { return .none }
@@ -257,6 +270,8 @@ public final class ShaderParams: @unchecked Sendable {
         var color = [Float](repeating: 0, count: n * 4)
         var wbs = [Float](repeating: 0, count: n * 9)
         var brush = [BrushRaster?](repeating: nil, count: n)
+        var blur = [Float](repeating: 0, count: n)
+        var retouch = [Float](repeating: 0, count: n)
         var view = 0
         let target = WhiteBalance.xyFromTempTint(Double(kelvin), Double(tint))
         let w = Float(imageWidth)
@@ -304,11 +319,14 @@ public final class ShaderParams: @unchecked Sendable {
                 ? Mat3.diagonal(1, 1, 1)
                 : WhiteBalance.rebalanceMatrix(asShotXY: target, targetXY: layerWhite)
             put(Mat3.toGlColumnMajor(wb), into: &wbs, at: i * 9)
+            blur[i] = a.lensBlur / 100 * Masks.maxLensBlur * long
+            // Without a map (none made yet, no face) there is nothing to scale.
+            retouch[i] = retouchMapStrength > 0 ? min(2.5, a.retouch / retouchMapStrength) : 0
             if l.id == viewId { view = i + 1 }
             if !l.strokes.isEmpty { brush[i] = brushFor(l) }
         }
         return LayerUniforms(count: used.count, geom: geom, shape: shape, tone: tone, color: color, whiteBalance: wbs,
-                             view: view, brush: brush, form: form)
+                             view: view, brush: brush, form: form, blur: blur, retouch: retouch)
     }
 }
 
@@ -338,6 +356,10 @@ public struct LayerUniforms: @unchecked Sendable {
     public let brush: [BrushRaster?]
     /** Stripe only: bend curvature (1/px), taper -1..1, end feather (in half lengths), 0 (`uMaskForm`). */
     public var form: [Float] = [Float](repeating: 0, count: 16)
+    /** Lens blur radius of each layer at full mask, full-resolution pixels (`uLayerBlur`); 0 = none. */
+    public var blur: [Float] = [Float](repeating: 0, count: 4)
+    /** Portrait retouch of each layer at full mask, as a multiple of the gains map (`uLayerRetouch`). */
+    public var retouch: [Float] = [Float](repeating: 0, count: 4)
 
     public static let none = LayerUniforms(
         count: 0, geom: [Float](repeating: 0, count: 16), shape: [Float](repeating: 0, count: 16),

@@ -203,4 +203,20 @@ void rb_heal_blemishes(RBImage* image, const float* spots, size_t count) {
     }
 }
 
+void rb_heal(RBImage* image, const float* spots, size_t count, const float* strokes, size_t strokeCount) {
+    DecodedImage& img = image->image;
+    try {
+        rawboy::restoreBackups(img, img.healBackups);
+        for (size_t i = 0; i + 3 < count; i += 4) {
+            rawboy::healBlemish(img, {spots[i], spots[i + 1], spots[i + 2], spots[i + 3]}, img.healBackups);
+        }
+        for (size_t i = 0; i + 5 < strokeCount; i += 6) {
+            const float* m = strokes + i;
+            rawboy::healStroke(img, {m[0], m[1], m[2], m[3] >= 0, m[3], m[4], m[5]}, img.healBackups);
+        }
+    } catch (const std::exception&) {
+        // Out of memory for a backup: the disks healed so far stay healed and undoable.
+    }
+}
+
 }  // extern "C"

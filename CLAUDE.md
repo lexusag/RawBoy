@@ -308,6 +308,11 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   (`Pro/ui/DesktopInput.swift`). The engine builds for macOS as `RawBoyEngineMac` (same sources, module `RawBoyEngine`, arm64 only: `Float16` is unavailable on Intel; no MediaPipe, `SkinSegmenter` is a
   stub that throws). Native: `ios/native/build.sh` adds a universal macOS slice (DNG SDK built with `qiPhone=1`). Needs the Metal toolchain (`xcodebuild -downloadComponent MetalToolchain`).
   CI's `desktop` job (ci.yml, macos-26, native libs cached by source hash) builds the app and runs these tests on every PR touching `ios/`, `shaders/` or the C++: the only check that compiles Swift.
+  Auto mode (2026-11-15): `Auto/` is in the Desktop target (minus `AutoApp.swift`; `Auto/ui/PlatformBars.swift` maps toolbar sides), `DesktopModel.mode`/`auto` + `DesktopRoot` switch (⌘1/⌘2), `Desktop/AutoDesktopRoot.swift`, `SidecarAuto` (`AutoPersistence`) writing `rawboy:Auto` (`auto/AutoSidecar.swift`, port of web's AutoSidecar.ts; `XmpSidecar.readAuto/writeAuto`), `AutoViewModel.saveExported` moves exports into the chosen folder, keyboard in `KeyboardShortcuts.handleAuto`, `--auto` launch files, debug `AutoBatchProbe` (`RAWBOY_AUTO_PROBE=<files/folders> "RawBoy Desktop"` prints analysis/sidecar/export timings).
+  Skin on the Mac (2026-11-15): `retouch/SkinSegmenterVision.swift` builds the `SkinMask` from Apple's Vision (face contour + forehead cap minus eyes/brows/lips/nostrils, a face-sampled skin-colour model for the cap and for body skin inside the person mask; tries several exposures; `SkinSegmenter.preferredDimension` = 1280 copy); `SkinMask.face`/`.faces` (`FaceShape`: lower lids, line-area centres, width; `FaceShape(mesh:)` from MediaPipe's 478 points as web indexes it).
+  Portrait retouch: `retouch/PortraitRetouch.swift` (port of web's PortraitRetouch.ts, same numbers and tests), `DevelopParams.portraitRetouch` (retouch preset group), `LayerAdjust.retouch` per layer, `ShaderParams.retouchMap`/`skinFix`, the map replaces the skin texture (RGBA16F) while in use (`DevelopTextures.bindMask`), `PhotoSession.scheduleRetouch`/`retouchMapFor` (export). Sliders are Mac-only until iOS's MediaPipe path fills `faces`.
+  Healing brush (2026-11-15): `develop/HealSpots.swift` (port of web's HealSpots.ts), `DevelopParams.healSpots` + `Edits` (`healSpots`, same JSON), `rb_heal` in `rawboy_native` (spots + brush disks into `blemish.cpp`'s `healStroke`),
+  `PhotoSession.scheduleBlemishes` heals strokes and Blemish removal together (`healedKey`), UI `Pro/ui/HealPanel.swift` + `HealOverlay.swift` (macOS top-bar button and B outside Masks; the iPhone bar is full). Android has no `healStroke` JNI binding yet.
   Tests: `xcodebuild test -scheme RawBoyEngineTestsMac -destination 'platform=macOS'`; `DesktopBenchTests` prints decode / frame / export timings. `Edits.swift` is checked against the web's
   JSON (`tools/edits_fixtures/generate.ts` writes `EngineTests/EditsFixtures.swift`); `XmpSidecar.swift` mirrors web's `XmpSidecar.ts` and RawBoy Viewer's `RawBoyBrowseKit` port.
 - **RawBoy Packer** (2026-11-01, web only; `docs/packer.md`): `web/packer.html` + `src/packer/` (`PackerApp`, `PackerStore`:
@@ -562,14 +567,14 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   `viewRectF`, `SampleGeometry.outputF`; `DevelopRenderer.zoom` sets centre and scale together; Swift: `zoomCenter` and
   `zoomScale`, main thread only). Up to `ZoomMath.previewSuffices` the zoomed view draws from the preview texture
   (also while a tile for a new region or scale loads); above it from a full-res tile (linear filtering below 100%).
-- Lens blur (mask layers' `lensBlur`, Android and web; `gl/BokehTexture.kt/.ts`): bloom-style, a small whole-image
+- Lens blur (mask layers' `lensBlur`, Android, web and RawBoy Desktop/iOS Metal; `gl/BokehTexture.kt/.ts`, `metal/BokehTexture.swift`): bloom-style, a small whole-image
   texture, so preview, 100% and export match with no `spatialMargin`. From a highlight-boosted 1536 px copy
   (`ShaderParams.bokehSource`, made by `PhotoSession` the first time a layer blurs), two GPU passes re-run only when the
   masks or source change: `shaders/bokeh_prep.glsl` (appended after develop.glsl in place of main_body, so it uses the
   same `layerMask`; writes rgb premultiplied by the fade-in and the radius) and `bokeh_gather.frag` (exact disc gather,
   a sample's radius capped by the centre's, so the sharp subject never smears). The texture is sized so the largest
   radius is `BOKEH_RADIUS` (16) texels; main_body mixes it in by the radius at each pixel. Off without
-  EXT_color_buffer_float. iOS binds a dummy texture and leaves it off.
+  EXT_color_buffer_float. Metal (2026-11-15): `gen.sh` also builds `bokeh_prep.glsl` into `bokeh_prep.metal` (own uniform block and textures: `DevelopLayout.bokehUniforms`/`bokehTextures`), the gather is hand-written in `Helpers.metal` (`bokehGatherFragment`), `BokehTexture.swift` runs both passes synchronously into `DevelopTextures.bokeh` (`uBokeh`), `LayerUniforms.blur` = `uLayerBlur`, `ShaderParams.bokehSource` made by `PhotoSession.ensureBokehSource` (also awaited by export; reset on a new photo and after healing). Slider in the Masks panel; `BokehTests`.
 - Mask layers (`develop/Masks.ts`, web only so far): `DevelopParams.masks`, positions in fractions of the decoded image,
   evaluated in the shader at `srcG` (the sampled image pixel), so they stay on the content through crop/lens. Analytic
   gradients only (no texture, no neighbourhood, so no `spatialMargin`); packed by `ShaderParams.packLayers` into

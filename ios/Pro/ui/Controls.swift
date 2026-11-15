@@ -17,6 +17,9 @@ struct ControlsPanel: View {
     let lens: LensInfo
     let skin: SkinState
     let blemish: BlemishState
+    /** Portrait retouch: its map is being made / there is one (none on a ready mask = no face to size it by). */
+    var retouchWorking = false
+    var retouchReady = false
     /** White balance picker armed: the next tap on the photo sets temperature and tint. */
     var pickingWhite = false
     var onPickWhite: () -> Void = {}
@@ -184,6 +187,19 @@ struct ControlsPanel: View {
                 Note(blemish.working ? "Removing blemishes…" : blemish.healed == 1 ? "1 spot removed" : "\(blemish.healed) spots removed")
             }
         }
+        #if !canImport(MediaPipeTasksVision)
+        // The Mac's Vision-based skin mask carries the face landmarks Portrait retouch needs; iOS's MediaPipe path doesn't hand them over yet (FaceShape(mesh:) is ready for it).
+        slider("Portrait retouch", \.portraitRetouch, 0...100, format: formatPlain)
+        if params.portraitRetouch > 0 {
+            if let note = skinNote {
+                Note(note)
+            } else if retouchWorking {
+                Note("Retouching…")
+            } else if skin.mask != nil && !retouchReady {
+                Note("No face found to size the retouch by")
+            }
+        }
+        #endif
         slider("Bloom", \.bloom, 0...100, format: formatPlain)
         anamorphicSliders
         grainSliders

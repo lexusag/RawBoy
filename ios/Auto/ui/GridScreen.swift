@@ -7,8 +7,11 @@ import SwiftUI
  */
 struct GridScreen: View {
     @ObservedObject var vm: AutoViewModel
-    let addFromPhotos: () -> Void
+    /** nil (RawBoy Desktop): photos come from files only. */
+    let addFromPhotos: (() -> Void)?
     let addFromFiles: () -> Void
+    /** RawBoy Desktop: adds the photos in a folder. */
+    var addFromFolder: (() -> Void)? = nil
     /** Opens a RawBoy preset file to apply to the batch (nil), or to the photos with these ids. */
     let pickPreset: (Set<String>?) -> Void
 
@@ -74,7 +77,7 @@ struct GridScreen: View {
                 }
             }
             .navigationTitle(selecting ? "\(selection.count) selected" : "RawBoy Auto")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle()
             .toolbar { toolbar }
         }
         .sheet(isPresented: $showExport) {
@@ -96,6 +99,12 @@ struct GridScreen: View {
         }
         // Drop ids of photos that left the list (removed elsewhere, e.g. via the detail view).
         .onChange(of: vm.photos.map(\.id)) { _, ids in selection.formIntersection(ids) }
+        .onChange(of: vm.exportRequest) { _, _ in
+            if !exporting && exportable > 0 {
+                exportIds = selecting ? selection : nil
+                showExport = true
+            }
+        }
     }
 
     private var importMode: some View {
@@ -105,6 +114,7 @@ struct GridScreen: View {
                 Text("Looks").tag(LookMode.looks)
                 Text("Film").tag(LookMode.film)
             }
+            .labelsHidden()
             .pickerStyle(.segmented)
             .frame(width: 180)
         }
@@ -172,8 +182,14 @@ struct GridScreen: View {
                  + " JPEG, HEIC, PNG and TIFF work too, at lower quality.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
-            Button("Choose from Photos", action: addFromPhotos).buttonStyle(.borderedProminent)
-            Button("Choose from Files", action: addFromFiles)
+            if let addFromPhotos {
+                Button("Choose from Photos", action: addFromPhotos).buttonStyle(.borderedProminent)
+                Button("Choose from Files", action: addFromFiles)
+            } else {
+                Button("Add photos… (⌘O)", action: addFromFiles).buttonStyle(.borderedProminent)
+                if let addFromFolder { Button("Add a folder… (⇧⌘O)", action: addFromFolder) }
+                Text("or drop photos or a folder here").font(.caption).foregroundStyle(.secondary)
+            }
             Spacer()
         }
         .padding(32)
@@ -187,6 +203,8 @@ struct GridScreen: View {
             let aspects = photos.map { p in p.thumbnail.map { CGFloat($0.width) / CGFloat($0.height) } ?? 1.5 }
             let rows = justifiedRows(aspects, width: geo.size.width - gap * 2,
                                      target: geo.size.width < 600 ? 120 : 180, gap: gap)
+            let _ = { vm.rowStarts = rows.map(\.start) }()
+            ScrollViewReader { scroll in
             ScrollView {
                 LazyVStack(spacing: gap) {
                     ForEach(rows, id: \.start) { row in
@@ -202,14 +220,29 @@ struct GridScreen: View {
                 }
                 .padding(gap)
             }
+            // The keyboard focus stays in view.
+            .onChange(of: vm.focusedId) { _, id in
+                if let id, let i = photos.firstIndex(where: { $0.id == id }), let row = rows.last(where: { $0.start <= i }) {
+                    withAnimation { scroll.scrollTo(photos[row.start].id) }
+                }
+            }
+            }
         }
     }
 
     private func cell(_ photo: AutoPhoto) -> some View {
         PhotoCell(photo: photo, next: vm.opening == photo.id, waiting: vm.export?.waiting.contains(photo.id) ?? false,
-                  selected: selection.contains(photo.id))
+                  selected: selection.contains(photo.id), focused: vm.focusedId == photo.id)
             .onTapGesture {
                 guard !exporting else { return }
+                vm.focusedId = photo.id
+                #if os(macOS)
+                // ⌘-click or ⇧-click selects, as in Finder; a plain click opens.
+                if NSEvent.modifierFlags.contains(.command) || NSEvent.modifierFlags.contains(.shift) {
+                    if selection.contains(photo.id) { selection.remove(photo.id) } else { selection.insert(photo.id) }
+                    return
+                }
+                #endif
                 if selecting {
                     if selection.contains(photo.id) { selection.remove(photo.id) } else { selection.insert(photo.id) }
                 } else {
@@ -222,10 +255,10 @@ struct GridScreen: View {
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         if selecting {
-            ToolbarItem(placement: .topBarLeading) {
+            ToolbarItem(placement: .barLeading) {
                 Button("Cancel") { selection = [] }
             }
-            ToolbarItemGroup(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .barTrailing) {
                 Button("All") { selection = Set(vm.photos.map(\.id)) }
                 // A lens preset for these photos: manual lenses record no lens name to match by.
                 if !vm.lensPresets.isEmpty {
@@ -258,14 +291,15 @@ struct GridScreen: View {
                 .disabled(exporting || exportableSelected == 0)
             }
         } else {
-            ToolbarItem(placement: .topBarLeading) {
+            ToolbarItem(placement: .barLeading) {
                 Menu("Add") {
-                    Button("From Photos", systemImage: "photo.on.rectangle", action: addFromPhotos)
-                    Button("From Files", systemImage: "folder", action: addFromFiles)
+                    if let addFromPhotos { Button("From Photos", systemImage: "photo.on.rectangle", action: addFromPhotos) }
+                    Button(addFromPhotos == nil ? "Photos…" : "From Files", systemImage: "folder", action: addFromFiles)
+                    if let addFromFolder { Button("A Folder…", systemImage: "folder.badge.plus", action: addFromFolder) }
                 }
                 .disabled(exporting)
             }
-            ToolbarItemGroup(placement: .topBarTrailing) {
+            ToolbarItemGroup(placement: .barTrailing) {
                 Button(exportable > 1 ? "Export all (\(exportable))" : "Export") {
                     exportIds = nil
                     showExport = true
@@ -285,6 +319,7 @@ private struct PhotoCell: View {
     /** Still to be saved by the running "Export all": shown desaturated. */
     let waiting: Bool
     let selected: Bool
+    var focused = false
 
     var body: some View {
         ZStack {
@@ -328,7 +363,7 @@ private struct PhotoCell: View {
             .frame(maxHeight: .infinity, alignment: .bottom)
         }
         .clipped()
-        .overlay(Rectangle().stroke(selected ? Color.accentColor : .clear, lineWidth: 3))
+        .overlay(Rectangle().stroke(selected ? Color.accentColor : focused ? Color.white.opacity(0.8) : .clear, lineWidth: focused && !selected ? 2 : 3))
         .contentShape(Rectangle())
     }
 }
@@ -425,11 +460,15 @@ struct ExportSheet: View {
                 }
                 ExportFrameSections(settings: settingsBinding)
                 Section {
-                    Text("Saved to Photos › \(AutoViewModel.naming.folder)").font(.caption).foregroundStyle(.secondary)
+                    if let destination = vm.destinationView {
+                        destination
+                    } else {
+                        Text("Saved to \(vm.destinationLabel)").font(.caption).foregroundStyle(.secondary)
+                    }
                 }
             }
             .navigationTitle(count > 1 ? "Export \(count) photos" : "Export")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle()
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
@@ -481,7 +520,7 @@ private struct LensPresetsSheet: View {
                 }
             }
             .navigationTitle(ids.map { $0.count == 1 ? "Lens preset for 1 photo" : "Lens preset for \($0.count) photos" } ?? "Lens presets")
-            .navigationBarTitleDisplayMode(.inline)
+            .inlineTitle()
             .toolbar { ToolbarItem(placement: .confirmationAction) { Button("Done") { dismiss() } } }
         }
     }

@@ -125,9 +125,9 @@ public final class RawImage: @unchecked Sendable {
         }
     }
 
-    /** Replaces any earlier healing with healing of exactly [spots]. Previews must be rebuilt afterwards. */
-    public func healBlemishes(_ spots: [Float]) {
-        withHandle { rb_heal_blemishes($0, spots, spots.count) }
+    /** Replaces any earlier healing with healing of exactly [spots] (detected blemishes) and [strokes] (the healing brush's disks, see `HealSpots.strokes`). Previews must be rebuilt afterwards. */
+    public func healBlemishes(_ spots: [Float], strokes: [Float] = []) {
+        withHandle { rb_heal($0, spots, spots.count, strokes, strokes.count) }
     }
 
     public func close() {

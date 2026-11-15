@@ -38,6 +38,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The photo's pointer position (Z, the wheel) needs mouse-moved events.
         for window in NSApp.windows { window.acceptsMouseMovedEvents = true }
         for url in Self.launchFiles() { model.open(url) }
+        let batch = Self.launchFiles(after: "--auto")
+        if !batch.isEmpty { model.addToAuto(batch) }
+        #if DEBUG
+        AutoBatchProbe.runIfRequested(model)
+        AutoBatchProbe.openDetailIfRequested(model)
+        #endif
     }
 
     @MainActor
@@ -48,7 +54,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /** Finder's Open With, a file dropped on the Dock icon, `open -a`. */
     @MainActor
     func application(_ application: NSApplication, open urls: [URL]) {
-        if let url = urls.first { DesktopModel.shared.open(url) }
+        let model = DesktopModel.shared
+        // Several photos (or a folder) from the Finder go to Auto's batch; one opens in the editor.
+        if urls.count > 1 || urls.first?.hasDirectoryPath == true { model.addToAuto(urls) } else if let url = urls.first { model.open(url) }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
@@ -56,13 +64,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         DesktopModel.shared.sidecars.flush()
+        DesktopModel.shared.autoSidecars.flush()
         return .terminateNow
     }
 
-    /** Files named on the command line (`RawBoy\ Desktop --open photo.RAF`), for scripts and tests. */
-    private static func launchFiles() -> [URL] {
+    /** Files named on the command line (`RawBoy\ Desktop --open photo.RAF`; `--auto a.RAF b.RAF folder/` fills Auto's batch), for scripts and tests. */
+    private static func launchFiles(after flag: String = "--open") -> [URL] {
         let args = CommandLine.arguments
-        guard let i = args.firstIndex(of: "--open") else { return [] }
+        guard let i = args.firstIndex(of: flag) else { return [] }
         return args[(i + 1)...].prefix { !$0.hasPrefix("--") }.map { URL(fileURLWithPath: $0) }
     }
 }
@@ -72,26 +81,49 @@ struct DesktopCommands: Commands {
     @ObservedObject var model: DesktopModel
 
     private var state: EditorState { model.vm.state }
-    private var ready: Bool { state.hasImage && !state.busy }
+    private var proMode: Bool { model.mode == .pro }
+    private var ready: Bool { proMode && state.hasImage && !state.busy }
+    private var auto: AutoViewModel { model.auto }
+    private var autoReady: Bool { model.mode == .auto && auto.export == nil }
+    private var autoExportable: Bool { autoReady && auto.photos.contains { $0.analysis != nil } }
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
-            Button("Open…") { model.openPanel() }.keyboardShortcut("o")
+            Button(proMode ? "Open…" : "Add Photos…") { if proMode { model.openPanel() } else { model.addPhotosPanel() } }
+                .keyboardShortcut("o")
+            Button("Add a Folder to Auto…") { model.addFolderPanel() }.keyboardShortcut("o", modifiers: [.command, .shift])
             Divider()
-            Button("Export…") { model.commands.send(.export) }.keyboardShortcut("e").disabled(!ready)
-            Button("Show Last Export in Finder") { model.showLastExportInFinder() }.disabled(model.vm.lastExport == nil)
-            Button("Show Sidecar in Finder") { model.showSidecarInFinder() }.disabled(model.vm.currentURL == nil)
+            Button(proMode ? "Export…" : "Export All…") {
+                if proMode { model.commands.send(.export) } else { auto.requestExport() }
+            }
+            .keyboardShortcut("e").disabled(proMode ? !ready : !autoExportable)
+            Button("Show Last Export in Finder") { model.showLastExportInFinder() }
+                .disabled(proMode ? model.vm.lastExport == nil : model.lastAutoExport == nil)
+            Button("Show Sidecar in Finder") { model.showSidecarInFinder() }.disabled(model.vm.currentURL == nil || !proMode)
         }
         CommandGroup(replacing: .undoRedo) {
-            Button("Undo") { model.undoOrTextUndo() }.keyboardShortcut("z").disabled(!state.canUndo)
-            Button("Redo") { model.redoOrTextRedo() }.keyboardShortcut("z", modifiers: [.command, .shift]).disabled(!state.canRedo)
+            Button("Undo") { model.undoOrTextUndo() }.keyboardShortcut("z")
+                .disabled(proMode ? !state.canUndo : !(auto.selected.map(auto.canUndo) ?? false))
+            Button("Redo") { model.redoOrTextRedo() }.keyboardShortcut("z", modifiers: [.command, .shift])
+                .disabled(proMode ? !state.canRedo : !(auto.selected.map(auto.canRedo) ?? false))
             Divider()
             Button("Reset All") { model.vm.reset() }.disabled(!ready)
             Button("Auto Dev") { model.vm.applyAuto() }.disabled(!ready)
         }
+        CommandMenu("Mode") {
+            Button("Pro: One Photo in the Editor") { model.mode = .pro }.keyboardShortcut("1").disabled(model.mode == .pro)
+            Button("Auto: a Batch Developed Automatically") { model.mode = .auto }.keyboardShortcut("2").disabled(model.mode == .auto)
+            Divider()
+            Button("Previous Photo") { auto.page(-1) }.keyboardShortcut(.leftArrow, modifiers: []).disabled(!autoReady || auto.selected == nil)
+            Button("Next Photo") { auto.page(1) }.keyboardShortcut(.rightArrow, modifiers: []).disabled(!autoReady || auto.selected == nil)
+            Button("Open Focused Photo") { auto.openFocused() }.keyboardShortcut(.return, modifiers: [])
+                .disabled(!autoReady || auto.selected != nil || auto.focusedId == nil)
+            Button("Back to the Grid") { auto.goBack() }.keyboardShortcut(.escape, modifiers: []).disabled(!autoReady || auto.selected == nil)
+        }
         CommandMenu("Photo") {
             Button("Crop & Rotate") { model.commands.send(.toggleMode(.geometry)) }.keyboardShortcut("c", modifiers: []).disabled(!ready)
             Button("Masks") { model.commands.send(.toggleMode(.masks)) }.disabled(!ready)
+            Button("Healing Brush") { model.commands.send(.toggleMode(.heal)) }.disabled(!ready)
             Button("Light Leaks & Effects") { model.commands.send(.toggleMode(.leaks)) }.disabled(!ready)
             Button("Presets") { model.commands.send(.toggleMode(.presets)) }.disabled(!ready)
             Divider()
@@ -100,7 +132,7 @@ struct DesktopCommands: Commands {
             Button("Flip Horizontal") { model.vm.flip(false) }.disabled(!ready)
             Button("Flip Vertical") { model.vm.flip(true) }.disabled(!ready)
             Divider()
-            Button("Close Tool") { model.commands.send(.done) }.keyboardShortcut(.escape, modifiers: []).disabled(!ready)
+            Button("Close Tool") { model.commands.send(.done) }.disabled(!ready)
         }
         CommandMenu("View") {
             Button("100% at the Pointer / Whole Photo") { model.commands.send(.zoom100AtPointer) }
@@ -112,7 +144,7 @@ struct DesktopCommands: Commands {
             Button("Mark Clipped Highlights and Shadows") { model.vm.toggleClipWarning() }.disabled(!ready)
         }
         CommandMenu("Masks") {
-            Button("Brush") { model.commands.send(.maskTool(.brush)) }.keyboardShortcut("b", modifiers: []).disabled(!ready)
+            Button("Brush (Healing brush outside Masks)") { model.commands.send(.maskTool(.brush)) }.keyboardShortcut("b", modifiers: []).disabled(!ready)
             Button("Erase") { model.commands.send(.maskTool(.erase)) }.keyboardShortcut("e", modifiers: []).disabled(!ready)
             Button("Move") { model.commands.send(.maskTool(.move)) }.keyboardShortcut("v", modifiers: []).disabled(!ready)
             Button("Smaller Brush") { model.commands.send(.brushSize(-1)) }.keyboardShortcut("[", modifiers: []).disabled(!ready)
