@@ -142,7 +142,9 @@ public enum AutoTone {
         } else {
             ev = min(log2f(targetKey / stats.key), targetP98 - stats.p98)
         }
-        if stats.skinLuminance > 0 {
+        // A camera-metered raw (Pixel, iPhone, Samsung) keeps the camera's exposure: its metering already knows the face, and the
+        // skin mask (Vision on the Mac, MediaPipe elsewhere) lifted it by 1-2 EV. Faces still steer the look (LookSuggester).
+        if stats.skinLuminance > 0 && (!cameraMetered || phoneAe) {
             let t = ((stats.faceArea - faceAreaFrom) / (faceAreaFull - faceAreaFrom)).clamped(0, 1)
             let w = skinWeight * t * t * (3 - 2 * t)
             let bySkin = log2f(targetSkin / (stats.skinLuminance * uncompensated))

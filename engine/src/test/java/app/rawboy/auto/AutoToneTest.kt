@@ -47,6 +47,16 @@ class AutoToneTest {
     }
 
     @Test
+    fun aCameraMeteredRawKeepsItsExposureWhateverTheSkinSays() {
+        // A face 3.2% of the frame with dark skin: a metered raw stays at 0 EV; any other raw is steered by the skin.
+        val stats = SceneStats(0.0286f, -8f, -7f, -5f, -1.5f, -1.3f, 0f, 0.1f, 0f, 0f, 0.032f, 0.0173f, 183f, IntArray(1))
+        assertEquals(0f, AutoTone.exposure(stats, cameraMetered = true), 1e-6f)
+        assert(AutoTone.exposure(stats, cameraMetered = false) != 0f)
+        // RawBoy Camera's phone exposure still follows the skin.
+        assert(AutoTone.exposure(stats, cameraMetered = true, phoneAe = true) > 0.5f)
+    }
+
+    @Test
     fun isoTableLumaIsHalfOfColourAtEveryIso() {
         assertEquals(Triple(0f, 0f, 15f), AutoTone.noiseSettings(400f))
         assertEquals(Triple(10f, 20f, 15f), AutoTone.noiseSettings(1600f))

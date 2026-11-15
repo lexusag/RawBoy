@@ -5,8 +5,9 @@ import XCTest
  * Desktop Auto against the web's, on Pixel DNGs: the scene stats and the auto develop (exposure, shadows, contrast,
  * denoise) without a face mask, as the web's WASM decode + `analyzeScene` + `autoDevelop` give them in Node (run on the same
  * files; draft decode there, full here). Camera-metered Pixel raws keep the camera's exposure (0), and everything but the
- * face mask comes out the same. With a face, Auto's exposure and look follow the skin mask, and that is the Mac's Vision
- * against the web's MediaPipe, which no test can pin. Skips the files that aren't on this Mac (CI has none).
+ * face mask comes out the same. With a face the exposure of a camera-metered raw stays the camera's (0 EV), whatever the
+ * Mac's Vision mask finds (it lifted four of these by +0.75 to +1.45 EV before); the face still steers the look. Skips the
+ * files that aren't on this Mac (CI has none).
  */
 final class AutoParityTests: XCTestCase {
     private struct Case {
@@ -25,6 +26,29 @@ final class AutoParityTests: XCTestCase {
         Case(path: "/Downloads/Telegram Desktop/IMG_20261030_141225.dng", key: 0.01487, p98: -0.469, exposure: 0, shadows: 5, contrast: 17, denoise: 0, colorDenoise: 14),
         Case(path: "/Downloads/Telegram Desktop/IMG_20261031_153812.dng", key: 0.00276, p98: -2.594, exposure: 0, shadows: 28, contrast: 16, denoise: 1, colorDenoise: 39),
     ]
+
+    /** The photos whose face mask (Vision) lifted or dropped a camera-metered exposure: now 0 EV with the mask on. */
+    func testAFaceDoesNotMoveACameraMeteredExposure() throws {
+        let faces: [(String, String, String)] = [  // path, suggested look, suggested film stock
+            ("/Downloads/Telegram Desktop/IMG_20261031_143823.dng", "portra400", "portra400"),
+            ("/Downloads/Telegram Desktop/IMG_20261031_142419.dng", "portra400", "portra400"),
+            ("/_claude/photos/IMG_20261107_215559.dng", "portra800", "portra800"),
+            ("/_claude/photos/IMG_20261107_215633.dng", "portra800", "portra800"),
+        ]
+        var ran = 0
+        for (path, lookId, filmId) in faces {
+            let url = URL(fileURLWithPath: Self.home + path)
+            guard FileManager.default.fileExists(atPath: url.path) else { continue }
+            ran += 1
+            let a = try AutoAnalysis.analyze(url)  // with skin detection, as Auto does
+            let name = url.lastPathComponent
+            XCTAssertGreaterThan(a.stats.faceArea, 0, "a face is found in \(name)")
+            XCTAssertEqual(a.autoBase.exposure, 0, accuracy: 0.001, "exposure \(name)")
+            XCTAssertEqual(LookSuggester.suggest(a.stats, asShotKelvin: a.defaults.temperature).id, lookId, name)
+            XCTAssertEqual(LookSuggester.suggestFilm(a.stats, asShotKelvin: a.defaults.temperature).id, filmId, name)
+        }
+        if ran == 0 { throw XCTSkip("none of the Pixel DNGs is on this Mac") }
+    }
 
     func testPixelDngsMatchTheWebWithoutAFaceMask() throws {
         var ran = 0
