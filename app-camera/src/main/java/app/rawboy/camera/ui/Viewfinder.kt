@@ -17,10 +17,24 @@ import app.rawboy.gl.VideoSink
 import app.rawboy.gl.ViewfinderRenderer
 
 /**
+ * Component sizes for the viewfinder's EGL config ([GLSurfaceView.setEGLConfigChooser]). The config also sets the
+ * format of the screen's buffers, and it is a recording's fallback encoder config ([app.rawboy.gl.EncoderConfig.CONTEXT]).
+ */
+data class ViewfinderEglConfig(
+    val red: Int,
+    val green: Int,
+    val blue: Int,
+    val alpha: Int,
+    val depth: Int = 0,
+    val stencil: Int = 0,
+)
+
+/**
  * The live camera preview, developed with [params] (see [ViewfinderRenderer]), with an optional focus [loupe]. While
  * [onLuma] is set it gets the renderer's greyscale copies (QR codes), while [onTrackLuma] is the small ones every frame
  * (the subject tracker). [videoSink]: the video encoder's surface while recording (see [ViewfinderRenderer.videoSink]); [videoMode] moves the grain with the frames. [turns]: clockwise quarter turns from the upright picture to the view (see
- * [ViewfinderRenderer.turns]).
+ * [ViewfinderRenderer.turns]). [eglConfig]: the view's EGL config, read once when the view is made; null leaves
+ * [GLSurfaceView]'s own choice.
  */
 @Composable
 fun Viewfinder(
@@ -36,6 +50,7 @@ fun Viewfinder(
     zoom: Float = 1f,
     videoSink: VideoSink? = null,
     videoMode: Boolean = false,
+    eglConfig: ViewfinderEglConfig? = null,
 ) {
     val surfaceCallback = rememberUpdatedState(onSurfaceTexture)
     val baseCallback = rememberUpdatedState(onBase)
@@ -55,6 +70,8 @@ fun Viewfinder(
         factory = { context ->
             GLSurfaceView(context).apply {
                 setEGLContextClientVersion(3)
+                // After the client version (the chooser filters by it) and before setRenderer (which fixes it).
+                eglConfig?.let { setEGLConfigChooser(it.red, it.green, it.blue, it.alpha, it.depth, it.stencil) }
                 preserveEGLContextOnPause = true
                 setRenderer(renderer)
                 // Frames are drawn as the camera delivers them (SurfaceTexture's frame listener).

@@ -26,6 +26,8 @@ class VideoSink(
     val flat: Boolean = false,
     /** Flat only: EV added in linear light before the log encode (the converter takes it out again). */
     val raiseEv: Float = 0f,
+    /** The EGL configs tried, in order, for the encoder's window surface (see [EncoderConfig]). */
+    val encoderConfigs: List<EncoderConfig> = EncoderConfig.DEFAULT_ORDER,
     /** Camera frame timestamp (ns, the SurfaceTexture's) -> presentation time (ns) of the encoded frame, or < 0 to skip the frame. */
     val presentationNs: (cameraTimestampNs: Long) -> Long,
     /** Asks the view for a frame (so a stop is noticed even if the camera has stalled). */
@@ -42,6 +44,35 @@ class VideoSink(
     /** Set by the renderer when the device refused an EGL surface on [surface]. */
     @Volatile
     var failed = false
+}
+
+/**
+ * One way to choose the EGL config of the encoder's window surface. [EncoderSurface.create] tries a [VideoSink]'s
+ * [VideoSink.encoderConfigs] in order and keeps the first that the device lets it make current.
+ */
+enum class EncoderConfig {
+    /** 8-bit RGBA with the recordable flag: what MediaCodec's input surfaces are meant for. */
+    RECORDABLE_RGBA8888,
+
+    /** The viewfinder context's own config: always compatible with the context. */
+    CONTEXT;
+
+    companion object {
+        /** Recordable first, the context's own config as the fallback. */
+        val DEFAULT_ORDER: List<EncoderConfig> = listOf(RECORDABLE_RGBA8888, CONTEXT)
+
+        /** eglChooseConfig attributes of [RECORDABLE_RGBA8888]. */
+        internal fun recordableRgba8888Attribs(): IntArray = intArrayOf(
+            EGL14.EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,
+            EGL14.EGL_RED_SIZE, 8, EGL14.EGL_GREEN_SIZE, 8, EGL14.EGL_BLUE_SIZE, 8, EGL14.EGL_ALPHA_SIZE, 8,
+            EGL14.EGL_SURFACE_TYPE, EGL14.EGL_WINDOW_BIT,
+            EGL_RECORDABLE_ANDROID, 1,
+            EGL14.EGL_NONE,
+        )
+
+        private const val EGL_OPENGL_ES3_BIT = 0x40
+        private const val EGL_RECORDABLE_ANDROID = 0x3142
+    }
 }
 
 /**
@@ -62,10 +93,8 @@ internal class EncoderSurface(private val sink: VideoSink) {
         if (display == EGL14.EGL_NO_DISPLAY || context == EGL14.EGL_NO_CONTEXT) return false
         savedDraw = EGL14.eglGetCurrentSurface(EGL14.EGL_DRAW)
         savedRead = EGL14.eglGetCurrentSurface(EGL14.EGL_READ)
-        // The recordable flag is what MediaCodec's surfaces are meant for; the context's own config is the fallback
-        // (always compatible with the context).
-        for (recordable in booleanArrayOf(true, false)) {
-            val config = chooseConfig(recordable) ?: continue
+        for (attempt in sink.encoderConfigs) {
+            val config = chooseConfig(attempt) ?: continue
             val created = EGL14.eglCreateWindowSurface(display, config, sink.surface, intArrayOf(EGL14.EGL_NONE), 0)
             if (created == null || created == EGL14.EGL_NO_SURFACE) continue
             if (EGL14.eglMakeCurrent(display, created, created, context)) {
@@ -80,19 +109,14 @@ internal class EncoderSurface(private val sink: VideoSink) {
         return false
     }
 
-    private fun chooseConfig(recordable: Boolean): EGLConfig? {
-        val attribs = if (recordable) {
-            intArrayOf(
-                EGL14.EGL_RENDERABLE_TYPE, EGL_OPENGL_ES3_BIT,
-                EGL14.EGL_RED_SIZE, 8, EGL14.EGL_GREEN_SIZE, 8, EGL14.EGL_BLUE_SIZE, 8, EGL14.EGL_ALPHA_SIZE, 8,
-                EGL14.EGL_SURFACE_TYPE, EGL14.EGL_WINDOW_BIT,
-                EGL_RECORDABLE_ANDROID, 1,
-                EGL14.EGL_NONE,
-            )
-        } else {
-            val id = IntArray(1)
-            if (!EGL14.eglQueryContext(display, context, EGL14.EGL_CONFIG_ID, id, 0)) return null
-            intArrayOf(EGL14.EGL_CONFIG_ID, id[0], EGL14.EGL_NONE)
+    private fun chooseConfig(attempt: EncoderConfig): EGLConfig? {
+        val attribs = when (attempt) {
+            EncoderConfig.RECORDABLE_RGBA8888 -> EncoderConfig.recordableRgba8888Attribs()
+            EncoderConfig.CONTEXT -> {
+                val id = IntArray(1)
+                if (!EGL14.eglQueryContext(display, context, EGL14.EGL_CONFIG_ID, id, 0)) return null
+                intArrayOf(EGL14.EGL_CONFIG_ID, id[0], EGL14.EGL_NONE)
+            }
         }
         val configs = arrayOfNulls<EGLConfig>(1)
         val count = IntArray(1)
@@ -130,7 +154,5 @@ internal class EncoderSurface(private val sink: VideoSink) {
 
     private companion object {
         const val TAG = "RawBoyVideo"
-        const val EGL_OPENGL_ES3_BIT = 0x40
-        const val EGL_RECORDABLE_ANDROID = 0x3142
     }
 }
