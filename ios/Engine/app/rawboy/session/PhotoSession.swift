@@ -280,6 +280,16 @@ public final class PhotoSession: ObservableObject {
         }.value
     }
 
+    /**
+     * Auto white balance for an area of the photo ([rect], fractions 0..1 of the visible output picture): the
+     * temperature and tint that render its unclipped pixels neutral grey. Nil with no photo or an empty area.
+     */
+    public func autoWhite(_ rect: CropRect, defaults: DevelopParams) -> WhitePicker.Pick? {
+        guard let img = image, let base else { return nil }
+        return WhitePicker.area(base: base, imageWidth: img.width, imageHeight: img.height, lens: lensFor(params), rect: rect,
+                                asShotKelvin: defaults.temperature, asShotTint: defaults.tint)
+    }
+
     /** Double tap: zoom to 100% at the tapped point of the fit view, or back out. */
     public func toggleZoom(_ viewX: Float, _ viewY: Float, frameWidth: Int) {
         guard image != nil else { return }

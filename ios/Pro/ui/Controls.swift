@@ -20,6 +20,10 @@ struct ControlsPanel: View {
     /** White balance picker armed: the next tap on the photo sets temperature and tint. */
     var pickingWhite = false
     var onPickWhite: () -> Void = {}
+    /** Auto WB's area is shown on the photo: dragging it sets temperature and tint from what is inside. */
+    var autoWb = false
+    var onAutoWb: () -> Void = {}
+    var onResetWb: () -> Void = {}
     /** Lens tab: saves its settings as the lens preset of that name; with true, also sends it to RawBoy Auto. */
     var onSaveLensPreset: (_ name: String, _ sendToAuto: Bool) -> Void = { _, _ in }
     /** Lens tab: lens corrections from the Lensfun database (nil = not offered). */
@@ -136,6 +140,15 @@ struct ControlsPanel: View {
         .buttonStyle(.bordered)
         .tint(pickingWhite ? .accentColor : .secondary)
         .padding(.vertical, 4)
+        HStack {
+            Button("Auto WB", action: onAutoWb).tint(autoWb ? .accentColor : .secondary)
+            Button("Reset WB", action: onResetWb).tint(.secondary)
+                .disabled(params.temperature == defaults.temperature && params.tint == defaults.tint)
+        }
+        .buttonStyle(.bordered)
+        .font(.subheadline)
+        .padding(.bottom, 4)
+        if autoWb { Note("Drag the frame on the photo over something that should be neutral.") }
         TemperatureSlider(kelvin: params.temperature, defaultValue: defaults.temperature) { k in set { $0.temperature = k } }
         slider("Tint", \.tint, -Float(WhiteBalance.maxTint)...Float(WhiteBalance.maxTint))
         slider("Saturation", \.saturation, -100...100)

@@ -33,6 +33,9 @@ struct EditorScreen: View {
     @State private var mode = EditorMode.none
     /** White balance picker: armed from the Color tab, the next tap on the photo picks. */
     @State private var pickingWhite = false
+    /** Auto WB's area is on the photo (fit view), and where it is (fractions of the picture shown). */
+    @State private var autoWb = false
+    @State private var autoWbRect = CropRect(0.15, 0.15, 0.85, 0.85)
     // Masks (UI state; the layers themselves are in the params).
     @State private var selectedLayer: String?
     @State private var maskTool = MaskTool.move
@@ -82,6 +85,7 @@ struct EditorScreen: View {
                              if m == .geometry { vm.exitZoom() }  // the crop tool works on the fit view
                              mode = m
                              pickingWhite = false
+                             autoWb = false
                          },
                          onReset: vm.reset, onAuto: vm.applyAuto,
                          canUndo: state.canUndo, canRedo: state.canRedo, onUndo: vm.undo, onRedo: vm.redo,
@@ -104,6 +108,7 @@ struct EditorScreen: View {
             selectedLeak = nil
             selectedFx = nil
             pickingWhite = false
+            autoWb = false
         }
     }
 
@@ -119,6 +124,7 @@ struct EditorScreen: View {
             if m == .geometry { vm.exitZoom() }  // the crop tool works on the fit view
             mode = mode == m ? .none : m
             pickingWhite = false
+            autoWb = false
         case .toggleCompare:
             showOriginal.toggle()
         case .zoom100AtPointer:
@@ -147,6 +153,8 @@ struct EditorScreen: View {
             sizeRingAt = Date()
         case .done:
             mode = .none
+            pickingWhite = false
+            autoWb = false
         case .help:
             showHelp = true
         }
@@ -248,6 +256,15 @@ struct EditorScreen: View {
                     CropOverlay(frameWidth: shader.lens.outputWidth, frameHeight: shader.lens.outputHeight,
                                 crop: state.params.crop, ratio: cropRatio, framePx: framePx, onCropChange: vm.setCrop)
                 }
+                if let shader, autoWb, mode == .none, session.zoomCenter == nil, session.preview != nil, !showOriginal {
+                    CropOverlay(frameWidth: shader.lens.outputWidth, frameHeight: shader.lens.outputHeight,
+                                crop: autoWbRect, ratio: nil, framePx: framePx,
+                                onCropChange: { r in
+                                    autoWbRect = r
+                                    vm.autoWhiteBalance(r)
+                                },
+                                shadeOpacity: 0.35, gridLines: 3)
+                }
                 if state.loading {
                     ProgressView()
                 } else if session.preview == nil {
@@ -304,7 +321,7 @@ struct EditorScreen: View {
     private var previewGestures: some Gesture {
         let doubleTap = SpatialTapGesture(count: 2).onEnded { e in
             // Zoom works on the cropped view; the crop tool shows the whole frame.
-            if mode != .geometry { vm.toggleZoom(Float(e.location.x * scale), Float(e.location.y * scale), extra: marginPx) }
+            if mode != .geometry && !autoWb { vm.toggleZoom(Float(e.location.x * scale), Float(e.location.y * scale), extra: marginPx) }
         }
         let tap = SpatialTapGesture().onEnded { e in
             guard mode != .geometry && mode != .masks && mode != .leaks && mode != .fx else { return }
@@ -460,7 +477,26 @@ struct EditorScreen: View {
                     onToneMapper: vm.setToneMapper, onFilm: vm.useFilm, onSelectFilm: vm.selectFilm,
                     onLutsTabShown: vm.refreshLuts, lens: session.lensInfo,
                     skin: session.skin, blemish: session.blemish,
-                    pickingWhite: pickingWhite, onPickWhite: { pickingWhite.toggle() },
+                    pickingWhite: pickingWhite,
+                    onPickWhite: {
+                        pickingWhite.toggle()
+                        if pickingWhite { autoWb = false }
+                    },
+                    autoWb: autoWb,
+                    onAutoWb: {
+                        autoWb.toggle()
+                        if autoWb {
+                            pickingWhite = false
+                            mode = .none
+                            vm.exitZoom()
+                            vm.autoWhiteBalance(autoWbRect, force: true)
+                        }
+                    },
+                    onResetWb: {
+                        autoWb = false
+                        pickingWhite = false
+                        vm.resetWhiteBalance()
+                    },
                     onSaveLensPreset: { name, send in
                         let preset = vm.saveLensPreset(name: name)
                         if send { vm.sendPresetToAuto(preset) }

@@ -217,6 +217,22 @@ final class EditorViewModel: ObservableObject {
         }
     }
 
+    /** Auto white balance for an area of the photo ([rect]: fractions of the picture shown); [force]: its own undo step. */
+    func autoWhiteBalance(_ rect: CropRect, force: Bool = false) {
+        guard state.hasImage, !state.busy, let pick = session.autoWhite(rect, defaults: state.defaults) else { return }
+        switch pick {
+        case let .white(kelvin, tint): edit(force: force) { $0.temperature = kelvin; $0.tint = tint }
+        case .clipped: message = "That region is blown out: pick an area that isn't clipped"
+        case .notNeutral: message = "No white balance makes that area grey"
+        }
+    }
+
+    /** White balance (temperature and tint) back to as shot. */
+    func resetWhiteBalance() {
+        let d = state.defaults
+        edit(force: true) { $0.temperature = d.temperature; $0.tint = d.tint }
+    }
+
     /** Drag in the zoomed view, in view pixels. */
     func pan(_ dx: Float, _ dy: Float) { session.pan(dx, dy) }
 

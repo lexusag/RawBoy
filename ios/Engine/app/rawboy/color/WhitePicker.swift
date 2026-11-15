@@ -38,10 +38,59 @@ public enum WhitePicker {
             sum[2] += Double(b)
             n += 1
         }
+        return pickFromSum(sum, n, asShotKelvin: asShotKelvin, asShotTint: asShotTint)
+    }
+
+    /** Solves for the white balance from summed RGB of [n] unclipped samples (none = clipped). */
+    public static func pickFromSum(_ sum: [Double], _ n: Int, asShotKelvin: Float, asShotTint: Float) -> Pick {
         if n == 0 { return .clipped }
         let mean = sum.map { $0 / Double(n) }
         guard let wb = WhiteBalance.neutralTempTint(asShotKelvin: Double(asShotKelvin), asShotTint: Double(asShotTint), rgb: mean)
         else { return .notNeutral }
         return .white(kelvin: Float(wb[0]), tint: Float(wb[1]))
+    }
+
+    /**
+     * Auto white balance for an area of the photo ([rect], fractions 0..1 of [lens]'s output picture), sampled from the
+     * 512 px [base] copy before any develop step; nil for an empty area. Web: PhotoSession.ts autoWhiteArea.
+     */
+    public static func area(base: PreviewImage, imageWidth: Int, imageHeight: Int, lens: LensTransform, rect: CropRect,
+                            asShotKelvin: Float, asShotTint: Float) -> Pick? {
+        let w = Double(lens.outputWidth)
+        let h = Double(lens.outputHeight)
+        func unit(_ v: Float) -> Double { Double(min(max(v, 0), 1)) }
+        let minX = unit(rect.left) * w
+        let maxX = unit(rect.right) * w
+        let minY = unit(rect.top) * h
+        let maxY = unit(rect.bottom) * h
+        if maxX <= minX || maxY <= minY { return nil }
+        let stepsX = max(1, min(64, Int(maxX - minX)))
+        let stepsY = max(1, min(64, Int(maxY - minY)))
+        let dx = (maxX - minX) / Double(stepsX)
+        let dy = (maxY - minY) / Double(stepsY)
+        let iw = Double(imageWidth)
+        let ih = Double(imageHeight)
+        var sum = [0.0, 0.0, 0.0]
+        var n = 0
+        for iy in 0...stepsY {
+            let outY = minY + Double(iy) * dy
+            for ix in 0...stepsX {
+                let src = lens.source(minX + Double(ix) * dx, outY)
+                if lens.clipFrame && (src[0] < 0 || src[1] < 0 || src[0] > iw || src[1] > ih) { continue }
+                guard src[0].isFinite, src[1].isFinite else { continue }
+                let bx = min(max(Int(src[0] / iw * Double(base.width)), 0), base.width - 1)
+                let by = min(max(Int(src[1] / ih * Double(base.height)), 0), base.height - 1)
+                let i = (by * base.width + bx) * 3
+                let r = Float(Float16(bitPattern: base.pixels[i]))
+                let g = Float(Float16(bitPattern: base.pixels[i + 1]))
+                let b = Float(Float16(bitPattern: base.pixels[i + 2]))
+                if r < 0 || g < 0 || b < 0 || r >= clip || g >= clip || b >= clip { continue }
+                sum[0] += Double(r)
+                sum[1] += Double(g)
+                sum[2] += Double(b)
+                n += 1
+            }
+        }
+        return pickFromSum(sum, n, asShotKelvin: asShotKelvin, asShotTint: asShotTint)
     }
 }

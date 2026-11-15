@@ -21,6 +21,9 @@ struct CropOverlay: View {
     let ratio: Double?
     let framePx: Int
     let onCropChange: (CropRect) -> Void
+    /** How dark the outside is, and the grid's cells per side (the Auto WB area: lighter, thirds only). */
+    var shadeOpacity = 0.55
+    var gridLines = 9
 
     @Environment(\.displayScale) private var scale
     @State private var start: CropRect?
@@ -65,16 +68,16 @@ struct CropOverlay: View {
         let h = bottom - top
 
         // Dim what the crop cuts away.
-        let shade = Color.black.opacity(0.55)
+        let shade = Color.black.opacity(shadeOpacity)
         ctx.fill(Path(CGRect(x: r.minX, y: r.minY, width: r.width, height: top - r.minY)), with: .color(shade))
         ctx.fill(Path(CGRect(x: r.minX, y: bottom, width: r.width, height: r.maxY - bottom)), with: .color(shade))
         ctx.fill(Path(CGRect(x: r.minX, y: top, width: left - r.minX, height: h)), with: .color(shade))
         ctx.fill(Path(CGRect(x: right, y: top, width: r.maxX - right, height: h)), with: .color(shade))
 
         // Fine grid to line up horizons and verticals, thirds slightly stronger.
-        let lines = 9
+        let lines = gridLines
         for i in 1..<lines {
-            let color = Color.white.opacity(i % 3 == 0 ? 0.5 : 0.22)
+            let color = Color.white.opacity(lines == 9 && i % 3 == 0 ? 0.5 : 0.22)
             let x = left + w * CGFloat(i) / CGFloat(lines)
             let y = top + h * CGFloat(i) / CGFloat(lines)
             ctx.stroke(Path { $0.move(to: CGPoint(x: x, y: top)); $0.addLine(to: CGPoint(x: x, y: bottom)) },
