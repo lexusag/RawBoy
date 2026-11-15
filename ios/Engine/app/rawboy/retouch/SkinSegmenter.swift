@@ -1,8 +1,10 @@
 import CoreGraphics
 import Foundation
-import MediaPipeTasksVision
 import os
+#if canImport(MediaPipeTasksVision)
+import MediaPipeTasksVision
 import UIKit
+#endif
 
 /**
  * Where the skin is, as a 0..1 map over the whole image (display orientation),
@@ -33,6 +35,7 @@ public struct SkinSegmenterError: LocalizedError {
     public var errorDescription: String? { message }
 }
 
+#if canImport(MediaPipeTasksVision)
 /**
  * Finds skin with MediaPipe's selfie multiclass segmentation model (Apache 2.0):
  * categories 0 background, 1 hair, 2 body-skin, 3 face-skin, 4 clothes, 5 others.
@@ -298,3 +301,21 @@ public enum SkinSegmenter {
         return g.indices.map { min(max(meanA[$0] * g[$0] + meanB[$0], 0), 1) }
     }
 }
+#else
+/**
+ * macOS: MediaPipe Tasks ships no macOS slice, so skin detection is off (RawBoy Desktop). `segment` throws, which
+ * every caller already treats as "no skin found" (the skin sliders have nothing to act on).
+ */
+public enum SkinSegmenter {
+    private static let logger = Logger(subsystem: "app.rawboy", category: "RawBoy")
+    nonisolated(unsafe) private static var logged = false
+
+    public static func segment(_ image: PreviewImage, fullWidth: Int, fullHeight: Int) throws -> SkinMask {
+        if !logged {
+            logged = true
+            logger.notice("skin detection unavailable on macOS (no MediaPipe slice): skin features disabled")
+        }
+        throw SkinSegmenterError(message: "skin detection is not available on macOS")
+    }
+}
+#endif

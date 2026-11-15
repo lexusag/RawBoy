@@ -207,7 +207,9 @@ private struct SavePresetSheet: View {
                 }
             }
             .navigationTitle("Save preset")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
@@ -227,6 +229,7 @@ struct ShareItem: Identifiable {
     var id: String { url.path }
 }
 
+#if canImport(UIKit)
 /** The system share sheet (save to Files, AirDrop, …): where exported preset files go. */
 struct ShareSheet: UIViewControllerRepresentable {
     let items: [Any]
@@ -237,3 +240,26 @@ struct ShareSheet: UIViewControllerRepresentable {
 
     func updateUIViewController(_ controller: UIActivityViewController, context: Context) {}
 }
+#else
+/** macOS: a save panel for the exported preset file (shown as a sheet that closes itself). */
+struct ShareSheet: View {
+    let items: [Any]
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        Color.clear.frame(width: 1, height: 1).onAppear {
+            guard let url = items.first as? URL else { dismiss(); return }
+            let panel = NSSavePanel()
+            panel.nameFieldStringValue = url.lastPathComponent
+            panel.canCreateDirectories = true
+            panel.begin { response in
+                if response == .OK, let target = panel.url {
+                    try? FileManager.default.removeItem(at: target)
+                    try? FileManager.default.copyItem(at: url, to: target)
+                }
+                dismiss()
+            }
+        }
+    }
+}
+#endif

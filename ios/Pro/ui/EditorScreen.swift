@@ -16,11 +16,15 @@ private let histogramHeight: CGFloat = 56
 struct EditorScreen: View {
     @ObservedObject var vm: EditorViewModel
     @ObservedObject var session: PhotoSession
-    let openFromPhotos: () -> Void
+    /** nil (RawBoy Desktop): there is only one place to open from. */
+    let openFromPhotos: (() -> Void)?
     let openFromFiles: () -> Void
+    /** Menu, keyboard and export hooks of RawBoy Desktop; unused on iOS. */
+    @ObservedObject var commands = EditorCommands()
 
     @Environment(\.displayScale) private var scale
     @State private var showExport = false
+    @State private var showHelp = false
     @State private var showOriginal = false
     /** The drag's previous translation; a local var would reset on every redraw and make pans accelerate. */
     @State private var panLast = CGSize.zero
@@ -81,14 +85,18 @@ struct EditorScreen: View {
                          },
                          onReset: vm.reset, onAuto: vm.applyAuto,
                          canUndo: state.canUndo, canRedo: state.canRedo, onUndo: vm.undo, onRedo: vm.redo,
-                         onExport: { showExport = true })
+                         onExport: { showExport = true }, helpShown: $showHelp)
             // Controls under the photo in portrait, beside it in landscape.
             PhotoWithControls { previewArea } controls: { beside in panel(beside: beside) }
         }
         .background(Color(white: 0.07))
         .sheet(isPresented: $showExport) {
-            ExportDialog(initial: vm.exportSettings, sourceName: state.fileName ?? "image") { vm.export($0) }
+            ExportDialog(initial: vm.exportSettings, sourceName: state.fileName ?? "image",
+                         destination: commands.exportDestination, destinationNote: commands.exportNote?(commands.exportFolder)) {
+                if let handler = commands.exportHandler { handler($0) } else { vm.export($0) }
+            }
         }
+        .onChange(of: commands.serial) { _, _ in if let a = commands.action { perform(a) } }
         .onChange(of: state.fileName) { _, _ in
             cropAspect = .free
             cropPortrait = nil
@@ -96,6 +104,51 @@ struct EditorScreen: View {
             selectedLeak = nil
             selectedFx = nil
             pickingWhite = false
+        }
+    }
+
+    // MARK: - Menu and keyboard actions (RawBoy Desktop)
+
+    private func perform(_ action: EditorAction) {
+        guard state.hasImage || action == .done || action == .help else { return }
+        switch action {
+        case .export:
+            if !state.busy { showExport = true }
+        case let .toggleMode(m):
+            if state.busy { return }
+            if m == .geometry { vm.exitZoom() }  // the crop tool works on the fit view
+            mode = mode == m ? .none : m
+            pickingWhite = false
+        case .toggleCompare:
+            showOriginal.toggle()
+        case .zoom100AtPointer:
+            guard mode != .geometry else { return }
+            if session.zoomCenter != nil {
+                vm.exitZoom()
+            } else {
+                let at = commands.pointer ?? CGPoint(x: viewSize.width / 2, y: viewSize.height / 2)
+                vm.toggleZoom(Float(at.x * scale), Float(at.y * scale), extra: marginPx)
+            }
+        case .zoomFit:
+            vm.exitZoom()
+        case .cycleFrame:
+            vm.cycleFrame()
+        case let .maskTool(tool):
+            if mode != .masks {
+                guard tool == .brush else { return }  // B opens Masks (and adds a brush layer); E and V only switch tools
+                mode = .masks
+            }
+            if tool == .brush && selectedId == nil, let id = vm.addLayer(.brush) { selectedLayer = id }
+            maskTool = tool
+        case let .brushSize(direction):
+            var b = vm.brush
+            b.radius = min(max(b.radius * (direction > 0 ? 1.15 : 1 / 1.15), Masks.minBrushRadius), Masks.maxBrushRadius)
+            vm.setBrush(b)
+            sizeRingAt = Date()
+        case .done:
+            mode = .none
+        case .help:
+            showHelp = true
         }
     }
 
@@ -124,6 +177,15 @@ struct EditorScreen: View {
             let maskView = mode == .masks && showMask && !showOriginal ? selectedId : nil
             let shader = session.hasImage ? session.shaderParams(shownParams, defaults: state.defaults, maskView: maskView) : nil
             ZStack {
+                #if os(macOS)
+                PointerSurface(
+                    onMove: { commands.pointer = $0 },
+                    onZoom: { p, factor in
+                        guard mode != .geometry, session.hasImage else { return }
+                        vm.zoomBy(Float(p.x * scale), Float(p.y * scale), factor: Float(factor), extra: marginPx)
+                    },
+                    onPan: { d in if session.zoomCenter != nil { vm.pan(Float(d.width * scale), Float(d.height * scale)) } })
+                #endif
                 DevelopPreview(image: session.preview, params: shader, zoomCenter: session.zoomCenter,
                                detail: session.detail, frameWidth: framePx, frameColor: vm.frameColor, margin: marginPx,
                                clipWarning: vm.clipWarning && !showOriginal && maskView == nil,
@@ -189,12 +251,20 @@ struct EditorScreen: View {
                 if state.loading {
                     ProgressView()
                 } else if session.preview == nil {
-                    Menu {
-                        Button("From Photos", systemImage: "photo.on.rectangle", action: openFromPhotos)
-                        Button("From Files", systemImage: "folder", action: openFromFiles)
-                    } label: {
-                        Text("Open a photo").padding(.horizontal, 20).padding(.vertical, 10)
-                            .background(Capsule().fill(Color.accentColor)).foregroundStyle(.black)
+                    if let openFromPhotos {
+                        Menu {
+                            Button("From Photos", systemImage: "photo.on.rectangle", action: openFromPhotos)
+                            Button("From Files", systemImage: "folder", action: openFromFiles)
+                        } label: {
+                            Text("Open a photo").padding(.horizontal, 20).padding(.vertical, 10)
+                                .background(Capsule().fill(Color.accentColor)).foregroundStyle(.black)
+                        }
+                    } else {
+                        Button(action: openFromFiles) {
+                            Text("Open a photo (⌘O), or drop one here").padding(.horizontal, 20).padding(.vertical, 10)
+                                .background(Capsule().fill(Color.accentColor)).foregroundStyle(.black)
+                        }
+                        .buttonStyle(.plain)
                     }
                 }
                 labels(maskView: maskView)
@@ -411,7 +481,7 @@ struct EditorTopBar: View {
     let enabled: Bool
     let mode: EditorMode
     let canOpen: Bool
-    let openFromPhotos: () -> Void
+    let openFromPhotos: (() -> Void)?
     let openFromFiles: () -> Void
     let onMode: (EditorMode) -> Void
     let onReset: () -> Void
@@ -421,6 +491,7 @@ struct EditorTopBar: View {
     let onUndo: () -> Void
     let onRedo: () -> Void
     let onExport: () -> Void
+    @Binding var helpShown: Bool
 
     /** The full name of the tool being long-pressed, shown under the bar for a moment. */
     @State private var tip: String?
@@ -428,13 +499,20 @@ struct EditorTopBar: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 10) {
-                Menu {
-                    Button("From Photos", systemImage: "photo.on.rectangle", action: openFromPhotos)
-                    Button("From Files", systemImage: "folder", action: openFromFiles)
-                } label: { ToolLabel(icon: "folder", label: "Open") }
-                .disabled(!canOpen)
-                .accessibilityLabel("Open")
-                .buttonStyle(BarButtonStyle())
+                if let openFromPhotos {
+                    Menu {
+                        Button("From Photos", systemImage: "photo.on.rectangle", action: openFromPhotos)
+                        Button("From Files", systemImage: "folder", action: openFromFiles)
+                    } label: { ToolLabel(icon: "folder", label: "Open") }
+                    .disabled(!canOpen)
+                    .accessibilityLabel("Open")
+                    .buttonStyle(BarButtonStyle())
+                } else {
+                    Button(action: openFromFiles) { ToolLabel(icon: "folder", label: "Open") }
+                        .disabled(!canOpen)
+                        .accessibilityLabel("Open")
+                        .buttonStyle(BarButtonStyle())
+                }
                 modeButton(.geometry, "crop.rotate", "Crop", "Crop & rotate")
                 modeButton(.masks, "square.stack.3d.down.forward", "Masks", "Masks")
                 // Light leaks and light effects share this button (the row is full); each panel has a switch.
@@ -449,7 +527,7 @@ struct EditorTopBar: View {
                 tool("wand.and.stars", "Auto Dev", "Auto light and colour (keeps the LUT)", action: onAuto)
                 Spacer(minLength: 0)
                 tool("square.and.arrow.down", "Export", "Export", action: onExport)
-                HelpButton("RawBoy", sections: proHelp, licences: true)
+                HelpButton("RawBoy", sections: proHelp, licences: true, isPresented: $helpShown)
                     .font(.title3)
                     .buttonStyle(BarButtonStyle())
             }

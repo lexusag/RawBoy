@@ -5,15 +5,21 @@ import SwiftUI
 struct ExportDialog: View {
     let sourceName: String
     let onExport: (ExportSettings) -> Void
+    /** RawBoy Desktop: where the file goes (a section with the folder choice) and the line saying so. */
+    var destination: AnyView?
+    var destinationNote: String?
 
     @State private var settings: ExportSettings
     @Environment(\.dismiss) private var dismiss
 
     private static let sizes: [Int?] = [nil, 6000, 4000, 3000, 2048]
 
-    init(initial: ExportSettings, sourceName: String, onExport: @escaping (ExportSettings) -> Void) {
+    init(initial: ExportSettings, sourceName: String, destination: AnyView? = nil, destinationNote: String? = nil,
+         onExport: @escaping (ExportSettings) -> Void) {
         self.sourceName = sourceName
         self.onExport = onExport
+        self.destination = destination
+        self.destinationNote = destinationNote
         _settings = State(initialValue: initial)
     }
 
@@ -50,15 +56,18 @@ struct ExportDialog: View {
                     }
                 }
                 ExportFrameSections(settings: $settings)
+                if let destination { Section { destination } }
                 Section {
-                    Text("Photos › RawBoy › " + OutputNaming().fileName(OutputNaming.baseNameOf(sourceName),
-                                                                        settings.format.fileExtension))
+                    Text((destinationNote ?? "Photos › RawBoy › ") + OutputNaming().fileName(OutputNaming.baseNameOf(sourceName),
+                                                                                              settings.format.fileExtension))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
             .navigationTitle("Export")
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
@@ -69,6 +78,8 @@ struct ExportDialog: View {
                 }
             }
         }
+        #if os(iOS)
         .presentationDetents([.medium, .large])
+        #endif
     }
 }

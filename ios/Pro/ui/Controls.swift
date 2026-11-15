@@ -454,7 +454,7 @@ struct ParamSlider: View {
                 .contentShape(Rectangle())
                 .onTapGesture { onLabelTap?() }
                 .allowsHitTesting(onLabelTap != nil)
-            slider
+            slider.sliderWheel(range, value: { value }, onChange)
             Text(format(value))
                 .font(.subheadline.monospacedDigit())
                 .foregroundStyle(value == defaultValue ? Color.secondary : Color.accentColor)
@@ -494,6 +494,17 @@ struct ParamSlider: View {
         } else {
             native
         }
+    }
+}
+
+extension View {
+    /** The wheel over this slider moves it (RawBoy Desktop). */
+    @ViewBuilder func sliderWheel(_ range: ClosedRange<Float>, value: @escaping () -> Float, _ onChange: @escaping (Float) -> Void) -> some View {
+        #if os(macOS)
+        background(SliderWheel(range: range, value: value, onChange: onChange))
+        #else
+        self
+        #endif
     }
 }
 

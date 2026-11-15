@@ -12,6 +12,9 @@
 #include <mutex>
 #include <thread>
 #include <vector>
+#ifdef __APPLE__
+#include <pthread.h>
+#endif
 
 namespace rawboy {
 namespace {
@@ -55,10 +58,35 @@ void runTasks(int count, int workers, Fn&& task) {
             }
         }
     };
+#ifdef __APPLE__
+    // Apple's secondary threads get 512 KB of stack, too little for some LibRaw steps (a raw crashed RawBoy Desktop on a
+    // guard page): the workers get 16 MB (reserved address space, touched only as used).
+    struct Start { decltype(work)* fn; int worker; };
+    std::vector<Start> starts(static_cast<size_t>(std::max(workers, 1)));
+    std::vector<pthread_t> pool;
+    pthread_attr_t attr;
+    pthread_attr_init(&attr);
+    pthread_attr_setstacksize(&attr, 16u << 20);
+    for (int t = 1; t < workers; ++t) {
+        starts[t] = {&work, t};
+        pthread_t th;
+        auto entry = [](void* arg) -> void* {
+            auto* st = static_cast<Start*>(arg);
+            (*st->fn)(st->worker);
+            return nullptr;
+        };
+        if (pthread_create(&th, &attr, entry, &starts[t]) == 0) pool.push_back(th);
+        else work(t);  // out of threads: this share runs here
+    }
+    pthread_attr_destroy(&attr);
+    work(0);
+    for (auto th : pool) pthread_join(th, nullptr);
+#else
     std::vector<std::thread> pool;
     for (int t = 1; t < workers; ++t) pool.emplace_back(work, t);
     work(0);
     for (auto& th : pool) th.join();
+#endif
     if (error) std::rethrow_exception(error);
 }
 

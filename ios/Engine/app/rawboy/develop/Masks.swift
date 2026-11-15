@@ -66,9 +66,15 @@ public struct LayerAdjust: Equatable, Sendable {
     public var tint: Float = 0
     public var saturation: Float = 0
     public var clarity: Float = 0
+    /** Web's lens blur and portrait retouch inside the mask: kept so a photo edited on the web round-trips; not drawn here. */
+    public var lensBlur: Float = 0
+    public var retouch: Float = 0
 
     public init(exposure: Float = 0, contrast: Float = 0, highlights: Float = 0, shadows: Float = 0,
-                temperature: Float = 0, tint: Float = 0, saturation: Float = 0, clarity: Float = 0) {
+                temperature: Float = 0, tint: Float = 0, saturation: Float = 0, clarity: Float = 0,
+                lensBlur: Float = 0, retouch: Float = 0) {
+        self.lensBlur = lensBlur
+        self.retouch = retouch
         self.exposure = exposure
         self.contrast = contrast
         self.highlights = highlights
@@ -167,11 +173,14 @@ public enum Masks {
         layers.filter { !$0.shape.isBrush }.map { var l = $0; l.strokes = []; return l }
     }
 
-    // Preset files (the same JSON as web's Masks.ts writes). Strokes are never written or read.
+    // Preset files and a photo's edits (the same JSON as web's Masks.ts writes). Presets never write or read strokes.
 
-    public static func toJson(_ layers: [MaskLayer]) -> [[String: Any]] { forPreset(layers).map(layerJson) }
+    /** [layers] as JSON: as a preset keeps them ([forPreset]), or with brush layers and strokes for one photo's `Edits`. */
+    public static func toJson(_ layers: [MaskLayer], strokes: Bool = false) -> [[String: Any]] {
+        (strokes ? layers : forPreset(layers)).map { layerJson($0, strokes: strokes) }
+    }
 
-    private static func layerJson(_ l: MaskLayer) -> [String: Any] {
+    private static func layerJson(_ l: MaskLayer, strokes: Bool) -> [String: Any] {
         let shape: [String: Any]
         switch l.shape {
         case let .linear(x0, y0, x1, y1, curve):
@@ -186,29 +195,51 @@ public enum Masks {
             shape = ["kind": "brush"]
         }
         let a = l.adjust
-        return [
-            "id": l.id, "name": l.name, "enabled": l.enabled, "opacity": num(l.opacity), "invert": l.invert,
+        var json: [String: Any] = [
+            "name": l.name, "enabled": l.enabled, "opacity": num(l.opacity), "invert": l.invert,
             "shape": shape,
             "adjust": [
                 "exposure": num(a.exposure), "contrast": num(a.contrast), "highlights": num(a.highlights),
                 "shadows": num(a.shadows), "temperature": num(a.temperature), "tint": num(a.tint),
-                "saturation": num(a.saturation), "clarity": num(a.clarity),
+                "saturation": num(a.saturation), "clarity": num(a.clarity), "lensBlur": num(a.lensBlur),
+                "retouch": num(a.retouch),
             ],
-            "strokes": [Any](),
+            "strokes": strokes ? l.strokes.map { st -> [String: Any] in
+                // 1/100000 of the image: far below a pixel, and a much smaller file (as web's Edits.ts).
+                ["erase": st.erase, "auto": st.auto, "radius": num(st.radius), "hardness": num(st.hardness),
+                 "flow": num(st.flow), "points": st.points.map { ($0 * 1e5).rounded() / 1e5 }.map { Double("\($0)") ?? Double($0) }]
+            } : [[String: Any]](),
         ]
+        if !strokes { json["id"] = l.id }  // a photo's edits carry no layer ids (web's Edits.ts strips them)
+        return json
     }
 
     /** Floats via their shortest decimal, so 0.1 is written as 0.1. */
     static func num(_ f: Float) -> Double { Double("\(f)") ?? Double(f) }
 
-    /** Layers from untrusted JSON (a preset file), each with a fresh id: invalid ones are dropped, ranges clamped. */
-    public static func parseLayers(_ v: Any?) -> [MaskLayer] {
+    /**
+     * Layers from untrusted JSON, each with a fresh id: invalid ones are dropped, ranges clamped. Preset files hold
+     * gradients only; [strokes] (a photo's own edits) also keeps brush layers and every layer's strokes.
+     */
+    public static func parseLayers(_ v: Any?, strokes: Bool = false) -> [MaskLayer] {
         guard let a = v as? [Any] else { return [] }
-        return Array(a.compactMap(parseLayer).prefix(maxLayers))
+        return Array(a.compactMap { parseLayer($0, strokes: strokes) }.prefix(maxLayers))
     }
 
-    private static func parseLayer(_ v: Any) -> MaskLayer? {
-        guard let o = v as? [String: Any], let shape = parseShape(o["shape"] as? [String: Any]) else { return nil }
+    private static func parseStroke(_ v: Any) -> BrushStroke? {
+        guard let o = v as? [String: Any], let a = o["points"] as? [Any] else { return nil }
+        var points: [Float] = []
+        for p in a {
+            guard let n = p as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID(), n.floatValue.isFinite else { return nil }
+            points.append(n.floatValue.clamped(-1, 2))
+        }
+        guard let radius = num(o, "radius", minBrushRadius, maxBrushRadius), points.count >= 2, points.count % 2 == 0 else { return nil }
+        return BrushStroke(id: newId(), erase: o["erase"] as? Bool == true, auto: o["auto"] as? Bool == true, radius: radius,
+                           hardness: num(o, "hardness", 0, 100) ?? 50, flow: num(o, "flow", 1, 100) ?? 100, points: points)
+    }
+
+    private static func parseLayer(_ v: Any, strokes: Bool) -> MaskLayer? {
+        guard let o = v as? [String: Any], let shape = parseShape(o["shape"] as? [String: Any], brush: strokes) else { return nil }
         let a = o["adjust"] as? [String: Any] ?? [:]
         func adj(_ k: String, _ range: Float) -> Float { num(a, k, -range, range) ?? 0 }
         let rawName = (o["name"] as? String ?? "").trimmingCharacters(in: .whitespaces)
@@ -222,11 +253,12 @@ public enum Masks {
             adjust: LayerAdjust(
                 exposure: adj("exposure", 5), contrast: adj("contrast", 100), highlights: adj("highlights", 100),
                 shadows: adj("shadows", 100), temperature: adj("temperature", 100), tint: adj("tint", 100),
-                saturation: adj("saturation", 100), clarity: adj("clarity", 100)),
-            strokes: [])  // strokes never come from presets
+                saturation: adj("saturation", 100), clarity: adj("clarity", 100),
+                lensBlur: num(a, "lensBlur", 0, 100) ?? 0, retouch: num(a, "retouch", 0, 100) ?? 0),
+            strokes: strokes ? ((o["strokes"] as? [Any]) ?? []).compactMap(parseStroke) : [])  // never from presets
     }
 
-    private static func parseShape(_ s: [String: Any]?) -> MaskShape? {
+    private static func parseShape(_ s: [String: Any]?, brush: Bool) -> MaskShape? {
         guard let s else { return nil }
         func f(_ k: String, _ lo: Float = -1, _ hi: Float = 2) -> Float? { num(s, k, lo, hi) }
         switch s["kind"] as? String {
@@ -242,6 +274,8 @@ public enum Masks {
                   let angle = f("angle", -360, 360), let feather = f("feather", 0, 100) else { return nil }
             return .stripe(cx: cx, cy: cy, rx: rx, ry: ry, angle: angle, feather: feather, bend: f("bend", -100, 100) ?? 0,
                            taper: f("taper", -100, 100) ?? 0)
+        case "brush":
+            return brush ? .brush : nil
         default:
             return nil
         }

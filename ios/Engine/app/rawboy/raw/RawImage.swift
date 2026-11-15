@@ -157,9 +157,11 @@ public final class RawImage: @unchecked Sendable {
      */
     public static func open(url: URL, extraBlack: Float = 0) throws -> RawImage {
         // Memory-mapped: phone raws are up to ~130 MB and the decoder only reads them.
-        let data: Data
+        var data: Data
         do {
             data = try Data(contentsOf: url, options: .alwaysMapped)
+            // A mapped read of a file the system keeps elsewhere (a not yet downloaded iCloud file) can come back empty.
+            if data.isEmpty { data = try Data(contentsOf: url) }
         } catch {
             throw RawImageError(message: "Cannot open \(url.lastPathComponent): \(error.localizedDescription)")
         }
@@ -168,14 +170,37 @@ public final class RawImage: @unchecked Sendable {
 
     public static func open(data: Data, extraBlack: Float = 0) throws -> RawImage {
         if isHeif(data) || isPng(data) { return try openWithImageIO(data: data) }
+        guard !data.isEmpty else { throw RawImageError(message: "The file is empty (or still downloading from iCloud)") }
         var error = [CChar](repeating: 0, count: 512)
-        let handle = data.withUnsafeBytes { bytes in
-            rb_open(bytes.bindMemory(to: UInt8.self).baseAddress, bytes.count, extraBlack, &error, error.count)
+        // The decoders (LibRaw's steps especially) can need more stack than the 512 KB of a Swift concurrency or
+        // dispatch thread: a raw opened from a Task crashed RawBoy Desktop on the stack's guard page. So decode on a
+        // thread of our own with 64 MB.
+        let handle = Self.onLargeStack { () -> OpaquePointer? in
+            data.withUnsafeBytes { bytes in
+                rb_open(bytes.bindMemory(to: UInt8.self).baseAddress, bytes.count, extraBlack, &error, error.count)
+            }
         }
         guard let handle else {
             throw RawImageError(message: String(cString: error))
         }
         return RawImage(handle: handle)
+    }
+
+    private final class Box<V>: @unchecked Sendable { var value: V?; init() {} }
+
+    /** Runs [body] on a new thread with a 64 MB stack and returns its result (the caller waits). */
+    static func onLargeStack<T>(_ body: @escaping () -> T) -> T {
+        let box = Box<T>()
+        let done = DispatchSemaphore(value: 0)
+        let thread = Thread {
+            box.value = body()
+            done.signal()
+        }
+        thread.stackSize = 64 << 20
+        thread.qualityOfService = QualityOfService.userInitiated
+        thread.start()
+        done.wait()
+        return box.value!
     }
 
     private static let heifBrands: Set<String> = ["heic", "heix", "heim", "heis", "hevc", "hevx", "mif1", "msf1"]

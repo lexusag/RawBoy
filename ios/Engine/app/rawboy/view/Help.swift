@@ -84,7 +84,9 @@ private struct HelpView: View {
                 Section { Text("Version \(Self.version)").font(.footnote).foregroundStyle(.secondary) }
             }
             .navigationTitle(title)
+            #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #endif
             .toolbar { Button("Done") { dismiss() } }
         }
         .presentationDetents([.medium, .large])

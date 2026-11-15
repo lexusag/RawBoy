@@ -80,7 +80,9 @@ final class WhitePickerTests: XCTestCase {
     }
 
     func testWhiteBalanceAdjustSolvesForWarmthAndTint() {
-        let base = DevelopParams(temperature: 5000, tint: 0)
+        var base = DevelopParams()
+        base.temperature = 5000
+        base.tint = 0
         let unadjusted = LookApplier.develop(base, look: Looks.natural, strength: 100, adjust: Adjustments.none, hasFace: false, preset: nil, lensPreset: nil)
 
         let (w0, t0) = LookApplier.whiteBalanceAdjust(unadjusted, kelvin: 5000, tint: 0)

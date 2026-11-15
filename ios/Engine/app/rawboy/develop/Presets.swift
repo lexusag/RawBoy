@@ -273,6 +273,7 @@ public enum Presets {
         "saturation": \.saturation, "redHue": \.redHue, "redPurity": \.redPurity, "greenHue": \.greenHue,
         "greenPurity": \.greenPurity, "blueHue": \.blueHue, "bluePurity": \.bluePurity, "tintHue": \.tintHue,
         "tintPurity": \.tintPurity, "denoise": \.denoise, "sharpening": \.sharpening, "localContrast": \.localContrast,
+        "highpassContrast": \.highpassContrast, "grain": \.grain, "grainSize": \.grainSize,
         "grainRoughness": \.grainRoughness, "grainColor": \.grainColor, "bloom": \.bloom,
         "anamorphic": \.anamorphic, "skinRetouch": \.skinRetouch,
         "blemishRemoval": \.blemishRemoval, "lutAmount": \.lutAmount, "lensDistortion": \.lensDistortion,
@@ -282,7 +283,7 @@ public enum Presets {
         "filmAmount": \.filmAmount, "filmGrain": \.filmGrain, "halation": \.halation,
     ]
 
-    private static func get(_ p: DevelopParams, _ field: String) -> PresetValue {
+    static func get(_ p: DevelopParams, _ field: String) -> PresetValue {
         switch field {
         case "toneMapper": .text(p.toneMapper.key)
         case "anamorphicColor": .text(p.anamorphicColor.key)
@@ -299,7 +300,7 @@ public enum Presets {
     }
 
     /** A value of the wrong type (a hand-edited file) leaves the field unchanged. */
-    private static func set(_ p: DevelopParams, _ field: String, _ value: PresetValue) -> DevelopParams {
+    static func set(_ p: DevelopParams, _ field: String, _ value: PresetValue) -> DevelopParams {
         var out = p
         switch (field, value) {
         case let ("lut", .text(s)): out.lut = s.map(RetiredLooks.lut)
