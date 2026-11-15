@@ -1,3 +1,9 @@
+**RawBoy Desktop (macOS): lens blur in mask layers (2026-11-15)**
+
+- The Masks panel's **Lens blur** slider (0..100) works on the Mac, as on the web and Android: a round, lens-like defocus inside the mask (up to 3% of the long side) where small bright lights become clean discs and the sharp part next to the mask is never smeared. Preview, 100% view and export agree (it works on a small whole-image copy, so no tile seams).
+- Port of the web's two GPU passes to Metal: `shaders/bokeh_prep.glsl` is built by `ios/shaders/gen.sh` into `bokeh_prep.metal` (with its own layout in `DevelopLayout`), the disc gather is `bokehGatherFragment` in `Helpers.metal`, `metal/BokehTexture.swift` runs both into the texture the develop shader reads (`uBokeh`; iOS used to bind a dummy one), `LayerUniforms.blur`, `ShaderParams.bokehSource`, `PhotoSession.ensureBokehSource`. The shader is shared, so RawBoy (iOS) gets the engine side too; its Masks panel shows the slider as well.
+- Tests: `BokehTests` (sizing and uniforms; a Metal render of a bright spot, which spreads into a disc of the expected radius while the dark field stays put). Not tried by hand yet.
+
 **RawBoy Desktop (macOS): healing brush (2026-11-15)**
 
 - **Heal** in the top bar (or **B** outside Masks; inside Masks B stays the mask brush, as on the web): click a spot or drag a stroke over dust, a blemish or a small object and it is healed away in the full-resolution image by seamless cloning. **Auto source** lets the engine pick the cleanest nearby area; **Choose source** shows a dashed copy to drag onto the area to clone from. Size and Feather (new strokes), the stroke list (pick, change source, delete, Clear all), **[ ]** size, **Delete** removes the selected stroke, Space pans, a ring shows the brush size.

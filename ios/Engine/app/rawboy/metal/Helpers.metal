@@ -210,3 +210,33 @@ fragment float4 denoiseMergeFragment(PassOut in [[stage_in]], texture2d<float> l
     float3 c = max(float3(v.x + v.y * m, v.x - (v.y + v.z) * m, v.x + v.z * m), 0.0);
     return float4(max(c * c - u.offset, 0.0), 1.0);
 }
+
+// ---- Lens blur, pass 2 of 2 (BokehTexture; shaders/bokeh_gather.frag): a round disc gather over the small
+// premultiplied copy bokehPrepFragment wrote (rgb * fade, radius in texels). Every texel inside the radius is read,
+// so small bright lights become clean discs. A sample spreads only as far as the smaller of its own radius and this
+// texel's: the masks stand in for depth with the sharp subject in front, so sharp texels never smear and the blurred
+// background never covers them. Output premultiplied (rgb * v, v), v = 0 where no blurred sample reaches.
+fragment float4 bokehGatherFragment(PassOut in [[stage_in]], texture2d<float> src [[texture(0)]],
+                                    constant int& maxRadius [[buffer(0)]]) {
+    int2 p = int2(in.position.xy);
+    int2 size = int2(src.get_width(), src.get_height());
+    float rp = src.read(uint2(p)).a;
+    int reach = min(int(ceil(rp)) + 1, maxRadius + 1);
+    float4 acc = float4(0.0);
+    for (int dy = -reach; dy <= reach; ++dy) {
+        for (int dx = -reach; dx <= reach; ++dx) {
+            int2 q = p + int2(dx, dy);
+            if (q.x < 0 || q.y < 0 || q.x >= size.x || q.y >= size.y) continue;
+            float4 s = src.read(uint2(q));
+            float r = min(s.a, rp);
+            // Coverage of this texel by the sample's disc, with a one-texel soft edge.
+            float cover = clamp(r - length(float2(dx, dy)) + 0.5, 0.0, 1.0);
+            if (cover <= 0.0) continue;
+            // Each disc spreads its light over its area; s.rgb is already weighted by the fade-in (bokehFade).
+            float w = cover / max(r * r, 0.25);
+            acc += float4(s.rgb, clamp(s.a / 1.5, 0.0, 1.0)) * w;
+        }
+    }
+    float v = acc.a > 1e-6 ? 1.0 : 0.0;
+    return float4(v * acc.rgb / max(acc.a, 1e-6), v);
+}

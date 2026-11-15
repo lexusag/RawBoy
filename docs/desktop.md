@@ -14,6 +14,9 @@ RawBoy's editor as a native Mac app (SwiftUI + Metal, the iOS engine). Phase 1 i
 ## Keys and mouse
 Z 100% at the pointer, D frame colour, C Crop & rotate, \ Compare, B healing brush (inside Masks: brush), E / V masks, [ ] brush size, Delete removes the selected healing stroke, Esc or Return closes the tool, Space pans, ⌘Z / ⇧⌘Z, ⌘O, ⌘E, ⌘/ help. Keys are matched by physical position. The wheel zooms around the pointer; over a slider it moves it (Shift big, ⌘ fine); double-click resets a slider.
 
+## Masks: Lens blur
+The Masks panel's **Lens blur** slider (Adjust tab, 0..100): a round, lens-like defocus inside the layer's mask, up to 3% of the long side, where small bright lights become clean bokeh discs and the sharp part next to the mask is never smeared. The same two Metal passes as the web's two GL passes (mask radius, then disc gather) on a highlight-boosted 1536 px copy; preview, 100% and export agree. See [rawboy.md](rawboy.md), Masks.
+
 ## Healing brush
 Heal in the top bar, or B: click a dust spot, blemish or small object to heal it away, drag to paint a stroke. Healed in the full-resolution image by seamless cloning (the same native `healStroke` as the web): the tone comes from around it, the detail from a clean area the engine picks (**Auto source**) or one you place (**Choose source**: drag the dashed copy; new strokes keep that offset). Size and Feather apply to the next strokes; pick a stroke in the list to change its source or delete it; up to 64 strokes per photo, reset for each new photo and kept out of presets. Strokes are undone one at a time with ⌘Z. The iPhone build has the engine but no button yet (its top bar is full).
 

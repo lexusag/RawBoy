@@ -27,6 +27,7 @@ let proHelp = [
         HelpItem("Lens", "Embedded profile, Distortion, Horizontal distortion, Crop, Fisheye, Vignetting and Chromatic aberration. Use Lensfun profile corrects distortion, chromatic aberration and vignetting from the Lensfun lens database: Auto matches the camera and lens from the photo's EXIF, Pick lens searches the database, Generic describes a lens that is not in it."),
         HelpItem("Presets", "Save the edits by group, apply, import and export .rawboy.json files."),
         HelpItem("Skin retouch and blemish removal", "Not available in RawBoy Desktop yet (they need the face detector, which the Mac build doesn't have)."),
+        HelpItem("Lens blur", "Masks, Adjust tab: a round lens-like defocus inside the mask (up to 3% of the long side). Small bright lights become clean discs, and the sharp part next to the mask is never smeared; it follows the mask, so paint or draw the background and leave the subject out."),
         HelpItem("Healing brush", "Heal in the top bar, or B: click a dust spot, blemish or small object to heal it away, drag to paint a stroke (zoom to 100% for the fine ones). The tone is filled in from around it and the detail borrowed from a nearby clean area; Choose source lets you drag a dashed copy onto the area to clone from. Size and Feather set the next strokes; [ and ] change the size, Delete removes the selected stroke, Esc or Return finishes. Strokes belong to the photo (the sidecar keeps them, presets don't)."),
     ]),
     HelpSection("Masks", [

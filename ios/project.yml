@@ -45,11 +45,14 @@ targets:
           - $(SRCROOT)/../shaders/develop.glsl
           - $(SRCROOT)/../shaders/develop.vert
           - $(SRCROOT)/../shaders/main_body.glsl
+          - $(SRCROOT)/../shaders/film_form.glsl
+          - $(SRCROOT)/../shaders/bokeh_prep.glsl
           - $(SRCROOT)/shaders/gen.sh
         outputFiles:
           - $(SRCROOT)/build/generated/develop_vert.metal
           - $(SRCROOT)/build/generated/develop_frag.metal
           - $(SRCROOT)/build/generated/develop_export.metal
+          - $(SRCROOT)/build/generated/bokeh_prep.metal
           - $(SRCROOT)/build/generated/DevelopLayout.swift
     dependencies:
       - framework: native/out/RawBoyNative.xcframework
@@ -231,11 +234,14 @@ targets:
           - $(SRCROOT)/../shaders/develop.glsl
           - $(SRCROOT)/../shaders/develop.vert
           - $(SRCROOT)/../shaders/main_body.glsl
+          - $(SRCROOT)/../shaders/film_form.glsl
+          - $(SRCROOT)/../shaders/bokeh_prep.glsl
           - $(SRCROOT)/shaders/gen.sh
         outputFiles:
           - $(SRCROOT)/build/generated/develop_vert.metal
           - $(SRCROOT)/build/generated/develop_frag.metal
           - $(SRCROOT)/build/generated/develop_export.metal
+          - $(SRCROOT)/build/generated/bokeh_prep.metal
           - $(SRCROOT)/build/generated/DevelopLayout.swift
     dependencies:
       - framework: native/out/RawBoyNative.xcframework

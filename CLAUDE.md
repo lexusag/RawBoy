@@ -564,14 +564,14 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   `viewRectF`, `SampleGeometry.outputF`; `DevelopRenderer.zoom` sets centre and scale together; Swift: `zoomCenter` and
   `zoomScale`, main thread only). Up to `ZoomMath.previewSuffices` the zoomed view draws from the preview texture
   (also while a tile for a new region or scale loads); above it from a full-res tile (linear filtering below 100%).
-- Lens blur (mask layers' `lensBlur`, Android and web; `gl/BokehTexture.kt/.ts`): bloom-style, a small whole-image
+- Lens blur (mask layers' `lensBlur`, Android, web and RawBoy Desktop/iOS Metal; `gl/BokehTexture.kt/.ts`, `metal/BokehTexture.swift`): bloom-style, a small whole-image
   texture, so preview, 100% and export match with no `spatialMargin`. From a highlight-boosted 1536 px copy
   (`ShaderParams.bokehSource`, made by `PhotoSession` the first time a layer blurs), two GPU passes re-run only when the
   masks or source change: `shaders/bokeh_prep.glsl` (appended after develop.glsl in place of main_body, so it uses the
   same `layerMask`; writes rgb premultiplied by the fade-in and the radius) and `bokeh_gather.frag` (exact disc gather,
   a sample's radius capped by the centre's, so the sharp subject never smears). The texture is sized so the largest
   radius is `BOKEH_RADIUS` (16) texels; main_body mixes it in by the radius at each pixel. Off without
-  EXT_color_buffer_float. iOS binds a dummy texture and leaves it off.
+  EXT_color_buffer_float. Metal (2026-11-15): `gen.sh` also builds `bokeh_prep.glsl` into `bokeh_prep.metal` (own uniform block and textures: `DevelopLayout.bokehUniforms`/`bokehTextures`), the gather is hand-written in `Helpers.metal` (`bokehGatherFragment`), `BokehTexture.swift` runs both passes synchronously into `DevelopTextures.bokeh` (`uBokeh`), `LayerUniforms.blur` = `uLayerBlur`, `ShaderParams.bokehSource` made by `PhotoSession.ensureBokehSource` (also awaited by export; reset on a new photo and after healing). Slider in the Masks panel; `BokehTests`.
 - Mask layers (`develop/Masks.ts`, web only so far): `DevelopParams.masks`, positions in fractions of the decoded image,
   evaluated in the shader at `srcG` (the sampled image pixel), so they stay on the content through crop/lens. Analytic
   gradients only (no texture, no neighbourhood, so no `spatialMargin`); packed by `ShaderParams.packLayers` into

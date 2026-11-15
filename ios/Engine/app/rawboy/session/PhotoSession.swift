@@ -59,6 +59,8 @@ public final class PhotoSession: ObservableObject {
     @Published public private(set) var bloomSources: BloomSources?
     /** What the anamorphic flare scatters light from (FlareSource); made the first time the flare is on. */
     @Published public private(set) var flareSource: PreviewImage?
+    /** The highlight-boosted whole-image copy the masks' lens blur starts from (BokehTexture), made once a layer blurs. */
+    @Published public private(set) var bokehSource: PreviewImage?
     /** Centre of the zoomed view in full-resolution pixels; nil = fit to view. */
     @Published public private(set) var zoomCenter: (Float, Float)?
     /** View pixels per full-resolution pixel while zoomed: 1 = 100% (double tap), others from a pinch. */
@@ -82,6 +84,7 @@ public final class PhotoSession: ObservableObject {
 
     private var skinTask: Task<Void, Never>?
     private var flareTask: Task<Void, Never>?
+    private var bokehTask: Task<Void, Never>?
     private var blemishTask: Task<Void, Never>?
     /** (x, y, radius, score) per candidate, most obvious first; detected once per photo. */
     private var blemishSpots: [Float]?
@@ -149,6 +152,9 @@ public final class PhotoSession: ObservableObject {
         bloomSources = loaded.bloom
         flareTask?.cancel()
         flareSource = nil
+        bokehTask?.cancel()
+        bokehTask = nil
+        bokehSource = nil
         skinTask?.cancel()
         skin = .notComputed
         blemishTask?.cancel()
@@ -172,6 +178,7 @@ public final class PhotoSession: ObservableObject {
         if newParams.skinRetouch > 0 || newParams.blemishRemoval > 0 { ensureSkinMask() }
         if newParams.blemishRemoval != before.blemishRemoval || newParams.healSpots != before.healSpots { scheduleBlemishes() }
         ensureFlareSource()
+        ensureBokehSource()
         // A 90 degree turn or a new crop changes the output shape, and a flip moves the content, so the zoom position
         // no longer applies.
         let flipChanged = newParams.flipHorizontal != before.flipHorizontal || newParams.flipVertical != before.flipVertical
@@ -191,13 +198,27 @@ public final class PhotoSession: ObservableObject {
         }
     }
 
+    /** Starts making the lens blur's source copy once a mask layer of [p] blurs (see BokehTexture). */
+    private func ensureBokehSource(_ p: DevelopParams? = nil) {
+        guard let img = image, bokehSource == nil, bokehTask == nil,
+              (p ?? params).masks.contains(where: { $0.enabled && $0.adjust.lensBlur > 0 }) else { return }
+        bokehTask = Task {
+            let source = await Task.detached(priority: .userInitiated) {
+                img.createPreview(maxDimension: BokehTexture.sourceMaxDimension, boostHighlights: true)
+            }.value
+            bokehTask = nil
+            guard image === img else { ensureBokehSource(); return }
+            bokehSource = source
+        }
+    }
+
     /** Uniforms for [p] with this photo's current textures; [maskView]: the layer whose mask is shown in red. */
     public func shaderParams(_ p: DevelopParams, defaults: DevelopParams, lut: LutData? = nil, useSelectedLut: Bool = true,
                              maskView: String? = nil, film: FilmData? = nil) -> ShaderParams {
         ShaderParams.from(p, asShot: defaults, lut: lut ?? (useSelectedLut ? lutData : nil), lens: lensFor(p), base: base,
                           bloomSources: bloomSources, skinMask: skin.mask, maskView: maskView,
                           brushFor: { [unowned self] in self.brushRaster($0) }, film: film ?? (useSelectedLut ? filmData : nil),
-                          flareSource: flareSource)
+                          flareSource: flareSource, bokehSource: bokehSource)
     }
 
     /**
@@ -469,7 +490,11 @@ public final class PhotoSession: ObservableObject {
             flareTask?.cancel()
             flareTask = nil
             flareSource = nil
+            bokehTask?.cancel()
+            bokehTask = nil
+            bokehSource = nil  // made again from the healed image
             ensureFlareSource()
+            ensureBokehSource()
             detail = nil  // the 100% tile shows old pixels; reload it
             recheckZoomTile()
             blemish = BlemishState(working: false, healed: count, detected: (blemishSpots?.count ?? 0) / 4)
@@ -577,6 +602,8 @@ public final class PhotoSession: ObservableObject {
         guard let img = image else { throw RawImageError(message: "No photo open") }
         ensureFlareSource(p)
         await flareTask?.value
+        ensureBokehSource(p)
+        await bokehTask?.value
         let lut = try await (p.film == nil ? p.lut : nil).asyncMap { try await loadLut($0) }
         var film: FilmData?
         if let id = p.film, let filmLoader { film = try await filmLoader(id) }

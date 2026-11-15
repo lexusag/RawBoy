@@ -96,7 +96,7 @@ final class MetalContext: @unchecked Sendable {
         self.quad = quad
     }
 
-    private static func pipeline(_ device: MTLDevice, _ library: MTLLibrary, fragment: String,
+    static func pipeline(_ device: MTLDevice, _ library: MTLLibrary, fragment: String,
                                  format: MTLPixelFormat) throws -> MTLRenderPipelineState {
         let d = MTLRenderPipelineDescriptor()
         d.vertexFunction = library.makeFunction(name: "developVertex")
@@ -217,8 +217,7 @@ struct DevelopProgram {
             "uBloomHalo": inputs.bloomHalo, "uBloomTail": inputs.bloomTail, "uSkinMask": inputs.skinMask,
             "uBrushMask": inputs.brush, "uFilmLut": inputs.filmLut, "uPrintLut": inputs.printLut,
             "uFlare": inputs.flare, "uFx": inputs.fx,
-            // No lens blur on iOS yet (uBokehScale stays 0); any texture keeps the slot bound.
-            "uBokeh": inputs.base,
+            "uBokeh": inputs.bokeh,
         ].merging(overrides) { $1 }
         for (name, index) in DevelopLayout.textures {
             encoder.setFragmentTexture(textures[name], index: index)
@@ -227,8 +226,9 @@ struct DevelopProgram {
         encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
     }
 
-    private static func fragmentUniforms(_ p: ShaderParams, _ g: SampleGeometry) -> UniformBlock {
-        var u = UniformBlock(size: DevelopLayout.fragmentBlockSize, layout: DevelopLayout.fragmentUniforms)
+    static func fragmentUniforms(_ p: ShaderParams, _ g: SampleGeometry, size: Int = DevelopLayout.fragmentBlockSize,
+                                 layout: [String: DevelopLayout.Uniform] = DevelopLayout.fragmentUniforms) -> UniformBlock {
+        var u = UniformBlock(size: size, layout: layout)
         u.mat3("uWhiteBalance", p.whiteBalance)
         u.float("uExposure", p.exposure)
         u.float("uContrast", p.contrast)
@@ -281,6 +281,9 @@ struct DevelopProgram {
         u.vec2("uOutOrigin", out[0], out[1])
         u.vec2("uOutSpan", out[2], out[3])
         bindLens(&u, p.lens)
+        let bokeh = BokehTexture.uniforms(p)
+        u.float("uBokehScale", bokeh.scale)
+        u.vec2("uBokehTexel", bokeh.texelX, bokeh.texelY)
         bindLayers(&u, p.layers)
         bindLeaks(&u, p.leaks)
         bindFx(&u, p.fx)
@@ -343,6 +346,7 @@ struct DevelopProgram {
         u.array("uMaskGeom", l.geom, components: 4)
         u.array("uMaskShape", l.shape, components: 4)
         u.array("uMaskForm", l.form, components: 4)
+        u.array("uLayerBlur", l.blur, components: 1)
         u.array("uLayerTone", l.tone, components: 4)
         u.array("uLayerColor", l.color, components: 4)
         u.mat3("uLayerWb", l.whiteBalance)
@@ -441,6 +445,9 @@ final class DevelopTextures {
     private(set) var brush: MTLTexture
     /** The light effects' segment data (RGBA32F, LightEffects.row texels wide, read with texelFetch). */
     private(set) var fx: MTLTexture
+    /** The masks' lens blur (BokehTexture): 1x1 transparent until the first blur, so the develop shader then shows none. */
+    var bokeh: MTLTexture { bokehTexture.output }
+    private let bokehTexture = BokehTexture()
 
     private var uploadedLut: LutData?
     private var uploadedFilm: LutData?
@@ -495,6 +502,7 @@ final class DevelopTextures {
         bindMask(p.skinMask)
         bindBrush(p.layers.brush)
         bindFx(p.fx.data)
+        bokehTexture.bind(p, brush: brush)
     }
 
     /** The light effects' segment data; re-uploaded only when the packer hands out new data (not while an effect is dragged). */

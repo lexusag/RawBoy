@@ -122,6 +122,9 @@ public enum Masks {
     /** Uniform arrays in the shader are this long. */
     public static let maxLayers = 4
 
+    /** Lens blur at 100: this fraction of the image's long side is the disc radius (web's MAX_LENS_BLUR). */
+    public static let maxLensBlur: Float = 0.03
+
     /**
      * Linear curvature: at curve 100 the lines' ends, half the image's long side from the middle, are pulled this
      * many long sides along the gradient. Shared by the shader packing and the overlay so both bend alike.
