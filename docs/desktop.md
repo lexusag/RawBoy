@@ -35,6 +35,9 @@ Heal in the top bar, or B: click a dust spot, blemish or small object to heal it
 ## Lens corrections
 Lens tab › **Use Lensfun profile**: distortion, chromatic aberration and vignetting from the Lensfun database for raws with no embedded profile, as on the web (Auto match from EXIF, Pick lens, Generic). See [rawboy.md](rawboy.md), Lens corrections. The database is inside the app; nothing is downloaded.
 
+## Light leaks: outline dots
+A glow leak (Light tool) shows 8 hollow dots on its outline: drag one with the mouse to reshape the outline around what it should hide (0.1–4 shape radii, a closed spline through the 8 points, as on the web); the size dots then sit on the reshaped outline. **Round outline** in the panel puts the ellipse back. The radii are saved in the sidecar like the rest of the leak.
+
 ## Not in yet
 a folder browser, Intel Macs, sandboxing and notarisation (the app writes next to your photos, so it is not sandboxed).
 

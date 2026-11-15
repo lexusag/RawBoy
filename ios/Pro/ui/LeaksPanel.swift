@@ -182,8 +182,15 @@ struct LeaksPanel: View {
                 .font(.subheadline)
                 .padding(.vertical, 4)
         }
+        if LightLeaks.reshaped(leak) {
+            Button("Round outline") { set(leak, true) { $0.radii = LightLeaks.roundRadii } }
+                .font(.subheadline)
+                .padding(.vertical, 4)
+        }
         Note("Drag the leak to move it, the dots to resize (" +
              (leak.kind == .streak ? "side dots: width, end dots: length" : "along and across") +
-             "), the round knob to turn it, the square to bend it. Inside the dashed line it is pure white at full intensity; the glow around it is added in Screen mode. Leaks aren't saved in presets: they belong to this photo.")
+             (leak.kind == .glow ? "), the hollow dots to reshape its outline around what it should hide, the round knob to turn it, the square to bend it."
+                 : "), the round knob to turn it, the square to bend it.") +
+             " Inside the dashed line it is pure white at full intensity; the glow around it is added in Screen mode. Leaks aren't saved in presets: they belong to this photo.")
     }
 }
