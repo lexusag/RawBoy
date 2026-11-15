@@ -4,6 +4,8 @@
 - A photo's edits are saved into its XMP sidecar (`rawboy:Develop`, the web's `Edits` JSON; NAME.xmp, else darktable's NAME.EXT.xmp, else a new NAME.xmp) 800 ms after you stop, only that field, everything else kept byte for byte, atomic writes. RawBoy Viewer's turn (`tiff:Orientation`) and crop are read.
 - Keys match the web: Z, D, C, B, E, V, [ ], \, ⌘Z / ⇧⌘Z, by physical key so non-Latin layouts work; wheel zoom around the pointer, wheel over a slider (Shift big steps, ⌘ fine), double-click resets.
 - Engine: macOS slices of the native libraries (arm64 + x86_64, `ios/native/build.sh`), `RawBoyEngineMac` target (arm64; Float16 is unavailable on Intel Macs), `Edits.swift` (port of Edits.kt, round-trips the web's JSON incl. brush strokes, leaks, effects; web-only fields are kept), `XmpSidecar.swift`. Skin retouch and blemish removal are off on macOS (MediaPipe has no macOS slice).
+- Opening a raw no longer depends on the thread's stack: the decode runs on a 64 MB thread (and Apple worker threads of LibRaw's parallel steps get 16 MB), after RawBoy Desktop crashed on a stack guard page opening one.
+- A release attaches `RawBoy-Desktop-<tag>.dmg` (ad-hoc signed, not notarised).
 - Fixed on iOS: saving a Detail preset crashed (`grain`, `grainSize`, `highpassContrast` missing from `Presets.numberFields`).
 
 **RawBoy Camera, Pro, and Auto (Android, iOS, web): Frames and Date stamps in Pro/Auto + frame rendering refinements (2026-11-14)**

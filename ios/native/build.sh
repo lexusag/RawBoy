@@ -96,13 +96,24 @@ EOF
     fi
 }
 
-build iphoneos
-build iphonesimulator
-build macosx
+MACOS_ONLY=0; [ "$1" = macos ] && MACOS_ONLY=1
+# "build.sh macos": only the macOS slice (RawBoy Desktop's CI build); no argument: all three, for the iOS apps too.
+if [ "$1" = macos ]; then
+    build macosx
+else
+    build iphoneos
+    build iphonesimulator
+    build macosx
+fi
 
 mkdir -p "$OUT"
 xcframework() {  # xcframework <name> <build dir prefix>
     rm -rf "$OUT/$1.xcframework"
+    if [ "$MACOS_ONLY" = 1 ]; then
+        xcodebuild -create-xcframework -framework "build/${2}macosx/frameworks/$1.framework" \
+            -output "$OUT/$1.xcframework" > /dev/null
+        return
+    fi
     xcodebuild -create-xcframework \
         -framework "build/${2}iphoneos/frameworks/$1.framework" \
         -framework "build/${2}iphonesimulator/frameworks/$1.framework" \

@@ -1,3 +1,4 @@
+# Also builds RawBoy Desktop's DMG (macOS, ad-hoc signed).
 # Builds signed release APKs of all three apps (RawBoy, Auto, Camera) and attaches them to the GitHub release,
 # and deploys the public web build to Cloudflare Pages (project "rawboy", and RawBoy Packer's page as project
 # "rawboy-packer").
@@ -245,6 +246,66 @@ jobs:
       - name: Remove signing files
         if: always()
         run: rm -f keystore.properties "$RUNNER_TEMP/release.jks"
+
+  # RawBoy Desktop (macOS): an ad-hoc signed, unnotarised DMG (arm64). First launch: right-click > Open. Built on every
+  # tag build unless the APKs are skipped. The Mac engine has no MediaPipe, so only the macOS native slice is built.
+  desktop:
+    if: github.event_name == 'workflow_dispatch' && !inputs.skip_apks
+    runs-on: macos-15
+    env:
+      TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+
+      - uses: actions/cache@v4
+        with:
+          path: third_party/dng_sdk_1_7_1.zip
+          key: dng_sdk_1_7_1.zip
+
+      - name: Download Adobe DNG SDK
+        run: |
+          cd third_party
+          [ -f dng_sdk_1_7_1.zip ] || curl -fsSLO https://download.adobe.com/pub/adobe/dng/dng_sdk_1_7_1.zip
+          unzip -q dng_sdk_1_7_1.zip && mv dng_sdk_1_7_1 dng_sdk
+
+      - name: Tools
+        run: |
+          brew install xcodegen glslang spirv-cross
+          xcodebuild -downloadComponent MetalToolchain
+
+      - name: Build the native libraries (macOS slice)
+        run: ios/native/build.sh macos
+
+      # project.yml's preGenCommand also fetches MediaPipe (iOS only); the macOS targets don't use it, so skip that step.
+      - name: Generate the project
+        run: |
+          cd ios
+          sh shaders/gen.sh
+          sed -i '' 's| && mediapipe/fetch.sh||' project.yml
+          xcodegen
+
+      - name: Build RawBoy Desktop
+        run: |
+          name="${TAG#v}"
+          cd ios
+          xcodebuild build -scheme RawBoyDesktop -configuration Release -destination 'platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/dd" MARKETING_VERSION="$name" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER"
+
+      - name: Make the DMG
+        run: |
+          app="$RUNNER_TEMP/dd/Build/Products/Release/RawBoy Desktop.app"
+          codesign --force --deep --sign - "$app"
+          mkdir -p dist dmg
+          cp -R "$app" dmg/
+          ln -s /Applications dmg/Applications
+          hdiutil create -volname "RawBoy Desktop" -srcfolder dmg -ov -format UDZO "dist/RawBoy-Desktop-$TAG.dmg"
+
+      - name: Upload to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/*.dmg --clobber
 
   # Compares the tag with the commit the live site was built from. No marker on the site (first deploy, or it
   # can't be fetched) counts as changed.

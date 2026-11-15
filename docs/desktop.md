@@ -16,3 +16,6 @@ Z 100% at the pointer, D frame colour, C Crop & rotate, \ Compare, B / E / V mas
 
 ## Not in yet
 Skin retouch and blemish removal (MediaPipe has no macOS build), Send to Auto, Photos export, a folder browser, Intel Macs, sandboxing and notarisation (the app writes next to your photos, so it is not sandboxed).
+
+## The DMG
+Publishing a release builds `RawBoy-Desktop-<tag>.dmg` (the `desktop` job of `.github/workflows/release.yml`, on a macOS runner: macOS native slice with `ios/native/build.sh macos`, xcodegen, `xcodebuild` Release, ad-hoc signed, app + an Applications link packed with `hdiutil`) and attaches it to the release. It is not notarised: open the app the first time with right-click > Open (or System Settings > Privacy & Security > Open Anyway).
