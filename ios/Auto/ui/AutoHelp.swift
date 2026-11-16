@@ -8,7 +8,7 @@ let autoHelp = [
         HelpItem("Export", "JPEG or TIFF and the size, asked when you tap Export all, Export on a selection or the photo view's Export; remembered."),
         HelpItem("Apply RawBoy preset…", "Develop every photo with a RawBoy preset instead of a look. Remove goes back to the looks."),
         HelpItem("Lens presets", "Lens presets sent from RawBoy's Lens tab correct every photo taken with their lens, on top of its look or preset; only the lens settings change. The lens presets button picks one for every photo (By lens, None or a named preset, for manual lenses that record no lens); Lens in the selection bar picks one for the selected photos. Remove forgets a preset."),
-        HelpItem("Sort", "Photos are in the order they were shot (from each file's EXIF date; a photo without one by its file's date). Sort: File name orders them by name instead; remembered."),
+        HelpItem("Sort", "Photos are in the order they were shot (from each file's EXIF date; a photo without one by its file's date). Sort: File name (on the Mac, File name under Order in the sidebar) orders them by name instead; remembered."),
         HelpItem("Export all", "Saves every photo to Photos, in the RawBoy Auto album. Stop ends it after the current photo; saved ones stay."),
         HelpItem("Auto denoise all", "Once a series is done: every photo gets the denoise and sharpening measured on it (its noise and ISO) in place of its Denoise slider. Looks, presets, lens corrections and the other settings stay; Undo in a photo takes it back for that photo."),
         HelpItem("Tap a waiting photo", "It's analysed next, ahead of the rest (marked Next), and opens when it's ready."),
@@ -34,7 +34,7 @@ let autoHelp = [
         HelpItem("Remove from batch (…)", "Takes this photo out of the batch (the original stays) and goes on to the next."),
         HelpItem("Apply to all (…)", "Copies the look and its settings to every photo (brightness and denoise stay per photo)."),
         HelpItem("Copy previous", "Gives this photo the look, brightness and settings of the photo before it (denoise stays)."),
-        HelpItem("Look name", "The name of the look or film stock a photo has now is on its cell in the grid (hover for the whole text) and in bold above the look strip in the photo view, with \"suggested\" when Auto picked it."),
+        HelpItem("Look name", "The name of the look or film stock a photo has now is on its cell in the grid (under the picture on the Mac; hover for the whole text) and in bold above the look strip in the photo view, with \"suggested\" when Auto picked it."),
         HelpItem("Reset all photos… (Mac)", "Next to Clear batch (and in the Mode menu): puts every photo back to one look, one film stock, or As is (just the automatic exposure and tone), and clears each photo's Strength, brightness, warmth, tint, contrast, saturation, grain, denoise, rotation, crop and any RawBoy preset. The photos stay; Undo in a photo's view brings its edits back."),
     ]),
 ]
