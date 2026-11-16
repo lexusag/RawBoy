@@ -73,6 +73,7 @@ struct ControlsPanel: View {
                 }
             }
             .pickerStyle(.segmented)
+            .neutralSegments()
             .reportsWidth("tabs picker")
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
@@ -106,6 +107,7 @@ struct ControlsPanel: View {
         }
         .labelsHidden()
         .pickerStyle(.segmented)
+        .neutralSegments()
         #if os(macOS)
         .controlSize(.small)
         #endif
@@ -248,6 +250,7 @@ struct ControlsPanel: View {
                 ForEach(AnamorphicColor.allCases, id: \.self) { Text($0.label).tag($0) }
             }
             .pickerStyle(.segmented)
+            .neutralSegments()
             .padding(.leading, 16)
             .padding(.vertical, 4)
             Toggle("Ghosts", isOn: Binding(
@@ -407,8 +410,15 @@ struct SectionLabel: View {
     init(_ text: String) { self.text = text }
 
     var body: some View {
+        #if os(macOS)
+        // Small caps in ash, as the Viewer's details panel heads its sections: amber headings competed with the values.
+        Text(text).font(.caption.weight(.semibold)).textCase(.uppercase).tracking(0.6).foregroundStyle(.secondary)
+            .padding(.top, 14).padding(.bottom, 2)
+            .accessibilityAddTraits(.isHeader)
+        #else
         Text(text).font(.caption.weight(.semibold)).foregroundStyle(Color.accentColor).padding(.top, 12).padding(.bottom, 2)
             .accessibilityAddTraits(.isHeader)
+        #endif
     }
 }
 
@@ -522,33 +532,29 @@ struct ParamSlider: View {
                 .accessibilityAction(named: "Reset") { onChange(defaultValue) }
             Text(format(value))
                 .font(.subheadline.monospacedDigit())
-                .foregroundStyle(value == defaultValue ? Color.secondary : Color.accentColor)
+                .foregroundStyle(value == defaultValue ? Color.secondary : changedValueColor)
                 .lineLimit(1)
                 .frame(width: 74, alignment: .trailing)
                 .tapButton(hint: "Resets \(label)") { onChange(defaultValue) }
                 .accessibilityLabel("Reset \(label), now \(format(value))")
         }
+        #if os(macOS)
+        .frame(height: 30)  // a pointer needs less than a finger: more of the panel fits without scrolling
+        #else
         .frame(height: 40)
+        #endif
     }
 
     private var clamped: Float { min(max(value, range.lowerBound), range.upperBound) }
 
     @ViewBuilder private var slider: some View {
+        #if os(macOS)
+        // The system slider with RawBoy's drawing: filled from the default, quiet when untouched (MacSlider).
+        MacSlider(value: value, range: range, defaultValue: defaultValue, gradient: trackGradient, onChange: onChange)
+        #else
         let native = Slider(value: Binding(get: { Double(clamped) }, set: { onChange(Float($0)) }),
                             in: Double(range.lowerBound)...Double(range.upperBound))
             .simultaneousGesture(TapGesture(count: 2).onEnded { onChange(defaultValue) })
-        #if os(macOS)
-        // The Mac's slider (NSSlider) must be drawn to be grabbed: at 2% opacity a click moved it but its thumb couldn't
-        // be dragged. So it stays as the system draws it, with the zero mark of a signed range over it and a colour
-        // gradient (if any) as a bar beneath.
-        VStack(spacing: 1) {
-            native.overlay { ZeroTick(range: range) }
-            if let colors = trackGradient {
-                Capsule().fill(LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing))
-                    .frame(height: 3).padding(.horizontal, 9).allowsHitTesting(false)
-            }
-        }
-        #else
         if let colors = trackGradient {
             // The system slider still takes the touches (and scrolls like the others); it's just not drawn.
             native.opacity(0.02).background {
@@ -574,25 +580,6 @@ struct ParamSlider: View {
         #endif
     }
 }
-
-#if os(macOS)
-/** A small mark at 0 over the Mac's system slider, for ranges that run both ways (it fills from the left end). */
-struct ZeroTick: View {
-    let range: ClosedRange<Float>
-
-    var body: some View {
-        GeometryReader { g in
-            if range.lowerBound < 0 && range.upperBound > 0 {
-                let inset: CGFloat = 9  // about where the system thumb's centre stops
-                let t = CGFloat((0 - range.lowerBound) / (range.upperBound - range.lowerBound))
-                Rectangle().fill(Color.secondary.opacity(0.9)).frame(width: 2, height: 9)
-                    .position(x: inset + t * (g.size.width - 2 * inset), y: g.size.height - 4)
-            }
-        }
-        .allowsHitTesting(false)
-    }
-}
-#endif
 
 extension View {
     /** The wheel over this slider moves it (RawBoy Desktop). */

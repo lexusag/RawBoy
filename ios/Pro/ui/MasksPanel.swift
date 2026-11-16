@@ -83,6 +83,7 @@ struct MasksPanel: View {
                     Text("Adjust").tag(1)
                 }
                 .pickerStyle(.segmented)
+                .neutralSegments()
                 .padding(.horizontal, 12)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
@@ -134,6 +135,7 @@ struct MasksPanel: View {
             Text("Erase").tag(MaskTool.erase)
         }
         .pickerStyle(.segmented)
+        .neutralSegments()
         .padding(.vertical, 4)
         if tool != .move {
             ParamSlider(label: "Size", value: radiusToSize(brush.radius), range: 0...100, defaultValue: radiusToSize(0.03),

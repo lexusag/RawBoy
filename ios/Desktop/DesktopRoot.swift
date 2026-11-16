@@ -28,6 +28,7 @@ struct DesktopRoot: View {
                     Text("Auto").tag(AppMode.auto)
                 }
                 .pickerStyle(.segmented)
+                .neutralSegments()
                 .frame(width: 130)
                 .help("Pro edits one photo (⌘1); Auto develops a batch (⌘2)")
             }

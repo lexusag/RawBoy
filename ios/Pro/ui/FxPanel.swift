@@ -85,6 +85,7 @@ struct FxPanel: View {
                     Text("Effects").tag(true)
                 }
                 .pickerStyle(.segmented)
+                .neutralSegments()
                 Button(zoomed ? "Fit" : "100%", action: actions.onToggleZoom)
                 Button("Done", action: actions.onDone).fontWeight(.semibold)
             }
@@ -152,6 +153,7 @@ struct FxPanel: View {
             ForEach(FxKind.allCases, id: \.self) { Text($0.label).tag($0) }
         }
         .pickerStyle(.segmented)
+        .neutralSegments()
         .padding(.vertical, 4)
         ParamSlider(label: "Intensity", value: fx.intensity, range: 0...100, defaultValue: 100,
                     format: { "\(Int($0.rounded()))%" }) { v in set(fx) { $0.intensity = v } }

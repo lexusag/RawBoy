@@ -171,6 +171,7 @@ struct LensfunPanel: View {
                 ForEach(LensfunMode.allCases, id: \.self) { Text(modeLabel($0)).tag($0) }
             }
             .pickerStyle(.segmented)
+            .neutralSegments()
             .labelsHidden()
             .padding(.vertical, 4)
             if s.loading { Note("Loading the lens database…") }

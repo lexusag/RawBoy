@@ -54,6 +54,7 @@ struct DetailScreen: View {
                             Text("Film").tag(LookMode.film)
                         }
                         .pickerStyle(.segmented)
+                        .neutralSegments()
                         .padding(.horizontal, 16)
                         .padding(.top, 8)
                         LookNameLine(photo: photo)
@@ -66,6 +67,7 @@ struct DetailScreen: View {
                             Text("Adjust").tag(1)
                         }
                         .pickerStyle(.segmented)
+                        .neutralSegments()
                         Button("Copy previous") { vm.copyPrevious(photo.id) }
                             .font(.subheadline)
                             .disabled(vm.export != nil || vm.previousPhoto(photo.id) == nil)
