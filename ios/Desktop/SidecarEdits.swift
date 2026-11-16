@@ -3,6 +3,9 @@ import Foundation
 import ImageIO
 import os
 import RawBoyEngine
+import struct RawBoyBrowseKit.PhotoSidecar
+import enum RawBoyBrowseKit.XmpSidecar
+import typealias RawBoyBrowseKit.ExifOrientation
 
 /**
  * RawBoy Desktop's edits live in the photo's XMP sidecar (`rawboy:Develop`, `Edits` JSON; `PhotoSidecar` picks the file

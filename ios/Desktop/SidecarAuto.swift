@@ -1,6 +1,7 @@
 import Foundation
 import os
 import RawBoyEngine
+import struct RawBoyBrowseKit.PhotoSidecar
 
 /**
  * RawBoy Auto's settings live beside each photo, in the same XMP sidecar as RawBoy's edits (`rawboy:Auto`, the web's

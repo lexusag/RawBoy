@@ -1,5 +1,8 @@
 import XCTest
 @testable import RawBoyEngine
+import struct RawBoyBrowseKit.PhotoSidecar
+import enum RawBoyBrowseKit.XmpSidecar
+import typealias RawBoyBrowseKit.ExifOrientation
 
 /** Web's browse.test.ts "XMP sidecars" cases, the Develop field and Desktop's file handling. */
 final class XmpSidecarTests: XCTestCase {

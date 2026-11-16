@@ -1,5 +1,6 @@
 import RawBoyEngine
 import SwiftUI
+import enum RawBoyBrowseKit.PhotoSort
 
 /**
  * The batch as a grid; long-press a photo to start selecting (for rotating, removing, exporting and giving photos, one

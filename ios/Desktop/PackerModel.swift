@@ -3,6 +3,7 @@ import Combine
 import RawBoyEngine
 import SwiftUI
 import UniformTypeIdentifiers
+import enum RawBoyBrowseKit.PhotoOrder
 
 enum PackStatus: Equatable { case inspecting, ready, packing, done, failed }
 

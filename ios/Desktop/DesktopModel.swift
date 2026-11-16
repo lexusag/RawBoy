@@ -3,6 +3,7 @@ import Combine
 import RawBoyEngine
 import SwiftUI
 import UniformTypeIdentifiers
+import struct RawBoyBrowseKit.PhotoSidecar
 
 /** The window's two ways of working: one photo in the full editor, or a batch developed automatically. */
 enum AppMode: String { case pro, auto }
