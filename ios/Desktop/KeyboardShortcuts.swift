@@ -141,6 +141,11 @@ final class KeyboardShortcuts {
         // ← → step through the folder (the filmstrip), unless a focused control (Full Keyboard Access) takes the arrows.
         if key == .left || key == .right, flags.isEmpty {
             if NSApp.keyWindow?.firstResponder is NSControl { return event }
+            // With the Look selector out they turn its pages.
+            if commands.looksOpen {
+                commands.send(.looksPage(key == .left ? -1 : 1))
+                return nil
+            }
             model.openNeighbour(key == .left ? -1 : 1)
             return nil
         }

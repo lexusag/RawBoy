@@ -36,6 +36,10 @@ struct EditorScreen: View {
     /** Auto WB's area is on the photo (fit view), and where it is (fractions of the picture shown). */
     @State private var autoWb = false
     @State private var autoWbRect = CropRect(0.15, 0.15, 0.85, 0.85)
+    /** Look selector: armed from the bar, the next click on the photo opens it there (preview points). */
+    @State private var looksArmed = false
+    @State private var looksAt: CGPoint?
+    @State private var looksPage = LookSelector.PageStep()
     // Masks (UI state; the layers themselves are in the params).
     @State private var selectedLayer: String?
     @State private var maskTool = MaskTool.move
@@ -94,10 +98,12 @@ struct EditorScreen: View {
                                  mode = m
                                  pickingWhite = false
                                  autoWb = false
+                                 closeLooks()
                              },
                              onReset: vm.reset, onAuto: vm.applyAuto,
                              canUndo: state.canUndo, canRedo: state.canRedo, onUndo: vm.undo, onRedo: vm.redo,
-                             onExport: { showExport = true }, onSendToAuto: commands.sendToAuto, helpShown: $showHelp)
+                             onExport: { showExport = true }, onSendToAuto: commands.sendToAuto,
+                             looksArmed: looksArmed, onLooks: toggleLooks, helpShown: $showHelp)
             }
             // Controls under the photo in portrait, beside it in landscape.
             PhotoWithControls(hidden: photoOnly) {
@@ -142,6 +148,7 @@ struct EditorScreen: View {
             mode = mode == m ? .none : m
             pickingWhite = false
             autoWb = false
+            closeLooks()
         case .toggleCompare:
             showOriginal.toggle()
         case .togglePhotoOnly:
@@ -185,13 +192,39 @@ struct EditorScreen: View {
                 selectedHeal = nil
             }
         case .done:
+            if looksArmed {
+                closeLooks()
+                return
+            }
             if mode == .none && photoOnly { Motion.animate { photoOnly = false } }
             mode = .none
             pickingWhite = false
             autoWb = false
         case .help:
             showHelp = true
+        case let .looksPage(delta):
+            looksPage = LookSelector.PageStep(serial: looksPage.serial + 1, delta: delta)
         }
+    }
+
+    /** The bar's Looks button: arms the selector (the next click on the photo opens it), or puts it away. */
+    private func toggleLooks() {
+        if looksArmed {
+            closeLooks()
+            return
+        }
+        vm.refreshLuts()
+        mode = .none
+        pickingWhite = false
+        autoWb = false
+        looksArmed = true
+        commands.looksOpen = true
+    }
+
+    private func closeLooks() {
+        looksArmed = false
+        looksAt = nil
+        commands.looksOpen = false
     }
 
     // MARK: - Preview
@@ -324,6 +357,11 @@ struct EditorScreen: View {
                                 },
                                 shadeOpacity: 0.35, gridLines: 3)
                 }
+                if looksArmed, let at = looksAt, mode == .none, !showOriginal, session.preview != nil {
+                    LookSelector(vm: vm, session: session, frame: frameWidthPt, at: at, onClose: closeLooks,
+                                 pageStep: looksPage)
+                        .id(state.fileName ?? "")
+                }
                 if state.loading {
                     ProgressView()
                 } else if session.preview == nil {
@@ -356,6 +394,7 @@ struct EditorScreen: View {
     @ViewBuilder
     private func labels(maskView: String?) -> some View {
         let text = showOriginal && session.preview != nil ? "Original"
+            : looksArmed && looksAt == nil && session.preview != nil ? "Click the photo to compare looks"
             : [session.zoomCenter != nil ? ZoomMath.label(session.zoomScale) : nil, maskView != nil ? "Mask" : nil].compactMap { $0 }.joined(separator: " · ")
         if !text.isEmpty {
             OverlayLabel(text).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).allowsHitTesting(false)
@@ -386,7 +425,9 @@ struct EditorScreen: View {
             guard mode != .geometry && mode != .masks && mode != .leaks && mode != .fx && mode != .heal else { return }
             let x = Float(e.location.x * scale)
             let y = Float(e.location.y * scale)
-            if pickingWhite {
+            if looksArmed {
+                looksAt = e.location
+            } else if pickingWhite {
                 pickingWhite = false
                 vm.pickWhite(x, y)
             } else {
@@ -619,6 +660,9 @@ struct EditorTopBar: View {
     let onExport: () -> Void
     /** RawBoy Desktop: "Send to Auto" in the bar (nil: no button). */
     var onSendToAuto: (() -> Void)? = nil
+    /** RawBoy Desktop: the Look selector's button (nil: no button) and whether it is armed. */
+    var looksArmed = false
+    var onLooks: (() -> Void)? = nil
     @Binding var helpShown: Bool
 
     /** The full name of the tool being long-pressed, shown under the bar for a moment. */
@@ -673,6 +717,17 @@ struct EditorTopBar: View {
             lightButton
             modeButton(.heal, "bandage", "Heal", "Healing brush (B)")
             modeButton(.presets, "bookmark", "Presets", "Presets", withoutPhoto: true)
+            if let onLooks {
+                Button(action: onLooks) {
+                    ToolLabel(icon: "rectangle.split.3x1", label: "Looks")
+                        .foregroundStyle(looksArmed ? Color.accentColor : Color.primary)
+                }
+                .buttonStyle(ToolButtonStyle(name: "Looks", tip: $tip))
+                .disabled(!enabled)
+                .help("Looks: click the photo to see that area in every LUT and film stock")
+                .accessibilityLabel("Looks")
+                .accessibilityAddTraits(looksArmed ? .isSelected : [])
+            }
             Spacer(minLength: 8)
             tool("wand.and.stars", "Auto Dev", "Auto light and colour (keeps the LUT)", action: onAuto)
             if let onSendToAuto { tool("square.stack.3d.up", "To Auto", "Send this photo to Auto's batch (⇧⌘A)", action: onSendToAuto) }

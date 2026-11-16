@@ -26,6 +26,8 @@ enum EditorAction: Equatable {
     case deleteSelection
     /** Closes the open tool (Esc, Return). */
     case done
+    /** The Look selector's page, -1 previous / +1 next (← → while it is open). */
+    case looksPage(Int)
     /** The "?" sheet. */
     case help
 }
@@ -39,6 +41,8 @@ final class EditorCommands: ObservableObject {
     var pointer: CGPoint?
     /** Space held: a drag pans the zoomed photo instead of painting. */
     var spaceHeld = false
+    /** The Look selector is armed or open: ← → turn its pages instead of stepping through the folder. */
+    var looksOpen = false
 
     /** RawBoy Desktop: a section for the export sheet choosing the folder, the file written there, and the folder chosen. */
     var exportDestination: AnyView?

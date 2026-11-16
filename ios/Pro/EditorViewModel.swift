@@ -345,6 +345,12 @@ final class EditorViewModel: ObservableObject {
         }
     }
 
+    /** The Look selector's pick: [next] is the photo's params with another LUT or film stock (one undo step). */
+    func setLook(_ next: DevelopParams) {
+        if let f = next.film { lastFilm = f }
+        commit(next, force: true)
+    }
+
     /** Film segment: the last stock (Portra 400 at first). */
     func useFilm() { selectFilm(state.params.film ?? lastFilm) }
 
