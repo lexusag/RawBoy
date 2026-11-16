@@ -169,4 +169,90 @@ public struct SliderWheel: NSViewRepresentable {
         }
     }
 }
+
+/**
+ * The wheel over this area steps through a list, one item per mouse click (a trackpad swipe a few; `WheelStepper`), as the
+ * web does for film stocks. The scroll is taken, so the panel doesn't move under the pointer; a wheel that was just
+ * scrolling the panel keeps scrolling it, and so does momentum. `onStep` gets the steps (positive = forward, wheel down).
+ */
+public struct StepWheel: NSViewRepresentable {
+    let enabled: Bool
+    let onStep: (Int) -> Void
+
+    public init(enabled: Bool = true, onStep: @escaping (Int) -> Void) {
+        self.enabled = enabled
+        self.onStep = onStep
+    }
+
+    public func makeNSView(context: Context) -> StepView {
+        let v = StepView()
+        StepView.register(v)
+        return v
+    }
+
+    public func updateNSView(_ view: StepView, context: Context) {
+        view.enabled = enabled
+        view.onStep = onStep
+    }
+
+    public static func dismantleNSView(_ view: StepView, coordinator: ()) { StepView.unregister(view) }
+
+    public final class StepView: NSView {
+        var enabled = true
+        var onStep: (Int) -> Void = { _ in }
+        fileprivate var stepper = WheelStepper()
+
+        override public var isFlipped: Bool { true }
+        override public func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+        private struct Weak { weak var view: StepView? }
+        nonisolated(unsafe) private static var views: [Weak] = []
+        nonisolated(unsafe) private static var monitor: Any?
+        /** When a scroll that no stepping area took last happened: a wheel still scrolling the panel keeps doing so. */
+        nonisolated(unsafe) private static var lastPanelScroll: TimeInterval = 0
+
+        static func register(_ v: StepView) {
+            views.removeAll { $0.view == nil }
+            views.append(Weak(view: v))
+            if monitor == nil {
+                monitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { handle($0) }
+            }
+        }
+
+        static func unregister(_ v: StepView) { views.removeAll { $0.view == nil || $0.view === v } }
+
+        private static func handle(_ event: NSEvent) -> NSEvent? {
+            guard event.scrollingDeltaY != 0 else { return event }
+            let hit = views.compactMap(\.view).first { v in
+                guard v.enabled, let w = v.window, w === event.window, !v.isHiddenOrHasHiddenAncestor else { return false }
+                return v.bounds.contains(v.convert(event.locationInWindow, from: nil))
+            }
+            guard let v = hit else {
+                lastPanelScroll = event.timestamp
+                return event
+            }
+            // The panel's own momentum, or a scroll it was just taking, carries on in the panel.
+            if event.momentumPhase != [] && event.timestamp - lastPanelScroll < 0.5 {
+                lastPanelScroll = event.timestamp
+                return event
+            }
+            if event.momentumPhase == [] && event.timestamp - lastPanelScroll < 0.2 && !v.stepping {
+                lastPanelScroll = event.timestamp
+                return event
+            }
+            // Momentum after our own swipe is swallowed without stepping, so the stocks don't run on.
+            if event.momentumPhase != [] { return nil }
+            v.stepping = true
+            // Wheel down = forward; scrollingDeltaY is positive for a wheel pushed away, and flips with natural scrolling.
+            let physical = Double(event.scrollingDeltaY) * (event.isDirectionInvertedFromDevice ? -1 : 1)
+            let steps = v.stepper.step(delta: -physical, precise: event.hasPreciseScrollingDeltas, time: event.timestamp)
+            if steps != 0 { v.onStep(steps) }
+            if event.phase == .ended || event.phase == .cancelled { v.stepping = false }
+            return nil
+        }
+
+        /** True once this area has taken the current scroll, so a short pause doesn't hand it back to the panel. */
+        fileprivate var stepping = false
+    }
+}
 #endif
