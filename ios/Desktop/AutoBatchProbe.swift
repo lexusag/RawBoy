@@ -251,6 +251,26 @@ enum AutoBatchProbe {
     }
 
     /**
+     * RAWBOY_PROBE_LOOKS=1 with `--open photo`: opens Pro's Look selector in the middle of the photo once it shows, turns
+     * the page after 10 s (→) and back after 20 s, logging the photo's LUT and film each time, for screenshots in between.
+     */
+    static func looksProbeIfRequested(_ model: DesktopModel) {
+        guard ProcessInfo.processInfo.environment["RAWBOY_PROBE_LOOKS"] != nil else { return }
+        Task {
+            while !model.vm.state.hasImage || model.vm.state.busy { try? await Task.sleep(for: .milliseconds(300)) }
+            try? await Task.sleep(for: .seconds(1))
+            model.commands.send(.openLooks(nil))
+            log("looks: opened, lut=\(model.vm.state.params.lut ?? "-") film=\(model.vm.state.params.film ?? "-")")
+            try? await Task.sleep(for: .seconds(10))
+            model.commands.send(.looksPage(1))
+            log("looks: next page")
+            try? await Task.sleep(for: .seconds(10))
+            model.commands.send(.looksPage(-1))
+            log("looks: previous page, lut=\(model.vm.state.params.lut ?? "-") film=\(model.vm.state.params.film ?? "-")")
+        }
+    }
+
+    /**
      * RAWBOY_PROBE_SELFTEST=1: the batch's selection, keys, Clear batch, and the moves between Pro and Auto, checked with
      * real key events posted into the window; prints PASS or FAIL per item.
      */

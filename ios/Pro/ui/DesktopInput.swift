@@ -28,6 +28,8 @@ enum EditorAction: Equatable {
     case done
     /** The Look selector's page, -1 previous / +1 next (← → while it is open). */
     case looksPage(Int)
+    /** Opens the Look selector at a point of the preview (points; nil = its centre). Debug probes. */
+    case openLooks(CGPoint?)
     /** The "?" sheet. */
     case help
 }
