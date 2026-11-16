@@ -14,7 +14,7 @@ public enum PresetGroup: String, CaseIterable, Sendable {
         case .light: "Light"
         case .whiteBalance: "White balance"
         case .curves: "Curves"
-        case .color: "Color"
+        case .color: "Colour"
         case .detail: "Detail"
         case .retouch: "Retouch"
         case .lut: "LUT"
@@ -108,7 +108,7 @@ public enum Presets {
         let mono = presets.filter(\.isMonochrome)
         if mono.isEmpty { return [(nil, presets)] }
         let color = presets.filter { !$0.isMonochrome }
-        return (color.isEmpty ? [] : [("Color", color)]) + [("Black & white", mono)]
+        return (color.isEmpty ? [] : [("Colour", color)]) + [("Black & white", mono)]
     }
 
     public static func capture(_ name: String, _ params: DevelopParams, _ groups: Set<PresetGroup>, lens: String? = nil) -> Preset {

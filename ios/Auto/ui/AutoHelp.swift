@@ -1,5 +1,32 @@
 import RawBoyEngine
 
+#if os(macOS)
+/** RawBoy Desktop's Auto help: the phones' sheet with the Mac's grid, sidebar, bar, panel, mouse and keys. */
+let autoHelp = [
+    HelpSection("Basics", [
+        HelpItem("Add", "⌘O adds photos, ⇧⌘O a folder, or drop photos and folders on the window. Each is developed automatically and gets a film look. JPEG, HEIC, PNG and TIFF work too, at lower quality. Photos are used in place, never copied."),
+        HelpItem("Sidebar", "New photos: Looks (a film LUT on the auto develop) or Film (developed as film), for photos added from now on. Order: Shoot date (each file's EXIF date, else the file's date) or File name; remembered. Preset: develop every photo with a RawBoy preset instead of a look. Lens: the lens preset for every photo (By lens, None or a named one). Auto denoise all: every photo gets the denoise and sharpening measured on it; Undo in a photo takes it back."),
+        HelpItem("Export all", "⌘E: JPEG or TIFF, quality and size, next to each photo or into a folder you choose; NAME-auto.jpg replaces an earlier one. Stop ends it after the current photo."),
+        HelpItem("A waiting photo", "Click it and it is analysed next, ahead of the rest, and opens when it's ready."),
+    ]),
+    HelpSection("Grid", [
+        HelpItem("Arrows, Return", "Move between photos and open one; a click opens too."),
+        HelpItem("Selecting", "⌘A selects all, ⌘-click adds or removes a photo, ⇧-click selects the range from the last one clicked; Esc clears the selection. A selection can be rotated, given a preset or lens preset, denoised, removed from the batch or exported."),
+        HelpItem("Look name", "Under each photo, with \"suggested\" when Auto picked it; hover for the whole text."),
+        HelpItem("Reset all photos…", "Next to Clear batch (and in the Mode menu): puts every photo back to one look, one film stock, or As is, and clears its adjustments, crop and any RawBoy preset. Undo in a photo's view brings its edits back."),
+    ]),
+    HelpSection("Photo view", [
+        HelpItem("Bar", "Grid (Esc) goes back; ← and → (or the arrows by the name) go to the previous or next photo. Crop opens Crop & rotate, Preset develops this photo with a RawBoy preset. Edit in Pro (⌘↩) opens it in the editor; Copy gives it the previous photo's look and settings (denoise stays); Apply to All copies its look and settings to every photo (brightness, denoise and crop stay per photo); Remove takes it out of the batch (the file stays). Then Undo, Redo (⌘Z, ⇧⌘Z) and Export."),
+        HelpItem("Panel", "Look (or Film): Looks or Film, Strength and every look as a thumbnail; click one to use it. Light: Brightness, Contrast. Colour: Pick white balance, Warmth, Tint, Saturation. Detail: Grain, Denoise. Click a section's name to open or close it; an amber dot and the arrow beside it reset that section."),
+        HelpItem("Pick white balance", "Colour section: click something in the photo that should be neutral grey, and Warmth and Tint make it grey."),
+        HelpItem("Double-click", "100% view at that point; drag to pan, double-click again to go back. A trackpad pinch zooms too."),
+        HelpItem("Press and hold", "See the photo without the look."),
+        HelpItem("Click outside the photo", "Change the frame around it: grey, white or black."),
+        HelpItem("Crop & rotate", "Drag the corners, edges or inside of the frame, pick a shape (Original, 1:1, 4:3, 3:2, 16:9...), turn the photo in quarter steps and straighten the horizon. The crop is in the exports and in Undo."),
+        HelpItem("Double-click a slider", "Reset it."),
+    ]),
+]
+#else
 /** RawBoy Auto's "?" sheet. Keep it in step with the Readme's RawBoy Auto section and Android's ui/Help.kt. */
 let autoHelp = [
     HelpSection("Basics", [
@@ -38,3 +65,4 @@ let autoHelp = [
         HelpItem("Reset all photos… (Mac)", "Next to Clear batch (and in the Mode menu): puts every photo back to one look, one film stock, or As is (just the automatic exposure and tone), and clears each photo's Strength, brightness, warmth, tint, contrast, saturation, grain, denoise, rotation, crop and any RawBoy preset. The photos stay; Undo in a photo's view brings its edits back."),
     ]),
 ]
+#endif

@@ -1,3 +1,11 @@
+**RawBoy Desktop: small fixes from the UI review (2026-11-16)**
+
+- **Camera name.** DNGs read by the Adobe DNG SDK (JPEG XL DNGs, packed DNGs) named the camera by the DNG's UniqueCameraModel, which Android writes as "Pixel 9 Pro-Google-google". They now use the EXIF Make and Model as LibRaw does ("Google Pixel 9 Pro"; the model alone when it already starts with the make). Shared C++, so Android and the web too.
+- **Colour.** "Colour" in the Apple apps' labels: Pro's tab, Colour denoise, Grain's Colour, the look and preset groups, the export frame's and Camera's frame Colour.
+- **Mac wording.** Auto's help on the Mac describes the grid, sidebar, bar, panel, clicks and keys instead of taps, swipes and long presses; the curve's note, the white balance picker and the sliders' VoiceOver hint say click and double-click.
+- **Curve.** The channel picker (RGB, Red, Green, Blue) is the tone mapper's small size on the Mac, so it no longer runs wider than the panel's other rows.
+- Sixth and last step of the desktop redesign.
+
 **RawBoy Desktop: a filmstrip under Pro's photo (2026-11-16)**
 
 - **Filmstrip.** The other photos in the open photo's folder sit in a strip under the photo, by file name; a RAW + JPEG pair shows once, as the raw (as in RawBoy Viewer). Click one to open it, or press ← / → for the previous and next photo (a slider focused with Full Keyboard Access keeps the arrows). The mouse wheel scrolls the strip sideways. The open photo has an amber outline and stays in view. Thumbnails are the files' own embedded previews (ImageIO), not developed; files only in iCloud show a cloud and aren't downloaded until opened. The folder is listed again when you come back to the app. Hidden with the panels (Tab, F), and absent when the folder has just the one photo.

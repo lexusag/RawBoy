@@ -753,7 +753,7 @@ private struct FramesSettingsView: View {
             }
             if vm.settings.photoFrame == .pentax645 || vm.settings.photoFrame == .contax645 {
                 Section {
-                    Picker("Color", selection: Binding(get: { vm.settings.frameColor }, set: vm.setFrameColor)) {
+                    Picker("Colour", selection: Binding(get: { vm.settings.frameColor }, set: vm.setFrameColor)) {
                         ForEach(FilmFrameColor.allCases, id: \.self) { color in
                             Text(color.label).tag(color)
                         }

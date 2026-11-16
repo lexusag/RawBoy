@@ -43,7 +43,7 @@ public struct ExportFrameSections: View {
                 }
             }
             if settings.photoFrame == .pentax645 || settings.photoFrame == .contax645 {
-                Picker("Color", selection: $settings.frameColor) {
+                Picker("Colour", selection: $settings.frameColor) {
                     ForEach(FilmFrameColor.allCases, id: \.self) { color in
                         Text(color.label).tag(color)
                     }
