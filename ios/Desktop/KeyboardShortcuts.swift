@@ -16,7 +16,7 @@ final class KeyboardShortcuts {
 
     /** ANSI key codes (Carbon's kVK_*). */
     enum Key: UInt16 {
-        case a = 0, z = 6, d = 2, c = 8, b = 11, e = 14, v = 9, o = 31
+        case a = 0, z = 6, d = 2, c = 8, b = 11, e = 14, v = 9, o = 31, f = 3, tab = 48
         case leftBracket = 33, rightBracket = 30, backslash = 42
         case left = 123, right = 124, down = 125, up = 126, one = 18, two = 19
         case delete = 51, forwardDelete = 117, space = 49, `return` = 36, keypadEnter = 76, escape = 53, slash = 44
@@ -127,7 +127,14 @@ final class KeyboardShortcuts {
         }
         guard flags.isEmpty || flags == [.shift] else { return event }
         guard vm.state.hasImage else { return event }
+        // Tab hides the panels, as in RawBoy Viewer, unless Full Keyboard Access uses it to move between controls (F always works).
+        if key == .tab {
+            guard flags.isEmpty, !NSApp.isFullKeyboardAccessEnabled else { return event }
+            commands.send(.togglePhotoOnly)
+            return nil
+        }
         switch key {
+        case .f: commands.send(.togglePhotoOnly)
         case .z: commands.send(.zoom100AtPointer)
         case .d: commands.send(.cycleFrame)
         case .c: commands.send(.toggleMode(.geometry))

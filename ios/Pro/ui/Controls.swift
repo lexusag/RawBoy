@@ -33,6 +33,10 @@ struct ControlsPanel: View {
     var lensfun: LensfunStore? = nil
 
     @AppStorage("pro.tab") private var chosenTab = 0
+    #if os(macOS)
+    /** The Mac inspector's closed sections, by title, comma separated (kept between launches). */
+    @AppStorage("pro.closedSections") private var closedSections = "Primaries,Portrait,Effects,LUT,Lens"
+    #endif
     @State private var anamorphicOpen: Bool?
     @State private var grainOpen = false
     @State private var fisheyeOpen = false
@@ -66,6 +70,15 @@ struct ControlsPanel: View {
     }
 
     var body: some View {
+        #if os(macOS)
+        inspector
+        #else
+        tabs
+        #endif
+    }
+
+    /** The phones' panel: one tab of sliders at a time. */
+    private var tabs: some View {
         VStack(spacing: 0) {
             Picker("", selection: Binding(get: { tab }, set: { chosenTab = $0 })) {
                 ForEach(shownTabs, id: \.self) { i in
@@ -114,7 +127,7 @@ struct ControlsPanel: View {
         .frame(maxWidth: .infinity)
     }
 
-    @ViewBuilder private var light: some View {
+    @ViewBuilder private var lightSliders: some View {
         // The label beside the segments when they fit, else above them: a segmented control can't go below its natural width,
         // and a row wider than the panel made every slider track and the curve box as wide, running off the panel's edge.
         ViewThatFits(in: .horizontal) {
@@ -156,11 +169,23 @@ struct ControlsPanel: View {
         slider("Shadows", \.shadows, -100...100)
         slider("Whites", \.whites, -100...100)
         slider("Blacks", \.blacks, -100...100)
-        SectionLabel("Curves")
-        CurvesPanel(curves: params.curves) { c in set { $0.curves = c } }
     }
 
+    @ViewBuilder private var light: some View {
+        lightSliders
+        SectionLabel("Curves")
+        curves
+    }
+
+    private var curves: some View { CurvesPanel(curves: params.curves) { c in set { $0.curves = c } } }
+
     @ViewBuilder private var color: some View {
+        whiteBalance
+        SectionLabel("RGB primaries")
+        primariesSliders
+    }
+
+    @ViewBuilder private var whiteBalance: some View {
         Button(action: onPickWhite) {
             Label(pickingWhite ? "Tap something neutral grey" : "Pick white balance", systemImage: "eyedropper")
                 .font(.subheadline)
@@ -180,7 +205,9 @@ struct ControlsPanel: View {
         TemperatureSlider(kelvin: params.temperature, defaultValue: defaults.temperature) { k in set { $0.temperature = k } }
         slider("Tint", \.tint, -Float(WhiteBalance.maxTint)...Float(WhiteBalance.maxTint))
         slider("Saturation", \.saturation, -100...100)
-        SectionLabel("RGB primaries")
+    }
+
+    @ViewBuilder private var primariesSliders: some View {
         let degrees = { (v: Float) in String(format: "%+.1f°", v) }
         primaries("Red hue", \.redHue, .redHue, -45...45, format: degrees)
         primaries("Red purity", \.redPurity, .redPurity, -200...200)
@@ -194,6 +221,13 @@ struct ControlsPanel: View {
     }
 
     @ViewBuilder private var detail: some View {
+        sharpness
+        portrait
+        effects
+    }
+
+    /** Denoise, sharpening and the two contrasts (the Mac's Detail section). */
+    @ViewBuilder private var sharpness: some View {
         // Colour denoise follows luma until set (edits and presets from before the split); moving luma pins it.
         ParamSlider(label: "Luma denoise", value: params.denoise, range: 0...100, defaultValue: defaults.denoise,
                     format: formatPlain) { v in set { $0.colorDenoise = $0.effectiveColorDenoise; $0.denoise = v } }
@@ -202,6 +236,10 @@ struct ControlsPanel: View {
         slider("Sharpening", \.sharpening, 0...100, format: formatPlain)
         slider("Local contrast", \.localContrast, -100...100)
         slider("High-pass contrast", \.highpassContrast, -100...100)
+    }
+
+    /** What works on skin (the Mac's Portrait section). */
+    @ViewBuilder private var portrait: some View {
         slider("Skin retouch", \.skinRetouch, 0...100, format: formatPlain)
         if params.skinRetouch > 0, let note = skinNote { Note(note) }
         slider("Blemish removal", \.blemishRemoval, 0...100, format: formatPlain)
@@ -225,6 +263,10 @@ struct ControlsPanel: View {
             }
         }
         #endif
+    }
+
+    /** Bloom, flare and grain (the Mac's Effects section). */
+    @ViewBuilder private var effects: some View {
         slider("Bloom", \.bloom, 0...100, format: formatPlain)
         anamorphicSliders
         grainSliders
@@ -349,6 +391,122 @@ struct ControlsPanel: View {
         LensPresetSave(lensName: lens.lensName, onSave: onSaveLensPreset).id(lens.lensName)
     }
 }
+
+#if os(macOS)
+/**
+ * The Mac's inspector: every slider in one scrolling column of sections that open and close (Light, Curve, Colour,
+ * Primaries, Detail, Portrait, Effects, LUT, Lens) instead of the phones' tabs, so related controls are seen together
+ * and nothing is two clicks away. A section with edits shows an amber dot and a reset for just that section, so what
+ * was changed can be found with the sections closed.
+ */
+extension ControlsPanel {
+    fileprivate var inspector: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                section("Light", reset: { p, d in
+                    p.exposure = d.exposure; p.contrast = d.contrast; p.highlights = d.highlights; p.shadows = d.shadows
+                    p.whites = d.whites; p.blacks = d.blacks
+                    p.filmAmount = d.filmAmount; p.filmGrain = d.filmGrain; p.halation = d.halation
+                }) { lightSliders }
+                section("Curve", reset: { p, d in p.curves = d.curves }) { curves }
+                section("Colour", reset: { p, d in p.temperature = d.temperature; p.tint = d.tint; p.saturation = d.saturation }) {
+                    whiteBalance
+                }
+                section("Primaries", reset: { p, d in
+                    p.redHue = d.redHue; p.redPurity = d.redPurity; p.greenHue = d.greenHue; p.greenPurity = d.greenPurity
+                    p.blueHue = d.blueHue; p.bluePurity = d.bluePurity; p.tintHue = d.tintHue; p.tintPurity = d.tintPurity
+                }) { primariesSliders }
+                section("Detail", reset: { p, d in
+                    p.denoise = d.denoise; p.colorDenoise = d.colorDenoise; p.sharpening = d.sharpening
+                    p.localContrast = d.localContrast; p.highpassContrast = d.highpassContrast
+                }) { sharpness }
+                section("Portrait", reset: { p, d in
+                    p.skinRetouch = d.skinRetouch; p.blemishRemoval = d.blemishRemoval; p.portraitRetouch = d.portraitRetouch
+                }) { portrait }
+                section("Effects", reset: { p, d in
+                    p.bloom = d.bloom; p.anamorphic = d.anamorphic; p.anamorphicColor = d.anamorphicColor
+                    p.anamorphicGhosts = d.anamorphicGhosts; p.grain = d.grain; p.grainSize = d.grainSize
+                    p.grainRoughness = d.grainRoughness; p.grainColor = d.grainColor
+                }) { effects }
+                // Film replaces the user LUT (kept, not rendered), so the section goes while Film is on, as the phones' tab.
+                if params.film == nil {
+                    section("LUT", reset: { p, d in p.lut = d.lut; p.lutAmount = d.lutAmount }) {
+                        LutPanel(params: params, luts: luts, loading: lutLoading, onChange: onChange, onSelect: onSelectLut)
+                            .onAppear(perform: onLutsTabShown)  // rescan the user's folder when opened
+                    }
+                }
+                section("Lens", reset: { p, d in
+                    p.lensProfile = d.lensProfile; p.lensDistortion = d.lensDistortion; p.lensAnamorphic = d.lensAnamorphic
+                    p.lensCrop = d.lensCrop; p.lensFisheye = d.lensFisheye; p.lensFisheyeFov = d.lensFisheyeFov
+                    p.lensFisheyeAuto = d.lensFisheyeAuto; p.lensFisheyeCircle = d.lensFisheyeCircle
+                    p.lensFisheyeX = d.lensFisheyeX; p.lensFisheyeY = d.lensFisheyeY
+                    p.vignetteAmount = d.vignetteAmount; p.vignetteMidpoint = d.vignetteMidpoint
+                    p.caRed = d.caRed; p.caBlue = d.caBlue
+                }) { lensPanel }
+            }
+            .reportsWidth("tab content")
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
+        }
+    }
+
+    private var closed: Set<String> { Set(closedSections.split(separator: ",").map(String.init)) }
+
+    private func toggle(_ title: String) {
+        var c = closed
+        if c.contains(title) { c.remove(title) } else { c.insert(title) }
+        Motion.animate { closedSections = c.sorted().joined(separator: ",") }
+    }
+
+    /**
+     * A section: its header (chevron, name, the edited dot, reset) and, while open, its controls. [reset] puts the
+     * section's fields back to the photo's defaults; the section counts as edited when that would change anything.
+     */
+    private func section<Content: View>(_ title: String, reset: @escaping (inout DevelopParams, DevelopParams) -> Void,
+                                        @ViewBuilder content: () -> Content) -> some View {
+        let open = !closed.contains(title)
+        var restored = params
+        reset(&restored, defaults)
+        let edited = restored != params
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(open ? 90 : 0))
+                    .frame(width: 12)
+                Text(title).font(.subheadline.weight(.semibold))
+                if edited {
+                    Circle().fill(Color.accentColor).frame(width: 6, height: 6).help("\(title) has edits")
+                }
+                Spacer(minLength: 0)
+                if edited {
+                    Button { onChange(restored) } label: {
+                        Image(systemName: "arrow.counterclockwise").font(.caption)
+                    }
+                    .buttonStyle(.borderless)
+                    .foregroundStyle(.secondary)
+                    .help("Reset \(title)")
+                    .accessibilityLabel("Reset \(title)")
+                }
+            }
+            .frame(height: 32)
+            .contentShape(Rectangle())
+            .onTapGesture { toggle(title) }
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(title + (edited ? ", edited" : ""))
+            .accessibilityValue(open ? "open" : "closed")
+            .accessibilityAddTraits([.isHeader, .isButton])
+            .accessibilityAction { toggle(title) }
+            if open {
+                VStack(alignment: .leading, spacing: 0) { content() }
+                    .padding(.bottom, 10)
+            }
+            Divider()
+        }
+    }
+}
+#endif
 
 private struct LutPanel: View {
     let params: DevelopParams

@@ -1,3 +1,10 @@
+**RawBoy Desktop: one-row bar, a sectioned slider panel, photo only (2026-11-16)**
+
+- **Bar.** Pro's two rows are one: the photo's name and exposure line on the left, Crop, Masks, Light, Heal and Presets in the middle, Auto Dev, To Auto, Reset, Undo, Redo and Export (amber) on the right, each with its name and key on hover.
+- **Inspector.** The Light / Color / Detail / LUTs / Lens tabs are one scrolling column of sections that open and close: Light, Curve, Colour, Primaries, Detail, Portrait, Effects, LUT, Lens. Related sliders are seen together, and a section with edits shows an amber dot and its own reset (the arrow beside it), so changes can be found with the sections closed. Which sections are open is remembered (Light, Curve, Colour and Detail at first). The histogram stays on top.
+- **Photo only.** Tab or F (View › Photo Only) hides the bar and the panel; again, or Esc, brings them back. Tab is left to Full Keyboard Access when that is on.
+- iPhone and iPad are unchanged. Second step of the desktop redesign; Auto in the same shell comes next.
+
 **RawBoy Desktop: sliders show what you changed, less amber (2026-11-16)**
 
 - **Sliders.** The Mac's sliders were the system slider, filled with amber from the left end: a slider at 0 on a −100…100 range was half amber, so untouched sliders looked edited and the one-sided ones (Denoise, Bloom) looked untouched when moved. They now draw a hairline track with a tick at the default and fill amber **only between the default and the value**; the thumb is grey at the default and white once moved, the value readout white. Still the system slider underneath (`MacSlider`: an NSSlider with its own cell), so clicks, thumb drags, the wheel, the keyboard and VoiceOver work as before; double-click resets. Rows are 30 pt (were 40), so more fits without scrolling. Pro and Auto both.

@@ -176,13 +176,14 @@ enum AutoBatchProbe {
                 model.vm.update(change)
                 try? await Task.sleep(for: .milliseconds(700))
             }
-            // Every slider tab, then each tool's panel, at the window's own size.
-            for tab in 0...4 {
-                measure("tab \(tab)")
-                UserDefaults.standard.set(tab, forKey: "pro.tab")
-                try? await Task.sleep(for: .milliseconds(700))
+            // The inspector with every section open, then as it was, then each tool's panel, at the window's own size.
+            let closedSections = UserDefaults.standard.string(forKey: "pro.closedSections")
+            measure("all sections")
+            UserDefaults.standard.set("", forKey: "pro.closedSections")
+            try? await Task.sleep(for: .milliseconds(700))
+            if let closedSections { UserDefaults.standard.set(closedSections, forKey: "pro.closedSections") } else {
+                UserDefaults.standard.removeObject(forKey: "pro.closedSections")
             }
-            UserDefaults.standard.set(0, forKey: "pro.tab")
             for mode in [EditorMode.geometry, .masks, .leaks, .fx, .heal, .presets] {
                 measure("tool \(mode)")
                 model.commands.send(.toggleMode(mode))

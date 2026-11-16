@@ -53,6 +53,8 @@ struct EditorScreen: View {
     @State private var cropAspect = CropAspect.free
     @State private var cropPortrait: Bool?
     @State private var viewSize = CGSize.zero
+    /** RawBoy Desktop's focus mode (Tab, F): the bar and the panel hide and the photo takes the window. */
+    @State private var photoOnly = false
 
     private var state: EditorState { vm.state }
     private var layers: [MaskLayer] { state.params.masks }
@@ -84,19 +86,21 @@ struct EditorScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            EditorTopBar(fileName: state.fileName, info: state.info, enabled: state.hasImage && !state.busy, mode: mode,
-                         canOpen: !state.busy, openFromPhotos: openFromPhotos, openFromFiles: openFromFiles,
-                         onMode: { m in
-                             if m == .geometry { vm.exitZoom() }  // the crop tool works on the fit view
-                             mode = m
-                             pickingWhite = false
-                             autoWb = false
-                         },
-                         onReset: vm.reset, onAuto: vm.applyAuto,
-                         canUndo: state.canUndo, canRedo: state.canRedo, onUndo: vm.undo, onRedo: vm.redo,
-                         onExport: { showExport = true }, onSendToAuto: commands.sendToAuto, helpShown: $showHelp)
+            if !photoOnly {
+                EditorTopBar(fileName: state.fileName, info: state.info, enabled: state.hasImage && !state.busy, mode: mode,
+                             canOpen: !state.busy, openFromPhotos: openFromPhotos, openFromFiles: openFromFiles,
+                             onMode: { m in
+                                 if m == .geometry { vm.exitZoom() }  // the crop tool works on the fit view
+                                 mode = m
+                                 pickingWhite = false
+                                 autoWb = false
+                             },
+                             onReset: vm.reset, onAuto: vm.applyAuto,
+                             canUndo: state.canUndo, canRedo: state.canRedo, onUndo: vm.undo, onRedo: vm.redo,
+                             onExport: { showExport = true }, onSendToAuto: commands.sendToAuto, helpShown: $showHelp)
+            }
             // Controls under the photo in portrait, beside it in landscape.
-            PhotoWithControls { previewArea } controls: { beside in panel(beside: beside) }
+            PhotoWithControls(hidden: photoOnly) { previewArea } controls: { beside in panel(beside: beside) }
         }
         .background(Color(white: 0.07))
         .sheet(isPresented: $showExport) {
@@ -134,6 +138,8 @@ struct EditorScreen: View {
             autoWb = false
         case .toggleCompare:
             showOriginal.toggle()
+        case .togglePhotoOnly:
+            Motion.animate { photoOnly.toggle() }
         case .zoom100AtPointer:
             guard mode != .geometry else { return }
             if session.zoomCenter != nil {
@@ -173,6 +179,7 @@ struct EditorScreen: View {
                 selectedHeal = nil
             }
         case .done:
+            if mode == .none && photoOnly { Motion.animate { photoOnly = false } }
             mode = .none
             pickingWhite = false
             autoWb = false
@@ -608,6 +615,69 @@ struct EditorTopBar: View {
     @State private var tip: String?
 
     var body: some View {
+        rows
+        .padding(.horizontal, 16)
+        .padding(.bottom, 4)
+        .overlay(alignment: .bottom) {
+            if let tip {
+                Text(tip)
+                    .font(.caption)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(.regularMaterial, in: Capsule())
+                    .offset(y: 30)
+                    .transition(.opacity)
+                    .allowsHitTesting(false)
+            }
+        }
+        .task(id: tip) {
+            guard tip != nil else { return }
+            try? await Task.sleep(for: .seconds(1.5))
+            Motion.animate { tip = nil }
+        }
+        .zIndex(1)
+    }
+
+    #if os(macOS)
+    /**
+     * The Mac's bar is one row: the photo on the left (name, then camera and exposure), the tools in the middle, and
+     * what acts on the whole photo on the right, Export last. The phones' second row (name, Reset all, Undo, Redo)
+     * went into it; the window is wide enough.
+     */
+    private var rows: some View {
+        HStack(spacing: 14) {
+            Button(action: openFromFiles) { ToolLabel(icon: "folder", label: "Open") }
+                .disabled(!canOpen)
+                .help("Open a photo (⌘O)")
+                .accessibilityLabel("Open")
+                .buttonStyle(BarButtonStyle())
+            VStack(alignment: .leading, spacing: 1) {
+                Text(fileName ?? "No photo").font(.subheadline.weight(.medium)).lineLimit(1).truncationMode(.middle)
+                Text(info ?? " ").font(.caption2).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
+            }
+            .frame(minWidth: 60, maxWidth: 300, alignment: .leading)
+            .help([fileName, info].compactMap { $0 }.joined(separator: "\n"))
+            Spacer(minLength: 8)
+            modeButton(.geometry, "crop.rotate", "Crop", "Crop & rotate (C)")
+            modeButton(.masks, "square.stack.3d.down.forward", "Masks", "Masks")
+            lightButton
+            modeButton(.heal, "bandage", "Heal", "Healing brush (B)")
+            modeButton(.presets, "bookmark", "Presets", "Presets")
+            Spacer(minLength: 8)
+            tool("wand.and.stars", "Auto Dev", "Auto light and colour (keeps the LUT)", action: onAuto)
+            if let onSendToAuto { tool("square.stack.3d.up", "To Auto", "Send this photo to Auto's batch (⇧⌘A)", action: onSendToAuto) }
+            tool("clock.arrow.circlepath", "Reset", "Reset all edits", action: onReset)
+            tool("arrow.uturn.backward", "Undo", "Undo (⌘Z)", disabled: !canUndo, action: onUndo)
+            tool("arrow.uturn.forward", "Redo", "Redo (⇧⌘Z)", disabled: !canRedo, action: onRedo)
+            tool("square.and.arrow.down", "Export", "Export (⌘E)", primary: true, action: onExport)
+            HelpButton("RawBoy", sections: proHelp, licences: true, isPresented: $helpShown)
+                .font(.title3)
+                .buttonStyle(BarButtonStyle())
+        }
+        .frame(height: 48)
+    }
+    #else
+    private var rows: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 10) {
                 if let openFromPhotos {
@@ -626,27 +696,11 @@ struct EditorTopBar: View {
                 }
                 modeButton(.geometry, "crop.rotate", "Crop", "Crop & rotate")
                 modeButton(.masks, "square.stack.3d.down.forward", "Masks", "Masks")
-                // Light leaks and light effects share this button (the row is full); each panel has a switch.
-                Button { onMode(mode == .leaks || mode == .fx ? .none : .leaks) } label: {
-                    ToolLabel(icon: "rays", label: "Light")
-                        .foregroundStyle(mode == .leaks || mode == .fx ? Color.accentColor : Color.primary)
-                }
-                .buttonStyle(ToolButtonStyle(name: "Light leaks and effects", tip: $tip))
-                .disabled(!enabled)
-                .accessibilityLabel("Light leaks and effects")
-                .accessibilityAddTraits(mode == .leaks || mode == .fx ? .isSelected : [])
-                #if os(macOS)
-                // The iPhone's row is full: the healing brush is on the Mac's bar (and B) for now.
-                modeButton(.heal, "bandage", "Heal", "Healing brush (B)")
-                #endif
+                lightButton
                 modeButton(.presets, "bookmark", "Presets", "Presets")
                 tool("wand.and.stars", "Auto Dev", "Auto light and colour (keeps the LUT)", action: onAuto)
-                #if os(macOS)
-                if let onSendToAuto { tool("square.stack.3d.up", "To Auto", "Send this photo to Auto's batch (⇧⌘A)", action: onSendToAuto) }
-                #endif
                 Spacer(minLength: 0)
-                // The bar's one primary action keeps the amber on the Mac.
-                tool("square.and.arrow.down", "Export", "Export", primary: true, action: onExport)
+                tool("square.and.arrow.down", "Export", "Export", action: onExport)
                 HelpButton("RawBoy", sections: proHelp, licences: true, isPresented: $helpShown)
                     .font(.title3)
                     .buttonStyle(BarButtonStyle())
@@ -678,26 +732,19 @@ struct EditorTopBar: View {
             .buttonStyle(BarButtonStyle())
             .frame(minHeight: 28)
         }
-        .padding(.horizontal, 16)
-        .padding(.bottom, 4)
-        .overlay(alignment: .bottom) {
-            if let tip {
-                Text(tip)
-                    .font(.caption)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(.regularMaterial, in: Capsule())
-                    .offset(y: 30)
-                    .transition(.opacity)
-                    .allowsHitTesting(false)
-            }
+    }
+    #endif
+
+    /** Light leaks and light effects share one button (the phone's row is full); each panel has a switch to the other. */
+    private var lightButton: some View {
+        Button { onMode(mode == .leaks || mode == .fx ? .none : .leaks) } label: {
+            ToolLabel(icon: "rays", label: "Light")
+                .foregroundStyle(mode == .leaks || mode == .fx ? Color.accentColor : Color.primary)
         }
-        .task(id: tip) {
-            guard tip != nil else { return }
-            try? await Task.sleep(for: .seconds(1.5))
-            Motion.animate { tip = nil }
-        }
-        .zIndex(1)
+        .buttonStyle(ToolButtonStyle(name: "Light leaks and effects", tip: $tip))
+        .disabled(!enabled)
+        .accessibilityLabel("Light leaks and effects")
+        .accessibilityAddTraits(mode == .leaks || mode == .fx ? .isSelected : [])
     }
 
     private func modeButton(_ target: EditorMode, _ icon: String, _ label: String, _ name: String) -> some View {
@@ -708,9 +755,12 @@ struct EditorTopBar: View {
         .disabled(!enabled)
         .accessibilityLabel(name)
         .accessibilityAddTraits(mode == target ? .isSelected : [])
+        #if os(macOS)
+        .help(name)
+        #endif
     }
 
-    private func tool(_ icon: String, _ label: String, _ name: String, primary: Bool = false,
+    private func tool(_ icon: String, _ label: String, _ name: String, primary: Bool = false, disabled: Bool = false,
                       action: @escaping () -> Void) -> some View {
         Button(action: action) {
             #if os(macOS)
@@ -720,8 +770,11 @@ struct EditorTopBar: View {
             #endif
         }
             .buttonStyle(ToolButtonStyle(name: name, tip: $tip))
-            .disabled(!enabled)
+            .disabled(!enabled || disabled)
             .accessibilityLabel(name)
+            #if os(macOS)
+            .help(name)
+            #endif
     }
 
     /**
