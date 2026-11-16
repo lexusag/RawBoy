@@ -26,6 +26,8 @@ struct EditorScreen: View {
     @State private var showExport = false
     @State private var showHelp = false
     @State private var showOriginal = false
+    /** Before/after slider (RawBoy Desktop): the divider's place as a fraction of the picture's width; nil = off. */
+    @State private var splitAt: CGFloat?
     /** The drag's previous translation; a local var would reset on every redraw and make pans accelerate. */
     @State private var panLast = CGSize.zero
     /** The pinch's magnification at its last change, while two fingers zoom. */
@@ -151,6 +153,8 @@ struct EditorScreen: View {
             closeLooks()
         case .toggleCompare:
             showOriginal.toggle()
+        case .toggleSplit:
+            splitAt = splitAt == nil ? 0.5 : nil
         case .togglePhotoOnly:
             Motion.animate { photoOnly.toggle() }
         case .zoom100AtPointer:
@@ -232,20 +236,22 @@ struct EditorScreen: View {
 
     // MARK: - Preview
 
+    /** The as-shot render with the edit's rotation, flips and crop, so the frame doesn't jump (Compare, the slider). */
+    private var originalParams: DevelopParams {
+        var d = state.defaults
+        d.rotation = state.params.rotation
+        d.flipHorizontal = state.params.flipHorizontal
+        d.flipVertical = state.params.flipVertical
+        d.straighten = state.params.straighten
+        d.perspectiveVertical = state.params.perspectiveVertical
+        d.perspectiveHorizontal = state.params.perspectiveHorizontal
+        d.scale = state.params.scale
+        return d.withCrop(state.params.crop)
+    }
+
     private var shownParams: DevelopParams {
         // Compare keeps the current rotation, flips and crop so the frame doesn't jump.
-        var edited = state.params
-        if showOriginal {
-            var d = state.defaults
-            d.rotation = state.params.rotation
-            d.flipHorizontal = state.params.flipHorizontal
-            d.flipVertical = state.params.flipVertical
-            d.straighten = state.params.straighten
-            d.perspectiveVertical = state.params.perspectiveVertical
-            d.perspectiveHorizontal = state.params.perspectiveHorizontal
-            d.scale = state.params.scale
-            edited = d.withCrop(state.params.crop)
-        }
+        let edited = showOriginal ? originalParams : state.params
         // The crop tool shows the whole frame with the crop drawn over it.
         return mode == .geometry ? edited.withoutCrop() : edited
     }
@@ -269,6 +275,10 @@ struct EditorScreen: View {
                                clipWarning: vm.clipWarning && !showOriginal && maskView == nil,
                                zoomScale: session.zoomScale)
                     .gesture(previewGestures)
+                if let splitAt, session.preview != nil, !showOriginal, !looksArmed, mode == .none || mode == .presets {
+                    CompareSplit(session: session, original: originalParams, defaults: state.defaults,
+                                 frame: frameWidthPt, fraction: Binding(get: { splitAt }, set: { self.splitAt = $0 }))
+                }
                 if let shader, mode == .masks, session.preview != nil, !showOriginal {
                     let frame = framePx + marginPx
                     MaskOverlay(lens: shader.lens, layers: layers, selectedId: selectedId, frame: frame,
