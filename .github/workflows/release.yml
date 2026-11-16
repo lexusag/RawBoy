@@ -275,12 +275,23 @@ jobs:
         with:
           ref: ${{ env.TAG }}
 
+      # The macOS native libraries (LibRaw, DNG SDK, jpegli: ~6 min) are cached by their sources' hash, with the same
+      # key as ci.yml's desktop job. This workflow runs on main, so it restores what CI saved there (and CI restores
+      # what this saves). The DNG SDK is only needed to build them.
       - uses: actions/cache@v4
+        id: native
+        with:
+          path: ios/native/out
+          key: desktop-native-${{ runner.os }}-${{ hashFiles('engine/src/main/cpp/**', 'ios/native/**', 'engine/src/main/cpp/dng_sdk.cmake') }}
+
+      - uses: actions/cache@v4
+        if: steps.native.outputs.cache-hit != 'true'
         with:
           path: third_party/dng_sdk_1_7_1.zip
           key: dng_sdk_1_7_1.zip
 
       - name: Download Adobe DNG SDK
+        if: steps.native.outputs.cache-hit != 'true'
         run: |
           cd third_party
           [ -f dng_sdk_1_7_1.zip ] || curl -fsSLO https://download.adobe.com/pub/adobe/dng/dng_sdk_1_7_1.zip
@@ -301,6 +312,7 @@ jobs:
           xcodebuild -downloadComponent MetalToolchain || xcrun -f metal
 
       - name: Build the native libraries (macOS slice)
+        if: steps.native.outputs.cache-hit != 'true'
         run: ios/native/build.sh macos
 
       # RawBoy Viewer's libraries (ios/project.yml's viewer-package block, switched by ios/viewer-source.sh).
