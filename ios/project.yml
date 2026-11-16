@@ -20,13 +20,13 @@ settings:
     DEVELOPMENT_TEAM: PB2FFKSMC8
     CODE_SIGN_STYLE: Automatic
 packages:
-  # RawBoy Viewer's libraries (RawBoyBrowseKit, ViewerFiles, ViewerImaging, ViewerUI), by local path while its
-  # `claude/project-thread-7b80wo` branch is unmerged.
-  # TODO: once that branch is merged and tagged, switch to `url: https://github.com/lexusag/RawBoyImageViewer` with
-  # `exactVersion: <tag>` (the packages live in its Packages/ folder: Package.swift must be at the repo root for a git
-  # dependency, so the Viewer needs a root Package.swift, or the tag must be of a split-out package repo).
+  # RawBoy Viewer's libraries (RawBoyBrowseKit, ViewerFiles, ViewerImaging, ViewerUI), switched by ios/viewer-source.sh:
+  # `local` = a sibling checkout (development), `git` = the tag pinned in that script (CI, releases). Now `local`: the
+  # Viewer has no tag with a root Package.swift yet (v0.2.1); once it has, run `ios/viewer-source.sh git` and commit.
+  # viewer-package:begin
   RawBoyViewerPackages:
     path: ../../RawBoyImageViewer/Packages
+  # viewer-package:end
 targets:
   RawBoyEngine:
     type: framework

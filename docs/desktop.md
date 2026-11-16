@@ -42,8 +42,7 @@ Auto analyses up to three photos side by side (a third of the cores, one lane pe
 ## Browse mode
 
 The third mode, ⌘3 (Pro | Auto | Browse): RawBoy Viewer's browser (grid, sidebar, culling) and viewer inside the window,
-from the Viewer's `ViewerUI` package (`RawBoyImageViewer/Packages`, a local-path package in `ios/project.yml`; **TODO** switch
-it to a pinned git tag once the Viewer's `claude/project-thread-7b80wo` branch is merged and tagged). Desktop owns the
+from the Viewer's libraries (`lexusag/RawBoyImageViewer`: RawBoyBrowseKit, ViewerFiles, ViewerImaging, ViewerUI; see "Where the Viewer's libraries come from" below). Desktop owns the
 `AppModel` (`DesktopModel.browse`) with `ViewerOptions`: the menu bar and Dock stay (`hidesDockAndMenuBar` off), the viewer is
 a view over the grid (`viewerInHostWindow`), and its preferences are kept under `desktop.browse.` (`ViewerSettings.store`).
 ViewerUI installs its own key monitor while Browse shows; Desktop's `KeyboardShortcuts` only takes ⌘1/⌘2 there. The Browse
@@ -75,6 +74,22 @@ on and off (the menu bar of the other display), and Mission Control. Debug `RAWB
 Launch with `--browse <folder or photo>`; debug `RAWBOY_BROWSE_PROBE=1` (copies
 only) selects all, rates, and exercises both hand-offs. The Kit also replaced the engine's own `XmpSidecar`, `PhotoOrder`
 (`CaptureDate` stays in `auto/CaptureDate.swift`) and the filmstrip's folder scan and thumbnails (`Desktop/ProFilmstrip.swift`).
+
+## Where the Viewer's libraries come from
+
+`ios/project.yml`'s `packages:` block (between the `viewer-package` markers) says, and `ios/viewer-source.sh` switches it:
+
+- `ios/viewer-source.sh local [path]` (**the committed default for now**): a sibling checkout, `../../RawBoyImageViewer/Packages`. For
+  development, with the Viewer branch you are working on; the libraries are built with `-O` even in Debug.
+- `ios/viewer-source.sh git`: `https://github.com/lexusag/RawBoyImageViewer` `from: 0.2.1` (the pin is `VIEWER_FROM` in the script). SwiftPM
+  needs a `Package.swift` at the root of the repository: v0.2.0 has none, **v0.2.1 is the first tag that has**. A git checkout cannot use
+  `unsafeFlags`, so Debug builds run the Viewer's libraries unoptimised (Release is optimised; measured). To try the git route before a
+  tag: `VIEWER_URL=file:///path/to/RawBoyImageViewer VIEWER_BRANCH=<branch> ios/viewer-source.sh git` (done once: the Desktop build resolves it).
+
+Run `xcodegen` after switching. **To flip when v0.2.1 is tagged:** `ios/viewer-source.sh git`, commit `ios/project.yml`, and nothing else:
+CI (`ci.yml` desktop job) and the release job (`release.yml`) clone `VIEWER_REF` (now `v0.2.0`) beside the repository only while project.yml
+is `local`; with `git` they let SwiftPM fetch the tag and cache `SourcePackages` by the pin. Develop against a local Viewer after the flip with
+`ios/viewer-source.sh local` (do not commit it).
 
 ## Skin: Skin retouch, Blemish removal, Portrait retouch
 MediaPipe has no macOS build, so the Mac finds faces and skin with Apple's Vision framework (nothing bundled, no third-party code). Each face's skin is the polygon of Vision's face contour plus a forehead cap above the eyebrows, minus eyes, eyebrows, lips and nostrils (from Vision's 76 landmarks), cut back by a skin-colour model sampled from the face itself; neck, arms and hands are found by that colour model inside Vision's person mask (weight 0.85). How it differs from MediaPipe's (iOS, Android, web): there is no trained skin class, so a garment or hair close to the skin's tone can be taken for skin and skin in very different light to the face's is missed; the forehead's top edge is an estimate (Vision has no hairline); Vision finds fewer small or side-on faces (the mask is made on a 1280 px copy), and a dark scene is tried at several exposures until a face is found. **Skin retouch**, **Blemish removal** and **Portrait retouch** (Portrait section; per mask layer too, in the Masks panel) run on that mask. Portrait retouch is the web's algorithm and numbers (`PortraitRetouch.swift`; face landmarks reach it through `FaceShape`): spots, under-eyes, lines and evening, as a gains map the develop shader applies, so preview, 100% and export match. iOS: the engine is shared, but MediaPipe's landmarks aren't handed over yet, so the Portrait retouch sliders are Mac-only for now.

@@ -1,3 +1,7 @@
+**RawBoy Desktop: the Viewer's libraries by path or by tag (2026-11-16)**
+
+- **Switch.** `ios/viewer-source.sh local|git` sets where `ios/project.yml` takes RawBoy Viewer's libraries from: a sibling checkout (the default for now) or its git tag (`from: 0.2.1`, which has the root `Package.swift` SwiftPM needs). CI and the release job clone the Viewer's v0.2.0 beside the repository while it is `local`, and cache the resolved package when it is `git`.
+
 **RawBoy Desktop: Browse's full-screen viewer (2026-11-16)**
 
 - **Full-Screen Viewer in Browse.** A Mode menu setting (remembered) opens the Viewer's screen-filling window, with its edge panels, press-and-hold peek and the menu bar and Dock hidden, instead of the in-window viewer; ⌥⌘↩ opens the selection the other way once. E hands the photo to Pro and closes the window; leaving Browse closes it. Compare follows the same choice. It opens on the display Desktop's window is on, follows a display being unplugged, and gives the menu bar and Dock back when it closes, when the app resigns active and on quit.
