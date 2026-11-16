@@ -1,3 +1,9 @@
+**RawBoy Desktop: Auto's grid and batch sidebar (2026-11-16)**
+
+- **Grid.** Auto's grid on the Mac is even cells, as in RawBoy Viewer: each photo whole in a 3:2 tile (no cropping), the file name and the look under it instead of over the picture, a thin amber outline when selected. The justified rows gave every row its own height and covered the bottom of each photo with text. The arrow keys move by the new columns.
+- **Sidebar.** The batch settings that ran along the top of the grid sit in a sidebar on the left: New photos (Looks / Film), Order (Shoot date / File name), Preset, Lens presets, Auto denoise all, and a line with the batch's count, how many are still to analyse and how many are saved.
+- iPhone and iPad are unchanged. Third step of the desktop redesign.
+
 **RawBoy Desktop: one-row bar, a sectioned slider panel, photo only (2026-11-16)**
 
 - **Bar.** Pro's two rows are one: the photo's name and exposure line on the left, Crop, Masks, Light, Heal and Presets in the middle, Auto Dev, To Auto, Reset, Undo, Redo and Export (amber) on the right, each with its name and key on hover.

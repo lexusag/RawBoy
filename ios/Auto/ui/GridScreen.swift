@@ -35,8 +35,25 @@ struct GridScreen: View {
     private var exportable: Int { vm.photos.filter { $0.analysis != nil }.count }
     private var exportableSelected: Int { vm.photos.filter { $0.analysis != nil && selection.contains($0.id) }.count }
 
-    var body: some View {
+    var body: some View { withSheets(navigation) }
+
+    private var navigation: some View {
         NavigationStack {
+            #if os(macOS)
+            HStack(spacing: 0) {
+                sidebar
+                Divider()
+                VStack(spacing: 0) {
+                    exportProgress
+                    if vm.photos.isEmpty { empty } else { grid }
+                }
+                // The empty state's prompt is only as wide as its text: without this the row was centred in the window and
+                // the sidebar sat in the middle of it.
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            .navigationTitle(selecting ? "\(selection.count) selected" : "RawBoy Auto")
+            .toolbar { toolbar }
+            #else
             VStack(spacing: 0) {
                 if !selecting {
                     // One line (two on narrow phones): the mode for photos added next (each can switch later) and the
@@ -62,22 +79,7 @@ struct GridScreen: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 6)
                 }
-                if let e = vm.export {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text(e.stopping
-                                ? "Stopping after photo \(min(e.done + 1, e.total))…"
-                                : "Exporting \(min(e.done + 1, e.total)) of \(e.total)").font(.caption)
-                            Spacer()
-                            if e.total > 1 {
-                                Button("Stop") { vm.stopExport() }.font(.caption).disabled(e.stopping)
-                            }
-                        }
-                        ProgressView(value: min(max((Double(e.done) + Double(e.current)) / Double(e.total), 0), 1))
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 6)
-                }
+                exportProgress
                 if vm.photos.isEmpty {
                     empty
                 } else {
@@ -87,7 +89,32 @@ struct GridScreen: View {
             .navigationTitle(selecting ? "\(selection.count) selected" : "RawBoy Auto")
             .inlineTitle()
             .toolbar { toolbar }
+            #endif
         }
+    }
+
+    @ViewBuilder private var exportProgress: some View {
+        if let e = vm.export {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(e.stopping
+                        ? "Stopping after photo \(min(e.done + 1, e.total))…"
+                        : "Exporting \(min(e.done + 1, e.total)) of \(e.total)").font(.caption)
+                    Spacer()
+                    if e.total > 1 {
+                        Button("Stop") { vm.stopExport() }.font(.caption).disabled(e.stopping)
+                    }
+                }
+                ProgressView(value: min(max((Double(e.done) + Double(e.current)) / Double(e.total), 0), 1))
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
+        }
+    }
+
+    /** The sheets and the selection/export bookkeeping, shared by the phone and Mac layouts. */
+    private func withSheets<V: View>(_ content: V) -> some View {
+        content
         .sheet(isPresented: $showExport) {
             let ids = exportIds
             ExportSheet(vm: vm, count: ids.map { ids in vm.photos.filter { $0.analysis != nil && ids.contains($0.id) }.count } ?? exportable) {
@@ -182,6 +209,128 @@ struct GridScreen: View {
         }
     }
 
+    #if os(macOS)
+    /**
+     * The Mac's batch settings, in a sidebar beside the grid as RawBoy Viewer's: what photos added next become, the
+     * order, the batch's preset and lens presets, and the denoise for a finished series. On the phones they are the
+     * line above the grid.
+     */
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 0) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                sidebarHeading("New photos")
+                Picker("Import as", selection: Binding(get: { vm.importMode }, set: { vm.setImportMode($0) })) {
+                    Text("Looks").tag(LookMode.looks)
+                    Text("Film").tag(LookMode.film)
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .neutralSegments()
+                .help("What photos added next are developed as; each photo can switch later")
+                sidebarHeading("Order")
+                Picker("Order", selection: Binding(get: { vm.sort }, set: { vm.setSort($0) })) {
+                    Text("Shoot date").tag(PhotoSort.date)
+                    Text("File name").tag(PhotoSort.name)
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .neutralSegments()
+                sidebarHeading("Preset")
+                if let p = vm.preset {
+                    HStack(spacing: 6) {
+                        Text(p.name).font(.subheadline).lineLimit(2)
+                        Spacer(minLength: 0)
+                        Button { vm.removePreset() } label: { Image(systemName: "xmark.circle.fill") }
+                            .buttonStyle(.borderless)
+                            .foregroundStyle(.secondary)
+                            .help("Remove the preset: photos go back to their looks")
+                            .accessibilityLabel("Remove preset \(p.name)")
+                    }
+                    Text("Develops every photo in place of its look.").font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Button("Apply RawBoy preset…") { pickPreset(nil) }
+                    Text("A preset file develops every photo in place of its look.").font(.caption).foregroundStyle(.secondary)
+                        .padding(.top, 2)
+                }
+                if !vm.lensPresets.isEmpty {
+                    sidebarHeading("Lens")
+                    lensPresetsControl
+                }
+                if !vm.photos.isEmpty {
+                    sidebarHeading("Denoise")
+                    Button("Auto denoise all") { vm.autoDenoiseAll() }
+                    Text("Each photo's own measured denoise, for a finished series.").font(.caption).foregroundStyle(.secondary)
+                        .padding(.top, 2)
+                }
+            }
+            .controlSize(.small)
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .scrollIndicators(.hidden)
+        // The batch at a glance, at the sidebar's foot (a Spacer inside the scroll view doesn't reach it).
+        if !vm.photos.isEmpty {
+            Divider()
+            Text(batchSummary).font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                .padding(.horizontal, 14).padding(.vertical, 10)
+        }
+        }
+        .frame(width: 220)
+        .frame(maxHeight: .infinity)
+        .background(Color(red: 0x1C / 255, green: 0x1C / 255, blue: 0x1E / 255))  // DESIGN.md's surface: an opaque edge panel
+        .disabled(exporting)
+    }
+
+    private func sidebarHeading(_ text: String) -> some View {
+        Text(text).font(.caption.weight(.semibold)).textCase(.uppercase).tracking(0.6).foregroundStyle(.secondary)
+            .padding(.top, 16).padding(.bottom, 6)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    /** "24 photos · 3 waiting · 5 saved": the batch at a glance. */
+    private var batchSummary: String {
+        let n = vm.photos.count
+        var parts = [n == 1 ? "1 photo" : "\(n) photos"]
+        let waiting = vm.photos.filter { $0.status == .queued || $0.status == .analyzing }.count
+        if waiting > 0 { parts.append("\(waiting) to analyse") }
+        let saved = vm.photos.filter { $0.status == .exported }.count
+        if saved > 0 { parts.append("\(saved) saved") }
+        return parts.joined(separator: " · ")
+    }
+
+    /**
+     * The Mac's grid, as RawBoy Viewer's: even cells, each photo fitted whole in its tile with the name and look under it
+     * (justified rows cropped nothing but gave every row its own height, and the names sat on the pictures).
+     */
+    private var macGrid: some View {
+        GeometryReader { geo in
+            let gap: CGFloat = 14
+            let photos = vm.photos
+            let columns = max(1, Int((geo.size.width - gap) / (Self.macCellMin + gap)))  // padding gap on each side, gap between
+            let _ = { vm.rowStarts = Array(stride(from: 0, to: photos.count, by: columns)) }()
+            ScrollViewReader { scroll in
+                ScrollView {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: gap, alignment: .top), count: columns),
+                              spacing: gap + 4) {
+                        ForEach(photos) { photo in
+                            cell(photo).id(photo.id)
+                        }
+                    }
+                    .padding(gap)
+                }
+                .onChange(of: vm.focusedId) { _, id in
+                    if let id { Motion.animate { scroll.scrollTo(id) } }
+                }
+            }
+        }
+        .background(Color(red: 0x12 / 255, green: 0x12 / 255, blue: 0x12 / 255))
+    }
+
+    /** The smallest cell width; the columns share what is left over. */
+    private static let macCellMin: CGFloat = 190
+    #endif
+
     private var empty: some View {
         VStack(spacing: 16) {
             Spacer()
@@ -204,8 +353,16 @@ struct GridScreen: View {
         .padding(32)
     }
 
+    @ViewBuilder private var grid: some View {
+        #if os(macOS)
+        macGrid
+        #else
+        justifiedGrid
+        #endif
+    }
+
     /** Justified rows: every photo at its own aspect, rows ~120 pt high on phones and ~180 pt wider up. */
-    private var grid: some View {
+    private var justifiedGrid: some View {
         GeometryReader { geo in
             let gap: CGFloat = 8
             let photos = vm.photos
@@ -389,6 +546,62 @@ private struct PhotoCell: View {
     }
 
     var body: some View {
+        #if os(macOS)
+        macBody
+        #else
+        phoneBody
+        #endif
+    }
+
+    #if os(macOS)
+    /** The picture fitted whole in a 3:2 tile, the name and look under it, as RawBoy Viewer's cells. */
+    private var macBody: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            ZStack {
+                Color(white: 0.09)
+                if let t = photo.thumbnail {
+                    Image(decorative: t, scale: 1).resizable().scaledToFit()
+                        .saturation(waiting ? 0 : 1)
+                        .brightness(waiting ? -0.12 : 0)
+                        .contrast(waiting ? 0.75 : 1)
+                        .animation(Motion.easeOut(0.6), value: waiting)
+                }
+                status
+            }
+            .aspectRatio(3 / 2, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .overlay(RoundedRectangle(cornerRadius: 4)
+                .stroke(selected ? Color.accentColor : focused ? Color.white.opacity(0.8) : .clear, lineWidth: 2))
+            VStack(alignment: .leading, spacing: 1) {
+                Text(photo.name).font(.caption).foregroundStyle(.primary).lineLimit(1).truncationMode(.middle)
+                Text(photo.analysis != nil ? photo.lookName : " ").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+            .padding(.horizontal, 2)
+        }
+        .help(photo.analysis != nil ? "\(photo.name) · \(photo.lookName)" : photo.name)
+        .contentShape(Rectangle())
+    }
+    #endif
+
+    /** Status badges and the selection tick over the picture. */
+    @ViewBuilder private var status: some View {
+        switch photo.status {
+        case .queued: Badge(text: next ? "Next" : "Waiting")
+        case .analyzing, .exporting: ProgressView()
+        case .failed: Badge(text: photo.error ?? "Failed", error: true)
+        case .exported: Badge(text: "Saved").frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        case .ready: EmptyView()
+        }
+        if selected {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(Color.accentColor)
+                .background(Circle().fill(.black.opacity(0.8)))
+                .padding(6)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+    }
+
+    private var phoneBody: some View {
         ZStack {
             ZStack {
                 Color(white: 0.12)
@@ -400,20 +613,7 @@ private struct PhotoCell: View {
                         .contrast(waiting ? 0.75 : 1)
                         .animation(Motion.easeOut(0.6), value: waiting)
                 }
-                switch photo.status {
-                case .queued: Badge(text: next ? "Next" : "Waiting")
-                case .analyzing, .exporting: ProgressView()
-                case .failed: Badge(text: photo.error ?? "Failed", error: true)
-                case .exported: Badge(text: "Saved").frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                case .ready: EmptyView()
-                }
-                if selected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.accentColor)
-                        .background(Circle().fill(.black.opacity(0.8)))
-                        .padding(6)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                }
+                status
             }
             // Name and look over the bottom of the photo, on a fade so they read on bright skies.
             VStack(alignment: .leading, spacing: 1) {
