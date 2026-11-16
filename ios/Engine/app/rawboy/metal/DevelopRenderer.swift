@@ -72,9 +72,25 @@ public final class DevelopRenderer: NSObject, MTKViewDelegate {
         view.delegate = self
     }
 
-    public func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
+    /**
+     * The view draws only on request (paused, setNeedsDisplay), so a frame drawn before the view had its size, or at its old
+     * size, stays until something asks again. A photo handed over at launch (RawBoy Viewer's E, Finder's Open With) loaded
+     * and drew before the window laid the view out, and the photo area stayed blank until the view was made again (Auto and
+     * back). Every change of the drawable's size asks for a redraw.
+     */
+    public func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
+        #if os(macOS)
+        view.needsDisplay = true
+        #else
+        view.setNeedsDisplay()
+        #endif
+    }
+
+    /** How many frames have been drawn: the preview view checks it moved after it asked for one. */
+    public private(set) var drawCount = 0
 
     public func draw(in view: MTKView) {
+        drawCount += 1
         if let img = image, uploadedImage.map({ !Self.same($0, img.pixels) }) ?? true {
             previewTexture = img.pixels.withUnsafeBufferPointer {
                 DevelopTextures.halfRgbTexture(img.width, img.height, $0.baseAddress!, reuse: previewTexture)

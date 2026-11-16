@@ -63,6 +63,7 @@ public struct DevelopPreview: PlatformViewRepresentable {
         r.clipWarning = clipWarning
         #if os(macOS)
         view.needsDisplay = true
+        (view as? PreviewView)?.ensureDrawn(r)
         #else
         view.setNeedsDisplay()
         #endif
@@ -91,17 +92,46 @@ final class PreviewView: MTKView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         (layer as? CAMetalLayer)?.colorspace = CGColorSpace(name: CGColorSpace.sRGB)
+        needsDisplay = true  // on screen now: draw what was set before it was
+        redrawSoon()
         observers.forEach(NotificationCenter.default.removeObserver)
         observers = []
         guard let window else { return }
+        // Also when the window comes on screen: a photo handed over at launch (RawBoy Viewer's E, Open With) is set on the view
+        // while its window is still hidden, and a request to draw then is dropped; nothing asks again, so the photo area stayed
+        // blank until the view was made again (Auto and back).
         for name in [NSWindow.didChangeScreenNotification, NSWindow.didChangeBackingPropertiesNotification,
-                     NSWindow.didChangeScreenProfileNotification] {
+                     NSWindow.didChangeScreenProfileNotification, NSWindow.didBecomeKeyNotification, NSWindow.didBecomeMainNotification,
+                     NSWindow.didChangeOcclusionStateNotification, NSWindow.didExposeNotification] {
             observers.append(NotificationCenter.default.addObserver(forName: name, object: window, queue: .main) { [weak self] _ in
                 MainActor.assumeIsolated {
                     self?.autoResizeDrawable = true
                     self?.needsDisplay = true
                 }
             })
+        }
+    }
+
+    /**
+     * Draws now, a moment from now, whether or not AppKit gets to ask: a paused MTKView draws when its window displays it,
+     * and a window that is still coming up (a cold launch with a photo from RawBoy Viewer or Finder) never did.
+     */
+    func redrawSoon() {
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.window != nil, self.drawableSize.width > 0 else { return }
+            self.draw()
+        }
+    }
+
+    /**
+     * After a request to draw: if no frame was drawn within a few frames, draws one directly. Normally AppKit has by then
+     * (the check costs nothing); in the cold-launch state described at [redrawSoon] it never does.
+     */
+    func ensureDrawn(_ renderer: DevelopRenderer) {
+        let before = renderer.drawCount
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06) { [weak self, weak renderer] in
+            guard let self, let renderer, renderer.drawCount == before, self.window != nil, self.drawableSize.width > 0 else { return }
+            self.draw()
         }
     }
 
