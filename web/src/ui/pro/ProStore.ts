@@ -42,14 +42,12 @@ export interface EditorState {
 export const CONTROLS_TABS = ['Light', 'Color', 'Detail', 'LUTs', 'Lens'] as const;
 export type ControlsTab = (typeof CONTROLS_TABS)[number];
 const CONTROLS_TAB_KEY = 'rawboy.pro.tab';
-const loadControlsTab = (): ControlsTab => {
-  try {
-    const t = localStorage.getItem(CONTROLS_TAB_KEY) as ControlsTab;
-    return CONTROLS_TABS.includes(t) ? t : 'Light';
-  } catch {
-    return 'Light';
-  }
-};
+// The open tab lasts for the session only: a fresh page load opens Light. Drop the value older versions saved.
+try {
+  localStorage.removeItem(CONTROLS_TAB_KEY);
+} catch {
+  // storage unavailable
+}
 
 const FRAME_KEY = 'rawboy.frame';
 const loadFrame = () => {
@@ -65,7 +63,7 @@ const loadFrame = () => {
 export class ProStore {
   private _state: EditorState = {
     loading: false, exporting: false, autoRunning: false, exportProgress: 0, fileName: null, info: null,
-    params: developParams(), defaults: developParams(), message: null, frameColor: loadFrame(), controlsTab: loadControlsTab(),
+    params: developParams(), defaults: developParams(), message: null, frameColor: loadFrame(), controlsTab: 'Light',
     exportSettings: ExportSettingsStore.load(),
     presets: PresetStore.load(),
     canUndo: false,
@@ -215,11 +213,6 @@ export class ProStore {
   }
 
   setControlsTab = (tab: ControlsTab) => {
-    try {
-      localStorage.setItem(CONTROLS_TAB_KEY, tab);
-    } catch {
-      // not remembered
-    }
     this.set({ controlsTab: tab });
   };
 

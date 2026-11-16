@@ -207,14 +207,13 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     /**
      * The editor's open tab (Light, Color…, Controls.kt's index): here rather than in the panel so it survives the panel
-     * leaving (Presets, a photo loading after RawBoy Auto's Edit in RawBoy) and the app's process going. Remembered.
+     * leaving (Presets, a photo loading after RawBoy Auto's Edit in RawBoy). Kept for the session only: a fresh start opens Light.
      */
-    private val _controlsTab = MutableStateFlow(getApplication<Application>().getSharedPreferences("display", 0).getInt("controlsTab", 0))
+    private val _controlsTab = MutableStateFlow(0)
     val controlsTab = _controlsTab.asStateFlow()
 
     fun setControlsTab(tab: Int) {
         _controlsTab.value = tab
-        getApplication<Application>().getSharedPreferences("display", 0).edit().putInt("controlsTab", tab).apply()
     }
 
     /** Single tap in the preview: outside the photo (fit view) cycles the frame colour. */

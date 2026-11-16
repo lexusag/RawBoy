@@ -1,3 +1,7 @@
+**RawBoy Pro (all platforms): the open tab lasts for the session (2026-11-16)**
+
+- A fresh start of RawBoy Pro (web page load, Android, iOS, Desktop) always opens the Light tab. The tab you pick is kept while the app runs (also when a panel closes or a photo loads), but no longer saved between starts; the saved value of older versions is dropped.
+
 **RawBoy Desktop: a photo handed over at launch drew blank (2026-11-16)**
 
 - **Bug:** a photo opened by RawBoy Viewer's E (or Finder's Open With, or `open -a`) in a **cold-started** RawBoy Desktop left the photo area blank (dark, nothing drawn) while the panel and histogram already had the photo; Auto and back to Pro, which makes the view again, fixed it. Cause: the photo's view is set while its window is still coming up, and a paused MTKView draws only when AppKit displays it; in that state it never did, and nothing asked again (its `drawableSizeWillChange` did nothing).
