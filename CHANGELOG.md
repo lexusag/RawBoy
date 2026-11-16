@@ -1,3 +1,8 @@
+**RawBoy Desktop: a filmstrip under Pro's photo (2026-11-16)**
+
+- **Filmstrip.** The other photos in the open photo's folder sit in a strip under the photo, by file name; a RAW + JPEG pair shows once, as the raw (as in RawBoy Viewer). Click one to open it, or press ← / → for the previous and next photo (a slider focused with Full Keyboard Access keeps the arrows). The mouse wheel scrolls the strip sideways. The open photo has an amber outline and stays in view. Thumbnails are the files' own embedded previews (ImageIO), not developed; files only in iCloud show a cloud and aren't downloaded until opened. The folder is listed again when you come back to the app. Hidden with the panels (Tab, F), and absent when the folder has just the one photo.
+- iPhone and iPad are unchanged. Fifth step of the desktop redesign.
+
 **RawBoy Desktop: Auto's photo view in Pro's layout (2026-11-16)**
 
 - **Bar.** Auto's photo view has Pro's one-row bar instead of the window toolbar: Grid (back), the photo's name and "Photo 3 of 12", Previous and Next; Crop and Preset in the middle; Edit in Pro, Copy (the previous photo's look and adjustments), Apply to All, Remove, Undo, Redo and Export (amber) on the right, each named on hover. Apply to all and Remove were in a "…" menu.

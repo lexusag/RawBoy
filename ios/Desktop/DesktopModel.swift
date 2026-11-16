@@ -18,6 +18,8 @@ final class DesktopModel: ObservableObject {
     /** RawBoy Auto's batch, with its settings in `rawboy:Auto` sidecars. */
     let auto = AutoViewModel()
     let autoSidecars = SidecarAuto()
+    /** Pro's filmstrip: the open photo's folder. */
+    let filmstrip = Filmstrip()
     @Published var mode = AppMode(rawValue: UserDefaults.standard.string(forKey: "desktop.mode") ?? "") ?? .pro {
         didSet {
             UserDefaults.standard.set(mode.rawValue, forKey: "desktop.mode")
@@ -48,6 +50,7 @@ final class DesktopModel: ObservableObject {
             return "\(name) › "
         }
         commands.exportDestination = AnyView(ExportDestinationSection(commands: commands, model: self))
+        commands.filmstrip = AnyView(FilmstripView(strip: filmstrip) { [weak self] url in self?.open(url) })
         // The window title follows the photo (the title bar is the only place the whole file name always fits).
         vm.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &bag)
         auto.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &bag)
@@ -56,6 +59,9 @@ final class DesktopModel: ObservableObject {
                 self?.sidecars.flush()
                 self?.autoSidecars.flush()
             }.store(in: &bag)
+        // Back in the app, the folder may have new photos (or fewer).
+        NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
+            .sink { [weak self] _ in self?.filmstrip.reload() }.store(in: &bag)
     }
 
     /** Opens [url] in the editor; the file is edited in place (never copied), its sidecar kept beside it. */
@@ -67,7 +73,13 @@ final class DesktopModel: ObservableObject {
         // A photo handed over (Finder, RawBoy Viewer) is for the editor, whichever mode the window was in; Auto's batch stays.
         mode = .pro
         NSDocumentController.shared.noteNewRecentDocumentURL(url)
+        filmstrip.show(url)
         vm.open(url)
+    }
+
+    /** ← → in Pro: the previous or next photo in the filmstrip. */
+    func openNeighbour(_ delta: Int) {
+        if let url = filmstrip.neighbour(delta) { open(url) }
     }
 
     /** The folder an export goes to: the chosen one, else the photo's own. */

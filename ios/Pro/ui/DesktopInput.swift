@@ -48,6 +48,8 @@ final class EditorCommands: ObservableObject {
     var sendToAuto: (() -> Void)?
     /** The line under the export options: where the file goes. */
     var exportNote: ((URL?) -> String)?
+    /** RawBoy Desktop: the folder's other photos, shown under the photo (nil elsewhere). */
+    var filmstrip: AnyView?
 
     func send(_ a: EditorAction) {
         action = a
