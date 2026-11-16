@@ -259,6 +259,7 @@ object DeviceReport {
                 },
             )
             field("stored for this build", yesNo(d.videoForThisBuild))
+            field("failed in a row", v.strikes.toString())
             if (v.lastTries.isEmpty()) field("last probe", null)
             for (t in v.lastTries) field("last probe", t)
         }

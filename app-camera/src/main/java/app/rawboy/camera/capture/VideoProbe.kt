@@ -63,6 +63,8 @@ data class VideoProbeState(
     val buildKey: String = "",
     /** The last probe's attempts, "VARIANT: outcome", for the device report. */
     val lastTries: List<String> = emptyList(),
+    /** Recordings in a row in which the usual variant (the remembered one, else STANDARD) failed (see [VideoProbe]). */
+    val strikes: Int = 0,
 )
 
 /** Where [VideoProbe] keeps its state. */
@@ -75,10 +77,12 @@ interface VideoProbeStore {
  * Picks the way to record video on this phone by trying ([run]) and remembers what worked.
  *
  * - A phone [VideoVariant.STANDARD] works on records with it and nothing else is tried or stored.
- * - Another variant is remembered only when [VideoVariant.STANDARD] failed [VideoFailure.definite] in the same probe (or
- *   an earlier one under the same build): a one-off failure (encoder busy, slow to start) may move that recording to
- *   another variant but never the next ones.
- * - A remembered variant goes first; if it fails, the probe starts over from [VideoVariant.STANDARD].
+ * - The usual variant (the remembered one, else [VideoVariant.STANDARD]) gives way only after it failed in
+ *   [STRIKES] recordings in a row. Before that, the probe only works around it for the one recording: whatever else
+ *   records then is not remembered, and the viewfinder is not made again. One bad start never moves a phone.
+ * - Another variant is remembered only when [VideoVariant.STANDARD] failed [VideoFailure.definite]ly (in this probe or
+ *   an earlier one under the same build): a slow or busy encoder isn't a reason to leave it.
+ * - A remembered variant goes first; once it gives way, the probe starts over from [VideoVariant.STANDARD].
  * - A variant that needs the viewfinder made again ([VideoVariant.recordableViewfinder]) stops the probe
  *   ([Result.NeedsViewfinder]): it is stored as pending, and the next recording, on the new view, starts with it.
  * - A system or app update ([buildKey] changes) forgets everything.
@@ -133,15 +137,19 @@ class VideoProbe(
     suspend fun <R> run(viewfinderRecordable: Boolean, attempt: suspend (VideoVariant) -> Attempt<R>): Result<R> {
         val before = state()
         val plan = plan()
+        // A probe that went on after the viewfinder was made again: decided already, and its first part stays in the report.
+        val pending = before.variant != null && !before.confirmed
         // Evidence that the standard path doesn't work here: an earlier probe under this build stored something else.
         var definite = before.variant != null && before.variant != VideoVariant.STANDARD
+        var strikes = before.strikes
+        // This recording only works around the usual variant: nothing it finds is kept (see the class comment).
+        var hold = false
         val tries = ArrayList<Pair<VideoVariant, VideoFailure>>()
-        // A probe that went on after the viewfinder was made again keeps its first part in the report.
-        val log = ArrayList<String>(if (before.variant != null && !before.confirmed) before.lastTries else emptyList())
-        for (variant in plan) {
+        val log = ArrayList<String>(if (pending) before.lastTries else emptyList())
+        for ((index, variant) in plan.withIndex()) {
             if (variant.recordableViewfinder && !viewfinderRecordable) {
                 // Only on evidence: otherwise a one-off failure would change the viewfinder for good.
-                if (!definite) continue
+                if (!definite || hold) continue
                 log += "${variant.name}: needs the viewfinder made again"
                 store.write(VideoProbeState(variant, confirmed = false, buildKey = buildKey, lastTries = log.toList()))
                 return Result.NeedsViewfinder(variant)
@@ -149,32 +157,43 @@ class VideoProbe(
             when (val a = attempt(variant)) {
                 is Attempt.Started -> {
                     log += "${variant.name}: ok"
-                    val keep = variant == VideoVariant.STANDARD || definite
+                    // The standard path is the default anyway: keeping it never moves a phone off anything.
+                    val keep = variant == VideoVariant.STANDARD || (definite && !hold)
                     // The report keeps the probe that chose the variant, not the plain recordings after it.
                     val lastTries = if (before.confirmed && tries.isEmpty() && variant == before.variant && before.lastTries.isNotEmpty()) before.lastTries else log.toList()
                     store.write(
                         if (keep) VideoProbeState(variant, confirmed = true, buildKey = buildKey, lastTries = lastTries)
-                        else before.copy(buildKey = buildKey, lastTries = lastTries),
+                        else before.copy(buildKey = buildKey, lastTries = lastTries, strikes = strikes),
                     )
                     return Result.Recording(variant, a.recording)
                 }
                 is Attempt.Failed -> {
                     log += "${variant.name}: ${a.failure.text}"
                     tries += variant to a.failure
+                    if (index == 0 && !pending) {
+                        strikes = before.strikes + 1
+                        hold = strikes < STRIKES
+                    }
                     if (variant == VideoVariant.STANDARD && a.failure.definite) definite = true
                 }
                 Attempt.Aborted -> {
-                    if (tries.isNotEmpty()) store.write(before.copy(buildKey = buildKey, lastTries = log + "${variant.name}: stopped"))
+                    if (tries.isNotEmpty()) store.write(before.copy(buildKey = buildKey, lastTries = log + "${variant.name}: stopped", strikes = strikes))
                     return Result.Aborted
                 }
             }
         }
-        // Nothing worked: start from the top next time (and the viewfinder as usual).
-        store.write(VideoProbeState(buildKey = buildKey, lastTries = log.toList()))
+        store.write(
+            // Nothing worked. Held: the usual variant stays. Else start from the top next time (the viewfinder as usual).
+            if (hold) before.copy(buildKey = buildKey, lastTries = log.toList(), strikes = strikes)
+            else VideoProbeState(buildKey = buildKey, lastTries = log.toList(), strikes = strikes),
+        )
         return Result.AllFailed(tries)
     }
 
     companion object {
+        /** Recordings in a row the usual variant must fail in before the probe may leave it. */
+        const val STRIKES = 2
+
         /** Changes with a system update (firmware, SDK) and with each install of the app, debug reinstalls included. */
         fun buildKey(context: Context): String {
             val installed = runCatching {
@@ -194,6 +213,7 @@ class PrefsVideoProbeStore(context: Context) : VideoProbeStore {
         confirmed = prefs.getBoolean("confirmed", false),
         buildKey = prefs.getString("buildKey", "") ?: "",
         lastTries = prefs.getString("lastTries", null)?.split('\n')?.filter { it.isNotBlank() } ?: emptyList(),
+        strikes = prefs.getInt("strikes", 0),
     )
 
     override fun write(state: VideoProbeState) {
@@ -202,6 +222,7 @@ class PrefsVideoProbeStore(context: Context) : VideoProbeStore {
             .putBoolean("confirmed", state.confirmed)
             .putString("buildKey", state.buildKey)
             .putString("lastTries", state.lastTries.joinToString("\n"))
+            .putInt("strikes", state.strikes)
             .commit() // the viewfinder reads it when it is made, possibly right after
     }
 }

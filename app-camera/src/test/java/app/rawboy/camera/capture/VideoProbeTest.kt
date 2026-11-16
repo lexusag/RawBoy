@@ -72,6 +72,12 @@ class VideoProbeTest {
         val result = run(probe(store), encoder)
         assertEquals(Result.Recording(OWN_CONTEXT, "recording with OWN_CONTEXT"), result)
         assertEquals(listOf(STANDARD, OWN_CONTEXT), encoder.tried)
+        // One recording is only a work-around; the standard path failing again in the next one moves the phone.
+        assertNull(store.state.variant)
+        assertEquals(1, store.state.strikes)
+        val second = Encoder(mapOf(STANDARD to VideoFailure.CODEC_ERROR))
+        assertEquals(Result.Recording(OWN_CONTEXT, "recording with OWN_CONTEXT"), run(probe(store), second))
+        assertEquals(listOf(STANDARD, OWN_CONTEXT), second.tried)
         assertEquals(VideoProbeState(OWN_CONTEXT, true, "build A", listOf("STANDARD: encoder error", "OWN_CONTEXT: ok")), store.state)
         // Next time the kept one goes first, and nothing else is tried; the report keeps the probe that chose it.
         val again = Encoder(mapOf(STANDARD to VideoFailure.CODEC_ERROR))
@@ -109,6 +115,11 @@ class VideoProbeTest {
     fun aVariantNeedingTheViewfinderWaitsForTheNextRecording() {
         val store = MemoryStore()
         val failing = mapOf(STANDARD to VideoFailure.EGL_SURFACE, OWN_CONTEXT to VideoFailure.CODEC_ERROR)
+        // The first failing recording only works around the standard path: no new viewfinder yet.
+        val workaround = Encoder(failing)
+        assertEquals(Result.Recording(SOFTWARE_AVC, "recording with SOFTWARE_AVC"), run(probe(store), workaround))
+        assertEquals(listOf(STANDARD, OWN_CONTEXT, SOFTWARE_AVC), workaround.tried)
+        assertFalse(probe(store).recordableViewfinder())
         val first = Encoder(failing)
         assertEquals(Result.NeedsViewfinder(RECORDABLE_VIEWFINDER), run(probe(store), first))
         assertEquals(listOf(STANDARD, OWN_CONTEXT), first.tried)
@@ -155,7 +166,45 @@ class VideoProbeTest {
         val encoder = Encoder(mapOf(OWN_CONTEXT to VideoFailure.CODEC_ERROR))
         assertEquals(Result.Recording(STANDARD, "recording with STANDARD"), run(probe(store), encoder))
         assertEquals(listOf(OWN_CONTEXT, STANDARD), encoder.tried)
+        // The standard path recording is always worth keeping: it is the default.
         assertEquals(STANDARD, store.state.variant)
+    }
+
+    @Test
+    fun oneBadStartNeverMovesAPhoneOffItsVariant() {
+        // A Pixel: the standard path recorded, then threw once at the start of a recording.
+        val pixel = MemoryStore(VideoProbeState(STANDARD, confirmed = true, buildKey = "build A"))
+        val once = Encoder(mapOf(STANDARD to VideoFailure.CODEC_ERROR, OWN_CONTEXT to VideoFailure.CODEC_ERROR))
+        assertEquals(Result.Recording(SOFTWARE_AVC, "recording with SOFTWARE_AVC"), run(probe(pixel), once))
+        assertEquals(listOf(STANDARD, OWN_CONTEXT, SOFTWARE_AVC), once.tried) // no new viewfinder for one bad start
+        assertEquals(STANDARD, pixel.state.variant)
+        assertTrue(pixel.state.confirmed)
+        assertEquals(1, pixel.state.strikes)
+        assertFalse(probe(pixel).recordableViewfinder())
+        // Back to normal: the count starts again (the report still shows the work-around's tries).
+        run(probe(pixel), Encoder())
+        assertEquals(STANDARD, pixel.state.variant)
+        assertEquals(0, pixel.state.strikes)
+
+        // A OnePlus: its own-context variant recorded, then one slow start; the standard path fails as always.
+        val onePlus = MemoryStore(VideoProbeState(OWN_CONTEXT, confirmed = true, buildKey = "build A"))
+        val slow = Encoder(mapOf(OWN_CONTEXT to VideoFailure.NO_OUTPUT, STANDARD to VideoFailure.CODEC_ERROR))
+        assertEquals(Result.Recording(SOFTWARE_AVC, "recording with SOFTWARE_AVC"), run(probe(onePlus), slow, recordableView = false))
+        assertEquals(listOf(OWN_CONTEXT, STANDARD, SOFTWARE_AVC), slow.tried)
+        assertEquals(OWN_CONTEXT, onePlus.state.variant)
+        assertTrue(onePlus.state.confirmed)
+        assertFalse(probe(onePlus).recordableViewfinder())
+    }
+
+    @Test
+    fun aVariantFailingRecordingAfterRecordingGivesWay() {
+        val store = MemoryStore(VideoProbeState(STANDARD, confirmed = true, buildKey = "build A"))
+        val broken = mapOf(STANDARD to VideoFailure.EGL_SURFACE)
+        repeat(VideoProbe.STRIKES - 1) { run(probe(store), Encoder(broken)) }
+        assertEquals(STANDARD, store.state.variant)
+        run(probe(store), Encoder(broken))
+        assertEquals(OWN_CONTEXT, store.state.variant)
+        assertEquals(0, store.state.strikes)
     }
 
     @Test
@@ -194,7 +243,9 @@ class VideoProbeTest {
         assertEquals(VideoProgress.Waiting, p())
         assertEquals(VideoProgress.Waiting, p(sent = 500, now = 500 + VideoRecorder.NO_OUTPUT_MS))
         assertEquals(VideoProgress.Encoding, p(encoded = 1, sent = 500))
-        assertEquals(VideoProgress.Broken, p(codec = true, encoded = 30, sent = 500))
+        assertEquals(VideoProgress.Broken(VideoFailure.CODEC_ERROR), p(codec = true, encoded = 30, sent = 500))
+        // A surface lost mid-recording stops it too (the renderer stops drawing into it).
+        assertEquals(VideoProgress.Broken(VideoFailure.EGL_SURFACE), p(egl = true, encoded = 30, sent = 500))
         assertEquals(VideoProgress.Failed(VideoFailure.EGL_SURFACE), p(egl = true))
         assertEquals(VideoProgress.Failed(VideoFailure.CODEC_ERROR), p(codec = true, sent = 500))
         assertEquals(VideoProgress.Failed(VideoFailure.NO_OUTPUT), p(sent = 500, now = 501 + VideoRecorder.NO_OUTPUT_MS))

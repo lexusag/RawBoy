@@ -166,7 +166,7 @@ class DeviceReportTest {
         )
         val lines = DeviceReport.render(probed).lines()
         for (expected in listOf(
-            "== Video probe ==", "variant: OWN_CONTEXT (recorded)", "stored for this build: yes",
+            "== Video probe ==", "variant: OWN_CONTEXT (recorded)", "stored for this build: yes", "failed in a row: 0",
             "last probe: STANDARD: encoder error", "last probe: OWN_CONTEXT: ok",
         )) assertTrue("missing line: $expected", expected in lines)
         val pending = DeviceReport.render(data.copy(video = VideoProbeState(VideoVariant.RECORDABLE_VIEWFINDER), videoForThisBuild = false)).lines()

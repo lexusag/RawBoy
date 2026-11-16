@@ -83,8 +83,15 @@ class VideoRecorder private constructor(
 
     /** How the recording is doing, for the probe and the watch while recording (see [progressOf]). */
     fun progress(nowMs: Long = SystemClock.uptimeMillis()): VideoProgress {
-        fault?.let { f -> if (f.kind == VideoDebug.Kind.EGL && sink.framesSent > 0) sink.failed = true }
-        return progressOf(sink.failed, codecFailed, videoFrames, sink.firstSentAtMs.takeIf { sink.framesSent > 0 }, startMs, nowMs)
+        fault?.let { f ->
+            // As the renderer does when the device refuses or loses the surface.
+            if (f.kind == VideoDebug.Kind.EGL && sink.framesSent > 0 && nowMs - sink.firstSentAtMs >= f.afterMs) {
+                sink.failed = true
+                sink.closing = true
+            }
+        }
+        // The time, not the count: the renderer sets it before counting the first frame.
+        return progressOf(sink.failed, codecFailed, videoFrames, sink.firstSentAtMs.takeIf { it > 0 }, startMs, nowMs)
     }
 
     private val startMs = SystemClock.uptimeMillis()
@@ -148,7 +155,7 @@ class VideoRecorder private constructor(
                         val buffer = videoCodec.getOutputBuffer(index)
                         val config = info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
                         // Debug faults: an injected EGL refusal or silent encoder writes nothing.
-                        val silent = fault?.kind == VideoDebug.Kind.SILENT || fault?.kind == VideoDebug.Kind.EGL
+                        val silent = fault?.kind == VideoDebug.Kind.SILENT || (fault?.kind == VideoDebug.Kind.EGL && fault.afterMs == 0L)
                         if (buffer != null && info.size > 0 && !config && !silent) {
                             buffer.position(info.offset)
                             buffer.limit(info.offset + info.size)
@@ -488,7 +495,9 @@ class VideoRecorder private constructor(
             startMs: Long,
             nowMs: Long,
         ): VideoProgress = when {
-            encodedFrames > 0 -> if (codecFailed) VideoProgress.Broken else VideoProgress.Encoding
+            encodedFrames > 0 && codecFailed -> VideoProgress.Broken(VideoFailure.CODEC_ERROR)
+            encodedFrames > 0 && eglFailed -> VideoProgress.Broken(VideoFailure.EGL_SURFACE)
+            encodedFrames > 0 -> VideoProgress.Encoding
             eglFailed -> VideoProgress.Failed(VideoFailure.EGL_SURFACE)
             codecFailed -> VideoProgress.Failed(VideoFailure.CODEC_ERROR)
             firstSentMs != null && nowMs - firstSentMs > NO_OUTPUT_MS -> VideoProgress.Failed(VideoFailure.NO_OUTPUT)
@@ -543,8 +552,8 @@ sealed interface VideoProgress {
     /** Frames come out of the encoder. */
     data object Encoding : VideoProgress
 
-    /** The encoder threw after frames had come out: the recording stops, keeping what it has. */
-    data object Broken : VideoProgress
+    /** The encoder or its surface failed after frames had come out: the recording stops, keeping what it has. */
+    data class Broken(val failure: VideoFailure) : VideoProgress
 
     /** Nothing recorded, for [failure]. */
     data class Failed(val failure: VideoFailure) : VideoProgress
@@ -571,6 +580,6 @@ data class VideoDebug(
 ) {
     enum class Kind { CODEC, EGL, SILENT }
 
-    /** [kind] on [variant] (any if null); [afterMs] after the first frame went in ([Kind.CODEC] only). */
+    /** [kind] on [variant] (any if null); [afterMs] after the first frame went in ([Kind.CODEC], [Kind.EGL]). */
     data class Fault(val kind: Kind, val variant: VideoVariant? = null, val afterMs: Long = 0)
 }

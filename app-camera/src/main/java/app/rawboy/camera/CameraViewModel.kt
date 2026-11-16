@@ -444,7 +444,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 return VideoProbe.Attempt.Aborted
             }
             when (val p = r.progress()) {
-                VideoProgress.Encoding, VideoProgress.Broken -> return VideoProbe.Attempt.Started(r)
+                VideoProgress.Encoding, is VideoProgress.Broken -> return VideoProbe.Attempt.Started(r)
                 is VideoProgress.Failed -> {
                     Log.w(TAG, "video: $variant failed (${p.failure})")
                     discard(r)
@@ -474,9 +474,13 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         }
         while (recorder === r) {
             _recordingMs.value = r.elapsedMs
-            if (r.progress() == VideoProgress.Broken) {
-                Log.w(TAG, "video: ${r.variant} encoder failed while recording; stopping")
-                stopRecording(failure = "Recording stopped: the video encoder failed")
+            val p = r.progress()
+            if (p is VideoProgress.Broken) {
+                val why = if (p.failure == VideoFailure.EGL_SURFACE) "the encoder's surface was lost" else "the video encoder failed"
+                // Said now: saving what was recorded can take a few seconds with a dead encoder.
+                _message.value = "Recording stopped: $why"
+                Log.w(TAG, "video: ${r.variant} broke while recording (${p.failure}); stopping")
+                stopRecording(failure = "Recording stopped: $why")
                 return
             }
             delay(200)
