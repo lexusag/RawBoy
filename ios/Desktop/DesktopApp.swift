@@ -155,6 +155,9 @@ struct DesktopCommands: Commands {
             Button("Pro: One Photo in the Editor") { model.mode = .pro }.keyboardShortcut("1").disabled(model.mode == .pro)
             Button("Auto: a Batch Developed Automatically") { model.mode = .auto }.keyboardShortcut("2").disabled(model.mode == .auto)
             Button("Browse: Folders, Ratings and Culling") { model.mode = .browse }.keyboardShortcut("3").disabled(browseMode)
+            Toggle("Full-Screen Viewer in Browse", isOn: $model.immersiveViewer)
+            Button("Open Selection in the Other Viewer") { model.browse.openSelectedInViewer(inHostWindow: model.immersiveViewer) }
+                .keyboardShortcut(.return, modifiers: [.command, .option]).disabled(!browseMode)
             Divider()
             Button("Previous Photo") { auto.page(-1) }.keyboardShortcut(.leftArrow, modifiers: []).disabled(!autoReady || auto.selected == nil)
             Button("Next Photo") { auto.page(1) }.keyboardShortcut(.rightArrow, modifiers: []).disabled(!autoReady || auto.selected == nil)

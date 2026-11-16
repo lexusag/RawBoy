@@ -34,17 +34,33 @@ final class DesktopModel: ObservableObject {
         ViewerSettings.store = UserDefaultsSettings(prefix: "desktop.browse.")
         // Real previews (R, Compare) are the engine's as-shot develop, as Pro opens the photo.
         ViewerHost.realPreview = EngineRealPreview()
+        // The viewer is a view in this window unless the Browse setting asks for the screen-filling one, which then hides
+        // the menu bar and Dock while it is the key window (never the in-window one); either opens on this window's display.
         var options = ViewerOptions()
-        options.hidesDockAndMenuBar = false
-        options.viewerInHostWindow = true
+        options.hidesDockAndMenuBar = true
+        options.opensOnHostScreen = true
+        options.viewerInHostWindow = !ViewerSettings.store.bool(forKey: DesktopModel.immersiveKey)
         return AppModel(options: options)
     }()
+
+    /** The Browse setting key (under `desktop.browse.`): the viewer opens as the screen-filling window. */
+    static let immersiveKey = "viewer.immersive"
+
+    /** Browse's viewer and Compare open in a screen-filling window of their own (Mode menu › Full-Screen Viewer), else in this window. */
+    @Published var immersiveViewer = ViewerSettings.store.bool(forKey: DesktopModel.immersiveKey) {
+        didSet {
+            ViewerSettings.store.set(immersiveViewer, forKey: Self.immersiveKey)
+            browse.options.viewerInHostWindow = !immersiveViewer
+        }
+    }
     @Published var mode = AppMode(rawValue: UserDefaults.standard.string(forKey: "desktop.mode") ?? "") ?? .pro {
         didSet {
             UserDefaults.standard.set(mode.rawValue, forKey: "desktop.mode")
             sidecars.flush()
             autoSidecars.flush()
             browse.writePendingNow()
+            // A window of Browse's own must not stay over the other modes (or their menus and keys).
+            if oldValue == .browse && mode != .browse { browse.closeOwnWindows() }
         }
     }
     private var bag: Set<AnyCancellable> = []

@@ -1,3 +1,7 @@
+**RawBoy Desktop: Browse's full-screen viewer (2026-11-16)**
+
+- **Full-Screen Viewer in Browse.** A Mode menu setting (remembered) opens the Viewer's screen-filling window, with its edge panels, press-and-hold peek and the menu bar and Dock hidden, instead of the in-window viewer; ⌥⌘↩ opens the selection the other way once. E hands the photo to Pro and closes the window; leaving Browse closes it. Compare follows the same choice. It opens on the display Desktop's window is on, follows a display being unplugged, and gives the menu bar and Dock back when it closes, when the app resigns active and on quit.
+
 **RawBoy Desktop: Browse's real preview is the engine's develop (2026-11-16)**
 
 - **R and Compare in Browse.** Real previews now show RawBoy's own as-shot develop, the picture Pro opens (`Desktop/EngineRealPreview.swift`, through `Exporter.renderCGImage`), instead of Core Image's. It is pixel-identical to a Pro export at that size, one raw at a time, falling back to Core Image for what the engine can't open. Slower than Core Image on ARW/RAF (0.5–0.8 s for 24–33 MP, 2.3 s for 102 MP at screen size), faster on a Sony DNG; the standalone Viewer keeps Core Image.

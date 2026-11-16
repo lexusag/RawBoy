@@ -80,7 +80,7 @@ struct DesktopRoot: View {
     }
 }
 
-/** Browse mode in the window: RawBoy Viewer's grid and sidebar, with its viewer over them while a photo is open. */
+/** Browse mode in the window: RawBoy Viewer's grid and sidebar, with its viewer or Compare over them while one is open in this window (the screen-filling ones are windows of their own). */
 struct BrowseDesktopRoot: View {
     let app: AppModel
 
@@ -89,6 +89,9 @@ struct BrowseDesktopRoot: View {
             BrowserRoot(app: app)
             if app.isViewerOpen {
                 ViewerView(app: app).background(Color.black)
+            }
+            if app.compareOpen {
+                CompareView(app: app).background(Color.black)
             }
         }
     }

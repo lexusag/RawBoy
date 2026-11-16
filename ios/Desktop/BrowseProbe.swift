@@ -9,7 +9,7 @@ import struct RawBoyBrowseKit.PhotoSidecar
 
 /**
  * RAWBOY_BROWSE_PROBE=1 with `--browse <folder of copies>` (debug builds): Browse mode's keys, ratings and hand-offs
- * without a person at the keyboard. Select all (⌘A) and rate 3 stars (3) through ViewerUI's own key monitor, read the
+ * without a person at the keyboard. Select all and rate 3 stars by calling ViewerUI directly (no synthetic key events), read the
  * sidecars back, then hand one photo to Pro and several to Auto, also while Auto is showing. Writes sidecars: copies only.
  */
 enum BrowseProbe {
@@ -21,19 +21,51 @@ enum BrowseProbe {
                 print("[browse-probe] \(text)")
                 fflush(stdout)
             }
-            func key(_ code: UInt16, _ character: String, _ flags: NSEvent.ModifierFlags = []) {
-                guard let window = NSApp.keyWindow ?? NSApp.windows.first else { return log("no window") }
-                for type in [NSEvent.EventType.keyDown, .keyUp] {
-                    if let event = NSEvent.keyEvent(
-                        with: type, location: .zero, modifierFlags: flags, timestamp: ProcessInfo.processInfo.systemUptime,
-                        windowNumber: window.windowNumber, context: nil, characters: character,
-                        charactersIgnoringModifiers: character, isARepeat: false, keyCode: code) {
-                        NSApp.sendEvent(event)
-                    }
-                }
-            }
             try? await Task.sleep(for: .seconds(3))
             guard let folder = model.browse.folder else { return log("no folder") }
+            // RAWBOY_BROWSE_PROBE=immersive: the screen-filling viewer opens, hands a photo to Pro on E and restores the screen.
+            if ProcessInfo.processInfo.environment["RAWBOY_BROWSE_PROBE"] == "immersive" {
+                @MainActor func windows() -> String { NSApp.windows.filter(\.isVisible).map { String(describing: type(of: $0)) }.joined(separator: ",") }
+                @MainActor func presentation(_ when: String) {
+                    log("\(when): presentation options \(NSApp.presentationOptions.rawValue), key window \(NSApp.keyWindow.map { String(describing: type(of: $0)) } ?? "none") (first responder \(NSApp.keyWindow?.firstResponder.map { String(describing: type(of: $0)) } ?? "none")), windows [\(windows())], mode \(model.mode.rawValue)")
+                }
+                model.immersiveViewer = true
+                presentation("before")
+                model.browse.openSelectedInViewer()
+                for ms in [0, 100, 400, 1500] {
+                    try? await Task.sleep(for: .milliseconds(ms))
+                    log("+\(ms) ms viewer first responder: \(model.browse.debugViewerFirstResponder), key window \(NSApp.keyWindow.map { String(describing: type(of: $0)) } ?? "none")")
+                }
+                presentation("immersive viewer open")
+                for delay in [0.0, 1.0] {
+                    try? await Task.sleep(for: .seconds(delay))
+                    log("viewer first responder: \(model.browse.debugViewerFirstResponder)")
+                }
+                model.browse.debugPressEditorKey()  // the E key's command: open in Pro
+                try? await Task.sleep(for: .seconds(4))
+                presentation("after E")
+                log("Pro has \(model.vm.currentURL?.lastPathComponent ?? "nothing")")
+                // Leaving Browse with a window of its own open closes it and restores the screen.
+                model.mode = .browse
+                try? await Task.sleep(for: .seconds(1))
+                model.browse.openSelectedInViewer()
+                try? await Task.sleep(for: .seconds(2))
+                presentation("immersive viewer open again")
+                model.mode = .auto
+                try? await Task.sleep(for: .seconds(1))
+                presentation("after switching to Auto")
+                // The default, in this window: nothing hides.
+                model.immersiveViewer = false
+                model.mode = .browse
+                try? await Task.sleep(for: .seconds(1))
+                model.browse.openSelectedInViewer()
+                try? await Task.sleep(for: .seconds(2))
+                presentation("viewer in this window")
+                model.mode = .pro
+                presentation("end")
+                model.immersiveViewer = false
+                return NSApp.terminate(nil)
+            }
             // RAWBOY_BROWSE_PROBE=preview: the real preview the viewer's image store gets from the host is the engine's.
             if ProcessInfo.processInfo.environment["RAWBOY_BROWSE_PROBE"] == "preview" {
                 log("host real preview provider: \(type(of: ViewerHost.realPreview))")
@@ -46,8 +78,8 @@ enum BrowseProbe {
                 return NSApp.terminate(nil)
             }
             log("mode \(model.mode.rawValue), folder \(folder.lastPathComponent)")
-            key(0, "a", .command)
-            key(20, "3")
+            model.browse.debugSelectAll()
+            model.browse.debugRateSelection(stars: 3)
             try? await Task.sleep(for: .seconds(2))
             let photos = ((try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []).sorted()
                 .filter { $0.lowercased().hasSuffix(".dng") || $0.lowercased().hasSuffix(".jpg") }

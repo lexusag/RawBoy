@@ -61,7 +61,18 @@ Sony 33 MP ARW 0.75 / 0.70 s vs 0.33 / 0.18 s; Fujifilm GFX 102 MP RAF 2.4 / 2.2
 whole raw (no half-size draft decode in the Swift API), Core Image develops ARW/RAF at a reduced scale; `EngineRealPreviewTests.testTimings`
 (`RAWBOY_PREVIEW_TIMING=<files>`) measures it again.
 Ratings, picks, turns and crops are the same `xmp:Rating` / `rawboy:Pick` / `tiff:Orientation` / `rawboy:Develop` fields Pro and
-Auto use, through the Kit's `XmpSidecar`. Launch with `--browse <folder or photo>`; debug `RAWBOY_BROWSE_PROBE=1` (copies
+Auto use, through the Kit's `XmpSidecar`. The viewer is in this window by default; **Mode › Full-Screen Viewer in Browse** (remembered as `desktop.browse.viewer.immersive`)
+opens the Viewer's screen-filling borderless window instead, with its edge panels, press-and-hold peek and the menu bar and
+Dock hidden while it is the key window (`ViewerOptions.hidesDockAndMenuBar` is on for those windows only; the in-window viewer
+never hides anything), and ⌥⌘↩ (Open Selection in the Other Viewer) opens one selection the other way. Both open on the display
+this window is on (`opensOnHostScreen`); Compare follows the same choice (`CompareView` in the window, or its own window).
+E in the full-screen viewer hands the photo to Pro (`DesktopHandOff`), closes that window and brings the window and the menu
+bar back; leaving Browse (⌘1/⌘2) closes any window of Browse's own (`AppModel.closeOwnWindows`). The presentation options
+are restored when the window closes, the app resigns active or quits, and when a display is unplugged the window moves to
+the display it overlaps most, else the main one, and fills it (`ScreenWatch`). The Desktop window itself is untouched. Needs
+a human on real displays: a second display, unplugging one while the viewer is full screen, "Displays have separate Spaces"
+on and off (the menu bar of the other display), and Mission Control. Debug `RAWBOY_BROWSE_PROBE=immersive` (calls ViewerUI directly through its `#if DEBUG` helpers; it never posts key events, which go through the system and can reach other apps).
+Launch with `--browse <folder or photo>`; debug `RAWBOY_BROWSE_PROBE=1` (copies
 only) selects all, rates, and exercises both hand-offs. The Kit also replaced the engine's own `XmpSidecar`, `PhotoOrder`
 (`CaptureDate` stays in `auto/CaptureDate.swift`) and the filmstrip's folder scan and thumbnails (`Desktop/ProFilmstrip.swift`).
 
