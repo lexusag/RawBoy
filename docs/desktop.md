@@ -4,7 +4,7 @@ RawBoy's editor as a native Mac app (SwiftUI + Metal, the iOS engine). Phase 1 i
 
 ## Photos and sidecars
 - Open with ⌘O, drop a file on the window, or Finder's Open With (which opens Browse). RAW, HEIC, JPEG, PNG and TIFF open in place (never copied).
-- Edits are written to the photo's XMP sidecar as you work: `rawboy:Develop`, the same JSON as RawBoy on the web. The file is NAME.xmp next to the photo, else darktable's NAME.EXT.xmp, else a new NAME.xmp. Only that field changes; everything else in an existing sidecar is kept. Writes happen 800 ms after the last change, when another photo opens, when the app goes to the background and on quit.
+- Edits are written to the photo's XMP sidecar as you work: `rawboy:Develop`, the same JSON as RawBoy on the web. The file is NAME.xmp next to the photo, else darktable's NAME.EXT.xmp, else a new NAME.xmp. Only that field changes; everything else in an existing sidecar is kept. Writes happen 800 ms after the last change, when another photo opens, when the app goes to the background and on quit. Quitting (or closing the window) while an export, Auto Dev, Auto's batch or the Packer is running, or after a sidecar write failed, asks first (Cancel / Quit Anyway; `QuitWork`).
 - A photo with a sidecar reopens with its edits. One without takes the previous photo's edits (as on the phone). RawBoy Viewer's rotation (`tiff:Orientation`) and crop are read; RawBoy's own turn wins.
 - Healing brush strokes are saved in the sidecar too; web-only values (portrait retouch and others the Mac app doesn't know) are kept untouched.
 

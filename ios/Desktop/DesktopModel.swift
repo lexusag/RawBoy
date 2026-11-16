@@ -65,6 +65,18 @@ final class DesktopModel: ObservableObject {
     }
     private var bag: Set<AnyCancellable> = []
 
+    /** What quitting now would cut short or lose (see `QuitWork`); asked by the app delegate before it terminates. */
+    var quitWork: QuitWork {
+        var w = QuitWork()
+        w.proExporting = vm.state.exporting
+        w.proAutoRunning = vm.state.autoRunning
+        w.unsavedEditsOf = sidecars.unsavedPhoto?.lastPathComponent
+        w.autoExporting = auto.export != nil
+        w.autoPhotosInProgress = auto.photos.filter { [.queued, .analyzing, .exporting].contains($0.status) }.count
+        w.packerRunning = PackerModel.shared.running
+        return w
+    }
+
     private static let folderKey = "desktop.export.folder"
 
     init() {
