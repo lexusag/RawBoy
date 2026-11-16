@@ -115,7 +115,7 @@ public struct InspectorSection<Content: View>: View {
             .accessibilityLabel(title + (edited ? ", edited" : ""))
             .accessibilityValue(open ? "open" : "closed")
             .accessibilityAddTraits([.isHeader, .isButton])
-            .accessibilityAction(onToggle)
+            .accessibilityAction { onToggle() }
             if open {
                 VStack(alignment: .leading, spacing: 0) { content }
                     .padding(.bottom, 10)
