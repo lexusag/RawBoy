@@ -196,8 +196,8 @@ final class DesktopModel: ObservableObject {
         return out
     }
 
-    /** Adds [urls] (files and folders) to Auto's batch and shows Auto. */
-    func addToAuto(_ urls: [URL]) {
+    /** Adds [urls] (files and folders) to Auto's batch and shows Auto; [how] overrides the sidebar's New photos choice for them. */
+    func addToAuto(_ urls: [URL], as how: ImportMode? = nil) {
         let files = Self.photoFiles(in: urls)
         mode = .auto
         if files.isEmpty {
@@ -205,7 +205,21 @@ final class DesktopModel: ObservableObject {
             return
         }
         files.forEach { NSDocumentController.shared.noteNewRecentDocumentURL($0) }
-        auto.add(files)
+        auto.add(files, as: how)
+    }
+
+    /**
+     * RawBoy Viewer's "Send to RawBoy Auto": `rawboy-desktop://auto?as=looks|film|plain&path=…&path=…` adds the files and
+     * folders to the batch as Looks, Film or As is. Returns false for a link it doesn't know.
+     */
+    @discardableResult
+    func handle(link: URL) -> Bool {
+        guard link.scheme == "rawboy-desktop", link.host == "auto",
+              let items = URLComponents(url: link, resolvingAgainstBaseURL: false)?.queryItems else { return false }
+        let paths = items.filter { $0.name == "path" }.compactMap(\.value).map { URL(fileURLWithPath: $0) }
+        guard !paths.isEmpty else { return false }
+        addToAuto(paths, as: items.first { $0.name == "as" }?.value.flatMap(ImportMode.init(rawValue:)))
+        return true
     }
 
     func addPhotosPanel() {

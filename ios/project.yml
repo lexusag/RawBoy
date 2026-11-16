@@ -309,6 +309,10 @@ targets:
             CFBundleTypeRole: Editor
             LSHandlerRank: Alternate
             LSItemContentTypes: [public.jpeg, public.heic, public.heif, public.png, public.tiff]
+        # RawBoy Viewer's "Send to RawBoy Auto": rawboy-desktop://auto?as=looks|film|plain&path=<file or folder>&path=…
+        CFBundleURLTypes:
+          - CFBundleURLName: app.rawboy.desktop.auto
+            CFBundleURLSchemes: [rawboy-desktop]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.rawboy.desktop
