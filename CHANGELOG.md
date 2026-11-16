@@ -1,3 +1,10 @@
+**RawBoy Desktop: version in Help (2026-11-16)**
+
+- The Help sheet (the "?" button, ⌘/; Pro and Auto, and the iPhone apps' sheets, which share it) starts with **RawBoy Desktop <version> (<build>)**, selectable, and the Mac's Help menu has a disabled "About RawBoy Desktop <version> (<build>)" line at the top; the standard About panel stays in the app menu.
+- **The DMG now says its real version.** `Desktop-Info.plist` had a literal 1.0 (1), so the release workflow's `MARKETING_VERSION` (the tag) and `CURRENT_PROJECT_VERSION` (the run number) never reached the app; the plist now follows them (checked: a build with 9.8.7 / 654 shows 9.8.7 (654)).
+- Fixed on the way: the Help sheet on the Mac had no size and collapsed to its title and Done; it is now 560 × 680.
+- Checked by hand in the running app: the Help menu's items and the Help sheet with the version on its first line. Not checked: the iPhone sheets (compiled only), and a real release DMG.
+
 **RawBoy Desktop (macOS): Auto look names, Reset all photos, Pro panel width, Pixel DNG check (2026-11-15)**
 
 - **Look and film stock names.** In Auto's photo view nothing said which look or stock was selected: the names under the strip's chips were hidden under a Mac scroll bar. The name is now in bold above the strip ("Yellow Portrait 400 · suggested"), the strip's scroll bar is off, and the grid cells use caption type on the Mac, with the whole text on hover. VoiceOver reads "Look: …" / "Film stock: …".
