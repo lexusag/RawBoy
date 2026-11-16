@@ -1,0 +1,37 @@
+{
+ "lightroom.xmp": {
+  "stars": 2,
+  "flag": null,
+  "orientation": 6,
+  "develop": null,
+  "auto": null
+ },
+ "crlf.xmp": {
+  "stars": 2,
+  "flag": null,
+  "orientation": 6,
+  "develop": null,
+  "auto": null
+ },
+ "darktable.xmp": {
+  "stars": 0,
+  "flag": "reject",
+  "orientation": null,
+  "develop": null,
+  "auto": null
+ },
+ "element-form.xmp": {
+  "stars": 4,
+  "flag": "pick",
+  "orientation": 3,
+  "develop": "{\"format\":\"rawboy-edit\",\"version\":1,\"values\":{\"exposure\":0.5}}",
+  "auto": "{\"format\":\"rawboy-auto\",\"mode\":\"film\",\"strength\":70}"
+ },
+ "web-develop.xmp": {
+  "stars": 5,
+  "flag": "pick",
+  "orientation": null,
+  "develop": "{\"format\":\"rawboy-edit\",\"version\":1,\"values\":{\"toneMapper\":\"filmic\",\"exposure\":0.7,\"rotation\":1,\"masks\":[{\"name\":\"Sky & <sea>\",\"enabled\":true,\"opacity\":100,\"invert\":false,\"shape\":{\"kind\":\"brush\"},\"strokes\":[{\"erase\":false,\"auto\":true,\"radius\":0.04,\"hardness\":60,\"flow\":80,\"points\":[0.12346,0.2,0.33333,0.4,0.5,0.6]},{\"erase\":true,\"radius\":1e-7,\"points\":[0.30000000000000004,1.0]}]}],\"healSpots\":[{\"x\":0.4,\"y\":0.5,\"radius\":0.0004,\"source\":null,\"path\":[]}],\"cropLeft\":0.1,\"cropTop\":0.05,\"cropRight\":0.9,\"cropBottom\":0.8,\"lut\":\"portra400\"}}",
+  "auto": "{\"format\":\"rawboy-auto\",\"mode\":\"film\",\"look\":\"natural\",\"strength\":70,\"adjust\":{\"brightness\":12,\"rotation\":1}}"
+ }
+}
