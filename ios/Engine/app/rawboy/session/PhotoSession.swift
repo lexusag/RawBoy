@@ -458,6 +458,16 @@ public final class PhotoSession: ObservableObject {
     }
 
     /**
+     * Heals what the open params ask for (healing brush strokes, Blemish removal) and waits for it: a photo opened only to
+     * export (Auto's batch, with RawBoy edits) never had a slider move to start it.
+     */
+    public func healNow() async {
+        guard params.blemishRemoval > 0 || !params.healSpots.isEmpty else { return }
+        scheduleBlemishes()
+        await blemishTask?.value
+    }
+
+    /**
      * Heals the blemishes the slider asks for, ~300 ms after it settles: spots are
      * detected once per photo, then the most obvious ones (by score) are healed in the
      * full-resolution image and the previews rebuilt from it.

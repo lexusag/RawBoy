@@ -379,7 +379,7 @@ extension DetailScreen {
             if let edit = vm.editInPro {
                 BarTool("slider.horizontal.3", "Edit in Pro", "Open this photo in the Pro editor (⌘↩)") { edit(photo) }
             }
-            BarTool("doc.on.doc", "Copy", "Copy the previous photo's look and adjustments") { vm.copyPrevious(id) }
+            BarTool("doc.on.doc", "Copy", "Copy the previous photo's look and adjustments (⇧C)") { vm.copyPrevious(id) }
                 .disabled(!idle || vm.previousPhoto(id) == nil)
             BarTool("square.grid.2x2", "Apply to All", "Give every photo in the batch this look and adjustments") {
                 vm.applyLookToAll(id)
@@ -406,8 +406,20 @@ extension DetailScreen {
         let disabled = vm.export != nil
         return ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                macSection(photo.preset != nil ? "Preset" : photo.mode == .film ? "Film" : "Look", edited: false, reset: nil) {
-                    if let preset = photo.preset {
+                macSection(photo.edits != nil ? "Edits" : photo.preset != nil ? "Preset" : photo.mode == .film ? "Film" : "Look",
+                           edited: false, reset: nil) {
+                    if photo.edits != nil {
+                        // Pro's whole develop ("To Auto" there) in place of the looks; the sliders below adjust on top.
+                        Text(AutoPhoto.editsName).font(.subheadline.weight(.semibold))
+                        Text("From Pro, with the sliders below on top. Edit in Pro to change them there.")
+                            .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        HStack {
+                            if let edit = vm.editInPro { Button("Edit in Pro") { edit(photo) } }
+                            Button("Use a look") { vm.removeEdits(photo.id) }
+                        }
+                        .disabled(disabled)
+                        .padding(.top, 6)
+                    } else if let preset = photo.preset {
                         // A RawBoy preset develops this photo in place of the looks.
                         Text(preset.name).font(.subheadline.weight(.semibold)).lineLimit(2)
                         Text("RawBoy preset · " + PresetGroup.allCases.filter { preset.groups.contains($0) }.map(\.label)
@@ -540,6 +552,19 @@ private struct PhotoPage: View {
                     let uncropped = showAuto && live ? analysis.autoBase : photo.params ?? analysis.autoBase
                     let cropping = live && vm.cropping
                     let shown = cropping ? uncropped.withoutCrop() : uncropped
+                    #if os(macOS)
+                    // The wheel zooms around the pointer (as Pro's and the web's), the middle button pans.
+                    PointerSurface(
+                        onMove: { _ in },
+                        onZoom: { p, factor in
+                            guard live, !cropping else { return }
+                            showAuto = false
+                            session.zoomBy(Float(p.x * scale), Float(p.y * scale), factor: Float(factor), frameWidth: framePx)
+                        },
+                        onPan: { d in
+                            if live, session.zoomCenter != nil { session.pan(Float(d.width * scale), Float(d.height * scale)) }
+                        })
+                    #endif
                     // One view for both, so it stays when the decoded preview replaces the cached one.
                     DevelopPreview(
                         image: live ? session.preview : cached,

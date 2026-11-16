@@ -40,7 +40,7 @@ final class DesktopModel: ObservableObject {
         autoSidecars.onError = { [weak auto] message in Task { @MainActor in auto?.message = message } }
         auto.saveExported = { [weak self] file, source in try self?.saveAutoExport(file, source: source) }
         auto.destinationView = AnyView(ExportDestinationSection(commands: commands, model: self))
-        auto.editInPro = { [weak self] photo in self?.open(photo.url) }
+        auto.editInPro = { [weak self] photo in self?.editInPro(photo) }
         commands.sendToAuto = { [weak self] in self?.sendToAuto() }
         updateAutoDestination()
         commands.exportFolder = UserDefaults.standard.string(forKey: Self.folderKey).map { URL(fileURLWithPath: $0, isDirectory: true) }
@@ -65,7 +65,7 @@ final class DesktopModel: ObservableObject {
     }
 
     /** Opens [url] in the editor; the file is edited in place (never copied), its sidecar kept beside it. */
-    func open(_ url: URL) {
+    func open(_ url: URL, initial: DevelopParams? = nil) {
         guard !vm.state.busy else {
             vm.message = "Wait for the photo that is opening or exporting"
             return
@@ -74,7 +74,7 @@ final class DesktopModel: ObservableObject {
         mode = .pro
         NSDocumentController.shared.noteNewRecentDocumentURL(url)
         filmstrip.show(url)
-        vm.open(url)
+        vm.open(url, initial: initial)
     }
 
     /** ← → in Pro: the previous or next photo in the filmstrip. */
@@ -140,17 +140,34 @@ final class DesktopModel: ObservableObject {
             auto.message = "Select a photo to edit in Pro"
             return
         }
-        open(photo.url)
+        editInPro(photo)
     }
 
-    /** The photo open in the editor joins Auto's batch (once) and Auto shows it. */
+    /**
+     * Opens an Auto photo in Pro with its current develop (look, preset or RawBoy edits, and its adjustments) as the starting
+     * edits, as the web's Edit in RawBoy does; To Auto there brings it back with Pro's edits.
+     */
+    func editInPro(_ photo: AutoPhoto) {
+        open(photo.url, initial: photo.params)
+    }
+
+    /**
+     * The photo open in the editor goes to Auto with Pro's edits ("Back to Auto"): they develop it there in place of its look,
+     * with Auto's sliders on top; it joins the batch if it isn't in it, and opens when analysed.
+     */
     func sendToAuto() {
         guard let url = vm.currentURL else {
             vm.message = "Open a photo first"
             return
         }
+        guard vm.state.hasImage, !vm.state.busy else { return }
         sidecars.flush()
-        addToAuto([url])
+        mode = .auto
+        guard auto.receiveEdits(url, vm.state.params) else {
+            vm.message = "Auto is exporting; try again when it has finished"
+            mode = .pro
+            return
+        }
         auto.focusedId = url.path
         auto.selectionAnchor = url.path
     }
@@ -179,8 +196,8 @@ final class DesktopModel: ObservableObject {
         return out
     }
 
-    /** Adds [urls] (files and folders) to Auto's batch and shows Auto. */
-    func addToAuto(_ urls: [URL]) {
+    /** Adds [urls] (files and folders) to Auto's batch and shows Auto; [how] overrides the sidebar's New photos choice for them. */
+    func addToAuto(_ urls: [URL], as how: ImportMode? = nil) {
         let files = Self.photoFiles(in: urls)
         mode = .auto
         if files.isEmpty {
@@ -188,7 +205,21 @@ final class DesktopModel: ObservableObject {
             return
         }
         files.forEach { NSDocumentController.shared.noteNewRecentDocumentURL($0) }
-        auto.add(files)
+        auto.add(files, as: how)
+    }
+
+    /**
+     * RawBoy Viewer's "Send to RawBoy Auto": `rawboy-desktop://auto?as=looks|film|plain&path=…&path=…` adds the files and
+     * folders to the batch as Looks, Film or As is. Returns false for a link it doesn't know.
+     */
+    @discardableResult
+    func handle(link: URL) -> Bool {
+        guard link.scheme == "rawboy-desktop", link.host == "auto",
+              let items = URLComponents(url: link, resolvingAgainstBaseURL: false)?.queryItems else { return false }
+        let paths = items.filter { $0.name == "path" }.compactMap(\.value).map { URL(fileURLWithPath: $0) }
+        guard !paths.isEmpty else { return false }
+        addToAuto(paths, as: items.first { $0.name == "as" }?.value.flatMap(ImportMode.init(rawValue:)))
+        return true
     }
 
     func addPhotosPanel() {
@@ -207,15 +238,6 @@ final class DesktopModel: ObservableObject {
         panel.allowsMultipleSelection = true
         panel.message = "Choose folders of photos to develop"
         if panel.runModal() == .OK { addToAuto(panel.urls) }
-    }
-
-    /** A RawBoy preset file for the batch (nil) or for the photos in [ids]. */
-    func choosePresetFile(for ids: Set<String>?) {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.json, .plainText, .data]
-        panel.allowsMultipleSelection = false
-        panel.message = "Choose a RawBoy preset file (.rawboy.json)"
-        if panel.runModal() == .OK, let url = panel.url { auto.openPresetFile(url, ids: ids) }
     }
 
     func showLastExportInFinder() {

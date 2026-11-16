@@ -10,6 +10,20 @@ public struct Analysis: @unchecked Sendable {
     public let base: PreviewImage
     public let bloom: BloomSources
     public let skin: SkinMask?
+    /**
+     * The auto develop as measured, even where [autoBase] isn't it ([asIs]): its denoise, colour denoise and sharpening are
+     * what Auto denoise gives a photo added "As is".
+     */
+    public let measured: DevelopParams
+
+    /**
+     * Auto's "As is" import (web's plain): the same analysis without the auto develop, so the photo starts as the file
+     * itself ([autoBase] = the as-shot [defaults]); [measured] keeps the auto develop for Auto denoise.
+     */
+    public func asIs() -> Analysis {
+        Analysis(defaults: defaults, autoBase: defaults, stats: stats, lens: lens, base: base, bloom: bloom, skin: skin,
+                 measured: measured)
+    }
 }
 
 /** The automatic develop of one raw, shared by RawBoy Auto and RawBoy Camera. */
@@ -151,6 +165,6 @@ public enum AutoAnalysis {
             wb=\(Int(defaults.temperature))K/\(Int(defaults.tint)) -> \(Int(auto.temperature))K/\(Int(auto.tint))
             """)
         return Analysis(defaults: defaults, autoBase: auto, stats: stats, lens: info.lens, base: base, bloom: bloom,
-                        skin: skin)
+                        skin: skin, measured: auto)
     }
 }

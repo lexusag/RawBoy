@@ -49,7 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for window in NSApp.windows { window.acceptsMouseMovedEvents = true }
         for url in Self.launchFiles() { model.open(url) }
         let batch = Self.launchFiles(after: "--auto")
-        if !batch.isEmpty { model.addToAuto(batch) }
+        if !batch.isEmpty { model.addToAuto(batch, as: Self.launchValue(after: "--import-as").flatMap(ImportMode.init(rawValue:))) }
         #if DEBUG
         AutoBatchProbe.runIfRequested(model)
         AutoBatchProbe.openDetailIfRequested(model)
@@ -71,6 +71,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor
     func application(_ application: NSApplication, open urls: [URL]) {
         let model = DesktopModel.shared
+        // RawBoy Viewer's rawboy-desktop://auto links.
+        let links = urls.filter { !$0.isFileURL }
+        links.forEach { model.handle(link: $0) }
+        let urls = urls.filter(\.isFileURL)
         // Several photos (or a folder) from the Finder go to Auto's batch; one opens in the editor.
         if urls.count > 1 || urls.first?.hasDirectoryPath == true { model.addToAuto(urls) } else if let url = urls.first { model.open(url) }
     }
@@ -84,7 +88,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return .terminateNow
     }
 
-    /** Files named on the command line (`RawBoy\ Desktop --open photo.RAF`; `--auto a.RAF b.RAF folder/` fills Auto's batch), for scripts and tests. */
+    /** The value after [flag] on the command line (`--import-as looks|film|plain`, for `--auto`). */
+    private static func launchValue(after flag: String) -> String? {
+        let args = CommandLine.arguments
+        guard let i = args.firstIndex(of: flag), i + 1 < args.count else { return nil }
+        return args[i + 1]
+    }
+
+    /** Files named on the command line (`RawBoy\ Desktop --open photo.RAF`; `--auto a.RAF b.RAF folder/` fills Auto's batch, `--import-as film` as Film), for scripts and tests. */
     private static func launchFiles(after flag: String = "--open") -> [URL] {
         let args = CommandLine.arguments
         guard let i = args.firstIndex(of: flag) else { return [] }
@@ -152,7 +163,7 @@ struct DesktopCommands: Commands {
             Button("Masks") { model.commands.send(.toggleMode(.masks)) }.disabled(!ready)
             Button("Healing Brush") { model.commands.send(.toggleMode(.heal)) }.disabled(!ready)
             Button("Light Leaks & Effects") { model.commands.send(.toggleMode(.leaks)) }.disabled(!ready)
-            Button("Presets") { model.commands.send(.toggleMode(.presets)) }.disabled(!ready)
+            Button("Presets") { model.commands.send(.toggleMode(.presets)) }.disabled(!proMode || state.busy)
             Divider()
             Button("Rotate Left") { model.vm.rotate(-1) }.keyboardShortcut("[", modifiers: .command).disabled(!ready)
             Button("Rotate Right") { model.vm.rotate(1) }.keyboardShortcut("]", modifiers: .command).disabled(!ready)

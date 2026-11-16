@@ -11,6 +11,8 @@ struct PresetsPanel: View {
     let onDone: () -> Void
     /** The photo has brush strokes (which presets don't keep): the save dialog says so. */
     let hasStrokes: Bool
+    /** A photo is open: without one, presets can be imported, exported, renamed and deleted, not applied or saved. */
+    var hasImage = true
 
     @State private var saving = false
     @State private var renaming: Preset?
@@ -58,13 +60,16 @@ struct PresetsPanel: View {
                     Button("Done", action: onDone).fontWeight(.semibold)
                 }
                 HStack(spacing: 12) {
-                    Button("Save current…") { saving = true }.buttonStyle(.bordered)
+                    if hasImage { Button("Save current…") { saving = true }.buttonStyle(.bordered) }
                     Button("Import") { importing = true }
                     Button("Export all") { sharing = vm.presetFile(vm.presets) }.disabled(vm.presets.isEmpty)
                 }
             }
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
+                    if !hasImage {
+                        Note("Open a photo to apply a preset or save its edits as one. Import and export work without one.")
+                    }
                     if vm.presets.isEmpty {
                         Note("No presets yet. Save the current edits (any groups of sliders) to reuse them on other photos. Rotation, flips, straightening and crop are never part of a preset.")
                     }
@@ -129,7 +134,7 @@ struct PresetsPanel: View {
             Spacer()
             if !selecting {
                 Menu {
-                    Button("Update from current") { vm.updatePreset(p.id) }
+                    if hasImage { Button("Update from current") { vm.updatePreset(p.id) } }
                     Button("Rename") {
                         renameText = p.name
                         renaming = p
@@ -148,7 +153,7 @@ struct PresetsPanel: View {
         .onTapGesture {
             if selecting {
                 if selected.contains(p.id) { selected.remove(p.id) } else { selected.insert(p.id) }
-            } else {
+            } else if hasImage {
                 vm.applyPreset(p)
             }
         }
@@ -158,7 +163,7 @@ struct PresetsPanel: View {
         .accessibilityAction(named: selecting ? "Select" : "Apply") {
             if selecting {
                 if selected.contains(p.id) { selected.remove(p.id) } else { selected.insert(p.id) }
-            } else {
+            } else if hasImage {
                 vm.applyPreset(p)
             }
         }
@@ -170,7 +175,9 @@ struct PresetsPanel: View {
                 } label: {
                     Label("Select", systemImage: "checkmark.circle")
                 }
-                Button { vm.updatePreset(p.id) } label: { Label("Update from current", systemImage: "arrow.triangle.2.circlepath") }
+                if hasImage {
+                    Button { vm.updatePreset(p.id) } label: { Label("Update from current", systemImage: "arrow.triangle.2.circlepath") }
+                }
                 Button {
                     renameText = p.name
                     renaming = p

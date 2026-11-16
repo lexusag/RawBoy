@@ -94,12 +94,13 @@ export function photoDate(p: AutoPhoto): string | null {
 
 /**
  * True for a photo shown "As is" (AS_IS_NAME): added "As is" (plain, so no auto develop) with the Natural look and
- * nothing on top: no preset, no lens preset, no RawBoy edits, no Auto denoise and every slider at 0. Photos added in
+ * nothing on top: no preset, no lens preset, no RawBoy edits and every slider at 0. Auto denoise, which raws added As is
+ * start with, doesn't count. Photos added in
  * a look mode always have the auto develop, so they never count. Settings kept in a sidecar are restored into these
  * same fields, so a photo that comes back edited is not unedited.
  */
 export function isUnedited(p: AutoPhoto): boolean {
-  return p.plain && activeLook(p) === Looks.NATURAL && !p.preset && !p.lensPreset && !p.edits && !p.autoDenoise
+  return p.plain && activeLook(p) === Looks.NATURAL && !p.preset && !p.lensPreset && !p.edits
     && sameAdjustments(p.adjust, NO_ADJUSTMENTS);
 }
 
@@ -519,7 +520,8 @@ export class AutoStore {
         id: String(this.nextId++), file, name: file.name, date: fileDate(file.lastModified), status: 'queued', error: null, analysis: null,
         look: Looks.NATURAL, suggested: Looks.NATURAL, mode, plain, filmLook: FilmLooks.PORTRA_400,
         suggestedFilm: FilmLooks.PORTRA_400, strength: DEFAULT_STRENGTH, adjust: NO_ADJUSTMENTS, preset: this._state.preset, edits: null,
-        lensChoice: this._state.lensChoice, lensPreset: null, looksApplied: false, autoDenoise: false,
+        // "As is": the file as it is; a raw gets its measured denoise (Auto denoise), a finished file nothing.
+        lensChoice: this._state.lensChoice, lensPreset: null, looksApplied: false, autoDenoise: plain && isRawName(file.name),
         thumbnail: null,
       });
     }
@@ -1573,6 +1575,11 @@ export { ALL_FILM_LOOKS, ALL_LOOKS };
 
 /** File types Auto opens besides raws: already processed by the camera, so they give lower-quality results. */
 const NON_RAW_EXTENSIONS = new Set(['jpg', 'jpeg', 'heic', 'heif', 'png', 'tif', 'tiff']);
+
+/** A raw by its file name (not one of the finished formats Auto also opens). */
+export function isRawName(name: string): boolean {
+  return !NON_RAW_EXTENSIONS.has(name.split('.').pop()?.toLowerCase() ?? '');
+}
 
 /** The note shown when an import includes non-raw photos, or null. */
 export function nonRawNote(names: string[]): string | null {

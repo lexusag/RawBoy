@@ -21,12 +21,14 @@ export const groupSummary = (p: Preset) => PRESET_GROUPS.filter((g) => p.groups.
  * Opened from the top bar in place of the slider tabs: saved presets (click to apply, menu to update, rename, export
  * or delete) and saving the current edits (port of app-pro's PresetsPanel.kt).
  */
-export function PresetsPanel({ presets, actions, onDone, hasStrokes = false }: {
+export function PresetsPanel({ presets, actions, onDone, hasStrokes = false, hasImage = true }: {
   presets: Preset[];
   actions: PresetActions;
   onDone: () => void;
   /** The photo has brush strokes (which presets don't keep): the save dialog says so. */
   hasStrokes?: boolean;
+  /** A photo is open: without one, presets can be imported, exported, renamed and deleted, not applied or saved. */
+  hasImage?: boolean;
 }) {
   const [saving, setSaving] = useState(false);
   const [renaming, setRenaming] = useState<Preset | null>(null);
@@ -136,7 +138,7 @@ export function PresetsPanel({ presets, actions, onDone, hasStrokes = false }: {
             </div>
           </div>
           <div className="button-row">
-            <button type="button" onClick={() => setSaving(true)}>Save current…</button>
+            {hasImage && <button type="button" onClick={() => setSaving(true)}>Save current…</button>}
             <button type="button" className="text" onClick={importFile}>Import</button>
             <button type="button" className="text" onClick={() => actions.export(presets)} disabled={presets.length === 0}>
               Export all
@@ -144,6 +146,7 @@ export function PresetsPanel({ presets, actions, onDone, hasStrokes = false }: {
           </div>
         </>
       )}
+      {!hasImage && <Note>Open a photo to apply a preset or save its edits as one. Import and export work without one.</Note>}
       {presets.length === 0 && (
         <Note>
           No presets yet. Save the current edits (any groups of sliders) to reuse them on other photos. Rotation, flips, straightening and crop are never
@@ -166,8 +169,8 @@ export function PresetsPanel({ presets, actions, onDone, hasStrokes = false }: {
               <button
                 type="button"
                 className="preset-apply"
-                onClick={() => (selecting ? toggleSelect(p.id) : actions.apply(p))}
-                title={selecting ? 'Toggle selection' : 'Apply'}
+                onClick={() => (selecting ? toggleSelect(p.id) : hasImage && actions.apply(p))}
+                title={selecting ? 'Toggle selection' : hasImage ? 'Apply' : 'Open a photo to apply'}
               >
                 <span className="preset-name">{p.name}</span>
                 <span className="preset-groups">{groupSummary(p)}</span>
@@ -177,7 +180,7 @@ export function PresetsPanel({ presets, actions, onDone, hasStrokes = false }: {
                   <button type="button" className="icon" title="Preset options" onClick={() => setMenu(menu === p.id ? null : p.id)}>⋮</button>
                   {menu === p.id && (
                     <div className="menu" onMouseLeave={() => setMenu(null)}>
-                      <button type="button" onClick={() => { setMenu(null); actions.update(p); }}>Update from current</button>
+                      {hasImage && <button type="button" onClick={() => { setMenu(null); actions.update(p); }}>Update from current</button>}
                       <button type="button" onClick={() => { setMenu(null); setRenaming(p); }}>Rename</button>
                       <button type="button" onClick={() => { setMenu(null); actions.export([p]); }}>Export</button>
                       <button

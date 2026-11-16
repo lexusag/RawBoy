@@ -140,6 +140,27 @@ public enum LookApplier {
     }
 
     /**
+     * A whole develop from Pro ("Back to Auto"; web's `applyEditsDevelop`) in place of a look: [edits] exactly as Pro
+     * rendered them, denoise and sharpening included, with [adjust] on top as with a preset.
+     */
+    public static func applyEditsDevelop(_ edits: DevelopParams, adjust: Adjustments) -> DevelopParams {
+        var d = edits
+        d.exposure = (edits.exposure + adjust.brightness / 100 * brightnessEv).clamped(-5, 5)
+        d.contrast = (edits.contrast + adjust.contrast).clamped(-100, 100)
+        d.saturation = saturation(edits.saturation, adjust.saturation)
+        (d.denoise, d.colorDenoise) = denoise(edits, adjust: adjust.denoise)
+        if edits.film != nil {
+            d.filmGrain = (edits.filmGrain * (1 + adjust.grain / 50)).clamped(0, 200)
+        } else {
+            d.grain = (edits.grain + adjust.grain).clamped(0, 100)
+        }
+        d.rotation = ((edits.rotation + adjust.rotation) % 4 + 4) % 4
+        var warmed = Warmth.shift(framed(d, adjust), powf(warmthRange, adjust.warmth / 100))
+        if adjust.tint != 0 { warmed.tint = (warmed.tint + adjust.tint).clamped(-100, 100) }
+        return warmed
+    }
+
+    /**
      * A photo's whole develop: [preset] (a RawBoy preset, see [applyPreset]) or else [look] (see [apply]), then its lens
      * preset ([Preset.isLensPreset], or nil), which changes only the lens corrections: the profile switch, distortion, chromatic aberration,
      * vignette radius and vignetting. A look's own vignette stays on top of the lens preset's vignetting; a RawBoy

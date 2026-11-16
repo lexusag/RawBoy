@@ -32,7 +32,7 @@ struct GridScreen: View {
 
     private var selecting: Bool { !selection.isEmpty }
     private var exporting: Bool { vm.export != nil }
-    private var exportable: Int { vm.photos.filter { $0.analysis != nil }.count }
+    private var exportable: Int { vm.shown.filter { $0.analysis != nil }.count }
     private var exportableSelected: Int { vm.photos.filter { $0.analysis != nil && selection.contains($0.id) }.count }
 
     var body: some View { withSheets(navigation) }
@@ -45,7 +45,17 @@ struct GridScreen: View {
                 Divider()
                 VStack(spacing: 0) {
                     exportProgress
-                    if vm.photos.isEmpty { empty } else { grid }
+                    if vm.photos.isEmpty {
+                        empty
+                    } else if vm.shown.isEmpty {
+                        VStack(spacing: 10) {
+                            Text("No photos match the filter").foregroundStyle(.secondary)
+                            Button("Clear filter") { vm.filter = AutoFilter() }
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        grid
+                    }
                 }
                 // The empty state's prompt is only as wide as its text: without this the row was centred in the window and
                 // the sidebar sat in the middle of it.
@@ -146,13 +156,12 @@ struct GridScreen: View {
         HStack {
             Text("Import as").font(.subheadline).foregroundStyle(.secondary)
             Picker("Import as", selection: Binding(get: { vm.importMode }, set: { vm.setImportMode($0) })) {
-                Text("Looks").tag(LookMode.looks)
-                Text("Film").tag(LookMode.film)
+                ForEach(ImportMode.allCases, id: \.self) { Text($0.label).tag($0) }
             }
             .labelsHidden()
             .pickerStyle(.segmented)
             .neutralSegments()
-            .frame(width: 180)
+            .frame(width: 240)
         }
     }
 
@@ -221,13 +230,14 @@ struct GridScreen: View {
             VStack(alignment: .leading, spacing: 0) {
                 sidebarHeading("New photos")
                 Picker("Import as", selection: Binding(get: { vm.importMode }, set: { vm.setImportMode($0) })) {
-                    Text("Looks").tag(LookMode.looks)
-                    Text("Film").tag(LookMode.film)
+                    ForEach(ImportMode.allCases, id: \.self) { Text($0.label).tag($0) }
                 }
                 .labelsHidden()
                 .pickerStyle(.segmented)
                 .neutralSegments()
                 .help("What photos added next are developed as; each photo can switch later")
+                Text(Self.importHint(vm.importMode)).font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true).padding(.top, 4)
                 sidebarHeading("Order")
                 Picker("Order", selection: Binding(get: { vm.sort }, set: { vm.setSort($0) })) {
                     Text("Shoot date").tag(PhotoSort.date)
@@ -250,7 +260,7 @@ struct GridScreen: View {
                     Text("Develops every photo in place of its look.").font(.caption).foregroundStyle(.secondary)
                 } else {
                     Button("Apply RawBoy preset…") { pickPreset(nil) }
-                    Text("A preset file develops every photo in place of its look.").font(.caption).foregroundStyle(.secondary)
+                    Text("One of your Pro presets develops every photo in place of its look.").font(.caption).foregroundStyle(.secondary)
                         .padding(.top, 2)
                 }
                 if !vm.lensPresets.isEmpty {
@@ -258,6 +268,7 @@ struct GridScreen: View {
                     lensPresetsControl
                 }
                 if !vm.photos.isEmpty {
+                    FilterSection(vm: vm, heading: { AnyView(sidebarHeading($0)) })
                     sidebarHeading("Denoise")
                     Button("Auto denoise all") { vm.autoDenoiseAll() }
                     Text("Each photo's own measured denoise, for a finished series.").font(.caption).foregroundStyle(.secondary)
@@ -288,10 +299,20 @@ struct GridScreen: View {
             .accessibilityAddTraits(.isHeader)
     }
 
+    /** What each Import as does, under the picker (the web's hint). */
+    static func importHint(_ mode: ImportMode) -> String {
+        switch mode {
+        case .looks: return "Auto develop and a suggested colour look."
+        case .film: return "Auto develop as film on a suggested stock."
+        case .plain: return "No automatic edits and no look: raws get only their measured denoise, other files stay as they are."
+        }
+    }
+
     /** "24 photos · 3 waiting · 5 saved": the batch at a glance. */
     private var batchSummary: String {
         let n = vm.photos.count
         var parts = [n == 1 ? "1 photo" : "\(n) photos"]
+        if vm.filter.isActive { parts[0] = "\(vm.shown.count) of \(n) shown" }
         let waiting = vm.photos.filter { $0.status == .queued || $0.status == .analyzing }.count
         if waiting > 0 { parts.append("\(waiting) to analyse") }
         let saved = vm.photos.filter { $0.status == .exported }.count
@@ -306,7 +327,7 @@ struct GridScreen: View {
     private var macGrid: some View {
         GeometryReader { geo in
             let gap: CGFloat = 14
-            let photos = vm.photos
+            let photos = vm.shown
             let columns = max(1, Int((geo.size.width - gap) / (Self.macCellMin + gap)))  // padding gap on each side, gap between
             let _ = { vm.rowStarts = Array(stride(from: 0, to: photos.count, by: columns)) }()
             ScrollViewReader { scroll in
@@ -334,10 +355,12 @@ struct GridScreen: View {
     private var empty: some View {
         VStack(spacing: 16) {
             Spacer()
-            Text((vm.importMode == .film
-                  ? "Pick RAW photos. Each is developed automatically as film, on a suggested stock."
-                  : "Pick RAW photos. Each is developed automatically and gets a suggested film look.")
-                 + " JPEG, HEIC, PNG and TIFF work too, at lower quality.")
+            Text(vm.importMode == .plain
+                 ? "Pick photos, e.g. TIFFs finished elsewhere. Each is added as it is, with no automatic edits (raws get their measured denoise): apply a preset or a look yourself."
+                 : (vm.importMode == .film
+                    ? "Pick RAW photos. Each is developed automatically as film, on a suggested stock."
+                    : "Pick RAW photos. Each is developed automatically and gets a suggested film look.")
+                   + " JPEG, HEIC, PNG and TIFF work too, at lower quality.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
             if let addFromPhotos {
@@ -365,7 +388,7 @@ struct GridScreen: View {
     private var justifiedGrid: some View {
         GeometryReader { geo in
             let gap: CGFloat = 8
-            let photos = vm.photos
+            let photos = vm.shown
             let aspects = photos.map { p in p.thumbnail.map { CGFloat($0.width) / CGFloat($0.height) } ?? 1.5 }
             let rows = justifiedRows(aspects, width: geo.size.width - gap * 2,
                                      target: geo.size.width < 600 ? 120 : 180, gap: gap)
@@ -892,3 +915,70 @@ struct ResetAllSheet: View {
         .frame(width: 440)
     }
 }
+
+#if os(macOS)
+/**
+ * The sidebar's Filter (the web's): camera, lens, ISO range and shoot day, each listing what the batch holds with a count,
+ * and Unedited (photos still As is). The grid, the photo view's arrows and Export all follow it.
+ */
+private struct FilterSection: View {
+    @ObservedObject var vm: AutoViewModel
+    let heading: (String) -> AnyView
+
+    var body: some View {
+        let photos = vm.photos
+        let cameras = Self.options(photos.compactMap(\.cameraLabel))
+        let lenses = Self.options(photos.compactMap(\.lensLabel))
+        let isos = Self.counts(photos.compactMap(\.isoValue)).sorted { $0.0 < $1.0 }
+        let days = Self.options(photos.compactMap(\.day))
+        heading("Filter")
+        VStack(alignment: .leading, spacing: 6) {
+            menu("Camera", vm.filter.camera, cameras) { vm.filter.camera = $0 }
+            menu("Lens", vm.filter.lens, lenses) { vm.filter.lens = $0 }
+            HStack(spacing: 6) {
+                isoMenu("Min ISO", vm.filter.isoMin, isos) { v in
+                    vm.filter.isoMin = v
+                    if let v, let hi = vm.filter.isoMax, hi < v { vm.filter.isoMax = nil }
+                }
+                isoMenu("Max ISO", vm.filter.isoMax, isos) { v in
+                    vm.filter.isoMax = v
+                    if let v, let lo = vm.filter.isoMin, lo > v { vm.filter.isoMin = nil }
+                }
+            }
+            menu("Date", vm.filter.date, days) { vm.filter.date = $0 }
+            Toggle("Unedited (As is)", isOn: $vm.filter.unedited)
+                .help("Only photos still As is: no look, preset, edits or adjustments")
+            if vm.filter.isActive {
+                Button("Clear filter") { vm.filter = AutoFilter() }
+            }
+        }
+    }
+
+    private static func counts<T: Hashable>(_ values: [T]) -> [(T, Int)] {
+        Dictionary(values.map { ($0, 1) }, uniquingKeysWith: +).map { ($0.key, $0.value) }
+    }
+
+    private static func options(_ values: [String]) -> [(String, Int)] {
+        counts(values).sorted { $0.0.localizedStandardCompare($1.0) == .orderedAscending }
+    }
+
+    private func menu(_ title: String, _ value: String?, _ options: [(String, Int)], _ set: @escaping (String?) -> Void) -> some View {
+        Picker(title, selection: Binding(get: { value ?? "" }, set: { set($0.isEmpty ? nil : $0) })) {
+            Text("Any").tag("")
+            ForEach(options, id: \.0) { o in Text("\(o.0) (\(o.1))").tag(o.0) }
+            if let value, !options.contains(where: { $0.0 == value }) { Text(value).tag(value) }
+        }
+        .help("\(title): only photos with this value")
+    }
+
+    private func isoMenu(_ title: String, _ value: Int?, _ options: [(Int, Int)], _ set: @escaping (Int?) -> Void) -> some View {
+        Picker(title, selection: Binding(get: { value ?? 0 }, set: { set($0 == 0 ? nil : $0) })) {
+            Text(title == "Min ISO" ? "Min ISO" : "Max ISO").tag(0)
+            ForEach(options, id: \.0) { o in Text("\(o.0)").tag(o.0) }
+            if let value, !options.contains(where: { $0.0 == value }) { Text("\(value)").tag(value) }
+        }
+        .labelsHidden()
+        .help(title)
+    }
+}
+#endif
