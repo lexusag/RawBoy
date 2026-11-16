@@ -19,6 +19,14 @@ settings:
     # Owner's free Personal Team: apps on a device must be reinstalled from Xcode every 7 days.
     DEVELOPMENT_TEAM: PB2FFKSMC8
     CODE_SIGN_STYLE: Automatic
+packages:
+  # RawBoy Viewer's libraries (RawBoyBrowseKit, ViewerFiles, ViewerImaging, ViewerUI), by local path while its
+  # `claude/project-thread-7b80wo` branch is unmerged.
+  # TODO: once that branch is merged and tagged, switch to `url: https://github.com/lexusag/RawBoyImageViewer` with
+  # `exactVersion: <tag>` (the packages live in its Packages/ folder: Package.swift must be at the repo root for a git
+  # dependency, so the Viewer needs a root Package.swift, or the tag must be of a split-out package repo).
+  RawBoyViewerPackages:
+    path: ../../RawBoyImageViewer/Packages
 targets:
   RawBoyEngine:
     type: framework
@@ -57,6 +65,8 @@ targets:
           - $(SRCROOT)/build/generated/scan.metal
           - $(SRCROOT)/build/generated/DevelopLayout.swift
     dependencies:
+      - package: RawBoyViewerPackages
+        product: RawBoyBrowseKit
       - framework: native/out/RawBoyNative.xcframework
         embed: false
       - framework: native/out/RawBoyJpeg.xcframework
@@ -89,6 +99,8 @@ targets:
       # Pro's crop frame, shared (Auto's Crop & rotate).
       - path: Pro/ui/CropOverlay.swift
     dependencies:
+      - package: RawBoyViewerPackages
+        product: RawBoyBrowseKit
       - target: RawBoyEngine
       - framework: native/out/RawBoyNative.xcframework
       - framework: native/out/RawBoyJpeg.xcframework
@@ -198,6 +210,8 @@ targets:
         excludes:
           - Fixtures  # read from the source tree (shared with RawBoy Viewer's tests), not bundled
     dependencies:
+      - package: RawBoyViewerPackages
+        product: RawBoyBrowseKit
       - target: RawBoyEngine
       - framework: native/out/RawBoyNative.xcframework
       - framework: native/out/RawBoyJpeg.xcframework
@@ -250,6 +264,8 @@ targets:
           - $(SRCROOT)/build/generated/scan.metal
           - $(SRCROOT)/build/generated/DevelopLayout.swift
     dependencies:
+      - package: RawBoyViewerPackages
+        product: RawBoyBrowseKit
       - framework: native/out/RawBoyNative.xcframework
         embed: false
       - framework: native/out/RawBoyJpeg.xcframework
@@ -290,6 +306,14 @@ targets:
           - Assets.xcassets
       - path: Desktop
     dependencies:
+      - package: RawBoyViewerPackages
+        product: RawBoyBrowseKit
+      - package: RawBoyViewerPackages
+        product: ViewerFiles
+      - package: RawBoyViewerPackages
+        product: ViewerImaging
+      - package: RawBoyViewerPackages
+        product: ViewerUI
       - target: RawBoyEngineMac
       - framework: native/out/RawBoyNative.xcframework
       - framework: native/out/RawBoyJpeg.xcframework
@@ -339,6 +363,8 @@ targets:
           - ViewfinderTests.swift
           - SkinTests.swift
     dependencies:
+      - package: RawBoyViewerPackages
+        product: RawBoyBrowseKit
       - target: RawBoyEngineMac
       - framework: native/out/RawBoyNative.xcframework
       - framework: native/out/RawBoyJpeg.xcframework
