@@ -22,8 +22,29 @@
 #include "dng_xy_coord.h"
 
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
+#include <string>
+
+namespace {
+/** "Make Model", or the model alone when it already starts with the make ("Canon EOS R5"); trimmed, empty if no model. */
+std::string cameraName(std::string make, std::string model) {
+    auto trim = [](std::string& v) {
+        v.erase(v.find_last_not_of(" \t") + 1);
+        v.erase(0, std::min(v.size(), v.find_first_not_of(" \t")));
+    };
+    trim(make);
+    trim(model);
+    if (model.empty()) return "";
+    if (make.empty() || (model.size() >= make.size() &&
+                         std::equal(make.begin(), make.end(), model.begin(), [](unsigned char a, unsigned char b) {
+                             return std::tolower(a) == std::tolower(b);
+                         })))
+        return model;
+    return make + " " + model;
+}
+}  // namespace
 
 namespace rawboy {
 
@@ -206,6 +227,9 @@ bool decodeWithDngSdk(const uint8_t* data, size_t size, DecodedImage& out, std::
         out.decoder = "Adobe DNG SDK";
         out.camera = negative->ModelName().Get();
         if (const dng_exif* exif = negative->GetExif()) {
+            // EXIF Make + Model, as LibRaw names cameras ("Google Pixel 9 Pro"): the ModelName is the DNG's
+            // UniqueCameraModel, which Android's DngCreator writes as "Pixel 9 Pro-Google-google".
+            if (std::string name = cameraName(exif->fMake.Get(), exif->fModel.Get()); !name.empty()) out.camera = name;
             out.lensName = exif->fLensName.Get();
             out.iso = static_cast<float>(exif->fISOSpeedRatings[0]);
             readMetadata(*exif, out.metadata);

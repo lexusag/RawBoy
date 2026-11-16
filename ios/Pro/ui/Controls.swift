@@ -41,7 +41,7 @@ struct ControlsPanel: View {
     @State private var grainOpen = false
     @State private var fisheyeOpen = false
 
-    private static let tabNames = ["Light", "Color", "Detail", "LUTs", "Lens"]
+    private static let tabNames = ["Light", "Colour", "Detail", "LUTs", "Lens"]
     private static let lutsTab = 3
 
     // Film replaces the tone mapper and the user LUT (kept, but not rendered), so the LUTs tab hides while Film is
@@ -185,9 +185,15 @@ struct ControlsPanel: View {
         primariesSliders
     }
 
+    #if os(macOS)
+    private static let pickWhitePrompt = "Click something neutral grey"
+    #else
+    private static let pickWhitePrompt = "Tap something neutral grey"
+    #endif
+
     @ViewBuilder private var whiteBalance: some View {
         Button(action: onPickWhite) {
-            Label(pickingWhite ? "Tap something neutral grey" : "Pick white balance", systemImage: "eyedropper")
+            Label(pickingWhite ? Self.pickWhitePrompt : "Pick white balance", systemImage: "eyedropper")
                 .font(.subheadline)
         }
         .buttonStyle(.bordered)
@@ -231,7 +237,7 @@ struct ControlsPanel: View {
         // Colour denoise follows luma until set (edits and presets from before the split); moving luma pins it.
         ParamSlider(label: "Luma denoise", value: params.denoise, range: 0...100, defaultValue: defaults.denoise,
                     format: formatPlain) { v in set { $0.colorDenoise = $0.effectiveColorDenoise; $0.denoise = v } }
-        ParamSlider(label: "Color denoise", value: params.effectiveColorDenoise, range: 0...100,
+        ParamSlider(label: "Colour denoise", value: params.effectiveColorDenoise, range: 0...100,
                     defaultValue: defaults.effectiveColorDenoise, format: formatPlain) { v in set { $0.colorDenoise = v } }
         slider("Sharpening", \.sharpening, 0...100, format: formatPlain)
         slider("Local contrast", \.localContrast, -100...100)
@@ -316,7 +322,7 @@ struct ControlsPanel: View {
             Group {
                 slider("Size", \.grainSize, 0...100, format: formatPlain)
                 slider("Roughness", \.grainRoughness, 0...100, format: formatPlain)
-                slider("Color", \.grainColor, 0...100, format: formatPlain)
+                slider("Colour", \.grainColor, 0...100, format: formatPlain)
             }
             .padding(.leading, 16)
         }
@@ -646,7 +652,11 @@ struct ParamSlider: View {
                 .reportsWidth("Pro \(label)")
                 .accessibilityLabel(label)
                 .accessibilityValue(format(value))
+                #if os(macOS)
+                .accessibilityHint("Double-click the slider or use Reset to go back to \(format(defaultValue))")
+                #else
                 .accessibilityHint("Double-tap the slider or use Reset to go back to \(format(defaultValue))")
+                #endif
                 .accessibilityAction(named: "Reset") { onChange(defaultValue) }
             Text(format(value))
                 .font(.subheadline.monospacedDigit())
