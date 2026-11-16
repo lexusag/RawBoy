@@ -47,6 +47,9 @@ struct GridScreen: View {
                     exportProgress
                     if vm.photos.isEmpty { empty } else { grid }
                 }
+                // The empty state's prompt is only as wide as its text: without this the row was centred in the window and
+                // the sidebar sat in the middle of it.
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .navigationTitle(selecting ? "\(selection.count) selected" : "RawBoy Auto")
             .toolbar { toolbar }
@@ -213,6 +216,7 @@ struct GridScreen: View {
      * line above the grid.
      */
     private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 0) {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 sidebarHeading("New photos")
@@ -259,17 +263,21 @@ struct GridScreen: View {
                     Text("Each photo's own measured denoise, for a finished series.").font(.caption).foregroundStyle(.secondary)
                         .padding(.top, 2)
                 }
-                Spacer(minLength: 24)
-                if !vm.photos.isEmpty {
-                    Text(batchSummary).font(.caption).foregroundStyle(.secondary).monospacedDigit()
-                }
             }
             .controlSize(.small)
             .padding(14)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .scrollIndicators(.hidden)
+        // The batch at a glance, at the sidebar's foot (a Spacer inside the scroll view doesn't reach it).
+        if !vm.photos.isEmpty {
+            Divider()
+            Text(batchSummary).font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                .padding(.horizontal, 14).padding(.vertical, 10)
+        }
+        }
         .frame(width: 220)
+        .frame(maxHeight: .infinity)
         .background(Color(red: 0x1C / 255, green: 0x1C / 255, blue: 0x1E / 255))  // DESIGN.md's surface: an opaque edge panel
         .disabled(exporting)
     }
