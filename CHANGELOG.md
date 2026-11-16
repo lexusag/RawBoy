@@ -1,3 +1,7 @@
+**RawBoy Desktop: Look selector drag fix (2026-11-16)**
+
+- **Look selector.** Dragging the window (or its corner) no longer makes it jump back and forth: the drag is measured in the photo's space, not the window's own, which moved with it.
+
 **RawBoy Desktop and Web: Auto's mouse, presets, edits from Pro, As is and filters; presets without a photo (2026-11-16)**
 
 - **Wheel in Auto (Desktop).** The mouse wheel over a slider in Auto's photo view moves it (Shift big steps, ⌘ fine), as Pro's and the web's sliders do; over the photo it zooms around the pointer, and the middle button pans. `PointerSurface` and `SliderWheel` moved from Pro into the engine (`view/MacPointer.swift`) so both modes share them.
