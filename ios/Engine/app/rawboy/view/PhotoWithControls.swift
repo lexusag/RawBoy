@@ -15,10 +15,14 @@ public let sidePanelWidth: CGFloat = 360
 public struct PhotoWithControls<Photo: View, Controls: View>: View {
     let photo: Photo
     let controls: (_ beside: Bool) -> Controls
+    /** The photo alone (RawBoy Desktop's focus mode); it keeps its place, so its Metal view isn't made again. */
+    let hidden: Bool
 
-    public init(@ViewBuilder photo: () -> Photo, @ViewBuilder controls: @escaping (_ beside: Bool) -> Controls) {
+    public init(hidden: Bool = false, @ViewBuilder photo: () -> Photo,
+                @ViewBuilder controls: @escaping (_ beside: Bool) -> Controls) {
         self.photo = photo()
         self.controls = controls
+        self.hidden = hidden
     }
 
     public var body: some View {
@@ -28,19 +32,21 @@ public struct PhotoWithControls<Photo: View, Controls: View>: View {
             layout {
                 photo
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                if beside { Divider() }
-                VStack(spacing: 0) {
-                    controls(beside)
+                if beside && !hidden { Divider() }
+                if !hidden {
+                    VStack(spacing: 0) {
+                        controls(beside)
+                    }
+                    .reportsWidth("panel content")
+                    #if os(macOS)
+                    // A classic Mac scroll bar takes 15-17 pt of the panel's width when it shows, and every slider track, the curve
+                    // box and the tone-mapper row stretch or shrink by that as the content grows past the height or back.
+                    .scrollIndicators(.hidden, axes: .vertical)
+                    #endif
+                    .frame(width: beside ? min(sidePanelWidth, geo.size.width * 0.45) : nil)
+                    .clipped()  // whatever a row might still ask for, it can't run off the panel's edge
+                    .frame(maxHeight: beside ? .infinity : nil, alignment: .top)
                 }
-                .reportsWidth("panel content")
-                #if os(macOS)
-                // A classic Mac scroll bar takes 15-17 pt of the panel's width when it shows, and every slider track, the curve
-                // box and the tone-mapper row stretch or shrink by that as the content grows past the height or back.
-                .scrollIndicators(.hidden, axes: .vertical)
-                #endif
-                .frame(width: beside ? min(sidePanelWidth, geo.size.width * 0.45) : nil)
-                .clipped()  // whatever a row might still ask for, it can't run off the panel's edge
-                .frame(maxHeight: beside ? .infinity : nil, alignment: .top)
             }
         }
     }

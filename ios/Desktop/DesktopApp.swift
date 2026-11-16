@@ -167,6 +167,8 @@ struct DesktopCommands: Commands {
             Button("Whole Photo") { model.commands.send(.zoomFit) }.disabled(!ready)
             Button("Compare with As Shot") { model.commands.send(.toggleCompare) }
                 .keyboardShortcut("\\", modifiers: []).disabled(!ready)
+            Button("Photo Only (Tab)") { model.commands.send(.togglePhotoOnly) }
+                .keyboardShortcut("f", modifiers: []).disabled(!ready)
             Button("Frame Colour") { model.commands.send(.cycleFrame) }.keyboardShortcut("d", modifiers: []).disabled(!ready)
             Button("Mark Clipped Highlights and Shadows") { model.vm.toggleClipWarning() }.disabled(!ready)
         }

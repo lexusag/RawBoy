@@ -13,6 +13,8 @@ enum EditorAction: Equatable {
     /** Opens the tool, or closes it when it is the open one. */
     case toggleMode(EditorMode)
     case toggleCompare
+    /** Hides the bar and the panel, or brings them back (Tab, F). */
+    case togglePhotoOnly
     /** 100% at the pointer, or back to the whole photo. */
     case zoom100AtPointer
     case zoomFit
