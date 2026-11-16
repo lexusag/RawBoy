@@ -5,6 +5,11 @@ import SwiftUI
 struct RawBoyProApp: App {
     @StateObject private var vm = EditorViewModel()
 
+    init() {
+        // The open controls tab lasts for the session: a fresh start opens Light.
+        UserDefaults.standard.removeObject(forKey: "pro.tab")
+    }
+
     var body: some Scene {
         WindowGroup {
             ProRoot(vm: vm)

@@ -1,3 +1,7 @@
+**RawBoy Pro (all platforms): the open tab lasts for the session (2026-11-16)**
+
+- A fresh start of RawBoy Pro (web page load, Android, iOS, Desktop) always opens the Light tab. The tab you pick is kept while the app runs (also when a panel closes or a photo loads), but no longer saved between starts; the saved value of older versions is dropped.
+
 **RawBoy Desktop (macOS): Auto look names, Reset all photos, Pro panel width, Pixel DNG check (2026-11-15)**
 
 - **Look and film stock names.** In Auto's photo view nothing said which look or stock was selected: the names under the strip's chips were hidden under a Mac scroll bar. The name is now in bold above the strip ("Yellow Portrait 400 · suggested"), the strip's scroll bar is off, and the grid cells use caption type on the Mac, with the whole text on hover. VoiceOver reads "Look: …" / "Film stock: …".

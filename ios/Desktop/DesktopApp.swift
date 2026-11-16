@@ -8,6 +8,11 @@ struct RawBoyDesktopApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     @ObservedObject private var model = DesktopModel.shared
 
+    init() {
+        // The open controls tab lasts for the session: a fresh start opens Light.
+        UserDefaults.standard.removeObject(forKey: "pro.tab")
+    }
+
     var body: some Scene {
         Window("RawBoy Desktop", id: "main") {
             DesktopRoot(model: model)
