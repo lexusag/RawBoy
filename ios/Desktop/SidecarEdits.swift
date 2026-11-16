@@ -34,6 +34,8 @@ final class SidecarEdits: EditsPersistence {
     var onError: (String) -> Void = { _ in }
     /** The last write's time, for the tests and the status line. */
     private(set) var writes = 0
+    /** The photo whose last write failed (its latest edits are only in memory); cleared by a later good write. */
+    private(set) var unsavedPhoto: URL?
 
     func restore(_ url: URL, defaults: DevelopParams) -> DevelopParams? {
         let sidecar = PhotoSidecar(photo: url)
@@ -78,7 +80,9 @@ final class SidecarEdits: EditsPersistence {
         do {
             try PhotoSidecar(photo: p.url).writeDevelop(json)
             writes += 1
+            if unsavedPhoto == p.url { unsavedPhoto = nil }
         } catch {
+            unsavedPhoto = p.url
             Self.log.error("sidecar write failed: \(error.localizedDescription)")
             onError("Couldn't save the edits next to \(p.url.lastPathComponent): \(error.localizedDescription)")
         }

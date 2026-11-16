@@ -100,10 +100,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        DesktopModel.shared.sidecars.flush()
-        DesktopModel.shared.autoSidecars.flush()
-        DesktopModel.shared.browse.writePendingNow()
-        return .terminateNow
+        let model = DesktopModel.shared
+        model.sidecars.flush()
+        model.autoSidecars.flush()
+        model.browse.writePendingNow()
+        // Closing the window quits too (last window), so this one question covers both. Edits are already on disk by now.
+        let work = model.quitWork
+        if work.isEmpty || ProcessInfo.processInfo.environment["RAWBOY_NO_QUIT_PROMPT"] != nil { return .terminateNow }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Quit RawBoy Desktop?"
+        alert.informativeText = work.message
+        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "Quit Anyway")
+        return alert.runModal() == .alertSecondButtonReturn ? .terminateNow : .terminateCancel
     }
 
     /** The value after [flag] on the command line (`--import-as looks|film|plain`, for `--auto`). */

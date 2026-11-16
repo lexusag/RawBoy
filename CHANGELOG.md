@@ -1,3 +1,7 @@
+**RawBoy Desktop: asks before quitting mid-work (2026-11-16)**
+
+- **Quit (⌘Q) or closing the window** asks "Quit RawBoy Desktop?" when something would be cut short: Pro's export or Auto Dev running, Auto's batch export or photos still being analysed, the Packer converting, or edits whose sidecar could not be written. Cancel is the default; Quit Anyway leaves. Edits themselves never prompt: they are already in the sidecar (the web asks about unexported edits only because it has no sidecar). Browse has no long work of its own, so it is not asked.
+
 **RawBoy Desktop: Settings… for Browse (2026-11-16)**
 
 - **Settings… (⌘,)** in the app menu opens the bundled Viewer's Settings window (`ViewerSettingsRoot`), which until now Desktop never showed. It holds Browse's choices (kept under `desktop.browse.`, not the standalone Viewer's); Pro and Auto have none of their own there.
