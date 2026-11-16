@@ -32,6 +32,8 @@ final class DesktopModel: ObservableObject {
      */
     let browse: AppModel = {
         ViewerSettings.store = UserDefaultsSettings(prefix: "desktop.browse.")
+        // Real previews (R, Compare) are the engine's as-shot develop, as Pro opens the photo.
+        ViewerHost.realPreview = EngineRealPreview()
         var options = ViewerOptions()
         options.hidesDockAndMenuBar = false
         options.viewerInHostWindow = true

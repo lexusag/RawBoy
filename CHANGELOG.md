@@ -1,3 +1,7 @@
+**RawBoy Desktop: Browse's real preview is the engine's develop (2026-11-16)**
+
+- **R and Compare in Browse.** Real previews now show RawBoy's own as-shot develop, the picture Pro opens (`Desktop/EngineRealPreview.swift`, through `Exporter.renderCGImage`), instead of Core Image's. It is pixel-identical to a Pro export at that size, one raw at a time, falling back to Core Image for what the engine can't open. Slower than Core Image on ARW/RAF (0.5–0.8 s for 24–33 MP, 2.3 s for 102 MP at screen size), faster on a Sony DNG; the standalone Viewer keeps Core Image.
+
 **RawBoy Desktop: Browse mode, and the Viewer's libraries replace Desktop's own copies (2026-11-16)**
 
 - **Browse (⌘3).** A third mode next to Pro and Auto: RawBoy Viewer's grid, sidebar, viewer and culling (`ViewerUI`) inside the window, with the Browse menu (rename, export, copy and move, compare, slideshow, Send to RawBoy Auto, Move to Trash). Its settings are kept apart (`desktop.browse.`); the menu bar and Dock are not hidden.

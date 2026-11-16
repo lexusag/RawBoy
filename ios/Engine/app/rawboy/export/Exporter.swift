@@ -102,6 +102,31 @@ public final class Exporter {
         }
     }
 
+    /**
+     * [image] developed with [params] as an 8-bit sRGB image whose long side is at most [maxLongSide] (nil: full size): the
+     * pixels the system JPEG export writes (full-resolution bands, area-downscaled as they stream), without the file. For
+     * viewers that show the develop at screen size (RawBoy Desktop's Browse real preview). Blocking: call from a background
+     * queue; [gpu] reuses a developer across calls.
+     */
+    public func renderCGImage(_ image: RawImage, params: ShaderParams, maxLongSide: Int?, gpu: ExportGpu? = nil) throws -> CGImage {
+        self.gpu = gpu
+        scanExport = false
+        let size = BandDownscaler.outputSize(params.lens.outputWidth, params.lens.outputHeight, maxLongSide: maxLongSide)
+        let (w, h) = size
+        var rgba = [UInt8](repeating: 255, count: w * h * 4)
+        try renderOutput(image, params, size, 0, "", .classic, nil, false, { _ in }) { y, rows, band in
+            rgba.withUnsafeMutableBufferPointer { dst in
+                for i in 0..<(w * rows) {
+                    let o = (y * w + i) * 4
+                    dst[o] = Self.to8(band[i * 3])
+                    dst[o + 1] = Self.to8(band[i * 3 + 1])
+                    dst[o + 2] = Self.to8(band[i * 3 + 2])
+                }
+            }
+        }
+        return try ThumbnailRenderer.cgImage(rgba, w, h)
+    }
+
     /** ImageIO's JPEG: 8-bit input, so the whole image is held as 8-bit RGBA. */
     private func writeSystemJpeg(_ image: RawImage, _ url: URL, _ params: ShaderParams, _ size: (Int, Int), _ outSize: (Int, Int),
                                  _ quality: Int, _ sharpen: Float, _ dateStamp: String, _ dateStampStyle: DateStampStyle,

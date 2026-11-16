@@ -1,6 +1,7 @@
 #if DEBUG
 import AppKit
 import RawBoyEngine
+import ViewerImaging
 import ViewerUI
 import enum RawBoyBrowseKit.AutoImport
 import enum RawBoyBrowseKit.XmpSidecar
@@ -33,6 +34,17 @@ enum BrowseProbe {
             }
             try? await Task.sleep(for: .seconds(3))
             guard let folder = model.browse.folder else { return log("no folder") }
+            // RAWBOY_BROWSE_PROBE=preview: the real preview the viewer's image store gets from the host is the engine's.
+            if ProcessInfo.processInfo.environment["RAWBOY_BROWSE_PROBE"] == "preview" {
+                log("host real preview provider: \(type(of: ViewerHost.realPreview))")
+                let store = ImageStore(realPreview: ViewerHost.realPreview)
+                for name in ((try? FileManager.default.contentsOfDirectory(atPath: folder.path)) ?? []).sorted() where name.lowercased().hasSuffix(".dng") {
+                    let start = Date()
+                    let image = await store.image(folder.appendingPathComponent(name), .developed, orientation: nil)
+                    log("\(name): \(image.map { "\($0.cgImage.width)x\($0.cgImage.height) of \($0.fullSize.width)x\($0.fullSize.height), \($0.cgImage.colorSpace?.name as String? ?? "?")" } ?? "nil") in \(String(format: "%.2f", Date().timeIntervalSince(start))) s")
+                }
+                return NSApp.terminate(nil)
+            }
             log("mode \(model.mode.rawValue), folder \(folder.lastPathComponent)")
             key(0, "a", .command)
             key(20, "3")

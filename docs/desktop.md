@@ -49,8 +49,17 @@ a view over the grid (`viewerInHostWindow`), and its preferences are kept under 
 ViewerUI installs its own key monitor while Browse shows; Desktop's `KeyboardShortcuts` only takes ⌘1/⌘2 there. The Browse
 menu is the Viewer's Photo menu (`ViewerPhotoCommands`), on while Browse shows. `Desktop/DesktopHandOff.swift`
 implements the Viewer's `PhotoHandOff` in-process: E in the viewer opens the photo in Pro (whichever mode was showing; Auto's
-batch is kept), Send to RawBoy Auto adds photos or folders to Auto's batch as Looks, Film or As is. Real previews (R) keep the
-Viewer's Core Image development: the engine's Metal develop was not wired in (it needs a `PhotoSession` per request).
+batch is kept), Send to RawBoy Auto adds photos or folders to Auto's batch as Looks, Film or As is. Real previews (R, and Compare's) are the
+engine's as-shot develop (`Desktop/EngineRealPreview.swift`, a `RealPreviewProvider` given to ViewerUI through
+`ViewerHost.realPreview` before the model is made): `RawImage.open`, the as-shot `DevelopParams` with no edits, then
+`Exporter.renderCGImage` (full-resolution bands developed on the GPU and area-downscaled to the requested size), so the
+picture is Pro's and pixel-identical to a `PhotoSession` export at that size; 8-bit sRGB (Core Image's is Display P3). One develop at
+a time, the GPU developer dropped 20 s after the last request, a sidecar's orientation applied once afterwards
+(`ImageLoader.oriented`), Core Image for anything the engine refuses and for non-raws. Timings at 3440 px on this Mac
+(cold / warm, engine vs Core Image): Sony 24 MP DNG 1.1 / 1.0 s vs 1.9 / 1.8 s; Sony 24 MP ARW 0.55 / 0.55 s vs 0.34 / 0.19 s;
+Sony 33 MP ARW 0.75 / 0.70 s vs 0.33 / 0.18 s; Fujifilm GFX 102 MP RAF 2.4 / 2.2 s vs 0.9 / 0.6–1.6 s. The engine decodes the
+whole raw (no half-size draft decode in the Swift API), Core Image develops ARW/RAF at a reduced scale; `EngineRealPreviewTests.testTimings`
+(`RAWBOY_PREVIEW_TIMING=<files>`) measures it again.
 Ratings, picks, turns and crops are the same `xmp:Rating` / `rawboy:Pick` / `tiff:Orientation` / `rawboy:Develop` fields Pro and
 Auto use, through the Kit's `XmpSidecar`. Launch with `--browse <folder or photo>`; debug `RAWBOY_BROWSE_PROBE=1` (copies
 only) selects all, rates, and exercises both hand-offs. The Kit also replaced the engine's own `XmpSidecar`, `PhotoOrder`

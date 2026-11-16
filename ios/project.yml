@@ -209,6 +209,7 @@ targets:
       - path: EngineTests
         excludes:
           - Fixtures  # read from the source tree (shared with RawBoy Viewer's tests), not bundled
+          - EngineRealPreviewTests.swift  # Desktop's provider, macOS only
     dependencies:
       - package: RawBoyViewerPackages
         product: RawBoyBrowseKit
@@ -362,7 +363,11 @@ targets:
           - DeviceDngTests.swift
           - ViewfinderTests.swift
           - SkinTests.swift
+      # Browse mode's real preview provider, tested here (it needs only the engine and ViewerImaging).
+      - path: Desktop/EngineRealPreview.swift
     dependencies:
+      - package: RawBoyViewerPackages
+        product: ViewerImaging
       - package: RawBoyViewerPackages
         product: RawBoyBrowseKit
       - target: RawBoyEngineMac
