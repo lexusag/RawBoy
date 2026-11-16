@@ -100,7 +100,13 @@ struct EditorScreen: View {
                              onExport: { showExport = true }, onSendToAuto: commands.sendToAuto, helpShown: $showHelp)
             }
             // Controls under the photo in portrait, beside it in landscape.
-            PhotoWithControls(hidden: photoOnly) { previewArea } controls: { beside in panel(beside: beside) }
+            PhotoWithControls(hidden: photoOnly) {
+                VStack(spacing: 0) {
+                    previewArea
+                    // RawBoy Desktop's filmstrip: the other photos in the folder, hidden with the panels.
+                    if !photoOnly, let filmstrip = commands.filmstrip { filmstrip }
+                }
+            } controls: { beside in panel(beside: beside) }
         }
         .background(Color(white: 0.07))
         .sheet(isPresented: $showExport) {

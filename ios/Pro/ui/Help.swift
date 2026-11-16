@@ -15,6 +15,7 @@ let proHelp = [
         HelpItem("Mouse wheel over the photo", "Zoom in and out around the pointer, from a quarter of the whole photo (it stops once at the whole photo, so masks and light leaks can be placed outside its edges) up to 400% (stops once at 100%). A trackpad pinch works too. The middle button pans the zoomed photo."),
         HelpItem("Press and hold, or \\", "Compare with the as-shot render (the key toggles it until pressed again)."),
         HelpItem("C", "Open or close Crop & rotate."),
+        HelpItem("Filmstrip", "Under the photo: the other photos in its folder, by file name (a RAW + JPEG pair once, as the raw). Click one to open it, or press ← and → for the previous and next; the mouse wheel scrolls the strip. Photos only in iCloud show a cloud and aren't downloaded until opened."),
         HelpItem("Tab or F", "Photo only: hides the bar and the panel; again, or Esc, brings them back. With Full Keyboard Access on, Tab moves between controls instead, and F still works."),
         HelpItem("D, or click outside the photo", "Change the frame around it: grey, white or black."),
         HelpItem("Histogram", "Above the sliders: red, green and blue levels of the developed photo, with the share of crushed shadows (left) and clipped highlights (right). Click it to mark clipped highlights red and crushed shadows blue on the photo."),

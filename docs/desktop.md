@@ -12,7 +12,7 @@ RawBoy's editor as a native Mac app (SwiftUI + Metal, the iOS engine). Phase 1 i
 ⌘E: JPEG or TIFF, into the photo's folder or a folder you choose, named NAME-rawboy.jpg / .tif (an existing file of that name is replaced).
 
 ## Window
-One bar over the photo (the photo's name and exposure; Crop, Masks, Light, Heal, Presets; Auto Dev, To Auto, Reset, Undo, Redo, Export) and the slider panel on the right: sections that open and close (Light, Curve, Colour, Primaries, Detail, Portrait, Effects, LUT, Lens), each with an amber dot when it has edits and a reset for that section only. The phones keep their tabs.
+One bar over the photo (the photo's name and exposure; Crop, Masks, Light, Heal, Presets; Auto Dev, To Auto, Reset, Undo, Redo, Export) and the slider panel on the right: sections that open and close (Light, Curve, Colour, Primaries, Detail, Portrait, Effects, LUT, Lens), each with an amber dot when it has edits and a reset for that section only. Under the photo, a **filmstrip** of the other photos in its folder (name order, a RAW + JPEG pair once): click one, or ← / →, to open the next. The phones keep their tabs.
 
 ## Keys and mouse
 Z 100% at the pointer, Tab or F photo only (hides the bar and the panel; Tab stays with Full Keyboard Access when that is on), D frame colour, C Crop & rotate, \ Compare, B healing brush (inside Masks: brush), E / V masks, [ ] brush size, Delete removes the selected healing stroke, Esc or Return closes the tool, Space pans, ⌘Z / ⇧⌘Z, ⌘O, ⌘E, ⌘/ help. Keys are matched by physical position. The wheel zooms around the pointer; over a slider it moves it (Shift big, ⌘ fine); double-click resets a slider.

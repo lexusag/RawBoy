@@ -133,6 +133,12 @@ final class KeyboardShortcuts {
             commands.send(.togglePhotoOnly)
             return nil
         }
+        // ← → step through the folder (the filmstrip), unless a focused control (Full Keyboard Access) takes the arrows.
+        if key == .left || key == .right, flags.isEmpty {
+            if NSApp.keyWindow?.firstResponder is NSControl { return event }
+            model.openNeighbour(key == .left ? -1 : 1)
+            return nil
+        }
         switch key {
         case .f: commands.send(.togglePhotoOnly)
         case .z: commands.send(.zoom100AtPointer)
