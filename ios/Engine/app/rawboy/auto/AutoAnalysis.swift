@@ -7,6 +7,7 @@ public struct Analysis: @unchecked Sendable {
     public let autoBase: DevelopParams
     public let stats: SceneStats
     public let lens: LensInfo
+    public let focalLength: Float
     public let base: PreviewImage
     public let bloom: BloomSources
     public let skin: SkinMask?
@@ -21,8 +22,8 @@ public struct Analysis: @unchecked Sendable {
      * itself ([autoBase] = the as-shot [defaults]); [measured] keeps the auto develop for Auto denoise.
      */
     public func asIs() -> Analysis {
-        Analysis(defaults: defaults, autoBase: defaults, stats: stats, lens: lens, base: base, bloom: bloom, skin: skin,
-                 measured: measured)
+        Analysis(defaults: defaults, autoBase: defaults, stats: stats, lens: lens, focalLength: focalLength, base: base,
+                 bloom: bloom, skin: skin, measured: measured)
     }
 }
 
@@ -52,7 +53,7 @@ public enum AutoAnalysis {
         let skin = segment(copies.0, detectSkin)
         if let key {
             cache?.put(key, AnalysisSnapshot(base: copies.0, halo: copies.1.halo, tail: copies.1.tail, lens: info.lens, iso: info.iso,
-                                             temperature: info.defaults.temperature, tint: info.defaults.tint,
+                                             focalLength: info.focalLength, temperature: info.defaults.temperature, tint: info.defaults.tint,
                                              displaySource: white.0, clipLevel: white.1, cameraMetered: info.cameraMetered,
                                              noise: info.noise, skin: skin, skinDone: true))
         }
@@ -66,7 +67,8 @@ public enum AutoAnalysis {
         defaults.tint = s.tint
         defaults.displaySource = s.displaySource
         defaults.clipLevel = s.clipLevel
-        let info = Info(lens: s.lens, iso: s.iso, defaults: defaults, cameraMetered: s.cameraMetered, noise: s.noise)
+        let info = Info(lens: s.lens, iso: s.iso, defaults: defaults, focalLength: s.focalLength,
+                        cameraMetered: s.cameraMetered, noise: s.noise)
         return finish(s.base, BloomSources(halo: s.halo, tail: s.tail), info, label, s.skin)
     }
 
@@ -85,7 +87,7 @@ public enum AutoAnalysis {
         let (base, bloom) = copiesOf(image)
         log.notice("small copies: \(Int(Date().timeIntervalSince(start) * 1000)) ms")
         var info = Info.of(image)
-        if info.iso <= 0 { info = Info(lens: info.lens, iso: fallbackIso, defaults: info.defaults) }
+        if info.iso <= 0 { info = Info(lens: info.lens, iso: fallbackIso, defaults: info.defaults, focalLength: info.focalLength) }
         info.phoneAe = phoneAe
         info.captureEv = captureEv
         return analyze(base, bloom, info, label, noiseIsoScale, detectSkin, meter, splitLuma)
@@ -99,15 +101,18 @@ public enum AutoAnalysis {
         let lens: LensInfo
         let iso: Float
         let defaults: DevelopParams
+        var focalLength: Float = 0
         var cameraMetered = false
         var noise = NoiseLevel.none
         var phoneAe = false
         var captureEv: Float = 0
 
         static func of(_ img: RawImage, auto: Bool = false) -> Info {
-            Info(lens: img.lens, iso: img.iso, defaults: PhotoSession.asShotDefaults(img),
-                 cameraMetered: auto && AutoTone.cameraMetered(make: img.make, baselineExposure: img.baselineExposure),
-                 noise: auto ? img.measureNoise() : .none)
+            let fl = img.metadata.focalLength
+            return Info(lens: img.lens, iso: img.iso, defaults: PhotoSession.asShotDefaults(img),
+                        focalLength: fl.isFinite && fl > 0 ? Float(fl) : 0,
+                        cameraMetered: auto && AutoTone.cameraMetered(make: img.make, baselineExposure: img.baselineExposure),
+                        noise: auto ? img.measureNoise() : .none)
         }
     }
 
@@ -164,7 +169,7 @@ public enum AutoAnalysis {
             denoise=\(auto.denoise)/\(auto.colorDenoise.map { "\($0)" } ?? "-") \
             wb=\(Int(defaults.temperature))K/\(Int(defaults.tint)) -> \(Int(auto.temperature))K/\(Int(auto.tint))
             """)
-        return Analysis(defaults: defaults, autoBase: auto, stats: stats, lens: info.lens, base: base, bloom: bloom,
-                        skin: skin, measured: auto)
+        return Analysis(defaults: defaults, autoBase: auto, stats: stats, lens: info.lens, focalLength: info.focalLength,
+                        base: base, bloom: bloom, skin: skin, measured: auto)
     }
 }

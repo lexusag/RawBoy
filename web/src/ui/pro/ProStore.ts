@@ -136,6 +136,8 @@ export class ProStore {
    */
   async open(file: File, params?: DevelopParams, sidecar: EditsSidecar | null = null) {
     if (this.busy) return;
+    this.flushStroke();
+    this.flushHeal();
     const prev = this._state.fileName != null ? { fileName: this._state.fileName, params: this._state.params, defaults: this._state.defaults } : null;
     this.set({ loading: true });
     try {
@@ -154,7 +156,7 @@ export class ProStore {
       });
       this.history.clear();
       this.openFile = file;
-      if (prev) this.previous = prev;
+      if (prev && prev.fileName !== file.name) this.previous = prev;
       this.sidecar = sidecar;
       this.savedParams = opened.params;
       this.set({
@@ -202,6 +204,8 @@ export class ProStore {
    */
   copyPreviousEdits = () => {
     if (!this.hasImage || this.busy || !this.previous) return;
+    this.flushStroke();
+    this.flushHeal();
     const prev = this.previous;
     const next = this.mergeCarriedEdits(prev, this._state.params, this._state.defaults);
     if (next.film) this.lastFilm = next.film;

@@ -16,6 +16,7 @@ export interface Analysis {
   autoBase: DevelopParams;
   stats: SceneStats;
   lens: LensInfo;
+  focalLength: number;
   camera: string;
   base: PreviewImage;
   bloom: BloomSources;
@@ -48,6 +49,7 @@ export interface DecodedForAnalysis {
   displayReferred: boolean;
   clipLevel: number;
   lens: LensInfo;
+  focalLength: number;
   iso: number;
   camera: string;
   description: string;
@@ -76,11 +78,13 @@ export async function decodeForAnalysis(
     const bloom = await bloomSourcesOf(img);
     const noise = await img.measureNoise();
     console.debug(`${TAG} small copies: ${Math.round(performance.now() - t0)} ms`);
+    const fl = img.metadata.focalLength;
     return {
       asShotWhite: img.asShotWhite,
       displayReferred: img.displayReferred,
       clipLevel: img.clipLevel,
       lens: img.lens,
+      focalLength: Number.isFinite(fl) && fl > 0 ? fl : 0,
       iso: img.iso,
       camera: img.camera,
       description: img.description,
@@ -121,7 +125,7 @@ export async function finishAnalysis(d: DecodedForAnalysis, label: string, known
       `noise=${noise.luma}/${noise.chroma} -> exposure=${auto.exposure} hl=${auto.highlights} denoise=${auto.denoise}/${auto.colorDenoise} sh=${auto.shadows} contrast=${auto.contrast} ` +
       `wb=${Math.trunc(defaults.temperature)}K/${Math.trunc(defaults.tint)} -> ${Math.trunc(auto.temperature)}K/${Math.trunc(auto.tint)}`,
   );
-  return { defaults, autoBase: auto, stats, lens: d.lens, camera: d.camera ?? '', base: d.base, bloom: d.bloom, skin, description: d.description, noise, cameraMetered: d.cameraMetered };
+  return { defaults, autoBase: auto, stats, lens: d.lens, focalLength: d.focalLength ?? 0, camera: d.camera ?? '', base: d.base, bloom: d.bloom, skin, description: d.description, noise, cameraMetered: d.cameraMetered };
 }
 
 /**

@@ -12,6 +12,7 @@ public struct AnalysisSnapshot: @unchecked Sendable {
     public var tail: PreviewImage
     public var lens: LensInfo
     public var iso: Float
+    public var focalLength: Float = 0
     public var temperature: Float
     public var tint: Float
     public var displaySource: Bool
@@ -30,7 +31,7 @@ public struct AnalysisSnapshot: @unchecked Sendable {
  * segmentation change (anything a snapshot holds; the auto develop is not part of it).
  */
 public final class AnalysisCache: @unchecked Sendable {
-    public static let version = 1
+    public static let version = 2
     /** About 300 photos (each is 2-5 MB). */
     public static let maxBytes = 1_000_000_000
 
@@ -163,7 +164,7 @@ public final class AnalysisCache: @unchecked Sendable {
         let key: String
         let base: Image, halo: Image, tail: Image
         let lens: Lens
-        let iso: Float, temperature: Float, tint: Float, clipLevel: Float
+        let iso: Float, focalLength: Float, temperature: Float, tint: Float, clipLevel: Float
         let displaySource: Bool, cameraMetered: Bool
         let noiseLuma: Float, noiseChroma: Float
         let skin: Skin?
@@ -176,7 +177,7 @@ public final class AnalysisCache: @unchecked Sendable {
                         sensorHeight: s.lens.sensorHeight, orientation: s.lens.orientation, warp: s.lens.warp,
                         vignette: s.lens.vignette, shading: s.lens.shading, gainMapsApplied: s.lens.gainMapsApplied,
                         fisheye: s.lens.fisheyeCircle)
-            iso = s.iso; temperature = s.temperature; tint = s.tint; clipLevel = s.clipLevel
+            iso = s.iso; focalLength = s.focalLength; temperature = s.temperature; tint = s.tint; clipLevel = s.clipLevel
             displaySource = s.displaySource; cameraMetered = s.cameraMetered
             noiseLuma = s.noise.luma; noiseChroma = s.noise.chroma
             skin = s.skin.map {
@@ -200,8 +201,8 @@ public final class AnalysisCache: @unchecked Sendable {
                 mask = SkinMask(width: s.width, height: s.height, data: data, sigmaPx: s.sigmaPx, hasSkin: s.hasSkin,
                                 faceDiameterPx: s.faceDiameterPx, face: s.face.map(AnalysisCache.floats), faces: s.faces)
             }
-            return AnalysisSnapshot(base: b, halo: h, tail: t, lens: l, iso: iso, temperature: temperature, tint: tint,
-                                    displaySource: displaySource, clipLevel: clipLevel, cameraMetered: cameraMetered,
+            return AnalysisSnapshot(base: b, halo: h, tail: t, lens: l, iso: iso, focalLength: focalLength, temperature: temperature,
+                                    tint: tint, displaySource: displaySource, clipLevel: clipLevel, cameraMetered: cameraMetered,
                                     noise: NoiseLevel(luma: noiseLuma, chroma: noiseChroma), skin: mask, skinDone: skinDone)
         }
     }

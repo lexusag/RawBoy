@@ -94,4 +94,20 @@ describe('ProStore.copyPreviousEdits', () => {
     expect(store.state.params.temperature).toBe(4800);
     expect(store.state.params.tint).toBe(18);
   });
+
+  it('keeps the previous photo when the current photo is reopened', async () => {
+    const { store } = setupStore();
+    await store.open(new File([], 'first.dng'));
+    store.update({ ...store.state.params, exposure: 1.5 });
+
+    await store.open(new File([], 'second.dng'), developParams({ exposure: 0 }));
+    expect(store.state.previousFileName).toBe('first.dng');
+
+    // Reopening second.dng (e.g. from Auto) should not overwrite first.dng as the previous photo.
+    await store.open(new File([], 'second.dng'), developParams({ exposure: -0.75 }));
+    expect(store.state.previousFileName).toBe('first.dng');
+
+    store.copyPreviousEdits();
+    expect(store.state.params.exposure).toBe(1.5);
+  });
 });
