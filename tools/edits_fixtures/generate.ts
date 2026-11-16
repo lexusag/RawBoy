@@ -43,7 +43,7 @@ const cases: Record<string, unknown> = {
   leaksFx: { ...defaults, leaks: [leak, { ...newLightLeak(0.8, 0.2, 'streak'), seed: 0.5 }], fx: [fx] },
   // Healing brush strokes: a stroke with a chosen source, and a click with the engine's own pick.
   heal: { ...defaults, healSpots: [{ ...newHealSpot(0.4, 0.5, 0.01, [0.6, 0.5], 25), path: [0.4, 0.5, 0.41, 0.52] }, newHealSpot(0.9, 0.1, 0.0004, null)] },
-  // Fields only the web has: the Swift port must keep them verbatim.
+  // Fields only the web had: the Swift port must keep them verbatim (luma contrast is a Swift field now, kept as a regression case).
   portrait: { ...defaults, portraitRetouch: 35, skinRetouch: 20 },
   webOnly: { ...defaults, exposure: 0.3, lumaContrast: 12 },
   untouched: { ...defaults },

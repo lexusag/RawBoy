@@ -1,3 +1,8 @@
+**RawBoy Desktop and iOS: Luma contrast in Pro and Auto (2026-11-16)**
+
+- **Luma contrast** (-100..+100) under Contrast in Pro's Light section and (-50..+50) under Contrast in Auto's Light section, as on the web: the same log slope on luminance only, so colour saturation holds. It is a `DevelopParams.lumaContrast` field (Light preset group, so presets, Edits JSON and Send to Auto carry it) and an `Adjustments.lumaContrast` in Auto (kept in the `rawboy:Auto` sidecar, copied by Apply to all and Copy previous, cleared by Reset all photos). The shader already had `uLumaContrast`; `ShaderParams.lumaContrast` = 2^(0.7 x value / 100) - 1 as on the web. Edits and sidecars the web wrote with it read as a slider now, not a kept extra.
+- Tests: `LumaContrastTests`, `EditsTests`, `AutoSidecarTests`. Not built here (no Swift toolchain); CI's `desktop` job compiles and runs them. Android still has no slider.
+
 **RawBoy Desktop: Browse takes the Viewer 0.2.2 (2026-11-16)**
 
 - **Top bar zoom.** Double-clicking Browse's toolbar (or the strip above Places) expands the window to fit the screen and again puts it back, like the title bar's Zoom (it follows the system's double-click setting).

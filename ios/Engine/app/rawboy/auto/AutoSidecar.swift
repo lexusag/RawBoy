@@ -13,7 +13,7 @@ public struct SavedAuto: @unchecked Sendable {
     public var filmLook: Look
     public var strength: Float
     public var adjust: Adjustments
-    /** Web's `retouch` and `lumaContrast` adjustments, which this engine has no slider for: kept and written back. */
+    /** Web's `retouch` adjustment, which this engine has no slider for: kept and written back. */
     public var webAdjust: [String: Float]
     /** The preset itself (name, groups, values), so it doesn't depend on this machine's preset list. */
     public var preset: Preset?
@@ -59,7 +59,7 @@ public enum AutoSidecar {
             "brightness": number(s.adjust.brightness), "warmth": number(s.adjust.warmth), "tint": number(s.adjust.tint),
             "contrast": number(s.adjust.contrast), "saturation": number(s.adjust.saturation), "grain": number(s.adjust.grain),
             "denoise": number(s.adjust.denoise), "rotation": s.adjust.rotation, "straighten": number(s.adjust.straighten),
-            "lumaContrast": number(s.webAdjust["lumaContrast"] ?? 0), "retouch": number(s.webAdjust["retouch"] ?? 0),
+            "lumaContrast": number(s.adjust.lumaContrast), "retouch": number(s.webAdjust["retouch"] ?? 0),
         ]
         if let c = s.adjust.crop {
             adjust["crop"] = ["left": number(c.left), "top": number(c.top), "right": number(c.right), "bottom": number(c.bottom)]
@@ -124,13 +124,14 @@ public enum AutoSidecar {
         adjust.warmth = num(a["warmth"], -100, 100, 0)
         adjust.tint = num(a["tint"], -100, 100, 0)
         adjust.contrast = num(a["contrast"], -100, 100, 0)
+        adjust.lumaContrast = num(a["lumaContrast"], -100, 100, 0)
         adjust.saturation = num(a["saturation"], -100, 100, 0)
         adjust.grain = num(a["grain"], -100, 100, 0)
         adjust.denoise = num(a["denoise"], -100, 100, 0)
         adjust.straighten = num(a["straighten"], -45, 45, 0)
         adjust.rotation = Int(num(a["rotation"], 0, 3, 0).rounded())
         adjust.crop = crop(a["crop"])
-        let webAdjust = ["lumaContrast": num(a["lumaContrast"], -100, 100, 0), "retouch": num(a["retouch"], 0, 100, 0)]
+        let webAdjust = ["retouch": num(a["retouch"], 0, 100, 0)]
             .filter { $0.value != 0 }
         var lensPreset: Preset?
         if let l = o["lens"], !(l is String) { lensPreset = preset(from: l).flatMap { $0.isLensPreset ? $0 : nil } }

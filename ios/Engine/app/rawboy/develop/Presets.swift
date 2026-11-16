@@ -27,7 +27,7 @@ public enum PresetGroup: String, CaseIterable, Sendable {
         switch self {
         // The film fields belong to the tone mapper: Film is its fourth choice (film != nil).
         case .light: ["toneMapper", "film", "filmAmount", "filmGrain", "halation",
-                      "exposure", "contrast", "highlights", "shadows", "whites", "blacks"]
+                      "exposure", "contrast", "lumaContrast", "highlights", "shadows", "whites", "blacks"]
         case .whiteBalance: ["temperature", "tint"]
         case .curves: ["curves"]
         case .color: ["saturation", "redHue", "redPurity", "greenHue", "greenPurity", "blueHue", "bluePurity", "tintHue",
@@ -268,7 +268,7 @@ public enum Presets {
     }
 
     private static let numberFields: [String: WritableKeyPath<DevelopParams, Float>] = [
-        "exposure": \.exposure, "contrast": \.contrast, "highlights": \.highlights, "shadows": \.shadows,
+        "exposure": \.exposure, "contrast": \.contrast, "lumaContrast": \.lumaContrast, "highlights": \.highlights, "shadows": \.shadows,
         "whites": \.whites, "blacks": \.blacks, "temperature": \.temperature, "tint": \.tint,
         "saturation": \.saturation, "redHue": \.redHue, "redPurity": \.redPurity, "greenHue": \.greenHue,
         "greenPurity": \.greenPurity, "blueHue": \.blueHue, "bluePurity": \.bluePurity, "tintHue": \.tintHue,
