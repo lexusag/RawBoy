@@ -2,7 +2,7 @@
 
 - **Top bar zoom.** Double-clicking Browse's toolbar (or the strip above Places) expands the window to fit the screen and again puts it back, like the title bar's Zoom (it follows the system's double-click setting).
 - **Copy Folder Name / Copy Folder Path** in the right-click menu of a folder in Places, Favourites, Recent and the grid.
-- **Finder opens.** Desktop no longer claims photo types from the OS (document types are rank None: not offered first, never the default; Open With › Other still works) and lists every type Browse shows (WebP, AVIF, JPEG XL, kdc, x3f too). While Browse is showing, Open With on a photo or folder opens it in Browse; otherwise Pro, or Auto for several photos or a folder, as before.
+- **Finder opens.** Desktop no longer claims photo types from the OS (document types are rank Alternate: listed under Open With and selectable, never the default on its own) and lists every type Browse shows (WebP, AVIF, JPEG XL, kdc, x3f too). Open With, a Dock drop or `open -a` on a photo or folder always opens it in Browse, whichever mode was showing; edit from there with E or Send to Auto.
 - Pin: `from: 0.2.2` (`ios/project.yml`, `ios/viewer-source.sh`). Needs the Viewer's v0.2.2 tag to exist before CI can resolve it.
 
 **RawBoy Desktop: the Viewer's libraries by path or by tag (2026-11-16)**

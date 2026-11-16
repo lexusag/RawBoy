@@ -328,17 +328,17 @@ targets:
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         LSApplicationCategoryType: public.app-category.photography
         NSHumanReadableCopyright: RawBoy
-        # Never claimed by the OS: rank None, so Finder doesn't offer Desktop first or pick it for a type; it is still there
-        # under Open With > Other, and takes the types RawBoy Viewer's Browse shows (RawBoyBrowseKit's PhotoFileType). Photos handed
+        # Rank Alternate: Desktop is listed and can be chosen (Open With, Always Open With, Get Info > Change All; rank None
+        # greys it out in the "Choose an application" dialog) but is never the default on its own. It takes the types RawBoy Viewer's Browse shows (RawBoyBrowseKit's PhotoFileType). Photos handed
         # over by the Finder open in Browse while Browse shows, else in Pro.
         CFBundleDocumentTypes:
           - CFBundleTypeName: RAW photo
             CFBundleTypeRole: Editor
-            LSHandlerRank: None
+            LSHandlerRank: Alternate
             LSItemContentTypes: [public.camera-raw-image, com.adobe.raw-image, app.rawboy.kdc-raw-image, app.rawboy.x3f-raw-image]
           - CFBundleTypeName: Photo
             CFBundleTypeRole: Editor
-            LSHandlerRank: None
+            LSHandlerRank: Alternate
             LSItemContentTypes: [public.jpeg, public.heic, public.heif, public.png, public.tiff, org.webmproject.webp, public.avif, public.jpeg-xl]
         UTImportedTypeDeclarations:
           - UTTypeIdentifier: app.rawboy.kdc-raw-image

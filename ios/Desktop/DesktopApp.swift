@@ -83,10 +83,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let links = urls.filter { !$0.isFileURL }
         links.forEach { model.handle(link: $0) }
         let urls = urls.filter(\.isFileURL)
-        // Several photos (or a folder) from the Finder go to Auto's batch; one opens in the editor.
-        if model.mode == .browse, let url = urls.first {
-            model.browse.open(url)  // Browse is showing: the photo (or folder) opens there, as in the standalone Viewer
-        } else if urls.count > 1 || urls.first?.hasDirectoryPath == true { model.addToAuto(urls) } else if let url = urls.first { model.open(url) }
+        // Whatever the Finder hands over opens in Browse (the bundled Viewer), whichever mode was showing: a photo with its
+        // folder around it, a folder as the folder. Editing starts from there (E, Send to Auto).
+        if let url = urls.first {
+            model.mode = .browse
+            model.browse.open(url)
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
