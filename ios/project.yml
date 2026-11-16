@@ -118,6 +118,216 @@ targets:
         LSSupportsOpeningDocumentsInPlace: false
         NSPhotoLibraryUsageDescription: RawBoy Auto saves developed photos into its own album in your library.
         NSPhotoLibraryAddUsageDescription: RawBoy Auto saves developed photos to your library.
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: RAW photo
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [public.camera-raw-image, com.adobe.raw-image]
+          # RawBoy preset files (.rawboy.json), opened from Files or AirDrop: applied to the batch.
+          - CFBundleTypeName: RawBoy preset
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [public.json]
+        # RawBoy's "Send to Auto": rawboy-auto://preset?json=<preset file, base64url>.
+        CFBundleURLTypes:
+          - CFBundleURLName: app.rawboy.auto.preset
+            CFBundleURLSchemes: [rawboy-auto]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.rawboy.auto
+        PRODUCT_NAME: RawBoyAuto
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Color.accentColor (used across the UI) follows this, not .tint: without it, it is system blue.
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+  RawBoyPro:
+    type: application
+    platform: iOS
+    sources:
+      - path: Pro
+    dependencies:
+      - target: RawBoyEngine
+      - framework: native/out/RawBoyNative.xcframework
+      - framework: native/out/RawBoyJpeg.xcframework
+    info:
+      path: build/generated/Pro-Info.plist
+      properties:
+        CFBundleDisplayName: RawBoy
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        UIApplicationSupportsIndirectInputEvents: true
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: false
+        NSPhotoLibraryUsageDescription: RawBoy saves developed photos into its own album in your library.
+        NSPhotoLibraryAddUsageDescription: RawBoy saves developed photos to your library.
+        CFBundleDocumentTypes:
+          - CFBundleTypeName: RAW photo
+            CFBundleTypeRole: Viewer
+            LSHandlerRank: Alternate
+            LSItemContentTypes: [public.camera-raw-image, com.adobe.raw-image]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.rawboy
+        PRODUCT_NAME: RawBoyPro
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Color.accentColor (used across the UI) follows this, not .tint: without it, it is system blue.
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+  RawBoyCamera:
+    type: application
+    platform: iOS
+    sources:
+      - path: Camera
+    dependencies:
+      - target: RawBoyEngine
+      - framework: native/out/RawBoyNative.xcframework
+      - framework: native/out/RawBoyJpeg.xcframework
+    info:
+      path: build/generated/Camera-Info.plist
+      properties:
+        CFBundleDisplayName: RawBoy Camera
+        CFBundleShortVersionString: "1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        UIApplicationSupportsIndirectInputEvents: true
+        UISupportedInterfaceOrientations: [UIInterfaceOrientationPortrait, UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
+        UIRequiresFullScreen: true
+        NSCameraUsageDescription: RawBoy Camera takes RAW photos and shows them developed live.
+        NSLocationWhenInUseUsageDescription: With Geotag on, RawBoy Camera saves where each photo was taken in the photo.
+        NSPhotoLibraryUsageDescription: RawBoy Camera saves photos into its own albums in your library.
+        NSPhotoLibraryAddUsageDescription: RawBoy Camera saves photos to your library.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.rawboy.camera
+        PRODUCT_NAME: RawBoyCamera
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Color.accentColor (used across the UI) follows this, not .tint: without it, it is system blue.
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+  RawBoyEngineTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: EngineTests
+        excludes:
+          - Fixtures  # read from the source tree (shared with RawBoy Viewer's tests), not bundled
+          - EngineRealPreviewTests.swift  # Desktop's provider, macOS only
+    dependencies:
+      - package: RawBoyViewerPackages
+        product: RawBoyBrowseKit
+      - target: RawBoyEngine
+      - framework: native/out/RawBoyNative.xcframework
+      - framework: native/out/RawBoyJpeg.xcframework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.rawboy.engine.tests
+        GENERATE_INFOPLIST_FILE: YES
+  # macOS build of the same engine (RawBoy Desktop): a separate target so iOS-only files can be left out. Module name stays
+  # RawBoyEngine. No MediaPipe on macOS (the pods ship no macOS slice): skin features are off there (SkinSegmenter).
+  RawBoyEngineMac:
+    type: framework
+    platform: macOS
+    sources:
+      - path: Engine
+        excludes:
+          - app/rawboy/view/Viewfinder.swift
+          - app/rawboy/metal/ViewfinderRenderer.swift
+          - app/rawboy/export/PhotoLibraryOutput.swift
+      - path: build/generated
+        group: Generated
+        excludes:
+          - "*Info.plist"
+      - path: ../luts
+        type: folder
+        buildPhase: resources
+      # The Lensfun lens database (CC BY-SA 3.0, data only), the web's copy: lens/LensfunData.swift.
+      - path: ../web/public/lensfun
+        type: folder
+        buildPhase: resources
+      - path: ../licenses/THIRD_PARTY_NOTICES.txt
+        buildPhase: resources
+      - path: ../engine/src/main/assets/models
+        buildPhase: resources
+    preBuildScripts:
+      - name: Generate develop shaders
+        script: shaders/gen.sh
+        inputFiles:
+          - $(SRCROOT)/../shaders/develop.glsl
+          - $(SRCROOT)/../shaders/develop.vert
+          - $(SRCROOT)/../shaders/main_body.glsl
+          - $(SRCROOT)/../shaders/film_form.glsl
+          - $(SRCROOT)/../shaders/bokeh_prep.glsl
+          - $(SRCROOT)/../shaders/scan.frag
+          - $(SRCROOT)/shaders/gen.sh
+        outputFiles:
+          - $(SRCROOT)/build/generated/develop_vert.metal
+          - $(SRCROOT)/build/generated/develop_frag.metal
+          - $(SRCROOT)/build/generated/develop_export.metal
+          - $(SRCROOT)/build/generated/bokeh_prep.metal
+          - $(SRCROOT)/build/generated/scan.metal
+          - $(SRCROOT)/build/generated/DevelopLayout.swift
+    dependencies:
+      - package: RawBoyViewerPackages
+        product: RawBoyBrowseKit
+      - framework: native/out/RawBoyNative.xcframework
+        embed: false
+      - framework: native/out/RawBoyJpeg.xcframework
+        embed: false
+      - sdk: Accelerate.framework
+      - sdk: CoreMedia.framework
+      - sdk: AVFoundation.framework
+      - sdk: CoreVideo.framework
+      - sdk: CoreImage.framework
+      - sdk: libc++.tbd
+    settings:
+      base:
+        PRODUCT_NAME: RawBoyEngine
+        PRODUCT_MODULE_NAME: RawBoyEngine
+        PRODUCT_BUNDLE_IDENTIFIER: app.rawboy.engine
+        GENERATE_INFOPLIST_FILE: YES
+        MTL_LANGUAGE_REVISION: Metal21
+        SWIFT_OPTIMIZATION_LEVEL: -O
+        # Swift's Float16 (used all over the engine) is unavailable on Intel macOS: the Swift side is arm64 only.
+        ARCHS: arm64
+        ONLY_ACTIVE_ARCH: NO
+        CODE_SIGN_IDENTITY: "-"
+        CODE_SIGNING_ALLOWED: YES
+  # RawBoy Desktop (macOS): RawBoy Pro's SwiftUI editor (Pro/, minus ProApp.swift) with Desktop/'s window, menus, sidecars and
+  # pointer views. Not sandboxed: it writes NAME.xmp next to the photo. Swift side arm64 only (see RawBoyEngineMac).
+  RawBoyDesktop:
+    type: application
+    platform: macOS
+    sources:
+      - path: Pro
+        excludes:
+          - ProApp.swift
+          - Assets.xcassets
+      # RawBoy Auto's SwiftUI batch screens, shared the same way (Auto/, minus AutoApp.swift).
+      - path: Auto
+        excludes:
+          - AutoApp.swift
+          - Assets.xcassets
+      - path: Desktop
+    dependencies:
+      - package: RawBoyViewerPackages
+        product: RawBoyBrowseKit
+      - package: RawBoyViewerPackages
+        product: ViewerFiles
+      - package: RawBoyViewerPackages
+        product: ViewerImaging
+      - package: RawBoyViewerPackages
+        product: ViewerUI
+      - target: RawBoyEngineMac
+      - framework: native/out/RawBoyNative.xcframework
+      - framework: native/out/RawBoyJpeg.xcframework
+    info:
+      path: build/generated/Desktop-Info.plist
+      properties:
+        CFBundleDisplayName: RawBoy Desktop
+        # The release workflow passes MARKETING_VERSION (the tag) and CURRENT_PROJECT_VERSION (the run number): the plist follows them.
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        LSApplicationCategoryType: public.app-category.photography
+        NSHumanReadableCopyright: RawBoy
         # Never claimed by the OS: rank None, so Finder doesn't offer Desktop first or pick it for a type; it is still there
         # under Open With > Other, and takes the types RawBoy Viewer's Browse shows (RawBoyBrowseKit's PhotoFileType). Photos handed
         # over by the Finder open in Browse while Browse shows, else in Pro.
