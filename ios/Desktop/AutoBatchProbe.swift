@@ -119,6 +119,13 @@ enum AutoBatchProbe {
                 }
                 v.subviews.forEach(views)
             }
+            if ProcessInfo.processInfo.environment["RAWBOY_PROBE_HELP"] != nil {
+                // The Help menu's items (title, enabled), then the Help sheet.
+                let help = NSApp.mainMenu?.items.first { $0.title == "Help" }
+                log("Help menu: " + (help?.submenu?.items.map { "\"\($0.title)\"\($0.isEnabled ? "" : " (disabled)")" }.joined(separator: ", ") ?? "none"))
+                model.commands.send(.help)
+                try? await Task.sleep(for: .seconds(2))
+            }
             for w in NSApp.windows where w.isVisible {
                 log("window \(w.title): frame \(w.frame), screen \(w.screen?.frame ?? .zero), screens \(NSScreen.screens.map(\.frame))")
                 if let c = w.contentView { views(c) }

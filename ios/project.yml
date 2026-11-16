@@ -295,8 +295,9 @@ targets:
       path: build/generated/Desktop-Info.plist
       properties:
         CFBundleDisplayName: RawBoy Desktop
-        CFBundleShortVersionString: "1.0"
-        CFBundleVersion: "1"
+        # The release workflow passes MARKETING_VERSION (the tag) and CURRENT_PROJECT_VERSION (the run number): the plist follows them.
+        CFBundleShortVersionString: "$(MARKETING_VERSION)"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         LSApplicationCategoryType: public.app-category.photography
         NSHumanReadableCopyright: RawBoy
         CFBundleDocumentTypes:
@@ -312,6 +313,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.rawboy.desktop
         PRODUCT_NAME: RawBoy Desktop
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
         ARCHS: arm64
         ONLY_ACTIVE_ARCH: NO
         CODE_SIGN_IDENTITY: "-"
