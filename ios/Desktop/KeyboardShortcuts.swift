@@ -44,8 +44,8 @@ final class KeyboardShortcuts {
     }
 
     /**
-     * Auto: the arrows move through the grid (and between photos in the photo view), Return opens, Esc goes back; ⌘E, ⌘O, ⌘Z
-     * and the mode keys are the menu's. Nothing here fires while text is being typed or a sheet is open.
+     * Auto: the arrows move through the grid (and between photos in the photo view), Return opens, Esc goes back, ⇧C copies the
+     * previous photo's look; ⌘E, ⌘O, ⌘Z and the mode keys are the menu's. Nothing here fires while text is being typed or a sheet is open.
      */
     private func handleAuto(_ event: NSEvent, _ key: Key) -> NSEvent? {
         guard event.type == .keyDown, !typing else { return event }
@@ -70,6 +70,11 @@ final class KeyboardShortcuts {
             case .o: model.addFolderPanel()
             default: return event
             }
+            return nil
+        }
+        // ⇧C in the photo view: Copy previous (the look, brightness and settings of the photo before it), as on the web.
+        if flags == [.shift], key == .c, auto.export == nil, let id = auto.selected {
+            auto.copyPrevious(id)
             return nil
         }
         guard flags.isEmpty, auto.export == nil else { return event }

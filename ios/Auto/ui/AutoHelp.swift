@@ -5,7 +5,7 @@ import RawBoyEngine
 let autoHelp = [
     HelpSection("Basics", [
         HelpItem("Add", "⌘O adds photos, ⇧⌘O a folder, or drop photos and folders on the window. Each is developed automatically and gets a film look. JPEG, HEIC, PNG and TIFF work too, at lower quality. Photos are used in place, never copied."),
-        HelpItem("Sidebar", "New photos: Looks (a film LUT on the auto develop) or Film (developed as film), for photos added from now on. Order: Shoot date (each file's EXIF date, else the file's date) or File name; remembered. Preset: develop every photo with a RawBoy preset instead of a look. Lens: the lens preset for every photo (By lens, None or a named one). Auto denoise all: every photo gets the denoise and sharpening measured on it; Undo in a photo takes it back."),
+        HelpItem("Sidebar", "New photos: Looks (a film LUT on the auto develop) or Film (developed as film), for photos added from now on. Order: Shoot date (each file's EXIF date, else the file's date) or File name; remembered. Preset: develop every photo with one of your Pro presets instead of a look (preset files are imported in Pro's Presets). Lens: the lens preset for every photo (By lens, None or a named one). Auto denoise all: every photo gets the denoise and sharpening measured on it; Undo in a photo takes it back."),
         HelpItem("Export all", "⌘E: JPEG or TIFF, quality and size, next to each photo or into a folder you choose; NAME-auto.jpg replaces an earlier one. Stop ends it after the current photo."),
         HelpItem("A waiting photo", "Click it and it is analysed next, ahead of the rest, and opens when it's ready."),
     ]),
@@ -16,10 +16,12 @@ let autoHelp = [
         HelpItem("Reset all photos…", "Next to Clear batch (and in the Mode menu): puts every photo back to one look, one film stock, or As is, and clears its adjustments, crop and any RawBoy preset. Undo in a photo's view brings its edits back."),
     ]),
     HelpSection("Photo view", [
-        HelpItem("Bar", "Grid (Esc) goes back; ← and → (or the arrows by the name) go to the previous or next photo. Crop opens Crop & rotate, Preset develops this photo with a RawBoy preset. Edit in Pro (⌘↩) opens it in the editor; Copy gives it the previous photo's look and settings (denoise stays); Apply to All copies its look and settings to every photo (brightness, denoise and crop stay per photo); Remove takes it out of the batch (the file stays). Then Undo, Redo (⌘Z, ⇧⌘Z) and Export."),
+        HelpItem("Bar", "Grid (Esc) goes back; ← and → (or the arrows by the name) go to the previous or next photo. Crop opens Crop & rotate, Preset develops this photo with a RawBoy preset. Edit in Pro (⌘↩) opens it in the editor; Copy (⇧C) gives it the previous photo's look and settings (denoise stays); Apply to All copies its look and settings to every photo (brightness, denoise and crop stay per photo); Remove takes it out of the batch (the file stays). Then Undo, Redo (⌘Z, ⇧⌘Z) and Export."),
         HelpItem("Panel", "Look (or Film): Looks or Film, Strength and every look as a thumbnail; click one to use it. Light: Brightness, Contrast. Colour: Pick white balance, Warmth, Tint, Saturation. Detail: Grain, Denoise. Click a section's name to open or close it; an amber dot and the arrow beside it reset that section."),
         HelpItem("Pick white balance", "Colour section: click something in the photo that should be neutral grey, and Warmth and Tint make it grey."),
         HelpItem("Double-click", "100% view at that point; drag to pan, double-click again to go back. A trackpad pinch zooms too."),
+        HelpItem("Mouse wheel over the photo", "Zoom in and out around the pointer, up to 400%; double-click goes back to the whole photo. The middle button pans the zoomed photo."),
+        HelpItem("Mouse wheel over a slider", "Move it without clicking; with Shift in big steps, with ⌘ in fine ones."),
         HelpItem("Press and hold", "See the photo without the look."),
         HelpItem("Click outside the photo", "Change the frame around it: grey, white or black."),
         HelpItem("Crop & rotate", "Drag the corners, edges or inside of the frame, pick a shape (Original, 1:1, 4:3, 3:2, 16:9...), turn the photo in quarter steps and straighten the horizon. The crop is in the exports and in Undo."),

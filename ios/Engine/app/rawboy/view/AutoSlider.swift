@@ -64,6 +64,8 @@ public struct ValueSlider: View {
         #if os(macOS)
         // The system slider with RawBoy's drawing: filled from the default, quiet when untouched (MacSlider).
         MacSlider(value: value, range: range, defaultValue: defaultValue, onChange: onChange)
+            // The wheel over the slider moves it, as Pro's sliders and the web's do.
+            .background(SliderWheel(range: range, value: { [value] in value }, onChange: onChange))
             .reportsWidth("Auto \(label)")
             .accessibilityLabel(label)
             .accessibilityValue(format(value))

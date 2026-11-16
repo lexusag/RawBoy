@@ -505,7 +505,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
             setLeaksMode(false);
             setFxMode(false);
           }}
-          disabled={!hasImage || busy}
+          disabled={busy}
         >
           <PresetsIcon />
           <span className="tool-label">Presets</span>
@@ -810,7 +810,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
           )}
           {state.exporting && <progress className="export-progress" value={state.exportProgress} max={1} />}
         </Preview>
-        {hasImage && (
+        {hasImage ? (
           <aside className="sidebar">
             {geometryMode ? (
               <GeometryPanel
@@ -953,7 +953,12 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
               </>
             )}
           </aside>
-        )}
+        ) : presetsMode ? (
+          // Without a photo the presets can still be imported, exported, renamed and deleted.
+          <aside className="sidebar">
+            <PresetsPanel presets={state.presets} actions={presetActions} onDone={() => setPresetsMode(false)} hasImage={false} />
+          </aside>
+        ) : null}
       </div>
       {showExport && shaderParams && (
         <ExportDialog

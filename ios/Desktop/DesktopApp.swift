@@ -152,7 +152,7 @@ struct DesktopCommands: Commands {
             Button("Masks") { model.commands.send(.toggleMode(.masks)) }.disabled(!ready)
             Button("Healing Brush") { model.commands.send(.toggleMode(.heal)) }.disabled(!ready)
             Button("Light Leaks & Effects") { model.commands.send(.toggleMode(.leaks)) }.disabled(!ready)
-            Button("Presets") { model.commands.send(.toggleMode(.presets)) }.disabled(!ready)
+            Button("Presets") { model.commands.send(.toggleMode(.presets)) }.disabled(!proMode || state.busy)
             Divider()
             Button("Rotate Left") { model.vm.rotate(-1) }.keyboardShortcut("[", modifiers: .command).disabled(!ready)
             Button("Rotate Right") { model.vm.rotate(1) }.keyboardShortcut("]", modifiers: .command).disabled(!ready)

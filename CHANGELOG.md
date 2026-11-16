@@ -1,3 +1,10 @@
+**RawBoy Desktop and Web: Auto's mouse, Auto's presets, presets without a photo (2026-11-16)**
+
+- **Wheel in Auto (Desktop).** The mouse wheel over a slider in Auto's photo view moves it (Shift big steps, ⌘ fine), as Pro's and the web's sliders do; over the photo it zooms around the pointer, and the middle button pans. `PointerSurface` and `SliderWheel` moved from Pro into the engine (`view/MacPointer.swift`) so both modes share them.
+- **⇧C in Auto (Desktop).** Copy previous, as on the web (also on the bar's Copy button's tooltip).
+- **Auto's Preset (Desktop).** Lists the presets saved in Pro, in their Colour and Black & white sections, for the batch or the selected photos, instead of opening a file dialog. Preset files are imported in Pro's Presets.
+- **Presets without a photo (Desktop and Web).** Pro's Presets button (and the Photo › Presets menu item) works with no photo open: import, export, rename and delete; applying and saving wait for a photo.
+
 **RawBoy Desktop: small fixes from the UI review (2026-11-16)**
 
 - **Camera name.** DNGs read by the Adobe DNG SDK (JPEG XL DNGs, packed DNGs) named the camera by the DNG's UniqueCameraModel, which Android writes as "Pixel 9 Pro-Google-google". They now use the EXIF Make and Model as LibRaw does ("Google Pixel 9 Pro"; the model alone when it already starts with the make). Shared C++, so Android and the web too.

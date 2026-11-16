@@ -132,7 +132,7 @@ struct EditorScreen: View {
     // MARK: - Menu and keyboard actions (RawBoy Desktop)
 
     private func perform(_ action: EditorAction) {
-        guard state.hasImage || action == .done || action == .help else { return }
+        guard state.hasImage || action == .done || action == .help || action == .toggleMode(.presets) else { return }
         switch action {
         case .export:
             if !state.busy { showExport = true }
@@ -589,6 +589,10 @@ struct EditorScreen: View {
                     lensfun: vm.lensfun)
                 .frame(maxHeight: maxHeight)
             }
+        } else if mode == .presets {
+            // Without a photo the presets can still be imported, exported, renamed and deleted.
+            PresetsPanel(vm: vm, onDone: { mode = .none }, hasStrokes: false, hasImage: false)
+                .frame(maxHeight: maxHeight)
         }
     }
 }
@@ -668,7 +672,7 @@ struct EditorTopBar: View {
             modeButton(.masks, "square.stack.3d.down.forward", "Masks", "Masks")
             lightButton
             modeButton(.heal, "bandage", "Heal", "Healing brush (B)")
-            modeButton(.presets, "bookmark", "Presets", "Presets")
+            modeButton(.presets, "bookmark", "Presets", "Presets", withoutPhoto: true)
             Spacer(minLength: 8)
             tool("wand.and.stars", "Auto Dev", "Auto light and colour (keeps the LUT)", action: onAuto)
             if let onSendToAuto { tool("square.stack.3d.up", "To Auto", "Send this photo to Auto's batch (⇧⌘A)", action: onSendToAuto) }
@@ -703,7 +707,7 @@ struct EditorTopBar: View {
                 modeButton(.geometry, "crop.rotate", "Crop", "Crop & rotate")
                 modeButton(.masks, "square.stack.3d.down.forward", "Masks", "Masks")
                 lightButton
-                modeButton(.presets, "bookmark", "Presets", "Presets")
+                modeButton(.presets, "bookmark", "Presets", "Presets", withoutPhoto: true)
                 tool("wand.and.stars", "Auto Dev", "Auto light and colour (keeps the LUT)", action: onAuto)
                 Spacer(minLength: 0)
                 tool("square.and.arrow.down", "Export", "Export", action: onExport)
@@ -753,12 +757,14 @@ struct EditorTopBar: View {
         .accessibilityAddTraits(mode == .leaks || mode == .fx ? .isSelected : [])
     }
 
-    private func modeButton(_ target: EditorMode, _ icon: String, _ label: String, _ name: String) -> some View {
+    /** [withoutPhoto]: the tool works with no photo open too (Presets: import, export and manage them). */
+    private func modeButton(_ target: EditorMode, _ icon: String, _ label: String, _ name: String,
+                            withoutPhoto: Bool = false) -> some View {
         Button { onMode(mode == target ? .none : target) } label: {
             ToolLabel(icon: icon, label: label).foregroundStyle(mode == target ? Color.accentColor : Color.primary)
         }
         .buttonStyle(ToolButtonStyle(name: name, tip: $tip))
-        .disabled(!enabled)
+        .disabled(withoutPhoto ? !canOpen : !enabled)
         .accessibilityLabel(name)
         .accessibilityAddTraits(mode == target ? .isSelected : [])
         #if os(macOS)

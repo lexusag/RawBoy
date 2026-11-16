@@ -437,6 +437,9 @@ final class AutoViewModel: ObservableObject {
         applyPreset(preset, target: ids)
     }
 
+    /** A preset picked from the user's saved ones: for the photos in [ids], or the whole batch (and photos added later) when nil. */
+    func applyChosenPreset(_ preset: Preset, to ids: Set<String>?) { applyPreset(preset, target: ids) }
+
     private func applyPreset(_ preset: Preset, target ids: Set<String>?) {
         if preset.isLensPreset {
             presetChoices = []

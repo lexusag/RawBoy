@@ -379,7 +379,7 @@ extension DetailScreen {
             if let edit = vm.editInPro {
                 BarTool("slider.horizontal.3", "Edit in Pro", "Open this photo in the Pro editor (⌘↩)") { edit(photo) }
             }
-            BarTool("doc.on.doc", "Copy", "Copy the previous photo's look and adjustments") { vm.copyPrevious(id) }
+            BarTool("doc.on.doc", "Copy", "Copy the previous photo's look and adjustments (⇧C)") { vm.copyPrevious(id) }
                 .disabled(!idle || vm.previousPhoto(id) == nil)
             BarTool("square.grid.2x2", "Apply to All", "Give every photo in the batch this look and adjustments") {
                 vm.applyLookToAll(id)
@@ -540,6 +540,19 @@ private struct PhotoPage: View {
                     let uncropped = showAuto && live ? analysis.autoBase : photo.params ?? analysis.autoBase
                     let cropping = live && vm.cropping
                     let shown = cropping ? uncropped.withoutCrop() : uncropped
+                    #if os(macOS)
+                    // The wheel zooms around the pointer (as Pro's and the web's), the middle button pans.
+                    PointerSurface(
+                        onMove: { _ in },
+                        onZoom: { p, factor in
+                            guard live, !cropping else { return }
+                            showAuto = false
+                            session.zoomBy(Float(p.x * scale), Float(p.y * scale), factor: Float(factor), frameWidth: framePx)
+                        },
+                        onPan: { d in
+                            if live, session.zoomCenter != nil { session.pan(Float(d.width * scale), Float(d.height * scale)) }
+                        })
+                    #endif
                     // One view for both, so it stays when the decoded preview replaces the cached one.
                     DevelopPreview(
                         image: live ? session.preview : cached,

@@ -209,15 +209,6 @@ final class DesktopModel: ObservableObject {
         if panel.runModal() == .OK { addToAuto(panel.urls) }
     }
 
-    /** A RawBoy preset file for the batch (nil) or for the photos in [ids]. */
-    func choosePresetFile(for ids: Set<String>?) {
-        let panel = NSOpenPanel()
-        panel.allowedContentTypes = [.json, .plainText, .data]
-        panel.allowsMultipleSelection = false
-        panel.message = "Choose a RawBoy preset file (.rawboy.json)"
-        if panel.runModal() == .OK, let url = panel.url { auto.openPresetFile(url, ids: ids) }
-    }
-
     func showLastExportInFinder() {
         if mode == .auto, let url = lastAutoExport {
             NSWorkspace.shared.activateFileViewerSelecting([url])
