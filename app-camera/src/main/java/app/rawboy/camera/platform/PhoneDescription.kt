@@ -4,12 +4,14 @@ package app.rawboy.camera.platform
 enum class ChipVendor(
     /** What Settings shows. */
     val title: String,
+    /** A short label for the debug choice ([ActivePlatform.choices]). */
+    val shortTitle: String,
 ) {
-    TENSOR("Google Tensor"),
-    QUALCOMM("Qualcomm Snapdragon"),
-    MEDIATEK("MediaTek"),
-    EXYNOS("Samsung Exynos"),
-    UNKNOWN("unknown"),
+    TENSOR("Google Tensor", "Tensor"),
+    QUALCOMM("Qualcomm Snapdragon", "Qualcomm"),
+    MEDIATEK("MediaTek", "MediaTek"),
+    EXYNOS("Samsung Exynos", "Exynos"),
+    UNKNOWN("unknown", "None"),
 }
 
 /**

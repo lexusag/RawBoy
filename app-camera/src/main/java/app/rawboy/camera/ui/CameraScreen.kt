@@ -153,7 +153,6 @@ import kotlin.math.min
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import android.content.pm.ApplicationInfo
-import app.rawboy.camera.platform.ChipVendor
 import app.rawboy.camera.platform.PlatformRegistry
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -1462,17 +1461,9 @@ private fun PlatformInfo(vm: CameraViewModel) {
         SettingChoice(
             title = "Take the phone for (debug)",
             subtitle = "From the next start of the app. Calibration learned under another profile is kept apart",
-            // The chips with a layer of their own (or soon one), and none; short labels to fit one row.
-            options = listOf(null, ChipVendor.TENSOR, ChipVendor.QUALCOMM, ChipVendor.UNKNOWN),
+            options = vm.platformChoices,
             selected = chosen,
-            label = { c ->
-                when (c) {
-                    null -> "Auto"
-                    ChipVendor.TENSOR -> "Tensor"
-                    ChipVendor.QUALCOMM -> "Qualcomm"
-                    else -> "None"
-                }
-            },
+            label = { it?.shortTitle ?: "Auto" },
             onSelect = vm::choosePlatform,
         )
     }

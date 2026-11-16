@@ -24,6 +24,12 @@ object ActivePlatform {
     private const val PREFS = "platform"
     private const val CHOSEN_CHIP = "chosenChip"
 
+    /**
+     * What a debug build offers to take the phone for: as detected (null), the chips with a layer of their own or
+     * about to get one, and none (the neutral profile, plus the phone maker's layer). Four, to fit one row.
+     */
+    val choices: List<ChipVendor?> = listOf(null, ChipVendor.TENSOR, ChipVendor.QUALCOMM, ChipVendor.UNKNOWN)
+
     @Volatile
     private var resolved: ResolvedPlatform? = null
 

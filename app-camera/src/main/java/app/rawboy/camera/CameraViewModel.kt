@@ -106,6 +106,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     /** Debug builds: the chip the phone is taken for from the next start (null = as detected). */
     val chosenChip = _chosenChip.asStateFlow()
 
+    /** Debug builds: what [choosePlatform] offers (null = as detected). */
+    val platformChoices: List<ChipVendor?> = ActivePlatform.choices
+
     /** Debug builds: take the phone for [chip] (null = as detected) from the next start of the app. */
     fun choosePlatform(chip: ChipVendor?) {
         ActivePlatform.choose(app, chip)

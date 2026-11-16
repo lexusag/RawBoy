@@ -13,10 +13,10 @@ import android.os.Build
 object PlatformDetector {
     /** This phone, its Build strings as reported (empty when missing). */
     fun detect(): PhoneDescription {
-        val sdk = Build.VERSION.SDK_INT
         // SOC_* only exist from API 31: reading them earlier throws.
-        val socManufacturer = if (sdk >= 31) known(Build.SOC_MANUFACTURER) else ""
-        val socModel = if (sdk >= 31) known(Build.SOC_MODEL) else ""
+        val hasSoc = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
+        val socManufacturer = if (hasSoc) known(Build.SOC_MANUFACTURER) else ""
+        val socModel = if (hasSoc) known(Build.SOC_MODEL) else ""
         val hardware = known(Build.HARDWARE)
         return PhoneDescription(
             chip = chipOf(socManufacturer, hardware),
@@ -28,7 +28,7 @@ object PlatformDetector {
             brand = known(Build.BRAND),
             model = known(Build.MODEL),
             device = known(Build.DEVICE),
-            sdk = sdk,
+            sdk = Build.VERSION.SDK_INT,
         )
     }
 
