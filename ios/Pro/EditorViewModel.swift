@@ -140,14 +140,15 @@ final class EditorViewModel: ObservableObject {
         histogramKey = key
     }
 
-    func open(_ url: URL) {
+    /** [initial]: the edits to start from (RawBoy Desktop's Edit in Pro: Auto's develop), in place of the sidecar's. */
+    func open(_ url: URL, initial: DevelopParams? = nil) {
         if state.busy { return }
         persistence?.flush()  // the photo that is leaving
         state.loading = true
         Task {
             do {
                 let previous = state
-                let opened = try await session.open(url) { persistence?.restore(url, defaults: $0) ?? carryOverEdits(previous, $0) }
+                let opened = try await session.open(url) { initial ?? persistence?.restore(url, defaults: $0) ?? carryOverEdits(previous, $0) }
                 if let old = source, old != url { Imports.delete(old) }
                 source = url
                 state.loading = false

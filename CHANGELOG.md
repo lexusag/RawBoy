@@ -1,8 +1,9 @@
-**RawBoy Desktop and Web: Auto's mouse, Auto's presets, presets without a photo (2026-11-16)**
+**RawBoy Desktop and Web: Auto's mouse, Auto's presets, edits between Pro and Auto, presets without a photo (2026-11-16)**
 
 - **Wheel in Auto (Desktop).** The mouse wheel over a slider in Auto's photo view moves it (Shift big steps, ⌘ fine), as Pro's and the web's sliders do; over the photo it zooms around the pointer, and the middle button pans. `PointerSurface` and `SliderWheel` moved from Pro into the engine (`view/MacPointer.swift`) so both modes share them.
 - **⇧C in Auto (Desktop).** Copy previous, as on the web (also on the bar's Copy button's tooltip).
 - **Auto's Preset (Desktop).** Lists the presets saved in Pro, in their Colour and Black & white sections, for the batch or the selected photos, instead of opening a file dialog. Preset files are imported in Pro's Presets.
+- **Edit in Pro and back (Desktop).** Edit in Pro opens the photo with its Auto develop (look or preset and Auto's sliders) as the starting edits, and To Auto in Pro brings it back with Pro's edits: they develop it in Auto in place of its look, Auto's sliders adjust on top, and Use a look drops them, as on the web. They're kept in the photo's `rawboy:Auto` sidecar (the web's `edits`), copied by neither Apply to all nor Copy previous, and Export all renders them through the session, so masks, lens blur and healing strokes come out. Before, Edit in Pro opened the photo with its own Pro sidecar and To Auto gave it the look again.
 - **Presets without a photo (Desktop and Web).** Pro's Presets button (and the Photo › Presets menu item) works with no photo open: import, export, rename and delete; applying and saving wait for a photo.
 
 **RawBoy Desktop: small fixes from the UI review (2026-11-16)**

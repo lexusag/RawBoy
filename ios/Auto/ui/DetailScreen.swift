@@ -406,8 +406,20 @@ extension DetailScreen {
         let disabled = vm.export != nil
         return ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                macSection(photo.preset != nil ? "Preset" : photo.mode == .film ? "Film" : "Look", edited: false, reset: nil) {
-                    if let preset = photo.preset {
+                macSection(photo.edits != nil ? "Edits" : photo.preset != nil ? "Preset" : photo.mode == .film ? "Film" : "Look",
+                           edited: false, reset: nil) {
+                    if photo.edits != nil {
+                        // Pro's whole develop ("To Auto" there) in place of the looks; the sliders below adjust on top.
+                        Text(AutoPhoto.editsName).font(.subheadline.weight(.semibold))
+                        Text("From Pro, with the sliders below on top. Edit in Pro to change them there.")
+                            .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        HStack {
+                            if let edit = vm.editInPro { Button("Edit in Pro") { edit(photo) } }
+                            Button("Use a look") { vm.removeEdits(photo.id) }
+                        }
+                        .disabled(disabled)
+                        .padding(.top, 6)
+                    } else if let preset = photo.preset {
                         // A RawBoy preset develops this photo in place of the looks.
                         Text(preset.name).font(.subheadline.weight(.semibold)).lineLimit(2)
                         Text("RawBoy preset · " + PresetGroup.allCases.filter { preset.groups.contains($0) }.map(\.label)

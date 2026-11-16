@@ -40,8 +40,15 @@ struct AutoPhoto: Identifiable {
     var looksApplied = false
     var thumbnail: CGImage?
 
-    /** Web-only parts of a photo's `rawboy:Auto` sidecar (RawBoy edits, As is, ...): kept and written back as they were. */
+    /** Web-only parts of a photo's `rawboy:Auto` sidecar (As is, ...): kept and written back as they were. */
     var kept: SavedAuto?
+    /**
+     * The develop the photo came back with from Pro ("Back to Auto", web's `edits`), in place of its look or preset, with
+     * the adjustments on top (LookApplier.applyEditsDevelop); nil = none. The look and preset stay for when it's removed.
+     */
+    var edits: DevelopParams?
+    /** Edits fields this engine doesn't know (written by the web), kept for the sidecar. */
+    var editsExtras = EditsExtras()
 
     var id: String { url.path }
 
@@ -56,20 +63,37 @@ struct AutoPhoto: Identifiable {
         s.preset = preset
         s.lensChoice = lensChoice
         s.lensPreset = lensChoice == nil || lensChoice == Presets.noLensPreset ? nil : lensPreset
+        // Against the global defaults, as the web keeps them, so reading them back needs no analysis.
+        s.edits = edits.flatMap { Edits.encode($0, defaults: DevelopParams(), keepEmpty: true, extras: editsExtras.values) }
+            .flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
         return s
     }
 
     var activeLook: Look { mode == .film ? filmLook : look }
 
-    /** What develops the photo, for labels: the preset's name, else the active look's. */
-    var lookName: String { preset?.name ?? activeLook.name }
+    /** What develops the photo, for labels: RawBoy edits, the preset's name, else the active look's. */
+    var lookName: String { edits != nil ? AutoPhoto.editsName : preset?.name ?? activeLook.name }
+
+    /** Label of [edits] in place of a look (web's EDITS_NAME). */
+    static let editsName = "RawBoy edits"
 
     /** The develop settings for the current look (or preset) and controls (nil until analysed). */
     var params: DevelopParams? {
         guard let a = analysis else { return nil }
+        if var e = edits {
+            // Edits read back from a sidecar don't know these as-shot facts about the file; the analysis does.
+            e.displaySource = a.defaults.displaySource
+            e.clipLevel = a.defaults.clipLevel
+            return LookApplier.applyEditsDevelop(e, adjust: adjust)
+        }
         return LookApplier.develop(a.autoBase, look: activeLook, strength: strength, adjust: adjust, hasFace: a.stats.hasFace,
                                    preset: preset, lensPreset: lensPreset)
     }
+}
+
+/** JSON values of RawBoy edits this engine doesn't know (Edits.Decoded.extras), carried as they came. */
+struct EditsExtras: @unchecked Sendable {
+    var values: [String: Any] = [:]
 }
 
 /** A photo's edits, as Undo and Redo bring them back. */
@@ -80,12 +104,16 @@ private struct Develop {
     var strength: Float
     var adjust: Adjustments
     var preset: Preset?
+    var edits: DevelopParams?
     var looksApplied: Bool
 }
 
 private extension AutoPhoto {
     var develop: Develop {
-        get { Develop(look: look, mode: mode, filmLook: filmLook, strength: strength, adjust: adjust, preset: preset, looksApplied: looksApplied) }
+        get {
+            Develop(look: look, mode: mode, filmLook: filmLook, strength: strength, adjust: adjust, preset: preset, edits: edits,
+                    looksApplied: looksApplied)
+        }
         set {
             look = newValue.look
             mode = newValue.mode
@@ -93,6 +121,7 @@ private extension AutoPhoto {
             strength = newValue.strength
             adjust = newValue.adjust
             preset = newValue.preset
+            edits = newValue.edits
             looksApplied = newValue.looksApplied
         }
     }
@@ -100,12 +129,13 @@ private extension AutoPhoto {
     /** "Reset all photos": see AutoReset. The photo keeps what it was given instead of its suggestion (looksApplied). */
     mutating func reset(to target: AutoReset.Target) {
         AutoReset.apply(target, look: &look, mode: &mode, filmLook: &filmLook, strength: &strength, adjust: &adjust, preset: &preset)
+        edits = nil
         looksApplied = true
     }
 
     /**
      * The look (or preset), strength, warmth, tint, contrast, saturation and grain of [source] ("Apply to all", "Copy previous");
-     * brightness, denoise and rotation stay (they follow this photo's exposure, noise and framing).
+     * brightness, denoise and rotation stay (they follow this photo's exposure, noise and framing). RawBoy edits are dropped.
      */
     mutating func takeLook(of source: AutoPhoto) {
         let s = source.adjust
@@ -114,6 +144,8 @@ private extension AutoPhoto {
         filmLook = source.filmLook
         strength = source.strength
         preset = source.preset
+        // RawBoy edits aren't copied (they hold the source's crop and masks); this photo's own give way to the look.
+        edits = nil
         looksApplied = true
         adjust.warmth = s.warmth
         adjust.tint = s.tint
@@ -335,6 +367,11 @@ final class AutoViewModel: ObservableObject {
             let fresh: [AutoPhoto] = zip(zip(wanted, dates), restored).filter { !now.contains($0.0.0.path) }.map { pair, saved in
                 var p = AutoPhoto(url: pair.0, name: Imports.displayName(pair.0), date: pair.1, mode: mode, preset: preset, lensChoice: lensChoice)
                 if let saved { takeSaved(saved, into: &p) }
+                if let e = pendingEdits.removeValue(forKey: pair.0.path) {
+                    p.edits = e
+                    p.adjust = .none
+                    p.looksApplied = true
+                }
                 return p
             }
             if fresh.isEmpty { return }
@@ -354,6 +391,11 @@ final class AutoViewModel: ObservableObject {
         p.preset = s.preset
         p.looksApplied = true
         p.kept = s
+        if let e = s.edits, let data = try? JSONSerialization.data(withJSONObject: e),
+           let decoded = Edits.decodeAll(String(decoding: data, as: UTF8.self), defaults: DevelopParams()) {
+            p.edits = decoded.params
+            p.editsExtras = EditsExtras(values: decoded.extras)
+        }
         p.lensChoice = s.lensChoice
         if let picked = s.lensPreset {
             // The picked lens preset travels with the photo; the one in the list for that lens (if any) stands in for it.
@@ -522,7 +564,7 @@ final class AutoViewModel: ObservableObject {
         presetChoices = []
         if export != nil { return }
         self.preset = preset
-        for p in photos { changeDevelop(p.id, force: true) { $0.preset = preset } }
+        for p in photos { changeDevelop(p.id, force: true) { $0.preset = preset; $0.edits = nil } }
         message = "\(preset.name) applied to all photos"
     }
 
@@ -534,7 +576,7 @@ final class AutoViewModel: ObservableObject {
         presetChoices = []
         if export != nil { return }
         let chosen = photos.filter { ids.contains($0.id) }
-        for p in chosen { changeDevelop(p.id, force: true) { $0.preset = preset } }
+        for p in chosen { changeDevelop(p.id, force: true) { $0.preset = preset; $0.edits = nil } }
         message = "\(preset.name) applied to \(chosen.count == 1 ? "1 photo" : "\(chosen.count) photos")"
     }
 
@@ -550,6 +592,35 @@ final class AutoViewModel: ObservableObject {
 
     /** Takes the preset off one photo, back to its look; the batch preset stays for photos added later. */
     func removePhotoPreset(_ id: String) { changeDevelop(id, force: true) { $0.preset = nil } }
+
+    /** "Use a look": takes the RawBoy edits off one photo, back to its preset or look. */
+    func removeEdits(_ id: String) { changeDevelop(id, force: true) { $0.edits = nil } }
+
+    /** Edits from Pro for photos still joining the batch ([receiveEdits] on a photo that wasn't in it), by path. */
+    private var pendingEdits: [String: DevelopParams] = [:]
+
+    /**
+     * "Back to Auto" from Pro: develops [url]'s photo with [params] in place of its look or preset, Auto's controls back at
+     * zero (the edits already hold what they did), as one undo step, and opens it. A photo not in the batch joins it with
+     * them. False while exporting.
+     */
+    @discardableResult
+    func receiveEdits(_ url: URL, _ params: DevelopParams) -> Bool {
+        if export != nil { return false }
+        guard let p = photo(url.path) else {
+            pendingEdits[url.path] = params
+            add([url])
+            message = "\(Imports.displayName(url)) added to Auto with its RawBoy edits"
+            return true
+        }
+        changeDevelop(p.id, force: true) {
+            $0.edits = params
+            $0.adjust = .none
+            $0.looksApplied = true
+        }
+        if p.analysis != nil { openDetail(p.id) }
+        return true
+    }
 
     /** Format, quality, bit depth, size and frame for the next exports (maxLongSide nil = full resolution). */
     func setExportSettings(_ settings: ExportSettings) {
@@ -780,10 +851,10 @@ final class AutoViewModel: ObservableObject {
                 message = "No white balance makes that spot grey"
             case .white(let kelvin, let tint):
                 guard let current = photo(id), let currentAnalysis = current.analysis else { return }
-                // The Swift port has no RawBoy edits (Kotlin's AutoPhoto.edits), so the unadjusted develop is the look's.
-                let unadjusted = LookApplier.develop(currentAnalysis.autoBase, look: current.activeLook, strength: current.strength,
-                                                     adjust: Adjustments.none, hasFace: currentAnalysis.stats.hasFace,
-                                                     preset: current.preset, lensPreset: current.lensPreset)
+                let unadjusted = current.edits.map { LookApplier.applyEditsDevelop($0, adjust: .none) }
+                    ?? LookApplier.develop(currentAnalysis.autoBase, look: current.activeLook, strength: current.strength,
+                                           adjust: Adjustments.none, hasFace: currentAnalysis.stats.hasFace,
+                                           preset: current.preset, lensPreset: current.lensPreset)
                 let wb = LookApplier.whiteBalanceAdjust(unadjusted, kelvin: kelvin, tint: tint)
                 setAdjust(id, force: true) { $0.warmth = wb.warmth; $0.tint = wb.tint }
             }
@@ -1188,6 +1259,14 @@ final class AutoViewModel: ObservableObject {
 
     private func exportOne(_ p: AutoPhoto, _ settings: ExportSettings) async throws -> URL {
         guard let a = p.analysis, let params = p.params else { throw RawImageError(message: "not analysed") }
+        if p.edits != nil {
+            // RawBoy edits can hold painted masks, lens blur and healing strokes, which the session builds (as Pro's export does).
+            defer { session.close() }
+            _ = try await session.open(p.url) { _ in params }
+            await session.healNow()
+            return try await session.export(params, defaults: a.defaults, sourceName: p.name, settings: settings,
+                                            naming: Self.naming) { f in Task { @MainActor in self.export?.current = f } }
+        }
         let lut = try await params.lut.asyncMap { try await loadLut($0) }
         let film = try await params.film.asyncMap { try await loadFilm($0) }
         return try await Task.detached(priority: .userInitiated) {

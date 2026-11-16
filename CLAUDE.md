@@ -117,7 +117,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   `AutoTone`: exposure/tone/noise as ordinary `DevelopParams`), `looks/` (`Looks` catalogue on the bundled
   LUTs, `LookApplier` = auto base + look × Strength + the user's `Adjustments`, `LookSuggester`).
 - `app-auto/src/main/java/app/rawboy/auto/` — `AutoViewModel.kt` (batch queue, export all), `ui/` (grid, detail).
-  RawBoy edits in Auto (Android + web: `AutoPhoto.edits`, `LookApplier.applyEdits`/`applyEditsDevelop`): one photo's whole
+  RawBoy edits in Auto (Android, web and RawBoy Desktop: `AutoPhoto.edits`, `LookApplier.applyEdits`/`applyEditsDevelop`; Desktop: Edit in Pro opens with `AutoPhoto.params`, To Auto calls `AutoViewModel.receiveEdits`, edited photos export through `PhotoSession` (`healNow`)): one photo's whole
   develop in place of its look. Android: Pro's Export › Send to Auto → `Edits.ACTION_SEND_TO_AUTO` with the photo and an
   `Edits.kt` JSON file (same format as web's `Edits.ts`; strokes and leaks kept) as extras, read grants via ClipData;
   Auto decodes it against the analysis's as-shot defaults (`pendingEdits` until then). Batch export builds the brush
