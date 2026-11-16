@@ -16,6 +16,9 @@ object PlatformRegistry {
     fun resolve(phone: PhoneDescription, from: List<PlatformLayer> = layers): CameraPlatform =
         stack(from.filter { it.matches(phone) })
 
+    /** The [PlatformLayer.title] of the layer called [name] (the name itself if there is none). */
+    fun title(name: String): String = layers.firstOrNull { it.name == name }?.title ?: name
+
     /** The neutral profile with [chosen] applied by [LayerLevel] (list order within one level), names recorded. */
     fun stack(chosen: List<PlatformLayer>): CameraPlatform =
         chosen.sortedBy { it.level }.fold(neutralPlatform) { p, layer ->

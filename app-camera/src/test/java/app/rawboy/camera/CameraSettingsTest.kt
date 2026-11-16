@@ -73,4 +73,13 @@ class CameraSettingsTest {
         assertEquals(scales, reset.previewScales)
         assertEquals(guides, reset.flashGuides)
     }
+
+    @Test
+    fun automaticCalibrationKeepsItsStorageKeys() {
+        // The owner's learned calibration lives under these keys; a debug build's chosen profile learns beside them.
+        assertEquals("previewScales3", CameraSettingsStore.scalesKey(""))
+        assertEquals("flashGuides", CameraSettingsStore.flashGuidesKey(""))
+        assertEquals("previewScales3@neutral+tensor", CameraSettingsStore.scalesKey("neutral+tensor"))
+        assertEquals("flashGuides@neutral", CameraSettingsStore.flashGuidesKey("neutral"))
+    }
 }

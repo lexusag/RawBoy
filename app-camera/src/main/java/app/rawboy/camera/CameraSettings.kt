@@ -265,8 +265,15 @@ object CameraSettingsStore {
     private const val SCALES_KEY = "previewScales3"
     private const val FLASH_GUIDES_KEY = "flashGuides"
 
+    /** Where [slot]'s preview scales are stored (`CameraPlatform.calibrationSlot`; empty = the phone's own). */
+    internal fun scalesKey(slot: String) = if (slot.isEmpty()) SCALES_KEY else "$SCALES_KEY@$slot"
+
+    /** Where [slot]'s flash guides are stored. */
+    internal fun flashGuidesKey(slot: String) = if (slot.isEmpty()) FLASH_GUIDES_KEY else "$FLASH_GUIDES_KEY@$slot"
+
+    /** The saved settings, with the calibration learned under [calibrationSlot]. */
     @Synchronized
-    fun load(context: Context): CameraSettings {
+    fun load(context: Context, calibrationSlot: String): CameraSettings {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val d = CameraSettings()
         val always = CameraSettings(
@@ -310,8 +317,8 @@ object CameraSettingsStore {
             experimental = p.getBoolean("experimental", d.experimental),
             videoStabilization = p.getBoolean("videoStabilization", d.videoStabilization),
             flatVideo = p.getBoolean("flatVideo", d.flatVideo),
-            previewScales = parseScales(p.getString(SCALES_KEY, null)),
-            flashGuides = parseScales(p.getString(FLASH_GUIDES_KEY, null), min = 1e-2f, max = 1e4f),
+            previewScales = parseScales(p.getString(scalesKey(calibrationSlot), null)),
+            flashGuides = parseScales(p.getString(flashGuidesKey(calibrationSlot), null), min = 1e-2f, max = 1e4f),
             // "FLASH" (plain flash, since removed) becomes Focus-flash.
             flash = when (val f = p.getString("flash", null)) {
                 "FLASH" -> FlashMode.FOCUS_FLASH
@@ -393,28 +400,28 @@ object CameraSettingsStore {
             .apply()
     }
 
-    /** Updates one lens's [CameraSettings.previewScales] entry in storage, returning the new scale. */
+    /** Updates one lens's [CameraSettings.previewScales] entry in [slot]'s storage, returning the new scale. */
     @Synchronized
-    fun updatePreviewScale(context: Context, lens: String, estimate: Float): Float {
+    fun updatePreviewScale(context: Context, slot: String, lens: String, estimate: Float): Float {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val scales = parseScales(p.getString(SCALES_KEY, null))
+        val scales = parseScales(p.getString(scalesKey(slot), null))
         val known = scales[lens]
         val scale = if (known == null) estimate else known * kotlin.math.sqrt(estimate / known)
         val clamped = scale.coerceIn(CameraSettings.MIN_SCALE, CameraSettings.MAX_SCALE)
         val updated = scales + (lens to clamped)
-        p.edit().putString(SCALES_KEY, updated.entries.joinToString(";") { "${it.key}=${it.value}" }).apply()
+        p.edit().putString(scalesKey(slot), updated.entries.joinToString(";") { "${it.key}=${it.value}" }).apply()
         return clamped
     }
 
-    /** Updates one lens's [CameraSettings.flashGuides] entry in storage, returning the new guide. */
+    /** Updates one lens's [CameraSettings.flashGuides] entry in [slot]'s storage, returning the new guide. */
     @Synchronized
-    fun updateFlashGuide(context: Context, key: String, estimate: Float, min: Float, max: Float): Float {
+    fun updateFlashGuide(context: Context, slot: String, key: String, estimate: Float, min: Float, max: Float): Float {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val guides = parseScales(p.getString(FLASH_GUIDES_KEY, null), min = min, max = max)
+        val guides = parseScales(p.getString(flashGuidesKey(slot), null), min = min, max = max)
         val known = guides[key]
         val guide = (if (known == null) estimate else known * kotlin.math.sqrt(estimate / known)).coerceIn(min, max)
         val updated = guides + (key to guide)
-        p.edit().putString(FLASH_GUIDES_KEY, updated.entries.joinToString(";") { "${it.key}=${it.value}" }).apply()
+        p.edit().putString(flashGuidesKey(slot), updated.entries.joinToString(";") { "${it.key}=${it.value}" }).apply()
         return guide
     }
 

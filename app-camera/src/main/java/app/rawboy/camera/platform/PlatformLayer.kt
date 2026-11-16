@@ -30,12 +30,14 @@ enum class LayerLevel {
  * they were measured.
  */
 class PlatformLayer(
-    /** Short name shown in logs and Settings, e.g. "tensor", "samsung". */
+    /** Short name for logs and [CameraPlatform.layers], e.g. "tensor", "samsung". */
     val name: String,
     val level: LayerLevel,
     /** Whether this layer applies to [phone]; reads only the description, never `Build` itself. */
     val matches: (PhoneDescription) -> Boolean,
     val patch: PlatformPatch,
+    /** What Settings shows, e.g. "Google Tensor". */
+    val title: String = name,
 ) {
     override fun toString() = "$name ($level)"
 }

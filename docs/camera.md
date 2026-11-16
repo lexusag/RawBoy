@@ -105,7 +105,7 @@ shows them.
   **Geotag** (off by default; see below); **Frames** (off by default, also toggled on/off from the top-bar Frames button which restores the last enabled frame or **Pentax 645** by default: a submenu offering either **Date stamp** — imprints today's date in the bottom-right corner of the JPEG in `DD MM 'YY` by default, or `'YY MM DD` / `MM DD 'YY`, drawn like a quartz film data back with chamfered 7-segment LED light — or **Pentax 645** — wraps the photo in a dark film-base rebate with convexly rounded black stripe ends and 5×7 dot-matrix LED shoot info always along the shorter side of the photo: today's 1-based frame number (`#1`), mode `FILM` / `LOOK` / `BW`, shutter speed, aperture, exposure compensation EV, metering icon — larger multi-pattern frame when auto-metered, smaller spot icon when tap-metered — lens focal length (`24mm`), ISO (`ISO400`), and separate **Date** (`DD MM 'YY`, `'YY MM DD`, `MM DD 'YY`, or `jan 26`) and **Time** (`24h` or `12h (am/pm)`), with an option to **Flip info upside down** 180° and drag-and-drop reordering of items under **Shoot info**; in B&W mode both Date stamp and Pentax 645 render in neutral black and white); **Grain** (on by default; off removes the look's grain, Film's included, from the viewfinder and photos); **QR codes** (on by default; see above); **Track subject after tap** (off by
   default; see above);
   **Remember camera & settings** (off by default: each start uses the
-  back W lens, Yellow Portrait 400 and default sliders; on keeps lens, side, look and sliders); **Reset settings to defaults** (returns photo, capture, video, viewfinder, experimental, look and camera choices to their defaults after confirmation, keeping learned camera calibration).
+  back W lens, Yellow Portrait 400 and default sliders; on keeps lens, side, look and sliders); **Reset settings to defaults** (returns photo, capture, video, viewfinder, experimental, look and camera choices to their defaults after confirmation, keeping learned camera calibration). Below it, before the credits, the **phone profile** (see below).
 - **Geotag:** with it on, each JPEG and DNG gets the GPS tags of where it was taken: latitude, longitude, altitude
   above sea level and the fix's UTC date and time. Location access is asked for only when you turn it on (approximate
   location is enough on Android too, just less exact); without it the switch stays off. The position comes from the
@@ -124,6 +124,16 @@ shows them.
 - **Noise:** a phone sensor is noisier than the camera raws Auto's noise settings were tuned on, so Camera picks
   denoise and sharpening as for 4× the shot's ISO (2 stops): base ISO stays clean, ISO 400 gets Denoise 20,
   ISO 1600 gets 45, ISO 6400 and up 65. Looks outside Film mode (LUT looks, Natural) have no film grain to hide shadow noise, so they get at least Denoise 12 and Color denoise 35 (Experimental looks such as Redscale 22 and 70, which also reaches the coarse colour stage).
+- **Phone profile** (Android): some of the camera's numbers and workarounds belong to one chip or phone maker
+  (the preview's colour path and the raw's extra black were measured on a Pixel 9 Pro's Tensor chip; Samsung phones add
+  a punchier look to saved photos). At start the camera reads the phone's chip maker (`Build.SOC_MANUFACTURER`, on
+  Android 10-11 `Build.HARDWARE`), manufacturer and model and builds its profile from layers: neutral, then the chip
+  maker's, the phone maker's and the model's, where they exist. The end of Settings shows the result, e.g. *Phone
+  profile: Google Tensor* or *Phone profile: neutral (this phone hasn't been tested)*, with the chip and model it
+  detected; logcat has the same and every value under the tag `RawBoyPlatform`. Today there are layers for Google
+  Tensor and Samsung only: other phones (older Snapdragon Pixels included) get the neutral profile, which takes the
+  preview as plain sRGB and adds no extra black. Debug builds can take the phone for another chip (*Take the phone
+  for*, from the next start); calibration learned under such a profile is kept apart from the phone's own.
 
 ## Black and white
 

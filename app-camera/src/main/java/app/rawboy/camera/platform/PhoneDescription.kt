@@ -1,10 +1,19 @@
 package app.rawboy.camera.platform
 
 /** Who made the phone's SoC, as the detector recognises it; [UNKNOWN] rather than a guess. */
-enum class ChipVendor { TENSOR, QUALCOMM, MEDIATEK, EXYNOS, UNKNOWN }
+enum class ChipVendor(
+    /** What Settings shows. */
+    val title: String,
+) {
+    TENSOR("Google Tensor"),
+    QUALCOMM("Qualcomm Snapdragon"),
+    MEDIATEK("MediaTek"),
+    EXYNOS("Samsung Exynos"),
+    UNKNOWN("unknown"),
+}
 
 /**
- * The phone the camera runs on, as read from `android.os.Build` ([ActivePlatform]). Pure data: the
+ * The phone the camera runs on, as read from `android.os.Build` ([PlatformDetector]). Pure data: the
  * raw strings are kept as reported (empty when missing), so layers can match on them and the device report can show
  * them; only [chip] is interpreted.
  */

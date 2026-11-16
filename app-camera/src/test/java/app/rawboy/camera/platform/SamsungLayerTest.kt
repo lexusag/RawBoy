@@ -39,6 +39,15 @@ class SamsungLayerTest {
     }
 
     @Test
+    fun developsAsWhenEveryPhoneWasTakenForTensor() {
+        // Before chips were detected a Samsung got Tensor + Samsung; every value but the layer names stays.
+        val before = PlatformRegistry.stack(listOf(app.rawboy.camera.platform.tensor.tensorLayer, samsungLayer))
+        for (chip in listOf(ChipVendor.QUALCOMM, ChipVendor.MEDIATEK, ChipVendor.EXYNOS, ChipVendor.UNKNOWN)) {
+            assertEquals("$chip", before.copy(layers = samsung(chip).layers), samsung(chip))
+        }
+    }
+
+    @Test
     fun onTensorOnlyTheLookIsAdded() {
         val tensor = PlatformRegistry.resolve(PhoneDescription(ChipVendor.TENSOR, manufacturer = "Google"))
         val p = samsung(ChipVendor.TENSOR)

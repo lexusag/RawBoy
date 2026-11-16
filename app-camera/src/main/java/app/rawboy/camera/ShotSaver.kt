@@ -487,8 +487,8 @@ internal object ShotSaver {
         }
         Log.d(TAG, "saved ${saved.name} in ${ms(p.started)} ms (develop started after $waitMs ms)")
         val key = s.lensKey(shot.hiRes)
-        shot.viewfinderKey?.let { calibrate(app, p.rawKey, it, key, s.previewScale(shot.hiRes)) }
-        shot.flashGuide?.let { calibrateFlash(app, p.autoEv, it, CameraSettings.flashGuideKey(key, shot.flashDistanceKnown)) }
+        shot.viewfinderKey?.let { calibrate(app, shot.platform.calibrationSlot, p.rawKey, it, key, s.previewScale(shot.hiRes)) }
+        shot.flashGuide?.let { calibrateFlash(app, shot.platform.calibrationSlot, p.autoEv, it, CameraSettings.flashGuideKey(key, shot.flashDistanceKnown)) }
         withContext(Dispatchers.IO) { thumbnail(app, saved.uri) }?.let { _lastShot.value = SavedShot(shot.id, LastShot(saved.uri, it)) }
         // The JPEG came from the uncompressed raw; now the kept DNG shrinks to a lossy JPEG XL one, on its own queue
         // so the next shot's JPEG doesn't wait for it. It counts as pending, so SaveService keeps the process up.
@@ -525,12 +525,12 @@ internal object ShotSaver {
      * for T3), so a lens's first shot takes the full correction; later shots move halfway (in stops), which
      * smooths out scene-to-scene noise (about ±0.3 stop between shots of the same view).
      */
-    private fun calibrate(app: Context, rawKey: Float, viewfinderKey: Float, lens: String, scaleAtShutter: Float) {
+    private fun calibrate(app: Context, slot: String, rawKey: Float, viewfinderKey: Float, lens: String, scaleAtShutter: Float) {
         if (!(rawKey > 0f) || !(viewfinderKey > 0f)) return
         // The gain that would have matched this shot. Judged against the gain in use at its shutter: shots taken
         // back to back are calibrated after both were captured.
         val estimate = scaleAtShutter * (rawKey / viewfinderKey).coerceIn(1f / 64, 64f)
-        val clamped = CameraSettingsStore.updatePreviewScale(app, lens, estimate)
+        val clamped = CameraSettingsStore.updatePreviewScale(app, slot, lens, estimate)
         Log.d(TAG, "calibrate $lens: raw key $rawKey, viewfinder key $viewfinderKey (raw/viewfinder ${rawKey / viewfinderKey}) -> preview scale $clamped")
         _calibrations.tryEmit(Calibration.PreviewScale(lens, clamped))
     }
@@ -540,10 +540,10 @@ internal object ShotSaver {
      * where it should be; aiming [FLASH_LIFT_EV] under it keeps highlights in the raw (dark raws are recoverable,
      * clipped ones aren't). First flash shot on a lens takes the full correction, later ones move halfway.
      */
-    private fun calibrateFlash(app: Context, autoEv: Float, guideUsed: Float, lens: String) {
+    private fun calibrateFlash(app: Context, slot: String, autoEv: Float, guideUsed: Float, lens: String) {
         if (!(guideUsed > 0f)) return
         val estimate = guideUsed * 2f.pow(autoEv - FLASH_LIFT_EV)
-        val guide = CameraSettingsStore.updateFlashGuide(app, lens, estimate, MIN_FLASH_GUIDE, MAX_FLASH_GUIDE)
+        val guide = CameraSettingsStore.updateFlashGuide(app, slot, lens, estimate, MIN_FLASH_GUIDE, MAX_FLASH_GUIDE)
         Log.d(TAG, "calibrate flash $lens: auto exposure $autoEv EV at guide $guideUsed -> flash guide $guide")
         _calibrations.tryEmit(Calibration.FlashGuide(lens, guide))
     }

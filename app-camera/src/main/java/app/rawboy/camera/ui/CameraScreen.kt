@@ -152,6 +152,9 @@ import app.rawboy.gl.ViewfinderRenderer
 import kotlin.math.min
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import android.content.pm.ApplicationInfo
+import app.rawboy.camera.platform.ChipVendor
+import app.rawboy.camera.platform.PlatformRegistry
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.rawboy.auto.looks.LookApplier
@@ -1418,6 +1421,8 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             )
         }
 
+        PlatformInfo(vm)
+
         Spacer(Modifier.height(16.dp))
         for (line in Edition.credits) {
             Text(line, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1426,6 +1431,50 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
         var showLicences by remember { mutableStateOf(false) }
         TextButton(onClick = { showLicences = true }, contentPadding = PaddingValues(0.dp)) { Text("Open-source licences") }
         if (showLicences) LicensesDialog(onDismiss = { showLicences = false })
+    }
+}
+
+/**
+ * Which platform profile the camera runs with (layers, or the neutral profile on a phone nobody has tested), what
+ * was detected, and in a debug build the chip to take the phone for from the next start.
+ */
+@Composable
+private fun PlatformInfo(vm: CameraViewModel) {
+    val resolved = vm.resolvedPlatform
+    val layers = resolved.profile.layers.drop(1)
+    val profile = if (layers.isEmpty()) "neutral (this phone hasn't been tested)" else layers.joinToString(" + ") { PlatformRegistry.title(it) }
+    val phone = resolved.phone
+    val chip = phone.chip.title + phone.socModel.takeIf { it.isNotEmpty() }?.let { " ($it)" }.orEmpty()
+    Spacer(Modifier.height(16.dp))
+    Text(
+        "Phone profile: $profile" + if (resolved.chosenChip != null) " (chosen by hand)" else "",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Text(
+        "Detected: $chip chip, ${phone.manufacturer} ${phone.model}",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    val debuggable = (LocalContext.current.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    if (debuggable) {
+        val chosen by vm.chosenChip.collectAsState()
+        SettingChoice(
+            title = "Take the phone for (debug)",
+            subtitle = "From the next start of the app. Calibration learned under another profile is kept apart",
+            // The chips with a layer of their own (or soon one), and none; short labels to fit one row.
+            options = listOf(null, ChipVendor.TENSOR, ChipVendor.QUALCOMM, ChipVendor.UNKNOWN),
+            selected = chosen,
+            label = { c ->
+                when (c) {
+                    null -> "Auto"
+                    ChipVendor.TENSOR -> "Tensor"
+                    ChipVendor.QUALCOMM -> "Qualcomm"
+                    else -> "None"
+                }
+            },
+            onSelect = vm::choosePlatform,
+        )
     }
 }
 

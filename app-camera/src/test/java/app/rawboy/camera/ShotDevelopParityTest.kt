@@ -6,7 +6,6 @@ import app.rawboy.camera.platform.ActivePlatform
 import app.rawboy.camera.platform.CameraPlatform
 import app.rawboy.camera.platform.ChipVendor
 import app.rawboy.camera.platform.PhoneDescription
-import app.rawboy.camera.platform.PlatformRegistry
 import app.rawboy.develop.DevelopParams
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -21,9 +20,8 @@ class ShotDevelopParityTest {
     private val pixel = resolve("Google", ChipVendor.TENSOR)
     private val galaxy = resolve("samsung", ChipVendor.QUALCOMM)
 
-    /** As the camera resolves phones until the chip is detected. */
     private fun resolve(maker: String, chip: ChipVendor): CameraPlatform =
-        PlatformRegistry.resolve(ActivePlatform.untilAutodetect(PhoneDescription(chip, manufacturer = maker)))
+        ActivePlatform.resolve(PhoneDescription(chip, manufacturer = maker), null).profile
 
     /** The DNG's Make the old code read: DngCreator writes the phone's Build.MANUFACTURER. */
     private val phones = listOf(pixel to "Google", galaxy to "samsung")

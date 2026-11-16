@@ -21,6 +21,7 @@ import app.rawboy.auto.analysis.SceneStats
 import app.rawboy.auto.looks.LookApplier
 import app.rawboy.camera.capture.CameraController
 import app.rawboy.camera.platform.ActivePlatform
+import app.rawboy.camera.platform.ChipVendor
 import app.rawboy.camera.debug.DebugProbe
 import app.rawboy.camera.capture.FlashMode
 import app.rawboy.camera.capture.LocationTracker
@@ -97,8 +98,20 @@ class LastShot(val uri: Uri, val thumbnail: Bitmap)
 class CameraViewModel(application: Application) : AndroidViewModel(application) {
     private val app get() = getApplication<Application>()
 
-    /** This phone's platform profile; the only reader of [ActivePlatform], handed on explicitly. */
-    private val platform = ActivePlatform.profile
+    /** This phone's platform; the only reader of [ActivePlatform], its profile handed on explicitly. */
+    val resolvedPlatform = ActivePlatform.get(application)
+    private val platform = resolvedPlatform.profile
+
+    private val _chosenChip = MutableStateFlow(ActivePlatform.chosen(application))
+    /** Debug builds: the chip the phone is taken for from the next start (null = as detected). */
+    val chosenChip = _chosenChip.asStateFlow()
+
+    /** Debug builds: take the phone for [chip] (null = as detected) from the next start of the app. */
+    fun choosePlatform(chip: ChipVendor?) {
+        ActivePlatform.choose(app, chip)
+        _chosenChip.value = ActivePlatform.chosen(app)
+    }
+
     val controller = CameraController(application, platform)
 
     /** The scene is dark enough for [BurstMode.AUTO] to merge frames ([LowLight]); follows the preview's exposure. */
@@ -107,7 +120,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    private val _settings = MutableStateFlow(CameraSettingsStore.load(application))
+    private val _settings = MutableStateFlow(CameraSettingsStore.load(application, platform.calibrationSlot))
     val settings = _settings.asStateFlow()
 
     private val _status = MutableStateFlow(CameraStatus.NEEDS_PERMISSION)
@@ -804,7 +817,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             }
             if (key in _settings.value.previewScales) return@launch // a shot calibrated it meanwhile
             val estimate = scale * (rawKey / viewfinderKey).coerceIn(1f / 64, 64f)
-            val calibrated = withContext(Dispatchers.IO) { CameraSettingsStore.updatePreviewScale(app, key, estimate) }
+            val calibrated = withContext(Dispatchers.IO) { CameraSettingsStore.updatePreviewScale(app, platform.calibrationSlot, key, estimate) }
             Log.d(TAG, "raw meter $key: raw key $rawKey, viewfinder key $viewfinderKey (raw/viewfinder ${rawKey / viewfinderKey}) -> preview scale $calibrated")
             _settings.value = _settings.value.let { it.copy(previewScales = it.previewScales + (key to calibrated)) }
             republish()

@@ -14,6 +14,7 @@ import app.rawboy.camera.platform.StillProfile
  */
 val neutralPlatform = CameraPlatform(
     layers = listOf("neutral"),
+    calibrationSlot = "",
     preview = PreviewProfile(
         // The result's colour matrix is only trusted where a layer says so: the OnePlus 11 reports identity.
         color = SrgbPreviewColor,

@@ -12,6 +12,12 @@ package app.rawboy.camera.platform
 data class CameraPlatform(
     /** Names of the layers applied, base first ("neutral", then e.g. "tensor"), for logs and Settings. */
     val layers: List<String>,
+    /**
+     * Where learned calibration (preview scales, flash guides) is stored: empty = the phone's own place. A profile
+     * picked by hand in a debug build that differs from the automatic one stores under its own slot, so it never
+     * spoils what the automatic profile learned ([ActivePlatform]).
+     */
+    val calibrationSlot: String,
     val preview: PreviewProfile,
     val still: StillProfile,
     val noise: NoiseProfile,

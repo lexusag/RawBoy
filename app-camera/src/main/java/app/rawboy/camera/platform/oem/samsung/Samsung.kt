@@ -20,6 +20,7 @@ import app.rawboy.camera.platform.traits.previewColorFromResult
  */
 val samsungLayer = PlatformLayer(
     name = "samsung",
+    title = "Samsung",
     level = LayerLevel.MANUFACTURER,
     matches = { it.madeBy("samsung") },
     patch = ispBlackAsPixel9Pro + previewColorFromResult + PlatformPatch { p ->

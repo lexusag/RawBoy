@@ -9,13 +9,14 @@ import app.rawboy.camera.platform.traits.previewColorFromResult
 
 /**
  * Google Tensor (Pixel 6 and later): everything RawBoy Camera was tuned on, measured on a Pixel 9 Pro (2026-10 to
- * 2026-11). Older Pixels have Qualcomm chips and get the Qualcomm layer.
+ * 2026-11). Older Pixels have Qualcomm chips: they get the Qualcomm layer (the neutral profile until there is one).
  *
  * The numbers that equal the neutral profile's are repeated on purpose: a later change to the neutral profile must
  * not move the Pixel's behaviour unnoticed.
  */
 val tensorLayer = PlatformLayer(
     name = "tensor",
+    title = "Google Tensor",
     level = LayerLevel.CHIP_VENDOR,
     matches = { it.chip == ChipVendor.TENSOR },
     patch = ispBlackAsPixel9Pro + previewColorFromResult + PlatformPatch { p ->
