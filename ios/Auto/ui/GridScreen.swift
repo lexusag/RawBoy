@@ -918,8 +918,8 @@ struct ResetAllSheet: View {
 
 #if os(macOS)
 /**
- * The sidebar's Filter (the web's): camera, lens, ISO range and shoot day, each listing what the batch holds with a count,
- * and Unedited (photos still As is). The grid, the photo view's arrows and Export all follow it.
+ * The sidebar's Filter (the web's): camera, lens, ISO range, focal length range and shoot day, each listing what the batch
+ * holds with a count, and Unedited (photos still As is). The grid, the photo view's arrows and Export all follow it.
  */
 private struct FilterSection: View {
     @ObservedObject var vm: AutoViewModel
@@ -930,19 +930,30 @@ private struct FilterSection: View {
         let cameras = Self.options(photos.compactMap(\.cameraLabel))
         let lenses = Self.options(photos.compactMap(\.lensLabel))
         let isos = Self.counts(photos.compactMap(\.isoValue)).sorted { $0.0 < $1.0 }
+        let focals = Self.counts(photos.compactMap(\.focalLengthValue)).sorted { $0.0 < $1.0 }
         let days = Self.options(photos.compactMap(\.day))
         heading("Filter")
         VStack(alignment: .leading, spacing: 6) {
             menu("Camera", vm.filter.camera, cameras) { vm.filter.camera = $0 }
             menu("Lens", vm.filter.lens, lenses) { vm.filter.lens = $0 }
             HStack(spacing: 6) {
-                isoMenu("Min ISO", vm.filter.isoMin, isos) { v in
+                rangeMenu("Min ISO", "", vm.filter.isoMin, isos) { v in
                     vm.filter.isoMin = v
                     if let v, let hi = vm.filter.isoMax, hi < v { vm.filter.isoMax = nil }
                 }
-                isoMenu("Max ISO", vm.filter.isoMax, isos) { v in
+                rangeMenu("Max ISO", "", vm.filter.isoMax, isos) { v in
                     vm.filter.isoMax = v
                     if let v, let lo = vm.filter.isoMin, lo > v { vm.filter.isoMin = nil }
+                }
+            }
+            HStack(spacing: 6) {
+                rangeMenu("Min mm", "mm", vm.filter.focalMin, focals) { v in
+                    vm.filter.focalMin = v
+                    if let v, let hi = vm.filter.focalMax, hi < v { vm.filter.focalMax = nil }
+                }
+                rangeMenu("Max mm", "mm", vm.filter.focalMax, focals) { v in
+                    vm.filter.focalMax = v
+                    if let v, let lo = vm.filter.focalMin, lo > v { vm.filter.focalMin = nil }
                 }
             }
             menu("Date", vm.filter.date, days) { vm.filter.date = $0 }
@@ -971,11 +982,18 @@ private struct FilterSection: View {
         .help("\(title): only photos with this value")
     }
 
-    private func isoMenu(_ title: String, _ value: Int?, _ options: [(Int, Int)], _ set: @escaping (Int?) -> Void) -> some View {
-        Picker(title, selection: Binding(get: { value ?? 0 }, set: { set($0 == 0 ? nil : $0) })) {
-            Text(title == "Min ISO" ? "Min ISO" : "Max ISO").tag(0)
-            ForEach(options, id: \.0) { o in Text("\(o.0)").tag(o.0) }
-            if let value, !options.contains(where: { $0.0 == value }) { Text("\(value)").tag(value) }
+    private func rangeMenu(_ title: String, _ unit: String, _ value: Int?, _ options: [(Int, Int)], _ set: @escaping (Int?) -> Void) -> some View {
+        // String tags match menu(_:_:_:_:) so macOS Picker's NSPopUpButton reliably updates when options populate after analysis.
+        let stringOptions = options.map { (key: String($0.0), label: unit.isEmpty ? "\($0.0)" : "\($0.0) \(unit)", count: $0.1) }
+        return Picker(title, selection: Binding(
+            get: { value.map(String.init) ?? "" },
+            set: { set($0.isEmpty ? nil : Int($0)) }
+        )) {
+            Text(title).tag("")
+            ForEach(stringOptions, id: \.key) { o in Text("\(o.label) (\(o.count))").tag(o.key) }
+            if let value, !options.contains(where: { $0.0 == value }) {
+                Text(unit.isEmpty ? "\(value)" : "\(value) \(unit)").tag(String(value))
+            }
         }
         .labelsHidden()
         .help(title)
