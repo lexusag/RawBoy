@@ -26,7 +26,7 @@ final class PresetSectionTests: XCTestCase {
         func shape(_ s: [(label: String?, presets: [Preset])]) -> [String] {
             s.map { "\($0.label ?? "-"): \($0.presets.map(\.name).joined(separator: ","))" }
         }
-        XCTAssertEqual(shape(Presets.sections([warm, mono, half, grey])), ["Color: Warm,Half", "Black & white: Mono,Grey"])
+        XCTAssertEqual(shape(Presets.sections([warm, mono, half, grey])), ["Colour: Warm,Half", "Black & white: Mono,Grey"])
         XCTAssertEqual(shape(Presets.sections([warm])), ["-: Warm"])
         XCTAssertEqual(shape(Presets.sections([mono])), ["Black & white: Mono"])
     }
