@@ -1,3 +1,9 @@
+**RawBoy Desktop: Browse mode, and the Viewer's libraries replace Desktop's own copies (2026-11-16)**
+
+- **Browse (⌘3).** A third mode next to Pro and Auto: RawBoy Viewer's grid, sidebar, viewer and culling (`ViewerUI`) inside the window, with the Browse menu (rename, export, copy and move, compare, slideshow, Send to RawBoy Auto, Move to Trash). Its settings are kept apart (`desktop.browse.`); the menu bar and Dock are not hidden.
+- **Hand-offs in-process.** E in the viewer opens the photo in Pro, also while Auto is showing (its batch stays); Send to RawBoy Auto adds photos and folders to Auto as Looks, Film or As is. No Open With or `rawboy-desktop://` round trip.
+- **One XmpSidecar, PhotoOrder and filmstrip scan.** Desktop and the engine use `RawBoyBrowseKit`'s `XmpSidecar`, `PhotoSidecar`, `ExifOrientation` and `PhotoOrder`, and Pro's filmstrip uses the Kit's folder scan, RAW + JPEG grouping and `ThumbnailStore` (thumbnails now cached on disk). The engine's `XmpSidecar.swift`, `PhotoOrder` and `Desktop/Filmstrip.swift` are gone; the shared XMP fixtures stay checked on both sides. The iOS targets use the same Kit (it declares iOS 17), but could not be built here (no iOS slice of the native frameworks).
+
 **RawBoy Web: Copy previous edits in Pro (2026-11-16)**
 
 - **Copy previous edits.** Pro's desktop toolbar has a **Copy previous edits** button (and `Shift+C` everywhere) to copy the previously open photo's edits onto the current photo as one undo step: white balance is copied only if changed on the previous photo, while the current photo's crop, rotation, flips, perspective, masks, light leaks, effects and healing spots stay.

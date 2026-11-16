@@ -39,6 +39,23 @@ The **Pro | Auto** switch in the title bar (⌘1, ⌘2) turns the window into Ra
 
 Auto analyses up to three photos side by side (a third of the cores, one lane per 6 GB of memory), and keeps each photo's analysis (small copies, lens data, noise, faces) in `~/Library/Caches/<app id>/analysis` (up to 1 GB, keyed by file path, size and modified time), so a folder added again isn't decoded again; the develop itself is worked out again each time. `RAWBOY_NO_ANALYSIS_CACHE=1` turns the cache off. A photo restored from it has no big detail preview until it is opened (the grid thumbnail stands in).
 
+## Browse mode
+
+The third mode, ⌘3 (Pro | Auto | Browse): RawBoy Viewer's browser (grid, sidebar, culling) and viewer inside the window,
+from the Viewer's `ViewerUI` package (`RawBoyImageViewer/Packages`, a local-path package in `ios/project.yml`; **TODO** switch
+it to a pinned git tag once the Viewer's `claude/project-thread-7b80wo` branch is merged and tagged). Desktop owns the
+`AppModel` (`DesktopModel.browse`) with `ViewerOptions`: the menu bar and Dock stay (`hidesDockAndMenuBar` off), the viewer is
+a view over the grid (`viewerInHostWindow`), and its preferences are kept under `desktop.browse.` (`ViewerSettings.store`).
+ViewerUI installs its own key monitor while Browse shows; Desktop's `KeyboardShortcuts` only takes ⌘1/⌘2 there. The Browse
+menu is the Viewer's Photo menu (`ViewerPhotoCommands`), on while Browse shows. `Desktop/DesktopHandOff.swift`
+implements the Viewer's `PhotoHandOff` in-process: E in the viewer opens the photo in Pro (whichever mode was showing; Auto's
+batch is kept), Send to RawBoy Auto adds photos or folders to Auto's batch as Looks, Film or As is. Real previews (R) keep the
+Viewer's Core Image development: the engine's Metal develop was not wired in (it needs a `PhotoSession` per request).
+Ratings, picks, turns and crops are the same `xmp:Rating` / `rawboy:Pick` / `tiff:Orientation` / `rawboy:Develop` fields Pro and
+Auto use, through the Kit's `XmpSidecar`. Launch with `--browse <folder or photo>`; debug `RAWBOY_BROWSE_PROBE=1` (copies
+only) selects all, rates, and exercises both hand-offs. The Kit also replaced the engine's own `XmpSidecar`, `PhotoOrder`
+(`CaptureDate` stays in `auto/CaptureDate.swift`) and the filmstrip's folder scan and thumbnails (`Desktop/ProFilmstrip.swift`).
+
 ## Skin: Skin retouch, Blemish removal, Portrait retouch
 MediaPipe has no macOS build, so the Mac finds faces and skin with Apple's Vision framework (nothing bundled, no third-party code). Each face's skin is the polygon of Vision's face contour plus a forehead cap above the eyebrows, minus eyes, eyebrows, lips and nostrils (from Vision's 76 landmarks), cut back by a skin-colour model sampled from the face itself; neck, arms and hands are found by that colour model inside Vision's person mask (weight 0.85). How it differs from MediaPipe's (iOS, Android, web): there is no trained skin class, so a garment or hair close to the skin's tone can be taken for skin and skin in very different light to the face's is missed; the forehead's top edge is an estimate (Vision has no hairline); Vision finds fewer small or side-on faces (the mask is made on a 1280 px copy), and a dark scene is tried at several exposures until a face is found. **Skin retouch**, **Blemish removal** and **Portrait retouch** (Portrait section; per mask layer too, in the Masks panel) run on that mask. Portrait retouch is the web's algorithm and numbers (`PortraitRetouch.swift`; face landmarks reach it through `FaceShape`): spots, under-eyes, lines and evening, as a gains map the develop shader applies, so preview, 100% and export match. iOS: the engine is shared, but MediaPipe's landmarks aren't handed over yet, so the Portrait retouch sliders are Mac-only for now.
 

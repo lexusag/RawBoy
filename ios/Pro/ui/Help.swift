@@ -37,6 +37,12 @@ let proHelp = [
     HelpSection("Export", [
         HelpItem("Film scan 1.5×", "In the export sheet, shown while a film look is on (the Film tone mapper in Pro, Film photos in Auto): renders the photo 1.5× larger, upscaled with sharp edges and the film grain on a finer pitch, like a finer scan of the negative. The size setting doesn't apply to it."),
     ]),
+    HelpSection("Browse", [
+        HelpItem("Browse (⌘3)", "The third mode next to Pro and Auto: RawBoy Viewer's browser (a grid of a folder's photos with a sidebar of favourites, recent folders and places) and its viewer, inside this window. Open a folder with ⌘O, drop one on the window, or click it in the sidebar. A RAW + JPEG pair is one photo, shown as the raw."),
+        HelpItem("Rating and culling", "1–5 give stars, 0 clears them, P picks, X rejects, U unflags, Return or double-click opens the viewer (arrows to move, Esc back), ⌘[ and ⌘] turn a photo, C compares two to four. Ratings, picks and turns are written into the photo's XMP sidecar, the same one Pro and Auto use. The Browse menu has Rename, Export, Copy and Move to, Compare, Slideshow and Send to RawBoy Auto. Move to Trash is ⌘⌫, and ⌘Z undoes ratings and file moves."),
+        HelpItem("Open in Pro, send to Auto", "In the viewer, E opens the photo in Pro (whichever mode the window was in; Auto's batch stays as it is). Send to RawBoy Auto adds the selected photos or folders to Auto's batch as Looks, Film or As is. Both happen inside Desktop: nothing is opened through the system."),
+        HelpItem("Settings of its own", "Browse keeps its sort order, sizes, favourites and export choices apart from the standalone RawBoy Viewer's, so the two never undo each other. ? shows its keys."),
+    ]),
     HelpSection("Packer", [
         HelpItem("Pack Raws… (⇧⌘P)", "Opens RawBoy Packer, which re-saves raws and DNGs as smaller DNGs: drop raws or folders, choose Smallest files, Maximum compatibility or Tiny copies, and Pack. The summary under the settings says what each choice does and which programs open the result. Files are saved next to the originals (or in a folder you choose), never over an existing file; the originals are never changed."),
     ]),
