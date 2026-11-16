@@ -26,7 +26,7 @@ packages:
   # viewer-package:begin
   RawBoyViewerPackages:
     url: https://github.com/lexusag/RawBoyImageViewer
-    from: 0.2.1
+    from: 0.2.2
   # viewer-package:end
 targets:
   RawBoyEngine:
@@ -328,15 +328,27 @@ targets:
         CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         LSApplicationCategoryType: public.app-category.photography
         NSHumanReadableCopyright: RawBoy
+        # Never claimed by the OS: rank None, so Finder doesn't offer Desktop first or pick it for a type; it is still there
+        # under Open With > Other, and takes the types RawBoy Viewer's Browse shows (RawBoyBrowseKit's PhotoFileType). Photos handed
+        # over by the Finder open in Browse while Browse shows, else in Pro.
         CFBundleDocumentTypes:
           - CFBundleTypeName: RAW photo
             CFBundleTypeRole: Editor
-            LSHandlerRank: Alternate
-            LSItemContentTypes: [public.camera-raw-image, com.adobe.raw-image]
+            LSHandlerRank: None
+            LSItemContentTypes: [public.camera-raw-image, com.adobe.raw-image, app.rawboy.kdc-raw-image, app.rawboy.x3f-raw-image]
           - CFBundleTypeName: Photo
             CFBundleTypeRole: Editor
-            LSHandlerRank: Alternate
-            LSItemContentTypes: [public.jpeg, public.heic, public.heif, public.png, public.tiff]
+            LSHandlerRank: None
+            LSItemContentTypes: [public.jpeg, public.heic, public.heif, public.png, public.tiff, org.webmproject.webp, public.avif, public.jpeg-xl]
+        UTImportedTypeDeclarations:
+          - UTTypeIdentifier: app.rawboy.kdc-raw-image
+            UTTypeDescription: Kodak raw image
+            UTTypeConformsTo: [public.camera-raw-image]
+            UTTypeTagSpecification: {public.filename-extension: [kdc]}
+          - UTTypeIdentifier: app.rawboy.x3f-raw-image
+            UTTypeDescription: Sigma X3F raw image
+            UTTypeConformsTo: [public.camera-raw-image]
+            UTTypeTagSpecification: {public.filename-extension: [x3f]}
         # RawBoy Viewer's "Send to RawBoy Auto": rawboy-desktop://auto?as=looks|film|plain&path=<file or folder>&path=…
         CFBundleURLTypes:
           - CFBundleURLName: app.rawboy.desktop.auto

@@ -1,3 +1,10 @@
+**RawBoy Desktop: Browse takes the Viewer 0.2.2 (2026-11-16)**
+
+- **Top bar zoom.** Double-clicking Browse's toolbar (or the strip above Places) expands the window to fit the screen and again puts it back, like the title bar's Zoom (it follows the system's double-click setting).
+- **Copy Folder Name / Copy Folder Path** in the right-click menu of a folder in Places, Favourites, Recent and the grid.
+- **Finder opens.** Desktop no longer claims photo types from the OS (document types are rank None: not offered first, never the default; Open With › Other still works) and lists every type Browse shows (WebP, AVIF, JPEG XL, kdc, x3f too). While Browse is showing, Open With on a photo or folder opens it in Browse; otherwise Pro, or Auto for several photos or a folder, as before.
+- Pin: `from: 0.2.2` (`ios/project.yml`, `ios/viewer-source.sh`). Needs the Viewer's v0.2.2 tag to exist before CI can resolve it.
+
 **RawBoy Desktop: the Viewer's libraries by path or by tag (2026-11-16)**
 
 - **Switch.** `ios/viewer-source.sh local|git` sets where `ios/project.yml` takes RawBoy Viewer's libraries from: its git tag (`from: 0.2.1`, the first with the root `Package.swift` SwiftPM needs; the committed default, used by CI and releases, which cache the resolved package) or a sibling checkout for development.
