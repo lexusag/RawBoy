@@ -173,6 +173,9 @@ struct DesktopCommands: Commands {
             Button("Larger Brush") { model.commands.send(.brushSize(1)) }.keyboardShortcut("]", modifiers: []).disabled(!ready)
         }
         CommandGroup(replacing: .help) {
+            // The version, at the top of the Help menu (the standard About panel is still the app menu's).
+            Button("About \(AppVersion.line)") {}.disabled(true)
+            Divider()
             Button("RawBoy Desktop Help") { model.commands.send(.help) }.keyboardShortcut("/", modifiers: .command)
         }
     }
