@@ -28,6 +28,11 @@ struct RawBoyDesktopApp: App {
             PackerView(model: PackerModel.shared).tint(DesktopTheme.amber)
         }
         .defaultSize(width: 980, height: 700)
+        // ⌘, and the app menu's Settings…: the bundled Viewer's settings, which are Browse's (kept under `desktop.browse.`).
+        Settings {
+            ViewerSettingsRoot(app: model.browse)
+                .tint(DesktopTheme.amber)
+        }
     }
 }
 
