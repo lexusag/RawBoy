@@ -25,6 +25,7 @@ export const PRO_HELP: HelpSection[] = [
       { how: 'Press and hold', text: 'Compare with the as-shot render.' },
       { keys: ['\\'], how: 'or Compare', text: 'Show the as-shot render until pressed again.' },
       { keys: ['C'], how: 'or Crop (top bar)', text: 'Open or close Crop & rotate.' },
+      { keys: ['Shift+C'], how: 'or Copy previous edits', text: 'Copies the previous photo\'s edits onto this photo (white balance only if changed; crop, rotation, flips, perspective, masks, light leaks, effects and healing stay).' },
       { keys: ['D'], how: 'or click outside the photo', text: 'Change the frame around it: grey, white or black.' },
       { how: 'Histogram', text: 'Above the tabs: red, green and blue levels of the developed photo, with the share of crushed shadows (left) and clipped highlights (right). Click it to mark them blue and red on the photo.' },
     ],

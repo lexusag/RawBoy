@@ -2767,6 +2767,16 @@ line.curve-grid,
   white-space: nowrap;
 }
 
+.pro-toolbar .copy-previous-edits {
+  white-space: nowrap;
+}
+
+@media (max-width: 900px) {
+  .pro-toolbar .copy-previous-edits {
+    display: none;
+  }
+}
+
 /* Pro's Lens tab: Lensfun lens database. */
 .lensfun-pick {
   margin: 8px 0;
