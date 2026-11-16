@@ -307,10 +307,11 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
     private var precaptureWatch: ((TotalCaptureResult) -> Unit)? = null
 
     /**
-     * The back lenses that can deliver RAW_SENSOR, widest first, labelled UW / W / T. A logical
+     * The back lenses that can deliver RAW_SENSOR, widest first, labelled UW / W / T ([LensChoice]). A logical
      * multi-camera (Pixel: one "back camera" over the wide, ultrawide and tele) contributes its physical
      * lenses; the logical camera itself stands for the lens it starts on (W), since that path has the
-     * most complete 3A. Lenses are logged under RawBoyCamera for diagnosing other phones.
+     * most complete 3A, unless the platform prefers stand-alone cameras of the same focal length
+     * ([app.rawboy.camera.platform.LensProfile]). Lenses are logged under RawBoyCamera for diagnosing other phones.
      * [facing]: CameraMetadata.LENS_FACING_BACK or LENS_FACING_FRONT; empty when that side has no RAW.
      * [onSkip] hears each camera ("2", or "0/3" for a physical lens) that isn't listed, and why (the device report).
      */
@@ -320,44 +321,35 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         onSkip: ((camera: String, why: String) -> Unit)? = null,
     ): List<Info> {
         val found = ArrayList<Info>()
+        val candidates = ArrayList<LensChoice.Candidate>()
         for (id in manager.cameraIdList) {
             val c = manager.getCameraCharacteristics(id)
             if (c.get(CameraCharacteristics.LENS_FACING) != facing) continue
             val region = c.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE) ?: Rect()
-            infoFor(id, null, c, region, preferMaxRes, onSkip)?.let(found::add)
             val caps = c.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES) ?: IntArray(0)
-            if (CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA in caps) {
+            val logical = CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA in caps
+            infoFor(id, null, c, region, preferMaxRes, onSkip)?.let {
+                found += it
+                candidates += LensChoice.Candidate(it.name, physical = false, logical = logical, focal = it.equivalentFocal)
+            }
+            if (logical) {
                 for (physical in c.physicalCameraIds) {
                     val pc = runCatching { manager.getCameraCharacteristics(physical) }.getOrNull() ?: continue
-                    val lens = infoFor(id, physical, pc, region, preferMaxRes, onSkip)
-                    lens?.let { Log.d(TAG, "camera $id/$physical: RAW ${it.rawSize}, preview ${it.previewSize}, ${it.equivalentFocal.toInt()} mm") }
-                    lens?.let(found::add)
+                    val lens = infoFor(id, physical, pc, region, preferMaxRes, onSkip) ?: continue
+                    Log.d(TAG, "camera $id/$physical: RAW ${lens.rawSize}, preview ${lens.previewSize}, ${lens.equivalentFocal.toInt()} mm")
+                    found += lens
+                    candidates += LensChoice.Candidate(lens.name, physical = true, logical = false, focal = lens.equivalentFocal)
                 }
             }
         }
-        // One entry per lens: physical lenses with the focal length of a camera already listed are the same lens.
-        val lenses = ArrayList<Info>()
-        for (lens in found.sortedBy { if (it.physicalId == null) 0 else 1 }) {
-            val same = lenses.firstOrNull { abs(it.equivalentFocal - lens.equivalentFocal) < 0.12f * lens.equivalentFocal }
-            if (same == null) lenses += lens
-            else onSkip?.invoke(lens.name, "same lens as ${same.name} (${String.format(java.util.Locale.ROOT, "%.1f", lens.equivalentFocal)} mm)")
-        }
-        if (lenses.isEmpty()) {
+        val choice = LensChoice.choose(candidates, platform.lenses.standaloneOverLogical)
+        for ((c, why) in choice.skipped) onSkip?.invoke(c.name, why)
+        if (choice.lenses.isEmpty()) {
             Log.d(TAG, "lenses (facing $facing): none with RAW")
             return emptyList()
         }
-        lenses.sortBy { it.equivalentFocal }
-        // The main lens is the one the logical camera opens on, else the one nearest 26 mm.
-        val main = lenses.firstOrNull { it.physicalId == null } ?: lenses.minBy { abs(it.equivalentFocal - 26f) }
-        val mainIndex = lenses.indexOf(main)
-        return lenses.mapIndexed { i, lens ->
-            val label = when {
-                i == mainIndex -> "W"
-                i < mainIndex -> if (mainIndex - i == 1) "UW" else "UW${mainIndex - i}"
-                else -> if (i - mainIndex == 1) "T" else "T${i - mainIndex}"
-            }
-            lens.labelled(label)
-        }.also { list ->
+        val byName = found.associateBy { it.name }
+        return choice.lenses.map { byName.getValue(it.candidate.name).labelled(it.label) }.also { list ->
             Log.d(TAG, "lenses (facing $facing): " + list.joinToString { "${it.label}=${it.openId}/${it.physicalId ?: "-"} ${it.equivalentFocal.toInt()}mm ${it.rawSize}" })
         }
     }
@@ -1650,7 +1642,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             // left alone the preview gets their own scene-dependent tone mapping, which can't be undone).
             inf.hasContrastCurve -> {
                 setForLens(CaptureRequest.TONEMAP_MODE, CameraMetadata.TONEMAP_MODE_CONTRAST_CURVE)
-                setForLens(CaptureRequest.TONEMAP_CURVE, SRGB_CURVE)
+                setForLens(CaptureRequest.TONEMAP_CURVE, if (platform.preview.curveAtEvenPoints) SRGB_CURVE_EVEN else SRGB_CURVE)
             }
             inf.hasGammaCurve -> {
                 setForLens(CaptureRequest.TONEMAP_MODE, CameraMetadata.TONEMAP_MODE_GAMMA_VALUE)
@@ -1902,21 +1894,11 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         /** Gamma for cameras without the sRGB preset curve. */
         private const val PREVIEW_GAMMA = 2.2f
 
-        /**
-         * The sRGB transfer curve as a TONEMAP_CURVE (64 segments, the Pixel's maximum is 65 points), with points
-         * spaced more densely near black, where the curve bends most. The viewfinder's inverse sRGB undoes it.
-         */
-        private val SRGB_CURVE: TonemapCurve = run {
-            val n = 65
-            val points = FloatArray(n * 2)
-            for (i in 0 until n) {
-                val x = (i.toFloat() / (n - 1)).let { it * it } // denser near 0
-                val y = if (x <= 0.0031308f) 12.92f * x else 1.055f * x.toDouble().pow(1 / 2.4).toFloat() - 0.055f
-                points[i * 2] = x
-                points[i * 2 + 1] = y.coerceIn(0f, 1f)
-            }
-            TonemapCurve(points, points, points)
-        }
+        /** The preview's sRGB curve ([PreviewCurve.dense]); the viewfinder's inverse sRGB undoes it. */
+        private val SRGB_CURVE: TonemapCurve = PreviewCurve.dense.let { TonemapCurve(it, it, it) }
+
+        /** The same at evenly spaced points ([PreviewCurve.even]), for HALs that ignore the points' x. */
+        private val SRGB_CURVE_EVEN: TonemapCurve = PreviewCurve.even.let { TonemapCurve(it, it, it) }
 
         private const val ILLUMINANT_D65 = CameraMetadata.SENSOR_REFERENCE_ILLUMINANT1_D65
 

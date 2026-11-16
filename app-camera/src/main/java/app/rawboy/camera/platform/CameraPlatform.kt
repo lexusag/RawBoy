@@ -18,6 +18,7 @@ data class CameraPlatform(
      * spoils what the automatic profile learned ([ActivePlatform]).
      */
     val calibrationSlot: String,
+    val lenses: LensProfile,
     val preview: PreviewProfile,
     val still: StillProfile,
     val noise: NoiseProfile,
@@ -42,6 +43,16 @@ data class CameraPlatform(
     }
 }
 
+/** Which cameras the lens list is built from ([app.rawboy.camera.capture.LensChoice]). */
+data class LensProfile(
+    /**
+     * When a stand-alone camera has the focal length of a logical multi-camera's lens, list the stand-alone one. Some
+     * HALs expose each sensor twice (a logical camera and a camera of its own) and only the stand-alone one streams
+     * RAW reliably. Neutral false: the logical camera, which has the most complete 3A on the Pixel.
+     */
+    val standaloneOverLogical: Boolean,
+)
+
 /** The live viewfinder: how the ISP's preview frames relate to the raw. */
 data class PreviewProfile(
     /**
@@ -49,6 +60,14 @@ data class PreviewProfile(
      * [SrgbPreviewColor], the preview taken as plain sRGB.
      */
     val color: PreviewColor,
+    /**
+     * The HAL applies TONEMAP_CURVE's points as if evenly spaced over its linear input, whatever their x (OnePlus 11:
+     * a curve of x^4 at even points gave the 4th power, the sRGB curve with points packed near black gave sRGB(x^2)).
+     * The preview's sRGB curve is then sent at even input steps, which such a HAL renders exactly and an honest one
+     * as the sRGB curve with a coarser toe (below 1/63 of white). Neutral false: points packed near black, where the
+     * curve bends most (exact where x is honoured, as on the Pixel 9 Pro).
+     */
+    val curveAtEvenPoints: Boolean,
 )
 
 /** Capturing and developing a still. */

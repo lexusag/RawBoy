@@ -74,7 +74,7 @@ object ActivePlatform {
         val choice = r.chosenChip?.let { "taken for $it by hand" } ?: "automatic"
         val slot = p.calibrationSlot.ifEmpty { "own" }
         return "platform: ${PlatformDetector.describe(r.phone)}; $choice; layers ${p.layers.joinToString("+")}; " +
-            "calibration $slot; ${p.preview}; ${p.still}; ${p.noise}; ${p.flash}"
+            "calibration $slot; ${p.lenses}; ${p.preview}; ${p.still}; ${p.noise}; ${p.flash}"
     }
 
     private fun debuggable(context: Context) = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0

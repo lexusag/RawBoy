@@ -21,6 +21,8 @@ val tensorLayer = PlatformLayer(
     matches = { it.chip == ChipVendor.TENSOR },
     patch = ispBlackAsPixel9Pro + previewColorFromResult + PlatformPatch { p ->
         p.copy(
+            // Everything on the Pixel 9 Pro was tuned with the curve's points packed near black.
+            preview = p.preview.copy(curveAtEvenPoints = false),
             still = p.still.copy(
                 // Preview 1/30 s, ISO 1410, boost 2.39 -> still 1/15 s, ISO 1410, boost 1.2.
                 maxStillExposureNs = 66_666_667L,

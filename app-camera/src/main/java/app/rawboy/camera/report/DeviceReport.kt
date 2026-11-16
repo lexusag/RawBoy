@@ -199,6 +199,7 @@ object DeviceReport {
         field("choice", d.platform.chosenChip?.let { "taken for $it by hand" } ?: "automatic")
         field("layers", p.layers.joinToString(" + "))
         field("calibration", p.calibrationSlot.ifEmpty { "own" })
+        field("lenses", p.lenses.toString())
         field("preview", p.preview.toString())
         field("still", p.still.toString())
         field("noise", p.noise.toString())

@@ -22,6 +22,8 @@ class TensorLayerTest {
     fun previewAsToday() {
         // The former CameraController.previewToRec2020: the result's ISP matrix and gains are undone.
         assertSame(UndoIspPreviewColor, tensor.preview.color)
+        // The former SRGB_CURVE, points packed near black.
+        assertEquals(false, tensor.preview.curveAtEvenPoints)
     }
 
     @Test
@@ -58,7 +60,7 @@ class TensorLayerTest {
                 still = p.still.copy(extraBlack = 0.01f, maxStillExposureNs = 1L),
                 noise = p.noise.copy(backIsoScale = 1f, frontIsoScale = 1f, lutLumaFloor = 0f, lutColorFloor = 0f, experimentalLumaFloor = 0f, experimentalColorFloor = 0f),
                 flash = p.flash.copy(defaultGuide = 1f, referenceFNumber = 9f, defaultGainNoDistance = 1f),
-                preview = p.preview.copy(color = SrgbPreviewColor),
+                preview = p.preview.copy(color = SrgbPreviewColor, curveAtEvenPoints = true),
             )
         }
         val pinned = tensorLayer.patch.applyTo(shifted.applyTo(tensor))

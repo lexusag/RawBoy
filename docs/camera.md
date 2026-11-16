@@ -37,7 +37,8 @@ the filters beside the shutter. The Look menu is above them, with the Film and B
 Settings move to a column at the left. The viewfinder stays upright and photos come out the right way round, as in
 portrait. With auto-rotate off the screen stays portrait.
 **UW · W · T** at the bottom of the viewfinder switches between the ultrawide, wide and telephoto lenses, as in
-Google Camera (each lens that can deliver RAW is offered). The button right of the shutter switches to the
+Google Camera (each lens that can deliver RAW is offered; W is the lens a logical back camera starts on, else the one
+nearest 26 mm). The button right of the shutter switches to the
 **selfie camera**, shown only when the front camera delivers RAW; selfies are saved mirrored, as the viewfinder
 shows them.
 
@@ -131,8 +132,12 @@ shows them.
   maker's, the phone maker's and the model's, where they exist. The end of Settings shows the result, e.g. *Phone
   profile: Google Tensor* or *Phone profile: neutral (this phone hasn't been tested)*, with the chip and model it
   detected; logcat has the same and every value under the tag `RawBoyPlatform`. Today there are layers for Google
-  Tensor and Samsung only: other phones (older Snapdragon Pixels included) get the neutral profile, which takes the
-  preview as plain sRGB and adds no extra black. Debug builds can take the phone for another chip (*Take the phone
+  Tensor, Qualcomm Snapdragon (older Pixels included), Samsung and OnePlus; other phones get the neutral profile,
+  which takes the preview as plain sRGB and adds no extra black. Snapdragon phones ask for the preview's sRGB curve at
+  evenly spaced points (the OnePlus 11 reads the points that way, whatever their spacing: with the points packed near
+  black, as the Pixel gets them, its viewfinder came out about twice as contrasty and saturated as the photo); Samsung
+  keeps the Pixel's curve, which its +25 look was tuned on. OnePlus phones list their stand-alone cameras rather than the
+  logical camera that also covers them (RAW through the logical camera froze the preview). Debug builds can take the phone for another chip (*Take the phone
   for*, from the next start); calibration learned under such a profile is kept apart from the phone's own.
 - **Share device report** (Android; Settings, under the phone profile): gathers what a profile for a new phone is made
   from into a plain text file and opens the system share sheet; nothing is sent unless you send it. It lists the phone

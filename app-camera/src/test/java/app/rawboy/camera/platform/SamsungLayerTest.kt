@@ -32,6 +32,7 @@ class SamsungLayerTest {
             val p = samsung(chip)
             assertEquals("$chip", 1.46e-3f, p.still.extraBlack)
             assertSame("$chip", UndoIspPreviewColor, p.preview.color)
+            assertEquals("$chip", false, p.preview.curveAtEvenPoints)
             assertEquals("$chip", 25f, p.still.lookContrast) // CameraSettings.SAMSUNG_CONTRAST
             assertEquals("$chip", 25f, p.still.lookSaturation) // CameraSettings.SAMSUNG_SATURATION
             assertEquals("$chip", emptyList<String>(), p.problems())

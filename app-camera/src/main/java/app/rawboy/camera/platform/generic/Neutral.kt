@@ -2,6 +2,7 @@ package app.rawboy.camera.platform.generic
 
 import app.rawboy.camera.platform.CameraPlatform
 import app.rawboy.camera.platform.FlashProfile
+import app.rawboy.camera.platform.LensProfile
 import app.rawboy.camera.platform.NoiseProfile
 import app.rawboy.camera.platform.PreviewProfile
 import app.rawboy.camera.platform.SrgbPreviewColor
@@ -15,9 +16,13 @@ import app.rawboy.camera.platform.StillProfile
 val neutralPlatform = CameraPlatform(
     layers = listOf("neutral"),
     calibrationSlot = "",
+    lenses = LensProfile(
+        standaloneOverLogical = false,
+    ),
     preview = PreviewProfile(
         // The result's colour matrix is only trusted where a layer says so: the OnePlus 11 reports identity.
         color = SrgbPreviewColor,
+        curveAtEvenPoints = false,
     ),
     still = StillProfile(
         // What Pro and Auto decode with.

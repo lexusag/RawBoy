@@ -15,8 +15,9 @@ import app.rawboy.camera.platform.traits.previewColorFromResult
  * with ~+30% chroma in the midtones, while the raw decoded here has neither, so the saved photo came out flat next to
  * the viewfinder. Added to the shot's develop to match; first estimate from one pair, tune on more Samsung shots.
  *
- * The look was tuned on top of the Pixel 9 Pro's extra black and preview colour path, so this layer keeps both until
- * someone checks them on a Samsung: these phones then develop as they did before chips were told apart.
+ * The look was tuned on top of the Pixel 9 Pro's extra black, preview colour path and preview curve, so this layer keeps
+ * them until someone checks them on a Samsung: these phones then develop as they did before chips were told apart.
+ * The S-curve may be the Snapdragon HAL reading the curve's points as evenly spaced (see the Qualcomm layer): untested.
  */
 val samsungLayer = PlatformLayer(
     name = "samsung",
@@ -24,6 +25,10 @@ val samsungLayer = PlatformLayer(
     level = LayerLevel.MANUFACTURER,
     matches = { it.madeBy("samsung") },
     patch = ispBlackAsPixel9Pro + previewColorFromResult + PlatformPatch { p ->
-        p.copy(still = p.still.copy(lookContrast = 25f, lookSaturation = 25f))
+        p.copy(
+            still = p.still.copy(lookContrast = 25f, lookSaturation = 25f),
+            // The look was tuned on the preview curve packed near black (the Galaxy S25 is a Snapdragon phone).
+            preview = p.preview.copy(curveAtEvenPoints = false),
+        )
     },
 )
