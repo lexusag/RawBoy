@@ -46,7 +46,7 @@ from the Viewer's libraries (`lexusag/RawBoyImageViewer`: RawBoyBrowseKit, Viewe
 `AppModel` (`DesktopModel.browse`) with `ViewerOptions`: the menu bar and Dock stay (`hidesDockAndMenuBar` off), the viewer is
 a view over the grid (`viewerInHostWindow`), and its preferences are kept under `desktop.browse.` (`ViewerSettings.store`).
 ViewerUI installs its own key monitor while Browse shows; Desktop's `KeyboardShortcuts` only takes ⌘1/⌘2 there. The Browse
-menu is the Viewer's Photo menu (`ViewerPhotoCommands`), on while Browse shows. `Desktop/DesktopHandOff.swift`
+menu is the Viewer's Photo menu (`ViewerPhotoCommands`), on while Browse shows. Browse's settings (the Viewer's Settings window, `ViewerSettingsRoot`) are the app's Settings… (⌘,); they apply to Browse only. `Desktop/DesktopHandOff.swift`
 implements the Viewer's `PhotoHandOff` in-process: E in the viewer opens the photo in Pro (whichever mode was showing; Auto's
 batch is kept), Send to RawBoy Auto adds photos or folders to Auto's batch as Looks, Film or As is. Real previews (R, and Compare's) are the
 engine's as-shot develop (`Desktop/EngineRealPreview.swift`, a `RealPreviewProvider` given to ViewerUI through

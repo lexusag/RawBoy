@@ -1,3 +1,7 @@
+**RawBoy Desktop: Settings… for Browse (2026-11-16)**
+
+- **Settings… (⌘,)** in the app menu opens the bundled Viewer's Settings window (`ViewerSettingsRoot`), which until now Desktop never showed. It holds Browse's choices (kept under `desktop.browse.`, not the standalone Viewer's); Pro and Auto have none of their own there.
+
 **RawBoy Desktop: Browse takes the Viewer 0.2.2 (2026-11-16)**
 
 - **Top bar zoom.** Double-clicking Browse's toolbar (or the strip above Places) expands the window to fit the screen and again puts it back, like the title bar's Zoom (it follows the system's double-click setting).
