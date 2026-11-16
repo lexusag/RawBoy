@@ -84,7 +84,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         links.forEach { model.handle(link: $0) }
         let urls = urls.filter(\.isFileURL)
         // Several photos (or a folder) from the Finder go to Auto's batch; one opens in the editor.
-        if urls.count > 1 || urls.first?.hasDirectoryPath == true { model.addToAuto(urls) } else if let url = urls.first { model.open(url) }
+        if model.mode == .browse, let url = urls.first {
+            model.browse.open(url)  // Browse is showing: the photo (or folder) opens there, as in the standalone Viewer
+        } else if urls.count > 1 || urls.first?.hasDirectoryPath == true { model.addToAuto(urls) } else if let url = urls.first { model.open(url) }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
