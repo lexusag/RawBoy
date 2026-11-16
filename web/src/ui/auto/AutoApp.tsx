@@ -355,6 +355,32 @@ function GridView({ store, scroll, lastViewed }: {
             ))}
           </select>
           <select
+            aria-label="Filter by minimum focal length"
+            title="Filter by minimum focal length"
+            className={state.filter.focalMin != null ? 'active' : ''}
+            value={state.filter.focalMin != null ? String(state.filter.focalMin) : ''}
+            disabled={exporting || (filterOptions.focalLengths.length === 0 && state.filter.focalMin == null)}
+            onChange={(e) => store.setFilter({ focalMin: e.target.value ? Number(e.target.value) : null })}
+          >
+            <option value="">Min mm</option>
+            {filterOptions.focalLengths.map((f) => (
+              <option key={f.value} value={String(f.value)}>{f.label} ({f.count})</option>
+            ))}
+          </select>
+          <select
+            aria-label="Filter by maximum focal length"
+            title="Filter by maximum focal length"
+            className={state.filter.focalMax != null ? 'active' : ''}
+            value={state.filter.focalMax != null ? String(state.filter.focalMax) : ''}
+            disabled={exporting || (filterOptions.focalLengths.length === 0 && state.filter.focalMax == null)}
+            onChange={(e) => store.setFilter({ focalMax: e.target.value ? Number(e.target.value) : null })}
+          >
+            <option value="">Max mm</option>
+            {filterOptions.focalLengths.map((f) => (
+              <option key={f.value} value={String(f.value)}>{f.label} ({f.count})</option>
+            ))}
+          </select>
+          <select
             aria-label="Filter by date"
             title="Filter by shoot date"
             className={state.filter.date ? 'active' : ''}

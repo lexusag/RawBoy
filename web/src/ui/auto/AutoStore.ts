@@ -54,6 +54,8 @@ export interface AutoFilter {
   lens: string | null;
   isoMin: number | null;
   isoMax: number | null;
+  focalMin: number | null;
+  focalMax: number | null;
   date: string | null;
   /** Only photos with nothing applied (see isUnedited). */
   unedited: boolean;
@@ -64,12 +66,14 @@ export const NO_FILTER: AutoFilter = {
   lens: null,
   isoMin: null,
   isoMax: null,
+  focalMin: null,
+  focalMax: null,
   date: null,
   unedited: false,
 };
 
 export const isFilterActive = (f: AutoFilter): boolean =>
-  f.camera !== null || f.lens !== null || f.isoMin !== null || f.isoMax !== null || f.date !== null || f.unedited;
+  f.camera !== null || f.lens !== null || f.isoMin !== null || f.isoMax !== null || f.focalMin !== null || f.focalMax !== null || f.date !== null || f.unedited;
 
 export function photoCamera(p: AutoPhoto): string | null {
   if (!p.analysis) return null;
@@ -85,6 +89,12 @@ export function photoIso(p: AutoPhoto): number | null {
   if (!p.analysis) return null;
   const iso = p.analysis.stats?.iso;
   return iso != null && iso > 0 ? Math.round(iso) : null;
+}
+
+export function photoFocalLength(p: AutoPhoto): number | null {
+  if (!p.analysis) return null;
+  const fl = p.analysis.focalLength;
+  return fl != null && Number.isFinite(fl) && fl > 0 ? Math.round(fl) : null;
 }
 
 export function photoDate(p: AutoPhoto): string | null {
@@ -111,6 +121,9 @@ export function photoMatchesFilter(p: AutoPhoto, filter: AutoFilter): boolean {
   const iso = photoIso(p);
   if (filter.isoMin !== null && (iso == null || iso < filter.isoMin)) return false;
   if (filter.isoMax !== null && (iso == null || iso > filter.isoMax)) return false;
+  const focal = photoFocalLength(p);
+  if (filter.focalMin !== null && (focal == null || focal < filter.focalMin)) return false;
+  if (filter.focalMax !== null && (focal == null || focal > filter.focalMax)) return false;
   if (filter.date !== null && photoDate(p) !== filter.date) return false;
   return true;
 }
@@ -125,6 +138,7 @@ export interface AvailableFilters {
   cameras: FilterOption<string>[];
   lenses: FilterOption<string>[];
   isos: FilterOption<number>[];
+  focalLengths: FilterOption<number>[];
   dates: FilterOption<string>[];
 }
 
@@ -132,6 +146,7 @@ export function availableFilterOptions(photos: readonly AutoPhoto[]): AvailableF
   const cameras = new Map<string, number>();
   const lenses = new Map<string, number>();
   const isos = new Map<number, number>();
+  const focalLengths = new Map<number, number>();
   const dates = new Map<string, number>();
 
   for (const p of photos) {
@@ -144,6 +159,9 @@ export function availableFilterOptions(photos: readonly AutoPhoto[]): AvailableF
     const iso = photoIso(p);
     if (iso != null) isos.set(iso, (isos.get(iso) ?? 0) + 1);
 
+    const fl = photoFocalLength(p);
+    if (fl != null) focalLengths.set(fl, (focalLengths.get(fl) ?? 0) + 1);
+
     const d = photoDate(p);
     if (d) dates.set(d, (dates.get(d) ?? 0) + 1);
   }
@@ -152,6 +170,7 @@ export function availableFilterOptions(photos: readonly AutoPhoto[]): AvailableF
     cameras: [...cameras.entries()].map(([value, count]) => ({ value, label: value, count })).sort((a, b) => compareNames(a.value, b.value)),
     lenses: [...lenses.entries()].map(([value, count]) => ({ value, label: value, count })).sort((a, b) => compareNames(a.value, b.value)),
     isos: [...isos.entries()].map(([value, count]) => ({ value, label: `ISO ${value}`, count })).sort((a, b) => a.value - b.value),
+    focalLengths: [...focalLengths.entries()].map(([value, count]) => ({ value, label: `${value} mm`, count })).sort((a, b) => a.value - b.value),
     dates: [...dates.entries()].map(([value, count]) => ({ value, label: value, count })).sort((a, b) => a.value.localeCompare(b.value)),
   };
 }
@@ -566,11 +585,15 @@ export class AutoStore {
   }
 
   /** Updates the active metadata filter in the grid. */
-  setFilter(filter: Partial<AutoFilter> & { iso?: number | null }) {
+  setFilter(filter: Partial<AutoFilter> & { iso?: number | null; focal?: number | null }) {
     const next: AutoFilter = { ...this._state.filter };
     if ('iso' in filter) {
       next.isoMin = filter.iso ?? null;
       next.isoMax = filter.iso ?? null;
+    }
+    if ('focal' in filter) {
+      next.focalMin = filter.focal ?? null;
+      next.focalMax = filter.focal ?? null;
     }
     if ('camera' in filter) next.camera = filter.camera ?? null;
     if ('lens' in filter) next.lens = filter.lens ?? null;
@@ -586,6 +609,18 @@ export class AutoStore {
       next.isoMax = filter.isoMax ?? null;
       if (next.isoMax !== null && next.isoMin !== null && next.isoMax < next.isoMin && !('isoMin' in filter)) {
         next.isoMin = null;
+      }
+    }
+    if ('focalMin' in filter) {
+      next.focalMin = filter.focalMin ?? null;
+      if (next.focalMin !== null && next.focalMax !== null && next.focalMin > next.focalMax && !('focalMax' in filter)) {
+        next.focalMax = null;
+      }
+    }
+    if ('focalMax' in filter) {
+      next.focalMax = filter.focalMax ?? null;
+      if (next.focalMax !== null && next.focalMin !== null && next.focalMax < next.focalMin && !('focalMin' in filter)) {
+        next.focalMin = null;
       }
     }
     this.update({ filter: next });

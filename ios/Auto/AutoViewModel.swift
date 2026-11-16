@@ -23,6 +23,8 @@ struct AutoFilter: Equatable {
     var lens: String?
     var isoMin: Int?
     var isoMax: Int?
+    var focalMin: Int?
+    var focalMax: Int?
     /** Shoot day, yyyy-mm-dd. */
     var date: String?
     /** Only photos still "As is" (see AutoPhoto.isUnedited). */
@@ -37,6 +39,9 @@ struct AutoFilter: Equatable {
         let iso = p.isoValue
         if let isoMin, (iso ?? -1) < isoMin { return false }
         if let isoMax, iso.map({ $0 > isoMax }) ?? true { return false }
+        let focal = p.focalLengthValue
+        if let focalMin, (focal ?? -1) < focalMin { return false }
+        if let focalMax, focal.map({ $0 > focalMax }) ?? true { return false }
         if let date, p.day != date { return false }
         return true
     }
@@ -137,7 +142,7 @@ struct AutoPhoto: Identifiable {
         plain && activeLook.id == Looks.natural.id && preset == nil && lensPreset == nil && edits == nil && adjust == .none
     }
 
-    /** The filters' values (web's photoCamera, photoLens, photoIso, photoDate); nil until known. */
+    /** The filters' values (web's photoCamera, photoLens, photoIso, photoFocalLength, photoDate); nil until known. */
     var cameraLabel: String? { analysis == nil ? nil : camera ?? "Unknown camera" }
     var lensLabel: String? {
         guard let a = analysis else { return nil }
@@ -147,6 +152,10 @@ struct AutoPhoto: Identifiable {
     var isoValue: Int? {
         guard let iso = analysis?.stats.iso, iso > 0 else { return nil }
         return Int(iso.rounded())
+    }
+    var focalLengthValue: Int? {
+        guard let fl = analysis?.focalLength, fl > 0 else { return nil }
+        return Int(fl.rounded())
     }
     var day: String? {
         guard let d = date?.trimmingCharacters(in: .whitespaces), d.count >= 10 else { return nil }

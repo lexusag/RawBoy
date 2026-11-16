@@ -22,8 +22,8 @@ final class AnalysisCacheTests: XCTestCase {
         lens.fisheyeCircle = FisheyeCircle(offsetX: 1, offsetY: 2, radius: 3)
         let mask = SkinMask(width: 4, height: 3, data: (0..<12).map { Float($0) / 12 }, sigmaPx: 2.5, hasSkin: true, faceDiameterPx: 90,
                             face: (0..<12).map { Float($0) / 24 }, faces: [])
-        return AnalysisSnapshot(base: image(8, 6, 1), halo: image(4, 3, 2), tail: image(2, 2, 3), lens: lens, iso: 640, temperature: 5400,
-                                tint: -7, displaySource: false, clipLevel: 0.97, cameraMetered: true,
+        return AnalysisSnapshot(base: image(8, 6, 1), halo: image(4, 3, 2), tail: image(2, 2, 3), lens: lens, iso: 640, focalLength: 35,
+                                temperature: 5400, tint: -7, displaySource: false, clipLevel: 0.97, cameraMetered: true,
                                 noise: NoiseLevel(luma: 0.02, chroma: 0.03), skin: skin ? mask : nil, skinDone: true)
     }
 
@@ -42,7 +42,7 @@ final class AnalysisCacheTests: XCTestCase {
         XCTAssertEqual(r.lens.vignette?.k, s.lens.vignette?.k)
         XCTAssertEqual(r.lens.shading?.gains, [1, 1.1, 1.2, 1.3])
         XCTAssertEqual(r.lens.fisheyeCircle?.radius, 3)
-        XCTAssertEqual([r.iso, r.temperature, r.tint, r.clipLevel], [640, 5400, -7, 0.97])
+        XCTAssertEqual([r.iso, r.focalLength, r.temperature, r.tint, r.clipLevel], [640, 35, 5400, -7, 0.97])
         XCTAssertTrue(r.cameraMetered)
         XCTAssertEqual(r.noise, NoiseLevel(luma: 0.02, chroma: 0.03))
         XCTAssertEqual(r.skin?.data, s.skin?.data)
