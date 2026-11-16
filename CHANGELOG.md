@@ -1,3 +1,8 @@
+**RawBoy Desktop and Web: ISO filter fix and focal length filter (2026-11-16)**
+
+- **ISO filter (Desktop).** Auto's Min ISO and Max ISO menus now show the batch's ISOs with their counts: switched the range pickers to string tags (`GridScreen.rangeMenu`), matching the Camera, Lens and Date menus so macOS `Picker` populates them once analysis finishes.
+- **Focal length filter (Desktop and Web).** Added Min mm and Max mm range filters to Auto's grid filter (`AutoFilter`, `Analysis.focalLength` from `metadata.focalLength`), with counts per rounded focal length. Bumped `AnalysisCache` versions (`2` on Desktop, `5` on Web) so cached analyses record focal lengths.
+
 **RawBoy Desktop: Look selector drag fix (2026-11-16)**
 
 - **Look selector.** Dragging the window (or its corner) no longer makes it jump back and forth: the drag is measured in the photo's space, not the window's own, which moved with it.
