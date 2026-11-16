@@ -1,3 +1,7 @@
+**RawBoy Web: Copy previous edits in Pro (2026-11-16)**
+
+- **Copy previous edits.** Pro's desktop toolbar has a **Copy previous edits** button (and `Shift+C` everywhere) to copy the previously open photo's edits onto the current photo as one undo step: white balance is copied only if changed on the previous photo, while the current photo's crop, rotation, flips, perspective, masks, light leaks, effects and healing spots stay.
+
 **RawBoy Desktop: Look selector drag fix (2026-11-16)**
 
 - **Look selector.** Dragging the window (or its corner) no longer makes it jump back and forth: the drag is measured in the photo's space, not the window's own, which moved with it.
