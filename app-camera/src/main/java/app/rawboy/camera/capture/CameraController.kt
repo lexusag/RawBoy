@@ -188,6 +188,9 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
 
         val isFront get() = facing == CameraMetadata.LENS_FACING_FRONT
 
+        /** "2", or "0/3" for physical lens 3 streamed from logical camera 0. */
+        val name get() = physicalId?.let { "$openId/$it" } ?: openId
+
         fun labelled(label: String) = Info(
             openId, physicalId, label, facing, equivalentFocal, characteristics, regionArray, rawSize, previewSize,
             sensorOrientation, previewGamma, toneMapModes, shadingMapModes, faceModes, activeArray, xyzToCamera,
@@ -309,19 +312,24 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
      * lenses; the logical camera itself stands for the lens it starts on (W), since that path has the
      * most complete 3A. Lenses are logged under RawBoyCamera for diagnosing other phones.
      * [facing]: CameraMetadata.LENS_FACING_BACK or LENS_FACING_FRONT; empty when that side has no RAW.
+     * [onSkip] hears each camera ("2", or "0/3" for a physical lens) that isn't listed, and why (the device report).
      */
-    fun lenses(facing: Int = CameraMetadata.LENS_FACING_BACK, preferMaxRes: Boolean = false): List<Info> {
+    fun lenses(
+        facing: Int = CameraMetadata.LENS_FACING_BACK,
+        preferMaxRes: Boolean = false,
+        onSkip: ((camera: String, why: String) -> Unit)? = null,
+    ): List<Info> {
         val found = ArrayList<Info>()
         for (id in manager.cameraIdList) {
             val c = manager.getCameraCharacteristics(id)
             if (c.get(CameraCharacteristics.LENS_FACING) != facing) continue
             val region = c.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE) ?: Rect()
-            infoFor(id, null, c, region, preferMaxRes)?.let(found::add)
+            infoFor(id, null, c, region, preferMaxRes, onSkip)?.let(found::add)
             val caps = c.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES) ?: IntArray(0)
             if (CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA in caps) {
                 for (physical in c.physicalCameraIds) {
                     val pc = runCatching { manager.getCameraCharacteristics(physical) }.getOrNull() ?: continue
-                    val lens = infoFor(id, physical, pc, region, preferMaxRes)
+                    val lens = infoFor(id, physical, pc, region, preferMaxRes, onSkip)
                     lens?.let { Log.d(TAG, "camera $id/$physical: RAW ${it.rawSize}, preview ${it.previewSize}, ${it.equivalentFocal.toInt()} mm") }
                     lens?.let(found::add)
                 }
@@ -330,7 +338,9 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         // One entry per lens: physical lenses with the focal length of a camera already listed are the same lens.
         val lenses = ArrayList<Info>()
         for (lens in found.sortedBy { if (it.physicalId == null) 0 else 1 }) {
-            if (lenses.none { abs(it.equivalentFocal - lens.equivalentFocal) < 0.12f * lens.equivalentFocal }) lenses += lens
+            val same = lenses.firstOrNull { abs(it.equivalentFocal - lens.equivalentFocal) < 0.12f * lens.equivalentFocal }
+            if (same == null) lenses += lens
+            else onSkip?.invoke(lens.name, "same lens as ${same.name} (${String.format(java.util.Locale.ROOT, "%.1f", lens.equivalentFocal)} mm)")
         }
         if (lenses.isEmpty()) {
             Log.d(TAG, "lenses (facing $facing): none with RAW")
@@ -352,10 +362,14 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         }
     }
 
-    private fun infoFor(openId: String, physicalId: String?, c: CameraCharacteristics, regionArray: Rect, preferMaxRes: Boolean): Info? {
+    private fun infoFor(
+        openId: String, physicalId: String?, c: CameraCharacteristics, regionArray: Rect, preferMaxRes: Boolean,
+        onSkip: ((String, String) -> Unit)?,
+    ): Info? {
         val name = physicalId?.let { "$openId/$it" } ?: openId
         fun reject(why: String): Info? {
             Log.d(TAG, "camera $name: $why")
+            onSkip?.invoke(name, why)
             return null
         }
         val caps = c.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES) ?: return reject("no capabilities")

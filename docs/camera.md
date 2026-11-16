@@ -134,6 +134,16 @@ shows them.
   Tensor and Samsung only: other phones (older Snapdragon Pixels included) get the neutral profile, which takes the
   preview as plain sRGB and adds no extra black. Debug builds can take the phone for another chip (*Take the phone
   for*, from the next start); calibration learned under such a profile is kept apart from the phone's own.
+- **Share device report** (Android; Settings, under the phone profile): gathers what a profile for a new phone is made
+  from into a plain text file and opens the system share sheet; nothing is sent unless you send it. It lists the phone
+  as detected and the profile's layers and values; every camera and physical lens (support level, capabilities, RAW
+  and preview sizes, tone map modes and curve points, ISO, exposure, frame rate and boost ranges, exposure
+  compensation step, flash, OIS, stabilization, lens shading map, focus calibration, session keys); which lenses the
+  camera lists as UW / W / T and why it passes over the others; the GPU (`GL_RENDERER`, the extensions the camera uses,
+  the EGL window configs and how many are recordable); the H.264 and HEVC encoders with their input colour formats; and
+  the calibration learned per lens. One `key: value` per line in a fixed order, numbers written the same in every
+  language, so two phones' reports compare line by line. It holds no serial numbers, accounts, locations, file names or
+  photos.
 
 ## Black and white
 

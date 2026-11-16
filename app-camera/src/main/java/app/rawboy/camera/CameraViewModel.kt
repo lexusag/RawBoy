@@ -7,6 +7,7 @@ import android.hardware.camera2.CameraMetadata
 import android.location.Location
 import android.location.altitude.AltitudeConverter
 import android.net.Uri
+import androidx.core.content.FileProvider
 import android.os.Build
 import android.os.Process
 import android.os.SystemClock
@@ -21,6 +22,8 @@ import app.rawboy.auto.analysis.SceneStats
 import app.rawboy.auto.looks.LookApplier
 import app.rawboy.camera.capture.CameraController
 import app.rawboy.camera.platform.ActivePlatform
+import app.rawboy.camera.report.DeviceReport
+import app.rawboy.camera.report.DeviceReportCollector
 import app.rawboy.camera.platform.ChipVendor
 import app.rawboy.camera.debug.DebugProbe
 import app.rawboy.camera.capture.FlashMode
@@ -116,6 +119,19 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     val controller = CameraController(application, platform)
+
+    /**
+     * Settings › Share device report: gathers [DeviceReportCollector]'s report into a text file in the cache (one,
+     * overwritten each time) and returns its content URI from the app's FileProvider. Nothing is sent anywhere.
+     */
+    suspend fun writeDeviceReport(): Uri = withContext(Dispatchers.Default) {
+        val text = DeviceReport.render(DeviceReportCollector.collect(app, resolvedPlatform, controller))
+        val dir = File(app.cacheDir, "reports").apply { mkdirs() }
+        dir.listFiles()?.forEach { it.delete() }
+        val model = resolvedPlatform.phone.model.replace(Regex("[^A-Za-z0-9_-]"), "_").ifEmpty { "phone" }
+        val file = File(dir, "rawboy-camera-device-report-$model.txt").apply { writeText(text) }
+        FileProvider.getUriForFile(app, "${app.packageName}.reports", file)
+    }
 
     /** The scene is dark enough for [BurstMode.AUTO] to merge frames ([LowLight]); follows the preview's exposure. */
     val lowLight = controller.frames

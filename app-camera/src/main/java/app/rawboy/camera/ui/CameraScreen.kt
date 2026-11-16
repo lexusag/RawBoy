@@ -181,6 +181,7 @@ fun CameraScreen(
     requestAudio: () -> Unit,
     openPhoto: (Uri) -> Unit,
     openQr: (QrPayload) -> Unit,
+    shareDeviceReport: () -> Unit,
 ) {
     val status by vm.status.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
@@ -717,7 +718,7 @@ fun CameraScreen(
 
     if (showSettings) {
         ModalBottomSheet(onDismissRequest = { showSettings = false }) {
-            SettingsContent(settings, vm, requestLocation)
+            SettingsContent(settings, vm, requestLocation, shareDeviceReport)
         }
     }
 }
@@ -1199,7 +1200,7 @@ private fun LookSlider(
 private val LOOK_LABEL_WIDTH = 88.dp
 
 @Composable
-private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, requestLocation: () -> Unit) {
+private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, requestLocation: () -> Unit, shareDeviceReport: () -> Unit) {
     val maxResMp by vm.maxResMp.collectAsState()
     var showFrames by remember { mutableStateOf(false) }
     if (showFrames) {
@@ -1420,7 +1421,7 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             )
         }
 
-        PlatformInfo(vm)
+        PlatformInfo(vm, shareDeviceReport)
 
         Spacer(Modifier.height(16.dp))
         for (line in Edition.credits) {
@@ -1435,10 +1436,11 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
 
 /**
  * Which platform profile the camera runs with (layers, or the neutral profile on a phone nobody has tested), what
- * was detected, and in a debug build the chip to take the phone for from the next start.
+ * was detected, the device report for tuning a profile, and in a debug build the chip to take the phone for from the
+ * next start.
  */
 @Composable
-private fun PlatformInfo(vm: CameraViewModel) {
+private fun PlatformInfo(vm: CameraViewModel, shareDeviceReport: () -> Unit) {
     val resolved = vm.resolvedPlatform
     val layers = resolved.profile.layers.drop(1)
     val profile = if (layers.isEmpty()) "neutral (this phone hasn't been tested)" else layers.joinToString(" + ") { PlatformRegistry.title(it) }
@@ -1452,6 +1454,12 @@ private fun PlatformInfo(vm: CameraViewModel) {
     )
     Text(
         "Detected: $chip chip, ${phone.manufacturer} ${phone.model}",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    TextButton(onClick = shareDeviceReport, contentPadding = PaddingValues(0.dp)) { Text("Share device report") }
+    Text(
+        "A text file about this phone's cameras, GPU and video encoders, for tuning the camera to it. It goes only where you send it",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )

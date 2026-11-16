@@ -39,6 +39,8 @@ data class PhoneDescription(
     val device: String = "",
     /** `Build.VERSION.SDK_INT`. */
     val sdk: Int = 0,
+    /** `Build.DISPLAY`, the firmware build, e.g. "CPH2447_16.0.5.1301(EX01)" (the device report). */
+    val firmware: String = "",
 ) {
     /** Whether [manufacturer] is [name], ignoring case (makers differ: "samsung", "OnePlus", "Google"). */
     fun madeBy(name: String) = manufacturer.equals(name, ignoreCase = true)

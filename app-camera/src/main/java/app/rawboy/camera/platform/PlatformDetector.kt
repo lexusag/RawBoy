@@ -29,6 +29,7 @@ object PlatformDetector {
             model = known(Build.MODEL),
             device = known(Build.DEVICE),
             sdk = Build.VERSION.SDK_INT,
+            firmware = known(Build.DISPLAY),
         )
     }
 

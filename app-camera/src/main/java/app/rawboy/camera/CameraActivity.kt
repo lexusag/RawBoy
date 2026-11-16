@@ -19,6 +19,7 @@ import android.os.PersistableBundle
 import android.os.PowerManager
 import android.provider.MediaStore
 import android.provider.Settings
+import android.util.Log
 import android.view.KeyEvent
 import android.view.OrientationEventListener
 import android.view.WindowManager
@@ -122,6 +123,7 @@ class CameraActivity : ComponentActivity() {
                     requestAudio = { audioPermission.launch(Manifest.permission.RECORD_AUDIO) },
                     openPhoto = ::openPhoto,
                     openQr = ::openQr,
+                    shareDeviceReport = ::shareDeviceReport,
                 )
             }
         }
@@ -175,6 +177,29 @@ class CameraActivity : ComponentActivity() {
             .setDataAndType(uri, "image/jpeg")
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         runCatching { startOutside(intent) }
+    }
+
+    /**
+     * Settings › Share device report: the system share sheet with the report's text file (after unlocking when the
+     * camera is over the lock screen). The report goes only where the user sends it.
+     */
+    private fun shareDeviceReport() = whenUnlocked {
+        lifecycleScope.launch {
+            val uri = runCatching { viewModel.writeDeviceReport() }.getOrElse {
+                Log.w("RawBoyCamera", "device report", it)
+                viewModel.showMessage("Could not make the device report")
+                return@launch
+            }
+            val send = Intent(Intent.ACTION_SEND)
+                .setType("text/plain")
+                .putExtra(Intent.EXTRA_STREAM, uri)
+                .putExtra(Intent.EXTRA_SUBJECT, "RawBoy Camera device report")
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            // The chooser's preview and the receiving app read the file through this grant.
+            send.clipData = ClipData.newRawUri(null, uri)
+            runCatching { startOutside(Intent.createChooser(send, "Share device report")) }
+                .onFailure { viewModel.showMessage("No app to share the report with") }
+        }
     }
 
     /**

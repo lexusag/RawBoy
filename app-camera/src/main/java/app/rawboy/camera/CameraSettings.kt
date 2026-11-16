@@ -400,6 +400,17 @@ object CameraSettingsStore {
             .apply()
     }
 
+    /**
+     * Every learned calibration entry, all slots: storage key ("previewScales3", "flashGuides@neutral+tensor") to its
+     * "lens=value;…" text (the device report). Nothing else from the settings.
+     */
+    @Synchronized
+    fun calibration(context: Context): List<Pair<String, String>> =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).all.entries
+            .filter { (key, value) -> value is String && (key == SCALES_KEY || key.startsWith("$SCALES_KEY@") || key == FLASH_GUIDES_KEY || key.startsWith("$FLASH_GUIDES_KEY@")) }
+            .map { it.key to it.value as String }
+            .sortedBy { it.first }
+
     /** Updates one lens's [CameraSettings.previewScales] entry in [slot]'s storage, returning the new scale. */
     @Synchronized
     fun updatePreviewScale(context: Context, slot: String, lens: String, estimate: Float): Float {

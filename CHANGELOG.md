@@ -1,3 +1,8 @@
+**RawBoy Camera (Android): device report (2026-11-16)**
+
+- Settings › **Share device report** (under the phone profile) writes a plain text report about the phone and opens the system share sheet with it (`camera/report/`: `DeviceReportCollector` gathers, `DeviceReport.render` writes; shared through the app's FileProvider, `cache/reports`). It is what a profile for a new phone is made from, which so far took adb: the phone and profile as detected, every camera and physical lens with its Camera2 characteristics, the lenses the camera lists and why it skips the others (`CameraController.lenses(onSkip)`), the GPU and the extensions the camera relies on, EGL window configs with their recordable counts, the H.264 / HEVC encoders and their input colour formats, and the learned calibration of every slot.
+- Fixed order, one `key: value` per line, `-` for what the phone doesn't report, numbers in the same notation in any locale: two phones' reports diff line by line. No serial numbers, accounts, locations, file names or photos; nothing is sent by the app, and no permission was added.
+
 **RawBoy Camera (Android): phone profile detected at start (2026-11-16)**
 
 - The camera now tells phones apart: at start it reads the chip maker (`Build.SOC_MANUFACTURER`; `Build.HARDWARE` on Android 10-11), manufacturer and model (`platform/PlatformDetector.kt`) and builds the profile from the neutral one plus the layers that match (`PlatformRegistry`): Google Tensor, then Samsung. Before, every phone ran with the Pixel 9 Pro's numbers.
