@@ -1,3 +1,10 @@
+**RawBoy Desktop: Auto's photo view in Pro's layout (2026-11-16)**
+
+- **Bar.** Auto's photo view has Pro's one-row bar instead of the window toolbar: Grid (back), the photo's name and "Photo 3 of 12", Previous and Next; Crop and Preset in the middle; Edit in Pro, Copy (the previous photo's look and adjustments), Apply to All, Remove, Undo, Redo and Export (amber) on the right, each named on hover. Apply to all and Remove were in a "…" menu.
+- **Panel.** The Look / Adjust tabs are sections that open and close, as Pro's: Look (Looks / Film, the look's name, Strength and every look as a thumbnail in rows that wrap, under its group's heading), Light (Brightness, Contrast), Colour (Pick white balance, Warmth, Tint, Saturation) and Detail (Grain, Denoise). One slider to a row everywhere (the Adjust tab had pairs). Sections with adjustments show the amber dot and their own reset. The looks scroll with the mouse wheel along with the panel; the horizontal strip only scrolled with Shift or a trackpad.
+- **Photo.** One photo with a 12 pt margin round it, no pager: no scroll bar under the photo any more, and the photo no longer runs into the window's edges. The arrow keys and the bar's arrows move between photos.
+- iPhone and iPad are unchanged (their pager no longer draws a scroll bar either). Fourth step of the desktop redesign; Pro's and Auto's bar buttons and sections are now one shared piece (`view/MacBar.swift`).
+
 **RawBoy Desktop: Auto's grid and batch sidebar (2026-11-16)**
 
 - **Grid.** Auto's grid on the Mac is even cells, as in RawBoy Viewer: each photo whole in a 3:2 tile (no cropping), the file name and the look under it instead of over the picture, a thin amber outline when selected. The justified rows gave every row its own height and covered the bottom of each photo with text. The arrow keys move by the new columns.

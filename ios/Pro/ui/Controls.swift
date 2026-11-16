@@ -450,12 +450,8 @@ extension ControlsPanel {
         }
     }
 
-    private var closed: Set<String> { Set(closedSections.split(separator: ",").map(String.init)) }
-
     private func toggle(_ title: String) {
-        var c = closed
-        if c.contains(title) { c.remove(title) } else { c.insert(title) }
-        Motion.animate { closedSections = c.sorted().joined(separator: ",") }
+        Motion.animate { closedSections = InspectorSections.toggled(closedSections, title) }
     }
 
     /**
@@ -464,46 +460,10 @@ extension ControlsPanel {
      */
     private func section<Content: View>(_ title: String, reset: @escaping (inout DevelopParams, DevelopParams) -> Void,
                                         @ViewBuilder content: () -> Content) -> some View {
-        let open = !closed.contains(title)
         var restored = params
         reset(&restored, defaults)
-        let edited = restored != params
-        return VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 6) {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.secondary)
-                    .rotationEffect(.degrees(open ? 90 : 0))
-                    .frame(width: 12)
-                Text(title).font(.subheadline.weight(.semibold))
-                if edited {
-                    Circle().fill(Color.accentColor).frame(width: 6, height: 6).help("\(title) has edits")
-                }
-                Spacer(minLength: 0)
-                if edited {
-                    Button { onChange(restored) } label: {
-                        Image(systemName: "arrow.counterclockwise").font(.caption)
-                    }
-                    .buttonStyle(.borderless)
-                    .foregroundStyle(.secondary)
-                    .help("Reset \(title)")
-                    .accessibilityLabel("Reset \(title)")
-                }
-            }
-            .frame(height: 32)
-            .contentShape(Rectangle())
-            .onTapGesture { toggle(title) }
-            .accessibilityElement(children: .contain)
-            .accessibilityLabel(title + (edited ? ", edited" : ""))
-            .accessibilityValue(open ? "open" : "closed")
-            .accessibilityAddTraits([.isHeader, .isButton])
-            .accessibilityAction { toggle(title) }
-            if open {
-                VStack(alignment: .leading, spacing: 0) { content() }
-                    .padding(.bottom, 10)
-            }
-            Divider()
-        }
+        return InspectorSection(title, open: !InspectorSections.closed(closedSections).contains(title), edited: restored != params,
+                                onToggle: { toggle(title) }, onReset: { onChange(restored) }, content: content)
     }
 }
 #endif
