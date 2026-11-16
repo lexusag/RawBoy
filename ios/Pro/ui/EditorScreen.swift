@@ -202,6 +202,9 @@ struct EditorScreen: View {
             autoWb = false
         case .help:
             showHelp = true
+        case let .openLooks(point):
+            if !looksArmed { toggleLooks() }
+            looksAt = point ?? CGPoint(x: viewSize.width / 2, y: viewSize.height / 2)
         case let .looksPage(delta):
             looksPage = LookSelector.PageStep(serial: looksPage.serial + 1, delta: delta)
         }

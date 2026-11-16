@@ -57,6 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         AutoBatchProbe.screenProbeIfRequested(model)
         AutoBatchProbe.sliderProbeIfRequested(model)
         AutoBatchProbe.resetProbeIfRequested(model)
+        AutoBatchProbe.looksProbeIfRequested(model)
         AutoBatchProbe.selfTestIfRequested(model)
         AutoBatchProbe.packProbeIfRequested(model)
         #endif
