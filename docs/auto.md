@@ -92,8 +92,9 @@ brightness, from the photo before this one in the batch to this photo only (deno
 develop one shot of a scene, swipe to the next and tap it. **Auto denoise all** (in the grid's top row, Android, iOS
 and web) is for a finished series: every photo gets the denoise, colour denoise and sharpening the auto develop measured on
 it (its noise, ISO and exposure), in place of its Denoise slider and RawBoy edits' own values (and, on the web, a preset's
-Denoise & sharpening group, the batch preset's too; Android presets never set denoise). Photos added As is, which
-skip the noise measurement, get the ISO table's values. Looks, presets, lens corrections and the other sliders
+Denoise & sharpening group, the batch preset's too; Android presets never set denoise). Photos added As is get the
+values measured on them too (raws start with them: As is gives a raw its measured denoise from the start, web and
+RawBoy Desktop; JPEG, HEIC, PNG and TIFF get none until Auto denoise). Looks, presets, lens corrections and the other sliders
 stay; it is one undo step per photo. With photos selected, the selection bar's **Auto denoise** (dots icon) does the same
 for those photos only (the batch preset stays as it is). **Export all** saves every photo
 to `Pictures/RawBoy Auto/<name>-auto.jpg` (or `.tif`), one photo at a time, keeping the screen on. **Stop**, next to the progress bar, ends the export after the
@@ -145,7 +146,7 @@ the photo view, Copy previous and Export all follow the same order (Android, iOS
 **Filter** (web): dropdowns above the grid filter the batch by **Camera**, **Lens**, **ISO range** (Min ISO and Max ISO) and **Shoot date** (each
 showing the count of matching photos in the batch), singly or combined. When a filter is active, the grid, detail
 navigation (‹ ›, Space, Backspace and arrow keys) and Export show and export only the matching photos, with a count of
-visible photos; **Unedited** (a toggle beside the dropdowns) keeps only photos shown **As is**: added "As is", still Natural with no preset, lens preset, RawBoy edits, Auto denoise or adjustment (settings restored from a sidecar count); **Clear filter** resets back to the whole batch.
+visible photos; **Unedited** (a toggle beside the dropdowns) keeps only photos shown **As is**: added "As is", still Natural with no preset, lens preset, RawBoy edits or adjustment (Auto denoise, which raws added As is start with, doesn't count; settings restored from a sidecar do); **Clear filter** resets back to the whole batch.
 **Opening a photo that's still waiting:** tap (web: click) a photo marked *Waiting* and it's analysed next, ahead of
 the rest of the batch (its badge reads *Next*), then opens once it's ready, unless another photo was opened meanwhile.
 **Cropping a photo (web, Android):** the **Crop** button in the photo view's top bar (on phones and in the Android app, **Crop & rotate** in the ⋯ menu)

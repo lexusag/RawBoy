@@ -28,7 +28,7 @@ describe('Auto import mode', () => {
     store.add([new File(['t'], 'scan.tif')]);
     expect(store.state.message).toBeNull();
     const [p] = store.state.photos;
-    expect([p.mode, p.plain]).toEqual(['looks', true]);
+    expect([p.mode, p.plain, p.autoDenoise]).toEqual(['looks', true, false]); // a finished file gets nothing, not even denoise
     // A plain analysis's auto develop is the as-shot defaults (AutoAnalysis skips autoDevelop).
     const defaults = developParams({ displaySource: true, temperature: 6504 });
     const analysed = { ...p, analysis: { defaults, autoBase: defaults, stats: { hasFace: false } } } as unknown as typeof p;
@@ -508,7 +508,9 @@ describe('Auto denoise on "As is" photos', () => {
     const stats = { hasFace: false, iso: 3200, key: 0.04, p5: -5, p98: -1, dynamicRange: 9, skinLuminance: 0, faceArea: 0, fractionAbove: () => 0 };
     const look = capturePreset('marfilm1', developParams({ contrast: 20, grain: 30 }), ['light', 'detail']);
     const s = store as unknown as { _state: { photos: object[] } };
-    s._state.photos = s._state.photos.map((p) => ({ ...p, analysis: { defaults, autoBase: defaults, stats }, preset: look }));
+    // A raw added As is starts with Auto denoise; this one is taken off first, to test the button.
+    expect((s._state.photos[0] as { autoDenoise: boolean }).autoDenoise).toBe(true);
+    s._state.photos = s._state.photos.map((p) => ({ ...p, analysis: { defaults, autoBase: defaults, stats }, preset: look, autoDenoise: false }));
     expect(paramsOf(store.state.photos[0])!.denoise).toBe(0);
     store.autoDenoiseAll();
     expect(store.state.message).toBe('Auto denoise on 1 photo');
@@ -801,11 +803,12 @@ describe('Auto grid: unedited filter', () => {
     set(c, { adjust: { ...store.state.photos[2].adjust, contrast: 10 } });
     set(d, { plain: false });
     set(e, { autoDenoise: true });
-    expect(store.state.photos.map(isUnedited)).toEqual([true, false, false, false, false]);
+    // Auto denoise (which raws added As is start with) doesn't make a photo edited.
+    expect(store.state.photos.map(isUnedited)).toEqual([true, false, false, false, true]);
     expect(isFilterActive(NO_FILTER)).toBe(false);
     store.setFilter({ unedited: true });
     expect(isFilterActive(store.state.filter)).toBe(true);
-    expect(store.shown.map((p) => p.id)).toEqual([a]);
+    expect(store.shown.map((p) => p.id)).toEqual([a, e]);
     store.clearFilter();
     expect(store.shown).toHaveLength(5);
   });

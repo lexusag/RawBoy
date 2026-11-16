@@ -71,4 +71,19 @@ public enum CaptureDate {
         }
         return PhotoOrder.fileDate((try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate)
     }
+
+    /**
+     * [url]'s camera from its EXIF make and model ("FUJIFILM GFX 50R"; the model alone when it already starts with the
+     * make, as the decoders name it), for Auto's Camera filter; nil when the file names none. Blocking.
+     */
+    public static func camera(_ url: URL) -> String? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary),
+              let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let tiff = props[kCGImagePropertyTIFFDictionary] as? [CFString: Any] else { return nil }
+        let make = (tiff[kCGImagePropertyTIFFMake] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = (tiff[kCGImagePropertyTIFFModel] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if model.isEmpty { return make.isEmpty ? nil : make }
+        if make.isEmpty || model.lowercased().hasPrefix(make.lowercased()) { return model }
+        return "\(make) \(model)"
+    }
 }
