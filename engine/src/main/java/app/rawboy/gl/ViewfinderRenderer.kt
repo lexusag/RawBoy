@@ -184,6 +184,8 @@ class ViewfinderRenderer(
         screen.reset()
         videoTurned.reset()
         // The context is new: the old EGL surface (and the program state it shared) is gone with it.
+        // Only an encoder context of its own outlives it (and is let go here); a surface in the old context went with it.
+        encoder?.takeIf { it.ownContext }?.discard()
         encoder = null
         encoderFor = null
         pending = null
@@ -371,7 +373,9 @@ class ViewfinderRenderer(
         val pts = sink.presentationNs(frameNs)
         if (pts < 0) return
         lastEncodedNs = frameNs
-        if (!enc.makeCurrent()) {
+        // In the viewfinder's context, the encoder's surface is current while drawing; in its own context, the
+        // picture is drawn here into [videoTurned] and copied over after (see finishVideo).
+        if (!enc.ownContext && !enc.makeCurrent()) {
             sink.failed = true
             sink.closing = true
             return
@@ -380,7 +384,7 @@ class ViewfinderRenderer(
         // The picture is drawn upright at the encoder's size turned back, then turned onto the encoder's surface.
         val pw = if (k % 2 == 1) sink.height else sink.width
         val ph = if (k % 2 == 1) sink.width else sink.height
-        if (k != 0) {
+        if (k != 0 || enc.ownContext) {
             videoTurned.ensure(pw, ph, mipmapped = false)
             videoTurned.bindForDrawing()
         } else {
@@ -394,12 +398,7 @@ class ViewfinderRenderer(
         if (sink.flat) {
             // No look: the linear frame, exposed as the viewfinder's auto develop would, Apple Log encoded.
             flatVideo!!.draw(quad!!, linear.texture, pw / (outW * cover), ph / (outH * cover), p.exposure / BASE_EXPOSURE_GAIN * 2f.pow(sink.raiseEv))
-            if (k != 0) {
-                GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
-                GLES30.glViewport(0, 0, sink.width, sink.height)
-                turn!!.draw(quad!!, videoTurned.texture, k)
-            }
-            enc.swapAndRestore(pts)
+            finishVideo(sink, enc, k, pts)
             return
         }
         lutTexture!!.bind(p.lut)
@@ -418,12 +417,34 @@ class ViewfinderRenderer(
         develop!!.bindLiveCopies(p, sw, sh, tw, th * BloomTail.BANDS)
         develop!!.setGrainFrame(grainFrame)
         quad!!.draw()
-        if (k != 0) {
+        finishVideo(sink, enc, k, pts)
+    }
+
+    /** Turns the drawn picture onto the encoder's surface (in the encoder's own context if it has one) and sends it. */
+    private fun finishVideo(sink: VideoSink, enc: EncoderSurface, k: Int, pts: Long) {
+        if (enc.ownContext) {
+            // The other context reads the texture only after this one's commands are done.
+            val fence = GLES30.glFenceSync(GLES30.GL_SYNC_GPU_COMMANDS_COMPLETE, 0)
+            GLES30.glFlush()
+            if (!enc.makeCurrent()) {
+                GLES30.glDeleteSync(fence)
+                sink.failed = true
+                sink.closing = true
+                return
+            }
+            GLES30.glWaitSync(fence, 0, GLES30.GL_TIMEOUT_IGNORED)
+            GLES30.glDeleteSync(fence)
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+            GLES30.glViewport(0, 0, sink.width, sink.height)
+            turn!!.draw(enc.quad!!, videoTurned.texture, k)
+        } else if (k != 0) {
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
             GLES30.glViewport(0, 0, sink.width, sink.height)
             turn!!.draw(quad!!, videoTurned.texture, k)
         }
         enc.swapAndRestore(pts)
+        if (sink.framesSent == 0) sink.firstSentAtMs = SystemClock.uptimeMillis()
+        sink.framesSent++
     }
 
     /** A readback in flight: its pixel buffer, fence and size. */

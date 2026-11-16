@@ -1,5 +1,6 @@
 package app.rawboy.camera.report
 
+import app.rawboy.camera.capture.VideoProbeState
 import app.rawboy.camera.platform.ResolvedPlatform
 import java.util.Locale
 
@@ -29,6 +30,10 @@ data class DeviceReportData(
     val encoders: List<EncoderFacts>,
     /** Learned calibration entries: storage key (e.g. "previewScales3") to its "lens=value;…" text. */
     val calibration: List<Pair<String, String>>,
+    /** What the video probe keeps ([VideoProbeState]); null if not read. */
+    val video: VideoProbeState? = null,
+    /** Whether [video] was stored under this build (another build's is forgotten at the next recording). */
+    val videoForThisBuild: Boolean = false,
     /** Parts that couldn't be read, one line each ("cameras: SecurityException"). */
     val failures: List<String> = emptyList(),
 )
@@ -239,6 +244,23 @@ object DeviceReport {
             ).joinToString(", ").ifEmpty { "-" }
             field("${e.name} (${e.type})", "$kind; 1080p30 ${e.takes1080p30?.let(::yesNo) ?: "-"}")
             field("  colour formats", e.colorFormats.joinToString(", ") { colorFormatName(it) })
+        }
+
+        section("Video probe")
+        val v = d.video
+        if (v == null) line("not read")
+        else {
+            field(
+                "variant",
+                when {
+                    v.variant == null -> "STANDARD (nothing stored)"
+                    v.confirmed -> "${v.variant.name} (recorded)"
+                    else -> "${v.variant.name} (next, on the remade viewfinder)"
+                },
+            )
+            field("stored for this build", yesNo(d.videoForThisBuild))
+            if (v.lastTries.isEmpty()) field("last probe", null)
+            for (t in v.lastTries) field("last probe", t)
         }
 
         section("Calibration")

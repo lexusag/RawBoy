@@ -54,7 +54,14 @@ import app.rawboy.lens.LensInfo
 import app.rawboy.lens.LensTransform
 import app.rawboy.retouch.SkinMask
 import app.rawboy.track.PatternTracker
+import app.rawboy.camera.capture.NoEncoderException
+import app.rawboy.camera.capture.PrefsVideoProbeStore
+import app.rawboy.camera.capture.VideoDebug
+import app.rawboy.camera.capture.VideoFailure
+import app.rawboy.camera.capture.VideoProbe
+import app.rawboy.camera.capture.VideoProgress
 import app.rawboy.camera.capture.VideoRecorder
+import app.rawboy.camera.capture.VideoVariant
 import app.rawboy.gl.VideoSink
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -294,6 +301,15 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     val recordingMs = _recordingMs.asStateFlow()
 
     private var recorder: VideoRecorder? = null
+    private val videoProbeStore = PrefsVideoProbeStore(application)
+
+    private val _recordableViewfinder = MutableStateFlow(VideoProbe(videoProbeStore, VideoProbe.buildKey(application)).recordableViewfinder())
+
+    /**
+     * Whether the viewfinder is made with a recordable RGBA config ([VideoVariant.RECORDABLE_VIEWFINDER]); a change
+     * makes the view again (the camera restarts on its new surface).
+     */
+    val recordableViewfinder = _recordableViewfinder.asStateFlow()
     private var recordingJob: Job? = null
     private var audioGranted = false
 
@@ -343,51 +359,138 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun toggleRecording() {
-        if (recorder != null) stopRecording() else startRecording()
+        // Recording, or still finding the way to record ([probing]): either way a press stops it.
+        if (_recordingMs.value != null) stopRecording() else startRecording()
     }
+
+    /** True while [VideoProbe] tries variants; a stop then waits for it ([stopRequested]). */
+    private var probing = false
 
     private fun startRecording() {
         if (recorder != null || _recordingMs.value != null) return
+        val debug = DebugProbe.videoDebug(app)
         // As photos do: the phone's own rotation, so a phone held sideways with auto-rotate off still records upright.
-        val turns = (deviceDegrees / 90) % 4
+        val turns = debug?.turns ?: ((deviceDegrees / 90) % 4)
         val withAudio = audioGranted
         val flat = _settings.value.flatVideo
         stopRequested = false
         _recordingMs.value = 0
         recordingJob = viewModelScope.launch {
-            val r = try {
-                withContext(Dispatchers.IO) { VideoRecorder.create(app, turns, withAudio, flat) { /* the view's requestRender is on the sink */ } }
+            val probe = videoProbe(debug)
+            probing = true
+            val result = try {
+                probe.run(_recordableViewfinder.value) { variant -> attemptRecording(variant, turns, withAudio, flat, debug) }
             } catch (e: Exception) {
+                probing = false
+                // The file couldn't be made (not the encoder's doing).
                 Log.w(TAG, "recording did not start", e)
                 _message.value = "Could not start recording: ${e.message}"
                 _recordingMs.value = null
                 stopRequested = false
                 return@launch
+            } finally {
+                probing = false
             }
-            recorder = r
-            _videoSink.value = r.sink
-            if (stopRequested) {
-                stopRequested = false
-                stopRecording()
-                return@launch
-            }
-            // The timer, and a watch on the renderer: no encoder surface means no video, so stop instead of recording nothing.
-            while (recorder === r) {
-                _recordingMs.value = r.elapsedMs
-                if (r.failed) {
-                    _message.value = "Recording failed: this phone refused the encoder surface"
-                    stopRecording()
-                    return@launch
+            when (result) {
+                is VideoProbe.Result.Recording -> watchRecording(result.recording)
+                is VideoProbe.Result.NeedsViewfinder -> {
+                    Log.i(TAG, "video: ${result.variant} needs a recordable viewfinder; making it again")
+                    _recordingMs.value = null
+                    _recordableViewfinder.value = true
+                    _message.value = "Video is set up for this phone: the viewfinder restarts once. Press record again"
                 }
-                delay(200)
+                is VideoProbe.Result.AllFailed -> {
+                    Log.w(TAG, "video: every variant failed: ${result.tries}")
+                    _recordingMs.value = null
+                    _message.value = "Video recording doesn't work on this phone (${result.tries.joinToString { it.second.text }})"
+                }
+                VideoProbe.Result.Aborted -> {
+                    _recordingMs.value = null
+                    _message.value = if (stopRequested) "Nothing was recorded" else "Nothing was recorded: the camera sent no frames"
+                }
+            }
+            stopRequested = false
+        }
+    }
+
+    /** This phone's video probe; a debug override may narrow the variants. */
+    private fun videoProbe(debug: VideoDebug?) =
+        VideoProbe(videoProbeStore, VideoProbe.buildKey(app), debug?.order ?: VideoVariant.ORDER)
+
+    /**
+     * One try of [variant] for [VideoProbe]: starts a recorder, publishes its sink and waits for its first encoded
+     * frame. A failed try is taken down completely (the next one starts on a clean slate).
+     */
+    private suspend fun attemptRecording(
+        variant: VideoVariant, turns: Int, withAudio: Boolean, flat: Boolean, debug: VideoDebug?,
+    ): VideoProbe.Attempt<VideoRecorder> {
+        if (stopRequested) return VideoProbe.Attempt.Aborted
+        val r = try {
+            withContext(Dispatchers.IO) {
+                VideoRecorder.create(app, turns, withAudio, flat, variant, debug) { /* the view's requestRender is on the sink */ }
+            }
+        } catch (e: NoEncoderException) {
+            Log.w(TAG, "video: $variant has no encoder", e)
+            return VideoProbe.Attempt.Failed(VideoFailure.NO_ENCODER)
+        }
+        recorder = r
+        _videoSink.value = r.sink
+        while (true) {
+            _recordingMs.value = r.elapsedMs
+            if (stopRequested) {
+                // Stop pressed before the encoder answered: keep what it has, but a try with no frame proves nothing.
+                if (r.progress() == VideoProgress.Encoding) return VideoProbe.Attempt.Started(r)
+                discard(r)
+                return VideoProbe.Attempt.Aborted
+            }
+            when (val p = r.progress()) {
+                VideoProgress.Encoding, VideoProgress.Broken -> return VideoProbe.Attempt.Started(r)
+                is VideoProgress.Failed -> {
+                    Log.w(TAG, "video: $variant failed (${p.failure})")
+                    discard(r)
+                    return VideoProbe.Attempt.Failed(p.failure)
+                }
+                VideoProgress.NoCamera -> {
+                    discard(r)
+                    return VideoProbe.Attempt.Aborted
+                }
+                VideoProgress.Waiting -> delay(50)
             }
         }
     }
 
-    /** Ends the recording and saves the file (on a worker thread); shows where it went. */
-    fun stopRecording() {
-        val r = recorder ?: run {
-            // Still starting up: the start stops again as soon as it has a recorder.
+    /** Takes a recorder that recorded nothing down, then lets the viewfinder forget its sink. */
+    private suspend fun discard(r: VideoRecorder) {
+        withContext(Dispatchers.IO + NonCancellable) { r.discard() }
+        if (recorder === r) recorder = null
+        _videoSink.value = null
+    }
+
+    /** The timer while recording, and a watch on the encoder: one that breaks stops the recording, keeping the file. */
+    private suspend fun watchRecording(r: VideoRecorder) {
+        if (stopRequested) {
+            stopRecording()
+            return
+        }
+        while (recorder === r) {
+            _recordingMs.value = r.elapsedMs
+            if (r.progress() == VideoProgress.Broken) {
+                Log.w(TAG, "video: ${r.variant} encoder failed while recording; stopping")
+                stopRecording(failure = "Recording stopped: the video encoder failed")
+                return
+            }
+            delay(200)
+        }
+    }
+
+    /**
+     * Ends the recording and saves the file (on a worker thread); shows where it went. [failure]: why it stopped on
+     * its own, shown instead of the usual message.
+     */
+    fun stopRecording(failure: String? = null) {
+        val r = recorder
+        if (probing || r == null) {
+            // Still starting up or finding the way to record: the start stops as soon as it has a recorder.
             if (_recordingMs.value != null) stopRequested = true
             return
         }
@@ -398,7 +501,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             _videoSink.value = null
             _recordingMs.value = null
             applyStabilization() // a switch flipped during the recording takes effect now
-            _message.value = if (uri != null) "Video saved to Movies/${Edition.FOLDER}" else "Nothing was recorded"
+            _message.value = when {
+                uri != null && failure != null -> "$failure. Video saved to Movies/${Edition.FOLDER}"
+                uri != null -> "Video saved to Movies/${Edition.FOLDER}"
+                failure != null -> failure
+                else -> "Nothing was recorded"
+            }
         }
     }
 

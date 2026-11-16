@@ -14,6 +14,8 @@ import android.opengl.GLES30
 import android.os.Build
 import app.rawboy.camera.CameraSettingsStore
 import app.rawboy.camera.capture.CameraController
+import app.rawboy.camera.capture.PrefsVideoProbeStore
+import app.rawboy.camera.capture.VideoProbe
 import app.rawboy.camera.platform.ResolvedPlatform
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -56,6 +58,7 @@ object DeviceReportCollector {
         val gl = part("GPU", null) { gl() }
         val encoders = part("video encoders", emptyList()) { encoders() }
         val calibration = part("calibration", emptyList()) { CameraSettingsStore.calibration(context) }
+        val video = part("video probe", null) { PrefsVideoProbeStore(context).read() }
         val info = context.packageManager.getPackageInfo(context.packageName, 0)
         val code = info.longVersionCode
         return DeviceReportData(
@@ -71,6 +74,8 @@ object DeviceReportCollector {
             gl = gl,
             encoders = encoders,
             calibration = calibration,
+            video = video,
+            videoForThisBuild = video?.buildKey == VideoProbe.buildKey(context),
             failures = failures,
         )
     }

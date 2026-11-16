@@ -11,6 +11,8 @@ import android.media.MediaCodecList
 import android.opengl.EGL14
 import android.os.Build
 import android.util.Log
+import app.rawboy.camera.capture.VideoDebug
+import app.rawboy.camera.capture.VideoVariant
 import app.rawboy.gl.PreviewImage
 import java.io.File
 
@@ -120,5 +122,35 @@ object DebugProbe {
             File(dir, "$name.txt").writeText("${image.width} ${image.height} ${image.fullWidth} ${image.fullHeight}\n$note\n")
             Log.d(TAG, "dumped $name ${image.width}x${image.height}")
         }.onFailure { Log.w(TAG, "dump $name", it) }
+    }
+
+    /**
+     * Debug builds: the video overrides in `video-debug.txt` in the app's external files directory
+     * (`/sdcard/Android/data/<package>/files`, pushed with adb), read at each recording's start, `key=value` lines:
+     * `variants=OWN_CONTEXT,SOFTWARE_AVC` (the probe's list), `avc=1` (hardware H.264), `turns=1` (landscape file),
+     * `fail=codec|egl|silent`, `failVariant=STANDARD`, `failAfterMs=2000` (an injected encoder failure). Null in
+     * release builds or without the file.
+     */
+    fun videoDebug(context: Context): VideoDebug? {
+        if ((context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) == 0) return null
+        val file = File(context.getExternalFilesDir(null) ?: return null, "video-debug.txt")
+        if (!file.exists()) return null
+        return runCatching {
+            val v = file.readLines().mapNotNull { l ->
+                l.split('=', limit = 2).takeIf { it.size == 2 }?.let { it[0].trim() to it[1].trim() }
+            }.toMap()
+            VideoDebug(
+                order = v["variants"]?.split(',')?.map { VideoVariant.valueOf(it.trim()) },
+                forceAvc = v["avc"] == "1",
+                turns = v["turns"]?.toInt(),
+                fault = v["fail"]?.let { kind ->
+                    VideoDebug.Fault(
+                        VideoDebug.Kind.valueOf(kind.uppercase()),
+                        v["failVariant"]?.let { VideoVariant.valueOf(it) },
+                        v["failAfterMs"]?.toLong() ?: 0,
+                    )
+                },
+            )
+        }.onFailure { Log.w(TAG, "video-debug.txt", it) }.getOrNull()?.also { Log.i(TAG, "video debug: $it") }
     }
 }

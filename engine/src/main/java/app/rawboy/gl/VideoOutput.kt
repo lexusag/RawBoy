@@ -44,6 +44,14 @@ class VideoSink(
     /** Set by the renderer when the device refused an EGL surface on [surface]. */
     @Volatile
     var failed = false
+
+    /** Frames the renderer handed to the encoder (set on the GL thread). */
+    @Volatile
+    var framesSent = 0
+
+    /** When the first of them went ([android.os.SystemClock.uptimeMillis]); 0 before. */
+    @Volatile
+    var firstSentAtMs = 0L
 }
 
 /**
@@ -55,7 +63,14 @@ enum class EncoderConfig {
     RECORDABLE_RGBA8888,
 
     /** The viewfinder context's own config: always compatible with the context. */
-    CONTEXT;
+    CONTEXT,
+
+    /**
+     * 8-bit RGBA recordable, as [RECORDABLE_RGBA8888], current in a context of its own that shares the viewfinder's
+     * textures and programs: for drivers that refuse a surface whose config differs from the context's. The frame is
+     * drawn in the viewfinder's context into a texture and copied onto the encoder in this one.
+     */
+    RECORDABLE_OWN_CONTEXT;
 
     companion object {
         /** Recordable first, the context's own config as the fallback. */
@@ -83,6 +98,12 @@ internal class EncoderSurface(private val sink: VideoSink) {
     private var display: EGLDisplay = EGL14.EGL_NO_DISPLAY
     private var context: EGLContext = EGL14.EGL_NO_CONTEXT
     private var surface: EGLSurface = EGL14.EGL_NO_SURFACE
+
+    /** The encoder's own context ([EncoderConfig.RECORDABLE_OWN_CONTEXT]), or none: then [context] draws it. */
+    private var own: EGLContext = EGL14.EGL_NO_CONTEXT
+
+    /** The vertex array of the copy in [own] (vertex arrays aren't shared between contexts). */
+    private var ownQuad: FullscreenQuad? = null
     private var savedDraw: EGLSurface = EGL14.EGL_NO_SURFACE
     private var savedRead: EGLSurface = EGL14.EGL_NO_SURFACE
 
@@ -95,15 +116,32 @@ internal class EncoderSurface(private val sink: VideoSink) {
         savedRead = EGL14.eglGetCurrentSurface(EGL14.EGL_READ)
         for (attempt in sink.encoderConfigs) {
             val config = chooseConfig(attempt) ?: continue
+            var drawContext = context
+            if (attempt == EncoderConfig.RECORDABLE_OWN_CONTEXT) {
+                val made = EGL14.eglCreateContext(display, config, context, intArrayOf(EGL14.EGL_CONTEXT_CLIENT_VERSION, 3, EGL14.EGL_NONE), 0)
+                if (made == null || made == EGL14.EGL_NO_CONTEXT) continue
+                drawContext = made
+            }
             val created = EGL14.eglCreateWindowSurface(display, config, sink.surface, intArrayOf(EGL14.EGL_NONE), 0)
-            if (created == null || created == EGL14.EGL_NO_SURFACE) continue
-            if (EGL14.eglMakeCurrent(display, created, created, context)) {
+            if (created == null || created == EGL14.EGL_NO_SURFACE) {
+                if (drawContext != context) EGL14.eglDestroyContext(display, drawContext)
+                continue
+            }
+            if (EGL14.eglMakeCurrent(display, created, created, drawContext)) {
                 surface = created
+                if (drawContext != context) {
+                    own = drawContext
+                    ownQuad = FullscreenQuad()
+                }
+                val visual = IntArray(1)
+                EGL14.eglGetConfigAttrib(display, config, EGL14.EGL_NATIVE_VISUAL_ID, visual, 0)
+                Log.i(TAG, "encoder surface: $attempt, native format 0x${visual[0].toString(16)}")
                 EGL14.eglMakeCurrent(display, savedDraw, savedRead, context)
                 return true
             }
             EGL14.eglMakeCurrent(display, savedDraw, savedRead, context)
             EGL14.eglDestroySurface(display, created)
+            if (drawContext != context) EGL14.eglDestroyContext(display, drawContext)
         }
         Log.w(TAG, "no EGL surface for the encoder (0x${EGL14.eglGetError().toString(16)})")
         return false
@@ -111,7 +149,7 @@ internal class EncoderSurface(private val sink: VideoSink) {
 
     private fun chooseConfig(attempt: EncoderConfig): EGLConfig? {
         val attribs = when (attempt) {
-            EncoderConfig.RECORDABLE_RGBA8888 -> EncoderConfig.recordableRgba8888Attribs()
+            EncoderConfig.RECORDABLE_RGBA8888, EncoderConfig.RECORDABLE_OWN_CONTEXT -> EncoderConfig.recordableRgba8888Attribs()
             EncoderConfig.CONTEXT -> {
                 val id = IntArray(1)
                 if (!EGL14.eglQueryContext(display, context, EGL14.EGL_CONFIG_ID, id, 0)) return null
@@ -124,11 +162,17 @@ internal class EncoderSurface(private val sink: VideoSink) {
         return configs[0]
     }
 
-    /** Makes the encoder's surface the current one (remembering the screen's). */
+    /** True when the encoder draws in a context of its own: the frame must reach it as a texture ([ownQuad]). */
+    val ownContext: Boolean get() = own != EGL14.EGL_NO_CONTEXT
+
+    /** The copy's vertex array in the encoder's own context (null without one). */
+    val quad: FullscreenQuad? get() = ownQuad
+
+    /** Makes the encoder's surface the current one (remembering the screen's), in its own context if it has one. */
     fun makeCurrent(): Boolean {
         savedDraw = EGL14.eglGetCurrentSurface(EGL14.EGL_DRAW)
         savedRead = EGL14.eglGetCurrentSurface(EGL14.EGL_READ)
-        return EGL14.eglMakeCurrent(display, surface, surface, context)
+        return EGL14.eglMakeCurrent(display, surface, surface, if (ownContext) own else context)
     }
 
     /** Hands the drawn frame to the encoder, stamped [ptsNs], and goes back to the screen's surface. */
@@ -150,6 +194,24 @@ internal class EncoderSurface(private val sink: VideoSink) {
             EGL14.eglDestroySurface(display, surface)
             surface = EGL14.EGL_NO_SURFACE
         }
+        discardOwnContext()
+    }
+
+    /**
+     * For a lost viewfinder context (nothing of it is current or usable any more): lets go of the surface and the
+     * encoder's own context without making anything current.
+     */
+    fun discard() {
+        if (surface != EGL14.EGL_NO_SURFACE) EGL14.eglDestroySurface(display, surface)
+        surface = EGL14.EGL_NO_SURFACE
+        discardOwnContext()
+    }
+
+    private fun discardOwnContext() {
+        // Its vertex array goes with the context.
+        ownQuad = null
+        if (own != EGL14.EGL_NO_CONTEXT) EGL14.eglDestroyContext(display, own)
+        own = EGL14.EGL_NO_CONTEXT
     }
 
     private companion object {

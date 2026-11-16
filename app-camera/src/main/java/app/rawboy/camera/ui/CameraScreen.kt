@@ -213,6 +213,7 @@ fun CameraScreen(
     val videoMode by vm.videoMode.collectAsStateWithLifecycle()
     val recordingMs by vm.recordingMs.collectAsStateWithLifecycle()
     val videoSink by vm.videoSink.collectAsStateWithLifecycle()
+    val recordableViewfinder by vm.recordableViewfinder.collectAsStateWithLifecycle()
     // Only the AF state of the camera's per-frame metadata, so the screen doesn't recompose 30 times a second.
     val afState by remember(vm) { vm.controller.frames.map { it?.afState }.distinctUntilChanged() }
         .collectAsStateWithLifecycle(null)
@@ -425,6 +426,7 @@ fun CameraScreen(
 
                         videoSink = videoSink,
                         videoMode = videoMode,
+                        eglConfig = if (recordableViewfinder) ViewfinderEglConfig.RECORDABLE_RGBA8888 else null,
                     )
                     // The self-timer's countdown, big and upright over the picture.
                     selfTimerLeft?.let { left ->

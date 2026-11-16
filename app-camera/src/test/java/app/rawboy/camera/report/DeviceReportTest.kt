@@ -8,6 +8,8 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import app.rawboy.camera.capture.VideoProbeState
+import app.rawboy.camera.capture.VideoVariant
 import java.util.Locale
 
 class DeviceReportTest {
@@ -154,5 +156,24 @@ class DeviceReportTest {
         assertEquals("1 s", DeviceReport.seconds(1_000_000_000L))
         assertEquals("32 s", DeviceReport.seconds(32_000_000_000L))
         assertEquals("0 ns", DeviceReport.seconds(0L))
+    }
+
+    @Test
+    fun videoProbeLines() {
+        val probed = data.copy(
+            video = VideoProbeState(VideoVariant.OWN_CONTEXT, confirmed = true, buildKey = "k", lastTries = listOf("STANDARD: encoder error", "OWN_CONTEXT: ok")),
+            videoForThisBuild = true,
+        )
+        val lines = DeviceReport.render(probed).lines()
+        for (expected in listOf(
+            "== Video probe ==", "variant: OWN_CONTEXT (recorded)", "stored for this build: yes",
+            "last probe: STANDARD: encoder error", "last probe: OWN_CONTEXT: ok",
+        )) assertTrue("missing line: $expected", expected in lines)
+        val pending = DeviceReport.render(data.copy(video = VideoProbeState(VideoVariant.RECORDABLE_VIEWFINDER), videoForThisBuild = false)).lines()
+        assertTrue("variant: RECORDABLE_VIEWFINDER (next, on the remade viewfinder)" in pending)
+        assertTrue("last probe: -" in pending)
+        val none = DeviceReport.render(data.copy(video = VideoProbeState())).lines()
+        assertTrue("variant: STANDARD (nothing stored)" in none)
+        assertTrue("not read" in DeviceReport.render(data).lines().dropWhile { it != "== Video probe ==" }.take(2))
     }
 }

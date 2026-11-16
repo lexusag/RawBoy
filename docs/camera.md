@@ -140,8 +140,8 @@ shows them.
   and preview sizes, tone map modes and curve points, ISO, exposure, frame rate and boost ranges, exposure
   compensation step, flash, OIS, stabilization, lens shading map, focus calibration, session keys); which lenses the
   camera lists as UW / W / T and why it passes over the others; the GPU (`GL_RENDERER`, the extensions the camera uses,
-  the EGL window configs and how many are recordable); the H.264 and HEVC encoders with their input colour formats; and
-  the calibration learned per lens. One `key: value` per line in a fixed order, numbers written the same in every
+  the EGL window configs and how many are recordable); the H.264 and HEVC encoders with their input colour formats; the
+  video probe's result (the way video is recorded on this phone, see Video); and the calibration learned per lens. One `key: value` per line in a fixed order, numbers written the same in every
   language, so two phones' reports compare line by line. It holds no serial numbers, accounts, locations, file names or
   photos.
 
@@ -204,6 +204,7 @@ In video mode, **AE LOCK** (top right of the viewfinder) holds the exposure and 
 - Film grain moves with the frames in video mode. The live exposure eases much slower than for photos, so brightness does not pump.
 - Skin retouch, the ISO-based denoise and sharpening, bursts, flash and raw are photo-only. The lens and the camera (selfie) can't be changed while recording, and leaving the app stops the recording.
 - Prototype: no video stabilisation, no 4K, no log; the lens/stream setup is the photo one. How it works: `ViewfinderRenderer.videoSink` draws the same develop pass into the `MediaCodec` input surface through an EGL window surface in the viewfinder's own context (`gl/VideoOutput.kt`); `capture/VideoRecorder.kt` runs the encoders and the MP4 muxer. Findings and the plan: `docs/video.md`.
+- **Finding the way to record on a new phone.** Phones differ in what their GPU driver and video encoder accept, so the first recording tries, in order: the standard path (an EGL surface in the viewfinder's context: the Pixel 9 Pro's, the only one it ever uses); the encoder's surface in a GL context of its own (the OnePlus 11's Snapdragon encoder refused the standard path's buffers); the viewfinder itself on a recordable config; the phone's software H.264 encoder (slower, lower frame rate). A way counts as working when the encoder hands out its first frame, usually 0.2-0.3 s after the start; a failed try is taken down and the next one starts at once, so the recording just begins a fraction of a second later. The working way is remembered until the next system or app update. Another way than the standard one is remembered only after the standard one failed outright (a refused surface or an encoder error), never after a slow start. If the next way needs the viewfinder made again, the viewfinder restarts once with *Video is set up for this phone: the viewfinder restarts once. Press record again*. When nothing works, the message says so at once (instead of a timer running and *Nothing was recorded* at the end); an encoder that fails during a recording stops it, keeps what was recorded and says so. The device report's *Video probe* section shows the way in use and the last probe's tries; logcat has them under `RawBoyVideo` and `RawBoyCamera`.
 
 ## Self-timer and long exposure (Android prototype)
 
