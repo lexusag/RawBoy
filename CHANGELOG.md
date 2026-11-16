@@ -1,3 +1,9 @@
+**RawBoy Desktop: a photo handed over at launch drew blank (2026-11-16)**
+
+- **Bug:** a photo opened by RawBoy Viewer's E (or Finder's Open With, or `open -a`) in a **cold-started** RawBoy Desktop left the photo area blank (dark, nothing drawn) while the panel and histogram already had the photo; Auto and back to Pro, which makes the view again, fixed it. Cause: the photo's view is set while its window is still coming up, and a paused MTKView draws only when AppKit displays it; in that state it never did, and nothing asked again (its `drawableSizeWillChange` did nothing).
+- **Fix:** the preview view redraws when its drawable size changes and when it joins a window, and after every update it checks that a frame was drawn within 60 ms and draws one directly if not (normally AppKit has: the check costs nothing). `DevelopRenderer.drawCount` counts frames.
+- Checked in the running Mac app, Debug build, screenshots of the photo area: cold launch with the photo (before: blank; after: the photo), cold launch in the background (`open -g`), first photo into a running app (Pro, and from Auto mode), and a second photo over the first (a different portrait photo at its own aspect, no stale first photo, not stretched). Not checked: Finder's Open With and a Dock drop by hand (they arrive through the same `application(_:open:)` as `open -a`), and RawBoy Viewer's E itself (it uses `NSWorkspace.open(_:withApplicationAt:)`, the same route); no unit test (it needs a window and the GPU).
+
 **RawBoy Desktop: version in Help (2026-11-16)**
 
 - The Help sheet (the "?" button, ⌘/; Pro and Auto, and the iPhone apps' sheets, which share it) starts with **RawBoy Desktop <version> (<build>)**, selectable, and the Mac's Help menu has a disabled "About RawBoy Desktop <version> (<build>)" line at the top; the standard About panel stays in the app menu.
