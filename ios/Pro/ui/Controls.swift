@@ -185,13 +185,15 @@ struct ControlsPanel: View {
         primariesSliders
     }
 
+    #if os(macOS)
+    private static let pickWhitePrompt = "Click something neutral grey"
+    #else
+    private static let pickWhitePrompt = "Tap something neutral grey"
+    #endif
+
     @ViewBuilder private var whiteBalance: some View {
         Button(action: onPickWhite) {
-            #if os(macOS)
-            Label(pickingWhite ? "Click something neutral grey" : "Pick white balance", systemImage: "eyedropper")
-            #else
-            Label(pickingWhite ? "Tap something neutral grey" : "Pick white balance", systemImage: "eyedropper")
-            #endif
+            Label(pickingWhite ? Self.pickWhitePrompt : "Pick white balance", systemImage: "eyedropper")
                 .font(.subheadline)
         }
         .buttonStyle(.bordered)
