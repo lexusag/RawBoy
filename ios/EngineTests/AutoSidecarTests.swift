@@ -1,5 +1,6 @@
 import XCTest
 @testable import RawBoyEngine
+import enum RawBoyBrowseKit.XmpSidecar
 
 /** Web's browse.test.ts Auto cases (`rawboy:Auto`, ui/auto/AutoSidecar.ts) on the Swift port. */
 final class AutoSidecarTests: XCTestCase {

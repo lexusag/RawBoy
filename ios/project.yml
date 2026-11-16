@@ -19,6 +19,15 @@ settings:
     # Owner's free Personal Team: apps on a device must be reinstalled from Xcode every 7 days.
     DEVELOPMENT_TEAM: PB2FFKSMC8
     CODE_SIGN_STYLE: Automatic
+packages:
+  # RawBoy Viewer's libraries (RawBoyBrowseKit, ViewerFiles, ViewerImaging, ViewerUI), switched by ios/viewer-source.sh:
+  # `git` = the tag pinned in that script (the committed default: CI, releases), `local` = a sibling checkout for
+  # development (`ios/viewer-source.sh local`; do not commit it). Run `xcodegen` after switching.
+  # viewer-package:begin
+  RawBoyViewerPackages:
+    url: https://github.com/lexusag/RawBoyImageViewer
+    from: 0.2.1
+  # viewer-package:end
 targets:
   RawBoyEngine:
     type: framework
@@ -57,6 +66,8 @@ targets:
           - $(SRCROOT)/build/generated/scan.metal
           - $(SRCROOT)/build/generated/DevelopLayout.swift
     dependencies:
+      - package: RawBoyViewerPackages
+        product: RawBoyBrowseKit
       - framework: native/out/RawBoyNative.xcframework
         embed: false
       - framework: native/out/RawBoyJpeg.xcframework
@@ -89,6 +100,8 @@ targets:
       # Pro's crop frame, shared (Auto's Crop & rotate).
       - path: Pro/ui/CropOverlay.swift
     dependencies:
+      - package: RawBoyViewerPackages
+        product: RawBoyBrowseKit
       - target: RawBoyEngine
       - framework: native/out/RawBoyNative.xcframework
       - framework: native/out/RawBoyJpeg.xcframework
@@ -195,7 +208,12 @@ targets:
     platform: iOS
     sources:
       - path: EngineTests
+        excludes:
+          - Fixtures  # read from the source tree (shared with RawBoy Viewer's tests), not bundled
+          - EngineRealPreviewTests.swift  # Desktop's provider, macOS only
     dependencies:
+      - package: RawBoyViewerPackages
+        product: RawBoyBrowseKit
       - target: RawBoyEngine
       - framework: native/out/RawBoyNative.xcframework
       - framework: native/out/RawBoyJpeg.xcframework
@@ -248,6 +266,8 @@ targets:
           - $(SRCROOT)/build/generated/scan.metal
           - $(SRCROOT)/build/generated/DevelopLayout.swift
     dependencies:
+      - package: RawBoyViewerPackages
+        product: RawBoyBrowseKit
       - framework: native/out/RawBoyNative.xcframework
         embed: false
       - framework: native/out/RawBoyJpeg.xcframework
@@ -288,6 +308,14 @@ targets:
           - Assets.xcassets
       - path: Desktop
     dependencies:
+      - package: RawBoyViewerPackages
+        product: RawBoyBrowseKit
+      - package: RawBoyViewerPackages
+        product: ViewerFiles
+      - package: RawBoyViewerPackages
+        product: ViewerImaging
+      - package: RawBoyViewerPackages
+        product: ViewerUI
       - target: RawBoyEngineMac
       - framework: native/out/RawBoyNative.xcframework
       - framework: native/out/RawBoyJpeg.xcframework
@@ -332,10 +360,17 @@ targets:
     sources:
       - path: EngineTests
         excludes:
+          - Fixtures
           - DeviceDngTests.swift
           - ViewfinderTests.swift
           - SkinTests.swift
+      # Browse mode's real preview provider, tested here (it needs only the engine and ViewerImaging).
+      - path: Desktop/EngineRealPreview.swift
     dependencies:
+      - package: RawBoyViewerPackages
+        product: ViewerImaging
+      - package: RawBoyViewerPackages
+        product: RawBoyBrowseKit
       - target: RawBoyEngineMac
       - framework: native/out/RawBoyNative.xcframework
       - framework: native/out/RawBoyJpeg.xcframework

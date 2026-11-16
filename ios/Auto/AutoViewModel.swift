@@ -2,6 +2,8 @@ import CoreGraphics
 import Foundation
 import RawBoyEngine
 import SwiftUI
+import enum RawBoyBrowseKit.PhotoOrder
+import enum RawBoyBrowseKit.PhotoSort
 #if canImport(UIKit)
 import UIKit
 #endif

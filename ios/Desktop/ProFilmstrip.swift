@@ -2,19 +2,25 @@ import AppKit
 import ImageIO
 import RawBoyEngine
 import SwiftUI
-import UniformTypeIdentifiers
+import ViewerFiles
+import ViewerImaging
+import enum RawBoyBrowseKit.PhotoGroups
 
 /**
  * Pro's filmstrip: the other photos in the open photo's folder, under the photo, so the next one is a click (or ← →) away
- * instead of a trip through the Open panel. File name order; a RAW + JPEG pair (same name) shows once, as the raw, as in
- * RawBoy Viewer. Thumbnails are the files' own embedded previews (ImageIO), never a develop.
+ * instead of a trip through the Open panel. The list and the thumbnails are RawBoy Viewer's (`FolderScanner` and
+ * `PhotoGroups`: file name order, a RAW + JPEG pair once, as the raw; `ThumbnailStore`: embedded previews, never a develop,
+ * kept on disk). Directory entries only: no file is read.
  */
 @MainActor
 final class Filmstrip: ObservableObject {
     @Published private(set) var files: [URL] = []
     /** The photo open in the editor (set as it starts opening). */
     @Published private(set) var current: URL?
+    /** Cloud placeholders (their data isn't on this Mac): the strip shows that they are there and reads nothing. */
+    private(set) var onlineOnly: Set<URL> = []
     private var folder: URL?
+    let thumbnails = ThumbnailStore(pixelSize: 240)
 
     /** [url] is opening: list its folder when it is another folder, or the photo isn't listed yet. */
     func show(_ url: URL) {
@@ -29,7 +35,9 @@ final class Filmstrip: ObservableObject {
     /** Lists the folder again (photos added or removed in the Finder meanwhile). */
     func reload() {
         guard let folder else { return }
-        files = Self.photos(in: folder)
+        let scanned = (try? FolderScanner.photos(in: folder)) ?? []
+        files = PhotoGroups.group(scanned.map(\.url.lastPathComponent)).map { folder.appendingPathComponent($0.main) }
+        onlineOnly = Set(scanned.filter(\.isOnlineOnly).map(\.url))
     }
 
     /** The photo [delta] places from the open one, if there is one. */
@@ -37,22 +45,6 @@ final class Filmstrip: ObservableObject {
         guard let current, let i = files.firstIndex(of: current), files.indices.contains(i + delta) else { return nil }
         return files[i + delta]
     }
-
-    /** The folder's photos (directory entries only: no file is read), in name order, a JPEG beside its raw left out. */
-    static func photos(in folder: URL) -> [URL] {
-        let all = (try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil,
-                                                                 options: [.skipsHiddenFiles, .skipsPackageDescendants])) ?? []
-        let photos = DesktopModel.photoFiles(in: all.filter { !$0.hasDirectoryPath })
-        let rawStems = Set(photos.filter(isRaw).map(stem))
-        return photos.filter { isRaw($0) || !rawStems.contains(stem($0)) }
-            .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
-    }
-
-    private nonisolated static func isRaw(_ u: URL) -> Bool {
-        UTType(filenameExtension: u.pathExtension.lowercased())?.conforms(to: .rawImage) ?? false
-    }
-
-    private nonisolated static func stem(_ u: URL) -> String { u.deletingPathExtension().lastPathComponent.lowercased() }
 }
 
 /** The strip under Pro's photo; nothing when the folder has only the open photo. */
@@ -70,7 +62,7 @@ struct FilmstripView: View {
                     ScrollView(.horizontal) {
                         LazyHStack(spacing: 6) {
                             ForEach(strip.files, id: \.self) { url in
-                                FilmstripCell(url: url, selected: url == strip.current) { open(url) }.id(url)
+                                FilmstripCell(strip: strip, url: url, selected: url == strip.current) { open(url) }.id(url)
                             }
                         }
                         .padding(.horizontal, 12)
@@ -92,6 +84,7 @@ struct FilmstripView: View {
 }
 
 private struct FilmstripCell: View {
+    let strip: Filmstrip
     let url: URL
     let selected: Bool
     let action: () -> Void
@@ -118,68 +111,13 @@ private struct FilmstripCell: View {
         .accessibilityLabel(url.lastPathComponent)
         .accessibilityAddTraits(selected ? .isSelected : [])
         .task(id: url) {
-            if FilmstripThumbs.isOnlineOnly(url) {
+            if strip.onlineOnly.contains(url) {
                 // Reading a cloud placeholder downloads it: the strip only shows that it is there.
                 online = true
                 return
             }
-            thumb = await FilmstripThumbs.shared.thumbnail(url)
+            thumb = await strip.thumbnails.thumbnail(url)?.cgImage
         }
-    }
-}
-
-/** Thumbnails from the files' embedded previews, kept in memory by path and modified date. */
-final class FilmstripThumbs: @unchecked Sendable {
-    static let shared = FilmstripThumbs()
-    private let cache = NSCache<NSString, CGImage>()
-
-    init() { cache.countLimit = 400 }
-
-    func thumbnail(_ url: URL) async -> CGImage? {
-        let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
-        let key = "\(url.path)|\(date?.timeIntervalSince1970 ?? 0)" as NSString
-        if let hit = cache.object(forKey: key) { return hit }
-        let image = await Task.detached(priority: .utility) { Self.make(url) }.value
-        if let image { cache.setObject(image, forKey: key) }
-        return image
-    }
-
-    /** About twice the cell's size for a Retina screen. */
-    private static let maxPixels = 240
-
-    /**
-     * The embedded thumbnail when it is big enough and the photo's own shape (cameras' EXIF thumbnails are 160 × 120,
-     * letterboxed for portrait photos), else one ImageIO makes from the larger preview or the image.
-     */
-    private static func make(_ url: URL) -> CGImage? {
-        guard let src = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary) else { return nil }
-        func thumb(always: Bool) -> CGImage? {
-            let options: [CFString: Any] = [
-                always ? kCGImageSourceCreateThumbnailFromImageAlways : kCGImageSourceCreateThumbnailFromImageIfAbsent: true,
-                kCGImageSourceThumbnailMaxPixelSize: maxPixels,
-                kCGImageSourceCreateThumbnailWithTransform: true,
-            ]
-            return CGImageSourceCreateThumbnailAtIndex(src, 0, options as CFDictionary)
-        }
-        if let t = thumb(always: false), max(t.width, t.height) >= maxPixels * 3 / 4, fits(t, src) { return t }
-        return thumb(always: true)
-    }
-
-    /** Whether [t] has the photo's shape (within 5%), turned as the photo is shown. */
-    private static func fits(_ t: CGImage, _ src: CGImageSource) -> Bool {
-        guard let p = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any],
-              let w = p[kCGImagePropertyPixelWidth] as? Double, let h = p[kCGImagePropertyPixelHeight] as? Double, w > 0, h > 0
-        else { return true }
-        let orientation = p[kCGImagePropertyOrientation] as? Int ?? 1
-        let aspect = orientation >= 5 ? h / w : w / h
-        return abs(Double(t.width) / Double(t.height) / aspect - 1) < 0.05
-    }
-
-    /** An iCloud or File Provider placeholder whose data isn't on this Mac. */
-    static func isOnlineOnly(_ url: URL) -> Bool {
-        var st = stat()
-        guard stat(url.path, &st) == 0 else { return false }
-        return st.st_flags & 0x4000_0000 != 0  // SF_DATALESS
     }
 }
 

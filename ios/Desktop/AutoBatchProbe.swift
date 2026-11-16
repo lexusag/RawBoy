@@ -4,6 +4,7 @@ import Foundation
 import ImageIO
 import MetalKit
 import RawBoyEngine
+import struct RawBoyBrowseKit.PhotoSidecar
 
 /**
  * Debug builds: runs a batch through Auto without clicking and prints timings, so the whole path (analysis, thumbnails,

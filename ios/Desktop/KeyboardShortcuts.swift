@@ -19,7 +19,7 @@ final class KeyboardShortcuts {
         case a = 0, z = 6, d = 2, c = 8, b = 11, e = 14, v = 9, o = 31, f = 3, tab = 48
         case leftBracket = 33, rightBracket = 30, backslash = 42
         case left = 123, right = 124, down = 125, up = 126, one = 18, two = 19
-        case delete = 51, forwardDelete = 117, space = 49, `return` = 36, keypadEnter = 76, escape = 53, slash = 44
+        case three = 20, delete = 51, forwardDelete = 117, space = 49, `return` = 36, keypadEnter = 76, escape = 53, slash = 44
     }
 
     init(model: DesktopModel) { self.model = model }
@@ -59,6 +59,7 @@ final class KeyboardShortcuts {
             case .a: if auto.selected == nil { auto.selectAll() }
             case .return, .keypadEnter: model.editInPro()
             case .one: model.mode = .pro
+            case .three: model.mode = .browse
             case .slash: model.commands.send(.help)
             default: return event
             }
@@ -103,10 +104,26 @@ final class KeyboardShortcuts {
         return nil
     }
 
+    /**
+     * Browse: the keys are ViewerUI's (its own monitor, in this window, while Browse is showing); only the mode keys
+     * are ours, matched by position like the others.
+     */
+    private func handleBrowse(_ event: NSEvent, _ key: Key) -> NSEvent? {
+        guard event.type == .keyDown, !typing,
+              event.modifierFlags.intersection([.command, .control, .option, .shift]) == [.command] else { return event }
+        switch key {
+        case .one: model.mode = .pro
+        case .two: model.mode = .auto
+        default: return event
+        }
+        return nil
+    }
+
     private func handle(_ event: NSEvent) -> NSEvent? {
         guard let key = Key(rawValue: event.keyCode) else { return event }
         let commands = model.commands
         if model.mode == .auto { return handleAuto(event, key) }
+        if model.mode == .browse { return handleBrowse(event, key) }
         if key == .space {
             if typing { return event }
             let held = event.type == .keyDown
@@ -122,6 +139,7 @@ final class KeyboardShortcuts {
             case .o: model.openPanel()
             case .e: commands.send(.export)
             case .slash: commands.send(.help)
+            case .three: model.mode = .browse
             default: return event
             }
             return nil

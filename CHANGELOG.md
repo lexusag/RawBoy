@@ -1,3 +1,21 @@
+**RawBoy Desktop: the Viewer's libraries by path or by tag (2026-11-16)**
+
+- **Switch.** `ios/viewer-source.sh local|git` sets where `ios/project.yml` takes RawBoy Viewer's libraries from: its git tag (`from: 0.2.1`, the first with the root `Package.swift` SwiftPM needs; the committed default, used by CI and releases, which cache the resolved package) or a sibling checkout for development.
+
+**RawBoy Desktop: Browse's full-screen viewer (2026-11-16)**
+
+- **Full-Screen Viewer in Browse.** A Mode menu setting (remembered) opens the Viewer's screen-filling window, with its edge panels, press-and-hold peek and the menu bar and Dock hidden, instead of the in-window viewer; ⌥⌘↩ opens the selection the other way once. E hands the photo to Pro and closes the window; leaving Browse closes it. Compare follows the same choice. It opens on the display Desktop's window is on, follows a display being unplugged, and gives the menu bar and Dock back when it closes, when the app resigns active and on quit.
+
+**RawBoy Desktop: Browse's real preview is the engine's develop (2026-11-16)**
+
+- **R and Compare in Browse.** Real previews now show RawBoy's own as-shot develop, the picture Pro opens (`Desktop/EngineRealPreview.swift`, through `Exporter.renderCGImage`), instead of Core Image's. It is pixel-identical to a Pro export at that size, one raw at a time, falling back to Core Image for what the engine can't open. Slower than Core Image on ARW/RAF (0.5–0.8 s for 24–33 MP, 2.3 s for 102 MP at screen size), faster on a Sony DNG; the standalone Viewer keeps Core Image.
+
+**RawBoy Desktop: Browse mode, and the Viewer's libraries replace Desktop's own copies (2026-11-16)**
+
+- **Browse (⌘3).** A third mode next to Pro and Auto: RawBoy Viewer's grid, sidebar, viewer and culling (`ViewerUI`) inside the window, with the Browse menu (rename, export, copy and move, compare, slideshow, Send to RawBoy Auto, Move to Trash). Its settings are kept apart (`desktop.browse.`); the menu bar and Dock are not hidden.
+- **Hand-offs in-process.** E in the viewer opens the photo in Pro, also while Auto is showing (its batch stays); Send to RawBoy Auto adds photos and folders to Auto as Looks, Film or As is. No Open With or `rawboy-desktop://` round trip.
+- **One XmpSidecar, PhotoOrder and filmstrip scan.** Desktop and the engine use `RawBoyBrowseKit`'s `XmpSidecar`, `PhotoSidecar`, `ExifOrientation` and `PhotoOrder`, and Pro's filmstrip uses the Kit's folder scan, RAW + JPEG grouping and `ThumbnailStore` (thumbnails now cached on disk). The engine's `XmpSidecar.swift`, `PhotoOrder` and `Desktop/Filmstrip.swift` are gone; the shared XMP fixtures stay checked on both sides. The iOS targets use the same Kit (it declares iOS 17), but could not be built here (no iOS slice of the native frameworks).
+
 **RawBoy Web: Copy previous edits in Pro (2026-11-16)**
 
 - **Copy previous edits.** Pro's desktop toolbar has a **Copy previous edits** button (and `Shift+C` everywhere) to copy the previously open photo's edits onto the current photo as one undo step: white balance is copied only if changed on the previous photo, while the current photo's crop, rotation, flips, perspective, masks, light leaks, effects and healing spots stay.

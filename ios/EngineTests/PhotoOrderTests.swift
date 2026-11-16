@@ -1,5 +1,7 @@
 import XCTest
 @testable import RawBoyEngine
+import enum RawBoyBrowseKit.PhotoOrder
+import enum RawBoyBrowseKit.PhotoSort
 
 /** Auto's batch order: the same cases as PhotoOrderTest.kt and photoorder.test.ts. */
 final class PhotoOrderTests: XCTestCase {

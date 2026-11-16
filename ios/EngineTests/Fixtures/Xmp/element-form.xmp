@@ -1,0 +1,11 @@
+<x:xmpmeta xmlns:x="adobe:ns:meta/">
+ <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+  <rdf:Description rdf:about="" xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmlns:tiff="http://ns.adobe.com/tiff/1.0/" xmlns:rawboy="http://ns.rawboy.app/1.0/">
+   <xmp:Rating>4</xmp:Rating>
+   <rawboy:Pick>1</rawboy:Pick>
+   <tiff:Orientation>3</tiff:Orientation>
+   <rawboy:Develop>{&quot;format&quot;:&quot;rawboy-edit&quot;,&quot;version&quot;:1,&quot;values&quot;:{&quot;exposure&quot;:0.5}}</rawboy:Develop>
+   <rawboy:Auto>{&quot;format&quot;:&quot;rawboy-auto&quot;,&quot;mode&quot;:&quot;film&quot;,&quot;strength&quot;:70}</rawboy:Auto>
+  </rdf:Description>
+ </rdf:RDF>
+</x:xmpmeta>

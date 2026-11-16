@@ -1,5 +1,8 @@
 import XCTest
 @testable import RawBoyEngine
+import struct RawBoyBrowseKit.PhotoSidecar
+import enum RawBoyBrowseKit.XmpSidecar
+import typealias RawBoyBrowseKit.ExifOrientation
 
 /** Web's browse.test.ts "XMP sidecars" cases, the Develop field and Desktop's file handling. */
 final class XmpSidecarTests: XCTestCase {
@@ -122,5 +125,83 @@ final class XmpSidecarTests: XCTestCase {
         XCTAssertEqual(g.rotation, 3)
         XCTAssertTrue(g.flipHorizontal)
         XCTAssertEqual([g.cropLeft, g.cropTop, g.cropRight, g.cropBottom], [0.1, 0.15, 0.9, 0.85])
+    }
+
+    // MARK: Shared fixtures
+
+    /// `Fixtures/Xmp`, the same files and expectations as RawBoy Viewer's `RawBoyBrowseKitTests/Fixtures/Xmp`: what
+    /// darktable, Lightroom and RawBoy's web write must read the same in both Swift copies of `XmpSidecar`.
+    private struct Fixture {
+        let name: String
+        let text: String
+        let rating: XmpSidecar.Rating
+        let orientation: Int?
+        let develop: String?
+        let auto: String?
+    }
+
+    private func fixtures() throws -> [Fixture] {
+        let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().appendingPathComponent("Fixtures/Xmp")
+        let data = try Data(contentsOf: dir.appendingPathComponent("expected.json"))
+        let all = try XCTUnwrap(try JSONSerialization.jsonObject(with: data) as? [String: [String: Any]])
+        return try all.keys.sorted().map { name in
+            let e = all[name]!
+            let flag: XmpSidecar.Flag? = (e["flag"] as? String).map { $0 == "pick" ? .pick : .reject }
+            return Fixture(name: name, text: try String(contentsOf: dir.appendingPathComponent(name), encoding: .utf8),
+                           rating: .init(stars: e["stars"] as! Int, flag: flag), orientation: e["orientation"] as? Int,
+                           develop: e["develop"] as? String, auto: e["auto"] as? String)
+        }
+    }
+
+    func testFixturesReadAsExpected() throws {
+        let all = try fixtures()
+        XCTAssertGreaterThanOrEqual(all.count, 5)
+        for f in all {
+            XCTAssertEqual(XmpSidecar.readRating(f.text), f.rating, "\(f.name) rating")
+            XCTAssertEqual(XmpSidecar.readOrientation(f.text), f.orientation, "\(f.name) orientation")
+            XCTAssertEqual(XmpSidecar.readDevelop(f.text), f.develop, "\(f.name) develop")
+            XCTAssertEqual(XmpSidecar.readAuto(f.text), f.auto, "\(f.name) auto")
+        }
+    }
+
+    func testFixturesWritingWhatIsThereChangesNothing() throws {
+        for f in try fixtures() {
+            XCTAssertEqual(try XmpSidecar.writeRating(f.text, f.rating), f.text, "\(f.name) rating")
+            XCTAssertEqual(try XmpSidecar.writeOrientation(f.text, f.orientation), f.text, "\(f.name) orientation")
+            XCTAssertEqual(try XmpSidecar.writeDevelop(f.text, f.develop), f.text, "\(f.name) develop")
+            XCTAssertEqual(try XmpSidecar.writeAuto(f.text, f.auto), f.text, "\(f.name) auto")
+        }
+    }
+
+    func testFixturesARatingChangeTouchesOnlyTheRating() throws {
+        for f in try fixtures() {
+            let other = XmpSidecar.Rating(stars: f.rating.stars == 3 ? 4 : 3, flag: f.rating.flag == .reject ? nil : f.rating.flag)
+            let changed = try XmpSidecar.writeRating(f.text, other)
+            XCTAssertEqual(XmpSidecar.readRating(changed), other, f.name)
+            XCTAssertEqual(XmpSidecar.readOrientation(changed), f.orientation, f.name)
+            XCTAssertEqual(XmpSidecar.readDevelop(changed), f.develop, f.name)
+            XCTAssertEqual(XmpSidecar.readAuto(changed), f.auto, f.name)
+            XCTAssertEqual(try XmpSidecar.writeRating(changed, f.rating), f.text, "\(f.name) back")
+        }
+    }
+
+    func testFixturesDevelopAndAutoLeaveTheRestOfAnotherAppsSidecarAlone() throws {
+        let json = #"{"format":"rawboy-edit","version":1,"values":{"exposure":0.5}}"#
+        for f in try fixtures() where f.develop == nil && f.auto == nil {
+            let out = try XmpSidecar.writeAuto(XmpSidecar.writeDevelop(f.text, json), "{}")
+            XCTAssertEqual(XmpSidecar.readDevelop(out), json, f.name)
+            XCTAssertEqual(XmpSidecar.readRating(out), f.rating, f.name)
+            let back = out.replacingOccurrences(of: #"\n\s+(rawboy:(Develop|Auto)|xmlns:rawboy)="[^"]*""#, with: "", options: .regularExpression)
+            XCTAssertEqual(back, f.text, f.name)
+            XCTAssertFalse(try XmpSidecar.writeDevelop(out, nil).contains("rawboy:Develop"), f.name)
+        }
+    }
+
+    func testFixtureWebDevelopDecodesAsEdits() throws {
+        let web = try XCTUnwrap(try fixtures().first { $0.name == "web-develop.xmp" })
+        let defaults = DevelopParams()
+        let p = try XCTUnwrap(Edits.decode(try XCTUnwrap(XmpSidecar.readDevelop(web.text)), defaults: defaults))
+        XCTAssertEqual(p.rotation, 1)
+        XCTAssertEqual([p.cropLeft, p.cropTop, p.cropRight, p.cropBottom], [0.1, 0.05, 0.9, 0.8])
     }
 }

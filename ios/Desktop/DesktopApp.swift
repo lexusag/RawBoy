@@ -1,6 +1,7 @@
 import AppKit
 import RawBoyEngine
 import SwiftUI
+import ViewerUI
 
 /** RawBoy Desktop: RawBoy's editor on the Mac, edits kept in the photo's XMP sidecar. */
 @main
@@ -48,9 +49,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // The photo's pointer position (Z, the wheel) needs mouse-moved events.
         for window in NSApp.windows { window.acceptsMouseMovedEvents = true }
         for url in Self.launchFiles() { model.open(url) }
+        // `--browse folder-or-photo`: Browse mode on it (for scripts and tests).
+        if let url = Self.launchFiles(after: "--browse").first {
+            model.mode = .browse
+            model.browse.open(url)
+        }
         let batch = Self.launchFiles(after: "--auto")
         if !batch.isEmpty { model.addToAuto(batch, as: Self.launchValue(after: "--import-as").flatMap(ImportMode.init(rawValue:))) }
         #if DEBUG
+        BrowseProbe.runIfRequested(model)
         AutoBatchProbe.runIfRequested(model)
         AutoBatchProbe.openDetailIfRequested(model)
         AutoBatchProbe.mouseProbeIfRequested(model)
@@ -86,6 +93,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         DesktopModel.shared.sidecars.flush()
         DesktopModel.shared.autoSidecars.flush()
+        DesktopModel.shared.browse.writePendingNow()
         return .terminateNow
     }
 
@@ -111,6 +119,7 @@ struct DesktopCommands: Commands {
 
     private var state: EditorState { model.vm.state }
     private var proMode: Bool { model.mode == .pro }
+    private var browseMode: Bool { model.mode == .browse }
     private var ready: Bool { proMode && state.hasImage && !state.busy }
     private var auto: AutoViewModel { model.auto }
     private var autoReady: Bool { model.mode == .auto && auto.export == nil }
@@ -118,24 +127,26 @@ struct DesktopCommands: Commands {
 
     var body: some Commands {
         CommandGroup(replacing: .newItem) {
-            Button(proMode ? "Open…" : "Add Photos…") { if proMode { model.openPanel() } else { model.addPhotosPanel() } }
-                .keyboardShortcut("o")
+            Button(proMode ? "Open…" : browseMode ? "Open Folder…" : "Add Photos…") {
+                if proMode { model.openPanel() } else if browseMode { model.browse.openFolderPanel() } else { model.addPhotosPanel() }
+            }
+            .keyboardShortcut("o")
             Button("Add a Folder to Auto…") { model.addFolderPanel() }.keyboardShortcut("o", modifiers: [.command, .shift])
             Button("Pack Raws…") { openWindow(id: "packer") }.keyboardShortcut("p", modifiers: [.command, .shift])
             Divider()
             Button(proMode ? "Export…" : "Export All…") {
                 if proMode { model.commands.send(.export) } else { auto.requestExport() }
             }
-            .keyboardShortcut("e").disabled(proMode ? !ready : !autoExportable)
+            .keyboardShortcut("e").disabled(browseMode || (proMode ? !ready : !autoExportable))
             Button("Show Last Export in Finder") { model.showLastExportInFinder() }
                 .disabled(proMode ? model.vm.lastExport == nil : model.lastAutoExport == nil)
             Button("Show Sidecar in Finder") { model.showSidecarInFinder() }.disabled(model.vm.currentURL == nil || !proMode)
         }
         CommandGroup(replacing: .undoRedo) {
             Button("Undo") { model.undoOrTextUndo() }.keyboardShortcut("z")
-                .disabled(proMode ? !state.canUndo : !(auto.selected.map(auto.canUndo) ?? false))
+                .disabled(browseMode ? false : proMode ? !state.canUndo : !(auto.selected.map(auto.canUndo) ?? false))
             Button("Redo") { model.redoOrTextRedo() }.keyboardShortcut("z", modifiers: [.command, .shift])
-                .disabled(proMode ? !state.canRedo : !(auto.selected.map(auto.canRedo) ?? false))
+                .disabled(browseMode || (proMode ? !state.canRedo : !(auto.selected.map(auto.canRedo) ?? false)))
             Divider()
             Button("Reset All") { model.vm.reset() }.disabled(!ready)
             Button("Auto Dev") { model.vm.applyAuto() }.disabled(!ready)
@@ -143,6 +154,10 @@ struct DesktopCommands: Commands {
         CommandMenu("Mode") {
             Button("Pro: One Photo in the Editor") { model.mode = .pro }.keyboardShortcut("1").disabled(model.mode == .pro)
             Button("Auto: a Batch Developed Automatically") { model.mode = .auto }.keyboardShortcut("2").disabled(model.mode == .auto)
+            Button("Browse: Folders, Ratings and Culling") { model.mode = .browse }.keyboardShortcut("3").disabled(browseMode)
+            Toggle("Full-Screen Viewer in Browse", isOn: $model.immersiveViewer)
+            Button("Open Selection in the Other Viewer") { model.browse.openSelectedInViewer(inHostWindow: model.immersiveViewer) }
+                .keyboardShortcut(.return, modifiers: [.command, .option]).disabled(!browseMode)
             Divider()
             Button("Previous Photo") { auto.page(-1) }.keyboardShortcut(.leftArrow, modifiers: []).disabled(!autoReady || auto.selected == nil)
             Button("Next Photo") { auto.page(1) }.keyboardShortcut(.rightArrow, modifiers: []).disabled(!autoReady || auto.selected == nil)
@@ -159,6 +174,7 @@ struct DesktopCommands: Commands {
                 .disabled(!autoReady || auto.selected != nil || auto.focusedId == nil)
             Button("Back to the Grid") { auto.goBack() }.keyboardShortcut(.escape, modifiers: []).disabled(!autoReady || auto.selected == nil)
         }
+        ViewerPhotoCommands(app: model.browse, title: "Browse", enabled: browseMode)
         CommandMenu("Photo") {
             Button("Crop & Rotate") { model.commands.send(.toggleMode(.geometry)) }.keyboardShortcut("c", modifiers: []).disabled(!ready)
             Button("Masks") { model.commands.send(.toggleMode(.masks)) }.disabled(!ready)
@@ -203,10 +219,13 @@ struct DesktopCommands: Commands {
 extension DesktopModel {
     /** ⌘Z while text is being edited undoes the text; otherwise the photo's edit. */
     func undoOrTextUndo() {
-        if let text = NSApp.keyWindow?.firstResponder as? NSTextView { text.undoManager?.undo() } else { vm.undo() }
+        if let text = NSApp.keyWindow?.firstResponder as? NSTextView { text.undoManager?.undo() }
+        else if mode == .browse { browse.undo() }
+        else { vm.undo() }
     }
 
     func redoOrTextRedo() {
-        if let text = NSApp.keyWindow?.firstResponder as? NSTextView { text.undoManager?.redo() } else { vm.redo() }
+        if let text = NSApp.keyWindow?.firstResponder as? NSTextView { text.undoManager?.redo() }
+        else if mode != .browse { vm.redo() }
     }
 }

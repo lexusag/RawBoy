@@ -203,6 +203,24 @@ jobs:
           cd ..
           ios/native/build.sh macos
 
+      # RawBoy Viewer's libraries (ios/project.yml's viewer-package block, switched by ios/viewer-source.sh).
+      #  - local (now): a sibling checkout of the Viewer's tag VIEWER_REF, where project.yml expects it.
+      #  - git: SwiftPM fetches the pinned tag itself; the checkout is cached by the pin (the block's hash).
+      - name: RawBoy Viewer libraries
+        id: viewer
+        env:
+          VIEWER_REF: v0.2.0
+        run: |
+          if grep -q 'path: ../../RawBoyImageViewer' ios/project.yml; then
+            git clone --depth 1 --branch "$VIEWER_REF" https://github.com/lexusag/RawBoyImageViewer ../RawBoyImageViewer
+          fi
+          echo "pin=$(sed -n '/viewer-package:begin/,/viewer-package:end/p' ios/project.yml | shasum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/dd/SourcePackages
+          key: viewer-spm-${{ runner.os }}-${{ steps.viewer.outputs.pin }}
+
       # project.yml's preGenCommand also fetches MediaPipe (iOS only); the macOS targets don't use it.
       - name: Generate the project
         run: |
