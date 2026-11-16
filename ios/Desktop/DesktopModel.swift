@@ -3,10 +3,14 @@ import Combine
 import RawBoyEngine
 import SwiftUI
 import UniformTypeIdentifiers
+import ViewerUI
 import struct RawBoyBrowseKit.PhotoSidecar
 
-/** The window's two ways of working: one photo in the full editor, or a batch developed automatically. */
-enum AppMode: String { case pro, auto }
+/**
+ * The window's three ways of working: one photo in the full editor, a batch developed automatically, or browsing a
+ * folder (RawBoy Viewer's grid, viewer and culling, hosted here).
+ */
+enum AppMode: String { case pro, auto, browse }
 
 /** One editor window's worth of state: the view models, the command bus and the sidecar persistence. */
 @MainActor
@@ -21,11 +25,24 @@ final class DesktopModel: ObservableObject {
     let autoSidecars = SidecarAuto()
     /** Pro's filmstrip: the open photo's folder. */
     let filmstrip = Filmstrip()
+    /**
+     * Browse mode: RawBoy Viewer's browser and viewer (`ViewerUI`), owned here. Its choices (sort, sizes, favourites,
+     * export options...) are kept under `desktop.browse.` in the preferences, never the standalone Viewer's keys; it
+     * hides neither the menu bar nor the Dock; the viewer is a view in this window, not a borderless one of its own.
+     */
+    let browse: AppModel = {
+        ViewerSettings.store = UserDefaultsSettings(prefix: "desktop.browse.")
+        var options = ViewerOptions()
+        options.hidesDockAndMenuBar = false
+        options.viewerInHostWindow = true
+        return AppModel(options: options)
+    }()
     @Published var mode = AppMode(rawValue: UserDefaults.standard.string(forKey: "desktop.mode") ?? "") ?? .pro {
         didSet {
             UserDefaults.standard.set(mode.rawValue, forKey: "desktop.mode")
             sidecars.flush()
             autoSidecars.flush()
+            browse.writePendingNow()
         }
     }
     private var bag: Set<AnyCancellable> = []
@@ -33,6 +50,8 @@ final class DesktopModel: ObservableObject {
     private static let folderKey = "desktop.export.folder"
 
     init() {
+        // Photos the viewer or the browser hand over open here, with no round trip through the system.
+        ViewerHost.handOff = DesktopHandOff(model: self)
         vm.persistence = sidecars
         sidecars.onError = { [weak vm] in vm?.message = $0 }
         auto.persistence = autoSidecars
