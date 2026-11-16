@@ -1,3 +1,7 @@
+**RawBoy Web: Copy previous edits in Pro (2026-11-16)**
+
+- **Copy previous edits.** Pro's desktop toolbar has a **Copy previous edits** button (and `Shift+C` everywhere) to copy the previously open photo's edits onto the current photo as one undo step: white balance is copied only if changed on the previous photo, while the current photo's crop, rotation, flips, perspective, masks, light leaks, effects and healing spots stay.
+
 **RawBoy Desktop and Web: ISO filter fix and focal length filter (2026-11-16)**
 
 - **ISO filter (Desktop).** Auto's Min ISO and Max ISO menus now show the batch's ISOs with their counts: switched the range pickers to string tags (`GridScreen.rangeMenu`), matching the Camera, Lens and Date menus so macOS `Picker` populates them once analysis finishes.

@@ -208,14 +208,19 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   const zoomExtra = shapesMode ? maskMargin * dpr : 0;
   const hasImage = store.hasImage;
   const busy = store.busy;
-  // C toggles Crop & rotate, like its top bar button.
+  // C toggles Crop & rotate (Shift+C is Copy previous edits).
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
-      if (e.code !== 'KeyC' || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
+      if (e.code !== 'KeyC' || e.metaKey || e.ctrlKey || e.altKey || e.repeat) return;
       const t = e.target;
       if (t instanceof HTMLTextAreaElement || (t instanceof HTMLInputElement && t.type !== 'range' && t.type !== 'checkbox')) return;
       if (!isTabShown('pro') || !hasImage || busy) return;
+      if (document.querySelector('[role="dialog"], [aria-modal="true"], dialog[open]')) return;
       e.preventDefault();
+      if (e.shiftKey) {
+        store.copyPreviousEdits();
+        return;
+      }
       if (!geometryMode && store.session.state.zoomCenter) store.session.exitZoom();
       setGeometryMode(!geometryMode);
       setHealMode(false);
@@ -608,6 +613,15 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
           <span className="tool-label">Looks</span>
         </button>
         <button type="button" className="auto-button" title="Auto light and colour (keeps the LUT)" onClick={store.applyAuto} disabled={!hasImage || busy}>Auto Dev</button>
+        <button
+          type="button"
+          className="text copy-previous-edits"
+          title={state.previousFileName ? `Copy edits from ${state.previousFileName} (Shift+C)` : 'Copy edits from the previous photo (Shift+C)'}
+          onClick={store.copyPreviousEdits}
+          disabled={!hasImage || busy || state.previousFileName == null}
+        >
+          Copy previous edits
+        </button>
         <span className="row-break" />
         <button
           type="button"
