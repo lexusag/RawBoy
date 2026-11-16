@@ -11,7 +11,10 @@ import org.junit.Test
 import java.util.Locale
 
 class DeviceReportTest {
-    /** The OnePlus 11 as session 01 found it by hand (adb, dumpsys), cut down to one camera of each kind. */
+    /**
+     * A phone shaped like the OnePlus 11 (its Build strings, lens layout and most camera values as session 01 found
+     * them); some values are made up to reach other names (hardware level FULL, capability 99, a failed camera).
+     */
     private val onePlus = PhoneDescription(
         chip = PlatformDetector.chipOf("QTI", "qcom"), socManufacturer = "QTI", socModel = "SM8550", hardware = "qcom",
         board = "kalama", manufacturer = "OnePlus", brand = "OnePlus", model = "CPH2447", device = "OP594DL1", sdk = 36,
@@ -32,8 +35,8 @@ class DeviceReportTest {
                 whiteLevel = 1023, rawSizes = listOf("4000x3000"), previewSizes = listOf("1920x1440", "1280x960"),
                 toneMapModes = listOf(0, 1, 2), maxCurvePoints = 64, isoRange = "100..6400",
                 exposureRangeNs = 13_000L to 2_500_000_000L, fpsRanges = listOf("10-30", "30-30"), aeCompensationStep = "1/6",
-                aeCompensationRange = "-24..24", oisModes = listOf(0), lensShadingApplied = true, focusCalibration = 1,
-                minFocusDistance = 10f, sessionKeys = listOf("android.control.aeTargetFpsRange"), vendorSessionKeys = 12,
+                aeCompensationRange = "-18..18", oisModes = listOf(0), lensShadingApplied = true, focusCalibration = 1,
+                minFocusDistance = 25f, sessionKeys = listOf("android.control.aeTargetFpsRange"), vendorSessionKeys = 12,
             ),
             CameraFacts(id = "0/2", failure = "IllegalArgumentException"),
         ),
@@ -86,11 +89,11 @@ class DeviceReportTest {
             "ISO range: 100..6400",
             "exposure range: 1/76923 s .. 2.5 s",
             "fps ranges: 10-30, 30-30",
-            "AE compensation: step 1/6 EV, range -24..24",
+            "AE compensation: step 1/6 EV, range -18..18",
             "OIS modes: OFF",
             "lens shading applied: yes",
             "focus calibration: APPROXIMATE",
-            "min focus distance: 10 dpt",
+            "min focus distance: 25 dpt",
             "session keys: android.control.aeTargetFpsRange, +12 vendor keys",
             "== Camera 0/2 ==",
             "not read: IllegalArgumentException",

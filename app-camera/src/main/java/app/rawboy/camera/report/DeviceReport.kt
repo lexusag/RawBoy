@@ -95,7 +95,7 @@ data class CameraFacts(
     val sessionKeys: List<String> = emptyList(),
     /** How many vendor session keys (e.g. `com.oplus.*`) the camera lists besides; counted, not named. */
     val vendorSessionKeys: Int = 0,
-    /** Reading this camera failed partway (the fields above are what was read). */
+    /** Reading this camera failed (then the fields above are left unset). */
     val failure: String? = null,
 )
 

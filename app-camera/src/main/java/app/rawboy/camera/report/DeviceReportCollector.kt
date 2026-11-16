@@ -77,11 +77,12 @@ object DeviceReportCollector {
 
     /** Each camera id, then (for a logical camera) its physical lenses as "id/physical", as `lenses()` looks at them. */
     private fun cameras(manager: CameraManager, ids: List<String>): List<CameraFacts> = ids.flatMap { id ->
+        // A camera that can't be read gives one "not read" line; the others still come out.
         val c = runCatching { manager.getCameraCharacteristics(id) }.getOrElse { return@flatMap listOf(CameraFacts(id, failure = it.toString())) }
         val logical = CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA in
             (c.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES) ?: IntArray(0))
         val physical = if (logical) c.physicalCameraIds.sorted() else emptyList()
-        listOf(facts(id, c)) + physical.map { p ->
+        listOf(runCatching { facts(id, c) }.getOrElse { CameraFacts(id, failure = it.toString()) }) + physical.map { p ->
             runCatching { facts("$id/$p", manager.getCameraCharacteristics(p)) }.getOrElse { CameraFacts("$id/$p", failure = it.toString()) }
         }
     }
@@ -128,8 +129,8 @@ object DeviceReportCollector {
             faceModes = c.get(CameraCharacteristics.STATISTICS_INFO_AVAILABLE_FACE_DETECT_MODES)?.toList().orEmpty(),
             focusCalibration = c.get(CameraCharacteristics.LENS_INFO_FOCUS_DISTANCE_CALIBRATION),
             minFocusDistance = c.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE),
-            sessionKeys = c.availableSessionKeys.map { it.name }.filter { it.startsWith("android.") }.sorted(),
-            vendorSessionKeys = c.availableSessionKeys.count { !it.name.startsWith("android.") },
+            sessionKeys = c.availableSessionKeys.orEmpty().map { it.name }.filter { it.startsWith("android.") }.sorted(),
+            vendorSessionKeys = c.availableSessionKeys.orEmpty().count { !it.name.startsWith("android.") },
         )
     }
 
