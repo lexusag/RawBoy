@@ -33,6 +33,7 @@ struct ExportDialog: View {
                     ForEach(ExportFormat.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
+                .neutralSegments()
                 switch settings.format {
                 case .jpeg:
                     Section {
@@ -52,6 +53,7 @@ struct ExportDialog: View {
                         Text("16-bit").tag(16)
                     }
                     .pickerStyle(.segmented)
+                    .neutralSegments()
                 }
                 if filmLook {
                     Picker("Film scan", selection: $settings.filmScan) {
@@ -59,6 +61,7 @@ struct ExportDialog: View {
                         Text("1.5× size").tag(true)
                     }
                     .pickerStyle(.segmented)
+                    .neutralSegments()
                     Text("Upscales the photo and grows the grain on a finer pitch, as a finer scan of the negative. The size below doesn't apply.")
                         .font(.caption).foregroundStyle(.secondary)
                 }

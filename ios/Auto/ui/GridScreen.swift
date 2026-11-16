@@ -124,6 +124,7 @@ struct GridScreen: View {
             }
             .labelsHidden()
             .pickerStyle(.segmented)
+            .neutralSegments()
             .frame(width: 180)
         }
     }
@@ -504,6 +505,7 @@ struct ExportSheet: View {
                         ForEach(ExportFormat.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                     }
                     .pickerStyle(.segmented)
+                    .neutralSegments()
                     switch s.format {
                     case .jpeg:
                         VStack(alignment: .leading) {
@@ -518,6 +520,7 @@ struct ExportSheet: View {
                             Text("16-bit").tag(16)
                         }
                         .pickerStyle(.segmented)
+                        .neutralSegments()
                     }
                     if vm.hasFilmPhotos {
                         Picker("Film scan", selection: settingsBinding.filmScan) {
@@ -525,6 +528,7 @@ struct ExportSheet: View {
                             Text("1.5× size").tag(true)
                         }
                         .pickerStyle(.segmented)
+                        .neutralSegments()
                         Text("Film photos only: upscaled, with finer grain. The size below doesn't apply to them.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
@@ -657,6 +661,7 @@ struct ResetAllSheet: View {
                 ForEach(Kind.allCases, id: \.self) { Text($0.rawValue).tag($0) }
             }
             .pickerStyle(.segmented)
+            .neutralSegments()
             .accessibilityHint("Choose what every photo goes back to")
             switch kind {
             case .look:

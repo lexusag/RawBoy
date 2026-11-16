@@ -1,3 +1,10 @@
+**RawBoy Desktop: sliders show what you changed, less amber (2026-11-16)**
+
+- **Sliders.** The Mac's sliders were the system slider, filled with amber from the left end: a slider at 0 on a −100…100 range was half amber, so untouched sliders looked edited and the one-sided ones (Denoise, Bloom) looked untouched when moved. They now draw a hairline track with a tick at the default and fill amber **only between the default and the value**; the thumb is grey at the default and white once moved, the value readout white. Still the system slider underneath (`MacSlider`: an NSSlider with its own cell), so clicks, thumb drags, the wheel, the keyboard and VoiceOver work as before; double-click resets. Rows are 30 pt (were 40), so more fits without scrolling. Pro and Auto both.
+- **Less amber.** Segmented controls (tabs, tone mapper, curve channel, Looks/Film, Pro/Auto…) select in graphite instead of amber; Pro's bar icons are white, amber only for the open tool and Export; section headings are small caps in grey, as in RawBoy Viewer's details panel. iPhone and iPad are unchanged.
+- First step of the desktop redesign from the UI review (title-bar toolbar and a sectioned inspector come next).
+- Checked: built and run on the Mac (Debug), screenshots of Pro's Light tab at defaults and with Exposure moved, Auto's photo view. Not checked: the Colour tab's hue tracks (the screenshot run opened on the Light tab), dragging by hand.
+
 **RawBoy Pro (all platforms): the open tab lasts for the session (2026-11-16)**
 
 - A fresh start of RawBoy Pro (web page load, Android, iOS, Desktop) always opens the Light tab. The tab you pick is kept while the app runs (also when a panel closes or a photo loads), but no longer saved between starts; the saved value of older versions is dropped.

@@ -645,7 +645,8 @@ struct EditorTopBar: View {
                 if let onSendToAuto { tool("square.stack.3d.up", "To Auto", "Send this photo to Auto's batch (⇧⌘A)", action: onSendToAuto) }
                 #endif
                 Spacer(minLength: 0)
-                tool("square.and.arrow.down", "Export", "Export", action: onExport)
+                // The bar's one primary action keeps the amber on the Mac.
+                tool("square.and.arrow.down", "Export", "Export", primary: true, action: onExport)
                 HelpButton("RawBoy", sections: proHelp, licences: true, isPresented: $helpShown)
                     .font(.title3)
                     .buttonStyle(BarButtonStyle())
@@ -709,12 +710,29 @@ struct EditorTopBar: View {
         .accessibilityAddTraits(mode == target ? .isSelected : [])
     }
 
-    private func tool(_ icon: String, _ label: String, _ name: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) { ToolLabel(icon: icon, label: label) }
+    private func tool(_ icon: String, _ label: String, _ name: String, primary: Bool = false,
+                      action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            #if os(macOS)
+            ToolLabel(icon: icon, label: label).foregroundStyle(primary ? Color.accentColor : Color.primary)
+            #else
+            ToolLabel(icon: icon, label: label)
+            #endif
+        }
             .buttonStyle(ToolButtonStyle(name: name, tip: $tip))
             .disabled(!enabled)
             .accessibilityLabel(name)
     }
+
+    /**
+     * The bar's icons: amber on the phones (their tint), white on the Mac, where amber marks only the open tool and
+     * Export: with every icon amber nothing stood out.
+     */
+    #if os(macOS)
+    private static let barForeground = AnyShapeStyle(Color.primary)
+    #else
+    private static let barForeground = AnyShapeStyle(.tint)
+    #endif
 
     /**
      * An icon with a word under it: the icons alone weren't obvious, and arrow.counterclockwise read as reload.
@@ -743,7 +761,7 @@ struct EditorTopBar: View {
 
         func makeBody(configuration: Configuration) -> some View {
             configuration.label
-                .foregroundStyle(.tint)
+                .foregroundStyle(EditorTopBar.barForeground)
                 .opacity(!enabled ? 0.35 : pressed ? 0.5 : 1)
                 .contentShape(Rectangle())
                 .onTapGesture { configuration.trigger() }
@@ -762,7 +780,7 @@ struct EditorTopBar: View {
 
         func makeBody(configuration: Configuration) -> some View {
             configuration.label
-                .foregroundStyle(.tint)
+                .foregroundStyle(EditorTopBar.barForeground)
                 .opacity(!enabled ? 0.35 : configuration.isPressed ? 0.5 : 1)
                 .contentShape(Rectangle())
         }

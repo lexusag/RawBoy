@@ -72,6 +72,7 @@ struct HealPanel: View {
                         Text("Choose source").tag(true)
                     }
                     .pickerStyle(.segmented)
+                    .neutralSegments()
                     .padding(.vertical, 4)
                     if working { Note("Healing…") }
                     if spots.count >= HealSpots.maxSpots { Note("That is the most strokes a photo takes; delete one to add another.") }

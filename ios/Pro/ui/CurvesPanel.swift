@@ -54,6 +54,7 @@ struct CurvesPanel: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                .neutralSegments()
                 Button("Reset") { set(ToneCurves.identity) }
                     .font(.subheadline)
                     .disabled(ToneCurves.isIdentity(points))
