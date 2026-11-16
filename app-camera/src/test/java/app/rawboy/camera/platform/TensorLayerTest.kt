@@ -24,6 +24,8 @@ class TensorLayerTest {
         assertSame(UndoIspPreviewColor, tensor.preview.color)
         // The former SRGB_CURVE, points packed near black.
         assertEquals(false, tensor.preview.curveAtEvenPoints)
+        // The former lens list: cameras in the order the camera list names them.
+        assertEquals(false, tensor.lenses.standaloneOverLogical)
     }
 
     @Test
@@ -61,6 +63,7 @@ class TensorLayerTest {
                 noise = p.noise.copy(backIsoScale = 1f, frontIsoScale = 1f, lutLumaFloor = 0f, lutColorFloor = 0f, experimentalLumaFloor = 0f, experimentalColorFloor = 0f),
                 flash = p.flash.copy(defaultGuide = 1f, referenceFNumber = 9f, defaultGainNoDistance = 1f),
                 preview = p.preview.copy(color = SrgbPreviewColor, curveAtEvenPoints = true),
+                lenses = p.lenses.copy(standaloneOverLogical = true),
             )
         }
         val pinned = tensorLayer.patch.applyTo(shifted.applyTo(tensor))

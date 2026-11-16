@@ -3,6 +3,8 @@ package app.rawboy.camera.capture
 import app.rawboy.camera.capture.LensChoice.Candidate
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import kotlin.math.abs
+import kotlin.random.Random
 
 /** The lens list of known phones' camera layouts. */
 class LensChoiceTest {
@@ -71,5 +73,47 @@ class LensChoiceTest {
         )
         assertEquals(listOf("W=0", "T=4"), labels(twoLogical))
         assertEquals(emptyList<String>(), labels(emptyList()))
+    }
+
+    /** CameraController.lenses before session 10: dedupe in found order (physical lenses last), main = first non-physical. */
+    private fun former(found: List<Candidate>): List<String> {
+        val lenses = ArrayList<Candidate>()
+        for (lens in found.sortedBy { if (it.physical) 1 else 0 }) {
+            if (lenses.none { abs(it.focal - lens.focal) < 0.12f * lens.focal }) lenses += lens
+        }
+        if (lenses.isEmpty()) return emptyList()
+        lenses.sortBy { it.focal }
+        val main = lenses.firstOrNull { !it.physical } ?: lenses.minBy { abs(it.focal - 26f) }
+        val mainIndex = lenses.indexOf(main)
+        return lenses.mapIndexed { i, c ->
+            val label = when {
+                i == mainIndex -> "W"
+                i < mainIndex -> if (mainIndex - i == 1) "UW" else "UW${mainIndex - i}"
+                else -> if (i - mainIndex == 1) "T" else "T${i - mainIndex}"
+            }
+            "$label=${c.name}"
+        }
+    }
+
+    @Test
+    fun withoutTheFlagTheSameCamerasAreListedAsBefore() {
+        val random = Random(10)
+        repeat(2000) {
+            val found = ArrayList<Candidate>()
+            for (id in 0 until random.nextInt(1, 4)) {
+                val logical = random.nextBoolean()
+                found += Candidate("$id", physical = false, logical = logical, focal = 10f + random.nextInt(0, 12) * 10f)
+                if (logical) repeat(random.nextInt(0, 4)) { p ->
+                    found += Candidate("$id/${10 + p}", physical = true, logical = false, focal = 10f + random.nextInt(0, 12) * 10f)
+                }
+            }
+            val now = labels(found)
+            val before = former(found)
+            // The same cameras, always.
+            assertEquals("$found", before.map { it.substringAfter('=') }.sorted(), now.map { it.substringAfter('=') }.sorted())
+            // The same labels unless several cameras open on their own (only the main lens rule changed, decision 36).
+            if (LensChoice.choose(found, false).lenses.count { !it.candidate.physical } <= 1) assertEquals("$found", before, now)
+        }
+        assertEquals(former(pixelBack), labels(pixelBack))
     }
 }

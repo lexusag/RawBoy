@@ -31,15 +31,15 @@ object LensChoice {
 
     /**
      * One entry per lens, then labels. Cameras with the same focal length (within 12%) are the same lens; the first in
-     * this order wins: stand-alone cameras, then logical ones (the other way round unless [standaloneOverLogical]),
-     * each in [found]'s order, then physical lenses. The main lens is the logical camera if exactly one is listed (the
-     * lens it starts on), else the one nearest 26 mm.
+     * this order wins: the cameras that open on their own in [found]'s order (with [standaloneOverLogical], stand-alone
+     * ones before logical ones), then physical lenses. The main lens is the logical camera if exactly one is listed (the
+     * lens it starts on), else the only camera that opens on its own, else the one nearest 26 mm.
      */
     fun choose(found: List<Candidate>, standaloneOverLogical: Boolean): Result {
         val order = found.sortedBy {
             when {
                 it.physical -> 2
-                it.logical == standaloneOverLogical -> 1
+                standaloneOverLogical && it.logical -> 1
                 else -> 0
             }
         }
@@ -52,8 +52,9 @@ object LensChoice {
         }
         if (kept.isEmpty()) return Result(emptyList(), skipped)
         kept.sortBy { it.focal }
-        val logical = kept.filter { it.logical }
-        val main = logical.singleOrNull() ?: kept.minBy { abs(it.focal - 26f) }
+        val main = kept.filter { it.logical }.singleOrNull()
+            ?: kept.filter { !it.physical }.singleOrNull()
+            ?: kept.minBy { abs(it.focal - 26f) }
         val mainIndex = kept.indexOf(main)
         val lenses = kept.mapIndexed { i, c ->
             val label = when {

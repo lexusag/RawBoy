@@ -21,6 +21,8 @@ val tensorLayer = PlatformLayer(
     matches = { it.chip == ChipVendor.TENSOR },
     patch = ispBlackAsPixel9Pro + previewColorFromResult + PlatformPatch { p ->
         p.copy(
+            // The Pixel 9 Pro has one logical camera per side and no stand-alone duplicates: lens order as found.
+            lenses = p.lenses.copy(standaloneOverLogical = false),
             // Everything on the Pixel 9 Pro was tuned with the curve's points packed near black.
             preview = p.preview.copy(curveAtEvenPoints = false),
             still = p.still.copy(

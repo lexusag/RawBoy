@@ -14,19 +14,29 @@ class OnePlusLayerTest {
 
     @Test
     fun appliesByManufacturer() {
-        assertEquals(listOf("neutral", "qualcomm", "oneplus"), PlatformRegistry.resolve(onePlus11).layers)
-        assertEquals(listOf("neutral", "qualcomm"), PlatformRegistry.resolve(onePlus11.copy(manufacturer = "Xiaomi")).layers)
+        assertEquals(listOf("neutral", "oneplus"), PlatformRegistry.resolve(onePlus11).layers)
+        assertEquals(listOf("neutral"), PlatformRegistry.resolve(onePlus11.copy(manufacturer = "Xiaomi")).layers)
         assertEquals(listOf("neutral", "oneplus"), PlatformRegistry.resolve(onePlus11.copy(chip = ChipVendor.MEDIATEK)).layers)
     }
 
     @Test
-    fun listsStandaloneCameras() {
+    fun listsStandaloneCamerasAndSendsTheCurveAtEvenPoints() {
         assertTrue(PlatformRegistry.resolve(onePlus11).lenses.standaloneOverLogical)
+        assertTrue(PlatformRegistry.resolve(onePlus11).preview.curveAtEvenPoints)
         assertEquals(emptyList<String>(), PlatformRegistry.resolve(onePlus11).problems())
     }
 
     @Test
-    fun othersKeepTheLogicalCamera() {
+    fun othersKeepTheirLensOrderAndCurve() {
+        for (p in listOf(
+            neutralPlatform,
+            PlatformRegistry.stack(listOf(tensorLayer)),
+            PlatformRegistry.resolve(onePlus11.copy(manufacturer = "Xiaomi")), // another Snapdragon phone
+            PlatformRegistry.resolve(onePlus11.copy(manufacturer = "samsung")),
+        )) {
+            assertFalse(p.layers.toString(), p.lenses.standaloneOverLogical)
+            assertFalse(p.layers.toString(), p.preview.curveAtEvenPoints)
+        }
         assertFalse(neutralPlatform.lenses.standaloneOverLogical)
         assertFalse(PlatformRegistry.stack(listOf(tensorLayer)).lenses.standaloneOverLogical)
         assertFalse(PlatformRegistry.resolve(onePlus11.copy(manufacturer = "samsung")).lenses.standaloneOverLogical)
@@ -35,6 +45,7 @@ class OnePlusLayerTest {
     @Test
     fun changesOnlyItsOwnFields() {
         val p = onePlusLayer.patch.applyTo(neutralPlatform)
-        assertEquals(neutralPlatform.copy(lenses = p.lenses), p)
+        assertEquals(neutralPlatform.copy(lenses = p.lenses, preview = p.preview), p)
+        assertEquals(neutralPlatform.preview.color, p.preview.color)
     }
 }
