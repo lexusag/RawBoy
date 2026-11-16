@@ -97,7 +97,12 @@ struct LookSelector: View {
                 window(geo.size, picture, visible)
             }
         }
+        // Drags are measured in the preview's space, which stays put: in the window's own space, which moves with the
+        // drag, every move shifted the origin it was measured from and the window jumped back and forth.
+        .coordinateSpace(name: Self.space)
     }
+
+    private static let space = "lookSelector"
 
     // MARK: - Geometry (points in the preview)
 
@@ -195,7 +200,7 @@ struct LookSelector: View {
             }
         }
         .gesture(
-            DragGesture(minimumDistance: 0)
+            DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.space))
                 .onChanged { g in
                     if dragStart == nil { dragStart = CGPoint(x: left, y: top) }
                     guard hypot(g.translation.width, g.translation.height) >= Self.dragSlop, let s = dragStart else { return }
@@ -204,8 +209,10 @@ struct LookSelector: View {
                 .onEnded { g in
                     dragStart = nil
                     // A press that stayed put picks the stripe under it (not on the bar).
-                    guard hypot(g.translation.width, g.translation.height) < Self.dragSlop, g.location.y > 30 else { return }
-                    let i = min(shown.count - 1, max(0, Int(g.location.x / size.width * CGFloat(shown.count))))
+                    let x = g.location.x - left
+                    let y = g.location.y - top
+                    guard hypot(g.translation.width, g.translation.height) < Self.dragSlop, y > 30 else { return }
+                    let i = min(shown.count - 1, max(0, Int(x / size.width * CGFloat(shown.count))))
                     vm.setLook(Self.withLook(vm.state.params, shown[i]))
                     onClose()
                 })
@@ -295,7 +302,7 @@ struct LookSelector: View {
                 Self.saveSize(nil)
             }
             .highPriorityGesture(
-                DragGesture(minimumDistance: 1)
+                DragGesture(minimumDistance: 1, coordinateSpace: .named(Self.space))
                     .onChanged { g in
                         let start = resizeStart ?? zone(visible)
                         if resizeStart == nil { resizeStart = start }
