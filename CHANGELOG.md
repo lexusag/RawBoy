@@ -1,3 +1,7 @@
+**RawBoy Desktop: Pro's crop starts on the photo's own shape (2026-11-17)**
+
+- **Crop & rotate in Pro opens on Original**: the frame is locked to the photo's own proportions and orientation (a portrait photo crops portrait), so dragging a corner keeps its shape, as Auto's crop already did. A photo that already has a crop opens on Free, so the tool never reshapes an earlier crop; Reset crop goes back to Original. Pick Free (or any other shape) to unlock it. Shared Swift code, so iOS Pro gets it too; web and Android Pro still start on Free. Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.
+
 **RawBoy Desktop: Interface size for the whole app (2026-11-17)**
 
 - **Settings › Interface size now sizes every mode**, not only Browse: Pro's bar, side panel and filmstrip, Auto's grid and sidebar, its photo view's bar and panel, and the Packer window are drawn at the chosen 85, 100, 115, 130 or 150 %, and follow a change at once. The side panels widen with it (still at most 45% of the window); the photo itself is never scaled, so it stays sharp. The window's own toolbar and the sheets keep the system size. `view/InterfaceScale.swift` (`interfaceScaled()`, the Viewer's method: laid out smaller, then scaled), `DesktopModel.interfaceScale` reads the Viewer's `app.uiScale` under `desktop.browse.`. Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.

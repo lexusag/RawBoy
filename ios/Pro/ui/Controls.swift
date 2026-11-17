@@ -716,7 +716,7 @@ struct GeometryPanel: View {
             HStack {
                 Text("Crop & rotate").font(.headline)
                 Spacer()
-                Button("Reset crop", action: onResetCrop).disabled(params.crop.isFull && aspect == .free)
+                Button("Reset crop", action: onResetCrop).disabled(params.crop.isFull && aspect == .original)
                 Button("Done", action: onDone).fontWeight(.semibold)
             }
             HStack(spacing: 12) {
