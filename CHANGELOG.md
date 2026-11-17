@@ -1,3 +1,7 @@
+**RawBoy Desktop: Pro opens a photo as Auto developed it (2026-11-17)**
+
+- A photo that is in Auto's batch and has no saved Pro edits (`rawboy:Develop`) now opens in Pro with its Auto develop (look or preset, adjustments) as the starting edits, from Browse's E, the filmstrip's arrows or the Open panel as well as from Edit in Pro. So the pipeline Browse → Auto → presets → Pro (heal strokes, blemishes) no longer restarts from the bare as-shot develop, and the strokes Pro saves are kept in the photo's sidecar. Once Pro has saved edits, its sidecar wins. Not compiled here (no Swift toolchain in the cloud session): CI's `desktop` job builds it.
+
 **RawBoy Desktop: one RawBoy Auto entry in Browse's photo menus (2026-11-17)**
 
 - **"Send to ▸" no longer repeats RawBoy Auto.** In the viewer's, the grid's and the list's right-click menus RawBoy Auto was at the top and again inside "Send to ▸". Now the RawBoy entries stay on top and "Send to ▸" (other apps) sits right under them; the viewer's menu gets the same submenu instead of loose "Send to <app>" items. Folder menus keep RawBoy Auto inside "Send to ▸". Comes with RawBoy Viewer v0.2.7 (PR 58); the pin moves from 0.2.6 to 0.2.7. Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.

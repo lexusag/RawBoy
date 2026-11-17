@@ -5,6 +5,7 @@ import SwiftUI
 import UniformTypeIdentifiers
 import ViewerUI
 import struct RawBoyBrowseKit.PhotoSidecar
+import enum RawBoyBrowseKit.XmpSidecar
 
 /**
  * The window's three ways of working: one photo in the full editor, a batch developed automatically, or browsing a
@@ -162,7 +163,19 @@ final class DesktopModel: ObservableObject {
         mode = .pro
         NSDocumentController.shared.noteNewRecentDocumentURL(url)
         filmstrip.show(url)
-        vm.open(url, initial: initial)
+        vm.open(url, initial: initial ?? autoDevelopForPro(url))
+    }
+
+    /**
+     * A photo in Auto's batch that Pro hasn't edited yet (no `rawboy:Develop` in its sidecar) opens in Pro as Auto shows it
+     * (look or preset, adjustments), so fixing blemishes there doesn't start from the bare as-shot develop. Once Pro has saved
+     * edits, its sidecar wins. nil otherwise.
+     */
+    private func autoDevelopForPro(_ url: URL) -> DevelopParams? {
+        guard let params = auto.photo(url.path)?.params else { return nil }
+        let text = PhotoSidecar(photo: url).readText()
+        if let text, XmpSidecar.readDevelop(text) != nil { return nil }
+        return params
     }
 
     /** ← → in Pro: the previous or next photo in the filmstrip. */
