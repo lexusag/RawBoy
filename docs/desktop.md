@@ -4,7 +4,7 @@ RawBoy's editor as a native Mac app (SwiftUI + Metal, the iOS engine). Phase 1 i
 
 ## Photos and sidecars
 - Open with ⌘O, drop a file on the window, or Finder's Open With (which opens Browse). RAW, HEIC, JPEG, PNG and TIFF open in place (never copied).
-- Edits are written to the photo's XMP sidecar as you work: `rawboy:Develop`, the same JSON as RawBoy on the web. The file is NAME.xmp next to the photo, else darktable's NAME.EXT.xmp, else a new NAME.xmp. Only that field changes; everything else in an existing sidecar is kept. Writes happen 800 ms after the last change, when another photo opens, when the app goes to the background and on quit.
+- Edits are written to the photo's XMP sidecar as you work: `rawboy:Develop`, the same JSON as RawBoy on the web. The file is NAME.xmp next to the photo, else darktable's NAME.EXT.xmp, else a new NAME.xmp. Only that field changes; everything else in an existing sidecar is kept. Writes happen 800 ms after the last change, when another photo opens, when the app goes to the background and on quit. Quitting (or closing the window) while an export, Auto Dev, Auto's batch or the Packer is running, or after a sidecar write failed, asks first (Cancel / Quit Anyway; `QuitWork`).
 - A photo with a sidecar reopens with its edits. One without takes the previous photo's edits (as on the phone). RawBoy Viewer's rotation (`tiff:Orientation`) and crop are read; RawBoy's own turn wins.
 - Healing brush strokes are saved in the sidecar too; web-only values (portrait retouch and others the Mac app doesn't know) are kept untouched.
 
@@ -46,7 +46,7 @@ from the Viewer's libraries (`lexusag/RawBoyImageViewer`: RawBoyBrowseKit, Viewe
 `AppModel` (`DesktopModel.browse`) with `ViewerOptions`: the menu bar and Dock stay (`hidesDockAndMenuBar` off), the viewer is
 a view over the grid (`viewerInHostWindow`), and its preferences are kept under `desktop.browse.` (`ViewerSettings.store`).
 ViewerUI installs its own key monitor while Browse shows; Desktop's `KeyboardShortcuts` only takes ⌘1/⌘2 there. The Browse
-menu is the Viewer's Photo menu (`ViewerPhotoCommands`), on while Browse shows. `Desktop/DesktopHandOff.swift`
+menu is the Viewer's Photo menu (`ViewerPhotoCommands`), on while Browse shows. Browse's settings (the Viewer's Settings window, `ViewerSettingsRoot`) are the app's Settings… (⌘,); they apply to Browse only. `Desktop/DesktopHandOff.swift`
 implements the Viewer's `PhotoHandOff` in-process: E in the viewer opens the photo in Pro (whichever mode was showing; Auto's
 batch is kept), Send to RawBoy Auto adds photos or folders to Auto's batch as Looks, Film or As is. Real previews (R, and Compare's) are the
 engine's as-shot develop (`Desktop/EngineRealPreview.swift`, a `RealPreviewProvider` given to ViewerUI through
