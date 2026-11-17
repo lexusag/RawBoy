@@ -14,11 +14,14 @@ public struct LutLibrary: Equatable, Sendable {
     public var user: [LutEntry] = []
     /** Always true on iOS: the user's folder is the app's own Documents/LUTs (visible in the Files app). */
     public var userFolderGranted: Bool = true
+    /** Where the user's LUTs are read from (RawBoy Desktop names it and reveals it in Finder). */
+    public var folder: URL?
 
-    public init(bundled: [LutEntry] = [], user: [LutEntry] = [], userFolderGranted: Bool = true) {
+    public init(bundled: [LutEntry] = [], user: [LutEntry] = [], userFolderGranted: Bool = true, folder: URL? = nil) {
         self.bundled = bundled
         self.user = user
         self.userFolderGranted = userFolderGranted
+        self.folder = folder
     }
 }
 

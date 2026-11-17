@@ -38,8 +38,7 @@ Biggest first:
 
 1. **Auto's export file names** (web 1.14.3): Desktop always writes `NAME-auto.jpg`.
 2. **Auto's Retouch slider** (web 1.12.0): Desktop's Auto has no portrait retouch adjustment.
-3. **Your own LUTs**: the Mac has no way to reach its LUT folder (a hidden Application Support folder; the panel still
-   says "Files app"), and no Choose folder or drop, as the web has.
+3. ~~**Your own LUTs**~~: done 2026-11-17 (folder shown, Add files, Show in Finder, Choose folder, drop).
 4. **Auto's keys** (web 1.1.1 to 1.15.10): Space / Backspace, Delete and C are missing on Desktop.
 5. **ISO on every Auto photo** (web ≤1.1.1) and **time left on Export all** (web 1.15.1).
 6. **Preset group Denoise & sharpening** (web 1.1.3): Desktop (and iOS, Android) can't keep denoise apart from Detail.
@@ -72,7 +71,7 @@ none of the web's 74; Kotlin lacks `healSpots`, `lumaContrast`, `portraitRetouch
 | Anamorphic flare (colours, Ghosts) | 1.9.2 | ✓ | ✓ 1.17.0 | ✓ | ✓ | Magenta coating and Ghosts: 1.10.1 |
 | Grain (size, roughness, colour) | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | Crisper grain 1.14.0 |
 | LUTs: bundled | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
-| **LUTs: your own** | ≤1.1.1 | ✓ choose folder, or drop `.cube`/`.png` on the page | ◐ | ✓ Files › RawBoy › LUTs | ✓ choose folder | **Gap.** Desktop reads `~/Library/Application Support/RawBoy Desktop/LUTs`, but nothing in the app opens, names or chooses it (no Reveal button, no folder picker, no drop; the panel's note says "Files app") |
+| LUTs: your own | ≤1.1.1 | ✓ choose folder, or drop `.cube`/`.png` on the page | ✓ (after 1.18.3): Add files, Show in Finder, Choose folder (remembered), drop on the panel or window; the folder's path under the list | ✓ Files › RawBoy › LUTs | ✓ choose folder | Desktop copies added files into its folder (`~/Library/Application Support/RawBoy Desktop/LUTs` unless you choose one); a `.png` dropped on the window counts as a LUT only when HaldCLUT-shaped (square, side a whole cube), else it opens as a photo |
 | Lens: embedded DNG profile, Distortion, Crop, Vignetting, CA | ≤1.1.1; CA 1.7.2 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
 | Lens: Horizontal distortion | 1.9.4 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
 | Lens: Fisheye, Straighten fisheye, circle finder | 1.13.0 | ✓ | ✓ 1.17.0 | ✓ 1.13.1 | ✓ 1.13.1 | |
@@ -222,7 +221,7 @@ most cases). "Check" = confirm in the app before building, because I could only 
 |---|---|---|---|---|
 | 1 | **Auto: export file name template** | 1.14.3 | Auto is the batch tool; fixed `NAME-auto.jpg` collides across folders and can't carry date or look | Small: `NameTemplate.ts` is pure logic (+ its test); Auto's ExportSheet takes a text field |
 | 2 | **Auto: Retouch slider** | 1.12.0 | Desktop already has the engine (`PortraitRetouch.swift`) and Pro's slider; Auto's `Adjustments` lacks `retouch` (also in `AutoSidecar`) | Small to medium: a field in `Adjustments`, `LookApplier`, the sidecar, the batch export's `retouchMapFor`, a slider; bump `AnalysisCache` only if it touches the analysis |
-| 3 | **Your own LUTs: a reachable folder** | ≤1.1.1 | A Mac user can't find the folder; "Files app" is wrong there. Needs Reveal in Finder, optionally a folder picker (remembered) and dropping `.cube` / `.png` on the window | Small |
+| 3 | ~~Your own LUTs: a reachable folder~~ | ≤1.1.1 | Done 2026-11-17: path shown, Add files, Show in Finder, Choose folder, drop | — |
 | 4 | **Auto keys: Space / Backspace, Delete, C** | ≤1.1.1; 1.15.10 | Muscle memory from the web; culling a batch is keyboard work | Small: `KeyboardShortcuts.handleAuto` + menu items |
 | 5 | **Auto: ISO on each photo; time left on Export all** | ≤1.1.1; 1.15.1 | Judging noise without zooming; knowing if a 300-photo export is 4 or 40 minutes | Small |
 | 6 | **Preset group Denoise & sharpening** | 1.1.3 | Without it a Pro preset applied in Auto either leaves noise to Auto (Detail unticked) or overrides the measured values | Small: `PresetGroup.denoise` (Swift and Kotlin), the "Detail-only presets keep theirs" migration (see `Presets.ts`) |
