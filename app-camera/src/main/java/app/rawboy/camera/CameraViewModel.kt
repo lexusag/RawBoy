@@ -573,8 +573,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     /** The viewfinder's gain hasn't been set from a frame of the lens started last ([ViewfinderGain]). */
     private var scaleFromStart = true
 
-    /** Whether the last viewfinder gain showed a long exposure's frames ahead of the shutter (onViewfinderBase). */
-    private var longGainOn = false
+    /** Whether a long exposure was running at the last viewfinder gain (onViewfinderBase). */
+    private var wasExposing = false
 
     @Volatile
     private var live: Live? = null
@@ -891,7 +891,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         // Under STILL_WHITE_BALANCED the frames decide, not the shutter: AE frames show what the long exposure's frames
         // will give, its own manual frames (while it runs, `CameraController.longExposureDng`) are already that.
         val whiteBalanced = platform.preview.level == PreviewLevel.STILL_WHITE_BALANCED
-        val aeFrames = if (whiteBalanced) controller.longExposureProgress.value == null else activeCaptures == 0
+        val exposing = controller.longExposureProgress.value != null
+        val aeFrames = if (whiteBalanced) !exposing else activeCaptures == 0
         val longGain = if (info?.hiRes != true && settings.flash == FlashMode.OFF && aeFrames && (state?.exposureNs ?: 0L) < 250_000_000L) {
             settings.longExposureSpec(sceneKey(), platform.preview.level, neutralFloor(state))?.let { controller.longExposureGainOverPreview(it) }
         } else null
@@ -904,9 +905,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         if (state != null) scaleFromStart = false
         // There, a long exposure's start and end change the frames and the gain together (the gain shown before the
         // shutter is the frames' own): a fade would show the step it is meant to hide, up to 1.7 EV for several seconds
-        // on the OnePlus 11, whose viewfinder updates every ~1.4 s while the exposure runs.
-        val longSwitched = whiteBalanced && (longGain != null) != longGainOn
-        longGainOn = longGain != null
+        // on the OnePlus 11, whose viewfinder updates every ~1.4 s while the exposure runs. Turning Long exposure on or
+        // off changes only the gain, so that still fades (with the live exposure following).
+        val longSwitched = whiteBalanced && exposing != wasExposing
+        wasExposing = exposing
         val scale = if (!first && !longSwitched && f.scale > 0f && target > 0f) f.scale * (target / f.scale).coerceIn(1f / SCALE_FADE_STEP, SCALE_FADE_STEP) else target
         // The raw's colours for the ISP's current white balance and colour matrix (they follow AWB).
         val color = state?.previewColor
