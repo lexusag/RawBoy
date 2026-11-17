@@ -200,6 +200,8 @@ struct DesktopCommands: Commands {
             Button("Healing Brush") { model.commands.send(.toggleMode(.heal)) }.disabled(!ready)
             Button("Light Leaks & Effects") { model.commands.send(.toggleMode(.leaks)) }.disabled(!ready)
             Button("Presets") { model.commands.send(.toggleMode(.presets)) }.disabled(!proMode || state.busy)
+            Button("Copy Previous Photo's Settings") { model.commands.send(.copyPrevious) }
+                .keyboardShortcut("c", modifiers: .shift).disabled(!ready || !model.vm.canCopyPrevious)
             Divider()
             Button("Rotate Left") { model.vm.rotate(-1) }.keyboardShortcut("[", modifiers: .command).disabled(!ready)
             Button("Rotate Right") { model.vm.rotate(1) }.keyboardShortcut("]", modifiers: .command).disabled(!ready)

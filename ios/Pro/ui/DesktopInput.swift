@@ -32,6 +32,8 @@ enum EditorAction: Equatable {
     case looksPage(Int)
     /** Opens the Look selector at a point of the preview (points; nil = its centre). Debug probes. */
     case openLooks(CGPoint?)
+    /** Copy the previous photo's settings onto this one (⇧C). */
+    case copyPrevious
     /** The "?" sheet. */
     case help
 }

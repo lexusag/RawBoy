@@ -167,6 +167,11 @@ final class KeyboardShortcuts {
             model.openNeighbour(key == .left ? -1 : 1)
             return nil
         }
+        // ⇧C: Copy previous (C alone is Crop & rotate).
+        if flags == [.shift], key == .c {
+            commands.send(.copyPrevious)
+            return nil
+        }
         switch key {
         case .f: commands.send(.togglePhotoOnly)
         case .z: commands.send(.zoom100AtPointer)

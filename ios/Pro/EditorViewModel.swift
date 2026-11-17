@@ -148,7 +148,15 @@ final class EditorViewModel: ObservableObject {
         Task {
             do {
                 let previous = state
-                let opened = try await session.open(url) { initial ?? persistence?.restore(url, defaults: $0) ?? carryOverEdits(previous, $0) }
+                #if os(macOS)
+                // RawBoy Desktop starts every photo from its own sidecar or as shot; ⇧C / the bar's Copy takes the previous photo's edits.
+                let opened = try await session.open(url) { initial ?? persistence?.restore(url, defaults: $0) ?? $0 }
+                if let name = previous.fileName, name != url.lastPathComponent {
+                    previousEdits = PreviousEdits(name: name, params: previous.params, defaults: previous.defaults)
+                }
+                #else
+                let opened = try await session.open(url) { initial ?? persistence?.restore(url, defaults: $0) ?? carryOverEdits(previous.params, previous.defaults, $0) }
+                #endif
                 if let old = source, old != url { Imports.delete(old) }
                 source = url
                 state.loading = false
@@ -243,10 +251,9 @@ final class EditorViewModel: ObservableObject {
      * Edits from the previous file carry over to the next one. White balance only
      * carries over if the user changed it; otherwise the new file's as-shot WB is used.
      */
-    private func carryOverEdits(_ previous: EditorState, _ newDefaults: DevelopParams) -> DevelopParams {
-        if previous.fileName == nil { return newDefaults }
+    private func carryOverEdits(_ previousParams: DevelopParams, _ previousDefaults: DevelopParams, _ newDefaults: DevelopParams) -> DevelopParams {
         // Rotation, flips, straightening, perspective, crop, masks, light leaks, light effects and healing strokes belong to one photo.
-        var p = previous.params
+        var p = previousParams
         p.rotation = newDefaults.rotation
         p.flipHorizontal = newDefaults.flipHorizontal
         p.flipVertical = newDefaults.flipVertical
@@ -259,12 +266,33 @@ final class EditorViewModel: ObservableObject {
         p.fx = newDefaults.fx
         p.healSpots = newDefaults.healSpots
         p = p.withCrop(newDefaults.crop)
-        let wbEdited = p.temperature != previous.defaults.temperature || p.tint != previous.defaults.tint
+        let wbEdited = p.temperature != previousDefaults.temperature || p.tint != previousDefaults.tint
         if !wbEdited {
             p.temperature = newDefaults.temperature
             p.tint = newDefaults.tint
         }
         return p
+    }
+
+    /** The edits of the photo that was open before this one (RawBoy Desktop: what Copy previous takes). */
+    struct PreviousEdits {
+        let name: String
+        let params: DevelopParams
+        let defaults: DevelopParams
+    }
+
+    private(set) var previousEdits: PreviousEdits?
+
+    var canCopyPrevious: Bool { previousEdits != nil && state.hasImage && !state.busy }
+
+    /**
+     * Copy previous (⇧C): gives this photo the previous photo's edits, as they used to carry over by themselves. Geometry,
+     * masks, leaks, effects and healing stay this photo's own; white balance moves only if it had been changed. One undo step.
+     */
+    func copyPrevious() {
+        guard canCopyPrevious, let previous = previousEdits else { return }
+        commit(carryOverEdits(previous.params, previous.defaults, state.defaults), force: true)
+        message = "Copied the settings of \(previous.name)"
     }
 
     /** A slider or drag: quick changes in a row are one undo step. */
