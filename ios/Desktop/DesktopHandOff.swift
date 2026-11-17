@@ -17,8 +17,12 @@ struct DesktopHandOff: PhotoHandOff {
 
     var canSendToAuto: Bool { true }
 
+    /**
+     * As is from Browse brings the photos with their sidecars and nothing else: the crop, turn and RawBoy edits saved
+     * beside them (or their own Auto settings), no measured denoise, preset or lens preset. Looks and Film develop as usual.
+     */
     func sendToAuto(_ urls: [URL], as how: AutoImport) async throws {
-        model.addToAuto(urls, as: ImportMode(rawValue: how.rawValue))
+        model.addToAuto(urls, as: ImportMode(rawValue: how.rawValue), sidecarOnly: how == .plain)
     }
 
     func openInEditor(_ url: URL) async -> Bool {
