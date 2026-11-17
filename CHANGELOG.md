@@ -1,3 +1,7 @@
+**RawBoy Desktop: the wheel steps film stocks (2026-11-16)**
+
+- **Wheel over Stock or the tone mapper** (Pro, Film on) moves to the next or previous stock, one per mouse click, as on the web; a trackpad swipe steps at its start and then every 40 points, so it passes a few stocks, not dozens. The panel doesn't scroll under the pointer there, but a wheel that was just scrolling the panel keeps scrolling it. `WheelStepper` (engine, tested in `WheelStepperTests`) is the Swift port of web's `stepWheel`. Not compiled or tried by hand when written (no Mac): CI is the first build.
+
 **RawBoy Desktop: Pro's before/after slider (2026-11-16)**
 
 - **Y, or View › Before/After Slider.** A divider over the photo: the as-shot render (with the edit's rotation, flips and crop, as Compare) on its left, the edit on its right, labelled. Drag it anywhere; it stays between 2% and 98% and keeps its place from photo to photo. The as-shot half is developed once and only drawn clipped while you drag or move sliders. On the whole-photo view only (zoomed in or inside a tool it steps aside); press-and-hold and `\` Compare still show the whole photo as shot.
