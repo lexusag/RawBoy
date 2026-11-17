@@ -105,7 +105,7 @@ struct EditorScreen: View {
                              onReset: vm.reset, onAuto: vm.applyAuto,
                              canUndo: state.canUndo, canRedo: state.canRedo, onUndo: vm.undo, onRedo: vm.redo,
                              onExport: { showExport = true }, onSendToAuto: commands.sendToAuto,
-                             onCopyPrevious: commands.sendToAuto == nil ? nil : vm.copyPrevious, canCopyPrevious: vm.canCopyPrevious,
+                             onCopyPrevious: copyPreviousAction, canCopyPrevious: vm.canCopyPrevious,
                              looksArmed: looksArmed, onLooks: toggleLooks, helpShown: $showHelp)
             }
             // Controls under the photo in portrait, beside it in landscape.
@@ -136,6 +136,12 @@ struct EditorScreen: View {
             pickingWhite = false
             autoWb = false
         }
+    }
+
+    /** RawBoy Desktop's bar button (nil elsewhere: the host sets `sendToAuto` only on the Mac). */
+    private var copyPreviousAction: (() -> Void)? {
+        if commands.sendToAuto == nil { return nil }
+        return { vm.copyPrevious() }
     }
 
     // MARK: - Menu and keyboard actions (RawBoy Desktop)
