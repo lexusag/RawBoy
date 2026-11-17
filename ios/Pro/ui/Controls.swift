@@ -1,5 +1,9 @@
 import RawBoyEngine
 import SwiftUI
+#if os(macOS)
+import AppKit
+import UniformTypeIdentifiers
+#endif
 
 /** The slider tabs: Light, Color, Detail, LUTs, Lens (Android's ControlsPanel). */
 struct ControlsPanel: View {
@@ -96,7 +100,8 @@ struct ControlsPanel: View {
                     case 0: light
                     case 1: color
                     case 2: detail
-                    case Self.lutsTab: LutPanel(params: params, luts: luts, loading: lutLoading, onChange: onChange, onSelect: onSelectLut)
+                    case Self.lutsTab: LutPanel(params: params, luts: luts, loading: lutLoading, onChange: onChange, onSelect: onSelectLut,
+                                 onLutsChanged: onLutsTabShown)
                     default: lensPanel
                     }
                 }
@@ -440,7 +445,8 @@ extension ControlsPanel {
                 // Film replaces the user LUT (kept, not rendered), so the section goes while Film is on, as the phones' tab.
                 if params.film == nil {
                     section("LUT", reset: { p, d in p.lut = d.lut; p.lutAmount = d.lutAmount }) {
-                        LutPanel(params: params, luts: luts, loading: lutLoading, onChange: onChange, onSelect: onSelectLut)
+                        LutPanel(params: params, luts: luts, loading: lutLoading, onChange: onChange, onSelect: onSelectLut,
+                                 onLutsChanged: onLutsTabShown)
                             .onAppear(perform: onLutsTabShown)  // rescan the user's folder when opened
                     }
                 }
@@ -483,8 +489,32 @@ private struct LutPanel: View {
     let loading: Bool
     let onChange: (DevelopParams) -> Void
     let onSelect: (String?) -> Void
+    /** Rescans the user's folder (after an import or a new folder). */
+    var onLutsChanged: () -> Void = {}
+    #if os(macOS)
+    // Not private: a private stored property would make the memberwise init private too.
+    @State var dropping = false
+    @State var note: String?
+    #endif
 
     var body: some View {
+        #if os(macOS)
+        VStack(alignment: .leading, spacing: 0) { list }
+            .overlay {
+                if dropping {
+                    RoundedRectangle(cornerRadius: 6).strokeBorder(Color.accentColor, lineWidth: 2).allowsHitTesting(false)
+                }
+            }
+            .onDrop(of: [.fileURL], isTargeted: $dropping) { providers in
+                Task { @MainActor in importLuts(await LutDrop.urls(providers)) }
+                return !providers.isEmpty
+            }
+        #else
+        list
+        #endif
+    }
+
+    @ViewBuilder private var list: some View {
         if params.lut != nil {
             ParamSlider(label: "Strength", value: params.lutAmount, range: 0...100, defaultValue: 100, format: formatPlain) { v in
                 var p = params
@@ -502,6 +532,23 @@ private struct LutPanel: View {
                 }
             }
         }
+        #if os(macOS)
+        SectionLabel("Your LUTs")
+        if luts.user.isEmpty {
+            Note("Add .cube or HaldCLUT .png files, drop them here or on the window, or put them in the folder below.")
+        }
+        ForEach(luts.user, id: \.id) { e in
+            LutRow(name: e.name, selected: params.lut == e.id, loading: loading && params.lut == e.id) { onSelect(e.id) }
+                .contextMenu {
+                    if let folder = luts.folder {
+                        Button("Show in Finder") {
+                            NSWorkspace.shared.activateFileViewerSelecting([folder.appendingPathComponent(String(e.id.dropFirst("file:".count)))])
+                        }
+                    }
+                }
+        }
+        folderControls
+        #else
         SectionLabel("Your LUTs · Files › RawBoy › LUTs")
         if luts.user.isEmpty {
             Note("Put .cube or HaldCLUT .png files into RawBoy's LUTs folder in the Files app.")
@@ -509,8 +556,101 @@ private struct LutPanel: View {
         ForEach(luts.user, id: \.id) { e in
             LutRow(name: e.name, selected: params.lut == e.id, loading: loading && params.lut == e.id) { onSelect(e.id) }
         }
+        #endif
+    }
+
+    #if os(macOS)
+    /** Where the user's LUTs live, with Add files, Show in Finder and Choose folder (the web's Add files / Choose folder). */
+    @ViewBuilder private var folderControls: some View {
+        if let folder = luts.folder {
+            Text((folder.path as NSString).abbreviatingWithTildeInPath)
+                .font(.caption).foregroundStyle(.secondary).lineLimit(2).truncationMode(.middle)
+                .textSelection(.enabled)
+                .help(folder.path)
+                .padding(.top, 6)
+        }
+        if let note {
+            Note(note)
+        }
+        HStack(spacing: 8) {
+            Button("Add files…", action: addFiles)
+                .help("Copies .cube or HaldCLUT .png files into the LUT folder")
+            Button("Show in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([LutRepository.userFolder])
+            }
+            .help("Opens the LUT folder: files put there show up here")
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .padding(.top, 4)
+        HStack(spacing: 8) {
+            Button(LutRepository.customFolder == nil ? "Choose folder…" : "Change folder…", action: chooseFolder)
+                .help("Reads your LUTs from a folder of your own instead")
+            if LutRepository.customFolder != nil {
+                Button("Use RawBoy's folder") {
+                    LutRepository.setUserFolder(nil)
+                    note = nil
+                    onLutsChanged()
+                }
+                .help((LutRepository.defaultUserFolder.path as NSString).abbreviatingWithTildeInPath)
+            }
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .padding(.top, 4)
+    }
+
+    private func addFiles() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = LutDrop.types
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.message = "Choose .cube or HaldCLUT .png files to add to your LUTs"
+        panel.prompt = "Add"
+        if panel.runModal() == .OK { importLuts(panel.urls) }
+    }
+
+    private func chooseFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = LutRepository.userFolder
+        panel.message = "Choose the folder RawBoy reads your .cube and HaldCLUT .png files from"
+        panel.prompt = "Use Folder"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        LutRepository.setUserFolder(url)
+        note = nil
+        onLutsChanged()
+    }
+
+    private func importLuts(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        let added = LutRepository.importFiles(urls)
+        note = added == 0 ? "No .cube or .png files there." : "Added \(added) LUT\(added == 1 ? "" : "s")."
+        onLutsChanged()
+    }
+    #endif
+}
+
+#if os(macOS)
+/** Dropped or picked LUT files: the content types the panels take and the file URLs a drop carries. */
+enum LutDrop {
+    static let types: [UTType] = [UTType(filenameExtension: "cube") ?? .data, .png]
+
+    static func urls(_ providers: [NSItemProvider]) async -> [URL] {
+        var urls: [URL] = []
+        for provider in providers {
+            let url: URL? = await withCheckedContinuation { continuation in
+                _ = provider.loadObject(ofClass: URL.self) { url, _ in continuation.resume(returning: url) }
+            }
+            if let url { urls.append(url) }
+        }
+        return urls
     }
 }
+#endif
 
 private struct LutRow: View {
     let name: String

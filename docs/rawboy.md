@@ -62,6 +62,11 @@ Edits carry over when you open the next file (on RawBoy Desktop only on demand: 
   likewise lists black and white presets (Saturation -100, or a black and white LUT at full strength) under their own
   heading.
 - **Your own:** put `.cube` / HaldCLUT `.png` files in `Documents/luts` on the phone. In the LUTs tab, tap **Choose folder** once and allow access (the picker opens at that folder). The folder is rescanned every time you open the tab.
+  RawBoy Desktop (Mac): the LUT section shows the folder's path under Your LUTs (`~/Library/Application Support/RawBoy Desktop/LUTs` by default).
+  **Add files…** copies `.cube` / HaldCLUT `.png` files into it, **Show in Finder** opens it, **Choose folder…** reads
+  your LUTs from a folder of your own instead (remembered; **Use RawBoy's folder** goes back). Dropping LUT files on the
+  section, or on the window, adds them too; on the window a `.png` counts as a LUT only when it is HaldCLUT-shaped
+  (square, its side a whole cube such as 512), otherwise it opens as a photo.
 - While the **Film** tone mapper is on, the LUTs tab is hidden and the chosen LUT isn't applied (preview and export);
   it stays chosen and comes back with AgX, Filmic or Sigmoid. A note under the stock picker says so.
 - LUTs larger than 64³ (e.g. a 4096 px HaldCLUT = 256³) are resampled to 64³ for the GPU.

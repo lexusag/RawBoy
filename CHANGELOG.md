@@ -5,6 +5,10 @@
 - Presets saved before the split: Detail-only ones keep their denoise (they get the new group), ones with Light leave it to Auto, the same rule as `Presets.ts`. A Light + Detail preset applied in Pro no longer sets denoise; re-save it with the group ticked.
 - Code: `PresetGroup.DENOISE` / `.denoise`, `Presets.withoutDenoise` (Kotlin and Swift), `LookApplier.applyPreset` no longer forces the auto values. Tests: `PresetsTest`, `LookApplierTest`, `PresetDenoiseGroupTests` (web's cases). Not compiled or run here (no Android SDK or Swift toolchain): CI compiles the Kotlin (unit tests compiled, not run) and the Desktop job builds and runs the Swift tests.
 
+**RawBoy Desktop: your own LUTs are reachable (2026-11-17)**
+
+- **Your LUTs on the Mac.** Pro's LUT section now shows where your LUTs live (`~/Library/Application Support/RawBoy Desktop/LUTs` until you choose another) with **Add files…** (copies `.cube` / HaldCLUT `.png` files in), **Show in Finder** (also on each of your LUTs' right-click menu) and **Choose folder…** (read them from a folder of your own, remembered; **Use RawBoy's folder** goes back). Drop LUT files on the section or on the window to add them, as on the web: on the window a `.png` counts as a LUT only when it is HaldCLUT-shaped, otherwise it opens as a photo. The note no longer says "Files app" on the Mac (the iPhone keeps it). `LutRepository.setUserFolder` / `importFiles` / `isSurelyLut`, tests in `LutFolderTests`. Not compiled when written (no Mac): CI is the first build.
+
 **RawBoy Desktop: Browse reopens the last folder (2026-11-17)**
 
 - **Back in the last folder.** A plain launch now opens Browse in the folder you left it in (Browse's Settings › "Open the last folder at launch", on by default). Opening a photo or folder from Finder, `--open`, `--browse` or `--auto` takes precedence. Not compiled when written (no Mac): CI is the first build.
