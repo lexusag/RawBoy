@@ -59,6 +59,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             model.mode = .browse
             model.browse.open(url)
         }
+        // A plain launch: Browse back in the folder the last session left (the Viewer's "Open the last folder at launch" setting).
+        if Self.launchFiles().isEmpty && Self.launchFiles(after: "--browse").isEmpty && Self.launchFiles(after: "--auto").isEmpty {
+            model.browse.openLastFolderIfWanted()
+        }
         let batch = Self.launchFiles(after: "--auto")
         if !batch.isEmpty { model.addToAuto(batch, as: Self.launchValue(after: "--import-as").flatMap(ImportMode.init(rawValue:))) }
         #if DEBUG
