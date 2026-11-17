@@ -369,7 +369,8 @@ struct EditorScreen: View {
                 }
                 if let shader, mode == .geometry, session.zoomCenter == nil, session.preview != nil {
                     CropOverlay(frameWidth: shader.lens.outputWidth, frameHeight: shader.lens.outputHeight,
-                                crop: state.params.crop, ratio: cropRatio, framePx: framePx, onCropChange: vm.setCrop)
+                                crop: state.params.crop, ratio: cropRatio, framePx: framePx, onCropChange: vm.setCrop,
+                                rotate: (angle: state.params.straighten, onChange: { d in vm.update { $0.straighten = d } }))
                 }
                 if let shader, autoWb, mode == .none, session.zoomCenter == nil, session.preview != nil, !showOriginal {
                     CropOverlay(frameWidth: shader.lens.outputWidth, frameHeight: shader.lens.outputHeight,

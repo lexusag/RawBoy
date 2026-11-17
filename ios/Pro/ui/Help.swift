@@ -15,7 +15,7 @@ let proHelp = [
         HelpItem("Mouse wheel over the photo", "Zoom in and out around the pointer, from a quarter of the whole photo (it stops once at the whole photo, so masks and light leaks can be placed outside its edges) up to 400% (stops once at 100%). A trackpad pinch works too. The middle button pans the zoomed photo."),
         HelpItem("Press and hold, or \\", "Compare with the as-shot render (the key toggles it until pressed again)."),
         HelpItem("Y", "Before/after slider: the as-shot render on the left of a divider you drag, the edit on the right. Y again hides it. It shows on the whole photo (zoomed in it steps aside), and holding or \\ still compare full size."),
-        HelpItem("C", "Open or close Crop & rotate."),
+        HelpItem("C", "Open or close Crop & rotate. Drag the corners, edges or inside of the frame to crop, or outside it to rotate (straighten, up to 45° each way)."),
         HelpItem("Filmstrip", "Under the photo: the other photos in its folder, by file name (a RAW + JPEG pair once, as the raw). Click one to open it, or press ← and → for the previous and next; the mouse wheel scrolls the strip. Photos only in iCloud show a cloud and aren't downloaded until opened."),
         HelpItem("Copy previous (⇧C)", "RawBoy Desktop: gives this photo the settings of the photo you had open before it (the bar's Copy button, or ⇧C). Opening a photo no longer copies them by itself; geometry, masks, leaks, effects and healing stay the photo's own."),
         HelpItem("Tab or F", "Photo only: hides the bar and the panel; again, or Esc, brings them back. With Full Keyboard Access on, Tab moves between controls instead, and F still works."),
@@ -79,7 +79,7 @@ let proHelp = [
         HelpItem("Open", "Opens a RAW file from Photos or Files, or a HEIC, JPEG, PNG or TIFF (lower quality than RAW)."),
         HelpItem("Tabs", "Light, Colour, Detail, LUTs and Lens hold the sliders. Edits carry over to the next photo; crop, rotation, flips and scale don't."),
         HelpItem("Lens preset", "Lens tab: name it (the lens by default) and Save lens preset keeps its settings for this photo's lens; Send to Auto also hands it to RawBoy Auto, which corrects every photo taken with that lens on top of its look. Manual lenses record no lens: Auto lets you pick their presets by name."),
-        HelpItem("Top bar", "Crop & rotate (turn, flip, straighten, Vertical and Horizontal perspective, scale, crop), Masks, Light (leaks and effects), Presets, Auto Dev (automatic light and colour, keeps the LUT) and Export; Reset all, Undo and Redo under them. Long-press a tool for its full name."),
+        HelpItem("Top bar", "Crop & rotate (turn, flip, straighten, Vertical and Horizontal perspective, scale, crop; drag outside the frame to straighten), Masks, Light (leaks and effects), Presets, Auto Dev (automatic light and colour, keeps the LUT) and Export; Reset all, Undo and Redo under them. Long-press a tool for its full name."),
     ]),
     HelpSection("Photo", [
         HelpItem("Double-tap", "100% view at that point; drag to pan, double-tap again to go back."),
