@@ -677,6 +677,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
               ratio={cropRatio}
               frame={FRAME_WIDTH}
               onChange={store.setCrop}
+              rotate={{ angle: state.params.straighten, onChange: (deg) => store.update({ ...state.params, straighten: deg }) }}
             />
           )}
           {autoWb && !geometryMode && !shapesMode && !session.zoomCenter && !showOriginal && shaderParams && (

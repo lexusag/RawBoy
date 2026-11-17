@@ -1,6 +1,6 @@
-**RawBoy Desktop: rotate the crop with the mouse (2026-11-17)**
+**RawBoy Desktop and web Pro: rotate the crop with the mouse (2026-11-17)**
 
-- **Drag outside the crop frame to straighten**, as in the web's Auto: in Crop & rotate (Pro and Auto), press outside the frame and circle its centre; the picture turns with the pointer (clockwise drag = clockwise turn, -45° to 45°, 0.01° steps), the Straighten slider follows, and the drag undoes like a slider drag. On the Mac the pointer is an open hand outside the frame and resize arrows on its edges and corners. Shared Swift code (`CropOverlay.rotate`), so the iPhone apps get the drag too. Not compiled when written (no Mac): CI's `desktop` job is the first build.
+- **Drag outside the crop frame to straighten**, as in the web's Auto: in Crop & rotate (Pro and Auto), press outside the frame and circle its centre; the picture turns with the pointer (clockwise drag = clockwise turn, -45° to 45°, 0.01° steps), the Straighten slider follows, and the drag undoes like a slider drag. On the Mac the pointer is an open hand outside the frame and resize arrows on its edges and corners. Shared Swift code (`CropOverlay.rotate`), so the iPhone apps get the drag too. **Web Pro** gets the same drag: its Crop & rotate passes `rotate` to `CropOverlay`, which until now only Auto did. Not compiled when written (no Mac): CI's `desktop` job is the first build.
 
 **RawBoy Desktop: Auto catches up with the web (2026-11-17)**
 
