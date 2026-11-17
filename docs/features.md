@@ -3,7 +3,7 @@
 What each platform has, which release first shipped it, and **where Desktop (macOS) is behind the web**. The Camera
 apps are in [features-camera.md](features-camera.md).
 
-Written 2026-11-17 against `main` at 4cbc445 (after v1.18.3; "unreleased" below means after that tag). Sources: every
+Written 2026-11-17 against `main` at 45bb627 (after v1.18.3; "unreleased" below means after that tag). Sources: every
 entry of `CHANGELOG.md` (379), matched to the first tag that contains it with `git blame` + `git tag --contains` (163
 tags, v1.0.0 to v1.18.3), the docs in `docs/`, `desktop-app/features.md` (the Phase 0 plan, 2026-11-15) and a read of the
 web, Swift and Kotlin sources. No Mac, Android SDK or browser was available, so nothing was *run*: a cell says what
@@ -185,7 +185,7 @@ Web "Browser" tab = culling; Desktop's counterpart is Browse mode, which hosts R
 | Edit in RawBoy (`E`) | ≤1.1.1 | ✓ | ✓ 1.18.0 in-process | |
 | Edits in sidecars (`rawboy:Develop`, `rawboy:Auto`) | ≤1.1.1 | ◐ opt-in | ✓ always | |
 | **Reopen a folder: photos with Auto settings go back into Auto** | ≤1.1.1 | ✓ | — | **Gap.** Browse reads sidecars for ratings only; Auto restores a photo's settings only when that photo is added to Auto again |
-| Reopen last folder | 1.1.2 | ✓ | ✓ 1.18.0; "start in Browse" unreleased | |
+| Reopen last folder | 1.1.2 | ✓ | ✓ unreleased (#400, at launch; before, only through Viewer settings) | |
 | darktable duplicates (`NAME_01.CR2.xmp`) | ≤1.1.1 | ✓ | ? | The Viewer's sidecar code names `NAME.xmp` and `NAME.EXT.xmp`; no `_01` handling found |
 | Safari / Firefox: pick files, download sidecars as ZIP | ≤1.1.1 | ✓ | n/a | |
 | Full-screen viewer, edge panels, Compare 2–4 | — | — | ✓ 1.18.0 | Viewer only |
