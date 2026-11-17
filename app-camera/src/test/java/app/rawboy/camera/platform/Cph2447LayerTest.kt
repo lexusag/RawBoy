@@ -25,7 +25,7 @@ class Cph2447LayerTest {
     }
 
     @Test
-    fun changesOnlyThePreviewColourTheBlackOffsetsAndTheSelfieNoise() {
+    fun changesOnlyThePreviewColourTheBlackOffsetsTheSelfieNoiseAndTheFlashCompensation() {
         val below = onePlusLayer.patch.applyTo(neutralPlatform)
         val p = cph2447Layer.patch.applyTo(below)
         assertEquals(
@@ -33,6 +33,7 @@ class Cph2447LayerTest {
                 preview = below.preview.copy(color = p.preview.color),
                 still = below.still.copy(blackOffsets = p.still.blackOffsets),
                 noise = below.noise.copy(frontIsoScale = 10f),
+                flash = below.flash.copy(cameraAeCompensationEv = -1f),
             ),
             p,
         )

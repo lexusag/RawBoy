@@ -70,10 +70,36 @@ class OnePlusLayerTest {
     }
 
     @Test
+    fun flashIsExposedByTheCamerasAe() {
+        val flash = PlatformRegistry.resolve(onePlus11.copy(model = "CPH2581")).flash
+        assertEquals(FlashMetering.CAMERA_AE, flash.metering)
+        assertEquals(0f, flash.cameraAeCompensationEv) // the compensation is the model's
+        assertTrue(flash.screenFlashUntilExposed)
+        assertEquals(-1f, PlatformRegistry.resolve(onePlus11).flash.cameraAeCompensationEv)
+    }
+
+    @Test
+    fun othersExposeTheFlashAsBefore() {
+        for (p in listOf(
+            neutralPlatform,
+            PlatformRegistry.stack(listOf(tensorLayer)),
+            PlatformRegistry.resolve(onePlus11.copy(manufacturer = "Xiaomi")),
+            PlatformRegistry.resolve(onePlus11.copy(manufacturer = "samsung")),
+        )) {
+            assertEquals(p.layers.toString(), FlashMetering.MANUAL_GUIDE, p.flash.metering)
+            assertEquals(p.layers.toString(), 0f, p.flash.cameraAeCompensationEv)
+            assertFalse(p.layers.toString(), p.flash.screenFlashUntilExposed)
+        }
+    }
+
+    @Test
     fun changesOnlyItsOwnFields() {
         val p = onePlusLayer.patch.applyTo(neutralPlatform)
         assertEquals(
-            neutralPlatform.copy(lenses = p.lenses, preview = p.preview, still = neutralPlatform.still.copy(exactBlack = true, blackPedestal = 32f)),
+            neutralPlatform.copy(
+                lenses = p.lenses, preview = p.preview, still = neutralPlatform.still.copy(exactBlack = true, blackPedestal = 32f),
+                flash = neutralPlatform.flash.copy(metering = FlashMetering.CAMERA_AE, screenFlashUntilExposed = true),
+            ),
             p,
         )
         assertEquals(neutralPlatform.preview.color, p.preview.color)

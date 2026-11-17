@@ -36,6 +36,7 @@ import app.rawboy.auto.analysis.AutoTone
 import app.rawboy.auto.analysis.MeterArea
 import app.rawboy.camera.debug.DebugProbe
 import app.rawboy.camera.platform.CameraPlatform
+import app.rawboy.camera.platform.FlashMetering
 import app.rawboy.camera.platform.PreviewColor
 import app.rawboy.camera.platform.PreviewColorInput
 import app.rawboy.color.Mat3
@@ -62,7 +63,6 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
-import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /** The camera's flash for a shot. */
@@ -298,6 +298,10 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
      */
     @Volatile
     private var residualAtZero = 1f
+
+    /** AE compensation (EV) added to the user's while a [FlashMetering.CAMERA_AE] flash shot runs ([flashMetering]). */
+    @Volatile
+    private var flashBiasEv = 0f
 
     /** AE and flash modes for every request; changed only while a flash shot runs (see [torchFocus]). */
     @Volatile
@@ -747,6 +751,8 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         longExposure: LongExposure? = null,
         /** Why the shot is a burst or not (mode, light), for the debug note; the frames actually merged are added here. */
         note: String = "",
+        /** A single still's exposure is over (its capture result has arrived): screen flash may go dark. */
+        onExposed: () -> Unit = {},
         onSubmitted: () -> Unit = {},
     ): Still = captureLock.withLock {
         try {
@@ -759,20 +765,28 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             // Ambient exposure before any light comes on: the flash still never needs more.
             val ambient = _frames.value
             var focused = false
+            // The platform says who exposes a flash still: the flash guide by hand (AE off), or the camera's flash AE.
+            val cameraAe = mode != FlashMode.OFF && platform.flash.metering == FlashMetering.CAMERA_AE
             try {
                 if (mode == FlashMode.FOCUS_FLASH) focused = torchFocus(s, inf)
                 val diopters = _frames.value?.focusDiopters
-                val exposure = if (mode == FlashMode.OFF) null else flashExposure(inf, ambient, diopters, guides)
+                val exposure = if (mode == FlashMode.OFF || cameraAe) null else flashExposure(inf, ambient, diopters, guides)
+                if (cameraAe) flashMetering(s, inf)
                 val why = when {
                     burstFrames <= 1 -> ""
                     inf.hiRes -> " reason=max-res"
                     else -> " reason=flash"
                 }
                 val description = "RawBoy merge=off frames=1 $note$why".trim()
-                val result = stillDng(s, inf, reader, mode, exposure?.first, exifOrientation, location, description, out, onSubmitted)
+                val result = stillDng(s, inf, reader, mode, exposure?.first, exifOrientation, location, description, out, onExposed, onSubmitted)
                 Still(
                     result, exposure?.second, distanceKnown = diopters != null && diopters > 0f,
-                    compensationEv = if (exposure == null) appliedCompensationEv(ambient) else 0f,
+                    compensationEv = when {
+                        // The flash AE has the range to put all of it (the user's and the flash's) into the raw.
+                        cameraAe -> compensationEv()
+                        exposure == null -> appliedCompensationEv(ambient)
+                        else -> 0f
+                    },
                     description = description,
                 )
             } finally {
@@ -798,8 +812,9 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         location: Location?,
         description: String,
         out: OutputStream,
+        onExposed: () -> Unit,
         onSubmitted: () -> Unit,
-    ): CaptureResult = captureOne(s, stillRequest(s, inf, reader, flash, manual), onSubmitted) { captureResult, img ->
+    ): CaptureResult = captureOne(s, stillRequest(s, inf, reader, flash, manual), onSubmitted, onExposed) { captureResult, img ->
         Log.d(TAG, "still (flash $flash${manual?.let { ", manual ${it.first / 1000} µs ISO ${it.second}" } ?: ""}, state ${captureResult.get(CaptureResult.FLASH_STATE)}, AE ${captureResult.get(CaptureResult.CONTROL_AE_STATE)}): ${(captureResult.get(CaptureResult.SENSOR_EXPOSURE_TIME) ?: 0L) / 1000} µs, ISO " +
             "${captureResult.get(CaptureResult.SENSOR_SENSITIVITY)}, boost ${captureResult.get(CaptureResult.CONTROL_POST_RAW_SENSITIVITY_BOOST)}, " +
             "black ${captureResult.get(CaptureResult.SENSOR_DYNAMIC_BLACK_LEVEL)?.joinToString()} " +
@@ -845,12 +860,13 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             // zero-shutter-lag frame from before the flash.
             set(CaptureRequest.CONTROL_ENABLE_ZSL, false)
             // The camera's AE keeps the ambient exposure for a flash still (Pixel 9 Pro), so the raw clipped:
-            // expose it ourselves (see flashExposure) and fire the flash.
+            // expose it ourselves (see flashExposure) and fire the flash. Without [manual] the flash AE mode in
+            // force (FlashMetering.CAMERA_AE, see flashMetering) exposes it and fires the flash itself.
             if (manual != null) {
                 set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF)
                 setForLens(CaptureRequest.SENSOR_EXPOSURE_TIME, manual.first)
                 setForLens(CaptureRequest.SENSOR_SENSITIVITY, manual.second)
-                setForLens(CaptureRequest.SENSOR_FRAME_DURATION, max(manual.first, FLASH_FRAME_NS))
+                setForLens(CaptureRequest.SENSOR_FRAME_DURATION, max(manual.first, FlashExposure.FRAME_NS))
                 setForLens(CaptureRequest.CONTROL_POST_RAW_SENSITIVITY_BOOST, 100)
             }
             set(CaptureRequest.FLASH_MODE, CameraMetadata.FLASH_MODE_SINGLE)
@@ -870,6 +886,8 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         s: CameraCaptureSession,
         request: CaptureRequest,
         onSubmitted: () -> Unit,
+        /** The result has arrived (the exposure is over); on the camera thread. */
+        onCompleted: () -> Unit = {},
         use: (CaptureResult, Image) -> T,
     ): T {
         val image = CompletableDeferred<Image>()
@@ -883,6 +901,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
                 override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, r: TotalCaptureResult) {
                     if (pendingResult === result) pendingResult = null
                     result.complete(r)
+                    onCompleted()
                 }
 
                 override fun onCaptureFailed(session: CameraCaptureSession, request: CaptureRequest, failure: CaptureFailure) {
@@ -1389,49 +1408,45 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
     }
 
     /**
-     * Manual (exposure ns, ISO) for a flash still, and the guide it amounts to. The camera's own flash metering is no
-     * use for the raw (Pixel 9 Pro: the AE precapture fires no pre-flash for other apps, and the still keeps the
-     * ambient exposure, so the raw clipped), so this works like a flash guide number: the LED's light falls off with
-     * the square of the distance, so the gain (s x ISO) is [guide] x distance² (m), with the distance the lens is
-     * focused at; never more than the ambient exposure. A distance of exactly 0 is taken as unknown, not infinity: the
-     * Pixel 9 Pro's UW reports 0 on every frame, even with AF locked close up (as 5 m it got the ambient exposure plus
-     * the flash: clipped); then the gain is [FlashGuides.noDistance], learned on its own. [FLASH_EXPOSURE_NS], shorter
-     * when the ISO is at its minimum.
+     * [FlashMetering.CAMERA_AE]: the camera's own flash metering. Always-flash AE mode (it fires the flash for the still
+     * itself) and a precapture trigger, during which the HAL fires its pre-flash and meters with it; waits until AE has
+     * left its precapture state (OnePlus 11: 0.6-0.9 s). [FlashProfile.cameraAeCompensationEv] is added to the user's
+     * compensation until [endFlashSequence].
+     */
+    private suspend fun flashMetering(s: CameraCaptureSession, inf: Info) {
+        aeMode = CameraMetadata.CONTROL_AE_MODE_ON_ALWAYS_FLASH
+        flashMode = CameraMetadata.FLASH_MODE_OFF // the AE mode drives the flash
+        flashBiasEv = platform.flash.cameraAeCompensationEv
+        var metering = false
+        triggerAndWait(s, inf, "flash metering (compensation ${compensationEv()} EV)", FLASH_METERING_TIMEOUT_MS, {
+            set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER, CameraMetadata.CONTROL_AE_PRECAPTURE_TRIGGER_START)
+        }) { r ->
+            val ae = r.get(CaptureResult.CONTROL_AE_STATE)
+            if (ae == CaptureResult.CONTROL_AE_STATE_PRECAPTURE) metering = true
+            ae == null || (metering && ae != CaptureResult.CONTROL_AE_STATE_PRECAPTURE)
+        }
+    }
+
+    /**
+     * Manual (exposure ns, ISO) for a flash still, and the guide it amounts to ([FlashExposure]). The camera's own flash
+     * metering is no use for the raw (Pixel 9 Pro: the AE precapture fires no pre-flash for other apps, and the still
+     * keeps the ambient exposure, so the raw clipped). Without a focus distance the gain is [FlashGuides.noDistance],
+     * learned on its own.
      */
     private fun flashExposure(inf: Info, ambient: FrameState?, diopters: Float?, guides: FlashGuides): Pair<Pair<Long, Int>, Float?> {
         val isoRange = inf.characteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE) ?: Range(50, 3200)
         val timeRange = inf.characteristics.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE) ?: Range(10_000L, 100_000_000L)
         val ambientGain = ambient?.let { it.exposureNs / 1e9f * it.iso }?.takeIf { it > 0f } ?: Float.MAX_VALUE
-        val known = diopters != null && diopters > 0f
-        val metres = if (known) (1f / diopters!!).coerceIn(MIN_FLASH_DISTANCE_M, MAX_FLASH_DISTANCE_M) else 1f
+        val metres = FlashExposure.metres(diopters)
+        val known = metres != null
         // A lens that hasn't learned its own guide starts from the platform's default, scaled by its light gathering.
         val guide = (if (known) guides.byDistance else guides.noDistance)
             ?: FlashStart.gain(platform.flash, inf.fNumber, known)
-        val falloff = flashFalloff(metres)
-        val byFlash = guide * falloff
-        val gain = min(byFlash, ambientGain).coerceAtMost(FLASH_EXPOSURE_NS / 1e9f * isoRange.upper)
-        var t = FLASH_EXPOSURE_NS.coerceIn(timeRange.lower, timeRange.upper)
-        var iso = gain / (t / 1e9f)
-        if (iso < isoRange.lower) {
-            t = (gain / isoRange.lower * 1e9f).toLong().coerceIn(timeRange.lower, timeRange.upper)
-            iso = isoRange.lower.toFloat()
-        }
-        val exposure = t to iso.toInt().coerceIn(isoRange.lower, isoRange.upper)
-        val used = exposure.first / 1e9f * exposure.second
-        Log.d(TAG, "flash exposure: focus ${diopters ?: "?"} dpt -> ${if (known) "%.2f m".format(metres) else "unknown"}, guide $guide -> gain $byFlash, " +
-            "ambient $ambientGain -> ${exposure.first / 1000} µs ISO ${exposure.second}")
-        // Calibrate only from shots the flash exposed (not those capped by ambient light or the sensor's range).
-        val guideUsed = if (byFlash <= ambientGain && abs(used / byFlash - 1f) < 0.1f) used / falloff else null
-        return exposure to guideUsed
+        val plan = FlashExposure.plan(guide, metres, ambientGain, isoRange.lower, isoRange.upper, timeRange.lower, timeRange.upper)
+        Log.d(TAG, "flash exposure: focus ${diopters ?: "?"} dpt -> ${if (known) "%.2f m".format(metres) else "unknown"}, guide $guide -> gain ${plan.byFlash}, " +
+            "ambient $ambientGain -> ${plan.exposureNs / 1000} µs ISO ${plan.iso}")
+        return (plan.exposureNs to plan.iso) to plan.guideUsed
     }
-
-    /**
-     * How much more exposure than at 1 m a subject at [metres] needs: the square of the distance (a point source) and
-     * beyond 1 m a bit more ([FLASH_FAR_EXPONENT]), because the guide is learned on close subjects (a hand's length)
-     * while the phone's LED is no point source: the farther the subject, the more of the light is lost to the
-     * wide beam's spread over the scene and to the room's own ambient fill-in the flash must overcome.
-     */
-    private fun flashFalloff(metres: Float): Float = metres * metres * max(1f, metres).pow(FLASH_FAR_EXPONENT)
 
     /**
      * Restarts the repeating preview with the current [aeMode]/[flashMode], sends one preview request with [trigger],
@@ -1491,6 +1506,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
     private fun endFlashSequence(inf: Info, focused: Boolean) {
         aeMode = CameraMetadata.CONTROL_AE_MODE_ON
         flashMode = CameraMetadata.FLASH_MODE_OFF
+        flashBiasEv = 0f
         handler.post {
             val s = session ?: return@post
             runCatching {
@@ -1722,8 +1738,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         val c = characteristicsOf(inf)
         val range = c.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_RANGE) ?: return 0
         val step = c.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP)?.toFloat() ?: return 0
-        if (step <= 0f) return 0
-        return (exposureBiasEv / step).roundToInt().coerceIn(range.lower, range.upper)
+        return CompensationSteps.of(exposureBiasEv + flashBiasEv, step, range.lower, range.upper)
     }
 
     /** The EV of [compensationSteps]: what the preview and stills (without flash) are shot with. */
@@ -1840,6 +1855,9 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         private const val LONG_EXPOSURE_MAX_LIFT_EV = 4f
         private const val FOCUS_TIMEOUT_MS = 1500L
 
+        /** How long [flashMetering] waits for the camera's pre-flash metering (OnePlus 11: 0.6-0.9 s), then shoots anyway. */
+        private const val FLASH_METERING_TIMEOUT_MS = 2000L
+
         /**
          * Tap focus: side of the AF box as a share of the sensor's short side (5%: about the reticle's square). Some
          * HALs widen a small region to their own phase-detect grid; tune per lens on the phone if the square misleads.
@@ -1847,19 +1865,8 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         const val FOCUS_SIZE = 0.05f
 
 
-        /** Flash still: exposure time and the frame duration it needs at least. */
-        private const val FLASH_EXPOSURE_NS = 33_333_333L
-        private const val FLASH_FRAME_NS = 33_333_333L
-
-        /** Extra exponent on distances beyond 1 m, see [flashFalloff]: 2 m needs 1.23x (0.3 EV), 4 m 1.5x (0.6 EV) more. */
-        private const val FLASH_FAR_EXPONENT = 0.3f
-
         /** How long [meterRaw] waits for its frame (a low-light still frame plus the pipeline, with room to spare). */
         private const val METER_TIMEOUT_MS = 2_000L
-
-        /** Focus distances the flash exposure trusts (nearer: macro; farther: the flash hardly reaches). */
-        private const val MIN_FLASH_DISTANCE_M = 0.1f
-        private const val MAX_FLASH_DISTANCE_M = 5f
 
         private const val MAX_PREVIEW_WIDTH = 1920
 

@@ -36,6 +36,13 @@ import app.rawboy.camera.platform.PlatformPatch
  * ISO: back cameras keep 4 (nothing to hold them against a Pixel's raws), the selfie camera 10 (the neutral 8 was a
  * first guess, 2x the back's). Merged bursts measured 3.2-3.3x below single frames at ISO 1600-6400 (8 frames,
  * effective 7.3-8.0), cleaner than the frame count alone predicts, as on the Pixel.
+ *
+ * Flash: the camera's flash AE ([onePlusLayer]) exposed a white sheet at 1 m to 0.67-0.69 of clip on the main camera
+ * but 0.955 (p98, 0.5% of the frame clipped) on the ultrawide. With -1 EV of compensation the ultrawide's sheet sat at
+ * 0.40 (0.002% clipped) and the main camera's at 0.29; at 0.3 m (a glossy mug nearer still) 0.07-0.09% clipped
+ * (specular highlights; 0.32% at 0 EV), at 3 m 0.0004%. The develop takes the -1 EV back (its auto exposure +1.0 to
+ * +1.8 EV): the JPEG's centre was within 0.1-0.2 EV of the uncompensated shot's at 1 m and equal at 3 m. Against a shot
+ * without flash (merged, 3 m, a lamp behind the phone) the flash shot's centre came out -0.43 EV (2026-11-17).
  */
 val cph2447Layer = PlatformLayer(
     name = "cph2447",
@@ -46,6 +53,7 @@ val cph2447Layer = PlatformLayer(
         p.copy(
             preview = p.preview.copy(color = CameraSaturation(p.preview.color, mapOf("3" to 1.25))),
             noise = p.noise.copy(backIsoScale = 4f, frontIsoScale = 10f),
+            flash = p.flash.copy(cameraAeCompensationEv = -1f),
             still = p.still.copy(
                 blackOffsets = BlackOffsets(
                     mapOf(

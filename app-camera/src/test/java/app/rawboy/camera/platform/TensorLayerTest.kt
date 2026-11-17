@@ -61,6 +61,9 @@ class TensorLayerTest {
         assertEquals(16f, tensor.flash.defaultGuide) // CameraController.DEFAULT_FLASH_GUIDE
         assertEquals(4f, tensor.flash.defaultGainNoDistance) // CameraController.DEFAULT_FLASH_GAIN_NO_DISTANCE
         assertEquals(1.7f, tensor.flash.referenceFNumber) // CameraController.FLASH_REFERENCE_F_NUMBER
+        assertEquals(FlashMetering.MANUAL_GUIDE, tensor.flash.metering) // CameraController.flashExposure, AE off
+        assertEquals(0f, tensor.flash.cameraAeCompensationEv)
+        assertEquals(false, tensor.flash.screenFlashUntilExposed) // CameraViewModel.SCREEN_FLASH_HOLD_MS alone
     }
 
     @Test
@@ -73,7 +76,10 @@ class TensorLayerTest {
                     blackOffsets = BlackOffsets(mapOf("0" to listOf(BlackOffsets.Point(100f, listOf(1f, 1f, 1f))))),
                 ),
                 noise = p.noise.copy(backIsoScale = 1f, frontIsoScale = 1f, lutLumaFloor = 0f, lutColorFloor = 0f, experimentalLumaFloor = 0f, experimentalColorFloor = 0f),
-                flash = p.flash.copy(defaultGuide = 1f, referenceFNumber = 9f, defaultGainNoDistance = 1f),
+                flash = p.flash.copy(
+                    defaultGuide = 1f, referenceFNumber = 9f, defaultGainNoDistance = 1f,
+                    metering = FlashMetering.CAMERA_AE, cameraAeCompensationEv = -2f, screenFlashUntilExposed = true,
+                ),
                 preview = p.preview.copy(color = SrgbPreviewColor, curveAtEvenPoints = true, level = PreviewLevel.STILL_WHITE_BALANCED, liftsShadows = false),
                 lenses = p.lenses.copy(standaloneOverLogical = true),
             )

@@ -40,6 +40,8 @@ class SamsungLayerTest {
             assertEquals("$chip", true, p.still.lowPriorityDevelop) // ShotSaver's ExportGpu(lowPriority = true)
             assertEquals("$chip", false, p.still.exactBlack)
             assertEquals("$chip", 0f, p.still.blackPedestal)
+            assertEquals("$chip", FlashMetering.MANUAL_GUIDE, p.flash.metering)
+            assertEquals("$chip", false, p.flash.screenFlashUntilExposed)
             assertEquals("$chip", emptyList<String>(), p.problems())
         }
     }

@@ -1,5 +1,6 @@
 package app.rawboy.camera.platform.oem.oneplus
 
+import app.rawboy.camera.platform.FlashMetering
 import app.rawboy.camera.platform.LayerLevel
 import app.rawboy.camera.platform.PlatformLayer
 import app.rawboy.camera.platform.PlatformPatch
@@ -43,6 +44,21 @@ import app.rawboy.camera.platform.PreviewLevel
  * is 6-7 DN) and the OnePlus 11's sensor offsets ([cph2447Layer]): main camera merged +1.8% / +2.3%, single +3.7% /
  * +3.0%; ultrawide merged +5.5% / +1.8% (single ISO 6400 still +21% / +10%). A night corridor without Film: deep
  * shadows from R/G/B 12 / 5 / 10 levels (magenta) to 5 / 7 / 6.
+ *
+ * Flash ([FlashMetering.CAMERA_AE]): a manual still (AE off, FLASH_MODE_SINGLE, the Pixel's way) reports the flash
+ * fired (FLASH_STATE 3) but its raw gets almost none of the light: a white sheet at 1.45 m reported focus, gain (s x
+ * ISO) 42, came out at 0.003 of clip (p98) against 0.009 for the ambient alone at gain 213, black in the JPEG
+ * (2026-11-17, a dark room). The camera's flash AE works: always-flash AE mode + a precapture trigger fire a
+ * pre-flash (AE in PRECAPTURE until 0.6-0.9 s after the trigger, then FLASH_REQUIRED), and the still (5-30 ms, ISO
+ * 100-1600 at 0.3-3 m) put the sheet at 0.67-0.69 of clip on the main camera at 1 m; repeated shots within 3% (ISO
+ * 421 / 433 / 433). The same with focus locked (no torch first). Its exposure
+ * aims at the phone's JPEG, not the raw: the ultrawide clipped the sheet (0.5% of the frame), hence the model's
+ * compensation ([cph2447Layer]).
+ *
+ * Screen flash: the HAL starts the still's exposure 0.36-0.38 s after the request is sent (the reconfiguration around
+ * every still), after the frame had gone dark at 0.25 s: the selfie raw's key was 0.069-0.073 with the screen flash,
+ * 0.112-0.119 with the frame kept lit to 0.7 s (a face-height subject at ~0.5 m, a lamp behind the phone), so it stays
+ * lit until the still's result has come ([app.rawboy.camera.platform.FlashProfile.screenFlashUntilExposed]).
  */
 val onePlusLayer = PlatformLayer(
     name = "oneplus",
@@ -54,6 +70,7 @@ val onePlusLayer = PlatformLayer(
             lenses = p.lenses.copy(standaloneOverLogical = true),
             preview = p.preview.copy(curveAtEvenPoints = true, level = PreviewLevel.STILL_WHITE_BALANCED, liftsShadows = false),
             still = p.still.copy(exactBlack = true, blackPedestal = 32f),
+            flash = p.flash.copy(metering = FlashMetering.CAMERA_AE, screenFlashUntilExposed = true),
         )
     },
 )

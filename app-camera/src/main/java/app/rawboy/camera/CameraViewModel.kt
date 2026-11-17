@@ -66,6 +66,8 @@ import app.rawboy.camera.capture.VideoRecorder
 import app.rawboy.camera.capture.VideoVariant
 import app.rawboy.gl.VideoSink
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -82,6 +84,7 @@ import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -1444,13 +1447,17 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /** As the request goes to the camera: the click (if on, or required here) and the UI's shutter feedback. */
-    private fun onShutter(screenFlash: Boolean = false) {
+    private fun onShutter(screenFlash: Boolean = false, exposed: Deferred<Unit>? = null) {
         if (_settings.value.shutterSound || shutterSoundRequired) shutterSound.play()
         _shutterEvents.tryEmit(Unit)
-        // The exposure runs right after the request goes out: keep the frame lit through it, then switch it off.
+        // The exposure runs right after the request goes out: keep the frame lit through it, then switch it off. Where
+        // the HAL starts it later (OnePlus 11: 0.36 s after the request), also until the still's result has come.
         if (screenFlash) viewModelScope.launch {
+            val sent = SystemClock.elapsedRealtime()
             delay(SCREEN_FLASH_HOLD_MS)
+            if (platform.flash.screenFlashUntilExposed) withTimeoutOrNull(SCREEN_FLASH_MAX_WAIT_MS) { exposed?.await() }
             _screenFlashLit.value = false
+            Log.d(TAG, "screen flash: dark ${SystemClock.elapsedRealtime() - sent} ms after the request, exposure ${if (exposed?.isCompleted == true) "over" else "not over"}")
         }
     }
 
@@ -1464,6 +1471,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val meter = meterArea().let { if (it is MeterArea.Spot) it.turned(degrees) else it }
         val fix = if (settings.geotag) location.current() else null
         val frameNumber = CameraSettingsStore.nextFrameNumber(app)
+        // The still's exposure is over: screen flash may go dark (FlashProfile.screenFlashUntilExposed).
+        val exposed = CompletableDeferred<Unit>()
         // The stand-alone or physical camera that shoots it, for the profile's per-camera sensor numbers.
         val cameraId = info?.let { it.physicalId ?: it.openId }
         return if (settings.keepDng) {
@@ -1474,7 +1483,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             val result = try {
                 withContext(Dispatchers.IO) {
                     val out = resolver.openOutputStream(uri, "w") ?: throw java.io.IOException("Cannot write $name")
-                    val result = out.buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix, longExposure, mergeNote) { onShutter(screenFlash) } }
+                    val result = out.buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix, longExposure, mergeNote, onExposed = { exposed.complete(Unit) }) { onShutter(screenFlash, exposed) } }
                     fix?.let { addGps(uri, it) }
                     MediaStoreOutput.publish(resolver, uri)
                     result
@@ -1489,7 +1498,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             val file = File(app.cacheDir, "$baseName-$shotId.dng")
             val result = try {
                 withContext(Dispatchers.IO) {
-                    val result = file.outputStream().buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix, longExposure, mergeNote) { onShutter(screenFlash) } }
+                    val result = file.outputStream().buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix, longExposure, mergeNote, onExposed = { exposed.complete(Unit) }) { onShutter(screenFlash, exposed) } }
                     fix?.let { addGps(Uri.fromFile(file), it) }
                     result
                 }
@@ -1572,6 +1581,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         /** Screen flash: how long the frame is lit before the shot (screen at full brightness, AE caught up), and after the request. */
         private const val SCREEN_FLASH_SETTLE_MS = 450L
         private const val SCREEN_FLASH_HOLD_MS = 250L
+        /** FlashProfile.screenFlashUntilExposed: at most this much longer for the still's result (a stuck capture). */
+        private const val SCREEN_FLASH_MAX_WAIT_MS = 2000L
         /** After a lens's first analysed viewfinder frame, how long AE gets to settle before its raw is metered. */
         private const val RAW_METER_DELAY_MS = 300L
         /** Smallest move of a tracked subject (share of the frame) that moves the focus point. */

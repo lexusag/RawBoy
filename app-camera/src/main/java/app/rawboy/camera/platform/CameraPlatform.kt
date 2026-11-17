@@ -42,6 +42,7 @@ data class CameraPlatform(
         if (!(flash.defaultGuide > 0f)) add("flash.defaultGuide ${flash.defaultGuide} <= 0")
         if (!(flash.referenceFNumber > 0f)) add("flash.referenceFNumber ${flash.referenceFNumber} <= 0")
         if (!(flash.defaultGainNoDistance > 0f)) add("flash.defaultGainNoDistance ${flash.defaultGainNoDistance} <= 0")
+        if (!(flash.cameraAeCompensationEv in -3f..3f)) add("flash.cameraAeCompensationEv ${flash.cameraAeCompensationEv} outside -3..3")
     }
 }
 
@@ -206,4 +207,32 @@ data class FlashProfile(
     val referenceFNumber: Float,
     /** Flash still gain for a lens that reports no focus distance, before it has learned its own. */
     val defaultGainNoDistance: Float,
+    /** Who exposes a flash still. Neutral [FlashMetering.MANUAL_GUIDE] (the guides above are only read then). */
+    val metering: FlashMetering = FlashMetering.MANUAL_GUIDE,
+    /**
+     * AE compensation (EV) added to the user's for a [FlashMetering.CAMERA_AE] flash still; the develop takes it back
+     * out (AutoTone's captureEv), so it only leaves the raw headroom the phone's flash AE (aiming at its own JPEG)
+     * doesn't. Neutral 0.
+     */
+    val cameraAeCompensationEv: Float = 0f,
+    /**
+     * Screen flash (selfie camera): keep the frame lit until the shot's exposure is over (its result has arrived), not
+     * only for the fixed time after the request is sent. Neutral false: the fixed time alone.
+     */
+    val screenFlashUntilExposed: Boolean = false,
 )
+
+/** How a flash still is exposed (`CameraController.captureDng`). */
+enum class FlashMetering {
+    /**
+     * By hand: the shot's gain is the lens's flash guide x the focus distance squared, AE off ([app.rawboy.camera.capture.FlashExposure]),
+     * learned per lens from each shot. For HALs whose AE keeps the ambient exposure for a flash still (Pixel 9 Pro).
+     */
+    MANUAL_GUIDE,
+
+    /**
+     * The camera's own flash AE: always-flash AE mode and a precapture trigger (the HAL fires its pre-flash and meters
+     * with it), then the still with AE on. For HALs where a manual (AE off) still doesn't get the flash's light.
+     */
+    CAMERA_AE,
+}

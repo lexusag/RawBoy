@@ -2,6 +2,7 @@ package app.rawboy.camera.platform.tensor
 
 import app.rawboy.camera.platform.BlackOffsets
 import app.rawboy.camera.platform.ChipVendor
+import app.rawboy.camera.platform.FlashMetering
 import app.rawboy.camera.platform.LayerLevel
 import app.rawboy.camera.platform.PlatformLayer
 import app.rawboy.camera.platform.PlatformPatch
@@ -58,6 +59,11 @@ val tensorLayer = PlatformLayer(
                 referenceFNumber = 1.7f,
                 // As for 0.5 m at the guide above; UW reports a focus distance of 0 on every frame, so it starts here.
                 defaultGainNoDistance = 4f,
+                // The Pixel 9 Pro's AE keeps the ambient exposure for a flash still (the raw clipped): exposed by hand.
+                metering = FlashMetering.MANUAL_GUIDE,
+                cameraAeCompensationEv = 0f,
+                // Screen flash: the frame goes dark a fixed time after the request.
+                screenFlashUntilExposed = false,
             ),
         )
     },

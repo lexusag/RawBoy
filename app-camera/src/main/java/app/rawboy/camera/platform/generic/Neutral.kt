@@ -2,6 +2,7 @@ package app.rawboy.camera.platform.generic
 
 import app.rawboy.camera.platform.BlackOffsets
 import app.rawboy.camera.platform.CameraPlatform
+import app.rawboy.camera.platform.FlashMetering
 import app.rawboy.camera.platform.FlashProfile
 import app.rawboy.camera.platform.LensProfile
 import app.rawboy.camera.platform.NoiseProfile
@@ -60,5 +61,8 @@ val neutralPlatform = CameraPlatform(
         referenceFNumber = 1.7f,
         // As for 0.5 m at the guide above.
         defaultGainNoDistance = 4f,
+        metering = FlashMetering.MANUAL_GUIDE,
+        cameraAeCompensationEv = 0f,
+        screenFlashUntilExposed = false,
     ),
 )

@@ -58,13 +58,18 @@ shows them.
   focus region moves with it at most ten times a second.
 - **Selfie flash (Android):** the selfie camera has no flash unit, so the bolt button there turns on a **screen flash**: on the
   shutter the screen goes to full brightness with a wide warm-white frame around the picture, and the shot is taken
-  about half a second later, exposed by the camera's AE under that light (single frame, no burst merging).
+  about half a second later, exposed by the camera's AE under that light (single frame, no burst merging). On phones
+  whose camera starts the exposure late (the OnePlus 11: about 0.36 s after the shutter request), the frame stays lit
+  until the exposure is over.
 - **Flash:** the bolt button in the top bar (shown when the lens has a flash) turns
   **Focus-flash** (bolt with "AF") on or off. It works like Google Camera's: the light comes on, the camera focuses with it (unless focus is locked), then the flash fires.
   Exposure works like a flash guide number: the photo is exposed for the distance the lens is focused at (the flash's
   light falls off with its square), never brighter than without flash, and each lens learns its flash strength from
-  its flash shots (the camera's own flash metering left the raw several stops overexposed). Flash shots don't
-  recalibrate the viewfinder's exposure. The choice is remembered.
+  its flash shots (the camera's own flash metering left the raw several stops overexposed on the Pixel). On phones
+  where that manual way gets none of the flash's light (OnePlus), the camera's own flash metering exposes the shot
+  instead: a pre-flash, then the photo, 1 EV darker in the raw than the camera picks (the OnePlus 11's ultrawide
+  clipped white paper otherwise), which the develop brightens back. Flash shots don't recalibrate the viewfinder's
+  exposure. The choice is remembered.
 - **Shooting:** each shot is one raw frame from the selected lens (Camera2 `RAW_SENSOR`, 12 MP on the Pixel's main lens), saved as DNG to
   `Pictures/RawBoy Camera/RAW/IMG_<date>_<time>.dng`. It is then developed in the background exactly as RawBoy Auto
   develops a raw (tone and noise from the raw itself, then the look with the controls as they were at the shutter)
