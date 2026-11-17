@@ -1,3 +1,4 @@
+import Combine
 import CoreGraphics
 import Foundation
 import RawBoyEngine
@@ -467,7 +468,20 @@ final class AutoViewModel: ObservableObject {
         session = PhotoSession(lutLoader: { [unowned self] in try await self.loadLut($0) },
                                filmLoader: { [unowned self] in try await self.loadFilm($0) },
                                onMessage: { [unowned self] in self.message = $0 })
+        #if os(macOS)
+        // RawBoy Desktop: a lens preset saved, renamed or deleted in Pro's presets reaches the batch at once.
+        presetsWatch = NotificationCenter.default.publisher(for: PresetStore.changed).sink { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let list = LensPresetStore.load()
+                if list != self.lensPresets { self.useLensPresets(list) }
+            }
+        }
+        #endif
     }
+    #if os(macOS)
+    private var presetsWatch: AnyCancellable?
+    #endif
 
     private func sorted(_ list: [AutoPhoto]) -> [AutoPhoto] {
         list.sorted { PhotoOrder.inOrder(sort, ($0.date, $0.name), ($1.date, $1.name)) }
@@ -679,8 +693,6 @@ final class AutoViewModel: ObservableObject {
 
     /** Forgets lens preset [id]; photos that picked it go back to matching by lens. */
     func removeLensPreset(_ id: String) {
-        if lensChoice == id { lensChoice = nil }
-        for p in photos where p.lensChoice == id { updatePhoto(p.id) { $0.lensChoice = nil } }
         setLensPresets(lensPresets.filter { $0.id != id })
     }
 
@@ -714,8 +726,21 @@ final class AutoViewModel: ObservableObject {
     }
 
     private func setLensPresets(_ list: [Preset]) {
-        lensPresets = list
         if !LensPresetStore.save(list) { message = "Could not save lens presets" }
+        useLensPresets(list)
+    }
+
+    /** [list] as the lens presets: a pick that was removed goes back to by lens, and each photo gets what its choice now gives. */
+    private func useLensPresets(_ list: [Preset]) {
+        lensPresets = list
+        let kept: (String?) -> String? = { c in
+            c == nil || c == Presets.noLensPreset || list.contains { $0.id == c } ? c : nil
+        }
+        lensChoice = kept(lensChoice)
+        for p in photos where kept(p.lensChoice) != p.lensChoice {
+            updatePhoto(p.id) { $0.lensChoice = nil }
+            if let q = photo(p.id) { persistence?.changed(q) }
+        }
         for p in photos {
             guard let lens = p.analysis.map({ Self.matchLensName(p, $0) }) else { continue }
             let next = Presets.chosenLensPreset(list, choice: p.lensChoice, lens: lens)
@@ -1147,7 +1172,7 @@ final class AutoViewModel: ObservableObject {
     }
 
     /**
-     * Gives every photo of the batch the look (or preset), strength, warmth, tint, contrast, luma contrast, saturation, grain and retouch of [id], including
+     * Gives every photo of the batch the look (or preset), lens preset choice, strength, warmth, tint, contrast, luma contrast, saturation, grain and retouch of [id], including
      * photos still being analysed (they keep it rather than their suggestion); brightness and denoise stay per photo (they follow
      * each photo's exposure and noise). Not while exporting.
      */
@@ -1155,7 +1180,10 @@ final class AutoViewModel: ObservableObject {
         if export != nil { return }
         guard let source = photo(id) else { return }
         for p in photos where p.id != id {
-            changeDevelop(p.id, force: true) { $0.takeLook(of: source) }
+            changeDevelop(p.id, force: true) {
+                $0.takeLook(of: source)
+                takeLensChoice(&$0, of: source)
+            }
         }
         message = "\(source.lookName) applied to all photos"
     }
@@ -1185,6 +1213,17 @@ final class AutoViewModel: ObservableObject {
         return ids.count
     }
 
+    /**
+     * [p] given [source]'s lens preset choice (Apply to all, Copy previous): the same pick, or "by lens" / none, worked out
+     * for [p]'s own lens (a photo still being analysed gets its preset when the analysis is in).
+     */
+    private func takeLensChoice(_ p: inout AutoPhoto, of source: AutoPhoto) {
+        p.lensChoice = source.lensChoice
+        if let a = p.analysis {
+            p.lensPreset = Presets.chosenLensPreset(lensPresets, choice: source.lensChoice, lens: Self.matchLensName(p, a))
+        }
+    }
+
     /** The analysed photo before [id] in the batch (the one Swipe goes back to), for "Copy previous". */
     func previousPhoto(_ id: String) -> AutoPhoto? {
         let pages = shown.filter { $0.analysis != nil }
@@ -1193,7 +1232,7 @@ final class AutoViewModel: ObservableObject {
     }
 
     /**
-     * Gives photo [id] what "Apply to all" copies, from the photo before it ([previousPhoto]): look (or preset), strength,
+     * Gives photo [id] what "Apply to all" copies, from the photo before it ([previousPhoto]): look (or preset), lens preset choice, strength,
      * brightness, warmth, tint, contrast, luma contrast, saturation, grain and retouch, as one undo step (a neighbouring shot of the same scene usually wants its
      * brightness too, unlike Apply to all); denoise and rotation stay. Not while exporting.
      */
@@ -1202,6 +1241,7 @@ final class AutoViewModel: ObservableObject {
         guard let source = previousPhoto(id) else { return }
         changeDevelop(id, force: true) {
             $0.takeLook(of: source)
+            takeLensChoice(&$0, of: source)
             $0.adjust.brightness = source.adjust.brightness
         }
         message = "Copied from \(source.name)"
@@ -1705,7 +1745,9 @@ extension Data {
 
 /**
  * The lens presets RawBoy sent or the user opened (Preset.isLensPreset), as one preset file (`lens-presets.json`, the
- * same format as RawBoy's preset files) in app storage, so later batches get them too.
+ * same format as RawBoy's preset files) in app storage, so later batches get them too. RawBoy Desktop keeps them in Pro's
+ * presets file instead, as the web's Auto lists the RawBoy tab's lens presets: one saved in Pro's Lens tab is in Auto's
+ * list at once, and one Auto keeps (from a sidecar) or removes is so in Pro too.
  */
 enum LensPresetStore {
     private static var file: URL {
@@ -1713,6 +1755,38 @@ enum LensPresetStore {
             .appendingPathComponent("lens-presets.json")
     }
 
+    #if os(macOS)
+    static func load() -> [Preset] {
+        var all = PresetStore.load()
+        // Before RawBoy Desktop shared Pro's file, Auto kept the lens presets of sidecars in their own: move them over once.
+        if let text = try? String(contentsOf: file, encoding: .utf8) {
+            let old = ((try? Presets.decode(text)) ?? []).filter(\.isLensPreset)
+            let merged = old.reduce(all, Presets.putLensPreset)
+            if merged == all || PresetStore.save(merged) {
+                all = merged
+                try? FileManager.default.removeItem(at: file)
+            }
+        }
+        return all.filter(\.isLensPreset)
+    }
+
+    /** [presets] in place of the file's lens presets: kept ones stay where they were, the other presets are untouched. */
+    static func save(_ presets: [Preset]) -> Bool {
+        let all = PresetStore.load()
+        var out: [Preset] = []
+        var kept = Set<String>()
+        for p in all {
+            if !p.isLensPreset {
+                out.append(p)
+            } else if let now = presets.first(where: { $0.id == p.id }), !kept.contains(now.id) {
+                out.append(now)
+                kept.insert(now.id)
+            }
+        }
+        out += presets.filter { !kept.contains($0.id) }
+        return out == all || PresetStore.save(out)
+    }
+    #else
     static func load() -> [Preset] {
         guard let text = try? String(contentsOf: file, encoding: .utf8) else { return [] }
         return ((try? Presets.decode(text)) ?? []).filter(\.isLensPreset)
@@ -1729,4 +1803,5 @@ enum LensPresetStore {
             return false
         }
     }
+    #endif
 }

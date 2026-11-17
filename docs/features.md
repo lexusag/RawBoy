@@ -140,7 +140,7 @@ none of the web's 74; Kotlin lacks `healSpots`, `lumaContrast`, `portraitRetouch
 | Crop & rotate in the photo view | 1.15.3 | ✓ | ✓ 1.17.2 | ✓ 1.15.3 | ✓ 1.15.3 | Drag outside the frame to rotate: web 1.15.5, Desktop and iOS unreleased (open hand cursor on the Mac); Android — |
 | RawBoy preset for the batch / a selection | ≤1.1.1 | ✓ | ✓ 1.17.8 (list of Pro's presets) | ✓ | ✓ | Desktop and iOS keep the selection after a preset or lens preset (unreleased); web and Android clear it |
 | Partial presets (only the groups they hold) | 1.1.2 | ✓ | ✓ 1.17.2 | ✓ | ? | Denoise & sharpening group: unreleased on Desktop, iOS and Android |
-| Lens presets (by lens, per batch / selection) | ≤1.1.1 | ✓ | ✓ 1.17.2 | ✓ | ✓ | |
+| Lens presets (by lens, per batch / selection / photo) | ≤1.1.1 | ✓ | ✓ 1.17.2; usable unreleased | ✓ | ✓ | Desktop before unreleased: Auto read its own list, which Pro's Lens tab never filled, so the picker didn't show. Now Auto lists the lens presets saved in Pro (one presets file), with a menu in the sidebar (batch), the selection's toolbar and the photo panel; iOS has no per-photo picker. Apply to all and Copy previous carry the lens preset choice: unreleased on all platforms |
 | Edit in RawBoy / Back to Auto (RawBoy edits per photo) | ≤1.1.1 | ✓ | ✓ 1.17.8 | — | ✓ | |
 | Apply to all, Copy previous (⇧C) | ≤1.1.1 | ✓ | ✓ 1.17.2; ⇧C 1.17.8 | ✓ | ✓ | |
 | Auto denoise all / selection | 1.4.0 | ✓ | ✓ 1.17.2 | ✓ 1.4.7 | ✓ | |

@@ -110,6 +110,12 @@ final class DesktopModel: ObservableObject {
         auto.destinationView = AnyView(ExportDestinationSection(commands: commands, model: self))
         auto.editInPro = { [weak self] photo in self?.editInPro(photo) }
         commands.sendToAuto = { [weak self] in self?.sendToAuto() }
+        vm.presetToAuto = { [weak self] preset in
+            guard let self else { return }
+            // Pro and Auto share the presets file, so a lens preset is in Auto's list already: this applies it and shows Auto.
+            self.mode = .auto
+            self.auto.applyChosenPreset(preset, to: nil)
+        }
         updateAutoDestination()
         commands.exportFolder = UserDefaults.standard.string(forKey: Self.folderKey).map { URL(fileURLWithPath: $0, isDirectory: true) }
         commands.exportHandler = { [weak self] settings in self?.export(settings) }

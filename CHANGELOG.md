@@ -1,3 +1,10 @@
+**RawBoy Desktop: lens presets in Auto, for the batch, a selection or one photo (2026-11-17)**
+
+- **Lens presets saved in Pro now reach Auto.** Desktop's Auto kept its own list (filled only by the iPhone's Send to Auto link or a sidecar), so a lens preset saved in Pro's Lens tab never showed up and Auto had no lens preset picker. Auto now lists the lens presets in Pro's presets file, as the web's Auto lists the RawBoy tab's: saving, renaming or deleting one in Pro reaches Auto at once, and one Auto keeps from a sidecar or removes is so in Pro too (`LensPresetStore` on macOS, `PresetStore.changed`). Lens presets in the old `lens-presets.json` move over once. **Send to Auto** in Pro's Lens tab and Presets switches to Auto and applies the preset there (a lens preset: matched by lens, with the count).
+- **Pick one per batch, selection or photo**, as on the web: the sidebar's **Lens preset** menu (By lens, None, a preset; for every photo and photos added later; **Manage…** removes one), a **Lens preset** menu in the selection's toolbar, and a **Lens preset** section in the photo panel (with By lens it names the preset the photo got). Kept in each photo's `rawboy:Auto` sidecar as before. `LensPresetMenu` (GridScreen.swift), `DetailScreen.macPanel`.
+- **Apply to all and Copy previous carry the lens preset choice** (all platforms: web, Android, iOS and Desktop): the same pick, or By lens worked out for each photo's own lens. Before, they kept each photo's own.
+- Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.
+
 **RawBoy Desktop: room under the mode switch in Browse (2026-11-17)**
 
 - **The Pro / Auto / Browse switch no longer crowds Browse's toolbar.** The grid's toolbar (icons, search, sort) started right under the switch; Browse now leaves 14 pt more above it (`ViewerOptions.toolbarTopInset`, set in `DesktopModel.browse`; the standalone Viewer keeps its layout). Needs a RawBoy Viewer tag that has the option and the pin in `ios/project.yml` moved to it. Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.

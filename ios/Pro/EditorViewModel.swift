@@ -83,6 +83,7 @@ final class EditorViewModel: ObservableObject {
     private var histogramTask: Task<Void, Never>?
     private var histogramKey: HistogramKey?
     private var sessionWatch: AnyCancellable?
+    private var presetsWatch: AnyCancellable?
 
     init() {
         var onMessage: (String) -> Void = { _ in }
@@ -102,6 +103,14 @@ final class EditorViewModel: ObservableObject {
         onMessage = { [weak self] in self?.message = $0 }
         filmLoader = { [unowned self] in try await self.loadFilm($0) }
         presets = PresetStore.load()
+        // RawBoy Desktop: Auto saves lens presets into the same file (picked from a sidecar, or removed there).
+        presetsWatch = NotificationCenter.default.publisher(for: PresetStore.changed).sink { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let list = PresetStore.load()
+                if list != self.presets { self.presets = list }
+            }
+        }
         // The histogram follows what the session loads (photo, LUT, film stock, skin mask) as well as the edits.
         sessionWatch = session.objectWillChange.sink { [weak self] _ in
             MainActor.assumeIsolated { self?.scheduleHistogram() }
@@ -697,9 +706,14 @@ final class EditorViewModel: ObservableObject {
             if !(await UIApplication.shared.open(url)) { message = "RawBoy Auto isn't installed" }
         }
         #else
-        message = "Send to Auto works between the iPhone apps"
+        if let presetToAuto { presetToAuto(preset) } else { message = "Send to Auto works between the iPhone apps" }
         #endif
     }
+
+    #if os(macOS)
+    /** RawBoy Desktop: hands a preset to its Auto (a lens preset joins Auto's lens presets, another develops the batch). */
+    var presetToAuto: ((Preset) -> Void)?
+    #endif
 
     // MARK: - Export
 
@@ -763,12 +777,19 @@ enum PresetStore {
         return (try? Presets.decode(text)) ?? []
     }
 
+    /**
+     * Posted (on the main thread) after [save] wrote the file. RawBoy Desktop's Pro and Auto share it (Auto's lens presets
+     * are the lens presets saved here, [LensPresetStore]), so each reloads what the other saved.
+     */
+    static let changed = Notification.Name("RawBoyPresetsChanged")
+
     /** Always an array, so one preset doesn't change the file's shape; written whole, then swapped in. */
     static func save(_ presets: [Preset]) -> Bool {
         let text = presets.isEmpty ? "[]" : presets.count == 1 ? "[\(Presets.encode(presets))]" : Presets.encode(presets)
         do {
             try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
             try text.write(to: file, atomically: true, encoding: .utf8)
+            NotificationCenter.default.post(name: changed, object: nil)
             return true
         } catch {
             return false
