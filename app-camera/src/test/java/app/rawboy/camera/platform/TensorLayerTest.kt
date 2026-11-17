@@ -39,6 +39,11 @@ class TensorLayerTest {
         // No Samsung look on a Pixel.
         assertEquals(0f, tensor.still.lookContrast)
         assertEquals(0f, tensor.still.lookSaturation)
+        // LibRaw's own black handling, which the extra black above was tuned on.
+        assertEquals(false, tensor.still.exactBlack)
+        assertEquals(0f, tensor.still.blackPedestal)
+        assertEquals(BlackOffsets.NONE, tensor.still.blackOffsets)
+        assertEquals(true, tensor.still.lowPriorityDevelop) // ShotSaver's ExportGpu(lowPriority = true)
     }
 
     @Test
@@ -63,7 +68,10 @@ class TensorLayerTest {
         // The Tensor layer repeats the numbers it shares with the neutral profile, so changing those doesn't move the Pixel.
         val shifted = PlatformPatch { p ->
             p.copy(
-                still = p.still.copy(extraBlack = 0.01f, maxStillExposureNs = 1L),
+                still = p.still.copy(
+                    extraBlack = 0.01f, maxStillExposureNs = 1L, exactBlack = true, blackPedestal = 8f, lowPriorityDevelop = false,
+                    blackOffsets = BlackOffsets(mapOf("0" to listOf(BlackOffsets.Point(100f, listOf(1f, 1f, 1f))))),
+                ),
                 noise = p.noise.copy(backIsoScale = 1f, frontIsoScale = 1f, lutLumaFloor = 0f, lutColorFloor = 0f, experimentalLumaFloor = 0f, experimentalColorFloor = 0f),
                 flash = p.flash.copy(defaultGuide = 1f, referenceFNumber = 9f, defaultGainNoDistance = 1f),
                 preview = p.preview.copy(color = SrgbPreviewColor, curveAtEvenPoints = true, level = PreviewLevel.STILL_WHITE_BALANCED, liftsShadows = false),

@@ -1,5 +1,6 @@
 package app.rawboy.camera.platform.generic
 
+import app.rawboy.camera.platform.BlackOffsets
 import app.rawboy.camera.platform.CameraPlatform
 import app.rawboy.camera.platform.FlashProfile
 import app.rawboy.camera.platform.LensProfile
@@ -35,6 +36,12 @@ val neutralPlatform = CameraPlatform(
         maxStillExposureNs = 66_666_667L,
         lookContrast = 0f,
         lookSaturation = 0f,
+        // LibRaw's own black handling, what Pro and Auto decode with.
+        exactBlack = false,
+        blackPedestal = 0f,
+        blackOffsets = BlackOffsets.NONE,
+        // The viewfinder's frames first, as on the Pixel 9 Pro.
+        lowPriorityDevelop = true,
     ),
     noise = NoiseProfile(
         // Phone sensors are roughly as noisy as the camera raws the ISO table was tuned on at ~4x (2 stops more) the

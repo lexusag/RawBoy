@@ -1464,6 +1464,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val meter = meterArea().let { if (it is MeterArea.Spot) it.turned(degrees) else it }
         val fix = if (settings.geotag) location.current() else null
         val frameNumber = CameraSettingsStore.nextFrameNumber(app)
+        // The stand-alone or physical camera that shoots it, for the profile's per-camera sensor numbers.
+        val cameraId = info?.let { it.physicalId ?: it.openId }
         return if (settings.keepDng) {
             val (uri, name) = withContext(Dispatchers.IO) {
                 MediaStoreOutput.create(resolver, baseName, "dng", DNG_MIME, RAW_NAMING)
@@ -1482,7 +1484,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 throw t
             }
             Log.d(TAG, "$name: capture + DNG write ${(System.nanoTime() - dngStart) / 1_000_000} ms")
-            Shot(shotId, uri, name, null, settings, platform = platform, viewfinderKey = viewfinderKey, iso = isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber)
+            Shot(shotId, uri, name, null, settings, platform = platform, viewfinderKey = viewfinderKey, iso = isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber, cameraId = cameraId)
         } else {
             val file = File(app.cacheDir, "$baseName-$shotId.dng")
             val result = try {
@@ -1495,7 +1497,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 file.delete()
                 throw t
             }
-            Shot(shotId, Uri.fromFile(file), "$baseName.dng", file, settings, platform = platform, viewfinderKey = viewfinderKey, iso = isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber)
+            Shot(shotId, Uri.fromFile(file), "$baseName.dng", file, settings, platform = platform, viewfinderKey = viewfinderKey, iso = isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber, cameraId = cameraId)
         }
     }
 

@@ -31,6 +31,8 @@ data class CameraPlatform(
         if (still.maxStillExposureNs <= 0L) add("still.maxStillExposureNs ${still.maxStillExposureNs} <= 0")
         if (!(still.lookContrast in -100f..100f)) add("still.lookContrast ${still.lookContrast} outside -100..100")
         if (!(still.lookSaturation in -100f..100f)) add("still.lookSaturation ${still.lookSaturation} outside -100..100")
+        if (!(still.blackPedestal in 0f..64f)) add("still.blackPedestal ${still.blackPedestal} outside 0..64")
+        addAll(still.blackOffsets.problems().map { "still.blackOffsets: $it" })
         if (!(noise.backIsoScale > 0f)) add("noise.backIsoScale ${noise.backIsoScale} <= 0")
         if (!(noise.frontIsoScale > 0f)) add("noise.frontIsoScale ${noise.frontIsoScale} <= 0")
         for ((name, v) in listOf(
@@ -121,7 +123,61 @@ data class StillProfile(
     val lookContrast: Float,
     /** As [lookContrast], for Saturation; B&W looks keep their grey. Neutral 0. */
     val lookSaturation: Float,
+    /**
+     * Subtract the DNG's fractional per-site BlackLevel exactly when a shot is decoded (`app.rawboy.raw.BlackFix`):
+     * LibRaw drops the fraction, which at a high ISO's black (e.g. 64.81) lifts and reddens the deepest shadows.
+     * Neutral false, LibRaw's handling as before (the Pixel 9 Pro's [extraBlack] was tuned on top of it).
+     */
+    val exactBlack: Boolean = false,
+    /**
+     * DN of noise kept below black when a shot is decoded instead of clipped at zero, which lifts and tints a noisy
+     * single frame's deepest shadows. Neutral 0 (LibRaw's clip).
+     */
+    val blackPedestal: Float = 0f,
+    /** The sensor's black beyond the DNG's, per camera and ISO ([BlackOffsets]). Neutral none. */
+    val blackOffsets: BlackOffsets = BlackOffsets.NONE,
+    /**
+     * Develop shots in a GL context of low GPU priority (EGL_IMG_context_priority), so the viewfinder's frames come
+     * first. Neutral true, as the Pixel 9 Pro was tuned. False: normal priority, where a busy viewfinder would starve
+     * the develop (a GPU throttled by heat).
+     */
+    val lowPriorityDevelop: Boolean = true,
 )
+
+/**
+ * Where a camera's real black differs from the BlackLevel its DNGs carry: DN per camera colour (R, G, B) at a few ISOs,
+ * by camera id (the stand-alone or physical camera that shot it), interpolated in stops of ISO and held beyond the ends.
+ * Positive = the sensor's black lies above the file's (shadows come out lifted).
+ */
+data class BlackOffsets(val byCamera: Map<String, List<Point>>) {
+    /** [rgb] DN at [iso]. */
+    data class Point(val iso: Float, val rgb: List<Float>)
+
+    /** DN (R, G, B) to subtract beyond the file's black for [cameraId] at [iso]; zeros for a camera without a table. */
+    fun at(cameraId: String?, iso: Float): FloatArray {
+        val points = cameraId?.let { byCamera[it] }?.sortedBy { it.iso }
+        if (points.isNullOrEmpty() || !(iso > 0f)) return FloatArray(3)
+        if (iso <= points.first().iso) return points.first().rgb.toFloatArray()
+        if (iso >= points.last().iso) return points.last().rgb.toFloatArray()
+        val i = points.indexOfLast { it.iso <= iso }
+        val a = points[i]
+        val b = points[i + 1]
+        val t = (kotlin.math.ln(iso / a.iso) / kotlin.math.ln(b.iso / a.iso)).toFloat()
+        return FloatArray(3) { c -> a.rgb[c] + (b.rgb[c] - a.rgb[c]) * t }
+    }
+
+    fun problems(): List<String> = buildList {
+        for ((id, points) in byCamera) for (pt in points) {
+            if (!(pt.iso > 0f)) add("camera $id: ISO ${pt.iso} <= 0")
+            if (pt.rgb.size != 3) add("camera $id ISO ${pt.iso}: ${pt.rgb.size} values, not 3")
+            if (pt.rgb.any { !(it in -8f..8f) }) add("camera $id ISO ${pt.iso}: ${pt.rgb} outside -8..8 DN")
+        }
+    }
+
+    companion object {
+        val NONE = BlackOffsets(emptyMap())
+    }
+}
 
 /** Auto denoise for the phone's sensors. */
 data class NoiseProfile(

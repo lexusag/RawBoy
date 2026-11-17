@@ -37,6 +37,9 @@ class SamsungLayerTest {
             assertEquals("$chip", true, p.preview.liftsShadows)
             assertEquals("$chip", 25f, p.still.lookContrast) // CameraSettings.SAMSUNG_CONTRAST
             assertEquals("$chip", 25f, p.still.lookSaturation) // CameraSettings.SAMSUNG_SATURATION
+            assertEquals("$chip", true, p.still.lowPriorityDevelop) // ShotSaver's ExportGpu(lowPriority = true)
+            assertEquals("$chip", false, p.still.exactBlack)
+            assertEquals("$chip", 0f, p.still.blackPedestal)
             assertEquals("$chip", emptyList<String>(), p.problems())
         }
     }

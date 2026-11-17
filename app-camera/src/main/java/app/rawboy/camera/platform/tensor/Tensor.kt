@@ -1,5 +1,6 @@
 package app.rawboy.camera.platform.tensor
 
+import app.rawboy.camera.platform.BlackOffsets
 import app.rawboy.camera.platform.ChipVendor
 import app.rawboy.camera.platform.LayerLevel
 import app.rawboy.camera.platform.PlatformLayer
@@ -29,6 +30,12 @@ val tensorLayer = PlatformLayer(
             still = p.still.copy(
                 // Preview 1/30 s, ISO 1410, boost 2.39 -> still 1/15 s, ISO 1410, boost 1.2.
                 maxStillExposureNs = 66_666_667L,
+                // The Pixel's extra black (ispBlackAsPixel9Pro) was tuned on LibRaw's integer black and its clip.
+                exactBlack = false,
+                blackPedestal = 0f,
+                blackOffsets = BlackOffsets.NONE,
+                // Shots develop at low GPU priority, so the viewfinder doesn't stutter.
+                lowPriorityDevelop = true,
             ),
             noise = p.noise.copy(
                 // The Pixel's sensors are roughly as noisy as the camera raws the ISO table was tuned on at ~4x

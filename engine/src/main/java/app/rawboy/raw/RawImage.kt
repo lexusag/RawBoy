@@ -115,13 +115,14 @@ class RawImage private constructor(private var handle: Long) : AutoCloseable {
         /**
          * [extraBlack]: black to take off beyond the file's black level, as a fraction of the white range (LibRaw
          * path only). RawBoy Camera passes its phone's value to match the phone's own rendering of black.
+         * [black]: how a 2x2 per-site DNG black is taken off ([BlackFix]); the default is LibRaw's own handling.
          */
-        fun open(context: Context, uri: Uri, extraBlack: Float = 0f): RawImage {
+        fun open(context: Context, uri: Uri, extraBlack: Float = 0f, black: BlackFix = BlackFix.LIBRAW): RawImage {
             val pfd = context.contentResolver.openFileDescriptor(uri, "r")
                 ?: throw IOException("Cannot open $uri")
             val handle = pfd.use {
                 if (platformDecoded(it.fileDescriptor)) openWithImageDecoder(context, uri, it.fd)
-                else RawNative.open(it.fd, extraBlack)
+                else RawNative.open(it.fd, extraBlack, black.exact, black.pedestal, black.offset)
             }
             return RawImage(handle)
         }

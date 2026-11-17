@@ -14,9 +14,9 @@ class OnePlusLayerTest {
 
     @Test
     fun appliesByManufacturer() {
-        assertEquals(listOf("neutral", "oneplus", "cph2447"), PlatformRegistry.resolve(onePlus11).layers)
-        assertEquals(listOf("neutral", "oneplus"), PlatformRegistry.resolve(onePlus11.copy(model = "CPH2581")).layers) // OnePlus 12
-        assertEquals(listOf("neutral"), PlatformRegistry.resolve(onePlus11.copy(manufacturer = "Xiaomi")).layers)
+        assertEquals(listOf("neutral", "qualcomm", "oneplus", "cph2447"), PlatformRegistry.resolve(onePlus11).layers)
+        assertEquals(listOf("neutral", "qualcomm", "oneplus"), PlatformRegistry.resolve(onePlus11.copy(model = "CPH2581")).layers) // OnePlus 12
+        assertEquals(listOf("neutral", "qualcomm"), PlatformRegistry.resolve(onePlus11.copy(manufacturer = "Xiaomi")).layers)
         assertEquals(listOf("neutral", "oneplus", "cph2447"), PlatformRegistry.resolve(onePlus11.copy(chip = ChipVendor.MEDIATEK)).layers)
     }
 
@@ -48,9 +48,34 @@ class OnePlusLayerTest {
     }
 
     @Test
+    fun decodesTheExactBlackWithAPedestal() {
+        val still = PlatformRegistry.resolve(onePlus11.copy(model = "CPH2581")).still
+        assertTrue(still.exactBlack)
+        assertEquals(32f, still.blackPedestal)
+        assertEquals(BlackOffsets.NONE, still.blackOffsets) // sensor offsets are the model's
+    }
+
+    @Test
+    fun othersDecodeBlackAsBefore() {
+        for (p in listOf(
+            neutralPlatform,
+            PlatformRegistry.stack(listOf(tensorLayer)),
+            PlatformRegistry.resolve(onePlus11.copy(manufacturer = "Xiaomi")),
+            PlatformRegistry.resolve(onePlus11.copy(manufacturer = "samsung")),
+        )) {
+            assertFalse(p.layers.toString(), p.still.exactBlack)
+            assertEquals(p.layers.toString(), 0f, p.still.blackPedestal)
+            assertEquals(p.layers.toString(), BlackOffsets.NONE, p.still.blackOffsets)
+        }
+    }
+
+    @Test
     fun changesOnlyItsOwnFields() {
         val p = onePlusLayer.patch.applyTo(neutralPlatform)
-        assertEquals(neutralPlatform.copy(lenses = p.lenses, preview = p.preview), p)
+        assertEquals(
+            neutralPlatform.copy(lenses = p.lenses, preview = p.preview, still = neutralPlatform.still.copy(exactBlack = true, blackPedestal = 32f)),
+            p,
+        )
         assertEquals(neutralPlatform.preview.color, p.preview.color)
     }
 }

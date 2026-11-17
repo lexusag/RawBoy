@@ -132,16 +132,22 @@ shows them.
   maker's, the phone maker's and the model's, where they exist. The end of Settings shows the result, e.g. *Phone
   profile: Google Tensor* or *Phone profile: neutral (this phone hasn't been tested)*, with the chip and model it
   detected; logcat has the same and every value under the tag `RawBoyPlatform`. Today there are layers for Google
-  Tensor, Samsung and OnePlus; other phones (older Snapdragon Pixels included) get the neutral profile, which takes the
-  preview as plain sRGB and adds no extra black. OnePlus phones ask for the preview's sRGB curve at evenly spaced
+  Tensor, Qualcomm Snapdragon, Samsung and OnePlus; other phones get the neutral profile, which takes the preview as
+  plain sRGB and adds no extra black. Snapdragon phones (older Pixels included) develop photos at normal GPU priority:
+  on a phone hot from long shooting, the low priority the Pixel uses let the viewfinder starve the develop (a photo
+  without Film took minutes instead of ~3 s on the OnePlus 11); Samsung phones keep the low priority. OnePlus phones ask for the preview's sRGB curve at evenly spaced
   points (the OnePlus 11 reads the points that way, whatever their spacing: with the points packed near black, as other
   phones get them, its viewfinder came out about twice as contrasty and saturated as the photo), and list their
   stand-alone cameras rather than the logical camera that also covers them (RAW through the logical camera froze the
   preview). On OnePlus phones the viewfinder also takes the preview as being as bright as the photo's raw, with the
   camera's white balance in it, so its learned brightness stays near 1 in any light and needs no raw metering before
   the first photo; it shows the shadow lift backlit photos get (their preview has no local lift of its own), and it
-  reads the curve's darkest step as the straight line the camera draws there. The OnePlus 11's model layer brings the
-  ultrawide's paler preview up to its photos' saturation (*Phone profile: OnePlus + OnePlus 11*). Debug builds can take the phone for another chip (*Take the phone
+  reads the curve's darkest step as the straight line the camera draws there. OnePlus photos are decoded with the
+  DNG's exact black level (the decoder used to drop its fraction, up to 0.8 of a raw level at high ISO) and keep the
+  noise below black instead of clipping it, so the deepest shadows of night shots stay neutral instead of turning
+  magenta. The OnePlus 11's model layer brings the ultrawide's paler preview up to its photos' saturation, corrects its
+  main and ultrawide cameras' black at high ISO (measured on the sensors) and denoises its selfie camera as the noisier
+  sensor it is (*Phone profile: Qualcomm + OnePlus + OnePlus 11*). Debug builds can take the phone for another chip (*Take the phone
   for*, from the next start); calibration learned under such a profile is kept apart from the phone's own.
 - **Share device report** (Android; Settings, under the phone profile): gathers what a profile for a new phone is made
   from into a plain text file and opens the system share sheet; nothing is sent unless you send it. It lists the phone

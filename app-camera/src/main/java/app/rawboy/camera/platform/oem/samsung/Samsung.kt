@@ -26,6 +26,8 @@ val samsungLayer = PlatformLayer(
     level = LayerLevel.MANUFACTURER,
     matches = { it.madeBy("samsung") },
     patch = ispBlackAsPixel9Pro + previewColorFromResult + PlatformPatch { p ->
-        p.copy(still = p.still.copy(lookContrast = 25f, lookSaturation = 25f))
+        // Low GPU priority for shots, as before chips were told apart (the Qualcomm layer drops it for other Snapdragon
+        // phones; nobody has checked a Galaxy S25 under heat).
+        p.copy(still = p.still.copy(lookContrast = 25f, lookSaturation = 25f, lowPriorityDevelop = true))
     },
 )

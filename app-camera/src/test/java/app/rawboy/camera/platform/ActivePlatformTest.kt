@@ -4,6 +4,7 @@ import app.rawboy.camera.platform.generic.neutralPlatform
 import app.rawboy.camera.platform.oem.oneplus.cph2447Layer
 import app.rawboy.camera.platform.oem.oneplus.onePlusLayer
 import app.rawboy.camera.platform.oem.samsung.samsungLayer
+import app.rawboy.camera.platform.qualcomm.qualcommLayer
 import app.rawboy.camera.platform.tensor.tensorLayer
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -29,9 +30,9 @@ class ActivePlatformTest {
 
     @Test
     fun aOnePlusGetsItsLayer() {
-        // The OnePlus 11: no Qualcomm layer yet (one Snapdragon phone measured); its model layer on top.
-        assertEquals(PlatformRegistry.stack(listOf(onePlusLayer, cph2447Layer)), ActivePlatform.resolve(onePlus, null).profile)
-        assertEquals(listOf("neutral", "oneplus", "cph2447"), ActivePlatform.resolve(onePlus, null).profile.layers)
+        // The OnePlus 11: the Qualcomm layer (its GPU), then OnePlus and its model layer on top.
+        assertEquals(PlatformRegistry.stack(listOf(qualcommLayer, onePlusLayer, cph2447Layer)), ActivePlatform.resolve(onePlus, null).profile)
+        assertEquals(listOf("neutral", "qualcomm", "oneplus", "cph2447"), ActivePlatform.resolve(onePlus, null).profile.layers)
     }
 
     @Test
@@ -43,7 +44,9 @@ class ActivePlatformTest {
     @Test
     fun aSamsungGetsItsLayerOnItsChip() {
         val galaxy = PhoneDescription(PlatformDetector.chipOf("QTI", "qcom"), manufacturer = "samsung", model = "SM-S931B")
-        assertEquals(PlatformRegistry.stack(listOf(samsungLayer)), ActivePlatform.resolve(galaxy, null).profile)
+        assertEquals(PlatformRegistry.stack(listOf(qualcommLayer, samsungLayer)), ActivePlatform.resolve(galaxy, null).profile)
+        // Samsung keeps what it had on any chip: the Qualcomm layer changes nothing under it.
+        assertEquals(PlatformRegistry.stack(listOf(samsungLayer)), ActivePlatform.resolve(galaxy, null).profile.copy(layers = listOf("neutral", "samsung")))
     }
 
     @Test
@@ -62,7 +65,9 @@ class ActivePlatformTest {
         assertEquals("neutral+tensor+oneplus+cph2447", ActivePlatform.resolve(onePlus, ChipVendor.TENSOR).profile.calibrationSlot)
         // The same layers as detected: the same profile, so the phone's own calibration stays valid.
         assertEquals("", ActivePlatform.resolve(pixel, ChipVendor.TENSOR).profile.calibrationSlot)
-        assertEquals("", ActivePlatform.resolve(onePlus, ChipVendor.UNKNOWN).profile.calibrationSlot)
+        assertEquals("", ActivePlatform.resolve(onePlus, ChipVendor.QUALCOMM).profile.calibrationSlot)
+        // Taken for no known chip, the OnePlus 11 loses the Qualcomm layer: a profile of its own.
+        assertEquals("neutral+oneplus+cph2447", ActivePlatform.resolve(onePlus, ChipVendor.UNKNOWN).profile.calibrationSlot)
     }
 
     @Test
@@ -71,6 +76,6 @@ class ActivePlatformTest {
         for (part in listOf("chip QUALCOMM", "\"SM8550\"", "taken for TENSOR by hand", "layers neutral+tensor+oneplus+cph2447", "calibration neutral+tensor+oneplus+cph2447", "extraBlack=0.00146", "UndoIspPreviewColor", "backIsoScale=4.0", "defaultGuide=16.0")) {
             assertTrue("$part not in $line", part in line)
         }
-        assertTrue("automatic; layers neutral+oneplus+cph2447; calibration own" in ActivePlatform.describe(ActivePlatform.resolve(onePlus, null)))
+        assertTrue("automatic; layers neutral+qualcomm+oneplus+cph2447; calibration own" in ActivePlatform.describe(ActivePlatform.resolve(onePlus, null)))
     }
 }

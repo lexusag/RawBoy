@@ -34,6 +34,15 @@ import app.rawboy.camera.platform.PreviewLevel
  * third of a backlit frame), so the ISP's local lift the Pixel's preview carries isn't there, and a window shot's
  * foreground came out 0.3-0.8 EV brighter in the photo than in the viewfinder: the live develop adds the shot's lift
  * (a 6.3-stop window scene: 49 in both).
+ *
+ * Black: the HAL writes the frame's dynamic black into the DNG with a fraction that grows with ISO (64.0 at ISO 100,
+ * 64.62 / 64.81 by CFA site at ISO 6400 on the main camera), which LibRaw truncates to 64, and LibRaw clips the noise
+ * below black at zero. Against a frame of the same scene at ISO 100 (16x16 blocks, 4 stops under, 2026-11-17), the
+ * main camera's shadows at 2^-8 / 2^-7 of white came out R/G up to +14% merged and +49% / +23% in a single ISO 6400
+ * frame (the approved limit is 8% on merged shots). With the exact black, a 32 DN pedestal (the noise std at ISO 6400
+ * is 6-7 DN) and the OnePlus 11's sensor offsets ([cph2447Layer]): main camera merged +1.8% / +2.3%, single +3.7% /
+ * +3.0%; ultrawide merged +5.5% / +1.8% (single ISO 6400 still +21% / +10%). A night corridor without Film: deep
+ * shadows from R/G/B 12 / 5 / 10 levels (magenta) to 5 / 7 / 6.
  */
 val onePlusLayer = PlatformLayer(
     name = "oneplus",
@@ -44,6 +53,7 @@ val onePlusLayer = PlatformLayer(
         p.copy(
             lenses = p.lenses.copy(standaloneOverLogical = true),
             preview = p.preview.copy(curveAtEvenPoints = true, level = PreviewLevel.STILL_WHITE_BALANCED, liftsShadows = false),
+            still = p.still.copy(exactBlack = true, blackPedestal = 32f),
         )
     },
 )

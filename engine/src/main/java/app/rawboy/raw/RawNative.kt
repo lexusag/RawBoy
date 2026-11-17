@@ -8,7 +8,7 @@ internal object RawNative {
         System.loadLibrary("rawboy")
     }
 
-    @JvmStatic external fun open(fd: Int, extraBlack: Float): Long
+    @JvmStatic external fun open(fd: Int, extraBlack: Float, exactBlack: Boolean, pedestal: Float, blackOffset: FloatArray): Long
     @JvmStatic external fun openBitmap(bitmap: android.graphics.Bitmap, fd: Int): Long
     @JvmStatic external fun displayReferred(handle: Long): Boolean
     @JvmStatic external fun close(handle: Long)

@@ -5,6 +5,7 @@ import app.rawboy.camera.platform.CameraPlatform
 import app.rawboy.camera.platform.NoiseProfile
 import app.rawboy.camera.platform.StillProfile
 import app.rawboy.develop.DevelopParams
+import app.rawboy.raw.BlackFix
 import kotlin.math.roundToInt
 
 /**
@@ -18,6 +19,13 @@ internal object ShotDevelop {
      */
     fun noiseIsoScale(noise: NoiseProfile, front: Boolean, effectiveFrames: Float): Float =
         (if (front) noise.frontIsoScale else noise.backIsoScale) / effectiveFrames
+
+    /** How the shot's raw is decoded ([StillProfile]'s black handling) for the camera [cameraId] at [iso]. */
+    fun blackFix(still: StillProfile, cameraId: String?, iso: Float): BlackFix {
+        val offset = still.blackOffsets.at(cameraId, iso)
+        if (!still.exactBlack && still.blackPedestal <= 0f && offset.all { it == 0f }) return BlackFix.LIBRAW
+        return BlackFix(exact = still.exactBlack, pedestal = still.blackPedestal, offset = offset)
+    }
 
     /**
      * Backlit scenes (a window, a lamp in frame): the phone's own preview lifts the dark parts locally, and the plain

@@ -9,7 +9,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 
-/** The OnePlus 11's model layer: only its ultrawide's viewfinder colour changes, and only on that phone. */
+/** The OnePlus 11's model layer: its ultrawide's viewfinder colour, its back cameras' black offsets and its selfie camera's noise, on that phone only. */
 class Cph2447LayerTest {
     private val onePlus11 = PhoneDescription(ChipVendor.QUALCOMM, "QTI", "SM8550", "qcom", "kalama", "OnePlus", "OnePlus", "CPH2447", "OP594DL1", 36)
     private val profile = PlatformRegistry.resolve(onePlus11)
@@ -19,16 +19,43 @@ class Cph2447LayerTest {
     @Test
     fun appliesToTheOnePlus11Only() {
         assertEquals("cph2447", profile.layers.last())
-        assertEquals(listOf("neutral", "oneplus"), PlatformRegistry.resolve(onePlus11.copy(model = "CPH2581")).layers)
-        assertEquals(listOf("neutral"), PlatformRegistry.resolve(onePlus11.copy(manufacturer = "Xiaomi")).layers)
+        assertEquals(listOf("neutral", "qualcomm", "oneplus"), PlatformRegistry.resolve(onePlus11.copy(model = "CPH2581")).layers)
+        assertEquals(listOf("neutral", "qualcomm"), PlatformRegistry.resolve(onePlus11.copy(manufacturer = "Xiaomi")).layers)
         assertEquals(emptyList<String>(), profile.problems())
     }
 
     @Test
-    fun changesOnlyThePreviewColour() {
+    fun changesOnlyThePreviewColourTheBlackOffsetsAndTheSelfieNoise() {
         val below = onePlusLayer.patch.applyTo(neutralPlatform)
         val p = cph2447Layer.patch.applyTo(below)
-        assertEquals(below.copy(preview = below.preview.copy(color = p.preview.color)), p)
+        assertEquals(
+            below.copy(
+                preview = below.preview.copy(color = p.preview.color),
+                still = below.still.copy(blackOffsets = p.still.blackOffsets),
+                noise = below.noise.copy(frontIsoScale = 10f),
+            ),
+            p,
+        )
+    }
+
+    @Test
+    fun selfieDenoisesAsANoisierSensor() {
+        assertEquals(4f, profile.noise.backIsoScale)
+        assertEquals(10f, profile.noise.frontIsoScale)
+        // Another OnePlus keeps the neutral guess.
+        assertEquals(8f, PlatformRegistry.resolve(onePlus11.copy(model = "CPH2581")).noise.frontIsoScale)
+    }
+
+    @Test
+    fun blackOffsetsForTheBackCamerasOnly() {
+        val offsets = profile.still.blackOffsets
+        // Ultrawide above the DNG's black, main camera below it, both growing with ISO; the selfie camera has none.
+        assertArrayEquals(floatArrayOf(0.72f, 0.60f, 0.42f), offsets.at("3", 6400f), 1e-6f)
+        assertArrayEquals(floatArrayOf(0.19f, 0.16f, 0.10f), offsets.at("3", 1600f), 1e-6f)
+        assertArrayEquals(floatArrayOf(-0.48f, -0.35f, -0.29f), offsets.at("2", 6400f), 1e-6f)
+        assertArrayEquals(floatArrayOf(0f, 0f, 0f), offsets.at("2", 200f), 0f)
+        assertArrayEquals(floatArrayOf(0f, 0f, 0f), offsets.at("1", 1600f), 0f)
+        assertArrayEquals(floatArrayOf(0f, 0f, 0f), offsets.at("0", 6400f), 0f) // logical camera: not listed on this phone
     }
 
     @Test

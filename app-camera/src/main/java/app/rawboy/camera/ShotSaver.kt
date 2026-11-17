@@ -27,6 +27,7 @@ import app.rawboy.camera.platform.CameraPlatform
 import app.rawboy.camera.platform.PreviewLevel
 import app.rawboy.auto.analysis.AutoTone
 import app.rawboy.auto.analysis.MeterArea
+import app.rawboy.auto.analysis.NoiseLevel
 import app.rawboy.export.DateStamp
 import app.rawboy.export.ExportFormat
 import app.rawboy.export.ExportGpu
@@ -104,6 +105,8 @@ internal data class Shot(
     val timeMs: Long = System.currentTimeMillis(),
     /** 1-based daily frame counter, used when [PhotoFrame.PENTAX_645] is selected. */
     val frameNumber: Int = 0,
+    /** The camera that shot it (the stand-alone or physical camera's id), for per-camera sensor numbers; null if unknown. */
+    val cameraId: String? = null,
 )
 
 /** A finished shot and the sequence number assigned at its shutter, so lock screen launches hide earlier ones. */
@@ -200,8 +203,15 @@ internal object ShotSaver {
     private val developDispatcher = developExecutor.asCoroutineDispatcher()
     private val compressExecutor = stageThread("RawBoy-dng", COMPRESS_THREAD_PRIORITY)
 
-    /** Used only on the develop thread; low GPU priority so the viewfinder's frames come first. */
-    private val exportGpu = ExportGpu(lowPriority = true)
+    /**
+     * Used only on the develop thread, at the GPU priority the platform asks for
+     * ([app.rawboy.camera.platform.StillProfile.lowPriorityDevelop]); each makes its context on first use, and a
+     * process runs with one profile, so one of them stays empty.
+     */
+    private val exportGpuLow = ExportGpu(lowPriority = true)
+    private val exportGpuNormal = ExportGpu(lowPriority = false)
+
+    private fun exportGpu(platform: CameraPlatform) = if (platform.still.lowPriorityDevelop) exportGpuLow else exportGpuNormal
 
     /** A shot decoded and analysed by [prepare], ready for [finish]; owns [image] until [finish] closes it. */
     private class Prepared(
@@ -376,7 +386,10 @@ internal object ShotSaver {
     private fun releaseGpuIfIdle() {
         // The export GL context belongs to the develop thread: release it there once all queued work has drained.
         developExecutor.execute {
-            if (_pending.value == 0 && activeViews.get() <= 0) exportGpu.close()
+            if (_pending.value == 0 && activeViews.get() <= 0) {
+                exportGpuLow.close()
+                exportGpuNormal.close()
+            }
         }
     }
 
@@ -389,8 +402,9 @@ internal object ShotSaver {
         val started = System.nanoTime()
         val decodeStart = System.nanoTime()
         Log.d(TAG, "${shot.name}: decode starts, ${memoryNote(app)}")
-        // The ISP's black beyond the DNG's, so the photo's shadows match the viewfinder (StillProfile.extraBlack).
-        val img = RawImage.open(app, shot.dng, shot.platform.still.extraBlack)
+        // The ISP's black beyond the DNG's, so the photo's shadows match the viewfinder (StillProfile.extraBlack), and how
+        // the DNG's own black is taken off (StillProfile.exactBlack, blackPedestal, blackOffsets).
+        val img = RawImage.open(app, shot.dng, shot.platform.still.extraBlack, ShotDevelop.blackFix(shot.platform.still, shot.cameraId, shot.iso))
         try {
             val decodeMs = ms(decodeStart)
             val analysisStart = System.nanoTime()
@@ -410,11 +424,15 @@ internal object ShotSaver {
             val looked = ShotDevelop.looked(s, a.autoBase, a.stats.hasFace, shot.platform)
             // High ISO: more denoise than the auto develop's table, up to the coarse stage (denoise > 65).
             val denoise = maxOf(looked.denoise, highIsoDenoise(a.stats.iso * noiseScale))
+            val noise = img.measureNoise()
             val params = looked.copy(
                 denoise = denoise,
-                colorDenoise = maxOf(measuredColorDenoise(img, looked.exposure, denoise) ?: denoise, looked.colorDenoise ?: 0f),
+                colorDenoise = maxOf(measuredColorDenoise(noise, looked.exposure, denoise) ?: denoise, looked.colorDenoise ?: 0f),
                 shadows = maxOf(looked.shadows, ShotDevelop.backlightShadows(a.stats)),
             )
+            Log.d(TAG, "${shot.name}: noise ISO ${a.stats.iso} x $noiseScale (frames ${shot.effectiveFrames}), measured luma " +
+                "${noise.luma} chroma ${noise.chroma}${if (noise.measured) "" else " (unmeasured)"} -> denoise ${params.denoise}, colour " +
+                "${params.colorDenoise}, sharpening ${params.sharpening}; key ${a.stats.key}, exposure ${params.exposure}")
             val lut = params.lut?.let { loadLut(app, it) }
             val film = params.film?.let { loadFilm(app, it) }
             val shader = ShaderParams.from(
@@ -478,7 +496,7 @@ internal object ShotSaver {
         val waitMs = ms(p.started)
         val saved = withContext(developDispatcher) {
             val exportStart = System.nanoTime()
-            Exporter(app).exportFile(p.image, shot.dng, shot.name, p.shader, p.export, CameraViewModel.JPEG_NAMING, exportGpu) {}
+            Exporter(app).exportFile(p.image, shot.dng, shot.name, p.shader, p.export, CameraViewModel.JPEG_NAMING, exportGpu(shot.platform)) {}
                 .also {
                     val took = ms(exportStart)
                     Log.d(TAG, "${shot.name}: develop + JPEG $took ms")
@@ -562,8 +580,7 @@ internal object ShotSaver {
      * speckle (Pixel 9 Pro test, 2026-10-30). Luma stays on the ISO table (the owner's call: luma noise is right).
      * The shader scales this towards the corners by the shading gain (develop.glsl `colorNoiseScale`).
      */
-    private fun measuredColorDenoise(img: RawImage, exposure: Float, denoise: Float): Float? {
-        val noise = img.measureNoise()
+    private fun measuredColorDenoise(noise: NoiseLevel, exposure: Float, denoise: Float): Float? {
         if (!noise.measured) return null
         return maxOf(AutoTone.measuredNoiseSettings(noise, exposure).second, denoise)
     }

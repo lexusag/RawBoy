@@ -72,7 +72,7 @@ class DeviceReportTest {
             "soc model: SM8550",
             "firmware: CPH2447_16.0.5.1301(EX01)",
             "choice: automatic",
-            "layers: neutral + oneplus + cph2447",
+            "layers: neutral + qualcomm + oneplus + cph2447",
             "calibration: own",
             "lenses: LensProfile(standaloneOverLogical=true)",
             "preview: PreviewProfile(color=CameraSaturation(SrgbPreviewColor, {3=1.25}), curveAtEvenPoints=true, level=STILL_WHITE_BALANCED, liftsShadows=false)",
