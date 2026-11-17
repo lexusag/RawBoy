@@ -1191,18 +1191,24 @@ final class AutoViewModel: ObservableObject {
 
     /**
      * "Auto denoise all", for a batch that's otherwise done: every photo gets the denoise, colour denoise and sharpening
-     * the auto develop measured on it, so its Denoise slider goes back to 0 (presets never override those here); looks,
-     * presets, lens corrections and the other sliders stay. One undo step per photo. [ids] (the grid's selection): only
-     * those photos. Not while exporting.
+     * the auto develop measured on it, so its Denoise slider goes back to 0 and presets (the batch's too, for photos
+     * added later) lose their Denoise & sharpening group (Presets.withoutDenoise); looks, presets, lens corrections and
+     * the other sliders stay. One undo step per photo. [ids] (the grid's selection): only those photos, and the batch
+     * preset stays as it is. Not while exporting.
      */
     func autoDenoiseAll(_ ids: Set<String>? = nil) {
         guard export == nil else { return }
+        if ids == nil, let batch = preset { preset = Presets.withoutDenoise(batch) }
         // A photo added "As is" has no auto develop: it gets the measured denoise from now on (autoDenoise).
-        let changed = photos.filter { (ids == nil || ids!.contains($0.id)) && ($0.adjust.denoise != 0 || ($0.plain && !$0.autoDenoise)) }
+        let changed = photos.filter {
+            (ids == nil || ids!.contains($0.id))
+                && ($0.adjust.denoise != 0 || ($0.plain && !$0.autoDenoise) || ($0.preset?.groups.contains(.denoise) ?? false))
+        }
         for p in changed {
             changeDevelop(p.id, force: true) {
                 $0.adjust.denoise = 0
                 if $0.plain { $0.autoDenoise = true }
+                $0.preset = $0.preset.flatMap(Presets.withoutDenoise)
             }
         }
         switch changed.count {

@@ -6,7 +6,7 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Presets' groups (the Film tone mapper in Light, local contrast and the two denoises in Detail), as RawBoy Web's Presets.ts. */
+/** Presets' groups (the Film tone mapper in Light, local contrast in Detail, the two denoises in Denoise & sharpening), as RawBoy Web's Presets.ts. */
 class PresetsTest {
     @Test
     fun lightGroupCarriesTheFilm() {
@@ -47,12 +47,63 @@ class PresetsTest {
     }
 
     @Test
-    fun detailGroupCarriesBothDenoises() {
-        val split = DevelopParams(denoise = 30f, colorDenoise = 60f)
-        val preset = Presets.decode(Presets.encode(listOf(Presets.capture("Split", split, setOf(PresetGroup.DETAIL))))).single()
+    fun denoiseGroupCarriesBothDenoisesAndSharpening() {
+        // The same cases as web's engine.test.ts ("split denoise in presets").
+        val split = DevelopParams(denoise = 30f, colorDenoise = 60f, sharpening = 7f)
+        val preset = Presets.decode(Presets.encode(listOf(Presets.capture("Split", split, setOf(PresetGroup.DENOISE))))).single()
         val applied = Presets.apply(preset, DevelopParams(colorDenoise = 5f))
         assertEquals(30f, applied.denoise, 0f)
         assertEquals(60f, applied.effectiveColorDenoise, 0f)
+        assertEquals(7f, applied.sharpening, 0f)
+        // Detail alone leaves them.
+        val detail = Presets.decode(Presets.encode(listOf(Presets.capture("Grain", DevelopParams(denoise = 30f, grain = 40f), setOf(PresetGroup.DETAIL))))).single()
+        assertEquals(setOf(PresetGroup.DETAIL), detail.groups)
+        val kept = Presets.apply(detail, DevelopParams(denoise = 5f))
+        assertEquals(5f, kept.denoise, 0f)
+        assertEquals(40f, kept.grain, 0f)
+    }
+
+    @Test
+    fun presetsFromBeforeTheDenoiseGroupKeepDenoiseOnlyWithoutLight() {
+        val detail = Presets.decode(
+            """{"format":"rawboy-preset","version":1,"name":"D","groups":["detail"],""" +
+                """"values":{"denoise":40,"colorDenoise":80,"sharpening":9,"grain":20}}""",
+        ).single()
+        assertEquals(setOf(PresetGroup.DETAIL, PresetGroup.DENOISE), detail.groups)
+        val a = Presets.apply(detail, DevelopParams())
+        assertEquals(40f, a.denoise, 0f)
+        assertEquals(80f, a.colorDenoise!!, 0f)
+        assertEquals(9f, a.sharpening, 0f)
+        assertEquals(20f, a.grain, 0f)
+        val scene = Presets.decode(
+            """{"format":"rawboy-preset","version":1,"name":"S","groups":["light","detail"],""" +
+                """"values":{"contrast":10,"denoise":40,"grain":20}}""",
+        ).single()
+        assertEquals(setOf(PresetGroup.LIGHT, PresetGroup.DETAIL), scene.groups)
+        val b = Presets.apply(scene, DevelopParams(denoise = 5f))
+        assertEquals(10f, b.contrast, 0f)
+        assertEquals(5f, b.denoise, 0f)
+        assertEquals(20f, b.grain, 0f)
+    }
+
+    @Test
+    fun withoutDenoiseDropsOnlyThatGroup() {
+        val p = Presets.capture("Night", DevelopParams(denoise = 50f, grain = 30f), setOf(PresetGroup.DETAIL, PresetGroup.DENOISE))
+        val stripped = Presets.withoutDenoise(p)!!
+        assertEquals(setOf(PresetGroup.DETAIL), stripped.groups)
+        assertEquals(p.id, stripped.id)
+        assertFalse("denoise" in stripped.values)
+        assertEquals(30f, Presets.apply(stripped, DevelopParams(denoise = 5f)).grain, 0f)
+        assertEquals(5f, Presets.apply(stripped, DevelopParams(denoise = 5f)).denoise, 0f)
+        assertNull(Presets.withoutDenoise(Presets.capture("Only", DevelopParams(), setOf(PresetGroup.DENOISE))))
+        val plain = Presets.capture("Grain", DevelopParams(), setOf(PresetGroup.DETAIL))
+        assertTrue(Presets.withoutDenoise(plain) === plain)
+    }
+
+    @Test
+    fun saveDialogLeavesDenoiseUnticked() {
+        assertFalse(PresetGroup.DENOISE in PresetGroup.DEFAULT)
+        assertEquals("denoise", PresetGroup.DENOISE.key)
     }
 
     @Test

@@ -42,7 +42,7 @@ Biggest first:
    says "Files app"), and no Choose folder or drop, as the web has.
 4. **Auto's keys** (web 1.1.1 to 1.15.10): Space / Backspace, Delete and C are missing on Desktop.
 5. **ISO on every Auto photo** (web ≤1.1.1) and **time left on Export all** (web 1.15.1).
-6. **Preset group Denoise & sharpening** (web 1.1.3): Desktop (and iOS, Android) can't keep denoise apart from Detail.
+6. ~~**Preset group Denoise & sharpening** (web 1.1.3)~~: done on Desktop, iOS and Android (unreleased).
 7. **No update path**: the web has a "New version available" banner; Desktop is a hand-downloaded DMG.
 8. **Browse** misses: photos with `rawboy:Auto` settings don't go back into Auto when a folder is reopened, "Send to
    Auto" has no picks / minimum-stars shortcut, darktable `_01` duplicates are unchecked.
@@ -92,7 +92,7 @@ none of the web's 74; Kotlin lacks `healSpots`, `lumaContrast`, `portraitRetouch
 | Undo / Redo | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
 | Presets: groups, import / export `.rawboy.json` | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
 | Presets: batch select to delete / export | 1.9.2 | ✓ | ✓ 1.17.0 | ✓ | ? | |
-| Presets: **Denoise & sharpening group** | 1.1.3 | ✓ | — | — | — | **Gap.** `PresetGroup` in Swift has no `denoise` group (denoise stays inside Detail), so Auto's "partial preset keeps each photo's own noise" can't be made from Desktop or iOS |
+| Presets: **Denoise & sharpening group** | 1.1.3 | ✓ | ✓ unreleased | ✓ unreleased | ✓ unreleased | `PresetGroup.denoise` / `DENOISE`, off by default in Save preset; old Detail-only presets keep their denoise, ones with Light leave it to Auto (as `Presets.ts`). Auto: a preset sets denoise and sharpening only with this group; Auto denoise all drops it |
 | Presets: Masks, Retouch groups | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
 | Presets with no photo open | 1.17.8 | ✓ | ✓ 1.17.8 | ? | ? | |
 | Look selector (stripes of every LUT / stock over the photo) | 1.10.11 | ✓ | ✓ 1.17.8 | ✓ (shared code) | — | Resizable window: web 1.14.2, Desktop 1.17.8 |
@@ -139,7 +139,7 @@ none of the web's 74; Kotlin lacks `healSpots`, `lumaContrast`, `portraitRetouch
 | **Retouch** (portrait retouch adjustment) | 1.12.0 | ✓ | — | — | — | **Gap.** `Adjustments.retouch` exists in web only; Desktop keeps it in the sidecar but has no slider |
 | Crop & rotate in the photo view | 1.15.3 | ✓ | ✓ 1.17.2 | ✓ 1.15.3 | ✓ 1.15.3 | Drag-to-rotate on web 1.15.5; Desktop ? |
 | RawBoy preset for the batch / a selection | ≤1.1.1 | ✓ | ✓ 1.17.8 (list of Pro's presets) | ✓ | ✓ | |
-| Partial presets (only the groups they hold) | 1.1.2 | ✓ | ✓ 1.17.2 | ✓ | ? | Denoise & sharpening group missing (above) |
+| Partial presets (only the groups they hold) | 1.1.2 | ✓ | ✓ 1.17.2 | ✓ | ? | Denoise & sharpening group: unreleased on Desktop, iOS and Android |
 | Lens presets (by lens, per batch / selection) | ≤1.1.1 | ✓ | ✓ 1.17.2 | ✓ | ✓ | |
 | Edit in RawBoy / Back to Auto (RawBoy edits per photo) | ≤1.1.1 | ✓ | ✓ 1.17.8 | — | ✓ | |
 | Apply to all, Copy previous (⇧C) | ≤1.1.1 | ✓ | ✓ 1.17.2; ⇧C 1.17.8 | ✓ | ✓ | |
@@ -225,7 +225,7 @@ most cases). "Check" = confirm in the app before building, because I could only 
 | 3 | **Your own LUTs: a reachable folder** | ≤1.1.1 | A Mac user can't find the folder; "Files app" is wrong there. Needs Reveal in Finder, optionally a folder picker (remembered) and dropping `.cube` / `.png` on the window | Small |
 | 4 | **Auto keys: Space / Backspace, Delete, C** | ≤1.1.1; 1.15.10 | Muscle memory from the web; culling a batch is keyboard work | Small: `KeyboardShortcuts.handleAuto` + menu items |
 | 5 | **Auto: ISO on each photo; time left on Export all** | ≤1.1.1; 1.15.1 | Judging noise without zooming; knowing if a 300-photo export is 4 or 40 minutes | Small |
-| 6 | **Preset group Denoise & sharpening** | 1.1.3 | Without it a Pro preset applied in Auto either leaves noise to Auto (Detail unticked) or overrides the measured values | Small: `PresetGroup.denoise` (Swift and Kotlin), the "Detail-only presets keep theirs" migration (see `Presets.ts`) |
+| 6 | ~~**Preset group Denoise & sharpening**~~ (done, unreleased) | 1.1.3 | Without it a Pro preset applied in Auto either leaves noise to Auto (Detail unticked) or overrides the measured values | Small: `PresetGroup.denoise` (Swift and Kotlin), the "Detail-only presets keep theirs" migration (see `Presets.ts`) |
 | 7 | **Browse: send "picks / ≥ N stars" to Auto; reopen a folder and bring Auto-edited photos back** | ≤1.1.1 | The web's Browser → Auto loop; needs a Viewer release (host hook) | Medium, in `RawBoyImageViewer` |
 | 8 | **Updater** | 1.6.0 | New DMGs are easy to miss; Sparkle is already in the Viewer app | Medium (signing, appcast; notarisation is "not in yet") |
 | 9 | **Auto: decode neighbours ahead** | 1.15.9 | Paging through a batch waits on each decode | Medium: a one-ahead prefetch in `AutoViewModel` / `PhotoSession`; web's `NeighbourPreload.ts` is the pattern |

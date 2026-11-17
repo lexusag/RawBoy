@@ -1,3 +1,10 @@
+**RawBoy Desktop, iOS and Android: Denoise & sharpening preset group (2026-11-17)**
+
+- **Save preset has a Denoise & sharpening group**, as on the web: Denoise, Color denoise and Sharpening moved out of Detail into it, off by default. Detail now holds local contrast, grain, bloom and flare only.
+- **RawBoy Auto keeps each photo's measured noise** unless a preset holds that group; with it, the preset's denoise and sharpening apply as saved (the Denoise adjustment still works on top). **Auto denoise all** takes the group off the presets (the batch preset's too, when no photos are selected), as on the web.
+- Presets saved before the split: Detail-only ones keep their denoise (they get the new group), ones with Light leave it to Auto, the same rule as `Presets.ts`. A Light + Detail preset applied in Pro no longer sets denoise; re-save it with the group ticked.
+- Code: `PresetGroup.DENOISE` / `.denoise`, `Presets.withoutDenoise` (Kotlin and Swift), `LookApplier.applyPreset` no longer forces the auto values. Tests: `PresetsTest`, `LookApplierTest`, `PresetDenoiseGroupTests` (web's cases). Not compiled or run here (no Android SDK or Swift toolchain): CI compiles the Kotlin (unit tests compiled, not run) and the Desktop job builds and runs the Swift tests.
+
 **RawBoy Desktop: Browse reopens the last folder (2026-11-17)**
 
 - **Back in the last folder.** A plain launch now opens Browse in the folder you left it in (Browse's Settings › "Open the last folder at launch", on by default). Opening a photo or folder from Finder, `--open`, `--browse` or `--auto` takes precedence. Not compiled when written (no Mac): CI is the first build.
