@@ -1,3 +1,8 @@
+**RawBoy Desktop: starts in Browse (2026-11-17)**
+
+- **Pro's Curve section starts closed** (until you open it once; your own open and closed choices are kept).
+- **Browse is the first screen.** RawBoy Desktop opens in Browse (⌘3) on every launch, whichever mode it was in when it quit (the last mode is no longer remembered). A photo opened from Finder or with `--open` still goes straight to Pro, `--auto` to Auto. Not compiled when written (no Mac): CI is the first build.
+
 **RawBoy Desktop: Browse takes the Viewer 0.2.3 (2026-11-17)**
 
 - **Pin folders to Recent.** Right-click a folder in Places, Favourites, Recent or the grid › Pin to Recent. Pinned folders stay at the top of Recent (pin icon) however many other folders you open; Unpin from Recent puts it back. Kept under `desktop.browse.browser.pinnedRecentFolders`.

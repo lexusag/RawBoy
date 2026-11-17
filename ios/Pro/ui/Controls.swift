@@ -35,7 +35,7 @@ struct ControlsPanel: View {
     @AppStorage("pro.tab") private var chosenTab = 0
     #if os(macOS)
     /** The Mac inspector's closed sections, by title, comma separated (kept between launches). */
-    @AppStorage("pro.closedSections") private var closedSections = "Primaries,Portrait,Effects,LUT,Lens"
+    @AppStorage("pro.closedSections") private var closedSections = "Primaries,Portrait,Effects,LUT,Lens,Curve"
     #endif
     @State private var anamorphicOpen: Bool?
     @State private var grainOpen = false
