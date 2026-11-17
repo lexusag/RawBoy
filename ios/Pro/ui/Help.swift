@@ -14,6 +14,7 @@ let proHelp = [
         HelpItem("Z, or double-click", "100% view at the pointer; again to go back to the whole photo. Drag to pan."),
         HelpItem("Mouse wheel over the photo", "Zoom in and out around the pointer, from a quarter of the whole photo (it stops once at the whole photo, so masks and light leaks can be placed outside its edges) up to 400% (stops once at 100%). A trackpad pinch works too. The middle button pans the zoomed photo."),
         HelpItem("Press and hold, or \\", "Compare with the as-shot render (the key toggles it until pressed again)."),
+        HelpItem("Y", "Before/after slider: the as-shot render on the left of a divider you drag, the edit on the right. Y again hides it. It shows on the whole photo (zoomed in it steps aside), and holding or \\ still compare full size."),
         HelpItem("C", "Open or close Crop & rotate."),
         HelpItem("Filmstrip", "Under the photo: the other photos in its folder, by file name (a RAW + JPEG pair once, as the raw). Click one to open it, or press ← and → for the previous and next; the mouse wheel scrolls the strip. Photos only in iCloud show a cloud and aren't downloaded until opened."),
         HelpItem("Tab or F", "Photo only: hides the bar and the panel; again, or Esc, brings them back. With Full Keyboard Access on, Tab moves between controls instead, and F still works."),

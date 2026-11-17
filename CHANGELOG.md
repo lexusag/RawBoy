@@ -1,3 +1,7 @@
+**RawBoy Desktop: Pro's before/after slider (2026-11-16)**
+
+- **Y, or View › Before/After Slider.** A divider over the photo: the as-shot render (with the edit's rotation, flips and crop, as Compare) on its left, the edit on its right, labelled. Drag it anywhere; it stays between 2% and 98% and keeps its place from photo to photo. The as-shot half is developed once and only drawn clipped while you drag or move sliders. On the whole-photo view only (zoomed in or inside a tool it steps aside); press-and-hold and `\` Compare still show the whole photo as shot.
+
 **RawBoy Desktop and iOS: Luma contrast in Pro and Auto (2026-11-16)**
 
 - **Luma contrast** (-100..+100) under Contrast in Pro's Light section and (-50..+50) under Contrast in Auto's Light section, as on the web: the same log slope on luminance only, so colour saturation holds. It is a `DevelopParams.lumaContrast` field (Light preset group, so presets, Edits JSON and Send to Auto carry it) and an `Adjustments.lumaContrast` in Auto (kept in the `rawboy:Auto` sidecar, copied by Apply to all and Copy previous, cleared by Reset all photos). The shader already had `uLumaContrast`; `ShaderParams.lumaContrast` = 2^(0.7 x value / 100) - 1 as on the web. Edits and sidecars the web wrote with it read as a slider now, not a kept extra.

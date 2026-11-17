@@ -16,7 +16,7 @@ final class KeyboardShortcuts {
 
     /** ANSI key codes (Carbon's kVK_*). */
     enum Key: UInt16 {
-        case a = 0, z = 6, d = 2, c = 8, b = 11, e = 14, v = 9, o = 31, f = 3, tab = 48
+        case a = 0, y = 16, z = 6, d = 2, c = 8, b = 11, e = 14, v = 9, o = 31, f = 3, tab = 48
         case leftBracket = 33, rightBracket = 30, backslash = 42
         case left = 123, right = 124, down = 125, up = 126, one = 18, two = 19
         case three = 20, delete = 51, forwardDelete = 117, space = 49, `return` = 36, keypadEnter = 76, escape = 53, slash = 44
@@ -173,6 +173,7 @@ final class KeyboardShortcuts {
         case .d: commands.send(.cycleFrame)
         case .c: commands.send(.toggleMode(.geometry))
         case .backslash: commands.send(.toggleCompare)
+        case .y: commands.send(.toggleSplit)
         case .b: commands.send(.maskTool(.brush))
         case .e: commands.send(.maskTool(.erase))
         case .v: commands.send(.maskTool(.move))
