@@ -129,4 +129,21 @@ class ShotDevelopParityTest {
 
     /** ShotSaver: (front ? FRONT_NOISE_ISO_SCALE : PHONE_NOISE_ISO_SCALE) / effectiveFrames. */
     private fun oldNoiseScale(front: Boolean, effectiveFrames: Float) = (if (front) 8f else 4f) / effectiveFrames
+
+    @Test
+    fun backlightShadowsAsBefore() {
+        // The former ShotSaver.backlightShadows, verbatim.
+        fun former(range: Float, iso: Float): Float {
+            val lift = ((range - 5f) * 37.5f).coerceIn(0f, 80f)
+            val t = ((iso - 800f) / 2400f).coerceIn(0f, 1f)
+            return Math.round(lift * (1f - t * t * (3f - 2f * t))).toFloat()
+        }
+        for (range in listOf(3f, 5f, 6.2f, 7f, 8.8f, 12f)) for (iso in listOf(50f, 800f, 1600f, 2400f, 3200f, 6400f)) {
+            val stats = app.rawboy.auto.analysis.SceneStats(
+                0.05f, -12f, -4f - range, -6f, -4f, -3f, 0f, 0.1f, 0f, 0f, 0f, 0f, iso, IntArray(1),
+            )
+            assertEquals("range $range iso $iso", former(range, iso), ShotDevelop.backlightShadows(stats))
+        }
+        assertEquals(75f, former(7f, 150f))
+    }
 }

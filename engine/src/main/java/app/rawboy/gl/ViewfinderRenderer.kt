@@ -53,6 +53,12 @@ class ViewfinderRenderer(
         val fullHeight: Int,
         /** Tone curve the ISP applied: <= 0 means the sRGB curve, otherwise a plain power. */
         val gamma: Float = 0f,
+        /**
+         * With the sRGB curve ([gamma] <= 0): the linear input up to which the ISP drew it as a straight line from
+         * black, its first point when the curve was sent at evenly spaced points (1/63). Codes below that point's are
+         * decoded along the same line; the plain inverse sRGB read them up to 35% dark. 0 = the exact sRGB curve.
+         */
+        val linearToe: Float = 0f,
         /** Gain from linearised preview values to raw units (1.0 = sensor clip). */
         val scale: Float = 1f,
         /** Show a mirror image (front camera), like a selfie preview. */
@@ -712,6 +718,7 @@ class ViewfinderRenderer(
         private val uTexMatrix = GLES30.glGetUniformLocation(id, "uTexMatrix")
         private val uRotation = GLES30.glGetUniformLocation(id, "uRotation")
         private val uGamma = GLES30.glGetUniformLocation(id, "uGamma")
+        private val uLinearToe = GLES30.glGetUniformLocation(id, "uLinearToe")
         private val uScale = GLES30.glGetUniformLocation(id, "uScale")
         private val uMirror = GLES30.glGetUniformLocation(id, "uMirror")
         private val uZoom = GLES30.glGetUniformLocation(id, "uZoom")
@@ -736,6 +743,7 @@ class ViewfinderRenderer(
             GLES30.glUniform1f(uMirror, if (f.mirror && determinant < 0f) 1f else 0f)
             GLES30.glUniform1f(uZoom, zoom)
             GLES30.glUniform1f(uGamma, f.gamma)
+            GLES30.glUniform1f(uLinearToe, f.linearToe)
             GLES30.glUniform1f(uScale, f.scale)
             GLES30.glUniformMatrix3fv(uColor, 1, false, f.color ?: SRGB_TO_REC2020, 0)
             if (yuv) {
@@ -815,6 +823,7 @@ uniform samplerExternalOES uCamera;
 uniform mat4 uTexMatrix;
 uniform int uRotation; // clockwise quarter turns from buffer to upright
 uniform float uGamma;  // <= 0: sRGB curve
+uniform float uLinearToe; // > 0: the sRGB curve is a straight line from black up to this input (Frame.linearToe)
 uniform float uScale;
 uniform float uMirror; // 1: show a mirror image
 uniform float uZoom;   // digital zoom: the centre 1/uZoom of the frame
@@ -838,6 +847,10 @@ void main() {
     vec3 lin = uGamma > 0.0
         ? pow(c, vec3(uGamma))
         : mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
+    if (uGamma <= 0.0 && uLinearToe > 0.0) {
+        float toeCode = 1.055 * pow(uLinearToe, 1.0 / 2.4) - 0.055;
+        lin = mix(c * (uLinearToe / toeCode), lin, step(toeCode, c));
+    }
     fragColor = vec4(uColor * lin * uScale, 1.0);
 }
 """

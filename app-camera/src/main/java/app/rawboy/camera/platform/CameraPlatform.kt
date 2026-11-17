@@ -68,7 +68,38 @@ data class PreviewProfile(
      * curve bends most, as the Pixel 9 Pro was tuned with.
      */
     val curveAtEvenPoints: Boolean,
+    /**
+     * How bright a preview frame is next to the still's raw, i.e. what the viewfinder's gain from linear preview to
+     * raw units (`ViewfinderRenderer.Frame.scale`) is made of besides the learned per-lens calibration. Neutral
+     * [PreviewLevel.BOOSTED], as the Pixel 9 Pro was tuned with.
+     */
+    val level: PreviewLevel,
+    /**
+     * The ISP lifts the preview's dark parts locally in backlit scenes (the Pixel's HDRnet), so the viewfinder already
+     * shows the lift a shot adds (`ShotDevelop.backlightShadows`). Neutral true, as the Pixel 9 Pro was tuned. False:
+     * a global preview tone; the live develop adds the shot's lift itself.
+     */
+    val liftsShadows: Boolean,
 )
+
+/** How a preview frame's brightness relates to the still's raw ([PreviewProfile.level]). */
+enum class PreviewLevel(
+    /** Where the learned preview scales are stored: they mean something else under each level. */
+    val scalesKey: String,
+) {
+    /**
+     * The preview carries the ISP's post-raw digital boost, which the raw lacks, and in low light the still exposes
+     * longer than the preview (`CameraController.stillGain`): gain = calibration / boost x still gain.
+     */
+    BOOSTED("previewScales3"),
+
+    /**
+     * The preview is as bright as the still's raw whatever boost the result reports, with the ISP's white balance
+     * applied at green 1, while the decoder scales the raw by the white balance's largest multiplier: gain =
+     * calibration x the frame's smallest as-shot neutral component. The calibration then stays near 1 under any light.
+     */
+    STILL_WHITE_BALANCED("previewScalesWb"),
+}
 
 /** Capturing and developing a still. */
 data class StillProfile(

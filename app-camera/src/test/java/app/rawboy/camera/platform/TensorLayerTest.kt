@@ -24,6 +24,10 @@ class TensorLayerTest {
         assertSame(UndoIspPreviewColor, tensor.preview.color)
         // The former SRGB_CURVE, points packed near black.
         assertEquals(false, tensor.preview.curveAtEvenPoints)
+        // The former viewfinder gain: calibration / post-raw boost x still gain, stored as "previewScales3".
+        assertEquals(PreviewLevel.BOOSTED, tensor.preview.level)
+        // The preview comes with the ISP's local shadow lift: the viewfinder adds no backlight lift of its own.
+        assertEquals(true, tensor.preview.liftsShadows)
         // The former lens list: cameras in the order the camera list names them.
         assertEquals(false, tensor.lenses.standaloneOverLogical)
     }
@@ -62,7 +66,7 @@ class TensorLayerTest {
                 still = p.still.copy(extraBlack = 0.01f, maxStillExposureNs = 1L),
                 noise = p.noise.copy(backIsoScale = 1f, frontIsoScale = 1f, lutLumaFloor = 0f, lutColorFloor = 0f, experimentalLumaFloor = 0f, experimentalColorFloor = 0f),
                 flash = p.flash.copy(defaultGuide = 1f, referenceFNumber = 9f, defaultGainNoDistance = 1f),
-                preview = p.preview.copy(color = SrgbPreviewColor, curveAtEvenPoints = true),
+                preview = p.preview.copy(color = SrgbPreviewColor, curveAtEvenPoints = true, level = PreviewLevel.STILL_WHITE_BALANCED, liftsShadows = false),
                 lenses = p.lenses.copy(standaloneOverLogical = true),
             )
         }

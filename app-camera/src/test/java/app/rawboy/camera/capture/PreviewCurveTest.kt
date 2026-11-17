@@ -32,4 +32,10 @@ class PreviewCurveTest {
         assertEquals(0f, p[1], 0f)
         assertEquals(1f, p[127], 1e-6f)
     }
+
+    @Test
+    fun evenToeIsTheFirstPointAfterBlack() {
+        assertEquals(1 / 63f, PreviewCurve.evenToe, 1e-7f)
+        assertEquals(PreviewCurve.even[2], PreviewCurve.evenToe, 0f)
+    }
 }

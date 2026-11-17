@@ -4,6 +4,7 @@ import app.rawboy.camera.platform.ChipVendor
 import app.rawboy.camera.platform.LayerLevel
 import app.rawboy.camera.platform.PlatformLayer
 import app.rawboy.camera.platform.PlatformPatch
+import app.rawboy.camera.platform.PreviewLevel
 import app.rawboy.camera.platform.traits.ispBlackAsPixel9Pro
 import app.rawboy.camera.platform.traits.previewColorFromResult
 
@@ -24,7 +25,7 @@ val tensorLayer = PlatformLayer(
             // The Pixel 9 Pro has one logical camera per side and no stand-alone duplicates: lens order as found.
             lenses = p.lenses.copy(standaloneOverLogical = false),
             // Everything on the Pixel 9 Pro was tuned with the curve's points packed near black.
-            preview = p.preview.copy(curveAtEvenPoints = false),
+            preview = p.preview.copy(curveAtEvenPoints = false, level = PreviewLevel.BOOSTED, liftsShadows = true),
             still = p.still.copy(
                 // Preview 1/30 s, ISO 1410, boost 2.39 -> still 1/15 s, ISO 1410, boost 1.2.
                 maxStillExposureNs = 66_666_667L,

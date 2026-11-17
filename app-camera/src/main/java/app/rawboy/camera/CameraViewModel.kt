@@ -25,6 +25,7 @@ import app.rawboy.camera.platform.ActivePlatform
 import app.rawboy.camera.report.DeviceReport
 import app.rawboy.camera.report.DeviceReportCollector
 import app.rawboy.camera.platform.ChipVendor
+import app.rawboy.camera.platform.PreviewLevel
 import app.rawboy.camera.debug.DebugProbe
 import app.rawboy.camera.capture.FlashMode
 import app.rawboy.camera.capture.LocationTracker
@@ -146,7 +147,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    private val _settings = MutableStateFlow(CameraSettingsStore.load(application, platform.calibrationSlot))
+    private val _settings = MutableStateFlow(CameraSettingsStore.load(application, platform.calibrationSlot, platform.preview.level))
     val settings = _settings.asStateFlow()
 
     private val _status = MutableStateFlow(CameraStatus.NEEDS_PERMISSION)
@@ -556,8 +557,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         _tilt.value = tiltFilter.update(degrees)
     }
 
-    /** The latest analysed viewfinder frame. */
-    private class Live(val base: ViewfinderBase, val stats: SceneStats, val defaults: DevelopParams, val auto: DevelopParams, val scale: Float = 1f)
+    /** The latest analysed viewfinder frame; [scale] and [neutralFloor]: the gain it was drawn with and its frame's neutral floor. */
+    private class Live(val base: ViewfinderBase, val stats: SceneStats, val defaults: DevelopParams, val auto: DevelopParams, val scale: Float = 1f, val neutralFloor: Float = 1f)
 
     @Volatile
     private var live: Live? = null
@@ -677,6 +678,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     fullWidth = inf.viewfinderWidth,
                     fullHeight = inf.viewfinderHeight,
                     gamma = inf.previewGamma,
+                    linearToe = controller.previewLinearToe(inf),
                     scale = _settings.value.previewScale(inf.hiRes),
                     mirror = inf.isFront,
                 )
@@ -870,7 +872,13 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val longGain = if (info?.hiRes != true && settings.flash == FlashMode.OFF && activeCaptures == 0 && (state?.exposureNs ?: 0L) < 250_000_000L) {
             settings.longExposureSpec(sceneKey())?.let { controller.longExposureGainOverPreview(it) }
         } else null
-        val target = settings.previewScale(info?.hiRes == true) / boost * (longGain ?: stillGain)
+        val target = when (platform.preview.level) {
+            PreviewLevel.BOOSTED -> settings.previewScale(info?.hiRes == true) / boost * (longGain ?: stillGain)
+            // The preview is already as bright as the still: only the white balance's normalisation and, with Long
+            // exposure, its frames' gain over the still (the long gain is over the boosted preview) remain.
+            PreviewLevel.STILL_WHITE_BALANCED ->
+                settings.previewScale(info?.hiRes == true) * neutralFloor(state) * (longGain?.let { it * boost / stillGain } ?: 1f)
+        }
         // The gain eases to its target (a fade) instead of jumping: a long exposure starts and ends with the viewfinder
         // changing exposure under the preview, and a step there reads as a flash. (Live.scale keeps the key honest.)
         val scale = if (f.scale > 0f && target > 0f) f.scale * (target / f.scale).coerceIn(1f / SCALE_FADE_STEP, SCALE_FADE_STEP) else target
@@ -895,7 +903,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             // Video eases much slower: a 0.3 EV step every 300 ms would pump visibly in a recording.
             val step = if (_videoMode.value) VIDEO_EV_STEP else MAX_EV_STEP
             val eased = if (last == null) auto else auto.copy(exposure = last + (auto.exposure - last).coerceIn(-step, step))
-            live = Live(base, stats, defaults, eased, f.scale)
+            live = Live(base, stats, defaults, eased, f.scale, neutralFloor(state))
             if (activeCaptures == 0 && SystemClock.uptimeMillis() - captureEndedAt > SCENE_KEY_SETTLE_MS && f.scale > 0f) sceneKeyHeld = stats.key / f.scale
             publish()
             withContext(Dispatchers.Main) { meterRawIfUncalibrated() }
@@ -908,6 +916,24 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
      * feeding back on itself. Null before the first analysed frame.
      */
     private fun sceneKey(): Float? = sceneKeyHeld
+
+    /**
+     * [l]'s scene key for calibrating [CameraSettings.previewScale] from [stored] (estimate = stored x raw key / this).
+     * [PreviewLevel.BOOSTED]: the key as measured, as the Pixel was tuned. [PreviewLevel.STILL_WHITE_BALANCED]: as if
+     * drawn at stored x the frame's neutral floor: the gain in use eases there after a lens starts (and after each
+     * calibration), so a key taken meanwhile would be judged against the wrong gain.
+     */
+    private fun calibrationKey(l: Live, stored: Float): Float = when (platform.preview.level) {
+        PreviewLevel.BOOSTED -> l.stats.key
+        PreviewLevel.STILL_WHITE_BALANCED -> if (l.scale > 0f) l.stats.key * stored * l.neutralFloor / l.scale else l.stats.key
+    }
+
+    /**
+     * The smallest component of [state]'s as-shot neutral: the decoder scales the raw by the white balance's largest
+     * multiplier, the ISP's preview by green's ([PreviewLevel.STILL_WHITE_BALANCED]). 1 when the frame doesn't say.
+     */
+    private fun neutralFloor(state: CameraController.FrameState?): Float =
+        state?.neutral?.minOrNull()?.takeIf { it > 0.0 }?.toFloat() ?: 1f
 
     /** [sceneKey]'s last reading from a frame the AE preview made (not a long exposure's manual frames, which come after the shutter). */
     private var sceneKeyHeld: Float? = null
@@ -922,13 +948,17 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
      * from it, as a photo would ([ShotSaver]'s calibrate). Without it the viewfinder stayed at gain 1 until the first
      * shot, which suits the Pixel (0.5-0.8) but on a Galaxy Tab S11 Ultra, whose ISP adds ~4.4 stops the raw never
      * gets, showed a blown-out picture. Waits [RAW_METER_DELAY_MS] after the lens's first analysed frame for AE to
-     * settle; skipped while a shot runs, focus is locked (spot metering) or for maximum-resolution lenses. Main thread.
+     * settle; skipped while a shot runs, focus is locked (spot metering), for maximum-resolution lenses and under
+     * [PreviewLevel.STILL_WHITE_BALANCED]. Main thread.
      */
     private fun meterRawIfUncalibrated() {
         val lens = info ?: return
         val settings = _settings.value
         val key = settings.lensKey(lens.hiRes)
         if (lens.hiRes || key in settings.previewScales || key in rawMetered || meterJob?.isActive == true) return
+        // There the calibration is ~1 on every lens, the default, while a raw frame this soon after a lens starts can
+        // catch AE unsettled (numbers in the OnePlus layer).
+        if (platform.preview.level == PreviewLevel.STILL_WHITE_BALANCED) return
         rawMetered += key
         meterJob = viewModelScope.launch {
             delay(RAW_METER_DELAY_MS)
@@ -948,7 +978,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             }
             if (key in _settings.value.previewScales) return@launch // a shot calibrated it meanwhile
             val estimate = scale * (rawKey / viewfinderKey).coerceIn(1f / 64, 64f)
-            val calibrated = withContext(Dispatchers.IO) { CameraSettingsStore.updatePreviewScale(app, platform.calibrationSlot, key, estimate) }
+            val calibrated = withContext(Dispatchers.IO) { CameraSettingsStore.updatePreviewScale(app, platform.calibrationSlot, platform.preview.level, key, estimate) }
             Log.d(TAG, "raw meter $key: raw key $rawKey, viewfinder key $viewfinderKey (raw/viewfinder ${rawKey / viewfinderKey}) -> preview scale $calibrated")
             _settings.value = _settings.value.let { it.copy(previewScales = it.previewScales + (key to calibrated)) }
             republish()
@@ -993,7 +1023,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val l = live ?: return
         val f = _frame.value ?: return
         val s = _settings.value
-        val developed = if (_compare.value) l.auto else s.develop(l.auto, l.stats.hasFace, platform.noise)
+        val developed = if (_compare.value) l.auto else s.develop(l.auto, l.stats.hasFace, platform.noise).let { d ->
+            // A preview without the ISP's local lift: show the backlight lift the shot will get.
+            if (platform.preview.liftsShadows) d else d.copy(shadows = maxOf(d.shadows, ShotDevelop.backlightShadows(l.stats)))
+        }
         // The ISP has already denoised and sharpened the preview stream.
         // Video also drops the colour denoise: its coarse stages are many taps per pixel, drawn twice a frame (screen and
         // encoder), and a clip on a non-Film look (its colour floor reaches the coarse stages) ran at 12 fps instead of 30.
@@ -1344,7 +1377,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             }
         // A flash shot's raw is lit by the flash, the viewfinder wasn't: no calibration from it.
         // A long exposure's raw is lifted away from what the viewfinder predicted for a still: it must not calibrate the preview.
-        val viewfinderKey = if (flash == FlashMode.OFF && !screenFlash && longExposure == null) live?.stats?.key else null
+        val viewfinderKey = if (flash == FlashMode.OFF && !screenFlash && longExposure == null) live?.let { calibrationKey(it, settings.previewScale(hiRes)) } else null
         val mayHaveFace = info?.hasFaceDetection != true || controller.frames.value?.faces?.isNotEmpty() != false
         controller.frames.value?.let { f ->
             Log.d(TAG, "shutter ${settings.lensKey(hiRes)}: preview ISO ${f.iso.toInt()}, ${f.exposureNs / 1000} µs, boost ${f.postRawBoost}, " +

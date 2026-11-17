@@ -24,9 +24,9 @@ import androidx.core.content.ContextCompat
 import app.rawboy.auto.AutoAnalysis
 import app.rawboy.camera.debug.DebugProbe
 import app.rawboy.camera.platform.CameraPlatform
+import app.rawboy.camera.platform.PreviewLevel
 import app.rawboy.auto.analysis.AutoTone
 import app.rawboy.auto.analysis.MeterArea
-import app.rawboy.auto.analysis.SceneStats
 import app.rawboy.export.DateStamp
 import app.rawboy.export.ExportFormat
 import app.rawboy.export.ExportGpu
@@ -413,7 +413,7 @@ internal object ShotSaver {
             val params = looked.copy(
                 denoise = denoise,
                 colorDenoise = maxOf(measuredColorDenoise(img, looked.exposure, denoise) ?: denoise, looked.colorDenoise ?: 0f),
-                shadows = maxOf(looked.shadows, backlightShadows(a.stats)),
+                shadows = maxOf(looked.shadows, ShotDevelop.backlightShadows(a.stats)),
             )
             val lut = params.lut?.let { loadLut(app, it) }
             val film = params.film?.let { loadFilm(app, it) }
@@ -487,7 +487,7 @@ internal object ShotSaver {
         }
         Log.d(TAG, "saved ${saved.name} in ${ms(p.started)} ms (develop started after $waitMs ms)")
         val key = s.lensKey(shot.hiRes)
-        shot.viewfinderKey?.let { calibrate(app, shot.platform.calibrationSlot, p.rawKey, it, key, s.previewScale(shot.hiRes)) }
+        shot.viewfinderKey?.let { calibrate(app, shot.platform.calibrationSlot, shot.platform.preview.level, p.rawKey, it, key, s.previewScale(shot.hiRes)) }
         shot.flashGuide?.let { calibrateFlash(app, shot.platform.calibrationSlot, p.autoEv, it, CameraSettings.flashGuideKey(key, shot.flashDistanceKnown)) }
         withContext(Dispatchers.IO) { thumbnail(app, saved.uri) }?.let { _lastShot.value = SavedShot(shot.id, LastShot(saved.uri, it)) }
         // The JPEG came from the uncompressed raw; now the kept DNG shrinks to a lossy JPEG XL one, on its own queue
@@ -525,12 +525,12 @@ internal object ShotSaver {
      * for T3), so a lens's first shot takes the full correction; later shots move halfway (in stops), which
      * smooths out scene-to-scene noise (about ±0.3 stop between shots of the same view).
      */
-    private fun calibrate(app: Context, slot: String, rawKey: Float, viewfinderKey: Float, lens: String, scaleAtShutter: Float) {
+    private fun calibrate(app: Context, slot: String, level: PreviewLevel, rawKey: Float, viewfinderKey: Float, lens: String, scaleAtShutter: Float) {
         if (!(rawKey > 0f) || !(viewfinderKey > 0f)) return
         // The gain that would have matched this shot. Judged against the gain in use at its shutter: shots taken
         // back to back are calibrated after both were captured.
         val estimate = scaleAtShutter * (rawKey / viewfinderKey).coerceIn(1f / 64, 64f)
-        val clamped = CameraSettingsStore.updatePreviewScale(app, slot, lens, estimate)
+        val clamped = CameraSettingsStore.updatePreviewScale(app, slot, level, lens, estimate)
         Log.d(TAG, "calibrate $lens: raw key $rawKey, viewfinder key $viewfinderKey (raw/viewfinder ${rawKey / viewfinderKey}) -> preview scale $clamped")
         _calibrations.tryEmit(Calibration.PreviewScale(lens, clamped))
     }
@@ -553,19 +553,6 @@ internal object ShotSaver {
             BitmapFactory.decodeStream(input, null, BitmapFactory.Options().apply { inSampleSize = 16 })
         }
     }.getOrNull()
-
-    /**
-     * Backlit scenes (a window, a lamp in frame): the phone's own preview lifts the dark parts locally, and the plain
-     * raw develop left them near black (owner preferred the preview). Shadows rise with the scene's range, p98 - p5:
-     * ordinary scenes span 3-5 stops (no change), a room against a window 7 (75, which matched the iPhone's
-     * viewfinder on that shot). Fades out from ISO 800 to 3200, where lifting would mostly lift noise. Shots only:
-     * the viewfinder's frames come already lifted.
-     */
-    private fun backlightShadows(s: SceneStats): Float {
-        val lift = ((s.p98 - s.p5 - 5f) * 37.5f).coerceIn(0f, 80f)
-        val t = ((s.iso - 800f) / 2400f).coerceIn(0f, 1f)
-        return (lift * (1f - t * t * (3f - 2f * t))).roundToInt().toFloat()
-    }
 
     /**
      * Colour denoise from the shot's measured colour noise (~30 ms; Auto's calibration, [AutoTone.measuredNoiseSettings]

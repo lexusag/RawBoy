@@ -14,15 +14,18 @@ class OnePlusLayerTest {
 
     @Test
     fun appliesByManufacturer() {
-        assertEquals(listOf("neutral", "oneplus"), PlatformRegistry.resolve(onePlus11).layers)
+        assertEquals(listOf("neutral", "oneplus", "cph2447"), PlatformRegistry.resolve(onePlus11).layers)
+        assertEquals(listOf("neutral", "oneplus"), PlatformRegistry.resolve(onePlus11.copy(model = "CPH2581")).layers) // OnePlus 12
         assertEquals(listOf("neutral"), PlatformRegistry.resolve(onePlus11.copy(manufacturer = "Xiaomi")).layers)
-        assertEquals(listOf("neutral", "oneplus"), PlatformRegistry.resolve(onePlus11.copy(chip = ChipVendor.MEDIATEK)).layers)
+        assertEquals(listOf("neutral", "oneplus", "cph2447"), PlatformRegistry.resolve(onePlus11.copy(chip = ChipVendor.MEDIATEK)).layers)
     }
 
     @Test
     fun listsStandaloneCamerasAndSendsTheCurveAtEvenPoints() {
         assertTrue(PlatformRegistry.resolve(onePlus11).lenses.standaloneOverLogical)
         assertTrue(PlatformRegistry.resolve(onePlus11).preview.curveAtEvenPoints)
+        assertEquals(PreviewLevel.STILL_WHITE_BALANCED, PlatformRegistry.resolve(onePlus11).preview.level)
+        assertFalse(PlatformRegistry.resolve(onePlus11).preview.liftsShadows)
         assertEquals(emptyList<String>(), PlatformRegistry.resolve(onePlus11).problems())
     }
 
@@ -36,6 +39,8 @@ class OnePlusLayerTest {
         )) {
             assertFalse(p.layers.toString(), p.lenses.standaloneOverLogical)
             assertFalse(p.layers.toString(), p.preview.curveAtEvenPoints)
+            assertEquals(p.layers.toString(), PreviewLevel.BOOSTED, p.preview.level)
+            assertTrue(p.layers.toString(), p.preview.liftsShadows)
         }
         assertFalse(neutralPlatform.lenses.standaloneOverLogical)
         assertFalse(PlatformRegistry.stack(listOf(tensorLayer)).lenses.standaloneOverLogical)

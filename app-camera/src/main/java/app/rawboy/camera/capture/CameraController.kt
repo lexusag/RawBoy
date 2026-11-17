@@ -239,6 +239,8 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         val focusDiopters: Float? = null,
         /** AE compensation steps this frame was shot with (CONTROL_AE_EXPOSURE_COMPENSATION), or null if not reported. */
         val compensationSteps: Int? = null,
+        /** The frame's as-shot neutral (SENSOR_NEUTRAL_COLOR_POINT) in camera RGB, or null if not reported. */
+        val neutral: DoubleArray? = null,
     )
 
     private val _frames = MutableStateFlow<FrameState?>(null)
@@ -1504,6 +1506,13 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
     }
 
     /**
+     * For `ViewfinderRenderer.Frame.linearToe`: the input up to which the preview's sRGB curve is a straight line from
+     * black, when this lens gets the curve at evenly spaced points (its first point); 0 otherwise.
+     */
+    fun previewLinearToe(inf: Info): Float =
+        if (!inf.hasPresetCurve && inf.hasContrastCurve && platform.preview.curveAtEvenPoints) PreviewCurve.evenToe else 0f
+
+    /**
      * How much brighter the still's raw will be than the preview frame [frame] (in raw terms: exposure time x ISO).
      * In low light the preview is held at its frame-rate cap, and for the still AE moves exposure from its post-raw
      * digital boost back into time, up to the platform's still limit, at the same ISO ([StillGain]). Otherwise the
@@ -1804,6 +1813,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             previewColor = platform.preview.color.toRec2020(previewColorInput(inf, r, neutral))?.let(Mat3::toGlColumnMajor),
             focusDiopters = r.get(CaptureResult.LENS_FOCUS_DISTANCE),
             compensationSteps = compensationSteps,
+            neutral = neutral?.takeIf { it.size >= 3 }?.let { n -> DoubleArray(3) { n[it].toDouble() } },
         )
     }
 
@@ -1938,6 +1948,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
                 ispMatrix = r.get(CaptureResult.COLOR_CORRECTION_TRANSFORM)?.let(::toDoubles),
                 ispGains = g?.let { doubleArrayOf(it.red.toDouble(), (it.greenEven + it.greenOdd) / 2.0, it.blue.toDouble()) },
                 neutral = neutral?.takeIf { it.size >= 3 }?.let { n -> DoubleArray(3) { n[it].toDouble() } },
+                cameraId = inf.physicalId ?: inf.openId,
             )
         }
 

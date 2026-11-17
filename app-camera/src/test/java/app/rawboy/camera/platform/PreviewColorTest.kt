@@ -59,4 +59,23 @@ class PreviewColorTest {
             assertArrayEquals(direct, viaPreview, 1e-9)
         }
     }
+
+    @Test
+    fun cameraSaturationOnlyTouchesItsCameras() {
+        val base = UndoIspPreviewColor
+        val c = CameraSaturation(base, mapOf("3" to 1.5))
+        val full = PreviewColorInput(rgbCam, ispMatrix, gains, neutral, cameraId = "2")
+        assertArrayEquals(base.toRec2020(full), c.toRec2020(full), 0.0)
+        val three = PreviewColorInput(rgbCam, ispMatrix, gains, neutral, cameraId = "3")
+        assertArrayEquals(Mat3.multiply(CameraSaturation.saturation(1.5), base.toRec2020(three)!!), c.toRec2020(three), 1e-12)
+        // A base that takes the preview as plain sRGB: the saturation goes on top of the viewfinder's own sRGB matrix.
+        val plain = CameraSaturation(SrgbPreviewColor, mapOf("3" to 1.5))
+        assertNull(plain.toRec2020(full))
+        assertArrayEquals(Mat3.multiply(CameraSaturation.saturation(1.5), SRGB_TO_REC2020_ROWS), plain.toRec2020(three), 1e-12)
+    }
+
+    @Test
+    fun saturationOneIsIdentity() {
+        assertArrayEquals(identity, CameraSaturation.saturation(1.0), 1e-12)
+    }
 }

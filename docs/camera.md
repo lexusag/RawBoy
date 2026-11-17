@@ -137,7 +137,11 @@ shows them.
   points (the OnePlus 11 reads the points that way, whatever their spacing: with the points packed near black, as other
   phones get them, its viewfinder came out about twice as contrasty and saturated as the photo), and list their
   stand-alone cameras rather than the logical camera that also covers them (RAW through the logical camera froze the
-  preview). Debug builds can take the phone for another chip (*Take the phone
+  preview). On OnePlus phones the viewfinder also takes the preview as being as bright as the photo's raw, with the
+  camera's white balance in it, so its learned brightness stays near 1 in any light and needs no raw metering before
+  the first photo; it shows the shadow lift backlit photos get (their preview has no local lift of its own), and it
+  reads the curve's darkest step as the straight line the camera draws there. The OnePlus 11's model layer brings the
+  ultrawide's paler preview up to its photos' saturation (*Phone profile: OnePlus + OnePlus 11*). Debug builds can take the phone for another chip (*Take the phone
   for*, from the next start); calibration learned under such a profile is kept apart from the phone's own.
 - **Share device report** (Android; Settings, under the phone profile): gathers what a profile for a new phone is made
   from into a plain text file and opens the system share sheet; nothing is sent unless you send it. It lists the phone

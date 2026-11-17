@@ -2,6 +2,7 @@ package app.rawboy.camera.platform.traits
 
 import app.rawboy.camera.platform.PreviewColor
 import app.rawboy.camera.platform.PreviewColorInput
+import app.rawboy.camera.platform.SRGB_TO_REC2020_ROWS
 import app.rawboy.color.Mat3
 
 /**
@@ -35,9 +36,5 @@ object UndoIspPreviewColor : PreviewColor {
     override fun toString() = "UndoIspPreviewColor"
 
     /** As the decoder's kSrgbToRec2020. */
-    internal val SRGB_TO_REC2020 = doubleArrayOf(
-        0.6274040, 0.3292820, 0.0433136,
-        0.0690970, 0.9195400, 0.0113612,
-        0.0163916, 0.0880132, 0.8955950,
-    )
+    internal val SRGB_TO_REC2020 = SRGB_TO_REC2020_ROWS
 }

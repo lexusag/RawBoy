@@ -27,4 +27,7 @@ object PreviewCurve {
      * ([app.rawboy.camera.platform.PreviewProfile.curveAtEvenPoints]).
      */
     val even: FloatArray = srgbPoints(64) { it }
+
+    /** [even]'s first point after black (1/63): below it a HAL draws a straight line from black. */
+    val evenToe: Float get() = even[2]
 }

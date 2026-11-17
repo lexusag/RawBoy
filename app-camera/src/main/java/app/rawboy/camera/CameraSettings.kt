@@ -11,6 +11,7 @@ import app.rawboy.camera.capture.CameraController
 import app.rawboy.camera.capture.FlashGuides
 import app.rawboy.camera.capture.FlashMode
 import app.rawboy.camera.platform.NoiseProfile
+import app.rawboy.camera.platform.PreviewLevel
 import app.rawboy.export.DateStampFormat
 import app.rawboy.export.DateStampStyle
 import app.rawboy.export.FilmFrameColor
@@ -258,22 +259,27 @@ data class CameraSettings(
 object CameraSettingsStore {
     private const val PREFS = "camera"
 
-    /**
-     * Calibration storage. "previewScales3": learned with the explicit sRGB preview curve and the still-exposure
-     * prediction (CameraController.stillGain); earlier values were learned without them and are dropped.
+    /*
+     * Calibration storage. Preview scales: each [PreviewLevel] has its own key ([PreviewLevel.scalesKey]), as a scale
+     * learned under one means something else under another. "previewScales3" (BOOSTED): learned with the explicit sRGB
+     * preview curve and the still-exposure prediction (CameraController.stillGain); earlier values were learned
+     * without them and are dropped.
      */
-    private const val SCALES_KEY = "previewScales3"
     private const val FLASH_GUIDES_KEY = "flashGuides"
 
-    /** Where [slot]'s preview scales are stored (`CameraPlatform.calibrationSlot`; empty = the phone's own). */
-    internal fun scalesKey(slot: String) = if (slot.isEmpty()) SCALES_KEY else "$SCALES_KEY@$slot"
+    /**
+     * Where [slot]'s preview scales under [level] are stored (`CameraPlatform.calibrationSlot`; empty = the phone's
+     * own).
+     */
+    internal fun scalesKey(slot: String, level: PreviewLevel = PreviewLevel.BOOSTED) =
+        if (slot.isEmpty()) level.scalesKey else "${level.scalesKey}@$slot"
 
     /** Where [slot]'s flash guides are stored. */
     internal fun flashGuidesKey(slot: String) = if (slot.isEmpty()) FLASH_GUIDES_KEY else "$FLASH_GUIDES_KEY@$slot"
 
-    /** The saved settings, with the calibration learned under [calibrationSlot]. */
+    /** The saved settings, with the calibration learned under [calibrationSlot] (preview scales: under [level]). */
     @Synchronized
-    fun load(context: Context, calibrationSlot: String): CameraSettings {
+    fun load(context: Context, calibrationSlot: String, level: PreviewLevel = PreviewLevel.BOOSTED): CameraSettings {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val d = CameraSettings()
         val always = CameraSettings(
@@ -317,7 +323,7 @@ object CameraSettingsStore {
             experimental = p.getBoolean("experimental", d.experimental),
             videoStabilization = p.getBoolean("videoStabilization", d.videoStabilization),
             flatVideo = p.getBoolean("flatVideo", d.flatVideo),
-            previewScales = parseScales(p.getString(scalesKey(calibrationSlot), null)),
+            previewScales = parseScales(p.getString(scalesKey(calibrationSlot, level), null)),
             flashGuides = parseScales(p.getString(flashGuidesKey(calibrationSlot), null), min = 1e-2f, max = 1e4f),
             // "FLASH" (plain flash, since removed) becomes Focus-flash.
             flash = when (val f = p.getString("flash", null)) {
@@ -407,20 +413,23 @@ object CameraSettingsStore {
     @Synchronized
     fun calibration(context: Context): List<Pair<String, String>> =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).all.entries
-            .filter { (key, value) -> value is String && (key == SCALES_KEY || key.startsWith("$SCALES_KEY@") || key == FLASH_GUIDES_KEY || key.startsWith("$FLASH_GUIDES_KEY@")) }
+            .filter { (key, value) ->
+                value is String && (PreviewLevel.entries.any { key == it.scalesKey || key.startsWith("${it.scalesKey}@") } ||
+                    key == FLASH_GUIDES_KEY || key.startsWith("$FLASH_GUIDES_KEY@"))
+            }
             .map { it.key to it.value as String }
             .sortedBy { it.first }
 
-    /** Updates one lens's [CameraSettings.previewScales] entry in [slot]'s storage, returning the new scale. */
+    /** Updates one lens's [CameraSettings.previewScales] entry in [slot]'s storage under [level], returning the new scale. */
     @Synchronized
-    fun updatePreviewScale(context: Context, slot: String, lens: String, estimate: Float): Float {
+    fun updatePreviewScale(context: Context, slot: String, level: PreviewLevel, lens: String, estimate: Float): Float {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val scales = parseScales(p.getString(scalesKey(slot), null))
+        val scales = parseScales(p.getString(scalesKey(slot, level), null))
         val known = scales[lens]
         val scale = if (known == null) estimate else known * kotlin.math.sqrt(estimate / known)
         val clamped = scale.coerceIn(CameraSettings.MIN_SCALE, CameraSettings.MAX_SCALE)
         val updated = scales + (lens to clamped)
-        p.edit().putString(scalesKey(slot), updated.entries.joinToString(";") { "${it.key}=${it.value}" }).apply()
+        p.edit().putString(scalesKey(slot, level), updated.entries.joinToString(";") { "${it.key}=${it.value}" }).apply()
         return clamped
     }
 

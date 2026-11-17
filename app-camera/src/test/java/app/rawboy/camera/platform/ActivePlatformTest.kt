@@ -1,6 +1,7 @@
 package app.rawboy.camera.platform
 
 import app.rawboy.camera.platform.generic.neutralPlatform
+import app.rawboy.camera.platform.oem.oneplus.cph2447Layer
 import app.rawboy.camera.platform.oem.oneplus.onePlusLayer
 import app.rawboy.camera.platform.oem.samsung.samsungLayer
 import app.rawboy.camera.platform.tensor.tensorLayer
@@ -28,9 +29,9 @@ class ActivePlatformTest {
 
     @Test
     fun aOnePlusGetsItsLayer() {
-        // The OnePlus 11: no Qualcomm layer yet (one Snapdragon phone measured).
-        assertEquals(PlatformRegistry.stack(listOf(onePlusLayer)), ActivePlatform.resolve(onePlus, null).profile)
-        assertEquals(listOf("neutral", "oneplus"), ActivePlatform.resolve(onePlus, null).profile.layers)
+        // The OnePlus 11: no Qualcomm layer yet (one Snapdragon phone measured); its model layer on top.
+        assertEquals(PlatformRegistry.stack(listOf(onePlusLayer, cph2447Layer)), ActivePlatform.resolve(onePlus, null).profile)
+        assertEquals(listOf("neutral", "oneplus", "cph2447"), ActivePlatform.resolve(onePlus, null).profile.layers)
     }
 
     @Test
@@ -50,7 +51,7 @@ class ActivePlatformTest {
         // Before session 07 every phone was taken to have a Tensor chip, its other fields its own.
         val r = ActivePlatform.resolve(onePlus, ChipVendor.TENSOR)
         assertEquals(ChipVendor.TENSOR, r.chosenChip)
-        assertEquals(PlatformRegistry.stack(listOf(tensorLayer, onePlusLayer)).copy(calibrationSlot = "neutral+tensor+oneplus"), r.profile)
+        assertEquals(PlatformRegistry.stack(listOf(tensorLayer, onePlusLayer, cph2447Layer)).copy(calibrationSlot = "neutral+tensor+oneplus+cph2447"), r.profile)
         val galaxy = PhoneDescription(ChipVendor.MEDIATEK, manufacturer = "samsung")
         assertEquals(listOf("neutral", "tensor", "samsung"), ActivePlatform.resolve(galaxy, ChipVendor.TENSOR).profile.layers)
     }
@@ -58,7 +59,7 @@ class ActivePlatformTest {
     @Test
     fun aChosenProfileLearnsApartUnlessItIsTheAutomaticOne() {
         assertEquals("neutral", ActivePlatform.resolve(pixel, ChipVendor.UNKNOWN).profile.calibrationSlot)
-        assertEquals("neutral+tensor+oneplus", ActivePlatform.resolve(onePlus, ChipVendor.TENSOR).profile.calibrationSlot)
+        assertEquals("neutral+tensor+oneplus+cph2447", ActivePlatform.resolve(onePlus, ChipVendor.TENSOR).profile.calibrationSlot)
         // The same layers as detected: the same profile, so the phone's own calibration stays valid.
         assertEquals("", ActivePlatform.resolve(pixel, ChipVendor.TENSOR).profile.calibrationSlot)
         assertEquals("", ActivePlatform.resolve(onePlus, ChipVendor.UNKNOWN).profile.calibrationSlot)
@@ -67,9 +68,9 @@ class ActivePlatformTest {
     @Test
     fun logLineNamesThePhoneLayersAndValues() {
         val line = ActivePlatform.describe(ActivePlatform.resolve(onePlus, ChipVendor.TENSOR))
-        for (part in listOf("chip QUALCOMM", "\"SM8550\"", "taken for TENSOR by hand", "layers neutral+tensor+oneplus", "calibration neutral+tensor+oneplus", "extraBlack=0.00146", "UndoIspPreviewColor", "backIsoScale=4.0", "defaultGuide=16.0")) {
+        for (part in listOf("chip QUALCOMM", "\"SM8550\"", "taken for TENSOR by hand", "layers neutral+tensor+oneplus+cph2447", "calibration neutral+tensor+oneplus+cph2447", "extraBlack=0.00146", "UndoIspPreviewColor", "backIsoScale=4.0", "defaultGuide=16.0")) {
             assertTrue("$part not in $line", part in line)
         }
-        assertTrue("automatic; layers neutral+oneplus; calibration own" in ActivePlatform.describe(ActivePlatform.resolve(onePlus, null)))
+        assertTrue("automatic; layers neutral+oneplus+cph2447; calibration own" in ActivePlatform.describe(ActivePlatform.resolve(onePlus, null)))
     }
 }

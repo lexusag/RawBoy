@@ -1,6 +1,7 @@
 package app.rawboy.camera.platform
 
 import app.rawboy.camera.platform.generic.neutralPlatform
+import app.rawboy.camera.platform.oem.oneplus.cph2447Layer
 import app.rawboy.camera.platform.oem.oneplus.onePlusLayer
 import app.rawboy.camera.platform.oem.samsung.samsungLayer
 import app.rawboy.camera.platform.tensor.tensorLayer
@@ -12,6 +13,7 @@ object PlatformRegistry {
         tensorLayer,
         samsungLayer,
         onePlusLayer,
+        cph2447Layer,
     )
 
     /** The profile for [phone]: the neutral one, then each matching layer by [LayerLevel] (list order within one). */
