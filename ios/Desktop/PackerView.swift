@@ -98,15 +98,33 @@ struct PackerView: View {
         return !keys.isEmpty && keys.allSatisfy { collapsed.contains($0) }
     }
 
+    private func folderStatus(_ items: [PackItem]) -> (text: String, kind: PackerInfo.FolderStatusKind)? {
+        var packing = 0, done = 0, failed = 0
+        for item in items {
+            switch item.status {
+            case .packing: packing += 1
+            case .done: done += 1
+            case .failed: failed += 1
+            default: break
+            }
+        }
+        return PackerInfo.folderStatus(total: items.count, packing: packing, done: done, failed: failed)
+    }
+
+    private func statusColor(_ kind: PackerInfo.FolderStatusKind) -> Color {
+        switch kind {
+        case .error: .red
+        case .busy: .accentColor
+        case .done: .secondary
+        }
+    }
+
     /** A folder's line: click to fold or unfold it; folded, it shows how its files are getting on. */
     private func folderHeader(_ group: Group) -> some View {
         let k = key(group.folder)
         let isCollapsed = collapsed.contains(k)
         let name = group.folder ?? "Other files"
-        let status = isCollapsed ? PackerInfo.folderStatus(total: group.items.count,
-                                                           packing: group.items.filter { $0.status == .packing }.count,
-                                                           done: group.items.filter { $0.status == .done }.count,
-                                                           failed: group.items.filter { $0.status == .failed }.count) : nil
+        let status = isCollapsed ? folderStatus(group.items) : nil
         return HStack(spacing: 6) {
             Button {
                 if isCollapsed { collapsed.remove(k) } else { collapsed.insert(k) }
@@ -118,7 +136,7 @@ struct PackerView: View {
                     Text("(\(group.items.count))").foregroundStyle(.secondary)
                     if let status {
                         Text(status.text).font(.caption)
-                            .foregroundStyle(status.kind == .error ? Color.red : status.kind == .busy ? Color.accentColor : Color.secondary)
+                            .foregroundStyle(statusColor(status.kind))
                     }
                     Spacer(minLength: 0)
                 }

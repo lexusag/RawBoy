@@ -178,7 +178,8 @@ final class PackerModel: ObservableObject {
 
     func start() {
         guard canStart else { return }
-        let todo = groups.flatMap { $0.items }.filter { $0.status == .ready || $0.status == .failed && $0.info != nil }.map(\.id)
+        let ordered: [PackItem] = groups.flatMap { (g: (folder: String?, items: [PackItem])) -> [PackItem] in g.items }
+        let todo: [String] = ordered.filter { $0.status == .ready || $0.status == .failed && $0.info != nil }.map(\.id)
         for id in todo { update(id) { $0.status = .ready; $0.error = nil } }
         running = true
         stopping = false
