@@ -1475,38 +1475,43 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val exposed = CompletableDeferred<Unit>()
         // The stand-alone or physical camera that shoots it, for the profile's per-camera sensor numbers.
         val cameraId = info?.let { it.physicalId ?: it.openId }
-        return if (settings.keepDng) {
-            val (uri, name) = withContext(Dispatchers.IO) {
-                MediaStoreOutput.create(resolver, baseName, "dng", DNG_MIME, RAW_NAMING)
-            }
-            val dngStart = System.nanoTime()
-            val result = try {
-                withContext(Dispatchers.IO) {
-                    val out = resolver.openOutputStream(uri, "w") ?: throw java.io.IOException("Cannot write $name")
-                    val result = out.buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix, longExposure, mergeNote, onExposed = { exposed.complete(Unit) }) { onShutter(screenFlash, exposed) } }
-                    fix?.let { addGps(uri, it) }
-                    MediaStoreOutput.publish(resolver, uri)
-                    result
+        // A failed capture never reports its exposure: let a waiting screen flash go dark now, not up to 2 s later.
+        return try {
+            if (settings.keepDng) {
+                val (uri, name) = withContext(Dispatchers.IO) {
+                    MediaStoreOutput.create(resolver, baseName, "dng", DNG_MIME, RAW_NAMING)
                 }
-            } catch (t: Throwable) {
-                withContext(Dispatchers.IO + NonCancellable) { resolver.delete(uri, null, null) }
-                throw t
-            }
-            Log.d(TAG, "$name: capture + DNG write ${(System.nanoTime() - dngStart) / 1_000_000} ms")
-            Shot(shotId, uri, name, null, settings, platform = platform, viewfinderKey = viewfinderKey, iso = isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber, cameraId = cameraId)
-        } else {
-            val file = File(app.cacheDir, "$baseName-$shotId.dng")
-            val result = try {
-                withContext(Dispatchers.IO) {
-                    val result = file.outputStream().buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix, longExposure, mergeNote, onExposed = { exposed.complete(Unit) }) { onShutter(screenFlash, exposed) } }
-                    fix?.let { addGps(Uri.fromFile(file), it) }
-                    result
+                val dngStart = System.nanoTime()
+                val result = try {
+                    withContext(Dispatchers.IO) {
+                        val out = resolver.openOutputStream(uri, "w") ?: throw java.io.IOException("Cannot write $name")
+                        val result = out.buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix, longExposure, mergeNote, onExposed = { exposed.complete(Unit) }) { onShutter(screenFlash, exposed) } }
+                        fix?.let { addGps(uri, it) }
+                        MediaStoreOutput.publish(resolver, uri)
+                        result
+                    }
+                } catch (t: Throwable) {
+                    withContext(Dispatchers.IO + NonCancellable) { resolver.delete(uri, null, null) }
+                    throw t
                 }
-            } catch (t: Throwable) {
-                file.delete()
-                throw t
+                Log.d(TAG, "$name: capture + DNG write ${(System.nanoTime() - dngStart) / 1_000_000} ms")
+                Shot(shotId, uri, name, null, settings, platform = platform, viewfinderKey = viewfinderKey, iso = isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber, cameraId = cameraId)
+            } else {
+                val file = File(app.cacheDir, "$baseName-$shotId.dng")
+                val result = try {
+                    withContext(Dispatchers.IO) {
+                        val result = file.outputStream().buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix, longExposure, mergeNote, onExposed = { exposed.complete(Unit) }) { onShutter(screenFlash, exposed) } }
+                        fix?.let { addGps(Uri.fromFile(file), it) }
+                        result
+                    }
+                } catch (t: Throwable) {
+                    file.delete()
+                    throw t
+                }
+                Shot(shotId, Uri.fromFile(file), "$baseName.dng", file, settings, platform = platform, viewfinderKey = viewfinderKey, iso = isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber, cameraId = cameraId)
             }
-            Shot(shotId, Uri.fromFile(file), "$baseName.dng", file, settings, platform = platform, viewfinderKey = viewfinderKey, iso = isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber, cameraId = cameraId)
+        } finally {
+            exposed.complete(Unit)
         }
     }
 
