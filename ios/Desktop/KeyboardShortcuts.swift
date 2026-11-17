@@ -82,7 +82,7 @@ final class KeyboardShortcuts {
         guard flags.isEmpty, auto.export == nil else { return event }
         // Esc with photos selected in the grid clears the selection first.
         if key == .escape, auto.selected == nil, !auto.selection.isEmpty {
-            auto.selection = []
+            auto.clearSelection()
             return nil
         }
         if let id = auto.selected {
