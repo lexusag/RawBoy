@@ -9,6 +9,7 @@ let proHelp = [
         HelpItem("Sliders", "The panel on the right holds every slider in sections: Light, Curve, Colour, Primaries, Detail, Portrait, Effects, LUT and Lens. Click a section's name to open or close it; an amber dot means it has edits, and the arrow beside it resets that section only. Crop, rotation, flips and scale belong to one photo; the other edits carry over to a photo without saved edits."),
         HelpItem("Top bar", "The photo's name and exposure on the left; Crop, Masks, Light (leaks and effects), Heal, Presets and Looks in the middle; Auto Dev, To Auto, Reset, Undo, Redo and Export on the right. Hover a button for its name and key."),
         HelpItem("Export", "⌘E: JPEG or TIFF, into the folder next to the photo or one you choose. The file is called NAME-rawboy.jpg (or .tif)."),
+        HelpItem("Export several photos", "Pick photos in the filmstrip with ⌘-click (one at a time) or ⇧-click (a run), or ⌘A for the whole folder, then ⌘E: each is exported with its own saved edits (the open photo as it is on screen), with the same options, one after another. A bar over the filmstrip shows the progress and the time left; Stop finishes the photo being written. A plain click on a photo, or Deselect, clears the pick."),
     ]),
     HelpSection("Photo", [
         HelpItem("Z, or double-click", "100% view at the pointer; again to go back to the whole photo. Drag to pan."),
@@ -16,7 +17,7 @@ let proHelp = [
         HelpItem("Press and hold, or \\", "Compare with the as-shot render (the key toggles it until pressed again)."),
         HelpItem("Y", "Before/after slider: the as-shot render on the left of a divider you drag, the edit on the right. Y again hides it. It shows on the whole photo (zoomed in it steps aside), and holding or \\ still compare full size."),
         HelpItem("C", "Open or close Crop & rotate. Drag the corners, edges or inside of the frame to crop, or outside it to rotate (straighten, up to 45° each way)."),
-        HelpItem("Filmstrip", "Under the photo: the other photos in its folder, by file name (a RAW + JPEG pair once, as the raw). Click one to open it, or press ← and → for the previous and next; the mouse wheel scrolls the strip. Photos only in iCloud show a cloud and aren't downloaded until opened."),
+        HelpItem("Filmstrip", "Under the photo: the other photos in its folder, by file name (a RAW + JPEG pair once, as the raw). Click one to open it, or press ← and → for the previous and next; the mouse wheel scrolls the strip. ⌘-click and ⇧-click pick photos for a batch export. Photos only in iCloud show a cloud and aren't downloaded until opened."),
         HelpItem("Copy previous (⇧C)", "RawBoy Desktop: gives this photo the settings of the photo you had open before it (the bar's Copy button, or ⇧C). Opening a photo no longer copies them by itself; geometry, masks, leaks, effects and healing stay the photo's own."),
         HelpItem("Tab or F", "Photo only: hides the bar and the panel; again, or Esc, brings them back. With Full Keyboard Access on, Tab moves between controls instead, and F still works."),
         HelpItem("D, or click outside the photo", "Change the frame around it: grey, white or black."),

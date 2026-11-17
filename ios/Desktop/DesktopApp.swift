@@ -147,6 +147,8 @@ struct DesktopCommands: Commands {
     private var proMode: Bool { model.mode == .pro }
     private var browseMode: Bool { model.mode == .browse }
     private var ready: Bool { proMode && state.hasImage && !state.busy }
+    /** Photos picked in Pro's filmstrip for a batch export (0 or 2+). */
+    private var proBatch: Int { model.filmstrip.batch.count }
     private var auto: AutoViewModel { model.auto }
     private var autoReady: Bool { model.mode == .auto && auto.export == nil }
     private var autoExportable: Bool { autoReady && auto.photos.contains { $0.analysis != nil } }
@@ -160,7 +162,7 @@ struct DesktopCommands: Commands {
             Button("Add a Folder to Auto…") { model.addFolderPanel() }.keyboardShortcut("o", modifiers: [.command, .shift])
             Button("Pack Raws…") { openWindow(id: "packer") }.keyboardShortcut("p", modifiers: [.command, .shift])
             Divider()
-            Button(proMode ? "Export…" : "Export All…") {
+            Button(proMode ? (proBatch > 1 ? "Export \(proBatch) Photos…" : "Export…") : "Export All…") {
                 if proMode { model.commands.send(.export) } else { auto.requestExport() }
             }
             .keyboardShortcut("e").disabled(browseMode || (proMode ? !ready : !autoExportable))
@@ -212,6 +214,12 @@ struct DesktopCommands: Commands {
             Button("Presets") { model.commands.send(.toggleMode(.presets)) }.disabled(!proMode || state.busy)
             Button("Copy Previous Photo's Settings") { model.commands.send(.copyPrevious) }
                 .keyboardShortcut("c", modifiers: .shift).disabled(!ready || !model.vm.canCopyPrevious)
+            Divider()
+            // Picking photos in the filmstrip for a batch export (also ⌘-click and ⇧-click there).
+            Button("Select All in Filmstrip") { model.filmstrip.selectAll() }
+                .disabled(!proMode || model.filmstrip.files.count < 2)
+            Button("Deselect Filmstrip") { model.filmstrip.deselectAll() }.disabled(!proMode || proBatch == 0)
+            Button("Stop Batch Export") { model.batchExport.stop() }.disabled(!model.batchExport.running)
             Divider()
             Button("Rotate Left") { model.vm.rotate(-1) }.keyboardShortcut("[", modifiers: .command).disabled(!ready)
             Button("Rotate Right") { model.vm.rotate(1) }.keyboardShortcut("]", modifiers: .command).disabled(!ready)

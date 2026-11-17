@@ -703,6 +703,12 @@ final class EditorViewModel: ObservableObject {
 
     // MARK: - Export
 
+    /** Keeps [settings] as the export sheet's next starting point (RawBoy Desktop's batch export, which runs elsewhere). */
+    func rememberExportSettings(_ settings: ExportSettings) {
+        exportSettings = settings
+        ExportSettingsStore.save(settings)
+    }
+
     /** [directory] (RawBoy Desktop): where the file goes; nil (iOS): developed into Photos › RawBoy. */
     func export(_ settings: ExportSettings, to directory: URL? = nil) {
         guard session.hasImage, !state.busy else { return }

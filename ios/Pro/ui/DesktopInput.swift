@@ -56,6 +56,8 @@ final class EditorCommands: ObservableObject {
     var exportHandler: ((ExportSettings) -> Void)?
     /** RawBoy Desktop: adds the open photo to Auto's batch and shows Auto (nil elsewhere: no button). */
     var sendToAuto: (() -> Void)?
+    /** RawBoy Desktop: the file names the export sheet exports when photos are picked in the filmstrip (empty: the open photo). */
+    var exportBatch: (() -> [String])?
     /** The line under the export options: where the file goes. */
     var exportNote: ((URL?) -> String)?
     /** RawBoy Desktop: the folder's other photos, shown under the photo (nil elsewhere). */

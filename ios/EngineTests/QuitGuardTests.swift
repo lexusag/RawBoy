@@ -12,6 +12,8 @@ final class QuitGuardTests: XCTestCase {
         XCTAssertEqual(w.reasons.count, 1)
         w = QuitWork(); w.autoExporting = true
         XCTAssertTrue(w.reasons[0].contains("batch export"))
+        w = QuitWork(); w.proBatchExporting = true
+        XCTAssertTrue(w.reasons[0].contains("Pro's batch export"))
         w = QuitWork(); w.packerRunning = true
         XCTAssertTrue(w.reasons[0].contains("Packer"))
         w = QuitWork(); w.proAutoRunning = true

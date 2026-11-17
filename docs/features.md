@@ -122,6 +122,7 @@ none of the web's 74; Kotlin lacks `healSpots`, `lumaContrast`, `portraitRetouch
 | Google Drive open / save | 1.5.0 | ✓ | n/a | n/a | n/a | Drive's desktop folder covers it |
 | "New version available" banner | 1.6.0 | ✓ | — | n/a | n/a (Play) | **Gap.** Desktop has no updater; releases are DMGs on GitHub |
 | Warning before closing mid-work | 1.14.0 | ✓ | ✓ 1.18.3 (quit) | n/a | n/a | |
+| **Batch export from Pro** (photos picked in the filmstrip, each with its own edits) | — | — | ✓ unreleased | — | — | Desktop only. ⌘-click / ⇧-click / ⌘A in the filmstrip, then ⌘E; progress, time left and Stop as Auto's Export all. The other platforms' Pro opens one photo; Auto's Export all covers batches there |
 | **Next / previous photo in Pro** (filmstrip of the folder, ← / →) | 1.17.7 | — | ✓ | — | — | Desktop only. Web, iOS and Android Pro open a single file; to change photo you open another (web: back to the Browser tab). This is why carry-over is automatic there and on demand on Desktop |
 | Multi-display, VoiceOver, Reduce Motion | 1.17.4 | n/a | ✓ | ✓ (iOS system) | ✓ TalkBack (Camera) | |
 
