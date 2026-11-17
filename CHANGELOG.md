@@ -1,3 +1,7 @@
+**RawBoy Desktop: Browse has a scroll bar (2026-11-17)**
+
+- **The grid and the list show a draggable scroll bar when the photos don't fit** (Viewer 0.2.8): a thin line at the right edge with a pill to drag; a click on the line beside the pill scrolls a page. The system's overlay bar was switched off there, so with a mouse there was nothing to grab.
+
 **RawBoy Desktop: one RawBoy Auto entry in Browse's photo menus (2026-11-17)**
 
 - **"Send to ▸" no longer repeats RawBoy Auto.** In the viewer's, the grid's and the list's right-click menus RawBoy Auto was at the top and again inside "Send to ▸". Now the RawBoy entries stay on top and "Send to ▸" (other apps) sits right under them; the viewer's menu gets the same submenu instead of loose "Send to <app>" items. Folder menus keep RawBoy Auto inside "Send to ▸". Comes with RawBoy Viewer v0.2.7 (PR 58); the pin moves from 0.2.6 to 0.2.7. Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.
