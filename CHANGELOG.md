@@ -1,3 +1,7 @@
+**RawBoy Desktop: ⌘C copies the picture in Browse's viewer (2026-11-17)**
+
+- **⌘C in the viewer copies the picture on screen** to the clipboard as an image (orientation applied, real preview if it is on), to paste into a document, chat or editor; ⌥⌘C still copies the file. Comes with RawBoy Viewer v0.2.5 (PR 55); the pin in `ios/project.yml` moves from 0.2.4 to 0.2.5. Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.
+
 **RawBoy Desktop: lens presets in Auto, for the batch, a selection or one photo (2026-11-17)**
 
 - **Lens presets saved in Pro now reach Auto.** Desktop's Auto kept its own list (filled only by the iPhone's Send to Auto link or a sidecar), so a lens preset saved in Pro's Lens tab never showed up and Auto had no lens preset picker. Auto now lists the lens presets in Pro's presets file, as the web's Auto lists the RawBoy tab's: saving, renaming or deleting one in Pro reaches Auto at once, and one Auto keeps from a sidecar or removes is so in Pro too (`LensPresetStore` on macOS, `PresetStore.changed`). Lens presets in the old `lens-presets.json` move over once. **Send to Auto** in Pro's Lens tab and Presets switches to Auto and applies the preset there (a lens preset: matched by lens, with the count).
