@@ -1,3 +1,7 @@
+**RawBoy Desktop and web Pro: rotate the crop with the mouse (2026-11-17)**
+
+- **Drag outside the crop frame to straighten**, as in the web's Auto: in Crop & rotate (Pro and Auto), press outside the frame and circle its centre; the picture turns with the pointer (clockwise drag = clockwise turn, -45° to 45°, 0.01° steps), the Straighten slider follows, and the drag undoes like a slider drag. On the Mac the pointer is an open hand outside the frame and resize arrows on its edges and corners. Shared Swift code (`CropOverlay.rotate`), so the iPhone apps get the drag too. **Web Pro** gets the same drag: its Crop & rotate passes `rotate` to `CropOverlay`, which until now only Auto did. Not compiled when written (no Mac): CI's `desktop` job is the first build.
+
 **RawBoy Desktop: Auto catches up with the web (2026-11-17)**
 
 - **Export file names.** The export sheet has the web's **File name** template, remembered: `{name}`, `{camera}`, `{lens}`, `{iso}`, `{look}`, `{date}`, `{time}`, `{year}` `{yy}` `{month}` `{day}` `{hour}` `{minute}` `{second}` and `#` counters (`##` = 01), with a preview of the first and last names and the keywords as buttons. Default `{name}-auto`, as before. A name already taken in the folder gets `-001`, `-002`: Auto no longer replaces an earlier export. `NameTemplate.swift` is a port of `NameTemplate.ts`, with its tests (`NameTemplateTests`).

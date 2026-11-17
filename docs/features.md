@@ -77,7 +77,7 @@ none of the web's 74; Kotlin lacks `healSpots`, `lumaContrast`, `portraitRetouch
 | Lens: Fisheye, Straighten fisheye, circle finder | 1.13.0 | ✓ | ✓ 1.17.0 | ✓ 1.13.1 | ✓ 1.13.1 | |
 | Lens: **Lensfun database** | 1.14.0 | ✓ | ✓ 1.17.2 | ✓ 1.17.2 | — | |
 | Lens presets (by lens; named for manual lenses) | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
-| Crop & rotate, Straighten, Flip | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
+| Crop & rotate, Straighten, Flip | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | Drag outside the crop frame to rotate: web, Desktop and iOS unreleased (Android has only the Straighten slider) |
 | Perspective (Vertical, Horizontal), Scale | 1.9.2 / 1.14.0 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
 | Masks: brush, linear, radial | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
 | Masks: stripe | 1.4.3 | ✓ | ✓ 1.17.0 | ✓ 1.4.7 | ✓ | |
@@ -136,7 +136,7 @@ none of the web's 74; Kotlin lacks `healSpots`, `lumaContrast`, `portraitRetouch
 | Brightness, Warmth, Contrast, Saturation, Tint, Grain, Denoise | ≤1.1.1 | ✓ | ✓ 1.17.2 | ✓ | ✓ | Luma contrast: web 1.12.5, Desktop and iOS 1.18.3 |
 | White balance picker | 1.9.0 | ✓ | ✓ 1.17.2 | ✓ | ✓ | |
 | **Retouch** (portrait retouch adjustment) | 1.12.0 | ✓ | ✓ unreleased | — | — | Desktop: its own Retouch section in the panel. `Adjustments.retouch` is in the Swift engine too (sidecar, Apply to all, Copy previous); iOS has no slider (its MediaPipe skin mask has no face landmarks yet) |
-| Crop & rotate in the photo view | 1.15.3 | ✓ | ✓ 1.17.2 | ✓ 1.15.3 | ✓ 1.15.3 | Drag-to-rotate on web 1.15.5; Desktop ? |
+| Crop & rotate in the photo view | 1.15.3 | ✓ | ✓ 1.17.2 | ✓ 1.15.3 | ✓ 1.15.3 | Drag outside the frame to rotate: web 1.15.5, Desktop and iOS unreleased (open hand cursor on the Mac); Android — |
 | RawBoy preset for the batch / a selection | ≤1.1.1 | ✓ | ✓ 1.17.8 (list of Pro's presets) | ✓ | ✓ | |
 | Partial presets (only the groups they hold) | 1.1.2 | ✓ | ✓ 1.17.2 | ✓ | ? | Denoise & sharpening group: unreleased on Desktop, iOS and Android |
 | Lens presets (by lens, per batch / selection) | ≤1.1.1 | ✓ | ✓ 1.17.2 | ✓ | ✓ | |
@@ -229,7 +229,7 @@ most cases). "Check" = confirm in the app before building, because I could only 
 | 8 | **Updater** | 1.6.0 | New DMGs are easy to miss; Sparkle is already in the Viewer app | Medium (signing, appcast; notarisation is "not in yet") |
 | 9 | ~~**Auto: decode neighbours ahead**~~ (done, unreleased) | 1.15.9 | Paging through a batch waits on each decode | Medium: a one-ahead prefetch in `AutoViewModel` / `PhotoSession`; web's `NeighbourPreload.ts` is the pattern |
 | 10 | **Packer: jump to top** | 1.8.12 | Long lists | Small (sort, collapse and remove folders done, unreleased) |
-| 11 | Check: **Auto crop drag-to-rotate (1.15.5), next / previous photo while zoomed (1.8.13), Pro zoom hint, healing stroke shown red while painting (1.15.11)** | | Listed as ? above | Check |
+| 11 | ~~Auto crop drag-to-rotate (1.15.5)~~ (done, unreleased: Pro's crop too, web and Desktop). Check: **next / previous photo while zoomed (1.8.13), Pro zoom hint, healing stroke shown red while painting (1.15.11)** | | Listed as ? above | Check |
 | 12 | Check: **darktable `_01` duplicates in Browse** | ≤1.1.1 | Web handles `NAME_01.CR2.xmp` | Check in the Viewer |
 | 13 | Carry-over to the next photo (Pro) | ≤1.1.1 | Not a gap: automatic on web, iOS and Android (they open one photo at a time), on demand on Desktop (it has a filmstrip and ← / →). Listed so the difference isn't mistaken for a bug | none |
 
