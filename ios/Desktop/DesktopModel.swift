@@ -41,6 +41,8 @@ final class DesktopModel: ObservableObject {
         var options = ViewerOptions()
         options.hidesDockAndMenuBar = true
         options.opensOnHostScreen = true
+        // The Pro / Auto / Browse switch sits in the window's toolbar area, over the top of the browser's own toolbar.
+        options.toolbarTopInset = 14
         options.viewerInHostWindow = !ViewerSettings.store.bool(forKey: DesktopModel.immersiveKey)
         return AppModel(options: options)
     }()
