@@ -1,3 +1,8 @@
+**RawBoy Desktop: mouse-only Browse (2026-11-17)**
+
+- **Double-click in the viewer goes back to the browser** instead of zooming (zoom stays on the wheel, press-and-hold and pinch; Compare and the crop tool keep the double-click zoom).
+- **Right-click sends any photo to Pro or Auto.** The viewer has a right-click menu now (Send to RawBoy Pro, Send to RawBoy Auto as Looks, Film or As is, other apps, Rotate, Export…, Show in Finder, Back to Browser, Move to Trash…), and the grid's and the list's photo menus list Send to RawBoy Pro and Send to RawBoy Auto at the top (the list had no send items). Raw, JPEG, HEIC, PNG and TIFF all go; with several photos selected Pro opens the first. Comes with RawBoy Viewer v0.2.6 (PR 57); the pin moves from 0.2.5 to 0.2.6. Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.
+
 **RawBoy Desktop: ⌘C copies the picture in Browse's viewer (2026-11-17)**
 
 - **⌘C in the viewer copies the picture on screen** to the clipboard as an image (orientation applied, real preview if it is on), to paste into a document, chat or editor; ⌥⌘C still copies the file. Comes with RawBoy Viewer v0.2.5 (PR 55); the pin in `ios/project.yml` moves from 0.2.4 to 0.2.5. Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.
