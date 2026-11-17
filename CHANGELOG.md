@@ -1,3 +1,7 @@
+**RawBoy Desktop: Auto's grid keeps its place after a photo (2026-11-17)**
+
+- **Leaving a photo scrolls the grid to it.** Back or Esc from Auto's photo view used to bring the grid back from the top; it now opens scrolled so the photo just viewed is on screen at its place (and has the keyboard focus). Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.
+
 **RawBoy Desktop: mouse-only Browse (2026-11-17)**
 
 - **Double-click in the viewer goes back to the browser** instead of zooming (zoom stays on the wheel, press-and-hold and pinch; Compare and the crop tool keep the double-click zoom).
