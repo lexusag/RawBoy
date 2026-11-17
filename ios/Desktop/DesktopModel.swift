@@ -53,9 +53,9 @@ final class DesktopModel: ObservableObject {
             browse.options.viewerInHostWindow = !immersiveViewer
         }
     }
-    @Published var mode = AppMode(rawValue: UserDefaults.standard.string(forKey: "desktop.mode") ?? "") ?? .pro {
+    /** Every launch starts in Browse (the last mode is not remembered); a photo handed over by Finder or `--open` switches to Pro. */
+    @Published var mode: AppMode = .browse {
         didSet {
-            UserDefaults.standard.set(mode.rawValue, forKey: "desktop.mode")
             sidecars.flush()
             autoSidecars.flush()
             browse.writePendingNow()

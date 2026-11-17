@@ -41,7 +41,7 @@ Auto analyses up to three photos side by side (a third of the cores, one lane pe
 
 ## Browse mode
 
-The third mode, ⌘3 (Pro | Auto | Browse): RawBoy Viewer's browser (grid, sidebar, culling) and viewer inside the window,
+The third mode, ⌘3 (Pro | Auto | Browse), is the one RawBoy Desktop starts in on every launch (the last mode is not remembered): RawBoy Viewer's browser (grid, sidebar, culling) and viewer inside the window,
 from the Viewer's libraries (`lexusag/RawBoyImageViewer`: RawBoyBrowseKit, ViewerFiles, ViewerImaging, ViewerUI; see "Where the Viewer's libraries come from" below). Desktop owns the
 `AppModel` (`DesktopModel.browse`) with `ViewerOptions`: the menu bar and Dock stay (`hidesDockAndMenuBar` off), the viewer is
 a view over the grid (`viewerInHostWindow`), and its preferences are kept under `desktop.browse.` (`ViewerSettings.store`).
