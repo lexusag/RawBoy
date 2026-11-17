@@ -899,7 +899,7 @@ struct ResetAllSheet: View {
             case .asIs:
                 Text("No look: just the automatic exposure and tone.").font(.callout).foregroundStyle(.secondary)
             }
-            Text("This clears each photo's Strength, brightness, warmth, tint, contrast, saturation, grain, denoise, rotation and crop, and any RawBoy preset. The photos stay in the batch, and their sidecars are updated. Undo in a photo's view brings its edits back.")
+            Text("This clears each photo's Strength, brightness, warmth, tint, contrast, luma contrast, saturation, grain, denoise, rotation and crop, and any RawBoy preset. The photos stay in the batch, and their sidecars are updated. Undo in a photo's view brings its edits back.")
                 .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             HStack {
                 Spacer()
