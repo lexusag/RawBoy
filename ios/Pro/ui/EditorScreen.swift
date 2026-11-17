@@ -105,6 +105,7 @@ struct EditorScreen: View {
                              onReset: vm.reset, onAuto: vm.applyAuto,
                              canUndo: state.canUndo, canRedo: state.canRedo, onUndo: vm.undo, onRedo: vm.redo,
                              onExport: { showExport = true }, onSendToAuto: commands.sendToAuto,
+                             onCopyPrevious: copyPreviousAction, canCopyPrevious: vm.canCopyPrevious,
                              looksArmed: looksArmed, onLooks: toggleLooks, helpShown: $showHelp)
             }
             // Controls under the photo in portrait, beside it in landscape.
@@ -137,6 +138,12 @@ struct EditorScreen: View {
         }
     }
 
+    /** RawBoy Desktop's bar button (nil elsewhere: the host sets `sendToAuto` only on the Mac). */
+    private var copyPreviousAction: (() -> Void)? {
+        if commands.sendToAuto == nil { return nil }
+        return { vm.copyPrevious() }
+    }
+
     // MARK: - Menu and keyboard actions (RawBoy Desktop)
 
     private func perform(_ action: EditorAction) {
@@ -151,6 +158,8 @@ struct EditorScreen: View {
             pickingWhite = false
             autoWb = false
             closeLooks()
+        case .copyPrevious:
+            vm.copyPrevious()
         case .toggleCompare:
             showOriginal.toggle()
         case .toggleSplit:
@@ -673,6 +682,9 @@ struct EditorTopBar: View {
     let onExport: () -> Void
     /** RawBoy Desktop: "Send to Auto" in the bar (nil: no button). */
     var onSendToAuto: (() -> Void)? = nil
+    /** RawBoy Desktop: "Copy" (the previous photo's settings, ⇧C) in the bar (nil: no button). */
+    var onCopyPrevious: (() -> Void)? = nil
+    var canCopyPrevious = false
     /** RawBoy Desktop: the Look selector's button (nil: no button) and whether it is armed. */
     var looksArmed = false
     var onLooks: (() -> Void)? = nil
@@ -744,6 +756,9 @@ struct EditorTopBar: View {
             Spacer(minLength: 8)
             tool("wand.and.stars", "Auto Dev", "Auto light and colour (keeps the LUT)", action: onAuto)
             if let onSendToAuto { tool("square.stack.3d.up", "To Auto", "Send this photo to Auto's batch (⇧⌘A)", action: onSendToAuto) }
+            if let onCopyPrevious {
+                tool("doc.on.doc", "Copy", "Copy the previous photo's settings (⇧C)", disabled: !canCopyPrevious, action: onCopyPrevious)
+            }
             tool("clock.arrow.circlepath", "Reset", "Reset all edits", action: onReset)
             tool("arrow.uturn.backward", "Undo", "Undo (⌘Z)", disabled: !canUndo, action: onUndo)
             tool("arrow.uturn.forward", "Redo", "Redo (⇧⌘Z)", disabled: !canRedo, action: onRedo)

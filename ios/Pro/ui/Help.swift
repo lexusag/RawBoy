@@ -17,6 +17,7 @@ let proHelp = [
         HelpItem("Y", "Before/after slider: the as-shot render on the left of a divider you drag, the edit on the right. Y again hides it. It shows on the whole photo (zoomed in it steps aside), and holding or \\ still compare full size."),
         HelpItem("C", "Open or close Crop & rotate."),
         HelpItem("Filmstrip", "Under the photo: the other photos in its folder, by file name (a RAW + JPEG pair once, as the raw). Click one to open it, or press ← and → for the previous and next; the mouse wheel scrolls the strip. Photos only in iCloud show a cloud and aren't downloaded until opened."),
+        HelpItem("Copy previous (⇧C)", "RawBoy Desktop: gives this photo the settings of the photo you had open before it (the bar's Copy button, or ⇧C). Opening a photo no longer copies them by itself; geometry, masks, leaks, effects and healing stay the photo's own."),
         HelpItem("Tab or F", "Photo only: hides the bar and the panel; again, or Esc, brings them back. With Full Keyboard Access on, Tab moves between controls instead, and F still works."),
         HelpItem("D, or click outside the photo", "Change the frame around it: grey, white or black."),
         HelpItem("Histogram", "Above the sliders: red, green and blue levels of the developed photo, with the share of crushed shadows (left) and clipped highlights (right). Click it to mark clipped highlights red and crushed shadows blue on the photo."),
