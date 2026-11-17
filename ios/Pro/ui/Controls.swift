@@ -167,6 +167,7 @@ struct ControlsPanel: View {
         }
         slider("Exposure", \.exposure, -5...5, format: formatEv)
         slider("Contrast", \.contrast, -100...100)
+        slider("Luma contrast", \.lumaContrast, -100...100)
         slider("Highlights", \.highlights, -100...100)
         slider("Shadows", \.shadows, -100...100)
         slider("Whites", \.whites, -100...100)
@@ -412,7 +413,7 @@ extension ControlsPanel {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
                 section("Light", reset: { p, d in
-                    p.exposure = d.exposure; p.contrast = d.contrast; p.highlights = d.highlights; p.shadows = d.shadows
+                    p.exposure = d.exposure; p.contrast = d.contrast; p.lumaContrast = d.lumaContrast; p.highlights = d.highlights; p.shadows = d.shadows
                     p.whites = d.whites; p.blacks = d.blacks
                     p.filmAmount = d.filmAmount; p.filmGrain = d.filmGrain; p.halation = d.halation
                 }) { lightSliders }

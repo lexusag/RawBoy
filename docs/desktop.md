@@ -4,7 +4,7 @@ RawBoy's editor as a native Mac app (SwiftUI + Metal, the iOS engine). Phase 1 i
 
 ## Photos and sidecars
 - Open with ⌘O, drop a file on the window, or Finder's Open With (which opens Browse). RAW, HEIC, JPEG, PNG and TIFF open in place (never copied).
-- Edits are written to the photo's XMP sidecar as you work: `rawboy:Develop`, the same JSON as RawBoy on the web. The file is NAME.xmp next to the photo, else darktable's NAME.EXT.xmp, else a new NAME.xmp. Only that field changes; everything else in an existing sidecar is kept. Writes happen 800 ms after the last change, when another photo opens, when the app goes to the background and on quit.
+- Edits are written to the photo's XMP sidecar as you work: `rawboy:Develop`, the same JSON as RawBoy on the web. The file is NAME.xmp next to the photo, else darktable's NAME.EXT.xmp, else a new NAME.xmp. Only that field changes; everything else in an existing sidecar is kept. Writes happen 800 ms after the last change, when another photo opens, when the app goes to the background and on quit. Quitting (or closing the window) while an export, Auto Dev, Auto's batch or the Packer is running, or after a sidecar write failed, asks first (Cancel / Quit Anyway; `QuitWork`).
 - A photo with a sidecar reopens with its edits. One without takes the previous photo's edits (as on the phone). RawBoy Viewer's rotation (`tiff:Orientation`) and crop are read; RawBoy's own turn wins.
 - Healing brush strokes are saved in the sidecar too; web-only values (portrait retouch and others the Mac app doesn't know) are kept untouched.
 
@@ -15,7 +15,7 @@ RawBoy's editor as a native Mac app (SwiftUI + Metal, the iOS engine). Phase 1 i
 One bar over the photo (the photo's name and exposure; Crop, Masks, Light, Heal, Presets, **Looks** (click it, then the photo: every LUT and film stock over that spot as labelled stripes, click one to use it, as on the web); Auto Dev, To Auto, Reset, Undo, Redo, Export) and the slider panel on the right: sections that open and close (Light, Curve, Colour, Primaries, Detail, Portrait, Effects, LUT, Lens), each with an amber dot when it has edits and a reset for that section only. Under the photo, a **filmstrip** of the other photos in its folder (name order, a RAW + JPEG pair once): click one, or ← / →, to open the next. The phones keep their tabs.
 
 ## Keys and mouse
-Z 100% at the pointer, Tab or F photo only (hides the bar and the panel; Tab stays with Full Keyboard Access when that is on), D frame colour, C Crop & rotate, \ Compare, B healing brush (inside Masks: brush), E / V masks, [ ] brush size, Delete removes the selected healing stroke, Esc or Return closes the tool, Space pans, ⌘Z / ⇧⌘Z, ⌘O, ⌘E, ⌘/ help. Keys are matched by physical position. The wheel zooms around the pointer; over a slider it moves it (Shift big, ⌘ fine); double-click resets a slider.
+Z 100% at the pointer, Tab or F photo only (hides the bar and the panel; Tab stays with Full Keyboard Access when that is on), D frame colour, C Crop & rotate, \ Compare, Y before/after slider (drag the divider: as shot on the left, the edit on the right), B healing brush (inside Masks: brush), E / V masks, [ ] brush size, Delete removes the selected healing stroke, Esc or Return closes the tool, Space pans, ⌘Z / ⇧⌘Z, ⌘O, ⌘E, ⌘/ help. Keys are matched by physical position. The wheel zooms around the pointer; over a slider it moves it (Shift big, ⌘ fine); double-click resets a slider.
 
 ## Displays and accessibility
 - **Displays.** The window's frame is restored at launch; if its display is gone, or one is unplugged or changes resolution while RawBoy is open, the window moves onto the main screen (cut down to fit if the screen is smaller; `WindowPlacement`). Full screen and Zoom are the system's and use the window's own screen. The photo is drawn tagged **sRGB**, so macOS converts it for whichever display the window is on (wide-gamut or not) and for each one as the window is dragged between them; it redraws when the window changes screen, backing scale or colour profile. The preview is SDR: no EDR/HDR output (an HDR display shows it at SDR white).
@@ -46,7 +46,7 @@ from the Viewer's libraries (`lexusag/RawBoyImageViewer`: RawBoyBrowseKit, Viewe
 `AppModel` (`DesktopModel.browse`) with `ViewerOptions`: the menu bar and Dock stay (`hidesDockAndMenuBar` off), the viewer is
 a view over the grid (`viewerInHostWindow`), and its preferences are kept under `desktop.browse.` (`ViewerSettings.store`).
 ViewerUI installs its own key monitor while Browse shows; Desktop's `KeyboardShortcuts` only takes ⌘1/⌘2 there. The Browse
-menu is the Viewer's Photo menu (`ViewerPhotoCommands`), on while Browse shows. `Desktop/DesktopHandOff.swift`
+menu is the Viewer's Photo menu (`ViewerPhotoCommands`), on while Browse shows. Browse's settings (the Viewer's Settings window, `ViewerSettingsRoot`) are the app's Settings… (⌘,); they apply to Browse only. `Desktop/DesktopHandOff.swift`
 implements the Viewer's `PhotoHandOff` in-process: E in the viewer opens the photo in Pro (whichever mode was showing; Auto's
 batch is kept), Send to RawBoy Auto adds photos or folders to Auto's batch as Looks, Film or As is. Real previews (R, and Compare's) are the
 engine's as-shot develop (`Desktop/EngineRealPreview.swift`, a `RealPreviewProvider` given to ViewerUI through

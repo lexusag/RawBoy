@@ -126,15 +126,25 @@ final class EditsTests: XCTestCase {
         XCTAssertEqual(try decode(text).params.portraitRetouch, 35)
     }
 
-    func testWebOnlyFieldsSurviveASwiftRoundTrip() throws {
+    func testLumaContrastIsAKnownField() throws {
         let d = try decode(EditsFixtures.webOnly)
         XCTAssertEqual(d.params.exposure, 0.3, accuracy: 1e-6)
-        XCTAssertEqual(Set(d.extras.keys), ["lumaContrast"])
-        let again = try XCTUnwrap(Edits.encode(d.params, defaults: defaults, extras: d.extras))
+        XCTAssertEqual(d.params.lumaContrast, 12)
+        XCTAssertTrue(d.extras.isEmpty)
+        let again = try XCTUnwrap(Edits.encode(d.params, defaults: defaults))
         let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(again.utf8)) as? [String: Any])
         let values = try XCTUnwrap(object["values"] as? [String: Any])
         XCTAssertEqual(values["lumaContrast"] as? Int, 12)
-        XCTAssertNil(Edits.encode(defaults, defaults: defaults, extras: [:]))
+        XCTAssertNil(Edits.encode(defaults, defaults: defaults))
+    }
+
+    func testUnknownFieldsSurviveASwiftRoundTrip() throws {
+        let d = try decode(#"{"format":"rawboy-edit","version":1,"values":{"exposure":0.3,"futureField":7}}"#)
+        XCTAssertEqual(Set(d.extras.keys), ["futureField"])
+        let again = try XCTUnwrap(Edits.encode(d.params, defaults: defaults, extras: d.extras))
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(again.utf8)) as? [String: Any])
+        let values = try XCTUnwrap(object["values"] as? [String: Any])
+        XCTAssertEqual(values["futureField"] as? Int, 7)
     }
 
     /** Whatever the web wrote decodes, and encoding that gives the same decode (idempotent through Swift). */

@@ -236,7 +236,7 @@ private extension AutoPhoto {
     }
 
     /**
-     * The look (or preset), strength, warmth, tint, contrast, saturation and grain of [source] ("Apply to all", "Copy previous");
+     * The look (or preset), strength, warmth, tint, contrast, luma contrast, saturation and grain of [source] ("Apply to all", "Copy previous");
      * brightness, denoise and rotation stay (they follow this photo's exposure, noise and framing). RawBoy edits are dropped.
      */
     mutating func takeLook(of source: AutoPhoto) {
@@ -252,6 +252,7 @@ private extension AutoPhoto {
         adjust.warmth = s.warmth
         adjust.tint = s.tint
         adjust.contrast = s.contrast
+        adjust.lumaContrast = s.lumaContrast
         adjust.saturation = s.saturation
         adjust.grain = s.grain
     }
@@ -1038,7 +1039,7 @@ final class AutoViewModel: ObservableObject {
     }
 
     /**
-     * Gives every photo of the batch the look (or preset), strength, warmth, tint, contrast, saturation and grain of [id], including
+     * Gives every photo of the batch the look (or preset), strength, warmth, tint, contrast, luma contrast, saturation and grain of [id], including
      * photos still being analysed (they keep it rather than their suggestion); brightness and denoise stay per photo (they follow
      * each photo's exposure and noise). Not while exporting.
      */
@@ -1085,7 +1086,7 @@ final class AutoViewModel: ObservableObject {
 
     /**
      * Gives photo [id] what "Apply to all" copies, from the photo before it ([previousPhoto]): look (or preset), strength,
-     * brightness, warmth, tint, contrast, saturation and grain, as one undo step (a neighbouring shot of the same scene usually wants its
+     * brightness, warmth, tint, contrast, luma contrast, saturation and grain, as one undo step (a neighbouring shot of the same scene usually wants its
      * brightness too, unlike Apply to all); denoise and rotation stay. Not while exporting.
      */
     func copyPrevious(_ id: String) {

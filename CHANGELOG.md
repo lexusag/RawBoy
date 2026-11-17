@@ -2,6 +2,23 @@
 
 - **Wheel over Stock or the tone mapper** (Pro, Film on) moves to the next or previous stock, one per mouse click, as on the web; a trackpad swipe steps at its start and then every 40 points, so it passes a few stocks, not dozens. The panel doesn't scroll under the pointer there, but a wheel that was just scrolling the panel keeps scrolling it. `WheelStepper` (engine, tested in `WheelStepperTests`) is the Swift port of web's `stepWheel`. Not compiled or tried by hand when written (no Mac): CI is the first build.
 
+**RawBoy Desktop: Pro's before/after slider (2026-11-16)**
+
+- **Y, or View › Before/After Slider.** A divider over the photo: the as-shot render (with the edit's rotation, flips and crop, as Compare) on its left, the edit on its right, labelled. Drag it anywhere; it stays between 2% and 98% and keeps its place from photo to photo. The as-shot half is developed once and only drawn clipped while you drag or move sliders. On the whole-photo view only (zoomed in or inside a tool it steps aside); press-and-hold and `\` Compare still show the whole photo as shot.
+
+**RawBoy Desktop and iOS: Luma contrast in Pro and Auto (2026-11-16)**
+
+- **Luma contrast** (-100..+100) under Contrast in Pro's Light section and (-50..+50) under Contrast in Auto's Light section, as on the web: the same log slope on luminance only, so colour saturation holds. It is a `DevelopParams.lumaContrast` field (Light preset group, so presets, Edits JSON and Send to Auto carry it) and an `Adjustments.lumaContrast` in Auto (kept in the `rawboy:Auto` sidecar, copied by Apply to all and Copy previous, cleared by Reset all photos). The shader already had `uLumaContrast`; `ShaderParams.lumaContrast` = 2^(0.7 x value / 100) - 1 as on the web. Edits and sidecars the web wrote with it read as a slider now, not a kept extra.
+- Tests: `LumaContrastTests`, `EditsTests`, `AutoSidecarTests`. Not built here (no Swift toolchain); CI's `desktop` job compiles and runs them. Android still has no slider.
+
+**RawBoy Desktop: asks before quitting mid-work (2026-11-16)**
+
+- **Quit (⌘Q) or closing the window** asks "Quit RawBoy Desktop?" when something would be cut short: Pro's export or Auto Dev running, Auto's batch export or photos still being analysed, the Packer converting, or edits whose sidecar could not be written. Cancel is the default; Quit Anyway leaves. Edits themselves never prompt: they are already in the sidecar (the web asks about unexported edits only because it has no sidecar). Browse has no long work of its own, so it is not asked.
+
+**RawBoy Desktop: Settings… for Browse (2026-11-16)**
+
+- **Settings… (⌘,)** in the app menu opens the bundled Viewer's Settings window (`ViewerSettingsRoot`), which until now Desktop never showed. It holds Browse's choices (kept under `desktop.browse.`, not the standalone Viewer's); Pro and Auto have none of their own there.
+
 **RawBoy Desktop: Browse takes the Viewer 0.2.2 (2026-11-16)**
 
 - **Top bar zoom.** Double-clicking Browse's toolbar (or the strip above Places) expands the window to fit the screen and again puts it back, like the title bar's Zoom (it follows the system's double-click setting).
