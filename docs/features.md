@@ -77,7 +77,7 @@ none of the web's 74; Kotlin lacks `healSpots`, `lumaContrast`, `portraitRetouch
 | Lens: Fisheye, Straighten fisheye, circle finder | 1.13.0 | ✓ | ✓ 1.17.0 | ✓ 1.13.1 | ✓ 1.13.1 | |
 | Lens: **Lensfun database** | 1.14.0 | ✓ | ✓ 1.17.2 | ✓ 1.17.2 | — | |
 | Lens presets (by lens; named for manual lenses) | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
-| Crop & rotate, Straighten, Flip | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | Drag outside the crop frame to rotate: web, Desktop and iOS unreleased (Android has only the Straighten slider) |
+| Crop & rotate, Straighten, Flip | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | Drag outside the crop frame to rotate: web, Desktop and iOS unreleased (Android has only the Straighten slider); the shape starts on Original (Free if already cropped): Desktop and iOS unreleased, web and Android start on Free |
 | Perspective (Vertical, Horizontal), Scale | 1.9.2 / 1.14.0 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
 | Masks: brush, linear, radial | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
 | Masks: stripe | 1.4.3 | ✓ | ✓ 1.17.0 | ✓ 1.4.7 | ✓ | |
