@@ -119,8 +119,8 @@ public enum LookApplier {
      * A RawBoy preset in place of a look: [base] (the auto develop) with every field the preset holds, exactly as RawBoy
      * applies it (tone mapper, film, LUT, colour, detail, retouch, lens corrections, gradient masks...), then [adjust]
      * on top as with a look. Fields the preset leaves out keep the auto develop's values; there is no Strength.
-     * Denoise, Color denoise and sharpening always come from the auto develop, measured on this photo (its ISO and
-     * exposure), never from the photo the preset was made on; the Denoise adjustment still works on top.
+     * Denoise, Color denoise and sharpening come from the auto develop, measured on this photo (its ISO and exposure),
+     * unless the preset holds the Denoise & sharpening group; the Denoise adjustment works on top either way.
      */
     public static func applyPreset(_ base: DevelopParams, preset: Preset, adjust: Adjustments) -> DevelopParams {
         let p = Presets.apply(preset, base)
@@ -129,8 +129,7 @@ public enum LookApplier {
         d.contrast = (p.contrast + adjust.contrast).clamped(-100, 100)
         d.lumaContrast = (p.lumaContrast + adjust.lumaContrast).clamped(-100, 100)
         d.saturation = saturation(p.saturation, adjust.saturation)
-        (d.denoise, d.colorDenoise) = denoise(base, adjust: adjust.denoise)
-        d.sharpening = base.sharpening
+        (d.denoise, d.colorDenoise) = denoise(p, adjust: adjust.denoise)
         // With a film stock its grain is the one rendered, so Grain scales that one, as in Film mode.
         if p.film != nil {
             d.filmGrain = (p.filmGrain * (1 + adjust.grain / 50)).clamped(0, 200)
