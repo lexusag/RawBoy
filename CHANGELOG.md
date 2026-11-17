@@ -2,6 +2,10 @@
 
 - **"Send to ▸" no longer repeats RawBoy Auto.** In the viewer's, the grid's and the list's right-click menus RawBoy Auto was at the top and again inside "Send to ▸". Now the RawBoy entries stay on top and "Send to ▸" (other apps) sits right under them; the viewer's menu gets the same submenu instead of loose "Send to <app>" items. Folder menus keep RawBoy Auto inside "Send to ▸". Comes with RawBoy Viewer v0.2.7 (PR 58); the pin moves from 0.2.6 to 0.2.7. Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.
 
+  **RawBoy Desktop: Auto's grid keeps its place after a photo (2026-11-17)**
+
+- **Leaving a photo scrolls the grid to it.** Back or Esc from Auto's photo view used to bring the grid back from the top; it now opens scrolled so the photo just viewed is on screen at its place (and has the keyboard focus). Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.
+
 **RawBoy Desktop: mouse-only Browse (2026-11-17)**
 
 - **Double-click in the viewer goes back to the browser** instead of zooming (zoom stays on the wheel, press-and-hold and pinch; Compare and the crop tool keep the double-click zoom).

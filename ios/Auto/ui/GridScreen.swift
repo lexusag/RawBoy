@@ -369,6 +369,10 @@ struct GridScreen: View {
                 .onChange(of: vm.focusedId) { _, id in
                     if let id { Motion.animate { scroll.scrollTo(id) } }
                 }
+                // Back from a photo: the grid is rebuilt, so put the photo just viewed on screen again.
+                .onAppear {
+                    if let id = vm.focusedId { DispatchQueue.main.async { scroll.scrollTo(id, anchor: .center) } }
+                }
             }
         }
         .background(Color(red: 0x12 / 255, green: 0x12 / 255, blue: 0x12 / 255))
@@ -434,6 +438,13 @@ struct GridScreen: View {
                     }
                 }
                 .padding(gap)
+            }
+            // Back from a photo: the grid is rebuilt, so put the photo just viewed on screen again.
+            .onAppear {
+                if let id = vm.focusedId, let i = photos.firstIndex(where: { $0.id == id }),
+                   let row = rows.last(where: { $0.start <= i }) {
+                    DispatchQueue.main.async { scroll.scrollTo(photos[row.start].id, anchor: .center) }
+                }
             }
             // The keyboard focus stays in view.
             .onChange(of: vm.focusedId) { _, id in

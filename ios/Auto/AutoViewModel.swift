@@ -1541,6 +1541,8 @@ final class AutoViewModel: ObservableObject {
     func closeDetail() {
         cropping = false
         session.exitZoom()
+        // The grid comes back scrolled to the photo just viewed (it also carries the keyboard focus).
+        if let selected { focusedId = selected }
         selected = nil
         cachedPreview = nil
         preloadNeighbours(nil)
