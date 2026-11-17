@@ -609,7 +609,8 @@ private struct PhotoPage: View {
                                                           film: shown.film != nil ? session.filmData : nil)
                         CropOverlay(frameWidth: shader.lens.outputWidth, frameHeight: shader.lens.outputHeight,
                                     crop: photo.adjust.crop ?? CropMath.full, ratio: cropRatio, framePx: framePx,
-                                    onCropChange: { vm.setCrop(photo.id, $0) })
+                                    onCropChange: { vm.setCrop(photo.id, $0) },
+                                    rotate: (angle: photo.adjust.straighten, onChange: { vm.setStraighten(photo.id, $0) }))
                     }
                     // The ISO in the bottom-left corner, to judge noise without zooming in (as the web's photo view).
                     if let iso = photo.isoLabel {
