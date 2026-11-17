@@ -1,3 +1,8 @@
+**RawBoy Desktop: Pro opens a photo as Auto developed it (2026-11-17)**
+
+- A photo that is in Auto's batch and has no saved Pro edits (`rawboy:Develop`) now opens in Pro with its Auto develop (look or preset, adjustments) as the starting edits, from Browse's E, the filmstrip's arrows or the Open panel as well as from Edit in Pro. So the pipeline Browse → Auto → presets → Pro (heal strokes, blemishes) no longer restarts from the bare as-shot develop, and the strokes Pro saves are kept in the photo's sidecar. Once Pro has saved edits, its sidecar wins. Not compiled here (no Swift toolchain in the cloud session): CI's `desktop` job builds it.
+- **Replacing Pro's edits asks first.** In Auto (Desktop and iOS), applying a preset to the batch or a selection, Apply to All, or Copy previous onto photos that carry RawBoy edits (Pro's heal strokes, masks, crop...) shows "Replace the RawBoy edits of N photos?" (Replace / Cancel) instead of silently dropping them; each photo keeps its undo step. Not compiled here either.
+
 **RawBoy Desktop: Browse has a scroll bar (2026-11-17)**
 
 - **The grid and the list show a draggable scroll bar when the photos don't fit** (Viewer 0.2.8): a thin line at the right edge with a pill to drag; a click on the line beside the pill scrolls a page. The system's overlay bar was switched off there, so with a mouse there was nothing to grab.

@@ -752,9 +752,10 @@ final class AutoViewModel: ObservableObject {
      * Develops every photo, and those added later, with [preset] in place of its look: all the preset holds, lens
      * corrections included, on top of each photo's auto develop. Each photo keeps its look for when the preset is removed.
      */
-    func applyPresetToAll(_ preset: Preset) {
+    func applyPresetToAll(_ preset: Preset, confirmed: Bool = false) {
         presetChoices = []
         if export != nil { return }
+        if !confirmed, askOverwrite(photos.map(\.id), "\(preset.name)", { [weak self] in self?.applyPresetToAll(preset, confirmed: true) }) { return }
         self.preset = preset
         for p in photos { changeDevelop(p.id, force: true) { $0.preset = preset; $0.edits = nil } }
         message = "\(preset.name) applied to all photos"
@@ -764,9 +765,10 @@ final class AutoViewModel: ObservableObject {
      * Develops only the photos in [ids] (the grid's selection, e.g. one scene) with [preset], so one batch can hold a
      * preset per scene. The batch preset, which photos added later get, stays as it is.
      */
-    func applyPreset(_ preset: Preset, to ids: Set<String>) {
+    func applyPreset(_ preset: Preset, to ids: Set<String>, confirmed: Bool = false) {
         presetChoices = []
         if export != nil { return }
+        if !confirmed, askOverwrite(Array(ids), "\(preset.name)", { [weak self] in self?.applyPreset(preset, to: ids, confirmed: true) }) { return }
         let chosen = photos.filter { ids.contains($0.id) }
         for p in chosen { changeDevelop(p.id, force: true) { $0.preset = preset; $0.edits = nil } }
         message = "\(preset.name) applied to \(chosen.count == 1 ? "1 photo" : "\(chosen.count) photos")"
@@ -1176,9 +1178,10 @@ final class AutoViewModel: ObservableObject {
      * photos still being analysed (they keep it rather than their suggestion); brightness and denoise stay per photo (they follow
      * each photo's exposure and noise). Not while exporting.
      */
-    func applyLookToAll(_ id: String) {
+    func applyLookToAll(_ id: String, confirmed: Bool = false) {
         if export != nil { return }
         guard let source = photo(id) else { return }
+        if !confirmed, askOverwrite(photos.map(\.id).filter { $0 != id }, source.lookName, { [weak self] in self?.applyLookToAll(id, confirmed: true) }) { return }
         for p in photos where p.id != id {
             changeDevelop(p.id, force: true) {
                 $0.takeLook(of: source)
@@ -1186,6 +1189,26 @@ final class AutoViewModel: ObservableObject {
             }
         }
         message = "\(source.lookName) applied to all photos"
+    }
+
+    /** A look or preset that would replace RawBoy edits (Pro's, with heal strokes and masks) waiting for the user's yes. */
+    struct OverwriteRequest: Identifiable {
+        let id = UUID()
+        let what: String
+        let count: Int
+        let proceed: () -> Void
+    }
+    @Published var overwriteRequest: OverwriteRequest?
+
+    /**
+     * True (and [overwriteRequest] set) when [ids] include photos with RawBoy edits, which giving them [what] would drop;
+     * [proceed] runs on "Replace" (each photo keeps its undo step, so Undo brings its edits back).
+     */
+    private func askOverwrite(_ ids: [String], _ what: String, _ proceed: @escaping () -> Void) -> Bool {
+        let edited = ids.filter { photo($0)?.edits != nil }.count
+        guard edited > 0 else { return false }
+        overwriteRequest = OverwriteRequest(what: what, count: edited, proceed: proceed)
+        return true
     }
 
     /** Bumped by the "Reset all photos" button and menu item: the root shows its sheet (count, target, a confirmation). */
@@ -1236,9 +1259,10 @@ final class AutoViewModel: ObservableObject {
      * brightness, warmth, tint, contrast, luma contrast, saturation, grain and retouch, as one undo step (a neighbouring shot of the same scene usually wants its
      * brightness too, unlike Apply to all); denoise and rotation stay. Not while exporting.
      */
-    func copyPrevious(_ id: String) {
+    func copyPrevious(_ id: String, confirmed: Bool = false) {
         if export != nil { return }
         guard let source = previousPhoto(id) else { return }
+        if !confirmed, askOverwrite([id], source.lookName, { [weak self] in self?.copyPrevious(id, confirmed: true) }) { return }
         changeDevelop(id, force: true) {
             $0.takeLook(of: source)
             takeLensChoice(&$0, of: source)

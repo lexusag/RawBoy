@@ -71,6 +71,18 @@ struct AutoRoot: View {
                 if case let .success(url) = result { vm.openPresetFile(url, ids: presetTarget) }
             }
         )
+        .confirmationDialog(
+            vm.overwriteRequest.map { $0.count == 1 ? "Replace this photo's RawBoy edits?" : "Replace the RawBoy edits of \($0.count) photos?" } ?? "",
+            isPresented: Binding(get: { vm.overwriteRequest != nil }, set: { if !$0 { vm.overwriteRequest = nil } }),
+            titleVisibility: .visible, presenting: vm.overwriteRequest) { request in
+            Button("Replace with \(request.what)", role: .destructive) {
+                vm.overwriteRequest = nil
+                request.proceed()
+            }
+            Button("Cancel", role: .cancel) { vm.overwriteRequest = nil }
+        } message: { _ in
+            Text("Edits made in Pro, such as heal strokes, masks and crops, give way to the look or preset. Undo in the photo's view brings them back.")
+        }
         .confirmationDialog("Apply a RawBoy preset",
                             isPresented: Binding(get: { !vm.presetChoices.isEmpty }, set: { if !$0 { vm.presetChoices = [] } }),
                             titleVisibility: .visible) {
