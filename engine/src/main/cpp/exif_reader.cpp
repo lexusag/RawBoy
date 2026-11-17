@@ -119,6 +119,24 @@ bool readExif(const uint8_t* data, size_t size, PhotoMetadata& m, int& orientati
     const Tiff t(data, size);
     if (!t.valid()) return false;
     size_t exifIfd = 0, gpsIfd = 0;
+    // The Exif tags also sit in IFD0 of TIFF/EP files (Android's DngCreator DNGs), where LibRaw misses them.
+    const auto exifTag = [&](const Tiff::Entry& e) {
+        const double v = t.number(e);
+        switch (e.tag) {
+            case 0x829A: if (v > 0) m.exposureTime = v; break;
+            case 0x829D: if (v > 0) m.fNumber = v; break;
+            case 0x8827: if (v > 0) m.iso = float(v); break;
+            case 0x8833: if (v > 0 && m.iso <= 0) m.iso = float(v); break;  // ISOSpeed, when ISOSpeedRatings is absent
+            case 0x9003: m.dateTimeOriginal = t.ascii(e); break;
+            case 0x9011: m.offsetTimeOriginal = t.ascii(e); break;
+            case 0x9204: if (std::isfinite(v)) m.exposureBias = v; break;
+            case 0x920A: if (v > 0) m.focalLength = v; break;
+            case 0x9291: m.subSecTimeOriginal = t.ascii(e); break;
+            case 0xA405: if (v > 0) m.focalLength35mm = v; break;
+            case 0xA433: m.lensMake = t.ascii(e); break;
+            case 0xA434: m.lensModel = t.ascii(e); break;
+        }
+    };
     t.forEach(t.u32(4), [&](const Tiff::Entry& e) {
         switch (e.tag) {
             case 0x010F: m.make = t.ascii(e); break;
@@ -132,24 +150,10 @@ bool readExif(const uint8_t* data, size_t size, PhotoMetadata& m, int& orientati
             case 0x8298: m.copyright = t.ascii(e); break;
             case 0x8769: exifIfd = size_t(t.number(e)); break;
             case 0x8825: gpsIfd = size_t(t.number(e)); break;
+            default: exifTag(e);
         }
     });
-    t.forEach(exifIfd, [&](const Tiff::Entry& e) {
-        const double v = t.number(e);
-        switch (e.tag) {
-            case 0x829A: if (v > 0) m.exposureTime = v; break;
-            case 0x829D: if (v > 0) m.fNumber = v; break;
-            case 0x8827: if (v > 0) m.iso = float(v); break;
-            case 0x9003: m.dateTimeOriginal = t.ascii(e); break;
-            case 0x9011: m.offsetTimeOriginal = t.ascii(e); break;
-            case 0x9204: if (std::isfinite(v)) m.exposureBias = v; break;
-            case 0x920A: if (v > 0) m.focalLength = v; break;
-            case 0x9291: m.subSecTimeOriginal = t.ascii(e); break;
-            case 0xA405: if (v > 0) m.focalLength35mm = v; break;
-            case 0xA433: m.lensMake = t.ascii(e); break;
-            case 0xA434: m.lensModel = t.ascii(e); break;
-        }
-    });
+    t.forEach(exifIfd, exifTag);
     bool lat = false, lon = false;
     t.forEach(gpsIfd, [&](const Tiff::Entry& e) {
         switch (e.tag) {
@@ -171,6 +175,79 @@ bool readExif(const uint8_t* data, size_t size, PhotoMetadata& m, int& orientati
     m.hasGps = lat && lon && (m.gpsLatitudeRef == 'N' || m.gpsLatitudeRef == 'S') &&
                (m.gpsLongitudeRef == 'E' || m.gpsLongitudeRef == 'W');
     return true;
+}
+
+namespace {
+
+/** The TIFF block of the first Exif APP1 segment of the JPEG at [d, d + n), or false. */
+bool findJpegExif(const uint8_t* d, size_t n, const uint8_t*& tiff, size_t& tiffSize) {
+    if (n < 4 || d[0] != 0xFF || d[1] != 0xD8) return false;
+    size_t p = 2;
+    while (p + 4 <= n && d[p] == 0xFF) {
+        const uint8_t marker = d[p + 1];
+        if (marker == 0xDA || marker == 0xD9) return false;  // image data: no Exif before it
+        const size_t len = size_t(d[p + 2]) << 8 | d[p + 3];
+        if (len < 2 || p + 2 + len > n) return false;
+        if (marker == 0xE1 && len >= 8 && std::memcmp(d + p + 4, "Exif\0\0", 6) == 0) {
+            tiff = d + p + 10;
+            tiffSize = len - 8;
+            return true;
+        }
+        p += 2 + len;
+    }
+    return false;
+}
+
+}  // namespace
+
+void fillMissingMetadata(const uint8_t* data, size_t size, PhotoMetadata& m) {
+    const uint8_t* tiff = nullptr;
+    size_t tiffSize = 0;
+    if (size > 8 && ((data[0] == 'I' && data[1] == 'I') || (data[0] == 'M' && data[1] == 'M'))) {
+        tiff = data;
+        tiffSize = size;
+    } else if (size > 92 && std::memcmp(data, "FUJIFILMCCD-RAW", 15) == 0) {
+        // A Fujifilm RAF: its embedded JPEG (offset and length at 84 and 88, big endian) carries the camera's EXIF.
+        const size_t off = size_t(data[84]) << 24 | size_t(data[85]) << 16 | size_t(data[86]) << 8 | data[87];
+        const size_t len = size_t(data[88]) << 24 | size_t(data[89]) << 16 | size_t(data[90]) << 8 | data[91];
+        if (off >= 92 && len > 0 && off + len <= size) findJpegExif(data + off, len, tiff, tiffSize);
+    }
+    if (!tiff) return;
+    PhotoMetadata e;
+    int orientation = 1;
+    if (!readExif(tiff, tiffSize, e, orientation)) return;
+    auto text = [](std::string& dst, const std::string& src) {
+        if (dst.empty() && !src.empty()) dst = src;
+    };
+    auto number = [](double& dst, double src) {
+        if (!std::isfinite(dst) && std::isfinite(src)) dst = src;
+    };
+    text(m.make, e.make);
+    text(m.model, e.model);
+    text(m.lensMake, e.lensMake);
+    text(m.lensModel, e.lensModel);
+    text(m.artist, e.artist);
+    text(m.copyright, e.copyright);
+    text(m.dateTimeOriginal, e.dateTimeOriginal);
+    text(m.subSecTimeOriginal, e.subSecTimeOriginal);
+    text(m.offsetTimeOriginal, e.offsetTimeOriginal);
+    number(m.exposureTime, e.exposureTime);
+    number(m.fNumber, e.fNumber);
+    number(m.exposureBias, e.exposureBias);
+    number(m.focalLength, e.focalLength);
+    number(m.focalLength35mm, e.focalLength35mm);
+    if (!(m.iso > 0) && e.iso > 0) m.iso = e.iso;
+    if (!m.hasGps && e.hasGps) {
+        m.hasGps = true;
+        std::memcpy(m.gpsLatitude, e.gpsLatitude, sizeof m.gpsLatitude);
+        std::memcpy(m.gpsLongitude, e.gpsLongitude, sizeof m.gpsLongitude);
+        m.gpsLatitudeRef = e.gpsLatitudeRef;
+        m.gpsLongitudeRef = e.gpsLongitudeRef;
+        m.gpsAltitude = e.gpsAltitude;
+        m.gpsBelowSeaLevel = e.gpsBelowSeaLevel;
+        std::memcpy(m.gpsTimeStamp, e.gpsTimeStamp, sizeof m.gpsTimeStamp);
+        m.gpsDateStamp = e.gpsDateStamp;
+    }
 }
 
 namespace {

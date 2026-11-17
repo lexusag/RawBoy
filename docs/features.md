@@ -138,7 +138,7 @@ none of the web's 74; Kotlin lacks `healSpots`, `lumaContrast`, `portraitRetouch
 | White balance picker | 1.9.0 | ✓ | ✓ 1.17.2 | ✓ | ✓ | |
 | **Retouch** (portrait retouch adjustment) | 1.12.0 | ✓ | ✓ unreleased | — | — | Desktop: its own Retouch section in the panel. `Adjustments.retouch` is in the Swift engine too (sidecar, Apply to all, Copy previous); iOS has no slider (its MediaPipe skin mask has no face landmarks yet) |
 | Crop & rotate in the photo view | 1.15.3 | ✓ | ✓ 1.17.2 | ✓ 1.15.3 | ✓ 1.15.3 | Drag outside the frame to rotate: web 1.15.5, Desktop and iOS unreleased (open hand cursor on the Mac); Android — |
-| RawBoy preset for the batch / a selection | ≤1.1.1 | ✓ | ✓ 1.17.8 (list of Pro's presets) | ✓ | ✓ | |
+| RawBoy preset for the batch / a selection | ≤1.1.1 | ✓ | ✓ 1.17.8 (list of Pro's presets) | ✓ | ✓ | Desktop and iOS keep the selection after a preset or lens preset (unreleased); web and Android clear it |
 | Partial presets (only the groups they hold) | 1.1.2 | ✓ | ✓ 1.17.2 | ✓ | ? | Denoise & sharpening group: unreleased on Desktop, iOS and Android |
 | Lens presets (by lens, per batch / selection) | ≤1.1.1 | ✓ | ✓ 1.17.2 | ✓ | ✓ | |
 | Edit in RawBoy / Back to Auto (RawBoy edits per photo) | ≤1.1.1 | ✓ | ✓ 1.17.8 | — | ✓ | |
@@ -151,7 +151,7 @@ none of the web's 74; Kotlin lacks `healSpots`, `lumaContrast`, `portraitRetouch
 | Filter: camera, lens, ISO, date | 1.9.0 | ✓ | ✓ 1.17.8 | — | — | |
 | Filter: focal length, Unedited | 1.12.6; 1.17.10 | ✓ | ✓ 1.17.8 / 1.17.10 | — | — | |
 | **ISO beside each photo** (grid and photo view) | ≤1.1.1 | ✓ | ✓ unreleased | ✓ unreleased | — | Shared SwiftUI cells and photo view |
-| Select: ⌘-click, ⇧-click range, ⌘A, Esc | ≤1.1.1 | ✓ | ✓ 1.17.2 | ✓ long-press | ✓ | |
+| Select: ⌘-click, ⇧-click range, ⌘A, Esc | ≤1.1.1 | ✓ | ✓ 1.17.2 | ✓ long-press | ✓ | Desktop (unreleased): after Esc or Cancel, the first ⇧-click selects only that photo and starts a new range, as on the web |
 | Export all / selected, JPEG / TIFF, sizes, Frame, Film scan | ≤1.1.1 | ✓ | ✓ 1.17.2 | ✓ | ✓ | 5600 px size ≤1.1.1 |
 | **Export file name template** (`{name}`, `{date}`, `{look}`, `#`…) | 1.14.3 | ✓ | ✓ unreleased | — | — | `NameTemplate.swift`, a port of `NameTemplate.ts` with its tests. Desktop never overwrites now (`-001`, `-002`), as the web; it used to replace `NAME-auto.jpg`. iOS keeps `<name>-auto` (no field in its sheet) |
 | **Export progress: elapsed and time left** | 1.15.1 | ✓ | ✓ unreleased | ✓ unreleased | — | `BatchTime.swift`, the web's estimate |
