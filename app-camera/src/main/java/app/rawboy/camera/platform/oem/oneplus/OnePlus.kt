@@ -32,7 +32,8 @@ import app.rawboy.camera.platform.PreviewLevel
  *
  * Shadows: the preview's tone is global (the viewfinder copy over the raw was the same at equal raw level in every
  * third of a backlit frame), so the ISP's local lift the Pixel's preview carries isn't there, and a window shot's
- * foreground came out 0.3-0.8 EV brighter in the photo than in the viewfinder: the live develop adds the shot's lift.
+ * foreground came out 0.3-0.8 EV brighter in the photo than in the viewfinder: the live develop adds the shot's lift
+ * (a 6.3-stop window scene: 49 in both).
  */
 val onePlusLayer = PlatformLayer(
     name = "oneplus",

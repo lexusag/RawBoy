@@ -21,6 +21,7 @@ import app.rawboy.auto.analysis.SceneAnalyzer
 import app.rawboy.auto.analysis.SceneStats
 import app.rawboy.auto.looks.LookApplier
 import app.rawboy.camera.capture.CameraController
+import app.rawboy.camera.capture.ViewfinderGain
 import app.rawboy.camera.platform.ActivePlatform
 import app.rawboy.camera.report.DeviceReport
 import app.rawboy.camera.report.DeviceReportCollector
@@ -557,8 +558,17 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         _tilt.value = tiltFilter.update(degrees)
     }
 
-    /** The latest analysed viewfinder frame; [scale] and [neutralFloor]: the gain it was drawn with and its frame's neutral floor. */
-    private class Live(val base: ViewfinderBase, val stats: SceneStats, val defaults: DevelopParams, val auto: DevelopParams, val scale: Float = 1f, val neutralFloor: Float = 1f)
+    /**
+     * The latest analysed viewfinder frame; [scale] and [neutralFloor]: the gain it was drawn with and its frame's
+     * neutral floor; [shadowLift]: the backlight lift the live develop adds (eased; 0 where the preview has its own).
+     */
+    private class Live(
+        val base: ViewfinderBase, val stats: SceneStats, val defaults: DevelopParams, val auto: DevelopParams,
+        val scale: Float = 1f, val neutralFloor: Float = 1f, val shadowLift: Float = 0f,
+    )
+
+    /** The viewfinder's gain hasn't been set from a frame of the lens started last ([ViewfinderGain]). */
+    private var scaleFromStart = true
 
     @Volatile
     private var live: Live? = null
@@ -671,6 +681,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 controller.setExposureBias(exposureBias(_settings.value))
                 applyStabilization()
                 controller.start(inf, st)
+                scaleFromStart = true
                 _frame.value = ViewfinderRenderer.Frame(
                     bufferWidth = inf.previewSize.width,
                     bufferHeight = inf.previewSize.height,
@@ -679,7 +690,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     fullHeight = inf.viewfinderHeight,
                     gamma = inf.previewGamma,
                     linearToe = controller.previewLinearToe(inf),
-                    scale = _settings.value.previewScale(inf.hiRes),
+                    // STILL_WHITE_BALANCED: from the last frame's neutral floor (any lens: the same light), not twice the target.
+                    scale = _settings.value.previewScale(inf.hiRes) *
+                        if (platform.preview.level == PreviewLevel.STILL_WHITE_BALANCED) neutralFloor(controller.frames.value) else 1f,
                     mirror = inf.isFront,
                 )
                 _status.value = CameraStatus.READY
@@ -872,16 +885,14 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val longGain = if (info?.hiRes != true && settings.flash == FlashMode.OFF && activeCaptures == 0 && (state?.exposureNs ?: 0L) < 250_000_000L) {
             settings.longExposureSpec(sceneKey())?.let { controller.longExposureGainOverPreview(it) }
         } else null
-        val target = when (platform.preview.level) {
-            PreviewLevel.BOOSTED -> settings.previewScale(info?.hiRes == true) / boost * (longGain ?: stillGain)
-            // The preview is already as bright as the still: only the white balance's normalisation and, with Long
-            // exposure, its frames' gain over the still (the long gain is over the boosted preview) remain.
-            PreviewLevel.STILL_WHITE_BALANCED ->
-                settings.previewScale(info?.hiRes == true) * neutralFloor(state) * (longGain?.let { it * boost / stillGain } ?: 1f)
-        }
+        val target = ViewfinderGain.target(platform.preview.level, settings.previewScale(info?.hiRes == true), boost, stillGain, longGain, neutralFloor(state))
         // The gain eases to its target (a fade) instead of jumping: a long exposure starts and ends with the viewfinder
         // changing exposure under the preview, and a step there reads as a flash. (Live.scale keeps the key honest.)
-        val scale = if (f.scale > 0f && target > 0f) f.scale * (target / f.scale).coerceIn(1f / SCALE_FADE_STEP, SCALE_FADE_STEP) else target
+        // Under STILL_WHITE_BALANCED a lens starts at the bare calibration, about twice its first target (the neutral
+        // floor comes with the first frame): that first step is taken at once, not over a second or two.
+        val first = scaleFromStart && platform.preview.level == PreviewLevel.STILL_WHITE_BALANCED && state?.neutral != null
+        if (state != null) scaleFromStart = false
+        val scale = if (!first && f.scale > 0f && target > 0f) f.scale * (target / f.scale).coerceIn(1f / SCALE_FADE_STEP, SCALE_FADE_STEP) else target
         // The raw's colours for the ISP's current white balance and colour matrix (they follow AWB).
         val color = state?.previewColor
         if (scale != f.scale || !color.contentEquals(f.color)) _frame.value = f.copy(scale = scale, color = color)
@@ -903,7 +914,13 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             // Video eases much slower: a 0.3 EV step every 300 ms would pump visibly in a recording.
             val step = if (_videoMode.value) VIDEO_EV_STEP else MAX_EV_STEP
             val eased = if (last == null) auto else auto.copy(exposure = last + (auto.exposure - last).coerceIn(-step, step))
-            live = Live(base, stats, defaults, eased, f.scale, neutralFloor(state))
+            // A preview without the ISP's local lift (PreviewProfile.liftsShadows false) shows the backlight lift the
+            // shot will get, eased like the exposure: a window panning into view would otherwise lift the shadows at
+            // once. Not in video, whose recordings keep the plain develop.
+            val lift = if (platform.preview.liftsShadows || _videoMode.value) 0f else ShotDevelop.backlightShadows(stats)
+            val lastLift = live?.shadowLift
+            val easedLift = if (lastLift == null) lift else lastLift + (lift - lastLift).coerceIn(-SHADOW_LIFT_STEP, SHADOW_LIFT_STEP)
+            live = Live(base, stats, defaults, eased, f.scale, neutralFloor(state), easedLift)
             if (activeCaptures == 0 && SystemClock.uptimeMillis() - captureEndedAt > SCENE_KEY_SETTLE_MS && f.scale > 0f) sceneKeyHeld = stats.key / f.scale
             publish()
             withContext(Dispatchers.Main) { meterRawIfUncalibrated() }
@@ -917,16 +934,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
      */
     private fun sceneKey(): Float? = sceneKeyHeld
 
-    /**
-     * [l]'s scene key for calibrating [CameraSettings.previewScale] from [stored] (estimate = stored x raw key / this).
-     * [PreviewLevel.BOOSTED]: the key as measured, as the Pixel was tuned. [PreviewLevel.STILL_WHITE_BALANCED]: as if
-     * drawn at stored x the frame's neutral floor: the gain in use eases there after a lens starts (and after each
-     * calibration), so a key taken meanwhile would be judged against the wrong gain.
-     */
-    private fun calibrationKey(l: Live, stored: Float): Float = when (platform.preview.level) {
-        PreviewLevel.BOOSTED -> l.stats.key
-        PreviewLevel.STILL_WHITE_BALANCED -> if (l.scale > 0f) l.stats.key * stored * l.neutralFloor / l.scale else l.stats.key
-    }
+    /** [l]'s scene key for calibrating [CameraSettings.previewScale] from [stored] ([ViewfinderGain.calibrationKey]). */
+    private fun calibrationKey(l: Live, stored: Float): Float =
+        ViewfinderGain.calibrationKey(platform.preview.level, l.stats.key, stored, l.scale, l.neutralFloor)
 
     /**
      * The smallest component of [state]'s as-shot neutral: the decoder scales the raw by the white balance's largest
@@ -1024,8 +1034,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val f = _frame.value ?: return
         val s = _settings.value
         val developed = if (_compare.value) l.auto else s.develop(l.auto, l.stats.hasFace, platform.noise).let { d ->
-            // A preview without the ISP's local lift: show the backlight lift the shot will get.
-            if (platform.preview.liftsShadows) d else d.copy(shadows = maxOf(d.shadows, ShotDevelop.backlightShadows(l.stats)))
+            if (l.shadowLift > 0f && !_videoMode.value) d.copy(shadows = maxOf(d.shadows, l.shadowLift)) else d
         }
         // The ISP has already denoised and sharpened the preview stream.
         // Video also drops the colour denoise: its coarse stages are many taps per pixel, drawn twice a frame (screen and
@@ -1573,6 +1582,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         private val SCALE_FADE_STEP = 2f.pow(0.25f)
         private const val SCENE_KEY_SETTLE_MS = 2000L
         private const val MAX_EV_STEP = 0.3f
+
+        /** The most the viewfinder's backlight lift moves per update (Shadows units): 0 to the full 80 in ~1.6 s. */
+        private const val SHADOW_LIFT_STEP = 15f
 
         const val MIN_ZOOM = 1f
 
