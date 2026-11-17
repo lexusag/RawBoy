@@ -160,6 +160,9 @@ struct DetailScreen: View {
                         vm.setAdjust(id) { $0.contrast = v }
                     }
                 }
+                ValueSlider("Luma contrast", value: a.lumaContrast, range: -50...50, defaultValue: 0) { v in
+                    vm.setAdjust(id) { $0.lumaContrast = v }
+                }
                 Button {
                     pickingWhite.toggle()
                 } label: {
@@ -448,14 +451,17 @@ extension DetailScreen {
                         LookGrid(vm: vm, photo: photo)
                     }
                 }
-                macSection("Light", edited: a.brightness != 0 || a.contrast != 0, reset: {
-                    $0.brightness = 0; $0.contrast = 0
+                macSection("Light", edited: a.brightness != 0 || a.contrast != 0 || a.lumaContrast != 0, reset: {
+                    $0.brightness = 0; $0.contrast = 0; $0.lumaContrast = 0
                 }) {
                     ValueSlider("Brightness", value: a.brightness, range: -100...100, defaultValue: 0) { v in
                         vm.setAdjust(id) { $0.brightness = v }
                     }
                     ValueSlider("Contrast", value: a.contrast, range: -50...50, defaultValue: 0) { v in
                         vm.setAdjust(id) { $0.contrast = v }
+                    }
+                    ValueSlider("Luma contrast", value: a.lumaContrast, range: -50...50, defaultValue: 0) { v in
+                        vm.setAdjust(id) { $0.lumaContrast = v }
                     }
                 }
                 macSection("Colour", edited: a.warmth != 0 || a.tint != 0 || a.saturation != 0, reset: {

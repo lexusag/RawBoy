@@ -3,7 +3,7 @@ import Foundation
 /**
  * "Reset all photos" (RawBoy Desktop's Auto): every photo goes back to a chosen look, a chosen film stock, or "As is" (the
  * Natural look: the auto develop alone, no LUT or stock). What a photo carries on top of its look is cleared: a RawBoy preset,
- * Strength (back to the default), and every adjustment (brightness, warmth, tint, contrast, saturation, grain, denoise,
+ * Strength (back to the default), and every adjustment (brightness, warmth, tint, contrast, luma contrast, saturation, grain, denoise,
  * rotation, straighten and crop). The photo's own auto develop (exposure, tone, white balance, noise) is its analysis and stays;
  * so do the lens preset choice and anything the sidecar keeps for the web.
  */

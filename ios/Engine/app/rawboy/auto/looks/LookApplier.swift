@@ -2,7 +2,7 @@ import Foundation
 
 /**
  * The user's controls on top of the auto develop and the look; all 0 = as suggested. [brightness] -100..100 shifts
- * exposure; [warmth] -100..100 warms or cools; [tint] -50..50 (+ = magenta), [contrast] -50..50, [saturation]
+ * exposure; [warmth] -100..100 warms or cools; [tint] -50..50 (+ = magenta), [contrast] -50..50, [lumaContrast] -50..50 (contrast on luminance only, colour saturation holds), [saturation]
  * -100..100 and [grain] -50..50 are added to the slider values the auto develop and the look arrive at, except negative
  * [saturation], which moves the saturation they arrive at towards -100 (-100 = black and white). [denoise] -100..100
  * shifts the auto luma and colour denoise, colour first (see LookApplier.denoise). [rotation] is clockwise quarter turns (0..3) on top of the photo's own orientation. [straighten] (degrees, -45..45)
@@ -14,6 +14,7 @@ public struct Adjustments: Equatable, Sendable {
     public var warmth: Float = 0
     public var tint: Float = 0
     public var contrast: Float = 0
+    public var lumaContrast: Float = 0
     public var saturation: Float = 0
     public var grain: Float = 0
     public var denoise: Float = 0
@@ -21,12 +22,13 @@ public struct Adjustments: Equatable, Sendable {
     public var straighten: Float = 0
     public var crop: CropRect?
 
-    public init(brightness: Float = 0, warmth: Float = 0, tint: Float = 0, contrast: Float = 0, saturation: Float = 0,
+    public init(brightness: Float = 0, warmth: Float = 0, tint: Float = 0, contrast: Float = 0, lumaContrast: Float = 0, saturation: Float = 0,
                 grain: Float = 0, denoise: Float = 0, rotation: Int = 0, straighten: Float = 0, crop: CropRect? = nil) {
         self.brightness = brightness
         self.warmth = warmth
         self.tint = tint
         self.contrast = contrast
+        self.lumaContrast = lumaContrast
         self.saturation = saturation
         self.grain = grain
         self.denoise = denoise
@@ -79,6 +81,7 @@ public enum LookApplier {
         var d = base
         d.exposure = (base.exposure + look.exposure * k + adjust.brightness / 100 * brightnessEv).clamped(-5, 5)
         d.contrast = (base.contrast + look.contrast * k + adjust.contrast).clamped(-100, 100)
+        d.lumaContrast = (base.lumaContrast + adjust.lumaContrast).clamped(-100, 100)
         d.saturation = saturation(base.saturation + look.saturation * k, adjust.saturation)
         (d.denoise, d.colorDenoise) = denoise(base, adjust: adjust.denoise)
         d.highlights = add(base.highlights, look.highlights)
@@ -124,6 +127,7 @@ public enum LookApplier {
         var d = p
         d.exposure = (p.exposure + adjust.brightness / 100 * brightnessEv).clamped(-5, 5)
         d.contrast = (p.contrast + adjust.contrast).clamped(-100, 100)
+        d.lumaContrast = (p.lumaContrast + adjust.lumaContrast).clamped(-100, 100)
         d.saturation = saturation(p.saturation, adjust.saturation)
         (d.denoise, d.colorDenoise) = denoise(base, adjust: adjust.denoise)
         d.sharpening = base.sharpening
@@ -147,6 +151,7 @@ public enum LookApplier {
         var d = edits
         d.exposure = (edits.exposure + adjust.brightness / 100 * brightnessEv).clamped(-5, 5)
         d.contrast = (edits.contrast + adjust.contrast).clamped(-100, 100)
+        d.lumaContrast = (edits.lumaContrast + adjust.lumaContrast).clamped(-100, 100)
         d.saturation = saturation(edits.saturation, adjust.saturation)
         (d.denoise, d.colorDenoise) = denoise(edits, adjust: adjust.denoise)
         if edits.film != nil {
