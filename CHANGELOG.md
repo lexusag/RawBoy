@@ -1,3 +1,8 @@
+**RawBoy Desktop: Packer sorts and folds folders (2026-11-17)**
+
+- **Sort: Shoot date / File name** over the Packer's list orders each folder's files (remembered, `packer.sort`); a run packs them in that order. Folders stay in the order they were added, as on the web.
+- **Folder headers fold.** Click a folder's header to collapse it to one line, which shows its progress while folded ("2 packing… · 1 done", "1 failed", "all done", "3 of 5 done"); **Collapse all / Expand all** do every folder; ✕ on a header removes that folder from the list. Files added by themselves sit under "Other files". `PackerInfo.groupByFolder` / `folderStatus` are ports of the web's `groupByFolder` / `folderStatusSummary` with their test cases (`PackSettingsTests`). Not compiled when written (no Mac): CI is the first build.
+
 **RawBoy Desktop: Browse reopens the last folder (2026-11-17)**
 
 - **Back in the last folder.** A plain launch now opens Browse in the folder you left it in (Browse's Settings › "Open the last folder at launch", on by default). Opening a photo or folder from Finder, `--open`, `--browse` or `--auto` takes precedence. Not compiled when written (no Mac): CI is the first build.
