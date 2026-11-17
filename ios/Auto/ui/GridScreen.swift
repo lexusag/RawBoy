@@ -149,7 +149,7 @@ struct GridScreen: View {
         .sheet(isPresented: Binding(get: { lensPresetsFor != nil && !vm.lensPresets.isEmpty }, set: { if !$0 { lensPresetsFor = nil } })) {
             let ids = lensPresetsFor.flatMap { $0.isEmpty ? nil : $0 }
             LensPresetsSheet(vm: vm, ids: ids) {
-                if ids != nil { selection = [] }
+                // The selection stays (as after a preset): Esc or Cancel clears it.
             }
         }
         // Drop ids of photos that left the list (removed elsewhere, e.g. via the detail view).
@@ -490,7 +490,7 @@ struct GridScreen: View {
     private var toolbar: some ToolbarContent {
         if selecting {
             ToolbarItem(placement: .barLeading) {
-                Button("Cancel") { selection = [] }
+                Button("Cancel") { vm.clearSelection() }
             }
             ToolbarItemGroup(placement: .barTrailing) {
                 Button("All") { selection = Set(vm.photos.map(\.id)) }
@@ -506,11 +506,9 @@ struct GridScreen: View {
                     .disabled(exporting)
                 Button("Rotate right", systemImage: "rotate.right") { vm.rotate(selection, by: 1) }
                     .disabled(exporting)
-                // A preset file for just these photos (one scene); the rest of the batch keeps its own.
-                Button("Preset", systemImage: "bookmark") {
-                    pickPreset(selection)
-                    selection = []
-                }
+                // A preset file for just these photos (one scene); the rest of the batch keeps its own. The selection stays,
+                // so the same photos can be given a lens preset, rotated or exported next (Esc or Cancel clears it).
+                Button("Preset", systemImage: "bookmark") { pickPreset(selection) }
                 .disabled(exporting)
                 if let edit = vm.editInPro, selection.count == 1, let p = vm.photo(selection.first!) {
                     Button("Edit in Pro", systemImage: "slider.horizontal.3") { edit(p) }.disabled(exporting)

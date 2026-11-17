@@ -1,3 +1,8 @@
+**RawBoy Desktop: Auto keeps the selection after a preset (2026-11-17)**
+
+- **Preset on a selection keeps it selected.** Preset (and Lens) in the selection bar no longer clears the selection, so the same photos can be rotated, given a lens preset or exported next. Esc or Cancel clears it. Export still clears it so the badges show each photo's progress. Shared Swift code, so the iPhone's Auto does the same; web and Android still clear it.
+- **Esc starts a fresh selection.** Esc (or Cancel) now also forgets where the last ⇧-click range started, and a ⇧-click with nothing selected selects only that photo and makes it the start, so a new batch is ⇧-click on the first photo, ⇧-click on the last. Before, the first ⇧-click selected everything from the previously clicked (or focused) photo. `AutoViewModel.clearSelection`, `selectRange`. Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.
+
 **RawBoy Desktop: batch export from Pro (2026-11-17)**
 
 - **Export several photos from Pro.** ⌘-click or ⇧-click photos in the filmstrip (⌘A, or Photo › Select All in Filmstrip, for the whole folder; a check marks each), then ⌘E: the sheet becomes "Export N Photos" with the usual options, and each photo is exported in turn with its own saved edits (the sidecar's `rawboy:Develop`, as Pro would open it; the open photo as it is on screen). A bar over the filmstrip shows the photo being written, the progress, the time left and Stop; a failure skips to the next. The editor stays usable while it runs. Quitting mid-batch asks first. Desktop only. `Desktop/ProBatchExport.swift`, `Desktop/FilmstripSelection.swift` (`FilmstripSelectionTests`). Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.
