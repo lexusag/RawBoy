@@ -31,7 +31,7 @@ class Cph2447LayerTest {
         assertEquals(
             below.copy(
                 preview = below.preview.copy(color = p.preview.color),
-                still = below.still.copy(blackOffsets = p.still.blackOffsets),
+                still = below.still.copy(blackOffsets = p.still.blackOffsets, aeGainCeilings = mapOf("1" to 240f)),
                 noise = below.noise.copy(frontIsoScale = 10f),
                 flash = below.flash.copy(cameraAeCompensationEv = -1f),
             ),
@@ -82,4 +82,13 @@ class Cph2447LayerTest {
         assertEquals(yb, (0..2).sumOf { y[it] * after[it] }, 1e-6)
         for (i in 0..2) assertEquals(1.25 * (before[i] - yb), after[i] - yb, 1e-6)
     }
+
+    @Test
+    fun selfieAeCeiling() {
+        assertEquals(240f, profile.still.aeGainCeilings.getValue("1"), 0.01f)
+        assertEquals(setOf("1"), profile.still.aeGainCeilings.keys) // the back cameras meet the default
+        assertEquals(emptyMap<String, Float>(), PlatformRegistry.resolve(onePlus11.copy(model = "CPH2581")).still.aeGainCeilings)
+        assertEquals(emptyMap<String, Float>(), neutralPlatform.still.aeGainCeilings)
+    }
 }
+

@@ -70,6 +70,19 @@ class OnePlusLayerTest {
     }
 
     @Test
+    fun brightnessReachesTheRawUnlessAeIsAtItsCeiling() {
+        assertEquals(CompensationModel.AE_GAIN_IN_RAW, PlatformRegistry.resolve(onePlus11.copy(model = "CPH2581")).still.compensation)
+        for (p in listOf(
+            neutralPlatform,
+            PlatformRegistry.stack(listOf(tensorLayer)),
+            PlatformRegistry.resolve(onePlus11.copy(manufacturer = "Xiaomi")),
+            PlatformRegistry.resolve(onePlus11.copy(manufacturer = "samsung")),
+        )) {
+            assertEquals(p.layers.toString(), CompensationModel.BOOST_STAYS_DIGITAL, p.still.compensation)
+        }
+    }
+
+    @Test
     fun flashIsExposedByTheCamerasAe() {
         val flash = PlatformRegistry.resolve(onePlus11.copy(model = "CPH2581")).flash
         assertEquals(FlashMetering.CAMERA_AE, flash.metering)
@@ -97,7 +110,7 @@ class OnePlusLayerTest {
         val p = onePlusLayer.patch.applyTo(neutralPlatform)
         assertEquals(
             neutralPlatform.copy(
-                lenses = p.lenses, preview = p.preview, still = neutralPlatform.still.copy(exactBlack = true, blackPedestal = 32f),
+                lenses = p.lenses, preview = p.preview, still = neutralPlatform.still.copy(exactBlack = true, blackPedestal = 32f, compensation = CompensationModel.AE_GAIN_IN_RAW),
                 flash = neutralPlatform.flash.copy(metering = FlashMetering.CAMERA_AE, screenFlashUntilExposed = true),
             ),
             p,

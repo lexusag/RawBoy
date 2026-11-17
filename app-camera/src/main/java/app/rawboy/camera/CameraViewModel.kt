@@ -573,6 +573,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     /** The viewfinder's gain hasn't been set from a frame of the lens started last ([ViewfinderGain]). */
     private var scaleFromStart = true
 
+    /** Whether the last viewfinder gain showed a long exposure's frames ahead of the shutter (onViewfinderBase). */
+    private var longGainOn = false
+
     @Volatile
     private var live: Live? = null
     private var liveJob: Job? = null
@@ -885,17 +888,26 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val stillGain = state?.let { controller.stillGain(it) } ?: 1f
         // With Long exposure on, show what its frames will give (the same maths as the shutter's) instead of the still's.
         val settings = _settings.value
-        val longGain = if (info?.hiRes != true && settings.flash == FlashMode.OFF && activeCaptures == 0 && (state?.exposureNs ?: 0L) < 250_000_000L) {
-            settings.longExposureSpec(sceneKey())?.let { controller.longExposureGainOverPreview(it) }
+        // Under STILL_WHITE_BALANCED the frames decide, not the shutter: AE frames show what the long exposure's frames
+        // will give, its own manual frames (while it runs, `CameraController.longExposureDng`) are already that.
+        val whiteBalanced = platform.preview.level == PreviewLevel.STILL_WHITE_BALANCED
+        val aeFrames = if (whiteBalanced) controller.longExposureProgress.value == null else activeCaptures == 0
+        val longGain = if (info?.hiRes != true && settings.flash == FlashMode.OFF && aeFrames && (state?.exposureNs ?: 0L) < 250_000_000L) {
+            settings.longExposureSpec(sceneKey(), platform.preview.level, neutralFloor(state))?.let { controller.longExposureGainOverPreview(it) }
         } else null
         val target = ViewfinderGain.target(platform.preview.level, settings.previewScale(info?.hiRes == true), boost, stillGain, longGain, neutralFloor(state))
         // The gain eases to its target (a fade) instead of jumping: a long exposure starts and ends with the viewfinder
         // changing exposure under the preview, and a step there reads as a flash. (Live.scale keeps the key honest.)
         // Under STILL_WHITE_BALANCED a lens starts at the bare calibration, about twice its first target (the neutral
         // floor comes with the first frame): that first step is taken at once, not over a second or two.
-        val first = scaleFromStart && platform.preview.level == PreviewLevel.STILL_WHITE_BALANCED && state?.neutral != null
+        val first = scaleFromStart && whiteBalanced && state?.neutral != null
         if (state != null) scaleFromStart = false
-        val scale = if (!first && f.scale > 0f && target > 0f) f.scale * (target / f.scale).coerceIn(1f / SCALE_FADE_STEP, SCALE_FADE_STEP) else target
+        // There, a long exposure's start and end change the frames and the gain together (the gain shown before the
+        // shutter is the frames' own): a fade would show the step it is meant to hide, up to 1.7 EV for several seconds
+        // on the OnePlus 11, whose viewfinder updates every ~1.4 s while the exposure runs.
+        val longSwitched = whiteBalanced && (longGain != null) != longGainOn
+        longGainOn = longGain != null
+        val scale = if (!first && !longSwitched && f.scale > 0f && target > 0f) f.scale * (target / f.scale).coerceIn(1f / SCALE_FADE_STEP, SCALE_FADE_STEP) else target
         // The raw's colours for the ISP's current white balance and colour matrix (they follow AWB).
         val color = state?.previewColor
         if (scale != f.scale || !color.contentEquals(f.color)) _frame.value = f.copy(scale = scale, color = color)
@@ -1374,7 +1386,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         // The selfie camera: the screen's frame is the light, the shot itself is an ordinary one exposed by AE.
         val screenFlash = settings.flash != FlashMode.OFF && _screenFlashCamera.value
         // Flash and maximum-resolution shots are single frames (CameraController.captureDng).
-        val longExposure = settings.longExposureSpec(sceneKey()).takeIf { !hiRes && !screenFlash && flash == FlashMode.OFF }
+        val longExposure = settings.longExposureSpec(sceneKey(), platform.preview.level, neutralFloor(controller.frames.value)).takeIf { !hiRes && !screenFlash && flash == FlashMode.OFF }
         val burstFrames = if (hiRes || screenFlash || longExposure != null) 1 else settings.burstFrames(lowLight.value)
         // A long exposure holds the shutter like a merging burst does (the stack and its DNG write).
         val burst = (burstFrames > 1 || longExposure != null) && flash == FlashMode.OFF
@@ -1396,7 +1408,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 "tonemap ${f.tonemapMode}, viewfinder key $viewfinderKey, preview scale ${settings.previewScale(hiRes)}, " +
                 "colour ${f.previewColor?.joinToString(" ") { "%.3f".format(it) } ?: "sRGB"}, " +
                 "wb ${live?.defaults?.let { "${it.temperature.toInt()}K/${it.tint.toInt()}" }} -> " +
-                "${live?.auto?.let { "${it.temperature.toInt()}K/${it.tint.toInt()}" }}")
+                "${live?.auto?.let { "${it.temperature.toInt()}K/${it.tint.toInt()}" }}, live exposure ${live?.auto?.exposure} + brightness " +
+                "${settings.exposureCompensationEv} EV")
         }
         val shotId = ShotSaver.beginCapture(app)
         DebugProbe.describe(controller.lastPreviewResult).takeIf { it.isNotEmpty() }?.let { probe ->

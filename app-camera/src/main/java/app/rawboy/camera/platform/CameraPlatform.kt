@@ -143,7 +143,33 @@ data class StillProfile(
      * the develop (a GPU throttled by heat).
      */
     val lowPriorityDevelop: Boolean = true,
+    /**
+     * How much of Brightness's AE compensation reaches the developed raw (`CameraController.appliedCompensationEv`).
+     * Neutral [CompensationModel.BOOST_STAYS_DIGITAL], as the Pixel 9 Pro was tuned.
+     */
+    val compensation: CompensationModel = CompensationModel.BOOST_STAYS_DIGITAL,
+    /**
+     * [CompensationModel.AE_GAIN_IN_RAW]: the most gain (exposure s x ISO x post-raw boost) AE gives a frame, measured,
+     * by camera id (the stand-alone or physical camera); other cameras: [maxStillExposureNs] x the sensor's highest ISO.
+     */
+    val aeGainCeilings: Map<String, Float> = emptyMap(),
 )
+
+/** Where AE compensation the sensor can't take any more ends up ([StillProfile.compensation]). */
+enum class CompensationModel {
+    /**
+     * In post-raw digital boost, which the developed raw doesn't get: what raised the residual digital gain over the
+     * still's longer exposure stayed out of it ([app.rawboy.camera.capture.AppliedCompensation.ev]).
+     */
+    BOOST_STAYS_DIGITAL,
+
+    /**
+     * In the raw: the still carries AE's whole gain (exposure x ISO x a boost the DNG holds as BaselineExposure, which the
+     * decoder applies), so compensation reaches it unless AE sits at its own gain ceiling, where a brighter one adds
+     * nothing ([app.rawboy.camera.capture.AppliedCompensation.evBelowCeiling]).
+     */
+    AE_GAIN_IN_RAW,
+}
 
 /**
  * Where a camera's real black differs from the BlackLevel its DNGs carry: DN per camera colour (R, G, B) at a few ISOs,

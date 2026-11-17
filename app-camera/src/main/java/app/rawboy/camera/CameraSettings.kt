@@ -10,6 +10,7 @@ import app.rawboy.develop.DevelopParams
 import app.rawboy.camera.capture.CameraController
 import app.rawboy.camera.capture.FlashGuides
 import app.rawboy.camera.capture.FlashMode
+import app.rawboy.camera.capture.ViewfinderGain
 import app.rawboy.camera.platform.NoiseProfile
 import app.rawboy.camera.platform.PreviewLevel
 import app.rawboy.export.DateStampFormat
@@ -214,9 +215,18 @@ data class CameraSettings(
     /** Self-timer and long exposure are experimental: they do nothing (and their buttons hide) unless [experimental] is on. */
     val activeSelfTimer: Int get() = if (experimental) selfTimer else 0
 
-    /** The long exposure to take, or null when the mode is off. */
-    fun longExposureSpec(key: Float?): app.rawboy.camera.capture.LongExposure? =
-        if (experimental && longExposure > 0) app.rawboy.camera.capture.LongExposure(longExposure, longExposureLighten, key?.takeIf { lensKey in previewScales }?.let { it * previewScale }) else null
+    /**
+     * The long exposure to take, or null when the mode is off. [sceneKey]: the viewfinder's scene key per unit of scale,
+     * turned into the raw's key by the lens's calibration ([ViewfinderGain.longExposureKey], [level] and the frame's
+     * [neutralFloor]); none until the lens is calibrated.
+     */
+    fun longExposureSpec(sceneKey: Float?, level: PreviewLevel, neutralFloor: Float): app.rawboy.camera.capture.LongExposure? =
+        if (experimental && longExposure > 0) {
+            app.rawboy.camera.capture.LongExposure(
+                longExposure, longExposureLighten,
+                sceneKey?.takeIf { lensKey in previewScales }?.let { ViewfinderGain.longExposureKey(level, it, previewScale, neutralFloor) },
+            )
+        } else null
 
     /** Resets all user settings to their defaults while keeping learned lens calibration. */
     fun resetToDefaults(): CameraSettings = CameraSettings(previewScales = previewScales, flashGuides = flashGuides)

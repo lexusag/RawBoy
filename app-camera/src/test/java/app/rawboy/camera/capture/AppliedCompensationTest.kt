@@ -44,4 +44,35 @@ class AppliedCompensationTest {
         assertEquals(-1f, AppliedCompensation.ev(-1f, residual = 4f, residualAtZero = 1f), 1e-4f)
         assertEquals(0f, AppliedCompensation.ev(0f, residual = 4f, residualAtZero = 1f), 0f)
     }
+
+    // OnePlus 11, main camera, 2026-11-17: AE's gain ceiling = 1/15 s x ISO 6400.
+    private val ceiling = 0.066666667f * 6400f
+
+    @Test
+    fun atTheCeilingABrighterCompensationNeverReachesTheRaw() {
+        // A dark room at Brightness +1: preview 1/30 s x ISO 6400 x boost 2.0 (or 30 ms x boost 2.22, the same gain).
+        assertEquals(0f, AppliedCompensation.evBelowCeiling(1f, 0.033328f * 6400f * 2.0f, ceiling), 0f)
+        assertEquals(0f, AppliedCompensation.evBelowCeiling(1f, 0.029993f * 6400f * 2.22f, ceiling), 0f)
+        assertEquals(0f, AppliedCompensation.evBelowCeiling(2.1667f, 0.033328f * 6400f * 2.0f, ceiling), 0f)
+    }
+
+    @Test
+    fun belowTheCeilingAllOfItDoes() {
+        // A lamp-lit room at +0.17: 1/30 s x ISO 6400 x boost 1.24.
+        assertEquals(0.1667f, AppliedCompensation.evBelowCeiling(0.1667f, 0.033328f * 6400f * 1.24f, ceiling), 0f)
+        // Bright light, nowhere near.
+        assertEquals(1.7f, AppliedCompensation.evBelowCeiling(1.7f, 0.004f * 100f, ceiling), 0f)
+    }
+
+    @Test
+    fun aDarkerCompensationAlwaysDoes() {
+        // AE takes the boost down first: -1 at the ceiling came out -0.96 EV (merged) and -0.93 EV (single).
+        assertEquals(-1f, AppliedCompensation.evBelowCeiling(-1f, 0.033328f * 6400f * 2.0f, ceiling), 0f)
+        assertEquals(0f, AppliedCompensation.evBelowCeiling(0f, 0.033328f * 6400f * 2.0f, ceiling), 0f)
+    }
+
+    @Test
+    fun anUnknownCeilingChangesNothing() {
+        assertEquals(1f, AppliedCompensation.evBelowCeiling(1f, 1000f, 0f), 0f)
+    }
 }

@@ -55,6 +55,9 @@ val cph2447Layer = PlatformLayer(
             noise = p.noise.copy(backIsoScale = 4f, frontIsoScale = 10f),
             flash = p.flash.copy(cameraAeCompensationEv = -1f),
             still = p.still.copy(
+                // Selfie camera (1): AE tops out at 1/30 s x ISO 1600 x boost 5.0 (a dark room, Brightness 0 and +0.84
+                // alike, 2026-11-17), above the default 1/15 s x ISO 1600 = 107; the back cameras meet the default.
+                aeGainCeilings = mapOf("1" to 0.03f * 1600f * 5f),
                 blackOffsets = BlackOffsets(
                     mapOf(
                         // Main camera (stand-alone camera 2).

@@ -36,6 +36,7 @@ import app.rawboy.auto.analysis.AutoTone
 import app.rawboy.auto.analysis.MeterArea
 import app.rawboy.camera.debug.DebugProbe
 import app.rawboy.camera.platform.CameraPlatform
+import app.rawboy.camera.platform.CompensationModel
 import app.rawboy.camera.platform.FlashMetering
 import app.rawboy.camera.platform.PreviewColor
 import app.rawboy.camera.platform.PreviewColorInput
@@ -760,8 +761,11 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             val inf = info ?: throw IOException("Camera not ready")
             val reader = rawReader ?: throw IOException("Camera not ready")
             val mode = if (inf.hasFlash) flash else FlashMode.OFF
-            if (mode == FlashMode.OFF && longExposure != null && !inf.hiRes) return@withLock longExposureDng(s, inf, longExposure, exifOrientation, location, note, out, onSubmitted)
-            if (mode == FlashMode.OFF && burstFrames > 1 && !inf.hiRes) return@withLock burstDng(s, inf, burstFrames, exifOrientation, location, note, out, onSubmitted)
+            // What reached the raw, judged on the frame at the shutter (a burst's or long exposure's AE moves on meanwhile).
+            // The Pixel's model keeps judging on the frame after the capture, as it was tuned.
+            val shutterEv = if (platform.still.compensation == CompensationModel.AE_GAIN_IN_RAW) appliedCompensationEv(_frames.value) else null
+            if (mode == FlashMode.OFF && longExposure != null && !inf.hiRes) return@withLock longExposureDng(s, inf, longExposure, exifOrientation, location, note, out, shutterEv, onSubmitted)
+            if (mode == FlashMode.OFF && burstFrames > 1 && !inf.hiRes) return@withLock burstDng(s, inf, burstFrames, exifOrientation, location, note, out, shutterEv, onSubmitted)
             // Ambient exposure before any light comes on: the flash still never needs more.
             val ambient = _frames.value
             var focused = false
@@ -989,6 +993,8 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         location: Location?,
         note: String,
         out: OutputStream,
+        /** [appliedCompensationEv] at the shutter, or null to judge on the frame after the burst. */
+        shutterEv: Float?,
         onSubmitted: () -> Unit,
     ): Still {
         val reader = rawReader ?: throw IOException("Camera not ready")
@@ -1104,7 +1110,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
                 location?.let(dng::setLocation)
                 dng.writeByteBuffer(out, Size(width, height), merged, 0)
             }
-            return Still(reference, null, effectiveFrames = effective, compensationEv = appliedCompensationEv(_frames.value), description = description)
+            return Still(reference, null, effectiveFrames = effective, compensationEv = shutterEv ?: appliedCompensationEv(_frames.value), description = description)
         } finally {
             BurstNative.destroy(h)
         }
@@ -1137,6 +1143,8 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         location: Location?,
         note: String,
         out: OutputStream,
+        /** [appliedCompensationEv] at the shutter, or null for the Pixel's rule (below). */
+        shutterEv: Float?,
         onSubmitted: () -> Unit,
     ): Still {
         val reader = rawReader ?: throw IOException("Camera not ready")
@@ -1320,7 +1328,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             }
             // Averaging N frames cuts noise about like merging N (see burstDng); a lighten stack keeps each frame's.
             val effective = if (spec.lighten) 1f else frames.toFloat().coerceIn(1f, 8f)
-            return Still(ref, null, effectiveFrames = effective, compensationEv = if (manualExposure) compensationEv() else appliedCompensationEv(_frames.value), description = description)
+            return Still(ref, null, effectiveFrames = effective, compensationEv = shutterEv ?: if (manualExposure) compensationEv() else appliedCompensationEv(_frames.value), description = description)
         } finally {
             LongExposureNative.destroy(h)
         }
@@ -1763,10 +1771,28 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             val inf = info
             if (steps != null && inf != null) {
                 val step = characteristicsOf(inf).get(CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP)?.toFloat() ?: 0f
-                return AppliedCompensation.ev(steps * step, residual(frame), residualAtZero)
+                return appliedOf(steps * step, frame)
             }
         }
-        return AppliedCompensation.ev(requested, residual(frame), residualAtZero)
+        return appliedOf(requested, frame)
+    }
+
+    /** [ev] of compensation as [frame] took it, by the platform's [CompensationModel]. */
+    private fun appliedOf(ev: Float, frame: FrameState): Float = when (platform.still.compensation) {
+        CompensationModel.BOOST_STAYS_DIGITAL -> AppliedCompensation.ev(ev, residual(frame), residualAtZero)
+        CompensationModel.AE_GAIN_IN_RAW -> AppliedCompensation.evBelowCeiling(ev, frame.exposureNs / 1e9f * frame.iso * frame.postRawBoost, aeGainCeiling())
+    }
+
+    /**
+     * The most gain (exposure s x ISO x boost) AE gives a frame: the platform's measured one for this camera, else the
+     * still's longest exposure at the sensor's highest ISO (the OnePlus 11's main and ultrawide night previews topped out
+     * there, as 1/30 s x ISO 6400 x boost 2.0-2.22). 0 when unknown.
+     */
+    private fun aeGainCeiling(): Float {
+        val inf = info ?: return 0f
+        platform.still.aeGainCeilings[inf.physicalId ?: inf.openId]?.let { return it }
+        val isoMax = inf.characteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)?.upper ?: return 0f
+        return platform.still.maxStillExposureNs / 1e9f * isoMax
     }
 
     private fun residual(frame: FrameState): Float = AppliedCompensation.residual(frame.postRawBoost, stillGain(frame))

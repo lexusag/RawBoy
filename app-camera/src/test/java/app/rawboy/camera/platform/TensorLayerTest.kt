@@ -44,6 +44,7 @@ class TensorLayerTest {
         assertEquals(0f, tensor.still.blackPedestal)
         assertEquals(BlackOffsets.NONE, tensor.still.blackOffsets)
         assertEquals(true, tensor.still.lowPriorityDevelop) // ShotSaver's ExportGpu(lowPriority = true)
+        assertEquals(CompensationModel.BOOST_STAYS_DIGITAL, tensor.still.compensation) // AppliedCompensation.ev on the residual boost
     }
 
     @Test

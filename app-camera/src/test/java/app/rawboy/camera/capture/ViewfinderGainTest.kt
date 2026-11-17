@@ -25,8 +25,11 @@ class ViewfinderGainTest {
         for (b in boosts) for (g in stillGains) {
             assertEquals(0.98f * 0.47f, ViewfinderGain.target(PreviewLevel.STILL_WHITE_BALANCED, 0.98f, b, g, null, 0.47f), 1e-6f)
         }
-        // Long exposure: its gain over the boosted preview, taken over the still instead.
-        assertEquals(1f * 0.5f * (8f * 2f / 1.5f), ViewfinderGain.target(PreviewLevel.STILL_WHITE_BALANCED, 1f, 2f, 1.5f, 8f, 0.5f), 1e-5f)
+        // Long exposure: its frames' time x ISO over the preview's whole gain (boost included), whatever the still gain.
+        // OnePlus 11, 2026-11-17: preview 30 ms x ISO 6400 x boost 2.22, frames 500 ms x ISO 1315 (raw key 0.0307 against
+        // 0.019-0.020 at the preview's gain: x1.54 = 0.5 x 1315 / (0.03 x 6400 x 2.22)).
+        assertEquals(1f * 0.5f * (8f / 2f), ViewfinderGain.target(PreviewLevel.STILL_WHITE_BALANCED, 1f, 2f, 1.5f, 8f, 0.5f), 1e-5f)
+        assertEquals(1.54f, ViewfinderGain.target(PreviewLevel.STILL_WHITE_BALANCED, 1f, 2.22f, 1f, 0.5f * 1315f / (0.029993f * 6400f), 1f), 0.01f)
     }
 
     @Test
@@ -41,4 +44,13 @@ class ViewfinderGainTest {
             assertEquals(c, s * raw / key, 1e-5f)
         }
     }
+
+    @Test
+    fun longExposureKey() {
+        // The Pixel's: scene key x calibration, as before (any neutral floor).
+        assertEquals(0.02f * 1.3f, ViewfinderGain.longExposureKey(PreviewLevel.BOOSTED, 0.02f, 1.3f, 0.47f), 1e-7f)
+        // OnePlus 11 at night: scene key 0.0476 per unit of scale, calibration 0.817, neutral floor 0.48 -> the raw's 0.019.
+        assertEquals(0.0187f, ViewfinderGain.longExposureKey(PreviewLevel.STILL_WHITE_BALANCED, 0.0476f, 0.817f, 0.48f), 2e-4f)
+    }
 }
+

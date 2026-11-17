@@ -1,5 +1,6 @@
 package app.rawboy.camera.capture
 
+import app.rawboy.camera.platform.CompensationModel
 import kotlin.math.ln
 
 /**
@@ -26,6 +27,21 @@ object AppliedCompensation {
         val applied = requestedEv - digital
         return if (requestedEv > 0f) applied.coerceIn(0f, requestedEv) else applied.coerceIn(requestedEv, 0f)
     }
+
+    /**
+     * [CompensationModel.AE_GAIN_IN_RAW]: EV of [requestedEv] that reached the raw of a frame whose whole AE gain
+     * (exposure s x ISO x post-raw boost) is [gain], when AE never goes above [ceiling]. A darker compensation always
+     * gets there; a brighter one too, unless the frame is within [CEILING_SHARE] of the ceiling: then AE had no room
+     * for it (or only for part of it), and the develop adds Brightness instead of taking it back out.
+     */
+    fun evBelowCeiling(requestedEv: Float, gain: Float, ceiling: Float): Float =
+        if (requestedEv > 0f && ceiling > 0f && gain >= ceiling * CEILING_SHARE) 0f else requestedEv
+
+    /**
+     * How close to [evBelowCeiling]'s ceiling a frame counts as on it: the OnePlus 11's preview sat at 0.97-1.0 of it
+     * (1/30 s x ISO 6400 x boost 2.0-2.22 against 1/15 s x ISO 6400), its stills at 0.9.
+     */
+    const val CEILING_SHARE = 0.85f
 
     /** Digital gain a still from this preview frame still carries after its longer exposure (1 = none). */
     fun residual(postRawBoost: Float, stillGain: Float): Float =

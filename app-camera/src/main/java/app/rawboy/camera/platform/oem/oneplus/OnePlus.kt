@@ -1,5 +1,6 @@
 package app.rawboy.camera.platform.oem.oneplus
 
+import app.rawboy.camera.platform.CompensationModel
 import app.rawboy.camera.platform.FlashMetering
 import app.rawboy.camera.platform.LayerLevel
 import app.rawboy.camera.platform.PlatformLayer
@@ -59,6 +60,17 @@ import app.rawboy.camera.platform.PreviewLevel
  * every still), after the frame had gone dark at 0.25 s: the selfie raw's key was 0.069-0.073 with the screen flash,
  * 0.112-0.119 with the frame kept lit to 0.7 s (a face-height subject at ~0.5 m, a lamp behind the phone), so it stays
  * lit until the still's result has come ([app.rawboy.camera.platform.FlashProfile.screenFlashUntilExposed]).
+ *
+ * Brightness ([CompensationModel.AE_GAIN_IN_RAW]): DngCreator writes the still's post-raw boost into the DNG as
+ * BaselineExposure (0.99 EV at boost 2.0), which the decoder applies, so the developed raw gets AE's whole gain
+ * (exposure x ISO x boost), digital part included. In a dark room (main camera, 2026-11-17) AE topped out at that gain
+ * = 1/15 s x ISO 6400 (preview 1/30 s x ISO 6400 x boost 2.0-2.22; stills 1/15 s at boost 1 or 1/30 s at boost 2) and
+ * Brightness +1 added nothing: the raw's key stayed 0.0173-0.0175 against 0.0173 at -0.17, while the develop took the
+ * +1 EV back out, and the photo came out +0.36 EV brighter (+0.25 in session 11). Below the ceiling compensation
+ * reached the raw in full (a lamp-lit room: +1 -> +0.90 EV, -1 -> -1.18 EV; merged -1 at the ceiling -0.96 EV). The
+ * Pixel's rule ([CompensationModel.BOOST_STAYS_DIGITAL]) read the same frames as applied or not by which side of its
+ * 0.9 x 1/30 s threshold the preview's exposure fell (33.3 ms x boost 2.0 or 30.0 ms x boost 2.22, the same gain):
+ * two merged +1 shots of one scene came out +1.03 and +0.29 EV.
  */
 val onePlusLayer = PlatformLayer(
     name = "oneplus",
@@ -69,7 +81,7 @@ val onePlusLayer = PlatformLayer(
         p.copy(
             lenses = p.lenses.copy(standaloneOverLogical = true),
             preview = p.preview.copy(curveAtEvenPoints = true, level = PreviewLevel.STILL_WHITE_BALANCED, liftsShadows = false),
-            still = p.still.copy(exactBlack = true, blackPedestal = 32f),
+            still = p.still.copy(exactBlack = true, blackPedestal = 32f, compensation = CompensationModel.AE_GAIN_IN_RAW),
             flash = p.flash.copy(metering = FlashMetering.CAMERA_AE, screenFlashUntilExposed = true),
         )
     },
