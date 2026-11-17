@@ -125,6 +125,7 @@ struct ControlsPanel: View {
         .controlSize(.small)
         #endif
         .frame(maxWidth: .infinity)
+        .stockWheel(film: params.film, onSelect: onSelectFilm)
     }
 
     @ViewBuilder private var lightSliders: some View {
@@ -155,6 +156,7 @@ struct ControlsPanel: View {
                 .frame(width: 190, alignment: .trailing)
             }
             .frame(height: 32)
+            .stockWheel(film: film, onSelect: onSelectFilm)
             if params.lut != nil {
                 Text("Your LUT is off while Film is on; it returns with another tone mapper.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -711,6 +713,18 @@ struct ParamSlider: View {
 }
 
 extension View {
+    /** The wheel over this row steps through the film stocks, one per click (RawBoy Desktop; off while Film is). */
+    @ViewBuilder func stockWheel(film: String?, onSelect: @escaping (String) -> Void) -> some View {
+        #if os(macOS)
+        background(StepWheel(enabled: film != nil) { steps in
+            let ids = FilmLooks.all.compactMap(\.film)
+            if let film, let next = WheelStepper.target(in: ids, current: film, steps: steps) { onSelect(next) }
+        })
+        #else
+        self
+        #endif
+    }
+
     /** The wheel over this slider moves it (RawBoy Desktop). */
     @ViewBuilder func sliderWheel(_ range: ClosedRange<Float>, value: @escaping () -> Float, _ onChange: @escaping (Float) -> Void) -> some View {
         #if os(macOS)
