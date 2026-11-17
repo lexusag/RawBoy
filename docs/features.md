@@ -96,7 +96,7 @@ none of the web's 74; Kotlin lacks `healSpots`, `lumaContrast`, `portraitRetouch
 | Presets: Masks, Retouch groups | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
 | Presets with no photo open | 1.17.8 | ✓ | ✓ 1.17.8 | ? | ? | |
 | Look selector (stripes of every LUT / stock over the photo) | 1.10.11 | ✓ | ✓ 1.17.8 | ✓ (shared code) | — | Resizable window: web 1.14.2, Desktop 1.17.8 |
-| Carry edits over to the next photo | ≤1.1.1 | ✓ automatic | ◐ on demand | ✓ automatic | ✓ automatic | **Deliberate on Desktop** (unreleased): a photo starts from its own sidecar; Copy button / ⇧C copies the previous photo's settings. Web got the same button and ⇧C in 1.17.10 but still carries over |
+| Carry edits over to the next photo (Pro) | ≤1.1.1 | ✓ automatic | on demand (by design) | ✓ automatic | ✓ automatic | **Not a gap.** Web, iOS and Android open one photo at a time, so edits carry over by themselves. Desktop Pro has a filmstrip and ← / →, so it starts every photo from its own sidecar or as shot (unreleased, #399); the bar's Copy or ⇧C takes the previous photo's settings. Web also has the Copy button and ⇧C since 1.17.10. Auto never carried edits; it has Copy previous (⇧C) on every platform |
 | Edits saved next to the photo (`rawboy:Develop`) | ≤1.1.1 | ◐ opt-in, Chrome/Edge folders | ✓ 1.17.0 always on | — | — | |
 | Compare: hold, `\` toggle | ≤1.1.1 | ✓ | ✓ 1.17.0 | ◐ hold | ◐ hold | |
 | Before/After slider (Y) | 1.18.3 | — | ✓ | — | — | Desktop only |
@@ -123,7 +123,7 @@ none of the web's 74; Kotlin lacks `healSpots`, `lumaContrast`, `portraitRetouch
 | Google Drive open / save | 1.5.0 | ✓ | n/a | n/a | n/a | Drive's desktop folder covers it |
 | "New version available" banner | 1.6.0 | ✓ | — | n/a | n/a (Play) | **Gap.** Desktop has no updater; releases are DMGs on GitHub |
 | Warning before closing mid-work | 1.14.0 | ✓ | ✓ 1.18.3 (quit) | n/a | n/a | |
-| Filmstrip of the folder under the photo | 1.17.7 | — | ✓ | — | — | Desktop only |
+| **Next / previous photo in Pro** (filmstrip of the folder, ← / →) | 1.17.7 | — | ✓ | — | — | Desktop only. Web, iOS and Android Pro open a single file; to change photo you open another (web: back to the Browser tab). This is why carry-over is automatic there and on demand on Desktop |
 | Multi-display, VoiceOver, Reduce Motion | 1.17.4 | n/a | ✓ | ✓ (iOS system) | ✓ TalkBack (Camera) | |
 
 ## RawBoy Auto
@@ -232,7 +232,7 @@ most cases). "Check" = confirm in the app before building, because I could only 
 | 10 | **Packer: sort, collapse and remove folders, jump to top** | 1.9.0 | Large folders | Small |
 | 11 | Check: **Auto crop drag-to-rotate (1.15.5), next / previous photo while zoomed (1.8.13), Pro zoom hint, healing stroke shown red while painting (1.15.11)** | | Listed as ? above | Check |
 | 12 | Check: **darktable `_01` duplicates in Browse** | ≤1.1.1 | Web handles `NAME_01.CR2.xmp` | Check in the Viewer |
-| 13 | Carry-over to the next photo (Pro) | ≤1.1.1 | Changed on purpose on 2026-11-17 (unreleased: on demand); listed so the difference isn't mistaken for a bug | none |
+| 13 | Carry-over to the next photo (Pro) | ≤1.1.1 | Not a gap: automatic on web, iOS and Android (they open one photo at a time), on demand on Desktop (it has a filmstrip and ← / →). Listed so the difference isn't mistaken for a bug | none |
 
 Left out on purpose: Google Drive, Video, ZIP export, the web caches and lanes, Safari/Firefox rating download.
 
