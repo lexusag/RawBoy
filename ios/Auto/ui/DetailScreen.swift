@@ -324,7 +324,7 @@ struct DetailScreen: View {
 extension DetailScreen {
     fileprivate func macBody(_ photo: AutoPhoto) -> some View {
         VStack(spacing: 0) {
-            macBar(photo)
+            macBar(photo).interfaceScaled()  // the Viewer's Settings › Interface size; the panel scales in PhotoWithControls
             PhotoWithControls {
                 PhotoPage(vm: vm, session: session, photo: photo, current: true, pickingWhite: $pickingWhite, cropRatio: cropRatio)
                     // Room between the photo's frame and the window's edges and bar.

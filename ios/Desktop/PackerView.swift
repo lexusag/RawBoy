@@ -15,6 +15,7 @@ struct PackerView: View {
             settingsPanel.frame(minWidth: 340, idealWidth: 380, maxWidth: 460)
         }
         .frame(minWidth: 820, minHeight: 560)
+        .interfaceScaled()  // the Viewer's Settings › Interface size; the window's least size grows with it
         .preferredColorScheme(.dark)
         .background(WindowSetup())
         .overlay {

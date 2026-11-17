@@ -1,3 +1,7 @@
+**RawBoy Desktop: Interface size for the whole app (2026-11-17)**
+
+- **Settings › Interface size now sizes every mode**, not only Browse: Pro's bar, side panel and filmstrip, Auto's grid and sidebar, its photo view's bar and panel, and the Packer window are drawn at the chosen 85, 100, 115, 130 or 150 %, and follow a change at once. The side panels widen with it (still at most 45% of the window); the photo itself is never scaled, so it stays sharp. The window's own toolbar and the sheets keep the system size. `view/InterfaceScale.swift` (`interfaceScaled()`, the Viewer's method: laid out smaller, then scaled), `DesktopModel.interfaceScale` reads the Viewer's `app.uiScale` under `desktop.browse.`. Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.
+
 **RawBoy Desktop and web Pro: rotate the crop with the mouse (2026-11-17)**
 
 - **Drag outside the crop frame to straighten**, as in the web's Auto: in Crop & rotate (Pro and Auto), press outside the frame and circle its centre; the picture turns with the pointer (clockwise drag = clockwise turn, -45° to 45°, 0.01° steps), the Straighten slider follows, and the drag undoes like a slider drag. On the Mac the pointer is an open hand outside the frame and resize arrows on its edges and corners. Shared Swift code (`CropOverlay.rotate`), so the iPhone apps get the drag too. **Web Pro** gets the same drag: its Crop & rotate passes `rotate` to `CropOverlay`, which until now only Auto did. Not compiled when written (no Mac): CI's `desktop` job is the first build.

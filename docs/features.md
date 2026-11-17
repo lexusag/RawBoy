@@ -188,6 +188,7 @@ Web "Browser" tab = culling; Desktop's counterpart is Browse mode, which hosts R
 | darktable duplicates (`NAME_01.CR2.xmp`) | ≤1.1.1 | ✓ | ? | The Viewer's sidecar code names `NAME.xmp` and `NAME.EXT.xmp`; no `_01` handling found |
 | Safari / Firefox: pick files, download sidecars as ZIP | ≤1.1.1 | ✓ | n/a | |
 | Full-screen viewer, edge panels, Compare 2–4 | — | — | ✓ 1.18.0 | Viewer only |
+| Interface size (Settings › Interface size: 85, 100, 115, 130, 150 %) for the whole app | — | n/a (the browser's own zoom) | ✓ unreleased | The Viewer's setting; Browse had it from 1.18.0, now Pro's bar, panel and filmstrip, Auto's grid, sidebar, bar and panel, and the Packer follow it too, live. The photo itself is never scaled |
 
 ## RawBoy Packer (raws and DNGs to smaller DNGs)
 
@@ -210,7 +211,7 @@ iOS or Android (Camera records video on Android: see [features-camera.md](featur
 One-row bar and sectioned inspector (1.17.7); Photo-only mode (Tab / F); Before/After slider (Y, 1.18.3); filmstrip
 under the photo (1.17.7); Auto grid with sidebar (1.17.7); Browse and the Viewer's libraries (1.18.0); sidecars always on;
 Apple Vision for skin (1.17.2); Reset all photos (1.17.5); quit guard (1.18.3); displays and accessibility (1.17.4);
-analysis cache (1.17.4).
+analysis cache (1.17.4); one interface size for every mode (unreleased).
 
 ## Web features missing on Desktop, prioritised
 
