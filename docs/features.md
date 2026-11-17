@@ -169,7 +169,7 @@ none of the web's 74; Kotlin lacks `healSpots`, `lumaContrast`, `portraitRetouch
 ## RawBoy Browser / Browse
 
 Web "Browser" tab = culling; Desktop's counterpart is Browse mode, which hosts RawBoy Viewer (its own repository,
-`lexusag/RawBoyImageViewer`, tags v0.1.0 to v0.2.5, pinned by Desktop at 0.2.5). iOS and Android have no browser.
+`lexusag/RawBoyImageViewer`, tags v0.1.0 to v0.2.6, pinned by Desktop at 0.2.6). iOS and Android have no browser.
 
 | Feature | Since | Web | Desktop | Notes |
 |---|---|---|---|---|
@@ -181,6 +181,7 @@ Web "Browser" tab = culling; Desktop's counterpart is Browse mode, which hosts R
 | 1:1 zoom, compare, slideshow, crop, rename, copy / move, export | — | ◐ 1:1 only | ✓ 1.18.0 | Desktop is richer here (Viewer features) |
 | Real preview (`R`, develop with RawBoy) | 1.9.0 | ✓ opt-in | ✓ 1.18.0 (the engine's develop) | |
 | JPEG XL DNG previews (the 6000 px one) | ≤1.1.1 | ✓ | ◐ | Viewer asks ImageIO to decode those DNGs (not ported), Adobe's lossy DNGs fall back |
+| **Browse: double-click in the viewer goes back to the grid; right-click Send to Pro / Auto** | Viewer 0.2.6 | n/a | ✓ unreleased | Mouse-only use. In the viewer double-click leaves the photo (zoom stays on the wheel, press-and-hold and pinch). Right-click, in the viewer (new menu), the grid and the list: **Send to RawBoy Pro** and **Send to RawBoy Auto** (Looks / Film / As is), any file type (raw, JPEG, HEIC, PNG, TIFF); with several photos selected Pro opens the first |
 | **Send to Auto: picks, ≥ N stars, = N stars, "what the grid shows"** | ≤1.1.1 | ✓ | ◐ 1.18.0 | **Gap.** Only the selection (and the right-click menu); Develop as Looks / Film / As is ✓ (web 1.4.4; Desktop 1.17.8). Desktop's As is carries only the sidecar (crop, turn, RawBoy edits; no measured denoise or presets; unreleased), the web's As is reads `rawboy:Auto` only |
 | Edit in RawBoy (`E`) | ≤1.1.1 | ✓ | ✓ 1.18.0 in-process | |
 | Edits in sidecars (`rawboy:Develop`, `rawboy:Auto`) | ≤1.1.1 | ◐ opt-in | ✓ always | |
