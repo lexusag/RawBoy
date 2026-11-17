@@ -1,5 +1,6 @@
 import XCTest
 @testable import RawBoyEngine
+import enum RawBoyBrowseKit.PhotoSort
 
 /** Web's packer/settings.test.ts on the Swift port. */
 final class PackSettingsTests: XCTestCase {
@@ -91,6 +92,33 @@ final class PackSettingsTests: XCTestCase {
                        "1 file packed: 40 MB → 10 MB (25%). 1 file failed.")
         XCTAssertEqual(PackerInfo.runMessage(.init(done: 0, failed: 2)).title, "Packing failed")
         XCTAssertEqual(PackerInfo.runMessage(.init(done: 1, failed: 0, stopped: true, before: 40_000_000, after: 10_000_000)).title, "Packing stopped")
+    }
+
+    /** Web's PackerStore.test.ts folderStatusSummary cases. */
+    func testCollapsedFolderStatus() {
+        XCTAssertNil(PackerInfo.folderStatus(total: 0, packing: 0, done: 0, failed: 0))
+        XCTAssertNil(PackerInfo.folderStatus(total: 3, packing: 0, done: 0, failed: 0))
+        XCTAssertEqual(PackerInfo.folderStatus(total: 3, packing: 1, done: 1, failed: 0)?.text, "1 packing… · 1 done")
+        XCTAssertEqual(PackerInfo.folderStatus(total: 3, packing: 1, done: 1, failed: 0)?.kind, .busy)
+        XCTAssertEqual(PackerInfo.folderStatus(total: 3, packing: 0, done: 1, failed: 1)?.text, "1 failed · 1 done")
+        XCTAssertEqual(PackerInfo.folderStatus(total: 3, packing: 0, done: 1, failed: 1)?.kind, .error)
+        XCTAssertEqual(PackerInfo.folderStatus(total: 2, packing: 0, done: 2, failed: 0)?.text, "all done")
+        XCTAssertEqual(PackerInfo.folderStatus(total: 2, packing: 0, done: 1, failed: 0)?.text, "1 of 2 done")
+    }
+
+    /** Web's "sorts files by shoot date by default and by name when chosen": folders keep their first-seen order. */
+    func testGroupsByFolderAndSorts() {
+        struct F { let folder: String?; let date: String?; let name: String }
+        let files = [F(folder: "B", date: "2026:01:01 12:00:00", name: "IMG_10.CR3"), F(folder: "A", date: nil, name: "Z.CR3"),
+                     F(folder: "B", date: "2026:01:01 08:00:00", name: "IMG_1.CR3"), F(folder: "A", date: nil, name: "A.CR3"),
+                     F(folder: "B", date: "2026:01:01 07:00:00", name: "IMG_2.CR3"), F(folder: nil, date: nil, name: "loose.ARW")]
+        func names(_ sort: PhotoSort) -> [[String]] {
+            PackerInfo.groupByFolder(files, sort: sort, folder: \.folder, date: \.date, name: \.name).map { $0.items.map { $0.name } }
+        }
+        let groups = PackerInfo.groupByFolder(files, sort: .date, folder: \.folder, date: \.date, name: \.name)
+        XCTAssertEqual(groups.map { $0.folder }, ["B", "A", nil])
+        XCTAssertEqual(names(.date), [["IMG_2.CR3", "IMG_1.CR3", "IMG_10.CR3"], ["A.CR3", "Z.CR3"], ["loose.ARW"]])
+        XCTAssertEqual(names(.name), [["IMG_1.CR3", "IMG_2.CR3", "IMG_10.CR3"], ["A.CR3", "Z.CR3"], ["loose.ARW"]])
     }
 
     func testListsWhichAppsOpenEachFormat() {

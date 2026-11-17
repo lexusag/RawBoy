@@ -1,3 +1,8 @@
+**RawBoy Desktop: Packer sorts and folds folders (2026-11-17)**
+
+- **Sort: Shoot date / File name** over the Packer's list orders each folder's files (remembered, `packer.sort`); a run packs them in that order. Folders stay in the order they were added, as on the web.
+- **Folder headers fold.** Click a folder's header to collapse it to one line, which shows its progress while folded ("2 packing… · 1 done", "1 failed", "all done", "3 of 5 done"); **Collapse all / Expand all** do every folder; ✕ on a header removes that folder from the list. Files added by themselves sit under "Other files". `PackerInfo.groupByFolder` / `folderStatus` are ports of the web's `groupByFolder` / `folderStatusSummary` with their test cases (`PackSettingsTests`). Not compiled when written (no Mac): CI is the first build.
+
 **RawBoy Desktop, iOS and Android: Denoise & sharpening preset group (2026-11-17)**
 
 - **Save preset has a Denoise & sharpening group**, as on the web: Denoise, Color denoise and Sharpening moved out of Detail into it, off by default. Detail now holds local contrast, grain, bloom and flare only.

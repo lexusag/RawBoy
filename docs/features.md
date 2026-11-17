@@ -45,7 +45,7 @@ Biggest first:
 7. **No update path**: the web has a "New version available" banner; Desktop is a hand-downloaded DMG.
 8. **Browse** misses: photos with `rawboy:Auto` settings don't go back into Auto when a folder is reopened, "Send to
    Auto" has no picks / minimum-stars shortcut, darktable `_01` duplicates are unchecked.
-9. **Packer**: sorting, collapsing and removing folders, "jump to top" and the done notification are web only.
+9. **Packer**: "jump to top" and the done notification are web only (sort, collapse and remove folders came to Desktop, unreleased).
 10. **Auto's paging speed**: the web decodes the neighbouring photos ahead; Desktop decodes only the one shown.
 
 ## RawBoy Pro: develop controls
@@ -196,7 +196,7 @@ Web "Browser" tab = culling; Desktop's counterpart is Browse mode, which hosts R
 | Small raw / Lossless / Micro, lens corrections kept, previews | 1.8.0 | ✓ | ✓ 1.17.4 | n/a | n/a | Same C++; sizes within 4% of the web's |
 | Presets, summary, "Opens in" table, Advanced settings | 1.8.3 | ✓ | ✓ 1.17.4 | n/a | n/a | |
 | Group by folder, shoot order | 1.8.17 | ✓ | ✓ 1.17.4 | n/a | n/a | |
-| **Sort by shoot date / name, collapse a folder, remove a folder** | 1.9.0 | ✓ | — | n/a | n/a | **Gap.** |
+| Sort by shoot date / name, collapse a folder, remove a folder | 1.9.0 | ✓ | ✓ unreleased | n/a | n/a | Collapse state lasts while the window is open, as on the web |
 | **Jump to top, persistent Clear finished, done pop-up** | 1.8.12 / 1.8.16 | ✓ | ◐ | n/a | n/a | Desktop has Clear and a result line, no jump to top |
 | Raw details in the list | 1.8.15 | ✓ | ✓ 1.17.4 | n/a | n/a | |
 
@@ -228,7 +228,7 @@ most cases). "Check" = confirm in the app before building, because I could only 
 | 7 | **Browse: send "picks / ≥ N stars" to Auto; reopen a folder and bring Auto-edited photos back** | ≤1.1.1 | The web's Browser → Auto loop; needs a Viewer release (host hook) | Medium, in `RawBoyImageViewer` |
 | 8 | **Updater** | 1.6.0 | New DMGs are easy to miss; Sparkle is already in the Viewer app | Medium (signing, appcast; notarisation is "not in yet") |
 | 9 | **Auto: decode neighbours ahead** | 1.15.9 | Paging through a batch waits on each decode | Medium: a one-ahead prefetch in `AutoViewModel` / `PhotoSession`; web's `NeighbourPreload.ts` is the pattern |
-| 10 | **Packer: sort, collapse and remove folders, jump to top** | 1.9.0 | Large folders | Small |
+| 10 | **Packer: jump to top** | 1.8.12 | Long lists | Small (sort, collapse and remove folders done, unreleased) |
 | 11 | Check: **Auto crop drag-to-rotate (1.15.5), next / previous photo while zoomed (1.8.13), Pro zoom hint, healing stroke shown red while painting (1.15.11)** | | Listed as ? above | Check |
 | 12 | Check: **darktable `_01` duplicates in Browse** | ≤1.1.1 | Web handles `NAME_01.CR2.xmp` | Check in the Viewer |
 | 13 | Carry-over to the next photo (Pro) | ≤1.1.1 | Not a gap: automatic on web, iOS and Android (they open one photo at a time), on demand on Desktop (it has a filmstrip and ← / →). Listed so the difference isn't mistaken for a bug | none |

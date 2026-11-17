@@ -50,6 +50,7 @@ let proHelp = [
     ]),
     HelpSection("Packer", [
         HelpItem("Pack Raws… (⇧⌘P)", "Opens RawBoy Packer, which re-saves raws and DNGs as smaller DNGs: drop raws or folders, choose Smallest files, Maximum compatibility or Tiny copies, and Pack. The summary under the settings says what each choice does and which programs open the result. Files are saved next to the originals (or in a folder you choose), never over an existing file; the originals are never changed."),
+        HelpItem("Sort, folder headers", "Sort switches each folder between shoot date and file name (remembered). Click a folder's header to fold it to one line, which then shows how its files are getting on; Collapse all and Expand all do every folder; ✕ removes a folder from the list."),
     ]),
     HelpSection("Auto mode", [
         HelpItem("Pro | Auto", "The switch in the title bar (⌘1, ⌘2) changes between the full editor for one photo and Auto, which develops a batch automatically: each photo gets a suggested look, adjustable one by one or all at once."),

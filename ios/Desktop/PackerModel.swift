@@ -3,7 +3,7 @@ import Combine
 import RawBoyEngine
 import SwiftUI
 import UniformTypeIdentifiers
-import enum RawBoyBrowseKit.PhotoOrder
+import enum RawBoyBrowseKit.PhotoSort
 
 enum PackStatus: Equatable { case inspecting, ready, packing, done, failed }
 
@@ -45,9 +45,12 @@ final class PackerModel: ObservableObject {
     @Published private(set) var finished: (title: String, body: String)?
     /** Files of the current run, for the progress line. */
     @Published private(set) var runTotal = 0
+    /** How each folder's files are ordered: by shoot date (the default) or file name; remembered. */
+    @Published private(set) var sort: PhotoSort = UserDefaults.standard.string(forKey: PackerModel.sortKey).flatMap(PhotoSort.init(rawValue:)) ?? .date
 
     private static let settingsKey = "packer.settings"
     private static let folderKey = "packer.output"
+    private static let sortKey = "packer.sort"
     private var inspecting = false
 
     init() {
@@ -98,7 +101,6 @@ final class PackerModel: ObservableObject {
                 item.date = date
                 items.append(item)
             }
-            items.sort { PhotoOrder.inOrder(.date, ($0.date, $0.url.lastPathComponent), ($1.date, $1.url.lastPathComponent)) }
             inspectPending()
         }
     }
@@ -135,6 +137,24 @@ final class PackerModel: ObservableObject {
         items.removeAll { $0.id == id }
     }
 
+    /** Orders each folder's files by [sort] from now on (remembered). */
+    func setSort(_ sort: PhotoSort) {
+        guard !running else { return }
+        self.sort = sort
+        UserDefaults.standard.set(sort.rawValue, forKey: Self.sortKey)
+    }
+
+    /** The list as shown: by folder, folders in the order they were added, each ordered by `sort`. Runs pack in this order. */
+    var groups: [(folder: String?, items: [PackItem])] {
+        PackerInfo.groupByFolder(items, sort: sort, folder: \.folder, date: \.date, name: \.url.lastPathComponent)
+    }
+
+    /** Removes a folder's files from the list (nil = the files added by themselves). */
+    func removeFolder(_ folder: String?) {
+        guard !running else { return }
+        items.removeAll { $0.folder == folder }
+    }
+
     func clear() {
         guard !running else { return }
         items = []
@@ -158,7 +178,8 @@ final class PackerModel: ObservableObject {
 
     func start() {
         guard canStart else { return }
-        let todo = items.filter { $0.status == .ready || $0.status == .failed && $0.info != nil }.map(\.id)
+        let ordered: [PackItem] = groups.flatMap { (g: (folder: String?, items: [PackItem])) -> [PackItem] in g.items }
+        let todo: [String] = ordered.filter { $0.status == .ready || $0.status == .failed && $0.info != nil }.map(\.id)
         for id in todo { update(id) { $0.status = .ready; $0.error = nil } }
         running = true
         stopping = false
