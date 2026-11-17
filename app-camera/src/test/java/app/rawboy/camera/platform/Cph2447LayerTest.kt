@@ -50,8 +50,8 @@ class Cph2447LayerTest {
     fun blackOffsetsForTheBackCamerasOnly() {
         val offsets = profile.still.blackOffsets
         // Ultrawide above the DNG's black, main camera below it, both growing with ISO; the selfie camera has none.
-        assertArrayEquals(floatArrayOf(0.72f, 0.60f, 0.42f), offsets.at("3", 6400f), 1e-6f)
-        assertArrayEquals(floatArrayOf(0.19f, 0.16f, 0.10f), offsets.at("3", 1600f), 1e-6f)
+        assertArrayEquals(floatArrayOf(0.27f, 0.14f, 0.04f), offsets.at("3", 6400f), 1e-6f)
+        assertArrayEquals(floatArrayOf(0.21f, 0.18f, 0.15f), offsets.at("3", 1600f), 1e-6f)
         assertArrayEquals(floatArrayOf(-0.48f, -0.35f, -0.29f), offsets.at("2", 6400f), 1e-6f)
         assertArrayEquals(floatArrayOf(0f, 0f, 0f), offsets.at("2", 200f), 0f)
         assertArrayEquals(floatArrayOf(0f, 0f, 0f), offsets.at("1", 1600f), 0f)

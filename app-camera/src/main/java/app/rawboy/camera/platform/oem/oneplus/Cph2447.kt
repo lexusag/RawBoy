@@ -15,14 +15,19 @@ import app.rawboy.camera.platform.PlatformPatch
  * a window at dawn, books and toys in morning light). The ISP also fades both previews' chroma at high ISO, which a
  * fixed matrix can't follow, so only the ultrawide's lens-wise gap is taken out.
  *
- * Black: lit frames sit off the DNG's black at high ISO, the ultrawide above it and the main camera below. Residual
- * against a frame of the same scene at ISO 100 (4 stops under, one exposure ratio for all four CFA sites, 16x16 blocks
- * at 0.5-2 DN where it is flat; a dim room and a daylit room, single frames and merged bursts alike, within +-0.15 DN
- * of each other, 2026-11-17), R / G / B DN: ultrawide +0.19 / +0.16 / +0.10 at ISO 1600, +0.72 / +0.60 / +0.42 at
- * 6400; main -0.17 / -0.15 / -0.11 at ISO 1600, -0.48 / -0.35 / -0.29 at 6400; both about 0 at ISO 400 and below.
- * Dark frames (lens covered, 33 ms) read differently (ultrawide +0.04..+0.24, main -0.4..-0.6 at 6400), so only lit
- * frames set it. Without it, merged shadows at 2^-8 of white came out R/G -10% (main) and +14% (ultrawide) at 6400
- * with the exact black.
+ * Black: frames sit off the DNG's black at high ISO, the ultrawide above it and the main camera below. Residual
+ * against a frame of the same scene at a low ISO (one exposure ratio for all four CFA sites, 16x16 blocks at 0.5-2 DN
+ * where it is flat, single frames and merged bursts alike, 2026-11-17), R / G / B DN:
+ * - main camera, lit frames of 0.3-11 ms (a dim and a daylit room, within +-0.15 DN): -0.17 / -0.15 / -0.11 at ISO
+ *   1600, -0.48 / -0.35 / -0.29 at 6400; dark frames at 33 ms read -0.62 / -0.51 / -0.42 at 6400. A night corridor at
+ *   ISO 6400, 1/30 s came out neutral with the lit numbers.
+ * - ultrawide: the offset falls with exposure time. Lit frames of 0.3-11 ms read +0.72 / +0.60 / +0.42 at ISO 6400,
+ *   but at 1/30 s, which is what AE gives at ISO 1600-6400, a dark corridor and dark frames agreed on +0.24..0.29 /
+ *   +0.14 / +0.03..0.04 (and +0.21 / +0.18 / +0.15 at ISO 1600): the 1/30 s numbers are used. The short-exposure
+ *   table had over-corrected a night shot's shadows to R/G -11%, B/G -13% at 2^-9.
+ * Both about 0 at ISO 400 and below. Without them, merged shadows at 2^-8 came out R/G -10% (main) and +14%
+ * (ultrawide) at ISO 6400 with the exact black. The selfie camera's offset (-0.1..-0.3 DN) is the same in every channel
+ * and keeps none.
  *
  * Noise: the engine's measured noise (luma std in the sqrt domain, `RawImage.measureNoise`) on a fixed scene at ISO
  * 100-6400 with time x ISO held (2026-11-17): main 0.0029 / 0.0053 / 0.0101 / 0.0205 at ISO 100 / 400 / 1600 / 6400,
@@ -50,12 +55,12 @@ val cph2447Layer = PlatformLayer(
                             BlackOffsets.Point(1600f, listOf(-0.17f, -0.15f, -0.11f)),
                             BlackOffsets.Point(6400f, listOf(-0.48f, -0.35f, -0.29f)),
                         ),
-                        // Ultrawide (stand-alone camera 3).
+                        // Ultrawide (stand-alone camera 3), at 1/30 s: what AE gives at these ISOs.
                         "3" to listOf(
                             BlackOffsets.Point(100f, listOf(0f, 0f, 0f)),
-                            BlackOffsets.Point(400f, listOf(0.04f, 0.05f, 0.04f)),
-                            BlackOffsets.Point(1600f, listOf(0.19f, 0.16f, 0.10f)),
-                            BlackOffsets.Point(6400f, listOf(0.72f, 0.60f, 0.42f)),
+                            BlackOffsets.Point(400f, listOf(0.02f, 0.03f, 0.04f)),
+                            BlackOffsets.Point(1600f, listOf(0.21f, 0.18f, 0.15f)),
+                            BlackOffsets.Point(6400f, listOf(0.27f, 0.14f, 0.04f)),
                         ),
                     ),
                 ),

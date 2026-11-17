@@ -30,7 +30,7 @@ class ShotDevelopBlackTest {
         val fix = ShotDevelop.blackFix(onePlus11.still, "3", 6400f)
         assertEquals(true, fix.exact)
         assertEquals(32f, fix.pedestal)
-        assertArrayEquals(floatArrayOf(0.72f, 0.60f, 0.42f), fix.offset, 1e-6f)
+        assertArrayEquals(floatArrayOf(0.27f, 0.14f, 0.04f), fix.offset, 1e-6f)
     }
 
     @Test
