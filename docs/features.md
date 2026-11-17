@@ -169,7 +169,7 @@ none of the web's 74; Kotlin lacks `healSpots`, `lumaContrast`, `portraitRetouch
 ## RawBoy Browser / Browse
 
 Web "Browser" tab = culling; Desktop's counterpart is Browse mode, which hosts RawBoy Viewer (its own repository,
-`lexusag/RawBoyImageViewer`, tags v0.1.0 to v0.2.6, pinned by Desktop at 0.2.6). iOS and Android have no browser.
+`lexusag/RawBoyImageViewer`, tags v0.1.0 to v0.2.7, pinned by Desktop at 0.2.7). iOS and Android have no browser.
 
 | Feature | Since | Web | Desktop | Notes |
 |---|---|---|---|---|
