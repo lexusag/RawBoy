@@ -176,6 +176,16 @@ final class DesktopModel: ObservableObject {
         if panel.runModal() == .OK, let url = panel.url { open(url) }
     }
 
+    // MARK: LUTs
+
+    /** Copies dropped `.cube` / HaldCLUT `.png` files into the LUT folder and says so where the user is looking. */
+    func importLuts(_ urls: [URL]) {
+        let added = LutRepository.importFiles(urls)
+        vm.refreshLuts()
+        let text = added == 0 ? "Couldn't add those LUTs" : "Added \(added) LUT\(added == 1 ? "" : "s") to Your LUTs (Pro's LUT section)"
+        if mode == .auto { auto.message = text } else { vm.message = text }
+    }
+
     // MARK: Moving a photo between Pro and Auto
 
     /** The Auto photo "Edit in Pro" means: the open one, else the only selected one, else the focused one. */

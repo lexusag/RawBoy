@@ -91,8 +91,8 @@ denoise stay per photo). **Copy previous** (at the end of the Look / Adjust tabs
 brightness, from the photo before this one in the batch to this photo only (denoise stays), as one undo step, like darktable's or Lightroom's "copy previous":
 develop one shot of a scene, swipe to the next and tap it. **Auto denoise all** (in the grid's top row, Android, iOS
 and web) is for a finished series: every photo gets the denoise, colour denoise and sharpening the auto develop measured on
-it (its noise, ISO and exposure), in place of its Denoise slider and RawBoy edits' own values (and, on the web, a preset's
-Denoise & sharpening group, the batch preset's too; Android presets never set denoise). Photos added As is get the
+it (its noise, ISO and exposure), in place of its Denoise slider and RawBoy edits' own values (and a preset's
+Denoise & sharpening group, the batch preset's too). Photos added As is get the
 values measured on them too (raws start with them: As is gives a raw its measured denoise from the start, web and
 RawBoy Desktop; JPEG, HEIC, PNG and TIFF get none until Auto denoise). Looks, presets, lens corrections and the other sliders
 stay; it is one undo step per photo. With photos selected, the selection bar's **Auto denoise** (dots icon) does the same
@@ -108,8 +108,8 @@ exports it on any platform; RawBoy's **Send to Auto**, or opening a preset file 
 preset develops every photo, and photos added later, in place of its look: everything it holds, lens corrections,
 LUT, film, detail, retouch and gradient masks included, on top of each photo's auto develop (groups it leaves out keep
 the auto values). Denoise, Color denoise and sharpening come from each photo's own auto develop (its measured
-noise, so its ISO), not from the photo the preset was made on, unless the preset holds **Denoise & sharpening** (web:
-its own group in RawBoy's Save preset, off by default; elsewhere they are part of Detail and always measured). Brightness, Warmth and the Adjust sliders still work
+noise, so its ISO), not from the photo the preset was made on, unless the preset holds **Denoise & sharpening** (its own
+group in RawBoy's Save preset, off by default). Brightness, Warmth and the Adjust sliders still work
 on top; there is no Strength. **Remove** goes back to the looks (photos given another preset on a selection keep
 theirs); **Use a look** in the photo view does it for one photo.
 **Partial presets** (web): a preset without the Light group (only Detail, only Color, Curves and White balance...)

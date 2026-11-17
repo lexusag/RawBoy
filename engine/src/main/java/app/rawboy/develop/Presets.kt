@@ -31,10 +31,13 @@ enum class PresetGroup(val key: String, val label: String, val fields: List<Stri
     DETAIL(
         "detail", "Detail",
         listOf(
-            "denoise", "colorDenoise", "sharpening", "localContrast", "highpassContrast",
+            "localContrast", "highpassContrast",
             "grain", "grainSize", "grainRoughness", "grainColor", "bloom", "anamorphic", "anamorphicColor", "anamorphicGhosts",
         ),
     ),
+    // Its own group, off by default: RawBoy Auto measures denoise and sharpening on each photo (its ISO and noise), and
+    // a preset overrides that only when it holds this group.
+    DENOISE("denoise", "Denoise & sharpening", listOf("denoise", "colorDenoise", "sharpening")),
     RETOUCH("retouch", "Retouch", listOf("skinRetouch", "blemishRemoval")),
     LUT("lut", "LUT", listOf("lut", "lutAmount")),
     LENS("lens", "Lens", listOf("lensProfile", "lensDistortion", "lensAnamorphic", "lensFisheye", "lensFisheyeFov", "lensFisheyeAuto", "lensFisheyeCircle", "lensFisheyeX", "lensFisheyeY", "lensCrop", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint")),
@@ -44,8 +47,12 @@ enum class PresetGroup(val key: String, val label: String, val fields: List<Stri
     companion object {
         fun ofKey(key: String): PresetGroup? = entries.firstOrNull { it.key == key }
 
-        /** What the save dialog ticks first: lens corrections are usually specific to one camera and lens, masks to one composition. */
-        val DEFAULT: Set<PresetGroup> = entries.toSet() - LENS - MASKS - DETAIL
+        /**
+         * What the save dialog ticks first: lens corrections are usually specific to one camera and lens, masks to one
+         * composition, denoise to one photo's noise (Auto measures it per photo), and Detail (grain, bloom, flare) is a
+         * look rather than a correction, so it is a deliberate choice.
+         */
+        val DEFAULT: Set<PresetGroup> = entries.toSet() - LENS - MASKS - DENOISE - DETAIL
     }
 }
 
@@ -144,6 +151,17 @@ object Presets {
         return presets.map { if (it === old) lensPreset.copy(id = old.id) else it }
     }
 
+    /**
+     * [preset] without its Denoise & sharpening group (null when nothing else is left); [preset] itself when it has
+     * none. RawBoy Auto's "Auto denoise all" uses it so the measured values win again. Port of web's withoutDenoise.
+     */
+    fun withoutDenoise(preset: Preset): Preset? {
+        if (PresetGroup.DENOISE !in preset.groups) return preset
+        val groups = preset.groups - PresetGroup.DENOISE
+        if (groups.isEmpty()) return null
+        return preset.copy(groups = groups, values = preset.values - PresetGroup.DENOISE.fields.toSet())
+    }
+
     /** [params] with the preset's stored fields; fields it doesn't hold (or doesn't know) stay. */
     fun apply(preset: Preset, params: DevelopParams): DevelopParams =
         preset.values.entries.fold(params) { p, (field, value) -> set(p, field, value) }
@@ -198,9 +216,14 @@ object Presets {
     private fun fromJson(o: JSONObject): Preset {
         require(o.optString("format") == FORMAT) { "Not a RawBoy preset" }
         val groupKeys = o.optJSONArray("groups") ?: JSONArray()
-        val groups = List(groupKeys.length()) { PresetGroup.ofKey(groupKeys.optString(it)) }.filterNotNull().toSet()
-        val known = groups.flatMap { it.fields }.toSet()
         val v = o.optJSONObject("values") ?: JSONObject()
+        val groups = List(groupKeys.length()) { PresetGroup.ofKey(groupKeys.optString(it)) }.filterNotNull().toMutableSet()
+        // Before denoise had its own group it was part of Detail. A preset with Detail but no Light (a denoise or grain
+        // preset) keeps its denoise; one with Light leaves denoise to Auto, as it did (web's Presets.ts does the same).
+        val oldDetail = PresetGroup.DETAIL in groups && PresetGroup.DENOISE !in groups &&
+            PresetGroup.DENOISE.fields.any { v.has(it) }
+        if (oldDetail && PresetGroup.LIGHT !in groups) groups += PresetGroup.DENOISE
+        val known = groups.flatMap { it.fields }.toSet()
         val values = LinkedHashMap<String, Any?>()
         for (f in known) {
             if (!v.has(f)) continue
@@ -216,7 +239,7 @@ object Presets {
         // Presets from before the separate colour denoise had one denoise for both: colour follows it.
         if ("denoise" in values && "colorDenoise" in known && !v.has("colorDenoise")) values["colorDenoise"] = null
         val lens = if (o.has("lens") && !o.isNull("lens")) o.optString("lens") else null
-        return Preset(newId(), o.optString("name").ifBlank { "Preset" }, groups, values, lens)
+        return Preset(newId(), o.optString("name").ifBlank { "Preset" }, groups.toSet(), values, lens)
     }
 
     internal fun get(p: DevelopParams, field: String): Any? = when (field) {
