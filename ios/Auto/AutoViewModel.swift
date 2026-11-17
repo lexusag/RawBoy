@@ -961,13 +961,27 @@ final class AutoViewModel: ObservableObject {
         if n > 0 { message = n == 1 ? "1 photo removed from the batch" : "\(n) photos removed from the batch" }
     }
 
-    /** ⇧-click: the photos from the anchor to [id] join the selection (from the first photo when there is no anchor). */
+    /**
+     * ⇧-click: the photos from the anchor to [id] join the selection. With nothing selected (after Esc, Cancel or at the
+     * start) it selects [id] alone and makes it the anchor, so a fresh range is two ⇧-clicks and never runs on from an
+     * earlier one (as on the web).
+     */
     func selectRange(to id: String) {
         let photos = shown
         guard let end = photos.firstIndex(where: { $0.id == id }) else { return }
-        let start = selectionAnchor.flatMap { a in photos.firstIndex { $0.id == a } } ?? focusedId.flatMap { a in photos.firstIndex { $0.id == a } } ?? 0
-        for p in photos[min(start, end)...max(start, end)] { selection.insert(p.id) }
         focusedId = id
+        guard !selection.isEmpty, let start = selectionAnchor.flatMap({ a in photos.firstIndex { $0.id == a } }) else {
+            selection.insert(id)
+            selectionAnchor = id
+            return
+        }
+        for p in photos[min(start, end)...max(start, end)] { selection.insert(p.id) }
+    }
+
+    /** Esc in the grid and the selection bar's Cancel: nothing selected and no ⇧-click anchor left over. */
+    func clearSelection() {
+        selection = []
+        selectionAnchor = nil
     }
 
     func selectAll() { selection = Set(shown.map(\.id)) }
@@ -1021,7 +1035,7 @@ final class AutoViewModel: ObservableObject {
     /** Esc: out of Crop & rotate, else from the photo back to the grid, else the selection is cleared. */
     func goBack() {
         if selected == nil, !selection.isEmpty {
-            selection = []
+            clearSelection()
         } else if cropping {
             cropping = false
         } else if selected != nil {
