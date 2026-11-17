@@ -459,6 +459,21 @@ extension DetailScreen {
                         LookGrid(vm: vm, photo: photo)
                     }
                 }
+                // This photo's lens preset, to check or change it photo by photo (the web's lens preset select).
+                if !vm.lensPresets.isEmpty {
+                    macSection("Lens preset", edited: false, reset: nil) {
+                        LensPresetMenu(presets: vm.lensPresets, current: .some(photo.lensChoice),
+                                       choose: { vm.chooseLensPreset($0, ids: [photo.id]) }) {
+                            Text(LensPresetChoice.name(.some(photo.lensChoice), presets: vm.lensPresets))
+                        }
+                        .controlSize(.small)
+                        .help(photo.lensPreset.map { "Lens preset: \($0.name)" } ?? "No lens preset on this photo")
+                        if photo.lensChoice == nil {
+                            Text(photo.lensPreset.map { "For this lens: \($0.name)" } ?? "None saved for this lens")
+                                .font(.caption).foregroundStyle(.secondary).padding(.top, 2)
+                        }
+                    }
+                }
                 macSection("Light", edited: a.brightness != 0 || a.contrast != 0 || a.lumaContrast != 0, reset: {
                     $0.brightness = 0; $0.contrast = 0; $0.lumaContrast = 0
                 }) {

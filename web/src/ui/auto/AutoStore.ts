@@ -1117,7 +1117,7 @@ export class AutoStore {
     this.setAdjust(id, { straighten: Math.round(Math.min(45, Math.max(-45, degrees)) * 100) / 100 }, force);
 
   /**
-   * Gives every photo of the batch the look (or preset), strength, warmth, tint, contrast, luma contrast, saturation, grain and retouch of [id], including
+   * Gives every photo of the batch the look (or preset), lens preset choice, strength, warmth, tint, contrast, luma contrast, saturation, grain and retouch of [id], including
    * photos still being analysed (they keep it rather than their suggestion); brightness and denoise stay per photo (they follow
    * each photo's exposure and noise). Not while exporting.
    */
@@ -1126,9 +1126,18 @@ export class AutoStore {
     const source = this.photo(id);
     if (!source) return;
     for (const p of this._state.photos) {
-      if (p.id !== id) this.changeDevelop(p.id, (q) => withLookOf(q, source), true);
+      if (p.id !== id) this.changeDevelop(p.id, (q) => this.withLensChoiceOf(withLookOf(q, source), source), true);
     }
     this.update({ message: `${lookName(source)} applied to all photos` });
+  }
+
+  /**
+   * [p] given [source]'s lens preset choice (Apply to all, Copy previous): the same pick, or "by lens" / none, worked out
+   * for [p]'s own lens (a photo still being analysed gets its preset when the analysis is in).
+   */
+  private withLensChoiceOf(p: AutoPhoto, source: AutoPhoto): AutoPhoto {
+    const lensPreset = p.analysis ? chosenLensPreset(this._state.lensPresets, source.lensChoice, matchLensName(p, p.analysis)) : p.lensPreset;
+    return { ...p, lensChoice: source.lensChoice, lensPreset };
   }
 
   /** The analysed photo before [id] in the batch (the one Backspace goes back to), for "Copy previous". */
@@ -1139,7 +1148,7 @@ export class AutoStore {
   }
 
   /**
-   * Gives photo [id] what "Apply to all" copies, from the photo before it ([previousPhoto]): look (or preset), strength,
+   * Gives photo [id] what "Apply to all" copies, from the photo before it ([previousPhoto]): look (or preset), lens preset choice, strength,
    * brightness, warmth, tint, contrast, luma contrast, saturation, grain and retouch, as one undo step (a neighbouring shot of the same scene usually wants its
    * brightness too, unlike Apply to all); denoise and rotation stay. Not while exporting.
    */
@@ -1148,7 +1157,7 @@ export class AutoStore {
     const source = this.previousPhoto(id);
     if (!source) return;
     this.changeDevelop(id, (q) => {
-      const p = withLookOf(q, source);
+      const p = this.withLensChoiceOf(withLookOf(q, source), source);
       return { ...p, adjust: { ...p.adjust, brightness: source.adjust.brightness } };
     }, true);
     this.update({ message: `Copied from ${source.name}` });

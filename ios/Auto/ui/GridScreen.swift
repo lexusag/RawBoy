@@ -273,9 +273,25 @@ struct GridScreen: View {
                     Text("One of your Pro presets develops every photo in place of its look.").font(.caption).foregroundStyle(.secondary)
                         .padding(.top, 2)
                 }
-                if !vm.lensPresets.isEmpty {
-                    sidebarHeading("Lens")
-                    lensPresetsControl
+                sidebarHeading("Lens preset")
+                if vm.lensPresets.isEmpty {
+                    Text("Save a lens preset in Pro's Lens tab to correct every photo taken with that lens, or pick it here for a manual lens.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                } else {
+                    HStack(spacing: 6) {
+                        LensPresetMenu(presets: vm.lensPresets, current: .some(vm.lensChoice),
+                                       choose: { vm.chooseLensPreset($0) }) {
+                            Text(LensPresetChoice.name(.some(vm.lensChoice), presets: vm.lensPresets))
+                        }
+                        .help("The lens preset of every photo, and photos added later; a selection's own is in the toolbar")
+                        Button("Manage…") { lensPresetsFor = [] }
+                            .help("Lens presets kept for Auto: remove one")
+                    }
+                    Text(vm.lensChoice == nil
+                         ? "By lens: each photo gets the preset saved for its lens, on top of its look."
+                         : "For every photo and photos added later, on top of their looks.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 2)
                 }
                 if !vm.photos.isEmpty {
                     FilterSection(vm: vm, heading: { AnyView(sidebarHeading($0)) })
@@ -496,8 +512,17 @@ struct GridScreen: View {
                 Button("All") { selection = Set(vm.photos.map(\.id)) }
                 // A lens preset for these photos: manual lenses record no lens name to match by.
                 if !vm.lensPresets.isEmpty {
+                    #if os(macOS)
+                    LensPresetMenu(presets: vm.lensPresets, current: LensPresetChoice.shared(vm.photos, selection),
+                                   choose: { vm.chooseLensPreset($0, ids: selection) }) {
+                        Label("Lens preset", systemImage: "camera.aperture")
+                    }
+                    .help("Lens preset for the selected photos: \(LensPresetChoice.name(LensPresetChoice.shared(vm.photos, selection), presets: vm.lensPresets))")
+                    .disabled(exporting)
+                    #else
                     Button("Lens preset", systemImage: "camera.aperture") { lensPresetsFor = selection }
                         .disabled(exporting)
+                    #endif
                 }
                 // Each selected photo's own measured denoise in place of its Denoise slider.
                 Button("Auto denoise", systemImage: "aqi.medium") { vm.autoDenoiseAll(selection) }
@@ -1087,3 +1112,49 @@ private struct FilterSection: View {
     }
 }
 #endif
+
+/**
+ * A lens preset choice as a menu (RawBoy Desktop: the sidebar for the batch, the toolbar for a selection, the photo panel for
+ * one photo), as the web's lens preset select: by lens (each photo gets the preset saved for its lens), none, or a named
+ * preset (manual lenses record no lens name, so theirs are picked by hand). [current] is the pick shown checked; nil = the
+ * photos differ.
+ */
+struct LensPresetMenu<MenuLabel: View>: View {
+    let presets: [Preset]
+    let current: String??
+    let choose: (String?) -> Void
+    @ViewBuilder let label: () -> MenuLabel
+
+    var body: some View {
+        Menu {
+            item(nil, "By lens")
+            item(Presets.noLensPreset, "None")
+            if !presets.isEmpty { Divider() }
+            ForEach(presets) { p in
+                item(p.id, (p.lens?.trimmingCharacters(in: .whitespaces) ?? "").isEmpty ? "\(p.name) (manual lens)" : p.name)
+            }
+        } label: { label() }
+    }
+
+    /** Checked in a menu like the system's own choices. */
+    private func item(_ value: String?, _ title: String) -> some View {
+        Toggle(title, isOn: Binding(get: { current == .some(value) }, set: { _ in choose(value) }))
+    }
+}
+
+/** Naming and gathering lens preset choices (nil = by lens, Presets.noLensPreset, or a preset's id) for [LensPresetMenu]. */
+enum LensPresetChoice {
+    /** What [current] is called on the menu's button. */
+    static func name(_ current: String??, presets: [Preset]) -> String {
+        guard let choice = current else { return "Mixed" }
+        guard let id = choice else { return "By lens" }
+        if id == Presets.noLensPreset { return "None" }
+        return presets.first { $0.id == id }?.name ?? "By lens"
+    }
+
+    /** The choice the photos with [ids] share, nil if they differ. */
+    static func shared(_ photos: [AutoPhoto], _ ids: Set<String>) -> String?? {
+        let choices = Set(photos.filter { ids.contains($0.id) }.map(\.lensChoice))
+        return choices.count == 1 ? .some(choices.first!) : nil
+    }
+}
