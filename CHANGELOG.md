@@ -1,3 +1,8 @@
+**RawBoy Desktop: Browse takes the Viewer 0.2.3 (2026-11-17)**
+
+- **Pin folders to Recent.** Right-click a folder in Places, Favourites, Recent or the grid › Pin to Recent. Pinned folders stay at the top of Recent (pin icon) however many other folders you open; Unpin from Recent puts it back. Kept under `desktop.browse.browser.pinnedRecentFolders`.
+- Pin: `from: 0.2.3` (`ios/project.yml`, `ios/viewer-source.sh`).
+
 **RawBoy Desktop: the wheel steps film stocks (2026-11-16)**
 
 - **Wheel over Stock or the tone mapper** (Pro, Film on) moves to the next or previous stock, one per mouse click, as on the web; a trackpad swipe steps at its start and then every 40 points, so it passes a few stocks, not dozens. The panel doesn't scroll under the pointer there, but a wheel that was just scrolling the panel keeps scrolling it. `WheelStepper` (engine, tested in `WheelStepperTests`) is the Swift port of web's `stepWheel`. Not compiled or tried by hand when written (no Mac): CI is the first build.
