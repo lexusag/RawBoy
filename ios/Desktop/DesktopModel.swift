@@ -25,6 +25,8 @@ final class DesktopModel: ObservableObject {
     let autoSidecars = SidecarAuto()
     /** Pro's filmstrip: the open photo's folder. */
     let filmstrip = Filmstrip()
+    /** Pro's batch export: the photos picked in the filmstrip, each with its own edits. */
+    let batchExport = ProBatchExport()
     /**
      * Browse mode: RawBoy Viewer's browser and viewer (`ViewerUI`), owned here. Its choices (sort, sizes, favourites,
      * export options...) are kept under `desktop.browse.` in the preferences, never the standalone Viewer's keys; it
@@ -82,6 +84,7 @@ final class DesktopModel: ObservableObject {
     var quitWork: QuitWork {
         var w = QuitWork()
         w.proExporting = vm.state.exporting
+        w.proBatchExporting = batchExport.running
         w.proAutoRunning = vm.state.autoRunning
         w.unsavedEditsOf = sidecars.unsavedPhoto?.lastPathComponent
         w.autoExporting = auto.export != nil
@@ -113,10 +116,16 @@ final class DesktopModel: ObservableObject {
             return "\(name) › "
         }
         commands.exportDestination = AnyView(ExportDestinationSection(commands: commands, model: self))
-        commands.filmstrip = AnyView(FilmstripView(strip: filmstrip) { [weak self] url in self?.open(url) })
+        commands.exportBatch = { [weak self] in self?.filmstrip.batch.map(\.lastPathComponent) ?? [] }
+        commands.filmstrip = AnyView(FilmstripView(strip: filmstrip, exporter: batchExport) { [weak self] url in self?.open(url) })
         // The window title follows the photo (the title bar is the only place the whole file name always fits).
         vm.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &bag)
         auto.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &bag)
+        // The menus name the batch (Export 5 Photos…) and follow its progress.
+        filmstrip.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &bag)
+        batchExport.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &bag)
+        // Show Last Export in Finder: a one-photo export after a batch is the last one.
+        vm.$lastExport.sink { [weak self] file in if file != nil { self?.batchExport.lastFile = nil } }.store(in: &bag)
         // The Viewer's Settings window writes the size through its store, i.e. UserDefaults: follow it live.
         NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
             .receive(on: DispatchQueue.main)
@@ -186,9 +195,37 @@ final class DesktopModel: ObservableObject {
     /** The last file Auto exported, for "Show in Finder". */
     private(set) var lastAutoExport: URL?
 
+    /** The export sheet's Export: the photos picked in the filmstrip when there are two or more, else the open photo. */
     func export(_ settings: ExportSettings) {
+        let batch = filmstrip.batch
+        if batch.count > 1 {
+            exportBatch(batch, settings)
+            return
+        }
         guard let dir = exportDirectory else { return }
         vm.export(settings, to: dir)
+    }
+
+    /**
+     * Pro's batch export: each picked photo with its own saved edits (the open one with its edits as they stand), into the
+     * chosen folder or beside each photo. The editor stays usable meanwhile.
+     */
+    func exportBatch(_ urls: [URL], _ settings: ExportSettings) {
+        guard !batchExport.running else {
+            vm.message = "A batch export is already running"
+            return
+        }
+        vm.rememberExportSettings(settings)
+        sidecars.flush()
+        var edited: (url: URL, params: DevelopParams)?
+        if let url = vm.currentURL, vm.state.hasImage { edited = (url: url, params: vm.state.params) }
+        batchExport.start(urls, settings: settings, directory: commands.exportFolder, edited: edited,
+                          restore: { [weak self] url, defaults in self?.sidecars.restore(url, defaults: defaults) },
+                          finished: { [weak self] text in
+                              self?.vm.message = text
+                              // The picked photos are done: a plain ⌘E exports the open photo again (a pick made meanwhile stays).
+                              if self?.filmstrip.batch == urls { self?.filmstrip.deselectAll() }
+                          })
     }
 
     // MARK: Open panel
@@ -333,7 +370,7 @@ final class DesktopModel: ObservableObject {
             NSWorkspace.shared.activateFileViewerSelecting([url])
             return
         }
-        if let url = vm.lastExport { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+        if let url = batchExport.lastFile ?? vm.lastExport { NSWorkspace.shared.activateFileViewerSelecting([url]) }
     }
 
     func showSidecarInFinder() {

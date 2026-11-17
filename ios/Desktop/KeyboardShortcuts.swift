@@ -153,6 +153,8 @@ final class KeyboardShortcuts {
             case .z: vm.undo()
             case .o: model.openPanel()
             case .e: commands.send(.export)
+            // Every photo in the filmstrip, for a batch export.
+            case .a: model.filmstrip.selectAll()
             case .slash: commands.send(.help)
             case .three: model.mode = .browse
             default: return event

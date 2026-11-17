@@ -211,6 +211,7 @@ targets:
         excludes:
           - Fixtures  # read from the source tree (shared with RawBoy Viewer's tests), not bundled
           - EngineRealPreviewTests.swift  # Desktop's provider, macOS only
+          - FilmstripSelectionTests.swift  # Desktop's filmstrip pick, macOS only
     dependencies:
       - package: RawBoyViewerPackages
         product: RawBoyBrowseKit
@@ -378,6 +379,8 @@ targets:
           - SkinTests.swift
       # Browse mode's real preview provider, tested here (it needs only the engine and ViewerImaging).
       - path: Desktop/EngineRealPreview.swift
+      # Pro's filmstrip pick for batch exports (pure).
+      - path: Desktop/FilmstripSelection.swift
     dependencies:
       - package: RawBoyViewerPackages
         product: ViewerImaging

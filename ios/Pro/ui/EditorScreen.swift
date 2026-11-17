@@ -120,9 +120,12 @@ struct EditorScreen: View {
         }
         .background(Color(white: 0.07))
         .sheet(isPresented: $showExport) {
-            ExportDialog(initial: vm.exportSettings, sourceName: state.fileName ?? "image",
+            // RawBoy Desktop: the photos picked in the filmstrip, when two or more are.
+            let batch = commands.exportBatch?() ?? []
+            let count = max(1, batch.count)
+            ExportDialog(initial: vm.exportSettings, sourceName: batch.first ?? state.fileName ?? "image",
                          destination: commands.exportDestination, destinationNote: commands.exportNote?(commands.exportFolder),
-                         filmLook: state.params.film != nil && state.params.filmAmount > 0) {
+                         filmLook: count > 1 || (state.params.film != nil && state.params.filmAmount > 0), count: count) {
                 if let handler = commands.exportHandler { handler($0) } else { vm.export($0) }
             }
         }

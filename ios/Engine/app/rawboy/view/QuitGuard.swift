@@ -10,6 +10,8 @@ import Foundation
 public struct QuitWork: Equatable {
     /** Pro is exporting the open photo. */
     public var proExporting = false
+    /** RawBoy Desktop: Pro's batch export (photos picked in the filmstrip) is running. */
+    public var proBatchExporting = false
     /** Pro's Auto button is measuring the photo. */
     public var proAutoRunning = false
     /** Pro's last sidecar write failed: the named photo's latest edits exist only in memory. */
@@ -29,6 +31,7 @@ public struct QuitWork: Equatable {
     public var reasons: [String] {
         var out: [String] = []
         if proExporting { out.append("The photo is still exporting, and the file would be left unfinished.") }
+        if proBatchExporting { out.append("Pro's batch export is still running; photos not yet written would be skipped.") }
         if autoExporting { out.append("Auto's batch export is still running; photos not yet written would be skipped.") }
         else if autoPhotosInProgress > 0 {
             out.append(autoPhotosInProgress == 1 ? "Auto is still working on 1 photo." : "Auto is still working on \(autoPhotosInProgress) photos.")
