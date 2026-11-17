@@ -1,3 +1,7 @@
+**RawBoy Desktop: Browse reopens the last folder (2026-11-17)**
+
+- **Back in the last folder.** A plain launch now opens Browse in the folder you left it in (Browse's Settings › "Open the last folder at launch", on by default). Opening a photo or folder from Finder, `--open`, `--browse` or `--auto` takes precedence. Not compiled when written (no Mac): CI is the first build.
+
 **RawBoy Desktop: Pro copies the previous photo's settings on demand (2026-11-17)**
 
 - **Opening a photo no longer carries the last photo's edits over** (Mac only; the iPhone, Android and web still do). A photo starts from its own sidecar, or as shot. **Copy** in the bar, ⇧C, or Photo › Copy Previous Photo's Settings gives it the settings of the photo you had open before (white balance only if you had changed it; crop, rotation, masks, leaks, effects and healing stay its own), as one undo step. Not compiled when written (no Mac): CI is the first build.
