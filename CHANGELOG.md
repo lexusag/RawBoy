@@ -1,3 +1,7 @@
+**RawBoy Desktop: room under the mode switch in Browse (2026-11-17)**
+
+- **The Pro / Auto / Browse switch no longer crowds Browse's toolbar.** The grid's toolbar (icons, search, sort) started right under the switch; Browse now leaves 14 pt more above it (`ViewerOptions.toolbarTopInset`, set in `DesktopModel.browse`; the standalone Viewer keeps its layout). Needs a RawBoy Viewer tag that has the option and the pin in `ios/project.yml` moved to it. Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.
+
 **RawBoy Desktop: batch export from Pro (2026-11-17)**
 
 - **Export several photos from Pro.** ⌘-click or ⇧-click photos in the filmstrip (⌘A, or Photo › Select All in Filmstrip, for the whole folder; a check marks each), then ⌘E: the sheet becomes "Export N Photos" with the usual options, and each photo is exported in turn with its own saved edits (the sidecar's `rawboy:Develop`, as Pro would open it; the open photo as it is on screen). A bar over the filmstrip shows the photo being written, the progress, the time left and Stop; a failure skips to the next. The editor stays usable while it runs. Quitting mid-batch asks first. Desktop only. `Desktop/ProBatchExport.swift`, `Desktop/FilmstripSelection.swift` (`FilmstripSelectionTests`). Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.
