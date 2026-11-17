@@ -284,8 +284,11 @@ final class DesktopModel: ObservableObject {
         return out
     }
 
-    /** Adds [urls] (files and folders) to Auto's batch and shows Auto; [how] overrides the sidebar's New photos choice for them. */
-    func addToAuto(_ urls: [URL], as how: ImportMode? = nil) {
+    /**
+     * Adds [urls] (files and folders) to Auto's batch and shows Auto; [how] overrides the sidebar's New photos choice for
+     * them. [sidecarOnly]: only what the photos' sidecars hold, nothing added (Browse's As is; AutoViewModel.add).
+     */
+    func addToAuto(_ urls: [URL], as how: ImportMode? = nil, sidecarOnly: Bool = false) {
         let files = Self.photoFiles(in: urls)
         mode = .auto
         if files.isEmpty {
@@ -293,7 +296,7 @@ final class DesktopModel: ObservableObject {
             return
         }
         files.forEach { NSDocumentController.shared.noteNewRecentDocumentURL($0) }
-        auto.add(files, as: how)
+        auto.add(files, as: how, sidecarOnly: sidecarOnly)
     }
 
     /**

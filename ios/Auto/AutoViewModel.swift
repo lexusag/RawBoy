@@ -283,7 +283,19 @@ struct BatchExport: Equatable {
 protocol AutoPersistence: AnyObject, Sendable {
     func restore(_ url: URL) -> SavedAuto?
     @MainActor func changed(_ photo: AutoPhoto)
+    /**
+     * The photo's RawBoy edits kept beside it (RawBoy Desktop: `rawboy:Develop` and the Viewer's turn), read now (off the
+     * main actor) and worked out against the as-shot defaults once the analysis has them; nil if it has none.
+     */
+    func sidecarEdits(_ url: URL) -> SidecarDevelop?
 }
+
+extension AutoPersistence {
+    func sidecarEdits(_ url: URL) -> SidecarDevelop? { nil }
+}
+
+/** RawBoy edits read from a photo's sidecar: given its as-shot defaults (Analysis.defaults), the develop and unknown fields, or nil. */
+typealias SidecarDevelop = @Sendable (DevelopParams) -> (params: DevelopParams, extras: EditsExtras)?
 
 @MainActor
 final class AutoViewModel: ObservableObject {
@@ -471,26 +483,43 @@ final class AutoViewModel: ObservableObject {
     /**
      * Adds imported files; already listed ones are skipped. They join the batch once their dates are read (ImageIO's
      * metadata, off the main actor), so it never reorders under the user's finger.
+     *
+     * [sidecarOnly] (RawBoy Desktop's Browse, Send to Auto › As is): the photos get only what their sidecars hold, nothing
+     * added. A photo's `rawboy:Auto` comes back as it was left; else its RawBoy edits (`rawboy:Develop`, the Viewer's crop
+     * and turn) develop it once analysed; else it stays the file as it is, without the measured denoise, and the batch's
+     * preset and lens preset choice aren't applied either.
      */
-    func add(_ urls: [URL], as how: ImportMode? = nil) {
+    func add(_ urls: [URL], as how: ImportMode? = nil, sidecarOnly: Bool = false) {
         let known = Set(photos.map(\.id))
         let wanted = urls.filter { !known.contains($0.path) }
         if wanted.isEmpty { return }
-        let (importMode, preset, lensChoice) = (how ?? importMode, preset, lensChoice)
+        let importMode: ImportMode = sidecarOnly ? .plain : how ?? self.importMode
+        let (preset, lensChoice): (Preset?, String?) = sidecarOnly ? (nil, Presets.noLensPreset) : (self.preset, self.lensChoice)
         let (mode, plain) = (importMode.lookMode, importMode == .plain)
         Task {
             let read = await Task.detached(priority: .userInitiated) { wanted.map { (CaptureDate.read($0), CaptureDate.camera($0)) } }.value
             let dates = read.map(\.0)
             let now = Set(photos.map(\.id))
             let persistence = persistence
-            let restored = await Task.detached(priority: .userInitiated) { wanted.map { persistence?.restore($0) } }.value
-            let fresh: [AutoPhoto] = zip(zip(wanted, dates), restored).filter { !now.contains($0.0.0.path) }.map { pair, saved in
+            let restored = await Task.detached(priority: .userInitiated) {
+                wanted.map { url in
+                    let saved = persistence?.restore(url)
+                    return (saved, saved == nil && sidecarOnly ? persistence?.sidecarEdits(url) : nil)
+                }
+            }.value
+            let fresh: [AutoPhoto] = zip(zip(wanted, dates), restored).filter { !now.contains($0.0.0.path) }.map { pair, sidecar in
+                let (saved, develop) = sidecar
                 var p = AutoPhoto(url: pair.0, name: Imports.displayName(pair.0), date: pair.1, mode: mode, preset: preset, lensChoice: lensChoice)
                 p.camera = read[wanted.firstIndex(of: pair.0) ?? 0].1
                 // "As is": the file as it is; a raw gets its measured denoise (Auto denoise), a finished file nothing.
+                // From Browse it gets nothing at all.
                 p.plain = plain
-                p.autoDenoise = plain && Self.isRaw(p.name)
+                p.autoDenoise = plain && !sidecarOnly && Self.isRaw(p.name)
                 if let saved { takeSaved(saved, into: &p) }
+                if let develop {
+                    pendingSidecarEdits[pair.0.path] = develop
+                    p.looksApplied = true
+                }
                 if let e = pendingEdits.removeValue(forKey: pair.0.path) {
                     p.edits = e
                     p.adjust = .none
@@ -736,6 +765,8 @@ final class AutoViewModel: ObservableObject {
 
     /** Edits from Pro for photos still joining the batch ([receiveEdits] on a photo that wasn't in it), by path. */
     private var pendingEdits: [String: DevelopParams] = [:]
+    /** Sidecar edits of photos sent from Browse ([add] with sidecarOnly), applied when their analysis is in, by path. */
+    private var pendingSidecarEdits: [String: SidecarDevelop] = [:]
 
     /**
      * "Back to Auto" from Pro: develops [url]'s photo with [params] in place of its look or preset, Auto's controls back at
@@ -873,8 +904,15 @@ final class AutoViewModel: ObservableObject {
                 if photo(next.id) == nil { previews.remove(next.id) } // removed while it was analysed
                 let look = LookSuggester.suggest(analysis.stats, asShotKelvin: analysis.defaults.temperature)
                 let film = LookSuggester.suggestFilm(analysis.stats, asShotKelvin: analysis.defaults.temperature)
+                // Sent from Browse: its sidecar's RawBoy edits, against the as-shot defaults the analysis has just found.
+                let fromSidecar = pendingSidecarEdits.removeValue(forKey: next.id).flatMap { $0(analysis.defaults) }
                 updatePhoto(next.id) {
                     $0.status = .ready
+                    if let fromSidecar, $0.edits == nil {
+                        $0.edits = fromSidecar.params
+                        $0.editsExtras = fromSidecar.extras
+                        $0.adjust = .none
+                    }
                     $0.analysis = analysis
                     $0.suggested = look
                     $0.suggestedFilm = film
