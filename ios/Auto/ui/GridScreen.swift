@@ -117,6 +117,12 @@ struct GridScreen: View {
                     }
                 }
                 ProgressView(value: min(max((Double(e.done) + Double(e.current)) / Double(e.total), 0), 1))
+                // "1:05 elapsed · about 2:30 left", ticking each second.
+                TimelineView(.periodic(from: e.startedAt, by: 1)) { context in
+                    Text(BatchTime.label(elapsed: context.date.timeIntervalSince(e.startedAt), done: e.done, current: e.current,
+                                         total: e.total, stopping: e.stopping))
+                        .font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                }
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 6)
@@ -128,7 +134,8 @@ struct GridScreen: View {
         content
         .sheet(isPresented: $showExport) {
             let ids = exportIds
-            ExportSheet(vm: vm, count: ids.map { ids in vm.photos.filter { $0.analysis != nil && ids.contains($0.id) }.count } ?? exportable) {
+            ExportSheet(vm: vm, count: ids.map { ids in vm.photos.filter { $0.analysis != nil && ids.contains($0.id) }.count } ?? exportable,
+                        sample: (ids == nil ? vm.shown : vm.photos).first { $0.analysis != nil && (ids?.contains($0.id) ?? true) }) {
                 if let ids {
                     selection = []  // the grid's badges then show each photo's export
                     vm.exportAll(only: ids)
@@ -448,6 +455,7 @@ struct GridScreen: View {
         case .ready: break
         }
         if photo.analysis != nil { parts.append("look \(photo.lookName)") }
+        if let iso = photo.isoLabel { parts.append(iso) }
         if selected { parts.append("selected") }
         return parts.joined(separator: ", ")
     }
@@ -597,12 +605,19 @@ private struct PhotoCell: View {
             .overlay(RoundedRectangle(cornerRadius: 4)
                 .stroke(selected ? Color.accentColor : focused ? Color.white.opacity(0.8) : .clear, lineWidth: 2))
             VStack(alignment: .leading, spacing: 1) {
-                Text(photo.name).font(.caption).foregroundStyle(.primary).lineLimit(1).truncationMode(.middle)
+                HStack(spacing: 6) {
+                    Text(photo.name).font(.caption).foregroundStyle(.primary).lineLimit(1).truncationMode(.middle)
+                    Spacer(minLength: 0)
+                    // The ISO beside the name, to judge noise without opening the photo (as the web's cells).
+                    if let iso = photo.isoLabel {
+                        Text(iso).font(.caption2).monospacedDigit().foregroundStyle(.secondary).lineLimit(1).fixedSize()
+                    }
+                }
                 Text(photo.analysis != nil ? photo.lookName : " ").font(.caption).foregroundStyle(.secondary).lineLimit(1)
             }
             .padding(.horizontal, 2)
         }
-        .help(photo.analysis != nil ? "\(photo.name) · \(photo.lookName)" : photo.name)
+        .help(photo.analysis != nil ? "\(photo.name) · \(photo.lookName)" + (photo.isoLabel.map { " · \($0)" } ?? "") : photo.name)
         .contentShape(Rectangle())
     }
     #endif
@@ -641,7 +656,13 @@ private struct PhotoCell: View {
             }
             // Name and look over the bottom of the photo, on a fade so they read on bright skies.
             VStack(alignment: .leading, spacing: 1) {
-                Text(photo.name).font(Self.nameFont).foregroundStyle(.white.opacity(0.85)).lineLimit(1)
+                HStack(spacing: 4) {
+                    Text(photo.name).font(Self.nameFont).foregroundStyle(.white.opacity(0.85)).lineLimit(1)
+                    Spacer(minLength: 0)
+                    if let iso = photo.isoLabel {
+                        Text(iso).font(Self.nameFont).monospacedDigit().foregroundStyle(.white.opacity(0.85)).lineLimit(1).fixedSize()
+                    }
+                }
                 if photo.analysis != nil {
                     Text(photo.lookName).font(Self.nameFont.weight(.semibold)).foregroundStyle(Color.accentColor).lineLimit(1)
                 }
@@ -713,6 +734,8 @@ private struct Badge: View {
 struct ExportSheet: View {
     @ObservedObject var vm: AutoViewModel
     let count: Int
+    /** The first photo to be exported, for the file name's preview. */
+    var sample: AutoPhoto? = nil
     let onExport: () -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -763,6 +786,9 @@ struct ExportSheet: View {
                     }
                 }
                 ExportFrameSections(settings: settingsBinding)
+                #if os(macOS)
+                FileNameSection(vm: vm, sample: sample, count: count)
+                #endif
                 Section {
                     if let destination = vm.destinationView {
                         destination
@@ -786,6 +812,66 @@ struct ExportSheet: View {
         .presentationDetents([.medium, .large])
     }
 }
+
+#if os(macOS)
+/**
+ * The export sheet's file name: the name template (see NameTemplate), its keywords as buttons that add them, and a live
+ * preview of the first and last names (web's FileNameRow). Remembered for the next exports.
+ */
+private struct FileNameSection: View {
+    @ObservedObject var vm: AutoViewModel
+    let sample: AutoPhoto?
+    let count: Int
+    @State private var draft = ""
+
+    var body: some View {
+        let shown = draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? NameTemplate.defaultTemplate : draft
+        let ext = vm.exportSettings.format.fileExtension
+        Section {
+            TextField("File name", text: Binding(get: { draft }, set: { change($0) }), prompt: Text(NameTemplate.defaultTemplate))
+                .autocorrectionDisabled()
+                .font(.body.monospaced())
+            if let sample {
+                let first = "\(vm.nameFor(sample, index: 1, template: shown)).\(ext)"
+                let last = count > 1 ? " … \(vm.nameFor(sample, index: count, template: shown)).\(ext)" : ""
+                Text(first + last).font(.caption).foregroundStyle(.secondary).lineLimit(2).textSelection(.enabled)
+            }
+            // The keywords: a click adds one at the end.
+            FlowKeywords(keywords: NameTemplate.keywords) { change(draft + $0) } reset: { change(NameTemplate.defaultTemplate) }
+            Text("{date} and {time} are the shoot date, else the file's; # is the photo's number in this export. A name already taken gets -001, -002.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        } header: {
+            Text("File name")
+        }
+        .onAppear { draft = vm.nameTemplate }
+    }
+
+    private func change(_ value: String) {
+        draft = value
+        vm.setNameTemplate(value)
+    }
+}
+
+/** The name template's keywords as small buttons that wrap, then Reset. */
+private struct FlowKeywords: View {
+    let keywords: [NameTemplate.Keyword]
+    let add: (String) -> Void
+    let reset: () -> Void
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 74), spacing: 4, alignment: .leading)], alignment: .leading, spacing: 4) {
+            ForEach(keywords) { k in
+                Button(k.token) { add(k.token) }
+                    .buttonStyle(.borderless)
+                    .font(.caption.monospaced())
+                    .help(k.text)
+            }
+            Button("Reset") { reset() }.buttonStyle(.borderless).font(.caption)
+                .help("Back to \(NameTemplate.defaultTemplate)")
+        }
+    }
+}
+#endif
 
 /**
  * The lens presets Auto keeps (sent from RawBoy or opened as files), to pick one for the photos [ids] (nil = the whole

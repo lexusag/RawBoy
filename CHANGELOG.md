@@ -1,3 +1,13 @@
+**RawBoy Desktop: Auto catches up with the web (2026-11-17)**
+
+- **Export file names.** The export sheet has the web's **File name** template, remembered: `{name}`, `{camera}`, `{lens}`, `{iso}`, `{look}`, `{date}`, `{time}`, `{year}` `{yy}` `{month}` `{day}` `{hour}` `{minute}` `{second}` and `#` counters (`##` = 01), with a preview of the first and last names and the keywords as buttons. Default `{name}-auto`, as before. A name already taken in the folder gets `-001`, `-002`: Auto no longer replaces an earlier export. `NameTemplate.swift` is a port of `NameTemplate.ts`, with its tests (`NameTemplateTests`).
+- **Retouch** in the photo view's panel (its own section): the web's natural portrait retouch (40 is about Reblum Natural 40), on top of the look, preset or Pro edits. It is `Adjustments.retouch` (sidecar `retouch`, which Desktop used to keep without a slider), copied by Apply to All and Copy previous, cleared by Reset all photos; exports with it go through the session, as the photo view makes the map.
+- **Keys as on the web.** In a photo: Space next and ⌫ previous (as → and ←), ⌦ (fn-Delete) takes the photo out of the batch and opens the next, C opens Crop & rotate (C, Return or Esc put it down). Mode menu: Crop & Rotate Photo, Remove Photo from Batch.
+- **ISO** beside each photo's name in the grid and in the photo view's bottom-left corner (iPhone too).
+- **Time left on Export all**: "1:05 elapsed · about 2:30 left" under the progress bar, the web's estimate (`BatchTime.swift`; iPhone too).
+- **Quicker paging.** Once a photo is open, the next one is decoded ahead at full resolution (`PhotoSession.prepare` / `adopt`) and the cached previews of the next three and previous two are read ahead with their LUT or film stock, as the web does. Only where Auto analyses in more than one lane (Macs); iPhones decode the photo shown, as before.
+- Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.
+
 **RawBoy Desktop: Packer sorts and folds folders (2026-11-17)**
 
 - **Sort: Shoot date / File name** over the Packer's list orders each folder's files (remembered, `packer.sort`); a run packs them in that order. Folders stay in the order they were added, as on the web.

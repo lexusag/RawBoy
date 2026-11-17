@@ -49,11 +49,10 @@ final class LumaContrastTests: XCTestCase {
         let text = AutoSidecar.encode(s)
         let back = try XCTUnwrap(AutoSidecar.decode(text))
         XCTAssertEqual(back.adjust.lumaContrast, -12)
-        XCTAssertNil(back.webAdjust["lumaContrast"])
         // What the web wrote before this slider existed here reads the same way.
         let web = #"{"format":"rawboy-auto","adjust":{"lumaContrast":30,"retouch":10}}"#
         let d = try XCTUnwrap(AutoSidecar.decode(web))
         XCTAssertEqual(d.adjust.lumaContrast, 30)
-        XCTAssertEqual(d.webAdjust, ["retouch": 10])
+        XCTAssertEqual(d.adjust.retouch, 10)
     }
 }

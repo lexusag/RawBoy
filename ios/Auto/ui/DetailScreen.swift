@@ -97,7 +97,7 @@ struct DetailScreen: View {
                 }
                 .toolbar { toolbar(photo) }
                 .sheet(isPresented: $showExport) {
-                    ExportSheet(vm: vm, count: 1) { vm.exportSelected() }
+                    ExportSheet(vm: vm, count: 1, sample: vm.photo(id)) { vm.exportSelected() }
                 }
                 .onChange(of: vm.exportRequest) { _, _ in if vm.export == nil { showExport = true } }
                 .inlineTitle()
@@ -338,9 +338,17 @@ extension DetailScreen {
         }
         .background(Color(white: 0.07))
         .sheet(isPresented: $showExport) {
-            ExportSheet(vm: vm, count: 1) { vm.exportSelected() }
+            ExportSheet(vm: vm, count: 1, sample: vm.photo(id)) { vm.exportSelected() }
         }
         .onChange(of: vm.exportRequest) { _, _ in if vm.export == nil { showExport = true } }
+        // C (KeyboardShortcuts): Crop & rotate, as the bar's Crop button.
+        .onChange(of: vm.cropRequest) { _, _ in
+            if vm.cropping {
+                vm.cropping = false
+            } else if vm.export == nil, vm.sessionReady == id, let p = vm.photo(id) {
+                startCrop(p)
+            }
+        }
         .onChange(of: id) { _, _ in
             pickingWhite = false
             cropPortrait = nil
@@ -366,12 +374,12 @@ extension DetailScreen {
             }
             .frame(minWidth: 60, maxWidth: 260, alignment: .leading)
             .help(photo.name)
-            BarTool("chevron.left", "Previous", "Previous photo (←)") { vm.page(-1) }
+            BarTool("chevron.left", "Previous", "Previous photo (← or ⌫)") { vm.page(-1) }
                 .disabled(!idle || vm.cropping || (at?.index ?? 0) == 0)
-            BarTool("chevron.right", "Next", "Next photo (→)") { vm.page(1) }
+            BarTool("chevron.right", "Next", "Next photo (→ or Space)") { vm.page(1) }
                 .disabled(!idle || vm.cropping || at.map { $0.index + 1 >= $0.count } ?? true)
             Spacer(minLength: 8)
-            BarTool("crop.rotate", "Crop", "Crop & rotate", primary: vm.cropping) {
+            BarTool("crop.rotate", "Crop", "Crop & rotate (C)", primary: vm.cropping) {
                 if vm.cropping { vm.cropping = false } else { startCrop(photo) }
             }
             .disabled(!idle || vm.sessionReady != id)
@@ -388,7 +396,7 @@ extension DetailScreen {
                 vm.applyLookToAll(id)
             }
             .disabled(!idle || vm.photos.count < 2)
-            BarTool("trash", "Remove", "Remove this photo from the batch (the file stays)") { vm.removeOpened(id) }
+            BarTool("trash", "Remove", "Remove this photo from the batch (the file stays) (⌦)") { vm.removeOpened(id) }
                 .disabled(!idle)
             BarTool("arrow.uturn.backward", "Undo", "Undo (⌘Z)") { vm.undo(id) }.disabled(!idle || !vm.canUndo(id))
             BarTool("arrow.uturn.forward", "Redo", "Redo (⇧⌘Z)") { vm.redo(id) }.disabled(!idle || !vm.canRedo(id))
@@ -482,6 +490,17 @@ extension DetailScreen {
                 macSection("Detail", edited: a.grain != 0 || a.denoise != 0, reset: { $0.grain = 0; $0.denoise = 0 }) {
                     ValueSlider("Grain", value: a.grain, range: -50...50, defaultValue: 0) { v in vm.setAdjust(id) { $0.grain = v } }
                     ValueSlider("Denoise", value: a.denoise, range: -100...100, defaultValue: 0) { v in vm.setAdjust(id) { $0.denoise = v } }
+                }
+                // A natural portrait retouch (as the web's Retouch: 40 is about Reblum Natural 40), on top of the look or preset.
+                macSection("Retouch", edited: a.retouch != 0, reset: { $0.retouch = 0 }) {
+                    ValueSlider("Retouch", value: a.retouch, range: 0...100, defaultValue: 0) { v in vm.setAdjust(id) { $0.retouch = v } }
+                    if a.retouch > 0, vm.sessionReady == id {
+                        if session.retouchWorking {
+                            Text("Retouching…").font(.caption).foregroundStyle(.secondary)
+                        } else if session.retouchMap == nil, session.skin.mask != nil {
+                            Text("No face found to size the retouch by").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
                 }
             }
             .disabled(disabled)
@@ -591,6 +610,13 @@ private struct PhotoPage: View {
                         CropOverlay(frameWidth: shader.lens.outputWidth, frameHeight: shader.lens.outputHeight,
                                     crop: photo.adjust.crop ?? CropMath.full, ratio: cropRatio, framePx: framePx,
                                     onCropChange: { vm.setCrop(photo.id, $0) })
+                    }
+                    // The ISO in the bottom-left corner, to judge noise without zooming in (as the web's photo view).
+                    if let iso = photo.isoLabel {
+                        OverlayLabel(iso)
+                            .monospacedDigit()
+                            .allowsHitTesting(false)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                     }
                     if live, showAuto || session.zoomCenter != nil {
                         OverlayLabel(!showAuto ? ZoomMath.label(session.zoomScale) : photo.preset != nil ? "Without preset" : "Without look")

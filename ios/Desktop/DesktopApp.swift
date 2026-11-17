@@ -184,6 +184,9 @@ struct DesktopCommands: Commands {
             Divider()
             Button("Previous Photo") { auto.page(-1) }.keyboardShortcut(.leftArrow, modifiers: []).disabled(!autoReady || auto.selected == nil)
             Button("Next Photo") { auto.page(1) }.keyboardShortcut(.rightArrow, modifiers: []).disabled(!autoReady || auto.selected == nil)
+            Button("Crop & Rotate Photo") { auto.requestCrop() }.disabled(!autoReady || auto.selected == nil || auto.sessionReady != auto.selected)
+            Button("Remove Photo from Batch") { if let id = auto.selected { auto.removeOpened(id) } }
+                .keyboardShortcut(.deleteForward, modifiers: []).disabled(!autoReady || auto.selected == nil)
             Button("Edit in Pro") { model.editInPro() }.keyboardShortcut(.return, modifiers: .command)
                 .disabled(!autoReady || model.autoPhotoForPro == nil)
             Button("Send to Auto") { model.sendToAuto() }.keyboardShortcut("a", modifiers: [.command, .shift])

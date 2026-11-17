@@ -44,8 +44,9 @@ final class KeyboardShortcuts {
     }
 
     /**
-     * Auto: the arrows move through the grid (and between photos in the photo view), Return opens, Esc goes back, ⇧C copies the
-     * previous photo's look; ⌘E, ⌘O, ⌘Z and the mode keys are the menu's. Nothing here fires while text is being typed or a sheet is open.
+     * Auto: the arrows move through the grid (and between photos in the photo view, as Space and ⌫ do there), Return opens,
+     * Esc goes back, ⌦ removes the photo from the batch, C opens Crop & rotate, ⇧C copies the previous photo's look; ⌘E, ⌘O,
+     * ⌘Z and the mode keys are the menu's. Nothing here fires while text is being typed or a sheet is open.
      */
     private func handleAuto(_ event: NSEvent, _ key: Key) -> NSEvent? {
         guard event.type == .keyDown, !typing else { return event }
@@ -84,10 +85,24 @@ final class KeyboardShortcuts {
             auto.selection = []
             return nil
         }
-        if auto.selected != nil {
+        if let id = auto.selected {
+            // Crop & rotate open: Return, Esc or C put it down (the crop stays as drawn); the batch keys wait until then.
+            // A held C doesn't flick the tool open and shut.
+            if key == .c, event.isARepeat { return nil }
+            if auto.cropping {
+                switch key {
+                case .return, .keypadEnter, .escape, .c: auto.cropping = false
+                default: return event
+                }
+                return nil
+            }
             switch key {
-            case .left: auto.page(-1)
-            case .right: auto.page(1)
+            // Space / ⌫ as on the web (and in darktable), also while a slider has focus.
+            case .left, .delete: auto.page(-1)
+            case .right, .space: auto.page(1)
+            // ⌦ (fn-Delete, the web's Delete): out of the batch, on to the next photo.
+            case .forwardDelete: auto.removeOpened(id)
+            case .c: auto.requestCrop()
             case .escape: auto.goBack()
             default: return event
             }
