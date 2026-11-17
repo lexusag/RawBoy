@@ -129,7 +129,6 @@ public enum AutoSidecar {
         adjust.rotation = Int(num(a["rotation"], 0, 3, 0).rounded())
         adjust.retouch = num(a["retouch"], 0, 100, 0)
         adjust.crop = crop(a["crop"])
-            .filter { $0.value != 0 }
         var lensPreset: Preset?
         if let l = o["lens"], !(l is String) { lensPreset = preset(from: l).flatMap { $0.isLensPreset ? $0 : nil } }
         let lensString = o["lens"] as? String
