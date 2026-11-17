@@ -17,6 +17,8 @@ public struct PhotoWithControls<Photo: View, Controls: View>: View {
     let controls: (_ beside: Bool) -> Controls
     /** The photo alone (RawBoy Desktop's focus mode); it keeps its place, so its Metal view isn't made again. */
     let hidden: Bool
+    /** RawBoy Desktop's interface size: the panel is drawn that much larger and is that much wider. */
+    @Environment(\.interfaceScale) private var interfaceScale
 
     public init(hidden: Bool = false, @ViewBuilder photo: () -> Photo,
                 @ViewBuilder controls: @escaping (_ beside: Bool) -> Controls) {
@@ -43,7 +45,8 @@ public struct PhotoWithControls<Photo: View, Controls: View>: View {
                     // box and the tone-mapper row stretch or shrink by that as the content grows past the height or back.
                     .scrollIndicators(.hidden, axes: .vertical)
                     #endif
-                    .frame(width: beside ? min(sidePanelWidth, geo.size.width * 0.45) : nil)
+                    .interfaceScaled()
+                    .frame(width: beside ? min(sidePanelWidth * interfaceScale, geo.size.width * 0.45) : nil)
                     .clipped()  // whatever a row might still ask for, it can't run off the panel's edge
                     .frame(maxHeight: beside ? .infinity : nil, alignment: .top)
                 }

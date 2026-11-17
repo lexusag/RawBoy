@@ -17,6 +17,8 @@ struct RawBoyDesktopApp: App {
     var body: some Scene {
         Window("RawBoy Desktop", id: "main") {
             DesktopRoot(model: model)
+                // The bundled Viewer's Settings › Interface size sizes every mode, not only Browse (which scales itself).
+                .environment(\.interfaceScale, model.interfaceScale)
                 .frame(minWidth: 720, minHeight: 520)
                 .preferredColorScheme(.dark)
                 .tint(DesktopTheme.amber)
@@ -26,6 +28,7 @@ struct RawBoyDesktopApp: App {
         // RawBoy Packer: raws to smaller DNGs, in a window of its own (⇧⌘P).
         Window("RawBoy Packer", id: "packer") {
             PackerView(model: PackerModel.shared).tint(DesktopTheme.amber)
+                .environment(\.interfaceScale, model.interfaceScale)
         }
         .defaultSize(width: 980, height: 700)
         // ⌘, and the app menu's Settings…: the bundled Viewer's settings, which are Browse's (kept under `desktop.browse.`).

@@ -107,13 +107,14 @@ struct EditorScreen: View {
                              onExport: { showExport = true }, onSendToAuto: commands.sendToAuto,
                              onCopyPrevious: copyPreviousAction, canCopyPrevious: vm.canCopyPrevious,
                              looksArmed: looksArmed, onLooks: toggleLooks, helpShown: $showHelp)
+                    .interfaceScaled()  // RawBoy Desktop's interface size (1 on the phones)
             }
             // Controls under the photo in portrait, beside it in landscape.
             PhotoWithControls(hidden: photoOnly) {
                 VStack(spacing: 0) {
                     previewArea
                     // RawBoy Desktop's filmstrip: the other photos in the folder, hidden with the panels.
-                    if !photoOnly, let filmstrip = commands.filmstrip { filmstrip }
+                    if !photoOnly, let filmstrip = commands.filmstrip { filmstrip.interfaceScaled() }
                 }
             } controls: { beside in panel(beside: beside) }
         }

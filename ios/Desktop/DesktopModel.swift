@@ -43,6 +43,19 @@ final class DesktopModel: ObservableObject {
         return AppModel(options: options)
     }()
 
+    /**
+     * The bundled Viewer's Settings › Interface size (its `SettingsKeys.uiScale`, under `desktop.browse.`): Browse scales
+     * itself, and Pro, Auto and the Packer follow it through `EnvironmentValues.interfaceScale`.
+     */
+    static let interfaceScaleKey = "app.uiScale"
+    /** The interface size now (1 = as designed), updated as soon as the setting changes. */
+    @Published private(set) var interfaceScale = DesktopModel.storedInterfaceScale
+
+    private static var storedInterfaceScale: CGFloat {
+        let s = ViewerSettings.store.double(forKey: interfaceScaleKey)
+        return s >= 0.5 && s <= 2 ? s : 1  // as the Viewer reads it: unset (0) or out of range = as designed
+    }
+
     /** The Browse setting key (under `desktop.browse.`): the viewer opens as the screen-filling window. */
     static let immersiveKey = "viewer.immersive"
 
@@ -104,6 +117,14 @@ final class DesktopModel: ObservableObject {
         // The window title follows the photo (the title bar is the only place the whole file name always fits).
         vm.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &bag)
         auto.objectWillChange.sink { [weak self] _ in self?.objectWillChange.send() }.store(in: &bag)
+        // The Viewer's Settings window writes the size through its store, i.e. UserDefaults: follow it live.
+        NotificationCenter.default.publisher(for: UserDefaults.didChangeNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                let s = Self.storedInterfaceScale
+                if self?.interfaceScale != s { self?.interfaceScale = s }
+            }
+            .store(in: &bag)
         NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)
             .sink { [weak self] _ in
                 self?.sidecars.flush()

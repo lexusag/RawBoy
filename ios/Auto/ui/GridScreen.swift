@@ -62,6 +62,8 @@ struct GridScreen: View {
                 // the sidebar sat in the middle of it.
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
+            // The Viewer's Settings › Interface size, as Browse's grid and sidebar (the toolbar is the window's own).
+            .interfaceScaled()
             .navigationTitle(selecting ? "\(selection.count) selected" : "RawBoy Auto")
             .toolbar { toolbar }
             #else
