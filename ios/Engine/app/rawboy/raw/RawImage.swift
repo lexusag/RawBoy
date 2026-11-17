@@ -87,7 +87,9 @@ public final class RawImage: @unchecked Sendable {
         let w = max(1, Int((Double(width) * scale).rounded()))
         let h = max(1, Int((Double(height) * scale).rounded()))
         var pixels = [UInt16](repeating: 0, count: w * h * 3)
-        withHandle { rb_downsample($0, Int32(w), Int32(h), &pixels, boostHighlights) }
+        // A closed image (the session moved on to another photo while a background task ran) gives a blank copy:
+        // the caller checks it still owns the image before using the result.
+        _ = withOpenHandle { rb_downsample($0, Int32(w), Int32(h), &pixels, boostHighlights) }
         return PreviewImage(width: w, height: h, pixels: pixels, fullWidth: width, fullHeight: height)
     }
 
@@ -109,25 +111,25 @@ public final class RawImage: @unchecked Sendable {
     /** Measures the photo's noise on the full-resolution pixels (~30 ms); NoiseLevel.none for JPEG/HEIC. */
     public func measureNoise() -> NoiseLevel {
         var v: [Float] = [0, 0]
-        withHandle { rb_noise_level($0, &v) }
+        _ = withOpenHandle { rb_noise_level($0, &v) }
         return NoiseLevel(luma: v[0], chroma: v[1])
     }
 
     /** Blemish candidates on [mask]: (x, y, radius, score) per spot, most obvious first. */
     public func detectBlemishes(_ mask: SkinMask) -> [Float] {
-        withHandle { handle in
+        withOpenHandle { handle in
             var count = 0
             guard let spots = rb_detect_blemishes(
                 handle, mask.data, Int32(mask.width), Int32(mask.height), mask.faceDiameterPx, &count)
             else { return [] }
             defer { rb_free_floats(spots) }
             return Array(UnsafeBufferPointer(start: spots, count: count))
-        }
+        } ?? []
     }
 
     /** Replaces any earlier healing with healing of exactly [spots] (detected blemishes) and [strokes] (the healing brush's disks, see `HealSpots.strokes`). Previews must be rebuilt afterwards. */
     public func healBlemishes(_ spots: [Float], strokes: [Float] = []) {
-        withHandle { rb_heal($0, spots, spots.count, strokes, strokes.count) }
+        _ = withOpenHandle { rb_heal($0, spots, spots.count, strokes, strokes.count) }
     }
 
     public func close() {
@@ -137,6 +139,14 @@ public final class RawImage: @unchecked Sendable {
             rb_close(handle)
             self.handle = nil
         }
+    }
+
+    /** Like `withHandle`, but nil instead of a trap when the image was closed meanwhile (background work racing a photo change). */
+    private func withOpenHandle<T>(_ body: (OpaquePointer) -> T) -> T? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let handle else { return nil }
+        return body(handle)
     }
 
     private func withHandle<T>(_ body: (OpaquePointer) -> T) -> T {
