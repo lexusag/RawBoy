@@ -5,7 +5,8 @@ import Foundation
  * exposure; [warmth] -100..100 warms or cools; [tint] -50..50 (+ = magenta), [contrast] -50..50, [lumaContrast] -50..50 (contrast on luminance only, colour saturation holds), [saturation]
  * -100..100 and [grain] -50..50 are added to the slider values the auto develop and the look arrive at, except negative
  * [saturation], which moves the saturation they arrive at towards -100 (-100 = black and white). [denoise] -100..100
- * shifts the auto luma and colour denoise, colour first (see LookApplier.denoise). [rotation] is clockwise quarter turns (0..3) on top of the photo's own orientation. [straighten] (degrees, -45..45)
+ * shifts the auto luma and colour denoise, colour first (see LookApplier.denoise). [retouch] 0..100 adds Portrait retouch
+ * (a natural skin retouch, see PortraitRetouch) on top of what the look or preset sets. [rotation] is clockwise quarter turns (0..3) on top of the photo's own orientation. [straighten] (degrees, -45..45)
  * adds to the develop's straighten angle and [crop] (fractions of the rotated + straightened frame, nil = the whole
  * frame) replaces its crop: Auto's Crop & rotate.
  */
@@ -18,12 +19,13 @@ public struct Adjustments: Equatable, Sendable {
     public var saturation: Float = 0
     public var grain: Float = 0
     public var denoise: Float = 0
+    public var retouch: Float = 0
     public var rotation: Int = 0
     public var straighten: Float = 0
     public var crop: CropRect?
 
     public init(brightness: Float = 0, warmth: Float = 0, tint: Float = 0, contrast: Float = 0, lumaContrast: Float = 0, saturation: Float = 0,
-                grain: Float = 0, denoise: Float = 0, rotation: Int = 0, straighten: Float = 0, crop: CropRect? = nil) {
+                grain: Float = 0, denoise: Float = 0, retouch: Float = 0, rotation: Int = 0, straighten: Float = 0, crop: CropRect? = nil) {
         self.brightness = brightness
         self.warmth = warmth
         self.tint = tint
@@ -32,6 +34,7 @@ public struct Adjustments: Equatable, Sendable {
         self.saturation = saturation
         self.grain = grain
         self.denoise = denoise
+        self.retouch = retouch
         self.rotation = rotation
         self.straighten = straighten
         self.crop = crop
@@ -93,6 +96,7 @@ public enum LookApplier {
         d.vignetteAmount = add(base.vignetteAmount, look.vignette)
         d.temperature = (base.temperature + look.warmth * k).clamped(Warmth.minKelvin, Warmth.maxKelvin)
         d.skinRetouch = hasFace ? add(base.skinRetouch, look.portraitRetouch, 0) : base.skinRetouch
+        d.portraitRetouch = (base.portraitRetouch + adjust.retouch).clamped(0, 100)
         d.lut = k > 0 ? look.lutId : nil
         d.lutAmount = look.lutAmount * k
         // A film look renders the stock in place of AgX; Strength blends it with the AgX render.
@@ -130,6 +134,7 @@ public enum LookApplier {
         d.lumaContrast = (p.lumaContrast + adjust.lumaContrast).clamped(-100, 100)
         d.saturation = saturation(p.saturation, adjust.saturation)
         (d.denoise, d.colorDenoise) = denoise(p, adjust: adjust.denoise)
+        d.portraitRetouch = (p.portraitRetouch + adjust.retouch).clamped(0, 100)
         // With a film stock its grain is the one rendered, so Grain scales that one, as in Film mode.
         if p.film != nil {
             d.filmGrain = (p.filmGrain * (1 + adjust.grain / 50)).clamped(0, 200)
@@ -153,6 +158,7 @@ public enum LookApplier {
         d.lumaContrast = (edits.lumaContrast + adjust.lumaContrast).clamped(-100, 100)
         d.saturation = saturation(edits.saturation, adjust.saturation)
         (d.denoise, d.colorDenoise) = denoise(edits, adjust: adjust.denoise)
+        d.portraitRetouch = (edits.portraitRetouch + adjust.retouch).clamped(0, 100)
         if edits.film != nil {
             d.filmGrain = (edits.filmGrain * (1 + adjust.grain / 50)).clamped(0, 200)
         } else {

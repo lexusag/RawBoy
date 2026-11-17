@@ -88,7 +88,7 @@ final class DesktopModel: ObservableObject {
         // Each photo's analysis stays on disk (Caches), so a folder opened again isn't decoded again; RAWBOY_NO_ANALYSIS_CACHE=1 turns it off.
         if ProcessInfo.processInfo.environment["RAWBOY_NO_ANALYSIS_CACHE"] == nil { auto.analysisCache = AnalysisCache(dir: AnalysisCache.defaultDir) }
         autoSidecars.onError = { [weak auto] message in Task { @MainActor in auto?.message = message } }
-        auto.saveExported = { [weak self] file, source in try self?.saveAutoExport(file, source: source) }
+        auto.saveExported = { [weak self] file, source in try self?.saveAutoExport(file, source: source) ?? file.lastPathComponent }
         auto.destinationView = AnyView(ExportDestinationSection(commands: commands, model: self))
         auto.editInPro = { [weak self] photo in self?.editInPro(photo) }
         commands.sendToAuto = { [weak self] in self?.sendToAuto() }
@@ -146,13 +146,20 @@ final class DesktopModel: ObservableObject {
     }
 
     /** Auto's exported [file] goes to the chosen folder, else the photo's own; an existing file of that name is replaced. */
-    private func saveAutoExport(_ file: URL, source: URL) throws {
+    /**
+     * Moves an Auto export (named by Auto's name template) into the export folder, or beside its photo. A name already
+     * taken there gets -001, -002... (NameTemplate.freeName, as the web's folder export): an export never overwrites.
+     */
+    private func saveAutoExport(_ file: URL, source: URL) throws -> String {
         let dir = commands.exportFolder ?? source.deletingLastPathComponent()
-        let target = dir.appendingPathComponent(file.lastPathComponent)
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        if FileManager.default.fileExists(atPath: target.path) { try FileManager.default.removeItem(at: target) }
+        guard let name = NameTemplate.freeName(file.deletingPathExtension().lastPathComponent, file.pathExtension, in: dir) else {
+            throw CocoaError(.fileWriteFileExists, userInfo: [NSFilePathErrorKey: dir.appendingPathComponent(file.lastPathComponent).path])
+        }
+        let target = dir.appendingPathComponent(name)
         try FileManager.default.moveItem(at: file, to: target)
         lastAutoExport = target
+        return name
     }
 
     /** The last file Auto exported, for "Show in Finder". */

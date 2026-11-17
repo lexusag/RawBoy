@@ -147,6 +147,18 @@ public final class PhotoSession: ObservableObject {
      */
     public func open(_ url: URL, initialParams: (DevelopParams) -> DevelopParams) async throws -> Opened {
         let loaded = try await Task.detached(priority: .userInitiated) { try Self.load(url) }.value
+        return adopt(loaded, initialParams: initialParams)
+    }
+
+    /**
+     * Decodes [url] with its previews without showing it (web's `prepare`): Auto decodes the next photo ahead this way.
+     * Blocking: call off the main thread. Hand the result to [adopt], or close its [Prepared.image] if it isn't needed;
+     * until then it holds a second full-resolution image.
+     */
+    public nonisolated static func prepare(_ url: URL) throws -> Prepared { try load(url) }
+
+    /** Swaps in a photo made by [prepare] (what [open] does after decoding). */
+    public func adopt(_ loaded: Prepared, initialParams: (DevelopParams) -> DevelopParams) -> Opened {
         exitZoom()
         image?.close()
         image = loaded.image
@@ -706,18 +718,19 @@ public final class PhotoSession: ObservableObject {
                      tail: BloomTail.scatter(image.createPreview(maxDimension: bloomTailMaxDimension, boostHighlights: true)))
     }
 
-    private struct Loaded: @unchecked Sendable {
-        let image: RawImage
+    /** A decoded photo with its previews, not yet shown ([prepare]). */
+    public struct Prepared: @unchecked Sendable {
+        public let image: RawImage
         let preview: PreviewImage
         let base: PreviewImage
         let bloom: BloomSources
     }
 
-    private nonisolated static func load(_ url: URL) throws -> Loaded {
+    private nonisolated static func load(_ url: URL) throws -> Prepared {
         let img = try RawImage.open(url: url)
         let base = img.createPreview(maxDimension: baseMaxDimension)
         img.lens.fisheyeCircle = FisheyeCircle.detect(base)
-        return Loaded(image: img, preview: img.createPreview(maxDimension: previewMaxDimension),
+        return Prepared(image: img, preview: img.createPreview(maxDimension: previewMaxDimension),
                       base: base, bloom: bloomSourcesOf(img))
     }
 }

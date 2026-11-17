@@ -155,6 +155,8 @@ struct AutoPhoto: Identifiable {
         guard let iso = analysis?.stats.iso, iso > 0 else { return nil }
         return Int(iso.rounded())
     }
+    /** "ISO 6400" from the photo's EXIF, to judge its noise without zooming in (web's isoLabel); nil until analysed or unknown. */
+    var isoLabel: String? { isoValue.map { "ISO \($0)" } }
     var focalLengthValue: Int? {
         guard let fl = analysis?.focalLength, fl > 0 else { return nil }
         return Int(fl.rounded())
@@ -236,7 +238,7 @@ private extension AutoPhoto {
     }
 
     /**
-     * The look (or preset), strength, warmth, tint, contrast, luma contrast, saturation and grain of [source] ("Apply to all", "Copy previous");
+     * The look (or preset), strength, warmth, tint, contrast, luma contrast, saturation, grain and retouch of [source] ("Apply to all", "Copy previous");
      * brightness, denoise and rotation stay (they follow this photo's exposure, noise and framing). RawBoy edits are dropped.
      */
     mutating func takeLook(of source: AutoPhoto) {
@@ -255,6 +257,7 @@ private extension AutoPhoto {
         adjust.lumaContrast = s.lumaContrast
         adjust.saturation = s.saturation
         adjust.grain = s.grain
+        adjust.retouch = s.retouch
     }
 }
 
@@ -269,6 +272,8 @@ struct BatchExport: Equatable {
     /// "Export all": the photos not yet done, the one being exported included. The grid shows them desaturated, so the
     /// batch can be followed as each turns to colour once saved.
     var waiting: Set<String> = []
+    /// When it started, for the elapsed time and the estimate of the time left (BatchTime).
+    var startedAt = Date()
 }
 
 /**
@@ -391,14 +396,19 @@ final class AutoViewModel: ObservableObject {
     var persistence: AutoPersistence?
     /**
      * Where exports go: the photo library's RawBoy Auto album on iOS; RawBoy Desktop sets a folder. [saveExported] gets the
-     * file the exporter wrote (in the temporary folder: move it) and the photo's file.
+     * file the exporter wrote (in the temporary folder, already named by the name template: move it) and the photo's file,
+     * and returns the name the file got there (a name already taken gets -001, -002...).
      * [destinationView] is the export sheet's choice of destination, where there is one to make.
      */
     #if canImport(UIKit)
-    var saveExported: (URL, URL) async throws -> Void = { file, _ in try await PhotoLibraryOutput.save(file, naming: AutoViewModel.naming) }
+    var saveExported: (URL, URL) async throws -> String = { file, _ in
+        let name = file.lastPathComponent
+        try await PhotoLibraryOutput.save(file, naming: AutoViewModel.naming)
+        return name
+    }
     var destinationLabel = "Photos › \(AutoViewModel.naming.folder)"
     #else
-    var saveExported: (URL, URL) async throws -> Void = { _, _ in }
+    var saveExported: (URL, URL) async throws -> String = { file, _ in file.lastPathComponent }
     var destinationLabel = "the export folder"
     #endif
     var destinationView: AnyView?
@@ -750,6 +760,45 @@ final class AutoViewModel: ObservableObject {
         return true
     }
 
+    /** Template of the exported files' names (see NameTemplate), remembered (web's `rawboy.auto.nameTemplate`). */
+    @Published private(set) var nameTemplate: String =
+        UserDefaults.standard.string(forKey: AutoViewModel.nameTemplateKey).flatMap { $0.isEmpty ? nil : $0 } ?? NameTemplate.defaultTemplate
+    private static let nameTemplateKey = "auto.nameTemplate"
+
+    /** The template of the next exports' file names (an empty one means the default). */
+    func setNameTemplate(_ template: String) {
+        nameTemplate = template.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? NameTemplate.defaultTemplate : template
+        UserDefaults.standard.set(nameTemplate, forKey: Self.nameTemplateKey)
+    }
+
+    /** The exported file's name without extension that [template] gives [p], numbered [index] in the export. */
+    func nameFor(_ p: AutoPhoto, index: Int = 1, template: String? = nil) -> String {
+        let lens = p.analysis?.lens.lensName.trimmingCharacters(in: .whitespaces)
+        return NameTemplate.apply(template ?? nameTemplate, NameTemplate.Context(
+            fileName: p.name, camera: p.camera?.trimmingCharacters(in: .whitespaces), lens: lens?.isEmpty == false ? lens : nil,
+            iso: p.analysis?.stats.iso, look: p.lookName, date: p.date, index: index))
+    }
+
+    /**
+     * [file] (the exporter's "<name>-auto.<ext>" in its temporary folder) renamed to what the name template gives [p] as
+     * photo [index] of this export; the destination then picks a free name from it (NameTemplate.freeName).
+     */
+    private func named(_ file: URL, _ p: AutoPhoto, index: Int) throws -> URL {
+        let fm = FileManager.default
+        let dir = file.deletingLastPathComponent()
+        let target = dir.appendingPathComponent(NameTemplate.fileName(nameFor(p, index: index), file.pathExtension, 0))
+        if target.path == file.path { return file }
+        var source = file
+        if target.path.lowercased() == file.path.lowercased() {
+            // Only the letter case differs: on a case-insensitive disk removing the target would remove the file itself.
+            source = dir.appendingPathComponent(UUID().uuidString + "." + file.pathExtension)
+            try fm.moveItem(at: file, to: source)
+        }
+        try? fm.removeItem(at: target)
+        try fm.moveItem(at: source, to: target)
+        return target
+    }
+
     /** Format, quality, bit depth, size and frame for the next exports (maxLongSide nil = full resolution). */
     func setExportSettings(_ settings: ExportSettings) {
         exportSettings = settings
@@ -789,6 +838,8 @@ final class AutoViewModel: ObservableObject {
             previews.remove(id)
         }
         if let c = cachedPreview, ids.contains(c.id) { cachedPreview = nil }
+        for id in ids { warmPreviews.removeValue(forKey: id) }
+        if let n = next, ids.contains(n.id) { discardNext() }
         lookThumbs = lookThumbs.filter { key, _ in !ids.contains(where: { key.hasPrefix($0 + "|") }) }
     }
 
@@ -891,6 +942,11 @@ final class AutoViewModel: ObservableObject {
     var rowStarts: [Int] = []
 
     func requestExport() { exportRequest += 1 }
+
+    /** Bumped by C in the photo view: it opens Crop & rotate, or puts it down when open (the view knows the frame's shape). */
+    @Published private(set) var cropRequest = 0
+
+    func requestCrop() { if selected != nil, export == nil { cropRequest += 1 } }
 
     /** Moves the grid's focus by [dx] photos and [dy] rows (the first arrow press focuses the first photo). */
     func moveFocus(dx: Int, dy: Int) {
@@ -1039,7 +1095,7 @@ final class AutoViewModel: ObservableObject {
     }
 
     /**
-     * Gives every photo of the batch the look (or preset), strength, warmth, tint, contrast, luma contrast, saturation and grain of [id], including
+     * Gives every photo of the batch the look (or preset), strength, warmth, tint, contrast, luma contrast, saturation, grain and retouch of [id], including
      * photos still being analysed (they keep it rather than their suggestion); brightness and denoise stay per photo (they follow
      * each photo's exposure and noise). Not while exporting.
      */
@@ -1086,7 +1142,7 @@ final class AutoViewModel: ObservableObject {
 
     /**
      * Gives photo [id] what "Apply to all" copies, from the photo before it ([previousPhoto]): look (or preset), strength,
-     * brightness, warmth, tint, contrast, luma contrast, saturation and grain, as one undo step (a neighbouring shot of the same scene usually wants its
+     * brightness, warmth, tint, contrast, luma contrast, saturation, grain and retouch, as one undo step (a neighbouring shot of the same scene usually wants its
      * brightness too, unlike Apply to all); denoise and rotation stay. Not while exporting.
      */
     func copyPrevious(_ id: String) {
@@ -1235,13 +1291,118 @@ final class AutoViewModel: ObservableObject {
         message = "\(p.name) removed from the batch"
     }
 
+    // MARK: - Paging ahead (web's NeighbourPreload and prefetchNext)
+
+    /** How many photos after / before the open one have their cached preview read ahead. */
+    static let preloadAhead = 3
+    static let preloadBehind = 2
+
+    /**
+     * Whether photos around the open one are warmed up: Macs and other machines that analyse in more than one lane (a
+     * second full-resolution raw and five previews fit). Phones decode only the photo shown, as before.
+     */
+    static let pagesAhead = lanes > 1
+
+    /**
+     * The ids to warm around [current] in [ids] (the photo view's order): the next [preloadAhead] and the previous
+     * [preloadBehind], nearest first, forward before backward at the same distance (people mostly step forward). Empty
+     * if [current] isn't in the list.
+     */
+    static func preloadWindow(_ ids: [String], _ current: String?) -> [String] {
+        guard let current, let at = ids.firstIndex(of: current) else { return [] }
+        var out: [String] = []
+        for d in 1...max(preloadAhead, preloadBehind) {
+            if d <= preloadAhead, at + d < ids.count { out.append(ids[at + d]) }
+            if d <= preloadBehind, at - d >= 0 { out.append(ids[at - d]) }
+        }
+        return out
+    }
+
+    /** The cached previews of the photos around the open one, read ahead with their LUT or film stock loaded. */
+    private var warmPreviews: [String: PreviewImage] = [:]
+    /** Bumped when the photo view moves on: a warm-up still running for the old window stops. */
+    private var warmRun = 0
+
+    /**
+     * The photo after the open one, decoded at full resolution ahead of time ([prefetchNext]); taken by [openDetail] when
+     * stepping to it, thrown away when anything else opens.
+     */
+    private var next: (id: String, task: Task<PhotoSession.Prepared?, Never>)?
+
+    /**
+     * Restarts the warm-up around [id] (nil: the photo view closed, everything is dropped): what left the window is
+     * dropped, the rest read one at a time, nearest first, once the open photo is decoded (it always goes first).
+     */
+    private func preloadNeighbours(_ id: String?) {
+        warmRun += 1
+        let run = warmRun
+        guard let id, Self.pagesAhead else {
+            warmPreviews = [:]
+            discardNext()
+            return
+        }
+        let window = Self.preloadWindow(shown.filter { $0.analysis != nil }.map(\.id), id)
+        let keep = Set(window)
+        warmPreviews = warmPreviews.filter { keep.contains($0.key) }
+        let todo = window.filter { warmPreviews[$0] == nil }
+        guard !todo.isEmpty else { return }
+        let previews = previews
+        Task {
+            for nid in todo {
+                while warmRun == run, let s = selected, sessionReady != s { try? await Task.sleep(nanoseconds: 200_000_000) }
+                guard warmRun == run else { return }
+                guard let image = await Task.detached(priority: .utility, operation: { previews.get(nid) }).value else { continue }
+                if let params = photo(nid)?.params {
+                    _ = try? await params.lut.asyncMap { try await loadLut($0) }
+                    _ = try? await params.film.asyncMap { try await loadFilm($0) }
+                }
+                guard warmRun == run else { return }
+                warmPreviews[nid] = image
+            }
+        }
+    }
+
+    /** Frees the photo decoded ahead (once its decode finishes, if it's still running). */
+    private func discardNext() {
+        guard let n = next else { return }
+        next = nil
+        n.task.cancel()
+        Task { await n.task.value?.image.close() }
+    }
+
+    /** Starts decoding the photo after [id], [id] being open: under the decode lock, so it waits for the work before it. */
+    private func prefetchNext(_ id: String) {
+        guard Self.pagesAhead else { return }
+        let pages = shown.filter { $0.analysis != nil }
+        guard let i = pages.firstIndex(where: { $0.id == id }), i + 1 < pages.count else { return discardNext() }
+        let after = pages[i + 1]
+        if next?.id == after.id { return }
+        discardNext()
+        let url = after.url
+        let task = Task { () -> PhotoSession.Prepared? in
+            try? await decodeLock.run { () async throws -> PhotoSession.Prepared? in
+                // Discarded meanwhile (the user moved elsewhere) or an export started: nothing to decode.
+                guard !Task.isCancelled, export == nil else { return nil }
+                return try await Task.detached(priority: .utility) { try PhotoSession.prepare(url) }.value
+            }
+        }
+        next = (after.id, task)
+    }
+
     func openDetail(_ id: String) {
         guard let p = photo(id), p.analysis != nil, export == nil else { return }
         if selected != id { cropping = false }
         selected = id
-        if sessionReady == id { return }
+        preloadNeighbours(id)
+        if let n = next, n.id != id, sessionReady != id { discardNext() }
+        if sessionReady == id { return prefetchNext(id) }
         sessionReady = nil
-        if cachedPreview?.id != id {
+        // The photo decoded ahead, if this is it: taken now, so nothing else discards it.
+        let ahead = next?.id == id ? next : nil
+        if ahead != nil { next = nil }
+        if cachedPreview?.id != id, let warm = warmPreviews[id] {
+            cachedPreview = (id, warm)
+        } else if cachedPreview?.id != id {
             cachedPreview = nil
             let previews = previews
             Task {
@@ -1256,10 +1417,20 @@ final class AutoViewModel: ObservableObject {
         }
         Task {
             do {
+                // Outside the lock: the decode ahead takes the lock itself.
+                let prepared = await ahead?.task.value
                 // Photos swiped past while an earlier decode ran are skipped: each decode takes seconds.
                 let opened = try await decodeLock.run { () async throws -> Bool in
-                    guard selected == id else { return false }
-                    _ = try await session.open(p.url) { [weak self] in self?.photo(id)?.params ?? $0 }
+                    guard selected == id else {
+                        prepared?.image.close()
+                        return false
+                    }
+                    let initial: (DevelopParams) -> DevelopParams = { [weak self] in self?.photo(id)?.params ?? $0 }
+                    if let prepared {
+                        _ = session.adopt(prepared, initialParams: initial)
+                    } else {
+                        _ = try await session.open(p.url, initialParams: initial)
+                    }
                     return true
                 }
                 guard opened, selected == id else { return }
@@ -1267,6 +1438,7 @@ final class AutoViewModel: ObservableObject {
                 session.selectFilm(photo(id)?.params?.film) { [weak self] in self?.message = $0 }
                 sessionReady = id
                 cachedPreview = nil
+                prefetchNext(id)
             } catch {
                 message = error.localizedDescription
                 selected = nil
@@ -1279,6 +1451,7 @@ final class AutoViewModel: ObservableObject {
         session.exitZoom()
         selected = nil
         cachedPreview = nil
+        preloadNeighbours(nil)
     }
 
     /**
@@ -1336,8 +1509,8 @@ final class AutoViewModel: ObservableObject {
                     try await session.export(params, defaults: a.defaults, sourceName: p.name, settings: settings,
                                              naming: Self.naming) { f in Task { @MainActor in self.export?.current = f } }
                 }
-                try await saveExported(file, p.url)
-                message = "Saved \(file.lastPathComponent) to \(destinationLabel)"
+                let name = try await saveExported(try named(file, p, index: 1), p.url)
+                message = "Saved \(name) to \(destinationLabel)"
                 ok = true
             } catch {
                 message = "Export failed: \(error.localizedDescription)"
@@ -1380,7 +1553,7 @@ final class AutoViewModel: ObservableObject {
                     itemSettings.frameNumber = index + 1
                     itemSettings.captureDate = p.date
                     let file = try await decodeLock.run { try await exportOne(p, itemSettings) }
-                    try await saveExported(file, p.url)
+                    _ = try await saveExported(try named(file, p, index: index + 1), p.url)
                     ok = true
                 } catch {
                     failed += 1
@@ -1408,8 +1581,9 @@ final class AutoViewModel: ObservableObject {
 
     private func exportOne(_ p: AutoPhoto, _ settings: ExportSettings) async throws -> URL {
         guard let a = p.analysis, let params = p.params else { throw RawImageError(message: "not analysed") }
-        if p.edits != nil {
+        if p.edits != nil || params.portraitRetouch > 0 {
             // RawBoy edits can hold painted masks, lens blur and healing strokes, which the session builds (as Pro's export does).
+            // Portrait retouch's map is made by the session too, from its preview and skin mask, as the photo view shows it.
             defer { session.close() }
             _ = try await session.open(p.url) { _ in params }
             await session.healNow()

@@ -13,8 +13,6 @@ public struct SavedAuto: @unchecked Sendable {
     public var filmLook: Look
     public var strength: Float
     public var adjust: Adjustments
-    /** Web's `retouch` adjustment, which this engine has no slider for: kept and written back. */
-    public var webAdjust: [String: Float]
     /** The preset itself (name, groups, values), so it doesn't depend on this machine's preset list. */
     public var preset: Preset?
     /** RawBoy edits (web's "Back to Auto"), edits JSON kept as it was: this engine's Auto has no counterpart. */
@@ -29,7 +27,7 @@ public struct SavedAuto: @unchecked Sendable {
     public var autoDenoise: Bool
 
     public init(mode: LookMode = .looks, look: Look = Looks.natural, filmLook: Look = FilmLooks.portra400,
-                strength: Float = 100, adjust: Adjustments = .none, webAdjust: [String: Float] = [:], preset: Preset? = nil,
+                strength: Float = 100, adjust: Adjustments = .none, preset: Preset? = nil,
                 edits: [String: Any]? = nil, lensChoice: String? = nil, lensPreset: Preset? = nil, plain: Bool = false,
                 autoDenoise: Bool = false) {
         self.mode = mode
@@ -37,7 +35,6 @@ public struct SavedAuto: @unchecked Sendable {
         self.filmLook = filmLook
         self.strength = strength
         self.adjust = adjust
-        self.webAdjust = webAdjust
         self.preset = preset
         self.edits = edits
         self.lensChoice = lensChoice
@@ -59,7 +56,7 @@ public enum AutoSidecar {
             "brightness": number(s.adjust.brightness), "warmth": number(s.adjust.warmth), "tint": number(s.adjust.tint),
             "contrast": number(s.adjust.contrast), "saturation": number(s.adjust.saturation), "grain": number(s.adjust.grain),
             "denoise": number(s.adjust.denoise), "rotation": s.adjust.rotation, "straighten": number(s.adjust.straighten),
-            "lumaContrast": number(s.adjust.lumaContrast), "retouch": number(s.webAdjust["retouch"] ?? 0),
+            "lumaContrast": number(s.adjust.lumaContrast), "retouch": number(s.adjust.retouch),
         ]
         if let c = s.adjust.crop {
             adjust["crop"] = ["left": number(c.left), "top": number(c.top), "right": number(c.right), "bottom": number(c.bottom)]
@@ -130,16 +127,15 @@ public enum AutoSidecar {
         adjust.denoise = num(a["denoise"], -100, 100, 0)
         adjust.straighten = num(a["straighten"], -45, 45, 0)
         adjust.rotation = Int(num(a["rotation"], 0, 3, 0).rounded())
+        adjust.retouch = num(a["retouch"], 0, 100, 0)
         adjust.crop = crop(a["crop"])
-        let webAdjust = ["retouch": num(a["retouch"], 0, 100, 0)]
-            .filter { $0.value != 0 }
         var lensPreset: Preset?
         if let l = o["lens"], !(l is String) { lensPreset = preset(from: l).flatMap { $0.isLensPreset ? $0 : nil } }
         let lensString = o["lens"] as? String
         return SavedAuto(
             mode: o["mode"] as? String == "film" ? .film : .looks,
             look: Looks.byId(o["look"] as? String ?? ""), filmLook: FilmLooks.byId(o["filmLook"] as? String ?? ""),
-            strength: num(o["strength"], 0, 100, 100), adjust: adjust, webAdjust: webAdjust,
+            strength: num(o["strength"], 0, 100, 100), adjust: adjust,
             preset: preset(from: o["preset"]), edits: o["edits"] as? [String: Any],
             lensChoice: lensString == Presets.noLensPreset ? Presets.noLensPreset : lensPreset?.id, lensPreset: lensPreset,
             plain: o["plain"] as? Bool == true, autoDenoise: o["autoDenoise"] as? Bool == true)

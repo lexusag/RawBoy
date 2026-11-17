@@ -75,12 +75,12 @@ the other auto develop sliders (0 = as Auto set them): **Contrast** (±50),
 **Saturation** (±100; −100 is black and white, the film look keeps its tone curve but loses its colour cast), **Tint** (±50, + = magenta, on top of what Warmth adds), **Grain** (±50, on top of the base
 grain and the look's) and **Denoise** (±100, on top of the measured luma and colour denoise, colour first: raising it clears colour noise fast
 and smooths luma later and gently, at most +60; below 0 it takes the luma denoise away first, then the colour denoise,
-down to none at −100, e.g. to keep fine detail at high ISO), then (web) **Retouch** (0–100, RawBoy's Portrait retouch on top of
+down to none at −100, e.g. to keep fine detail at high ISO), then (web; RawBoy Desktop in its own Retouch section) **Retouch** (0–100, RawBoy's Portrait retouch on top of
 the look, preset or edits; 40 is about Reblum's Natural at 40; photos without a face are left alone). A **white balance picker** (Pick white balance on the Adjust tab, like RawBoy Pro's) sets Warmth and Tint so a clicked or tapped neutral grey spot renders grey. Press and hold the photo to see it without the look. As in RawBoy, a thin frame around the photo (neutral
 grey by default) helps judge exposure; tap (click) outside the photo to cycle it through grey, white and black.
 **Swipe left or right** on the photo to move to the previous or next photo in the batch (each keeps its own
-settings; swiping is off while zoomed or exporting). On the web, the ‹ › buttons and the arrow keys (also Space and Backspace) change the photo while zoomed too; the next one opens whole. Pinch with two fingers to zoom around them, up to 400% (iOS, Android, web on touch screens).
-**Remove from batch** (the bin in the web's top bar, its ⋯ menu on phones, the ⋮ menu on Android, the … menu on iOS; **Delete** on the web) takes the open photo
+settings; swiping is off while zoomed or exporting). On the web, the ‹ › buttons and the arrow keys (also Space and Backspace; on RawBoy Desktop Space and ⌫) change the photo while zoomed too; the next one opens whole. Pinch with two fingers to zoom around them, up to 400% (iOS, Android, web on touch screens).
+**Remove from batch** (the bin in the web's top bar, its ⋯ menu on phones, the ⋮ menu on Android, the … menu on iOS; **Delete** on the web, ⌦ (fn-Delete) on RawBoy Desktop) takes the open photo
 out of the batch, the file stays, and goes on to the next photo (the one before it at the batch's end; back to the
 grid when it was the last).
 **Undo** and **Redo** (arrows in the photo view's top bar; Ctrl/⌘ Z and Shift Ctrl/⌘ Z on the web) take back the
@@ -163,7 +163,7 @@ selected photos, with the same format and size choices as Export all. Removing o
 raw files stay where they are. On the web, Ctrl/Cmd-click also starts a selection, Shift-click selects every photo between the last
 one picked and the clicked one, and Ctrl/Cmd+A selects all.
 
-**File names (web):** the export sheet's **File name** box names the files from a template, remembered, with a live preview.
+**File names (web and RawBoy Desktop):** the export sheet's **File name** box names the files from a template, remembered, with a live preview.
 Keywords: `{name}` original name, `{camera}`, `{lens}`, `{iso}`, `{look}` (look, preset or RawBoy edits), `{date}` (2026-11-11),
 `{time}` (14-30-05), `{year}` `{yy}` `{month}` `{day}` `{hour}` `{minute}` `{second}` (shoot date, else the file's date), and
 `#` for the photo's number in the export: `#` = 1, `##` = 01, `###` = 001. The default is `{name}-auto`; `{date}_{name}_###`

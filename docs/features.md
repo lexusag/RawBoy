@@ -36,17 +36,17 @@ the code and changelog say.
 The full prioritised list is at the end ([Web features missing on Desktop](#web-features-missing-on-desktop-prioritised)).
 Biggest first:
 
-1. **Auto's export file names** (web 1.14.3): Desktop always writes `NAME-auto.jpg`.
-2. **Auto's Retouch slider** (web 1.12.0): Desktop's Auto has no portrait retouch adjustment.
+1. ~~**Auto's export file names**~~ (web 1.14.3): on Desktop too (unreleased).
+2. ~~**Auto's Retouch slider**~~ (web 1.12.0): on Desktop too (unreleased).
 3. ~~**Your own LUTs**~~: done 2026-11-17 (folder shown, Add files, Show in Finder, Choose folder, drop).
-4. **Auto's keys** (web 1.1.1 to 1.15.10): Space / Backspace, Delete and C are missing on Desktop.
-5. **ISO on every Auto photo** (web ≤1.1.1) and **time left on Export all** (web 1.15.1).
+4. ~~**Auto's keys**~~ (web 1.1.1 to 1.15.10): Space / ⌫, ⌦ and C on Desktop too (unreleased).
+5. ~~**ISO on every Auto photo**~~ (web ≤1.1.1) and ~~**time left on Export all**~~ (web 1.15.1): on Desktop too (unreleased).
 6. ~~**Preset group Denoise & sharpening** (web 1.1.3)~~: done on Desktop, iOS and Android (unreleased).
 7. **No update path**: the web has a "New version available" banner; Desktop is a hand-downloaded DMG.
 8. **Browse** misses: photos with `rawboy:Auto` settings don't go back into Auto when a folder is reopened, "Send to
    Auto" has no picks / minimum-stars shortcut, darktable `_01` duplicates are unchecked.
 9. **Packer**: "jump to top" and the done notification are web only (sort, collapse and remove folders came to Desktop, unreleased).
-10. **Auto's paging speed**: the web decodes the neighbouring photos ahead; Desktop decodes only the one shown.
+10. ~~**Auto's paging speed**~~: Desktop decodes the next photo ahead and reads its neighbours' previews too (unreleased).
 
 ## RawBoy Pro: develop controls
 
@@ -135,7 +135,7 @@ none of the web's 74; Kotlin lacks `healSpots`, `lumaContrast`, `portraitRetouch
 | Import as **As is** | ≤1.1.1 | ✓ | ✓ 1.17.8 | — | — | |
 | Brightness, Warmth, Contrast, Saturation, Tint, Grain, Denoise | ≤1.1.1 | ✓ | ✓ 1.17.2 | ✓ | ✓ | Luma contrast: web 1.12.5, Desktop and iOS 1.18.3 |
 | White balance picker | 1.9.0 | ✓ | ✓ 1.17.2 | ✓ | ✓ | |
-| **Retouch** (portrait retouch adjustment) | 1.12.0 | ✓ | — | — | — | **Gap.** `Adjustments.retouch` exists in web only; Desktop keeps it in the sidecar but has no slider |
+| **Retouch** (portrait retouch adjustment) | 1.12.0 | ✓ | ✓ unreleased | — | — | Desktop: its own Retouch section in the panel. `Adjustments.retouch` is in the Swift engine too (sidecar, Apply to all, Copy previous); iOS has no slider (its MediaPipe skin mask has no face landmarks yet) |
 | Crop & rotate in the photo view | 1.15.3 | ✓ | ✓ 1.17.2 | ✓ 1.15.3 | ✓ 1.15.3 | Drag-to-rotate on web 1.15.5; Desktop ? |
 | RawBoy preset for the batch / a selection | ≤1.1.1 | ✓ | ✓ 1.17.8 (list of Pro's presets) | ✓ | ✓ | |
 | Partial presets (only the groups they hold) | 1.1.2 | ✓ | ✓ 1.17.2 | ✓ | ? | Denoise & sharpening group: unreleased on Desktop, iOS and Android |
@@ -149,19 +149,19 @@ none of the web's 74; Kotlin lacks `healSpots`, `lumaContrast`, `portraitRetouch
 | Sort by shoot date / file name | 1.2.0 | ✓ | ✓ 1.17.2 | ✓ | ✓ | |
 | Filter: camera, lens, ISO, date | 1.9.0 | ✓ | ✓ 1.17.8 | — | — | |
 | Filter: focal length, Unedited | 1.12.6; 1.17.10 | ✓ | ✓ 1.17.8 / 1.17.10 | — | — | |
-| **ISO beside each photo** (grid and photo view) | ≤1.1.1 | ✓ | — | — | — | **Gap.** Desktop keeps the ISO (for the filter) but never shows it |
+| **ISO beside each photo** (grid and photo view) | ≤1.1.1 | ✓ | ✓ unreleased | ✓ unreleased | — | Shared SwiftUI cells and photo view |
 | Select: ⌘-click, ⇧-click range, ⌘A, Esc | ≤1.1.1 | ✓ | ✓ 1.17.2 | ✓ long-press | ✓ | |
 | Export all / selected, JPEG / TIFF, sizes, Frame, Film scan | ≤1.1.1 | ✓ | ✓ 1.17.2 | ✓ | ✓ | 5600 px size ≤1.1.1 |
-| **Export file name template** (`{name}`, `{date}`, `{look}`, `#`…) | 1.14.3 | ✓ | — | — | — | **Gap.** Desktop writes `NAME-auto.jpg`/`.tif` only |
-| **Export progress: elapsed and time left** | 1.15.1 | ✓ | — | — | — | Desktop shows "Exporting 3 of 24" |
+| **Export file name template** (`{name}`, `{date}`, `{look}`, `#`…) | 1.14.3 | ✓ | ✓ unreleased | — | — | `NameTemplate.swift`, a port of `NameTemplate.ts` with its tests. Desktop never overwrites now (`-001`, `-002`), as the web; it used to replace `NAME-auto.jpg`. iOS keeps `<name>-auto` (no field in its sheet) |
+| **Export progress: elapsed and time left** | 1.15.1 | ✓ | ✓ unreleased | ✓ unreleased | — | `BatchTime.swift`, the web's estimate |
 | Stop a batch export | 1.1.4 | ✓ | ✓ 1.17.2 | ✓ | ✓ | |
 | Export to a folder / Google Drive / ZIP / Photos | ≤1.1.1; 1.5.0 | ✓ | ✓ folder only | ✓ Photos | ✓ | Drive and ZIP n/a on Desktop |
 | Click a waiting photo to analyse it next | 1.1.2 | ✓ | ✓ 1.17.2 | ✓ | ? | |
 | Cached preview while a photo decodes | ≤1.1.1 | ✓ | ✓ 1.17.2 | ✓ | ✓ | |
-| **Neighbour photos decoded ahead** | 1.15.9 | ✓ | — | — | — | **Gap.** Desktop decodes only the shown photo, the neighbours show their grid thumbnail |
+| **Neighbour photos decoded ahead** | 1.15.9 | ✓ | ✓ unreleased | — | — | Next photo decoded at full resolution, cached previews of the next 3 / previous 2 read ahead (`PhotoSession.prepare` / `adopt`), when Auto analyses in more than one lane (Macs; the web's rule too). iOS decodes only the shown photo |
 | Settings kept next to each photo (`rawboy:Auto`) | ≤1.1.1 | ◐ opt-in | ✓ 1.17.2 | — | — | |
 | Keys: arrows, Return, Esc | ≤1.1.1 | ✓ | ✓ 1.17.2 | n/a | n/a | |
-| **Keys: Space / Backspace** (next / previous), **Delete** (remove), **C** (Crop) | ≤1.1.1; 1.15.10 | ✓ | — | n/a | n/a | **Gap.** `handleAuto` knows arrows, Return, Esc and ⇧C only |
+| **Keys: Space / Backspace** (next / previous), **Delete** (remove), **C** (Crop) | ≤1.1.1; 1.15.10 | ✓ | ✓ unreleased | n/a | n/a | On the Mac: Space / ⌫ (the Delete key), ⌦ (fn-Delete, the web's Delete) and C; C, Return or Esc put Crop down |
 | Wheel zoom and wheel over sliders in the photo view | 1.3.0 | ✓ | ✓ 1.17.8 | n/a | n/a | |
 | Photo view Frame colour | ≤1.1.1 | ✓ | ? | ✓ | ✓ | |
 
@@ -219,15 +219,15 @@ most cases). "Check" = confirm in the app before building, because I could only 
 
 | # | Feature | Web since | Why it matters | Cost |
 |---|---|---|---|---|
-| 1 | **Auto: export file name template** | 1.14.3 | Auto is the batch tool; fixed `NAME-auto.jpg` collides across folders and can't carry date or look | Small: `NameTemplate.ts` is pure logic (+ its test); Auto's ExportSheet takes a text field |
-| 2 | **Auto: Retouch slider** | 1.12.0 | Desktop already has the engine (`PortraitRetouch.swift`) and Pro's slider; Auto's `Adjustments` lacks `retouch` (also in `AutoSidecar`) | Small to medium: a field in `Adjustments`, `LookApplier`, the sidecar, the batch export's `retouchMapFor`, a slider; bump `AnalysisCache` only if it touches the analysis |
+| 1 | ~~**Auto: export file name template**~~ (done, unreleased) | 1.14.3 | Auto is the batch tool; fixed `NAME-auto.jpg` collides across folders and can't carry date or look | Small: `NameTemplate.ts` is pure logic (+ its test); Auto's ExportSheet takes a text field |
+| 2 | ~~**Auto: Retouch slider**~~ (done, unreleased) | 1.12.0 | Desktop already has the engine (`PortraitRetouch.swift`) and Pro's slider; Auto's `Adjustments` lacks `retouch` (also in `AutoSidecar`) | Small to medium: a field in `Adjustments`, `LookApplier`, the sidecar, the batch export's `retouchMapFor`, a slider; bump `AnalysisCache` only if it touches the analysis |
 | 3 | ~~Your own LUTs: a reachable folder~~ | ≤1.1.1 | Done 2026-11-17: path shown, Add files, Show in Finder, Choose folder, drop | — |
-| 4 | **Auto keys: Space / Backspace, Delete, C** | ≤1.1.1; 1.15.10 | Muscle memory from the web; culling a batch is keyboard work | Small: `KeyboardShortcuts.handleAuto` + menu items |
-| 5 | **Auto: ISO on each photo; time left on Export all** | ≤1.1.1; 1.15.1 | Judging noise without zooming; knowing if a 300-photo export is 4 or 40 minutes | Small |
+| 4 | ~~**Auto keys: Space / Backspace, Delete, C**~~ (done, unreleased) | ≤1.1.1; 1.15.10 | Muscle memory from the web; culling a batch is keyboard work | Small: `KeyboardShortcuts.handleAuto` + menu items |
+| 5 | ~~**Auto: ISO on each photo; time left on Export all**~~ (done, unreleased) | ≤1.1.1; 1.15.1 | Judging noise without zooming; knowing if a 300-photo export is 4 or 40 minutes | Small |
 | 6 | ~~**Preset group Denoise & sharpening**~~ (done, unreleased) | 1.1.3 | Without it a Pro preset applied in Auto either leaves noise to Auto (Detail unticked) or overrides the measured values | Small: `PresetGroup.denoise` (Swift and Kotlin), the "Detail-only presets keep theirs" migration (see `Presets.ts`) |
 | 7 | **Browse: send "picks / ≥ N stars" to Auto; reopen a folder and bring Auto-edited photos back** | ≤1.1.1 | The web's Browser → Auto loop; needs a Viewer release (host hook) | Medium, in `RawBoyImageViewer` |
 | 8 | **Updater** | 1.6.0 | New DMGs are easy to miss; Sparkle is already in the Viewer app | Medium (signing, appcast; notarisation is "not in yet") |
-| 9 | **Auto: decode neighbours ahead** | 1.15.9 | Paging through a batch waits on each decode | Medium: a one-ahead prefetch in `AutoViewModel` / `PhotoSession`; web's `NeighbourPreload.ts` is the pattern |
+| 9 | ~~**Auto: decode neighbours ahead**~~ (done, unreleased) | 1.15.9 | Paging through a batch waits on each decode | Medium: a one-ahead prefetch in `AutoViewModel` / `PhotoSession`; web's `NeighbourPreload.ts` is the pattern |
 | 10 | **Packer: jump to top** | 1.8.12 | Long lists | Small (sort, collapse and remove folders done, unreleased) |
 | 11 | Check: **Auto crop drag-to-rotate (1.15.5), next / previous photo while zoomed (1.8.13), Pro zoom hint, healing stroke shown red while painting (1.15.11)** | | Listed as ? above | Check |
 | 12 | Check: **darktable `_01` duplicates in Browse** | ≤1.1.1 | Web handles `NAME_01.CR2.xmp` | Check in the Viewer |
