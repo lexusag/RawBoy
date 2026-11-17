@@ -56,7 +56,8 @@ struct EditorScreen: View {
     @State private var selectedHeal: String?
     @State private var healBrush = HealBrush()
     // Crop shape lock (UI only; the crop itself is in the params). Portrait nil = follow the frame.
-    @State private var cropAspect = CropAspect.free
+    /** The shape chosen in Crop & rotate for this photo; nil = [defaultCropAspect]. */
+    @State private var chosenCropAspect: CropAspect?
     @State private var cropPortrait: Bool?
     @State private var viewSize = CGSize.zero
     /** RawBoy Desktop's focus mode (Tab, F): the bar and the panel hide and the photo takes the window. */
@@ -131,7 +132,7 @@ struct EditorScreen: View {
         }
         .onChange(of: commands.serial) { _, _ in if let a = commands.action { perform(a) } }
         .onChange(of: state.fileName) { _, _ in
-            cropAspect = .free
+            chosenCropAspect = nil
             cropPortrait = nil
             selectedLayer = nil
             selectedLeak = nil
@@ -372,7 +373,12 @@ struct EditorScreen: View {
                 }
                 if let shader, mode == .geometry, session.zoomCenter == nil, session.preview != nil {
                     CropOverlay(frameWidth: shader.lens.outputWidth, frameHeight: shader.lens.outputHeight,
-                                crop: state.params.crop, ratio: cropRatio, framePx: framePx, onCropChange: vm.setCrop,
+                                crop: state.params.crop, ratio: cropRatio, framePx: framePx,
+                                onCropChange: { r in
+                                    // Keep the shape the drag started with: the default follows whether a crop is set.
+                                    if chosenCropAspect == nil { chosenCropAspect = defaultCropAspect }
+                                    vm.setCrop(r)
+                                },
                                 rotate: (angle: state.params.straighten, onChange: { d in vm.update { $0.straighten = d } }))
                 }
                 if let shader, autoWb, mode == .none, session.zoomCenter == nil, session.preview != nil, !showOriginal {
@@ -491,6 +497,12 @@ struct EditorScreen: View {
 
     private var frameLens: LensTransform { vm.lensFor(state.params.withoutCrop()) }
     private var portrait: Bool { cropPortrait ?? (frameLens.frameHeight > frameLens.frameWidth) }
+    /**
+     * The crop tool starts locked to the photo's own shape and orientation (Original), so a drag keeps it; a photo that
+     * already has a crop opens Free, so the tool never reshapes a crop made earlier.
+     */
+    private var defaultCropAspect: CropAspect { state.params.crop.isFull ? .original : .free }
+    private var cropAspect: CropAspect { chosenCropAspect ?? defaultCropAspect }
     private var cropRatio: Double? {
         cropAspect.ratio(frameWidth: frameLens.frameWidth, frameHeight: frameLens.frameHeight, portrait: portrait)
     }
@@ -511,7 +523,7 @@ struct EditorScreen: View {
                     onFlip: vm.flip,
                     aspect: cropAspect, portrait: portrait,
                     onAspect: { aspect, toPortrait in
-                        cropAspect = aspect
+                        chosenCropAspect = aspect
                         cropPortrait = toPortrait
                         let f = frameLens
                         let ratio = aspect.ratio(frameWidth: f.frameWidth, frameHeight: f.frameHeight, portrait: toPortrait)
@@ -519,7 +531,7 @@ struct EditorScreen: View {
                                                        frameHeight: f.frameHeight))
                     },
                     onResetCrop: {
-                        cropAspect = .free
+                        chosenCropAspect = nil
                         cropPortrait = nil
                         vm.setCrop(CropMath.full)
                     },
