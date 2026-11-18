@@ -4,9 +4,9 @@
 
 Роли в тексте: **автор ветки** ведёт план и тестирует на OnePlus 11; **владелец репозитория** проверяет Pixel 9 Pro и принимает слияние.
 
-## Состояние (18 ноября 2026)
+## Состояние (18 ноября 2026, после сессии 15)
 
-- Сессии **00**–**12**, **13a**, **13b** и **14** выполнены ([results/00.md](results/00.md), [results/01.md](results/01.md), [results/02.md](results/02.md), [results/03.md](results/03.md), [results/04.md](results/04.md), [results/05.md](results/05.md), [results/06.md](results/06.md), [results/07.md](results/07.md), [results/08.md](results/08.md), [results/09.md](results/09.md), [results/10a.md](results/10a.md), [results/10b.md](results/10b.md), [results/11.md](results/11.md), [results/12.md](results/12.md), [results/13a.md](results/13a.md), [results/13b.md](results/13b.md), [results/14.md](results/14.md)).
+- Сессии **00**–**12**, **13a**, **13b**, **14** и **15** выполнены ([results/00.md](results/00.md), [results/01.md](results/01.md), [results/02.md](results/02.md), [results/03.md](results/03.md), [results/04.md](results/04.md), [results/05.md](results/05.md), [results/06.md](results/06.md), [results/07.md](results/07.md), [results/08.md](results/08.md), [results/09.md](results/09.md), [results/10a.md](results/10a.md), [results/10b.md](results/10b.md), [results/11.md](results/11.md), [results/12.md](results/12.md), [results/13a.md](results/13a.md), [results/13b.md](results/13b.md), [results/14.md](results/14.md), [results/15.md](results/15.md)).
 - **Веха M1 пройдена** (16 ноября 2026): владелец репозитория дал добро по чек-листу для Pixel 9 Pro из [results/06.md](results/06.md).
 - **Автодетект включён** (07):
   - `PlatformDetector` определяет чип по `Build.SOC_MANUFACTURER`, без него — по `Build.HARDWARE`;
@@ -78,7 +78,7 @@
 - На OnePlus снимок без Film проявляется медленно (8.8–15 с при ISO ~4500; замер с касаниями UI во время проявки); эталона нет, параметры совпадают с прежними точно. Наблюдение для сессии 11 ([results/05.md](results/05.md)).
 - В debug-сборке есть зонд `DebugProbe` (тег `RawBoyProbe`, выгрузка 512-копий).
 - Инструменты сборки на машине автора ветки стоят: раздел «Машина автора ветки» ниже устарел, актуально — в [results/00.md](results/00.md).
-- Следующая сессия — **15** (финал, веха M4).
+- **Финал** (15, решения 101–104): ветка слита с `main`, документация перенесена в `docs/camera-platforms.md`, `CLAUDE.md` и `docs/camera.md`, релиз с R8 проверен статически, `user/` удалена из ветки. Ждём ответа владельца репозитория по чек-листу M4 (PR #388) и его решения о слиянии.
 
 ## Зачем
 
@@ -203,7 +203,7 @@ app-camera/src/main/java/app/rawboy/camera/
 
 | Сессия | Файл | Что делает | Зависит от |
 |---|---|---|---|
-| 15 | [Финал — **веха M4**](15-final-m4.md) | Документация, релизная сборка, удаление `user/`, согласование слияния | 14 |
+| — | — | Ответ владельца репозитория на M4, слияние | 15 |
 
 Сессия, которая не помещается в один контекст, делится на части с буквой (04a, 04b); решение о делении записывается в [decisions.md](decisions.md).
 
@@ -229,6 +229,7 @@ app-camera/src/main/java/app/rawboy/camera/
 | 13a (17 ноября 2026) | Brightness на пределе ISO (поле `compensation`, потолок AE по камерам), длинная выдержка под моделью яркости OnePlus, таймер, склейка ночью ([results/13a.md](results/13a.md)) |
 | 13b (17 ноября 2026) | Максимальное разрешение — ограничение; слежение, QR и HDR-карта работают на OnePlus 11 без правок ([results/13b.md](results/13b.md)) |
 | 14 (18 ноября 2026) | Приёмка на OnePlus 11 одной сборкой с чистых данных; этап Qualcomm принят автором ветки, ограничения OnePlus 11 записаны ([results/14.md](results/14.md)) |
+| 15 (18 ноября 2026) | Слияние с `main`, перенос знаний в `docs/` и `CLAUDE.md`, статическая проверка релиза, удаление `user/`; веха M4 ([results/15.md](results/15.md)) |
 
 ## Вехи с проверкой на Pixel
 
