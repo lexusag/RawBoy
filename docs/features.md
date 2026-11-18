@@ -51,7 +51,7 @@ Biggest first:
 ## RawBoy Pro: develop controls
 
 Web, Desktop and iOS take every field of `DevelopParams` except where noted (checked field by field: Swift lacks
-none of the web's 74; Kotlin lacks `healSpots`, `lumaContrast`, `portraitRetouch`). So gaps here are *UI*, not engine.
+`filmLeaks`, web-only prototype; Kotlin lacks `filmLeaks`, `healSpots`, `lumaContrast`, `portraitRetouch`). So most gaps here are *UI*, not engine.
 
 | Feature | Since | Web | Desktop | iOS | Android | Notes |
 |---|---|---|---|---|---|---|
@@ -84,6 +84,7 @@ none of the web's 74; Kotlin lacks `healSpots`, `lumaContrast`, `portraitRetouch
 | Masks: Lens blur | 1.3.0 | ✓ | ✓ 1.17.2 | ✓ 1.17.2 | ✓ | |
 | Masks: Portrait retouch inside a layer | 1.13.4 | ✓ | ✓ 1.17.2 | — | — | |
 | Light leaks | 1.3.0 | ✓ | ✓ 1.17.0 | ✓ 1.4.7 | ✓ | Outline dots: web 1.11.0, Desktop and iOS 1.17.4, Android — |
+| **Light leaks: procedural generator** (Generate: 12 types, 🎲 Random, colour adjustment, x/y box) | unreleased | ✓ | — | — | — | Web prototype (`shaders/film_leak.glsl`, `FilmLeaks.ts`): Edge burn, Blob, Streak, Sprocket holes, Fog, Rebate glow, Flare, Start/End of roll, Film tear, Dust & scratches, Chemical stain; shares the `MAX_LEAKS` (4) budget |
 | Light effects (lightning, sparks, trails, swirl) | 1.11.0 | ✓ | ✓ 1.17.0 | ✓ 1.13.0 | ✓ 1.13.0 | |
 | **Healing brush** | 1.15.1 | ✓ | ✓ 1.17.2 | ◐ | — | iOS has the engine (`rb_heal`) but no button (its bar is full) |
 | Auto Dev button | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
@@ -93,6 +94,7 @@ none of the web's 74; Kotlin lacks `healSpots`, `lumaContrast`, `portraitRetouch
 | Presets: batch select to delete / export | 1.9.2 | ✓ | ✓ 1.17.0 | ✓ | ? | |
 | Presets: **Denoise & sharpening group** | 1.1.3 | ✓ | ✓ unreleased | ✓ unreleased | ✓ unreleased | `PresetGroup.denoise` / `DENOISE`, off by default in Save preset; old Detail-only presets keep their denoise, ones with Light leave it to Auto (as `Presets.ts`). Auto: a preset sets denoise and sharpening only with this group; Auto denoise all drops it |
 | Presets: Masks, Retouch groups | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
+| Presets: **Light leaks (generated) group** | unreleased | ✓ | — | — | — | `PresetGroup.leaks` (`filmLeaks`), off by default in Save preset; layers on top of Auto looks (`replacesLook` false) |
 | Presets with no photo open | 1.17.8 | ✓ | ✓ 1.17.8 | ? | ? | |
 | Look selector (stripes of every LUT / stock over the photo) | 1.10.11 | ✓ | ✓ 1.17.8 | ✓ (shared code) | — | Resizable window: web 1.14.2, Desktop 1.17.8 |
 | Carry edits over to the next photo (Pro) | ≤1.1.1 | ✓ automatic | on demand (by design) | ✓ automatic | ✓ automatic | **Not a gap.** Web, iOS and Android open one photo at a time, so edits carry over by themselves. Desktop Pro has a filmstrip and ← / →, so it starts every photo from its own sidecar or as shot (unreleased, #399); the bar's Copy or ⇧C takes the previous photo's settings. Web also has the Copy button and ⇧C since 1.17.10. Auto never carried edits; it has Copy previous (⇧C) on every platform |
@@ -138,6 +140,7 @@ none of the web's 74; Kotlin lacks `healSpots`, `lumaContrast`, `portraitRetouch
 | White balance picker | 1.9.0 | ✓ | ✓ 1.17.2 | ✓ | ✓ | |
 | **Retouch** (portrait retouch adjustment) | 1.12.0 | ✓ | ✓ unreleased | — | — | Desktop: its own Retouch section in the panel. `Adjustments.retouch` is in the Swift engine too (sidecar, Apply to all, Copy previous); iOS has no slider (its MediaPipe skin mask has no face landmarks yet) |
 | Crop & rotate in the photo view | 1.15.3 | ✓ | ✓ 1.17.2 | ✓ 1.15.3 | ✓ 1.15.3 | Drag outside the frame to rotate: web 1.15.5, Desktop and iOS unreleased (open hand cursor on the Mac); Android — |
+| **🎲 Leak** (random generated film leak in the photo view) | unreleased | ✓ | — | — | — | Rolls a procedural film leak (`FilmLeaks.ts`) on top of the look, preset or RawBoy edits; × or long-press removes it |
 | RawBoy preset for the batch / a selection | ≤1.1.1 | ✓ | ✓ 1.17.8 (list of Pro's presets) | ✓ | ✓ | Desktop and iOS keep the selection after a preset or lens preset (unreleased); web and Android clear it |
 | Partial presets (only the groups they hold) | 1.1.2 | ✓ | ✓ 1.17.2 | ✓ | ? | Denoise & sharpening group: unreleased on Desktop, iOS and Android |
 | Lens presets (by lens, per batch / selection / photo) | ≤1.1.1 | ✓ | ✓ 1.17.2; usable unreleased | ✓ | ✓ | Desktop before unreleased: Auto read its own list, which Pro's Lens tab never filled, so the picker didn't show. Now Auto lists the lens presets saved in Pro (one presets file), with a menu in the sidebar (batch), the selection's toolbar and the photo panel; iOS has no per-photo picker. Apply to all and Copy previous carry the lens preset choice: unreleased on all platforms |
@@ -235,6 +238,7 @@ most cases). "Check" = confirm in the app before building, because I could only 
 | 11 | ~~Auto crop drag-to-rotate (1.15.5)~~ (done, unreleased: Pro's crop too, web and Desktop). Check: **next / previous photo while zoomed (1.8.13), Pro zoom hint, healing stroke shown red while painting (1.15.11)** | | Listed as ? above | Check |
 | 12 | Check: **darktable `_01` duplicates in Browse** | ≤1.1.1 | Web handles `NAME_01.CR2.xmp` | Check in the Viewer |
 | 13 | Carry-over to the next photo (Pro) | ≤1.1.1 | Not a gap: automatic on web, iOS and Android (they open one photo at a time), on demand on Desktop (it has a filmstrip and ← / →). Listed so the difference isn't mistaken for a bug | none |
+| 14 | **Procedural film leak generator** (Pro Generate, `leaks` preset group, Auto 🎲 Leak) | unreleased | Web prototype first; port once the look is settled | Medium: `film_leak.glsl` in `Shaders.kt` / `gen.sh`, `FilmLeaks.kt/.swift` with seed checksum tests, `BoxForm` in `MaskOverlay`, `LeaksPanel`, `Presets` and Auto's button |
 
 Left out on purpose: Google Drive, Video, ZIP export, the web caches and lanes, Safari/Firefox rating download.
 
