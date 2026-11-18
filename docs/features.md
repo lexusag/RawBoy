@@ -84,7 +84,7 @@ Web, Desktop and iOS take every field of `DevelopParams` except where noted (che
 | Masks: Lens blur | 1.3.0 | ✓ | ✓ 1.17.2 | ✓ 1.17.2 | ✓ | |
 | Masks: Portrait retouch inside a layer | 1.13.4 | ✓ | ✓ 1.17.2 | — | — | |
 | Light leaks | 1.3.0 | ✓ | ✓ 1.17.0 | ✓ 1.4.7 | ✓ | Outline dots: web 1.11.0, Desktop and iOS 1.17.4, Android — |
-| **Light leaks: procedural generator** (Generate: 12 types, 🎲 Random, colour adjustment, x/y box) | unreleased | ✓ | — | — | — | Web prototype (`shaders/film_leak.glsl`, `FilmLeaks.ts`): Edge burn, Blob, Streak, Sprocket holes, Fog, Rebate glow, Flare, Start/End of roll, Film tear, Dust & scratches, Chemical stain; shares the `MAX_LEAKS` (4) budget |
+| **Light leaks: procedural generator** (Generate: 13 types, 🎲 Random, colour adjustment, x/y box) | unreleased | ✓ | — | — | — | Web prototype (`shaders/film_leak.glsl`, `FilmLeaks.ts`): Edge burn, Blob, Streak, Sprocket holes, Fog, Rebate glow, Flare, Start/End of roll, Film tear, Dust & scratches, Chemical stain, Scratches (↔ Horizontal / ↕ Vertical); shares the `MAX_LEAKS` (4) budget |
 | Light effects (lightning, sparks, trails, swirl) | 1.11.0 | ✓ | ✓ 1.17.0 | ✓ 1.13.0 | ✓ 1.13.0 | |
 | **Healing brush** | 1.15.1 | ✓ | ✓ 1.17.2 | ◐ | — | iOS has the engine (`rb_heal`) but no button (its bar is full) |
 | Auto Dev button | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |

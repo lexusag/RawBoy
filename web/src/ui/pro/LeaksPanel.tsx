@@ -210,17 +210,38 @@ export function LeaksPanel({
             ))}
           </div>
           <div className="button-row" role="group" aria-label="Source edge">
-            {SIDE_ARROWS.map(([t, arrow, title]) => (
-              <button
-                key={t}
-                type="button"
-                title={title}
-                className={filmLeak.turn === t ? 'primary' : 'text'}
-                onClick={() => setFilm((l) => sideMove(l, t), true)}
-              >
-                {arrow}
-              </button>
-            ))}
+            {filmLeak.type === 'scratches' || filmLeak.type === 'dust' ? (
+              <>
+                <button
+                  type="button"
+                  title="Horizontal scratches"
+                  className={filmLeak.turn % 2 === 1 ? 'primary' : 'text'}
+                  onClick={() => setFilm((l) => sideMove(l, 1), true)}
+                >
+                  ↔ Horizontal
+                </button>
+                <button
+                  type="button"
+                  title="Vertical scratches"
+                  className={filmLeak.turn % 2 === 0 ? 'primary' : 'text'}
+                  onClick={() => setFilm((l) => sideMove(l, 0), true)}
+                >
+                  ↕ Vertical
+                </button>
+              </>
+            ) : (
+              SIDE_ARROWS.map(([t, arrow, title]) => (
+                <button
+                  key={t}
+                  type="button"
+                  title={title}
+                  className={filmLeak.turn === t ? 'primary' : 'text'}
+                  onClick={() => setFilm((l) => sideMove(l, t), true)}
+                >
+                  {arrow}
+                </button>
+              ))
+            )}
             <button
               type="button"
               className={filmLeak.mirror ? 'primary' : 'text'}

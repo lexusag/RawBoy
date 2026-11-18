@@ -17,7 +17,7 @@ import { newId } from './Masks';
  * and a colour grade for the whole photo: warmth and tint -100..100, fade 0..100, contrast -100..100.
  */
 export type FilmLeakType =
-  | 'edge' | 'blob' | 'streak' | 'sprocket' | 'fog' | 'rebate' | 'flare' | 'start' | 'end' | 'tear' | 'dust' | 'stain';
+  | 'edge' | 'blob' | 'streak' | 'sprocket' | 'fog' | 'rebate' | 'flare' | 'start' | 'end' | 'tear' | 'dust' | 'stain' | 'scratches';
 
 export type FilmPalette = 'warm' | 'amber' | 'red' | 'magenta' | 'cool' | 'green' | 'mono';
 
@@ -46,7 +46,7 @@ export interface FilmLeak {
 
 /** Order matches the FL_* constants in film_leak.glsl. */
 export const FILM_LEAK_TYPES: readonly FilmLeakType[] = [
-  'edge', 'blob', 'streak', 'sprocket', 'fog', 'rebate', 'flare', 'start', 'end', 'tear', 'dust', 'stain',
+  'edge', 'blob', 'streak', 'sprocket', 'fog', 'rebate', 'flare', 'start', 'end', 'tear', 'dust', 'stain', 'scratches',
 ];
 
 export const FILM_LEAK_LABELS: Record<FilmLeakType, string> = {
@@ -62,6 +62,7 @@ export const FILM_LEAK_LABELS: Record<FilmLeakType, string> = {
   tear: 'Film tear',
   dust: 'Dust & scratches',
   stain: 'Chemical stain',
+  scratches: 'Scratches',
 };
 
 export const FILM_PALETTES: readonly FilmPalette[] = ['warm', 'amber', 'red', 'magenta', 'cool', 'green', 'mono'];
@@ -159,8 +160,8 @@ const pick = <T>(r: Rng, weights: readonly (readonly [T, number])[]): T => {
 
 /** How often Random picks each type as the main layer. */
 const TYPE_WEIGHTS: readonly (readonly [FilmLeakType, number])[] = [
-  ['edge', 26], ['blob', 18], ['streak', 9], ['sprocket', 7], ['fog', 8], ['rebate', 5],
-  ['flare', 6], ['start', 7], ['end', 5], ['tear', 3], ['stain', 3], ['dust', 3],
+  ['edge', 24], ['blob', 17], ['streak', 9], ['sprocket', 7], ['fog', 8], ['rebate', 5],
+  ['flare', 6], ['start', 7], ['end', 5], ['tear', 3], ['stain', 3], ['dust', 3], ['scratches', 3],
 ];
 
 const PALETTE_WEIGHTS: Record<FilmLeakType, readonly (readonly [FilmPalette, number])[]> = {
@@ -176,12 +177,13 @@ const PALETTE_WEIGHTS: Record<FilmLeakType, readonly (readonly [FilmPalette, num
   tear: [['mono', 100]],
   dust: [['mono', 100]],
   stain: [['magenta', 35], ['amber', 35], ['green', 30]],
+  scratches: [['mono', 100]],
 };
 
 /** Which side of the photo a layer of each type prefers: the short sides (film transport) or the long ones. */
 const SIDE: Record<FilmLeakType, 'short' | 'long' | 'any'> = {
   edge: 'short', blob: 'any', streak: 'short', sprocket: 'long', fog: 'any', rebate: 'any', flare: 'any',
-  start: 'short', end: 'short', tear: 'short', dust: 'long', stain: 'any',
+  start: 'short', end: 'short', tear: 'short', dust: 'any', stain: 'any', scratches: 'any',
 };
 
 /** A turn (0 left, 1 top, 2 right, 3 bottom) for a type on a photo of [aspect] (width / height). */
@@ -238,6 +240,7 @@ export function randomFilmLeak(type: FilmLeakType | undefined, aspect: number, s
     }
     case 'fog': intensity = between(r, 40, 80); break;
     case 'dust': box = { cx: 0.5, cy: 0.5, w: 1, h: 1 }; amount = between(r, 35, 85); intensity = between(r, 65, 95); break;
+    case 'scratches': box = { cx: 0.5, cy: 0.5, w: 1, h: 1 }; amount = between(r, 35, 85); intensity = between(r, 65, 95); break;
     case 'stain': {
       const s = between(r, 0.35, 0.8);
       box = { cx: between(r, 0.25, 0.75), cy: between(r, 0.25, 0.75), w: s, h: s * aspect * between(r, 0.7, 1.3) };
@@ -272,7 +275,9 @@ export function randomFilmRoll(aspect: number, seed: number): FilmLeak[] {
   const r = mulberry32(Math.floor(seed * 4294967296) ^ 0x9e3779b9);
   const main = randomFilmLeak(undefined, aspect, r());
   const out = [main];
-  if (main.type !== 'dust' && r() < 0.3) out.push(randomFilmLeak('dust', aspect, r(), false));
+  if (main.type !== 'dust' && main.type !== 'scratches' && r() < 0.3) {
+    out.push(randomFilmLeak(r() < 0.45 ? 'scratches' : 'dust', aspect, r(), false));
+  }
   if (main.type !== 'rebate' && main.type !== 'end' && r() < 0.15) out.push({ ...randomFilmLeak('rebate', aspect, r(), false), palette: main.palette === 'cool' ? 'red' : main.palette });
   if ((main.type === 'edge' || main.type === 'blob') && r() < 0.2) {
     const second = randomFilmLeak(main.type, aspect, r(), false);
@@ -289,7 +294,7 @@ export function sideMove(l: FilmLeak, turn: number): FilmLeak {
   const depth = l.turn % 2 === 0 ? l.w : l.h;
   const along = l.turn % 2 === 0 ? l.h : l.w;
   const offset = l.turn % 2 === 0 ? l.cy : l.cx;
-  const hugs = !['streak', 'fog', 'dust', 'stain'].includes(l.type);
+  const hugs = !['streak', 'fog', 'dust', 'stain', 'scratches'].includes(l.type);
   return hugs ? { ...l, turn, ...sideBox(turn, depth, along, offset, l.type === 'rebate' ? 0 : 0.02) } : { ...l, turn };
 }
 
