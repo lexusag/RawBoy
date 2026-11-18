@@ -1401,7 +1401,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 hiRes -> " reason=max-res"
                 screenFlash -> " reason=screen-flash"
                 else -> " reason=not-low-light"
-            }
+            } +
+            " ${settings.descriptionNote()}"
         // A flash shot's raw is lit by the flash, the viewfinder wasn't: no calibration from it.
         // A long exposure's raw is lifted away from what the viewfinder predicted for a still: it must not calibrate the preview.
         val viewfinderKey = if (flash == FlashMode.OFF && !screenFlash && longExposure == null) live?.let { calibrationKey(it, settings.previewScale(hiRes)) } else null
