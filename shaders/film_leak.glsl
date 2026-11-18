@@ -357,150 +357,115 @@ vec3 applyFilmLeaks(vec3 c, vec2 p, vec2 fullPx) {
                         else white = max(white, m * op);
                     }
                 }
-            } else {
-                // Fine sub-pixel emulsion grit scattered sparsely in the scratch swaths.
-                vec2 dp = bp / pxUnit;
-                float g1 = leakNoise(dp * 0.55 + so * 13.0) * leakNoise(dp * 0.92 + so * 29.0);
-                float grit = smoothstep(0.71 - 0.1 * density * look.y, 0.79 - 0.1 * density * look.y, g1)
-                           * (0.15 + 0.45 * pow(leakNoise(dp * 0.23 + so), 2.0));
-                white = max(white, grit);
-            }
-            // 3) Chaotic multi-scale stray scratches, V-nicks and splintered hairlines (3 rotated cell passes from
-            //    fine 8..35 px scuffs up to 50..220 px crossing scratches at varied angles, like Image 1 & Image 3).
-            int nPasses = scratchOnly ? 3 : 2;
-            for (int pass = 0; pass < 3; ++pass) {
-                if (pass >= nPasses) break;
-                float fp = float(pass);
-                float ang = 0.77 + fp * 0.93 + so.y * 0.07;
-                float ca = cos(ang), sa = sin(ang);
-                vec2 rp = vec2(ca * bp.x - sa * bp.y, sa * bp.x + ca * bp.y);
-                float cellPx = scale * (pass == 0 ? mix(0.14, 0.055, look.z) : pass == 1 ? mix(0.075, 0.030, look.z) : mix(0.038, 0.016, look.z));
-                vec2 cell = floor(rp / cellPx);
-                vec2 f = rp / cellPx - cell;
-                vec2 ps = so * (23.0 + fp * 17.0) + fp * 47.3;
-                float h = leakHash(cell + ps);
-                float keep = (scratchOnly ? (0.14 + 0.28 * density) : (0.04 + 0.16 * density)) * (0.35 + 0.65 * look.y);
-                if (h < keep) {
-                    vec2 ctr = vec2(0.2 + 0.6 * leakHash(cell + ps + 2.1), 0.2 + 0.6 * leakHash(cell + ps + 5.3));
-                    vec2 dh = (f - ctr) * cellPx / pxUnit;
-                    // Mix transport-biased angles (+-35°) with completely arbitrary angles (0..360°).
-                    float ha = leakHash(cell + ps + 6.1) < 0.55
-                        ? (1.5708 + (leakHash(cell + ps + 7.7) - 0.5) * 1.2) - ang
-                        : leakHash(cell + ps + 7.7) * 6.28318;
-                    float cha = cos(ha), sha = sin(ha);
-                    dh = vec2(cha * dh.x - sha * dh.y, sha * dh.x + cha * dh.y);
-                    float hlen = (cellPx / pxUnit) * (0.16 + 0.36 * pow(leakHash(cell + ps + 9.9), 1.1));
-                    float t = clamp(dh.x / max(hlen, 1e-3), -1.0, 1.0);
-                    // Piecewise-linear sharp kinks + high-frequency pixel chatter along the scratch.
-                    float k1 = (leakHash(cell + ps + 11.3) - 0.5) * 0.7;
-                    float k2 = (leakHash(cell + ps + 12.7) - 0.5) * 0.7;
-                    float path = (leakHash(cell + ps + 13.1) - 0.5) * hlen * 0.14 * abs(t - k1)
-                               + (leakHash(cell + ps + 14.7) - 0.5) * hlen * 0.09 * abs(t - k2)
-                               + (leakNoise(vec2(dh.x * 0.22, h * 31.0) + ps) - 0.5) * 1.6
-                               + (leakNoise(vec2(dh.x * 0.85, h * 53.0) + ps) - 0.5) * 0.55;
-                    float hd = abs(dh.y - path);
-                    // Optional secondary splinter branching off at an acute angle (like lower-right of Image 3).
-                    if (scratchOnly && leakHash(cell + ps + 16.3) < 0.35) {
-                        float brSlope = (leakHash(cell + ps + 18.1) - 0.5) * 0.45;
-                        float br = abs(dh.y - path - (dh.x - k1 * hlen) * brSlope) + step(dh.x, k1 * hlen) * 99.0;
-                        hd = min(hd, br);
+                // 3) Rare lint fibres (only in Dust & scratches; Scratches is straight transport lines only).
+                for (int pass = 0; pass < 2; ++pass) {
+                    float fp = float(pass);
+                    float ang = 0.77 + fp * 0.93 + so.y * 0.07;
+                    float ca = cos(ang), sa = sin(ang);
+                    vec2 rp = vec2(ca * bp.x - sa * bp.y, sa * bp.x + ca * bp.y);
+                    float cellPx = scale * (pass == 0 ? mix(0.14, 0.055, look.z) : mix(0.075, 0.030, look.z));
+                    vec2 cell = floor(rp / cellPx);
+                    vec2 f = rp / cellPx - cell;
+                    vec2 ps = so * (23.0 + fp * 17.0) + fp * 47.3;
+                    float h = leakHash(cell + ps);
+                    float keep = (0.03 + 0.12 * density) * (0.35 + 0.65 * look.y);
+                    if (h < keep) {
+                        vec2 ctr = vec2(0.2 + 0.6 * leakHash(cell + ps + 2.1), 0.2 + 0.6 * leakHash(cell + ps + 5.3));
+                        vec2 dh = (f - ctr) * cellPx / pxUnit;
+                        float ha = leakHash(cell + ps + 7.7) * 6.28318;
+                        float cha = cos(ha), sha = sin(ha);
+                        dh = vec2(cha * dh.x - sha * dh.y, sha * dh.x + cha * dh.y);
+                        float hlen = (cellPx / pxUnit) * (0.14 + 0.28 * pow(leakHash(cell + ps + 9.9), 1.2));
+                        float t = clamp(dh.x / max(hlen, 1e-3), -1.0, 1.0);
+                        float path = (leakHash(cell + ps + 13.1) - 0.5) * hlen * 0.12 * (t * t - 0.3);
+                        float hd = abs(dh.y - path);
+                        float hw = 0.08 + 0.18 * leakHash(cell + ps + 15.7);
+                        float taper = 1.0 - smoothstep(0.72, 1.0, abs(t));
+                        float nick = (1.0 - smoothstep(hw, hw + 0.38, hd)) * taper;
+                        float op = 0.25 + 0.55 * leakHash(cell + ps + 17.9);
+                        if (leakHash(cell + ps + 19.1) < 0.2) black = max(black, nick * op * 0.7);
+                        else white = max(white, nick * op);
                     }
-                    // Razor-thin sub-pixel core with intermittent stipple/skip along its length.
-                    float hw = 0.08 + 0.18 * leakHash(cell + ps + 15.7);
-                    float taper = 1.0 - smoothstep(0.72, 1.0, abs(t));
-                    float chatter = smoothstep(0.22, 0.55, leakNoise(vec2(dh.x * 0.18, h * 19.0) + ps))
-                                  * (0.4 + 0.6 * leakNoise(vec2(dh.x * 0.75, h * 41.0) + ps));
-                    float nick = (1.0 - smoothstep(hw, hw + 0.38 + 0.2 * look.x, hd)) * taper * chatter;
-                    float op = 0.28 + 0.65 * leakHash(cell + ps + 17.9);
-                    if (leakHash(cell + ps + 19.1) < 0.22) black = max(black, nick * op * 0.75);
-                    else white = max(white, nick * op);
                 }
             }
-            // 4) Long erratic, kinked hairline scratches roughly along the transport axis (bp.y), wandering,
-            //    jerking sideways at sharp kinks, and skipping intermittently (like Image 1 & Image 3).
+            // 4) Straight, ultra-fine hairline scratches along the transport axis (bp.y), with chaotic spacing,
+            //    varied start/end spans, and fine stippled skips along their length.
             float nWave = scratchOnly
-                ? floor(4.0 + 10.0 * look.z * (1.0 - 0.45 * smoothstep(0.7, 1.0, var)) + 0.5)
-                : floor(1.0 + 4.0 * look.z * (0.4 + 0.6 * (1.0 - var)) + 0.5);
-            for (int k = 0; k < 14; ++k) {
+                ? floor(5.0 + 13.0 * look.z * (1.0 - 0.45 * smoothstep(0.7, 1.0, var)) + 0.5)
+                : floor(1.0 + 3.0 * look.z * (0.4 + 0.6 * (1.0 - var)) + 0.5);
+            for (int k = 0; k < 18; ++k) {
                 if (float(k) >= nWave) break;
                 float fk = float(k);
                 vec2 ks = so * 11.0 + vec2(fk * 7.3, fk * 3.1);
-                // Group some scratches into irregular 2-4 line swaths, leave others isolated.
+                // Group some lines into tight parallel pairs/triplets, scatter the rest randomly across the frame.
                 float baseFrac = mod(fk, 3.0) > 0.5 && fk > 0.0
-                    ? fract(leakHash(ks - vec2(7.3, 3.1)) + (leakHash(ks + 0.5) - 0.5) * 0.055)
-                    : (0.04 + 0.92 * leakHash(ks));
+                    ? fract(leakHash(ks - vec2(7.3, 3.1)) + (leakHash(ks + 0.5) - 0.5) * 0.028)
+                    : (0.03 + 0.94 * leakHash(ks));
                 float sx = baseFrac * span.x;
-                float y0 = (0.02 + 0.72 * leakHash(ks + 1.2)) * span.y;
-                float lenY = (0.08 + 0.65 * pow(leakHash(ks + 2.4), 1.4)) * span.y;
+                float y0 = (0.0 + 0.65 * leakHash(ks + 1.2)) * span.y;
+                float lenY = (0.18 + 0.82 * pow(leakHash(ks + 2.4), 0.9)) * span.y;
                 float relY = (bp.y - y0) / max(lenY, 1.0);
                 if (relY < -0.02 || relY > 1.02) continue;
-                float envY = smoothstep(0.0, 0.06, relY) * (1.0 - smoothstep(0.92, 1.0, relY));
+                float envY = smoothstep(0.0, 0.05, relY) * (1.0 - smoothstep(0.95, 1.0, relY));
                 float yPx = bp.y / pxUnit;
-                // Stronger random tilt + sharp piecewise-linear kinks + high-frequency micro-jitter.
-                float tilt = (leakHash(ks + 3.6) - 0.5) * 0.16 * (bp.y - y0);
-                float k1 = 0.2 + 0.6 * leakHash(ks + 5.1);
-                float k2 = 0.15 + 0.7 * leakHash(ks + 6.3);
-                float kinks = (abs(relY - k1) - 0.3) * (leakHash(ks + 7.4) - 0.5) * pxUnit * 32.0
-                            + (abs(relY - k2) - 0.3) * (leakHash(ks + 8.8) - 0.5) * pxUnit * 16.0;
-                float wav = (leakFbm(vec2(bp.y / scale * 5.5, fk * 4.7) + so) - 0.5) * pxUnit * 18.0
-                          + (leakNoise(vec2(yPx * 0.06, fk * 9.1) + so) - 0.5) * pxUnit * 4.2
-                          + (leakNoise(vec2(yPx * 0.35, fk * 13.7) + so) - 0.5) * pxUnit * 1.1
-                          + kinks;
-                float distPx = abs(bp.x - sx - tilt - wav) / pxUnit;
-                if (distPx > 2.5) continue;
-                float w = 0.07 + 0.16 * leakHash(ks + 4.8);
-                // Broken, stippled skips along the scratch so it isn't a continuous vector stroke.
-                float skipCoarse = smoothstep(0.26, 0.58, leakFbm(vec2(bp.y / scale * 9.0, fk * 3.7) + so));
-                float skipFine = 0.3 + 0.7 * smoothstep(0.32, 0.68, leakNoise(vec2(yPx * 0.14, fk * 17.3) + so));
-                float op = (0.28 + 0.65 * leakHash(ks + 6.0)) * envY * skipCoarse * skipFine;
-                float line = (1.0 - smoothstep(w, w + 0.36 + 0.22 * look.x, distPx)) * op;
-                if (leakHash(ks + 9.5) < 0.15) black = max(black, line * 0.7);
+                // Straight line: only a tiny (<0.2°) transport alignment drift and sub-pixel (0.25 px) edge micro-roughness.
+                float tilt = (leakHash(ks + 3.6) - 0.5) * 0.003 * (bp.y - y0);
+                float microJit = (leakNoise(vec2(yPx * 0.04, fk * 9.1) + so) - 0.5) * pxUnit * 0.45
+                               + (leakNoise(vec2(yPx * 0.35, fk * 13.7) + so) - 0.5) * pxUnit * 0.22;
+                float distPx = abs(bp.x - sx - tilt - microJit) / pxUnit;
+                if (distPx > 2.0) continue;
+                float w = 0.06 + 0.14 * leakHash(ks + 4.8);
+                // Fine chaotic stipple/skip modulation along the straight line so intensity chatters and breaks up.
+                float skipCoarse = smoothstep(0.22, 0.58, leakFbm(vec2(bp.y / scale * 8.5, fk * 3.7) + so));
+                float skipMed = smoothstep(0.28, 0.68, leakNoise(vec2(yPx * 0.09, fk * 11.9) + so));
+                float skipFine = 0.25 + 0.75 * smoothstep(0.3, 0.72, leakNoise(vec2(yPx * 0.42, fk * 17.3) + so));
+                float op = (0.25 + 0.68 * leakHash(ks + 6.0)) * envY * skipCoarse * (0.35 + 0.65 * skipMed) * skipFine;
+                float line = (1.0 - smoothstep(w, w + 0.34 + 0.2 * look.x, distPx)) * op;
+                if (leakHash(ks + 9.5) < 0.2) black = max(black, line * 0.75);
                 else white = max(white, line);
             }
-            // 5) Ultra-fine, pitted tramline / roller scratches along bp.y (like Image 2 spider & Image 4 trees):
-            //    - Sub-pixel (0.35..0.7 px) irregular pitted track with sharp black gouge dashes, high-frequency
-            //      micro-dots, tiny grit specks alongside the groove, and a crisp 0.6 px refraction highlight lip.
+            // 5) Straight, ultra-fine pitted tramline / roller scratches along bp.y (like Image 2 spider & Image 4 trees):
+            //    - Sub-pixel (0.3..0.65 px) straight track with chaotic black gouge dashes, high-frequency dotted
+            //      micro-ticks, tiny grit burrs on the line, and a crisp 0.6 px refraction highlight lip alongside it.
             float nTram = scratchOnly
-                ? floor(1.0 + 13.0 * look.z * smoothstep(0.1, 0.9, var) + 0.5)
+                ? floor(2.0 + 14.0 * look.z * smoothstep(0.08, 0.9, var) + 0.5)
                 : floor(0.5 + 3.0 * look.z * var + 0.5);
-            for (int k = 0; k < 14; ++k) {
+            for (int k = 0; k < 16; ++k) {
                 if (float(k) >= nTram) break;
                 float fk = float(k);
                 vec2 ks = so * 17.0 + vec2(fk * 5.9, fk * 11.3);
-                float bandCenter = 0.08 + 0.84 * leakHash(vec2(floor(fk / 3.0) * 13.0, 1.0) + so * 9.0);
-                float bandSpread = (leakHash(ks) - 0.5) * 0.16;
+                float bandCenter = 0.06 + 0.88 * leakHash(vec2(floor(fk / 3.0) * 13.0, 1.0) + so * 9.0);
+                float bandSpread = (leakHash(ks) - 0.5) * 0.14;
                 float sx = clamp(bandCenter + bandSpread, 0.03, 0.97) * span.x;
-                float tilt = (leakHash(ks + 1.4) - 0.5) * 0.012 * (bp.y - 0.5 * span.y);
+                float tilt = (leakHash(ks + 1.4) - 0.5) * 0.002 * (bp.y - 0.5 * span.y);
                 float yCoord = bp.y / pxUnit;
-                // High-frequency micro-chatter along the track so it isn't dead ruler-straight.
-                float wob = (leakNoise(vec2(bp.y / scale * 3.8, fk * 6.1) + so) - 0.5) * pxUnit * 1.4
-                          + (leakNoise(vec2(yCoord * 0.25, fk * 15.3) + so) - 0.5) * pxUnit * 0.55;
-                float signedPx = (bp.x - sx - tilt - wob) / pxUnit;
+                float microJit = (leakNoise(vec2(bp.y / scale * 3.0, fk * 6.1) + so) - 0.5) * pxUnit * 0.35
+                               + (leakNoise(vec2(yCoord * 0.3, fk * 15.3) + so) - 0.5) * pxUnit * 0.18;
+                float signedPx = (bp.x - sx - tilt - microJit) / pxUnit;
                 float distPx = abs(signedPx);
-                if (distPx > 3.2) continue;
-                float reach = smoothstep(0.18, 0.52, leakFbm(vec2(bp.y / scale * 2.5 + fk * 1.9, fk * 4.3) + so));
-                // Unequal gouge dashes + high-frequency pitted micro-ticks (yCoord * 0.65 and * 0.12).
-                float dashes = smoothstep(0.57, 0.64, leakFbm(vec2(yCoord * 0.035, fk * 5.1) + so))
-                             * smoothstep(0.35, 0.55, leakNoise(vec2(yCoord * 0.22, fk * 9.7) + so));
-                float microTicks = smoothstep(0.54, 0.68, leakNoise(vec2(yCoord * 0.68, fk * 11.3) + so))
-                                 * smoothstep(0.38, 0.62, leakNoise(vec2(yCoord * 0.09, fk * 3.7) + so));
+                if (distPx > 2.8) continue;
+                float reach = smoothstep(0.16, 0.5, leakFbm(vec2(bp.y / scale * 2.5 + fk * 1.9, fk * 4.3) + so));
+                // Chaotic unequal gouge dashes + high-frequency pitted micro-ticks along the straight track.
+                float dashes = smoothstep(0.56, 0.63, leakFbm(vec2(yCoord * 0.038, fk * 5.1) + so))
+                             * smoothstep(0.32, 0.54, leakNoise(vec2(yCoord * 0.24, fk * 9.7) + so));
+                float microTicks = smoothstep(0.52, 0.66, leakNoise(vec2(yCoord * 0.72, fk * 11.3) + so))
+                                 * smoothstep(0.36, 0.6, leakNoise(vec2(yCoord * 0.095, fk * 3.7) + so));
                 float ticks = max(dashes, microTicks * 0.92);
-                float baseLine = (0.08 + 0.22 * look.y) * (0.4 + 0.6 * leakNoise(vec2(yCoord * 0.35, fk * 7.1) + so));
-                float grooveW = 0.08 + 0.24 * dashes + 0.14 * microTicks;
-                float groove = (1.0 - smoothstep(grooveW, grooveW + 0.34 + 0.18 * look.x, distPx))
+                float baseLine = (0.07 + 0.2 * look.y) * (0.35 + 0.65 * leakNoise(vec2(yCoord * 0.38, fk * 7.1) + so));
+                float grooveW = 0.07 + 0.22 * dashes + 0.13 * microTicks;
+                float groove = (1.0 - smoothstep(grooveW, grooveW + 0.32 + 0.16 * look.x, distPx))
                              * reach * (baseLine + (1.0 - baseLine) * ticks);
-                // Tiny asymmetric grit / burr pinholes along the track.
-                float burrCell = floor(yCoord / 42.0);
+                // Tiny asymmetric grit / burr pinholes sitting directly on the straight track.
+                float burrCell = floor(yCoord / 45.0);
                 float burrH = leakHash(vec2(burrCell, fk * 19.0) + so * 23.0);
-                if (burrH < 0.055 * reach) {
-                    float burrY = (burrCell + 0.2 + 0.6 * leakHash(vec2(burrCell + 1.0, fk))) * 42.0;
-                    float burrX = (leakHash(vec2(burrCell + 2.0, fk)) - 0.5) * 1.2;
-                    float burrR = 0.55 + 1.15 * pow(leakHash(vec2(burrCell + 3.0, fk) + so), 2.0);
-                    float bd = length(vec2(signedPx - burrX, (yCoord - burrY) * 0.8));
-                    groove = max(groove, 1.0 - smoothstep(burrR * 0.4, burrR + 0.45, bd));
+                if (burrH < 0.05 * reach) {
+                    float burrY = (burrCell + 0.2 + 0.6 * leakHash(vec2(burrCell + 1.0, fk))) * 45.0;
+                    float burrR = 0.5 + 1.1 * pow(leakHash(vec2(burrCell + 3.0, fk) + so), 2.0);
+                    float bd = length(vec2(signedPx, (yCoord - burrY) * 0.8));
+                    groove = max(groove, 1.0 - smoothstep(burrR * 0.4, burrR + 0.42, bd));
                 }
-                // Fine 0.65 px bright refraction lip right beside the dark groove.
-                float ridge = (1.0 - smoothstep(0.08, 0.45, abs(signedPx - 0.68)))
+                // Fine 0.6 px bright refraction lip right beside the dark groove.
+                float ridge = (1.0 - smoothstep(0.07, 0.42, abs(signedPx - 0.62)))
                             * reach * (0.12 + 0.58 * ticks) * (1.0 - 0.35 * var);
                 bool darkTrack = var > 0.28 || mod(fk, 2.0) < 0.5;
                 if (darkTrack) {
