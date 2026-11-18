@@ -83,6 +83,7 @@ struct MasksPanel: View {
                     Text("Adjust").tag(1)
                 }
                 .pickerStyle(.segmented)
+                .neutralSegments()
                 .padding(.horizontal, 12)
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
@@ -114,9 +115,8 @@ struct MasksPanel: View {
             .font(.subheadline)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(Capsule().fill(selected ? Color.accentColor.opacity(0.3) : Color.clear))
-            .overlay(Capsule().stroke(selected ? Color.accentColor : Color.secondary.opacity(0.5)))
-            .onTapGesture { actions.onSelect(l.id) }
+            .chipStyle(selected: selected)
+            .tapButton(selected: selected, hint: "Selects this mask") { actions.onSelect(l.id) }
             .contextMenu {
                 Button("Rename") {
                     renameText = l.name
@@ -135,6 +135,7 @@ struct MasksPanel: View {
             Text("Erase").tag(MaskTool.erase)
         }
         .pickerStyle(.segmented)
+        .neutralSegments()
         .padding(.vertical, 4)
         if tool != .move {
             ParamSlider(label: "Size", value: radiusToSize(brush.radius), range: 0...100, defaultValue: radiusToSize(0.03),

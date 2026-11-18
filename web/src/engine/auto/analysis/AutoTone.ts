@@ -49,11 +49,13 @@ const round = (v: number) => Math.round(v);
 
 /**
  * EV that brings the key to its target, but never brighter than what puts the highlights near the top.
- * [cameraMetered]: the camera's own exposure is kept instead (see cameraMetered). With a face, mostly the skin decides.
+ * [cameraMetered]: the camera's own exposure is kept instead (see cameraMetered), skin or not. Otherwise, with a face, mostly the skin decides.
  */
 export function autoExposure(stats: SceneStats, cameraMetered = false): number {
   let ev = cameraMetered ? 0 : Math.min(Math.log2(TARGET_KEY / stats.key), TARGET_P98 - stats.p98);
-  if (stats.skinLuminance > 0) {
+  // A camera-metered raw (Pixel, iPhone, Samsung) keeps the camera's exposure: its metering already knows the face, and the
+  // skin mask lifted it by 1-2 EV. Faces still steer the look (suggestLook).
+  if (stats.skinLuminance > 0 && !cameraMetered) {
     const t = clamp((stats.faceArea - FACE_AREA_FROM) / (FACE_AREA_FULL - FACE_AREA_FROM), 0, 1);
     const w = SKIN_WEIGHT * t * t * (3 - 2 * t);
     const bySkin = Math.log2(TARGET_SKIN / stats.skinLuminance);

@@ -162,7 +162,9 @@ object AutoTone {
             cameraMetered -> 0f
             else -> min(log2(TARGET_KEY / stats.key), TARGET_P98 - stats.p98)
         }
-        if (stats.skinLuminance > 0f) {
+        // A camera-metered raw (Pixel, iPhone, Samsung) keeps the camera's exposure: its metering already knows the face, and the
+        // skin mask (Vision on the Mac, MediaPipe elsewhere) lifted it by 1-2 EV. Faces still steer the look (LookSuggester).
+        if (stats.skinLuminance > 0f && (!cameraMetered || phoneAe)) {
             val t = ((stats.faceArea - FACE_AREA_FROM) / (FACE_AREA_FULL - FACE_AREA_FROM)).coerceIn(0f, 1f)
             val w = SKIN_WEIGHT * t * t * (3f - 2f * t)
             val bySkin = log2(TARGET_SKIN / (stats.skinLuminance * uncompensated))

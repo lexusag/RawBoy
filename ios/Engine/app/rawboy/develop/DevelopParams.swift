@@ -6,6 +6,7 @@ import Foundation
  * - toneMapper: the display transform (AgX by default; Pro only, Auto and Camera stay on AgX)
  * - exposure: EV, -5..+5
  * - contrast, saturation, highlights, shadows, whites, blacks, tint: -100..+100
+ * - lumaContrast: -100..+100 contrast on luminance only (colour ratios kept), 0 = off
  * - temperature: Kelvin; the as-shot value is the default
  * - denoise, grain, sharpening: 0..100, 0 = off; denoise is luminance noise (and colour noise while colorDenoise is nil)
  * - grainSize: 0..100, 25 = the default ~1/3200 of the long edge, each 25 doubles it (0 = half, 100 = 8x);
@@ -53,6 +54,7 @@ public struct DevelopParams: Equatable, Sendable {
     public var toneMapper: ToneMapper = .agx
     public var exposure: Float = 0
     public var contrast: Float = 0
+    public var lumaContrast: Float = 0
     public var highlights: Float = 0
     public var shadows: Float = 0
     public var whites: Float = 0

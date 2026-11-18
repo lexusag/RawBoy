@@ -85,6 +85,7 @@ struct FxPanel: View {
                     Text("Effects").tag(true)
                 }
                 .pickerStyle(.segmented)
+                .neutralSegments()
                 Button(zoomed ? "Fit" : "100%", action: actions.onToggleZoom)
                 Button("Done", action: actions.onDone).fontWeight(.semibold)
             }
@@ -127,9 +128,8 @@ struct FxPanel: View {
         .font(.subheadline)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(Capsule().fill(selected ? Color.accentColor.opacity(0.3) : Color.clear))
-        .overlay(Capsule().stroke(selected ? Color.accentColor : Color.secondary.opacity(0.5)))
-        .onTapGesture { actions.onSelect(e.id) }
+        .chipStyle(selected: selected)
+        .tapButton(selected: selected, hint: "Selects this light effect") { actions.onSelect(e.id) }
         .contextMenu {
             Button(e.enabled ? "Hide" : "Show") { actions.onUpdate(e.id, true) { $0.enabled.toggle() } }
             Button("Delete", role: .destructive) { actions.onRemove(e.id) }
@@ -153,6 +153,7 @@ struct FxPanel: View {
             ForEach(FxKind.allCases, id: \.self) { Text($0.label).tag($0) }
         }
         .pickerStyle(.segmented)
+        .neutralSegments()
         .padding(.vertical, 4)
         ParamSlider(label: "Intensity", value: fx.intensity, range: 0...100, defaultValue: 100,
                     format: { "\(Int($0.rounded()))%" }) { v in set(fx) { $0.intensity = v } }

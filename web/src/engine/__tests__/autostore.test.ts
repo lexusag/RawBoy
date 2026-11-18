@@ -28,7 +28,7 @@ describe('Auto import mode', () => {
     store.add([new File(['t'], 'scan.tif')]);
     expect(store.state.message).toBeNull();
     const [p] = store.state.photos;
-    expect([p.mode, p.plain]).toEqual(['looks', true]);
+    expect([p.mode, p.plain, p.autoDenoise]).toEqual(['looks', true, false]); // a finished file gets nothing, not even denoise
     // A plain analysis's auto develop is the as-shot defaults (AutoAnalysis skips autoDevelop).
     const defaults = developParams({ displaySource: true, temperature: 6504 });
     const analysed = { ...p, analysis: { defaults, autoBase: defaults, stats: { hasFace: false } } } as unknown as typeof p;
@@ -508,7 +508,9 @@ describe('Auto denoise on "As is" photos', () => {
     const stats = { hasFace: false, iso: 3200, key: 0.04, p5: -5, p98: -1, dynamicRange: 9, skinLuminance: 0, faceArea: 0, fractionAbove: () => 0 };
     const look = capturePreset('marfilm1', developParams({ contrast: 20, grain: 30 }), ['light', 'detail']);
     const s = store as unknown as { _state: { photos: object[] } };
-    s._state.photos = s._state.photos.map((p) => ({ ...p, analysis: { defaults, autoBase: defaults, stats }, preset: look }));
+    // A raw added As is starts with Auto denoise; this one is taken off first, to test the button.
+    expect((s._state.photos[0] as { autoDenoise: boolean }).autoDenoise).toBe(true);
+    s._state.photos = s._state.photos.map((p) => ({ ...p, analysis: { defaults, autoBase: defaults, stats }, preset: look, autoDenoise: false }));
     expect(paramsOf(store.state.photos[0])!.denoise).toBe(0);
     store.autoDenoiseAll();
     expect(store.state.message).toBe('Auto denoise on 1 photo');
@@ -650,7 +652,7 @@ describe('Auto white balance picker', () => {
 describe('Auto grid filter', () => {
   it('filters photos by camera, lens, ISO and shoot date, and provides available options with counts', async () => {
     vi.stubGlobal('window', { setTimeout: () => 0 });
-    const { availableFilterOptions, isFilterActive, NO_FILTER, photoCamera, photoDate, photoIso, photoLens } = await import('../../ui/auto/AutoStore');
+    const { availableFilterOptions, isFilterActive, NO_FILTER, photoCamera, photoDate, photoFocalLength, photoIso, photoLens } = await import('../../ui/auto/AutoStore');
     const { developParams } = await import('../develop/DevelopParams');
     const { LensInfo } = await import('../lens/LensInfo');
 
@@ -661,11 +663,12 @@ describe('Auto grid filter', () => {
       new File(['3'], 'shot3.CR2', { lastModified: 1700000000000 }),
     ]);
 
-    const makeAnalysis = (camera: string, lensName: string, iso: number) => ({
+    const makeAnalysis = (camera: string, lensName: string, iso: number, focalLength: number) => ({
       defaults: developParams(),
       autoBase: developParams(),
       camera,
       lens: new LensInfo(lensName, 6000, 4000, 36, 24, 1, null, null, null, 0),
+      focalLength,
       stats: { hasFace: false, iso, key: 0.05, p1: -6, p5: -5, p50: -2, p98: 0, p99: 0.5, clipped: 0, chroma: 0.2, greenBlue: 0.1, warm: 0.2, faceArea: 0, skinLuminance: 0 },
       base: {} as unknown,
       bloom: {} as unknown,
@@ -674,13 +677,13 @@ describe('Auto grid filter', () => {
     });
 
     const s = store as unknown as { _state: { photos: { id: string; date: string | null; analysis: unknown }[] } };
-    s._state.photos[0].analysis = makeAnalysis('Fujifilm X-T5', 'XF35mmF1.4 R', 400);
+    s._state.photos[0].analysis = makeAnalysis('Fujifilm X-T5', 'XF35mmF1.4 R', 400, 35);
     s._state.photos[0].date = '2024:10:15 10:00:00';
 
-    s._state.photos[1].analysis = makeAnalysis('Fujifilm X-T5', 'XF18-55mmF2.8-4 R LM OIS', 1600);
+    s._state.photos[1].analysis = makeAnalysis('Fujifilm X-T5', 'XF18-55mmF2.8-4 R LM OIS', 1600, 18.4);
     s._state.photos[1].date = '2024:10:15 14:30:00';
 
-    s._state.photos[2].analysis = makeAnalysis('Sony ILCE-7M3', 'FE 24-70mm F2.8 GM', 400);
+    s._state.photos[2].analysis = makeAnalysis('Sony ILCE-7M3', 'FE 24-70mm F2.8 GM', 400, 50);
     s._state.photos[2].date = '2024:10:16 09:15:00';
 
     const p0 = store.state.photos[0];
@@ -690,6 +693,8 @@ describe('Auto grid filter', () => {
     expect(photoCamera(p0)).toBe('Fujifilm X-T5');
     expect(photoLens(p0)).toBe('XF35mmF1.4 R');
     expect(photoIso(p0)).toBe(400);
+    expect(photoFocalLength(p0)).toBe(35);
+    expect(photoFocalLength(p1)).toBe(18);
     expect(photoDate(p0)).toBe('2024-10-15');
     expect(photoCamera(p1)).toBe('Fujifilm X-T5');
     expect(photoCamera(p2)).toBe('Sony ILCE-7M3');
@@ -708,6 +713,11 @@ describe('Auto grid filter', () => {
     expect(opts.isos).toEqual([
       { value: 400, label: 'ISO 400', count: 2 },
       { value: 1600, label: 'ISO 1600', count: 1 },
+    ]);
+    expect(opts.focalLengths).toEqual([
+      { value: 18, label: '18 mm', count: 1 },
+      { value: 35, label: '35 mm', count: 1 },
+      { value: 50, label: '50 mm', count: 1 },
     ]);
     expect(opts.dates).toEqual([
       { value: '2024-10-15', label: '2024-10-15', count: 2 },
@@ -759,8 +769,28 @@ describe('Auto grid filter', () => {
     expect(store.state.filter.isoMax).toBe(400);
     expect(store.shown.map((p) => p.name)).toEqual(['shot1.CR2', 'shot3.CR2']);
 
+    // Filter by focal length range
+    store.setFilter({ iso: null, focalMin: 24, focalMax: 50 });
+    expect(store.shown.map((p) => p.name)).toEqual(['shot1.CR2', 'shot3.CR2']);
+
+    store.setFilter({ focalMin: 40, focalMax: null });
+    expect(store.shown.map((p) => p.name)).toEqual(['shot3.CR2']);
+
+    store.setFilter({ focalMin: null, focalMax: 35 });
+    expect(store.shown.map((p) => p.name)).toEqual(['shot1.CR2', 'shot2.CR2']);
+
+    // Conflicting focal length bounds reset the opposing bound
+    store.setFilter({ focalMin: 18, focalMax: 35 });
+    store.setFilter({ focalMin: 50 });
+    expect(store.state.filter.focalMin).toBe(50);
+    expect(store.state.filter.focalMax).toBeNull();
+    expect(store.shown.map((p) => p.name)).toEqual(['shot3.CR2']);
+
+    store.setFilter({ focal: 35 });
+    expect(store.shown.map((p) => p.name)).toEqual(['shot1.CR2']);
+
     // Filter by lens
-    store.setFilter({ camera: null, iso: null, lens: 'FE 24-70mm F2.8 GM' });
+    store.setFilter({ camera: null, iso: null, focal: null, lens: 'FE 24-70mm F2.8 GM' });
     expect(store.shown.map((p) => p.name)).toEqual(['shot3.CR2']);
 
     // Filter by date
@@ -801,11 +831,12 @@ describe('Auto grid: unedited filter', () => {
     set(c, { adjust: { ...store.state.photos[2].adjust, contrast: 10 } });
     set(d, { plain: false });
     set(e, { autoDenoise: true });
-    expect(store.state.photos.map(isUnedited)).toEqual([true, false, false, false, false]);
+    // Auto denoise (which raws added As is start with) doesn't make a photo edited.
+    expect(store.state.photos.map(isUnedited)).toEqual([true, false, false, false, true]);
     expect(isFilterActive(NO_FILTER)).toBe(false);
     store.setFilter({ unedited: true });
     expect(isFilterActive(store.state.filter)).toBe(true);
-    expect(store.shown.map((p) => p.id)).toEqual([a]);
+    expect(store.shown.map((p) => p.id)).toEqual([a, e]);
     store.clearFilter();
     expect(store.shown).toHaveLength(5);
   });

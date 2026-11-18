@@ -16,10 +16,10 @@ final class KeyboardShortcuts {
 
     /** ANSI key codes (Carbon's kVK_*). */
     enum Key: UInt16 {
-        case a = 0, z = 6, d = 2, c = 8, b = 11, e = 14, v = 9, o = 31
+        case a = 0, y = 16, z = 6, d = 2, c = 8, b = 11, e = 14, v = 9, o = 31, f = 3, tab = 48
         case leftBracket = 33, rightBracket = 30, backslash = 42
         case left = 123, right = 124, down = 125, up = 126, one = 18, two = 19
-        case delete = 51, forwardDelete = 117, space = 49, `return` = 36, keypadEnter = 76, escape = 53, slash = 44
+        case three = 20, delete = 51, forwardDelete = 117, space = 49, `return` = 36, keypadEnter = 76, escape = 53, slash = 44
     }
 
     init(model: DesktopModel) { self.model = model }
@@ -44,8 +44,9 @@ final class KeyboardShortcuts {
     }
 
     /**
-     * Auto: the arrows move through the grid (and between photos in the photo view), Return opens, Esc goes back; ⌘E, ⌘O, ⌘Z
-     * and the mode keys are the menu's. Nothing here fires while text is being typed or a sheet is open.
+     * Auto: the arrows move through the grid (and between photos in the photo view, as Space and ⌫ do there), Return opens,
+     * Esc goes back, ⌦ removes the photo from the batch, C opens Crop & rotate, ⇧C copies the previous photo's look; ⌘E, ⌘O,
+     * ⌘Z and the mode keys are the menu's. Nothing here fires while text is being typed or a sheet is open.
      */
     private func handleAuto(_ event: NSEvent, _ key: Key) -> NSEvent? {
         guard event.type == .keyDown, !typing else { return event }
@@ -59,6 +60,7 @@ final class KeyboardShortcuts {
             case .a: if auto.selected == nil { auto.selectAll() }
             case .return, .keypadEnter: model.editInPro()
             case .one: model.mode = .pro
+            case .three: model.mode = .browse
             case .slash: model.commands.send(.help)
             default: return event
             }
@@ -72,16 +74,35 @@ final class KeyboardShortcuts {
             }
             return nil
         }
+        // ⇧C in the photo view: Copy previous (the look, brightness and settings of the photo before it), as on the web.
+        if flags == [.shift], key == .c, auto.export == nil, let id = auto.selected {
+            auto.copyPrevious(id)
+            return nil
+        }
         guard flags.isEmpty, auto.export == nil else { return event }
         // Esc with photos selected in the grid clears the selection first.
         if key == .escape, auto.selected == nil, !auto.selection.isEmpty {
-            auto.selection = []
+            auto.clearSelection()
             return nil
         }
-        if auto.selected != nil {
+        if let id = auto.selected {
+            // Crop & rotate open: Return, Esc or C put it down (the crop stays as drawn); the batch keys wait until then.
+            // A held C doesn't flick the tool open and shut.
+            if key == .c, event.isARepeat { return nil }
+            if auto.cropping {
+                switch key {
+                case .return, .keypadEnter, .escape, .c: auto.cropping = false
+                default: return event
+                }
+                return nil
+            }
             switch key {
-            case .left: auto.page(-1)
-            case .right: auto.page(1)
+            // Space / ⌫ as on the web (and in darktable), also while a slider has focus.
+            case .left, .delete: auto.page(-1)
+            case .right, .space: auto.page(1)
+            // ⌦ (fn-Delete, the web's Delete): out of the batch, on to the next photo.
+            case .forwardDelete: auto.removeOpened(id)
+            case .c: auto.requestCrop()
             case .escape: auto.goBack()
             default: return event
             }
@@ -98,10 +119,26 @@ final class KeyboardShortcuts {
         return nil
     }
 
+    /**
+     * Browse: the keys are ViewerUI's (its own monitor, in this window, while Browse is showing); only the mode keys
+     * are ours, matched by position like the others.
+     */
+    private func handleBrowse(_ event: NSEvent, _ key: Key) -> NSEvent? {
+        guard event.type == .keyDown, !typing,
+              event.modifierFlags.intersection([.command, .control, .option, .shift]) == [.command] else { return event }
+        switch key {
+        case .one: model.mode = .pro
+        case .two: model.mode = .auto
+        default: return event
+        }
+        return nil
+    }
+
     private func handle(_ event: NSEvent) -> NSEvent? {
         guard let key = Key(rawValue: event.keyCode) else { return event }
         let commands = model.commands
         if model.mode == .auto { return handleAuto(event, key) }
+        if model.mode == .browse { return handleBrowse(event, key) }
         if key == .space {
             if typing { return event }
             let held = event.type == .keyDown
@@ -116,7 +153,10 @@ final class KeyboardShortcuts {
             case .z: vm.undo()
             case .o: model.openPanel()
             case .e: commands.send(.export)
+            // Every photo in the filmstrip, for a batch export.
+            case .a: model.filmstrip.selectAll()
             case .slash: commands.send(.help)
+            case .three: model.mode = .browse
             default: return event
             }
             return nil
@@ -127,11 +167,35 @@ final class KeyboardShortcuts {
         }
         guard flags.isEmpty || flags == [.shift] else { return event }
         guard vm.state.hasImage else { return event }
+        // Tab hides the panels, as in RawBoy Viewer, unless Full Keyboard Access uses it to move between controls (F always works).
+        if key == .tab {
+            guard flags.isEmpty, !NSApp.isFullKeyboardAccessEnabled else { return event }
+            commands.send(.togglePhotoOnly)
+            return nil
+        }
+        // ← → step through the folder (the filmstrip), unless a focused control (Full Keyboard Access) takes the arrows.
+        if key == .left || key == .right, flags.isEmpty {
+            if NSApp.keyWindow?.firstResponder is NSControl { return event }
+            // With the Look selector out they turn its pages.
+            if commands.looksOpen {
+                commands.send(.looksPage(key == .left ? -1 : 1))
+                return nil
+            }
+            model.openNeighbour(key == .left ? -1 : 1)
+            return nil
+        }
+        // ⇧C: Copy previous (C alone is Crop & rotate).
+        if flags == [.shift], key == .c {
+            commands.send(.copyPrevious)
+            return nil
+        }
         switch key {
+        case .f: commands.send(.togglePhotoOnly)
         case .z: commands.send(.zoom100AtPointer)
         case .d: commands.send(.cycleFrame)
         case .c: commands.send(.toggleMode(.geometry))
         case .backslash: commands.send(.toggleCompare)
+        case .y: commands.send(.toggleSplit)
         case .b: commands.send(.maskTool(.brush))
         case .e: commands.send(.maskTool(.erase))
         case .v: commands.send(.maskTool(.move))

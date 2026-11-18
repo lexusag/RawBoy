@@ -5,7 +5,7 @@ import Foundation
  * it works on hang on these points, and its size scales everything (`width`). Made from MediaPipe's 478-point mesh
  * (`init(mesh:)`, as web's PortraitRetouch indexes it) or from Apple's Vision landmarks (`VisionFaces`, macOS).
  */
-public struct FaceShape: Equatable, Sendable {
+public struct FaceShape: Equatable, Sendable, Codable {
     public typealias Point = SIMD2<Float>
 
     /** Lower eyelids from the outer to the inner corner, nine points each. */

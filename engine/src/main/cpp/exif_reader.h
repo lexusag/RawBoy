@@ -19,6 +19,13 @@ bool readExif(const uint8_t* tiff, size_t size, PhotoMetadata& out, int& orienta
  */
 void readGpsStamps(const uint8_t* tiff, size_t size, PhotoMetadata& out);
 
+/**
+ * Fills what [m] still lacks from the file's own EXIF: IFD0 and Exif IFD of a TIFF-based file (LibRaw skips the Exif tags
+ * Android's DngCreator keeps in IFD0: Pixel DNGs came out with no ISO), or the embedded JPEG of a Fujifilm RAF (no
+ * exposure bias, ...). Never replaces a value the decoder already read.
+ */
+void fillMissingMetadata(const uint8_t* data, size_t size, PhotoMetadata& m);
+
 /** The TIFF-structured EXIF block of a HEIF/HEIC file (its 'Exif' item), or false if it has none. */
 bool findHeifExif(const uint8_t* data, size_t size, const uint8_t*& tiff, size_t& tiffSize);
 

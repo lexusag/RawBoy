@@ -235,7 +235,7 @@ public enum LightLeaks {
         l.cover = f("cover", 0, 100) ?? 0
         if let r = o["radii"] as? [Any], r.count == 8,
            r.allSatisfy({ ($0 as? NSNumber).map { CFGetTypeID($0) != CFBooleanGetTypeID() && $0.floatValue.isFinite } ?? false }) {
-            l.radii = r.map { ($0 as! NSNumber).floatValue.clamped(0.1, 4) }
+            l.radii = r.map { ($0 as! NSNumber).floatValue.clamped(LightLeaks.radiusMin, LightLeaks.radiusMax) }
         }
         l.intensity = f("intensity", 0, 100) ?? 100
         l.hue = f("hue", hueMin, hueMax) ?? hue
@@ -258,6 +258,32 @@ public enum LightLeaks {
     /** The outer glow colour for [hue]: the same light, redder. */
     public static func outerColor(_ hue: Float) -> [Float] { hueColor(hue.clamped(hueMin, hueMax) - outerShift) }
 
+    /** A reshaped glow's 8 outline radii are limited to this range (shape radii). */
+    public static let radiusMin: Float = 0.1
+    public static let radiusMax: Float = 4
+    /** The unreshaped outline: an ellipse. */
+    public static let roundRadii = [Float](repeating: 1, count: 8)
+
+    /** The angle (radians, in the leak's own frame) of control radius [k]. */
+    public static func radiusAngle(_ k: Int) -> Float { Float((Double(k) + 0.5) * Double.pi / 4) }
+
+    /** Whether a glow's outline was reshaped (any radius moved off the ellipse). */
+    public static func reshaped(_ l: LightLeak) -> Bool { l.kind == .glow && l.radii.contains { $0 != 1 } }
+
+    /**
+     * A glow's outline radius (shape radii) at angle [t] (radians, its own frame): the shader's closed Catmull-Rom
+     * spline through the 8 control radii.
+     */
+    public static func radius(_ radii: [Float], _ t: Float) -> Float {
+        let x = Double(t) * 4 / Double.pi - 0.5
+        let fl = x.rounded(.down)
+        let f = x - fl
+        func r(_ k: Int) -> Double { Double(radii.isEmpty ? 1 : radii[(((Int(fl) + k) % 8) + 8) % 8 % radii.count]) }
+        let (r0, r1, r2, r3) = (r(-1), r(0), r(1), r(2))
+        let v = 0.5 * (2 * r1 + (r2 - r0) * f + (2 * r0 - 5 * r1 + 4 * r2 - r3) * f * f + (3 * r1 - r0 - 3 * r2 + r3) * f * f * f)
+        return Float(max(v, 0.05))
+    }
+
     /** The glow slider 0..100 as the shader's glow reach, in shape radii. */
     public static func glowReach(_ glow: Float) -> Float { 0.03 + glow.clamped(0, 100) / 100 * 3 }
 
@@ -272,12 +298,15 @@ public enum LightLeaks {
      * frame after bend and taper (the shader's leakEdge, without the warp). Triangle: apex (1, 0), base corners
      * (-1, ±1), exact distance outside, inside scaled by its inradius so the middle is -1 as for the other shapes.
      */
-    public static func edge(_ kind: LeakKind, qx: Float, qy: Float) -> Float {
+    public static func edge(_ kind: LeakKind, qx: Float, qy: Float, radii: [Float] = roundRadii) -> Float {
         switch kind {
         case .streak:
             return abs(qy) - 1
         case .glow:
-            return hypotf(qx, qy) - 1
+            if radii.allSatisfy({ $0 == 1 }) { return hypotf(qx, qy) - 1 }
+            // A reshaped glow: the distance past its outline radius, in the shader's units ((|q| - r) / sqrt(r)).
+            let r = radius(radii, atan2(qy, qx + 1e-6))
+            return (hypotf(qx, qy) - r) / r.squareRoot()
         case .triangle:
             func segment(_ ax: Float, _ ay: Float, _ bx: Float, _ by: Float) -> Float {
                 let ex = bx - ax

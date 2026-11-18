@@ -2,7 +2,9 @@
 import AppKit
 import Foundation
 import ImageIO
+import MetalKit
 import RawBoyEngine
+import struct RawBoyBrowseKit.PhotoSidecar
 
 /**
  * Debug builds: runs a batch through Auto without clicking and prints timings, so the whole path (analysis, thumbnails,
@@ -36,6 +38,12 @@ enum AutoBatchProbe {
         Task {
             if model.mode == .pro {
                 while !model.vm.state.hasImage { try? await Task.sleep(for: .milliseconds(300)) }
+                // RAWBOY_PROBE_LEAK=<kind>: a leak of that kind is added and the Light tool opened, for the mouse script.
+                if let kind = ProcessInfo.processInfo.environment["RAWBOY_PROBE_LEAK"] {
+                    _ = model.vm.addLeak(kind == "glow" ? .glow : kind == "triangle" ? .triangle : .streak)
+                    model.commands.send(.toggleMode(.leaks))
+                    try? await Task.sleep(for: .seconds(2))
+                }
             } else {
                 while model.auto.selected == nil || model.auto.sessionReady == nil { try? await Task.sleep(for: .milliseconds(300)) }
             }
@@ -44,7 +52,9 @@ enum AutoBatchProbe {
                 log("no window")
                 return
             }
+            NSApp.activate(ignoringOtherApps: true)
             window.makeKeyAndOrderFront(nil)
+            try? await Task.sleep(for: .milliseconds(500))
             func point(_ s: Substring) -> NSPoint {
                 let v = s.split(separator: ",").compactMap { Double($0) }
                 return NSPoint(x: v[0], y: view.frame.height - v[1])
@@ -57,6 +67,9 @@ enum AutoBatchProbe {
             @MainActor func state() -> String {
                 if model.mode == .pro {
                     let p = model.vm.state.params
+                    if let l = p.leaks.last, ProcessInfo.processInfo.environment["RAWBOY_PROBE_LEAK"] != nil {
+                        return "leak \(l.kind) radii \(l.radii) rx \(l.rx) ry \(l.ry) angle \(l.angle) cx \(l.cx) cy \(l.cy)"
+                    }
                     return "exposure \(p.exposure) contrast \(p.contrast) highlights \(p.highlights) shadows \(p.shadows) tonemapper \(p.toneMapper) film \(p.film ?? "-")"
                 }
                 guard let id = model.auto.selected, let p = model.auto.photo(id) else { return "-" }
@@ -68,6 +81,10 @@ enum AutoBatchProbe {
                 let body = double ? step.dropLast(2) : step
                 let parts = body.split(separator: ">")
                 let from = point(parts[0])
+                if ProcessInfo.processInfo.environment["RAWBOY_PROBE_HIT"] != nil, let super_ = view.superview {
+                    let hit = view.hitTest(view.convert(from, to: super_))
+                    log("hit at \(step): \(hit.map { String(describing: type(of: $0)) } ?? "nil"), content \(view.frame.size)")
+                }
                 post(.mouseMoved, from)
                 try? await Task.sleep(for: .milliseconds(50))
                 post(.leftMouseDown, from, clicks: double ? 2 : 1)
@@ -84,6 +101,173 @@ enum AutoBatchProbe {
                 try? await Task.sleep(for: .milliseconds(600))
                 log("after \(step): \(state())")
             }
+        }
+    }
+
+    /**
+     * RAWBOY_PROBE_SCREEN=1: once a photo is open, prints each visible window's frame and screen, and each photo view's
+     * colour space, backing scale and drawable size (multi-display checks).
+     */
+    static func screenProbeIfRequested(_ model: DesktopModel) {
+        guard ProcessInfo.processInfo.environment["RAWBOY_PROBE_SCREEN"] != nil else { return }
+        Task {
+            while !model.vm.state.hasImage { try? await Task.sleep(for: .milliseconds(300)) }
+            try? await Task.sleep(for: .seconds(3))
+            @MainActor func views(_ v: NSView) {
+                if let m = v as? MTKView {
+                    let space = (m.layer as? CAMetalLayer)?.colorspace?.name.map { $0 as String } ?? "none"
+                    log("preview view: colorspace \(space), screen \(m.window?.screen?.localizedName ?? "-"), scale \(m.window?.backingScaleFactor ?? 0), drawable \(m.drawableSize)")
+                }
+                v.subviews.forEach(views)
+            }
+            if ProcessInfo.processInfo.environment["RAWBOY_PROBE_HELP"] != nil {
+                // The Help menu's items (title, enabled), then the Help sheet.
+                let help = NSApp.mainMenu?.items.first { $0.title == "Help" }
+                log("Help menu: " + (help?.submenu?.items.map { "\"\($0.title)\"\($0.isEnabled ? "" : " (disabled)")" }.joined(separator: ", ") ?? "none"))
+                model.commands.send(.help)
+                try? await Task.sleep(for: .seconds(2))
+            }
+            for w in NSApp.windows where w.isVisible {
+                log("window \(w.title): frame \(w.frame), screen \(w.screen?.frame ?? .zero), screens \(NSScreen.screens.map(\.frame))")
+                if let c = w.contentView { views(c) }
+            }
+            // RAWBOY_PROBE_SCREEN=offscreen: the window is put where a disconnected display was, then the system's "screens
+            // changed" notice is posted: it must come back onto a screen.
+            if ProcessInfo.processInfo.environment["RAWBOY_PROBE_SCREEN"] == "offscreen", let w = NSApp.windows.first(where: { $0.isVisible }) {
+                w.setFrame(NSRect(x: 9000, y: 200, width: 1280, height: 860), display: true)
+                log("moved off screen: \(w.frame), on a screen \(NSScreen.screens.contains { $0.frame.intersects(w.frame) })")
+                NotificationCenter.default.post(name: NSApplication.didChangeScreenParametersNotification, object: NSApp)
+                try? await Task.sleep(for: .seconds(1))
+                log("after the screens changed: \(w.frame), on a screen \(NSScreen.screens.contains { $0.frame.intersects(w.frame) })")
+                if let c = w.contentView { views(c) }
+            }
+        }
+    }
+
+    /**
+     * RAWBOY_PROBE_SLIDERS=1: with a photo open (and RAWBOY_PROBE_LEAK's tool, if set), sets Light and Colour values to their
+     * extremes step by step and prints every width `SliderWidthLog` reports (ParamSlider, ValueSlider), so a track whose width
+     * follows the value readout shows up as a spread of widths. Ends with a summary per slider.
+     */
+    static func sliderProbeIfRequested(_ model: DesktopModel) {
+        guard ProcessInfo.processInfo.environment["RAWBOY_PROBE_SLIDERS"] != nil else { return }
+        Task {
+            while !model.vm.state.hasImage { try? await Task.sleep(for: .milliseconds(300)) }
+            if let kind = ProcessInfo.processInfo.environment["RAWBOY_PROBE_LEAK"] {
+                _ = model.vm.addLeak(kind == "glow" ? .glow : kind == "triangle" ? .triangle : .streak)
+                model.commands.send(.toggleMode(.leaks))
+            }
+            try? await Task.sleep(for: .seconds(2))
+            var seen: [String: Set<Int>] = [:]
+            var phase = "start"
+            SliderWidthLog.record = { name, width in
+                seen[name, default: []].insert(Int(width.rounded()))
+                log("slider width [\(phase)] \(name): \(Int(width.rounded()))")
+            }
+            @MainActor func measure(_ label: String) { phase = label }
+            measure("start")
+            let steps: [(String, (inout DevelopParams) -> Void)] = [
+                ("min", { p in p.exposure = -5; p.contrast = -100; p.highlights = -100; p.shadows = -100; p.saturation = -100; p.temperature = 2000; p.tint = -100; p.filmGrain = 0 }),
+                ("max", { p in p.exposure = 5; p.contrast = 100; p.highlights = 100; p.shadows = 100; p.saturation = 100; p.temperature = 12000; p.tint = 100; p.filmGrain = 200 }),
+                ("mid", { p in p.exposure = 0.05; p.contrast = 7; p.highlights = -8; p.shadows = 1; p.saturation = 0; p.temperature = 5500; p.tint = 3; p.filmGrain = 75 }),
+                ("fine", { p in p.exposure = -1.25; p.contrast = -33; p.highlights = 12; p.shadows = -77; p.saturation = 55; p.temperature = 3300; p.tint = -45; p.filmGrain = 111 }),
+            ]
+            for (name, change) in steps {
+                measure(name)
+                model.vm.update(change)
+                try? await Task.sleep(for: .milliseconds(700))
+            }
+            // The inspector with every section open, then as it was, then each tool's panel, at the window's own size.
+            let closedSections = UserDefaults.standard.string(forKey: "pro.closedSections")
+            measure("all sections")
+            UserDefaults.standard.set("", forKey: "pro.closedSections")
+            try? await Task.sleep(for: .milliseconds(700))
+            if let closedSections { UserDefaults.standard.set(closedSections, forKey: "pro.closedSections") } else {
+                UserDefaults.standard.removeObject(forKey: "pro.closedSections")
+            }
+            for mode in [EditorMode.geometry, .masks, .leaks, .fx, .heal, .presets] {
+                measure("tool \(mode)")
+                model.commands.send(.toggleMode(mode))
+                try? await Task.sleep(for: .milliseconds(700))
+                model.commands.send(.toggleMode(mode))
+                try? await Task.sleep(for: .milliseconds(300))
+            }
+            // The frame colour (D, or a click outside the photo) cycles; the window is made narrower, wider and as it was.
+            for i in 1...4 {
+                measure("frame colour \(i)")
+                model.commands.send(.cycleFrame)
+                try? await Task.sleep(for: .milliseconds(700))
+            }
+            if let w = NSApp.windows.first(where: { $0.isVisible }) {
+                let original = w.frame
+                for width in [1100.0, 2200.0, original.width] {
+                    measure("window \(Int(width))")
+                    w.setFrame(NSRect(x: original.minX, y: original.minY, width: width, height: original.height), display: true)
+                    try? await Task.sleep(for: .milliseconds(900))
+                }
+            }
+            for (name, ws) in seen.sorted(by: { $0.key < $1.key }) {
+                log("slider \(name): widths \(ws.sorted()) \(ws.count > 1 ? "VARIES" : "constant")")
+            }
+        }
+    }
+
+    /**
+     * RAWBOY_PROBE_RESET=sheet|look|film|asis: once the batch is analysed, gives each photo some adjustments, then shows the
+     * Reset all photos sheet (sheet), or resets to a look / a film stock / As is and prints every photo's state; then undoes the
+     * first photo's reset and prints it again.
+     */
+    static func resetProbeIfRequested(_ model: DesktopModel) {
+        guard let kind = ProcessInfo.processInfo.environment["RAWBOY_PROBE_RESET"] else { return }
+        Task {
+            let auto = model.auto
+            while auto.photos.isEmpty || auto.photos.contains(where: { $0.status == .queued || $0.status == .analyzing }) {
+                try? await Task.sleep(for: .milliseconds(300))
+            }
+            @MainActor func dump(_ label: String) {
+                for p in auto.photos {
+                    log("reset \(label) \(p.name): \(p.mode) look=\(p.look.name) film=\(p.filmLook.name) strength=\(p.strength) brightness=\(p.adjust.brightness) warmth=\(p.adjust.warmth) contrast=\(p.adjust.contrast) preset=\(p.preset?.name ?? "-") shown=\(p.lookName)")
+                }
+            }
+            for p in auto.photos {
+                auto.setAdjust(p.id, force: true) { $0.brightness = 30; $0.warmth = -15; $0.contrast = 12 }
+                auto.setStrength(p.id, 60)
+                auto.setLook(p.id, Looks.ektar100)
+            }
+            dump("before")
+            if kind == "sheet" { auto.requestReset(); return }
+            let target: AutoReset.Target = kind == "film" ? .film(FilmLooks.byId("vision500t")) : kind == "look" ? .look(Looks.gold200) : .asIs
+            let n = auto.resetAll(to: target)
+            log("reset \(n) photos, message: \(auto.message ?? "-")")
+            dump("after")
+            if let first = auto.photos.first {
+                auto.undo(first.id)
+                try? await Task.sleep(for: .milliseconds(200))
+                log("after Undo on the first photo only:")
+                dump("undo")
+            }
+            try? await Task.sleep(for: .seconds(2))
+            log("sidecars: " + auto.photos.map { p in PhotoSidecar(photo: p.url).readAuto().map { _ in "written" } ?? "none" }.joined(separator: ", "))
+        }
+    }
+
+    /**
+     * RAWBOY_PROBE_LOOKS=1 with `--open photo`: opens Pro's Look selector in the middle of the photo once it shows, turns
+     * the page after 10 s (→) and back after 20 s, logging the photo's LUT and film each time, for screenshots in between.
+     */
+    static func looksProbeIfRequested(_ model: DesktopModel) {
+        guard ProcessInfo.processInfo.environment["RAWBOY_PROBE_LOOKS"] != nil else { return }
+        Task {
+            while !model.vm.state.hasImage || model.vm.state.busy { try? await Task.sleep(for: .milliseconds(300)) }
+            try? await Task.sleep(for: .seconds(1))
+            model.commands.send(.openLooks(nil))
+            log("looks: opened, lut=\(model.vm.state.params.lut ?? "-") film=\(model.vm.state.params.film ?? "-")")
+            try? await Task.sleep(for: .seconds(10))
+            model.commands.send(.looksPage(1))
+            log("looks: next page")
+            try? await Task.sleep(for: .seconds(10))
+            model.commands.send(.looksPage(-1))
+            log("looks: previous page, lut=\(model.vm.state.params.lut ?? "-") film=\(model.vm.state.params.film ?? "-")")
         }
     }
 
@@ -296,6 +480,9 @@ enum AutoBatchProbe {
             log("restored from the sidecar: strength \(p.strength) (was \(before.1)), mode \(p.mode) (was \(before.2)), brightness \(p.adjust.brightness) (was \(before.3)) \(p.strength == before.1 && p.mode == before.2 && p.adjust.brightness == before.3 ? "OK" : "MISMATCH")")
         }
         log("re-analysis: \(String(format: "%.2f", Date().timeIntervalSince(t))) s")
+        var ru = rusage()
+        getrusage(RUSAGE_SELF, &ru)
+        log("peak RSS \(ru.ru_maxrss / 1_048_576) MB")
 
         // 4. Export all.
         t = Date()

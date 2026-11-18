@@ -10,6 +10,8 @@ struct ExportDialog: View {
     var destinationNote: String?
     /** A film look is on (the Film tone mapper): the Film scan option applies. */
     var filmLook = false
+    /** RawBoy Desktop's batch export: how many photos (1 = the open photo). */
+    var count = 1
 
     @State private var settings: ExportSettings
     @Environment(\.dismiss) private var dismiss
@@ -17,8 +19,9 @@ struct ExportDialog: View {
     private static let sizes: [Int?] = [nil, 6000, 4000, 3000, 2048]
 
     init(initial: ExportSettings, sourceName: String, destination: AnyView? = nil, destinationNote: String? = nil,
-         filmLook: Bool = false, onExport: @escaping (ExportSettings) -> Void) {
+         filmLook: Bool = false, count: Int = 1, onExport: @escaping (ExportSettings) -> Void) {
         self.filmLook = filmLook
+        self.count = count
         self.sourceName = sourceName
         self.onExport = onExport
         self.destination = destination
@@ -33,6 +36,7 @@ struct ExportDialog: View {
                     ForEach(ExportFormat.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                 }
                 .pickerStyle(.segmented)
+                .neutralSegments()
                 switch settings.format {
                 case .jpeg:
                     Section {
@@ -52,6 +56,7 @@ struct ExportDialog: View {
                         Text("16-bit").tag(16)
                     }
                     .pickerStyle(.segmented)
+                    .neutralSegments()
                 }
                 if filmLook {
                     Picker("Film scan", selection: $settings.filmScan) {
@@ -59,7 +64,10 @@ struct ExportDialog: View {
                         Text("1.5× size").tag(true)
                     }
                     .pickerStyle(.segmented)
-                    Text("Upscales the photo and grows the grain on a finer pitch, as a finer scan of the negative. The size below doesn't apply.")
+                    .neutralSegments()
+                    Text(count > 1
+                         ? "Photos developed with a film stock are upscaled and their grain grown on a finer pitch, as a finer scan of the negative; the size below doesn't apply to them."
+                         : "Upscales the photo and grows the grain on a finer pitch, as a finer scan of the negative. The size below doesn't apply.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 Picker("Size", selection: $settings.maxLongSide) {
@@ -72,12 +80,13 @@ struct ExportDialog: View {
                 if let destination { Section { destination } }
                 Section {
                     Text((destinationNote ?? "Photos › RawBoy › ") + OutputNaming().fileName(OutputNaming.baseNameOf(sourceName),
-                                                                                              settings.format.fileExtension))
+                                                                                              settings.format.fileExtension)
+                         + (count > 1 ? " and \(count - 1) more, each with its own edits" : ""))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
             }
-            .navigationTitle("Export")
+            .navigationTitle(count > 1 ? "Export \(count) Photos" : "Export")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif

@@ -24,6 +24,7 @@ Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and
 
 - [RawBoy controls](docs/rawboy.md): sliders, LUTs, lens corrections and output naming
 - [RawBoy Desktop](docs/desktop.md) (macOS, in development)
+- [Feature matrix](docs/features.md): every feature by platform and release, with the web features Desktop still lacks; [Camera's](docs/features-camera.md)
 - [RawBoy Auto](docs/auto.md)
 - [RawBoy Camera](docs/camera.md), including its Film mode
 - [RawBoy Web](docs/web.md)

@@ -56,8 +56,23 @@ final class DesktopBenchTests: XCTestCase {
                                             naming: OutputNaming(suffix: "bench"), directory: dir2)
         let export = ms(t)
         let size = (try? outFile.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        t = Date()
+        let tiffFile = try Exporter().export(image, sourceName: file.lastPathComponent, params: shader(p),
+                                             settings: ExportSettings(format: .tiff), naming: OutputNaming(suffix: "benchtiff"), directory: dir2)
+        let exportTiff = ms(t)
+        let tiffSize = (try? tiffFile.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        // Peak resident size of the whole process so far (bytes on macOS).
+        var ru = rusage()
+        getrusage(RUSAGE_SELF, &ru)
+        print("bench peak RSS \(ru.ru_maxrss / 1_048_576) MB, TIFF \(exportTiff) ms (\(tiffSize / 1024) KB)")
         print(String(format: "bench %@ %@ | decode %d ms | preview copy %d ms | frame median %.1f ms (min %.1f max %.1f) | export JPEG %d ms (%d KB)",
                      file.lastPathComponent, image.description, decode, previewMs, frames[frames.count / 2], frames.first!, frames.last!, export, size / 1024))
+        // RAWBOY_BENCH_OUT=<folder>: keeps the exports, to compare before and after a change (they must be identical).
+        if let keep = ProcessInfo.processInfo.environment["RAWBOY_BENCH_OUT"] ?? (try? String(contentsOfFile: "/tmp/rawboy-bench-out", encoding: .utf8)) {
+            let to = URL(fileURLWithPath: keep.trimmingCharacters(in: .whitespacesAndNewlines), isDirectory: true)
+            try? FileManager.default.createDirectory(at: to, withIntermediateDirectories: true)
+            for f in [outFile, tiffFile] { try? FileManager.default.removeItem(at: to.appendingPathComponent(f.lastPathComponent)); try? FileManager.default.copyItem(at: f, to: to.appendingPathComponent(f.lastPathComponent)) }
+        }
         try? FileManager.default.removeItem(at: dir2)
     }
 }

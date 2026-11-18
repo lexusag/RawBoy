@@ -37,19 +37,18 @@ export interface EditorState {
   presets: Preset[];
   canUndo: boolean;
   canRedo: boolean;
+  previousFileName: string | null;
 }
 
 export const CONTROLS_TABS = ['Light', 'Color', 'Detail', 'LUTs', 'Lens'] as const;
 export type ControlsTab = (typeof CONTROLS_TABS)[number];
 const CONTROLS_TAB_KEY = 'rawboy.pro.tab';
-const loadControlsTab = (): ControlsTab => {
-  try {
-    const t = localStorage.getItem(CONTROLS_TAB_KEY) as ControlsTab;
-    return CONTROLS_TABS.includes(t) ? t : 'Light';
-  } catch {
-    return 'Light';
-  }
-};
+// The open tab lasts for the session only: a fresh page load opens Light. Drop the value older versions saved.
+try {
+  localStorage.removeItem(CONTROLS_TAB_KEY);
+} catch {
+  // storage unavailable
+}
 
 const FRAME_KEY = 'rawboy.frame';
 const loadFrame = () => {
@@ -65,11 +64,12 @@ const loadFrame = () => {
 export class ProStore {
   private _state: EditorState = {
     loading: false, exporting: false, autoRunning: false, exportProgress: 0, fileName: null, info: null,
-    params: developParams(), defaults: developParams(), message: null, frameColor: loadFrame(), controlsTab: loadControlsTab(),
+    params: developParams(), defaults: developParams(), message: null, frameColor: loadFrame(), controlsTab: 'Light',
     exportSettings: ExportSettingsStore.load(),
     presets: PresetStore.load(),
     canUndo: false,
     canRedo: false,
+    previousFileName: null,
   };
   private readonly listeners = new Set<() => void>();
   /** The open photo; the pipeline state comes from it. */
@@ -80,6 +80,8 @@ export class ProStore {
   /** This photo's edits, for Undo and Redo. */
   private readonly history = new EditHistory<DevelopParams>();
   private openFile: File | null = null;
+  /** The photo open before the current one, for "Copy previous edits". */
+  private previous: { fileName: string; params: DevelopParams; defaults: DevelopParams } | null = null;
   /** Where this photo's edits are kept (opened from RawBoy Browser with Edits in sidecars on), else null. */
   private sidecar: EditsSidecar | null = null;
   private sidecarTimer = 0;
@@ -134,6 +136,9 @@ export class ProStore {
    */
   async open(file: File, params?: DevelopParams, sidecar: EditsSidecar | null = null) {
     if (this.busy) return;
+    this.flushStroke();
+    this.flushHeal();
+    const prev = this._state.fileName != null ? { fileName: this._state.fileName, params: this._state.params, defaults: this._state.defaults } : null;
     this.set({ loading: true });
     try {
       await this.flushSidecar();
@@ -147,15 +152,17 @@ export class ProStore {
       const opened = await this.session.open(file, (d) => {
         const fromSidecar = saved != null ? decodeEdits(saved, d) : null;
         restored = fromSidecar != null;
-        return params ?? fromSidecar ?? this.carryOverEdits(this._state, d);
+        return params ?? fromSidecar ?? (prev ? this.mergeCarriedEdits(prev, d, d) : d);
       });
       this.history.clear();
       this.openFile = file;
+      if (prev && prev.fileName !== file.name) this.previous = prev;
       this.sidecar = sidecar;
       this.savedParams = opened.params;
       this.set({
         loading: false, fileName: file.name, info: opened.description, params: opened.params, defaults: opened.defaults,
-        canUndo: false, canRedo: false, message: restored ? `Edits from ${sidecar!.name}` : this._state.message,
+        canUndo: false, canRedo: false, previousFileName: this.previous?.fileName ?? null,
+        message: restored ? `Edits from ${sidecar!.name}` : this._state.message,
       });
       this.session.selectLut(opened.params.lut, (m) => this.lutFailed(opened.params.lut, m));
       const meta = this.session.metadata;
@@ -167,29 +174,44 @@ export class ProStore {
     }
   }
 
-  /** Edits carry over to the next file. White balance only if the user changed it; rotation, flips, perspective, crop, masks, light leaks, effects and healing spots never. */
-  private carryOverEdits(previous: EditorState, newDefaults: DevelopParams): DevelopParams {
-    if (previous.fileName == null) return newDefaults;
+  /** Edits carry over to the next file (and "Copy previous edits"). White balance only if the user changed it; rotation, flips, perspective, crop, masks, light leaks, effects and healing spots never. */
+  private mergeCarriedEdits(previous: { params: DevelopParams; defaults: DevelopParams }, base: DevelopParams, defaults: DevelopParams): DevelopParams {
     const p = withCrop(
       {
         ...previous.params,
-        rotation: newDefaults.rotation,
-        flipHorizontal: newDefaults.flipHorizontal,
-        flipVertical: newDefaults.flipVertical,
-        straighten: newDefaults.straighten,
-        perspectiveVertical: newDefaults.perspectiveVertical,
-        perspectiveHorizontal: newDefaults.perspectiveHorizontal,
-        scale: newDefaults.scale,
-        masks: newDefaults.masks,
-        leaks: newDefaults.leaks,
-        fx: newDefaults.fx,
-        healSpots: newDefaults.healSpots,
+        rotation: base.rotation,
+        flipHorizontal: base.flipHorizontal,
+        flipVertical: base.flipVertical,
+        straighten: base.straighten,
+        perspectiveVertical: base.perspectiveVertical,
+        perspectiveHorizontal: base.perspectiveHorizontal,
+        scale: base.scale,
+        masks: base.masks,
+        leaks: base.leaks,
+        fx: base.fx,
+        healSpots: base.healSpots,
       },
-      cropOf(newDefaults),
+      cropOf(base),
     );
     const wbEdited = p.temperature !== previous.defaults.temperature || p.tint !== previous.defaults.tint;
-    return wbEdited ? p : { ...p, temperature: newDefaults.temperature, tint: newDefaults.tint };
+    return wbEdited ? p : { ...p, temperature: defaults.temperature, tint: defaults.tint };
   }
+
+  /**
+   * Copies edits from the previous photo onto the open photo as one undo step. White balance is copied only if the
+   * user changed it on the previous photo; the open photo's rotation, flips, perspective, crop, masks, light leaks,
+   * effects and healing spots stay.
+   */
+  copyPreviousEdits = () => {
+    if (!this.hasImage || this.busy || !this.previous) return;
+    this.flushStroke();
+    this.flushHeal();
+    const prev = this.previous;
+    const next = this.mergeCarriedEdits(prev, this._state.params, this._state.defaults);
+    if (next.film) this.lastFilm = next.film;
+    this.commit(next, true);
+    this.set({ message: `Copied edits from ${prev.fileName}` });
+  };
 
   setViewSize(width: number, height: number, frame: number) {
     this.frameWidth = frame;
@@ -215,11 +237,6 @@ export class ProStore {
   }
 
   setControlsTab = (tab: ControlsTab) => {
-    try {
-      localStorage.setItem(CONTROLS_TAB_KEY, tab);
-    } catch {
-      // not remembered
-    }
     this.set({ controlsTab: tab });
   };
 

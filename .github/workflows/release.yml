@@ -113,9 +113,18 @@ jobs:
           decide auto app-auto RawBoy-Auto
           decide camera app-camera RawBoy-Camera
           out $pro $auto $camera
+          {
+            echo "### APKs for $TAG (compared with ${base:-no earlier release})"
+            echo "| App | Action |"; echo "|---|---|"
+            for a in "Pro:$pro" "Auto:$auto" "Camera:$camera"; do
+              [ "${a#*:}" = true ] && echo "| ${a%%:*} | build |" || echo "| ${a%%:*} | reuse from $base |"
+            done
+            echo; echo "The \`apks\` job builds the apps marked build; \`apks-reuse\` copies the others. Both run when the release is mixed."
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # Unchanged apps: attach the last build's APKs for them, unless this release already has them.
   apks-reuse:
+    name: "Reuse APKs from ${{ needs.apk-changes.outputs.base }} (unchanged apps only)"
     needs: apk-changes
     if: needs.apk-changes.outputs.pro == 'false' || needs.apk-changes.outputs.auto == 'false' || needs.apk-changes.outputs.camera == 'false'
     runs-on: ubuntu-latest
@@ -143,6 +152,7 @@ jobs:
           ls dist 2>/dev/null && gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" dist/*.apk || true
 
   apks:
+    name: "Build APKs (changed apps only: Pro ${{ needs.apk-changes.outputs.pro }}, Auto ${{ needs.apk-changes.outputs.auto }}, Camera ${{ needs.apk-changes.outputs.camera }})"
     needs: apk-changes
     if: needs.apk-changes.outputs.build == 'true'
     runs-on: ubuntu-latest
@@ -265,12 +275,23 @@ jobs:
         with:
           ref: ${{ env.TAG }}
 
+      # The macOS native libraries (LibRaw, DNG SDK, jpegli: ~6 min) are cached by their sources' hash, with the same
+      # key as ci.yml's desktop job. This workflow runs on main, so it restores what CI saved there (and CI restores
+      # what this saves). The DNG SDK is only needed to build them.
       - uses: actions/cache@v4
+        id: native
+        with:
+          path: ios/native/out
+          key: desktop-native-${{ runner.os }}-${{ hashFiles('engine/src/main/cpp/**', 'ios/native/**', 'engine/src/main/cpp/dng_sdk.cmake') }}
+
+      - uses: actions/cache@v4
+        if: steps.native.outputs.cache-hit != 'true'
         with:
           path: third_party/dng_sdk_1_7_1.zip
           key: dng_sdk_1_7_1.zip
 
       - name: Download Adobe DNG SDK
+        if: steps.native.outputs.cache-hit != 'true'
         run: |
           cd third_party
           [ -f dng_sdk_1_7_1.zip ] || curl -fsSLO https://download.adobe.com/pub/adobe/dng/dng_sdk_1_7_1.zip
@@ -291,7 +312,26 @@ jobs:
           xcodebuild -downloadComponent MetalToolchain || xcrun -f metal
 
       - name: Build the native libraries (macOS slice)
+        if: steps.native.outputs.cache-hit != 'true'
         run: ios/native/build.sh macos
+
+      # RawBoy Viewer's libraries (ios/project.yml's viewer-package block, switched by ios/viewer-source.sh).
+      #  - local (now): a sibling checkout of the Viewer's tag VIEWER_REF, where project.yml expects it.
+      #  - git: SwiftPM fetches the pinned tag itself; the checkout is cached by the pin (the block's hash).
+      - name: RawBoy Viewer libraries
+        id: viewer
+        env:
+          VIEWER_REF: v0.2.0
+        run: |
+          if grep -q 'path: ../../RawBoyImageViewer' ios/project.yml; then
+            git clone --depth 1 --branch "$VIEWER_REF" https://github.com/lexusag/RawBoyImageViewer ../RawBoyImageViewer
+          fi
+          echo "pin=$(sed -n '/viewer-package:begin/,/viewer-package:end/p' ios/project.yml | shasum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/dd/SourcePackages
+          key: viewer-spm-${{ runner.os }}-${{ steps.viewer.outputs.pin }}
 
       # project.yml's preGenCommand also fetches MediaPipe (iOS only); the macOS targets don't use it, so skip that step.
       - name: Generate the project

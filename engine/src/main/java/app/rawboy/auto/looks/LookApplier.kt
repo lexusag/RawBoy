@@ -119,11 +119,11 @@ object LookApplier {
      * A RawBoy preset in place of a look: [base] (the auto develop) with every field the preset holds, exactly as RawBoy
      * applies it (tone mapper, film, LUT, colour, detail, retouch, lens corrections, gradient masks...), then [adjust]
      * on top as with a look. Fields the preset leaves out keep the auto develop's values; there is no Strength.
-     * Denoise, Color denoise and sharpening always come from the auto develop, measured on this photo (its ISO and
-     * exposure), never from the photo the preset was made on; the Denoise adjustment still works on top.
+     * Denoise, Color denoise and sharpening come from the auto develop, measured on this photo (its ISO and exposure),
+     * unless the preset holds the Denoise & sharpening group; the Denoise adjustment works on top either way.
      */
     fun applyPreset(base: DevelopParams, preset: Preset, adjust: Adjustments): DevelopParams =
-        adjusted(Presets.apply(preset, base).copy(denoise = base.denoise, colorDenoise = base.colorDenoise, sharpening = base.sharpening), adjust)
+        adjusted(Presets.apply(preset, base), adjust)
 
     /**
      * A whole develop from RawBoy ("Send to Auto", [app.rawboy.develop.Edits]) in place of a look: [edits] exactly as

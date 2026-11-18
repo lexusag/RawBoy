@@ -5,7 +5,7 @@ import Foundation
  * never part of a preset. [key] is the name in preset files (shared with Android's Presets.kt and web's Presets.ts).
  */
 public enum PresetGroup: String, CaseIterable, Sendable {
-    case light, whiteBalance, curves, color, detail, retouch, lut, lens, masks
+    case light, whiteBalance, curves, color, detail, denoise, retouch, lut, lens, masks
 
     public var key: String { rawValue }
 
@@ -14,8 +14,9 @@ public enum PresetGroup: String, CaseIterable, Sendable {
         case .light: "Light"
         case .whiteBalance: "White balance"
         case .curves: "Curves"
-        case .color: "Color"
+        case .color: "Colour"
         case .detail: "Detail"
+        case .denoise: "Denoise & sharpening"
         case .retouch: "Retouch"
         case .lut: "LUT"
         case .lens: "Lens"
@@ -27,13 +28,16 @@ public enum PresetGroup: String, CaseIterable, Sendable {
         switch self {
         // The film fields belong to the tone mapper: Film is its fourth choice (film != nil).
         case .light: ["toneMapper", "film", "filmAmount", "filmGrain", "halation",
-                      "exposure", "contrast", "highlights", "shadows", "whites", "blacks"]
+                      "exposure", "contrast", "lumaContrast", "highlights", "shadows", "whites", "blacks"]
         case .whiteBalance: ["temperature", "tint"]
         case .curves: ["curves"]
         case .color: ["saturation", "redHue", "redPurity", "greenHue", "greenPurity", "blueHue", "bluePurity", "tintHue",
                       "tintPurity"]
-        case .detail: ["denoise", "colorDenoise", "sharpening", "localContrast", "highpassContrast", "grain", "grainSize",
-                       "grainRoughness", "grainColor", "bloom", "anamorphic", "anamorphicColor", "anamorphicGhosts"]
+        case .detail: ["localContrast", "highpassContrast", "grain", "grainSize", "grainRoughness", "grainColor", "bloom",
+                       "anamorphic", "anamorphicColor", "anamorphicGhosts"]
+        // Its own group, off by default: RawBoy Auto measures denoise and sharpening on each photo (its ISO and noise),
+        // and a preset overrides that only when it holds this group.
+        case .denoise: ["denoise", "colorDenoise", "sharpening"]
         case .retouch: ["skinRetouch", "blemishRemoval", "portraitRetouch"]
         case .lut: ["lut", "lutAmount"]
         case .lens: ["lensProfile", "lensDistortion", "lensAnamorphic", "lensFisheye", "lensFisheyeFov", "lensFisheyeAuto", "lensFisheyeCircle", "lensFisheyeX", "lensFisheyeY", "lensCrop", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint"]
@@ -43,8 +47,12 @@ public enum PresetGroup: String, CaseIterable, Sendable {
 
     public static func ofKey(_ key: String) -> PresetGroup? { PresetGroup(rawValue: key) }
 
-    /** What the save dialog ticks first: lens corrections are usually specific to one camera and lens, masks to one composition. */
-    public static let defaultGroups: Set<PresetGroup> = Set(allCases).subtracting([.lens, .masks, .detail])
+    /**
+     * What the save dialog ticks first: lens corrections are usually specific to one camera and lens, masks to one
+     * composition, denoise to one photo's noise (Auto measures it per photo), and Detail (grain, bloom, flare) is a look
+     * rather than a correction, so it is a deliberate choice.
+     */
+    public static let defaultGroups: Set<PresetGroup> = Set(allCases).subtracting([.lens, .masks, .denoise, .detail])
 }
 
 /** A stored field value: a number, an optional string (LUT id, tone mapper), a switch, mask layers or curves. */
@@ -108,7 +116,7 @@ public enum Presets {
         let mono = presets.filter(\.isMonochrome)
         if mono.isEmpty { return [(nil, presets)] }
         let color = presets.filter { !$0.isMonochrome }
-        return (color.isEmpty ? [] : [("Color", color)]) + [("Black & white", mono)]
+        return (color.isEmpty ? [] : [("Colour", color)]) + [("Black & white", mono)]
     }
 
     public static func capture(_ name: String, _ params: DevelopParams, _ groups: Set<PresetGroup>, lens: String? = nil) -> Preset {
@@ -185,6 +193,18 @@ public enum Presets {
         return list
     }
 
+    /**
+     * [preset] without its Denoise & sharpening group (nil when nothing else is left); [preset] itself when it has
+     * none. RawBoy Auto's "Auto denoise all" uses it so the measured values win again. Port of web's withoutDenoise.
+     */
+    public static func withoutDenoise(_ preset: Preset) -> Preset? {
+        guard preset.groups.contains(.denoise) else { return preset }
+        let groups = preset.groups.subtracting([.denoise])
+        if groups.isEmpty { return nil }
+        let values = preset.values.filter { !PresetGroup.denoise.fields.contains($0.key) }
+        return Preset(id: preset.id, name: preset.name, groups: groups, values: values, lens: preset.lens)
+    }
+
     /** [params] with the preset's stored fields; fields it doesn't hold (or doesn't know) stay. */
     public static func apply(_ preset: Preset, _ params: DevelopParams) -> DevelopParams {
         preset.values.reduce(params) { set($0, $1.key, $1.value) }
@@ -242,8 +262,13 @@ public enum Presets {
 
     private static func fromJson(_ o: [String: Any]) throws -> Preset {
         guard o["format"] as? String == format else { throw DecodeError(message: "Not a RawBoy preset") }
-        let groups = Set(((o["groups"] as? [Any]) ?? []).compactMap { ($0 as? String).flatMap(PresetGroup.ofKey) })
+        var groups = Set(((o["groups"] as? [Any]) ?? []).compactMap { ($0 as? String).flatMap(PresetGroup.ofKey) })
         let v = o["values"] as? [String: Any] ?? [:]
+        // Before denoise had its own group it was part of Detail. A preset with Detail but no Light (a denoise or grain
+        // preset) keeps its denoise; one with Light leaves denoise to Auto, as it did (web's Presets.ts does the same).
+        let oldDetail = groups.contains(.detail) && !groups.contains(.denoise)
+            && PresetGroup.denoise.fields.contains { v[$0] != nil }
+        if oldDetail && !groups.contains(.light) { groups.insert(.denoise) }
         var values: [String: PresetValue] = [:]
         for f in groups.flatMap(\.fields) {
             guard let raw = v[f] else { continue }
@@ -268,7 +293,7 @@ public enum Presets {
     }
 
     private static let numberFields: [String: WritableKeyPath<DevelopParams, Float>] = [
-        "exposure": \.exposure, "contrast": \.contrast, "highlights": \.highlights, "shadows": \.shadows,
+        "exposure": \.exposure, "contrast": \.contrast, "lumaContrast": \.lumaContrast, "highlights": \.highlights, "shadows": \.shadows,
         "whites": \.whites, "blacks": \.blacks, "temperature": \.temperature, "tint": \.tint,
         "saturation": \.saturation, "redHue": \.redHue, "redPurity": \.redPurity, "greenHue": \.greenHue,
         "greenPurity": \.greenPurity, "blueHue": \.blueHue, "bluePurity": \.bluePurity, "tintHue": \.tintHue,

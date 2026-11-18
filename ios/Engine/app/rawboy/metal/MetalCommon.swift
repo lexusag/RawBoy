@@ -244,6 +244,7 @@ struct DevelopProgram {
         u.mat3("uWhiteBalance", p.whiteBalance)
         u.float("uExposure", p.exposure)
         u.float("uContrast", p.contrast)
+        u.float("uLumaContrast", p.lumaContrast)
         u.float("uSaturation", p.saturation)
         u.float("uGamutSoft", p.gamutSoft)
         u.int("uToneMapper", p.toneMapper)

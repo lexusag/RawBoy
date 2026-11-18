@@ -10,6 +10,8 @@ struct DetailScreen: View {
 
     /** Look: the look and the two everyday controls; Adjust: every adjustment (those two again, then the offsets from the auto develop). Kept across photos. */
     @AppStorage("auto.detailTab") private var tab = 0
+    /** RawBoy Desktop: the side panel's closed sections, a comma list. */
+    @AppStorage("auto.closedSections") private var closedSections = ""
     @State private var page: String?
     @State private var showExport = false
     @State private var pickingWhite = false
@@ -21,6 +23,17 @@ struct DetailScreen: View {
 
     var body: some View {
         if let photo = vm.photo(id), photo.analysis != nil {
+            #if os(macOS)
+            macBody(photo)
+            #else
+            phoneBody(photo)
+            #endif
+        }
+    }
+
+    /** The phones: a navigation bar, the pager, then the look strip and the Look / Adjust tabs. */
+    @ViewBuilder
+    private func phoneBody(_ photo: AutoPhoto) -> some View {
             NavigationStack {
                 // The looks and sliders under the photo in portrait, beside it in landscape.
                 PhotoWithControls { pager } controls: { beside in
@@ -54,8 +67,10 @@ struct DetailScreen: View {
                             Text("Film").tag(LookMode.film)
                         }
                         .pickerStyle(.segmented)
+                        .neutralSegments()
                         .padding(.horizontal, 16)
                         .padding(.top, 8)
+                        LookNameLine(photo: photo)
                         LookStrip(vm: vm, photo: photo)
                     }
                     // Copy previous sits by the tabs, next to the controls it changes (the top bar is full on phones).
@@ -65,6 +80,7 @@ struct DetailScreen: View {
                             Text("Adjust").tag(1)
                         }
                         .pickerStyle(.segmented)
+                        .neutralSegments()
                         Button("Copy previous") { vm.copyPrevious(photo.id) }
                             .font(.subheadline)
                             .disabled(vm.export != nil || vm.previousPhoto(photo.id) == nil)
@@ -81,12 +97,11 @@ struct DetailScreen: View {
                 }
                 .toolbar { toolbar(photo) }
                 .sheet(isPresented: $showExport) {
-                    ExportSheet(vm: vm, count: 1) { vm.exportSelected() }
+                    ExportSheet(vm: vm, count: 1, sample: vm.photo(id)) { vm.exportSelected() }
                 }
                 .onChange(of: vm.exportRequest) { _, _ in if vm.export == nil { showExport = true } }
                 .inlineTitle()
             }
-        }
     }
 
     // Swipe between the batch's photos. Only the shown photo is decoded; neighbours show their grid thumbnails
@@ -104,7 +119,7 @@ struct DetailScreen: View {
         }
         .scrollTargetBehavior(.paging)
         .scrollPosition(id: $page)
-        .scrollIndicators(.hidden)
+        .scrollIndicators(.never)
         // Drags pan the 100% view; an export holds the photo still.
         .scrollDisabled(session.zoomCenter != nil || vm.export != nil || vm.cropping)
         .background(Color(white: 0.07))
@@ -144,6 +159,9 @@ struct DetailScreen: View {
                     ValueSlider("Contrast", value: a.contrast, range: -50...50, defaultValue: 0, stacked: true) { v in
                         vm.setAdjust(id) { $0.contrast = v }
                     }
+                }
+                ValueSlider("Luma contrast", value: a.lumaContrast, range: -50...50, defaultValue: 0) { v in
+                    vm.setAdjust(id) { $0.lumaContrast = v }
                 }
                 Button {
                     pickingWhite.toggle()
@@ -227,6 +245,18 @@ struct DetailScreen: View {
         }
     }
 
+    private func startCrop(_ photo: AutoPhoto) {
+        session.exitZoom()  // the crop tool works on the fit view
+        vm.cropping = true
+        // A remembered shape other than Original / Free shapes the frame at once, so the chip and the frame agree.
+        if let f = frameLens, photo.adjust.crop == nil, vm.cropAspect != .free, vm.cropAspect != .original {
+            let portrait = cropPortrait ?? (f.frameHeight > f.frameWidth)
+            let ratio = vm.cropAspect.ratio(frameWidth: f.frameWidth, frameHeight: f.frameHeight, portrait: portrait)
+            vm.setCrop(id, CropMath.withAspect(CropMath.full, ratio: ratio, frameWidth: f.frameWidth,
+                                               frameHeight: f.frameHeight), force: true)
+        }
+    }
+
     private func turn(_ quarterTurns: Int) {
         vm.rotate([id], by: quarterTurns)
         cropPortrait = cropPortrait.map { !$0 }  // a locked shape turns with the picture
@@ -253,7 +283,6 @@ struct DetailScreen: View {
                 .disabled(vm.export != nil || !vm.canRedo(id))
                 .accessibilityLabel("Redo")
         }
-        #if !os(macOS)
         ToolbarItem(placement: .principal) {
             VStack(spacing: 0) {
                 Text(photo.name).font(.subheadline).lineLimit(1)
@@ -262,31 +291,10 @@ struct DetailScreen: View {
                 }
             }
         }
-        #endif
         ToolbarItemGroup(placement: .barTrailing) {
-            #if os(macOS)
-            // The window title has the name; the position in the batch goes here (a title pill beside the mode switch overflowed).
-            if pages.count > 1, let i = pages.firstIndex(where: { $0.id == id }) {
-                Text("\(i + 1) / \(pages.count)").font(.caption).monospacedDigit().foregroundStyle(.secondary)
-            }
-            if let edit = vm.editInPro {
-                Button("Edit in Pro", systemImage: "slider.horizontal.3") { edit(photo) }
-                    .help("Open this photo in the Pro editor (⌘↩)")
-            }
-            #endif
             // Apply to all and Remove share a menu: the bar is full on phones and the name needs the room.
             Menu {
-                Button("Crop & rotate", systemImage: "crop.rotate") {
-                    session.exitZoom()  // the crop tool works on the fit view
-                    vm.cropping = true
-                    // A remembered shape other than Original / Free shapes the frame at once, so the chip and the frame agree.
-                    if let f = frameLens, photo.adjust.crop == nil, vm.cropAspect != .free, vm.cropAspect != .original {
-                        let portrait = cropPortrait ?? (f.frameHeight > f.frameWidth)
-                        let ratio = vm.cropAspect.ratio(frameWidth: f.frameWidth, frameHeight: f.frameHeight, portrait: portrait)
-                        vm.setCrop(id, CropMath.withAspect(CropMath.full, ratio: ratio, frameWidth: f.frameWidth,
-                                                           frameHeight: f.frameHeight), force: true)
-                    }
-                }
+                Button("Crop & rotate", systemImage: "crop.rotate") { startCrop(photo) }
                 .disabled(vm.export != nil || vm.sessionReady != id)
                 if let pickPreset {
                     Button("Apply RawBoy preset…") { pickPreset([id]) }
@@ -305,6 +313,251 @@ struct DetailScreen: View {
         }
     }
 }
+
+#if os(macOS)
+/**
+ * RawBoy Desktop's photo view, in Pro's layout so the two modes read as one app: Pro's one-row bar (back to the grid and
+ * the photo on the left, Crop and Preset in the middle, what acts on the photo or the batch on the right, Export last)
+ * and a side panel of sections that open and close (Look, Light, Colour, Detail) in place of the phones' Look / Adjust
+ * tabs. One photo, no pager: the arrow keys and the bar's arrows page, and a Mac pager drew a scroll bar under the photo.
+ */
+extension DetailScreen {
+    fileprivate func macBody(_ photo: AutoPhoto) -> some View {
+        VStack(spacing: 0) {
+            macBar(photo).interfaceScaled()  // the Viewer's Settings › Interface size; the panel scales in PhotoWithControls
+            PhotoWithControls {
+                PhotoPage(vm: vm, session: session, photo: photo, current: true, pickingWhite: $pickingWhite, cropRatio: cropRatio)
+                    // Room between the photo's frame and the window's edges and bar.
+                    .padding(macPhotoMargin)
+                    .overlay(alignment: .bottom) {
+                        if let e = vm.export { ProgressView(value: Double(e.current)) }
+                    }
+            } controls: { _ in
+                if vm.cropping { cropPanel(photo) } else { macPanel(photo) }
+            }
+        }
+        .background(Color(white: 0.07))
+        .sheet(isPresented: $showExport) {
+            ExportSheet(vm: vm, count: 1, sample: vm.photo(id)) { vm.exportSelected() }
+        }
+        .onChange(of: vm.exportRequest) { _, _ in if vm.export == nil { showExport = true } }
+        // C (KeyboardShortcuts): Crop & rotate, as the bar's Crop button.
+        .onChange(of: vm.cropRequest) { _, _ in
+            if vm.cropping {
+                vm.cropping = false
+            } else if vm.export == nil, vm.sessionReady == id, let p = vm.photo(id) {
+                startCrop(p)
+            }
+        }
+        .onChange(of: id) { _, _ in
+            pickingWhite = false
+            cropPortrait = nil
+        }
+    }
+
+    private var macPhotoMargin: CGFloat { 12 }
+
+    /** Where the photo sits in the batch: its index among the photos that can be opened, and their count. */
+    private var position: (index: Int, count: Int)? {
+        pages.firstIndex(where: { $0.id == id }).map { ($0, pages.count) }
+    }
+
+    private func macBar(_ photo: AutoPhoto) -> some View {
+        let idle = vm.export == nil
+        let at = position
+        return HStack(spacing: 14) {
+            BarTool("chevron.backward", "Grid", "Back to the grid (Esc)") { vm.closeDetail() }
+            VStack(alignment: .leading, spacing: 1) {
+                Text(photo.name).font(.subheadline.weight(.medium)).lineLimit(1).truncationMode(.middle)
+                Text(at.map { "Photo \($0.index + 1) of \($0.count)" } ?? " ")
+                    .font(.caption2).monospacedDigit().foregroundStyle(.secondary).lineLimit(1)
+            }
+            .frame(minWidth: 60, maxWidth: 260, alignment: .leading)
+            .help(photo.name)
+            BarTool("chevron.left", "Previous", "Previous photo (← or ⌫)") { vm.page(-1) }
+                .disabled(!idle || vm.cropping || (at?.index ?? 0) == 0)
+            BarTool("chevron.right", "Next", "Next photo (→ or Space)") { vm.page(1) }
+                .disabled(!idle || vm.cropping || at.map { $0.index + 1 >= $0.count } ?? true)
+            Spacer(minLength: 8)
+            BarTool("crop.rotate", "Crop", "Crop & rotate (C)", primary: vm.cropping) {
+                if vm.cropping { vm.cropping = false } else { startCrop(photo) }
+            }
+            .disabled(!idle || vm.sessionReady != id)
+            if let pickPreset {
+                BarTool("bookmark", "Preset", "Apply a RawBoy preset…") { pickPreset([id]) }.disabled(!idle)
+            }
+            Spacer(minLength: 8)
+            if let edit = vm.editInPro {
+                BarTool("slider.horizontal.3", "Edit in Pro", "Open this photo in the Pro editor (⌘↩)") { edit(photo) }
+            }
+            BarTool("doc.on.doc", "Copy", "Copy the previous photo's look and adjustments (⇧C)") { vm.copyPrevious(id) }
+                .disabled(!idle || vm.previousPhoto(id) == nil)
+            BarTool("square.grid.2x2", "Apply to All", "Give every photo in the batch this look and adjustments") {
+                vm.applyLookToAll(id)
+            }
+            .disabled(!idle || vm.photos.count < 2)
+            BarTool("trash", "Remove", "Remove this photo from the batch (the file stays) (⌦)") { vm.removeOpened(id) }
+                .disabled(!idle)
+            BarTool("arrow.uturn.backward", "Undo", "Undo (⌘Z)") { vm.undo(id) }.disabled(!idle || !vm.canUndo(id))
+            BarTool("arrow.uturn.forward", "Redo", "Redo (⇧⌘Z)") { vm.redo(id) }.disabled(!idle || !vm.canRedo(id))
+            BarTool("square.and.arrow.down", "Export", "Export this photo", primary: true) { showExport = true }
+                .disabled(vm.sessionReady != id || !idle)
+            HelpButton("RawBoy Auto", sections: autoHelp, licences: true)
+                .font(.title3)
+                .buttonStyle(BarButtonStyle())
+        }
+        .frame(height: 48)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 4)
+    }
+
+    /** The side panel: the look first, then the adjustments in sections, all sliders one to a row. */
+    private func macPanel(_ photo: AutoPhoto) -> some View {
+        let a = photo.adjust
+        let disabled = vm.export != nil
+        return ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                macSection(photo.edits != nil ? "Edits" : photo.preset != nil ? "Preset" : photo.mode == .film ? "Film" : "Look",
+                           edited: false, reset: nil) {
+                    if photo.edits != nil {
+                        // Pro's whole develop ("To Auto" there) in place of the looks; the sliders below adjust on top.
+                        Text(AutoPhoto.editsName).font(.subheadline.weight(.semibold))
+                        Text("From Pro, with the sliders below on top. Edit in Pro to change them there.")
+                            .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        HStack {
+                            if let edit = vm.editInPro { Button("Edit in Pro") { edit(photo) } }
+                            Button("Use a look") { vm.removeEdits(photo.id) }
+                        }
+                        .disabled(disabled)
+                        .padding(.top, 6)
+                    } else if let preset = photo.preset {
+                        // A RawBoy preset develops this photo in place of the looks.
+                        Text(preset.name).font(.subheadline.weight(.semibold)).lineLimit(2)
+                        Text("RawBoy preset · " + PresetGroup.allCases.filter { preset.groups.contains($0) }.map(\.label)
+                            .joined(separator: " · "))
+                            .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                        HStack {
+                            if let pickPreset { Button("Change…") { pickPreset([photo.id]) } }
+                            Button("Use a look") { vm.removePhotoPreset(photo.id) }
+                        }
+                        .disabled(disabled)
+                        .padding(.top, 6)
+                    } else {
+                        // Looks (LUTs on the AgX develop) or Film (stocks rendered as negative + print).
+                        Picker("", selection: Binding(get: { photo.mode }, set: { vm.setMode(photo.id, $0) })) {
+                            Text("Looks").tag(LookMode.looks)
+                            Text("Film").tag(LookMode.film)
+                        }
+                        .pickerStyle(.segmented)
+                        .neutralSegments()
+                        .labelsHidden()
+                        .controlSize(.small)
+                        LookNameLine(photo: photo, inset: 0)
+                        ValueSlider("Strength", value: photo.strength, range: 0...100, defaultValue: LookApplier.defaultStrength) {
+                            vm.setStrength(id, $0)
+                        }
+                        LookGrid(vm: vm, photo: photo)
+                    }
+                }
+                // This photo's lens preset, to check or change it photo by photo (the web's lens preset select).
+                if !vm.lensPresets.isEmpty {
+                    macSection("Lens preset", edited: false, reset: nil) {
+                        LensPresetMenu(presets: vm.lensPresets, current: .some(photo.lensChoice),
+                                       choose: { vm.chooseLensPreset($0, ids: [photo.id]) }) {
+                            Text(LensPresetChoice.name(.some(photo.lensChoice), presets: vm.lensPresets))
+                        }
+                        .controlSize(.small)
+                        .help(photo.lensPreset.map { "Lens preset: \($0.name)" } ?? "No lens preset on this photo")
+                        if photo.lensChoice == nil {
+                            Text(photo.lensPreset.map { "For this lens: \($0.name)" } ?? "None saved for this lens")
+                                .font(.caption).foregroundStyle(.secondary).padding(.top, 2)
+                        }
+                    }
+                }
+                macSection("Light", edited: a.brightness != 0 || a.contrast != 0 || a.lumaContrast != 0, reset: {
+                    $0.brightness = 0; $0.contrast = 0; $0.lumaContrast = 0
+                }) {
+                    ValueSlider("Brightness", value: a.brightness, range: -100...100, defaultValue: 0) { v in
+                        vm.setAdjust(id) { $0.brightness = v }
+                    }
+                    ValueSlider("Contrast", value: a.contrast, range: -50...50, defaultValue: 0) { v in
+                        vm.setAdjust(id) { $0.contrast = v }
+                    }
+                    ValueSlider("Luma contrast", value: a.lumaContrast, range: -50...50, defaultValue: 0) { v in
+                        vm.setAdjust(id) { $0.lumaContrast = v }
+                    }
+                }
+                macSection("Colour", edited: a.warmth != 0 || a.tint != 0 || a.saturation != 0, reset: {
+                    $0.warmth = 0; $0.tint = 0; $0.saturation = 0
+                }) {
+                    Toggle(isOn: $pickingWhite) {
+                        Label(pickingWhite ? "Click something neutral grey" : "Pick white balance", systemImage: "eyedropper")
+                    }
+                    .toggleStyle(.button)
+                    .help("Then click something in the photo that should be neutral grey")
+                    .padding(.vertical, 4)
+                    ValueSlider("Warmth", value: a.warmth, range: -100...100, defaultValue: 0) { v in vm.setAdjust(id) { $0.warmth = v } }
+                    ValueSlider("Tint", value: a.tint, range: -50...50, defaultValue: 0) { v in vm.setAdjust(id) { $0.tint = v } }
+                    ValueSlider("Saturation", value: a.saturation, range: -100...100, defaultValue: 0) { v in
+                        vm.setAdjust(id) { $0.saturation = v }
+                    }
+                }
+                macSection("Detail", edited: a.grain != 0 || a.denoise != 0, reset: { $0.grain = 0; $0.denoise = 0 }) {
+                    ValueSlider("Grain", value: a.grain, range: -50...50, defaultValue: 0) { v in vm.setAdjust(id) { $0.grain = v } }
+                    ValueSlider("Denoise", value: a.denoise, range: -100...100, defaultValue: 0) { v in vm.setAdjust(id) { $0.denoise = v } }
+                }
+                // A natural portrait retouch (as the web's Retouch: 40 is about Reblum Natural 40), on top of the look or preset.
+                macSection("Retouch", edited: a.retouch != 0, reset: { $0.retouch = 0 }) {
+                    ValueSlider("Retouch", value: a.retouch, range: 0...100, defaultValue: 0) { v in vm.setAdjust(id) { $0.retouch = v } }
+                    if a.retouch > 0, vm.sessionReady == id {
+                        if session.retouchWorking {
+                            Text("Retouching…").font(.caption).foregroundStyle(.secondary)
+                        } else if session.retouchMap == nil, session.skin.mask != nil {
+                            Text("No face found to size the retouch by").font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+            .disabled(disabled)
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
+        }
+    }
+
+    /** A section of the panel; [reset] puts its adjustments back to none, as one undo step. */
+    private func macSection<Content: View>(_ title: String, edited: Bool, reset: ((inout Adjustments) -> Void)?,
+                                           @ViewBuilder content: () -> Content) -> some View {
+        InspectorSection(title, open: !InspectorSections.closed(closedSections).contains(title), edited: edited,
+                         onToggle: { Motion.animate { closedSections = InspectorSections.toggled(closedSections, title) } },
+                         onReset: reset.map { r in { vm.setAdjust(id, force: true, r) } }, content: content)
+    }
+}
+
+/**
+ * The Mac panel's looks: thumbnails in rows that wrap, under their group's heading, so a mouse wheel scrolls them with the
+ * rest of the panel (a horizontal strip only scrolled with Shift or a trackpad).
+ */
+private struct LookGrid: View {
+    @ObservedObject var vm: AutoViewModel
+    let photo: AutoPhoto
+
+    var body: some View {
+        let looks = photo.mode == .film ? FilmLooks.all : Looks.all
+        let sections = Looks.sections(looks)
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(sections) { s in
+                if sections.count > 1 {
+                    Text(s.group.label).font(.caption.weight(.semibold)).foregroundStyle(.secondary).padding(.top, 4)
+                }
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 64), spacing: 8, alignment: .top)], alignment: .leading, spacing: 8) {
+                    ForEach(s.looks) { look in LookChip(vm: vm, photo: photo, look: look) }
+                }
+            }
+        }
+        .padding(.top, 6)
+    }
+}
+#endif
 
 /** The frame around the photo in the fit view, as RawBoy's (grey, white or black: tap outside the photo). */
 private let frameWidthPt: CGFloat = 12
@@ -339,6 +592,19 @@ private struct PhotoPage: View {
                     let uncropped = showAuto && live ? analysis.autoBase : photo.params ?? analysis.autoBase
                     let cropping = live && vm.cropping
                     let shown = cropping ? uncropped.withoutCrop() : uncropped
+                    #if os(macOS)
+                    // The wheel zooms around the pointer (as Pro's and the web's), the middle button pans.
+                    PointerSurface(
+                        onMove: { _ in },
+                        onZoom: { p, factor in
+                            guard live, !cropping else { return }
+                            showAuto = false
+                            session.zoomBy(Float(p.x * scale), Float(p.y * scale), factor: Float(factor), frameWidth: framePx)
+                        },
+                        onPan: { d in
+                            if live, session.zoomCenter != nil { session.pan(Float(d.width * scale), Float(d.height * scale)) }
+                        })
+                    #endif
                     // One view for both, so it stays when the decoded preview replaces the cached one.
                     DevelopPreview(
                         image: live ? session.preview : cached,
@@ -358,7 +624,15 @@ private struct PhotoPage: View {
                                                           film: shown.film != nil ? session.filmData : nil)
                         CropOverlay(frameWidth: shader.lens.outputWidth, frameHeight: shader.lens.outputHeight,
                                     crop: photo.adjust.crop ?? CropMath.full, ratio: cropRatio, framePx: framePx,
-                                    onCropChange: { vm.setCrop(photo.id, $0) })
+                                    onCropChange: { vm.setCrop(photo.id, $0) },
+                                    rotate: (angle: photo.adjust.straighten, onChange: { vm.setStraighten(photo.id, $0) }))
+                    }
+                    // The ISO in the bottom-left corner, to judge noise without zooming in (as the web's photo view).
+                    if let iso = photo.isoLabel {
+                        OverlayLabel(iso)
+                            .monospacedDigit()
+                            .allowsHitTesting(false)
+                            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                     }
                     if live, showAuto || session.zoomCenter != nil {
                         OverlayLabel(!showAuto ? ZoomMath.label(session.zoomScale) : photo.preset != nil ? "Without preset" : "Without look")
@@ -429,6 +703,32 @@ private struct PhotoPage: View {
     }
 }
 
+/**
+ * The name of the look or film stock the photo has now (the web shows it on each grid cell; here also above the strip, whose
+ * chips only name theirs in small type under each thumbnail): "Yellow Portrait 400", with "suggested" when Auto picked it.
+ */
+private struct LookNameLine: View {
+    let photo: AutoPhoto
+    /** Side margin: the phones' strip is edge to edge, the Mac panel has its own padding. */
+    var inset: CGFloat = 16
+
+    var body: some View {
+        let look = photo.activeLook
+        let suggested = (photo.mode == .film ? photo.suggestedFilm : photo.suggested).id == look.id
+        let kind = photo.mode == .film ? "Film stock" : "Look"
+        HStack(spacing: 6) {
+            Text(look.name).font(.subheadline.weight(.semibold)).foregroundStyle(Color.accentColor).lineLimit(2)
+            if suggested { Text("suggested").font(.caption).foregroundStyle(.secondary) }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, inset)
+        .padding(.top, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(kind): \(look.name)\(suggested ? ", suggested by Auto" : "")")
+        .accessibilityAddTraits(.isHeader)
+    }
+}
+
 private struct LookStrip: View {
     @ObservedObject var vm: AutoViewModel
     let photo: AutoPhoto
@@ -456,7 +756,7 @@ private struct LookStrip: View {
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
             }
-            .scrollIndicators(.hidden)
+            .scrollIndicators(.never)  // `.hidden` still drew the Mac's scroll bar over the chips' names
             .onAppear { proxy.scrollTo(photo.activeLook.id, anchor: .leading) }
             .onChange(of: photo.id) { _, _ in proxy.scrollTo(photo.activeLook.id, anchor: .leading) }
             .onChange(of: photo.mode) { _, _ in proxy.scrollTo(photo.activeLook.id, anchor: .leading) }
@@ -513,7 +813,8 @@ private struct LookChip: View {
                 .foregroundStyle(selected ? Color.accentColor : .primary)
         }
         .frame(width: Self.size)
-        .onTapGesture { vm.setLook(photo.id, look) }
+        .tapButton(selected: selected, hint: "Applies this look") { vm.setLook(photo.id, look) }
+        .accessibilityLabel(suggested.id == look.id ? "\(look.name), suggested" : look.name)
         // Keeps showing the previous thumbnail while a slider moves; re-renders once it rests.
         .task(id: "\(photo.id)|\(look.film ?? look.id)|\(photo.adjust)") {
             if !vm.hasCurrentLookThumbnail(photo.id, look) { try? await Task.sleep(nanoseconds: 400_000_000) }

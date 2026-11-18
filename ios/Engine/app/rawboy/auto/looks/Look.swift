@@ -71,7 +71,7 @@ public enum LookGroup: CaseIterable, Sendable {
 
     public var label: String {
         switch self {
-        case .color: "Color"
+        case .color: "Colour"
         case .experimental: "Experimental"
         case .monochrome: "Black & white"
         }

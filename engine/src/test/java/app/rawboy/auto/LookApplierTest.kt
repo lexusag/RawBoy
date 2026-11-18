@@ -57,6 +57,17 @@ class LookApplierTest {
     }
 
     @Test
+    fun aPresetWithTheDenoiseGroupSetsTheNoiseSettings() {
+        val edited = DevelopParams(denoise = 5f, colorDenoise = 8f, sharpening = 40f)
+        val preset = Presets.capture("Clean", edited, setOf(PresetGroup.DENOISE))
+        val base = DevelopParams(denoise = 60f, colorDenoise = 75f, sharpening = 6f)
+        val p = LookApplier.applyPreset(base, preset, Adjustments.NONE)
+        assertEquals(5f, p.denoise, 1e-6f)
+        assertEquals(8f, p.colorDenoise!!, 1e-6f)
+        assertEquals(40f, p.sharpening, 1e-6f)
+    }
+
+    @Test
     fun denoiseMovesColourFirstAndLumaLaterAndGently() {
         // The same cases as web's engine.test.ts.
         val base = DevelopParams(denoise = 20f, colorDenoise = 30f)

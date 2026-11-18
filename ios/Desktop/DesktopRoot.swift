@@ -2,6 +2,7 @@ import AppKit
 import RawBoyEngine
 import SwiftUI
 import UniformTypeIdentifiers
+import ViewerUI
 
 /** The window's content: the editor, a drop target for photos, the toast and the window title. */
 struct DesktopRoot: View {
@@ -17,6 +18,8 @@ struct DesktopRoot: View {
                     .toast(Binding(get: { model.vm.message }, set: { model.vm.message = $0 }))
             case .auto:
                 AutoDesktopRoot(model: model, vm: model.auto)
+            case .browse:
+                BrowseDesktopRoot(app: model.browse)
             }
         }
         .navigationTitle(title)
@@ -26,10 +29,12 @@ struct DesktopRoot: View {
                 Picker("Mode", selection: $model.mode) {
                     Text("Pro").tag(AppMode.pro)
                     Text("Auto").tag(AppMode.auto)
+                    Text("Browse").tag(AppMode.browse)
                 }
                 .pickerStyle(.segmented)
-                .frame(width: 130)
-                .help("Pro edits one photo (⌘1); Auto develops a batch (⌘2)")
+                .neutralSegments()
+                .frame(width: 200)
+                .help("Pro edits one photo (⌘1); Auto develops a batch (⌘2); Browse culls a folder (⌘3)")
             }
         }
         .overlay {
@@ -44,9 +49,20 @@ struct DesktopRoot: View {
                 for provider in providers {
                     if let url = await Self.fileURL(provider) { urls.append(url) }
                 }
+                // .cube and HaldCLUT .png files go to Your LUTs (as on the web), outside Browse, which shows folders.
+                if model.mode != .browse {
+                    let luts = urls.filter(LutRepository.isSurelyLut)
+                    if !luts.isEmpty {
+                        urls.removeAll(where: LutRepository.isSurelyLut)
+                        model.importLuts(luts)
+                    }
+                }
                 guard !urls.isEmpty else { return }
-                // Auto takes any number of photos and folders; Pro opens the first photo.
-                if model.mode == .auto || urls.count > 1 || urls[0].hasDirectoryPath {
+                // Browse shows the folder (or the photo's folder); Auto takes any number of photos and folders; Pro opens
+                // the first photo.
+                if model.mode == .browse {
+                    model.browse.open(urls[0])
+                } else if model.mode == .auto || urls.count > 1 || urls[0].hasDirectoryPath {
                     model.addToAuto(urls)
                 } else {
                     model.open(urls[0])
@@ -61,6 +77,7 @@ struct DesktopRoot: View {
         switch model.mode {
         case .pro: model.vm.state.fileName ?? "RawBoy Desktop"
         case .auto: model.auto.selected.flatMap { model.auto.photo($0)?.name } ?? "RawBoy Auto"
+        case .browse: model.browse.folder?.lastPathComponent ?? "RawBoy Browse"
         }
     }
 
@@ -71,13 +88,19 @@ struct DesktopRoot: View {
     }
 }
 
-/** Window details SwiftUI has no modifier for. */
-private struct WindowSetup: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSView {
-        let v = NSView()
-        DispatchQueue.main.async { v.window?.acceptsMouseMovedEvents = true }
-        return v
-    }
+/** Browse mode in the window: RawBoy Viewer's grid and sidebar, with its viewer or Compare over them while one is open in this window (the screen-filling ones are windows of their own). */
+struct BrowseDesktopRoot: View {
+    let app: AppModel
 
-    func updateNSView(_ view: NSView, context: Context) {}
+    var body: some View {
+        ZStack {
+            BrowserRoot(app: app)
+            if app.isViewerOpen {
+                ViewerView(app: app).background(Color.black)
+            }
+            if app.compareOpen {
+                CompareView(app: app).background(Color.black)
+            }
+        }
+    }
 }

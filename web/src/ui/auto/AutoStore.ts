@@ -54,6 +54,8 @@ export interface AutoFilter {
   lens: string | null;
   isoMin: number | null;
   isoMax: number | null;
+  focalMin: number | null;
+  focalMax: number | null;
   date: string | null;
   /** Only photos with nothing applied (see isUnedited). */
   unedited: boolean;
@@ -64,12 +66,14 @@ export const NO_FILTER: AutoFilter = {
   lens: null,
   isoMin: null,
   isoMax: null,
+  focalMin: null,
+  focalMax: null,
   date: null,
   unedited: false,
 };
 
 export const isFilterActive = (f: AutoFilter): boolean =>
-  f.camera !== null || f.lens !== null || f.isoMin !== null || f.isoMax !== null || f.date !== null || f.unedited;
+  f.camera !== null || f.lens !== null || f.isoMin !== null || f.isoMax !== null || f.focalMin !== null || f.focalMax !== null || f.date !== null || f.unedited;
 
 export function photoCamera(p: AutoPhoto): string | null {
   if (!p.analysis) return null;
@@ -87,6 +91,12 @@ export function photoIso(p: AutoPhoto): number | null {
   return iso != null && iso > 0 ? Math.round(iso) : null;
 }
 
+export function photoFocalLength(p: AutoPhoto): number | null {
+  if (!p.analysis) return null;
+  const fl = p.analysis.focalLength;
+  return fl != null && Number.isFinite(fl) && fl > 0 ? Math.round(fl) : null;
+}
+
 export function photoDate(p: AutoPhoto): string | null {
   const d = p.date?.trim();
   return d ? d.slice(0, 10).replace(/:/g, '-') : null;
@@ -94,12 +104,13 @@ export function photoDate(p: AutoPhoto): string | null {
 
 /**
  * True for a photo shown "As is" (AS_IS_NAME): added "As is" (plain, so no auto develop) with the Natural look and
- * nothing on top: no preset, no lens preset, no RawBoy edits, no Auto denoise and every slider at 0. Photos added in
+ * nothing on top: no preset, no lens preset, no RawBoy edits and every slider at 0. Auto denoise, which raws added As is
+ * start with, doesn't count. Photos added in
  * a look mode always have the auto develop, so they never count. Settings kept in a sidecar are restored into these
  * same fields, so a photo that comes back edited is not unedited.
  */
 export function isUnedited(p: AutoPhoto): boolean {
-  return p.plain && activeLook(p) === Looks.NATURAL && !p.preset && !p.lensPreset && !p.edits && !p.autoDenoise
+  return p.plain && activeLook(p) === Looks.NATURAL && !p.preset && !p.lensPreset && !p.edits
     && sameAdjustments(p.adjust, NO_ADJUSTMENTS);
 }
 
@@ -110,6 +121,9 @@ export function photoMatchesFilter(p: AutoPhoto, filter: AutoFilter): boolean {
   const iso = photoIso(p);
   if (filter.isoMin !== null && (iso == null || iso < filter.isoMin)) return false;
   if (filter.isoMax !== null && (iso == null || iso > filter.isoMax)) return false;
+  const focal = photoFocalLength(p);
+  if (filter.focalMin !== null && (focal == null || focal < filter.focalMin)) return false;
+  if (filter.focalMax !== null && (focal == null || focal > filter.focalMax)) return false;
   if (filter.date !== null && photoDate(p) !== filter.date) return false;
   return true;
 }
@@ -124,6 +138,7 @@ export interface AvailableFilters {
   cameras: FilterOption<string>[];
   lenses: FilterOption<string>[];
   isos: FilterOption<number>[];
+  focalLengths: FilterOption<number>[];
   dates: FilterOption<string>[];
 }
 
@@ -131,6 +146,7 @@ export function availableFilterOptions(photos: readonly AutoPhoto[]): AvailableF
   const cameras = new Map<string, number>();
   const lenses = new Map<string, number>();
   const isos = new Map<number, number>();
+  const focalLengths = new Map<number, number>();
   const dates = new Map<string, number>();
 
   for (const p of photos) {
@@ -143,6 +159,9 @@ export function availableFilterOptions(photos: readonly AutoPhoto[]): AvailableF
     const iso = photoIso(p);
     if (iso != null) isos.set(iso, (isos.get(iso) ?? 0) + 1);
 
+    const fl = photoFocalLength(p);
+    if (fl != null) focalLengths.set(fl, (focalLengths.get(fl) ?? 0) + 1);
+
     const d = photoDate(p);
     if (d) dates.set(d, (dates.get(d) ?? 0) + 1);
   }
@@ -151,6 +170,7 @@ export function availableFilterOptions(photos: readonly AutoPhoto[]): AvailableF
     cameras: [...cameras.entries()].map(([value, count]) => ({ value, label: value, count })).sort((a, b) => compareNames(a.value, b.value)),
     lenses: [...lenses.entries()].map(([value, count]) => ({ value, label: value, count })).sort((a, b) => compareNames(a.value, b.value)),
     isos: [...isos.entries()].map(([value, count]) => ({ value, label: `ISO ${value}`, count })).sort((a, b) => a.value - b.value),
+    focalLengths: [...focalLengths.entries()].map(([value, count]) => ({ value, label: `${value} mm`, count })).sort((a, b) => a.value - b.value),
     dates: [...dates.entries()].map(([value, count]) => ({ value, label: value, count })).sort((a, b) => a.value.localeCompare(b.value)),
   };
 }
@@ -519,7 +539,8 @@ export class AutoStore {
         id: String(this.nextId++), file, name: file.name, date: fileDate(file.lastModified), status: 'queued', error: null, analysis: null,
         look: Looks.NATURAL, suggested: Looks.NATURAL, mode, plain, filmLook: FilmLooks.PORTRA_400,
         suggestedFilm: FilmLooks.PORTRA_400, strength: DEFAULT_STRENGTH, adjust: NO_ADJUSTMENTS, preset: this._state.preset, edits: null,
-        lensChoice: this._state.lensChoice, lensPreset: null, looksApplied: false, autoDenoise: false,
+        // "As is": the file as it is; a raw gets its measured denoise (Auto denoise), a finished file nothing.
+        lensChoice: this._state.lensChoice, lensPreset: null, looksApplied: false, autoDenoise: plain && isRawName(file.name),
         thumbnail: null,
       });
     }
@@ -564,11 +585,15 @@ export class AutoStore {
   }
 
   /** Updates the active metadata filter in the grid. */
-  setFilter(filter: Partial<AutoFilter> & { iso?: number | null }) {
+  setFilter(filter: Partial<AutoFilter> & { iso?: number | null; focal?: number | null }) {
     const next: AutoFilter = { ...this._state.filter };
     if ('iso' in filter) {
       next.isoMin = filter.iso ?? null;
       next.isoMax = filter.iso ?? null;
+    }
+    if ('focal' in filter) {
+      next.focalMin = filter.focal ?? null;
+      next.focalMax = filter.focal ?? null;
     }
     if ('camera' in filter) next.camera = filter.camera ?? null;
     if ('lens' in filter) next.lens = filter.lens ?? null;
@@ -584,6 +609,18 @@ export class AutoStore {
       next.isoMax = filter.isoMax ?? null;
       if (next.isoMax !== null && next.isoMin !== null && next.isoMax < next.isoMin && !('isoMin' in filter)) {
         next.isoMin = null;
+      }
+    }
+    if ('focalMin' in filter) {
+      next.focalMin = filter.focalMin ?? null;
+      if (next.focalMin !== null && next.focalMax !== null && next.focalMin > next.focalMax && !('focalMax' in filter)) {
+        next.focalMax = null;
+      }
+    }
+    if ('focalMax' in filter) {
+      next.focalMax = filter.focalMax ?? null;
+      if (next.focalMax !== null && next.focalMin !== null && next.focalMax < next.focalMin && !('focalMin' in filter)) {
+        next.focalMin = null;
       }
     }
     this.update({ filter: next });
@@ -1080,7 +1117,7 @@ export class AutoStore {
     this.setAdjust(id, { straighten: Math.round(Math.min(45, Math.max(-45, degrees)) * 100) / 100 }, force);
 
   /**
-   * Gives every photo of the batch the look (or preset), strength, warmth, tint, contrast, luma contrast, saturation, grain and retouch of [id], including
+   * Gives every photo of the batch the look (or preset), lens preset choice, strength, warmth, tint, contrast, luma contrast, saturation, grain and retouch of [id], including
    * photos still being analysed (they keep it rather than their suggestion); brightness and denoise stay per photo (they follow
    * each photo's exposure and noise). Not while exporting.
    */
@@ -1089,9 +1126,18 @@ export class AutoStore {
     const source = this.photo(id);
     if (!source) return;
     for (const p of this._state.photos) {
-      if (p.id !== id) this.changeDevelop(p.id, (q) => withLookOf(q, source), true);
+      if (p.id !== id) this.changeDevelop(p.id, (q) => this.withLensChoiceOf(withLookOf(q, source), source), true);
     }
     this.update({ message: `${lookName(source)} applied to all photos` });
+  }
+
+  /**
+   * [p] given [source]'s lens preset choice (Apply to all, Copy previous): the same pick, or "by lens" / none, worked out
+   * for [p]'s own lens (a photo still being analysed gets its preset when the analysis is in).
+   */
+  private withLensChoiceOf(p: AutoPhoto, source: AutoPhoto): AutoPhoto {
+    const lensPreset = p.analysis ? chosenLensPreset(this._state.lensPresets, source.lensChoice, matchLensName(p, p.analysis)) : p.lensPreset;
+    return { ...p, lensChoice: source.lensChoice, lensPreset };
   }
 
   /** The analysed photo before [id] in the batch (the one Backspace goes back to), for "Copy previous". */
@@ -1102,7 +1148,7 @@ export class AutoStore {
   }
 
   /**
-   * Gives photo [id] what "Apply to all" copies, from the photo before it ([previousPhoto]): look (or preset), strength,
+   * Gives photo [id] what "Apply to all" copies, from the photo before it ([previousPhoto]): look (or preset), lens preset choice, strength,
    * brightness, warmth, tint, contrast, luma contrast, saturation, grain and retouch, as one undo step (a neighbouring shot of the same scene usually wants its
    * brightness too, unlike Apply to all); denoise and rotation stay. Not while exporting.
    */
@@ -1111,7 +1157,7 @@ export class AutoStore {
     const source = this.previousPhoto(id);
     if (!source) return;
     this.changeDevelop(id, (q) => {
-      const p = withLookOf(q, source);
+      const p = this.withLensChoiceOf(withLookOf(q, source), source);
       return { ...p, adjust: { ...p.adjust, brightness: source.adjust.brightness } };
     }, true);
     this.update({ message: `Copied from ${source.name}` });
@@ -1573,6 +1619,11 @@ export { ALL_FILM_LOOKS, ALL_LOOKS };
 
 /** File types Auto opens besides raws: already processed by the camera, so they give lower-quality results. */
 const NON_RAW_EXTENSIONS = new Set(['jpg', 'jpeg', 'heic', 'heif', 'png', 'tif', 'tiff']);
+
+/** A raw by its file name (not one of the finished formats Auto also opens). */
+export function isRawName(name: string): boolean {
+  return !NON_RAW_EXTENSIONS.has(name.split('.').pop()?.toLowerCase() ?? '');
+}
 
 /** The note shown when an import includes non-raw photos, or null. */
 export function nonRawNote(names: string[]): string | null {

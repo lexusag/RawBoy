@@ -26,6 +26,8 @@ struct EditorScreen: View {
     @State private var showExport = false
     @State private var showHelp = false
     @State private var showOriginal = false
+    /** Before/after slider (RawBoy Desktop): the divider's place as a fraction of the picture's width; nil = off. */
+    @State private var splitAt: CGFloat?
     /** The drag's previous translation; a local var would reset on every redraw and make pans accelerate. */
     @State private var panLast = CGSize.zero
     /** The pinch's magnification at its last change, while two fingers zoom. */
@@ -36,6 +38,10 @@ struct EditorScreen: View {
     /** Auto WB's area is on the photo (fit view), and where it is (fractions of the picture shown). */
     @State private var autoWb = false
     @State private var autoWbRect = CropRect(0.15, 0.15, 0.85, 0.85)
+    /** Look selector: armed from the bar, the next click on the photo opens it there (preview points). */
+    @State private var looksArmed = false
+    @State private var looksAt: CGPoint?
+    @State private var looksPage = LookSelector.PageStep()
     // Masks (UI state; the layers themselves are in the params).
     @State private var selectedLayer: String?
     @State private var maskTool = MaskTool.move
@@ -50,9 +56,12 @@ struct EditorScreen: View {
     @State private var selectedHeal: String?
     @State private var healBrush = HealBrush()
     // Crop shape lock (UI only; the crop itself is in the params). Portrait nil = follow the frame.
-    @State private var cropAspect = CropAspect.free
+    /** The shape chosen in Crop & rotate for this photo; nil = [defaultCropAspect]. */
+    @State private var chosenCropAspect: CropAspect?
     @State private var cropPortrait: Bool?
     @State private var viewSize = CGSize.zero
+    /** RawBoy Desktop's focus mode (Tab, F): the bar and the panel hide and the photo takes the window. */
+    @State private var photoOnly = false
 
     private var state: EditorState { vm.state }
     private var layers: [MaskLayer] { state.params.masks }
@@ -65,7 +74,7 @@ struct EditorScreen: View {
     }
     private var leakShapes: [MaskLayer] { leaks.map { MaskLayer(id: $0.id, name: "", enabled: $0.enabled, shape: $0.shape) } }
     private var leakForms: [String: LeakForm] {
-        Dictionary(uniqueKeysWithValues: leaks.map { ($0.id, LeakForm(kind: $0.kind, bend: $0.bend, taper: $0.taper)) })
+        Dictionary(uniqueKeysWithValues: leaks.map { ($0.id, LeakForm(kind: $0.kind, bend: $0.bend, taper: $0.taper, radii: $0.radii)) })
     }
     private var effects: [LightEffect] { state.params.fx }
     private var selectedFxId: String? {
@@ -84,31 +93,46 @@ struct EditorScreen: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            EditorTopBar(fileName: state.fileName, info: state.info, enabled: state.hasImage && !state.busy, mode: mode,
-                         canOpen: !state.busy, openFromPhotos: openFromPhotos, openFromFiles: openFromFiles,
-                         onMode: { m in
-                             if m == .geometry { vm.exitZoom() }  // the crop tool works on the fit view
-                             mode = m
-                             pickingWhite = false
-                             autoWb = false
-                         },
-                         onReset: vm.reset, onAuto: vm.applyAuto,
-                         canUndo: state.canUndo, canRedo: state.canRedo, onUndo: vm.undo, onRedo: vm.redo,
-                         onExport: { showExport = true }, onSendToAuto: commands.sendToAuto, helpShown: $showHelp)
+            if !photoOnly {
+                EditorTopBar(fileName: state.fileName, info: state.info, enabled: state.hasImage && !state.busy, mode: mode,
+                             canOpen: !state.busy, openFromPhotos: openFromPhotos, openFromFiles: openFromFiles,
+                             onMode: { m in
+                                 if m == .geometry { vm.exitZoom() }  // the crop tool works on the fit view
+                                 mode = m
+                                 pickingWhite = false
+                                 autoWb = false
+                                 closeLooks()
+                             },
+                             onReset: vm.reset, onAuto: vm.applyAuto,
+                             canUndo: state.canUndo, canRedo: state.canRedo, onUndo: vm.undo, onRedo: vm.redo,
+                             onExport: { showExport = true }, onSendToAuto: commands.sendToAuto,
+                             onCopyPrevious: copyPreviousAction, canCopyPrevious: vm.canCopyPrevious,
+                             looksArmed: looksArmed, onLooks: toggleLooks, helpShown: $showHelp)
+                    .interfaceScaled()  // RawBoy Desktop's interface size (1 on the phones)
+            }
             // Controls under the photo in portrait, beside it in landscape.
-            PhotoWithControls { previewArea } controls: { beside in panel(beside: beside) }
+            PhotoWithControls(hidden: photoOnly) {
+                VStack(spacing: 0) {
+                    previewArea
+                    // RawBoy Desktop's filmstrip: the other photos in the folder, hidden with the panels.
+                    if !photoOnly, let filmstrip = commands.filmstrip { filmstrip.interfaceScaled() }
+                }
+            } controls: { beside in panel(beside: beside) }
         }
         .background(Color(white: 0.07))
         .sheet(isPresented: $showExport) {
-            ExportDialog(initial: vm.exportSettings, sourceName: state.fileName ?? "image",
+            // RawBoy Desktop: the photos picked in the filmstrip, when two or more are.
+            let batch = commands.exportBatch?() ?? []
+            let count = max(1, batch.count)
+            ExportDialog(initial: vm.exportSettings, sourceName: batch.first ?? state.fileName ?? "image",
                          destination: commands.exportDestination, destinationNote: commands.exportNote?(commands.exportFolder),
-                         filmLook: state.params.film != nil && state.params.filmAmount > 0) {
+                         filmLook: count > 1 || (state.params.film != nil && state.params.filmAmount > 0), count: count) {
                 if let handler = commands.exportHandler { handler($0) } else { vm.export($0) }
             }
         }
         .onChange(of: commands.serial) { _, _ in if let a = commands.action { perform(a) } }
         .onChange(of: state.fileName) { _, _ in
-            cropAspect = .free
+            chosenCropAspect = nil
             cropPortrait = nil
             selectedLayer = nil
             selectedLeak = nil
@@ -119,10 +143,16 @@ struct EditorScreen: View {
         }
     }
 
+    /** RawBoy Desktop's bar button (nil elsewhere: the host sets `sendToAuto` only on the Mac). */
+    private var copyPreviousAction: (() -> Void)? {
+        if commands.sendToAuto == nil { return nil }
+        return { vm.copyPrevious() }
+    }
+
     // MARK: - Menu and keyboard actions (RawBoy Desktop)
 
     private func perform(_ action: EditorAction) {
-        guard state.hasImage || action == .done || action == .help else { return }
+        guard state.hasImage || action == .done || action == .help || action == .toggleMode(.presets) else { return }
         switch action {
         case .export:
             if !state.busy { showExport = true }
@@ -132,8 +162,15 @@ struct EditorScreen: View {
             mode = mode == m ? .none : m
             pickingWhite = false
             autoWb = false
+            closeLooks()
+        case .copyPrevious:
+            vm.copyPrevious()
         case .toggleCompare:
             showOriginal.toggle()
+        case .toggleSplit:
+            splitAt = splitAt == nil ? 0.5 : nil
+        case .togglePhotoOnly:
+            Motion.animate { photoOnly.toggle() }
         case .zoom100AtPointer:
             guard mode != .geometry else { return }
             if session.zoomCenter != nil {
@@ -173,30 +210,62 @@ struct EditorScreen: View {
                 selectedHeal = nil
             }
         case .done:
+            if looksArmed {
+                closeLooks()
+                return
+            }
+            if mode == .none && photoOnly { Motion.animate { photoOnly = false } }
             mode = .none
             pickingWhite = false
             autoWb = false
         case .help:
             showHelp = true
+        case let .openLooks(point):
+            if !looksArmed { toggleLooks() }
+            looksAt = point ?? CGPoint(x: viewSize.width / 2, y: viewSize.height / 2)
+        case let .looksPage(delta):
+            looksPage = LookSelector.PageStep(serial: looksPage.serial + 1, delta: delta)
         }
+    }
+
+    /** The bar's Looks button: arms the selector (the next click on the photo opens it), or puts it away. */
+    private func toggleLooks() {
+        if looksArmed {
+            closeLooks()
+            return
+        }
+        vm.refreshLuts()
+        mode = .none
+        pickingWhite = false
+        autoWb = false
+        looksArmed = true
+        commands.looksOpen = true
+    }
+
+    private func closeLooks() {
+        looksArmed = false
+        looksAt = nil
+        commands.looksOpen = false
     }
 
     // MARK: - Preview
 
+    /** The as-shot render with the edit's rotation, flips and crop, so the frame doesn't jump (Compare, the slider). */
+    private var originalParams: DevelopParams {
+        var d = state.defaults
+        d.rotation = state.params.rotation
+        d.flipHorizontal = state.params.flipHorizontal
+        d.flipVertical = state.params.flipVertical
+        d.straighten = state.params.straighten
+        d.perspectiveVertical = state.params.perspectiveVertical
+        d.perspectiveHorizontal = state.params.perspectiveHorizontal
+        d.scale = state.params.scale
+        return d.withCrop(state.params.crop)
+    }
+
     private var shownParams: DevelopParams {
         // Compare keeps the current rotation, flips and crop so the frame doesn't jump.
-        var edited = state.params
-        if showOriginal {
-            var d = state.defaults
-            d.rotation = state.params.rotation
-            d.flipHorizontal = state.params.flipHorizontal
-            d.flipVertical = state.params.flipVertical
-            d.straighten = state.params.straighten
-            d.perspectiveVertical = state.params.perspectiveVertical
-            d.perspectiveHorizontal = state.params.perspectiveHorizontal
-            d.scale = state.params.scale
-            edited = d.withCrop(state.params.crop)
-        }
+        let edited = showOriginal ? originalParams : state.params
         // The crop tool shows the whole frame with the crop drawn over it.
         return mode == .geometry ? edited.withoutCrop() : edited
     }
@@ -220,6 +289,10 @@ struct EditorScreen: View {
                                clipWarning: vm.clipWarning && !showOriginal && maskView == nil,
                                zoomScale: session.zoomScale)
                     .gesture(previewGestures)
+                if let splitAt, session.preview != nil, !showOriginal, !looksArmed, mode == .none || mode == .presets {
+                    CompareSplit(session: session, original: originalParams, defaults: state.defaults,
+                                 frame: frameWidthPt, fraction: Binding(get: { splitAt }, set: { self.splitAt = $0 }))
+                }
                 if let shader, mode == .masks, session.preview != nil, !showOriginal {
                     let frame = framePx + marginPx
                     MaskOverlay(lens: shader.lens, layers: layers, selectedId: selectedId, frame: frame,
@@ -254,7 +327,8 @@ struct EditorScreen: View {
                             onPan: vm.pan, onZoom: pinchZoom),
                         onPaintAt: { _ in },
                         grabInside: true, leaks: leakForms,
-                        onBend: { id, bend in vm.updateLeak(id) { $0.bend = bend } }))
+                        onBend: { id, bend in vm.updateLeak(id) { $0.bend = bend } },
+                        onReshape: { id, radii in vm.updateLeak(id) { $0.radii = radii } }))
                 }
                 if let shader, mode == .fx, session.preview != nil, !showOriginal {
                     let frame = framePx + marginPx
@@ -299,7 +373,13 @@ struct EditorScreen: View {
                 }
                 if let shader, mode == .geometry, session.zoomCenter == nil, session.preview != nil {
                     CropOverlay(frameWidth: shader.lens.outputWidth, frameHeight: shader.lens.outputHeight,
-                                crop: state.params.crop, ratio: cropRatio, framePx: framePx, onCropChange: vm.setCrop)
+                                crop: state.params.crop, ratio: cropRatio, framePx: framePx,
+                                onCropChange: { r in
+                                    // Keep the shape the drag started with: the default follows whether a crop is set.
+                                    if chosenCropAspect == nil { chosenCropAspect = defaultCropAspect }
+                                    vm.setCrop(r)
+                                },
+                                rotate: (angle: state.params.straighten, onChange: { d in vm.update { $0.straighten = d } }))
                 }
                 if let shader, autoWb, mode == .none, session.zoomCenter == nil, session.preview != nil, !showOriginal {
                     CropOverlay(frameWidth: shader.lens.outputWidth, frameHeight: shader.lens.outputHeight,
@@ -309,6 +389,11 @@ struct EditorScreen: View {
                                     vm.autoWhiteBalance(r)
                                 },
                                 shadeOpacity: 0.35, gridLines: 3)
+                }
+                if looksArmed, let at = looksAt, mode == .none, !showOriginal, session.preview != nil {
+                    LookSelector(vm: vm, session: session, frame: frameWidthPt, at: at, onClose: closeLooks,
+                                 pageStep: looksPage)
+                        .id(state.fileName ?? "")
                 }
                 if state.loading {
                     ProgressView()
@@ -342,6 +427,7 @@ struct EditorScreen: View {
     @ViewBuilder
     private func labels(maskView: String?) -> some View {
         let text = showOriginal && session.preview != nil ? "Original"
+            : looksArmed && looksAt == nil && session.preview != nil ? "Click the photo to compare looks"
             : [session.zoomCenter != nil ? ZoomMath.label(session.zoomScale) : nil, maskView != nil ? "Mask" : nil].compactMap { $0 }.joined(separator: " · ")
         if !text.isEmpty {
             OverlayLabel(text).frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading).allowsHitTesting(false)
@@ -372,7 +458,9 @@ struct EditorScreen: View {
             guard mode != .geometry && mode != .masks && mode != .leaks && mode != .fx && mode != .heal else { return }
             let x = Float(e.location.x * scale)
             let y = Float(e.location.y * scale)
-            if pickingWhite {
+            if looksArmed {
+                looksAt = e.location
+            } else if pickingWhite {
                 pickingWhite = false
                 vm.pickWhite(x, y)
             } else {
@@ -409,6 +497,12 @@ struct EditorScreen: View {
 
     private var frameLens: LensTransform { vm.lensFor(state.params.withoutCrop()) }
     private var portrait: Bool { cropPortrait ?? (frameLens.frameHeight > frameLens.frameWidth) }
+    /**
+     * The crop tool starts locked to the photo's own shape and orientation (Original), so a drag keeps it; a photo that
+     * already has a crop opens Free, so the tool never reshapes a crop made earlier.
+     */
+    private var defaultCropAspect: CropAspect { state.params.crop.isFull ? .original : .free }
+    private var cropAspect: CropAspect { chosenCropAspect ?? defaultCropAspect }
     private var cropRatio: Double? {
         cropAspect.ratio(frameWidth: frameLens.frameWidth, frameHeight: frameLens.frameHeight, portrait: portrait)
     }
@@ -429,7 +523,7 @@ struct EditorScreen: View {
                     onFlip: vm.flip,
                     aspect: cropAspect, portrait: portrait,
                     onAspect: { aspect, toPortrait in
-                        cropAspect = aspect
+                        chosenCropAspect = aspect
                         cropPortrait = toPortrait
                         let f = frameLens
                         let ratio = aspect.ratio(frameWidth: f.frameWidth, frameHeight: f.frameHeight, portrait: toPortrait)
@@ -437,7 +531,7 @@ struct EditorScreen: View {
                                                        frameHeight: f.frameHeight))
                     },
                     onResetCrop: {
-                        cropAspect = .free
+                        chosenCropAspect = nil
                         cropPortrait = nil
                         vm.setCrop(CropMath.full)
                     },
@@ -575,6 +669,10 @@ struct EditorScreen: View {
                     lensfun: vm.lensfun)
                 .frame(maxHeight: maxHeight)
             }
+        } else if mode == .presets {
+            // Without a photo the presets can still be imported, exported, renamed and deleted.
+            PresetsPanel(vm: vm, onDone: { mode = .none }, hasStrokes: false, hasImage: false)
+                .frame(maxHeight: maxHeight)
         }
     }
 }
@@ -601,12 +699,95 @@ struct EditorTopBar: View {
     let onExport: () -> Void
     /** RawBoy Desktop: "Send to Auto" in the bar (nil: no button). */
     var onSendToAuto: (() -> Void)? = nil
+    /** RawBoy Desktop: "Copy" (the previous photo's settings, ⇧C) in the bar (nil: no button). */
+    var onCopyPrevious: (() -> Void)? = nil
+    var canCopyPrevious = false
+    /** RawBoy Desktop: the Look selector's button (nil: no button) and whether it is armed. */
+    var looksArmed = false
+    var onLooks: (() -> Void)? = nil
     @Binding var helpShown: Bool
 
     /** The full name of the tool being long-pressed, shown under the bar for a moment. */
     @State private var tip: String?
 
     var body: some View {
+        rows
+        .padding(.horizontal, 16)
+        .padding(.bottom, 4)
+        .overlay(alignment: .bottom) {
+            if let tip {
+                Text(tip)
+                    .font(.caption)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(.regularMaterial, in: Capsule())
+                    .offset(y: 30)
+                    .transition(.opacity)
+                    .allowsHitTesting(false)
+            }
+        }
+        .task(id: tip) {
+            guard tip != nil else { return }
+            try? await Task.sleep(for: .seconds(1.5))
+            Motion.animate { tip = nil }
+        }
+        .zIndex(1)
+    }
+
+    #if os(macOS)
+    /**
+     * The Mac's bar is one row: the photo on the left (name, then camera and exposure), the tools in the middle, and
+     * what acts on the whole photo on the right, Export last. The phones' second row (name, Reset all, Undo, Redo)
+     * went into it; the window is wide enough.
+     */
+    private var rows: some View {
+        HStack(spacing: 14) {
+            Button(action: openFromFiles) { ToolLabel(icon: "folder", label: "Open") }
+                .disabled(!canOpen)
+                .help("Open a photo (⌘O)")
+                .accessibilityLabel("Open")
+                .buttonStyle(BarButtonStyle())
+            VStack(alignment: .leading, spacing: 1) {
+                Text(fileName ?? "No photo").font(.subheadline.weight(.medium)).lineLimit(1).truncationMode(.middle)
+                Text(info ?? " ").font(.caption2).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
+            }
+            .frame(minWidth: 60, maxWidth: 300, alignment: .leading)
+            .help([fileName, info].compactMap { $0 }.joined(separator: "\n"))
+            Spacer(minLength: 8)
+            modeButton(.geometry, "crop.rotate", "Crop", "Crop & rotate (C)")
+            modeButton(.masks, "square.stack.3d.down.forward", "Masks", "Masks")
+            lightButton
+            modeButton(.heal, "bandage", "Heal", "Healing brush (B)")
+            modeButton(.presets, "bookmark", "Presets", "Presets", withoutPhoto: true)
+            if let onLooks {
+                Button(action: onLooks) {
+                    ToolLabel(icon: "rectangle.split.3x1", label: "Looks")
+                        .foregroundStyle(looksArmed ? Color.accentColor : Color.primary)
+                }
+                .buttonStyle(ToolButtonStyle(name: "Looks", tip: $tip))
+                .disabled(!enabled)
+                .help("Looks: click the photo to see that area in every LUT and film stock")
+                .accessibilityLabel("Looks")
+                .accessibilityAddTraits(looksArmed ? .isSelected : [])
+            }
+            Spacer(minLength: 8)
+            tool("wand.and.stars", "Auto Dev", "Auto light and colour (keeps the LUT)", action: onAuto)
+            if let onSendToAuto { tool("square.stack.3d.up", "To Auto", "Send this photo to Auto's batch (⇧⌘A)", action: onSendToAuto) }
+            if let onCopyPrevious {
+                tool("doc.on.doc", "Copy", "Copy the previous photo's settings (⇧C)", disabled: !canCopyPrevious, action: onCopyPrevious)
+            }
+            tool("clock.arrow.circlepath", "Reset", "Reset all edits", action: onReset)
+            tool("arrow.uturn.backward", "Undo", "Undo (⌘Z)", disabled: !canUndo, action: onUndo)
+            tool("arrow.uturn.forward", "Redo", "Redo (⇧⌘Z)", disabled: !canRedo, action: onRedo)
+            tool("square.and.arrow.down", "Export", "Export (⌘E)", primary: true, action: onExport)
+            HelpButton("RawBoy", sections: proHelp, licences: true, isPresented: $helpShown)
+                .font(.title3)
+                .buttonStyle(BarButtonStyle())
+        }
+        .frame(height: 48)
+    }
+    #else
+    private var rows: some View {
         VStack(alignment: .leading, spacing: 2) {
             HStack(spacing: 10) {
                 if let openFromPhotos {
@@ -625,23 +806,9 @@ struct EditorTopBar: View {
                 }
                 modeButton(.geometry, "crop.rotate", "Crop", "Crop & rotate")
                 modeButton(.masks, "square.stack.3d.down.forward", "Masks", "Masks")
-                // Light leaks and light effects share this button (the row is full); each panel has a switch.
-                Button { onMode(mode == .leaks || mode == .fx ? .none : .leaks) } label: {
-                    ToolLabel(icon: "rays", label: "Light")
-                        .foregroundStyle(mode == .leaks || mode == .fx ? Color.accentColor : Color.primary)
-                }
-                .buttonStyle(ToolButtonStyle(name: "Light leaks and effects", tip: $tip))
-                .disabled(!enabled)
-                .accessibilityLabel("Light leaks and effects")
-                #if os(macOS)
-                // The iPhone's row is full: the healing brush is on the Mac's bar (and B) for now.
-                modeButton(.heal, "bandage", "Heal", "Healing brush (B)")
-                #endif
-                modeButton(.presets, "bookmark", "Presets", "Presets")
+                lightButton
+                modeButton(.presets, "bookmark", "Presets", "Presets", withoutPhoto: true)
                 tool("wand.and.stars", "Auto Dev", "Auto light and colour (keeps the LUT)", action: onAuto)
-                #if os(macOS)
-                if let onSendToAuto { tool("square.stack.3d.up", "To Auto", "Send this photo to Auto's batch (⇧⌘A)", action: onSendToAuto) }
-                #endif
                 Spacer(minLength: 0)
                 tool("square.and.arrow.down", "Export", "Export", action: onExport)
                 HelpButton("RawBoy", sections: proHelp, licences: true, isPresented: $helpShown)
@@ -675,43 +842,62 @@ struct EditorTopBar: View {
             .buttonStyle(BarButtonStyle())
             .frame(minHeight: 28)
         }
-        .padding(.horizontal, 16)
-        .padding(.bottom, 4)
-        .overlay(alignment: .bottom) {
-            if let tip {
-                Text(tip)
-                    .font(.caption)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(.regularMaterial, in: Capsule())
-                    .offset(y: 30)
-                    .transition(.opacity)
-                    .allowsHitTesting(false)
-            }
+    }
+    #endif
+
+    /** Light leaks and light effects share one button (the phone's row is full); each panel has a switch to the other. */
+    private var lightButton: some View {
+        Button { onMode(mode == .leaks || mode == .fx ? .none : .leaks) } label: {
+            ToolLabel(icon: "rays", label: "Light")
+                .foregroundStyle(mode == .leaks || mode == .fx ? Color.accentColor : Color.primary)
         }
-        .task(id: tip) {
-            guard tip != nil else { return }
-            try? await Task.sleep(for: .seconds(1.5))
-            withAnimation { tip = nil }
-        }
-        .zIndex(1)
+        .buttonStyle(ToolButtonStyle(name: "Light leaks and effects", tip: $tip))
+        .disabled(!enabled)
+        .accessibilityLabel("Light leaks and effects")
+        .accessibilityAddTraits(mode == .leaks || mode == .fx ? .isSelected : [])
     }
 
-    private func modeButton(_ target: EditorMode, _ icon: String, _ label: String, _ name: String) -> some View {
+    /** [withoutPhoto]: the tool works with no photo open too (Presets: import, export and manage them). */
+    private func modeButton(_ target: EditorMode, _ icon: String, _ label: String, _ name: String,
+                            withoutPhoto: Bool = false) -> some View {
         Button { onMode(mode == target ? .none : target) } label: {
             ToolLabel(icon: icon, label: label).foregroundStyle(mode == target ? Color.accentColor : Color.primary)
         }
         .buttonStyle(ToolButtonStyle(name: name, tip: $tip))
-        .disabled(!enabled)
+        .disabled(withoutPhoto ? !canOpen : !enabled)
         .accessibilityLabel(name)
+        .accessibilityAddTraits(mode == target ? .isSelected : [])
+        #if os(macOS)
+        .help(name)
+        #endif
     }
 
-    private func tool(_ icon: String, _ label: String, _ name: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) { ToolLabel(icon: icon, label: label) }
+    private func tool(_ icon: String, _ label: String, _ name: String, primary: Bool = false, disabled: Bool = false,
+                      action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            #if os(macOS)
+            ToolLabel(icon: icon, label: label).foregroundStyle(primary ? Color.accentColor : Color.primary)
+            #else
+            ToolLabel(icon: icon, label: label)
+            #endif
+        }
             .buttonStyle(ToolButtonStyle(name: name, tip: $tip))
-            .disabled(!enabled)
+            .disabled(!enabled || disabled)
             .accessibilityLabel(name)
+            #if os(macOS)
+            .help(name)
+            #endif
     }
+
+    /**
+     * The bar's icons: amber on the phones (their tint), white on the Mac, where amber marks only the open tool and
+     * Export: with every icon amber nothing stood out.
+     */
+    #if os(macOS)
+    private static let barForeground = AnyShapeStyle(Color.primary)
+    #else
+    private static let barForeground = AnyShapeStyle(.tint)
+    #endif
 
     /**
      * An icon with a word under it: the icons alone weren't obvious, and arrow.counterclockwise read as reload.
@@ -740,12 +926,12 @@ struct EditorTopBar: View {
 
         func makeBody(configuration: Configuration) -> some View {
             configuration.label
-                .foregroundStyle(.tint)
+                .foregroundStyle(EditorTopBar.barForeground)
                 .opacity(!enabled ? 0.35 : pressed ? 0.5 : 1)
                 .contentShape(Rectangle())
                 .onTapGesture { configuration.trigger() }
                 .onLongPressGesture(minimumDuration: 0.5) {
-                    withAnimation { tip = name }
+                    Motion.animate { tip = name }
                 } onPressingChanged: { pressed = $0 }
         }
     }
@@ -759,7 +945,7 @@ struct EditorTopBar: View {
 
         func makeBody(configuration: Configuration) -> some View {
             configuration.label
-                .foregroundStyle(.tint)
+                .foregroundStyle(EditorTopBar.barForeground)
                 .opacity(!enabled ? 0.35 : configuration.isPressed ? 0.5 : 1)
                 .contentShape(Rectangle())
         }

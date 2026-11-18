@@ -1,13 +1,54 @@
+import Combine
 import CoreGraphics
 import Foundation
 import RawBoyEngine
 import SwiftUI
+import enum RawBoyBrowseKit.PhotoOrder
+import enum RawBoyBrowseKit.PhotoSort
 #if canImport(UIKit)
 import UIKit
 #endif
 
 /** Where a photo is in the batch. */
 enum PhotoStatus { case queued, analyzing, ready, failed, exporting, exported }
+
+/** How photos are added: in a look mode, or "As is" (web's plain): no auto develop and no look, only what is applied. */
+enum ImportMode: String, CaseIterable {
+    case looks, film, plain
+
+    var lookMode: LookMode { self == .film ? .film : .looks }
+    var label: String { self == .plain ? "As is" : self == .film ? "Film" : "Looks" }
+}
+
+/** The grid's metadata filter (web's AutoFilter); nil fields don't filter. */
+struct AutoFilter: Equatable {
+    var camera: String?
+    var lens: String?
+    var isoMin: Int?
+    var isoMax: Int?
+    var focalMin: Int?
+    var focalMax: Int?
+    /** Shoot day, yyyy-mm-dd. */
+    var date: String?
+    /** Only photos still "As is" (see AutoPhoto.isUnedited). */
+    var unedited = false
+
+    var isActive: Bool { self != AutoFilter() }
+
+    func matches(_ p: AutoPhoto) -> Bool {
+        if unedited && !p.isUnedited { return false }
+        if let camera, p.cameraLabel != camera { return false }
+        if let lens, p.lensLabel != lens { return false }
+        let iso = p.isoValue
+        if let isoMin, (iso ?? -1) < isoMin { return false }
+        if let isoMax, iso.map({ $0 > isoMax }) ?? true { return false }
+        let focal = p.focalLengthValue
+        if let focalMin, (focal ?? -1) < focalMin { return false }
+        if let focalMax, focal.map({ $0 > focalMax }) ?? true { return false }
+        if let date, p.day != date { return false }
+        return true
+    }
+}
 
 /**
  * One photo of the batch. Only small whole-image copies are kept (about 3 MB);
@@ -40,8 +81,27 @@ struct AutoPhoto: Identifiable {
     var looksApplied = false
     var thumbnail: CGImage?
 
-    /** Web-only parts of a photo's `rawboy:Auto` sidecar (RawBoy edits, As is, ...): kept and written back as they were. */
+    /** Web-only parts of a photo's `rawboy:Auto` sidecar: kept and written back as they were. */
     var kept: SavedAuto?
+    /** The camera, from the file's EXIF (CaptureDate.camera), for the Camera filter; nil if it names none. */
+    var camera: String?
+    /**
+     * Added "As is" (web's plain): its analysis skips the auto develop, so the photo starts as the file itself, Natural
+     * with nothing added; a preset, look or slider is all it gets.
+     */
+    var plain = false
+    /**
+     * Auto denoise on a photo added "As is": it gets the denoise, colour denoise and sharpening measured on it
+     * (Analysis.measured) under its look or preset. Raws added "As is" start with it; ignored for other photos.
+     */
+    var autoDenoise = false
+    /**
+     * The develop the photo came back with from Pro ("Back to Auto", web's `edits`), in place of its look or preset, with
+     * the adjustments on top (LookApplier.applyEditsDevelop); nil = none. The look and preset stay for when it's removed.
+     */
+    var edits: DevelopParams?
+    /** Edits fields this engine doesn't know (written by the web), kept for the sidecar. */
+    var editsExtras = EditsExtras()
 
     var id: String { url.path }
 
@@ -56,20 +116,87 @@ struct AutoPhoto: Identifiable {
         s.preset = preset
         s.lensChoice = lensChoice
         s.lensPreset = lensChoice == nil || lensChoice == Presets.noLensPreset ? nil : lensPreset
+        s.plain = plain
+        s.autoDenoise = autoDenoise
+        // Against the global defaults, as the web keeps them, so reading them back needs no analysis.
+        s.edits = edits.flatMap { Edits.encode($0, defaults: DevelopParams(), keepEmpty: true, extras: editsExtras.values) }
+            .flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
         return s
     }
 
     var activeLook: Look { mode == .film ? filmLook : look }
 
-    /** What develops the photo, for labels: the preset's name, else the active look's. */
-    var lookName: String { preset?.name ?? activeLook.name }
+    /** What develops the photo, for labels: RawBoy edits, the preset's name, else the active look's. */
+    var lookName: String {
+        if edits != nil { return AutoPhoto.editsName }
+        if let preset { return preset.name }
+        return plain && activeLook.id == Looks.natural.id ? AutoPhoto.asIsName : activeLook.name
+    }
+
+    /** Label of a photo added "As is" while nothing is applied to it (web's AS_IS_NAME). */
+    static let asIsName = "As is"
+
+    /**
+     * Still "As is" (web's isUnedited): added As is, the Natural look and nothing on top (no preset, lens preset, RawBoy
+     * edits or slider). Photos added in a look mode always have the auto develop, so they never count. Auto denoise,
+     * which raws added As is start with, doesn't count either.
+     */
+    var isUnedited: Bool {
+        plain && activeLook.id == Looks.natural.id && preset == nil && lensPreset == nil && edits == nil && adjust == .none
+    }
+
+    /** The filters' values (web's photoCamera, photoLens, photoIso, photoFocalLength, photoDate); nil until known. */
+    var cameraLabel: String? { analysis == nil ? nil : camera ?? "Unknown camera" }
+    var lensLabel: String? {
+        guard let a = analysis else { return nil }
+        let l = a.lens.lensName.trimmingCharacters(in: .whitespaces)
+        return l.isEmpty ? "Unknown lens" : l
+    }
+    var isoValue: Int? {
+        guard let iso = analysis?.stats.iso, iso > 0 else { return nil }
+        return Int(iso.rounded())
+    }
+    /** "ISO 6400" from the photo's EXIF, to judge its noise without zooming in (web's isoLabel); nil until analysed or unknown. */
+    var isoLabel: String? { isoValue.map { "ISO \($0)" } }
+    var focalLengthValue: Int? {
+        guard let fl = analysis?.focalLength, fl > 0 else { return nil }
+        return Int(fl.rounded())
+    }
+    var day: String? {
+        guard let d = date?.trimmingCharacters(in: .whitespaces), d.count >= 10 else { return nil }
+        return String(d.prefix(10)).replacingOccurrences(of: ":", with: "-")
+    }
+
+    /** The auto develop under the look or preset: the analysis's, with the measured denoise on an As is photo given Auto denoise. */
+    private func autoBase(_ a: Analysis) -> DevelopParams {
+        guard plain && autoDenoise else { return a.autoBase }
+        var b = a.autoBase
+        b.denoise = a.measured.denoise
+        b.colorDenoise = a.measured.colorDenoise
+        b.sharpening = a.measured.sharpening
+        return b
+    }
+
+    /** Label of [edits] in place of a look (web's EDITS_NAME). */
+    static let editsName = "RawBoy edits"
 
     /** The develop settings for the current look (or preset) and controls (nil until analysed). */
     var params: DevelopParams? {
         guard let a = analysis else { return nil }
-        return LookApplier.develop(a.autoBase, look: activeLook, strength: strength, adjust: adjust, hasFace: a.stats.hasFace,
+        if var e = edits {
+            // Edits read back from a sidecar don't know these as-shot facts about the file; the analysis does.
+            e.displaySource = a.defaults.displaySource
+            e.clipLevel = a.defaults.clipLevel
+            return LookApplier.applyEditsDevelop(e, adjust: adjust)
+        }
+        return LookApplier.develop(autoBase(a), look: activeLook, strength: strength, adjust: adjust, hasFace: a.stats.hasFace,
                                    preset: preset, lensPreset: lensPreset)
     }
+}
+
+/** JSON values of RawBoy edits this engine doesn't know (Edits.Decoded.extras), carried as they came. */
+struct EditsExtras: @unchecked Sendable {
+    var values: [String: Any] = [:]
 }
 
 /** A photo's edits, as Undo and Redo bring them back. */
@@ -80,12 +207,17 @@ private struct Develop {
     var strength: Float
     var adjust: Adjustments
     var preset: Preset?
+    var edits: DevelopParams?
     var looksApplied: Bool
+    var autoDenoise: Bool
 }
 
 private extension AutoPhoto {
     var develop: Develop {
-        get { Develop(look: look, mode: mode, filmLook: filmLook, strength: strength, adjust: adjust, preset: preset, looksApplied: looksApplied) }
+        get {
+            Develop(look: look, mode: mode, filmLook: filmLook, strength: strength, adjust: adjust, preset: preset, edits: edits,
+                    looksApplied: looksApplied, autoDenoise: autoDenoise)
+        }
         set {
             look = newValue.look
             mode = newValue.mode
@@ -93,13 +225,22 @@ private extension AutoPhoto {
             strength = newValue.strength
             adjust = newValue.adjust
             preset = newValue.preset
+            edits = newValue.edits
             looksApplied = newValue.looksApplied
+            autoDenoise = newValue.autoDenoise
         }
     }
 
+    /** "Reset all photos": see AutoReset. The photo keeps what it was given instead of its suggestion (looksApplied). */
+    mutating func reset(to target: AutoReset.Target) {
+        AutoReset.apply(target, look: &look, mode: &mode, filmLook: &filmLook, strength: &strength, adjust: &adjust, preset: &preset)
+        edits = nil
+        looksApplied = true
+    }
+
     /**
-     * The look (or preset), strength, warmth, tint, contrast, saturation and grain of [source] ("Apply to all", "Copy previous");
-     * brightness, denoise and rotation stay (they follow this photo's exposure, noise and framing).
+     * The look (or preset), strength, warmth, tint, contrast, luma contrast, saturation, grain and retouch of [source] ("Apply to all", "Copy previous");
+     * brightness, denoise and rotation stay (they follow this photo's exposure, noise and framing). RawBoy edits are dropped.
      */
     mutating func takeLook(of source: AutoPhoto) {
         let s = source.adjust
@@ -108,12 +249,16 @@ private extension AutoPhoto {
         filmLook = source.filmLook
         strength = source.strength
         preset = source.preset
+        // RawBoy edits aren't copied (they hold the source's crop and masks); this photo's own give way to the look.
+        edits = nil
         looksApplied = true
         adjust.warmth = s.warmth
         adjust.tint = s.tint
         adjust.contrast = s.contrast
+        adjust.lumaContrast = s.lumaContrast
         adjust.saturation = s.saturation
         adjust.grain = s.grain
+        adjust.retouch = s.retouch
     }
 }
 
@@ -128,6 +273,8 @@ struct BatchExport: Equatable {
     /// "Export all": the photos not yet done, the one being exported included. The grid shows them desaturated, so the
     /// batch can be followed as each turns to colour once saved.
     var waiting: Set<String> = []
+    /// When it started, for the elapsed time and the estimate of the time left (BatchTime).
+    var startedAt = Date()
 }
 
 /**
@@ -137,7 +284,19 @@ struct BatchExport: Equatable {
 protocol AutoPersistence: AnyObject, Sendable {
     func restore(_ url: URL) -> SavedAuto?
     @MainActor func changed(_ photo: AutoPhoto)
+    /**
+     * The photo's RawBoy edits kept beside it (RawBoy Desktop: `rawboy:Develop` and the Viewer's turn), read now (off the
+     * main actor) and worked out against the as-shot defaults once the analysis has them; nil if it has none.
+     */
+    func sidecarEdits(_ url: URL) -> SidecarDevelop?
 }
+
+extension AutoPersistence {
+    func sidecarEdits(_ url: URL) -> SidecarDevelop? { nil }
+}
+
+/** RawBoy edits read from a photo's sidecar: given its as-shot defaults (Analysis.defaults), the develop and unknown fields, or nil. */
+typealias SidecarDevelop = @Sendable (DevelopParams) -> (params: DevelopParams, extras: EditsExtras)?
 
 @MainActor
 final class AutoViewModel: ObservableObject {
@@ -167,9 +326,14 @@ final class AutoViewModel: ObservableObject {
     /** Each analysed photo's detail preview, so a photo shows at once while [session] decodes it. */
     private let previews = PreviewCache(dir: FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         .appendingPathComponent("auto-previews"))
-    /** The mode photos are added in (Looks or Film), chosen in the grid before importing; remembered. */
-    @Published private(set) var importMode: LookMode =
-        UserDefaults.standard.string(forKey: importModeKey).flatMap(LookMode.init(rawValue:)) ?? .looks
+    /** How photos are added (Looks, Film or As is), chosen in the grid before importing; remembered. */
+    @Published private(set) var importMode: ImportMode =
+        UserDefaults.standard.string(forKey: importModeKey).flatMap(ImportMode.init(rawValue:)) ?? .looks
+    /** The grid's metadata filter; navigation in the photo view and Export all follow the photos it shows. */
+    @Published var filter = AutoFilter()
+
+    /** The photos the filter lets through, in batch order. */
+    var shown: [AutoPhoto] { filter.isActive ? photos.filter(filter.matches) : photos }
     private static let importModeKey = "auto.importMode"
     /** How the batch is ordered: by shoot date (the default) or file name; remembered. */
     @Published private(set) var sort: PhotoSort =
@@ -245,14 +409,19 @@ final class AutoViewModel: ObservableObject {
     var persistence: AutoPersistence?
     /**
      * Where exports go: the photo library's RawBoy Auto album on iOS; RawBoy Desktop sets a folder. [saveExported] gets the
-     * file the exporter wrote (in the temporary folder: move it) and the photo's file.
+     * file the exporter wrote (in the temporary folder, already named by the name template: move it) and the photo's file,
+     * and returns the name the file got there (a name already taken gets -001, -002...).
      * [destinationView] is the export sheet's choice of destination, where there is one to make.
      */
     #if canImport(UIKit)
-    var saveExported: (URL, URL) async throws -> Void = { file, _ in try await PhotoLibraryOutput.save(file, naming: AutoViewModel.naming) }
+    var saveExported: (URL, URL) async throws -> String = { file, _ in
+        let name = file.lastPathComponent
+        try await PhotoLibraryOutput.save(file, naming: AutoViewModel.naming)
+        return name
+    }
     var destinationLabel = "Photos › \(AutoViewModel.naming.folder)"
     #else
-    var saveExported: (URL, URL) async throws -> Void = { _, _ in }
+    var saveExported: (URL, URL) async throws -> String = { file, _ in file.lastPathComponent }
     var destinationLabel = "the export folder"
     #endif
     var destinationView: AnyView?
@@ -275,7 +444,22 @@ final class AutoViewModel: ObservableObject {
      * time keeps a batch from stacking them up.
      */
     private let decodeLock = AsyncLock()
-    private var analysisTask: Task<Void, Never>?
+    /** How many analyses run side by side: [lanes] (RawBoy Desktop's cores and memory allow more than one). */
+    private var analysisLanes = 0
+    /** RawBoy Desktop: each photo's analysis kept on disk by path, size and modified time (nil: none). */
+    var analysisCache: AnalysisCache?
+    /**
+     * Analysis lanes: the first goes through [decodeLock] (one full decode at a time, with the detail view and export); the
+     * others only run on the Mac, a third of its cores (at most 3) and one per 6 GB of memory, as the web does (`analysisLanes`).
+     */
+    static let lanes: Int = {
+        #if os(macOS)
+        let info = ProcessInfo.processInfo
+        return max(1, min(3, info.activeProcessorCount / 3, Int(info.physicalMemory >> 30) / 6))
+        #else
+        return 1
+        #endif
+    }()
     private var thumbTasks: [String: Task<Void, Never>] = [:]
     /** Each photo's edits, for Undo and Redo in the photo view. */
     private var histories: [String: EditHistory<Develop>] = [:]
@@ -284,7 +468,20 @@ final class AutoViewModel: ObservableObject {
         session = PhotoSession(lutLoader: { [unowned self] in try await self.loadLut($0) },
                                filmLoader: { [unowned self] in try await self.loadFilm($0) },
                                onMessage: { [unowned self] in self.message = $0 })
+        #if os(macOS)
+        // RawBoy Desktop: a lens preset saved, renamed or deleted in Pro's presets reaches the batch at once.
+        presetsWatch = NotificationCenter.default.publisher(for: PresetStore.changed).sink { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let list = LensPresetStore.load()
+                if list != self.lensPresets { self.useLensPresets(list) }
+            }
+        }
+        #endif
     }
+    #if os(macOS)
+    private var presetsWatch: AnyCancellable?
+    #endif
 
     private func sorted(_ list: [AutoPhoto]) -> [AutoPhoto] {
         list.sorted { PhotoOrder.inOrder(sort, ($0.date, $0.name), ($1.date, $1.name)) }
@@ -300,25 +497,54 @@ final class AutoViewModel: ObservableObject {
     /**
      * Adds imported files; already listed ones are skipped. They join the batch once their dates are read (ImageIO's
      * metadata, off the main actor), so it never reorders under the user's finger.
+     *
+     * [sidecarOnly] (RawBoy Desktop's Browse, Send to Auto › As is): the photos get only what their sidecars hold, nothing
+     * added. A photo's `rawboy:Auto` comes back as it was left; else its RawBoy edits (`rawboy:Develop`, the Viewer's crop
+     * and turn) develop it once analysed; else it stays the file as it is, without the measured denoise, and the batch's
+     * preset and lens preset choice aren't applied either.
      */
-    func add(_ urls: [URL]) {
+    func add(_ urls: [URL], as how: ImportMode? = nil, sidecarOnly: Bool = false) {
         let known = Set(photos.map(\.id))
         let wanted = urls.filter { !known.contains($0.path) }
         if wanted.isEmpty { return }
-        let (mode, preset, lensChoice) = (importMode, preset, lensChoice)
+        let importMode: ImportMode = sidecarOnly ? .plain : how ?? self.importMode
+        let (preset, lensChoice): (Preset?, String?) = sidecarOnly ? (nil, Presets.noLensPreset) : (self.preset, self.lensChoice)
+        let (mode, plain) = (importMode.lookMode, importMode == .plain)
         Task {
-            let dates = await Task.detached(priority: .userInitiated) { wanted.map(CaptureDate.read) }.value
+            let read = await Task.detached(priority: .userInitiated) { wanted.map { (CaptureDate.read($0), CaptureDate.camera($0)) } }.value
+            let dates = read.map(\.0)
             let now = Set(photos.map(\.id))
             let persistence = persistence
-            let restored = await Task.detached(priority: .userInitiated) { wanted.map { persistence?.restore($0) } }.value
-            let fresh: [AutoPhoto] = zip(zip(wanted, dates), restored).filter { !now.contains($0.0.0.path) }.map { pair, saved in
+            let restored = await Task.detached(priority: .userInitiated) {
+                wanted.map { url in
+                    let saved = persistence?.restore(url)
+                    return (saved, saved == nil && sidecarOnly ? persistence?.sidecarEdits(url) : nil)
+                }
+            }.value
+            let fresh: [AutoPhoto] = zip(zip(wanted, dates), restored).filter { !now.contains($0.0.0.path) }.map { pair, sidecar in
+                let (saved, develop) = sidecar
                 var p = AutoPhoto(url: pair.0, name: Imports.displayName(pair.0), date: pair.1, mode: mode, preset: preset, lensChoice: lensChoice)
+                p.camera = read[wanted.firstIndex(of: pair.0) ?? 0].1
+                // "As is": the file as it is; a raw gets its measured denoise (Auto denoise), a finished file nothing.
+                // From Browse it gets nothing at all.
+                p.plain = plain
+                p.autoDenoise = plain && !sidecarOnly && Self.isRaw(p.name)
                 if let saved { takeSaved(saved, into: &p) }
+                if let develop {
+                    pendingSidecarEdits[pair.0.path] = develop
+                    p.looksApplied = true
+                }
+                if let e = pendingEdits.removeValue(forKey: pair.0.path) {
+                    p.edits = e
+                    p.adjust = .none
+                    p.looksApplied = true
+                }
                 return p
             }
             if fresh.isEmpty { return }
             photos = sorted(photos + fresh)
-            if let note = Self.nonRawNote(fresh.map(\.name)) { message = note }
+            // "As is" is for finished files: no note that they aren't raws.
+            if !plain, let note = Self.nonRawNote(fresh.map(\.name)) { message = note }
             processQueue()
         }
     }
@@ -333,6 +559,13 @@ final class AutoViewModel: ObservableObject {
         p.preset = s.preset
         p.looksApplied = true
         p.kept = s
+        p.plain = s.plain
+        p.autoDenoise = s.autoDenoise
+        if let e = s.edits, let data = try? JSONSerialization.data(withJSONObject: e),
+           let decoded = Edits.decodeAll(String(decoding: data, as: UTF8.self), defaults: DevelopParams()) {
+            p.edits = decoded.params
+            p.editsExtras = EditsExtras(values: decoded.extras)
+        }
         p.lensChoice = s.lensChoice
         if let picked = s.lensPreset {
             // The picked lens preset travels with the photo; the one in the list for that lens (if any) stands in for it.
@@ -353,6 +586,17 @@ final class AutoViewModel: ObservableObject {
     /** File types Auto opens besides raws: already processed by the camera, so they give lower-quality results. */
     private static let nonRawExtensions: Set<String> = ["jpg", "jpeg", "heic", "heif", "png", "tif", "tiff"]
 
+    /**
+     * The lens name a by-lens preset is matched on. A photo added "As is" that isn't a raw (already corrected by whatever
+     * made it) is never matched automatically; a preset picked by hand still applies.
+     */
+    static func matchLensName(_ p: AutoPhoto, _ a: Analysis) -> String {
+        p.plain && a.defaults.displaySource ? "" : a.lens.lensName
+    }
+
+    /** A raw by its extension (not one of the finished formats Auto also opens). */
+    static func isRaw(_ name: String) -> Bool { !nonRawExtensions.contains((name as NSString).pathExtension.lowercased()) }
+
     /** The note shown when an import includes non-raw photos, or nil. */
     static func nonRawNote(_ names: [String]) -> String? {
         let n = names.filter { nonRawExtensions.contains(($0 as NSString).pathExtension.lowercased()) }.count
@@ -363,7 +607,7 @@ final class AutoViewModel: ObservableObject {
     }
 
     /** Mode for photos added from now on; photos already in the batch keep theirs. */
-    func setImportMode(_ mode: LookMode) {
+    func setImportMode(_ mode: ImportMode) {
         importMode = mode
         UserDefaults.standard.set(mode.rawValue, forKey: Self.importModeKey)
     }
@@ -416,6 +660,9 @@ final class AutoViewModel: ObservableObject {
         applyPreset(preset, target: ids)
     }
 
+    /** A preset picked from the user's saved ones: for the photos in [ids], or the whole batch (and photos added later) when nil. */
+    func applyChosenPreset(_ preset: Preset, to ids: Set<String>?) { applyPreset(preset, target: ids) }
+
     private func applyPreset(_ preset: Preset, target ids: Set<String>?) {
         if preset.isLensPreset {
             presetChoices = []
@@ -446,8 +693,6 @@ final class AutoViewModel: ObservableObject {
 
     /** Forgets lens preset [id]; photos that picked it go back to matching by lens. */
     func removeLensPreset(_ id: String) {
-        if lensChoice == id { lensChoice = nil }
-        for p in photos where p.lensChoice == id { updatePhoto(p.id) { $0.lensChoice = nil } }
         setLensPresets(lensPresets.filter { $0.id != id })
     }
 
@@ -460,7 +705,7 @@ final class AutoViewModel: ObservableObject {
         if ids == nil { lensChoice = choice }
         let targets = photos.filter { ids?.contains($0.id) ?? true }
         for p in targets {
-            let next = p.analysis.flatMap { Presets.chosenLensPreset(lensPresets, choice: choice, lens: $0.lens.lensName) }
+            let next = p.analysis.flatMap { Presets.chosenLensPreset(lensPresets, choice: choice, lens: Self.matchLensName(p, $0)) }
             changeDevelop(p.id, force: nil) {
                 $0.lensChoice = choice
                 $0.lensPreset = next
@@ -481,10 +726,23 @@ final class AutoViewModel: ObservableObject {
     }
 
     private func setLensPresets(_ list: [Preset]) {
-        lensPresets = list
         if !LensPresetStore.save(list) { message = "Could not save lens presets" }
+        useLensPresets(list)
+    }
+
+    /** [list] as the lens presets: a pick that was removed goes back to by lens, and each photo gets what its choice now gives. */
+    private func useLensPresets(_ list: [Preset]) {
+        lensPresets = list
+        let kept: (String?) -> String? = { c in
+            c == nil || c == Presets.noLensPreset || list.contains { $0.id == c } ? c : nil
+        }
+        lensChoice = kept(lensChoice)
+        for p in photos where kept(p.lensChoice) != p.lensChoice {
+            updatePhoto(p.id) { $0.lensChoice = nil }
+            if let q = photo(p.id) { persistence?.changed(q) }
+        }
         for p in photos {
-            guard let lens = p.analysis?.lens.lensName else { continue }
+            guard let lens = p.analysis.map({ Self.matchLensName(p, $0) }) else { continue }
             let next = Presets.chosenLensPreset(list, choice: p.lensChoice, lens: lens)
             if next != p.lensPreset { changeDevelop(p.id, force: nil, persist: false) { $0.lensPreset = next } }
         }
@@ -494,11 +752,12 @@ final class AutoViewModel: ObservableObject {
      * Develops every photo, and those added later, with [preset] in place of its look: all the preset holds, lens
      * corrections included, on top of each photo's auto develop. Each photo keeps its look for when the preset is removed.
      */
-    func applyPresetToAll(_ preset: Preset) {
+    func applyPresetToAll(_ preset: Preset, confirmed: Bool = false) {
         presetChoices = []
         if export != nil { return }
+        if !confirmed, askOverwrite(photos.map(\.id), "\(preset.name)", { [weak self] in self?.applyPresetToAll(preset, confirmed: true) }) { return }
         self.preset = preset
-        for p in photos { changeDevelop(p.id, force: true) { $0.preset = preset } }
+        for p in photos { changeDevelop(p.id, force: true) { $0.preset = preset; $0.edits = nil } }
         message = "\(preset.name) applied to all photos"
     }
 
@@ -506,11 +765,12 @@ final class AutoViewModel: ObservableObject {
      * Develops only the photos in [ids] (the grid's selection, e.g. one scene) with [preset], so one batch can hold a
      * preset per scene. The batch preset, which photos added later get, stays as it is.
      */
-    func applyPreset(_ preset: Preset, to ids: Set<String>) {
+    func applyPreset(_ preset: Preset, to ids: Set<String>, confirmed: Bool = false) {
         presetChoices = []
         if export != nil { return }
+        if !confirmed, askOverwrite(Array(ids), "\(preset.name)", { [weak self] in self?.applyPreset(preset, to: ids, confirmed: true) }) { return }
         let chosen = photos.filter { ids.contains($0.id) }
-        for p in chosen { changeDevelop(p.id, force: true) { $0.preset = preset } }
+        for p in chosen { changeDevelop(p.id, force: true) { $0.preset = preset; $0.edits = nil } }
         message = "\(preset.name) applied to \(chosen.count == 1 ? "1 photo" : "\(chosen.count) photos")"
     }
 
@@ -526,6 +786,76 @@ final class AutoViewModel: ObservableObject {
 
     /** Takes the preset off one photo, back to its look; the batch preset stays for photos added later. */
     func removePhotoPreset(_ id: String) { changeDevelop(id, force: true) { $0.preset = nil } }
+
+    /** "Use a look": takes the RawBoy edits off one photo, back to its preset or look. */
+    func removeEdits(_ id: String) { changeDevelop(id, force: true) { $0.edits = nil } }
+
+    /** Edits from Pro for photos still joining the batch ([receiveEdits] on a photo that wasn't in it), by path. */
+    private var pendingEdits: [String: DevelopParams] = [:]
+    /** Sidecar edits of photos sent from Browse ([add] with sidecarOnly), applied when their analysis is in, by path. */
+    private var pendingSidecarEdits: [String: SidecarDevelop] = [:]
+
+    /**
+     * "Back to Auto" from Pro: develops [url]'s photo with [params] in place of its look or preset, Auto's controls back at
+     * zero (the edits already hold what they did), as one undo step, and opens it. A photo not in the batch joins it with
+     * them. False while exporting.
+     */
+    @discardableResult
+    func receiveEdits(_ url: URL, _ params: DevelopParams) -> Bool {
+        if export != nil { return false }
+        guard let p = photo(url.path) else {
+            pendingEdits[url.path] = params
+            add([url])
+            message = "\(Imports.displayName(url)) added to Auto with its RawBoy edits"
+            return true
+        }
+        changeDevelop(p.id, force: true) {
+            $0.edits = params
+            $0.adjust = .none
+            $0.looksApplied = true
+        }
+        if p.analysis != nil { openDetail(p.id) }
+        return true
+    }
+
+    /** Template of the exported files' names (see NameTemplate), remembered (web's `rawboy.auto.nameTemplate`). */
+    @Published private(set) var nameTemplate: String =
+        UserDefaults.standard.string(forKey: AutoViewModel.nameTemplateKey).flatMap { $0.isEmpty ? nil : $0 } ?? NameTemplate.defaultTemplate
+    private static let nameTemplateKey = "auto.nameTemplate"
+
+    /** The template of the next exports' file names (an empty one means the default). */
+    func setNameTemplate(_ template: String) {
+        nameTemplate = template.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? NameTemplate.defaultTemplate : template
+        UserDefaults.standard.set(nameTemplate, forKey: Self.nameTemplateKey)
+    }
+
+    /** The exported file's name without extension that [template] gives [p], numbered [index] in the export. */
+    func nameFor(_ p: AutoPhoto, index: Int = 1, template: String? = nil) -> String {
+        let lens = p.analysis?.lens.lensName.trimmingCharacters(in: .whitespaces)
+        return NameTemplate.apply(template ?? nameTemplate, NameTemplate.Context(
+            fileName: p.name, camera: p.camera?.trimmingCharacters(in: .whitespaces), lens: lens?.isEmpty == false ? lens : nil,
+            iso: p.analysis?.stats.iso, look: p.lookName, date: p.date, index: index))
+    }
+
+    /**
+     * [file] (the exporter's "<name>-auto.<ext>" in its temporary folder) renamed to what the name template gives [p] as
+     * photo [index] of this export; the destination then picks a free name from it (NameTemplate.freeName).
+     */
+    private func named(_ file: URL, _ p: AutoPhoto, index: Int) throws -> URL {
+        let fm = FileManager.default
+        let dir = file.deletingLastPathComponent()
+        let target = dir.appendingPathComponent(NameTemplate.fileName(nameFor(p, index: index), file.pathExtension, 0))
+        if target.path == file.path { return file }
+        var source = file
+        if target.path.lowercased() == file.path.lowercased() {
+            // Only the letter case differs: on a case-insensitive disk removing the target would remove the file itself.
+            source = dir.appendingPathComponent(UUID().uuidString + "." + file.pathExtension)
+            try fm.moveItem(at: file, to: source)
+        }
+        try? fm.removeItem(at: target)
+        try fm.moveItem(at: source, to: target)
+        return target
+    }
 
     /** Format, quality, bit depth, size and frame for the next exports (maxLongSide nil = full resolution). */
     func setExportSettings(_ settings: ExportSettings) {
@@ -566,48 +896,72 @@ final class AutoViewModel: ObservableObject {
             previews.remove(id)
         }
         if let c = cachedPreview, ids.contains(c.id) { cachedPreview = nil }
+        for id in ids { warmPreviews.removeValue(forKey: id) }
+        if let n = next, ids.contains(n.id) { discardNext() }
         lookThumbs = lookThumbs.filter { key, _ in !ids.contains(where: { key.hasPrefix($0 + "|") }) }
     }
 
-    /** Analyses queued photos one at a time (each decode needs the full raw in memory). */
+    /** Analyses queued photos, [lanes] at a time (each decode needs the full raw in memory). */
     private func processQueue() {
-        if analysisTask != nil { return }
-        analysisTask = Task {
-            while let next = nextQueued() {
-                updatePhoto(next.id) { $0.status = .analyzing }
-                do {
-                    let previews = previews
-                    let analysis = try await decodeLock.run {
-                        try await Task.detached(priority: .userInitiated) {
-                            try AutoAnalysis.analyze(next.url) { previews.put(next.id, $0) }
-                        }.value
-                    }
-                    if photo(next.id) == nil { previews.remove(next.id) } // removed while it was analysed
-                    let look = LookSuggester.suggest(analysis.stats, asShotKelvin: analysis.defaults.temperature)
-                    let film = LookSuggester.suggestFilm(analysis.stats, asShotKelvin: analysis.defaults.temperature)
-                    updatePhoto(next.id) {
-                        $0.status = .ready
-                        $0.analysis = analysis
-                        $0.suggested = look
-                        $0.suggestedFilm = film
-                        $0.lensPreset = Presets.chosenLensPreset(self.lensPresets, choice: $0.lensChoice, lens: analysis.lens.lensName)
-                        if !$0.looksApplied {
-                            $0.look = look
-                            $0.filmLook = film
-                        }
-                    }
-                    refreshThumbnail(next.id, immediate: true)
-                    await openIfWaiting(next.id)
-                } catch {
-                    // Mark this photo and go on with the rest.
-                    updatePhoto(next.id) {
-                        $0.status = .failed
-                        $0.error = error.localizedDescription
-                    }
-                    if opening == next.id { opening = nil }
-                }
+        while analysisLanes < Self.lanes, nextQueued() != nil {
+            let lane = analysisLanes
+            analysisLanes += 1
+            Task {
+                await runLane(lane)
+                analysisLanes -= 1
             }
-            analysisTask = nil
+        }
+    }
+
+    private func runLane(_ lane: Int) async {
+        while let next = nextQueued() {
+            updatePhoto(next.id) { $0.status = .analyzing }
+            do {
+                let previews = previews
+                let cache = analysisCache
+                let plain = next.plain
+                let work: @Sendable () async throws -> Analysis = {
+                    try await Task.detached(priority: .userInitiated) {
+                        // "As is" skips the skin segmentation (no auto develop to steer), as the web's plain import does.
+                        let a = try AutoAnalysis.analyze(next.url, cache: plain ? nil : cache, detectSkin: !plain) { previews.put(next.id, $0) }
+                        return plain ? a.asIs() : a
+                    }.value
+                }
+                let analysis = lane == 0 ? try await decodeLock.run(work) : try await work()
+                if photo(next.id) == nil { previews.remove(next.id) } // removed while it was analysed
+                let look = LookSuggester.suggest(analysis.stats, asShotKelvin: analysis.defaults.temperature)
+                let film = LookSuggester.suggestFilm(analysis.stats, asShotKelvin: analysis.defaults.temperature)
+                // Sent from Browse: its sidecar's RawBoy edits, against the as-shot defaults the analysis has just found.
+                let fromSidecar = pendingSidecarEdits.removeValue(forKey: next.id).flatMap { $0(analysis.defaults) }
+                updatePhoto(next.id) {
+                    $0.status = .ready
+                    if let fromSidecar, $0.edits == nil {
+                        $0.edits = fromSidecar.params
+                        $0.editsExtras = fromSidecar.extras
+                        $0.adjust = .none
+                    }
+                    $0.analysis = analysis
+                    $0.suggested = look
+                    $0.suggestedFilm = film
+                    $0.lensPreset = Presets.chosenLensPreset(self.lensPresets, choice: $0.lensChoice, lens: Self.matchLensName($0, analysis))
+                    // A plain photo stays Natural (nothing added); its film suggestion is there if it switches to Film.
+                    if !$0.looksApplied && !$0.plain {
+                        $0.look = look
+                        $0.filmLook = film
+                    } else if !$0.looksApplied {
+                        $0.filmLook = film
+                    }
+                }
+                refreshThumbnail(next.id, immediate: true)
+                await openIfWaiting(next.id)
+            } catch {
+                // Mark this photo and go on with the rest.
+                updatePhoto(next.id) {
+                    $0.status = .failed
+                    $0.error = error.localizedDescription
+                }
+                if opening == next.id { opening = nil }
+            }
         }
     }
 
@@ -634,15 +988,30 @@ final class AutoViewModel: ObservableObject {
         if n > 0 { message = n == 1 ? "1 photo removed from the batch" : "\(n) photos removed from the batch" }
     }
 
-    /** ⇧-click: the photos from the anchor to [id] join the selection (from the first photo when there is no anchor). */
+    /**
+     * ⇧-click: the photos from the anchor to [id] join the selection. With nothing selected (after Esc, Cancel or at the
+     * start) it selects [id] alone and makes it the anchor, so a fresh range is two ⇧-clicks and never runs on from an
+     * earlier one (as on the web).
+     */
     func selectRange(to id: String) {
+        let photos = shown
         guard let end = photos.firstIndex(where: { $0.id == id }) else { return }
-        let start = selectionAnchor.flatMap { a in photos.firstIndex { $0.id == a } } ?? focusedId.flatMap { a in photos.firstIndex { $0.id == a } } ?? 0
-        for p in photos[min(start, end)...max(start, end)] { selection.insert(p.id) }
         focusedId = id
+        guard !selection.isEmpty, let start = selectionAnchor.flatMap({ a in photos.firstIndex { $0.id == a } }) else {
+            selection.insert(id)
+            selectionAnchor = id
+            return
+        }
+        for p in photos[min(start, end)...max(start, end)] { selection.insert(p.id) }
     }
 
-    func selectAll() { selection = Set(photos.map(\.id)) }
+    /** Esc in the grid and the selection bar's Cancel: nothing selected and no ⇧-click anchor left over. */
+    func clearSelection() {
+        selection = []
+        selectionAnchor = nil
+    }
+
+    func selectAll() { selection = Set(shown.map(\.id)) }
 
     /** The grid's keyboard focus (arrow keys move it, Return opens it); UI state only. */
     @Published var focusedId: String?
@@ -653,8 +1022,14 @@ final class AutoViewModel: ObservableObject {
 
     func requestExport() { exportRequest += 1 }
 
+    /** Bumped by C in the photo view: it opens Crop & rotate, or puts it down when open (the view knows the frame's shape). */
+    @Published private(set) var cropRequest = 0
+
+    func requestCrop() { if selected != nil, export == nil { cropRequest += 1 } }
+
     /** Moves the grid's focus by [dx] photos and [dy] rows (the first arrow press focuses the first photo). */
     func moveFocus(dx: Int, dy: Int) {
+        let photos = shown
         guard !photos.isEmpty else { return }
         guard let id = focusedId, let i = photos.firstIndex(where: { $0.id == id }) else {
             focusedId = photos[0].id
@@ -679,7 +1054,7 @@ final class AutoViewModel: ObservableObject {
     /** Left and right in the photo view: the previous or next analysed photo. */
     func page(_ delta: Int) {
         guard let id = selected, export == nil, !cropping else { return }
-        let pages = photos.filter { $0.analysis != nil }
+        let pages = shown.filter { $0.analysis != nil }
         guard let i = pages.firstIndex(where: { $0.id == id }), pages.indices.contains(i + delta) else { return }
         openDetail(pages[i + delta].id)
     }
@@ -687,7 +1062,7 @@ final class AutoViewModel: ObservableObject {
     /** Esc: out of Crop & rotate, else from the photo back to the grid, else the selection is cleared. */
     func goBack() {
         if selected == nil, !selection.isEmpty {
-            selection = []
+            clearSelection()
         } else if cropping {
             cropping = false
         } else if selected != nil {
@@ -747,10 +1122,10 @@ final class AutoViewModel: ObservableObject {
                 message = "No white balance makes that spot grey"
             case .white(let kelvin, let tint):
                 guard let current = photo(id), let currentAnalysis = current.analysis else { return }
-                // The Swift port has no RawBoy edits (Kotlin's AutoPhoto.edits), so the unadjusted develop is the look's.
-                let unadjusted = LookApplier.develop(currentAnalysis.autoBase, look: current.activeLook, strength: current.strength,
-                                                     adjust: Adjustments.none, hasFace: currentAnalysis.stats.hasFace,
-                                                     preset: current.preset, lensPreset: current.lensPreset)
+                let unadjusted = current.edits.map { LookApplier.applyEditsDevelop($0, adjust: .none) }
+                    ?? LookApplier.develop(currentAnalysis.autoBase, look: current.activeLook, strength: current.strength,
+                                           adjust: Adjustments.none, hasFace: currentAnalysis.stats.hasFace,
+                                           preset: current.preset, lensPreset: current.lensPreset)
                 let wb = LookApplier.whiteBalanceAdjust(unadjusted, kelvin: kelvin, tint: tint)
                 setAdjust(id, force: true) { $0.warmth = wb.warmth; $0.tint = wb.tint }
             }
@@ -799,36 +1174,98 @@ final class AutoViewModel: ObservableObject {
     }
 
     /**
-     * Gives every photo of the batch the look (or preset), strength, warmth, tint, contrast, saturation and grain of [id], including
+     * Gives every photo of the batch the look (or preset), lens preset choice, strength, warmth, tint, contrast, luma contrast, saturation, grain and retouch of [id], including
      * photos still being analysed (they keep it rather than their suggestion); brightness and denoise stay per photo (they follow
      * each photo's exposure and noise). Not while exporting.
      */
-    func applyLookToAll(_ id: String) {
+    func applyLookToAll(_ id: String, confirmed: Bool = false) {
         if export != nil { return }
         guard let source = photo(id) else { return }
+        if !confirmed, askOverwrite(photos.map(\.id).filter { $0 != id }, source.lookName, { [weak self] in self?.applyLookToAll(id, confirmed: true) }) { return }
         for p in photos where p.id != id {
-            changeDevelop(p.id, force: true) { $0.takeLook(of: source) }
+            changeDevelop(p.id, force: true) {
+                $0.takeLook(of: source)
+                takeLensChoice(&$0, of: source)
+            }
         }
         message = "\(source.lookName) applied to all photos"
     }
 
+    /** A look or preset that would replace RawBoy edits (Pro's, with heal strokes and masks) waiting for the user's yes. */
+    struct OverwriteRequest: Identifiable {
+        let id = UUID()
+        let what: String
+        let count: Int
+        let proceed: () -> Void
+    }
+    @Published var overwriteRequest: OverwriteRequest?
+
+    /**
+     * True (and [overwriteRequest] set) when [ids] include photos with RawBoy edits, which giving them [what] would drop;
+     * [proceed] runs on "Replace" (each photo keeps its undo step, so Undo brings its edits back).
+     */
+    private func askOverwrite(_ ids: [String], _ what: String, _ proceed: @escaping () -> Void) -> Bool {
+        let edited = ids.filter { photo($0)?.edits != nil }.count
+        guard edited > 0 else { return false }
+        overwriteRequest = OverwriteRequest(what: what, count: edited, proceed: proceed)
+        return true
+    }
+
+    /** Bumped by the "Reset all photos" button and menu item: the root shows its sheet (count, target, a confirmation). */
+    @Published private(set) var resetRequest = 0
+
+    func requestReset() { if export == nil && !photos.isEmpty { resetRequest += 1 } }
+
+    /**
+     * Puts every photo of the batch back to [target] (AutoReset: preset, Strength and every adjustment cleared), photos still
+     * being analysed included. Each photo gets its own undo step (Undo in its photo view brings its look and adjustments back)
+     * and its sidecar is written as for any edit. The file list stays. Not while exporting. Returns how many photos.
+     */
+    @discardableResult
+    func resetAll(to target: AutoReset.Target) -> Int {
+        if export != nil { return 0 }
+        let ids = photos.map(\.id)
+        for id in ids { changeDevelop(id, force: true) { $0.reset(to: target) } }
+        let what: String
+        switch target {
+        case .look(let l): what = l.name
+        case .film(let f): what = f.name
+        case .asIs: what = "As is"
+        }
+        message = ids.count == 1 ? "Photo reset to \(what)" : "\(ids.count) photos reset to \(what)"
+        return ids.count
+    }
+
+    /**
+     * [p] given [source]'s lens preset choice (Apply to all, Copy previous): the same pick, or "by lens" / none, worked out
+     * for [p]'s own lens (a photo still being analysed gets its preset when the analysis is in).
+     */
+    private func takeLensChoice(_ p: inout AutoPhoto, of source: AutoPhoto) {
+        p.lensChoice = source.lensChoice
+        if let a = p.analysis {
+            p.lensPreset = Presets.chosenLensPreset(lensPresets, choice: source.lensChoice, lens: Self.matchLensName(p, a))
+        }
+    }
+
     /** The analysed photo before [id] in the batch (the one Swipe goes back to), for "Copy previous". */
     func previousPhoto(_ id: String) -> AutoPhoto? {
-        let pages = photos.filter { $0.analysis != nil }
+        let pages = shown.filter { $0.analysis != nil }
         guard let i = pages.firstIndex(where: { $0.id == id }), i > 0 else { return nil }
         return pages[i - 1]
     }
 
     /**
-     * Gives photo [id] what "Apply to all" copies, from the photo before it ([previousPhoto]): look (or preset), strength,
-     * brightness, warmth, tint, contrast, saturation and grain, as one undo step (a neighbouring shot of the same scene usually wants its
+     * Gives photo [id] what "Apply to all" copies, from the photo before it ([previousPhoto]): look (or preset), lens preset choice, strength,
+     * brightness, warmth, tint, contrast, luma contrast, saturation, grain and retouch, as one undo step (a neighbouring shot of the same scene usually wants its
      * brightness too, unlike Apply to all); denoise and rotation stay. Not while exporting.
      */
-    func copyPrevious(_ id: String) {
+    func copyPrevious(_ id: String, confirmed: Bool = false) {
         if export != nil { return }
         guard let source = previousPhoto(id) else { return }
+        if !confirmed, askOverwrite([id], source.lookName, { [weak self] in self?.copyPrevious(id, confirmed: true) }) { return }
         changeDevelop(id, force: true) {
             $0.takeLook(of: source)
+            takeLensChoice(&$0, of: source)
             $0.adjust.brightness = source.adjust.brightness
         }
         message = "Copied from \(source.name)"
@@ -926,14 +1363,26 @@ final class AutoViewModel: ObservableObject {
 
     /**
      * "Auto denoise all", for a batch that's otherwise done: every photo gets the denoise, colour denoise and sharpening
-     * the auto develop measured on it, so its Denoise slider goes back to 0 (presets never override those here); looks,
-     * presets, lens corrections and the other sliders stay. One undo step per photo. [ids] (the grid's selection): only
-     * those photos. Not while exporting.
+     * the auto develop measured on it, so its Denoise slider goes back to 0 and presets (the batch's too, for photos
+     * added later) lose their Denoise & sharpening group (Presets.withoutDenoise); looks, presets, lens corrections and
+     * the other sliders stay. One undo step per photo. [ids] (the grid's selection): only those photos, and the batch
+     * preset stays as it is. Not while exporting.
      */
     func autoDenoiseAll(_ ids: Set<String>? = nil) {
         guard export == nil else { return }
-        let changed = photos.filter { (ids == nil || ids!.contains($0.id)) && $0.adjust.denoise != 0 }
-        for p in changed { changeDevelop(p.id, force: true) { $0.adjust.denoise = 0 } }
+        if ids == nil, let batch = preset { preset = Presets.withoutDenoise(batch) }
+        // A photo added "As is" has no auto develop: it gets the measured denoise from now on (autoDenoise).
+        let changed = photos.filter {
+            (ids == nil || ids!.contains($0.id))
+                && ($0.adjust.denoise != 0 || ($0.plain && !$0.autoDenoise) || ($0.preset?.groups.contains(.denoise) ?? false))
+        }
+        for p in changed {
+            changeDevelop(p.id, force: true) {
+                $0.adjust.denoise = 0
+                if $0.plain { $0.autoDenoise = true }
+                $0.preset = $0.preset.flatMap(Presets.withoutDenoise)
+            }
+        }
         switch changed.count {
         case 0:
             message = ids == nil ? "Every photo already has its auto denoise"
@@ -949,7 +1398,7 @@ final class AutoViewModel: ObservableObject {
      */
     func removeOpened(_ id: String) {
         guard let p = photo(id), export == nil else { return }
-        let pages = photos.filter { $0.analysis != nil }
+        let pages = shown.filter { $0.analysis != nil }
         let next: AutoPhoto? = pages.firstIndex { $0.id == id }.flatMap { i in
             i + 1 < pages.count ? pages[i + 1] : i > 0 ? pages[i - 1] : nil
         }
@@ -958,13 +1407,118 @@ final class AutoViewModel: ObservableObject {
         message = "\(p.name) removed from the batch"
     }
 
+    // MARK: - Paging ahead (web's NeighbourPreload and prefetchNext)
+
+    /** How many photos after / before the open one have their cached preview read ahead. */
+    static let preloadAhead = 3
+    static let preloadBehind = 2
+
+    /**
+     * Whether photos around the open one are warmed up: Macs and other machines that analyse in more than one lane (a
+     * second full-resolution raw and five previews fit). Phones decode only the photo shown, as before.
+     */
+    static let pagesAhead = lanes > 1
+
+    /**
+     * The ids to warm around [current] in [ids] (the photo view's order): the next [preloadAhead] and the previous
+     * [preloadBehind], nearest first, forward before backward at the same distance (people mostly step forward). Empty
+     * if [current] isn't in the list.
+     */
+    static func preloadWindow(_ ids: [String], _ current: String?) -> [String] {
+        guard let current, let at = ids.firstIndex(of: current) else { return [] }
+        var out: [String] = []
+        for d in 1...max(preloadAhead, preloadBehind) {
+            if d <= preloadAhead, at + d < ids.count { out.append(ids[at + d]) }
+            if d <= preloadBehind, at - d >= 0 { out.append(ids[at - d]) }
+        }
+        return out
+    }
+
+    /** The cached previews of the photos around the open one, read ahead with their LUT or film stock loaded. */
+    private var warmPreviews: [String: PreviewImage] = [:]
+    /** Bumped when the photo view moves on: a warm-up still running for the old window stops. */
+    private var warmRun = 0
+
+    /**
+     * The photo after the open one, decoded at full resolution ahead of time ([prefetchNext]); taken by [openDetail] when
+     * stepping to it, thrown away when anything else opens.
+     */
+    private var next: (id: String, task: Task<PhotoSession.Prepared?, Never>)?
+
+    /**
+     * Restarts the warm-up around [id] (nil: the photo view closed, everything is dropped): what left the window is
+     * dropped, the rest read one at a time, nearest first, once the open photo is decoded (it always goes first).
+     */
+    private func preloadNeighbours(_ id: String?) {
+        warmRun += 1
+        let run = warmRun
+        guard let id, Self.pagesAhead else {
+            warmPreviews = [:]
+            discardNext()
+            return
+        }
+        let window = Self.preloadWindow(shown.filter { $0.analysis != nil }.map(\.id), id)
+        let keep = Set(window)
+        warmPreviews = warmPreviews.filter { keep.contains($0.key) }
+        let todo = window.filter { warmPreviews[$0] == nil }
+        guard !todo.isEmpty else { return }
+        let previews = previews
+        Task {
+            for nid in todo {
+                while warmRun == run, let s = selected, sessionReady != s { try? await Task.sleep(nanoseconds: 200_000_000) }
+                guard warmRun == run else { return }
+                guard let image = await Task.detached(priority: .utility, operation: { previews.get(nid) }).value else { continue }
+                if let params = photo(nid)?.params {
+                    _ = try? await params.lut.asyncMap { try await loadLut($0) }
+                    _ = try? await params.film.asyncMap { try await loadFilm($0) }
+                }
+                guard warmRun == run else { return }
+                warmPreviews[nid] = image
+            }
+        }
+    }
+
+    /** Frees the photo decoded ahead (once its decode finishes, if it's still running). */
+    private func discardNext() {
+        guard let n = next else { return }
+        next = nil
+        n.task.cancel()
+        Task { await n.task.value?.image.close() }
+    }
+
+    /** Starts decoding the photo after [id], [id] being open: under the decode lock, so it waits for the work before it. */
+    private func prefetchNext(_ id: String) {
+        guard Self.pagesAhead else { return }
+        let pages = shown.filter { $0.analysis != nil }
+        guard let i = pages.firstIndex(where: { $0.id == id }), i + 1 < pages.count else { return discardNext() }
+        let after = pages[i + 1]
+        if next?.id == after.id { return }
+        discardNext()
+        let url = after.url
+        let task = Task { () -> PhotoSession.Prepared? in
+            try? await decodeLock.run { () async throws -> PhotoSession.Prepared? in
+                // Discarded meanwhile (the user moved elsewhere) or an export started: nothing to decode.
+                guard !Task.isCancelled, export == nil else { return nil }
+                return try await Task.detached(priority: .utility) { try PhotoSession.prepare(url) }.value
+            }
+        }
+        next = (after.id, task)
+    }
+
     func openDetail(_ id: String) {
         guard let p = photo(id), p.analysis != nil, export == nil else { return }
         if selected != id { cropping = false }
         selected = id
-        if sessionReady == id { return }
+        preloadNeighbours(id)
+        if let n = next, n.id != id, sessionReady != id { discardNext() }
+        if sessionReady == id { return prefetchNext(id) }
         sessionReady = nil
-        if cachedPreview?.id != id {
+        // The photo decoded ahead, if this is it: taken now, so nothing else discards it.
+        let ahead = next?.id == id ? next : nil
+        if ahead != nil { next = nil }
+        if cachedPreview?.id != id, let warm = warmPreviews[id] {
+            cachedPreview = (id, warm)
+        } else if cachedPreview?.id != id {
             cachedPreview = nil
             let previews = previews
             Task {
@@ -979,10 +1533,20 @@ final class AutoViewModel: ObservableObject {
         }
         Task {
             do {
+                // Outside the lock: the decode ahead takes the lock itself.
+                let prepared = await ahead?.task.value
                 // Photos swiped past while an earlier decode ran are skipped: each decode takes seconds.
                 let opened = try await decodeLock.run { () async throws -> Bool in
-                    guard selected == id else { return false }
-                    _ = try await session.open(p.url) { [weak self] in self?.photo(id)?.params ?? $0 }
+                    guard selected == id else {
+                        prepared?.image.close()
+                        return false
+                    }
+                    let initial: (DevelopParams) -> DevelopParams = { [weak self] in self?.photo(id)?.params ?? $0 }
+                    if let prepared {
+                        _ = session.adopt(prepared, initialParams: initial)
+                    } else {
+                        _ = try await session.open(p.url, initialParams: initial)
+                    }
                     return true
                 }
                 guard opened, selected == id else { return }
@@ -990,6 +1554,7 @@ final class AutoViewModel: ObservableObject {
                 session.selectFilm(photo(id)?.params?.film) { [weak self] in self?.message = $0 }
                 sessionReady = id
                 cachedPreview = nil
+                prefetchNext(id)
             } catch {
                 message = error.localizedDescription
                 selected = nil
@@ -1000,8 +1565,11 @@ final class AutoViewModel: ObservableObject {
     func closeDetail() {
         cropping = false
         session.exitZoom()
+        // The grid comes back scrolled to the photo just viewed (it also carries the keyboard focus).
+        if let selected { focusedId = selected }
         selected = nil
         cachedPreview = nil
+        preloadNeighbours(nil)
     }
 
     /**
@@ -1059,8 +1627,8 @@ final class AutoViewModel: ObservableObject {
                     try await session.export(params, defaults: a.defaults, sourceName: p.name, settings: settings,
                                              naming: Self.naming) { f in Task { @MainActor in self.export?.current = f } }
                 }
-                try await saveExported(file, p.url)
-                message = "Saved \(file.lastPathComponent) to \(destinationLabel)"
+                let name = try await saveExported(try named(file, p, index: 1), p.url)
+                message = "Saved \(name) to \(destinationLabel)"
                 ok = true
             } catch {
                 message = "Export failed: \(error.localizedDescription)"
@@ -1077,7 +1645,8 @@ final class AutoViewModel: ObservableObject {
      */
     func exportAll(only ids: Set<String>? = nil) {
         guard export == nil else { return }
-        let todo = photos.filter { $0.analysis != nil && (ids?.contains($0.id) ?? true) }
+        // Export all takes the photos the filter shows.
+        let todo = (ids == nil ? shown : photos).filter { $0.analysis != nil && (ids?.contains($0.id) ?? true) }
         if todo.isEmpty { return }
         closeDetail()
         // The detail view's full-resolution image would double the memory each export needs.
@@ -1102,7 +1671,7 @@ final class AutoViewModel: ObservableObject {
                     itemSettings.frameNumber = index + 1
                     itemSettings.captureDate = p.date
                     let file = try await decodeLock.run { try await exportOne(p, itemSettings) }
-                    try await saveExported(file, p.url)
+                    _ = try await saveExported(try named(file, p, index: index + 1), p.url)
                     ok = true
                 } catch {
                     failed += 1
@@ -1130,6 +1699,15 @@ final class AutoViewModel: ObservableObject {
 
     private func exportOne(_ p: AutoPhoto, _ settings: ExportSettings) async throws -> URL {
         guard let a = p.analysis, let params = p.params else { throw RawImageError(message: "not analysed") }
+        if p.edits != nil || params.portraitRetouch > 0 {
+            // RawBoy edits can hold painted masks, lens blur and healing strokes, which the session builds (as Pro's export does).
+            // Portrait retouch's map is made by the session too, from its preview and skin mask, as the photo view shows it.
+            defer { session.close() }
+            _ = try await session.open(p.url) { _ in params }
+            await session.healNow()
+            return try await session.export(params, defaults: a.defaults, sourceName: p.name, settings: settings,
+                                            naming: Self.naming) { f in Task { @MainActor in self.export?.current = f } }
+        }
         let lut = try await params.lut.asyncMap { try await loadLut($0) }
         let film = try await params.film.asyncMap { try await loadFilm($0) }
         return try await Task.detached(priority: .userInitiated) {
@@ -1193,7 +1771,9 @@ extension Data {
 
 /**
  * The lens presets RawBoy sent or the user opened (Preset.isLensPreset), as one preset file (`lens-presets.json`, the
- * same format as RawBoy's preset files) in app storage, so later batches get them too.
+ * same format as RawBoy's preset files) in app storage, so later batches get them too. RawBoy Desktop keeps them in Pro's
+ * presets file instead, as the web's Auto lists the RawBoy tab's lens presets: one saved in Pro's Lens tab is in Auto's
+ * list at once, and one Auto keeps (from a sidecar) or removes is so in Pro too.
  */
 enum LensPresetStore {
     private static var file: URL {
@@ -1201,6 +1781,38 @@ enum LensPresetStore {
             .appendingPathComponent("lens-presets.json")
     }
 
+    #if os(macOS)
+    static func load() -> [Preset] {
+        var all = PresetStore.load()
+        // Before RawBoy Desktop shared Pro's file, Auto kept the lens presets of sidecars in their own: move them over once.
+        if let text = try? String(contentsOf: file, encoding: .utf8) {
+            let old = ((try? Presets.decode(text)) ?? []).filter(\.isLensPreset)
+            let merged = old.reduce(all, Presets.putLensPreset)
+            if merged == all || PresetStore.save(merged) {
+                all = merged
+                try? FileManager.default.removeItem(at: file)
+            }
+        }
+        return all.filter(\.isLensPreset)
+    }
+
+    /** [presets] in place of the file's lens presets: kept ones stay where they were, the other presets are untouched. */
+    static func save(_ presets: [Preset]) -> Bool {
+        let all = PresetStore.load()
+        var out: [Preset] = []
+        var kept = Set<String>()
+        for p in all {
+            if !p.isLensPreset {
+                out.append(p)
+            } else if let now = presets.first(where: { $0.id == p.id }), !kept.contains(now.id) {
+                out.append(now)
+                kept.insert(now.id)
+            }
+        }
+        out += presets.filter { !kept.contains($0.id) }
+        return out == all || PresetStore.save(out)
+    }
+    #else
     static func load() -> [Preset] {
         guard let text = try? String(contentsOf: file, encoding: .utf8) else { return [] }
         return ((try? Presets.decode(text)) ?? []).filter(\.isLensPreset)
@@ -1217,4 +1829,5 @@ enum LensPresetStore {
             return false
         }
     }
+    #endif
 }

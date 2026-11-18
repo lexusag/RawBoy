@@ -73,6 +73,8 @@ public final class ShaderParams: @unchecked Sendable {
     /** Portrait retouch: the gains map (PortraitRetouch, packed into the skin texture) and `uSkinFix`, 0 = off. */
     public let retouchMap: RetouchMap?
     public let skinFix: Float
+    /** Exponent of the luminance-only gain `pow(Y / 0.18, x)` (`uLumaContrast`); 0 = neutral. */
+    public let lumaContrast: Float
 
     public init(whiteBalance: [Float], exposure: Float, contrast: Float, saturation: Float, shadows: Float,
                 highlights: Float, blacks: Float, whites: Float, denoise: Float, denoiseWide: Float,
@@ -88,7 +90,8 @@ public final class ShaderParams: @unchecked Sendable {
                 anamorphic: Float = 0, anamorphicTint: [Float] = AnamorphicColor.neutral.tintVec(ghosts: false),
                 anamorphicLength: [Float] = AnamorphicColor.neutral.lengthVec,
                 anamorphicBar: [Float] = AnamorphicColor.neutral.barVec, flareSource: PreviewImage? = nil,
-                bokehSource: PreviewImage? = nil, retouchMap: RetouchMap? = nil, skinFix: Float = 0) {
+                bokehSource: PreviewImage? = nil, retouchMap: RetouchMap? = nil, skinFix: Float = 0,
+                lumaContrast: Float = 0) {
         self.whiteBalance = whiteBalance
         self.exposure = exposure
         self.contrast = contrast
@@ -137,6 +140,7 @@ public final class ShaderParams: @unchecked Sendable {
         self.bokehSource = bokehSource
         self.retouchMap = retouchMap
         self.skinFix = skinFix
+        self.lumaContrast = lumaContrast
     }
 
     /**
@@ -243,7 +247,8 @@ public final class ShaderParams: @unchecked Sendable {
             anamorphicTint: p.anamorphicColor.tintVec(ghosts: p.anamorphicGhosts),
             anamorphicLength: p.anamorphicColor.lengthVec, anamorphicBar: p.anamorphicColor.barVec,
             flareSource: flareSource, bokehSource: bokehSource, retouchMap: retouchMap,
-            skinFix: PortraitRetouch.skinFix(strength: p.portraitRetouch, map: retouchMap))
+            skinFix: PortraitRetouch.skinFix(strength: p.portraitRetouch, map: retouchMap),
+            lumaContrast: powf(2, p.lumaContrast / 100 * 0.7) - 1)
     }
 
     /** Full layer temperature offset (100) moves the white this many mireds; + = warmer, as the global slider. */

@@ -65,6 +65,7 @@ struct LeaksPanel: View {
                     Text("Effects").tag(true)
                 }
                 .pickerStyle(.segmented)
+                .neutralSegments()
                 Button(zoomed ? "Fit" : "100%", action: actions.onToggleZoom)
                 Button("Done", action: actions.onDone).fontWeight(.semibold)
             }
@@ -107,9 +108,8 @@ struct LeaksPanel: View {
         .font(.subheadline)
         .padding(.horizontal, 10)
         .padding(.vertical, 6)
-        .background(Capsule().fill(selected ? Color.accentColor.opacity(0.3) : Color.clear))
-        .overlay(Capsule().stroke(selected ? Color.accentColor : Color.secondary.opacity(0.5)))
-        .onTapGesture { actions.onSelect(l.id) }
+        .chipStyle(selected: selected)
+        .tapButton(selected: selected, hint: "Selects this light leak") { actions.onSelect(l.id) }
         .contextMenu {
             Button(l.enabled ? "Hide" : "Show") { actions.onUpdate(l.id, true) { $0.enabled.toggle() } }
             Button("Delete", role: .destructive) { actions.onRemove(l.id) }
@@ -127,6 +127,7 @@ struct LeaksPanel: View {
             ForEach(LeakKind.allCases, id: \.self) { Text($0.label).tag($0) }
         }
         .pickerStyle(.segmented)
+        .neutralSegments()
         .padding(.vertical, 4)
         ParamSlider(label: "Intensity", value: leak.intensity, range: 0...100, defaultValue: 100,
                     format: { "\(Int($0.rounded()))%" }) { v in set(leak) { $0.intensity = v } }
@@ -182,8 +183,15 @@ struct LeaksPanel: View {
                 .font(.subheadline)
                 .padding(.vertical, 4)
         }
+        if LightLeaks.reshaped(leak) {
+            Button("Round outline") { set(leak, true) { $0.radii = LightLeaks.roundRadii } }
+                .font(.subheadline)
+                .padding(.vertical, 4)
+        }
         Note("Drag the leak to move it, the dots to resize (" +
              (leak.kind == .streak ? "side dots: width, end dots: length" : "along and across") +
-             "), the round knob to turn it, the square to bend it. Inside the dashed line it is pure white at full intensity; the glow around it is added in Screen mode. Leaks aren't saved in presets: they belong to this photo.")
+             (leak.kind == .glow ? "), the hollow dots to reshape its outline around what it should hide, the round knob to turn it, the square to bend it."
+                 : "), the round knob to turn it, the square to bend it.") +
+             " Inside the dashed line it is pure white at full intensity; the glow around it is added in Screen mode. Leaks aren't saved in presets: they belong to this photo.")
     }
 }

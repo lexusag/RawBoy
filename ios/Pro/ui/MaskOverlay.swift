@@ -19,13 +19,18 @@ private let pointStep: CGFloat = 0.15
 /** A second finger this soon after the first turns the touch into a pan and drops the stroke just started. */
 private let panGrace: TimeInterval = 0.15
 
-enum MaskHandle { case move, start, end, rx, ry, rotate, curve, bend, pin }
+enum MaskHandle: Equatable { case move, start, end, rx, ry, rotate, curve, bend, pin
+    /** A glow leak's outline point (which of the 8). */
+    case outline(Int)
+}
 
 /** A light leak's form, for a radial shape that is one (rx, ry = its length and width radii). */
 struct LeakForm: Equatable {
     let kind: LeakKind
     let bend: Float
     let taper: Float
+    /** A glow's 8 outline radii (LightLeaks' radii); all 1: an ellipse, but still with its outline points. */
+    var radii: [Float] = LightLeaks.roundRadii
 }
 
 /**
@@ -103,13 +108,13 @@ struct MaskGeometry {
         case linear(start: [CGPoint], centre: [CGPoint], end: [CGPoint], pin: CGPoint, curve: CGPoint)
         /** [bend]: a light leak's bend square, nil for a mask. */
         case radial(outer: [CGPoint], inner: [CGPoint], pin: CGPoint, rx: [CGPoint], ry: [CGPoint], knob: CGPoint,
-                    knobBase: CGPoint, bend: CGPoint?)
+                    knobBase: CGPoint, bend: CGPoint?, outline: [CGPoint])
         case brush(pin: CGPoint?)
 
         var pin: CGPoint? {
             switch self {
             case let .linear(_, _, _, pin, _): pin
-            case let .radial(_, _, pin, _, _, _, _, _): pin
+            case let .radial(_, _, pin, _, _, _, _, _, _): pin
             case let .brush(pin): pin
             }
         }
@@ -153,6 +158,9 @@ struct MaskGeometry {
             let cy = CGFloat(scy) * h
             func at(_ u: CGFloat, _ v: CGFloat) -> CGPoint { toScreen(cx + c * u - sn * v, cy + sn * u + c * v) }
             let k = leak.map { CGFloat(LightLeaks.bendCurvature($0.bend, rxPx: Float(rx))) } ?? 0
+            let radii: [Float]? = leak?.kind == .glow ? leak?.radii : nil
+            /// A glow's outline radius at angle [t] of its own frame (1 for other shapes).
+            func radiusAt(_ t: CGFloat) -> CGFloat { radii.map { CGFloat(LightLeaks.radius($0, Float(t))) } ?? 1 }
             // A point in the leak's own frame (q: 1 = its radii) through its taper and bend, like the shader.
             func atQ(_ qx: CGFloat, _ qy: CGFloat) -> CGPoint {
                 let u = qx * rx
@@ -176,17 +184,26 @@ struct MaskGeometry {
                 default:
                     return (0..<steps).map {
                         let t = CGFloat($0) / CGFloat(steps) * 2 * .pi
-                        return atQ(sc * cos(t), sc * sin(t))
+                        let rr = radiusAt(t)
+                        // The shader's edge is (|q| - r) / sqrt(r): the inner line sits (1 - sc) sqrt(r) inside the outline.
+                        let len = radii != nil ? max(0.01, rr - (1 - sc) * rr.squareRoot()) : sc
+                        return atQ(len * cos(t), len * sin(t))
                     }
                 }
             }
             // A thin leak's knob keeps clear of its width handles.
             let knobAt = leak != nil ? max(ry * knob, ry + 0.06 * long) : ry * knob
             return .radial(outer: outline(1), inner: outline(1 - min(max(CGFloat(feather) / 100, 0.01), 0.95)), pin: at(0, 0),
-                           rx: [atQ(1, 0), atQ(-1, 0)],
-                           // A triangle's width handles: its base corners.
-                           ry: leak?.kind == .triangle ? [atQ(-1, 1), atQ(-1, -1)] : [at(0, ry), at(0, -ry)],
-                           knob: at(0, -knobAt), knobBase: at(0, -ry), bend: leak != nil ? atQ(0.5, 0) : nil)
+                           rx: [atQ(radiusAt(0), 0), atQ(-radiusAt(.pi), 0)],
+                           // A triangle's width handles: its base corners; a reshaped glow's sit on its outline.
+                           ry: leak?.kind == .triangle ? [atQ(-1, 1), atQ(-1, -1)]
+                               : radii != nil ? [atQ(0, radiusAt(.pi / 2)), atQ(0, -radiusAt(-.pi / 2))] : [at(0, ry), at(0, -ry)],
+                           knob: at(0, -knobAt), knobBase: at(0, -ry), bend: leak != nil ? atQ(0.5, 0) : nil,
+                           // A glow leak's outline points (hollow dots), between the size dots.
+                           outline: radii.map { rs in rs.indices.map { i in
+                               let t = CGFloat(LightLeaks.radiusAngle(i))
+                               return atQ(CGFloat(rs[i]) * cos(t), CGFloat(rs[i]) * sin(t))
+                           } } ?? [])
         }
     }
 
@@ -229,11 +246,42 @@ struct MaskGeometry {
         pv -= LightLeaks.bendCurvature(leak.bend, rxPx: rx) * pu * pu
         let qx = pu / rx
         let qy = pv / (ry * LightLeaks.taperWidth(leak.taper, qx: qx))
-        return LightLeaks.edge(leak.kind, qx: qx, qy: qy) < 0 && (leak.kind != .streak || abs(qx) < 1)
+        return LightLeaks.edge(leak.kind, qx: qx, qy: qy, radii: leak.radii) < 0 && (leak.kind != .streak || abs(qx) < 1)
     }
 
-    /** The shape after dragging [handle] from image point [from] to [to]. */
-    func drag(_ s: MaskShape, _ handle: MaskHandle, _ from: CGPoint, _ to: CGPoint) -> MaskShape {
+    /** Image point [to] in a leak's own frame (q: 1 = its radii), through its bend and taper, like the shader. */
+    func toQ(_ s: MaskShape, _ leak: LeakForm, _ to: CGPoint) -> (Float, Float) {
+        let axis: (Float, Float, Float, Float, Float)
+        switch s {
+        case let .radial(x, y, rx, ry, a, _), let .stripe(x, y, rx, ry, a, _, _, _): axis = (x, y, rx, ry, a)
+        default: return (0, 0)
+        }
+        let (cx, cy, srx, sry, angle) = axis
+        let a = Double(angle) * .pi / 180
+        let dx = Double(to.x - CGFloat(cx) * w)
+        let dy = Double(to.y - CGFloat(cy) * h)
+        let rx = Float(CGFloat(srx) * long)
+        let pu = Float(cos(a) * dx + sin(a) * dy)
+        let pv = Float(-sin(a) * dx + cos(a) * dy) - LightLeaks.bendCurvature(leak.bend, rxPx: rx) * pu * pu
+        let qx = pu / rx
+        return (qx, pv / (Float(CGFloat(sry) * long) * LightLeaks.taperWidth(leak.taper, qx: qx)))
+    }
+
+    /**
+     * A glow's 8 outline radii after its outline point [index] is dragged to image point [to]: the point follows the pointer
+     * along its own direction from the centre, within LightLeaks' radius limits.
+     */
+    func reshape(_ s: MaskShape, _ leak: LeakForm, index: Int, to: CGPoint) -> [Float] {
+        let (qx, qy) = toQ(s, leak, to)
+        let t = LightLeaks.radiusAngle(index)
+        let rr = (qx * cosf(t) + qy * sinf(t)).clamped(LightLeaks.radiusMin, LightLeaks.radiusMax)
+        var radii = leak.radii
+        radii[index] = (rr * 1000).rounded() / 1000
+        return radii
+    }
+
+    /** The shape after dragging [handle] from image point [from] to [to]; [radii]: a reshaped glow's, whose size dots sit on its outline. */
+    func drag(_ s: MaskShape, _ handle: MaskHandle, _ from: CGPoint, _ to: CGPoint, radii: [Float]? = nil) -> MaskShape {
         let dx = Float((to.x - from.x) / w)
         let dy = Float((to.y - from.y) / h)
         switch s {
@@ -241,7 +289,7 @@ struct MaskGeometry {
             return s
         case let .stripe(cx, cy, rx, ry, angle, feather, bend, taper):
             guard case let .radial(ncx, ncy, nrx, nry, nangle, _) =
-                    drag(.radial(cx: cx, cy: cy, rx: rx, ry: ry, angle: angle, feather: feather), handle, from, to) else { return s }
+                    drag(.radial(cx: cx, cy: cy, rx: rx, ry: ry, angle: angle, feather: feather), handle, from, to, radii: radii) else { return s }
             return .stripe(cx: ncx, cy: ncy, rx: nrx, ry: nry, angle: nangle, feather: feather, bend: bend, taper: taper)
         case let .linear(x0, y0, x1, y1, curve):
             switch handle {
@@ -269,12 +317,13 @@ struct MaskGeometry {
                 if deg > 180 { deg -= 360 }
                 return .radial(cx: cx, cy: cy, rx: rx, ry: ry, angle: Float((deg * 10).rounded()) / 10, feather: feather)
             }
-            // Radius along the ellipse's own (rotated) axis.
-            let u = Float(abs(cos(a) * vx + sin(a) * vy))
-            let v = Float(abs(-sin(a) * vx + cos(a) * vy))
+            // Radius along the ellipse's own (rotated) axis; a reshaped glow's dot sits on its outline, [radii] times out.
+            let su = Float(cos(a) * vx + sin(a) * vy)
+            let sv = Float(-sin(a) * vx + cos(a) * vy)
+            let r: Float = radii.map { handle == .rx ? LightLeaks.radius($0, su >= 0 ? 0 : .pi) : LightLeaks.radius($0, sv >= 0 ? .pi / 2 : -.pi / 2) } ?? 1
             return handle == .rx
-                ? .radial(cx: cx, cy: cy, rx: max(0.01, u / Float(long)), ry: ry, angle: angle, feather: feather)
-                : .radial(cx: cx, cy: cy, rx: rx, ry: max(0.01, v / Float(long)), angle: angle, feather: feather)
+                ? .radial(cx: cx, cy: cy, rx: max(0.01, abs(su) / r / Float(long)), ry: ry, angle: angle, feather: feather)
+                : .radial(cx: cx, cy: cy, rx: rx, ry: max(0.01, abs(sv) / r / Float(long)), angle: angle, feather: feather)
         }
     }
 
@@ -295,9 +344,10 @@ struct MaskGeometry {
         func nearLine(_ line: [CGPoint]) -> Bool { (1..<line.count).contains { dist2(p, line[$0 - 1], line[$0]) < grab * grab } }
         if let selected = layers.first(where: { $0.id == selectedId }) {
             switch shape(selected, leak: leaks[selected.id]) {
-            case let .radial(_, _, pin, rx, ry, k, _, bend):
+            case let .radial(_, _, pin, rx, ry, k, _, bend, outline):
                 if near(k, grab) { return (selected.id, .rotate) }
                 if let bend, near(bend, grab) { return (selected.id, .bend) }
+                if let i = outline.firstIndex(where: { near($0, grab) }) { return (selected.id, .outline(i)) }
                 if rx.contains(where: { near($0, grab) }) { return (selected.id, .rx) }
                 if ry.contains(where: { near($0, grab) }) { return (selected.id, .ry) }
                 if near(pin, grab * 1.5) { return (selected.id, .move) }
@@ -370,6 +420,8 @@ struct MaskInputs {
     var leaks: [String: LeakForm] = [:]
     /** A leak's bend square was dragged to this bend. */
     var onBend: (String, Float) -> Void = { _, _ in }
+    /** A glow leak's outline point was dragged: its new 8 radii. */
+    var onReshape: (String, [Float]) -> Void = { _, _ in }
 }
 
 #if canImport(UIKit)
@@ -519,7 +571,13 @@ final class MaskTouchView: UIView {
                 }
                 return
             }
-            inp.actions.onChange(id, g.drag(start, handle, dragFrom, g.toImage(p)))
+            if case let .outline(i) = handle {
+                // The point follows the pointer along its own direction from the centre.
+                guard let leak = inp.leaks[id] else { return }
+                inp.onReshape(id, g.reshape(start, leak, index: i, to: g.toImage(p)))
+                return
+            }
+            inp.actions.onChange(id, g.drag(start, handle, dragFrom, g.toImage(p), radii: inp.leaks[id].flatMap { $0.kind == .glow ? $0.radii : nil }))
             return
         }
         guard let layer = strokeLayer, let sid = strokeId else { return }
@@ -580,6 +638,15 @@ final class MaskTouchView: NSView {
     private var panFrom: CGPoint?
 
     override var isFlipped: Bool { true }
+
+    // VoiceOver: the handles are for the pointer; the panels' sliders do the same from the keyboard.
+    override func isAccessibilityElement() -> Bool { inputs.map { i in i.layers.contains { $0.id == i.selectedId } } ?? false }
+    override func accessibilityRole() -> NSAccessibility.Role? { .group }
+    override func accessibilityLabel() -> String? { "Handles of the selected shape" }
+    override func accessibilityHelp() -> String? { "Drag a handle with the mouse or trackpad. The sliders in the panel change the same values from the keyboard." }
+
+    /** A click that brings the window forward also grabs the handle under it (the system slider does the same). */
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     private var scale: CGFloat { window?.backingScaleFactor ?? 2 }
 
@@ -657,7 +724,13 @@ final class MaskTouchView: NSView {
                 }
                 return
             }
-            inp.actions.onChange(id, g.drag(start, handle, dragFrom, g.toImage(p)))
+            if case let .outline(i) = handle {
+                // The point follows the pointer along its own direction from the centre.
+                guard let leak = inp.leaks[id] else { return }
+                inp.onReshape(id, g.reshape(start, leak, index: i, to: g.toImage(p)))
+                return
+            }
+            inp.actions.onChange(id, g.drag(start, handle, dragFrom, g.toImage(p), radii: inp.leaks[id].flatMap { $0.kind == .glow ? $0.radii : nil }))
             return
         }
         guard let layer = strokeLayer, let sid = strokeId else { return }
@@ -797,12 +870,13 @@ struct MaskOverlay: View {
                     line(end, 1.5, dim, dashed: true)
                     dot(pin, 6, filled: true, dim)
                     square(curve, dim)
-                case let .radial(outer, inner, pin, rx, ry, k, knobBase, bend):
+                case let .radial(outer, inner, pin, rx, ry, k, knobBase, bend, outline):
                     line(outer, 2, dim, closed: true)
                     line(inner, 1.2, dim, dashed: true, closed: true)
                     line([knobBase, k], 1.2, dim)
                     dot(k, 7, filled: false, dim)
                     for p in rx + ry { dot(p, 6, filled: true, dim) }
+                    for p in outline { dot(p, 4.5, filled: false, dim) }
                     if let bend { square(bend, dim) }
                     dot(pin, 8, filled: true, dim)
                 case .brush:

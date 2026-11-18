@@ -43,3 +43,20 @@ final class HealBrushTests: XCTestCase {
         XCTAssertEqual(image.createPreview(maxDimension: 1024).pixels, before.pixels)
     }
 }
+
+/** A photo closed while a background task still works on it (Auto's quick photo changes) must not trap. */
+final class ClosedImageTests: XCTestCase {
+    func testClosedImageDoesNotTrap() throws {
+        let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent(".raw")
+        let files = ((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [])
+            .filter { !$0.hasDirectoryPath && !$0.lastPathComponent.hasPrefix(".") }.sorted { $0.path < $1.path }
+        guard let file = files.first else { throw XCTSkip("no test file in \(dir.path)") }
+        let image = try RawImage.open(url: file)
+        image.close()
+        image.healBlemishes([], strokes: [])
+        let preview = image.createPreview(maxDimension: 256)
+        XCTAssertEqual(preview.pixels.count, preview.width * preview.height * 3)
+        XCTAssertEqual(image.measureNoise().luma, 0)
+    }
+}

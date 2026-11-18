@@ -2,10 +2,11 @@ import Foundation
 
 /**
  * The user's controls on top of the auto develop and the look; all 0 = as suggested. [brightness] -100..100 shifts
- * exposure; [warmth] -100..100 warms or cools; [tint] -50..50 (+ = magenta), [contrast] -50..50, [saturation]
+ * exposure; [warmth] -100..100 warms or cools; [tint] -50..50 (+ = magenta), [contrast] -50..50, [lumaContrast] -50..50 (contrast on luminance only, colour saturation holds), [saturation]
  * -100..100 and [grain] -50..50 are added to the slider values the auto develop and the look arrive at, except negative
  * [saturation], which moves the saturation they arrive at towards -100 (-100 = black and white). [denoise] -100..100
- * shifts the auto luma and colour denoise, colour first (see LookApplier.denoise). [rotation] is clockwise quarter turns (0..3) on top of the photo's own orientation. [straighten] (degrees, -45..45)
+ * shifts the auto luma and colour denoise, colour first (see LookApplier.denoise). [retouch] 0..100 adds Portrait retouch
+ * (a natural skin retouch, see PortraitRetouch) on top of what the look or preset sets. [rotation] is clockwise quarter turns (0..3) on top of the photo's own orientation. [straighten] (degrees, -45..45)
  * adds to the develop's straighten angle and [crop] (fractions of the rotated + straightened frame, nil = the whole
  * frame) replaces its crop: Auto's Crop & rotate.
  */
@@ -14,22 +15,26 @@ public struct Adjustments: Equatable, Sendable {
     public var warmth: Float = 0
     public var tint: Float = 0
     public var contrast: Float = 0
+    public var lumaContrast: Float = 0
     public var saturation: Float = 0
     public var grain: Float = 0
     public var denoise: Float = 0
+    public var retouch: Float = 0
     public var rotation: Int = 0
     public var straighten: Float = 0
     public var crop: CropRect?
 
-    public init(brightness: Float = 0, warmth: Float = 0, tint: Float = 0, contrast: Float = 0, saturation: Float = 0,
-                grain: Float = 0, denoise: Float = 0, rotation: Int = 0, straighten: Float = 0, crop: CropRect? = nil) {
+    public init(brightness: Float = 0, warmth: Float = 0, tint: Float = 0, contrast: Float = 0, lumaContrast: Float = 0, saturation: Float = 0,
+                grain: Float = 0, denoise: Float = 0, retouch: Float = 0, rotation: Int = 0, straighten: Float = 0, crop: CropRect? = nil) {
         self.brightness = brightness
         self.warmth = warmth
         self.tint = tint
         self.contrast = contrast
+        self.lumaContrast = lumaContrast
         self.saturation = saturation
         self.grain = grain
         self.denoise = denoise
+        self.retouch = retouch
         self.rotation = rotation
         self.straighten = straighten
         self.crop = crop
@@ -79,6 +84,7 @@ public enum LookApplier {
         var d = base
         d.exposure = (base.exposure + look.exposure * k + adjust.brightness / 100 * brightnessEv).clamped(-5, 5)
         d.contrast = (base.contrast + look.contrast * k + adjust.contrast).clamped(-100, 100)
+        d.lumaContrast = (base.lumaContrast + adjust.lumaContrast).clamped(-100, 100)
         d.saturation = saturation(base.saturation + look.saturation * k, adjust.saturation)
         (d.denoise, d.colorDenoise) = denoise(base, adjust: adjust.denoise)
         d.highlights = add(base.highlights, look.highlights)
@@ -90,6 +96,7 @@ public enum LookApplier {
         d.vignetteAmount = add(base.vignetteAmount, look.vignette)
         d.temperature = (base.temperature + look.warmth * k).clamped(Warmth.minKelvin, Warmth.maxKelvin)
         d.skinRetouch = hasFace ? add(base.skinRetouch, look.portraitRetouch, 0) : base.skinRetouch
+        d.portraitRetouch = (base.portraitRetouch + adjust.retouch).clamped(0, 100)
         d.lut = k > 0 ? look.lutId : nil
         d.lutAmount = look.lutAmount * k
         // A film look renders the stock in place of AgX; Strength blends it with the AgX render.
@@ -116,17 +123,18 @@ public enum LookApplier {
      * A RawBoy preset in place of a look: [base] (the auto develop) with every field the preset holds, exactly as RawBoy
      * applies it (tone mapper, film, LUT, colour, detail, retouch, lens corrections, gradient masks...), then [adjust]
      * on top as with a look. Fields the preset leaves out keep the auto develop's values; there is no Strength.
-     * Denoise, Color denoise and sharpening always come from the auto develop, measured on this photo (its ISO and
-     * exposure), never from the photo the preset was made on; the Denoise adjustment still works on top.
+     * Denoise, Color denoise and sharpening come from the auto develop, measured on this photo (its ISO and exposure),
+     * unless the preset holds the Denoise & sharpening group; the Denoise adjustment works on top either way.
      */
     public static func applyPreset(_ base: DevelopParams, preset: Preset, adjust: Adjustments) -> DevelopParams {
         let p = Presets.apply(preset, base)
         var d = p
         d.exposure = (p.exposure + adjust.brightness / 100 * brightnessEv).clamped(-5, 5)
         d.contrast = (p.contrast + adjust.contrast).clamped(-100, 100)
+        d.lumaContrast = (p.lumaContrast + adjust.lumaContrast).clamped(-100, 100)
         d.saturation = saturation(p.saturation, adjust.saturation)
-        (d.denoise, d.colorDenoise) = denoise(base, adjust: adjust.denoise)
-        d.sharpening = base.sharpening
+        (d.denoise, d.colorDenoise) = denoise(p, adjust: adjust.denoise)
+        d.portraitRetouch = (p.portraitRetouch + adjust.retouch).clamped(0, 100)
         // With a film stock its grain is the one rendered, so Grain scales that one, as in Film mode.
         if p.film != nil {
             d.filmGrain = (p.filmGrain * (1 + adjust.grain / 50)).clamped(0, 200)
@@ -134,6 +142,29 @@ public enum LookApplier {
             d.grain = (p.grain + adjust.grain).clamped(0, 100)
         }
         d.rotation = ((p.rotation + adjust.rotation) % 4 + 4) % 4
+        var warmed = Warmth.shift(framed(d, adjust), powf(warmthRange, adjust.warmth / 100))
+        if adjust.tint != 0 { warmed.tint = (warmed.tint + adjust.tint).clamped(-100, 100) }
+        return warmed
+    }
+
+    /**
+     * A whole develop from Pro ("Back to Auto"; web's `applyEditsDevelop`) in place of a look: [edits] exactly as Pro
+     * rendered them, denoise and sharpening included, with [adjust] on top as with a preset.
+     */
+    public static func applyEditsDevelop(_ edits: DevelopParams, adjust: Adjustments) -> DevelopParams {
+        var d = edits
+        d.exposure = (edits.exposure + adjust.brightness / 100 * brightnessEv).clamped(-5, 5)
+        d.contrast = (edits.contrast + adjust.contrast).clamped(-100, 100)
+        d.lumaContrast = (edits.lumaContrast + adjust.lumaContrast).clamped(-100, 100)
+        d.saturation = saturation(edits.saturation, adjust.saturation)
+        (d.denoise, d.colorDenoise) = denoise(edits, adjust: adjust.denoise)
+        d.portraitRetouch = (edits.portraitRetouch + adjust.retouch).clamped(0, 100)
+        if edits.film != nil {
+            d.filmGrain = (edits.filmGrain * (1 + adjust.grain / 50)).clamped(0, 200)
+        } else {
+            d.grain = (edits.grain + adjust.grain).clamped(0, 100)
+        }
+        d.rotation = ((edits.rotation + adjust.rotation) % 4 + 4) % 4
         var warmed = Warmth.shift(framed(d, adjust), powf(warmthRange, adjust.warmth / 100))
         if adjust.tint != 0 { warmed.tint = (warmed.tint + adjust.tint).clamped(-100, 100) }
         return warmed

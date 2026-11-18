@@ -1,5 +1,9 @@
 import RawBoyEngine
 import SwiftUI
+#if os(macOS)
+import AppKit
+import UniformTypeIdentifiers
+#endif
 
 /** The slider tabs: Light, Color, Detail, LUTs, Lens (Android's ControlsPanel). */
 struct ControlsPanel: View {
@@ -33,11 +37,15 @@ struct ControlsPanel: View {
     var lensfun: LensfunStore? = nil
 
     @AppStorage("pro.tab") private var chosenTab = 0
+    #if os(macOS)
+    /** The Mac inspector's closed sections, by title, comma separated (kept between launches). */
+    @AppStorage("pro.closedSections") private var closedSections = "Primaries,Portrait,Effects,LUT,Lens,Curve"
+    #endif
     @State private var anamorphicOpen: Bool?
     @State private var grainOpen = false
     @State private var fisheyeOpen = false
 
-    private static let tabNames = ["Light", "Color", "Detail", "LUTs", "Lens"]
+    private static let tabNames = ["Light", "Colour", "Detail", "LUTs", "Lens"]
     private static let lutsTab = 3
 
     // Film replaces the tone mapper and the user LUT (kept, but not rendered), so the LUTs tab hides while Film is
@@ -66,6 +74,15 @@ struct ControlsPanel: View {
     }
 
     var body: some View {
+        #if os(macOS)
+        inspector
+        #else
+        tabs
+        #endif
+    }
+
+    /** The phones' panel: one tab of sliders at a time. */
+    private var tabs: some View {
         VStack(spacing: 0) {
             Picker("", selection: Binding(get: { tab }, set: { chosenTab = $0 })) {
                 ForEach(shownTabs, id: \.self) { i in
@@ -73,6 +90,8 @@ struct ControlsPanel: View {
                 }
             }
             .pickerStyle(.segmented)
+            .neutralSegments()
+            .reportsWidth("tabs picker")
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
             ScrollView {
@@ -81,10 +100,12 @@ struct ControlsPanel: View {
                     case 0: light
                     case 1: color
                     case 2: detail
-                    case Self.lutsTab: LutPanel(params: params, luts: luts, loading: lutLoading, onChange: onChange, onSelect: onSelectLut)
+                    case Self.lutsTab: LutPanel(params: params, luts: luts, loading: lutLoading, onChange: onChange, onSelect: onSelectLut,
+                                 onLutsChanged: onLutsTabShown)
                     default: lensPanel
                     }
                 }
+                .reportsWidth("tab content")
                 .padding(.horizontal, 16)
                 .padding(.bottom, 8)
             }
@@ -94,22 +115,39 @@ struct ControlsPanel: View {
         .onAppear { if tab == Self.lutsTab { onLutsTabShown() } }
     }
 
-    @ViewBuilder private var light: some View {
-        HStack {
-            // A fixed label width (as the sliders') so the row doesn't re-flow when the segments or the stock name change.
-            Text("Tone mapper").font(.subheadline).lineLimit(1).minimumScaleFactor(0.8).frame(width: 104, alignment: .leading)
-            // nil = Film: negative + print on a stock, in place of the tone mapper (also what Auto's Film mode sets).
-            Picker("", selection: Binding<ToneMapper?>(
-                get: { params.film == nil ? params.toneMapper : nil },
-                set: { t in if let t { onToneMapper(t) } else { onFilm() } })) {
-                ForEach(ToneMapper.allCases, id: \.self) { Text($0.label).tag(Optional($0)) }
-                Text("Film").tag(ToneMapper?.none)
-            }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .frame(maxWidth: .infinity)
+    /** nil = Film: negative + print on a stock, in place of the tone mapper (also what Auto's Film mode sets). */
+    private var toneMapperPicker: some View {
+        Picker("Tone mapper", selection: Binding<ToneMapper?>(
+            get: { params.film == nil ? params.toneMapper : nil },
+            set: { t in if let t { onToneMapper(t) } else { onFilm() } })) {
+            ForEach(ToneMapper.allCases, id: \.self) { Text($0.label).tag(Optional($0)) }
+            Text("Film").tag(ToneMapper?.none)
         }
-        .frame(height: 32)
+        .labelsHidden()
+        .pickerStyle(.segmented)
+        .neutralSegments()
+        #if os(macOS)
+        .controlSize(.small)
+        #endif
+        .frame(maxWidth: .infinity)
+        .stockWheel(film: params.film, onSelect: onSelectFilm)
+    }
+
+    @ViewBuilder private var lightSliders: some View {
+        // The label beside the segments when they fit, else above them: a segmented control can't go below its natural width,
+        // and a row wider than the panel made every slider track and the curve box as wide, running off the panel's edge.
+        ViewThatFits(in: .horizontal) {
+            HStack {
+                // A fixed label width (as the sliders') so the row doesn't re-flow when the segments or the stock name change.
+                Text("Tone mapper").font(.subheadline).lineLimit(1).minimumScaleFactor(0.8).frame(width: 88, alignment: .leading)
+                toneMapperPicker
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Tone mapper").font(.subheadline).lineLimit(1)
+                toneMapperPicker
+            }
+        }
+        .reportsWidth("tone mapper row")
         if let film = params.film {
             HStack {
                 Text("Stock").font(.subheadline).frame(width: 104, alignment: .leading)
@@ -123,6 +161,7 @@ struct ControlsPanel: View {
                 .frame(width: 190, alignment: .trailing)
             }
             .frame(height: 32)
+            .stockWheel(film: film, onSelect: onSelectFilm)
             if params.lut != nil {
                 Text("Your LUT is off while Film is on; it returns with another tone mapper.")
                     .font(.caption).foregroundStyle(.secondary)
@@ -133,17 +172,36 @@ struct ControlsPanel: View {
         }
         slider("Exposure", \.exposure, -5...5, format: formatEv)
         slider("Contrast", \.contrast, -100...100)
+        slider("Luma contrast", \.lumaContrast, -100...100)
         slider("Highlights", \.highlights, -100...100)
         slider("Shadows", \.shadows, -100...100)
         slider("Whites", \.whites, -100...100)
         slider("Blacks", \.blacks, -100...100)
-        SectionLabel("Curves")
-        CurvesPanel(curves: params.curves) { c in set { $0.curves = c } }
     }
 
+    @ViewBuilder private var light: some View {
+        lightSliders
+        SectionLabel("Curves")
+        curves
+    }
+
+    private var curves: some View { CurvesPanel(curves: params.curves) { c in set { $0.curves = c } } }
+
     @ViewBuilder private var color: some View {
+        whiteBalance
+        SectionLabel("RGB primaries")
+        primariesSliders
+    }
+
+    #if os(macOS)
+    private static let pickWhitePrompt = "Click something neutral grey"
+    #else
+    private static let pickWhitePrompt = "Tap something neutral grey"
+    #endif
+
+    @ViewBuilder private var whiteBalance: some View {
         Button(action: onPickWhite) {
-            Label(pickingWhite ? "Tap something neutral grey" : "Pick white balance", systemImage: "eyedropper")
+            Label(pickingWhite ? Self.pickWhitePrompt : "Pick white balance", systemImage: "eyedropper")
                 .font(.subheadline)
         }
         .buttonStyle(.bordered)
@@ -161,7 +219,9 @@ struct ControlsPanel: View {
         TemperatureSlider(kelvin: params.temperature, defaultValue: defaults.temperature) { k in set { $0.temperature = k } }
         slider("Tint", \.tint, -Float(WhiteBalance.maxTint)...Float(WhiteBalance.maxTint))
         slider("Saturation", \.saturation, -100...100)
-        SectionLabel("RGB primaries")
+    }
+
+    @ViewBuilder private var primariesSliders: some View {
         let degrees = { (v: Float) in String(format: "%+.1f°", v) }
         primaries("Red hue", \.redHue, .redHue, -45...45, format: degrees)
         primaries("Red purity", \.redPurity, .redPurity, -200...200)
@@ -175,14 +235,25 @@ struct ControlsPanel: View {
     }
 
     @ViewBuilder private var detail: some View {
+        sharpness
+        portrait
+        effects
+    }
+
+    /** Denoise, sharpening and the two contrasts (the Mac's Detail section). */
+    @ViewBuilder private var sharpness: some View {
         // Colour denoise follows luma until set (edits and presets from before the split); moving luma pins it.
         ParamSlider(label: "Luma denoise", value: params.denoise, range: 0...100, defaultValue: defaults.denoise,
                     format: formatPlain) { v in set { $0.colorDenoise = $0.effectiveColorDenoise; $0.denoise = v } }
-        ParamSlider(label: "Color denoise", value: params.effectiveColorDenoise, range: 0...100,
+        ParamSlider(label: "Colour denoise", value: params.effectiveColorDenoise, range: 0...100,
                     defaultValue: defaults.effectiveColorDenoise, format: formatPlain) { v in set { $0.colorDenoise = v } }
         slider("Sharpening", \.sharpening, 0...100, format: formatPlain)
         slider("Local contrast", \.localContrast, -100...100)
         slider("High-pass contrast", \.highpassContrast, -100...100)
+    }
+
+    /** What works on skin (the Mac's Portrait section). */
+    @ViewBuilder private var portrait: some View {
         slider("Skin retouch", \.skinRetouch, 0...100, format: formatPlain)
         if params.skinRetouch > 0, let note = skinNote { Note(note) }
         slider("Blemish removal", \.blemishRemoval, 0...100, format: formatPlain)
@@ -206,6 +277,10 @@ struct ControlsPanel: View {
             }
         }
         #endif
+    }
+
+    /** Bloom, flare and grain (the Mac's Effects section). */
+    @ViewBuilder private var effects: some View {
         slider("Bloom", \.bloom, 0...100, format: formatPlain)
         anamorphicSliders
         grainSliders
@@ -231,6 +306,7 @@ struct ControlsPanel: View {
                 ForEach(AnamorphicColor.allCases, id: \.self) { Text($0.label).tag($0) }
             }
             .pickerStyle(.segmented)
+            .neutralSegments()
             .padding(.leading, 16)
             .padding(.vertical, 4)
             Toggle("Ghosts", isOn: Binding(
@@ -254,7 +330,7 @@ struct ControlsPanel: View {
             Group {
                 slider("Size", \.grainSize, 0...100, format: formatPlain)
                 slider("Roughness", \.grainRoughness, 0...100, format: formatPlain)
-                slider("Color", \.grainColor, 0...100, format: formatPlain)
+                slider("Colour", \.grainColor, 0...100, format: formatPlain)
             }
             .padding(.leading, 16)
         }
@@ -330,14 +406,115 @@ struct ControlsPanel: View {
     }
 }
 
+#if os(macOS)
+/**
+ * The Mac's inspector: every slider in one scrolling column of sections that open and close (Light, Curve, Colour,
+ * Primaries, Detail, Portrait, Effects, LUT, Lens) instead of the phones' tabs, so related controls are seen together
+ * and nothing is two clicks away. A section with edits shows an amber dot and a reset for just that section, so what
+ * was changed can be found with the sections closed.
+ */
+extension ControlsPanel {
+    fileprivate var inspector: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                section("Light", reset: { p, d in
+                    p.exposure = d.exposure; p.contrast = d.contrast; p.lumaContrast = d.lumaContrast; p.highlights = d.highlights; p.shadows = d.shadows
+                    p.whites = d.whites; p.blacks = d.blacks
+                    p.filmAmount = d.filmAmount; p.filmGrain = d.filmGrain; p.halation = d.halation
+                }) { lightSliders }
+                section("Curve", reset: { p, d in p.curves = d.curves }) { curves }
+                section("Colour", reset: { p, d in p.temperature = d.temperature; p.tint = d.tint; p.saturation = d.saturation }) {
+                    whiteBalance
+                }
+                section("Primaries", reset: { p, d in
+                    p.redHue = d.redHue; p.redPurity = d.redPurity; p.greenHue = d.greenHue; p.greenPurity = d.greenPurity
+                    p.blueHue = d.blueHue; p.bluePurity = d.bluePurity; p.tintHue = d.tintHue; p.tintPurity = d.tintPurity
+                }) { primariesSliders }
+                section("Detail", reset: { p, d in
+                    p.denoise = d.denoise; p.colorDenoise = d.colorDenoise; p.sharpening = d.sharpening
+                    p.localContrast = d.localContrast; p.highpassContrast = d.highpassContrast
+                }) { sharpness }
+                section("Portrait", reset: { p, d in
+                    p.skinRetouch = d.skinRetouch; p.blemishRemoval = d.blemishRemoval; p.portraitRetouch = d.portraitRetouch
+                }) { portrait }
+                section("Effects", reset: { p, d in
+                    p.bloom = d.bloom; p.anamorphic = d.anamorphic; p.anamorphicColor = d.anamorphicColor
+                    p.anamorphicGhosts = d.anamorphicGhosts; p.grain = d.grain; p.grainSize = d.grainSize
+                    p.grainRoughness = d.grainRoughness; p.grainColor = d.grainColor
+                }) { effects }
+                // Film replaces the user LUT (kept, not rendered), so the section goes while Film is on, as the phones' tab.
+                if params.film == nil {
+                    section("LUT", reset: { p, d in p.lut = d.lut; p.lutAmount = d.lutAmount }) {
+                        LutPanel(params: params, luts: luts, loading: lutLoading, onChange: onChange, onSelect: onSelectLut,
+                                 onLutsChanged: onLutsTabShown)
+                            .onAppear(perform: onLutsTabShown)  // rescan the user's folder when opened
+                    }
+                }
+                section("Lens", reset: { p, d in
+                    p.lensProfile = d.lensProfile; p.lensDistortion = d.lensDistortion; p.lensAnamorphic = d.lensAnamorphic
+                    p.lensCrop = d.lensCrop; p.lensFisheye = d.lensFisheye; p.lensFisheyeFov = d.lensFisheyeFov
+                    p.lensFisheyeAuto = d.lensFisheyeAuto; p.lensFisheyeCircle = d.lensFisheyeCircle
+                    p.lensFisheyeX = d.lensFisheyeX; p.lensFisheyeY = d.lensFisheyeY
+                    p.vignetteAmount = d.vignetteAmount; p.vignetteMidpoint = d.vignetteMidpoint
+                    p.caRed = d.caRed; p.caBlue = d.caBlue
+                }) { lensPanel }
+            }
+            .reportsWidth("tab content")
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
+        }
+    }
+
+    private func toggle(_ title: String) {
+        Motion.animate { closedSections = InspectorSections.toggled(closedSections, title) }
+    }
+
+    /**
+     * A section: its header (chevron, name, the edited dot, reset) and, while open, its controls. [reset] puts the
+     * section's fields back to the photo's defaults; the section counts as edited when that would change anything.
+     */
+    private func section<Content: View>(_ title: String, reset: @escaping (inout DevelopParams, DevelopParams) -> Void,
+                                        @ViewBuilder content: () -> Content) -> some View {
+        var restored = params
+        reset(&restored, defaults)
+        return InspectorSection(title, open: !InspectorSections.closed(closedSections).contains(title), edited: restored != params,
+                                onToggle: { toggle(title) }, onReset: { onChange(restored) }, content: content)
+    }
+}
+#endif
+
 private struct LutPanel: View {
     let params: DevelopParams
     let luts: LutLibrary
     let loading: Bool
     let onChange: (DevelopParams) -> Void
     let onSelect: (String?) -> Void
+    /** Rescans the user's folder (after an import or a new folder). */
+    var onLutsChanged: () -> Void = {}
+    #if os(macOS)
+    // Not private: a private stored property would make the memberwise init private too.
+    @State var dropping = false
+    @State var note: String?
+    #endif
 
     var body: some View {
+        #if os(macOS)
+        VStack(alignment: .leading, spacing: 0) { list }
+            .overlay {
+                if dropping {
+                    RoundedRectangle(cornerRadius: 6).strokeBorder(Color.accentColor, lineWidth: 2).allowsHitTesting(false)
+                }
+            }
+            .onDrop(of: [.fileURL], isTargeted: $dropping) { providers in
+                Task { @MainActor in importLuts(await LutDrop.urls(providers)) }
+                return !providers.isEmpty
+            }
+        #else
+        list
+        #endif
+    }
+
+    @ViewBuilder private var list: some View {
         if params.lut != nil {
             ParamSlider(label: "Strength", value: params.lutAmount, range: 0...100, defaultValue: 100, format: formatPlain) { v in
                 var p = params
@@ -355,6 +532,23 @@ private struct LutPanel: View {
                 }
             }
         }
+        #if os(macOS)
+        SectionLabel("Your LUTs")
+        if luts.user.isEmpty {
+            Note("Add .cube or HaldCLUT .png files, drop them here or on the window, or put them in the folder below.")
+        }
+        ForEach(luts.user, id: \.id) { e in
+            LutRow(name: e.name, selected: params.lut == e.id, loading: loading && params.lut == e.id) { onSelect(e.id) }
+                .contextMenu {
+                    if let folder = luts.folder {
+                        Button("Show in Finder") {
+                            NSWorkspace.shared.activateFileViewerSelecting([folder.appendingPathComponent(String(e.id.dropFirst("file:".count)))])
+                        }
+                    }
+                }
+        }
+        folderControls
+        #else
         SectionLabel("Your LUTs · Files › RawBoy › LUTs")
         if luts.user.isEmpty {
             Note("Put .cube or HaldCLUT .png files into RawBoy's LUTs folder in the Files app.")
@@ -362,8 +556,101 @@ private struct LutPanel: View {
         ForEach(luts.user, id: \.id) { e in
             LutRow(name: e.name, selected: params.lut == e.id, loading: loading && params.lut == e.id) { onSelect(e.id) }
         }
+        #endif
+    }
+
+    #if os(macOS)
+    /** Where the user's LUTs live, with Add files, Show in Finder and Choose folder (the web's Add files / Choose folder). */
+    @ViewBuilder private var folderControls: some View {
+        if let folder = luts.folder {
+            Text((folder.path as NSString).abbreviatingWithTildeInPath)
+                .font(.caption).foregroundStyle(.secondary).lineLimit(2).truncationMode(.middle)
+                .textSelection(.enabled)
+                .help(folder.path)
+                .padding(.top, 6)
+        }
+        if let note {
+            Note(note)
+        }
+        HStack(spacing: 8) {
+            Button("Add files…", action: addFiles)
+                .help("Copies .cube or HaldCLUT .png files into the LUT folder")
+            Button("Show in Finder") {
+                NSWorkspace.shared.activateFileViewerSelecting([LutRepository.userFolder])
+            }
+            .help("Opens the LUT folder: files put there show up here")
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .padding(.top, 4)
+        HStack(spacing: 8) {
+            Button(LutRepository.customFolder == nil ? "Choose folder…" : "Change folder…", action: chooseFolder)
+                .help("Reads your LUTs from a folder of your own instead")
+            if LutRepository.customFolder != nil {
+                Button("Use RawBoy's folder") {
+                    LutRepository.setUserFolder(nil)
+                    note = nil
+                    onLutsChanged()
+                }
+                .help((LutRepository.defaultUserFolder.path as NSString).abbreviatingWithTildeInPath)
+            }
+        }
+        .buttonStyle(.bordered)
+        .controlSize(.small)
+        .padding(.top, 4)
+    }
+
+    private func addFiles() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = LutDrop.types
+        panel.allowsMultipleSelection = true
+        panel.canChooseDirectories = false
+        panel.message = "Choose .cube or HaldCLUT .png files to add to your LUTs"
+        panel.prompt = "Add"
+        if panel.runModal() == .OK { importLuts(panel.urls) }
+    }
+
+    private func chooseFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.canCreateDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.directoryURL = LutRepository.userFolder
+        panel.message = "Choose the folder RawBoy reads your .cube and HaldCLUT .png files from"
+        panel.prompt = "Use Folder"
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        LutRepository.setUserFolder(url)
+        note = nil
+        onLutsChanged()
+    }
+
+    private func importLuts(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        let added = LutRepository.importFiles(urls)
+        note = added == 0 ? "No .cube or .png files there." : "Added \(added) LUT\(added == 1 ? "" : "s")."
+        onLutsChanged()
+    }
+    #endif
+}
+
+#if os(macOS)
+/** Dropped or picked LUT files: the content types the panels take and the file URLs a drop carries. */
+enum LutDrop {
+    static let types: [UTType] = [UTType(filenameExtension: "cube") ?? .data, .png]
+
+    static func urls(_ providers: [NSItemProvider]) async -> [URL] {
+        var urls: [URL] = []
+        for provider in providers {
+            let url: URL? = await withCheckedContinuation { continuation in
+                _ = provider.loadObject(ofClass: URL.self) { url, _ in continuation.resume(returning: url) }
+            }
+            if let url { urls.append(url) }
+        }
+        return urls
     }
 }
+#endif
 
 private struct LutRow: View {
     let name: String
@@ -380,8 +667,7 @@ private struct LutRow: View {
             if loading { ProgressView().controlSize(.small) }
         }
         .padding(.vertical, 6)
-        .contentShape(Rectangle())
-        .onTapGesture(perform: onTap)
+        .tapButton(selected: selected, hint: "Applies this LUT", action: onTap)
     }
 }
 
@@ -391,7 +677,15 @@ struct SectionLabel: View {
     init(_ text: String) { self.text = text }
 
     var body: some View {
+        #if os(macOS)
+        // Small caps in ash, as the Viewer's details panel heads its sections: amber headings competed with the values.
+        Text(text).font(.caption.weight(.semibold)).textCase(.uppercase).tracking(0.6).foregroundStyle(.secondary)
+            .padding(.top, 14).padding(.bottom, 2)
+            .accessibilityAddTraits(.isHeader)
+        #else
         Text(text).font(.caption.weight(.semibold)).foregroundStyle(Color.accentColor).padding(.top, 12).padding(.bottom, 2)
+            .accessibilityAddTraits(.isHeader)
+        #endif
     }
 }
 
@@ -422,7 +716,7 @@ struct GeometryPanel: View {
             HStack {
                 Text("Crop & rotate").font(.headline)
                 Spacer()
-                Button("Reset crop", action: onResetCrop).disabled(params.crop.isFull && aspect == .free)
+                Button("Reset crop", action: onResetCrop).disabled(params.crop.isFull && aspect == .original)
                 Button("Done", action: onDone).fontWeight(.semibold)
             }
             HStack(spacing: 12) {
@@ -496,36 +790,42 @@ struct ParamSlider: View {
                 .contentShape(Rectangle())
                 .onTapGesture { onLabelTap?() }
                 .allowsHitTesting(onLabelTap != nil)
+                .accessibilityHidden(true)  // the slider carries the label
             slider.sliderWheel(range, value: { value }, onChange)
+                .reportsWidth("Pro \(label)")
+                .accessibilityLabel(label)
+                .accessibilityValue(format(value))
+                #if os(macOS)
+                .accessibilityHint("Double-click the slider or use Reset to go back to \(format(defaultValue))")
+                #else
+                .accessibilityHint("Double-tap the slider or use Reset to go back to \(format(defaultValue))")
+                #endif
+                .accessibilityAction(named: "Reset") { onChange(defaultValue) }
             Text(format(value))
                 .font(.subheadline.monospacedDigit())
-                .foregroundStyle(value == defaultValue ? Color.secondary : Color.accentColor)
+                .foregroundStyle(value == defaultValue ? Color.secondary : changedValueColor)
                 .lineLimit(1)
                 .frame(width: 74, alignment: .trailing)
-                .contentShape(Rectangle())
-                .onTapGesture { onChange(defaultValue) }
+                .tapButton(hint: "Resets \(label)") { onChange(defaultValue) }
+                .accessibilityLabel("Reset \(label), now \(format(value))")
         }
+        #if os(macOS)
+        .frame(height: 30)  // a pointer needs less than a finger: more of the panel fits without scrolling
+        #else
         .frame(height: 40)
+        #endif
     }
 
     private var clamped: Float { min(max(value, range.lowerBound), range.upperBound) }
 
     @ViewBuilder private var slider: some View {
+        #if os(macOS)
+        // The system slider with RawBoy's drawing: filled from the default, quiet when untouched (MacSlider).
+        MacSlider(value: value, range: range, defaultValue: defaultValue, gradient: trackGradient, onChange: onChange)
+        #else
         let native = Slider(value: Binding(get: { Double(clamped) }, set: { onChange(Float($0)) }),
                             in: Double(range.lowerBound)...Double(range.upperBound))
             .simultaneousGesture(TapGesture(count: 2).onEnded { onChange(defaultValue) })
-        #if os(macOS)
-        // The Mac's slider (NSSlider) must be drawn to be grabbed: at 2% opacity a click moved it but its thumb couldn't
-        // be dragged. So it stays as the system draws it, with the zero mark of a signed range over it and a colour
-        // gradient (if any) as a bar beneath.
-        VStack(spacing: 1) {
-            native.overlay { ZeroTick(range: range) }
-            if let colors = trackGradient {
-                Capsule().fill(LinearGradient(colors: colors, startPoint: .leading, endPoint: .trailing))
-                    .frame(height: 3).padding(.horizontal, 9).allowsHitTesting(false)
-            }
-        }
-        #else
         if let colors = trackGradient {
             // The system slider still takes the touches (and scrolls like the others); it's just not drawn.
             native.opacity(0.02).background {
@@ -552,26 +852,19 @@ struct ParamSlider: View {
     }
 }
 
-#if os(macOS)
-/** A small mark at 0 over the Mac's system slider, for ranges that run both ways (it fills from the left end). */
-struct ZeroTick: View {
-    let range: ClosedRange<Float>
-
-    var body: some View {
-        GeometryReader { g in
-            if range.lowerBound < 0 && range.upperBound > 0 {
-                let inset: CGFloat = 9  // about where the system thumb's centre stops
-                let t = CGFloat((0 - range.lowerBound) / (range.upperBound - range.lowerBound))
-                Rectangle().fill(Color.secondary.opacity(0.9)).frame(width: 2, height: 9)
-                    .position(x: inset + t * (g.size.width - 2 * inset), y: g.size.height - 4)
-            }
-        }
-        .allowsHitTesting(false)
-    }
-}
-#endif
-
 extension View {
+    /** The wheel over this row steps through the film stocks, one per click (RawBoy Desktop; off while Film is). */
+    @ViewBuilder func stockWheel(film: String?, onSelect: @escaping (String) -> Void) -> some View {
+        #if os(macOS)
+        background(StepWheel(enabled: film != nil) { steps in
+            let ids = FilmLooks.all.compactMap(\.film)
+            if let film, let next = WheelStepper.target(in: ids, current: film, steps: steps) { onSelect(next) }
+        })
+        #else
+        self
+        #endif
+    }
+
     /** The wheel over this slider moves it (RawBoy Desktop). */
     @ViewBuilder func sliderWheel(_ range: ClosedRange<Float>, value: @escaping () -> Float, _ onChange: @escaping (Float) -> Void) -> some View {
         #if os(macOS)

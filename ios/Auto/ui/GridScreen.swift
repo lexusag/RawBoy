@@ -1,5 +1,6 @@
 import RawBoyEngine
 import SwiftUI
+import enum RawBoyBrowseKit.PhotoSort
 
 /**
  * The batch as a grid; long-press a photo to start selecting (for rotating, removing, exporting and giving photos, one
@@ -14,6 +15,8 @@ struct GridScreen: View {
     var addFromFolder: (() -> Void)? = nil
     /** RawBoy Desktop: the "Clear batch" button (the root asks first). */
     var onClearBatch: (() -> Void)? = nil
+    /** RawBoy Desktop: the "Reset all photos…" button beside it (the root's sheet asks which look and confirms). */
+    var onResetAll: (() -> Void)? = nil
     /** Opens a RawBoy preset file to apply to the batch (nil), or to the photos with these ids. */
     let pickPreset: (Set<String>?) -> Void
 
@@ -30,11 +33,40 @@ struct GridScreen: View {
 
     private var selecting: Bool { !selection.isEmpty }
     private var exporting: Bool { vm.export != nil }
-    private var exportable: Int { vm.photos.filter { $0.analysis != nil }.count }
+    private var exportable: Int { vm.shown.filter { $0.analysis != nil }.count }
     private var exportableSelected: Int { vm.photos.filter { $0.analysis != nil && selection.contains($0.id) }.count }
 
-    var body: some View {
+    var body: some View { withSheets(navigation) }
+
+    private var navigation: some View {
         NavigationStack {
+            #if os(macOS)
+            HStack(spacing: 0) {
+                sidebar
+                Divider()
+                VStack(spacing: 0) {
+                    exportProgress
+                    if vm.photos.isEmpty {
+                        empty
+                    } else if vm.shown.isEmpty {
+                        VStack(spacing: 10) {
+                            Text("No photos match the filter").foregroundStyle(.secondary)
+                            Button("Clear filter") { vm.filter = AutoFilter() }
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        grid
+                    }
+                }
+                // The empty state's prompt is only as wide as its text: without this the row was centred in the window and
+                // the sidebar sat in the middle of it.
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+            // The Viewer's Settings › Interface size, as Browse's grid and sidebar (the toolbar is the window's own).
+            .interfaceScaled()
+            .navigationTitle(selecting ? "\(selection.count) selected" : "RawBoy Auto")
+            .toolbar { toolbar }
+            #else
             VStack(spacing: 0) {
                 if !selecting {
                     // One line (two on narrow phones): the mode for photos added next (each can switch later) and the
@@ -60,22 +92,7 @@ struct GridScreen: View {
                     .padding(.horizontal, 16)
                     .padding(.vertical, 6)
                 }
-                if let e = vm.export {
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text(e.stopping
-                                ? "Stopping after photo \(min(e.done + 1, e.total))…"
-                                : "Exporting \(min(e.done + 1, e.total)) of \(e.total)").font(.caption)
-                            Spacer()
-                            if e.total > 1 {
-                                Button("Stop") { vm.stopExport() }.font(.caption).disabled(e.stopping)
-                            }
-                        }
-                        ProgressView(value: min(max((Double(e.done) + Double(e.current)) / Double(e.total), 0), 1))
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 6)
-                }
+                exportProgress
                 if vm.photos.isEmpty {
                     empty
                 } else {
@@ -85,10 +102,42 @@ struct GridScreen: View {
             .navigationTitle(selecting ? "\(selection.count) selected" : "RawBoy Auto")
             .inlineTitle()
             .toolbar { toolbar }
+            #endif
         }
+    }
+
+    @ViewBuilder private var exportProgress: some View {
+        if let e = vm.export {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(e.stopping
+                        ? "Stopping after photo \(min(e.done + 1, e.total))…"
+                        : "Exporting \(min(e.done + 1, e.total)) of \(e.total)").font(.caption)
+                    Spacer()
+                    if e.total > 1 {
+                        Button("Stop") { vm.stopExport() }.font(.caption).disabled(e.stopping)
+                    }
+                }
+                ProgressView(value: min(max((Double(e.done) + Double(e.current)) / Double(e.total), 0), 1))
+                // "1:05 elapsed · about 2:30 left", ticking each second.
+                TimelineView(.periodic(from: e.startedAt, by: 1)) { context in
+                    Text(BatchTime.label(elapsed: context.date.timeIntervalSince(e.startedAt), done: e.done, current: e.current,
+                                         total: e.total, stopping: e.stopping))
+                        .font(.caption).monospacedDigit().foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 6)
+        }
+    }
+
+    /** The sheets and the selection/export bookkeeping, shared by the phone and Mac layouts. */
+    private func withSheets<V: View>(_ content: V) -> some View {
+        content
         .sheet(isPresented: $showExport) {
             let ids = exportIds
-            ExportSheet(vm: vm, count: ids.map { ids in vm.photos.filter { $0.analysis != nil && ids.contains($0.id) }.count } ?? exportable) {
+            ExportSheet(vm: vm, count: ids.map { ids in vm.photos.filter { $0.analysis != nil && ids.contains($0.id) }.count } ?? exportable,
+                        sample: (ids == nil ? vm.shown : vm.photos).first { $0.analysis != nil && (ids?.contains($0.id) ?? true) }) {
                 if let ids {
                     selection = []  // the grid's badges then show each photo's export
                     vm.exportAll(only: ids)
@@ -100,7 +149,7 @@ struct GridScreen: View {
         .sheet(isPresented: Binding(get: { lensPresetsFor != nil && !vm.lensPresets.isEmpty }, set: { if !$0 { lensPresetsFor = nil } })) {
             let ids = lensPresetsFor.flatMap { $0.isEmpty ? nil : $0 }
             LensPresetsSheet(vm: vm, ids: ids) {
-                if ids != nil { selection = [] }
+                // The selection stays (as after a preset): Esc or Cancel clears it.
             }
         }
         // Drop ids of photos that left the list (removed elsewhere, e.g. via the detail view).
@@ -117,12 +166,12 @@ struct GridScreen: View {
         HStack {
             Text("Import as").font(.subheadline).foregroundStyle(.secondary)
             Picker("Import as", selection: Binding(get: { vm.importMode }, set: { vm.setImportMode($0) })) {
-                Text("Looks").tag(LookMode.looks)
-                Text("Film").tag(LookMode.film)
+                ForEach(ImportMode.allCases, id: \.self) { Text($0.label).tag($0) }
             }
             .labelsHidden()
             .pickerStyle(.segmented)
-            .frame(width: 180)
+            .neutralSegments()
+            .frame(width: 240)
         }
     }
 
@@ -179,13 +228,169 @@ struct GridScreen: View {
         }
     }
 
+    #if os(macOS)
+    /**
+     * The Mac's batch settings, in a sidebar beside the grid as RawBoy Viewer's: what photos added next become, the
+     * order, the batch's preset and lens presets, and the denoise for a finished series. On the phones they are the
+     * line above the grid.
+     */
+    private var sidebar: some View {
+        VStack(alignment: .leading, spacing: 0) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                sidebarHeading("New photos")
+                Picker("Import as", selection: Binding(get: { vm.importMode }, set: { vm.setImportMode($0) })) {
+                    ForEach(ImportMode.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .neutralSegments()
+                .help("What photos added next are developed as; each photo can switch later")
+                Text(Self.importHint(vm.importMode)).font(.caption).foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true).padding(.top, 4)
+                sidebarHeading("Order")
+                Picker("Order", selection: Binding(get: { vm.sort }, set: { vm.setSort($0) })) {
+                    Text("Shoot date").tag(PhotoSort.date)
+                    Text("File name").tag(PhotoSort.name)
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .neutralSegments()
+                sidebarHeading("Preset")
+                if let p = vm.preset {
+                    HStack(spacing: 6) {
+                        Text(p.name).font(.subheadline).lineLimit(2)
+                        Spacer(minLength: 0)
+                        Button { vm.removePreset() } label: { Image(systemName: "xmark.circle.fill") }
+                            .buttonStyle(.borderless)
+                            .foregroundStyle(.secondary)
+                            .help("Remove the preset: photos go back to their looks")
+                            .accessibilityLabel("Remove preset \(p.name)")
+                    }
+                    Text("Develops every photo in place of its look.").font(.caption).foregroundStyle(.secondary)
+                } else {
+                    Button("Apply RawBoy preset…") { pickPreset(nil) }
+                    Text("One of your Pro presets develops every photo in place of its look.").font(.caption).foregroundStyle(.secondary)
+                        .padding(.top, 2)
+                }
+                sidebarHeading("Lens preset")
+                if vm.lensPresets.isEmpty {
+                    Text("Save a lens preset in Pro's Lens tab to correct every photo taken with that lens, or pick it here for a manual lens.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                } else {
+                    HStack(spacing: 6) {
+                        LensPresetMenu(presets: vm.lensPresets, current: .some(vm.lensChoice),
+                                       choose: { vm.chooseLensPreset($0) }) {
+                            Text(LensPresetChoice.name(.some(vm.lensChoice), presets: vm.lensPresets))
+                        }
+                        .help("The lens preset of every photo, and photos added later; a selection's own is in the toolbar")
+                        Button("Manage…") { lensPresetsFor = [] }
+                            .help("Lens presets kept for Auto: remove one")
+                    }
+                    Text(vm.lensChoice == nil
+                         ? "By lens: each photo gets the preset saved for its lens, on top of its look."
+                         : "For every photo and photos added later, on top of their looks.")
+                        .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        .padding(.top, 2)
+                }
+                if !vm.photos.isEmpty {
+                    FilterSection(vm: vm, heading: { AnyView(sidebarHeading($0)) })
+                    sidebarHeading("Denoise")
+                    Button("Auto denoise all") { vm.autoDenoiseAll() }
+                    Text("Each photo's own measured denoise, for a finished series.").font(.caption).foregroundStyle(.secondary)
+                        .padding(.top, 2)
+                }
+            }
+            .controlSize(.small)
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .scrollIndicators(.hidden)
+        // The batch at a glance, at the sidebar's foot (a Spacer inside the scroll view doesn't reach it).
+        if !vm.photos.isEmpty {
+            Divider()
+            Text(batchSummary).font(.caption).foregroundStyle(.secondary).monospacedDigit()
+                .padding(.horizontal, 14).padding(.vertical, 10)
+        }
+        }
+        .frame(width: 220)
+        .frame(maxHeight: .infinity)
+        .background(Color(red: 0x1C / 255, green: 0x1C / 255, blue: 0x1E / 255))  // DESIGN.md's surface: an opaque edge panel
+        .disabled(exporting)
+    }
+
+    private func sidebarHeading(_ text: String) -> some View {
+        Text(text).font(.caption.weight(.semibold)).textCase(.uppercase).tracking(0.6).foregroundStyle(.secondary)
+            .padding(.top, 16).padding(.bottom, 6)
+            .accessibilityAddTraits(.isHeader)
+    }
+
+    /** What each Import as does, under the picker (the web's hint). */
+    static func importHint(_ mode: ImportMode) -> String {
+        switch mode {
+        case .looks: return "Auto develop and a suggested colour look."
+        case .film: return "Auto develop as film on a suggested stock."
+        case .plain: return "No automatic edits and no look: raws get only their measured denoise, other files stay as they are."
+        }
+    }
+
+    /** "24 photos · 3 waiting · 5 saved": the batch at a glance. */
+    private var batchSummary: String {
+        let n = vm.photos.count
+        var parts = [n == 1 ? "1 photo" : "\(n) photos"]
+        if vm.filter.isActive { parts[0] = "\(vm.shown.count) of \(n) shown" }
+        let waiting = vm.photos.filter { $0.status == .queued || $0.status == .analyzing }.count
+        if waiting > 0 { parts.append("\(waiting) to analyse") }
+        let saved = vm.photos.filter { $0.status == .exported }.count
+        if saved > 0 { parts.append("\(saved) saved") }
+        return parts.joined(separator: " · ")
+    }
+
+    /**
+     * The Mac's grid, as RawBoy Viewer's: even cells, each photo fitted whole in its tile with the name and look under it
+     * (justified rows cropped nothing but gave every row its own height, and the names sat on the pictures).
+     */
+    private var macGrid: some View {
+        GeometryReader { geo in
+            let gap: CGFloat = 14
+            let photos = vm.shown
+            let columns = max(1, Int((geo.size.width - gap) / (Self.macCellMin + gap)))  // padding gap on each side, gap between
+            let _ = { vm.rowStarts = Array(stride(from: 0, to: photos.count, by: columns)) }()
+            ScrollViewReader { scroll in
+                ScrollView {
+                    LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: gap, alignment: .top), count: columns),
+                              spacing: gap + 4) {
+                        ForEach(photos) { photo in
+                            cell(photo).id(photo.id)
+                        }
+                    }
+                    .padding(gap)
+                }
+                .onChange(of: vm.focusedId) { _, id in
+                    if let id { Motion.animate { scroll.scrollTo(id) } }
+                }
+                // Back from a photo: the grid is rebuilt, so put the photo just viewed on screen again.
+                .onAppear {
+                    if let id = vm.focusedId { DispatchQueue.main.async { scroll.scrollTo(id, anchor: .center) } }
+                }
+            }
+        }
+        .background(Color(red: 0x12 / 255, green: 0x12 / 255, blue: 0x12 / 255))
+    }
+
+    /** The smallest cell width; the columns share what is left over. */
+    private static let macCellMin: CGFloat = 190
+    #endif
+
     private var empty: some View {
         VStack(spacing: 16) {
             Spacer()
-            Text((vm.importMode == .film
-                  ? "Pick RAW photos. Each is developed automatically as film, on a suggested stock."
-                  : "Pick RAW photos. Each is developed automatically and gets a suggested film look.")
-                 + " JPEG, HEIC, PNG and TIFF work too, at lower quality.")
+            Text(vm.importMode == .plain
+                 ? "Pick photos, e.g. TIFFs finished elsewhere. Each is added as it is, with no automatic edits (raws get their measured denoise): apply a preset or a look yourself."
+                 : (vm.importMode == .film
+                    ? "Pick RAW photos. Each is developed automatically as film, on a suggested stock."
+                    : "Pick RAW photos. Each is developed automatically and gets a suggested film look.")
+                   + " JPEG, HEIC, PNG and TIFF work too, at lower quality.")
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
             if let addFromPhotos {
@@ -201,11 +406,19 @@ struct GridScreen: View {
         .padding(32)
     }
 
+    @ViewBuilder private var grid: some View {
+        #if os(macOS)
+        macGrid
+        #else
+        justifiedGrid
+        #endif
+    }
+
     /** Justified rows: every photo at its own aspect, rows ~120 pt high on phones and ~180 pt wider up. */
-    private var grid: some View {
+    private var justifiedGrid: some View {
         GeometryReader { geo in
             let gap: CGFloat = 8
-            let photos = vm.photos
+            let photos = vm.shown
             let aspects = photos.map { p in p.thumbnail.map { CGFloat($0.width) / CGFloat($0.height) } ?? 1.5 }
             let rows = justifiedRows(aspects, width: geo.size.width - gap * 2,
                                      target: geo.size.width < 600 ? 120 : 180, gap: gap)
@@ -226,10 +439,17 @@ struct GridScreen: View {
                 }
                 .padding(gap)
             }
+            // Back from a photo: the grid is rebuilt, so put the photo just viewed on screen again.
+            .onAppear {
+                if let id = vm.focusedId, let i = photos.firstIndex(where: { $0.id == id }),
+                   let row = rows.last(where: { $0.start <= i }) {
+                    DispatchQueue.main.async { scroll.scrollTo(photos[row.start].id, anchor: .center) }
+                }
+            }
             // The keyboard focus stays in view.
             .onChange(of: vm.focusedId) { _, id in
                 if let id, let i = photos.firstIndex(where: { $0.id == id }), let row = rows.last(where: { $0.start <= i }) {
-                    withAnimation { scroll.scrollTo(photos[row.start].id) }
+                    Motion.animate { scroll.scrollTo(photos[row.start].id) }
                 }
             }
             }
@@ -239,43 +459,81 @@ struct GridScreen: View {
     private func cell(_ photo: AutoPhoto) -> some View {
         PhotoCell(photo: photo, next: vm.opening == photo.id, waiting: vm.export?.waiting.contains(photo.id) ?? false,
                   selected: selection.contains(photo.id), focused: vm.focusedId == photo.id)
-            .onTapGesture {
-                guard !exporting else { return }
-                vm.focusedId = photo.id
-                #if os(macOS)
-                // ⌘-click or ⇧-click selects, as in Finder; a plain click opens.
-                if NSEvent.modifierFlags.contains(.shift) {
-                    vm.selectRange(to: photo.id)  // from the last clicked photo to this one
-                    return
-                }
-                if NSEvent.modifierFlags.contains(.command) {
-                    if selection.contains(photo.id) { selection.remove(photo.id) } else { selection.insert(photo.id) }
-                    vm.selectionAnchor = photo.id
-                    return
-                }
-                vm.selectionAnchor = photo.id
-                #endif
-                if selecting {
-                    if selection.contains(photo.id) { selection.remove(photo.id) } else { selection.insert(photo.id) }
-                } else {
-                    vm.openFromGrid(photo.id)
-                }
-            }
+            .onTapGesture { activate(photo) }
             .onLongPressGesture { if !exporting { selection.insert(photo.id) } }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(photo.name)
+            .accessibilityValue(Self.spokenState(photo, selected: selection.contains(photo.id)))
+            .accessibilityHint(selecting ? "Selects or deselects the photo" : "Opens the photo")
+            .accessibilityAddTraits(selection.contains(photo.id) ? [.isButton, .isSelected] : .isButton)
+            .accessibilityAction { activate(photo) }
+            .accessibilityAction(named: selection.contains(photo.id) ? "Deselect" : "Select") {
+                if selection.contains(photo.id) { selection.remove(photo.id) } else { selection.insert(photo.id) }
+            }
+    }
+
+    /** What VoiceOver adds to a photo's name: where it is in the analysis, its look, and whether it is selected. */
+    private static func spokenState(_ photo: AutoPhoto, selected: Bool) -> String {
+        var parts: [String] = []
+        switch photo.status {
+        case .queued: parts.append("waiting to be analysed")
+        case .analyzing: parts.append("being analysed")
+        case .exporting: parts.append("being saved")
+        case .exported: parts.append("saved")
+        case .failed: parts.append("failed: \(photo.error ?? "unknown error")")
+        case .ready: break
+        }
+        if photo.analysis != nil { parts.append("look \(photo.lookName)") }
+        if let iso = photo.isoLabel { parts.append(iso) }
+        if selected { parts.append("selected") }
+        return parts.joined(separator: ", ")
+    }
+
+    /** A tap or a VoiceOver activation: opens the photo, or selects it (⇧ and ⌘ select like Finder on the Mac). */
+    private func activate(_ photo: AutoPhoto) {
+        guard !exporting else { return }
+        vm.focusedId = photo.id
+        #if os(macOS)
+        // ⌘-click or ⇧-click selects, as in Finder; a plain click opens.
+        if NSEvent.modifierFlags.contains(.shift) {
+            vm.selectRange(to: photo.id)  // from the last clicked photo to this one
+            return
+        }
+        if NSEvent.modifierFlags.contains(.command) {
+            if selection.contains(photo.id) { selection.remove(photo.id) } else { selection.insert(photo.id) }
+            vm.selectionAnchor = photo.id
+            return
+        }
+        vm.selectionAnchor = photo.id
+        #endif
+        if selecting {
+            if selection.contains(photo.id) { selection.remove(photo.id) } else { selection.insert(photo.id) }
+        } else {
+            vm.openFromGrid(photo.id)
+        }
     }
 
     @ToolbarContentBuilder
     private var toolbar: some ToolbarContent {
         if selecting {
             ToolbarItem(placement: .barLeading) {
-                Button("Cancel") { selection = [] }
+                Button("Cancel") { vm.clearSelection() }
             }
             ToolbarItemGroup(placement: .barTrailing) {
                 Button("All") { selection = Set(vm.photos.map(\.id)) }
                 // A lens preset for these photos: manual lenses record no lens name to match by.
                 if !vm.lensPresets.isEmpty {
+                    #if os(macOS)
+                    LensPresetMenu(presets: vm.lensPresets, current: LensPresetChoice.shared(vm.photos, selection),
+                                   choose: { vm.chooseLensPreset($0, ids: selection) }) {
+                        Label("Lens preset", systemImage: "camera.aperture")
+                    }
+                    .help("Lens preset for the selected photos: \(LensPresetChoice.name(LensPresetChoice.shared(vm.photos, selection), presets: vm.lensPresets))")
+                    .disabled(exporting)
+                    #else
                     Button("Lens preset", systemImage: "camera.aperture") { lensPresetsFor = selection }
                         .disabled(exporting)
+                    #endif
                 }
                 // Each selected photo's own measured denoise in place of its Denoise slider.
                 Button("Auto denoise", systemImage: "aqi.medium") { vm.autoDenoiseAll(selection) }
@@ -284,11 +542,9 @@ struct GridScreen: View {
                     .disabled(exporting)
                 Button("Rotate right", systemImage: "rotate.right") { vm.rotate(selection, by: 1) }
                     .disabled(exporting)
-                // A preset file for just these photos (one scene); the rest of the batch keeps its own.
-                Button("Preset", systemImage: "bookmark") {
-                    pickPreset(selection)
-                    selection = []
-                }
+                // A preset file for just these photos (one scene); the rest of the batch keeps its own. The selection stays,
+                // so the same photos can be given a lens preset, rotated or exported next (Esc or Cancel clears it).
+                Button("Preset", systemImage: "bookmark") { pickPreset(selection) }
                 .disabled(exporting)
                 if let edit = vm.editInPro, selection.count == 1, let p = vm.photo(selection.first!) {
                     Button("Edit in Pro", systemImage: "slider.horizontal.3") { edit(p) }.disabled(exporting)
@@ -315,6 +571,13 @@ struct GridScreen: View {
                 .disabled(exporting)
             }
             ToolbarItemGroup(placement: .barTrailing) {
+                if onResetAll != nil {
+                    Button("Reset all photos…", systemImage: "arrow.counterclockwise") { onResetAll?() }
+                        .disabled(exporting || vm.photos.isEmpty)
+                        .help("Put every photo back to one look, film stock or As is, clearing its adjustments")
+                        .accessibilityLabel("Reset all photos")
+                        .accessibilityHint("Asks which look, film stock or As is to give every photo, and clears their adjustments")
+                }
                 if onClearBatch != nil {
                     Button("Clear batch", systemImage: "xmark.bin") { onClearBatch?() }
                         .disabled(exporting || vm.photos.isEmpty)
@@ -341,7 +604,79 @@ private struct PhotoCell: View {
     let selected: Bool
     var focused = false
 
+    /** The Mac's cells are big and its screens too: the name and the look read at caption size there. */
+    private static var nameFont: Font {
+        #if os(macOS)
+        .caption
+        #else
+        .caption2
+        #endif
+    }
+
     var body: some View {
+        #if os(macOS)
+        macBody
+        #else
+        phoneBody
+        #endif
+    }
+
+    #if os(macOS)
+    /** The picture fitted whole in a 3:2 tile, the name and look under it, as RawBoy Viewer's cells. */
+    private var macBody: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            ZStack {
+                Color(white: 0.09)
+                if let t = photo.thumbnail {
+                    Image(decorative: t, scale: 1).resizable().scaledToFit()
+                        .saturation(waiting ? 0 : 1)
+                        .brightness(waiting ? -0.12 : 0)
+                        .contrast(waiting ? 0.75 : 1)
+                        .animation(Motion.easeOut(0.6), value: waiting)
+                }
+                status
+            }
+            .aspectRatio(3 / 2, contentMode: .fit)
+            .clipShape(RoundedRectangle(cornerRadius: 4))
+            .overlay(RoundedRectangle(cornerRadius: 4)
+                .stroke(selected ? Color.accentColor : focused ? Color.white.opacity(0.8) : .clear, lineWidth: 2))
+            VStack(alignment: .leading, spacing: 1) {
+                HStack(spacing: 6) {
+                    Text(photo.name).font(.caption).foregroundStyle(.primary).lineLimit(1).truncationMode(.middle)
+                    Spacer(minLength: 0)
+                    // The ISO beside the name, to judge noise without opening the photo (as the web's cells).
+                    if let iso = photo.isoLabel {
+                        Text(iso).font(.caption2).monospacedDigit().foregroundStyle(.secondary).lineLimit(1).fixedSize()
+                    }
+                }
+                Text(photo.analysis != nil ? photo.lookName : " ").font(.caption).foregroundStyle(.secondary).lineLimit(1)
+            }
+            .padding(.horizontal, 2)
+        }
+        .help(photo.analysis != nil ? "\(photo.name) · \(photo.lookName)" + (photo.isoLabel.map { " · \($0)" } ?? "") : photo.name)
+        .contentShape(Rectangle())
+    }
+    #endif
+
+    /** Status badges and the selection tick over the picture. */
+    @ViewBuilder private var status: some View {
+        switch photo.status {
+        case .queued: Badge(text: next ? "Next" : "Waiting")
+        case .analyzing, .exporting: ProgressView()
+        case .failed: Badge(text: photo.error ?? "Failed", error: true)
+        case .exported: Badge(text: "Saved").frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+        case .ready: EmptyView()
+        }
+        if selected {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(Color.accentColor)
+                .background(Circle().fill(.black.opacity(0.8)))
+                .padding(6)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+    }
+
+    private var phoneBody: some View {
         ZStack {
             ZStack {
                 Color(white: 0.12)
@@ -351,28 +686,21 @@ private struct PhotoCell: View {
                         .saturation(waiting ? 0 : 1)
                         .brightness(waiting ? -0.12 : 0)
                         .contrast(waiting ? 0.75 : 1)
-                        .animation(.easeOut(duration: 0.6), value: waiting)
+                        .animation(Motion.easeOut(0.6), value: waiting)
                 }
-                switch photo.status {
-                case .queued: Badge(text: next ? "Next" : "Waiting")
-                case .analyzing, .exporting: ProgressView()
-                case .failed: Badge(text: photo.error ?? "Failed", error: true)
-                case .exported: Badge(text: "Saved").frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
-                case .ready: EmptyView()
-                }
-                if selected {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundStyle(Color.accentColor)
-                        .background(Circle().fill(.black.opacity(0.8)))
-                        .padding(6)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                }
+                status
             }
             // Name and look over the bottom of the photo, on a fade so they read on bright skies.
             VStack(alignment: .leading, spacing: 1) {
-                Text(photo.name).font(.caption2).foregroundStyle(.white.opacity(0.85)).lineLimit(1)
+                HStack(spacing: 4) {
+                    Text(photo.name).font(Self.nameFont).foregroundStyle(.white.opacity(0.85)).lineLimit(1)
+                    Spacer(minLength: 0)
+                    if let iso = photo.isoLabel {
+                        Text(iso).font(Self.nameFont).monospacedDigit().foregroundStyle(.white.opacity(0.85)).lineLimit(1).fixedSize()
+                    }
+                }
                 if photo.analysis != nil {
-                    Text(photo.lookName).font(.caption2.weight(.semibold)).foregroundStyle(Color.accentColor).lineLimit(1)
+                    Text(photo.lookName).font(Self.nameFont.weight(.semibold)).foregroundStyle(Color.accentColor).lineLimit(1)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -383,6 +711,7 @@ private struct PhotoCell: View {
             .frame(maxHeight: .infinity, alignment: .bottom)
         }
         .clipped()
+        .help(photo.analysis != nil ? "\(photo.name) · \(photo.lookName)" : photo.name)  // the whole text where a cell clips it
         .overlay(Rectangle().stroke(selected ? Color.accentColor : focused ? Color.white.opacity(0.8) : .clear, lineWidth: focused && !selected ? 2 : 3))
         .contentShape(Rectangle())
     }
@@ -441,6 +770,8 @@ private struct Badge: View {
 struct ExportSheet: View {
     @ObservedObject var vm: AutoViewModel
     let count: Int
+    /** The first photo to be exported, for the file name's preview. */
+    var sample: AutoPhoto? = nil
     let onExport: () -> Void
     @Environment(\.dismiss) private var dismiss
 
@@ -457,6 +788,7 @@ struct ExportSheet: View {
                         ForEach(ExportFormat.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                     }
                     .pickerStyle(.segmented)
+                    .neutralSegments()
                     switch s.format {
                     case .jpeg:
                         VStack(alignment: .leading) {
@@ -471,6 +803,7 @@ struct ExportSheet: View {
                             Text("16-bit").tag(16)
                         }
                         .pickerStyle(.segmented)
+                        .neutralSegments()
                     }
                     if vm.hasFilmPhotos {
                         Picker("Film scan", selection: settingsBinding.filmScan) {
@@ -478,6 +811,7 @@ struct ExportSheet: View {
                             Text("1.5× size").tag(true)
                         }
                         .pickerStyle(.segmented)
+                        .neutralSegments()
                         Text("Film photos only: upscaled, with finer grain. The size below doesn't apply to them.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
@@ -488,6 +822,9 @@ struct ExportSheet: View {
                     }
                 }
                 ExportFrameSections(settings: settingsBinding)
+                #if os(macOS)
+                FileNameSection(vm: vm, sample: sample, count: count)
+                #endif
                 Section {
                     if let destination = vm.destinationView {
                         destination
@@ -511,6 +848,66 @@ struct ExportSheet: View {
         .presentationDetents([.medium, .large])
     }
 }
+
+#if os(macOS)
+/**
+ * The export sheet's file name: the name template (see NameTemplate), its keywords as buttons that add them, and a live
+ * preview of the first and last names (web's FileNameRow). Remembered for the next exports.
+ */
+private struct FileNameSection: View {
+    @ObservedObject var vm: AutoViewModel
+    let sample: AutoPhoto?
+    let count: Int
+    @State private var draft = ""
+
+    var body: some View {
+        let shown = draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? NameTemplate.defaultTemplate : draft
+        let ext = vm.exportSettings.format.fileExtension
+        Section {
+            TextField("File name", text: Binding(get: { draft }, set: { change($0) }), prompt: Text(NameTemplate.defaultTemplate))
+                .autocorrectionDisabled()
+                .font(.body.monospaced())
+            if let sample {
+                let first = "\(vm.nameFor(sample, index: 1, template: shown)).\(ext)"
+                let last = count > 1 ? " … \(vm.nameFor(sample, index: count, template: shown)).\(ext)" : ""
+                Text(first + last).font(.caption).foregroundStyle(.secondary).lineLimit(2).textSelection(.enabled)
+            }
+            // The keywords: a click adds one at the end.
+            FlowKeywords(keywords: NameTemplate.keywords) { change(draft + $0) } reset: { change(NameTemplate.defaultTemplate) }
+            Text("{date} and {time} are the shoot date, else the file's; # is the photo's number in this export. A name already taken gets -001, -002.")
+                .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        } header: {
+            Text("File name")
+        }
+        .onAppear { draft = vm.nameTemplate }
+    }
+
+    private func change(_ value: String) {
+        draft = value
+        vm.setNameTemplate(value)
+    }
+}
+
+/** The name template's keywords as small buttons that wrap, then Reset. */
+private struct FlowKeywords: View {
+    let keywords: [NameTemplate.Keyword]
+    let add: (String) -> Void
+    let reset: () -> Void
+
+    var body: some View {
+        LazyVGrid(columns: [GridItem(.adaptive(minimum: 74), spacing: 4, alignment: .leading)], alignment: .leading, spacing: 4) {
+            ForEach(keywords) { k in
+                Button(k.token) { add(k.token) }
+                    .buttonStyle(.borderless)
+                    .font(.caption.monospaced())
+                    .help(k.text)
+            }
+            Button("Reset") { reset() }.buttonStyle(.borderless).font(.caption)
+                .help("Back to \(NameTemplate.defaultTemplate)")
+        }
+    }
+}
+#endif
 
 /**
  * The lens presets Auto keeps (sent from RawBoy or opened as files), to pick one for the photos [ids] (nil = the whole
@@ -578,5 +975,197 @@ private struct LensPresetsSheet: View {
     private static func lensLabel(_ p: Preset) -> String {
         let lens = p.lens?.trimmingCharacters(in: .whitespaces) ?? ""
         return lens.isEmpty ? "Manual lens: pick it here" : "Photos taken with \(lens)"
+    }
+}
+
+/**
+ * RawBoy Desktop's "Reset all photos": which look, film stock or As is every photo goes back to, and the confirmation. The
+ * adjustments are cleared; it can be undone photo by photo (Undo in a photo's view).
+ */
+struct ResetAllSheet: View {
+    @ObservedObject var vm: AutoViewModel
+    @Binding var isPresented: Bool
+
+    private enum Kind: String, CaseIterable { case look = "Look", film = "Film stock", asIs = "As is" }
+    @State private var kind = Kind.look
+    @State private var look = Looks.portra400
+    @State private var film = FilmLooks.portra400
+
+    private var count: Int { vm.photos.count }
+    private var target: AutoReset.Target {
+        switch kind {
+        case .look: .look(look)
+        case .film: .film(film)
+        case .asIs: .asIs
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(count == 1 ? "Reset the photo?" : "Reset all \(count) photos?").font(.headline)
+            Picker("Reset to", selection: $kind) {
+                ForEach(Kind.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+            }
+            .pickerStyle(.segmented)
+            .neutralSegments()
+            .accessibilityHint("Choose what every photo goes back to")
+            switch kind {
+            case .look:
+                Picker("Look", selection: $look) {
+                    ForEach(Looks.all) { Text($0.name).tag($0) }
+                }
+            case .film:
+                Picker("Film stock", selection: $film) {
+                    ForEach(FilmLooks.all) { Text($0.name).tag($0) }
+                }
+            case .asIs:
+                Text("No look: just the automatic exposure and tone.").font(.callout).foregroundStyle(.secondary)
+            }
+            Text("This clears each photo's Strength, brightness, warmth, tint, contrast, luma contrast, saturation, grain, denoise, rotation and crop, and any RawBoy preset. The photos stay in the batch, and their sidecars are updated. Undo in a photo's view brings its edits back.")
+                .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            HStack {
+                Spacer()
+                Button("Cancel", role: .cancel) { isPresented = false }.keyboardShortcut(.cancelAction)
+                Button(count == 1 ? "Reset 1 photo" : "Reset \(count) photos", role: .destructive) {
+                    vm.resetAll(to: target)
+                    isPresented = false
+                }
+                .keyboardShortcut(.defaultAction)
+                .accessibilityHint("Resets \(count == 1 ? "the photo" : "all \(count) photos") and clears their adjustments")
+            }
+        }
+        .padding(20)
+        .frame(width: 440)
+    }
+}
+
+#if os(macOS)
+/**
+ * The sidebar's Filter (the web's): camera, lens, ISO range, focal length range and shoot day, each listing what the batch
+ * holds with a count, and Unedited (photos still As is). The grid, the photo view's arrows and Export all follow it.
+ */
+private struct FilterSection: View {
+    @ObservedObject var vm: AutoViewModel
+    let heading: (String) -> AnyView
+
+    var body: some View {
+        let photos = vm.photos
+        let cameras = Self.options(photos.compactMap(\.cameraLabel))
+        let lenses = Self.options(photos.compactMap(\.lensLabel))
+        let isos = Self.counts(photos.compactMap(\.isoValue)).sorted { $0.0 < $1.0 }
+        let focals = Self.counts(photos.compactMap(\.focalLengthValue)).sorted { $0.0 < $1.0 }
+        let days = Self.options(photos.compactMap(\.day))
+        heading("Filter")
+        VStack(alignment: .leading, spacing: 6) {
+            menu("Camera", vm.filter.camera, cameras) { vm.filter.camera = $0 }
+            menu("Lens", vm.filter.lens, lenses) { vm.filter.lens = $0 }
+            HStack(spacing: 6) {
+                rangeMenu("Min ISO", "", vm.filter.isoMin, isos) { v in
+                    vm.filter.isoMin = v
+                    if let v, let hi = vm.filter.isoMax, hi < v { vm.filter.isoMax = nil }
+                }
+                rangeMenu("Max ISO", "", vm.filter.isoMax, isos) { v in
+                    vm.filter.isoMax = v
+                    if let v, let lo = vm.filter.isoMin, lo > v { vm.filter.isoMin = nil }
+                }
+            }
+            HStack(spacing: 6) {
+                rangeMenu("Min mm", "mm", vm.filter.focalMin, focals) { v in
+                    vm.filter.focalMin = v
+                    if let v, let hi = vm.filter.focalMax, hi < v { vm.filter.focalMax = nil }
+                }
+                rangeMenu("Max mm", "mm", vm.filter.focalMax, focals) { v in
+                    vm.filter.focalMax = v
+                    if let v, let lo = vm.filter.focalMin, lo > v { vm.filter.focalMin = nil }
+                }
+            }
+            menu("Date", vm.filter.date, days) { vm.filter.date = $0 }
+            Toggle("Unedited (As is)", isOn: $vm.filter.unedited)
+                .help("Only photos still As is: no look, preset, edits or adjustments")
+            if vm.filter.isActive {
+                Button("Clear filter") { vm.filter = AutoFilter() }
+            }
+        }
+    }
+
+    private static func counts<T: Hashable>(_ values: [T]) -> [(T, Int)] {
+        Dictionary(values.map { ($0, 1) }, uniquingKeysWith: +).map { ($0.key, $0.value) }
+    }
+
+    private static func options(_ values: [String]) -> [(String, Int)] {
+        counts(values).sorted { $0.0.localizedStandardCompare($1.0) == .orderedAscending }
+    }
+
+    private func menu(_ title: String, _ value: String?, _ options: [(String, Int)], _ set: @escaping (String?) -> Void) -> some View {
+        Picker(title, selection: Binding(get: { value ?? "" }, set: { set($0.isEmpty ? nil : $0) })) {
+            Text("Any").tag("")
+            ForEach(options, id: \.0) { o in Text("\(o.0) (\(o.1))").tag(o.0) }
+            if let value, !options.contains(where: { $0.0 == value }) { Text(value).tag(value) }
+        }
+        .help("\(title): only photos with this value")
+    }
+
+    private func rangeMenu(_ title: String, _ unit: String, _ value: Int?, _ options: [(Int, Int)], _ set: @escaping (Int?) -> Void) -> some View {
+        // String tags match menu(_:_:_:_:) so macOS Picker's NSPopUpButton reliably updates when options populate after analysis.
+        let stringOptions = options.map { (key: String($0.0), label: unit.isEmpty ? "\($0.0)" : "\($0.0) \(unit)", count: $0.1) }
+        return Picker(title, selection: Binding(
+            get: { value.map(String.init) ?? "" },
+            set: { set($0.isEmpty ? nil : Int($0)) }
+        )) {
+            Text(title).tag("")
+            ForEach(stringOptions, id: \.key) { o in Text("\(o.label) (\(o.count))").tag(o.key) }
+            if let value, !options.contains(where: { $0.0 == value }) {
+                Text(unit.isEmpty ? "\(value)" : "\(value) \(unit)").tag(String(value))
+            }
+        }
+        .labelsHidden()
+        .help(title)
+    }
+}
+#endif
+
+/**
+ * A lens preset choice as a menu (RawBoy Desktop: the sidebar for the batch, the toolbar for a selection, the photo panel for
+ * one photo), as the web's lens preset select: by lens (each photo gets the preset saved for its lens), none, or a named
+ * preset (manual lenses record no lens name, so theirs are picked by hand). [current] is the pick shown checked; nil = the
+ * photos differ.
+ */
+struct LensPresetMenu<MenuLabel: View>: View {
+    let presets: [Preset]
+    let current: String??
+    let choose: (String?) -> Void
+    @ViewBuilder let label: () -> MenuLabel
+
+    var body: some View {
+        Menu {
+            item(nil, "By lens")
+            item(Presets.noLensPreset, "None")
+            if !presets.isEmpty { Divider() }
+            ForEach(presets) { p in
+                item(p.id, (p.lens?.trimmingCharacters(in: .whitespaces) ?? "").isEmpty ? "\(p.name) (manual lens)" : p.name)
+            }
+        } label: { label() }
+    }
+
+    /** Checked in a menu like the system's own choices. */
+    private func item(_ value: String?, _ title: String) -> some View {
+        Toggle(title, isOn: Binding(get: { current == .some(value) }, set: { _ in choose(value) }))
+    }
+}
+
+/** Naming and gathering lens preset choices (nil = by lens, Presets.noLensPreset, or a preset's id) for [LensPresetMenu]. */
+enum LensPresetChoice {
+    /** What [current] is called on the menu's button. */
+    static func name(_ current: String??, presets: [Preset]) -> String {
+        guard let choice = current else { return "Mixed" }
+        guard let id = choice else { return "By lens" }
+        if id == Presets.noLensPreset { return "None" }
+        return presets.first { $0.id == id }?.name ?? "By lens"
+    }
+
+    /** The choice the photos with [ids] share, nil if they differ. */
+    static func shared(_ photos: [AutoPhoto], _ ids: Set<String>) -> String?? {
+        let choices = Set(photos.filter { ids.contains($0.id) }.map(\.lensChoice))
+        return choices.count == 1 ? .some(choices.first!) : nil
     }
 }

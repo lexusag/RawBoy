@@ -50,23 +50,41 @@ public struct HelpButton: View {
     }
 }
 
-private struct HelpView: View {
-    let title: String
-    let sections: [HelpSection]
-    let licences: Bool
-    @Environment(\.dismiss) private var dismiss
-
-    /// The app's version (and build), as the bundle declares it.
-    private static var version: String {
+/** The running app's name and version, as its bundle declares them (RawBoy Desktop: the release tag and the build run). */
+public enum AppVersion {
+    /** "1.2.3 (45)". */
+    public static var text: String {
         let info = Bundle.main.infoDictionary
         let short = info?["CFBundleShortVersionString"] as? String ?? "?"
         let build = info?["CFBundleVersion"] as? String ?? "?"
         return "\(short) (\(build))"
     }
 
+    /** "RawBoy Desktop", else the bundle's name. */
+    public static var name: String {
+        let info = Bundle.main.infoDictionary
+        return info?["CFBundleDisplayName"] as? String ?? info?["CFBundleName"] as? String ?? "RawBoy"
+    }
+
+    /** "RawBoy Desktop 1.2.3 (45)". */
+    public static var line: String { "\(name) \(text)" }
+}
+
+private struct HelpView: View {
+    let title: String
+    let sections: [HelpSection]
+    let licences: Bool
+    @Environment(\.dismiss) private var dismiss
+
     var body: some View {
         NavigationStack {
             List {
+                // The version first, where it is seen: the Help sheet is where people look when they report something.
+                Section {
+                    Text(AppVersion.line).font(.headline)
+                        .textSelection(.enabled)
+                        .accessibilityLabel("Version: \(AppVersion.line)")
+                }
                 ForEach(sections, id: \.self) { section in
                     Section(section.title) {
                         ForEach(section.items, id: \.self) { item in
@@ -81,7 +99,6 @@ private struct HelpView: View {
                     Section { NavigationLink("Open-source licences") { LicensesView() } }
                 }
                 Section { Link("Support me on Ko-fi", destination: URL(string: "https://ko-fi.com/U7U011XOE")!) }
-                Section { Text("Version \(Self.version)").font(.footnote).foregroundStyle(.secondary) }
             }
             .navigationTitle(title)
             #if os(iOS)
@@ -90,5 +107,9 @@ private struct HelpView: View {
             .toolbar { Button("Done") { dismiss() } }
         }
         .presentationDetents([.medium, .large])
+        #if os(macOS)
+        // A Mac sheet takes the size of its content, and a list has none: without this it collapsed to its title and Done.
+        .frame(minWidth: 540, idealWidth: 560, minHeight: 520, idealHeight: 680)
+        #endif
     }
 }

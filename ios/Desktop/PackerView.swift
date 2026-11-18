@@ -5,6 +5,9 @@ import SwiftUI
 struct PackerView: View {
     @ObservedObject var model: PackerModel
     @State private var dropping = false
+    /** Folders folded to their header line (nil's key is `looseKey`); for this window's life, as on the web. */
+    @State private var collapsed: Set<String> = []
+    private static let looseKey = ":loose:"
 
     var body: some View {
         HSplitView {
@@ -12,7 +15,9 @@ struct PackerView: View {
             settingsPanel.frame(minWidth: 340, idealWidth: 380, maxWidth: 460)
         }
         .frame(minWidth: 820, minHeight: 560)
+        .interfaceScaled()  // the Viewer's Settings › Interface size; the window's least size grows with it
         .preferredColorScheme(.dark)
+        .background(WindowSetup())
         .overlay {
             if dropping {
                 RoundedRectangle(cornerRadius: 12).strokeBorder(Color.accentColor, lineWidth: 3).padding(6).allowsHitTesting(false)
@@ -39,7 +44,18 @@ struct PackerView: View {
             HStack {
                 Button("Add Files or Folders…", systemImage: "plus") { model.addFilesPanel() }.disabled(model.running)
                 Spacer()
-                if !model.items.isEmpty { Button("Clear", action: model.clear).disabled(model.running) }
+                if !model.items.isEmpty {
+                    Button("Sort: \(model.sort == .date ? "Shoot date" : "File name")") { model.setSort(model.sort == .date ? .name : .date) }
+                        .buttonStyle(.link)
+                        .disabled(model.running)
+                        .help(model.sort == .date ? "Photos in the order they were shot. Click to sort by file name." : "Photos by file name. Click to sort by shoot date.")
+                    Button(allCollapsed ? "Expand all" : "Collapse all") {
+                        collapsed = allCollapsed ? [] : Set(groups.map { key($0.folder) })
+                    }
+                    .buttonStyle(.link)
+                    .help(allCollapsed ? "Expand all folders" : "Collapse all folders")
+                    Button("Clear", action: model.clear).disabled(model.running)
+                }
             }
             .padding(10)
             Divider()
@@ -55,8 +71,12 @@ struct PackerView: View {
             } else {
                 List {
                     ForEach(groups, id: \.folder) { group in
-                        Section(group.folder ?? "Files") {
-                            ForEach(group.items) { row($0) }
+                        Section {
+                            if !collapsed.contains(key(group.folder)) {
+                                ForEach(group.items) { row($0) }
+                            }
+                        } header: {
+                            folderHeader(group)
                         }
                     }
                 }
@@ -69,15 +89,69 @@ struct PackerView: View {
 
     private struct Group { let folder: String?; let items: [PackItem] }
 
-    /** Items by the folder they came from, folders in order of first appearance. */
-    private var groups: [Group] {
-        var order: [String?] = []
-        var map: [String?: [PackItem]] = [:]
-        for item in model.items {
-            if map[item.folder] == nil { order.append(item.folder) }
-            map[item.folder, default: []].append(item)
+    /** Items by the folder they came from, folders in order of first appearance, each in the chosen order. */
+    private var groups: [Group] { model.groups.map { Group(folder: $0.folder, items: $0.items) } }
+
+    private func key(_ folder: String?) -> String { folder ?? Self.looseKey }
+
+    private var allCollapsed: Bool {
+        let keys = groups.map { key($0.folder) }
+        return !keys.isEmpty && keys.allSatisfy { collapsed.contains($0) }
+    }
+
+    private func folderStatus(_ items: [PackItem]) -> (text: String, kind: PackerInfo.FolderStatusKind)? {
+        var packing = 0, done = 0, failed = 0
+        for item in items {
+            switch item.status {
+            case .packing: packing += 1
+            case .done: done += 1
+            case .failed: failed += 1
+            default: break
+            }
         }
-        return order.map { Group(folder: $0, items: map[$0] ?? []) }
+        return PackerInfo.folderStatus(total: items.count, packing: packing, done: done, failed: failed)
+    }
+
+    private func statusColor(_ kind: PackerInfo.FolderStatusKind) -> Color {
+        switch kind {
+        case .error: .red
+        case .busy: .accentColor
+        case .done: .secondary
+        }
+    }
+
+    /** A folder's line: click to fold or unfold it; folded, it shows how its files are getting on. */
+    private func folderHeader(_ group: Group) -> some View {
+        let k = key(group.folder)
+        let isCollapsed = collapsed.contains(k)
+        let name = group.folder ?? "Other files"
+        let status = isCollapsed ? folderStatus(group.items) : nil
+        return HStack(spacing: 6) {
+            Button {
+                if isCollapsed { collapsed.remove(k) } else { collapsed.insert(k) }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: isCollapsed ? "chevron.right" : "chevron.down").font(.caption.weight(.semibold)).frame(width: 12)
+                    Image(systemName: group.folder == nil ? "doc.on.doc" : "folder").foregroundStyle(.secondary)
+                    Text(name).lineLimit(1).truncationMode(.middle)
+                    Text("(\(group.items.count))").foregroundStyle(.secondary)
+                    if let status {
+                        Text(status.text).font(.caption)
+                            .foregroundStyle(statusColor(status.kind))
+                    }
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(name)
+            .accessibilityLabel("\(isCollapsed ? "Expand" : "Collapse") folder \(name)")
+            if !model.running {
+                Button { model.removeFolder(group.folder); collapsed.remove(k) } label: { Image(systemName: "xmark") }
+                    .buttonStyle(.plain).foregroundStyle(.secondary).help("Remove \(name)")
+                    .accessibilityLabel("Remove folder \(name)")
+            }
+        }
     }
 
     private func megabytes(_ n: Int) -> String { String(format: "%.1f MB", Double(n) / 1e6) }

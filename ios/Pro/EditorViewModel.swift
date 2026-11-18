@@ -83,6 +83,7 @@ final class EditorViewModel: ObservableObject {
     private var histogramTask: Task<Void, Never>?
     private var histogramKey: HistogramKey?
     private var sessionWatch: AnyCancellable?
+    private var presetsWatch: AnyCancellable?
 
     init() {
         var onMessage: (String) -> Void = { _ in }
@@ -102,6 +103,14 @@ final class EditorViewModel: ObservableObject {
         onMessage = { [weak self] in self?.message = $0 }
         filmLoader = { [unowned self] in try await self.loadFilm($0) }
         presets = PresetStore.load()
+        // RawBoy Desktop: Auto saves lens presets into the same file (picked from a sidecar, or removed there).
+        presetsWatch = NotificationCenter.default.publisher(for: PresetStore.changed).sink { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let list = PresetStore.load()
+                if list != self.presets { self.presets = list }
+            }
+        }
         // The histogram follows what the session loads (photo, LUT, film stock, skin mask) as well as the edits.
         sessionWatch = session.objectWillChange.sink { [weak self] _ in
             MainActor.assumeIsolated { self?.scheduleHistogram() }
@@ -140,14 +149,23 @@ final class EditorViewModel: ObservableObject {
         histogramKey = key
     }
 
-    func open(_ url: URL) {
+    /** [initial]: the edits to start from (RawBoy Desktop's Edit in Pro: Auto's develop), in place of the sidecar's. */
+    func open(_ url: URL, initial: DevelopParams? = nil) {
         if state.busy { return }
         persistence?.flush()  // the photo that is leaving
         state.loading = true
         Task {
             do {
                 let previous = state
-                let opened = try await session.open(url) { persistence?.restore(url, defaults: $0) ?? carryOverEdits(previous, $0) }
+                #if os(macOS)
+                // RawBoy Desktop starts every photo from its own sidecar or as shot; ⇧C / the bar's Copy takes the previous photo's edits.
+                let opened = try await session.open(url) { initial ?? persistence?.restore(url, defaults: $0) ?? $0 }
+                if let name = previous.fileName, name != url.lastPathComponent {
+                    previousEdits = PreviousEdits(name: name, params: previous.params, defaults: previous.defaults)
+                }
+                #else
+                let opened = try await session.open(url) { initial ?? persistence?.restore(url, defaults: $0) ?? carryOverEdits(previous.params, previous.defaults, $0) }
+                #endif
                 if let old = source, old != url { Imports.delete(old) }
                 source = url
                 state.loading = false
@@ -242,10 +260,9 @@ final class EditorViewModel: ObservableObject {
      * Edits from the previous file carry over to the next one. White balance only
      * carries over if the user changed it; otherwise the new file's as-shot WB is used.
      */
-    private func carryOverEdits(_ previous: EditorState, _ newDefaults: DevelopParams) -> DevelopParams {
-        if previous.fileName == nil { return newDefaults }
+    private func carryOverEdits(_ previousParams: DevelopParams, _ previousDefaults: DevelopParams, _ newDefaults: DevelopParams) -> DevelopParams {
         // Rotation, flips, straightening, perspective, crop, masks, light leaks, light effects and healing strokes belong to one photo.
-        var p = previous.params
+        var p = previousParams
         p.rotation = newDefaults.rotation
         p.flipHorizontal = newDefaults.flipHorizontal
         p.flipVertical = newDefaults.flipVertical
@@ -258,12 +275,33 @@ final class EditorViewModel: ObservableObject {
         p.fx = newDefaults.fx
         p.healSpots = newDefaults.healSpots
         p = p.withCrop(newDefaults.crop)
-        let wbEdited = p.temperature != previous.defaults.temperature || p.tint != previous.defaults.tint
+        let wbEdited = p.temperature != previousDefaults.temperature || p.tint != previousDefaults.tint
         if !wbEdited {
             p.temperature = newDefaults.temperature
             p.tint = newDefaults.tint
         }
         return p
+    }
+
+    /** The edits of the photo that was open before this one (RawBoy Desktop: what Copy previous takes). */
+    struct PreviousEdits {
+        let name: String
+        let params: DevelopParams
+        let defaults: DevelopParams
+    }
+
+    private(set) var previousEdits: PreviousEdits?
+
+    var canCopyPrevious: Bool { previousEdits != nil && state.hasImage && !state.busy }
+
+    /**
+     * Copy previous (⇧C): gives this photo the previous photo's edits, as they used to carry over by themselves. Geometry,
+     * masks, leaks, effects and healing stay this photo's own; white balance moves only if it had been changed. One undo step.
+     */
+    func copyPrevious() {
+        guard canCopyPrevious, let previous = previousEdits else { return }
+        commit(carryOverEdits(previous.params, previous.defaults, state.defaults), force: true)
+        message = "Copied the settings of \(previous.name)"
     }
 
     /** A slider or drag: quick changes in a row are one undo step. */
@@ -342,6 +380,12 @@ final class EditorViewModel: ObservableObject {
             p.film = id
             if id != nil && wasOff { p.filmAmount = 100 }
         }
+    }
+
+    /** The Look selector's pick: [next] is the photo's params with another LUT or film stock (one undo step). */
+    func setLook(_ next: DevelopParams) {
+        if let f = next.film { lastFilm = f }
+        commit(next, force: true)
     }
 
     /** Film segment: the last stock (Portra 400 at first). */
@@ -662,11 +706,22 @@ final class EditorViewModel: ObservableObject {
             if !(await UIApplication.shared.open(url)) { message = "RawBoy Auto isn't installed" }
         }
         #else
-        message = "Send to Auto works between the iPhone apps"
+        if let presetToAuto { presetToAuto(preset) } else { message = "Send to Auto works between the iPhone apps" }
         #endif
     }
 
+    #if os(macOS)
+    /** RawBoy Desktop: hands a preset to its Auto (a lens preset joins Auto's lens presets, another develops the batch). */
+    var presetToAuto: ((Preset) -> Void)?
+    #endif
+
     // MARK: - Export
+
+    /** Keeps [settings] as the export sheet's next starting point (RawBoy Desktop's batch export, which runs elsewhere). */
+    func rememberExportSettings(_ settings: ExportSettings) {
+        exportSettings = settings
+        ExportSettingsStore.save(settings)
+    }
 
     /** [directory] (RawBoy Desktop): where the file goes; nil (iOS): developed into Photos › RawBoy. */
     func export(_ settings: ExportSettings, to directory: URL? = nil) {
@@ -722,12 +777,19 @@ enum PresetStore {
         return (try? Presets.decode(text)) ?? []
     }
 
+    /**
+     * Posted (on the main thread) after [save] wrote the file. RawBoy Desktop's Pro and Auto share it (Auto's lens presets
+     * are the lens presets saved here, [LensPresetStore]), so each reloads what the other saved.
+     */
+    static let changed = Notification.Name("RawBoyPresetsChanged")
+
     /** Always an array, so one preset doesn't change the file's shape; written whole, then swapped in. */
     static func save(_ presets: [Preset]) -> Bool {
         let text = presets.isEmpty ? "[]" : presets.count == 1 ? "[\(Presets.encode(presets))]" : Presets.encode(presets)
         do {
             try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
             try text.write(to: file, atomically: true, encoding: .utf8)
+            NotificationCenter.default.post(name: changed, object: nil)
             return true
         } catch {
             return false

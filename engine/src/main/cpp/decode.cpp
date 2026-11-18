@@ -21,6 +21,7 @@ bool decodeAny(const uint8_t* data, size_t size, DecodedImage& out, std::string&
     // and other newer encodings) fall back to the Adobe DNG SDK.
     bool ok = decodeWithLibRaw(data, size, out, error, extraBlack, draft, black);
     if (ok && out.metadata.hasGps && looksLikeTiff(data, size)) readGpsStamps(data, size, out.metadata);
+    if (ok) fillMissingMetadata(data, size, out.metadata);
     std::string dngError;
 #if RAWBOY_WITH_DNG_SDK
     if (!ok && looksLikeTiff(data, size)) {

@@ -1,4 +1,6 @@
 import Foundation
+import enum RawBoyBrowseKit.PhotoOrder
+import enum RawBoyBrowseKit.PhotoSort
 
 /**
  * RawBoy Packer's settings, presets and the live summary of what they do: a port of web's `packer/settings.ts` (same
@@ -456,5 +458,48 @@ public enum PackerInfo {
         if r.failed > 0 { parts.append("\(plural(r.failed, "file")) failed.") }
         if r.done == 0 && r.failed == 0 { parts.append("No files were packed.") }
         return (title, parts.joined(separator: " "))
+    }
+
+    /**
+     * Groups the list by the folder each file came from, folders in the order they first appear, and orders each folder
+     * by [sort] (shoot date, those without one last by name; or file name). Web's `groupByFolder`.
+     */
+    public static func groupByFolder<T>(_ items: [T], sort: PhotoSort, folder: (T) -> String?, date: (T) -> String?,
+                                        name: (T) -> String) -> [(folder: String?, items: [T])] {
+        var order: [String?] = []
+        var map: [String?: [T]] = [:]
+        for item in items {
+            let key = folder(item)
+            if map[key] == nil { order.append(key) }
+            map[key, default: []].append(item)
+        }
+        return order.map { key in
+            (key, (map[key] ?? []).sorted { PhotoOrder.inOrder(sort, (date($0), name($0)), (date($1), name($1))) })
+        }
+    }
+
+    /** How a collapsed folder's line reads its files' progress. */
+    public enum FolderStatusKind: Equatable, Sendable { case busy, error, done }
+
+    /**
+     * A collapsed folder's progress ("2 packing… · 1 done", "1 failed", "all done", "3 of 5 done"), nil while nothing
+     * has started. Web's `folderStatusSummary`.
+     */
+    public static func folderStatus(total: Int, packing: Int, done: Int, failed: Int) -> (text: String, kind: FolderStatusKind)? {
+        guard total > 0 else { return nil }
+        if packing > 0 {
+            var parts = ["\(packing) packing…"]
+            if done > 0 { parts.append("\(done) done") }
+            if failed > 0 { parts.append("\(failed) failed") }
+            return (parts.joined(separator: " · "), .busy)
+        }
+        if failed > 0 {
+            var parts = ["\(failed) failed"]
+            if done > 0 { parts.append("\(done) done") }
+            return (parts.joined(separator: " · "), .error)
+        }
+        if done == total { return ("all done", .done) }
+        if done > 0 { return ("\(done) of \(total) done", .done) }
+        return nil
     }
 }

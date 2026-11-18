@@ -1,5 +1,6 @@
 import XCTest
 @testable import RawBoyEngine
+import enum RawBoyBrowseKit.XmpSidecar
 
 /** Web's browse.test.ts Auto cases (`rawboy:Auto`, ui/auto/AutoSidecar.ts) on the Swift port. */
 final class AutoSidecarTests: XCTestCase {
@@ -45,13 +46,15 @@ final class AutoSidecarTests: XCTestCase {
         XCTAssertNil(AutoSidecar.decode("not json"))
     }
 
-    func testKeepsWebOnlyAdjustmentsAndACrop() throws {
+    func testKeepsRetouchAndACrop() throws {
         var s = saved()
-        s.webAdjust = ["retouch": 30, "lumaContrast": -5]
+        s.adjust.retouch = 30
+        s.adjust.lumaContrast = -5
         s.adjust.crop = CropRect(0.1, 0.2, 0.9, 0.8)
         s.adjust.straighten = 3.5
         let back = try XCTUnwrap(AutoSidecar.decode(AutoSidecar.encode(s)))
-        XCTAssertEqual(back.webAdjust, ["retouch": 30, "lumaContrast": -5])
+        XCTAssertEqual(back.adjust.retouch, 30)
+        XCTAssertEqual(back.adjust.lumaContrast, -5)
         XCTAssertEqual(back.adjust.crop, CropRect(0.1, 0.2, 0.9, 0.8))
         XCTAssertEqual(back.adjust.straighten, 3.5)
         // A crop with nothing left, or the whole frame, is none; values are clamped.

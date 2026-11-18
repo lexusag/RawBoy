@@ -64,6 +64,39 @@ final class LightLeaksTests: XCTestCase {
         XCTAssertGreaterThan(LightLeaks.edge(.triangle, qx: 0, qy: 0.6), 0)
     }
 
+    /** Web's lightleaks.test.ts "reshapes a glow through its outline points". */
+    func testReshapesAGlowThroughItsOutlinePoints() {
+        let radii: [Float] = [1.5, 1, 0.7, 1, 1, 1.2, 1, 1]
+        for k in 0..<8 { XCTAssertEqual(LightLeaks.radius(radii, LightLeaks.radiusAngle(k)), radii[k], accuracy: 1e-5) }  // the spline passes through them
+        XCTAssertEqual(LightLeaks.radius(LightLeaks.roundRadii, 1.234), 1, accuracy: 1e-6)
+        let t = LightLeaks.radiusAngle(0)
+        XCTAssertEqual(LightLeaks.edge(.glow, qx: 1.5 * cosf(t), qy: 1.5 * sinf(t), radii: radii), 0, accuracy: 1e-5)
+        XCTAssertLessThan(LightLeaks.edge(.glow, qx: 1.2 * cosf(t), qy: 1.2 * sinf(t), radii: radii), 0)  // inside, though out of the ellipse
+        let t2 = LightLeaks.radiusAngle(2)
+        XCTAssertGreaterThan(LightLeaks.edge(.glow, qx: 0.8 * cosf(t2), qy: 0.8 * sinf(t2), radii: radii), 0)
+        // Angles wrap round the closed spline; a radius never goes below the floor of 0.05.
+        XCTAssertEqual(LightLeaks.radius(radii, -0.3), LightLeaks.radius(radii, 2 * .pi - 0.3), accuracy: 1e-5)
+        XCTAssertGreaterThanOrEqual(LightLeaks.radius([0.1, 0.1, 4, 0.1, 0.1, 4, 0.1, 0.1], 1.0), 0.05)
+        XCTAssertEqual(LightLeaks.radiusAngle(0), .pi / 8, accuracy: 1e-6)
+        XCTAssertEqual(LightLeaks.radiusAngle(7), 15 * .pi / 8, accuracy: 1e-5)
+    }
+
+    func testReshapedAndRoundOutlines() {
+        var l = LightLeaks.newLeak(.glow)
+        XCTAssertFalse(LightLeaks.reshaped(l))
+        l.radii[3] = 1.4
+        XCTAssertTrue(LightLeaks.reshaped(l))
+        var streak = LightLeaks.newLeak(.streak)
+        streak.radii[3] = 1.4
+        XCTAssertFalse(LightLeaks.reshaped(streak))  // only a glow has an outline to reshape
+        XCTAssertEqual(LightLeaks.roundRadii, [Float](repeating: 1, count: 8))
+        XCTAssertEqual(LightLeaks.radiusMin, 0.1)
+        XCTAssertEqual(LightLeaks.radiusMax, 4)
+        // JSON keeps the radii, clamped to the limits.
+        let json = LightLeaks.toJson([{ var g = l; g.radii = [9, 0, 1, 1, 1, 1, 1, 1]; return g }()])
+        XCTAssertEqual(LightLeaks.parseLeaks(json).first?.radii.prefix(2).map { $0 }, [4, 0.1])
+    }
+
     func testMakesPhotoshopsColours() {
         let inner = LightLeaks.color(LightLeaks.hue)  // (255, 156, 0)
         XCTAssertEqual(inner[0], 1)

@@ -729,16 +729,24 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
     fun resetCrop(id: String) = setAdjust(id, force = true) { it.copy(crop = null, straighten = 0f) }
 
     /**
-     * Gives every photo of the batch the look (or preset), strength, warmth, tint, contrast, saturation and grain of [id], including
+     * Gives every photo of the batch the look (or preset), lens preset choice, strength, warmth, tint, contrast, saturation and grain of [id], including
      * photos still being analysed (they keep it rather than their suggestion); brightness and denoise stay per photo (they follow
      * each photo's exposure and noise). Not while exporting.
      */
     fun applyLookToAll(id: String) {
         if (_export.value != null) return
         val source = photo(id) ?: return
-        _photos.value.filter { it.id != id }.forEach { p -> changeDevelop(p.id, force = true) { it.withLookOf(source) } }
+        _photos.value.filter { it.id != id }.forEach { p -> changeDevelop(p.id, force = true) { it.withLookOf(source).withLensChoiceOf(source) } }
         _message.value = "${source.lookName} applied to all photos"
     }
+
+    /**
+     * This photo given [source]'s lens preset choice (Apply to all, Copy previous): the same pick, or "by lens" / none,
+     * worked out for its own lens (a photo still being analysed gets its preset when the analysis is in).
+     */
+    private fun AutoPhoto.withLensChoiceOf(source: AutoPhoto): AutoPhoto =
+        copy(lensChoice = source.lensChoice,
+             lensPreset = analysis?.let { Presets.chosenLensPreset(_lensPresets.value, source.lensChoice, it.lens.lensName) } ?: lensPreset)
 
     /** The analysed photo before [id] in the batch (the one Swipe and Backspace go back to), for "Copy previous". */
     fun previousPhoto(id: String): AutoPhoto? {
@@ -748,7 +756,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     /**
-     * Gives photo [id] what "Apply to all" copies, from the photo before it ([previousPhoto]): look (or preset), strength,
+     * Gives photo [id] what "Apply to all" copies, from the photo before it ([previousPhoto]): look (or preset), lens preset choice, strength,
      * brightness, warmth, tint, contrast, saturation and grain, as one undo step (a neighbouring shot of the same scene usually wants its
      * brightness too, unlike Apply to all); denoise and rotation stay. Not while exporting.
      */
@@ -756,24 +764,28 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
         if (_export.value != null) return
         val source = previousPhoto(id) ?: return
         changeDevelop(id, force = true) { p ->
-            p.withLookOf(source).let { it.copy(adjust = it.adjust.copy(brightness = source.adjust.brightness)) }
+            p.withLookOf(source).withLensChoiceOf(source).let { it.copy(adjust = it.adjust.copy(brightness = source.adjust.brightness)) }
         }
         _message.value = "Copied from ${source.name}"
     }
 
     /**
      * "Auto denoise all", for a batch that's otherwise done: every photo gets the denoise, colour denoise and sharpening
-     * the auto develop measured on it (presets never override those here), so the Denoise slider goes back to 0 and
-     * RawBoy edits take the measured values in place of their own (those of photos still being analysed stay); looks,
-     * presets, lens corrections and the other sliders stay. One undo step per photo. [ids] (the grid's selection): only
-     * those photos. Not while exporting.
+     * the auto develop measured on it, so the Denoise slider goes back to 0, presets (the batch's too, for photos added
+     * later) lose their Denoise & sharpening group ([Presets.withoutDenoise]) and RawBoy edits take the measured values
+     * in place of their own (those of photos still being analysed stay); looks, presets, lens corrections and the other
+     * sliders stay. One undo step per photo. [ids] (the grid's selection): only those photos, and the batch preset stays
+     * as it is. Not while exporting.
      */
     fun autoDenoiseAll(ids: Set<String>? = null) {
         if (_export.value != null) return
+        if (ids == null) _preset.value = _preset.value?.let(Presets::withoutDenoise)
+        fun AutoPhoto.denoised(): AutoPhoto =
+            withAutoNoise().copy(adjust = this.adjust.copy(denoise = 0f), preset = this.preset?.let(Presets::withoutDenoise))
         val changed = _photos.value.filter { p ->
-            (ids == null || p.id in ids) && (p.adjust.denoise != 0f || p.withAutoNoise().edits != p.edits)
+            (ids == null || p.id in ids) && (p.adjust.denoise != 0f || p.denoised() != p)
         }
-        changed.forEach { p -> changeDevelop(p.id, force = true) { it.withAutoNoise().copy(adjust = it.adjust.copy(denoise = 0f)) } }
+        changed.forEach { p -> changeDevelop(p.id, force = true) { it.denoised() } }
         _message.value = when (changed.size) {
             0 -> when {
                 ids == null -> "Every photo already has its auto denoise"

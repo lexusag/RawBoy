@@ -16,7 +16,7 @@ interface Props {
   frame: number;
   onChange: (crop: CropRect) => void;
   /**
-   * Drag outside the crop frame to rotate (Auto's Crop & rotate): [angle] is the straighten angle in degrees (+ turns
+   * Drag outside the crop frame to rotate (Pro's and Auto's Crop & rotate): [angle] is the straighten angle in degrees (+ turns
    * clockwise) and [onChange] gets the new one while the pointer circles the frame's centre. Without it, presses
    * outside fall through to the preview.
    */

@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdlib>
 #include <cmath>
 #include <cstdio>
 #include <ctime>
@@ -860,7 +861,12 @@ bool decodeWithLibRaw(const uint8_t* data, size_t size, DecodedImage& out, std::
                             fixed ? "on" : "not applicable", blackFix.exact ? 1 : 0, fixPedestal, fixRemainder[0],
                             fixRemainder[1], fixRemainder[2], fixGain);
 #else
-    (void)ms;
+    // RAWBOY_DECODE_TIMING=1 prints the same stage times where there is no Android log (the Mac's benchmark).
+    if (std::getenv("RAWBOY_DECODE_TIMING")) {
+        std::fprintf(stderr,
+                     "LibRaw decode: unpack %ld ms, column defects %d + hot pixels %d in %ld ms, demosaic %ld ms, convert + orient %ld ms\n",
+                     ms(t0, t1), defectColumns, hotPixels, ms(t1, t1b), ms(t1b, t2), ms(t2, t3));
+    }
     (void)defectColumns;
     (void)hotPixels;
 #endif

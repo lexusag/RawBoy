@@ -24,7 +24,8 @@ export const PRO_HELP: HelpSection[] = [
       { how: 'Pinch (touch screens)', text: 'Two fingers zoom around their middle, up to 400% (stops once at 100%), and pan with it; the finger left keeps panning. Out past the whole photo shrinks it to a quarter; a double-tap goes back to the whole photo.' },
       { how: 'Press and hold', text: 'Compare with the as-shot render.' },
       { keys: ['\\'], how: 'or Compare', text: 'Show the as-shot render until pressed again.' },
-      { keys: ['C'], how: 'or Crop (top bar)', text: 'Open or close Crop & rotate.' },
+      { keys: ['C'], how: 'or Crop (top bar)', text: 'Open or close Crop & rotate. Drag the corners, edges or inside of the frame to crop, or outside it to rotate (straighten, up to 45° each way).' },
+      { keys: ['Shift+C'], how: 'or Copy previous edits', text: 'Copies the previous photo\'s edits onto this photo (white balance only if changed; crop, rotation, flips, perspective, masks, light leaks, effects and healing stay).' },
       { keys: ['D'], how: 'or click outside the photo', text: 'Change the frame around it: grey, white or black.' },
       { how: 'Histogram', text: 'Above the tabs: red, green and blue levels of the developed photo, with the share of crushed shadows (left) and clipped highlights (right). Click it to mark them blue and red on the photo.' },
     ],
@@ -39,7 +40,7 @@ export const PRO_HELP: HelpSection[] = [
       { how: 'Curves', text: 'Light tab: click the box to add a point, drag it, double-click it to remove. On touch, press on the curve or a point; elsewhere the box scrolls. RGB, then Red, Green and Blue.' },
       { how: 'Detail', text: 'Luma and Color denoise work separately. Local contrast brings out texture; High-pass contrast is wider clarity. Portrait retouch cleans up skin like Reblum\'s Natural (40 is about Reblum Natural 40): spots, under-eyes, lines and unevenness, pores kept. Fake anamorphic flare adds horizontal cinema streaks (Neutral, Blue, Golden or Magenta, with optional faint Ghosts; big lit windows and signs do not flare). Tap Grain\'s name for its size, roughness and color.' },
       { how: 'Lens', text: 'Embedded profile, Distortion, Horizontal distortion (bows verticals like an anamorphic lens), Crop (0 auto-crops empty edges; negative shows the curved edges, positive crops tighter), Fisheye (straightens a fisheye lens towards rectilinear; set the lens field of view, and for a circular fisheye the size and centre of its image circle), Vignetting and Chromatic aberration. Use Lensfun profile corrects distortion, chromatic aberration and vignetting from the Lensfun lens database: Auto matches the camera and lens from the photo\'s EXIF, Pick lens searches the database, Generic takes a crop factor, focal length, aperture and lens type (incl. fisheye) for a lens that is not in it.' },
-      { how: 'Presets', text: 'Save the edits by group, apply, import and export .rawboy.json files. Select to batch-delete or export.' },
+      { how: 'Presets', text: 'Save the edits by group, apply, import and export .rawboy.json files. Select to batch-delete or export. Import, export, rename and delete work with no photo open too.' },
     ],
   },
   {

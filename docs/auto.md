@@ -75,12 +75,12 @@ the other auto develop sliders (0 = as Auto set them): **Contrast** (±50),
 **Saturation** (±100; −100 is black and white, the film look keeps its tone curve but loses its colour cast), **Tint** (±50, + = magenta, on top of what Warmth adds), **Grain** (±50, on top of the base
 grain and the look's) and **Denoise** (±100, on top of the measured luma and colour denoise, colour first: raising it clears colour noise fast
 and smooths luma later and gently, at most +60; below 0 it takes the luma denoise away first, then the colour denoise,
-down to none at −100, e.g. to keep fine detail at high ISO), then (web) **Retouch** (0–100, RawBoy's Portrait retouch on top of
+down to none at −100, e.g. to keep fine detail at high ISO), then (web; RawBoy Desktop in its own Retouch section) **Retouch** (0–100, RawBoy's Portrait retouch on top of
 the look, preset or edits; 40 is about Reblum's Natural at 40; photos without a face are left alone). A **white balance picker** (Pick white balance on the Adjust tab, like RawBoy Pro's) sets Warmth and Tint so a clicked or tapped neutral grey spot renders grey. Press and hold the photo to see it without the look. As in RawBoy, a thin frame around the photo (neutral
 grey by default) helps judge exposure; tap (click) outside the photo to cycle it through grey, white and black.
 **Swipe left or right** on the photo to move to the previous or next photo in the batch (each keeps its own
-settings; swiping is off while zoomed or exporting). On the web, the ‹ › buttons and the arrow keys (also Space and Backspace) change the photo while zoomed too; the next one opens whole. Pinch with two fingers to zoom around them, up to 400% (iOS, Android, web on touch screens).
-**Remove from batch** (the bin in the web's top bar, its ⋯ menu on phones, the ⋮ menu on Android, the … menu on iOS; **Delete** on the web) takes the open photo
+settings; swiping is off while zoomed or exporting). On the web, the ‹ › buttons and the arrow keys (also Space and Backspace; on RawBoy Desktop Space and ⌫) change the photo while zoomed too; the next one opens whole. Pinch with two fingers to zoom around them, up to 400% (iOS, Android, web on touch screens).
+**Remove from batch** (the bin in the web's top bar, its ⋯ menu on phones, the ⋮ menu on Android, the … menu on iOS; **Delete** on the web, ⌦ (fn-Delete) on RawBoy Desktop) takes the open photo
 out of the batch, the file stays, and goes on to the next photo (the one before it at the batch's end; back to the
 grid when it was the last).
 **Undo** and **Redo** (arrows in the photo view's top bar; Ctrl/⌘ Z and Shift Ctrl/⌘ Z on the web) take back the
@@ -91,9 +91,10 @@ denoise stay per photo). **Copy previous** (at the end of the Look / Adjust tabs
 brightness, from the photo before this one in the batch to this photo only (denoise stays), as one undo step, like darktable's or Lightroom's "copy previous":
 develop one shot of a scene, swipe to the next and tap it. **Auto denoise all** (in the grid's top row, Android, iOS
 and web) is for a finished series: every photo gets the denoise, colour denoise and sharpening the auto develop measured on
-it (its noise, ISO and exposure), in place of its Denoise slider and RawBoy edits' own values (and, on the web, a preset's
-Denoise & sharpening group, the batch preset's too; Android presets never set denoise). Photos added As is, which
-skip the noise measurement, get the ISO table's values. Looks, presets, lens corrections and the other sliders
+it (its noise, ISO and exposure), in place of its Denoise slider and RawBoy edits' own values (and a preset's
+Denoise & sharpening group, the batch preset's too). Photos added As is get the
+values measured on them too (raws start with them: As is gives a raw its measured denoise from the start, web and
+RawBoy Desktop; JPEG, HEIC, PNG and TIFF get none until Auto denoise). Looks, presets, lens corrections and the other sliders
 stay; it is one undo step per photo. With photos selected, the selection bar's **Auto denoise** (dots icon) does the same
 for those photos only (the batch preset stays as it is). **Export all** saves every photo
 to `Pictures/RawBoy Auto/<name>-auto.jpg` (or `.tif`), one photo at a time, keeping the screen on. **Stop**, next to the progress bar, ends the export after the
@@ -107,8 +108,8 @@ exports it on any platform; RawBoy's **Send to Auto**, or opening a preset file 
 preset develops every photo, and photos added later, in place of its look: everything it holds, lens corrections,
 LUT, film, detail, retouch and gradient masks included, on top of each photo's auto develop (groups it leaves out keep
 the auto values). Denoise, Color denoise and sharpening come from each photo's own auto develop (its measured
-noise, so its ISO), not from the photo the preset was made on, unless the preset holds **Denoise & sharpening** (web:
-its own group in RawBoy's Save preset, off by default; elsewhere they are part of Detail and always measured). Brightness, Warmth and the Adjust sliders still work
+noise, so its ISO), not from the photo the preset was made on, unless the preset holds **Denoise & sharpening** (its own
+group in RawBoy's Save preset, off by default). Brightness, Warmth and the Adjust sliders still work
 on top; there is no Strength. **Remove** goes back to the looks (photos given another preset on a selection keep
 theirs); **Use a look** in the photo view does it for one photo.
 **Partial presets** (web): a preset without the Light group (only Detail, only Color, Curves and White balance...)
@@ -136,7 +137,7 @@ and a RawBoy preset's Lens group gives way to the lens preset. Sending a new one
 **lens presets** button in the grid (web: the **Lens** menu, and **Manage…** to remove) picks one for every photo and
 those added later: **By lens** (the default), **None**, or a named preset. Manual lenses record no lens name, so their
 presets (and lens-only presets saved before RawBoy recorded the lens) never match by lens: pick them by name, for the
-whole batch or for a selection (**Lens** in the selection bar). **Remove** forgets a preset. **One preset per scene:** select a scene's photos and
+whole batch or for a selection (**Lens** in the selection bar), or for the open photo (the lens preset menu in the photo view; with **By lens** it names the preset the photo got, or says none is saved for its lens). **Apply to all** and **Copy previous** copy the lens preset choice too (a "By lens" photo then gets the preset of its own lens). **Remove** forgets a preset. RawBoy Desktop lists the lens presets saved in Pro's Lens tab directly (Pro and Auto share one presets file): the sidebar's **Lens preset** menu is the batch's, the toolbar's for a selection, the photo panel's **Lens preset** section for one photo; **Manage…** removes one, and **Send to Auto** in Pro switches to Auto and reports how many photos it matched. Each photo's choice is kept in its `rawboy:Auto` sidecar. **One preset per scene:** select a scene's photos and
 tap **Preset** (the bookmarks icon) in the selection bar to develop just those with a preset; the rest keep theirs. In the photo view, **Apply RawBoy preset…** (or the Preset button) applies a preset to the open photo alone, and **Change** picks another.
 **Order:** the grid shows photos in the order they were shot (oldest first), from each file's EXIF capture date
 (read from its metadata, without decoding it; a photo without one goes by its file's modified date). **Sort: Shoot
@@ -145,13 +146,13 @@ the photo view, Copy previous and Export all follow the same order (Android, iOS
 **Filter** (web): dropdowns above the grid filter the batch by **Camera**, **Lens**, **ISO range** (Min ISO and Max ISO) and **Shoot date** (each
 showing the count of matching photos in the batch), singly or combined. When a filter is active, the grid, detail
 navigation (‹ ›, Space, Backspace and arrow keys) and Export show and export only the matching photos, with a count of
-visible photos; **Unedited** (a toggle beside the dropdowns) keeps only photos shown **As is**: added "As is", still Natural with no preset, lens preset, RawBoy edits, Auto denoise or adjustment (settings restored from a sidecar count); **Clear filter** resets back to the whole batch.
+visible photos; **Unedited** (a toggle beside the dropdowns) keeps only photos shown **As is**: added "As is", still Natural with no preset, lens preset, RawBoy edits or adjustment (Auto denoise, which raws added As is start with, doesn't count; settings restored from a sidecar do); **Clear filter** resets back to the whole batch.
 **Opening a photo that's still waiting:** tap (web: click) a photo marked *Waiting* and it's analysed next, ahead of
 the rest of the batch (its badge reads *Next*), then opens once it's ready, unless another photo was opened meanwhile.
 **Cropping a photo (web, Android):** the **Crop** button in the photo view's top bar (on phones and in the Android app, **Crop & rotate** in the ⋯ menu)
 shows the whole frame with a crop box; drag its corners, edges or inside. The panel has the shapes (Free, Original, 1:1,
 5:4, 4:3, 3:2, 16:9, 2:1, 2.39:1, with a Portrait / Landscape switch), **↺ Left** / **Right ↻**, a **Straighten** slider
-(±45°, crops automatically so no empty corners show; on the web you can also drag outside the crop box to rotate, the slider follows) and **Reset** / **Done** (on the web C opens the tool, Enter confirms and Esc closes it). The shape starts on **Original** (the photo's own proportions) and the last one chosen is kept for the session, not saved. The crop and the
+(±45°, crops automatically so no empty corners show; on the web, RawBoy Desktop and the iPhone you can also drag outside the crop box to rotate, the slider follows) and **Reset** / **Done** (on the web C opens the tool, Enter confirms and Esc closes it). The shape starts on **Original** (the photo's own proportions) and the last one chosen is kept for the session, not saved. The crop and the
 straighten angle are kept per photo, shown in the photo view, thumbnails, Export all and Export, and saved in the
 sidecar; they are in Undo / Redo, and Apply to all and Copy previous leave them alone. Flip and perspective stay in the
 RawBoy tab, which brings Auto's crop along with the rest of the develop.
@@ -162,7 +163,7 @@ selected photos, with the same format and size choices as Export all. Removing o
 raw files stay where they are. On the web, Ctrl/Cmd-click also starts a selection, Shift-click selects every photo between the last
 one picked and the clicked one, and Ctrl/Cmd+A selects all.
 
-**File names (web):** the export sheet's **File name** box names the files from a template, remembered, with a live preview.
+**File names (web and RawBoy Desktop):** the export sheet's **File name** box names the files from a template, remembered, with a live preview.
 Keywords: `{name}` original name, `{camera}`, `{lens}`, `{iso}`, `{look}` (look, preset or RawBoy edits), `{date}` (2026-11-11),
 `{time}` (14-30-05), `{year}` `{yy}` `{month}` `{day}` `{hour}` `{minute}` `{second}` (shoot date, else the file's date), and
 `#` for the photo's number in the export: `#` = 1, `##` = 01, `###` = 001. The default is `{name}-auto`; `{date}_{name}_###`

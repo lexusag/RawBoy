@@ -53,11 +53,17 @@ struct CurvesPanel: View {
                         Text(ToneCurves.isIdentity(curves[c]) ? c.label : "\(c.label) •").tag(c)
                     }
                 }
+                .labelsHidden()
                 .pickerStyle(.segmented)
+                .neutralSegments()
+                #if os(macOS)
+                .controlSize(.small)  // as the tone mapper's: at the regular size it ran wider than the panel's other rows
+                #endif
                 Button("Reset") { set(ToneCurves.identity) }
                     .font(.subheadline)
                     .disabled(ToneCurves.isIdentity(points))
             }
+            .reportsWidth("curves header row")
             GeometryReader { geo in
                 let size = geo.size
                 Canvas { ctx, s in
@@ -108,7 +114,11 @@ struct CurvesPanel: View {
             if let i = selected, i < points.count {
                 Note("Input \(Int((points[i].x * 255).rounded())) → output \(Int((points[i].y * 255).rounded()))")
             } else {
+                #if os(macOS)
+                Note("Click the curve to add a point and drag to shape it; double-click a point to remove it.")
+                #else
                 Note("Touch the curve to add a point and drag to shape it; double-tap a point to remove it.")
+                #endif
             }
         }
         .padding(.vertical, 4)
@@ -174,6 +184,11 @@ private final class CurveTouchView: NSView {
     var onEnd: (() -> Void)?
 
     override var isFlipped: Bool { true }
+
+    override func isAccessibilityElement() -> Bool { !points.isEmpty }
+    override func accessibilityRole() -> NSAccessibility.Role? { .group }
+    override func accessibilityLabel() -> String? { "Tone curve points" }
+    override func accessibilityHelp() -> String? { "Drag a point with the mouse or trackpad; the Reset button puts the curve back." }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         let p = convert(point, from: superview)

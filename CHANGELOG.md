@@ -48,6 +48,269 @@
 - **What changes:** Tensor Pixels keep every value (pinned by tests). Samsung phones keep theirs on any chip: their layer carries the Pixel's extra black and preview colour path besides the +25 look. Every other phone, older Snapdragon Pixels included, gets the neutral profile: the viewfinder takes the preview as plain sRGB instead of undoing the colour matrix the camera reports, and shots and the raw meter are decoded without the 1.46e-3 extra black. Their learned viewfinder calibration was learned under the old profile and settles again over a few shots per lens.
 - **Diagnostics:** one logcat line at start (tag `RawBoyPlatform`: the Build strings read, the chip recognised, the layers and every value); Settings ends with *Phone profile: …* and the chip and model detected. Debug builds can take the phone for another chip (Settings › *Take the phone for*, from the next start); calibration learned under a profile that differs from the automatic one is stored apart (`previewScales3@<layers>`, `flashGuides@<layers>`).
 
+**RawBoy Desktop: Pro opens a photo as Auto developed it (2026-11-17)**
+
+- A photo that is in Auto's batch and has no saved Pro edits (`rawboy:Develop`) now opens in Pro with its Auto develop (look or preset, adjustments) as the starting edits, from Browse's E, the filmstrip's arrows or the Open panel as well as from Edit in Pro. So the pipeline Browse → Auto → presets → Pro (heal strokes, blemishes) no longer restarts from the bare as-shot develop, and the strokes Pro saves are kept in the photo's sidecar. Once Pro has saved edits, its sidecar wins. Not compiled here (no Swift toolchain in the cloud session): CI's `desktop` job builds it.
+- **Replacing Pro's edits asks first.** In Auto (Desktop and iOS), applying a preset to the batch or a selection, Apply to All, or Copy previous onto photos that carry RawBoy edits (Pro's heal strokes, masks, crop...) shows "Replace the RawBoy edits of N photos?" (Replace / Cancel) instead of silently dropping them; each photo keeps its undo step. Not compiled here either.
+
+**RawBoy Desktop: Browse has a scroll bar (2026-11-17)**
+
+- **The grid and the list show a draggable scroll bar when the photos don't fit** (Viewer 0.2.8): a thin line at the right edge with a pill to drag; a click on the line beside the pill scrolls a page. The system's overlay bar was switched off there, so with a mouse there was nothing to grab.
+
+**RawBoy Desktop: one RawBoy Auto entry in Browse's photo menus (2026-11-17)**
+
+- **"Send to ▸" no longer repeats RawBoy Auto.** In the viewer's, the grid's and the list's right-click menus RawBoy Auto was at the top and again inside "Send to ▸". Now the RawBoy entries stay on top and "Send to ▸" (other apps) sits right under them; the viewer's menu gets the same submenu instead of loose "Send to <app>" items. Folder menus keep RawBoy Auto inside "Send to ▸". Comes with RawBoy Viewer v0.2.7 (PR 58); the pin moves from 0.2.6 to 0.2.7. Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.
+
+  **RawBoy Desktop: Auto's grid keeps its place after a photo (2026-11-17)**
+
+- **Leaving a photo scrolls the grid to it.** Back or Esc from Auto's photo view used to bring the grid back from the top; it now opens scrolled so the photo just viewed is on screen at its place (and has the keyboard focus). Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.
+
+**RawBoy Desktop: mouse-only Browse (2026-11-17)**
+
+- **Double-click in the viewer goes back to the browser** instead of zooming (zoom stays on the wheel, press-and-hold and pinch; Compare and the crop tool keep the double-click zoom).
+- **Right-click sends any photo to Pro or Auto.** The viewer has a right-click menu now (Send to RawBoy Pro, Send to RawBoy Auto as Looks, Film or As is, other apps, Rotate, Export…, Show in Finder, Back to Browser, Move to Trash…), and the grid's and the list's photo menus list Send to RawBoy Pro and Send to RawBoy Auto at the top (the list had no send items). Raw, JPEG, HEIC, PNG and TIFF all go; with several photos selected Pro opens the first. Comes with RawBoy Viewer v0.2.6 (PR 57); the pin moves from 0.2.5 to 0.2.6. Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.
+
+**RawBoy Desktop: ⌘C copies the picture in Browse's viewer (2026-11-17)**
+
+- **⌘C in the viewer copies the picture on screen** to the clipboard as an image (orientation applied, real preview if it is on), to paste into a document, chat or editor; ⌥⌘C still copies the file. Comes with RawBoy Viewer v0.2.5 (PR 55); the pin in `ios/project.yml` moves from 0.2.4 to 0.2.5. Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.
+
+**RawBoy Desktop: lens presets in Auto, for the batch, a selection or one photo (2026-11-17)**
+
+- **Lens presets saved in Pro now reach Auto.** Desktop's Auto kept its own list (filled only by the iPhone's Send to Auto link or a sidecar), so a lens preset saved in Pro's Lens tab never showed up and Auto had no lens preset picker. Auto now lists the lens presets in Pro's presets file, as the web's Auto lists the RawBoy tab's: saving, renaming or deleting one in Pro reaches Auto at once, and one Auto keeps from a sidecar or removes is so in Pro too (`LensPresetStore` on macOS, `PresetStore.changed`). Lens presets in the old `lens-presets.json` move over once. **Send to Auto** in Pro's Lens tab and Presets switches to Auto and applies the preset there (a lens preset: matched by lens, with the count).
+- **Pick one per batch, selection or photo**, as on the web: the sidebar's **Lens preset** menu (By lens, None, a preset; for every photo and photos added later; **Manage…** removes one), a **Lens preset** menu in the selection's toolbar, and a **Lens preset** section in the photo panel (with By lens it names the preset the photo got). Kept in each photo's `rawboy:Auto` sidecar as before. `LensPresetMenu` (GridScreen.swift), `DetailScreen.macPanel`.
+- **Apply to all and Copy previous carry the lens preset choice** (all platforms: web, Android, iOS and Desktop): the same pick, or By lens worked out for each photo's own lens. Before, they kept each photo's own.
+- Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.
+
+**RawBoy Desktop: room under the mode switch in Browse (2026-11-17)**
+
+- **The Pro / Auto / Browse switch no longer crowds Browse's toolbar.** The grid's toolbar (icons, search, sort) started right under the switch; Browse now leaves 14 pt more above it (`ViewerOptions.toolbarTopInset`, set in `DesktopModel.browse`; the standalone Viewer keeps its layout). Needs a RawBoy Viewer tag that has the option and the pin in `ios/project.yml` moved to it. Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.
+
+**All apps with the shared decoder: exports keep the ISO and the rest of the camera's EXIF (2026-11-17)**
+
+- **Pixel DNGs exported with no ISO, and raws with no exposure compensation.** Desktop (and web) JPEG and TIFF exports take their EXIF from the decoder, and LibRaw doesn't read the Exif tags Android's DngCreator keeps in IFD0 (ISO, shutter, aperture, focal length, date) nor Fujifilm's exposure compensation (a RAF's EXIF is in its embedded JPEG). After decoding, the missing fields are now filled from the file's own EXIF: IFD0 and the Exif IFD of TIFF-based files (also ISOSpeed when ISOSpeedRatings is absent, and the lens and GPS tags), or the embedded JPEG of a RAF. Values LibRaw or the DNG SDK already read are never replaced. Checked on the project's files: a Pixel 9 Pro DNG now reports ISO 22 (was 0), GFX 50R RAFs their exposure compensation (was missing); Sony, Fujifilm DNG unchanged. Orientation stays 1 and no thumbnail or source dimensions are copied, so nothing stale is written. `exif_reader.cpp` `fillMissingMetadata`, called from `decode.cpp`. Host-checked the reader on Linux; the apps were not built when written: CI's `desktop` job is the first Swift build.
+
+**RawBoy Desktop: Auto keeps the selection after a preset (2026-11-17)**
+
+- **Preset on a selection keeps it selected.** Preset (and Lens) in the selection bar no longer clears the selection, so the same photos can be rotated, given a lens preset or exported next. Esc or Cancel clears it. Export still clears it so the badges show each photo's progress. Shared Swift code, so the iPhone's Auto does the same; web and Android still clear it.
+- **Esc starts a fresh selection.** Esc (or Cancel) now also forgets where the last ⇧-click range started, and a ⇧-click with nothing selected selects only that photo and makes it the start, so a new batch is ⇧-click on the first photo, ⇧-click on the last. Before, the first ⇧-click selected everything from the previously clicked (or focused) photo. `AutoViewModel.clearSelection`, `selectRange`. Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.
+
+**RawBoy Desktop: batch export from Pro (2026-11-17)**
+
+- **Export several photos from Pro.** ⌘-click or ⇧-click photos in the filmstrip (⌘A, or Photo › Select All in Filmstrip, for the whole folder; a check marks each), then ⌘E: the sheet becomes "Export N Photos" with the usual options, and each photo is exported in turn with its own saved edits (the sidecar's `rawboy:Develop`, as Pro would open it; the open photo as it is on screen). A bar over the filmstrip shows the photo being written, the progress, the time left and Stop; a failure skips to the next. The editor stays usable while it runs. Quitting mid-batch asks first. Desktop only. `Desktop/ProBatchExport.swift`, `Desktop/FilmstripSelection.swift` (`FilmstripSelectionTests`). Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.
+
+**RawBoy Desktop: Send to Auto › As is brings only the sidecar (2026-11-17)**
+
+- **As is from Browse adds nothing.** Photos sent to Auto as As is used to come in without the crop or turn made in Browse (Auto read only `rawboy:Auto`) and, for raws, with the measured denoise added. Now each photo comes with its sidecar and nothing else: its own Auto settings if it was in Auto before; otherwise its RawBoy edits (`rawboy:Develop`: the Viewer's crop and turn, Pro's edits, decoded against the as-shot defaults once the photo is analysed, as Pro reads them) develop it in place of a look ("RawBoy edits"); otherwise it stays the file as it is. No measured denoise, batch preset or lens preset is added. Looks and Film, and As is from Auto's own sidebar, are unchanged. `AutoViewModel.add(sidecarOnly:)`, `AutoPersistence.sidecarEdits`, `SidecarEdits.develop` (Pro's sidecar read, now shared). Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.
+
+**RawBoy Desktop: Pro's crop starts on the photo's own shape (2026-11-17)**
+
+- **Crop & rotate in Pro opens on Original**: the frame is locked to the photo's own proportions and orientation (a portrait photo crops portrait), so dragging a corner keeps its shape, as Auto's crop already did. A photo that already has a crop opens on Free, so the tool never reshapes an earlier crop; Reset crop goes back to Original. Pick Free (or any other shape) to unlock it. Shared Swift code, so iOS Pro gets it too; web and Android Pro still start on Free. Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.
+
+**RawBoy Desktop: Interface size for the whole app (2026-11-17)**
+
+- **Settings › Interface size now sizes every mode**, not only Browse: Pro's bar, side panel and filmstrip, Auto's grid and sidebar, its photo view's bar and panel, and the Packer window are drawn at the chosen 85, 100, 115, 130 or 150 %, and follow a change at once. The side panels widen with it (still at most 45% of the window); the photo itself is never scaled, so it stays sharp. The window's own toolbar and the sheets keep the system size. `view/InterfaceScale.swift` (`interfaceScaled()`, the Viewer's method: laid out smaller, then scaled), `DesktopModel.interfaceScale` reads the Viewer's `app.uiScale` under `desktop.browse.`. Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.
+
+**RawBoy Desktop and web Pro: rotate the crop with the mouse (2026-11-17)**
+
+- **Drag outside the crop frame to straighten**, as in the web's Auto: in Crop & rotate (Pro and Auto), press outside the frame and circle its centre; the picture turns with the pointer (clockwise drag = clockwise turn, -45° to 45°, 0.01° steps), the Straighten slider follows, and the drag undoes like a slider drag. On the Mac the pointer is an open hand outside the frame and resize arrows on its edges and corners. Shared Swift code (`CropOverlay.rotate`), so the iPhone apps get the drag too. **Web Pro** gets the same drag: its Crop & rotate passes `rotate` to `CropOverlay`, which until now only Auto did. Not compiled when written (no Mac): CI's `desktop` job is the first build.
+
+**RawBoy Desktop: Auto catches up with the web (2026-11-17)**
+
+- **Export file names.** The export sheet has the web's **File name** template, remembered: `{name}`, `{camera}`, `{lens}`, `{iso}`, `{look}`, `{date}`, `{time}`, `{year}` `{yy}` `{month}` `{day}` `{hour}` `{minute}` `{second}` and `#` counters (`##` = 01), with a preview of the first and last names and the keywords as buttons. Default `{name}-auto`, as before. A name already taken in the folder gets `-001`, `-002`: Auto no longer replaces an earlier export. `NameTemplate.swift` is a port of `NameTemplate.ts`, with its tests (`NameTemplateTests`).
+- **Retouch** in the photo view's panel (its own section): the web's natural portrait retouch (40 is about Reblum Natural 40), on top of the look, preset or Pro edits. It is `Adjustments.retouch` (sidecar `retouch`, which Desktop used to keep without a slider), copied by Apply to All and Copy previous, cleared by Reset all photos; exports with it go through the session, as the photo view makes the map.
+- **Keys as on the web.** In a photo: Space next and ⌫ previous (as → and ←), ⌦ (fn-Delete) takes the photo out of the batch and opens the next, C opens Crop & rotate (C, Return or Esc put it down). Mode menu: Crop & Rotate Photo, Remove Photo from Batch.
+- **ISO** beside each photo's name in the grid and in the photo view's bottom-left corner (iPhone too).
+- **Time left on Export all**: "1:05 elapsed · about 2:30 left" under the progress bar, the web's estimate (`BatchTime.swift`; iPhone too).
+- **Quicker paging.** Once a photo is open, the next one is decoded ahead at full resolution (`PhotoSession.prepare` / `adopt`) and the cached previews of the next three and previous two are read ahead with their LUT or film stock, as the web does. Only where Auto analyses in more than one lane (Macs); iPhones decode the photo shown, as before.
+- Not compiled or tried when written (no Mac): CI's `desktop` job is the first build.
+
+**RawBoy Desktop: Packer sorts and folds folders (2026-11-17)**
+
+- **Sort: Shoot date / File name** over the Packer's list orders each folder's files (remembered, `packer.sort`); a run packs them in that order. Folders stay in the order they were added, as on the web.
+- **Folder headers fold.** Click a folder's header to collapse it to one line, which shows its progress while folded ("2 packing… · 1 done", "1 failed", "all done", "3 of 5 done"); **Collapse all / Expand all** do every folder; ✕ on a header removes that folder from the list. Files added by themselves sit under "Other files". `PackerInfo.groupByFolder` / `folderStatus` are ports of the web's `groupByFolder` / `folderStatusSummary` with their test cases (`PackSettingsTests`). Not compiled when written (no Mac): CI is the first build.
+
+**RawBoy Desktop, iOS and Android: Denoise & sharpening preset group (2026-11-17)**
+
+- **Save preset has a Denoise & sharpening group**, as on the web: Denoise, Color denoise and Sharpening moved out of Detail into it, off by default. Detail now holds local contrast, grain, bloom and flare only.
+- **RawBoy Auto keeps each photo's measured noise** unless a preset holds that group; with it, the preset's denoise and sharpening apply as saved (the Denoise adjustment still works on top). **Auto denoise all** takes the group off the presets (the batch preset's too, when no photos are selected), as on the web.
+- Presets saved before the split: Detail-only ones keep their denoise (they get the new group), ones with Light leave it to Auto, the same rule as `Presets.ts`. A Light + Detail preset applied in Pro no longer sets denoise; re-save it with the group ticked.
+- Code: `PresetGroup.DENOISE` / `.denoise`, `Presets.withoutDenoise` (Kotlin and Swift), `LookApplier.applyPreset` no longer forces the auto values. Tests: `PresetsTest`, `LookApplierTest`, `PresetDenoiseGroupTests` (web's cases). Not compiled or run here (no Android SDK or Swift toolchain): CI compiles the Kotlin (unit tests compiled, not run) and the Desktop job builds and runs the Swift tests.
+
+**RawBoy Desktop: your own LUTs are reachable (2026-11-17)**
+
+- **Your LUTs on the Mac.** Pro's LUT section now shows where your LUTs live (`~/Library/Application Support/RawBoy Desktop/LUTs` until you choose another) with **Add files…** (copies `.cube` / HaldCLUT `.png` files in), **Show in Finder** (also on each of your LUTs' right-click menu) and **Choose folder…** (read them from a folder of your own, remembered; **Use RawBoy's folder** goes back). Drop LUT files on the section or on the window to add them, as on the web: on the window a `.png` counts as a LUT only when it is HaldCLUT-shaped, otherwise it opens as a photo. The note no longer says "Files app" on the Mac (the iPhone keeps it). `LutRepository.setUserFolder` / `importFiles` / `isSurelyLut`, tests in `LutFolderTests`. Not compiled when written (no Mac): CI is the first build.
+
+**RawBoy Desktop: Browse reopens the last folder (2026-11-17)**
+
+- **Back in the last folder.** A plain launch now opens Browse in the folder you left it in (Browse's Settings › "Open the last folder at launch", on by default). Opening a photo or folder from Finder, `--open`, `--browse` or `--auto` takes precedence. Not compiled when written (no Mac): CI is the first build.
+
+**RawBoy Desktop: Pro copies the previous photo's settings on demand (2026-11-17)**
+
+- **Opening a photo no longer carries the last photo's edits over** (Mac only; the iPhone, Android and web still do). A photo starts from its own sidecar, or as shot. **Copy** in the bar, ⇧C, or Photo › Copy Previous Photo's Settings gives it the settings of the photo you had open before (white balance only if you had changed it; crop, rotation, masks, leaks, effects and healing stay its own), as one undo step. Not compiled when written (no Mac): CI is the first build.
+
+**RawBoy Desktop: starts in Browse (2026-11-17)**
+
+- **Pro's Curve section starts closed** (until you open it once; your own open and closed choices are kept).
+- **Browse is the first screen.** RawBoy Desktop opens in Browse (⌘3) on every launch, whichever mode it was in when it quit (the last mode is no longer remembered). A photo opened from Finder or with `--open` still goes straight to Pro, `--auto` to Auto. Not compiled when written (no Mac): CI is the first build.
+
+**RawBoy Desktop: Browse takes the Viewer 0.2.3 (2026-11-17)**
+
+- **Pin folders to Recent.** Right-click a folder in Places, Favourites, Recent or the grid › Pin to Recent. Pinned folders stay at the top of Recent (pin icon) however many other folders you open; Unpin from Recent puts it back. Kept under `desktop.browse.browser.pinnedRecentFolders`.
+- Pin: `from: 0.2.3` (`ios/project.yml`, `ios/viewer-source.sh`).
+
+**RawBoy Desktop: the wheel steps film stocks (2026-11-16)**
+
+- **Wheel over Stock or the tone mapper** (Pro, Film on) moves to the next or previous stock, one per mouse click, as on the web; a trackpad swipe steps at its start and then every 40 points, so it passes a few stocks, not dozens. The panel doesn't scroll under the pointer there, but a wheel that was just scrolling the panel keeps scrolling it. `WheelStepper` (engine, tested in `WheelStepperTests`) is the Swift port of web's `stepWheel`. Not compiled or tried by hand when written (no Mac): CI is the first build.
+
+**RawBoy Desktop: Pro's before/after slider (2026-11-16)**
+
+- **Y, or View › Before/After Slider.** A divider over the photo: the as-shot render (with the edit's rotation, flips and crop, as Compare) on its left, the edit on its right, labelled. Drag it anywhere; it stays between 2% and 98% and keeps its place from photo to photo. The as-shot half is developed once and only drawn clipped while you drag or move sliders. On the whole-photo view only (zoomed in or inside a tool it steps aside); press-and-hold and `\` Compare still show the whole photo as shot.
+
+**RawBoy Desktop and iOS: Luma contrast in Pro and Auto (2026-11-16)**
+
+- **Luma contrast** (-100..+100) under Contrast in Pro's Light section and (-50..+50) under Contrast in Auto's Light section, as on the web: the same log slope on luminance only, so colour saturation holds. It is a `DevelopParams.lumaContrast` field (Light preset group, so presets, Edits JSON and Send to Auto carry it) and an `Adjustments.lumaContrast` in Auto (kept in the `rawboy:Auto` sidecar, copied by Apply to all and Copy previous, cleared by Reset all photos). The shader already had `uLumaContrast`; `ShaderParams.lumaContrast` = 2^(0.7 x value / 100) - 1 as on the web. Edits and sidecars the web wrote with it read as a slider now, not a kept extra.
+- Tests: `LumaContrastTests`, `EditsTests`, `AutoSidecarTests`. Not built here (no Swift toolchain); CI's `desktop` job compiles and runs them. Android still has no slider.
+
+**RawBoy Desktop: asks before quitting mid-work (2026-11-16)**
+
+- **Quit (⌘Q) or closing the window** asks "Quit RawBoy Desktop?" when something would be cut short: Pro's export or Auto Dev running, Auto's batch export or photos still being analysed, the Packer converting, or edits whose sidecar could not be written. Cancel is the default; Quit Anyway leaves. Edits themselves never prompt: they are already in the sidecar (the web asks about unexported edits only because it has no sidecar). Browse has no long work of its own, so it is not asked.
+
+**RawBoy Desktop: Settings… for Browse (2026-11-16)**
+
+- **Settings… (⌘,)** in the app menu opens the bundled Viewer's Settings window (`ViewerSettingsRoot`), which until now Desktop never showed. It holds Browse's choices (kept under `desktop.browse.`, not the standalone Viewer's); Pro and Auto have none of their own there.
+
+**RawBoy Desktop: Browse takes the Viewer 0.2.2 (2026-11-16)**
+
+- **Top bar zoom.** Double-clicking Browse's toolbar (or the strip above Places) expands the window to fit the screen and again puts it back, like the title bar's Zoom (it follows the system's double-click setting).
+- **Copy Folder Name / Copy Folder Path** in the right-click menu of a folder in Places, Favourites, Recent and the grid.
+- **Finder opens.** Desktop no longer claims photo types from the OS (document types are rank Alternate: listed under Open With and selectable, never the default on its own) and lists every type Browse shows (WebP, AVIF, JPEG XL, kdc, x3f too). Open With, a Dock drop or `open -a` on a photo or folder always opens it in Browse, whichever mode was showing; edit from there with E or Send to Auto.
+- Pin: `from: 0.2.2` (`ios/project.yml`, `ios/viewer-source.sh`). Needs the Viewer's v0.2.2 tag to exist before CI can resolve it.
+
+**RawBoy Desktop: the Viewer's libraries by path or by tag (2026-11-16)**
+
+- **Switch.** `ios/viewer-source.sh local|git` sets where `ios/project.yml` takes RawBoy Viewer's libraries from: its git tag (`from: 0.2.1`, the first with the root `Package.swift` SwiftPM needs; the committed default, used by CI and releases, which cache the resolved package) or a sibling checkout for development.
+
+**RawBoy Desktop: Browse's full-screen viewer (2026-11-16)**
+
+- **Full-Screen Viewer in Browse.** A Mode menu setting (remembered) opens the Viewer's screen-filling window, with its edge panels, press-and-hold peek and the menu bar and Dock hidden, instead of the in-window viewer; ⌥⌘↩ opens the selection the other way once. E hands the photo to Pro and closes the window; leaving Browse closes it. Compare follows the same choice. It opens on the display Desktop's window is on, follows a display being unplugged, and gives the menu bar and Dock back when it closes, when the app resigns active and on quit.
+
+**RawBoy Desktop: Browse's real preview is the engine's develop (2026-11-16)**
+
+- **R and Compare in Browse.** Real previews now show RawBoy's own as-shot develop, the picture Pro opens (`Desktop/EngineRealPreview.swift`, through `Exporter.renderCGImage`), instead of Core Image's. It is pixel-identical to a Pro export at that size, one raw at a time, falling back to Core Image for what the engine can't open. Slower than Core Image on ARW/RAF (0.5–0.8 s for 24–33 MP, 2.3 s for 102 MP at screen size), faster on a Sony DNG; the standalone Viewer keeps Core Image.
+
+**RawBoy Desktop: Browse mode, and the Viewer's libraries replace Desktop's own copies (2026-11-16)**
+
+- **Browse (⌘3).** A third mode next to Pro and Auto: RawBoy Viewer's grid, sidebar, viewer and culling (`ViewerUI`) inside the window, with the Browse menu (rename, export, copy and move, compare, slideshow, Send to RawBoy Auto, Move to Trash). Its settings are kept apart (`desktop.browse.`); the menu bar and Dock are not hidden.
+- **Hand-offs in-process.** E in the viewer opens the photo in Pro, also while Auto is showing (its batch stays); Send to RawBoy Auto adds photos and folders to Auto as Looks, Film or As is. No Open With or `rawboy-desktop://` round trip.
+- **One XmpSidecar, PhotoOrder and filmstrip scan.** Desktop and the engine use `RawBoyBrowseKit`'s `XmpSidecar`, `PhotoSidecar`, `ExifOrientation` and `PhotoOrder`, and Pro's filmstrip uses the Kit's folder scan, RAW + JPEG grouping and `ThumbnailStore` (thumbnails now cached on disk). The engine's `XmpSidecar.swift`, `PhotoOrder` and `Desktop/Filmstrip.swift` are gone; the shared XMP fixtures stay checked on both sides. The iOS targets use the same Kit (it declares iOS 17), but could not be built here (no iOS slice of the native frameworks).
+
+**RawBoy Web: Copy previous edits in Pro (2026-11-16)**
+
+- **Copy previous edits.** Pro's desktop toolbar has a **Copy previous edits** button (and `Shift+C` everywhere) to copy the previously open photo's edits onto the current photo as one undo step: white balance is copied only if changed on the previous photo, while the current photo's crop, rotation, flips, perspective, masks, light leaks, effects and healing spots stay.
+
+**RawBoy Desktop and Web: ISO filter fix and focal length filter (2026-11-16)**
+
+- **ISO filter (Desktop).** Auto's Min ISO and Max ISO menus now show the batch's ISOs with their counts: switched the range pickers to string tags (`GridScreen.rangeMenu`), matching the Camera, Lens and Date menus so macOS `Picker` populates them once analysis finishes.
+- **Focal length filter (Desktop and Web).** Added Min mm and Max mm range filters to Auto's grid filter (`AutoFilter`, `Analysis.focalLength` from `metadata.focalLength`), with counts per rounded focal length. Bumped `AnalysisCache` versions (`2` on Desktop, `5` on Web) so cached analyses record focal lengths.
+
+**RawBoy Desktop: Look selector drag fix (2026-11-16)**
+
+- **Look selector.** Dragging the window (or its corner) no longer makes it jump back and forth: the drag is measured in the photo's space, not the window's own, which moved with it.
+
+**RawBoy Desktop and Web: Auto's mouse, presets, edits from Pro, As is and filters; presets without a photo (2026-11-16)**
+
+- **Wheel in Auto (Desktop).** The mouse wheel over a slider in Auto's photo view moves it (Shift big steps, ⌘ fine), as Pro's and the web's sliders do; over the photo it zooms around the pointer, and the middle button pans. `PointerSurface` and `SliderWheel` moved from Pro into the engine (`view/MacPointer.swift`) so both modes share them.
+- **⇧C in Auto (Desktop).** Copy previous, as on the web (also on the bar's Copy button's tooltip).
+- **Auto's Preset (Desktop).** Lists the presets saved in Pro, in their Colour and Black & white sections, for the batch or the selected photos, instead of opening a file dialog. Preset files are imported in Pro's Presets.
+- **Edit in Pro and back (Desktop).** Edit in Pro opens the photo with its Auto develop (look or preset and Auto's sliders) as the starting edits, and To Auto in Pro brings it back with Pro's edits: they develop it in Auto in place of its look, Auto's sliders adjust on top, and Use a look drops them, as on the web. They're kept in the photo's `rawboy:Auto` sidecar (the web's `edits`), copied by neither Apply to all nor Copy previous, and Export all renders them through the session, so masks, lens blur and healing strokes come out. Before, Edit in Pro opened the photo with its own Pro sidecar and To Auto gave it the look again.
+- **As is (Desktop).** Auto's New photos gains As is, as on the web: no auto develop, no suggested look (Natural, labelled "As is") and no skin detection; a preset, look or slider is all a photo gets. Raws matched to a lens preset by lens still get it; JPEG, HEIC, PNG and TIFF aren't matched (a preset picked by hand still applies) and get no non-RAW note. Auto denoise all gives As is photos the denoise measured on them (`Analysis.measured`, `asIs()`). Kept in the sidecar's `plain` / `autoDenoise`, which the web reads.
+- **As is denoises raws (Desktop and Web).** Raws added As is start with their measured denoise (Auto denoise), as described for As is; finished files still get nothing. Undo or Denoise −100 takes it off. Auto denoise no longer makes a photo count as edited for the Unedited filter.
+- **Filter (Desktop).** Auto's sidebar has the web's Filter: camera (from the file's EXIF), lens, Min and Max ISO, shoot day, each with its count, and Unedited (photos still As is). The grid, ← → in the photo view, ⌘A and Export all follow the photos shown; the summary reads "5 of 24 shown"; Clear filter shows all again.
+- **From RawBoy Viewer as Looks, Film or As is (Desktop).** RawBoy Viewer's Send to RawBoy Auto asks how the photos join the batch; RawBoy Desktop takes them through a `rawboy-desktop://auto?as=looks|film|plain&path=…` link (it starts the app if needed), or `--auto … --import-as film` on the command line, overriding the sidebar's New photos for those photos.
+- **Look selector (Desktop).** Pro's bar has the web's Looks: click it, then the photo, and a window over that spot shows it through every LUT and film stock as labelled stripes; click one to use it. Drag the window and the stripes follow; drag its corner to resize it (remembered); ← → turn the page, Esc closes. `Pro/ui/LookSelector.swift`, a port of `LookSelector.tsx`: each look of the page is developed over the whole preview (`ThumbnailRenderer`) with the photo's own parameters, LUT or stock swapped.
+- **Presets without a photo (Desktop and Web).** Pro's Presets button (and the Photo › Presets menu item) works with no photo open: import, export, rename and delete; applying and saving wait for a photo.
+
+**RawBoy Desktop: small fixes from the UI review (2026-11-16)**
+
+- **Camera name.** DNGs read by the Adobe DNG SDK (JPEG XL DNGs, packed DNGs) named the camera by the DNG's UniqueCameraModel, which Android writes as "Pixel 9 Pro-Google-google". They now use the EXIF Make and Model as LibRaw does ("Google Pixel 9 Pro"; the model alone when it already starts with the make). Shared C++, so Android and the web too.
+- **Colour.** "Colour" in the Apple apps' labels: Pro's tab, Colour denoise, Grain's Colour, the look and preset groups, the export frame's and Camera's frame Colour.
+- **Mac wording.** Auto's help on the Mac describes the grid, sidebar, bar, panel, clicks and keys instead of taps, swipes and long presses; the curve's note, the white balance picker and the sliders' VoiceOver hint say click and double-click.
+- **Curve.** The channel picker (RGB, Red, Green, Blue) is the tone mapper's small size on the Mac, so it no longer runs wider than the panel's other rows.
+- Sixth and last step of the desktop redesign.
+
+**RawBoy Desktop: a filmstrip under Pro's photo (2026-11-16)**
+
+- **Filmstrip.** The other photos in the open photo's folder sit in a strip under the photo, by file name; a RAW + JPEG pair shows once, as the raw (as in RawBoy Viewer). Click one to open it, or press ← / → for the previous and next photo (a slider focused with Full Keyboard Access keeps the arrows). The mouse wheel scrolls the strip sideways. The open photo has an amber outline and stays in view. Thumbnails are the files' own embedded previews (ImageIO), not developed; files only in iCloud show a cloud and aren't downloaded until opened. The folder is listed again when you come back to the app. Hidden with the panels (Tab, F), and absent when the folder has just the one photo.
+- iPhone and iPad are unchanged. Fifth step of the desktop redesign.
+
+**RawBoy Desktop: Auto's photo view in Pro's layout (2026-11-16)**
+
+- **Bar.** Auto's photo view has Pro's one-row bar instead of the window toolbar: Grid (back), the photo's name and "Photo 3 of 12", Previous and Next; Crop and Preset in the middle; Edit in Pro, Copy (the previous photo's look and adjustments), Apply to All, Remove, Undo, Redo and Export (amber) on the right, each named on hover. Apply to all and Remove were in a "…" menu.
+- **Panel.** The Look / Adjust tabs are sections that open and close, as Pro's: Look (Looks / Film, the look's name, Strength and every look as a thumbnail in rows that wrap, under its group's heading), Light (Brightness, Contrast), Colour (Pick white balance, Warmth, Tint, Saturation) and Detail (Grain, Denoise). One slider to a row everywhere (the Adjust tab had pairs). Sections with adjustments show the amber dot and their own reset. The looks scroll with the mouse wheel along with the panel; the horizontal strip only scrolled with Shift or a trackpad.
+- **Photo.** One photo with a 12 pt margin round it, no pager: no scroll bar under the photo any more, and the photo no longer runs into the window's edges. The arrow keys and the bar's arrows move between photos.
+- iPhone and iPad are unchanged (their pager no longer draws a scroll bar either). Fourth step of the desktop redesign; Pro's and Auto's bar buttons and sections are now one shared piece (`view/MacBar.swift`).
+
+**RawBoy Desktop: Auto's grid and batch sidebar (2026-11-16)**
+
+- **Grid.** Auto's grid on the Mac is even cells, as in RawBoy Viewer: each photo whole in a 3:2 tile (no cropping), the file name and the look under it instead of over the picture, a thin amber outline when selected. The justified rows gave every row its own height and covered the bottom of each photo with text. The arrow keys move by the new columns.
+- **Sidebar.** The batch settings that ran along the top of the grid sit in a sidebar on the left: New photos (Looks / Film), Order (Shoot date / File name), Preset, Lens presets, Auto denoise all, and a line with the batch's count, how many are still to analyse and how many are saved.
+- iPhone and iPad are unchanged. Third step of the desktop redesign.
+
+**RawBoy Desktop: one-row bar, a sectioned slider panel, photo only (2026-11-16)**
+
+- **Bar.** Pro's two rows are one: the photo's name and exposure line on the left, Crop, Masks, Light, Heal and Presets in the middle, Auto Dev, To Auto, Reset, Undo, Redo and Export (amber) on the right, each with its name and key on hover.
+- **Inspector.** The Light / Color / Detail / LUTs / Lens tabs are one scrolling column of sections that open and close: Light, Curve, Colour, Primaries, Detail, Portrait, Effects, LUT, Lens. Related sliders are seen together, and a section with edits shows an amber dot and its own reset (the arrow beside it), so changes can be found with the sections closed. Which sections are open is remembered (Light, Curve, Colour and Detail at first). The histogram stays on top.
+- **Photo only.** Tab or F (View › Photo Only) hides the bar and the panel; again, or Esc, brings them back. Tab is left to Full Keyboard Access when that is on.
+- iPhone and iPad are unchanged. Second step of the desktop redesign; Auto in the same shell comes next.
+
+**RawBoy Desktop: sliders show what you changed, less amber (2026-11-16)**
+
+- **Sliders.** The Mac's sliders were the system slider, filled with amber from the left end: a slider at 0 on a −100…100 range was half amber, so untouched sliders looked edited and the one-sided ones (Denoise, Bloom) looked untouched when moved. They now draw a hairline track with a tick at the default and fill amber **only between the default and the value**; the thumb is grey at the default and white once moved, the value readout white. Still the system slider underneath (`MacSlider`: an NSSlider with its own cell), so clicks, thumb drags, the wheel, the keyboard and VoiceOver work as before; double-click resets. Rows are 30 pt (were 40), so more fits without scrolling. Pro and Auto both.
+- **Less amber.** Segmented controls (tabs, tone mapper, curve channel, Looks/Film, Pro/Auto…) select in graphite instead of amber; Pro's bar icons are white, amber only for the open tool and Export; section headings are small caps in grey, as in RawBoy Viewer's details panel. iPhone and iPad are unchanged.
+- First step of the desktop redesign from the UI review (title-bar toolbar and a sectioned inspector come next).
+- Checked: built and run on the Mac (Debug), screenshots of Pro's Light tab at defaults and with Exposure moved, Auto's photo view. Not checked: the Colour tab's hue tracks (the screenshot run opened on the Light tab), dragging by hand.
+
+**RawBoy Pro (all platforms): the open tab lasts for the session (2026-11-16)**
+
+- A fresh start of RawBoy Pro (web page load, Android, iOS, Desktop) always opens the Light tab. The tab you pick is kept while the app runs (also when a panel closes or a photo loads), but no longer saved between starts; the saved value of older versions is dropped.
+
+**RawBoy Desktop: a photo handed over at launch drew blank (2026-11-16)**
+
+- **Bug:** a photo opened by RawBoy Viewer's E (or Finder's Open With, or `open -a`) in a **cold-started** RawBoy Desktop left the photo area blank (dark, nothing drawn) while the panel and histogram already had the photo; Auto and back to Pro, which makes the view again, fixed it. Cause: the photo's view is set while its window is still coming up, and a paused MTKView draws only when AppKit displays it; in that state it never did, and nothing asked again (its `drawableSizeWillChange` did nothing).
+- **Fix:** the preview view redraws when its drawable size changes and when it joins a window, and after every update it checks that a frame was drawn within 60 ms and draws one directly if not (normally AppKit has: the check costs nothing). `DevelopRenderer.drawCount` counts frames.
+- Checked in the running Mac app, Debug build, screenshots of the photo area: cold launch with the photo (before: blank; after: the photo), cold launch in the background (`open -g`), first photo into a running app (Pro, and from Auto mode), and a second photo over the first (a different portrait photo at its own aspect, no stale first photo, not stretched). Not checked: Finder's Open With and a Dock drop by hand (they arrive through the same `application(_:open:)` as `open -a`), and RawBoy Viewer's E itself (it uses `NSWorkspace.open(_:withApplicationAt:)`, the same route); no unit test (it needs a window and the GPU).
+
+**RawBoy Desktop: version in Help (2026-11-16)**
+
+- The Help sheet (the "?" button, ⌘/; Pro and Auto, and the iPhone apps' sheets, which share it) starts with **RawBoy Desktop <version> (<build>)**, selectable, and the Mac's Help menu has a disabled "About RawBoy Desktop <version> (<build>)" line at the top; the standard About panel stays in the app menu.
+- **The DMG now says its real version.** `Desktop-Info.plist` had a literal 1.0 (1), so the release workflow's `MARKETING_VERSION` (the tag) and `CURRENT_PROJECT_VERSION` (the run number) never reached the app; the plist now follows them (checked: a build with 9.8.7 / 654 shows 9.8.7 (654)).
+- Fixed on the way: the Help sheet on the Mac had no size and collapsed to its title and Done; it is now 560 × 680.
+- Checked by hand in the running app: the Help menu's items and the Help sheet with the version on its first line. Not checked: the iPhone sheets (compiled only), and a real release DMG.
+
+**RawBoy Desktop (macOS): Auto look names, Reset all photos, Pro panel width, Pixel DNG check (2026-11-15)**
+
+- **Look and film stock names.** In Auto's photo view nothing said which look or stock was selected: the names under the strip's chips were hidden under a Mac scroll bar. The name is now in bold above the strip ("Yellow Portrait 400 · suggested"), the strip's scroll bar is off, and the grid cells use caption type on the Mac, with the whole text on hover. VoiceOver reads "Look: …" / "Film stock: …".
+- **Reset all photos…** (Auto toolbar next to Clear batch, Mode menu): every photo back to a look, a film stock or As is; clears Strength, adjustments (incl. rotation and crop) and presets; asks first with the count; one undo step per photo; sidecars written (`AutoReset`, `AutoViewModel.resetAll`, tests).
+- **Pro panel stretching.** The Light tab's tone-mapper row (label + the Mac's segmented control, which can't shrink below its natural width) was wider than the 360 pt panel, so the whole panel's content (every slider track, the curve box, the tabs) was laid out at 408-457 pt, centred in the panel: shifted left and running off the right edge. The row now stacks its label above the control when it doesn't fit (small control size), the panel's scroll bars no longer take layout width, and the panel clips what is left over. Measured on every tab and tool panel: content now 328 pt (panel 360) in all of them. Debug builds have `SliderWidthLog` / `RAWBOY_PROBE_SLIDERS`.
+- **Pixel DNG Auto vs web.** Checked on 9 Pixel DNGs: without a face mask Desktop's decode, scene stats and auto develop equal the web's (`AutoParityTests`). With a face the Mac's Vision mask (it finds faces in dark scenes that MediaPipe doesn't) steered the exposure of camera-metered raws by +0.75 to +1.45 EV (and −0.6 on two night shots). **A camera-metered raw (Pixel, iPhone, Samsung: `cameraMetered`) now keeps the camera's exposure whatever the skin says**, in Swift, Kotlin and the web (`AutoTone`); faces still steer the look suggestion, and RawBoy Camera's phone-AE path keeps following the skin. Photos IMG_20261031_143823 / 142419 / IMG_20261107_215559 / 215633: exposure +1.45 / +0.75 / −0.65 / −0.60 → 0 EV, looks unchanged (portra400, portra400, portra800, portra800). The analysis cache holds no develop, so its version stays.
+
+**RawBoy Desktop (macOS): displays and accessibility (2026-11-15)**
+
+- **Displays.** The photo is now tagged sRGB (it was untagged: on a wide-gamut display the same numbers drew over-saturated, and a window moved to another display kept that display's wrong colours); the system converts for each display, and the view redraws when the window changes screen, scale or colour profile. A window restored onto a display that is gone, or left behind when one is unplugged or changes resolution, moves onto the main screen (`WindowPlacement`, with tests); the Packer window too.
+- **VoiceOver and keyboard.** Sliders say name and value with a Reset action; mask, leak, effect, look, LUT and tone-mapper choices are real buttons (selected state, Tab focus ring with Full Keyboard Access, Space); value readouts reset on press; section titles are headings; Auto's grid cells say name, status and look and have Select/Deselect; the photo, mask handles and curve are described; messages are announced. **Reduce Motion** stops the fades and scrolls; **Increase Contrast** firms up chip outlines. Pro's Help has a VoiceOver and keyboard item.
+- Checked: `RawBoyEngineTestsMac` (new `WindowPlacementTests`), `RawBoyDesktop` builds; the preview layer's colour space (sRGB) and the off-screen fallback were confirmed in the running app (a window put where a disconnected display was, then the screens-changed notice: moved to the centre of the main screen, preview redrawn). Not checked: a second display (this Mac has one: moving a window between displays, per-display profile and scale), a wide-gamut screen's look, and the VoiceOver wording (no assistive access for scripting here, so the tree was not read); mouse handles still can't be moved from the keyboard.
+
+**RawBoy Desktop (macOS): speed on big files (2026-11-15)**
+
+- **Auto analyses up to 3 photos at once** (a third of the cores, at most 3, one per 6 GB of memory; one lane on iPhone) and **keeps each analysis on disk** (`AnalysisCache`: path + size + modified time; 512 px copies, bloom copies, lens data, ISO, noise, skin mask, as-shot white; the develop is worked out again, so tuning it needs no cache bump). **TIFF export compresses its strips in parallel** (same bytes).
+- Release, 10 cores, 30 raws (5 Fuji RAF, Canon CR2/CR3, Sony ARW, iPhone DNGs, 4.9 s of RAF decode each): Auto first pass **33.1 → 22.7 s** with lanes (peak memory 3.9 GB), **0.33 s** when the folder is added again (91 MB of cache); same looks for all 30. 48 MP iPhone DNG TIFF export **2.9 → 1.0 s**, 24 MP **1.6 → 0.5 s**; both exports byte-identical to before.
+- Measured, not changed: full decode of a 48 MP iPhone DNG 1.9 s (1.5 s of it single-threaded LibRaw `unpack`), X-E5 RAF 5.0 s (3.8 s X-Trans demosaic, already on all cores), CR3 1.6 s; the preview draw 15-17 ms a frame, the 1.5 MP preview copy 17 ms. Draft (half-size) decode left out: RAF 3.8 → 0.5 s, but the denoise suggestion moves (RAF 1 → 4, CR2 0 → 3), so Auto's look would change; the other formats gain little. Not measured: 100% tile loads and Auto's export of a batch.
+
+**RawBoy Desktop and iOS: light leak outline dots (2026-11-15)**
+
+- A glow leak now shows the web's 8 hollow **outline dots** (at 22.5° + k·45° of its own frame) and drags them with the mouse (touch on iOS, the same code): each follows the pointer along its own direction from the centre, limited to 0.1–4 shape radii, and the size dots then sit on the reshaped outline (dragging one divides by the outline radius there). **Round outline** in the Light panel puts the ellipse back. The Swift side already stored, saved and rendered `radii`; this adds the maths (`LightLeaks.radius`, the closed Catmull-Rom of the shader, and `edge(radii:)`) and the overlay drawing, hit-testing and dragging, ported from web's `OverlayLayer`.
+- Checked: new tests port web's "reshapes a glow through its outline points" (spline passes through the points, wraps, floor 0.05, edge inside/outside) and the radii JSON limits; `RawBoyEngineTestsMac` 148 run, 7 skipped, 0 failed. Driven on the Mac with posted mouse events on a real DNG: an outline drag set radius 6 to 1.658 and a size-dot drag on the reshaped outline grew `rx` 0.09 → 0.125; a screenshot shows the reshaped outline and glow. Not checked: touch on an iPhone (iOS isn't compiled here), dragging in a rotated/bent/tapered leak by hand, and the mouse hover cursor.
+
 **RawBoy Desktop and iOS: Film scan 1.5× export (2026-11-15)**
 
 - The Film scan option of the web and Android is ported to the Swift engine: in Film mode (Pro's Film tone mapper, Auto's Film looks or any film stock) the export sheet offers **Film scan: Off / 1.5× size**, rendering the photo 1.5× larger by iterative back-projection upscale plus a light luma sharpen before the grain, with the grain at the finer pitch (`ScanScale`: 1.5, margin 16, grain 0.86, sharpen 1.0, same as the web). The Size setting doesn't apply to a scan. Auto's batch export applies it to its Film photos and leaves the others alone.

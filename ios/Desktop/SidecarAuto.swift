@@ -1,6 +1,7 @@
 import Foundation
 import os
 import RawBoyEngine
+import struct RawBoyBrowseKit.PhotoSidecar
 
 /**
  * RawBoy Auto's settings live beside each photo, in the same XMP sidecar as RawBoy's edits (`rawboy:Auto`, the web's
@@ -23,6 +24,16 @@ final class SidecarAuto: AutoPersistence, @unchecked Sendable {
 
     func restore(_ url: URL) -> SavedAuto? {
         PhotoSidecar(photo: url).readAuto().flatMap(AutoSidecar.decode)
+    }
+
+    /** `rawboy:Develop` and the Viewer's turn, read as Pro reads them (SidecarEdits.develop) once the defaults are known. */
+    func sidecarEdits(_ url: URL) -> SidecarDevelop? {
+        guard let text = PhotoSidecar(photo: url).readText() else { return nil }
+        let fileOrientation = SidecarEdits.fileOrientation(url)
+        return { defaults in
+            SidecarEdits.develop(text, fileOrientation: fileOrientation, defaults: defaults)
+                .map { (params: $0.params, extras: EditsExtras(values: $0.extras)) }
+        }
     }
 
     @MainActor func changed(_ photo: AutoPhoto) {

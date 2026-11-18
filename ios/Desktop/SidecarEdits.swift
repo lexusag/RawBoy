@@ -3,6 +3,9 @@ import Foundation
 import ImageIO
 import os
 import RawBoyEngine
+import struct RawBoyBrowseKit.PhotoSidecar
+import enum RawBoyBrowseKit.XmpSidecar
+import typealias RawBoyBrowseKit.ExifOrientation
 
 /**
  * RawBoy Desktop's edits live in the photo's XMP sidecar (`rawboy:Develop`, `Edits` JSON; `PhotoSidecar` picks the file
@@ -31,10 +34,24 @@ final class SidecarEdits: EditsPersistence {
     var onError: (String) -> Void = { _ in }
     /** The last write's time, for the tests and the status line. */
     private(set) var writes = 0
+    /** The photo whose last write failed (its latest edits are only in memory); cleared by a later good write. */
+    private(set) var unsavedPhoto: URL?
 
     func restore(_ url: URL, defaults: DevelopParams) -> DevelopParams? {
-        let sidecar = PhotoSidecar(photo: url)
-        guard let text = sidecar.readText() else { return nil }
+        guard let text = PhotoSidecar(photo: url).readText() else { return nil }
+        let read = Self.develop(text, fileOrientation: Self.fileOrientation(url), defaults: defaults)
+        extras[url.path] = read?.extras
+        return read?.params
+    }
+
+    /**
+     * The photo's develop from its sidecar's [text]: `rawboy:Develop` decoded against the as-shot [defaults], and the
+     * Viewer's `tiff:Orientation` (relative to the file's own, [fileOrientation]) as the turn when RawBoy saved none.
+     * Nil when the sidecar holds neither; extras are the edits' fields this engine doesn't know. Pure: Auto calls it too
+     * (Send to Auto from Browse, once a photo's analysis gives its defaults).
+     */
+    nonisolated static func develop(_ text: String, fileOrientation: Int, defaults: DevelopParams)
+        -> (params: DevelopParams, extras: [String: Any])? {
         var base = defaults
         let orientation = XmpSidecar.readOrientation(text)
         let develop = XmpSidecar.readDevelop(text)
@@ -42,18 +59,16 @@ final class SidecarEdits: EditsPersistence {
         // RawBoy's own turn wins; without one, the Viewer's orientation (on top of the file's own) is the turn.
         let hasTurn = decoded.map { d in d.params.rotation != defaults.rotation || d.params.flipHorizontal != defaults.flipHorizontal || d.params.flipVertical != defaults.flipVertical } ?? false
         if let orientation, !hasTurn {
-            let delta = ExifOrientation.delta(file: Self.fileOrientation(url), sidecar: orientation)
+            let delta = ExifOrientation.delta(file: fileOrientation, sidecar: orientation)
             base.rotation = delta.quarterTurns
             base.flipHorizontal = delta.mirrored
         }
-        if let decoded {
-            extras[url.path] = decoded.extras
-            var p = Edits.decode(develop!, defaults: base) ?? decoded.params
+        if let develop, let decoded {
+            var p = Edits.decode(develop, defaults: base) ?? decoded.params
             if hasTurn { p.rotation = decoded.params.rotation; p.flipHorizontal = decoded.params.flipHorizontal; p.flipVertical = decoded.params.flipVertical }
-            return p
+            return (p, decoded.extras)
         }
-        extras[url.path] = nil
-        return base == defaults ? nil : base
+        return base == defaults ? nil : (base, [:])
     }
 
     func changed(_ url: URL, params: DevelopParams, defaults: DevelopParams) {
@@ -75,14 +90,16 @@ final class SidecarEdits: EditsPersistence {
         do {
             try PhotoSidecar(photo: p.url).writeDevelop(json)
             writes += 1
+            if unsavedPhoto == p.url { unsavedPhoto = nil }
         } catch {
+            unsavedPhoto = p.url
             Self.log.error("sidecar write failed: \(error.localizedDescription)")
             onError("Couldn't save the edits next to \(p.url.lastPathComponent): \(error.localizedDescription)")
         }
     }
 
     /** The EXIF orientation of the file itself (what the decoder already applied), 1 when unreadable. */
-    static func fileOrientation(_ url: URL) -> Int {
+    nonisolated static func fileOrientation(_ url: URL) -> Int {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
               let props = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
               let o = (props[kCGImagePropertyOrientation] as? NSNumber)?.intValue else { return 1 }
