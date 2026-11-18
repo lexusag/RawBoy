@@ -10,8 +10,12 @@
 #include <cstring>
 #include <exception>
 #include <mutex>
+#include <system_error>
 #include <thread>
 #include <vector>
+#ifdef __EMSCRIPTEN__
+#include <emscripten/threading.h>
+#endif
 #ifdef __APPLE__
 #include <pthread.h>
 #endif
@@ -34,6 +38,9 @@ private:
 };
 
 int taskThreads(int tasks) {
+#ifdef __EMSCRIPTEN__
+    if (!emscripten_has_threading_support()) return 1;
+#endif
     return std::max(1, std::min({8, tasks, static_cast<int>(std::thread::hardware_concurrency())}));
 }
 
@@ -83,7 +90,15 @@ void runTasks(int count, int workers, Fn&& task) {
     for (auto th : pool) pthread_join(th, nullptr);
 #else
     std::vector<std::thread> pool;
-    for (int t = 1; t < workers; ++t) pool.emplace_back(work, t);
+    pool.reserve(static_cast<size_t>(std::max(0, workers - 1)));
+    for (int t = 1; t < workers; ++t) {
+        try {
+            pool.emplace_back(work, t);
+        } catch (const std::system_error&) {
+            // Pool exhausted or threads unavailable: work(0) and any started threads drain all tasks.
+            break;
+        }
+    }
     work(0);
     for (auto& th : pool) th.join();
 #endif

@@ -10,6 +10,7 @@
 #include "rawboy.h"
 
 #include <emscripten/bind.h>
+#include <emscripten/threading.h>
 #include <emscripten/val.h>
 
 #if RAWBOY_WITH_DNG_SDK
@@ -120,7 +121,7 @@ val decodeJxl(const val& bytes) {
         const std::vector<uint8_t> data = fromTyped<uint8_t>(bytes);
         auto decoder = JxlDecoderMake(nullptr);
         // A pool made per call: a lasting one would hold threads parallelRows needs (PTHREAD_POOL_SIZE_STRICT).
-        auto runner = JxlThreadParallelRunnerMake(nullptr, 4);
+        auto runner = JxlThreadParallelRunnerMake(nullptr, emscripten_has_threading_support() ? 4 : 0);
         const JxlPixelFormat format{4, JXL_TYPE_UINT8, JXL_NATIVE_ENDIAN, 0};
         JxlBasicInfo info{};
         std::vector<uint8_t> rgba;

@@ -10,6 +10,10 @@
 #include "rawboy.h"
 
 #include <stdexcept>
+#include <system_error>
+#ifdef __EMSCRIPTEN__
+#include <emscripten/threading.h>
+#endif
 
 #include "dng_area_task.h"
 #include "dng_auto_ptr.h"
@@ -82,7 +86,7 @@ thread_local bool tInAreaTask = false;
 
 class PackHost : public dng_host {
 public:
-    explicit PackHost(const PackOptions& o) : options_(o), threads_(static_cast<uint32>(std::max(1, o.threads))) {}
+    explicit PackHost(const PackOptions& o) : options_(o), threads_(effectiveThreads(o.threads)) {}
 
     dng_jxl_encode_settings* MakeJXLEncodeSettings(use_case_enum useCase, const dng_image& image,
                                                    const dng_negative* negative) const override {
@@ -96,11 +100,11 @@ public:
         return s;
     }
 
-    uint32 PerformAreaTaskThreads() override { return threads_; }
+    uint32 PerformAreaTaskThreads() override { return tInAreaTask ? 1 : threads_; }
 
     // The SDK's own host runs every area task (demosaic, JPEG XL tiles, lossless JPEG) on one thread. Bands of whole
-    // tile rows go to their own threads; a task started from inside one (libjxl's runner) stays on its thread, so the
-    // thread count never multiplies (the web build has a fixed pool).
+    // tile rows go to their own threads (with the calling thread taking band 0); a task started from inside one
+    // (libjxl's runner) stays on its thread, so the thread count never multiplies (the web build has a fixed pool).
     void PerformAreaTask(dng_area_task& task, const dng_rect& area, dng_area_task_progress* progress) override {
         const dng_point tile = task.FindTileSize(area);
         const uint32 tileRows = (area.H() + tile.v - 1) / std::max<int32>(1, tile.v);
@@ -111,24 +115,41 @@ public:
         }
         task.Start(n, area, tile, &Allocator(), Sniffer());
         std::vector<std::thread> threads;
+        threads.reserve(n - 1);
         std::exception_ptr failure;
         std::mutex lock;
         const uint32 rowsPer = (tileRows + n - 1) / n;
-        for (uint32 i = 0; i < n; ++i) {
+        auto runBand = [&](uint32 i, const dng_rect& band) {
+            const bool prev = tInAreaTask;
+            tInAreaTask = true;
+            try {
+                task.ProcessOnThread(i, band, tile, Sniffer(), progress);
+            } catch (...) {
+                std::lock_guard<std::mutex> g(lock);
+                if (!failure) failure = std::current_exception();
+            }
+            tInAreaTask = prev;
+        };
+        auto bandRect = [&](uint32 i) {
             dng_rect band = area;
             band.t = area.t + int32(i * rowsPer) * tile.v;
             band.b = std::min<int32>(area.b, band.t + int32(rowsPer) * tile.v);
+            return band;
+        };
+        uint32 fallbackStart = n;
+        for (uint32 i = 1; i < n; ++i) {
+            const dng_rect band = bandRect(i);
             if (band.IsEmpty()) continue;
-            threads.emplace_back([&, i, band]() {
-                tInAreaTask = true;
-                try {
-                    task.ProcessOnThread(i, band, tile, Sniffer(), progress);
-                } catch (...) {
-                    std::lock_guard<std::mutex> g(lock);
-                    if (!failure) failure = std::current_exception();
-                }
-                tInAreaTask = false;
-            });
+            try {
+                threads.emplace_back([&, i, band]() { runBand(i, band); });
+            } catch (const std::system_error&) {
+                fallbackStart = i;
+                break;
+            }
+        }
+        if (const dng_rect band0 = bandRect(0); !band0.IsEmpty()) runBand(0, band0);
+        for (uint32 i = fallbackStart; i < n; ++i) {
+            if (const dng_rect band = bandRect(i); !band.IsEmpty()) runBand(i, band);
         }
         for (auto& t : threads) t.join();
         task.Finish(n);
@@ -136,6 +157,13 @@ public:
     }
 
 private:
+    static uint32 effectiveThreads(int requested) {
+#ifdef __EMSCRIPTEN__
+        if (!emscripten_has_threading_support()) return 1;
+#endif
+        return static_cast<uint32>(std::max(1, requested));
+    }
+
     PackOptions options_;
     uint32 threads_;
 };
