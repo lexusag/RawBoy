@@ -194,7 +194,6 @@ struct AutoPhoto: Identifiable {
     /** The develop settings for the current look (or preset) and controls (nil until analysed). */
     var params: DevelopParams? {
         guard let a = analysis else { return nil }
-        let out: DevelopParams
         if var e = edits {
             // Edits read back from a sidecar don't know these as-shot facts about the file; the analysis does.
             e.displaySource = a.defaults.displaySource
