@@ -146,6 +146,15 @@ struct DetailScreen: View {
                         vm.setStrength(id, $0)
                     }
                 }
+                HStack(spacing: 8) {
+                    Button("🎲 Leak") { vm.rollFilmLeak(id) }.font(.subheadline)
+                    if photo.hasFilmLeak {
+                        Button("Clear leak") { vm.clearFilmLeaks(id) }.font(.caption).foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 4)
                 ValueSlider("Brightness", value: a.brightness, range: -100...100, defaultValue: 0) { v in
                     vm.setAdjust(id) { $0.brightness = v }
                 }
@@ -458,6 +467,19 @@ extension DetailScreen {
                         }
                         LookGrid(vm: vm, photo: photo)
                     }
+                    HStack(spacing: 8) {
+                        Button("🎲 Leak") { vm.rollFilmLeak(photo.id) }
+                            .controlSize(.small)
+                            .help("Generate a random film light leak or damage roll")
+                        if photo.hasFilmLeak {
+                            Button("Clear") { vm.clearFilmLeaks(photo.id) }
+                                .controlSize(.small)
+                                .help("Remove generated film leaks")
+                        }
+                        Spacer()
+                    }
+                    .disabled(disabled)
+                    .padding(.top, 6)
                 }
                 // This photo's lens preset, to check or change it photo by photo (the web's lens preset select).
                 if !vm.lensPresets.isEmpty {

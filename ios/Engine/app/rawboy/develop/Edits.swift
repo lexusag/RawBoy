@@ -20,7 +20,7 @@ public enum Edits {
 
     private static let geometry = [
         "rotation", "flipHorizontal", "flipVertical", "straighten", "perspectiveVertical", "perspectiveHorizontal", "scale",
-        "cropLeft", "cropTop", "cropRight", "cropBottom", "masks", "leaks", "fx", "healSpots",
+        "cropLeft", "cropTop", "cropRight", "cropBottom", "masks", "leaks", "filmLeaks", "fx", "healSpots",
     ]
     private static let known = Set(sliders + geometry)
 
@@ -38,7 +38,7 @@ public enum Edits {
             case let .text(s): out[f] = s.map { $0 as Any } ?? NSNull()
             case let .flag(b): out[f] = b
             case let .curves(c): out[f] = c.toJson()
-            case .layers: break
+            case .layers, .filmLeaks: break
             }
         }
         out["rotation"] = p.rotation
@@ -54,6 +54,7 @@ public enum Edits {
         out["cropBottom"] = Masks.num(p.cropBottom)
         out["masks"] = Masks.toJson(p.masks, strokes: true)
         out["leaks"] = LightLeaks.toJson(p.leaks)
+        out["filmLeaks"] = FilmLeaks.toJson(p.filmLeaks)
         out["fx"] = LightEffects.toJson(p.fx)
         out["healSpots"] = HealSpots.toJson(p.healSpots)
         return out
@@ -143,6 +144,7 @@ public enum Edits {
         }
         if v["masks"] != nil { p.masks = Masks.parseLayers(v["masks"], strokes: true) }
         if v["leaks"] != nil { p.leaks = LightLeaks.parseLeaks(v["leaks"]) }
+        if v["filmLeaks"] != nil { p.filmLeaks = FilmLeaks.parseLeaks(v["filmLeaks"]) }
         if v["fx"] != nil { p.fx = LightEffects.parseEffects(v["fx"]) }
         if v["healSpots"] != nil { p.healSpots = HealSpots.parse(v["healSpots"]) }
         return Decoded(params: p, extras: v.filter { !known.contains($0.key) })

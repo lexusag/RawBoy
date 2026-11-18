@@ -55,6 +55,9 @@ targets:
           - $(SRCROOT)/../shaders/develop.vert
           - $(SRCROOT)/../shaders/main_body.glsl
           - $(SRCROOT)/../shaders/film_form.glsl
+          - $(SRCROOT)/../shaders/light_leak.glsl
+          - $(SRCROOT)/../shaders/film_leak.glsl
+          - $(SRCROOT)/../shaders/light_fx.glsl
           - $(SRCROOT)/../shaders/bokeh_prep.glsl
           - $(SRCROOT)/../shaders/scan.frag
           - $(SRCROOT)/shaders/gen.sh
@@ -256,6 +259,9 @@ targets:
           - $(SRCROOT)/../shaders/develop.vert
           - $(SRCROOT)/../shaders/main_body.glsl
           - $(SRCROOT)/../shaders/film_form.glsl
+          - $(SRCROOT)/../shaders/light_leak.glsl
+          - $(SRCROOT)/../shaders/film_leak.glsl
+          - $(SRCROOT)/../shaders/light_fx.glsl
           - $(SRCROOT)/../shaders/bokeh_prep.glsl
           - $(SRCROOT)/../shaders/scan.frag
           - $(SRCROOT)/shaders/gen.sh
