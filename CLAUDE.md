@@ -226,8 +226,8 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   phone**; the engine takes values as parameters (`BlackFix`, `Frame.linearToe`, `EncoderConfig`) and never imports
   `platform/`. Rules: GPU driver/encoder findings → chip vendor layer (safe for most phones with that chip), camera HAL
   and preview behaviour → maker layer, sensor numbers → model layer; a field is added only with neutral = today's
-  behaviour and never changes meaning; the Tensor layer repeats every value the Pixel relies on and `TensorLayerTest`
-  pins them to the pre-profile constants (**the Pixel 9 Pro must not move**); `oem/samsung` pins what Samsung had before
+  behaviour and never changes meaning; the Tensor layer repeats the neutral values the Pixel was tuned with and
+  `TensorLayerTest` pins every field to the pre-profile constants (**the Pixel 9 Pro must not move**); `oem/samsung` pins what Samsung had before
   profiles (Pixel extra black + preview colour + low develop priority + the +25 look), unmeasured since; no empty
   layers. Calibration keys: `PreviewLevel.scalesKey` (`previewScales3` / `previewScalesWb`) per brightness model, and
   `…@<layers>` (`calibrationSlot`) under a debug build's hand-picked chip (Settings › *Take the phone for*, from the next

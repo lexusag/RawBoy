@@ -60,9 +60,10 @@ Code: `app-camera/src/main/java/app/rawboy/camera/platform/`.
 - **What goes in a profile at all:** a number measured or tuned on one device, even when the neutral value equals it
   (the Pixel's flash starting points, the noise scales). Limits that already cover several devices, the owner's
   taste, general heuristics and anything read from Camera2 at run time stay in the shared code.
-- **The Tensor layer repeats every neutral value it relies on**, with a comment naming the Pixel 9 Pro, so a later
-  change to the neutral profile can't move the Pixel unnoticed; `TensorLayerTest` pins each value against the
-  constants the code had before profiles.
+- **The Tensor layer repeats the neutral values the Pixel was tuned with**, with a comment naming the Pixel 9 Pro, so
+  a later change to the neutral profile can't move the Pixel unnoticed; `TensorLayerTest` pins every field against the
+  constants the code had before profiles, including the ones the layer leaves to the neutral profile
+  (`lookContrast`/`lookSaturation`, `compensation`, `aeGainCeilings`): a new field needs the layer line and the test.
 - **No empty layers:** a layer is created together with its first value. A phone without its own layer gets the neutral
   profile, which has no workaround for any one ISP.
 - **Probe rather than profile** where the phone itself can say what works: video (below).
@@ -81,12 +82,12 @@ measurements behind its numbers.
 | `preview.liftsShadows` | The ISP's preview already has the backlight shadow lift a shot adds; false = the live develop adds it (not in video mode) | true | true | | | **false** | |
 | `still.extraBlack` | Black beyond the DNG's, fraction of white, for shot decoding and the raw meter | 0 | **1.46e-3** | **1.46e-3** | | | |
 | `still.maxStillExposureNs` | Longest still exposure AE gives in low light (`stillGain` prediction, AE ceiling) | 1/15 s | 1/15 s | | | | |
-| `still.lookContrast` / `lookSaturation` | Added to saved photos only (`ShotDevelop.withIspLook`): the viewfinder shows an ISP rendering that can't be undone | 0 / 0 | 0 / 0 | **+25 / +25** | | | |
+| `still.lookContrast` / `lookSaturation` | Added to saved photos only (`ShotDevelop.withIspLook`): the viewfinder shows an ISP rendering that can't be undone | 0 / 0 | | **+25 / +25** | | | |
 | `still.exactBlack` | Subtract the DNG's fractional per-site BlackLevel (`app.rawboy.raw.BlackFix`) | false (LibRaw's integer black) | false | | | **true** | |
 | `still.blackPedestal` | DN of noise kept below black instead of clipped | 0 | 0 | | | **32** | |
 | `still.blackOffsets` | Sensor black beyond the file's, DN per camera id and ISO | none | none | | | | main (2), ultrawide (3) |
 | `still.lowPriorityDevelop` | Develop shots in a low-priority GL context (`EGL_IMG_context_priority`) | true | true | true | **false** | | |
-| `still.compensation` | How much of Brightness's AE compensation reached the raw (`capture/AppliedCompensation.kt`) | `BOOST_STAYS_DIGITAL` (residual boost, the Pixel's rule) | same | same | | **`AE_GAIN_IN_RAW`** | |
+| `still.compensation` | How much of Brightness's AE compensation reached the raw (`capture/AppliedCompensation.kt`) | `BOOST_STAYS_DIGITAL` (residual boost, the Pixel's rule) | | | | **`AE_GAIN_IN_RAW`** | |
 | `still.aeGainCeilings` | AE's highest gain (s × ISO × boost) by camera id, where it isn't `maxStillExposureNs` × max ISO | — | | | | | selfie (1): 240 |
 | `noise.backIsoScale` / `frontIsoScale` | Denoise as for this many times the ISO | 4 / 8 | 4 / 8 | | | | 4 / **10** |
 | `noise.lut*Floor`, `experimental*Floor` | Denoise floors of non-Film looks (luma / colour) | 12 / 70, 22 / 70 | same | | | | |
@@ -149,10 +150,11 @@ after `STANDARD` failed definitely. The device report's *Video probe* section an
    - logcat streamed to a file before each experiment (phones keep ~5 minutes);
    - viewfinder/photo pairs, measured rather than eyeballed: the debug build's `DebugProbe` (tag `RawBoyProbe`) saves
      the viewfinder's and the shot's 512 px linear copies at every shutter (`files/debug/<id>-vf.f16`, `<id>-raw.f16`,
-     half-float RGB, a `.txt` beside each with sizes and a note: lens, scale, key, colour matrix), read with
-     `adb exec-out run-as <package> cat files/debug/<file>`. Align them (crop/zoom search on log luminance), compare in
-     8×8 cells: median ratio by 1 EV band of the raw, per-channel ratio, log-log slope (1.0 = same tone), log-chroma
-     spread (saturation). A screenshot before the shutter against the JPEG is the second measure;
+     half-float RGB, a `.txt` beside each with sizes and a note: lens, scale, key, colour matrix).
+     `tools/camera_fit/fit.py` pulls nothing itself (its header has the `adb exec-out run-as` lines); it aligns the two
+     (crop/zoom search on log luminance) and compares 8×8 cells: median ratio by 1 EV band of the raw, per-channel
+     ratio, log-log slope (1.0 = same tone), log-chroma spread (saturation). A screenshot before the shutter against
+     the JPEG is the second measure;
    - **done** when, once a lens is calibrated (2-3 shots), the viewfinder is within **0.2 EV** of the JPEG and R/G, B/G
      within **8%**; shadows neutral within 8% at 2⁻⁸…2⁻⁷ of white on merged shots; the flash raw clips below ~0.1%;
    - scenes: a room under artificial light, daylight, a backlit window, dim light (ISO ≥ 3200), every lens and the
