@@ -26,7 +26,7 @@ Android raw developer with an **AgX** tone mapper (RawBoy also offers Filmic and
 - [RawBoy Desktop](docs/desktop.md) (macOS, in development)
 - [Feature matrix](docs/features.md): every feature by platform and release, with the web features Desktop still lacks; [Camera's](docs/features-camera.md)
 - [RawBoy Auto](docs/auto.md)
-- [RawBoy Camera](docs/camera.md), including its Film mode
+- [RawBoy Camera](docs/camera.md), including its Film mode; [phone profiles](docs/camera-platforms.md): how the camera adapts to a phone and how to add one
 - [RawBoy Web](docs/web.md)
 - [RawBoy Packer](docs/packer.md): raws and DNGs to smaller DNGs
 - [Google Drive in RawBoy Web](docs/google-drive.md): setting up opening from and saving to Drive

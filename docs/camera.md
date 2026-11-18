@@ -1,6 +1,6 @@
 # RawBoy Camera
 
-A camera for the back lenses (made for the Pixel 9 Pro; any phone whose camera offers RAW works). The
+A camera for the back lenses (made for the Pixel 9 Pro and measured on the OnePlus 11; any phone whose camera offers RAW works, see Phones below). The
 viewfinder shows the photo developed live: RawBoy Auto's automatic develop plus the **look** chosen from the
 **Look** menu under the viewfinder, with **Brightness** and **Warmth** as in Auto (one thin row each; **Strength** is in Settings › Look strength, so the viewfinder keeps the room). **Brightness** also changes the exposure the camera shoots with (exposure compensation, up to the camera's limit, usually ±2 to ±4 EV): a brighter setting gathers more light, so its shadows are cleaner, and a darker one keeps more highlights; the picture's brightness is the same as before. In the dark the camera may already be at its longest exposure and highest gain (the OnePlus 11 at about 1/15 s and ISO 6400): a brighter setting then gathers nothing more, and the picture is brightened in the develop alone. Flash shots keep their own exposure (where the camera's own flash metering exposes them, on OnePlus phones, Brightness moves it too). **Tap** to lock focus and exposure at that point: a ring
 shows it (pulsing while focusing, white when locked, red when focus wasn't found) and stays locked, also for the
@@ -154,6 +154,18 @@ shows them.
   main and ultrawide cameras' black at high ISO (measured on the sensors) and denoises its selfie camera as the noisier
   sensor it is (*Phone profile: Qualcomm + OnePlus + OnePlus 11*). Debug builds can take the phone for another chip (*Take the phone
   for*, from the next start); calibration learned under such a profile is kept apart from the phone's own.
+  How profiles are built, what each value does and how to add a phone: [Camera phone profiles](camera-platforms.md).
+- **Phones:** tuned on the **Pixel 9 Pro** (Google Tensor; other Tensor Pixels get the same values) and measured on
+  the **OnePlus 11** (all its features checked, with the limits below). **Samsung** phones keep exactly what they did
+  before phones were told apart (the Pixel's preview colour path and extra black plus the +25 look), unchecked since.
+  Every other phone, Pixels before the Pixel 6 included, gets the neutral profile (Snapdragon phones also the normal
+  develop priority): photos, video and the viewfinder work wherever the camera offers RAW, but the viewfinder may differ
+  from the photo until each lens has learned its calibration over a few shots, and nobody has checked those phones.
+- **Known limits on the OnePlus 11:** no telephoto (it is a system-only camera) and no full-resolution RAW (binned only,
+  so the 50 MP switch doesn't show); flash on a near, light subject comes out brighter than the scene without flash
+  (+2.4 to +2.8 EV at about 1 m, no clipped highlights); Brightness in the dark is accurate to about ±0.4 EV; the
+  viewfinder is 10-15% less saturated than the photo at ISO 6400; single ultrawide frames at ISO 6400 have slightly
+  red deep shadows (merged shots don't); videos don't get the backlight shadow lift photos and the viewfinder get.
 - **Share device report** (Android; Settings, under the phone profile): gathers what a profile for a new phone is made
   from into a plain text file and opens the system share sheet; nothing is sent unless you send it. It lists the phone
   as detected and the profile's layers and values; every camera and physical lens (support level, capabilities, RAW
@@ -223,7 +235,7 @@ In video mode, **AE LOCK** (top right of the viewfinder) holds the exposure and 
 - The viewfinder is 4:3, a video is 16:9: the parts the file will not have are darkened. A phone held sideways records a landscape file.
 - Film grain moves with the frames in video mode. The live exposure eases much slower than for photos, so brightness does not pump.
 - Skin retouch, the ISO-based denoise and sharpening, bursts, flash and raw are photo-only. The lens and the camera (selfie) can't be changed while recording, and leaving the app stops the recording.
-- Prototype: no video stabilisation, no 4K, no log; the lens/stream setup is the photo one. How it works: `ViewfinderRenderer.videoSink` draws the same develop pass into the `MediaCodec` input surface through an EGL window surface in the viewfinder's own context (`gl/VideoOutput.kt`); `capture/VideoRecorder.kt` runs the encoders and the MP4 muxer. Findings and the plan: `docs/video.md`.
+- No 4K, no 10-bit, no log beyond Flat video; the lens/stream setup is the photo one. How it works: `ViewfinderRenderer.videoSink` draws the same develop pass into the `MediaCodec` input surface through an EGL window surface (`gl/VideoOutput.kt`: in the viewfinder's own context, or in one of its own on phones that need it, see below); `capture/VideoRecorder.kt` runs the encoders and the MP4 muxer. The original exploration and staged plan: `docs/video.md`.
 - **Finding the way to record on a new phone.** Phones differ in what their GPU driver and video encoder accept, so the first recording tries, in order: the standard path (an EGL surface in the viewfinder's context: the Pixel 9 Pro's, the only one it ever uses); the encoder's surface in a GL context of its own (the OnePlus 11's Snapdragon encoder refused the standard path's buffers); the viewfinder itself on a recordable config; the phone's software H.264 encoder (slower, lower frame rate). A way counts as working when the encoder hands out its first frame, usually 0.2-0.3 s after the start; a failed try is taken down and the next one starts at once, so the recording just begins a fraction of a second later. The working way is remembered until the next system or app update. The way a phone records with gives way only after failing in two recordings in a row (the first time, another way is used for that recording only), and another way than the standard one is remembered only after the standard one failed outright (a refused surface or an encoder error), never after a slow start. If the next way needs the viewfinder made again, the viewfinder restarts once with *Video is set up for this phone: the viewfinder restarts once. Press record again*. When nothing works, the message says so at once (instead of a timer running and *Nothing was recorded* at the end); an encoder (or its surface) that fails during a recording stops it at once, keeps what was recorded and says so. The device report's *Video probe* section shows the way in use and the last probe's tries; logcat has them under `RawBoyVideo` and `RawBoyCamera`.
 
 ## Self-timer and long exposure (Android prototype)
