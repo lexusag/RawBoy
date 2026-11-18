@@ -85,6 +85,8 @@ data class CameraSettings(
     val geotag: Boolean = false,
     /** Save the JPEG as an Ultra HDR JPEG: the same picture plus a gain map that lets HDR screens show brighter highlights (`ultrahdr.h`). */
     val hdrGainMap: Boolean = false,
+    /** Add a completely random procedural film light leak (edge burn, blob, sprocket holes, rebate glow, flare, start of roll) per shot. */
+    val randomLightLeak: Boolean = false,
     /** Frame / stamp option: Off by default, or Date stamp / Pentax 645 (mutually exclusive). */
     val photoFrame: PhotoFrame = PhotoFrame.NONE,
     /** Last enabled frame / stamp option, restored when toggling frames back on from the top bar. */
@@ -310,6 +312,7 @@ object CameraSettingsStore {
             shutterSound = p.getBoolean("shutterSound", d.shutterSound),
             geotag = p.getBoolean("geotag", d.geotag),
             hdrGainMap = p.getBoolean("hdrGainMap", d.hdrGainMap),
+            randomLightLeak = p.getBoolean("randomLightLeak", d.randomLightLeak),
             photoFrame = p.getString("photoFrame", null)
                 ?.let { runCatching { PhotoFrame.valueOf(it) }.getOrNull() }
                 ?: if (p.getBoolean("dateStamp", false)) PhotoFrame.DATE_STAMP else d.photoFrame,
@@ -394,6 +397,7 @@ object CameraSettingsStore {
             .putBoolean("shutterSound", s.shutterSound)
             .putBoolean("geotag", s.geotag)
             .putBoolean("hdrGainMap", s.hdrGainMap)
+            .putBoolean("randomLightLeak", s.randomLightLeak)
             .putString("photoFrame", s.photoFrame.name)
             .putString("lastPhotoFrame", (if (s.photoFrame != PhotoFrame.NONE) s.photoFrame else s.lastPhotoFrame).name)
             .putBoolean("dateStamp", s.photoFrame == PhotoFrame.DATE_STAMP)

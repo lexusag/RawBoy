@@ -174,8 +174,15 @@ fun EditorScreen(vm: EditorViewModel) {
     val selectedId = selectedLayer?.takeIf { id -> layers.any { it.id == id } } ?: layers.firstOrNull()?.id
     // Light leaks (UI state; the leaks are in the params). The overlay draws and drags them as radial shapes.
     var selectedLeakState by rememberSaveable { mutableStateOf<String?>(null) }
+    var selectedFilmLeakState by rememberSaveable { mutableStateOf<String?>(null) }
     val leaks = state.params.leaks
-    val selectedLeak = selectedLeakState?.takeIf { id -> leaks.any { it.id == id } } ?: leaks.lastOrNull()?.id
+    val filmLeaks = state.params.filmLeaks
+    val selectedFilmLeak = when {
+        selectedFilmLeakState != null && filmLeaks.any { it.id == selectedFilmLeakState } -> selectedFilmLeakState
+        selectedLeakState != null && leaks.any { it.id == selectedLeakState } -> null
+        else -> filmLeaks.lastOrNull()?.id
+    }
+    val selectedLeak = if (selectedFilmLeak != null) null else selectedLeakState?.takeIf { id -> leaks.any { it.id == id } } ?: leaks.lastOrNull()?.id
     val leakShapes = remember(leaks) { leaks.map { MaskLayer(it.id, "", enabled = it.enabled, shape = it.shape) } }
     val leakForms = remember(leaks) { leaks.associate { it.id to LeakForm(it.kind, it.bend, it.taper) } }
     // Light effects, the same way: radial shapes (an ellipse round the effect's box, no feather ring).
@@ -193,6 +200,7 @@ fun EditorScreen(vm: EditorViewModel) {
         cropPortrait = null
         selectedLayer = null
         selectedLeakState = null
+        selectedFilmLeakState = null
         selectedFxState = null
     }
     val frame = vm.lensFor(state.params.withoutCrop())
@@ -308,7 +316,7 @@ fun EditorScreen(vm: EditorViewModel) {
                     val leakGestures = rememberMaskGestures(
                         shaderParams.lens, leakShapes, selectedLeak, framePx + marginPx, framePx, zoomCenter, MaskTool.MOVE, brush,
                         MaskActions(
-                            onSelect = { selectedLeakState = it },
+                            onSelect = { selectedLeakState = it; selectedFilmLeakState = null },
                             onChange = { id, shape -> if (shape is MaskShape.Radial) vm.updateLeak(id) { it.withShape(shape) } },
                             onStrokeBegin = { _, _ -> },
                             onStrokeExtend = { _, _, _ -> },
@@ -320,6 +328,12 @@ fun EditorScreen(vm: EditorViewModel) {
                         grabInside = true,
                         leaks = leakForms,
                         onBend = { id, bend -> vm.updateLeak(id) { it.copy(bend = bend) } },
+                        zoomScale = zoomScale,
+                    )
+                    val filmLeakGestures = rememberFilmLeakGestures(
+                        shaderParams.lens, filmLeaks, selectedFilmLeak, framePx + marginPx, framePx, zoomCenter,
+                        onSelect = { selectedFilmLeakState = it; selectedLeakState = null },
+                        onChange = { id, change -> vm.updateFilmLeak(id, change = change) },
                         zoomScale = zoomScale,
                     )
                     val fxGestures = rememberMaskGestures(
@@ -375,7 +389,8 @@ fun EditorScreen(vm: EditorViewModel) {
                             .then(panAndPinch)
                             // Last, so it sees each touch first and takes only handles and paint strokes.
                             .then(if (masksMode && preview != null) maskGestures else Modifier)
-                            .then(if (leaksMode && preview != null) leakGestures else Modifier)
+                            .then(if (leaksMode && preview != null && filmLeaks.isNotEmpty()) filmLeakGestures else Modifier)
+                            .then(if (leaksMode && preview != null && leaks.isNotEmpty()) leakGestures else Modifier)
                             .then(if (fxMode && preview != null) fxGestures else Modifier),
                     )
                     if (masksMode && preview != null && !showOriginal) {
@@ -386,10 +401,18 @@ fun EditorScreen(vm: EditorViewModel) {
                         )
                     }
                     if (leaksMode && preview != null && !showOriginal) {
-                        MaskOverlay(
-                            shaderParams.lens, leakShapes, selectedLeak, framePx + marginPx, framePx, zoomCenter,
-                            MaskTool.MOVE, brush, null, false, Modifier.matchParentSize(), leaks = leakForms, zoomScale = zoomScale,
-                        )
+                        if (leaks.isNotEmpty()) {
+                            MaskOverlay(
+                                shaderParams.lens, leakShapes, selectedLeak, framePx + marginPx, framePx, zoomCenter,
+                                MaskTool.MOVE, brush, null, false, Modifier.matchParentSize(), leaks = leakForms, zoomScale = zoomScale,
+                            )
+                        }
+                        if (filmLeaks.isNotEmpty()) {
+                            FilmLeakOverlay(
+                                shaderParams.lens, filmLeaks, selectedFilmLeak, framePx + marginPx, framePx, zoomCenter,
+                                Modifier.matchParentSize(), zoomScale = zoomScale,
+                            )
+                        }
                     }
                     if (fxMode && preview != null && !showOriginal) {
                         MaskOverlay(
@@ -525,14 +548,22 @@ fun EditorScreen(vm: EditorViewModel) {
                     modifier = panel,
                 )
             } else if (state.hasImage && leaksMode) {
+                val photoAspect = frame.frameWidth.toFloat() / frame.frameHeight.coerceAtLeast(1)
                 LeaksPanel(
                     leaks = leaks,
                     selectedId = selectedLeak,
+                    filmLeaks = filmLeaks,
+                    selectedFilmId = selectedFilmLeak,
                     zoomed = zoomCenter != null,
-                    onSelect = { selectedLeakState = it },
-                    onAdd = { kind -> vm.addLeak(kind)?.let { selectedLeakState = it } },
+                    onSelect = { selectedLeakState = it; selectedFilmLeakState = null },
+                    onAdd = { kind -> vm.addLeak(kind)?.let { selectedLeakState = it; selectedFilmLeakState = null } },
                     onUpdate = vm::updateLeak,
                     onRemove = vm::removeLeak,
+                    onSelectFilm = { selectedFilmLeakState = it; selectedLeakState = null },
+                    onAddFilm = { type -> vm.addFilmLeak(type, photoAspect)?.let { selectedFilmLeakState = it; selectedLeakState = null } },
+                    onRandomRoll = { vm.randomFilmRoll(photoAspect)?.let { selectedFilmLeakState = it; selectedLeakState = null } },
+                    onUpdateFilm = vm::updateFilmLeak,
+                    onRemoveFilm = vm::removeFilmLeak,
                     onMode = { mode = it },
                     onToggleZoom = {
                         if (zoomCenter != null) vm.exitZoom() else vm.toggleZoom(viewSize.width / 2f, viewSize.height / 2f, marginPx)

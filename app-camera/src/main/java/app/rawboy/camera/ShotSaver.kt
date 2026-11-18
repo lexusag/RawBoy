@@ -28,6 +28,7 @@ import app.rawboy.camera.platform.PreviewLevel
 import app.rawboy.auto.analysis.AutoTone
 import app.rawboy.auto.analysis.MeterArea
 import app.rawboy.auto.analysis.NoiseLevel
+import app.rawboy.develop.FilmLeaks
 import app.rawboy.export.DateStamp
 import app.rawboy.export.ExportFormat
 import app.rawboy.export.ExportGpu
@@ -425,10 +426,17 @@ internal object ShotSaver {
             // High ISO: more denoise than the auto develop's table, up to the coarse stage (denoise > 65).
             val denoise = maxOf(looked.denoise, highIsoDenoise(a.stats.iso * noiseScale))
             val noise = img.measureNoise()
+            val aspect = a.base.width.toFloat() / a.base.height.coerceAtLeast(1)
+            val filmLeaks = if (s.randomLightLeak) {
+                listOf(FilmLeaks.randomForCamera(aspect = aspect, seed = FilmLeaks.newSeed()))
+            } else {
+                emptyList()
+            }
             val params = looked.copy(
                 denoise = denoise,
                 colorDenoise = maxOf(measuredColorDenoise(noise, looked.exposure, denoise) ?: denoise, looked.colorDenoise ?: 0f),
                 shadows = maxOf(looked.shadows, ShotDevelop.backlightShadows(a.stats)),
+                filmLeaks = filmLeaks,
             )
             Log.d(TAG, "${shot.name}: noise ISO ${a.stats.iso} x $noiseScale (frames ${shot.effectiveFrames}), measured luma " +
                 "${noise.luma} chroma ${noise.chroma}${if (noise.measured) "" else " (unmeasured)"} -> denoise ${params.denoise}, colour " +

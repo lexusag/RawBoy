@@ -1,3 +1,8 @@
+**Pro, Auto, and Camera (Android): procedural film light leak and film damage generator (2026-11-18)**
+
+- **Pro & Auto:** Ported the procedural film leak generator to Android (`Shaders.kt`, `FilmLeaks.kt`, `DevelopParams.kt`, `Edits.kt`, `Presets.kt`, `ShaderParams.kt`, `GlCommon.kt`, `LeaksPanel.kt`, `FilmLeakOverlay` + `rememberFilmLeakGestures` in `MaskOverlay.kt`, `EditorViewModel.kt`, `EditorScreen.kt`, `AutoViewModel.kt`, `DetailScreen.kt`), with deterministic seed-parity tests against `FilmLeaks.ts` (`FilmLeaksTest.kt`).
+- **Camera (`CameraSettings.kt`, `CameraViewModel.kt`, `CameraScreen.kt`, `ShotSaver.kt`):** Added a **Random light leak** setting (off by default) that adds a completely random film light leak per shot from `edge`, `blob`, `sprocket`, `rebate`, `flare`, or `start`.
+
 **Pro and Auto (Desktop, iOS): procedural film light leak and film damage generator (2026-11-18)**
 
 - Ported the procedural film leak generator from Web to Desktop and iOS (`ios/shaders/gen.sh`, `FilmLeaks.swift`, `DevelopParams.swift`, `Edits.swift`, `Presets.swift`, `ShaderParams.swift`, `MetalCommon.swift`, `LeaksPanel.swift`, `FilmLeakOverlay` in `MaskOverlay.swift`, `EditorViewModel.swift`, `EditorScreen.swift`, `AutoSidecar.swift`, `AutoViewModel.swift`, `DetailScreen.swift`), with deterministic seed-parity tests against `FilmLeaks.ts` (`FilmLeaksTests.swift`).

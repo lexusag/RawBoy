@@ -6,6 +6,8 @@ import app.rawboy.color.WhiteBalance
 import app.rawboy.develop.AnamorphicColor
 import app.rawboy.develop.BrushRaster
 import app.rawboy.develop.DevelopParams
+import app.rawboy.develop.FilmLeakUniforms
+import app.rawboy.develop.FilmLeaks
 import app.rawboy.develop.FxUniforms
 import app.rawboy.develop.LeakUniforms
 import app.rawboy.develop.LightEffects
@@ -84,6 +86,8 @@ class ShaderParams(
     val clipLevel: Float = 0f,
     /** Light leaks over the finished picture (shaders/light_leak.glsl). */
     val leaks: LeakUniforms = LeakUniforms.NONE,
+    /** Generated film leaks over the finished picture (shaders/film_leak.glsl). */
+    val filmLeaks: FilmLeakUniforms = FilmLeakUniforms.NONE,
     /** Light effects over the finished picture, after the leaks (shaders/light_fx.glsl). */
     val fx: FxUniforms = FxUniforms.NONE,
     /** Highlight-boosted ~1536 px copy of the whole image the masks' lens blur works from (BokehTexture), or null. */
@@ -205,6 +209,7 @@ class ShaderParams(
                 curve = p.curves.table(),
                 clipLevel = asShot.clipLevel,
                 leaks = LightLeaks.pack(p.leaks, lens.width, lens.height),
+                filmLeaks = FilmLeaks.pack(p.filmLeaks, lens.width, lens.height),
                 fx = LightEffects.pack(p.fx, lens.width, lens.height),
                 bokehSource = bokehSource,
                 anamorphic = p.anamorphic / 100f * (0.35f + 0.65f * p.anamorphic / 100f),
