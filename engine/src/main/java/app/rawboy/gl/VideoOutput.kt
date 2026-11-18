@@ -30,8 +30,9 @@ class VideoSink(
     val encoderConfigs: List<EncoderConfig> = EncoderConfig.DEFAULT_ORDER,
     /** Camera frame timestamp (ns, the SurfaceTexture's) -> presentation time (ns) of the encoded frame, or < 0 to skip the frame. */
     val presentationNs: (cameraTimestampNs: Long) -> Long,
-    /** Asks the view for a frame (so a stop is noticed even if the camera has stalled). */
-    val requestRender: () -> Unit,
+    /** Asks the view for a frame (so a stop is noticed even if the camera has stalled); set by [ViewfinderRenderer.videoSink]. */
+    @Volatile
+    var requestRender: () -> Unit = {},
 ) {
     /** Set by the owner to stop: the renderer then draws no more frames and releases its EGL surface. */
     @Volatile

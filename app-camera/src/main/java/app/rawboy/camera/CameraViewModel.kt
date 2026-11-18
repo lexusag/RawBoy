@@ -432,7 +432,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         if (stopRequested) return VideoProbe.Attempt.Aborted
         val r = try {
             withContext(Dispatchers.IO) {
-                VideoRecorder.create(app, turns, withAudio, flat, variant, debug) { /* the view's requestRender is on the sink */ }
+                VideoRecorder.create(app, turns, withAudio, flat, variant, debug)
             }
         } catch (e: NoEncoderException) {
             Log.w(TAG, "video: $variant has no encoder", e)

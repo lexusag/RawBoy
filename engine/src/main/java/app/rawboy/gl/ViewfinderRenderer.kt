@@ -111,6 +111,10 @@ class ViewfinderRenderer(
      */
     @Volatile
     var videoSink: VideoSink? = null
+        set(value) {
+            value?.requestRender = requestRender
+            field = value
+        }
 
     /** Grain moves with the frame counter on the screen too (video mode, so the viewfinder grain looks as the file's). */
     @Volatile

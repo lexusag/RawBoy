@@ -32,7 +32,9 @@ object DebugProbe {
     fun init(context: Context) {
         enabled = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
         if (!enabled) return
-        runCatching { logDevice(context) }.onFailure { Log.w(TAG, "device", it) }
+        val app = context.applicationContext
+        Thread({ runCatching { logDevice(app) }.onFailure { Log.w(TAG, "device", it) } }, "RawBoy-probe")
+            .apply { isDaemon = true; start() }
     }
 
     private fun logDevice(context: Context) {

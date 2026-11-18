@@ -686,7 +686,9 @@ bool decodeWithLibRaw(const uint8_t* data, size_t size, DecodedImage& out, std::
         }
     }
     // BlackFix: LibRaw subtracts one integer black (user_black), pedestal DN below the lowest site's, and the rest of
-    // each site's black (its fraction, the pedestal, the offset) is taken off in float below, with the scale put back.
+    // each site's black (its fraction, any inter-site integer delta, the pedestal, the offset) is taken off in float
+    // below, with the scale put back. Setting user_black clears cblack[4..5] so LibRaw's adjust_bl doesn't move the
+    // second green into cblack[3] (which copy_bayer ignores on 3-colour Bayer sensors before pre_interpolate).
     // Only for a 2x2 per-site black (DngCreator's), where LibRaw keeps the sites' integer parts in cblack[6..9].
     double fixRemainder[3] = {0, 0, 0};  // DN per camera colour still to subtract after LibRaw
     int fixPedestal = 0;                 // DN LibRaw left above black
