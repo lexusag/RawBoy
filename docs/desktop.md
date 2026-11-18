@@ -86,7 +86,7 @@ only) selects all, rates, and exercises both hand-offs. The Kit also replaced th
 
 - `ios/viewer-source.sh local [path]`: a sibling checkout, `../../RawBoyImageViewer/Packages`. For
   development, with the Viewer branch you are working on; the libraries are built with `-O` even in Debug.
-- `ios/viewer-source.sh git` (**the committed default**): `https://github.com/lexusag/RawBoyImageViewer` `from: 0.2.8` (the pin is `VIEWER_FROM` in the script). SwiftPM
+- `ios/viewer-source.sh git` (**the committed default**): `https://github.com/lexusag/RawBoyImageViewer` `from: 0.2.9` (the pin is `VIEWER_FROM` in the script). SwiftPM
   needs a `Package.swift` at the root of the repository: v0.2.0 has none, **v0.2.1 is the first tag that has**. A git checkout cannot use
   `unsafeFlags`, so Debug builds run the Viewer's libraries unoptimised (Release is optimised; measured). To try the git route before a
   tag: `VIEWER_URL=file:///path/to/RawBoyImageViewer VIEWER_BRANCH=<branch> ios/viewer-source.sh git` (done once: the Desktop build resolves it).
