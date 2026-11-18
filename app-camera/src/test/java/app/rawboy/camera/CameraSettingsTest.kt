@@ -97,8 +97,11 @@ class CameraSettingsTest {
     @Test
     fun descriptionNoteIncludesModeAndLut() {
         assertEquals("cameraMode=film lut=${Edition.defaultFilmLookId}", CameraSettings().descriptionNote())
+        // Film mode only knows film stocks: an id that isn't one (a colour look's) falls back to the default stock.
+        val stock = Edition.filmLooks.last().id
+        assertEquals("cameraMode=film lut=$stock", CameraSettings(film = true, filmLookId = stock).descriptionNote())
         assertEquals(
-            "cameraMode=film lut=${Looks.NATURAL.id}",
+            "cameraMode=film lut=${Edition.defaultFilmLookId}",
             CameraSettings(film = true, filmLookId = Looks.NATURAL.id).descriptionNote(),
         )
         assertEquals(
