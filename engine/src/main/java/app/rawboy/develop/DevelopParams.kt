@@ -122,6 +122,8 @@ data class DevelopParams(
     val masks: List<MaskLayer> = emptyList(),
     /** Up to [LightLeaks.MAX_LEAKS] light leaks over the finished picture (see LightLeaks.kt); per photo, like the masks. */
     val leaks: List<LightLeak> = emptyList(),
+    /** Up to [FilmLeaks.MAX_LEAKS] generated film leaks (see FilmLeaks.kt); shares the leaks budget with [leaks]. */
+    val filmLeaks: List<FilmLeak> = emptyList(),
     /** Up to [LightEffects.MAX_EFFECTS] light (lomo) effects over the leaks (see LightEffects.kt); per photo, not in presets. */
     val fx: List<LightEffect> = emptyList(),
     /**

@@ -1266,6 +1266,12 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             checked = settings.hdrGainMap,
             onChange = vm::setHdrGainMap,
         )
+        SettingSwitch(
+            title = "Random light leak",
+            subtitle = "Adds a random film light leak (edge burn, blob, sprocket holes, rebate glow, flare or start of roll) to each shot",
+            checked = settings.randomLightLeak,
+            onChange = vm::setRandomLightLeak,
+        )
         Row(
             modifier = Modifier
                 .fillMaxWidth()

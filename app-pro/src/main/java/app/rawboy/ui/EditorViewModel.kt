@@ -17,6 +17,9 @@ import app.rawboy.develop.CropRect
 import app.rawboy.develop.BrushRaster
 import app.rawboy.develop.BrushStroke
 import app.rawboy.develop.DevelopParams
+import app.rawboy.develop.FilmLeak
+import app.rawboy.develop.FilmLeakType
+import app.rawboy.develop.FilmLeaks
 import app.rawboy.develop.Edits
 import app.rawboy.develop.Histogram
 import app.rawboy.develop.FxKind
@@ -400,10 +403,10 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     // Light leaks (see LightLeaks.kt).
 
-    /** Adds a light leak (up to LightLeaks.MAX_LEAKS) in the middle; returns its id, or null when full. */
+    /** Adds a light leak (up to LightLeaks.MAX_LEAKS total with filmLeaks) in the middle; returns its id, or null when full. */
     fun addLeak(kind: LeakKind = LeakKind.STREAK): String? {
         val p = _state.value.params
-        if (p.leaks.size >= LightLeaks.MAX_LEAKS) return null
+        if (p.leaks.size + p.filmLeaks.size >= LightLeaks.MAX_LEAKS) return null
         val leak = LightLeaks.newLeak(kind)
         commit(p.copy(leaks = p.leaks + leak), force = true)
         return leak.id
@@ -418,6 +421,35 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
     fun removeLeak(id: String) {
         val p = _state.value.params
         commit(p.copy(leaks = p.leaks.filter { it.id != id }), force = true)
+    }
+
+    // Generated film leaks (see FilmLeaks.kt).
+
+    fun addFilmLeak(type: FilmLeakType? = null, aspect: Float): String? {
+        val p = _state.value.params
+        if (p.leaks.size + p.filmLeaks.size >= LightLeaks.MAX_LEAKS) return null
+        val leak = FilmLeaks.random(type = type, aspect = aspect, seed = FilmLeaks.newSeed(), grade = p.filmLeaks.isEmpty())
+        commit(p.copy(filmLeaks = p.filmLeaks + leak), force = true)
+        return leak.id
+    }
+
+    fun randomFilmRoll(aspect: Float): String? {
+        val p = _state.value.params
+        val cap = (LightLeaks.MAX_LEAKS - p.leaks.size).coerceAtLeast(0)
+        if (cap == 0) return null
+        val roll = FilmLeaks.randomRoll(aspect, FilmLeaks.newSeed()).take(cap)
+        commit(p.copy(filmLeaks = roll), force = true)
+        return roll.firstOrNull()?.id
+    }
+
+    fun updateFilmLeak(id: String, force: Boolean = false, change: (FilmLeak) -> FilmLeak) {
+        val p = _state.value.params
+        commit(p.copy(filmLeaks = p.filmLeaks.map { if (it.id == id) change(it) else it }), force)
+    }
+
+    fun removeFilmLeak(id: String) {
+        val p = _state.value.params
+        commit(p.copy(filmLeaks = p.filmLeaks.filter { it.id != id }), force = true)
     }
 
     // Light effects (see LightEffects.kt).

@@ -20,6 +20,8 @@ import app.rawboy.auto.looks.Looks
 import app.rawboy.color.WhitePicker
 import app.rawboy.develop.DevelopParams
 import app.rawboy.develop.Edits
+import app.rawboy.develop.FilmLeak
+import app.rawboy.develop.FilmLeaks
 import app.rawboy.develop.MaskLayer
 import app.rawboy.develop.BrushRaster
 import app.rawboy.develop.Preset
@@ -104,6 +106,7 @@ data class AutoPhoto(
     val lensPreset: Preset? = null,
     /** True once "Apply to all" gave the photo its looks: its analysis then keeps them instead of the suggestions. */
     val looksApplied: Boolean = false,
+    val filmLeaks: List<FilmLeak> = emptyList(),
     val thumbnail: Bitmap? = null,
 ) {
     val id: String get() = uri.toString()
@@ -116,8 +119,9 @@ data class AutoPhoto(
     /** The develop settings for the current RawBoy edits, look (or preset) and controls (null until analysed). */
     val params: DevelopParams?
         get() = analysis?.let { a ->
-            edits?.let { LookApplier.applyEdits(it, adjust) }
+            val p = edits?.let { LookApplier.applyEdits(it, adjust) }
                 ?: LookApplier.develop(a.autoBase, activeLook, strength, adjust, a.stats.hasFace, preset, lensPreset)
+            if (filmLeaks.isNotEmpty()) p.copy(filmLeaks = filmLeaks) else p
         }
 
     companion object {
@@ -144,13 +148,14 @@ private data class Develop(
     val preset: Preset?,
     val edits: DevelopParams?,
     val looksApplied: Boolean,
+    val filmLeaks: List<FilmLeak>,
 )
 
-private val AutoPhoto.develop get() = Develop(look, mode, filmLook, strength, adjust, preset, edits, looksApplied)
+private val AutoPhoto.develop get() = Develop(look, mode, filmLook, strength, adjust, preset, edits, looksApplied, filmLeaks)
 
 private fun AutoPhoto.withDevelop(d: Develop) = copy(
     look = d.look, mode = d.mode, filmLook = d.filmLook, strength = d.strength, adjust = d.adjust, preset = d.preset,
-    edits = d.edits, looksApplied = d.looksApplied,
+    edits = d.edits, looksApplied = d.looksApplied, filmLeaks = d.filmLeaks,
 )
 
 /**
@@ -661,6 +666,17 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
         changeDevelop(id, force = true) { if (it.mode == LookMode.FILM) it.copy(filmLook = look) else it.copy(look = look) }
 
     fun setMode(id: String, mode: LookMode) = changeDevelop(id, force = true) { it.copy(mode = mode) }
+
+    fun rollFilmLeak(id: String) {
+        val aspect = photo(id)?.analysis?.let {
+            it.base.width.toFloat() / it.base.height.coerceAtLeast(1)
+        } ?: 1.5f
+        changeDevelop(id, force = true) {
+            it.copy(filmLeaks = FilmLeaks.randomRoll(aspect, FilmLeaks.newSeed()))
+        }
+    }
+
+    fun clearFilmLeaks(id: String) = changeDevelop(id, force = true) { it.copy(filmLeaks = emptyList()) }
 
     fun setStrength(id: String, strength: Float) = changeDevelop(id) { it.copy(strength = strength) }
 

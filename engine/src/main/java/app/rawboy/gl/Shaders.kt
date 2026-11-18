@@ -26,6 +26,7 @@ internal object Shaders {
     private const val MAIN_BODY = ShaderSources.MAIN_BODY
     private const val FILM_FORM = ShaderSources.FILM_FORM
     private const val LIGHT_LEAK = ShaderSources.LIGHT_LEAK
+    private const val FILM_LEAK = ShaderSources.FILM_LEAK
     private const val LIGHT_FX = ShaderSources.LIGHT_FX
 
     private fun header(out: String): String = buildString {
@@ -43,11 +44,13 @@ internal object Shaders {
     fun fragment(forExport: Boolean): String = buildString {
         append(header(if (forExport) "out uvec4 fragColor;\n" else "out vec4 fragColor;\n"))
         append(LIGHT_LEAK)
+        append(FILM_LEAK)
         append(LIGHT_FX)
         append(MAIN_BODY)
         append("    if (uLutAmount > 0.0) c = clamp(applyLut(c), 0.0, 1.0);\n")
         append("    if (uCurveOn > 0.0) c = applyCurves(c);\n")
         append("    if (uLeakCount > 0) c = applyLeaks(c, srcG, outPx);\n")
+        append("    if (uFlCount > 0) c = applyFilmLeaks(c, srcG, outPx);\n")
         append("    if (uFxCount > 0) c = applyLightFx(c, srcG, outPx);\n")
         if (forExport) {
             // 16-bit unsigned integer target: exact, core in GLES 3.0, no float-buffer extension needed.

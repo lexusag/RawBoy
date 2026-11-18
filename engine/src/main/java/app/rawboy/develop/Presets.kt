@@ -42,6 +42,7 @@ enum class PresetGroup(val key: String, val label: String, val fields: List<Stri
     LUT("lut", "LUT", listOf("lut", "lutAmount")),
     LENS("lens", "Lens", listOf("lensProfile", "lensDistortion", "lensAnamorphic", "lensFisheye", "lensFisheyeFov", "lensFisheyeAuto", "lensFisheyeCircle", "lensFisheyeX", "lensFisheyeY", "lensCrop", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint")),
     MASKS("masks", "Masks (gradients only)", listOf("masks")),
+    LEAKS("leaks", "Light leaks (generated)", listOf("filmLeaks")),
     ;
 
     companion object {
@@ -52,7 +53,7 @@ enum class PresetGroup(val key: String, val label: String, val fields: List<Stri
          * composition, denoise to one photo's noise (Auto measures it per photo), and Detail (grain, bloom, flare) is a
          * look rather than a correction, so it is a deliberate choice.
          */
-        val DEFAULT: Set<PresetGroup> = entries.toSet() - LENS - MASKS - DENOISE - DETAIL
+        val DEFAULT: Set<PresetGroup> = entries.toSet() - LENS - MASKS - DENOISE - DETAIL - LEAKS
     }
 }
 
@@ -184,6 +185,7 @@ object Presets {
                         k,
                         when {
                             k == "masks" -> Masks.toJson(v as? List<MaskLayer> ?: emptyList())
+                            k == "filmLeaks" -> FilmLeaks.toJson(v as? List<FilmLeak> ?: emptyList())
                             v is ToneCurves -> v.toJson()
                             v is Float -> v.toString().toDouble()
                             else -> v ?: JSONObject.NULL
@@ -230,6 +232,7 @@ object Presets {
             val raw = v.get(f)
             values[f] = when {
                 f == "masks" -> Masks.parseLayers(raw)
+                f == "filmLeaks" -> FilmLeaks.parseLeaks(raw)
                 f == "curves" -> ToneCurves.parse(raw) ?: continue
                 raw == JSONObject.NULL -> null
                 raw is Number -> raw.toFloat()
@@ -298,6 +301,7 @@ object Presets {
         "vignetteAmount" -> p.vignetteAmount
         "vignetteMidpoint" -> p.vignetteMidpoint
         "masks" -> Masks.forPreset(p.masks) // strokes stay with the photo
+        "filmLeaks" -> p.filmLeaks
         else -> throw IllegalArgumentException(field)
     }
 
@@ -316,6 +320,10 @@ object Presets {
             // Fresh ids, so two photos never share a layer id.
             val layers = (value as? List<*>)?.filterIsInstance<MaskLayer>() ?: return p
             return p.copy(masks = layers.take(Masks.MAX_LAYERS).map { it.copy(id = Masks.newId()) })
+        }
+        if (field == "filmLeaks") {
+            val fl = (value as? List<*>)?.filterIsInstance<FilmLeak>() ?: return p
+            return p.copy(filmLeaks = fl.take(FilmLeaks.MAX_LEAKS).map { it.copy(id = Masks.newId()) })
         }
         val f = (value as? Number)?.toFloat()?.takeIf { it.isFinite() } ?: return p
         return when (field) {

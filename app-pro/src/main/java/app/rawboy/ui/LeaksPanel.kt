@@ -35,6 +35,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import app.rawboy.develop.FilmLeak
+import app.rawboy.develop.FilmLeakType
+import app.rawboy.develop.FilmLeaks
+import app.rawboy.develop.FilmPalette
 import app.rawboy.develop.LeakKind
 import app.rawboy.develop.LightLeak
 import app.rawboy.develop.LightLeaks
@@ -85,18 +89,28 @@ private fun hueName(h: Float) = when {
 fun LeaksPanel(
     leaks: List<LightLeak>,
     selectedId: String?,
+    filmLeaks: List<FilmLeak>,
+    selectedFilmId: String?,
     zoomed: Boolean,
     onSelect: (String) -> Unit,
     onAdd: (LeakKind) -> Unit,
     onUpdate: (String, Boolean, (LightLeak) -> LightLeak) -> Unit,
     onRemove: (String) -> Unit,
+    onSelectFilm: (String) -> Unit,
+    onAddFilm: (FilmLeakType?) -> Unit,
+    onRandomRoll: () -> Unit,
+    onUpdateFilm: (String, Boolean, (FilmLeak) -> FilmLeak) -> Unit,
+    onRemoveFilm: (String) -> Unit,
     onMode: (EditorMode) -> Unit,
     onToggleZoom: () -> Unit,
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val selected = leaks.firstOrNull { it.id == selectedId }
+    val selectedFilm = filmLeaks.firstOrNull { it.id == selectedFilmId }
     var menuFor by remember { mutableStateOf<String?>(null) }
+    var genType by remember { mutableStateOf<FilmLeakType?>(null) }
+    val budgetLeft = leaks.size + filmLeaks.size < LightLeaks.MAX_LEAKS
 
     Column(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 12.dp, end = 4.dp)) {
@@ -126,16 +140,123 @@ fun LeaksPanel(
                     }
                 }
             }
-            if (leaks.size < LightLeaks.MAX_LEAKS) {
+            filmLeaks.forEachIndexed { i, fl ->
+                Box {
+                    FilterChip(
+                        selected = fl.id == selectedFilmId,
+                        onClick = { if (fl.id == selectedFilmId) menuFor = fl.id else onSelectFilm(fl.id) },
+                        leadingIcon = { Box(Modifier.size(10.dp).background(Color(fl.palette.rgb), CircleShape)) },
+                        label = { Text(if (fl.enabled) "${fl.type.label} ${i + 1}" else "${fl.type.label} ${i + 1} (off)") },
+                    )
+                    DropdownMenu(expanded = menuFor == fl.id, onDismissRequest = { menuFor = null }) {
+                        DropdownMenuItem(
+                            text = { Text(if (fl.enabled) "Hide" else "Show") },
+                            onClick = { menuFor = null; onUpdateFilm(fl.id, true) { it.copy(enabled = !it.enabled) } },
+                        )
+                        DropdownMenuItem(text = { Text("Delete") }, onClick = { menuFor = null; onRemoveFilm(fl.id) })
+                    }
+                }
+            }
+            if (budgetLeft) {
                 LeakKind.entries.forEach { k -> FilterChip(selected = false, onClick = { onAdd(k) }, label = { Text("+ ${k.label}") }) }
             }
         }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
+        ) {
+            FilterChip(selected = genType == null, onClick = { genType = null }, label = { Text("Any") })
+            FilmLeakType.entries.forEach { t ->
+                FilterChip(selected = genType == t, onClick = { genType = t }, label = { Text(t.label) })
+            }
+        }
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = 12.dp),
+        ) {
+            TextButton(onClick = { onAddFilm(genType) }, enabled = budgetLeft) { Text("🎲 Random") }
+            TextButton(onClick = onRandomRoll, enabled = leaks.size < LightLeaks.MAX_LEAKS) { Text("Roll") }
+            if (selectedFilm != null) {
+                TextButton(
+                    onClick = {
+                        onUpdateFilm(selectedFilm.id, true) {
+                            FilmLeaks.newVariation(it, FilmLeaks.newSeed().toFloat())
+                        }
+                    },
+                ) { Text("New variation") }
+            }
+            if (budgetLeft && genType != null) {
+                TextButton(onClick = { onAddFilm(genType) }) { Text("+ Add ${genType!!.label}") }
+            }
+        }
+        if (selectedFilm != null) {
+            fun setFilm(force: Boolean = false, change: (FilmLeak) -> FilmLeak) = onUpdateFilm(selectedFilm.id, force, change)
+            Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 6.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.horizontalScroll(rememberScrollState()).padding(vertical = 4.dp),
+                ) {
+                    FilmPalette.entries.forEach { p ->
+                        FilterChip(
+                            selected = selectedFilm.palette == p,
+                            onClick = { setFilm(force = true) { it.copy(palette = p) } },
+                            leadingIcon = { Box(Modifier.size(10.dp).background(Color(p.rgb), CircleShape)) },
+                            label = { Text(p.label) },
+                        )
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    if (selectedFilm.type == FilmLeakType.STREAK || selectedFilm.type == FilmLeakType.SCRATCHES) {
+                        TextButton(onClick = { setFilm(force = true) { it.copy(turn = 0) } }) { Text("↔ Horizontal") }
+                        TextButton(onClick = { setFilm(force = true) { it.copy(turn = 1) } }) { Text("↕ Vertical") }
+                    } else if (selectedFilm.type != FilmLeakType.DUST && selectedFilm.type != FilmLeakType.FOG && selectedFilm.type != FilmLeakType.STAIN) {
+                        listOf(0 to "←", 1 to "↑", 2 to "→", 3 to "↓").forEach { (t, arrow) ->
+                            TextButton(onClick = { setFilm(force = true) { FilmLeaks.sideMove(it, t) } }) { Text(arrow) }
+                        }
+                    }
+                    TextButton(onClick = { setFilm(force = true) { it.copy(mirror = !it.mirror) } }) {
+                        Text(if (selectedFilm.mirror) "Flipped" else "Flip")
+                    }
+                }
+                ParamSlider("Intensity", selectedFilm.intensity, 0f..100f, 80f, format = { "${it.roundToInt()}%" }) { v ->
+                    setFilm { it.copy(intensity = v) }
+                }
+                ParamSlider("Softness", selectedFilm.softness, 0f..100f, 50f, format = { "${it.roundToInt()}" }) { v ->
+                    setFilm { it.copy(softness = v) }
+                }
+                ParamSlider("Texture", selectedFilm.texture, 0f..100f, 65f, format = { "${it.roundToInt()}" }) { v ->
+                    setFilm { it.copy(texture = v) }
+                }
+                ParamSlider("Amount", selectedFilm.amount, 0f..100f, 55f, format = { "${it.roundToInt()}" }) { v ->
+                    setFilm { it.copy(amount = v) }
+                }
+                ParamSlider("Variant", selectedFilm.variant, 0f..100f, 50f, format = { "${it.roundToInt()}" }) { v ->
+                    setFilm { it.copy(variant = v) }
+                }
+                ParamSlider("Warmth", selectedFilm.warmth, -100f..100f, 0f, format = ::signed) { v ->
+                    setFilm { it.copy(warmth = v) }
+                }
+                ParamSlider("Tint", selectedFilm.tint, -100f..100f, 0f, format = ::signed) { v ->
+                    setFilm { it.copy(tint = v) }
+                }
+                ParamSlider("Fade", selectedFilm.fade, 0f..100f, 0f, format = { "${it.roundToInt()}" }) { v ->
+                    setFilm { it.copy(fade = v) }
+                }
+                ParamSlider("Contrast", selectedFilm.contrast, -100f..100f, 0f, format = ::signed) { v ->
+                    setFilm { it.copy(contrast = v) }
+                }
+                LeakNote(
+                    "Drag inside the box to move, or drag any of its 8 handles to stretch along X/Y. The bright edge marks where light enters or the film ends.",
+                    Modifier.padding(top = 8.dp),
+                )
+            }
+            return@Column
+        }
         val leak = selected ?: run {
             LeakNote(
-                "Add a film-style light leak (a streak of light, a round glow or a triangle), then drag it over the " +
-                    "photo. It is added in Screen mode, so the photo shows through its glow; at full intensity its white " +
-                    "middle (inside the dashed line) hides what is under it, so it can cover part of a photo. The grain " +
-                    "stays on top. Up to ${LightLeaks.MAX_LEAKS}; leaks reset for each new photo.",
+                "Add a hand-drawn light leak (+ Streak/Glow/Triangle) or generate a procedural film leak/damage above (up to ${LightLeaks.MAX_LEAKS} total). Generated leaks can be saved in presets under Light leaks.",
                 Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             )
             return@Column

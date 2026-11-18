@@ -1170,6 +1170,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setLongExposureLighten(on: Boolean) = change { it.copy(longExposureLighten = on) }
     fun setShutterSound(on: Boolean) = change { it.copy(shutterSound = on) }
     fun setHdrGainMap(on: Boolean) = change { it.copy(hdrGainMap = on) }
+    fun setRandomLightLeak(on: Boolean) = change { it.copy(randomLightLeak = on) }
     fun setPhotoFrame(frame: PhotoFrame) = change {
         it.copy(
             photoFrame = frame,

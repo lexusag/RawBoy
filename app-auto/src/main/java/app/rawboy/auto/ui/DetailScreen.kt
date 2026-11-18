@@ -501,6 +501,12 @@ fun DetailScreen(
                     if (preset == null && photo.edits == null) {
                         AutoSlider("Strength", photo.strength, 0f..100f, LookApplier.DEFAULT_STRENGTH) { vm.setStrength(id, it) }
                     }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { vm.rollFilmLeak(id) }) { Text("🎲 Leak") }
+                        if (photo.filmLeaks.isNotEmpty()) {
+                            TextButton(onClick = { vm.clearFilmLeaks(id) }) { Text("Clear leak") }
+                        }
+                    }
                     AutoSlider("Brightness", a.brightness, -100f..100f, 0f) { v -> vm.setAdjust(id) { it.copy(brightness = v) } }
                     AutoSlider("Warmth", a.warmth, -100f..100f, 0f) { v -> vm.setAdjust(id) { it.copy(warmth = v) } }
                 } else {
