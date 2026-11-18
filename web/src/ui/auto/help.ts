@@ -50,6 +50,7 @@ export const AUTO_HELP: HelpSection[] = [
       { how: 'Click outside the photo', text: 'Change the frame around it: grey, white or black.' },
       { how: 'Press and hold', text: 'See the photo without the look.' },
       { how: 'Look, Adjust', text: 'Look, Strength, Brightness and Warmth; Adjust has the auto develop\'s own sliders, and Retouch: a natural portrait retouch like Reblum\'s Natural (40 is about Reblum Natural 40), which Apply to all copies to the batch.' },
+      { how: '🎲 Leak', text: 'Places a random generated film leak or defect on top of the look or preset; click again to reroll it, click × (or long-press) to remove it. Open in the RawBoy tab to move, stretch or fine-tune it.' },
       { keys: ['C'], how: 'Crop (toolbar)', text: 'Crop & rotate: drag the corners, edges or inside of the frame (or outside it, to rotate), pick a shape (Original, 1:1, 4:3, 3:2, 16:9...), turn the photo in quarter steps and straighten the horizon. The crop is in the exports and in Undo; Apply to all leaves each photo\'s crop alone.' },
       { how: 'Pick white balance', text: 'Adjust tab: click something neutral grey and Warmth and Tint make it grey.' },
       { how: 'Apply to all', text: 'Copies the look and its settings to every photo (brightness and denoise stay per photo).' },

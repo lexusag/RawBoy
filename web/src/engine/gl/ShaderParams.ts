@@ -6,6 +6,7 @@ import { anamorphicBarOf, anamorphicLengthOf, anamorphicTintOf, effectiveColorDe
 import type { BrushRaster } from '../develop/BrushRaster';
 import { curveTable } from '../develop/ToneCurve';
 import { CURVE_SCALE, MAX_LAYERS, MAX_LENS_BLUR, layerIsIdentity, type MaskLayer } from '../develop/Masks';
+import { NO_FILM_LEAKS, packFilmLeaks, type FilmLeakUniforms } from '../develop/FilmLeaks';
 import { NO_FX, packEffects, type FxUniforms } from '../develop/LightEffects';
 import { NO_LEAKS, bendCurvature, packLeaks, type LeakUniforms } from '../develop/LightLeaks';
 import type { FilmData } from '../film/FilmStocks';
@@ -222,6 +223,8 @@ export class ShaderParams {
     /** Portrait retouch: the gains map (PortraitRetouch, packed into the skin texture) and `uSkinFix`, 0 = off. */
     readonly retouchMap: RetouchMap | null = null,
     readonly skinFix = 0,
+    /** Generated film leaks over the finished picture, after the hand-made leaks (shaders/film_leak.glsl). */
+    readonly filmLeaks: FilmLeakUniforms = NO_FILM_LEAKS,
   ) {}
 
   /** Extra source pixels needed around an output region for the spatial effects, so tiles join seamlessly. */
@@ -327,6 +330,7 @@ export class ShaderParams {
       packEffects(p.fx ?? [], lens.width, lens.height),
       retouchMap,
       skinFixOf(p.portraitRetouch ?? 0, retouchMap),
+      packFilmLeaks(p.filmLeaks ?? [], lens.width, lens.height),
     );
   }
 }

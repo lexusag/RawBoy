@@ -16,7 +16,7 @@ const CURVE_HANDLE = 0.22;
 const POINT_STEP = 0.15;
 
 type Handle =
-  | 'move' // linear centre line, radial centre
+  | 'move' // linear centre line, radial centre, box interior
   | 'start' // linear full-effect line
   | 'end' // linear no-effect line
   | 'rx'
@@ -24,7 +24,12 @@ type Handle =
   | 'rotate'
   | 'bend' // light leak's bend square
   | 'outline' // a glow leak's outline point (drag.index: which)
+  | 'box' // a generated film leak's 8 stretch handles (drag.index: which)
   | 'curve'; // linear centre line's bend
+
+const BOX_HANDLES: readonly [number, number][] = [
+  [-1, -1], [0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0],
+];
 
 export type MaskTool = 'move' | 'brush' | 'erase';
 
@@ -45,11 +50,21 @@ export interface LeakForm {
   radii?: readonly number[];
 }
 
+/** An axis-aligned box for generated film leaks: stretched along x and y only, with its source side (0..3) marked. */
+export interface BoxForm {
+  cx: number;
+  cy: number;
+  w: number;
+  h: number;
+  turn: number;
+}
+
 /**
  * What the overlay draws of a layer: also light leaks, as radial shapes (LeaksPanel) with [leak] set: drawn and
- * hit-tested as that leak's outline (glow, streak or triangle, bent and tapered like the shader), with a bend handle.
+ * hit-tested as that leak's outline (glow, streak or triangle, bent and tapered like the shader), with a bend handle;
+ * or generated film leaks with [box] set (an axis-aligned box with 8 stretch handles and no rotation or mesh warp).
  */
-export type OverlayLayer = Pick<MaskLayer, 'id' | 'enabled' | 'shape' | 'strokes'> & { leak?: LeakForm };
+export type OverlayLayer = Pick<MaskLayer, 'id' | 'enabled' | 'shape' | 'strokes'> & { leak?: LeakForm; box?: BoxForm };
 
 /** The leak form a layer is drawn with: a leak's own, a stripe mask's streak, else none (an ellipse). */
 const formOf = (l: OverlayLayer): LeakForm | undefined =>
@@ -80,6 +95,8 @@ interface Props {
   onBend?: (id: string, bend: number) => void;
   /** A glow leak's outline point was dragged: its new 8 radii. */
   onReshape?: (id: string, radii: number[]) => void;
+  /** A generated film leak's box was moved or stretched along x/y. */
+  onBoxChange?: (id: string, box: Pick<BoxForm, 'cx' | 'cy' | 'w' | 'h'>) => void;
   onStrokeBegin: (layerId: string, stroke: BrushStroke) => void;
   onStrokeExtend: (layerId: string, strokeId: string, points: number[]) => void;
   onStrokeEnd: () => void;
@@ -124,7 +141,7 @@ export function MaskOverlay(props: Props) {
   const [box, setBox] = useState<{ w: number; h: number } | null>(null);
   const [hover, setHover] = useState<Handle | 'pin' | null>(null);
   const [cursorAt, setCursorAt] = useState<Pt | null>(null);
-  const drag = useRef<{ id: string; handle: Handle; start: MaskShape; from: Pt; index: number } | null>(null);
+  const drag = useRef<{ id: string; handle: Handle; start: MaskShape; startBox?: BoxForm; from: Pt; index: number } | null>(null);
   const painting = useRef<{ layerId: string; strokeId: string; last: Pt; at: number } | null>(null);
   /** Pointers down over the overlay: a second one is a pinch for the preview, never a handle or a stroke. */
   const down = useRef(new Set<number>());
@@ -180,8 +197,32 @@ export function MaskOverlay(props: Props) {
     });
   };
 
-  /** Lines (linear), ellipses (radial) or just a pin (brush) of one layer, in overlay pixels. */
+  /** Lines (linear), ellipses (radial), axis-aligned boxes (generated film leaks) or just a pin (brush) of one layer, in overlay pixels. */
   const geometry = (l: OverlayLayer) => {
+    if (l.box) {
+      const b = l.box;
+      const x0 = (b.cx - b.w / 2) * W;
+      const x1 = (b.cx + b.w / 2) * W;
+      const y0 = (b.cy - b.h / 2) * H;
+      const y1 = (b.cy + b.h / 2) * H;
+      const corners: Pt[] = [[x0, y0], [x1, y0], [x1, y1], [x0, y1]];
+      const edgeLine = (a: Pt, c: Pt): Pt[] =>
+        Array.from({ length: STEPS + 1 }, (_, j) => toScreen(a[0] + ((c[0] - a[0]) * j) / STEPS, a[1] + ((c[1] - a[1]) * j) / STEPS));
+      const edges = [
+        edgeLine(corners[3], corners[0]), // 0: left
+        edgeLine(corners[0], corners[1]), // 1: top
+        edgeLine(corners[1], corners[2]), // 2: right
+        edgeLine(corners[2], corners[3]), // 3: bottom
+      ];
+      const t = ((b.turn % 4) + 4) % 4;
+      return {
+        kind: 'box' as const,
+        edges,
+        sourceEdge: edges[t],
+        pin: toScreen(b.cx * W, b.cy * H) as Pt | null,
+        handles: BOX_HANDLES.map(([hx, hy]) => toScreen((b.cx + (hx * b.w) / 2) * W, (b.cy + (hy * b.h) / 2) * H)),
+      };
+    }
     const s = l.shape;
     if (s.kind === 'brush') {
       const p = l.strokes[0]?.points;
@@ -271,8 +312,12 @@ export function MaskOverlay(props: Props) {
 
   const selected = layers.find((l) => l.id === selectedId) ?? null;
 
-  /** Overlay point [p] lies inside a radial shape's outer ellipse (a leak: its outline). */
+  /** Overlay point [p] lies inside a radial shape's outer ellipse (a leak: its outline; a generated leak: its box). */
   const inside = (l: OverlayLayer, p: Pt): boolean => {
+    if (l.box) {
+      const [x, y] = toImage(p[0], p[1]);
+      return Math.abs(x / W - l.box.cx) <= l.box.w / 2 && Math.abs(y / H - l.box.cy) <= l.box.h / 2;
+    }
     const s = l.shape;
     if (s.kind !== 'radial' && s.kind !== 'stripe') return false;
     const [x, y] = toImage(p[0], p[1]);
@@ -307,7 +352,12 @@ export function MaskOverlay(props: Props) {
     if (!r) return null;
     if (selected) {
       const g = geometry(selected);
-      if (g.kind === 'radial') {
+      if (g.kind === 'box') {
+        const hi = g.handles.findIndex((q) => near(p, q, GRAB));
+        if (hi >= 0) return { id: selected.id, handle: 'box', index: hi };
+        if (near(p, g.pin!, GRAB * 1.5)) return { id: selected.id, handle: 'move' };
+        if (props.grabInside && inside(selected, p)) return { id: selected.id, handle: 'move' };
+      } else if (g.kind === 'radial') {
         if (near(p, g.knob, GRAB)) return { id: selected.id, handle: 'rotate' };
         if (g.bend && near(p, g.bend, GRAB)) return { id: selected.id, handle: 'bend' };
         const pt = g.outlinePts.findIndex((q) => near(p, q, GRAB));
@@ -433,6 +483,18 @@ export function MaskOverlay(props: Props) {
             const g = geometry(l);
             if (l.id !== selectedId) return g.pin ? <g key={l.id} opacity={l.enabled ? 1 : 0.5}>{dot(g.pin, 6, false)}</g> : null;
             if (g.kind === 'brush') return null;
+            if (g.kind === 'box') {
+              return (
+                <g key={l.id}>
+                  <g clipPath={`url(#${clipId})`}>
+                    {g.edges.map((e, i) => <g key={i}>{line(path(e), 1.5, '6 5')}</g>)}
+                    {line(path(g.sourceEdge), 3)}
+                  </g>
+                  {g.handles.map((p, i) => <g key={i}>{dot(p, 5, true)}</g>)}
+                  {dot(g.pin!, 6.5, true)}
+                </g>
+              );
+            }
             if (g.kind === 'linear') {
               return (
                 <g key={l.id}>
@@ -503,7 +565,10 @@ export function MaskOverlay(props: Props) {
             props.onStrokeEnd();
             if (e.timeStamp - pt.at < PINCH_GRACE_MS) props.onStrokeCancel?.(pt.layerId);
           }
-          if (d) onChange(d.id, d.start);
+          if (d) {
+            if (d.startBox) props.onBoxChange?.(d.id, d.startBox);
+            else onChange(d.id, d.start);
+          }
           return;
         }
         if (e.button !== 0 || !r) return;
@@ -537,7 +602,7 @@ export function MaskOverlay(props: Props) {
         if (!layer) return;
         if (h.id !== selectedId) onSelect(h.id);
         e.currentTarget.setPointerCapture(e.pointerId);
-        drag.current = { id: h.id, handle: h.handle, start: layer.shape, from: toImage(p[0], p[1]), index: h.index ?? 0 };
+        drag.current = { id: h.id, handle: h.handle, start: layer.shape, startBox: layer.box, from: toImage(p[0], p[1]), index: h.index ?? 0 };
       }}
       onPointerMove={(e) => {
         const p = local(e);
@@ -558,6 +623,28 @@ export function MaskOverlay(props: Props) {
           return;
         }
         e.stopPropagation();
+        if (d.startBox) {
+          const to = toImage(p[0], p[1]);
+          const dx = (to[0] - d.from[0]) / W;
+          const dy = (to[1] - d.from[1]) / H;
+          const b0 = d.startBox;
+          if (d.handle === 'move') {
+            props.onBoxChange?.(d.id, { cx: b0.cx + dx, cy: b0.cy + dy, w: b0.w, h: b0.h });
+          } else {
+            const [hx, hy] = BOX_HANDLES[d.index] ?? [0, 0];
+            let left = b0.cx - b0.w / 2;
+            let right = b0.cx + b0.w / 2;
+            let top = b0.cy - b0.h / 2;
+            let bottom = b0.cy + b0.h / 2;
+            const min = 0.02;
+            if (hx < 0) left = Math.min(left + dx, right - min);
+            if (hx > 0) right = Math.max(right + dx, left + min);
+            if (hy < 0) top = Math.min(top + dy, bottom - min);
+            if (hy > 0) bottom = Math.max(bottom + dy, top + min);
+            props.onBoxChange?.(d.id, { cx: (left + right) / 2, cy: (top + bottom) / 2, w: right - left, h: bottom - top });
+          }
+          return;
+        }
         if (d.handle === 'outline') {
           // The point follows the pointer along its own direction from the centre.
           const layer = layers.find((x) => x.id === d.id);
