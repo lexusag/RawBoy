@@ -2266,6 +2266,26 @@ line.curve-grid,
   white-space: nowrap;
 }
 
+.leak-generate {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 0 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.leak-roll {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.leak-roll .icon {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+}
+
 /* Light effects: four add buttons, two by two beside Done. */
 .geometry-head .fx-add {
   flex: 1;

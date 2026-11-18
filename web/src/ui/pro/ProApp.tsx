@@ -16,6 +16,7 @@ import { HealOverlay } from './HealOverlay';
 import { HealPanel, healSize, type HealBrush } from './HealPanel';
 import { DEFAULT_HEAL_FEATHER, HEAL_RADIUS_MAX, HEAL_RADIUS_MIN, newHealSpot } from '../../engine/develop/HealSpots';
 import { LookSelector } from './LookSelector';
+import type { FilmLeak } from '../../engine/develop/FilmLeaks';
 import type { LightEffect } from '../../engine/develop/LightEffects';
 import type { LightLeak } from '../../engine/develop/LightLeaks';
 import type { MaskShape } from '../../engine/develop/Masks';
@@ -194,7 +195,9 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   const layers = state.params.masks;
   const selectedId = layers.some((l) => l.id === selectedLayer) ? selectedLayer : (layers[0]?.id ?? null);
   const leaks = state.params.leaks;
-  const leakId = leaks.some((l) => l.id === selectedLeak) ? selectedLeak : (leaks[leaks.length - 1]?.id ?? null);
+  const filmLeaks = state.params.filmLeaks;
+  const allLeakIds = [...leaks.map((l) => l.id), ...filmLeaks.map((l) => l.id)];
+  const leakId = allLeakIds.includes(selectedLeak ?? '') ? selectedLeak : (allLeakIds[allLeakIds.length - 1] ?? null);
   const effects = state.params.fx;
   const healSpots = state.params.healSpots;
   const healId = healSpots.some((h) => h.id === selectedHeal) ? selectedHeal : null;
@@ -715,7 +718,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
           {leaksMode && !showOriginal && shaderParams && (
             <MaskOverlay
               lens={shaderParams.lens}
-              layers={leaks.map(leakLayer)}
+              layers={[...leaks.map(leakLayer), ...filmLeaks.map(filmLeakLayer)]}
               selectedId={leakId}
               frame={FRAME_WIDTH + maskMargin}
               zoomFrame={FRAME_WIDTH}
@@ -729,6 +732,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
               onChange={(id, shape) => store.updateLeak(id, (l) => withLeakShape(l, shape))}
               onBend={(id, bend) => store.updateLeak(id, (l) => ({ ...l, bend }))}
               onReshape={(id, radii) => store.updateLeak(id, (l) => ({ ...l, radii }))}
+              onBoxChange={(id, box) => store.updateFilmLeak(id, (l) => ({ ...l, ...box }))}
               onStrokeBegin={() => {}}
               onStrokeExtend={() => {}}
               onStrokeEnd={() => {}}
@@ -871,6 +875,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
             ) : leaksMode ? (
               <LeaksPanel
                 leaks={leaks}
+                filmLeaks={filmLeaks}
                 selectedId={leakId}
                 onSelect={setSelectedLeak}
                 onAdd={(kind) => {
@@ -879,6 +884,18 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
                 }}
                 onUpdate={store.updateLeak}
                 onRemove={store.removeLeak}
+                onAddFilm={(type) => {
+                  const aspect = shaderParams ? shaderParams.lens.width / shaderParams.lens.height : 1.5;
+                  const id = store.addFilmLeak(type, aspect);
+                  if (id) setSelectedLeak(id);
+                }}
+                onRollFilm={(type) => {
+                  const aspect = shaderParams ? shaderParams.lens.width / shaderParams.lens.height : 1.5;
+                  const id = store.rollFilmLeaks(type, aspect, leakId);
+                  if (id) setSelectedLeak(id);
+                }}
+                onUpdateFilm={store.updateFilmLeak}
+                onRemoveFilm={store.removeFilmLeak}
                 onDone={() => setLeaksMode(false)}
               />
             ) : fxMode ? (
@@ -1039,6 +1056,15 @@ const leakLayer = (l: LightLeak) => ({
 
 const withLeakShape = (l: LightLeak, s: MaskShape): LightLeak =>
   s.kind === 'radial' ? { ...l, cx: s.cx, cy: s.cy, rx: s.rx, ry: s.ry, angle: s.angle } : l;
+
+/** A generated film leak as the overlay draws it: an axis-aligned box with its source side marked. */
+const filmLeakLayer = (l: FilmLeak) => ({
+  id: l.id,
+  enabled: l.enabled,
+  strokes: [],
+  box: { cx: l.cx, cy: l.cy, w: l.w, h: l.h, turn: l.turn },
+  shape: { kind: 'radial' as const, cx: l.cx, cy: l.cy, rx: l.w / 2, ry: l.h / 2, angle: 0, feather: 1 },
+});
 
 /** A light effect as the overlay draws it: a radial shape (an ellipse round its box) with no feather ring. */
 const fxLayer = (e: LightEffect) => ({

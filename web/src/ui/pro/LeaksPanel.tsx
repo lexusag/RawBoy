@@ -1,3 +1,15 @@
+import { useState } from 'react';
+import {
+  FILM_LEAK_LABELS,
+  FILM_LEAK_TYPES,
+  FILM_PALETTES,
+  FILM_PALETTE_LABELS,
+  filmPaletteCss,
+  newVariation,
+  sideMove,
+  type FilmLeak,
+  type FilmLeakType,
+} from '../../engine/develop/FilmLeaks';
 import {
   LEAK_DEFAULTS,
   LEAK_HUE,
@@ -42,23 +54,54 @@ const KIND_NAMES: Record<LeakKind, string> = { streak: 'Streak', glow: 'Glow', t
 
 interface Props {
   leaks: readonly LightLeak[];
+  filmLeaks?: readonly FilmLeak[];
   selectedId: string | null;
   onSelect: (id: string) => void;
   onAdd: (kind: LeakKind) => void;
   onUpdate: (id: string, change: (l: LightLeak) => LightLeak, force?: boolean) => void;
   onRemove: (id: string) => void;
+  onAddFilm?: (type?: FilmLeakType) => void;
+  onRollFilm?: (type: FilmLeakType | 'any') => void;
+  onUpdateFilm?: (id: string, change: (l: FilmLeak) => FilmLeak, force?: boolean) => void;
+  onRemoveFilm?: (id: string) => void;
   onDone: () => void;
 }
 
+const SIDE_ARROWS: readonly [number, string, string][] = [
+  [0, '←', 'From left edge'],
+  [1, '↑', 'From top edge'],
+  [2, '→', 'From right edge'],
+  [3, '↓', 'From bottom edge'],
+];
+
 /**
  * Light leaks: film-style light (streaks, glows, triangles) dragged into place on the photo, e.g. to tastefully cover
- * part of a nude. A top-bar mode like Masks; the shapes are moved, sized, turned and bent on the photo (MaskOverlay) or
- * with these sliders.
+ * part of a nude, plus the procedural film leak generator (edge burns, sprocket holes, fog, end/start of roll, film
+ * tear, dust & scratches, chemical stains). A top-bar mode like Masks; the shapes are moved and sized on the photo
+ * (MaskOverlay) or with these sliders.
  */
-export function LeaksPanel({ leaks, selectedId, onSelect, onAdd, onUpdate, onRemove, onDone }: Props) {
+export function LeaksPanel({
+  leaks,
+  filmLeaks = [],
+  selectedId,
+  onSelect,
+  onAdd,
+  onUpdate,
+  onRemove,
+  onAddFilm,
+  onRollFilm,
+  onUpdateFilm,
+  onRemoveFilm,
+  onDone,
+}: Props) {
+  const [genType, setGenType] = useState<FilmLeakType | 'any'>('any');
   const leak = leaks.find((l) => l.id === selectedId) ?? null;
+  const filmLeak = filmLeaks.find((l) => l.id === selectedId) ?? null;
   const set = (change: (l: LightLeak) => LightLeak, force = false) => leak && onUpdate(leak.id, change, force);
-  const full = leaks.length >= MAX_LEAKS;
+  const setFilm = (change: (l: FilmLeak) => FilmLeak, force = false) => filmLeak && onUpdateFilm?.(filmLeak.id, change, force);
+  const total = leaks.length + filmLeaks.length;
+  const full = total >= MAX_LEAKS;
+  const canRoll = genType === 'any' ? leaks.length < MAX_LEAKS : !full || filmLeak != null || filmLeaks.length > 0;
   return (
     <div className="controls geometry">
       <div className="geometry-head">
@@ -73,11 +116,40 @@ export function LeaksPanel({ leaks, selectedId, onSelect, onAdd, onUpdate, onRem
           Done
         </button>
       </div>
-      {leaks.length === 0 && (
+      {onRollFilm && (
+        <div className="leak-generate">
+          <div className="section-label">Generate</div>
+          <div className="chips">
+            <button type="button" className={genType === 'any' ? 'active' : ''} onClick={() => setGenType('any')}>
+              Any
+            </button>
+            {FILM_LEAK_TYPES.map((t) => (
+              <button key={t} type="button" className={genType === t ? 'active' : ''} onClick={() => setGenType(t)}>
+                {FILM_LEAK_LABELS[t]}
+              </button>
+            ))}
+          </div>
+          <div className="button-row">
+            <button type="button" className="primary" disabled={!canRoll} onClick={() => onRollFilm(genType)}>
+              🎲 Random
+            </button>
+            {filmLeak && (
+              <button type="button" className="text" onClick={() => setFilm((l) => newVariation(l, Math.random()), true)}>
+                New variation
+              </button>
+            )}
+            {onAddFilm && (
+              <button type="button" className="text" disabled={full} onClick={() => onAddFilm(genType === 'any' ? undefined : genType)}>
+                + Add
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+      {total === 0 && (
         <Note>
-          Add a film-style light leak (a streak of light, a round glow or a triangle), then drag it over the photo. Its glow lets the photo show
-          through; with Cover at 100% nothing in its middle shows (about half way out to its outline), so it can hide part of a photo (drag a glow’s hollow dots to fit its
-          outline to the area). The grain stays on top. Up to {MAX_LEAKS}; leaks reset for each new photo.
+          Press <strong>🎲 Random</strong> to generate a film leak or defect, or add a hand-placed streak, glow or triangle above, then drag it over the photo.
+          The grain stays on top. Up to {MAX_LEAKS} layers; generated leaks can be saved in presets under the Light leaks group.
         </Note>
       )}
       {leaks.map((l, i) => (
@@ -100,6 +172,150 @@ export function LeaksPanel({ leaks, selectedId, onSelect, onAdd, onUpdate, onRem
           </button>
         </div>
       ))}
+      {filmLeaks.map((l, i) => (
+        <div key={l.id} className={`preset-row mask-row${l.id === selectedId ? ' active' : ''}`}>
+          <input
+            type="checkbox"
+            checked={l.enabled}
+            title={l.enabled ? 'Hide leak' : 'Show leak'}
+            onChange={(e) => onUpdateFilm?.(l.id, (x) => ({ ...x, enabled: e.target.checked }), true)}
+          />
+          <button type="button" className="preset-apply" onClick={() => onSelect(l.id)}>
+            <span className="preset-name">
+              <span className="leak-swatch" style={{ background: filmPaletteCss(l.palette) }} />
+              {FILM_LEAK_LABELS[l.type]} {i + 1}
+            </span>
+            <span className="preset-groups">{`${FILM_PALETTE_LABELS[l.palette]} · ${Math.round(l.intensity)}%`}</span>
+          </button>
+          <button type="button" className="icon" title="Delete leak" onClick={() => onRemoveFilm?.(l.id)}>
+            ×
+          </button>
+        </div>
+      ))}
+      {filmLeak && (
+        <>
+          <div className="chips" role="group" aria-label="Leak type">
+            {FILM_LEAK_TYPES.map((t) => (
+              <button key={t} type="button" className={filmLeak.type === t ? 'active' : ''} onClick={() => setFilm((l) => ({ ...l, type: t }), true)}>
+                {FILM_LEAK_LABELS[t]}
+              </button>
+            ))}
+          </div>
+          <div className="chips" role="group" aria-label="Palette">
+            {FILM_PALETTES.map((p) => (
+              <button key={p} type="button" className={filmLeak.palette === p ? 'active' : ''} onClick={() => setFilm((l) => ({ ...l, palette: p }), true)}>
+                <span className="leak-swatch" style={{ background: filmPaletteCss(p), marginRight: 5 }} />
+                {FILM_PALETTE_LABELS[p]}
+              </button>
+            ))}
+          </div>
+          <div className="button-row" role="group" aria-label="Source edge">
+            {SIDE_ARROWS.map(([t, arrow, title]) => (
+              <button
+                key={t}
+                type="button"
+                title={title}
+                className={filmLeak.turn === t ? 'primary' : 'text'}
+                onClick={() => setFilm((l) => sideMove(l, t), true)}
+              >
+                {arrow}
+              </button>
+            ))}
+            <button
+              type="button"
+              className={filmLeak.mirror ? 'primary' : 'text'}
+              onClick={() => setFilm((l) => ({ ...l, mirror: !l.mirror }), true)}
+            >
+              Flip
+            </button>
+          </div>
+          <ParamSlider
+            label="Intensity"
+            value={filmLeak.intensity}
+            min={0}
+            max={100}
+            defaultValue={85}
+            format={(v) => `${Math.round(v)}%`}
+            onChange={(v) => setFilm((l) => ({ ...l, intensity: v }))}
+          />
+          <ParamSlider
+            label="Softness"
+            value={filmLeak.softness}
+            min={0}
+            max={100}
+            defaultValue={50}
+            format={formatPlain}
+            onChange={(v) => setFilm((l) => ({ ...l, softness: v }))}
+          />
+          <ParamSlider
+            label="Texture"
+            value={filmLeak.texture}
+            min={0}
+            max={100}
+            defaultValue={65}
+            format={formatPlain}
+            onChange={(v) => setFilm((l) => ({ ...l, texture: v }))}
+          />
+          <ParamSlider
+            label="Amount"
+            value={filmLeak.amount}
+            min={0}
+            max={100}
+            defaultValue={55}
+            format={formatPlain}
+            onChange={(v) => setFilm((l) => ({ ...l, amount: v }))}
+          />
+          <ParamSlider
+            label="Variant"
+            value={filmLeak.variant}
+            min={0}
+            max={100}
+            defaultValue={50}
+            format={formatPlain}
+            onChange={(v) => setFilm((l) => ({ ...l, variant: v }))}
+          />
+          <div className="section-label">Colour adjustment</div>
+          <ParamSlider
+            label="Warmth"
+            value={filmLeak.warmth}
+            min={-100}
+            max={100}
+            defaultValue={0}
+            format={signed}
+            onChange={(v) => setFilm((l) => ({ ...l, warmth: v }))}
+          />
+          <ParamSlider
+            label="Tint"
+            value={filmLeak.tint}
+            min={-100}
+            max={100}
+            defaultValue={0}
+            format={signed}
+            onChange={(v) => setFilm((l) => ({ ...l, tint: v }))}
+          />
+          <ParamSlider
+            label="Fade"
+            value={filmLeak.fade}
+            min={0}
+            max={100}
+            defaultValue={0}
+            format={formatPlain}
+            onChange={(v) => setFilm((l) => ({ ...l, fade: v }))}
+          />
+          <ParamSlider
+            label="Contrast"
+            value={filmLeak.contrast}
+            min={-100}
+            max={100}
+            defaultValue={0}
+            format={signed}
+            onChange={(v) => setFilm((l) => ({ ...l, contrast: v }))}
+          />
+          <Note>
+            Drag inside the box to move it, or drag the 8 edge and corner handles to stretch it along x and y. The solid line marks the edge the leak or defect enters from.
+          </Note>
+        </>
+      )}
       {leak && (
         <>
           <div className="segmented" role="group" aria-label="Shape">

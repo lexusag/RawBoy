@@ -1,5 +1,6 @@
 import type { BwFilter } from '../color/BwFilter';
 import type { MaskLayer } from './Masks';
+import type { FilmLeak } from './FilmLeaks';
 import type { HealSpot } from './HealSpots';
 import type { LightEffect } from './LightEffects';
 import type { LightLeak } from './LightLeaks';
@@ -182,6 +183,7 @@ export interface DevelopParams {
   cropBottom: number;
   masks: readonly MaskLayer[];
   leaks: readonly LightLeak[];
+  filmLeaks: readonly FilmLeak[];
   fx: readonly LightEffect[];
   healSpots: readonly HealSpot[];
   /**
@@ -267,6 +269,7 @@ export const DEFAULT_PARAMS: Readonly<DevelopParams> = Object.freeze({
   cropBottom: 1,
   masks: [],
   leaks: [],
+  filmLeaks: [],
   fx: [],
   healSpots: [],
 });

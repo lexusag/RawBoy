@@ -7,6 +7,7 @@ import { developParams, type DevelopParams } from '../../engine/develop/DevelopP
 import { decodeEdits, encodeEdits } from '../../engine/develop/Edits';
 import { MAX_LAYERS, SHAPE_NAMES, newBrushLayer, newLinearLayer, newRadialLayer, newStripeLayer, type BrushStroke, type MaskLayer } from '../../engine/develop/Masks';
 import { MAX_EFFECTS, newLightEffect, type FxKind, type LightEffect } from '../../engine/develop/LightEffects';
+import { randomFilmLeak, randomFilmRoll, type FilmLeak, type FilmLeakType } from '../../engine/develop/FilmLeaks';
 import { MAX_HEAL_POINTS, MAX_HEAL_SPOTS, type HealSpot } from '../../engine/develop/HealSpots';
 import { MAX_LEAKS, newLightLeak, type LeakKind, type LightLeak } from '../../engine/develop/LightLeaks';
 import { applyPreset, captureLensPreset, capturePreset, decodePresets, encodePresets, putLensPreset, type Preset, type PresetGroup } from '../../engine/develop/Presets';
@@ -188,6 +189,7 @@ export class ProStore {
         scale: base.scale,
         masks: base.masks,
         leaks: base.leaks,
+        filmLeaks: base.filmLeaks,
         fx: base.fx,
         healSpots: base.healSpots,
       },
@@ -435,10 +437,10 @@ export class ProStore {
     this.session.dropBrush(id);
   };
 
-  /** Adds a light leak (up to MAX_LEAKS) at image fractions [cx], [cy]; returns its id, or null when full. */
+  /** Adds a light leak (up to MAX_LEAKS across hand-made and generated leaks) at image fractions [cx], [cy]; returns its id, or null when full. */
   addLeak = (kind: LeakKind = 'streak', cx = 0.5, cy = 0.5): string | null => {
     const p = this._state.params;
-    if (p.leaks.length >= MAX_LEAKS) return null;
+    if (p.leaks.length + p.filmLeaks.length >= MAX_LEAKS) return null;
     const leak = newLightLeak(cx, cy, kind);
     this.commit({ ...p, leaks: [...p.leaks, leak] }, true);
     return leak.id;
@@ -453,6 +455,55 @@ export class ProStore {
   removeLeak = (id: string) => {
     const p = this._state.params;
     this.commit({ ...p, leaks: p.leaks.filter((l) => l.id !== id) }, true);
+  };
+
+  /** Adds a generated film leak (sharing MAX_LEAKS with hand-made leaks); returns its id, or null when full. */
+  addFilmLeak = (type?: FilmLeakType, aspect = 1.5, seed = Math.random()): string | null => {
+    const p = this._state.params;
+    if (p.leaks.length + p.filmLeaks.length >= MAX_LEAKS) return null;
+    const leak = randomFilmLeak(type, aspect, seed, p.filmLeaks.length === 0);
+    this.commit({ ...p, filmLeaks: [...p.filmLeaks, leak] }, true);
+    return leak.id;
+  };
+
+  /**
+   * Random in the Light leaks panel: 'any' rolls a full set of generated film leaks (fitting in the remaining
+   * MAX_LEAKS slots); a chosen type rerolls the selected generated leak (or adds one when none is selected).
+   */
+  rollFilmLeaks = (type: FilmLeakType | 'any', aspect = 1.5, selectedId: string | null = null, seed = Math.random()): string | null => {
+    const p = this._state.params;
+    const room = Math.max(0, MAX_LEAKS - p.leaks.length);
+    if (room === 0) return null;
+    if (type === 'any') {
+      const filmLeaks = randomFilmRoll(aspect, seed).slice(0, room);
+      this.commit({ ...p, filmLeaks }, true);
+      return filmLeaks[0]?.id ?? null;
+    }
+    const idx = selectedId ? p.filmLeaks.findIndex((l) => l.id === selectedId) : -1;
+    const leak = randomFilmLeak(type, aspect, seed, idx <= 0 && p.filmLeaks.length <= 1);
+    if (idx >= 0) {
+      const replaced = { ...leak, id: p.filmLeaks[idx].id };
+      this.commit({ ...p, filmLeaks: p.filmLeaks.map((l, i) => (i === idx ? replaced : l)) }, true);
+      return replaced.id;
+    }
+    if (p.filmLeaks.length < room) {
+      this.commit({ ...p, filmLeaks: [...p.filmLeaks, leak] }, true);
+      return leak.id;
+    }
+    const last = p.filmLeaks[p.filmLeaks.length - 1];
+    const replaced = { ...leak, id: last.id };
+    this.commit({ ...p, filmLeaks: [...p.filmLeaks.slice(0, -1), replaced] }, true);
+    return replaced.id;
+  };
+
+  updateFilmLeak = (id: string, change: (l: FilmLeak) => FilmLeak, force = false) => {
+    const p = this._state.params;
+    this.commit({ ...p, filmLeaks: p.filmLeaks.map((l) => (l.id === id ? change(l) : l)) }, force);
+  };
+
+  removeFilmLeak = (id: string) => {
+    const p = this._state.params;
+    this.commit({ ...p, filmLeaks: p.filmLeaks.filter((l) => l.id !== id) }, true);
   };
 
   /** Starts a healing brush stroke (up to MAX_HEAL_SPOTS); false when full. Healing follows ~300 ms after the edits rest. */

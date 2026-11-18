@@ -30,7 +30,7 @@ import { AppSwitcher, HelpButton } from '../common/AppNav';
 import { EXTENSIONS } from '../../engine/export/ExportSettings';
 import { ExportFrameControls } from '../common/ExportFrameControls';
 import { DEFAULT_NAME_TEMPLATE, NAME_KEYWORDS } from '../../engine/export/NameTemplate';
-import { activeLook, availableFilterOptions, EDITS_NAME, EXPORT_SIZES, isFilterActive, lookName, paramsOf, SETTINGS, type AutoPhoto, type AutoStore, type BatchExport, type ImportMode, type LookMode } from './AutoStore';
+import { activeLook, availableFilterOptions, EDITS_NAME, EXPORT_SIZES, hasFilmLeak, isFilterActive, lookName, paramsOf, SETTINGS, type AutoPhoto, type AutoStore, type BatchExport, type ImportMode, type LookMode } from './AutoStore';
 import { shortcutKey } from '../common/shortcutKey';
 
 /** The frame around the photo in the fit view, CSS pixels, as RawBoy's (grey, white or black: click outside the photo). */
@@ -651,6 +651,42 @@ function LensPresetsDialog({ store, presets, onDismiss }: { store: AutoStore; pr
   );
 }
 
+/** Minimal 🎲 Leak button in Auto's photo view: click to place or reroll a random film leak, long-press or × to remove it. */
+function LeakRollButton({ active, disabled, onRoll, onClear }: { active: boolean; disabled: boolean; onRoll: () => void; onClear: () => void }) {
+  const timer = useRef(0);
+  const longPressed = useRef(false);
+  return (
+    <span className="leak-roll">
+      <button
+        type="button"
+        className={`text${active ? ' active' : ''}`}
+        disabled={disabled}
+        title={active ? 'Reroll film leak (long-press to remove)' : 'Add a random film leak'}
+        onPointerDown={() => {
+          longPressed.current = false;
+          if (!active) return;
+          timer.current = window.setTimeout(() => {
+            longPressed.current = true;
+            onClear();
+          }, 500);
+        }}
+        onPointerUp={() => clearTimeout(timer.current)}
+        onPointerLeave={() => clearTimeout(timer.current)}
+        onClick={() => {
+          if (!longPressed.current) onRoll();
+        }}
+      >
+        🎲 Leak
+      </button>
+      {active && (
+        <button type="button" className="icon" disabled={disabled} title="Remove film leak" aria-label="Remove film leak" onClick={onClear}>
+          ×
+        </button>
+      )}
+    </span>
+  );
+}
+
 /** True for elements where Ctrl/Cmd+A should keep selecting text. */
 function isTextEntry(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -958,6 +994,12 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
           {t}
         </button>
       ))}
+      <LeakRollButton
+        active={hasFilmLeak(photo)}
+        disabled={state.export != null}
+        onRoll={() => store.rollFilmLeak(id)}
+        onClear={() => store.clearFilmLeak(id)}
+      />
       {/* By the controls it changes; the top bar is full on phones. */}
       <button
         type="button"
