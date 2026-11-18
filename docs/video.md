@@ -1,5 +1,10 @@
 # RawBoy Camera: video support exploration
 
+> **Status (2026-11-18):** this is the original exploration and plan, written before any video code ran. Android video
+> (Stage 1 and the flat file of Stage 1.5) has shipped since and runs on the Pixel 9 Pro and the OnePlus 11; how it
+> works today, including the per-phone probe for the encoder's surface, is in [RawBoy Camera](camera.md#video-android)
+> and [Camera phone profiles](camera-platforms.md#video-a-probe-not-a-profile). The numbers below are estimates.
+
 Scope: basic video (1080p/30 default) in RawBoy Camera on Android and iOS, then shooting log and grading with LUTs and film stocks in real time.
 Method: read the current code (`ViewfinderRenderer.kt`, `CameraController.kt`, `film_form.glsl`, iOS `CameraController.swift` and the Metal viewfinder). **Nothing here was run on a device**: GPU and thermal numbers are estimates from the shader structure and must be measured on the Pixel 9 Pro (the log line `RawBoyViewfinder: N fps, GL thread X ms/frame` already exists) before committing to Stage 2.
 

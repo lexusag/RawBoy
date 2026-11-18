@@ -1,0 +1,91 @@
+package app.rawboy.camera.platform
+
+import app.rawboy.camera.platform.tensor.tensorLayer
+import app.rawboy.camera.platform.traits.UndoIspPreviewColor
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
+import org.junit.Test
+
+/**
+ * The Tensor profile equals what the camera did before the profile: every value as a literal, named after the
+ * constant it replaced.
+ */
+class TensorLayerTest {
+    private val tensor = PlatformRegistry.resolve(PhoneDescription(ChipVendor.TENSOR, manufacturer = "Google"))
+
+    @Test
+    fun resolvesToTensor() {
+        assertEquals(listOf("neutral", "tensor"), tensor.layers)
+    }
+
+    @Test
+    fun previewAsToday() {
+        // The former CameraController.previewToRec2020: the result's ISP matrix and gains are undone.
+        assertSame(UndoIspPreviewColor, tensor.preview.color)
+        // The former SRGB_CURVE, points packed near black.
+        assertEquals(false, tensor.preview.curveAtEvenPoints)
+        // The former viewfinder gain: calibration / post-raw boost x still gain, stored as "previewScales3".
+        assertEquals(PreviewLevel.BOOSTED, tensor.preview.level)
+        // The preview comes with the ISP's local shadow lift: the viewfinder adds no backlight lift of its own.
+        assertEquals(true, tensor.preview.liftsShadows)
+        // The former lens list: cameras in the order the camera list names them.
+        assertEquals(false, tensor.lenses.standaloneOverLogical)
+    }
+
+    @Test
+    fun stillAsToday() {
+        assertEquals(1.46e-3f, tensor.still.extraBlack) // ShotSaver.EXTRA_BLACK
+        assertEquals(66_666_667L, tensor.still.maxStillExposureNs) // CameraController.MAX_STILL_EXPOSURE_NS
+        // No Samsung look on a Pixel.
+        assertEquals(0f, tensor.still.lookContrast)
+        assertEquals(0f, tensor.still.lookSaturation)
+        // LibRaw's own black handling, which the extra black above was tuned on.
+        assertEquals(false, tensor.still.exactBlack)
+        assertEquals(0f, tensor.still.blackPedestal)
+        assertEquals(BlackOffsets.NONE, tensor.still.blackOffsets)
+        assertEquals(true, tensor.still.lowPriorityDevelop) // ShotSaver's ExportGpu(lowPriority = true)
+        assertEquals(CompensationModel.BOOST_STAYS_DIGITAL, tensor.still.compensation) // AppliedCompensation.ev on the residual boost
+    }
+
+    @Test
+    fun noiseAsToday() {
+        assertEquals(4f, tensor.noise.backIsoScale) // ShotSaver.PHONE_NOISE_ISO_SCALE
+        assertEquals(8f, tensor.noise.frontIsoScale) // ShotSaver.FRONT_NOISE_ISO_SCALE
+        assertEquals(12f, tensor.noise.lutLumaFloor) // CameraSettings.LUT_LUMA_DENOISE
+        assertEquals(70f, tensor.noise.lutColorFloor) // CameraSettings.LUT_COLOR_DENOISE
+        assertEquals(22f, tensor.noise.experimentalLumaFloor) // CameraSettings.LUT_LUMA_DENOISE_EXPERIMENTAL
+        assertEquals(70f, tensor.noise.experimentalColorFloor) // CameraSettings.LUT_COLOR_DENOISE_EXPERIMENTAL
+    }
+
+    @Test
+    fun flashAsToday() {
+        assertEquals(16f, tensor.flash.defaultGuide) // CameraController.DEFAULT_FLASH_GUIDE
+        assertEquals(4f, tensor.flash.defaultGainNoDistance) // CameraController.DEFAULT_FLASH_GAIN_NO_DISTANCE
+        assertEquals(1.7f, tensor.flash.referenceFNumber) // CameraController.FLASH_REFERENCE_F_NUMBER
+        assertEquals(FlashMetering.MANUAL_GUIDE, tensor.flash.metering) // CameraController.flashExposure, AE off
+        assertEquals(0f, tensor.flash.cameraAeCompensationEv)
+        assertEquals(false, tensor.flash.screenFlashUntilExposed) // CameraViewModel.SCREEN_FLASH_HOLD_MS alone
+    }
+
+    @Test
+    fun tensorPinsItsValuesWhateverTheNeutralProfileSays() {
+        // The Tensor layer repeats the numbers it shares with the neutral profile, so changing those doesn't move the Pixel.
+        val shifted = PlatformPatch { p ->
+            p.copy(
+                still = p.still.copy(
+                    extraBlack = 0.01f, maxStillExposureNs = 1L, exactBlack = true, blackPedestal = 8f, lowPriorityDevelop = false,
+                    blackOffsets = BlackOffsets(mapOf("0" to listOf(BlackOffsets.Point(100f, listOf(1f, 1f, 1f))))),
+                ),
+                noise = p.noise.copy(backIsoScale = 1f, frontIsoScale = 1f, lutLumaFloor = 0f, lutColorFloor = 0f, experimentalLumaFloor = 0f, experimentalColorFloor = 0f),
+                flash = p.flash.copy(
+                    defaultGuide = 1f, referenceFNumber = 9f, defaultGainNoDistance = 1f,
+                    metering = FlashMetering.CAMERA_AE, cameraAeCompensationEv = -2f, screenFlashUntilExposed = true,
+                ),
+                preview = p.preview.copy(color = SrgbPreviewColor, curveAtEvenPoints = true, level = PreviewLevel.STILL_WHITE_BALANCED, liftsShadows = false),
+                lenses = p.lenses.copy(standaloneOverLogical = true),
+            )
+        }
+        val pinned = tensorLayer.patch.applyTo(shifted.applyTo(tensor))
+        assertEquals(tensor, pinned)
+    }
+}

@@ -8,6 +8,7 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaCodec
 import android.media.MediaCodecInfo
+import android.media.MediaCodecList
 import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.media.MediaRecorder
@@ -44,6 +45,9 @@ class VideoRecorder private constructor(
     private val videoCodec: MediaCodec,
     private val audio: Audio?,
     val sink: VideoSink,
+    /** The way this recording was made (see [VideoProbe]). */
+    val variant: VideoVariant,
+    private val fault: VideoDebug.Fault?,
 ) {
     /** The microphone and its AAC encoder. */
     private class Audio(val record: AudioRecord, val codec: MediaCodec, val bufferBytes: Int)
@@ -63,15 +67,34 @@ class VideoRecorder private constructor(
     private var stopAudio = false
     private var videoThread: Thread? = null
     private var audioThread: Thread? = null
+
+    /** Encoded frames written so far (the video thread's count, read by [progress]). */
+    @Volatile
     private var videoFrames = 0
+
+    /** Set when the video encoder threw: before the first frame the attempt failed, after it the recording broke. */
+    @Volatile
+    private var codecFailed = false
 
     /** Elapsed recording time for the timer. */
     val elapsedMs: Long get() = (SystemClock.elapsedRealtimeNanos() - startNs) / 1_000_000
 
-    /** True when the device refused the encoder surface, or no frame ever arrived. */
-    val failed: Boolean get() = sink.failed
-
     val hasAudio: Boolean get() = audio != null
+
+    /** How the recording is doing, for the probe and the watch while recording (see [progressOf]). */
+    fun progress(nowMs: Long = SystemClock.uptimeMillis()): VideoProgress {
+        fault?.let { f ->
+            // As the renderer does when the device refuses or loses the surface.
+            if (f.kind == VideoDebug.Kind.EGL && sink.framesSent > 0 && nowMs - sink.firstSentAtMs >= f.afterMs) {
+                sink.failed = true
+                sink.closing = true
+            }
+        }
+        // The time, not the count: the renderer sets it before counting the first frame.
+        return progressOf(sink.failed, codecFailed, videoFrames, sink.firstSentAtMs.takeIf { it > 0 }, startMs, nowMs)
+    }
+
+    private val startMs = SystemClock.uptimeMillis()
 
     private fun begin() {
         videoCodec.start()
@@ -124,16 +147,20 @@ class VideoRecorder private constructor(
         val info = MediaCodec.BufferInfo()
         try {
             while (true) {
+                injectFault()
                 val index = videoCodec.dequeueOutputBuffer(info, TIMEOUT_US)
                 when {
                     index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> addTrack(videoCodec.outputFormat, isVideo = true)
                     index >= 0 -> {
                         val buffer = videoCodec.getOutputBuffer(index)
                         val config = info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
-                        if (buffer != null && info.size > 0 && !config) {
+                        // Debug faults: an injected EGL refusal or silent encoder writes nothing.
+                        val silent = fault?.kind == VideoDebug.Kind.SILENT || (fault?.kind == VideoDebug.Kind.EGL && fault.afterMs == 0L)
+                        if (buffer != null && info.size > 0 && !config && !silent) {
                             buffer.position(info.offset)
                             buffer.limit(info.offset + info.size)
                             write(videoTrack, buffer, info)
+                            if (videoFrames == 0) Log.i(TAG, "${variant.name}: first encoded frame ${elapsedMs} ms after the start")
                             videoFrames++
                         }
                         videoCodec.releaseOutputBuffer(index, false)
@@ -142,8 +169,16 @@ class VideoRecorder private constructor(
                 }
             }
         } catch (e: Exception) {
-            Log.w(TAG, "video encoder stopped", e)
+            codecFailed = true
+            Log.w(TAG, "${variant.name}: video encoder stopped after $videoFrames frames", e)
         }
+    }
+
+    /** Debug builds: the failure [fault] asks for, once its time has come. */
+    private fun injectFault() {
+        val f = fault ?: return
+        if (f.kind != VideoDebug.Kind.CODEC || sink.framesSent == 0) return
+        if (SystemClock.uptimeMillis() - sink.firstSentAtMs >= f.afterMs) throw IllegalStateException("injected encoder failure (debug)")
     }
 
     @SuppressLint("MissingPermission") // RECORD_AUDIO was granted before create() built the AudioRecord
@@ -218,6 +253,33 @@ class VideoRecorder private constructor(
     }
 
     /**
+     * Ends an attempt that recorded nothing and removes its file; blocking, so off the main thread. The encoder goes
+     * first: the renderer may be stuck handing frames to an encoder that took none (the viewfinder froze for seconds
+     * on the OnePlus 11), and only then can it let go of the EGL surface.
+     */
+    fun discard() {
+        sink.closing = true
+        stopAudio = true
+        runCatching { videoCodec.stop() }
+        runCatching { videoCodec.release() }
+        sink.requestRender()
+        val deadline = SystemClock.uptimeMillis() + 800
+        while (!sink.released && SystemClock.uptimeMillis() < deadline) Thread.sleep(10)
+        videoThread?.join(2000)
+        audioThread?.join(2000)
+        runCatching { audio?.record?.stop() }
+        runCatching { muxer.release() }
+        sink.surface.release()
+        audio?.let {
+            runCatching { it.codec.stop() }
+            runCatching { it.codec.release() }
+            runCatching { it.record.release() }
+        }
+        runCatching { descriptor.close() }
+        runCatching { resolver.delete(uri, null, null) }
+    }
+
+    /**
      * Ends the recording and finalises the file; blocking (up to a few seconds), so off the main thread. Returns the
      * file's Uri, or null when nothing was recorded (the empty entry is removed).
      */
@@ -287,8 +349,11 @@ class VideoRecorder private constructor(
         const val FLAT_RAISE_EV = 1.0f
         private const val AUDIO_BITRATE = 192_000
 
-        /** A configured encoder of [mime] (surface input), or null when the device has none or refuses the format. */
-        private fun videoCodecOf(width: Int, height: Int, mime: String, flat: Boolean): MediaCodec? {
+        /**
+         * A configured encoder of [mime] (surface input; the codec called [name], else the platform's choice for the
+         * type), or null when the device has none or refuses the format.
+         */
+        private fun videoCodecOf(width: Int, height: Int, mime: String, flat: Boolean, name: String? = null): MediaCodec? {
             var codec: MediaCodec? = null
             try {
                 val format = MediaFormat.createVideoFormat(mime, width, height).apply {
@@ -313,8 +378,9 @@ class VideoRecorder private constructor(
                     }
                     setInteger(MediaFormat.KEY_COLOR_RANGE, MediaFormat.COLOR_RANGE_LIMITED)
                 }
-                codec = MediaCodec.createEncoderByType(mime)
+                codec = if (name != null) MediaCodec.createByCodecName(name) else MediaCodec.createEncoderByType(mime)
                 codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+                Log.i(TAG, "video encoder ${codec.name} ($mime, ${width}x$height)")
                 return codec
             } catch (e: Exception) {
                 Log.w(TAG, "no $mime encoder", e)
@@ -337,7 +403,9 @@ class VideoRecorder private constructor(
             turns: Int,
             withAudio: Boolean,
             flat: Boolean,
-            requestRender: () -> Unit,
+            variant: VideoVariant = VideoVariant.STANDARD,
+            debug: VideoDebug? = null,
+            requestRender: () -> Unit = {},
         ): VideoRecorder {
             val landscape = turns % 2 != 0
             val width = if (landscape) LONG_SIDE else SHORT_SIDE
@@ -365,9 +433,12 @@ class VideoRecorder private constructor(
                 // HEVC first: the Pixel's player stalled for seconds on this app's grainy H.264 High files (the same
                 // frames re-muxed with exact 30 fps times stalled too), while the camera's own videos play fine.
                 // H.264 stays as the fallback for a device without an HEVC encoder.
-                video = videoCodecOf(width, height, MediaFormat.MIMETYPE_VIDEO_HEVC, flat)
-                    ?: videoCodecOf(width, height, MediaFormat.MIMETYPE_VIDEO_AVC, flat)
-                    ?: throw IOException("No video encoder")
+                video = when {
+                    variant.softwareAvc -> softwareAvcName(width, height)?.let { videoCodecOf(width, height, MediaFormat.MIMETYPE_VIDEO_AVC, flat, it) }
+                    debug?.forceAvc == true -> videoCodecOf(width, height, MediaFormat.MIMETYPE_VIDEO_AVC, flat)
+                    else -> videoCodecOf(width, height, MediaFormat.MIMETYPE_VIDEO_HEVC, flat)
+                        ?: videoCodecOf(width, height, MediaFormat.MIMETYPE_VIDEO_AVC, flat)
+                } ?: throw NoEncoderException(if (variant.softwareAvc) "No software H.264 encoder" else "No video encoder")
                 surface = video.createInputSurface()
 
                 if (withAudio) microphone = runCatching { audioOf() }.onFailure { Log.w(TAG, "no microphone", it) }.getOrNull()
@@ -381,10 +452,12 @@ class VideoRecorder private constructor(
                     turns = turns,
                     flat = flat,
                     raiseEv = FLAT_RAISE_EV,
+                    encoderConfigs = variant.encoderConfigs,
                     presentationNs = { recorder.presentationNs(it) },
                     requestRender = requestRender,
                 )
-                recorder = VideoRecorder(resolver, uri, descriptor, muxer, video, microphone, sink)
+                val fault = debug?.fault?.takeIf { it.variant == null || it.variant == variant }
+                recorder = VideoRecorder(resolver, uri, descriptor, muxer, video, microphone, sink, variant, fault)
                 recorder.begin()
                 return recorder
             } catch (e: Exception) {
@@ -395,9 +468,51 @@ class VideoRecorder private constructor(
                 runCatching { muxer?.release() }
                 runCatching { descriptor?.close() }
                 runCatching { resolver.delete(uri, null, null) }
-                throw if (e is IOException) e else IOException(e.message ?: "Could not start the recording", e)
+                throw if (e is IOException) e else NoEncoderException(e.message ?: "Could not start the recording", e)
             }
         }
+
+        /** The first software-only H.264 encoder that takes [width] x [height] at 30 fps (`c2.android.avc.encoder` on AOSP). */
+        private fun softwareAvcName(width: Int, height: Int): String? =
+            MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos.firstOrNull { info ->
+                info.isEncoder && info.isSoftwareOnly && MediaFormat.MIMETYPE_VIDEO_AVC in info.supportedTypes &&
+                    runCatching {
+                        info.getCapabilitiesForType(MediaFormat.MIMETYPE_VIDEO_AVC).videoCapabilities
+                            .areSizeAndRateSupported(width, height, 30.0)
+                    }.getOrDefault(false)
+            }?.name
+
+        /**
+         * What [progress] makes of a recording's counters. [firstSentMs]: when the renderer handed the encoder its
+         * first frame (null: none yet). The probe waits [NO_OUTPUT_MS] for a first encoded frame after that, and
+         * [NO_CAMERA_MS] for the first frame at all.
+         */
+        fun progressOf(
+            eglFailed: Boolean,
+            codecFailed: Boolean,
+            encodedFrames: Int,
+            firstSentMs: Long?,
+            startMs: Long,
+            nowMs: Long,
+        ): VideoProgress = when {
+            encodedFrames > 0 && codecFailed -> VideoProgress.Broken(VideoFailure.CODEC_ERROR)
+            encodedFrames > 0 && eglFailed -> VideoProgress.Broken(VideoFailure.EGL_SURFACE)
+            encodedFrames > 0 -> VideoProgress.Encoding
+            eglFailed -> VideoProgress.Failed(VideoFailure.EGL_SURFACE)
+            codecFailed -> VideoProgress.Failed(VideoFailure.CODEC_ERROR)
+            firstSentMs != null && nowMs - firstSentMs > NO_OUTPUT_MS -> VideoProgress.Failed(VideoFailure.NO_OUTPUT)
+            firstSentMs == null && nowMs - startMs > NO_CAMERA_MS -> VideoProgress.NoCamera
+            else -> VideoProgress.Waiting
+        }
+
+        /**
+         * Generous: the OnePlus 11's encoder put out its first frame 0.2-0.3 s after the first frame went in; a slow
+         * one must not be taken for a broken one (that would only cost this recording, see [VideoProbe]).
+         */
+        const val NO_OUTPUT_MS = 3000L
+
+        /** No frame drawn into the encoder at all: the camera stalled, which says nothing about the encoder. */
+        const val NO_CAMERA_MS = 4000L
 
         @SuppressLint("MissingPermission")
         private fun audioOf(): Audio {
@@ -427,4 +542,44 @@ class VideoRecorder private constructor(
             return Audio(microphone, codec, bytes)
         }
     }
+}
+
+/** How a recording is doing ([VideoRecorder.progress]). */
+sealed interface VideoProgress {
+    /** No encoded frame yet, still within the time allowed. */
+    data object Waiting : VideoProgress
+
+    /** Frames come out of the encoder. */
+    data object Encoding : VideoProgress
+
+    /** The encoder or its surface failed after frames had come out: the recording stops, keeping what it has. */
+    data class Broken(val failure: VideoFailure) : VideoProgress
+
+    /** Nothing recorded, for [failure]. */
+    data class Failed(val failure: VideoFailure) : VideoProgress
+
+    /** The camera sent no frame to record. */
+    data object NoCamera : VideoProgress
+}
+
+/** The video encoder (or the chosen one) could not be made or configured. */
+class NoEncoderException(message: String, cause: Throwable? = null) : IOException(message, cause)
+
+/**
+ * Debug builds only (read by [app.rawboy.camera.debug.DebugProbe.videoDebug]): a forced variant list for the probe, a
+ * forced hardware H.264 encoder, and an injected failure, to try every path on one phone.
+ */
+data class VideoDebug(
+    /** Replaces [VideoVariant.ORDER] for the probe. */
+    val order: List<VideoVariant>? = null,
+    /** Hardware H.264 instead of HEVC (the variants that use the hardware encoder). */
+    val forceAvc: Boolean = false,
+    /** Quarter turns of the file in place of the phone's rotation (landscape files with the phone on a stand). */
+    val turns: Int? = null,
+    val fault: Fault? = null,
+) {
+    enum class Kind { CODEC, EGL, SILENT }
+
+    /** [kind] on [variant] (any if null); [afterMs] after the first frame went in ([Kind.CODEC], [Kind.EGL]). */
+    data class Fault(val kind: Kind, val variant: VideoVariant? = null, val afterMs: Long = 0)
 }

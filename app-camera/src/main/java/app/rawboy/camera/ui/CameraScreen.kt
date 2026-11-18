@@ -152,6 +152,8 @@ import app.rawboy.gl.ViewfinderRenderer
 import kotlin.math.min
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import android.content.pm.ApplicationInfo
+import app.rawboy.camera.platform.PlatformRegistry
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.rawboy.auto.looks.LookApplier
@@ -179,6 +181,7 @@ fun CameraScreen(
     requestAudio: () -> Unit,
     openPhoto: (Uri) -> Unit,
     openQr: (QrPayload) -> Unit,
+    shareDeviceReport: () -> Unit,
 ) {
     val status by vm.status.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
@@ -210,6 +213,7 @@ fun CameraScreen(
     val videoMode by vm.videoMode.collectAsStateWithLifecycle()
     val recordingMs by vm.recordingMs.collectAsStateWithLifecycle()
     val videoSink by vm.videoSink.collectAsStateWithLifecycle()
+    val recordableViewfinder by vm.recordableViewfinder.collectAsStateWithLifecycle()
     // Only the AF state of the camera's per-frame metadata, so the screen doesn't recompose 30 times a second.
     val afState by remember(vm) { vm.controller.frames.map { it?.afState }.distinctUntilChanged() }
         .collectAsStateWithLifecycle(null)
@@ -422,6 +426,7 @@ fun CameraScreen(
 
                         videoSink = videoSink,
                         videoMode = videoMode,
+                        eglConfig = if (recordableViewfinder) ViewfinderEglConfig.RECORDABLE_RGBA8888 else null,
                     )
                     // The self-timer's countdown, big and upright over the picture.
                     selfTimerLeft?.let { left ->
@@ -715,7 +720,7 @@ fun CameraScreen(
 
     if (showSettings) {
         ModalBottomSheet(onDismissRequest = { showSettings = false }) {
-            SettingsContent(settings, vm, requestLocation)
+            SettingsContent(settings, vm, requestLocation, shareDeviceReport)
         }
     }
 }
@@ -1197,7 +1202,7 @@ private fun LookSlider(
 private val LOOK_LABEL_WIDTH = 88.dp
 
 @Composable
-private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, requestLocation: () -> Unit) {
+private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, requestLocation: () -> Unit, shareDeviceReport: () -> Unit) {
     val maxResMp by vm.maxResMp.collectAsState()
     var showFrames by remember { mutableStateOf(false) }
     if (showFrames) {
@@ -1418,6 +1423,8 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             )
         }
 
+        PlatformInfo(vm, shareDeviceReport)
+
         Spacer(Modifier.height(16.dp))
         for (line in Edition.credits) {
             Text(line, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1426,6 +1433,49 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
         var showLicences by remember { mutableStateOf(false) }
         TextButton(onClick = { showLicences = true }, contentPadding = PaddingValues(0.dp)) { Text("Open-source licences") }
         if (showLicences) LicensesDialog(onDismiss = { showLicences = false })
+    }
+}
+
+/**
+ * Which platform profile the camera runs with (layers, or the neutral profile on a phone nobody has tested), what
+ * was detected, the device report for tuning a profile, and in a debug build the chip to take the phone for from the
+ * next start.
+ */
+@Composable
+private fun PlatformInfo(vm: CameraViewModel, shareDeviceReport: () -> Unit) {
+    val resolved = vm.resolvedPlatform
+    val layers = resolved.profile.layers.drop(1)
+    val profile = if (layers.isEmpty()) "neutral (this phone hasn't been tested)" else layers.joinToString(" + ") { PlatformRegistry.title(it) }
+    val phone = resolved.phone
+    val chip = phone.chip.title + phone.socModel.takeIf { it.isNotEmpty() }?.let { " ($it)" }.orEmpty()
+    Spacer(Modifier.height(16.dp))
+    Text(
+        "Phone profile: $profile" + if (resolved.chosenChip != null) " (chosen by hand)" else "",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Text(
+        "Detected: $chip chip, ${phone.manufacturer} ${phone.model}",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    TextButton(onClick = shareDeviceReport, contentPadding = PaddingValues(0.dp)) { Text("Share device report") }
+    Text(
+        "A text file about this phone's cameras, GPU and video encoders, for tuning the camera to it. It goes only where you send it",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    val debuggable = (LocalContext.current.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    if (debuggable) {
+        val chosen by vm.chosenChip.collectAsState()
+        SettingChoice(
+            title = "Take the phone for (debug)",
+            subtitle = "From the next start of the app. Calibration learned under another profile is kept apart",
+            options = vm.platformChoices,
+            selected = chosen,
+            label = { it?.shortTitle ?: "Auto" },
+            onSelect = vm::choosePlatform,
+        )
     }
 }
 

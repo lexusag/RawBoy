@@ -47,6 +47,9 @@ lenses, burst merge), iOS drives AVFoundation (**ProRAW at 12 MP by default**, o
 | Opens fast and saves while locking right after a shot | 1.5.7 | ✓ foreground service + wake lock | n/a | |
 | Saves back off when memory is low | 1.10.9 | ✓ | ? | |
 | Samsung tablets / phones match the viewfinder better | 1.8.11; 1.10.8 | ✓ | n/a | |
+| **Phone profiles** detected at start (chip, maker, model layers; *Phone profile* line in Settings) | unreleased (branch `camera-device-compat`) | ✓ | n/a | Pixel 9 Pro (Tensor) and OnePlus 11 measured; others neutral. See [camera-platforms.md](camera-platforms.md) |
+| Share device report (Settings) | unreleased (same) | ✓ | — | Plain text through the share sheet, for tuning a new phone |
+| Video on phones whose standard encoder path fails (probe) | unreleased (same) | ✓ | — | OnePlus 11 records through the encoder's own GL context |
 
 ## Looks and output
 

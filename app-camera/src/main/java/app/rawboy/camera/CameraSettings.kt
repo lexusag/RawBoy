@@ -10,6 +10,9 @@ import app.rawboy.develop.DevelopParams
 import app.rawboy.camera.capture.CameraController
 import app.rawboy.camera.capture.FlashGuides
 import app.rawboy.camera.capture.FlashMode
+import app.rawboy.camera.capture.ViewfinderGain
+import app.rawboy.camera.platform.NoiseProfile
+import app.rawboy.camera.platform.PreviewLevel
 import app.rawboy.export.DateStampFormat
 import app.rawboy.export.DateStampStyle
 import app.rawboy.export.FilmFrameColor
@@ -167,13 +170,14 @@ data class CameraSettings(
      * the filter, then grey (Saturation -100 makes the scene grey before the stock and keeps the stock's output grey, see
      * `applyLut`), so Strength blends the stock's tones with plain AgX grey and the picture stays black and white;
      * Warmth isn't shown there and doesn't apply. With Film on too ([filmMono]) it has [FILM_MONO_CONTRAST] more contrast.
+     * [noise] gives the denoise floors of the non-Film colour looks (the phone's platform profile).
      */
-    fun develop(base: DevelopParams, hasFace: Boolean): DevelopParams {
-        val p = developLook(base, hasFace)
+    fun develop(base: DevelopParams, hasFace: Boolean, noise: NoiseProfile): DevelopParams {
+        val p = developLook(base, hasFace, noise)
         return if (grain) p else p.copy(grain = 0f, filmGrain = 0f)
     }
 
-    private fun developLook(base: DevelopParams, hasFace: Boolean): DevelopParams {
+    private fun developLook(base: DevelopParams, hasFace: Boolean, noise: NoiseProfile): DevelopParams {
         val bw = monoMode
         val adjust = Adjustments(
             brightness = brightness,
@@ -186,8 +190,8 @@ data class CameraSettings(
         // LUT and neutral looks have no film grain and scatter to hide shadow noise, and a LUT steepens the shadows
         // (Redscale ~4x): clean the shadows more than the ISO table does. Mirrors iOS CameraSettings.develop.
         val experimental = look.experimental
-        val luma = if (experimental) LUT_LUMA_DENOISE_EXPERIMENTAL else LUT_LUMA_DENOISE
-        val color = if (experimental) LUT_COLOR_DENOISE_EXPERIMENTAL else LUT_COLOR_DENOISE
+        val luma = if (experimental) noise.experimentalLumaFloor else noise.lutLumaFloor
+        val color = if (experimental) noise.experimentalColorFloor else noise.lutColorFloor
         // Neutral and plain LUT looks start a little punchier than Auto's base (2026-11-07, tuned on Pixel night/stage DNGs
         // through the web develop); the colour-swap looks keep their own colour.
         val punch = !experimental
@@ -211,9 +215,18 @@ data class CameraSettings(
     /** Self-timer and long exposure are experimental: they do nothing (and their buttons hide) unless [experimental] is on. */
     val activeSelfTimer: Int get() = if (experimental) selfTimer else 0
 
-    /** The long exposure to take, or null when the mode is off. */
-    fun longExposureSpec(key: Float?): app.rawboy.camera.capture.LongExposure? =
-        if (experimental && longExposure > 0) app.rawboy.camera.capture.LongExposure(longExposure, longExposureLighten, key?.takeIf { lensKey in previewScales }?.let { it * previewScale }) else null
+    /**
+     * The long exposure to take, or null when the mode is off. [sceneKey]: the viewfinder's scene key per unit of scale,
+     * turned into the raw's key by the lens's calibration ([ViewfinderGain.longExposureKey], [level] and the frame's
+     * [neutralFloor]); none until the lens is calibrated.
+     */
+    fun longExposureSpec(sceneKey: Float?, level: PreviewLevel, neutralFloor: Float): app.rawboy.camera.capture.LongExposure? =
+        if (experimental && longExposure > 0) {
+            app.rawboy.camera.capture.LongExposure(
+                longExposure, longExposureLighten,
+                sceneKey?.takeIf { lensKey in previewScales }?.let { ViewfinderGain.longExposureKey(level, it, previewScale, neutralFloor) },
+            )
+        } else null
 
     /** Resets all user settings to their defaults while keeping learned lens calibration. */
     fun resetToDefaults(): CameraSettings = CameraSettings(previewScales = previewScales, flashGuides = flashGuides)
@@ -227,25 +240,6 @@ data class CameraSettings(
 
         const val MIN_QUALITY = 70
 
-        /**
-         * Samsung (2026-11-08, Galaxy S25 pair of viewfinder screenshot and saved JPEG, same Film look): the preview
-         * the viewfinder shows is the ISP's own rendering and ignores the plain sRGB curve we ask for, so it can't be
-         * undone like the Pixel's. It is an S-curve (darks x0.55-0.65, highlights x1.2 around display grey 0.33, in
-         * log-log slope ~1.14) with ~+30% chroma in the midtones, while the raw decoded here has neither, so the saved
-         * photo came out flat next to the viewfinder. Added to the shot's develop to match; first estimate from one
-         * pair, tune on more Samsung shots. Camera only, saved photos only (the viewfinder already has it).
-         */
-        const val SAMSUNG_CONTRAST = 25f
-        const val SAMSUNG_SATURATION = 25f
-
-        /** [p] with the Samsung ISP look added when the DNG's [make] is Samsung; B&W keeps its grey (saturation -100). */
-        fun withPhoneIspLook(p: DevelopParams, make: String): DevelopParams {
-            if (!make.equals("samsung", ignoreCase = true)) return p
-            return p.copy(
-                contrast = (p.contrast + SAMSUNG_CONTRAST).coerceAtMost(100f),
-                saturation = if (p.saturation <= -100f) p.saturation else (p.saturation + SAMSUNG_SATURATION).coerceAtMost(100f),
-            )
-        }
         const val SMALL_LONG_SIDE = 3000
         /** Light sharpening after the downscale to [SMALL_LONG_SIDE] (luma unsharp mask, `band_ops.h`); full size gets none. */
         const val SMALL_SHARPEN = 0.5f
@@ -253,17 +247,6 @@ data class CameraSettings(
         const val BURST_FRAMES = 8
         /** Film + B&W: added to the Contrast slider's value (owner's choice, 2026-10-31: punchier than plain B&W). */
         const val FILM_MONO_CONTRAST = 20f
-
-        /**
-         * Denoise floors for non-Film colour looks (2026-11-07): shadows of LUT and neutral shots were noisy, Redscale
-         * with blocky coarse colour blotches. Experimental looks (colour swaps, Redscale) get more; 70 colour reaches
-         * the shader's coarse stage (> 65). Unverified on device: tune against Pixel night shots.
-         */
-        const val LUT_LUMA_DENOISE = 12f
-        /** 70 reaches the coarse chroma stage: Natural's shadow colour mottle (σ10 chroma std) 3.95 → 2.55 (35 → 70), 1.34 at 100 with colour fading at edges. */
-        const val LUT_COLOR_DENOISE = 70f
-        const val LUT_LUMA_DENOISE_EXPERIMENTAL = 22f
-        const val LUT_COLOR_DENOISE_EXPERIMENTAL = 70f
 
         /** Added to Contrast / Saturation for Natural and the plain LUT looks (not Film, B&W or the experimental looks). */
         const val LOOK_CONTRAST = 6f
@@ -286,15 +269,27 @@ data class CameraSettings(
 object CameraSettingsStore {
     private const val PREFS = "camera"
 
-    /**
-     * Calibration storage. "previewScales3": learned with the explicit sRGB preview curve and the still-exposure
-     * prediction (CameraController.stillGain); earlier values were learned without them and are dropped.
+    /*
+     * Calibration storage. Preview scales: each [PreviewLevel] has its own key ([PreviewLevel.scalesKey]), as a scale
+     * learned under one means something else under another. "previewScales3" (BOOSTED): learned with the explicit sRGB
+     * preview curve and the still-exposure prediction (CameraController.stillGain); earlier values were learned
+     * without them and are dropped.
      */
-    private const val SCALES_KEY = "previewScales3"
     private const val FLASH_GUIDES_KEY = "flashGuides"
 
+    /**
+     * Where [slot]'s preview scales under [level] are stored (`CameraPlatform.calibrationSlot`; empty = the phone's
+     * own).
+     */
+    internal fun scalesKey(slot: String, level: PreviewLevel = PreviewLevel.BOOSTED) =
+        if (slot.isEmpty()) level.scalesKey else "${level.scalesKey}@$slot"
+
+    /** Where [slot]'s flash guides are stored. */
+    internal fun flashGuidesKey(slot: String) = if (slot.isEmpty()) FLASH_GUIDES_KEY else "$FLASH_GUIDES_KEY@$slot"
+
+    /** The saved settings, with the calibration learned under [calibrationSlot] (preview scales: under [level]). */
     @Synchronized
-    fun load(context: Context): CameraSettings {
+    fun load(context: Context, calibrationSlot: String, level: PreviewLevel = PreviewLevel.BOOSTED): CameraSettings {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val d = CameraSettings()
         val always = CameraSettings(
@@ -338,8 +333,8 @@ object CameraSettingsStore {
             experimental = p.getBoolean("experimental", d.experimental),
             videoStabilization = p.getBoolean("videoStabilization", d.videoStabilization),
             flatVideo = p.getBoolean("flatVideo", d.flatVideo),
-            previewScales = parseScales(p.getString(SCALES_KEY, null)),
-            flashGuides = parseScales(p.getString(FLASH_GUIDES_KEY, null), min = 1e-2f, max = 1e4f),
+            previewScales = parseScales(p.getString(scalesKey(calibrationSlot, level), null)),
+            flashGuides = parseScales(p.getString(flashGuidesKey(calibrationSlot), null), min = 1e-2f, max = 1e4f),
             // "FLASH" (plain flash, since removed) becomes Focus-flash.
             flash = when (val f = p.getString("flash", null)) {
                 "FLASH" -> FlashMode.FOCUS_FLASH
@@ -421,28 +416,42 @@ object CameraSettingsStore {
             .apply()
     }
 
-    /** Updates one lens's [CameraSettings.previewScales] entry in storage, returning the new scale. */
+    /**
+     * Every learned calibration entry, all slots: storage key ("previewScales3", "flashGuides@neutral+tensor") to its
+     * "lens=value;…" text (the device report). Nothing else from the settings.
+     */
     @Synchronized
-    fun updatePreviewScale(context: Context, lens: String, estimate: Float): Float {
+    fun calibration(context: Context): List<Pair<String, String>> =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).all.entries
+            .filter { (key, value) ->
+                value is String && (PreviewLevel.entries.any { key == it.scalesKey || key.startsWith("${it.scalesKey}@") } ||
+                    key == FLASH_GUIDES_KEY || key.startsWith("$FLASH_GUIDES_KEY@"))
+            }
+            .map { it.key to it.value as String }
+            .sortedBy { it.first }
+
+    /** Updates one lens's [CameraSettings.previewScales] entry in [slot]'s storage under [level], returning the new scale. */
+    @Synchronized
+    fun updatePreviewScale(context: Context, slot: String, level: PreviewLevel, lens: String, estimate: Float): Float {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val scales = parseScales(p.getString(SCALES_KEY, null))
+        val scales = parseScales(p.getString(scalesKey(slot, level), null))
         val known = scales[lens]
         val scale = if (known == null) estimate else known * kotlin.math.sqrt(estimate / known)
         val clamped = scale.coerceIn(CameraSettings.MIN_SCALE, CameraSettings.MAX_SCALE)
         val updated = scales + (lens to clamped)
-        p.edit().putString(SCALES_KEY, updated.entries.joinToString(";") { "${it.key}=${it.value}" }).apply()
+        p.edit().putString(scalesKey(slot, level), updated.entries.joinToString(";") { "${it.key}=${it.value}" }).apply()
         return clamped
     }
 
-    /** Updates one lens's [CameraSettings.flashGuides] entry in storage, returning the new guide. */
+    /** Updates one lens's [CameraSettings.flashGuides] entry in [slot]'s storage, returning the new guide. */
     @Synchronized
-    fun updateFlashGuide(context: Context, key: String, estimate: Float, min: Float, max: Float): Float {
+    fun updateFlashGuide(context: Context, slot: String, key: String, estimate: Float, min: Float, max: Float): Float {
         val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-        val guides = parseScales(p.getString(FLASH_GUIDES_KEY, null), min = min, max = max)
+        val guides = parseScales(p.getString(flashGuidesKey(slot), null), min = min, max = max)
         val known = guides[key]
         val guide = (if (known == null) estimate else known * kotlin.math.sqrt(estimate / known)).coerceIn(min, max)
         val updated = guides + (key to guide)
-        p.edit().putString(FLASH_GUIDES_KEY, updated.entries.joinToString(";") { "${it.key}=${it.value}" }).apply()
+        p.edit().putString(flashGuidesKey(slot), updated.entries.joinToString(";") { "${it.key}=${it.value}" }).apply()
         return guide
     }
 

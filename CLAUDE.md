@@ -169,8 +169,10 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   left trails. Every ~300 ms the 512 px base is read back → `gl/ViewfinderBase.kt` (analysis only).
 - `app-camera/src/main/java/app/rawboy/camera/` — `capture/CameraController.kt` (Camera2: back camera with RAW,
   preview with `TONEMAP_PRESET_CURVE_SRGB`, `DngCreator` with lens shading map on, tap-to-focus, as-shot white from
-  `SENSOR_NEUTRAL_COLOR_POINT` + D65 ColorMatrix; `lenses()`: the logical back camera = W, its physical cameras with
-  RAW = UW/T by 35 mm-equivalent focal; a physical lens is streamed via `OutputConfiguration.setPhysicalCameraId`,
+  `SENSOR_NEUTRAL_COLOR_POINT` + D65 ColorMatrix; `lenses()` (`capture/LensChoice.kt`): W = the logical camera if a side has exactly one, else the only camera
+  that opens on its own, else the lens nearest 26 mm; the others with RAW = UW/T by 35 mm-equivalent focal (a
+  stand-alone camera wins over a logical camera's lens of the same focal only under the profile's
+  `standaloneOverLogical`: OnePlus); a physical lens is streamed via `OutputConfiguration.setPhysicalCameraId`,
   with per-lens keys (`setPhysicalCameraKey`) and per-lens results/characteristics for DngCreator; fallback: open the
   physical id directly), `CameraViewModel.kt` (live auto develop, capture → DNG), `ShotSaver.kt` (application-scoped
   two-stage queue → jpegli JPEG: `prepare` (decode + analysis, `RawBoy-decode`) overlaps the previous shot's `finish`
@@ -183,8 +185,8 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   camera. Charging with the screensaver on sleep, power makes the phone **dream**: `isInteractive` stays true, so the
   lock screen camera also closes on `ACTION_DREAMING_STARTED`, but only if it left the screen as the lock screen camera:
   a frozen background process gets that broadcast late, after a new secure launch (a late SCREEN_OFF did the same in #116)),
-  `CameraSettings.kt`, `ui/`. Exposure (`AutoTone.develop(phoneAe = true)`; flash shots, AE off, are re-metered as
-  Auto): the phone's AE is kept, but lifted to `PHONE_KEY` (0.06) when it put the metered key below it (the Pixel's AE
+  `CameraSettings.kt`, `ui/`. Exposure (`AutoTone.develop(phoneAe = true)`; manual flash shots, AE off, are re-metered as
+  Auto; `CAMERA_AE` flash shots keep the phone's exposure): the phone's AE is kept, but lifted to `PHONE_KEY` (0.06) when it put the metered key below it (the Pixel's AE
   protects highlights: a white pigeon or a window in the box took the frame 1-2 EV down), never darker, max +2 EV.
   Re-metering to `AutoTone.TARGET_KEY` put rooms 1-2 EV under the Pixel's camera; plain AE (#87) still went dark on highlights.
   Brightness (2026-10-31) also goes into the capture as AE compensation (`CameraController.setExposureBias`: Camera2
@@ -195,7 +197,8 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   Android takes out only the compensation that reached the raw (`CameraController.appliedCompensationEv`,
   `capture/AppliedCompensation.kt`): in low light the Pixel's AE is at 1/30 s and puts extra compensation into the
   post-raw boost, so removing all of it undid Brightness (viewfinder brightened, then sank back). Measured as the
-  still's residual digital gain (boost / `stillGain`) against the last zero-compensation preview frame's.
+  still's residual digital gain (boost / `stillGain`) against the last zero-compensation preview frame's
+  (`StillProfile.compensation = BOOST_STAYS_DIGITAL`; OnePlus `AE_GAIN_IN_RAW`, see the phone profiles below).
   iOS: the same (`AutoTone.exposure(phoneAe:)`, viewfinder and shots), flash shots included (the iPhone's flash is
   exposed by its own AE, no flash guide). Shutter sound: iOS 18's `isShutterSoundSuppressionEnabled` where
   `isShutterSoundSuppressionSupported` (not in Japan/Korea; before iOS 18 the click always plays).
@@ -211,6 +214,49 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   app); packaged by the engine's
   `copyNotices` task (shown by `view/Licenses.kt`: at the end of Pro's/Auto's "?" help sheet, Camera's Settings) and copied
   into the web build (`ui/common/LicensesDialog.tsx`). Update it when adding or upgrading a dependency.
+- **Phone profiles** (Android Camera, 2026-11-15..18; `docs/camera-platforms.md` has the field table, the rules and how
+  to add a phone): `app-camera/.../camera/platform/`. `PlatformDetector` reads `Build` into a `PhoneDescription` (chip
+  from `SOC_MANUFACTURER`, only without it from `HARDWARE`; unrecognised = UNKNOWN, the phone maker never decides the
+  chip) → `PlatformRegistry.layers` (one file per layer: `tensor/`, `qualcomm/`, `oem/samsung/`, `oem/oneplus/` +
+  model `Cph2447.kt`; shared pieces in `traits/`) applied to `generic/Neutral.kt` by `LayerLevel` (chip vendor → SoC →
+  maker → model) → `CameraPlatform` (`lenses`, `preview`, `still`, `noise`, `flash`; data + a few strategies:
+  `PreviewColor`, enums). `ActivePlatform.get` resolves it once per process (logcat `RawBoyPlatform`); only
+  `CameraViewModel` reads it and hands it to `CameraController` (constructor), each `Shot` (`Shot.platform`) and
+  `CameraSettings.develop()` (noise floors). **Shared camera code holds no phone names and no numbers measured on one
+  phone**; the engine takes values as parameters (`BlackFix`, `Frame.linearToe`, `EncoderConfig`) and never imports
+  `platform/`. Rules: GPU driver/encoder findings → chip vendor layer (safe for most phones with that chip), camera HAL
+  and preview behaviour → maker layer, sensor numbers → model layer; a field is added only with neutral = today's
+  behaviour and never changes meaning; the Tensor layer repeats the neutral values the Pixel was tuned with and
+  `TensorLayerTest` pins every field to the pre-profile constants (**the Pixel 9 Pro must not move**); `oem/samsung` pins what Samsung had before
+  profiles (Pixel extra black + preview colour + low develop priority + the +25 look), unmeasured since; no empty
+  layers. Calibration keys: `PreviewLevel.scalesKey` (`previewScales3` / `previewScalesWb`) per brightness model, and
+  `…@<layers>` (`calibrationSlot`) under a debug build's hand-picked chip (Settings › *Take the phone for*, from the next
+  start). Settings shows *Phone profile: …*; **Share device report** (`camera/report/`: `DeviceReportCollector` →
+  `DeviceReport.render`, a text file via the `${applicationId}.reports` FileProvider, `cache/reports`; fixed line order,
+  `Locale.ROOT` numbers, `format: 1`). Debug builds also have `debug/DebugProbe.kt` (tag `RawBoyProbe`: Build/EGL/encoder
+  lines, request templates, the preview result at the shutter, and the viewfinder's and the shot's 512 px linear copies
+  in `files/debug/<id>-vf.f16` / `-raw.f16` for viewfinder/photo fits). Acceptance threshold used: viewfinder within
+  0.2 EV of the JPEG, R/G and B/G within 8% once a lens is calibrated. OnePlus 11 findings (all in the layers' KDoc):
+  HAL reads TONEMAP_CURVE points as evenly spaced (`curveAtEvenPoints`), identity CCM in the result, preview as bright as
+  the raw with the ISP's WB (`STILL_WHITE_BALANCED`), fractional DNG black that LibRaw truncates + clipped noise
+  (`exactBlack`, `blackPedestal`, `blackOffsets`), manual flash stills get no flash light (`CAMERA_AE`), exposure starts
+  0.36 s after the request (`screenFlashUntilExposed`), boost written as BaselineExposure (`AE_GAIN_IN_RAW`), RAW via the
+  logical camera 0 freezes (`standaloneOverLogical`), telephoto is `SYSTEM_CAMERA`, no max-res RAW.
+- **Video** (Android Camera; user side in `docs/camera.md` › Video, the pre-code exploration in `docs/video.md`):
+  `capture/VideoRecorder.kt` (HEVC Main 1080p30, H.264 fallback, stereo AAC, MP4 in Movies/RawBoy Camera; video frames
+  carry the sensor clock, audio stamped from it) takes `ViewfinderRenderer.videoSink` (`gl/VideoOutput.kt`): the develop
+  pass is drawn a second time into the `MediaCodec` input surface. **The encoder's surface is found by a probe**, not the
+  profile (`capture/VideoProbe.kt`): `VideoVariant` `STANDARD` (EGL window surface in the viewfinder's context,
+  recordable RGBA8888 then the context's config: the Pixel's) → `OWN_CONTEXT` (`EncoderConfig.RECORDABLE_OWN_CONTEXT`:
+  its own context sharing the viewfinder's textures; the OnePlus 11's Adreno refused the recordable surface in the
+  viewfinder's context with EGL_BAD_MATCH, then Qualcomm's HEVC encoder refused RGBX buffers) → `RECORDABLE_VIEWFINDER`
+  (`Viewfinder(eglConfig)`, the view made again) → `SOFTWARE_AVC`. Success = the first encoded frame; definite failures
+  (EGL refused, encoder error) vs one-off (no output in 3 s, no encoder); remembered per `Build.DISPLAY` + SDK + the app's
+  `lastUpdateTime` (`video` prefs); the remembered variant yields only after two failing recordings in a row, and a
+  non-STANDARD one is stored only after STANDARD failed definitely (so the Pixel never leaves STANDARD on a hiccup).
+  An encoder failing mid-recording stops it at once and keeps the file. Debug: `video-debug.txt` in the app's external
+  files dir (`DebugProbe.videoDebug`: forced variants, hardware H.264, landscape, injected failures). Flat video
+  (Apple Log, Rec.2020, 28 Mbit/s), stabilization settings and AE lock: `docs/camera.md`.
 - **`Edition`** (`app-camera/src/main/.../Edition.kt`, iOS `Camera/Edition.swift`; one app, no flavours since
   2026-10-31): looks, default looks, Pictures folder / albums, Settings credits. Film mode's looks are `FilmLooks.ALL`
   rendered by `film_form.glsl`, exactly as Auto's Film mode. **B&W mode** (`Edition.monoLooks` = the mono looks; the colour `looks` leave them out, and a remembered mono `lookId` moves into B&W mode on load): `CameraSettings.mono`/
@@ -370,6 +416,8 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
 - ABIs come from `rawboy.abis` (`gradle.properties`, read by the engine and all apps): arm64-v8a + x86_64 locally;
   the release workflow passes `-Prawboy.abis=arm64-v8a`. It runs on main (a release only dispatches it) so its
   ccache/Gradle/Emscripten caches carry over between releases.
+- `-Prawboy.debugIdSuffix=.dev` (optional, off by default; `app-camera/build.gradle.kts`) gives Camera's debug build its
+  own package (`app.rawboy.camera.dev`, own data and calibration) so it installs next to the Play version.
 - Native libs must stay 16 KB page-aligned (`-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON`). Check with
   `llvm-readelf -lW librawboy.so` (LOAD align 0x4000).
 - Release: signing from `keystore.properties` (git-ignored). R8 + resource shrinking; keep rules for
@@ -764,7 +812,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   got colour 0 and speckled shadows; measured 18-38. Luma noise was the owner's "good now": ask before changing it.
   Removing colour noise makes the remaining luma grain read a little stronger in Y (raw noise is anti-correlated across
   channels after the colour matrix), with the luma setting unchanged.
-  2026-11-07: non-Film colour looks get a colour floor of 70 (`CameraSettings.LUT_COLOR_DENOISE`, iOS `lutColorDenoise`; luma floor 12,
+  2026-11-07: non-Film colour looks get a colour floor of 70 (Android: the phone profile's `NoiseProfile.lutColorFloor` etc., iOS `lutColorDenoise`; luma floor 12,
   experimental looks 22/70) and Contrast +6 / Saturation +8 (`LOOK_CONTRAST`/`LOOK_SATURATION`, not Film, B&W or experimental). Redscale's
   blocky shadow noise is luma noise times the LUT's red ramp (gain ~2.5-3.5), not colour noise: colour 100 gave 5.06 → 4.33 chroma std,
   luma floor 70 about -20%; accepted as is. Harness: web develop in headless Chrome (`analyzeFile` + `developAuto` + the camera's
@@ -775,12 +823,14 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   colour noise. Exponent 0.75: between sqrt(g) (shot noise) and g (read noise); fine colour noise corner/centre was
   1.8-2.5× without it, 1.1-1.8× with it (1.0 barely differed).
   The wavelet pre-pass's coarse chroma bands stay global (their corner excess was small once the fine stage scaled).
-- Camera denoise: `AutoTone.develop(noiseIsoScale)`; Camera passes 4 (phone sensors ≈ 2 stops noisier than the
-  camera raws the ISO table was tuned on) and the capture result's ISO as fallback (DNGs may lack it).
+- Camera denoise: `AutoTone.develop(noiseIsoScale)`; Camera passes the profile's `NoiseProfile.backIsoScale` /
+  `frontIsoScale` (4 / 8 neutral and Tensor: phone sensors ≈ 2 stops noisier than the camera raws the ISO table was
+  tuned on; the OnePlus 11's selfie camera 10) and the capture result's ISO as fallback (DNGs may lack it).
 - Performance (camera): the viewfinder's 512 px readback is asynchronous (PBO + fence, collected on a later
   frame); a blocking `glReadPixels` there dropped frames. Shots develop on one thread (`RawBoy-develop`, nice 5)
   that keeps an `ExportGpu` (export EGL context + compiled shader, low GPU priority via
-  `EGL_IMG_context_priority`); normal CPU priority (see shot speed below). **Don't use `THREAD_PRIORITY_BACKGROUND`** for it: nice ≥ 10 moves a thread to
+  `EGL_IMG_context_priority` where `StillProfile.lowPriorityDevelop`; the Qualcomm layer turns it off: on a hot Adreno
+  the viewfinder starved a low-priority develop for minutes); normal CPU priority (see shot speed below). **Don't use `THREAD_PRIORITY_BACKGROUND`** for it: nice ≥ 10 moves a thread to
   the background cgroup (little cores only). LibRaw is built with OpenMP (`-fopenmp` PUBLIC: `libraw_types.h`
   changes LibRaw's memory-manager layout under `_OPENMP`, so every includer must agree; libomp static).
   `SkinSegmenter` keeps both MediaPipe models loaded (synchronized); close each result's masks (`MPImage`)
@@ -790,7 +840,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
 - Camera flash (`FlashMode`, `CameraController.captureDng(flash, flashGuide)`): **the camera's flash AE is useless for
   the raw** (Pixel 9 Pro): the AE precapture with AE_MODE_ON_ALWAYS_FLASH fires no pre-flash for third-party apps
   (FLASH_REQUIRED after 2 frames, ambient values unchanged) and the still keeps the ambient exposure, only the post-raw
-  boost drops: 19% of the raw clipped at 0.4 m. So flash stills are manual (AE_MODE_OFF, boost 100, FLASH_MODE_SINGLE,
+  boost drops: 19% of the raw clipped at 0.4 m. So flash stills are manual under `FlashProfile.metering = MANUAL_GUIDE` (neutral, Tensor) (AE_MODE_OFF, boost 100, FLASH_MODE_SINGLE,
   1/30 s): gain (s x ISO) = guide x `flashFalloff`(distance) (distance², x max(1, d)^0.3 beyond 1 m) from `LENS_FOCUS_DISTANCE` (`flashExposure`); an unlearned guide defaults to the 16/4 defaults x (lens f-number / 1.7)², capped at the ambient gain;
   the guide is learned per lens (`CameraSettings.flashGuides`, `CameraViewModel.calibrateFlash`) from the auto
   develop's exposure, aiming +0.5 EV (dark raws recover, clipped ones don't). **Pixel 9 Pro UW reports LENS_FOCUS_DISTANCE 0 on
@@ -907,14 +957,15 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   Mali driver decodes its Y'CbCr as BT.709, but the ISP encodes BT.601: reds ~20% too saturated. The viewfinder samples
   the raw Y'CbCr (`GL_EXT_YUV_target`, Mali-G715 has it) and converts BT.601 itself (`LinearizeProgram.yuvToRgb`);
   don't trust the data space's standard. (2) The ISP's own colour matrix (result `COLOR_CORRECTION_TRANSFORM`, after
-  `COLOR_CORRECTION_GAINS` = 1/neutral) is more saturated than the DNG's: `CameraController.previewToRec2020` undoes
-  both per frame and applies the raw decoder's matrix (LibRaw rgb_cam: D65 ColorMatrix x CameraCalibration, rows
+  `COLOR_CORRECTION_GAINS` = 1/neutral) is more saturated than the DNG's: `UndoIspPreviewColor` (`platform/traits/`, the
+  Tensor and Samsung layers' `PreviewProfile.color`; the neutral profile takes the preview as sRGB, since the OnePlus 11
+  reports an identity matrix while its ISP applies its own) undoes both per frame and applies the raw decoder's matrix (LibRaw rgb_cam: D65 ColorMatrix x CameraCalibration, rows
   normalised, inverted) → `Frame.color`. Both are needed (either alone leaves large cross-channel terms). Afterwards
   per-channel gains match within a few %.
 - **Camera black:** the ISP renders black ~1.4 DN (of 959) deeper than the DNG's BlackLevel, which is the frame's own
   `SENSOR_DYNAMIC_BLACK_LEVEL` (63.96; the still log prints both). Without matching it the photo's deepest shadows
   were lifted and, after the WB's ~2x blue gain, bluish. Camera decodes with `RawImage.open(extraBlack =
-  EXTRA_BLACK)` (fraction of the white range, subtracted in float in `decodeWithLibRaw`); Pro/Auto pass 0. Not
+  StillProfile.extraBlack)` (1.46e-3 in the Tensor and Samsung layers, 0 neutral) (fraction of the white range, subtracted in float in `decodeWithLibRaw`); Pro/Auto pass 0. Not
   LibRaw's clipping of noise below black (a pedestal before black subtraction changed nothing) nor black rounding.
   Measured at ISO 170-250 only; if high-ISO shadows differ, check whether it scales with ISO.
 - **As-shot white of DNGs from cameras LibRaw doesn't list (phones):** `color.cam_xyz` only comes from LibRaw's

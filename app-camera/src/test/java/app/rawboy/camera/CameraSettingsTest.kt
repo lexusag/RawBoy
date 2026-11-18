@@ -1,5 +1,7 @@
 package app.rawboy.camera
 
+import app.rawboy.camera.platform.PreviewLevel
+import app.rawboy.camera.platform.generic.neutralPlatform
 import app.rawboy.develop.DevelopParams
 import app.rawboy.export.DateStampFormat
 import app.rawboy.export.DateStampStyle
@@ -8,7 +10,6 @@ import app.rawboy.export.PhotoFrame
 import app.rawboy.export.TimeStampFormat
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertSame
 import org.junit.Test
 
 class CameraSettingsTest {
@@ -38,29 +39,9 @@ class CameraSettingsTest {
         val base = DevelopParams(grain = 20f, filmGrain = 75f)
         val on = CameraSettings()
         assertEquals(true, on.grain)
-        val off = on.copy(grain = false).develop(base, false)
+        val off = on.copy(grain = false).develop(base, false, neutralPlatform.noise)
         assertEquals(0f, off.grain, 0f)
         assertEquals(0f, off.filmGrain, 0f)
-    }
-
-    @Test
-    fun samsungGetsTheIspLook() {
-        val base = DevelopParams()
-        val p = CameraSettings.withPhoneIspLook(base, "samsung")
-        assertEquals(base.contrast + CameraSettings.SAMSUNG_CONTRAST, p.contrast, 1e-4f)
-        assertEquals(base.saturation + CameraSettings.SAMSUNG_SATURATION, p.saturation, 1e-4f)
-    }
-
-    @Test
-    fun otherMakersAreUntouched() {
-        val base = DevelopParams()
-        assertSame(base, CameraSettings.withPhoneIspLook(base, "Google"))
-    }
-
-    @Test
-    fun blackAndWhiteStaysGrey() {
-        val p = CameraSettings.withPhoneIspLook(DevelopParams(saturation = -100f), "SAMSUNG")
-        assertEquals(-100f, p.saturation, 0f)
     }
 
     @Test
@@ -92,5 +73,23 @@ class CameraSettingsTest {
         assertEquals(CameraSettings(previewScales = scales, flashGuides = guides), reset)
         assertEquals(scales, reset.previewScales)
         assertEquals(guides, reset.flashGuides)
+    }
+
+    @Test
+    fun automaticCalibrationKeepsItsStorageKeys() {
+        // The owner's learned calibration lives under these keys; a debug build's chosen profile learns beside them.
+        assertEquals("previewScales3", CameraSettingsStore.scalesKey(""))
+        assertEquals("flashGuides", CameraSettingsStore.flashGuidesKey(""))
+        assertEquals("previewScales3@neutral+tensor", CameraSettingsStore.scalesKey("neutral+tensor"))
+        assertEquals("flashGuides@neutral", CameraSettingsStore.flashGuidesKey("neutral"))
+        assertEquals("previewScales3", CameraSettingsStore.scalesKey("", PreviewLevel.BOOSTED))
+    }
+
+    @Test
+    fun eachPreviewLevelLearnsItsOwnScales() {
+        // A scale learned under one level means something else under another (OnePlus: ~0.4 boosted, ~1.0 white balanced).
+        assertEquals("previewScalesWb", CameraSettingsStore.scalesKey("", PreviewLevel.STILL_WHITE_BALANCED))
+        assertEquals("previewScalesWb@neutral+tensor", CameraSettingsStore.scalesKey("neutral+tensor", PreviewLevel.STILL_WHITE_BALANCED))
+        assertEquals(PreviewLevel.entries.size, PreviewLevel.entries.map { it.scalesKey }.toSet().size)
     }
 }

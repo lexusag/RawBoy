@@ -56,7 +56,8 @@ bool readAll(int fd, std::vector<uint8_t>& data, std::string& error) {
 
 extern "C" {
 
-JNIEXPORT jlong JNICALL Java_app_rawboy_raw_RawNative_open(JNIEnv* env, jclass, jint fd, jfloat extraBlack) {
+JNIEXPORT jlong JNICALL Java_app_rawboy_raw_RawNative_open(JNIEnv* env, jclass, jint fd, jfloat extraBlack,
+                                                           jboolean exactBlack, jfloat pedestal, jfloatArray blackOffset) {
     try {
         std::vector<uint8_t> data;
         std::string error;
@@ -65,8 +66,13 @@ JNIEXPORT jlong JNICALL Java_app_rawboy_raw_RawNative_open(JNIEnv* env, jclass, 
             return 0;
         }
 
+        rawboy::BlackFix black;
+        black.exact = exactBlack;
+        black.pedestal = pedestal;
+        if (blackOffset && env->GetArrayLength(blackOffset) >= 3)
+            env->GetFloatArrayRegion(blackOffset, 0, 3, black.offset);
         auto image = std::make_unique<DecodedImage>();
-        if (!rawboy::decodeAny(data.data(), data.size(), *image, error, extraBlack)) {
+        if (!rawboy::decodeAny(data.data(), data.size(), *image, error, extraBlack, false, black)) {
             throwJava(env, "java/io/IOException", "Cannot decode file: " + error);
             return 0;
         }

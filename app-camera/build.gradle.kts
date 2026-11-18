@@ -49,6 +49,15 @@ android {
     }
 
     buildTypes {
+        debug {
+            // Optional, off by default: e.g. rawboy.debugIdSuffix=.dev in ~/.gradle/gradle.properties installs the
+            // debug build next to the Play version (its own package, data and calibration).
+            val idSuffix = providers.gradleProperty("rawboy.debugIdSuffix").orNull?.trim().orEmpty()
+            if (idSuffix.isNotEmpty()) {
+                applicationIdSuffix = idSuffix
+                versionNameSuffix = "-debug"
+            }
+        }
         release {
             signingConfig = signingConfigs.findByName("release")
             isMinifyEnabled = true

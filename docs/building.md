@@ -6,6 +6,11 @@ Needs Android Studio (Ladybug or newer) with **NDK 27.2** and **CMake 3.22.1** f
 Open the folder and let Gradle sync. The first native build downloads LibRaw and needs network access.
 Command line: `./gradlew :app-pro:assembleDebug` (RawBoy), `./gradlew :app-auto:assembleDebug` (RawBoy Auto), or `./gradlew :app-camera:assembleDebug` (RawBoy Camera). The Gradle daemon is pinned to JDK 21 (`gradle/gradle-daemon-jvm.properties`), because Gradle 8.11 can't run on the Java 25 that Android Studio bundles.
 
+RawBoy Camera's debug build can install next to the Play version: `-Prawboy.debugIdSuffix=.dev` (or the same line in
+`~/.gradle/gradle.properties`) appends that suffix to the package name (`app.rawboy.camera.dev`, its own data and
+calibration) and `-debug` to the version name. Off by default. Local builds for one phone can add
+`-Prawboy.abis=arm64-v8a` (ABIs come from `rawboy.abis` in `gradle.properties`).
+
 minSdk 29 (Android 10). No storage permissions needed: input comes through the system picker or "Open with",
 and output goes through MediaStore.
 
@@ -25,14 +30,14 @@ The iOS apps are built with Xcode on a Mac: see [Installing on your iPhone](ios-
    keyPassword=...
    ```
 3. Put the Adobe DNG SDK in `third_party/dng_sdk` ([third_party/README.md](../third_party/README.md)): release builds
-   fail without it (debug builds don't need it).
+   fail without it, and so do the Android debug builds (`checkDngSdk`).
 4. Build:
    - APK to install directly: `./gradlew :app-pro:assembleRelease` → `app-pro/build/outputs/apk/release/app-pro-release.apk`
      (RawBoy Auto: `:app-auto:assembleRelease` → `app-auto/build/outputs/apk/release/app-auto-release.apk`)
    - Bundle for Google Play: `./gradlew :app-pro:bundleRelease` → `app-pro/build/outputs/bundle/release/app-pro-release.aab`
      (likewise `:app-auto:bundleRelease`)
    - Build all: `./gradlew :app-pro:assembleRelease :app-auto:assembleRelease :app-camera:assembleRelease`
-     (camera APKs: `app-camera/build/outputs/apk/{standard,film}/release/app-camera-{standard,film}-release.apk`)
+     (camera APK: `app-camera/build/outputs/apk/release/app-camera-release.apk`)
 
    Both apps are signed with the same `keystore.properties`.
 
