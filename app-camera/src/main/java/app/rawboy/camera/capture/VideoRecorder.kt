@@ -405,7 +405,7 @@ class VideoRecorder private constructor(
             flat: Boolean,
             variant: VideoVariant = VideoVariant.STANDARD,
             debug: VideoDebug? = null,
-            requestRender: () -> Unit,
+            requestRender: () -> Unit = {},
         ): VideoRecorder {
             val landscape = turns % 2 != 0
             val width = if (landscape) LONG_SIDE else SHORT_SIDE

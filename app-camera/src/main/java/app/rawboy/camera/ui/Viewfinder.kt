@@ -146,6 +146,7 @@ fun Viewfinder(
             lifecycleOwner.lifecycle.addObserver(observer)
             onDispose {
                 lifecycleOwner.lifecycle.removeObserver(observer)
+                view[0]?.onPause()
                 renderer.release()
             }
         }
