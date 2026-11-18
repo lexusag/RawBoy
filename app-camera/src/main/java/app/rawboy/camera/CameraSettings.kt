@@ -167,6 +167,16 @@ data class CameraSettings(
         else -> Edition.look(lookId)
     }
 
+    /** Active camera mode name for metadata: `film`, `look`, or `bw`. */
+    val cameraMode: String get() = when {
+        monoMode -> "bw"
+        filmMode -> "film"
+        else -> "look"
+    }
+
+    /** Mode and LUT/stock tag appended to the saved DNG and JPEG `ImageDescription`. */
+    fun descriptionNote(): String = "cameraMode=$cameraMode lut=${look.id}"
+
     /**
      * [base] (the auto develop) with the look and the sliders, as the viewfinder shows it and the shot is saved. B&W mode:
      * the filter, then grey (Saturation -100 makes the scene grey before the stock and keeps the stock's output grey, see

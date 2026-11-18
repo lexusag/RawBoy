@@ -1,5 +1,6 @@
 package app.rawboy.camera
 
+import app.rawboy.auto.looks.Looks
 import app.rawboy.camera.platform.PreviewLevel
 import app.rawboy.camera.platform.generic.neutralPlatform
 import app.rawboy.develop.DevelopParams
@@ -91,5 +92,29 @@ class CameraSettingsTest {
         assertEquals("previewScalesWb", CameraSettingsStore.scalesKey("", PreviewLevel.STILL_WHITE_BALANCED))
         assertEquals("previewScalesWb@neutral+tensor", CameraSettingsStore.scalesKey("neutral+tensor", PreviewLevel.STILL_WHITE_BALANCED))
         assertEquals(PreviewLevel.entries.size, PreviewLevel.entries.map { it.scalesKey }.toSet().size)
+    }
+
+    @Test
+    fun descriptionNoteIncludesModeAndLut() {
+        assertEquals("cameraMode=film lut=${Edition.defaultFilmLookId}", CameraSettings().descriptionNote())
+        // Film mode only knows film stocks: an id that isn't one (a colour look's) falls back to the default stock.
+        val stock = Edition.filmLooks.last().id
+        assertEquals("cameraMode=film lut=$stock", CameraSettings(film = true, filmLookId = stock).descriptionNote())
+        assertEquals(
+            "cameraMode=film lut=${Edition.defaultFilmLookId}",
+            CameraSettings(film = true, filmLookId = Looks.NATURAL.id).descriptionNote(),
+        )
+        assertEquals(
+            "cameraMode=look lut=${Looks.EKTAR_100.id}",
+            CameraSettings(film = false, lookId = Looks.EKTAR_100.id).descriptionNote(),
+        )
+        assertEquals(
+            "cameraMode=look lut=${Looks.NATURAL.id}",
+            CameraSettings(film = false, lookId = Looks.NATURAL.id).descriptionNote(),
+        )
+        assertEquals(
+            "cameraMode=bw lut=${Edition.defaultMonoLookId}",
+            CameraSettings(mono = true, film = true).descriptionNote(),
+        )
     }
 }
