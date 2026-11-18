@@ -26,6 +26,11 @@ private func leakColor(_ hue: Float) -> Color {
     return Color(red: Double(c[0]), green: Double(c[1]), blue: Double(c[2]))
 }
 
+private func paletteColor(_ p: FilmPalette) -> Color {
+    let c = p.rgb
+    return Color(red: c.0, green: c.1, blue: c.2)
+}
+
 /** Inner glow colours across the Colour slider. */
 private let hueTrack: [Color] = [LightLeaks.hueMin, -20, 0, 20, 40, LightLeaks.hueMax].map(leakColor)
 
@@ -40,6 +45,11 @@ struct LeakPanelActions {
     /** A slider ([force] false) or a button ([force] true). */
     let onUpdate: (String, Bool, (inout LightLeak) -> Void) -> Void
     let onRemove: (String) -> Void
+    let onSelectFilm: (String) -> Void
+    let onAddFilm: (FilmLeakType?) -> Void
+    let onRandomRoll: () -> Void
+    let onUpdateFilm: (String, Bool, (inout FilmLeak) -> Void) -> Void
+    let onRemoveFilm: (String) -> Void
     /** Switches to the light effects tool (they share one top-bar button). */
     let onFx: () -> Void
     let onToggleZoom: () -> Void
@@ -47,15 +57,19 @@ struct LeakPanelActions {
 }
 
 /**
- * Light leaks (mirrors Android's LeaksPanel and RawBoy Web's): film-style light (streaks, glows, triangles) dragged
- * into place on the photo, e.g. to tastefully cover part of a nude. A top-bar mode like Masks: leak chips (long-press
- * to hide or delete), then the selected leak's sliders; the shape is also moved, sized, turned and bent on the photo.
+ * Light leaks (mirrors Android's LeaksPanel and RawBoy Web's): film-style light (streaks, glows, triangles) and
+ * generated film leaks/damage dragged into place on the photo. Up to LightLeaks.maxLeaks layers total.
  */
 struct LeaksPanel: View {
     let leaks: [LightLeak]
     let selectedId: String?
+    let filmLeaks: [FilmLeak]
+    let selectedFilmId: String?
     let zoomed: Bool
     let actions: LeakPanelActions
+    @State private var genType: FilmLeakType? = nil
+
+    private var budgetLeft: Bool { leaks.count + filmLeaks.count < LightLeaks.maxLeaks }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -73,7 +87,8 @@ struct LeaksPanel: View {
             ScrollView(.horizontal) {
                 HStack(spacing: 6) {
                     ForEach(Array(leaks.enumerated()), id: \.element.id) { i, l in chip(l, i) }
-                    if leaks.count < LightLeaks.maxLeaks {
+                    ForEach(Array(filmLeaks.enumerated()), id: \.element.id) { i, fl in filmChip(fl, i) }
+                    if budgetLeft {
                         ForEach(LeakKind.allCases, id: \.self) { k in
                             Button { actions.onAdd(k) } label: {
                                 Text("+ \(k.label)").font(.subheadline).padding(.horizontal, 10).padding(.vertical, 6)
@@ -86,13 +101,19 @@ struct LeaksPanel: View {
                 .padding(.horizontal, 12)
             }
             .scrollIndicators(.hidden)
-            if let leak = leaks.first(where: { $0.id == selectedId }) {
+            generateBar
+            if let fl = filmLeaks.first(where: { $0.id == selectedFilmId }) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) { filmSliders(fl) }
+                        .padding(.horizontal, 16)
+                }
+            } else if let leak = leaks.first(where: { $0.id == selectedId }) {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) { sliders(leak) }
                         .padding(.horizontal, 16)
                 }
             } else {
-                Note("Add a film-style light leak (a streak of light, a round glow or a triangle), then drag it over the photo. It is added in Screen mode, so the photo shows through its glow; at full intensity its white middle (inside the dashed line) hides what is under it, so it can cover part of a photo. The grain stays on top. Up to \(LightLeaks.maxLeaks); leaks reset for each new photo.")
+                Note("Add a hand-drawn light leak (+ Streak/Glow/Triangle) or generate a procedural film leak/damage below (up to \(LightLeaks.maxLeaks) total). Generated leaks can be saved in presets under Light leaks.")
                     .padding(.horizontal, 16)
             }
         }
@@ -114,6 +135,124 @@ struct LeaksPanel: View {
             Button(l.enabled ? "Hide" : "Show") { actions.onUpdate(l.id, true) { $0.enabled.toggle() } }
             Button("Delete", role: .destructive) { actions.onRemove(l.id) }
         }
+    }
+
+    private func filmChip(_ fl: FilmLeak, _ i: Int) -> some View {
+        let selected = fl.id == selectedFilmId
+        return HStack(spacing: 6) {
+            Circle().fill(paletteColor(fl.palette)).frame(width: 10, height: 10)
+            Text(fl.enabled ? "\(fl.type.label) \(i + 1)" : "\(fl.type.label) \(i + 1) (off)")
+        }
+        .font(.subheadline)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .chipStyle(selected: selected)
+        .tapButton(selected: selected, hint: "Selects this generated film leak") { actions.onSelectFilm(fl.id) }
+        .contextMenu {
+            Button(fl.enabled ? "Hide" : "Show") { actions.onUpdateFilm(fl.id, true) { $0.enabled.toggle() } }
+            Button("Delete", role: .destructive) { actions.onRemoveFilm(fl.id) }
+        }
+    }
+
+    private var generateBar: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            ScrollView(.horizontal) {
+                HStack(spacing: 6) {
+                    Text("Any")
+                        .font(.caption)
+                        .padding(.horizontal, 9).padding(.vertical, 4)
+                        .chipStyle(selected: genType == nil)
+                        .tapButton(selected: genType == nil, hint: "Random type") { genType = nil }
+                    ForEach(FilmLeakType.allCases, id: \.self) { t in
+                        Text(t.label)
+                            .font(.caption)
+                            .padding(.horizontal, 9).padding(.vertical, 4)
+                            .chipStyle(selected: genType == t)
+                            .tapButton(selected: genType == t, hint: "Select \(t.label)") { genType = t }
+                    }
+                }
+                .padding(.horizontal, 12)
+            }
+            .scrollIndicators(.hidden)
+            HStack(spacing: 8) {
+                Button("🎲 Random") { actions.onAddFilm(genType) }
+                    .font(.subheadline).fontWeight(.medium)
+                    .disabled(!budgetLeft)
+                Button("Roll") { actions.onRandomRoll() }
+                    .font(.subheadline)
+                    .disabled(leaks.count >= LightLeaks.maxLeaks)
+                if let fl = filmLeaks.first(where: { $0.id == selectedFilmId }) {
+                    Button("New variation") {
+                        actions.onUpdateFilm(fl.id, true) { $0 = FilmLeaks.newVariation($0, seed: Float(FilmLeaks.newSeed())) }
+                    }
+                    .font(.subheadline)
+                }
+                if budgetLeft, let t = genType {
+                    Button("+ Add \(t.label)") { actions.onAddFilm(t) }
+                        .font(.subheadline)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+        }
+    }
+
+    private func setFilm(_ fl: FilmLeak, _ force: Bool = false, _ change: (inout FilmLeak) -> Void) {
+        actions.onUpdateFilm(fl.id, force, change)
+    }
+
+    @ViewBuilder
+    private func filmSliders(_ fl: FilmLeak) -> some View {
+        ScrollView(.horizontal) {
+            HStack(spacing: 6) {
+                ForEach(FilmPalette.allCases, id: \.self) { p in
+                    HStack(spacing: 4) {
+                        Circle().fill(paletteColor(p)).frame(width: 10, height: 10)
+                        Text(p.label).font(.caption)
+                    }
+                    .padding(.horizontal, 8).padding(.vertical, 4)
+                    .chipStyle(selected: fl.palette == p)
+                    .tapButton(selected: fl.palette == p, hint: "Palette \(p.label)") { setFilm(fl, true) { $0.palette = p } }
+                }
+            }
+            .padding(.vertical, 4)
+        }
+        .scrollIndicators(.hidden)
+        HStack(spacing: 6) {
+            if fl.type == .streak || fl.type == .scratches {
+                Button("↔ Horizontal") { setFilm(fl, true) { $0.turn = 0 } }.font(.caption)
+                Button("↕ Vertical") { setFilm(fl, true) { $0.turn = 1 } }.font(.caption)
+            } else if fl.type != .dust && fl.type != .fog && fl.type != .stain {
+                ForEach([(0, "←"), (1, "↑"), (2, "→"), (3, "↓")], id: \.0) { t, arrow in
+                    Button(arrow) { setFilm(fl, true) { $0 = FilmLeaks.sideMove($0, turn: t) } }
+                        .font(.caption)
+                        .fontWeight(fl.turn == t ? .bold : .regular)
+                }
+            }
+            Button(fl.mirror ? "Flipped" : "Flip") { setFilm(fl, true) { $0.mirror.toggle() } }
+                .font(.caption)
+            Spacer()
+        }
+        .padding(.vertical, 2)
+        ParamSlider(label: "Intensity", value: fl.intensity, range: 0...100, defaultValue: 80,
+                    format: { "\(Int($0.rounded()))%" }) { v in setFilm(fl) { $0.intensity = v } }
+        ParamSlider(label: "Softness", value: fl.softness, range: 0...100, defaultValue: 50,
+                    format: formatPlain) { v in setFilm(fl) { $0.softness = v } }
+        ParamSlider(label: "Texture", value: fl.texture, range: 0...100, defaultValue: 65,
+                    format: formatPlain) { v in setFilm(fl) { $0.texture = v } }
+        ParamSlider(label: "Amount", value: fl.amount, range: 0...100, defaultValue: 55,
+                    format: formatPlain) { v in setFilm(fl) { $0.amount = v } }
+        ParamSlider(label: "Variant", value: fl.variant, range: 0...100, defaultValue: 50,
+                    format: formatPlain) { v in setFilm(fl) { $0.variant = v } }
+        ParamSlider(label: "Warmth", value: fl.warmth, range: -100...100, defaultValue: 0,
+                    format: formatPlain) { v in setFilm(fl) { $0.warmth = v } }
+        ParamSlider(label: "Tint", value: fl.tint, range: -100...100, defaultValue: 0,
+                    format: formatPlain) { v in setFilm(fl) { $0.tint = v } }
+        ParamSlider(label: "Fade", value: fl.fade, range: 0...100, defaultValue: 0,
+                    format: formatPlain) { v in setFilm(fl) { $0.fade = v } }
+        ParamSlider(label: "Contrast", value: fl.contrast, range: -100...100, defaultValue: 0,
+                    format: formatPlain) { v in setFilm(fl) { $0.contrast = v } }
+        Note("Drag inside the box to move, or drag any of its 8 handles to stretch along X/Y. The bright edge marks where light enters or the film ends.")
     }
 
     /** A slider's change to [leak] ([force] false), or a button's (true). */

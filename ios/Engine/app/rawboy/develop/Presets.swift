@@ -5,7 +5,7 @@ import Foundation
  * never part of a preset. [key] is the name in preset files (shared with Android's Presets.kt and web's Presets.ts).
  */
 public enum PresetGroup: String, CaseIterable, Sendable {
-    case light, whiteBalance, curves, color, detail, denoise, retouch, lut, lens, masks
+    case light, whiteBalance, curves, color, detail, denoise, retouch, lut, lens, masks, leaks
 
     public var key: String { rawValue }
 
@@ -21,6 +21,7 @@ public enum PresetGroup: String, CaseIterable, Sendable {
         case .lut: "LUT"
         case .lens: "Lens"
         case .masks: "Masks (gradients only)"
+        case .leaks: "Light leaks (generated)"
         }
     }
 
@@ -42,6 +43,7 @@ public enum PresetGroup: String, CaseIterable, Sendable {
         case .lut: ["lut", "lutAmount"]
         case .lens: ["lensProfile", "lensDistortion", "lensAnamorphic", "lensFisheye", "lensFisheyeFov", "lensFisheyeAuto", "lensFisheyeCircle", "lensFisheyeX", "lensFisheyeY", "lensCrop", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint"]
         case .masks: ["masks"]
+        case .leaks: ["filmLeaks"]
         }
     }
 
@@ -52,15 +54,16 @@ public enum PresetGroup: String, CaseIterable, Sendable {
      * composition, denoise to one photo's noise (Auto measures it per photo), and Detail (grain, bloom, flare) is a look
      * rather than a correction, so it is a deliberate choice.
      */
-    public static let defaultGroups: Set<PresetGroup> = Set(allCases).subtracting([.lens, .masks, .denoise, .detail])
+    public static let defaultGroups: Set<PresetGroup> = Set(allCases).subtracting([.lens, .masks, .denoise, .detail, .leaks])
 }
 
-/** A stored field value: a number, an optional string (LUT id, tone mapper), a switch, mask layers or curves. */
+/** A stored field value: a number, an optional string (LUT id, tone mapper), a switch, mask layers, film leaks or curves. */
 public enum PresetValue: Equatable, Sendable {
     case number(Float)
     case text(String?)
     case flag(Bool)
     case layers([MaskLayer])
+    case filmLeaks([FilmLeak])
     case curves(ToneCurves)
 }
 
@@ -221,6 +224,7 @@ public enum Presets {
             case let .text(s): values[k] = s ?? NSNull()
             case let .flag(b): values[k] = b
             case let .layers(l): values[k] = Masks.toJson(l)
+            case let .filmLeaks(fl): values[k] = FilmLeaks.toJson(fl)
             case let .curves(c): values[k] = c.toJson()
             }
         }
@@ -274,6 +278,8 @@ public enum Presets {
             guard let raw = v[f] else { continue }
             if f == "masks" {
                 values[f] = .layers(Masks.parseLayers(raw))
+            } else if f == "filmLeaks" {
+                values[f] = .filmLeaks(FilmLeaks.parseLeaks(raw))
             } else if f == "curves" {
                 if let c = ToneCurves.parse(raw) { values[f] = .curves(c) }
             } else if raw is NSNull {
@@ -319,6 +325,7 @@ public enum Presets {
         case "anamorphicGhosts": .flag(p.anamorphicGhosts)
         case "colorDenoise": p.colorDenoise.map { PresetValue.number($0) } ?? .text(nil)
         case "masks": .layers(Masks.forPreset(p.masks))  // strokes stay with the photo
+        case "filmLeaks": .filmLeaks(p.filmLeaks)
         case "curves": .curves(p.curves)
         default: .number(p[keyPath: numberFields[field]!])
         }
@@ -341,6 +348,8 @@ public enum Presets {
         case let ("masks", .layers(layers)):
             // Fresh ids, so two photos never share a layer id.
             out.masks = layers.prefix(Masks.maxLayers).map { var l = $0; l.id = Masks.newId(); return l }
+        case let ("filmLeaks", .filmLeaks(fl)):
+            out.filmLeaks = fl.prefix(FilmLeaks.maxLeaks).map { var l = $0; l.id = Masks.newId(); return l }
         case let (f, .number(n)): if n.isFinite, let kp = numberFields[f] { out[keyPath: kp] = n }
         default: break
         }

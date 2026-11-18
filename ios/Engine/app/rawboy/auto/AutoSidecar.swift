@@ -25,11 +25,13 @@ public struct SavedAuto: @unchecked Sendable {
     public var plain: Bool
     /** Auto denoise given to a photo added "As is" (web's autoDenoise): kept and written back. */
     public var autoDenoise: Bool
+    /** Generated film leaks/damage added in Auto (dice Leak), kept in the sidecar. */
+    public var filmLeaks: [FilmLeak]
 
     public init(mode: LookMode = .looks, look: Look = Looks.natural, filmLook: Look = FilmLooks.portra400,
                 strength: Float = 100, adjust: Adjustments = .none, preset: Preset? = nil,
                 edits: [String: Any]? = nil, lensChoice: String? = nil, lensPreset: Preset? = nil, plain: Bool = false,
-                autoDenoise: Bool = false) {
+                autoDenoise: Bool = false, filmLeaks: [FilmLeak] = []) {
         self.mode = mode
         self.look = look
         self.filmLook = filmLook
@@ -41,6 +43,7 @@ public struct SavedAuto: @unchecked Sendable {
         self.lensPreset = lensPreset
         self.plain = plain
         self.autoDenoise = autoDenoise
+        self.filmLeaks = filmLeaks
     }
 }
 
@@ -71,6 +74,7 @@ public enum AutoSidecar {
         // By lens is the default and isn't kept: the photo's lens finds its preset again.
         if s.plain { o["plain"] = true }
         if s.autoDenoise { o["autoDenoise"] = true }
+        if !s.filmLeaks.isEmpty { o["filmLeaks"] = FilmLeaks.toJson(s.filmLeaks) }
         if s.lensChoice == Presets.noLensPreset {
             o["lens"] = Presets.noLensPreset
         } else if s.lensChoice != nil, let p = s.lensPreset {
@@ -138,6 +142,7 @@ public enum AutoSidecar {
             strength: num(o["strength"], 0, 100, 100), adjust: adjust,
             preset: preset(from: o["preset"]), edits: o["edits"] as? [String: Any],
             lensChoice: lensString == Presets.noLensPreset ? Presets.noLensPreset : lensPreset?.id, lensPreset: lensPreset,
-            plain: o["plain"] as? Bool == true, autoDenoise: o["autoDenoise"] as? Bool == true)
+            plain: o["plain"] as? Bool == true, autoDenoise: o["autoDenoise"] as? Bool == true,
+            filmLeaks: FilmLeaks.parseLeaks(o["filmLeaks"]))
     }
 }

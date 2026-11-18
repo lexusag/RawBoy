@@ -123,6 +123,8 @@ public struct DevelopParams: Equatable, Sendable {
     public var masks: [MaskLayer] = []
     /** Up to LightLeaks.maxLeaks light leaks over the finished picture (see LightLeaks.swift); per photo, like the masks. */
     public var leaks: [LightLeak] = []
+    /** Up to FilmLeaks.maxLeaks generated film leaks (see FilmLeaks.swift); shares the leaks budget with `leaks`. */
+    public var filmLeaks: [FilmLeak] = []
     /** Up to LightEffects.maxEffects light (lomo) effects over the leaks (see LightEffects.swift); per photo, not in presets. */
     public var fx: [LightEffect] = []
     /** Up to HealSpots.maxSpots healing brush strokes (see HealSpots.swift), healed in the full-resolution image; per photo, not in presets. */

@@ -1,3 +1,7 @@
+**Pro and Auto (Desktop, iOS): procedural film light leak and film damage generator (2026-11-18)**
+
+- Ported the procedural film leak generator from Web to Desktop and iOS (`ios/shaders/gen.sh`, `FilmLeaks.swift`, `DevelopParams.swift`, `Edits.swift`, `Presets.swift`, `ShaderParams.swift`, `MetalCommon.swift`, `LeaksPanel.swift`, `FilmLeakOverlay` in `MaskOverlay.swift`, `EditorViewModel.swift`, `EditorScreen.swift`, `AutoSidecar.swift`, `AutoViewModel.swift`, `DetailScreen.swift`), with deterministic seed-parity tests against `FilmLeaks.ts` (`FilmLeaksTests.swift`).
+
 **RawBoy Web and Packer: no thread-pool failure on iPhone or single-threaded pages (2026-11-18)**
 
 - **Root cause:** `parallelRows` (`rawboy.h`), `taskThreads` (`libraw_parallel.cpp`), `PackHost` (`dng_pack.cpp`) and `decodeJxl` (`wasm_bridge.cpp`) asked for `std::thread::hardware_concurrency()` threads without checking `emscripten_has_threading_support()` (which can be false even when `hardwareConcurrency > 1`) and without catching `std::system_error` when `pthread_create` returns `EAGAIN` (`thread constructor failed: Resource temporarily unavailable`). `parallelRows` and `PackHost::PerformAreaTask` also spawned up to 8 worker threads while leaving the calling thread idle in `join()`, and destroying a non-empty `std::vector<std::thread>` on a mid-loop throw would call `std::terminate()`.

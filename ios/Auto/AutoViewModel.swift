@@ -102,6 +102,8 @@ struct AutoPhoto: Identifiable {
     var edits: DevelopParams?
     /** Edits fields this engine doesn't know (written by the web), kept for the sidecar. */
     var editsExtras = EditsExtras()
+    /** Generated film leaks/damage added in Auto (`🎲 Leak`), layered over the developed photo. */
+    var filmLeaks: [FilmLeak] = []
 
     var id: String { url.path }
 
@@ -118,6 +120,7 @@ struct AutoPhoto: Identifiable {
         s.lensPreset = lensChoice == nil || lensChoice == Presets.noLensPreset ? nil : lensPreset
         s.plain = plain
         s.autoDenoise = autoDenoise
+        s.filmLeaks = filmLeaks
         // Against the global defaults, as the web keeps them, so reading them back needs no analysis.
         s.edits = edits.flatMap { Edits.encode($0, defaults: DevelopParams(), keepEmpty: true, extras: editsExtras.values) }
             .flatMap { try? JSONSerialization.jsonObject(with: Data($0.utf8)) as? [String: Any] }
@@ -183,14 +186,18 @@ struct AutoPhoto: Identifiable {
     /** The develop settings for the current look (or preset) and controls (nil until analysed). */
     var params: DevelopParams? {
         guard let a = analysis else { return nil }
+        var out: DevelopParams
         if var e = edits {
             // Edits read back from a sidecar don't know these as-shot facts about the file; the analysis does.
             e.displaySource = a.defaults.displaySource
             e.clipLevel = a.defaults.clipLevel
-            return LookApplier.applyEditsDevelop(e, adjust: adjust)
+            out = LookApplier.applyEditsDevelop(e, adjust: adjust)
+        } else {
+            out = LookApplier.develop(autoBase(a), look: activeLook, strength: strength, adjust: adjust, hasFace: a.stats.hasFace,
+                                      preset: preset, lensPreset: lensPreset)
         }
-        return LookApplier.develop(autoBase(a), look: activeLook, strength: strength, adjust: adjust, hasFace: a.stats.hasFace,
-                                   preset: preset, lensPreset: lensPreset)
+        if !filmLeaks.isEmpty { out.filmLeaks = filmLeaks }
+        return out
     }
 }
 
@@ -210,13 +217,14 @@ private struct Develop {
     var edits: DevelopParams?
     var looksApplied: Bool
     var autoDenoise: Bool
+    var filmLeaks: [FilmLeak]
 }
 
 private extension AutoPhoto {
     var develop: Develop {
         get {
             Develop(look: look, mode: mode, filmLook: filmLook, strength: strength, adjust: adjust, preset: preset, edits: edits,
-                    looksApplied: looksApplied, autoDenoise: autoDenoise)
+                    looksApplied: looksApplied, autoDenoise: autoDenoise, filmLeaks: filmLeaks)
         }
         set {
             look = newValue.look
@@ -228,6 +236,7 @@ private extension AutoPhoto {
             edits = newValue.edits
             looksApplied = newValue.looksApplied
             autoDenoise = newValue.autoDenoise
+            filmLeaks = newValue.filmLeaks
         }
     }
 
@@ -561,6 +570,7 @@ final class AutoViewModel: ObservableObject {
         p.kept = s
         p.plain = s.plain
         p.autoDenoise = s.autoDenoise
+        p.filmLeaks = s.filmLeaks
         if let e = s.edits, let data = try? JSONSerialization.data(withJSONObject: e),
            let decoded = Edits.decodeAll(String(decoding: data, as: UTF8.self), defaults: DevelopParams()) {
             p.edits = decoded.params
@@ -1101,6 +1111,17 @@ final class AutoViewModel: ObservableObject {
     }
 
     func setMode(_ id: String, _ mode: LookMode) { changeDevelop(id, force: true) { $0.mode = mode } }
+
+    func rollFilmLeak(_ id: String) {
+        let aspect: Float = photo(id)?.analysis.map {
+            Float($0.base.width) / Float(max(1, $0.base.height))
+        } ?? 1.5
+        changeDevelop(id, force: true) {
+            $0.filmLeaks = FilmLeaks.randomRoll(aspect: aspect, seed: FilmLeaks.newSeed())
+        }
+    }
+
+    func clearFilmLeaks(_ id: String) { changeDevelop(id, force: true) { $0.filmLeaks = [] } }
 
     func setStrength(_ id: String, _ strength: Float) { changeDevelop(id) { $0.strength = strength } }
 

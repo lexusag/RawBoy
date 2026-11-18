@@ -896,3 +896,149 @@ struct MaskOverlay: View {
 
     private func px(_ p: CGPoint) -> CGPoint { CGPoint(x: p.x * scale, y: p.y * scale) }
 }
+
+/**
+ * Axis-aligned box overlay for generated film leaks (`FilmLeak`): drag inside to move, 8 handles to stretch along X/Y,
+ * and a bright source edge showing `turn` (0 left, 1 top, 2 right, 3 bottom). Outside the box/pins, hits pass through.
+ */
+struct FilmLeakOverlay: View {
+    let lens: LensTransform
+    let leaks: [FilmLeak]
+    let selectedId: String?
+    let frame: Int
+    let zoomCenter: (Float, Float)?
+    let zoomScale: Float
+    let zoomFrame: Int
+    let onSelect: (String) -> Void
+    let onChange: (String, (inout FilmLeak) -> Void) -> Void
+
+    @Environment(\.displayScale) private var scale
+    @State private var dragStart: (id: String, cx: Float, cy: Float, w: Float, h: Float)?
+
+    private enum Handle: CaseIterable {
+        case move, tl, t, tr, r, br, b, bl, l
+    }
+
+    var body: some View {
+        GeometryReader { geo in
+            let g = MaskGeometry(lens: lens, viewW: Int(geo.size.width * scale), viewH: Int(geo.size.height * scale),
+                                 frame: frame, zoomCenter: zoomCenter, zoomScale: zoomScale, zoomFrame: zoomFrame)
+            let pt = { (x: Float, y: Float) -> CGPoint in
+                let p = g.toScreen(CGFloat(x) * g.w, CGFloat(y) * g.h)
+                return CGPoint(x: p.x / scale, y: p.y / scale)
+            }
+            ZStack(alignment: .topLeading) {
+                Canvas { ctx, _ in
+                    for fl in leaks {
+                        let c = pt(fl.cx, fl.cy)
+                        if fl.id != selectedId {
+                            let r: CGFloat = 6
+                            let rect = CGRect(x: c.x - r, y: c.y - r, width: 2 * r, height: 2 * r)
+                            ctx.fill(Path(ellipseIn: rect), with: .color(.black.opacity(0.35)))
+                            ctx.stroke(Path(ellipseIn: rect), with: .color(.white.opacity(fl.enabled ? 1 : 0.5)), lineWidth: 1.5)
+                            continue
+                        }
+                        let x0 = fl.cx - fl.w / 2, x1 = fl.cx + fl.w / 2
+                        let y0 = fl.cy - fl.h / 2, y1 = fl.cy + fl.h / 2
+                        let tl = pt(x0, y0), tr = pt(x1, y0), br = pt(x1, y1), bl = pt(x0, y1)
+                        let edges: [(CGPoint, CGPoint, Int)] = [(bl, tl, 0), (tl, tr, 1), (tr, br, 2), (br, bl, 3)]
+                        for (a, b, side) in edges {
+                            var p = Path()
+                            p.move(to: a)
+                            p.addLine(to: b)
+                            let isSource = ((fl.turn % 4) + 4) % 4 == side
+                            ctx.stroke(p, with: .color(.black.opacity(0.5)), lineWidth: isSource ? 4.5 : 3)
+                            ctx.stroke(p, with: .color(isSource ? .accentColor : .white),
+                                       style: StrokeStyle(lineWidth: isSource ? 2.5 : 1.5, dash: isSource ? [] : [5, 4]))
+                        }
+                        let handles = [tl, pt(fl.cx, y0), tr, pt(x1, fl.cy), br, pt(fl.cx, y1), bl, pt(x0, fl.cy)]
+                        for h in handles {
+                            let r: CGFloat = 5
+                            let rect = CGRect(x: h.x - r, y: h.y - r, width: 2 * r, height: 2 * r)
+                            ctx.fill(Path(rect), with: .color(.black.opacity(0.45)))
+                            ctx.stroke(Path(rect), with: .color(.white), lineWidth: 1.5)
+                        }
+                        let pr: CGFloat = 6
+                        let pRect = CGRect(x: c.x - pr, y: c.y - pr, width: 2 * pr, height: 2 * pr)
+                        ctx.fill(Path(ellipseIn: pRect), with: .color(.white))
+                        ctx.stroke(Path(ellipseIn: pRect), with: .color(.black.opacity(0.5)), lineWidth: 1.5)
+                    }
+                }
+                .allowsHitTesting(false)
+
+                ForEach(leaks.filter { $0.id != selectedId }) { fl in
+                    let c = pt(fl.cx, fl.cy)
+                    Color.clear.frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                        .position(c)
+                        .onTapGesture { onSelect(fl.id) }
+                }
+
+                if let fl = leaks.first(where: { $0.id == selectedId }) {
+                    let x0 = fl.cx - fl.w / 2, x1 = fl.cx + fl.w / 2
+                    let y0 = fl.cy - fl.h / 2, y1 = fl.cy + fl.h / 2
+                    let tl = pt(x0, y0), br = pt(x1, y1)
+                    let boxW = max(24, abs(br.x - tl.x))
+                    let boxH = max(24, abs(br.y - tl.y))
+                    Color.clear.frame(width: boxW, height: boxH)
+                        .contentShape(Rectangle())
+                        .position(x: (tl.x + br.x) / 2, y: (tl.y + br.y) / 2)
+                        .gesture(dragHandle(.move, for: fl, g: g))
+
+                    let specs: [(Handle, CGPoint)] = [
+                        (.tl, tl), (.t, pt(fl.cx, y0)), (.tr, pt(x1, y0)), (.r, pt(x1, fl.cy)),
+                        (.br, br), (.b, pt(fl.cx, y1)), (.bl, pt(x0, y1)), (.l, pt(x0, fl.cy)),
+                    ]
+                    ForEach(specs, id: \.0) { handle, pos in
+                        Color.clear.frame(width: 26, height: 26)
+                            .contentShape(Rectangle())
+                            .position(pos)
+                            .gesture(dragHandle(handle, for: fl, g: g))
+                    }
+                }
+            }
+            .coordinateSpace(name: "filmLeakBox")
+        }
+    }
+
+    private func dragHandle(_ handle: Handle, for fl: FilmLeak, g: MaskGeometry) -> some Gesture {
+        DragGesture(minimumDistance: 1, coordinateSpace: .named("filmLeakBox"))
+            .onChanged { val in
+                if dragStart?.id != fl.id {
+                    dragStart = (fl.id, fl.cx, fl.cy, fl.w, fl.h)
+                }
+                guard let s = dragStart else { return }
+                let a = g.toImage(CGPoint(x: val.startLocation.x * scale, y: val.startLocation.y * scale))
+                let b = g.toImage(CGPoint(x: val.location.x * scale, y: val.location.y * scale))
+                let dx = Float((b.x - a.x) / g.w)
+                let dy = Float((b.y - a.y) / g.h)
+                onChange(fl.id) { l in
+                    var left = s.cx - s.w / 2, right = s.cx + s.w / 2
+                    var top = s.cy - s.h / 2, bottom = s.cy + s.h / 2
+                    switch handle {
+                    case .move:
+                        l.cx = (s.cx + dx).clamped(-0.5, 1.5)
+                        l.cy = (s.cy + dy).clamped(-0.5, 1.5)
+                        return
+                    case .tl: left += dx; top += dy
+                    case .t: top += dy
+                    case .tr: right += dx; top += dy
+                    case .r: right += dx
+                    case .br: right += dx; bottom += dy
+                    case .b: bottom += dy
+                    case .bl: left += dx; bottom += dy
+                    case .l: left += dx
+                    }
+                    let nw = max(0.02, right - left)
+                    let nh = max(0.02, bottom - top)
+                    if handle == .tl || handle == .l || handle == .bl { left = right - nw } else { right = left + nw }
+                    if handle == .tl || handle == .t || handle == .tr { top = bottom - nh } else { bottom = top + nh }
+                    l.cx = (left + right) / 2
+                    l.cy = (top + bottom) / 2
+                    l.w = nw
+                    l.h = nh
+                }
+            }
+            .onEnded { _ in dragStart = nil }
+    }
+}

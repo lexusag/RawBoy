@@ -48,6 +48,8 @@ public final class ShaderParams: @unchecked Sendable {
     public let layers: LayerUniforms
     /** Light leaks over the finished picture (shaders/light_leak.glsl). */
     public let leaks: LeakUniforms
+    /** Generated film leaks over the finished picture (shaders/film_leak.glsl). */
+    public let filmLeaks: FilmLeakUniforms
     /** Light effects over the finished picture, after the leaks (shaders/light_fx.glsl). */
     public let fx: FxUniforms
     /** Film stock (shaders/film_form.glsl) matching DevelopParams.film, or nil for none. */
@@ -84,7 +86,7 @@ public final class ShaderParams: @unchecked Sendable {
                 base: PreviewImage?, bloom: Float, bloomHalo: PreviewImage?, bloomTail: PreviewImage?,
                 skinRetouch: Float, skinMask: SkinMask?, grainSizeScale: Float = 1, gamutSoft: Float = 1,
                 toneMapper: Int = 0, displaySource: Float = 0, layers: LayerUniforms = .none, leaks: LeakUniforms = .none,
-                fx: FxUniforms = .none,
+                filmLeaks: FilmLeakUniforms = .none, fx: FxUniforms = .none,
                 film: FilmData? = nil, filmAmount: Float = 0,
                 filmGrain: Float = 1, halation: Float = 1, curve: [Float]? = nil, clipLevel: Float = 0,
                 anamorphic: Float = 0, anamorphicTint: [Float] = AnamorphicColor.neutral.tintVec(ghosts: false),
@@ -125,6 +127,7 @@ public final class ShaderParams: @unchecked Sendable {
         self.displaySource = displaySource
         self.layers = layers
         self.leaks = leaks
+        self.filmLeaks = filmLeaks
         self.fx = fx
         self.film = film
         self.filmAmount = filmAmount
@@ -236,6 +239,7 @@ public final class ShaderParams: @unchecked Sendable {
                                tint: p.tint, clarityReady: base != nil, viewId: maskView, brushFor: brushFor,
                                retouchMapStrength: retouchMap?.strength ?? 0),
             leaks: LightLeaks.pack(p.leaks, imageWidth: lens.width, imageHeight: lens.height),
+            filmLeaks: FilmLeaks.pack(p.filmLeaks, imageWidth: lens.width, imageHeight: lens.height),
             fx: LightEffects.pack(p.fx, imageWidth: lens.width, imageHeight: lens.height),
             film: filmUsed,
             filmAmount: filmUsed != nil ? (p.filmAmount / 100).clamped(0, 1) : 0,
