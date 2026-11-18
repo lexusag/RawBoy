@@ -6,8 +6,12 @@
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include <system_error>
 #include <thread>
 #include <vector>
+#ifdef __EMSCRIPTEN__
+#include <emscripten/threading.h>
+#endif
 
 #include "lens.h"
 
@@ -86,18 +90,32 @@ struct DecodedImage {
     std::vector<HealBackup> healBackups;
 };
 
-/** Runs fn(rowBegin, rowEnd) on up to 8 threads. */
+/** Runs fn(rowBegin, rowEnd) on up to 8 threads (the calling thread takes a slice too). */
 template <typename Fn>
 void parallelRows(int rows, Fn&& fn) {
-    const int threads = std::max(1, std::min(8, static_cast<int>(std::thread::hardware_concurrency())));
-    std::vector<std::thread> pool;
+    if (rows <= 0) return;
+    int threads = std::max(1, std::min(8, static_cast<int>(std::thread::hardware_concurrency())));
+#ifdef __EMSCRIPTEN__
+    if (!emscripten_has_threading_support()) threads = 1;
+#endif
     const int step = (rows + threads - 1) / threads;
-    for (int t = 0; t < threads; ++t) {
+    std::vector<std::thread> pool;
+    pool.reserve(static_cast<size_t>(threads - 1));
+    int fallbackBegin = rows;
+    for (int t = 1; t < threads; ++t) {
         const int begin = t * step;
         const int end = std::min(rows, begin + step);
         if (begin >= end) break;
-        pool.emplace_back([&fn, begin, end] { fn(begin, end); });
+        try {
+            pool.emplace_back([&fn, begin, end] { fn(begin, end); });
+        } catch (const std::system_error&) {
+            // Pool exhausted or threads unavailable (e.g. WebKit/iOS): run the rest here instead of aborting.
+            fallbackBegin = begin;
+            break;
+        }
     }
+    fn(0, std::min(rows, step));
+    if (fallbackBegin < rows) fn(fallbackBegin, rows);
     for (auto& th : pool) th.join();
 }
 
