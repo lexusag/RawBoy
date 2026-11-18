@@ -145,7 +145,15 @@ struct AutoPhoto: Identifiable {
      * which raws added As is start with, doesn't count either.
      */
     var isUnedited: Bool {
-        plain && activeLook.id == Looks.natural.id && preset == nil && lensPreset == nil && edits == nil && adjust == .none
+        plain && activeLook.id == Looks.natural.id && preset == nil && lensPreset == nil && edits == nil && filmLeaks.isEmpty && adjust == .none
+    }
+
+    /** Generated film leaks on this photo: rolled in Auto, in its RawBoy edits, or from a preset (web's hasFilmLeak). */
+    var hasFilmLeak: Bool {
+        if let e = edits { return !e.filmLeaks.isEmpty }
+        if !filmLeaks.isEmpty { return true }
+        if case let .filmLeaks(l)? = preset?.values["filmLeaks"] { return !l.isEmpty }
+        return false
     }
 
     /** The filters' values (web's photoCamera, photoLens, photoIso, photoFocalLength, photoDate); nil until known. */
@@ -186,16 +194,16 @@ struct AutoPhoto: Identifiable {
     /** The develop settings for the current look (or preset) and controls (nil until analysed). */
     var params: DevelopParams? {
         guard let a = analysis else { return nil }
-        var out: DevelopParams
+        let out: DevelopParams
         if var e = edits {
             // Edits read back from a sidecar don't know these as-shot facts about the file; the analysis does.
             e.displaySource = a.defaults.displaySource
             e.clipLevel = a.defaults.clipLevel
-            out = LookApplier.applyEditsDevelop(e, adjust: adjust)
-        } else {
-            out = LookApplier.develop(autoBase(a), look: activeLook, strength: strength, adjust: adjust, hasFace: a.stats.hasFace,
-                                      preset: preset, lensPreset: lensPreset)
+            // Leaks rolled in Auto live in the edits (web's paramsOf), so none are laid over them.
+            return LookApplier.applyEditsDevelop(e, adjust: adjust)
         }
+        var out = LookApplier.develop(autoBase(a), look: activeLook, strength: strength, adjust: adjust, hasFace: a.stats.hasFace,
+                                      preset: preset, lensPreset: lensPreset)
         if !filmLeaks.isEmpty { out.filmLeaks = filmLeaks }
         return out
     }
@@ -822,6 +830,7 @@ final class AutoViewModel: ObservableObject {
         changeDevelop(p.id, force: true) {
             $0.edits = params
             $0.adjust = .none
+            $0.filmLeaks = []
             $0.looksApplied = true
         }
         if p.analysis != nil { openDetail(p.id) }
@@ -1116,12 +1125,17 @@ final class AutoViewModel: ObservableObject {
         let aspect: Float = photo(id)?.analysis.map {
             Float($0.base.width) / Float(max(1, $0.base.height))
         } ?? 1.5
-        changeDevelop(id, force: true) {
-            $0.filmLeaks = FilmLeaks.randomRoll(aspect: aspect, seed: FilmLeaks.newSeed())
-        }
+        let roll = FilmLeaks.randomRoll(aspect: aspect, seed: FilmLeaks.newSeed())
+        // On a photo with RawBoy edits the leaks go into the edits, as on the web.
+        changeDevelop(id, force: true) { if $0.edits != nil { $0.edits?.filmLeaks = roll } else { $0.filmLeaks = roll } }
     }
 
-    func clearFilmLeaks(_ id: String) { changeDevelop(id, force: true) { $0.filmLeaks = [] } }
+    func clearFilmLeaks(_ id: String) {
+        changeDevelop(id, force: true) {
+            $0.filmLeaks = []
+            if $0.edits != nil { $0.edits?.filmLeaks = [] }
+        }
+    }
 
     func setStrength(_ id: String, _ strength: Float) { changeDevelop(id) { $0.strength = strength } }
 

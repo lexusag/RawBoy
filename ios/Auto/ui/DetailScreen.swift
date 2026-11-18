@@ -148,7 +148,7 @@ struct DetailScreen: View {
                 }
                 HStack(spacing: 8) {
                     Button("🎲 Leak") { vm.rollFilmLeak(id) }.font(.subheadline)
-                    if !photo.filmLeaks.isEmpty {
+                    if photo.hasFilmLeak {
                         Button("Clear leak") { vm.clearFilmLeaks(id) }.font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
@@ -471,7 +471,7 @@ extension DetailScreen {
                         Button("🎲 Leak") { vm.rollFilmLeak(photo.id) }
                             .controlSize(.small)
                             .help("Generate a random film light leak or damage roll")
-                        if !photo.filmLeaks.isEmpty {
+                        if photo.hasFilmLeak {
                             Button("Clear") { vm.clearFilmLeaks(photo.id) }
                                 .controlSize(.small)
                                 .help("Remove generated film leaks")

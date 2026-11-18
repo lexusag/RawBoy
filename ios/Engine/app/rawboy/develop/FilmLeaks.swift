@@ -501,7 +501,7 @@ public enum FilmLeaks {
         let type = (s["type"] as? String).flatMap(FilmLeakType.init(rawValue:)) ?? .edge
         let palette = (s["palette"] as? String).flatMap(FilmPalette.init(rawValue:)) ?? .warm
         let turnRaw = num(s["turn"], -16, 16) ?? 0
-        let turn = ((Int(turnRaw.rounded()) % 4) + 4) % 4
+        let turn = ((Int(Foundation.floor(turnRaw + 0.5)) % 4) + 4) % 4  // JS Math.round: halves go up
         return FilmLeak(
             id: Masks.newId(),
             enabled: (s["enabled"] as? Bool) ?? true,
