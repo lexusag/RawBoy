@@ -49,6 +49,12 @@ struct DesktopRoot: View {
                 for provider in providers {
                     if let url = await Self.fileURL(provider) { urls.append(url) }
                 }
+                let trashed = urls.filter(DesktopModel.isInTrash)
+                if !trashed.isEmpty {
+                    DesktopModel.warnTrash(trashed)
+                    urls.removeAll(where: DesktopModel.isInTrash)
+                }
+                guard !urls.isEmpty else { return }
                 // .cube and HaldCLUT .png files go to Your LUTs (as on the web), outside Browse, which shows folders.
                 if model.mode != .browse {
                     let luts = urls.filter(LutRepository.isSurelyLut)
@@ -58,10 +64,10 @@ struct DesktopRoot: View {
                     }
                 }
                 guard !urls.isEmpty else { return }
-                // Browse shows the folder (or the photo's folder); Auto takes any number of photos and folders; Pro opens
-                // the first photo.
+                // Browse copies dropped files into the open folder (or opens a folder); Auto takes any number of photos and
+                // folders; Pro opens the first photo.
                 if model.mode == .browse {
-                    model.browse.open(urls[0])
+                    model.dropInBrowse(urls)
                 } else if model.mode == .auto || urls.count > 1 || urls[0].hasDirectoryPath {
                     model.addToAuto(urls)
                 } else {

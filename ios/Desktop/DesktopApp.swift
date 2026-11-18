@@ -95,9 +95,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let links = urls.filter { !$0.isFileURL }
         links.forEach { model.handle(link: $0) }
         let urls = urls.filter(\.isFileURL)
+        let trashed = urls.filter(DesktopModel.isInTrash)
+        if !trashed.isEmpty { DesktopModel.warnTrash(trashed) }
         // Whatever the Finder hands over opens in Browse (the bundled Viewer), whichever mode was showing: a photo with its
         // folder around it, a folder as the folder. Editing starts from there (E, Send to Auto).
-        if let url = urls.first {
+        if let url = urls.first(where: { !DesktopModel.isInTrash($0) }) {
             model.mode = .browse
             model.browse.open(url)
         }

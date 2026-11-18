@@ -402,6 +402,65 @@ final class DesktopModel: ObservableObject {
         let side = PhotoSidecar(photo: url).url
         NSWorkspace.shared.activateFileViewerSelecting([FileManager.default.fileExists(atPath: side.path) ? side : url])
     }
+
+    // MARK: Drag & Drop / Trash Guard
+
+    /** True when [url] sits inside a macOS Trash folder (`~/.Trash` or a volume's `.Trashes/<uid>`). */
+    static func isInTrash(_ url: URL) -> Bool {
+        let standardized = url.standardizedFileURL
+        let components = standardized.pathComponents
+        if components.contains(".Trash") || components.contains(".Trashes") { return true }
+        var relationship: FileManager.URLRelationship = .other
+        if (try? FileManager.default.getRelationship(&relationship, of: .trashDirectory, in: .userDomainMask, toItemAt: standardized)) != nil,
+           relationship == .same || relationship == .contains {
+            return true
+        }
+        return false
+    }
+
+    /** Explains clearly why files dragged or opened from the Trash cannot be read. */
+    static func warnTrash(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = urls.count == 1 ? "File in the Trash can't be opened" : "Files in the Trash can't be opened"
+        let item = urls.count == 1 ? "“\(urls[0].lastPathComponent)”" : "them"
+        alert.informativeText = "Put \(item) back from the Trash first, then drag or open again."
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
+    }
+
+    /**
+     * Handles files or folders dropped onto Browse: folders (or a file when no folder is open yet) open in the
+     * browser; files dropped onto an open folder are copied into it (with any companion/sidecar files, never overwriting).
+     */
+    func dropInBrowse(_ urls: [URL]) {
+        guard !urls.isEmpty else { return }
+        let fm = FileManager.default
+        let isDirectory: (URL) -> Bool = { url in
+            var d: ObjCBool = false
+            return fm.fileExists(atPath: url.path, isDirectory: &d) && d.boolValue
+        }
+        if let folder = urls.first(where: isDirectory) {
+            browse.open(folder)
+            return
+        }
+        guard let destination = browse.folder else {
+            browse.open(urls[0])
+            return
+        }
+        let result = FilePaste.paste(urls, into: destination)
+        if result.failed > 0 {
+            let alert = NSAlert()
+            alert.alertStyle = .warning
+            alert.messageText = result.created.isEmpty ? "Couldn't copy dropped files" : "Some dropped files couldn't be copied"
+            alert.informativeText = result.created.isEmpty
+                ? "Make sure RawBoy has permission to read the files and write to “\(destination.lastPathComponent)”."
+                : "Copied \(result.files) file\(result.files == 1 ? "" : "s") into “\(destination.lastPathComponent)”; \(result.failed) couldn't be copied."
+            alert.addButton(withTitle: "OK")
+            alert.runModal()
+        }
+    }
 }
 
 /** The export sheet's folder choice: next to the photo, or a folder of your own. */
