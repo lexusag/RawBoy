@@ -7,9 +7,9 @@
 #
 # Branch protection / ruleset: require ONLY "pr-check". Add new jobs to `pr-check`'s `needs`.
 #
-# Android: fast compile check for pull requests: Kotlin only, no NDK/CMake, no DNG SDK, no lint, no R8, no APK
-# packaging. It catches what broke #276 (duplicate declarations, missing imports) in a few minutes instead of a full
-# assembleDebug. The native build and the APKs stay in release.yml / play.yml.
+# Android: fast compile & JVM unit-test check for pull requests: Kotlin + JUnit only, no NDK/CMake, no DNG SDK,
+# no lint, no R8, no APK packaging. It catches compile errors and logic regressions in a few minutes instead of a
+# full assembleDebug. The native build and the APKs stay in release.yml / play.yml.
 name: CI
 
 on:
@@ -23,7 +23,7 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
@@ -39,9 +39,9 @@ jobs:
       engine: ${{ steps.filter.outputs.engine }}
       desktop: ${{ steps.filter.outputs.desktop }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4
         id: filter
         with:
           filters: |
@@ -74,11 +74,14 @@ jobs:
             camera:
               - *shared
               - 'app-camera/**'
-            # RawBoy Desktop (macOS): the Swift engine, Pro's and the Desktop's sources, the shaders and native code.
+            # RawBoy Desktop (macOS): the Swift engine, Pro's and the Desktop's sources, bundled resources, shaders and native code.
             desktop:
               - 'ios/**'
               - 'shaders/**'
               - 'luts/**'
+              - 'web/public/lensfun/**'
+              - 'engine/src/main/assets/models/**'
+              - 'licenses/**'
               - 'engine/src/main/cpp/**'
               - '.github/workflows/ci.yml'
 
@@ -87,15 +90,16 @@ jobs:
     needs: changes
     if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     defaults:
       run:
         working-directory: web
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -111,7 +115,7 @@ jobs:
         run: npm run build
 
   android:
-    name: Android Kotlin compile
+    name: Android Kotlin compile & unit tests
     needs: changes
     if: >-
       github.event_name == 'workflow_dispatch' || needs.changes.outputs.pro == 'true' ||
@@ -119,29 +123,28 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: 21
 
       # ubuntu-latest already has the SDK platforms; this only accepts licences and adds anything missing.
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
         with:
           packages: platform-tools
 
       # Gradle caches are written on main only; pull requests restore them read-only.
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
-      # Compile-only tasks do not run CMake, so the NDK, CMake and third_party/dng_sdk are not needed.
-      # The unit-test sources are compiled too (they are not run: that is for a later, slower job).
-      # Only the modules whose inputs changed: an app-only change compiles :engine (up to date from the cache) and
-      # that app, not the other two. Anything shared (engine, shaders, luts, Gradle files) turns every flag on.
-      # Manual runs compile everything.
-      - name: Compile Kotlin (changed modules, with unit-test sources)
+      # Compile and JVM unit-test tasks do not run CMake, so the NDK, CMake and third_party/dng_sdk are not needed.
+      # Only the modules whose inputs changed: an app-only change restores :engine from the Gradle build cache and
+      # checks that app, not the other two. Anything shared (engine, shaders, luts, Gradle files) turns every flag on.
+      # Manual runs check everything.
+      - name: Compile Kotlin & run JVM unit tests (changed modules)
         env:
           ALL: ${{ github.event_name == 'workflow_dispatch' }}
           PRO: ${{ needs.changes.outputs.pro }}
@@ -151,10 +154,10 @@ jobs:
         run: |
           tasks=":engine:compileDebugKotlin"
           [ "$ALL" = true ] && PRO=true AUTO=true CAMERA=true ENGINE=true
-          [ "$ENGINE" = true ] && tasks="$tasks :engine:compileDebugUnitTestKotlin"
+          [ "$ENGINE" = true ] && tasks="$tasks :engine:testDebugUnitTest"
           [ "$PRO" = true ] && tasks="$tasks :app-pro:compileDebugKotlin"
           [ "$AUTO" = true ] && tasks="$tasks :app-auto:compileDebugKotlin"
-          [ "$CAMERA" = true ] && tasks="$tasks :app-camera:compileDebugKotlin :app-camera:compileDebugUnitTestKotlin"
+          [ "$CAMERA" = true ] && tasks="$tasks :app-camera:compileDebugKotlin :app-camera:testDebugUnitTest"
           echo "Tasks: $tasks"
           ./gradlew --parallel --configuration-cache --console=plain $tasks
 
@@ -168,7 +171,7 @@ jobs:
     runs-on: macos-26
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Runner images keep an older Xcode as the default; the project needs 26+ (see release.yml's desktop job).
       - name: Select the newest Xcode
@@ -178,17 +181,20 @@ jobs:
           xcodebuild -version
 
       - name: Tools
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
         run: |
           brew install xcodegen glslang spirv-cross
-          xcodebuild -downloadComponent MetalToolchain || xcrun -f metal
+          xcrun -f metal >/dev/null 2>&1 || xcodebuild -downloadComponent MetalToolchain
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         id: native
         with:
           path: ios/native/out
           key: desktop-native-${{ runner.os }}-${{ hashFiles('engine/src/main/cpp/**', 'ios/native/**', 'engine/src/main/cpp/dng_sdk.cmake') }}
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         if: steps.native.outputs.cache-hit != 'true'
         with:
           path: third_party/dng_sdk_1_7_1.zip
@@ -204,28 +210,26 @@ jobs:
           ios/native/build.sh macos
 
       # RawBoy Viewer's libraries (ios/project.yml's viewer-package block, switched by ios/viewer-source.sh).
-      #  - local (now): a sibling checkout of the Viewer's tag VIEWER_REF, where project.yml expects it.
-      #  - git: SwiftPM fetches the pinned tag itself; the checkout is cached by the pin (the block's hash).
+      #  - git (default): SwiftPM fetches the pinned tag itself; the checkout is cached by the pin (the block's hash).
+      #  - local (dev fallback): a sibling checkout of the tag pinned in ios/viewer-source.sh, where project.yml expects it.
       - name: RawBoy Viewer libraries
         id: viewer
-        env:
-          VIEWER_REF: v0.2.0
         run: |
           if grep -q 'path: ../../RawBoyImageViewer' ios/project.yml; then
-            git clone --depth 1 --branch "$VIEWER_REF" https://github.com/lexusag/RawBoyImageViewer ../RawBoyImageViewer
+            ref="v$(sed -n 's/^VIEWER_FROM="${VIEWER_FROM:-\([^}]*\)}"/\1/p' ios/viewer-source.sh)"
+            git clone --depth 1 --branch "$ref" https://github.com/lexusag/RawBoyImageViewer ../RawBoyImageViewer
           fi
           echo "pin=$(sed -n '/viewer-package:begin/,/viewer-package:end/p' ios/project.yml | shasum | cut -c1-12)" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/dd/SourcePackages
           key: viewer-spm-${{ runner.os }}-${{ steps.viewer.outputs.pin }}
 
-      # project.yml's preGenCommand also fetches MediaPipe (iOS only); the macOS targets don't use it.
+      # project.yml's preGenCommand runs shaders/gen.sh and fetches MediaPipe (iOS only); macOS targets don't use MediaPipe.
       - name: Generate the project
         run: |
           cd ios
-          sh shaders/gen.sh
           sed -i '' 's| && mediapipe/fetch.sh||' project.yml
           xcodegen
 

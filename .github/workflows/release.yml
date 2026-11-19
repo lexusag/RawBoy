@@ -49,6 +49,7 @@ jobs:
   dispatch:
     if: github.event_name == 'release'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       actions: write
     steps:
@@ -65,6 +66,7 @@ jobs:
   apk-changes:
     if: github.event_name == 'workflow_dispatch' && !inputs.skip_apks
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       build: ${{ steps.check.outputs.build }}
       base: ${{ steps.check.outputs.base }}
@@ -76,9 +78,11 @@ jobs:
       FORCE: ${{ inputs.force_apks }}
       GH_TOKEN: ${{ github.token }}
       NOT_APP_PATHS: >-
-        :!web :!ios :!docs :!tools :!branding :!*.md :!.dockerignore :!app-pro :!app-auto :!app-camera
+        :!web :!ios :!docs :!tools :!branding :!*.md :!.dockerignore :!.gitignore
+        :!.claude :!.impeccable :!.github/workflows/ci.yml :!.github/workflows/cloudflare-cleanup.yml
+        :!.github/workflows/play.yml :!app-pro :!app-auto :!app-camera
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG }}
 
@@ -128,6 +132,7 @@ jobs:
     needs: apk-changes
     if: needs.apk-changes.outputs.pro == 'false' || needs.apk-changes.outputs.auto == 'false' || needs.apk-changes.outputs.camera == 'false'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     env:
       TAG: ${{ inputs.tag }}
       BASE: ${{ needs.apk-changes.outputs.base }}
@@ -156,27 +161,28 @@ jobs:
     needs: apk-changes
     if: needs.apk-changes.outputs.build == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     env:
       TAG: ${{ inputs.tag }}
       PRO: ${{ needs.apk-changes.outputs.pro }}
       AUTO: ${{ needs.apk-changes.outputs.auto }}
       CAMERA: ${{ needs.apk-changes.outputs.camera }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG }}
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
 
       # The action's default packages include "tools", which the SDK no longer has.
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
         with:
           packages: platform-tools ndk;27.2.12479018 cmake;3.22.1
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       # The C++ dependencies (LibRaw, DNG SDK, jpegli) rarely change between releases.
       - uses: hendrikmuhs/ccache-action@v1.2
@@ -186,7 +192,7 @@ jobs:
           verbose: 1
 
       # Release builds need the Adobe DNG SDK (git-ignored); see third_party/README.md.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: third_party/dng_sdk_1_7_1.zip
           key: dng_sdk_1_7_1.zip
@@ -268,23 +274,24 @@ jobs:
   desktop:
     if: github.event_name == 'workflow_dispatch' && !inputs.skip_desktop
     runs-on: macos-26
+    timeout-minutes: 60
     env:
       TAG: ${{ inputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG }}
 
       # The macOS native libraries (LibRaw, DNG SDK, jpegli: ~6 min) are cached by their sources' hash, with the same
       # key as ci.yml's desktop job. This workflow runs on main, so it restores what CI saved there (and CI restores
       # what this saves). The DNG SDK is only needed to build them.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         id: native
         with:
           path: ios/native/out
           key: desktop-native-${{ runner.os }}-${{ hashFiles('engine/src/main/cpp/**', 'ios/native/**', 'engine/src/main/cpp/dng_sdk.cmake') }}
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         if: steps.native.outputs.cache-hit != 'true'
         with:
           path: third_party/dng_sdk_1_7_1.zip
@@ -306,38 +313,39 @@ jobs:
           xcodebuild -version
 
       - name: Tools
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
         run: |
           brew install xcodegen glslang spirv-cross
           # Xcode 26+ ships the Metal compiler as a separate component.
-          xcodebuild -downloadComponent MetalToolchain || xcrun -f metal
+          xcrun -f metal >/dev/null 2>&1 || xcodebuild -downloadComponent MetalToolchain
 
       - name: Build the native libraries (macOS slice)
         if: steps.native.outputs.cache-hit != 'true'
         run: ios/native/build.sh macos
 
       # RawBoy Viewer's libraries (ios/project.yml's viewer-package block, switched by ios/viewer-source.sh).
-      #  - local (now): a sibling checkout of the Viewer's tag VIEWER_REF, where project.yml expects it.
-      #  - git: SwiftPM fetches the pinned tag itself; the checkout is cached by the pin (the block's hash).
+      #  - git (default): SwiftPM fetches the pinned tag itself; the checkout is cached by the pin (the block's hash).
+      #  - local (dev fallback): a sibling checkout of the tag pinned in ios/viewer-source.sh, where project.yml expects it.
       - name: RawBoy Viewer libraries
         id: viewer
-        env:
-          VIEWER_REF: v0.2.0
         run: |
           if grep -q 'path: ../../RawBoyImageViewer' ios/project.yml; then
-            git clone --depth 1 --branch "$VIEWER_REF" https://github.com/lexusag/RawBoyImageViewer ../RawBoyImageViewer
+            ref="v$(sed -n 's/^VIEWER_FROM="${VIEWER_FROM:-\([^}]*\)}"/\1/p' ios/viewer-source.sh)"
+            git clone --depth 1 --branch "$ref" https://github.com/lexusag/RawBoyImageViewer ../RawBoyImageViewer
           fi
           echo "pin=$(sed -n '/viewer-package:begin/,/viewer-package:end/p' ios/project.yml | shasum | cut -c1-12)" >> "$GITHUB_OUTPUT"
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ${{ runner.temp }}/dd/SourcePackages
           key: viewer-spm-${{ runner.os }}-${{ steps.viewer.outputs.pin }}
 
-      # project.yml's preGenCommand also fetches MediaPipe (iOS only); the macOS targets don't use it, so skip that step.
+      # project.yml's preGenCommand runs shaders/gen.sh and fetches MediaPipe (iOS only); macOS targets don't use MediaPipe.
       - name: Generate the project
         run: |
           cd ios
-          sh shaders/gen.sh
           sed -i '' 's| && mediapipe/fetch.sh||' project.yml
           xcodegen
 
@@ -367,6 +375,7 @@ jobs:
   web-changes:
     if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
       contents: read
     outputs:
@@ -381,7 +390,7 @@ jobs:
         web shaders luts engine/src/main/cpp engine/src/main/assets/models licenses third_party
         .github/workflows/release.yml
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG }}
 
@@ -402,6 +411,7 @@ jobs:
     needs: web-changes
     if: needs.web-changes.outputs.deploy == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     permissions:
       contents: read
     env:
@@ -409,12 +419,12 @@ jobs:
       # Emscripten's prebuilt system libraries (libc, libc++ with pthreads/exceptions), kept between runs.
       EM_CACHE: ${{ github.workspace }}/.em_cache
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ env.TAG }}
 
       # build:public needs the Adobe DNG SDK for rawboy-full.wasm.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: third_party/dng_sdk_1_7_1.zip
           key: dng_sdk_1_7_1.zip
@@ -427,7 +437,7 @@ jobs:
 
       # Same Emscripten as web/Dockerfile. Installed at a fixed path: setup-emsdk used a new temp dir each run,
       # which cleared EM_CACHE ("config changed") and changed the header paths ccache hashes.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ~/emsdk
           key: emsdk-6.0.12
@@ -438,7 +448,7 @@ jobs:
           ~/emsdk/emsdk install 6.0.12
           ~/emsdk/emsdk activate 6.0.12
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: ${{ env.EM_CACHE }}
           key: em-cache-6.0.12-${{ hashFiles('web/native/CMakeLists.txt') }}
@@ -450,7 +460,7 @@ jobs:
           max-size: 1G
           verbose: 1
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm

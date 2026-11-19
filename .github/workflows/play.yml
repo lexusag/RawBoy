@@ -68,6 +68,7 @@ concurrency:
 jobs:
   bundles:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     outputs:
       packages: ${{ steps.inputs.outputs.packages }}
     env:
@@ -104,19 +105,19 @@ jobs:
           echo "versionName $VERSION_NAME, versionCode $code, apps: [$packages]"
 
       # Builds the branch or tag picked in "Use workflow from".
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
 
       # The action's default packages include "tools", which the SDK no longer has.
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
         with:
           packages: platform-tools ndk;27.2.12479018 cmake;3.22.1
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
 
       # Same cache key as release.yml, so a Play build after a GitHub release reuses its compiled C++.
       - uses: hendrikmuhs/ccache-action@v1.2
@@ -126,7 +127,7 @@ jobs:
           verbose: 1
 
       # Release builds need the Adobe DNG SDK (git-ignored); see third_party/README.md.
-      - uses: actions/cache@v4
+      - uses: actions/cache@v6
         with:
           path: third_party/dng_sdk_1_7_1.zip
           key: dng_sdk_1_7_1.zip
@@ -189,7 +190,7 @@ jobs:
         run: rm -f keystore.properties "$RUNNER_TEMP/release.jks"
 
       # Kept for a week: download them from the run's Summary page for a manual upload (an app's very first one).
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: play-bundles-${{ inputs.version_name }}
           path: dist
@@ -199,13 +200,14 @@ jobs:
     needs: bundles
     if: inputs.upload
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       # One app failing (say, its version code was already used) doesn't stop the others.
       fail-fast: false
       matrix:
         package: ${{ fromJSON(needs.bundles.outputs.packages) }}
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         with:
           name: play-bundles-${{ inputs.version_name }}
           path: dist
