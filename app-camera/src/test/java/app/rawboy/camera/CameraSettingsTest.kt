@@ -62,6 +62,7 @@ class CameraSettingsTest {
             showGrid = true,
             showLevel = true,
             showHistogram = true,
+            videoQuality = VideoQuality.HIGH,
             grain = false,
             scanQr = false,
             photoFrame = PhotoFrame.PENTAX_645,
@@ -116,5 +117,17 @@ class CameraSettingsTest {
             "cameraMode=bw lut=${Edition.defaultMonoLookId}",
             CameraSettings(mono = true, film = true).descriptionNote(),
         )
+    }
+
+    @Test
+    fun videoQualityDefaultsAndBitrates() {
+        assertEquals(VideoQuality.OPTIMAL, CameraSettings().videoQuality)
+        assertEquals(listOf(VideoQuality.LOW, VideoQuality.OPTIMAL, VideoQuality.HIGH), VideoQuality.entries)
+        assertEquals(listOf("Low", "Optimal", "High"), VideoQuality.entries.map { it.label })
+        assert(VideoQuality.LOW.bitrate(false) < VideoQuality.OPTIMAL.bitrate(false))
+        assert(VideoQuality.OPTIMAL.bitrate(false) < VideoQuality.HIGH.bitrate(false))
+        assert(VideoQuality.LOW.bitrate(true) < VideoQuality.OPTIMAL.bitrate(true))
+        assert(VideoQuality.OPTIMAL.bitrate(true) < VideoQuality.HIGH.bitrate(true))
+        assert(VideoQuality.OPTIMAL.bitrate(true) > VideoQuality.OPTIMAL.bitrate(false))
     }
 }

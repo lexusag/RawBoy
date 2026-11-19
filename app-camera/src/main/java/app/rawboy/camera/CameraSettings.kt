@@ -117,6 +117,8 @@ data class CameraSettings(
     val videoStabilization: Boolean = false,
     /** Video mode records a flat Apple Log picture without the look, to be graded later (the web video page). */
     val flatVideo: Boolean = false,
+    /** Video recording quality (bitrate): Low, Optimal (default), or High. */
+    val videoQuality: VideoQuality = VideoQuality.OPTIMAL,
     /**
      * Per camera ([lensKey]): gain from the linearised preview to raw units (1.0 = sensor clip), learned
      * from each shot (raw key / viewfinder key), so the viewfinder's auto exposure matches the final.
@@ -346,6 +348,7 @@ object CameraSettingsStore {
             experimental = p.getBoolean("experimental", d.experimental),
             videoStabilization = p.getBoolean("videoStabilization", d.videoStabilization),
             flatVideo = p.getBoolean("flatVideo", d.flatVideo),
+            videoQuality = runCatching { VideoQuality.valueOf(p.getString("videoQuality", null)!!) }.getOrDefault(d.videoQuality),
             previewScales = parseScales(p.getString(scalesKey(calibrationSlot, level), null)),
             flashGuides = parseScales(p.getString(flashGuidesKey(calibrationSlot), null), min = 1e-2f, max = 1e4f),
             // "FLASH" (plain flash, since removed) becomes Focus-flash.
@@ -424,6 +427,7 @@ object CameraSettingsStore {
             .putBoolean("experimental", s.experimental)
             .putBoolean("videoStabilization", s.videoStabilization)
             .putBoolean("flatVideo", s.flatVideo)
+            .putString("videoQuality", s.videoQuality.name)
             .putBoolean("front", s.front)
             .putString("lens", s.lens)
             .putString("flash", s.flash.name)
@@ -512,6 +516,15 @@ enum class BurstMode {
         AUTO -> OFF
         OFF -> ON
     }
+}
+
+/** Video recording quality (bitrate): Low, Optimal (the default), or High. */
+enum class VideoQuality(val label: String, val bitrate: Int, val flatBitrate: Int) {
+    LOW("Low", bitrate = 8_000_000, flatBitrate = 14_000_000),
+    OPTIMAL("Optimal", bitrate = 16_000_000, flatBitrate = 28_000_000),
+    HIGH("High", bitrate = 28_000_000, flatBitrate = 48_000_000);
+
+    fun bitrate(flat: Boolean): Int = if (flat) flatBitrate else bitrate
 }
 
 /**

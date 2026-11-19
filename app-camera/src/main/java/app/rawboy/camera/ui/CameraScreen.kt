@@ -159,6 +159,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.rawboy.auto.looks.LookApplier
 import app.rawboy.color.BwFilter
 import app.rawboy.camera.BurstMode
+import app.rawboy.camera.VideoQuality
 import app.rawboy.camera.CameraSettings
 import app.rawboy.camera.CameraStatus
 import app.rawboy.camera.CameraViewModel
@@ -1342,6 +1343,14 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
         )
 
         SettingsSection("Video")
+        SettingChoice(
+            title = "Video quality",
+            subtitle = "Higher quality uses more storage (1080p at 30 fps)",
+            options = VideoQuality.entries,
+            selected = settings.videoQuality,
+            label = { it.label },
+            onSelect = vm::setVideoQuality,
+        )
         SettingSwitch(
             title = "Flat video for grading",
             subtitle = "No look: Apple Log, to grade on the web video page",
