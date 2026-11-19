@@ -119,8 +119,14 @@ function GridView({ store, scroll, lastViewed }: {
   const [managingLensPresets, setManagingLensPresets] = useState(false);
   // The export sheet: for every photo ('all') or the selection as it was when Export was pressed.
   const [exportSheet, setExportSheet] = useState<'all' | ReadonlySet<string> | null>(null);
+  // Confirmation before taking selected photos out of the batch (Delete/Backspace or the selection bar's Remove button).
+  const [confirmRemove, setConfirmRemove] = useState<ReadonlySet<string> | null>(null);
   const selecting = selection.size > 0;
   const exportableSelected = photos.filter((p) => p.analysis && selection.has(p.id)).length;
+  const selectionRef = useRef(selection);
+  selectionRef.current = selection;
+  const exportingRef = useRef(exporting);
+  exportingRef.current = exporting;
   useEffect(() => {
     const ids = new Set(photos.map((p) => p.id));
     if ([...selection].some((id) => !ids.has(id))) setSelection(new Set([...selection].filter((id) => ids.has(id))));
@@ -132,6 +138,10 @@ function GridView({ store, scroll, lastViewed }: {
       else if (shortcutKey(e) === 'a' && (e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && !isTextEntry(e.target)) {
         e.preventDefault();
         setSelection(new Set(photosRef.current.map((p) => p.id)));
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && !e.repeat && !isTextEntry(e.target) && !document.querySelector('.dialog')) {
+        if (exportingRef.current || selectionRef.current.size === 0) return;
+        e.preventDefault();
+        setConfirmRemove(new Set(selectionRef.current));
       }
     };
     window.addEventListener('keydown', onKey);
@@ -202,13 +212,10 @@ function GridView({ store, scroll, lastViewed }: {
             <button
               type="button"
               className="icon"
-              title="Remove from the batch"
+              title="Remove from the batch (Delete)"
               aria-label="Remove"
               disabled={exporting}
-              onClick={() => {
-                store.remove(selection);
-                setSelection(new Set());
-              }}
+              onClick={() => setConfirmRemove(new Set(selection))}
             >
               <DeleteIcon />
             </button>
@@ -515,6 +522,19 @@ function GridView({ store, scroll, lastViewed }: {
           onDismiss={() => setChoosingPreset(null)}
         />
       )}
+      {confirmRemove && (
+        <RemoveSelectionDialog
+          count={confirmRemove.size}
+          onConfirm={() => {
+            const ids = confirmRemove;
+            setConfirmRemove(null);
+            store.remove(new Set(ids));
+            setSelection(new Set());
+            store.showMessage(ids.size === 1 ? '1 photo removed from the batch' : `${ids.size} photos removed from the batch`);
+          }}
+          onDismiss={() => setConfirmRemove(null)}
+        />
+      )}
     </div>
   );
 }
@@ -645,6 +665,34 @@ function LensPresetsDialog({ store, presets, onDismiss }: { store: AutoStore; pr
         </div>
         <div className="dialog-actions">
           <button type="button" className="primary" onClick={onDismiss}>Done</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Confirmation before removing selected photos from the batch (Delete/Backspace or the selection bar's Remove button). */
+function RemoveSelectionDialog({ count, onConfirm, onDismiss }: {
+  count: number;
+  onConfirm: () => void;
+  onDismiss: () => void;
+}) {
+  useEscToDismiss(onDismiss);
+  const title = count === 1 ? 'Remove the selected photo from the batch?' : `Remove ${count} selected photos from the batch?`;
+  return (
+    <div className="dialog-backdrop" onClick={onDismiss}>
+      <div className="dialog" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={title}>
+        <h2>{title}</h2>
+        <div className="note">
+          {count === 1
+            ? 'It only leaves the batch: the file stays where it is.'
+            : 'They only leave the batch: the files stay where they are.'}
+        </div>
+        <div className="dialog-actions">
+          <button type="button" className="text" autoFocus onClick={onDismiss}>Cancel</button>
+          <button type="button" className="primary" onClick={onConfirm}>
+            {count === 1 ? 'Remove 1 photo' : `Remove ${count} photos`}
+          </button>
         </div>
       </div>
     </div>

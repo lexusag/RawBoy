@@ -990,10 +990,16 @@ final class AutoViewModel: ObservableObject {
     var selectionAnchor: String?
     /** Bumped by the "Clear batch" button and menu item: the root asks for confirmation. */
     @Published private(set) var clearRequest = 0
+    /** Bumped by Delete/Backspace in the grid, the selection bar's Remove button and the menu item: the root asks for confirmation. */
+    @Published private(set) var removeSelectionRequest = 0
     /** RawBoy Desktop: opens a photo in the Pro editor / nil on iOS (the buttons then don't show). */
     var editInPro: ((AutoPhoto) -> Void)?
 
     func requestClear() { if export == nil && !photos.isEmpty { clearRequest += 1 } }
+
+    func requestRemoveSelection() {
+        if export == nil && selected == nil && !selection.isEmpty { removeSelectionRequest += 1 }
+    }
 
     /** Takes every photo out of the batch (files and sidecars stay where they are). */
     func clearBatch() {
@@ -1004,6 +1010,20 @@ final class AutoViewModel: ObservableObject {
         focusedId = nil
         selectionAnchor = nil
         if n > 0 { message = n == 1 ? "1 photo removed from the batch" : "\(n) photos removed from the batch" }
+    }
+
+    /** Takes the selected photos out of the batch (files and sidecars stay where they are). */
+    func removeSelection() {
+        guard export == nil else { return }
+        let ids = selection.intersection(photos.map(\.id))
+        guard !ids.isEmpty else {
+            clearSelection()
+            return
+        }
+        remove(ids)
+        if let f = focusedId, ids.contains(f) { focusedId = nil }
+        clearSelection()
+        message = ids.count == 1 ? "1 photo removed from the batch" : "\(ids.count) photos removed from the batch"
     }
 
     /**
