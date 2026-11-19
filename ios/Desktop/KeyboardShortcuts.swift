@@ -45,8 +45,9 @@ final class KeyboardShortcuts {
 
     /**
      * Auto: the arrows move through the grid (and between photos in the photo view, as Space and ⌫ do there), Return opens,
-     * Esc goes back, ⌦ removes the photo from the batch, C opens Crop & rotate, ⇧C copies the previous photo's look; ⌘E, ⌘O,
-     * ⌘Z and the mode keys are the menu's. Nothing here fires while text is being typed or a sheet is open.
+     * Esc goes back, ⌫ / ⌦ in the grid removes the selection after confirming, ⌦ in the photo view removes the photo from
+     * the batch, C opens Crop & rotate, ⇧C copies the previous photo's look; ⌘E, ⌘O, ⌘Z and the mode keys are the menu's.
+     * Nothing here fires while text is being typed or a sheet is open.
      */
     private func handleAuto(_ event: NSEvent, _ key: Key) -> NSEvent? {
         guard event.type == .keyDown, !typing else { return event }
@@ -114,6 +115,9 @@ final class KeyboardShortcuts {
         case .up: auto.moveFocus(dx: 0, dy: -1)
         case .down: auto.moveFocus(dx: 0, dy: 1)
         case .return, .keypadEnter: auto.openFocused()
+        case .delete, .forwardDelete:
+            guard !event.isARepeat, !auto.selection.isEmpty else { return event }
+            auto.requestRemoveSelection()
         default: return event
         }
         return nil

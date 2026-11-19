@@ -6,6 +6,7 @@ struct AutoDesktopRoot: View {
     @ObservedObject var model: DesktopModel
     @ObservedObject var vm: AutoViewModel
     @State private var confirmingClear = false
+    @State private var confirmingRemoveSelection = false
     @State private var resetting = false
     /** The preset picker is open: for the whole batch (ids nil) or for these photos. */
     @State private var presetPick: PresetPick?
@@ -17,12 +18,16 @@ struct AutoDesktopRoot: View {
             } else {
                 GridScreen(vm: vm, addFromPhotos: nil, addFromFiles: { model.addPhotosPanel() },
                            addFromFolder: { model.addFolderPanel() }, onClearBatch: { vm.requestClear() },
+                           onRemoveSelection: { vm.requestRemoveSelection() },
                            onResetAll: { vm.requestReset() },
                            pickPreset: { ids in presetPick = PresetPick(ids: ids) })
             }
         }
         .toast($vm.message)
         .onChange(of: vm.clearRequest) { _, _ in confirmingClear = true }
+        .onChange(of: vm.removeSelectionRequest) { _, _ in
+            if !vm.selection.isEmpty { confirmingRemoveSelection = true }
+        }
         .onChange(of: vm.resetRequest) { _, _ in resetting = true }
         .sheet(isPresented: $resetting) { ResetAllSheet(vm: vm, isPresented: $resetting) }
         .sheet(item: $presetPick) { pick in
@@ -38,6 +43,16 @@ struct AutoDesktopRoot: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("They only leave the batch: the files, their sidecars and any exported photos stay where they are.")
+        }
+        .confirmationDialog(
+            vm.selection.count == 1 ? "Remove the selected photo from the batch?" : "Remove \(vm.selection.count) selected photos from the batch?",
+            isPresented: $confirmingRemoveSelection, titleVisibility: .visible) {
+            Button(vm.selection.count == 1 ? "Remove 1 photo" : "Remove \(vm.selection.count) photos", role: .destructive) { vm.removeSelection() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(vm.selection.count == 1
+                 ? "It only leaves the batch: the file, its sidecar and any exported photos stay where they are."
+                 : "They only leave the batch: the files, their sidecars and any exported photos stay where they are.")
         }
         .confirmationDialog(
             vm.overwriteRequest.map { $0.count == 1 ? "Replace this photo's RawBoy edits?" : "Replace the RawBoy edits of \($0.count) photos?" } ?? "",

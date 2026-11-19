@@ -198,6 +198,7 @@ struct DesktopCommands: Commands {
                 .disabled(!proMode || model.vm.currentURL == nil)
             Divider()
             Button("Select All Photos") { auto.selectAll() }.disabled(!autoReady || auto.selected != nil || auto.photos.isEmpty)
+            Button("Remove Selected Photos…") { auto.requestRemoveSelection() }.disabled(!autoReady || auto.selected != nil || auto.selection.isEmpty)
             Button("Reset All Photos…") { auto.requestReset() }.disabled(!autoReady || auto.photos.isEmpty)
             Button("Clear Batch…") { auto.requestClear() }.disabled(!autoReady || auto.photos.isEmpty)
             Divider()
