@@ -134,4 +134,67 @@ class CameraSettingsTest {
             assertTrue(q.bitrate(true) > q.bitrate(false))
         }
     }
+
+    @Test
+    fun randomLightLeakRateDefaultsAndExactCountsPerFivePhotoSequence() {
+        assertEquals(CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE, CameraSettings().randomLightLeakRate)
+        assertEquals(listOf(1, 2, 3, 4, 5), CameraSettings.LIGHT_LEAK_RATES)
+
+        val rng = kotlin.random.Random(42)
+        for (rate in CameraSettings.LIGHT_LEAK_RATES) {
+            var state: String? = null
+            repeat(20) {
+                var leaks = 0
+                repeat(CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE) {
+                    val (leak, next) = LightLeakSequence.next(state, rate, random = rng)
+                    if (leak) leaks++
+                    state = next
+                }
+                assertEquals("rate $rate should produce exactly $rate leaks per 5 shots", rate, leaks)
+                assertEquals("", state)
+            }
+        }
+    }
+
+    @Test
+    fun randomLightLeakOneOfFiveHitsAllPositionsUnpredictably() {
+        val rng = kotlin.random.Random(12345)
+        var state: String? = null
+        val positions = mutableSetOf<Int>()
+        repeat(50) {
+            var hitIndex = -1
+            repeat(CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE) { idx ->
+                val (leak, next) = LightLeakSequence.next(state, rate = 1, random = rng)
+                if (leak) hitIndex = idx
+                state = next
+            }
+            assertTrue(hitIndex in 0 until CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE)
+            positions += hitIndex
+        }
+        assertEquals(setOf(0, 1, 2, 3, 4), positions)
+    }
+
+    @Test
+    fun randomLightLeakSequenceResetsOnRateChangeOrCorruptState() {
+        val rng = kotlin.random.Random(7)
+        val (_, midState) = LightLeakSequence.next(null, rate = 1, random = rng)
+        assertTrue(midState.startsWith("1:"))
+
+        // Switching rate mid-sequence deals a fresh 5-shot sequence for the new rate.
+        var state: String? = midState
+        var leaks = 0
+        repeat(CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE) {
+            val (leak, next) = LightLeakSequence.next(state, rate = 3, random = rng)
+            if (leak) leaks++
+            state = next
+        }
+        assertEquals(3, leaks)
+
+        // Malformed states fall back cleanly without crashing.
+        for (bad in listOf("", "bad", "2:", ":0101", "2:abc", "2:010101")) {
+            val (_, next) = LightLeakSequence.next(bad, rate = 2, random = rng)
+            assertTrue(next.startsWith("2:"))
+        }
+    }
 }
+

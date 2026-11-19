@@ -1270,11 +1270,24 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
         )
         SettingSwitch(
             title = "Random light leak",
-            subtitle = "Adds a random film light leak (edge burn, blob, sprocket holes, rebate glow, flare or start of roll) to each shot",
+            subtitle = "Adds a random film light leak (edge burn, blob, sprocket holes, rebate glow, flare or start of roll) to saved shots",
             checked = settings.randomLightLeak,
             onChange = vm::setRandomLightLeak,
         )
         if (settings.randomLightLeak) {
+            SettingChoice(
+                title = "Frequency",
+                subtitle = if (settings.randomLightLeakRate == CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE) {
+                    "Every shot"
+                } else {
+                    "${settings.randomLightLeakRate} random out of every ${CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE} shots"
+                },
+                options = CameraSettings.LIGHT_LEAK_RATES,
+                selected = settings.randomLightLeakRate,
+                label = { "$it/${CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE}" },
+                onSelect = vm::setRandomLightLeakRate,
+                indent = true,
+            )
             SettingSwitch(
                 title = "Short-side sprockets",
                 subtitle = "Also generate sprocket holes on the short edges; off keeps them on the long edges only",

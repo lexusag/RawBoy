@@ -427,7 +427,7 @@ internal object ShotSaver {
             val denoise = maxOf(looked.denoise, highIsoDenoise(a.stats.iso * noiseScale))
             val noise = img.measureNoise()
             val aspect = a.base.width.toFloat() / a.base.height.coerceAtLeast(1)
-            val filmLeaks = if (s.randomLightLeak) {
+            val filmLeaks = if (s.randomLightLeak && CameraSettingsStore.nextLightLeak(app, s.randomLightLeakRate)) {
                 listOf(FilmLeaks.randomForCamera(aspect = aspect, seed = FilmLeaks.newSeed(), shortSideSprockets = s.shortSideSprockets))
             } else {
                 emptyList()

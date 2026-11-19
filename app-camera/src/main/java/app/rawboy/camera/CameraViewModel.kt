@@ -1178,6 +1178,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setHdrGainMap(on: Boolean) = change { it.copy(hdrGainMap = on) }
     fun setRandomLightLeak(on: Boolean) = change { it.copy(randomLightLeak = on) }
 
+    fun setRandomLightLeakRate(rate: Int) = change {
+        it.copy(randomLightLeakRate = rate.coerceIn(1, CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE))
+    }
+
     fun setShortSideSprockets(on: Boolean) = change { it.copy(shortSideSprockets = on) }
     fun setPhotoFrame(frame: PhotoFrame) = change {
         it.copy(
