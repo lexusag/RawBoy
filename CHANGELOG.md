@@ -1,3 +1,7 @@
+**Camera (Android): fewer dropped video frames (2026-11-19)**
+
+- Muxer writes moved to their own thread (`RawBoy-muxer`) so the encoder's output buffers are released at once, the encoder is asked for real-time priority without B-frames, and while recording a look the develop shader runs once per frame (at encoder size) for both the screen and the encoder. QR scanning pauses while recording. High video quality is now 24 Mbit/s (38 Mbit/s flat).
+
 **RawBoy Desktop: pin RawBoy Viewer 0.2.10 (2026-11-19)**
 
 - **Drag multiple selected files and folders to other apps**, **show selected files' total size in the browser status line**, **copy dropped files into the open folder**, and **warn before moving to Trash in the viewer**. Comes with RawBoy Viewer v0.2.10 (PRs 61, 62, 63); the pin moves from 0.2.9 to 0.2.10. Not tried by hand (no Mac): CI's `desktop` job is the first build.

@@ -15,6 +15,7 @@ import android.media.MediaRecorder
 import android.net.Uri
 import android.os.Environment
 import android.os.ParcelFileDescriptor
+import android.os.Process
 import android.os.SystemClock
 import android.provider.MediaStore
 import android.util.Log
@@ -26,6 +27,7 @@ import java.nio.ByteBuffer
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.LinkedBlockingQueue
 import kotlin.math.abs
 
 /**
@@ -57,17 +59,28 @@ class VideoRecorder private constructor(
     private var clockOffsetNs = Long.MIN_VALUE
     private var lastVideoPtsNs = -1L
 
-    private val lock = Any()
-    private var videoTrack = -1
-    private var audioTrack = -1
+    private sealed interface MuxEvent {
+        class Track(val format: MediaFormat, val isVideo: Boolean) : MuxEvent
+        class Sample(val isVideo: Boolean, val data: ByteBuffer, val info: MediaCodec.BufferInfo) : MuxEvent
+        data object Stop : MuxEvent
+    }
+
+    private val muxerQueue = LinkedBlockingQueue<MuxEvent>()
+
+    @Volatile
     private var muxerStarted = false
-    private val waiting = ArrayList<Sample>()
-    private class Sample(val track: Int, val data: ByteBuffer, val info: MediaCodec.BufferInfo)
+
+    @Volatile
+    private var muxerFailed = false
+
+    @Volatile
+    private var discardMuxer = false
 
     @Volatile
     private var stopAudio = false
     private var videoThread: Thread? = null
     private var audioThread: Thread? = null
+    private var muxerThread: Thread? = null
 
     /** Encoded frames written so far (the video thread's count, read by [progress]). */
     @Volatile
@@ -98,6 +111,7 @@ class VideoRecorder private constructor(
     private val startMs = SystemClock.uptimeMillis()
 
     private fun begin() {
+        muxerThread = Thread({ runMuxer() }, "RawBoy-muxer").also { it.start() }
         videoCodec.start()
         videoThread = Thread({ drainVideo() }, "RawBoy-video").also { it.start() }
         audio?.let { a ->
@@ -119,52 +133,80 @@ class VideoRecorder private constructor(
         return pts
     }
 
-    // ---- Muxing: samples wait until both tracks (video, and audio if any) exist ----
+    // ---- Muxing: dedicated writer thread so encoder output buffers are released immediately ----
 
-    private fun addTrack(format: MediaFormat, isVideo: Boolean) = synchronized(lock) {
-        val index = muxer.addTrack(format)
-        if (isVideo) videoTrack = index else audioTrack = index
-        if (videoTrack >= 0 && (audio == null || audioTrack >= 0)) {
-            muxer.start()
-            muxerStarted = true
-            for (s in waiting) muxer.writeSampleData(s.track, s.data, s.info)
-            waiting.clear()
-        }
+    private fun copySample(isVideo: Boolean, data: ByteBuffer, info: MediaCodec.BufferInfo): MuxEvent.Sample? {
+        if (muxerFailed) return null // the writer thread is gone: don't queue samples nobody will take
+        data.position(info.offset)
+        data.limit(info.offset + info.size)
+        val copy = ByteBuffer.allocate(info.size)
+        copy.put(data)
+        copy.flip()
+        val copyInfo = MediaCodec.BufferInfo().also { it.set(0, info.size, info.presentationTimeUs, info.flags) }
+        return MuxEvent.Sample(isVideo, copy, copyInfo)
     }
 
-    private fun write(track: Int, data: ByteBuffer, info: MediaCodec.BufferInfo) = synchronized(lock) {
-        if (muxerStarted) {
-            muxer.writeSampleData(track, data, info)
-        } else {
-            // Copied: the codec takes its buffer back as soon as it is released.
-            val copy = ByteBuffer.allocate(info.size)
-            copy.put(data)
-            copy.flip()
-            waiting.add(Sample(track, copy, MediaCodec.BufferInfo().also { it.set(0, info.size, info.presentationTimeUs, info.flags) }))
+    private fun runMuxer() {
+        var videoTrack = -1
+        var audioTrack = -1
+        val waiting = ArrayList<MuxEvent.Sample>()
+        try {
+            while (!discardMuxer) {
+                when (val event = muxerQueue.take()) {
+                    is MuxEvent.Track -> if (!muxerStarted) {
+                        val index = muxer.addTrack(event.format)
+                        if (event.isVideo) videoTrack = index else audioTrack = index
+                        if (videoTrack >= 0 && (audio == null || audioTrack >= 0)) {
+                            muxer.start()
+                            muxerStarted = true
+                            for (s in waiting) {
+                                val track = if (s.isVideo) videoTrack else audioTrack
+                                muxer.writeSampleData(track, s.data, s.info)
+                            }
+                            waiting.clear()
+                        }
+                    }
+                    is MuxEvent.Sample -> {
+                        if (muxerStarted) {
+                            val track = if (event.isVideo) videoTrack else audioTrack
+                            muxer.writeSampleData(track, event.data, event.info)
+                        } else {
+                            waiting.add(event)
+                        }
+                    }
+                    MuxEvent.Stop -> break
+                }
+            }
+        } catch (e: Exception) {
+            muxerFailed = true
+            Log.w(TAG, "muxer write failed", e)
         }
     }
 
     private fun drainVideo() {
+        Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_DISPLAY)
         val info = MediaCodec.BufferInfo()
         try {
             while (true) {
                 injectFault()
                 val index = videoCodec.dequeueOutputBuffer(info, TIMEOUT_US)
                 when {
-                    index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> addTrack(videoCodec.outputFormat, isVideo = true)
+                    index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED ->
+                        muxerQueue.put(MuxEvent.Track(videoCodec.outputFormat, isVideo = true))
                     index >= 0 -> {
                         val buffer = videoCodec.getOutputBuffer(index)
                         val config = info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
                         // Debug faults: an injected EGL refusal or silent encoder writes nothing.
                         val silent = fault?.kind == VideoDebug.Kind.SILENT || (fault?.kind == VideoDebug.Kind.EGL && fault.afterMs == 0L)
-                        if (buffer != null && info.size > 0 && !config && !silent) {
-                            buffer.position(info.offset)
-                            buffer.limit(info.offset + info.size)
-                            write(videoTrack, buffer, info)
+                        val sample = if (buffer != null && info.size > 0 && !config && !silent) {
+                            copySample(isVideo = true, buffer, info)
+                        } else null
+                        videoCodec.releaseOutputBuffer(index, false)
+                        if (sample != null) {
+                            muxerQueue.put(sample)
                             if (videoFrames == 0) Log.i(TAG, "${variant.name}: first encoded frame ${elapsedMs} ms after the start")
                             videoFrames++
                         }
-                        videoCodec.releaseOutputBuffer(index, false)
                         if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) return
                     }
                 }
@@ -184,6 +226,7 @@ class VideoRecorder private constructor(
 
     @SuppressLint("MissingPermission") // RECORD_AUDIO was granted before create() built the AudioRecord
     private fun runAudio(a: Audio) {
+        Process.setThreadPriority(Process.THREAD_PRIORITY_AUDIO)
         val pcm = ByteArray(a.bufferBytes)
         val info = MediaCodec.BufferInfo()
         var frames = 0L
@@ -218,16 +261,16 @@ class VideoRecorder private constructor(
                 while (true) {
                     val index = a.codec.dequeueOutputBuffer(info, if (inputDone) TIMEOUT_US else 0)
                     when {
-                        index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> addTrack(a.codec.outputFormat, isVideo = false)
+                        index == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED ->
+                            muxerQueue.put(MuxEvent.Track(a.codec.outputFormat, isVideo = false))
                         index >= 0 -> {
                             val buffer = a.codec.getOutputBuffer(index)
                             val config = info.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0
-                            if (buffer != null && info.size > 0 && !config) {
-                                buffer.position(info.offset)
-                                buffer.limit(info.offset + info.size)
-                                write(audioTrack, buffer, info)
-                            }
+                            val sample = if (buffer != null && info.size > 0 && !config) {
+                                copySample(isVideo = false, buffer, info)
+                            } else null
                             a.codec.releaseOutputBuffer(index, false)
+                            if (sample != null) muxerQueue.put(sample)
                             if (info.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM != 0) return
                         }
                         else -> break
@@ -268,6 +311,10 @@ class VideoRecorder private constructor(
         while (!sink.released && SystemClock.uptimeMillis() < deadline) Thread.sleep(10)
         videoThread?.join(2000)
         audioThread?.join(2000)
+        discardMuxer = true
+        muxerQueue.clear()
+        muxerQueue.offer(MuxEvent.Stop)
+        muxerThread?.join(2000)
         runCatching { audio?.record?.stop() }
         runCatching { muxer.release() }
         sink.surface.release()
@@ -297,19 +344,21 @@ class VideoRecorder private constructor(
         stopAudio = true
         videoThread?.join(5000)
         audioThread?.join(5000)
+        muxerQueue.offer(MuxEvent.Stop)
+        // The queue may hold a few seconds of samples behind a slow disk: stopping the muxer while the writer thread
+        // is still inside it would corrupt the file, so wait for it properly.
+        muxerThread?.join(30_000)
         runCatching { audio?.record?.stop() }
-        var ok = videoFrames > 0
-        synchronized(lock) {
-            if (muxerStarted) {
-                try {
-                    muxer.stop()
-                } catch (e: Exception) {
-                    Log.w(TAG, "muxer stop", e)
-                    ok = false
-                }
-            } else {
+        var ok = videoFrames > 0 && !muxerFailed
+        if (muxerStarted) {
+            try {
+                muxer.stop()
+            } catch (e: Exception) {
+                Log.w(TAG, "muxer stop", e)
                 ok = false
             }
+        } else {
+            ok = false
         }
         runCatching { muxer.release() }
         runCatching { videoCodec.stop() }
@@ -363,6 +412,8 @@ class VideoRecorder private constructor(
                     setInteger(MediaFormat.KEY_FRAME_RATE, 30)
                     setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
                     setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
+                    setInteger(MediaFormat.KEY_PRIORITY, 0)
+                    setInteger(MediaFormat.KEY_MAX_B_FRAMES, 0)
                     setInteger(
                         MediaFormat.KEY_PROFILE,
                         if (mime == MediaFormat.MIMETYPE_VIDEO_HEVC) MediaCodecInfo.CodecProfileLevel.HEVCProfileMain
