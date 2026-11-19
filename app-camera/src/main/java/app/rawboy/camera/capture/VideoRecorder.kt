@@ -135,7 +135,8 @@ class VideoRecorder private constructor(
 
     // ---- Muxing: dedicated writer thread so encoder output buffers are released immediately ----
 
-    private fun copySample(isVideo: Boolean, data: ByteBuffer, info: MediaCodec.BufferInfo): MuxEvent.Sample {
+    private fun copySample(isVideo: Boolean, data: ByteBuffer, info: MediaCodec.BufferInfo): MuxEvent.Sample? {
+        if (muxerFailed) return null // the writer thread is gone: don't queue samples nobody will take
         data.position(info.offset)
         data.limit(info.offset + info.size)
         val copy = ByteBuffer.allocate(info.size)
@@ -344,7 +345,9 @@ class VideoRecorder private constructor(
         videoThread?.join(5000)
         audioThread?.join(5000)
         muxerQueue.offer(MuxEvent.Stop)
-        muxerThread?.join(5000)
+        // The queue may hold a few seconds of samples behind a slow disk: stopping the muxer while the writer thread
+        // is still inside it would corrupt the file, so wait for it properly.
+        muxerThread?.join(30_000)
         runCatching { audio?.record?.stop() }
         var ok = videoFrames > 0 && !muxerFailed
         if (muxerStarted) {
