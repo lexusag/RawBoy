@@ -764,7 +764,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             // What reached the raw, judged on the frame at the shutter (a burst's or long exposure's AE moves on meanwhile).
             // The Pixel's model keeps judging on the frame after the capture, as it was tuned.
             val shutterEv = if (platform.still.compensation == CompensationModel.AE_GAIN_IN_RAW) appliedCompensationEv(_frames.value) else null
-            if (mode == FlashMode.OFF && longExposure != null && !inf.hiRes) return@withLock longExposureDng(s, inf, longExposure, exifOrientation, location, note, out, shutterEv, onSubmitted)
+            if (mode == FlashMode.OFF && longExposure != null && !inf.hiRes) return@withLock longExposureDng(s, inf, longExposure, exifOrientation, location, note, out, shutterEv, onExposed, onSubmitted)
             if (mode == FlashMode.OFF && burstFrames > 1 && !inf.hiRes) return@withLock burstDng(s, inf, burstFrames, exifOrientation, location, note, out, shutterEv, onSubmitted)
             // Ambient exposure before any light comes on: the flash still never needs more.
             val ambient = _frames.value
@@ -1123,9 +1123,18 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
     @Volatile
     private var longExposureStop = false
 
+    @Volatile
+    private var onLongExposureStop: (() -> Unit)? = null
+
+    /** Clears any previous early-stop flag before starting a new long exposure. */
+    fun prepareLongExposure() {
+        longExposureStop = false
+    }
+
     /** Ends the running long exposure early; the frames taken so far are stacked and saved. */
     fun stopLongExposure() {
         longExposureStop = true
+        onLongExposureStop?.invoke()
     }
 
     /**
@@ -1145,8 +1154,13 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         out: OutputStream,
         /** [appliedCompensationEv] at the shutter, or null for the Pixel's rule (below). */
         shutterEv: Float?,
+        onExposed: () -> Unit,
         onSubmitted: () -> Unit,
     ): Still {
+        if (longExposureStop) {
+            longExposureStop = false
+            throw CancellationException("Long exposure stopped")
+        }
         val reader = rawReader ?: throw IOException("Camera not ready")
         val width = reader.width
         val height = reader.height
@@ -1215,7 +1229,6 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         val totalNs = spec.seconds * 1_000_000_000L
         var startNs = 0L
         val done = CompletableDeferred<Unit>()
-        longExposureStop = false
         fun finished() = longExposureStop || System.nanoTime() - startNs >= totalNs
         fun checkDone() {
             if (finished() && reference != null && arrived + failed >= submitted) done.complete(Unit)
@@ -1273,7 +1286,13 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             runCatching { s.stopRepeating() }
         }
         handler.post {
+            if (longExposureStop) {
+                closed = true
+                done.complete(Unit)
+                return@post
+            }
             pendingBurst = done
+            onLongExposureStop = { handler.post { checkDone() } }
             burstSink = sink@{ img ->
                 if (closed) return@sink
                 if (handle == 0L) handle = LongExposureNative.create(width, height, spec.lighten)
@@ -1294,17 +1313,20 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             withTimeoutOrNull(totalNs / 1_000_000 + LONG_EXPOSURE_GRACE_MS) { done.await() }
         } catch (e: CancellationException) {
             handler.post {
+                onLongExposureStop = null
                 burstSink = null
                 if (pendingBurst === done) pendingBurst = null
                 closed = true
                 if (handle != 0L) LongExposureNative.destroy(handle)
                 runCatching { repeatPreview() }
             }
+            longExposureStop = false
             _longExposureProgress.value = null
             throw e
         }
         val state = CompletableDeferred<Triple<Long, CaptureResult?, Int>>()
         if (!handler.post {
+            onLongExposureStop = null
             burstSink = null
             if (pendingBurst === done) pendingBurst = null
             closed = true
@@ -1314,7 +1336,13 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             state.complete(Triple(handle, reference, arrived))
         }) state.completeExceptionally(IOException("Camera closed"))
         val (h, ref, frames) = try { state.await() } finally { _longExposureProgress.value = null }
-        if (h == 0L) throw IOException("Long exposure: no frames")
+        val stopped = longExposureStop
+        longExposureStop = false
+        onExposed()
+        if (h == 0L) {
+            if (stopped) throw CancellationException("Long exposure stopped")
+            throw IOException("Long exposure: no frames")
+        }
         try {
             if (ref == null) throw IOException("Long exposure: no result for the first frame")
             val stacked = withContext(Dispatchers.Default) { LongExposureNative.finish(h, width, height) }

@@ -314,11 +314,18 @@ fun CameraScreen(
                 }
             }
         }
+        val stopLabel = when {
+            recordingMs != null -> "Stop recording"
+            longExposing -> "Stop long exposure"
+            selfTimerLeft != null -> "Cancel timer"
+            else -> null
+        }
+        val modeSwitchEnabled = recordingMs == null && !longExposing && selfTimerLeft == null
         val shutterButton = @Composable {
             Shutter(
-                enabled = status == CameraStatus.READY && (!merging || longExposing),
+                enabled = selfTimerLeft != null || (status == CameraStatus.READY && (!merging || longExposing)),
                 video = videoMode,
-                recording = recordingMs != null,
+                stopLabel = stopLabel,
                 onClick = vm::shutter,
                 modifier = Modifier.graphicsLayer {
                     scaleX = shutterScale.value
@@ -662,7 +669,7 @@ fun CameraScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         extras()
-                        ModeSwitch(videoMode, enabled = recordingMs == null, vertical = true) { vm.setVideoMode(it) }
+                        ModeSwitch(videoMode, enabled = modeSwitchEnabled, vertical = true) { vm.setVideoMode(it) }
                         switchButton()
                         shutterButton()
                         lastPhoto()
@@ -670,8 +677,8 @@ fun CameraScreen(
                 } else {
                     // Swiping sideways anywhere on the shutter area switches too: left for video, right back to photo.
                     Column(
-                        Modifier.pointerInput(recordingMs == null) {
-                            if (recordingMs != null) return@pointerInput
+                        Modifier.pointerInput(modeSwitchEnabled) {
+                            if (!modeSwitchEnabled) return@pointerInput
                             var drag = 0f
                             detectHorizontalDragGestures(
                                 onDragStart = { drag = 0f },
@@ -690,7 +697,7 @@ fun CameraScreen(
                             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
                                 if (!videoMode && settings.experimental) TimerButton(settings.selfTimer) { vm.cycleSelfTimer() }
                             }
-                            ModeSwitch(videoMode, enabled = recordingMs == null) { vm.setVideoMode(it) }
+                            ModeSwitch(videoMode, enabled = modeSwitchEnabled) { vm.setVideoMode(it) }
                             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                                 if (!videoMode && settings.experimental) {
                                     LongExposureButton(settings.longExposure, settings.longExposureLighten, hiRes) { vm.cycleLongExposure() }
@@ -1009,25 +1016,26 @@ private fun loupeAt(x: Float, y: Float, view: IntSize, side: Float, gap: Float):
 }
 
 @Composable
-private fun Shutter(enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, video: Boolean = false, recording: Boolean = false) {
+private fun Shutter(enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, video: Boolean = false, stopLabel: String? = null) {
+    val stopping = stopLabel != null
     val ring = if (enabled) Color.White else Color.Gray
-    // Video: a red dot, which becomes a red square while recording.
+    // Video: a red dot; while recording, shooting a long exposure, or counting down a timer, a stop square.
     val fill = if (!video) ring else if (enabled) Color(0xFFE53935) else Color.Gray
-    val shape = if (recording) RoundedCornerShape(8.dp) else CircleShape
+    val shape = if (stopping) RoundedCornerShape(8.dp) else CircleShape
     Box(
         modifier
             .size(76.dp)
             .border(BorderStroke(4.dp, ring), CircleShape)
-            .padding(if (recording) 20.dp else 8.dp)
+            .padding(if (stopping) 20.dp else 8.dp)
             .clip(shape)
             .background(fill)
             .clickable(
                 enabled = enabled,
-                onClickLabel = if (!video) "Take a photo" else if (recording) "Stop recording" else "Start recording",
+                onClickLabel = stopLabel ?: if (video) "Start recording" else "Take a photo",
                 role = Role.Button,
                 onClick = onClick,
             )
-            .semantics { contentDescription = if (video) "Record" else "Shutter" },
+            .semantics { contentDescription = stopLabel ?: if (video) "Record" else "Shutter" },
     )
 }
 
