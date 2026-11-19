@@ -19,6 +19,7 @@ import android.os.SystemClock
 import android.provider.MediaStore
 import android.util.Log
 import app.rawboy.camera.Edition
+import app.rawboy.camera.VideoQuality
 import app.rawboy.gl.VideoSink
 import java.io.IOException
 import java.nio.ByteBuffer
@@ -335,10 +336,6 @@ class VideoRecorder private constructor(
         private const val CLOCK_AGREES_NS = 1_000_000_000L
         private const val AUDIO_RATE = 48_000
         private const val BYTES_PER_FRAME = 4 // 16-bit stereo
-        private const val VIDEO_BITRATE = 16_000_000
-
-        /** The flat picture keeps more of the shadows and highlights for grading, so it gets more bits. */
-        private const val FLAT_BITRATE = 28_000_000
 
         /**
          * Flat video is exposed this many EV higher than the look would be, to keep the shadows off the 8-bit floor: the
@@ -353,12 +350,12 @@ class VideoRecorder private constructor(
          * A configured encoder of [mime] (surface input; the codec called [name], else the platform's choice for the
          * type), or null when the device has none or refuses the format.
          */
-        private fun videoCodecOf(width: Int, height: Int, mime: String, flat: Boolean, name: String? = null): MediaCodec? {
+        private fun videoCodecOf(width: Int, height: Int, mime: String, flat: Boolean, bitrate: Int, name: String? = null): MediaCodec? {
             var codec: MediaCodec? = null
             try {
                 val format = MediaFormat.createVideoFormat(mime, width, height).apply {
                     setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-                    setInteger(MediaFormat.KEY_BIT_RATE, if (flat) FLAT_BITRATE else VIDEO_BITRATE)
+                    setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
                     setInteger(MediaFormat.KEY_FRAME_RATE, 30)
                     setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
                     setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
@@ -380,7 +377,7 @@ class VideoRecorder private constructor(
                 }
                 codec = if (name != null) MediaCodec.createByCodecName(name) else MediaCodec.createEncoderByType(mime)
                 codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-                Log.i(TAG, "video encoder ${codec.name} ($mime, ${width}x$height)")
+                Log.i(TAG, "video encoder ${codec.name} ($mime, ${width}x$height, ${bitrate / 1_000_000} Mbps)")
                 return codec
             } catch (e: Exception) {
                 Log.w(TAG, "no $mime encoder", e)
@@ -405,11 +402,13 @@ class VideoRecorder private constructor(
             flat: Boolean,
             variant: VideoVariant = VideoVariant.STANDARD,
             debug: VideoDebug? = null,
+            quality: VideoQuality = VideoQuality.OPTIMAL,
             requestRender: () -> Unit = {},
         ): VideoRecorder {
             val landscape = turns % 2 != 0
             val width = if (landscape) LONG_SIDE else SHORT_SIDE
             val height = if (landscape) SHORT_SIDE else LONG_SIDE
+            val bitrate = quality.bitrate(flat)
 
             val resolver = context.contentResolver
             val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
@@ -434,10 +433,10 @@ class VideoRecorder private constructor(
                 // frames re-muxed with exact 30 fps times stalled too), while the camera's own videos play fine.
                 // H.264 stays as the fallback for a device without an HEVC encoder.
                 video = when {
-                    variant.softwareAvc -> softwareAvcName(width, height)?.let { videoCodecOf(width, height, MediaFormat.MIMETYPE_VIDEO_AVC, flat, it) }
-                    debug?.forceAvc == true -> videoCodecOf(width, height, MediaFormat.MIMETYPE_VIDEO_AVC, flat)
-                    else -> videoCodecOf(width, height, MediaFormat.MIMETYPE_VIDEO_HEVC, flat)
-                        ?: videoCodecOf(width, height, MediaFormat.MIMETYPE_VIDEO_AVC, flat)
+                    variant.softwareAvc -> softwareAvcName(width, height)?.let { videoCodecOf(width, height, MediaFormat.MIMETYPE_VIDEO_AVC, flat, bitrate, it) }
+                    debug?.forceAvc == true -> videoCodecOf(width, height, MediaFormat.MIMETYPE_VIDEO_AVC, flat, bitrate)
+                    else -> videoCodecOf(width, height, MediaFormat.MIMETYPE_VIDEO_HEVC, flat, bitrate)
+                        ?: videoCodecOf(width, height, MediaFormat.MIMETYPE_VIDEO_AVC, flat, bitrate)
                 } ?: throw NoEncoderException(if (variant.softwareAvc) "No software H.264 encoder" else "No video encoder")
                 surface = video.createInputSurface()
 

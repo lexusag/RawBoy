@@ -357,6 +357,11 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         if (_recordingMs.value == null) change { it.copy(flatVideo = on) }
     }
 
+    /** Not in the middle of a recording: the file's bitrate is fixed when it starts. */
+    fun setVideoQuality(quality: VideoQuality) {
+        if (_recordingMs.value == null) change { it.copy(videoQuality = quality) }
+    }
+
     fun setVideoStabilization(on: Boolean) {
         change { it.copy(videoStabilization = on) }
         // Changing it restarts the preview (a visible blink and a new crop): not in the middle of a recording.
@@ -378,13 +383,14 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val turns = debug?.turns ?: ((deviceDegrees / 90) % 4)
         val withAudio = audioGranted
         val flat = _settings.value.flatVideo
+        val quality = _settings.value.videoQuality
         stopRequested = false
         _recordingMs.value = 0
         recordingJob = viewModelScope.launch {
             val probe = videoProbe(debug)
             probing = true
             val result = try {
-                probe.run(_recordableViewfinder.value) { variant -> attemptRecording(variant, turns, withAudio, flat, debug) }
+                probe.run(_recordableViewfinder.value) { variant -> attemptRecording(variant, turns, withAudio, flat, quality, debug) }
             } catch (e: Exception) {
                 probing = false
                 // The file couldn't be made (not the encoder's doing).
@@ -427,12 +433,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
      * frame. A failed try is taken down completely (the next one starts on a clean slate).
      */
     private suspend fun attemptRecording(
-        variant: VideoVariant, turns: Int, withAudio: Boolean, flat: Boolean, debug: VideoDebug?,
+        variant: VideoVariant, turns: Int, withAudio: Boolean, flat: Boolean, quality: VideoQuality, debug: VideoDebug?,
     ): VideoProbe.Attempt<VideoRecorder> {
         if (stopRequested) return VideoProbe.Attempt.Aborted
         val r = try {
             withContext(Dispatchers.IO) {
-                VideoRecorder.create(app, turns, withAudio, flat, variant, debug)
+                VideoRecorder.create(app, turns, withAudio, flat, variant, debug, quality)
             }
         } catch (e: NoEncoderException) {
             Log.w(TAG, "video: $variant has no encoder", e)
@@ -1256,7 +1262,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val prev = _settings.value
         val recording = _recordingMs.value != null
         val next = prev.resetToDefaults().let {
-            if (recording) it.copy(maxRes = prev.maxRes, front = prev.front, lens = prev.lens, flatVideo = prev.flatVideo) else it
+            if (recording) it.copy(maxRes = prev.maxRes, front = prev.front, lens = prev.lens, flatVideo = prev.flatVideo, videoQuality = prev.videoQuality) else it
         }
         change { next }
         if (!recording) {
