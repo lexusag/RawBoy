@@ -24,6 +24,7 @@ class CameraSettingsTest {
         assertEquals(DateStampStyle.CLASSIC, s.dateStampStyle)
         assertEquals(TimeStampFormat.H24, s.timeStampFormat)
         assertFalse(s.pentax645Flip)
+        assertFalse(s.showZoomControl)
         assertEquals(Pentax645Field.DEFAULT, s.pentax645Fields)
         assertEquals(Pentax645Field.DEFAULT_ORDER, s.pentax645Order)
         val subset = setOf(Pentax645Field.SHUTTER, Pentax645Field.ISO, Pentax645Field.DATE, Pentax645Field.TIME)

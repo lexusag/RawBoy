@@ -67,8 +67,8 @@ data class CameraSettings(
     val showHistogram: Boolean = false,
     /** A 3 x 3 grid over the viewfinder (rule of thirds). Off by default. */
     val showGrid: Boolean = false,
-    /** The zoom buttons (+, zoom, −) over the viewfinder. Pinching zooms either way. On by default. */
-    val showZoomControl: Boolean = true,
+    /** The zoom buttons (+, zoom, −) over the viewfinder. Pinching zooms either way. Off by default. */
+    val showZoomControl: Boolean = false,
     /** A level line over the viewfinder that turns yellow when the phone is straight. Off by default. */
     val showLevel: Boolean = false,
     /** Whether each shot (without flash) takes [BURST_FRAMES] raws and merges them into one: see [BurstMode]. */
