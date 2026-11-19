@@ -1,3 +1,7 @@
+**RawBoy Desktop: pin RawBoy Viewer 0.2.10 (2026-11-19)**
+
+- **Drag multiple selected files and folders to other apps**, **show selected files' total size in the browser status line**, **copy dropped files into the open folder**, and **warn before moving to Trash in the viewer**. Comes with RawBoy Viewer v0.2.10 (PRs 61, 62, 63); the pin moves from 0.2.9 to 0.2.10. Not tried by hand (no Mac): CI's `desktop` job is the first build.
+
 **Pro, Auto, and Camera (Android): procedural film light leak and film damage generator (2026-11-18)**
 
 - **Pro & Auto:** Ported the procedural film leak generator to Android (`Shaders.kt`, `FilmLeaks.kt`, `DevelopParams.kt`, `Edits.kt`, `Presets.kt`, `ShaderParams.kt`, `GlCommon.kt`, `LeaksPanel.kt`, `FilmLeakOverlay` + `rememberFilmLeakGestures` in `MaskOverlay.kt`, `EditorViewModel.kt`, `EditorScreen.kt`, `AutoViewModel.kt`, `DetailScreen.kt`), with deterministic seed-parity tests against `FilmLeaks.ts` (`FilmLeaksTest.kt`).
