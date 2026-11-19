@@ -11,6 +11,7 @@ import app.rawboy.export.PhotoFrame
 import app.rawboy.export.TimeStampFormat
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CameraSettingsTest {
@@ -124,10 +125,12 @@ class CameraSettingsTest {
         assertEquals(VideoQuality.OPTIMAL, CameraSettings().videoQuality)
         assertEquals(listOf(VideoQuality.LOW, VideoQuality.OPTIMAL, VideoQuality.HIGH), VideoQuality.entries)
         assertEquals(listOf("Low", "Optimal", "High"), VideoQuality.entries.map { it.label })
-        assert(VideoQuality.LOW.bitrate(false) < VideoQuality.OPTIMAL.bitrate(false))
-        assert(VideoQuality.OPTIMAL.bitrate(false) < VideoQuality.HIGH.bitrate(false))
-        assert(VideoQuality.LOW.bitrate(true) < VideoQuality.OPTIMAL.bitrate(true))
-        assert(VideoQuality.OPTIMAL.bitrate(true) < VideoQuality.HIGH.bitrate(true))
-        assert(VideoQuality.OPTIMAL.bitrate(true) > VideoQuality.OPTIMAL.bitrate(false))
+        assertTrue(VideoQuality.LOW.bitrate(false) < VideoQuality.OPTIMAL.bitrate(false))
+        assertTrue(VideoQuality.OPTIMAL.bitrate(false) < VideoQuality.HIGH.bitrate(false))
+        assertTrue(VideoQuality.LOW.bitrate(true) < VideoQuality.OPTIMAL.bitrate(true))
+        assertTrue(VideoQuality.OPTIMAL.bitrate(true) < VideoQuality.HIGH.bitrate(true))
+        for (q in VideoQuality.entries) {
+            assertTrue(q.bitrate(true) > q.bitrate(false))
+        }
     }
 }
