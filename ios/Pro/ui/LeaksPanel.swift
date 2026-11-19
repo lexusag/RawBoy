@@ -46,8 +46,8 @@ struct LeakPanelActions {
     let onUpdate: (String, Bool, (inout LightLeak) -> Void) -> Void
     let onRemove: (String) -> Void
     let onSelectFilm: (String) -> Void
-    let onAddFilm: (FilmLeakType?) -> Void
-    let onRandomRoll: () -> Void
+    let onAddFilm: (FilmLeakType?, Bool) -> Void
+    let onRandomRoll: (Bool) -> Void
     let onUpdateFilm: (String, Bool, (inout FilmLeak) -> Void) -> Void
     let onRemoveFilm: (String) -> Void
     /** Switches to the light effects tool (they share one top-bar button). */
@@ -68,6 +68,7 @@ struct LeaksPanel: View {
     let zoomed: Bool
     let actions: LeakPanelActions
     @State private var genType: FilmLeakType? = nil
+    @State private var shortSideSprockets = false
 
     private var budgetLeft: Bool { leaks.count + filmLeaks.count < LightLeaks.maxLeaks }
 
@@ -174,26 +175,35 @@ struct LeaksPanel: View {
                 .padding(.horizontal, 12)
             }
             .scrollIndicators(.hidden)
-            HStack(spacing: 8) {
-                Button("🎲 Random") { actions.onAddFilm(genType) }
-                    .font(.subheadline).fontWeight(.medium)
-                    .disabled(!budgetLeft)
-                Button("Roll") { actions.onRandomRoll() }
-                    .font(.subheadline)
-                    .disabled(leaks.count >= LightLeaks.maxLeaks)
-                if let fl = filmLeaks.first(where: { $0.id == selectedFilmId }) {
-                    Button("New variation") {
-                        actions.onUpdateFilm(fl.id, true) { $0 = FilmLeaks.newVariation($0, seed: Float(FilmLeaks.newSeed())) }
-                    }
-                    .font(.subheadline)
-                }
-                if budgetLeft, let t = genType {
-                    Button("+ Add \(t.label)") { actions.onAddFilm(t) }
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) {
+                    Button("🎲 Random") { actions.onAddFilm(genType, shortSideSprockets) }
+                        .font(.subheadline).fontWeight(.medium)
+                        .disabled(!budgetLeft)
+                    Button("Roll") { actions.onRandomRoll(shortSideSprockets) }
                         .font(.subheadline)
+                        .disabled(leaks.count >= LightLeaks.maxLeaks)
+                    Text("Short-side sprockets")
+                        .font(.caption)
+                        .padding(.horizontal, 9).padding(.vertical, 4)
+                        .chipStyle(selected: shortSideSprockets)
+                        .tapButton(selected: shortSideSprockets, hint: "Also generate sprocket holes on the short edges") {
+                            shortSideSprockets.toggle()
+                        }
+                    if let fl = filmLeaks.first(where: { $0.id == selectedFilmId }) {
+                        Button("New variation") {
+                            actions.onUpdateFilm(fl.id, true) { $0 = FilmLeaks.newVariation($0, seed: Float(FilmLeaks.newSeed())) }
+                        }
+                        .font(.subheadline)
+                    }
+                    if budgetLeft, let t = genType {
+                        Button("+ Add \(t.label)") { actions.onAddFilm(t, shortSideSprockets) }
+                            .font(.subheadline)
+                    }
                 }
-                Spacer()
+                .padding(.horizontal, 16)
             }
-            .padding(.horizontal, 16)
+            .scrollIndicators(.hidden)
         }
     }
 

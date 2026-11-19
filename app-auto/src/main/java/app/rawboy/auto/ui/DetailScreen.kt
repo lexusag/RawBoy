@@ -501,8 +501,18 @@ fun DetailScreen(
                     if (preset == null && photo.edits == null) {
                         AutoSlider("Strength", photo.strength, 0f..100f, LookApplier.DEFAULT_STRENGTH) { vm.setStrength(id, it) }
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                        TextButton(onClick = { vm.rollFilmLeak(id) }) { Text("🎲 Leak") }
+                    var shortSideSprockets by remember { mutableStateOf(false) }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.horizontalScroll(rememberScrollState()),
+                    ) {
+                        TextButton(onClick = { vm.rollFilmLeak(id, shortSideSprockets) }) { Text("🎲 Leak") }
+                        FilterChip(
+                            selected = shortSideSprockets,
+                            onClick = { shortSideSprockets = !shortSideSprockets },
+                            label = { Text("Short-side sprockets") },
+                        )
                         if (photo.filmLeaks.isNotEmpty()) {
                             TextButton(onClick = { vm.clearFilmLeaks(id) }) { Text("Clear leak") }
                         }

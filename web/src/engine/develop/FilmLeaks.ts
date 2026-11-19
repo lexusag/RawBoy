@@ -187,9 +187,13 @@ const SIDE: Record<FilmLeakType, 'short' | 'long' | 'any'> = {
 };
 
 /** A turn (0 left, 1 top, 2 right, 3 bottom) for a type on a photo of [aspect] (width / height). */
-function sideFor(r: Rng, type: FilmLeakType, aspect: number): number {
+function sideFor(r: Rng, type: FilmLeakType, aspect: number, shortSideSprockets = false): number {
   const shortSides = aspect >= 1 ? [0, 2] : [1, 3];
   const longSides = aspect >= 1 ? [1, 3] : [0, 2];
+  if (type === 'sprocket') {
+    const pool = shortSideSprockets ? [0, 1, 2, 3] : longSides;
+    return pool[Math.floor(r() * pool.length)];
+  }
   const pref = SIDE[type];
   const pool = pref === 'any' ? [0, 1, 2, 3] : r() < 0.85 ? (pref === 'short' ? shortSides : longSides) : (pref === 'short' ? longSides : shortSides);
   return pool[Math.floor(r() * pool.length)];
@@ -213,10 +217,16 @@ const round = (v: number) => Math.round(v);
  * A plausible random layer of [type] (or a weighted random type) on a photo of [aspect] (width / height), drawn from
  * [seed] (0..1). [grade] gives it a colour grade for the whole photo (the main layer of a Random roll).
  */
-export function randomFilmLeak(type: FilmLeakType | undefined, aspect: number, seed: number, grade = true): FilmLeak {
+export function randomFilmLeak(
+  type: FilmLeakType | undefined,
+  aspect: number,
+  seed: number,
+  grade = true,
+  shortSideSprockets = false,
+): FilmLeak {
   const r = mulberry32(Math.floor(seed * 4294967296));
   const t = type ?? pick(r, TYPE_WEIGHTS);
-  const turn = sideFor(r, t, aspect);
+  const turn = sideFor(r, t, aspect, shortSideSprockets);
   const palette = pick(r, PALETTE_WEIGHTS[t]);
   let box = { cx: 0.5, cy: 0.5, w: 1.04, h: 1.04 };
   let amount = between(r, 30, 80);
@@ -271,14 +281,14 @@ export function randomFilmLeak(type: FilmLeakType | undefined, aspect: number, s
 }
 
 /** Random (full): a main layer with its grade, sometimes with dust, a rebate glow or a second leak opposite. */
-export function randomFilmRoll(aspect: number, seed: number): FilmLeak[] {
+export function randomFilmRoll(aspect: number, seed: number, shortSideSprockets = false): FilmLeak[] {
   const r = mulberry32(Math.floor(seed * 4294967296) ^ 0x9e3779b9);
-  const main = randomFilmLeak(undefined, aspect, r());
+  const main = randomFilmLeak(undefined, aspect, r(), true, shortSideSprockets);
   const out = [main];
   if (main.type !== 'dust' && main.type !== 'scratches' && r() < 0.3) {
-    out.push(randomFilmLeak(r() < 0.45 ? 'scratches' : 'dust', aspect, r(), false));
+    out.push(randomFilmLeak(r() < 0.45 ? 'scratches' : 'dust', aspect, r(), false, shortSideSprockets));
   }
-  if (main.type !== 'rebate' && main.type !== 'end' && r() < 0.15) out.push({ ...randomFilmLeak('rebate', aspect, r(), false), palette: main.palette === 'cool' ? 'red' : main.palette });
+  if (main.type !== 'rebate' && main.type !== 'end' && r() < 0.15) out.push({ ...randomFilmLeak('rebate', aspect, r(), false, shortSideSprockets), palette: main.palette === 'cool' ? 'red' : main.palette });
   if ((main.type === 'edge' || main.type === 'blob') && r() < 0.2) {
     const second = randomFilmLeak(main.type, aspect, r(), false);
     out.push({ ...sideMove(second, (main.turn + 2) % 4), palette: main.palette, intensity: round(second.intensity * 0.6) });

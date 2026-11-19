@@ -489,18 +489,24 @@ final class EditorViewModel: ObservableObject {
     // MARK: - Generated film leaks (see FilmLeaks.swift)
 
     @discardableResult
-    func addFilmLeak(_ type: FilmLeakType? = nil, aspect: Float) -> String? {
+    func addFilmLeak(_ type: FilmLeakType? = nil, aspect: Float, shortSideSprockets: Bool = false) -> String? {
         if state.params.leaks.count + state.params.filmLeaks.count >= LightLeaks.maxLeaks { return nil }
-        let leak = FilmLeaks.random(type: type, aspect: aspect, seed: FilmLeaks.newSeed(), grade: state.params.filmLeaks.isEmpty)
+        let leak = FilmLeaks.random(
+            type: type,
+            aspect: aspect,
+            seed: FilmLeaks.newSeed(),
+            grade: state.params.filmLeaks.isEmpty,
+            shortSideSprockets: shortSideSprockets
+        )
         edit(force: true) { $0.filmLeaks.append(leak) }
         return leak.id
     }
 
     @discardableResult
-    func randomFilmRoll(aspect: Float) -> String? {
+    func randomFilmRoll(aspect: Float, shortSideSprockets: Bool = false) -> String? {
         let cap = max(0, LightLeaks.maxLeaks - state.params.leaks.count)
         guard cap > 0 else { return nil }
-        let roll = Array(FilmLeaks.randomRoll(aspect: aspect, seed: FilmLeaks.newSeed()).prefix(cap))
+        let roll = Array(FilmLeaks.randomRoll(aspect: aspect, seed: FilmLeaks.newSeed(), shortSideSprockets: shortSideSprockets).prefix(cap))
         edit(force: true) { $0.filmLeaks = roll }
         return roll.first?.id
     }

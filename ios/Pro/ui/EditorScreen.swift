@@ -591,8 +591,16 @@ struct EditorScreen: View {
                         onUpdate: { id, force, change in vm.updateLeak(id, force: force, change) },
                         onRemove: vm.removeLeak,
                         onSelectFilm: { selectedFilmLeak = $0; selectedLeak = nil },
-                        onAddFilm: { type in if let id = vm.addFilmLeak(type, aspect: photoAspect) { selectedFilmLeak = id; selectedLeak = nil } },
-                        onRandomRoll: { if let id = vm.randomFilmRoll(aspect: photoAspect) { selectedFilmLeak = id; selectedLeak = nil } },
+                        onAddFilm: { type, shortSideSprockets in
+                            if let id = vm.addFilmLeak(type, aspect: photoAspect, shortSideSprockets: shortSideSprockets) {
+                                selectedFilmLeak = id; selectedLeak = nil
+                            }
+                        },
+                        onRandomRoll: { shortSideSprockets in
+                            if let id = vm.randomFilmRoll(aspect: photoAspect, shortSideSprockets: shortSideSprockets) {
+                                selectedFilmLeak = id; selectedLeak = nil
+                            }
+                        },
                         onUpdateFilm: { id, force, change in vm.updateFilmLeak(id, force: force, change) },
                         onRemoveFilm: vm.removeFilmLeak,
                         onFx: { mode = .fx },

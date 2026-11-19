@@ -1120,11 +1120,11 @@ final class AutoViewModel: ObservableObject {
 
     func setMode(_ id: String, _ mode: LookMode) { changeDevelop(id, force: true) { $0.mode = mode } }
 
-    func rollFilmLeak(_ id: String) {
+    func rollFilmLeak(_ id: String, shortSideSprockets: Bool = false) {
         let aspect: Float = photo(id)?.analysis.map {
             Float($0.base.width) / Float(max(1, $0.base.height))
         } ?? 1.5
-        let roll = FilmLeaks.randomRoll(aspect: aspect, seed: FilmLeaks.newSeed())
+        let roll = FilmLeaks.randomRoll(aspect: aspect, seed: FilmLeaks.newSeed(), shortSideSprockets: shortSideSprockets)
         // On a photo with RawBoy edits the leaks go into the edits, as on the web.
         changeDevelop(id, force: true) { if $0.edits != nil { $0.edits?.filmLeaks = roll } else { $0.filmLeaks = roll } }
     }

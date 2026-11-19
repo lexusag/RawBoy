@@ -126,6 +126,25 @@ describe('film leaks (generated)', () => {
     expect(autoRestored.filmLeaks?.length).toBe(1);
     expect(autoRestored.filmLeaks?.[0].type).toBe(leakFromSeed(0.5).type);
   });
+
+  it('places sprocket holes on long sides only by default, and allows short sides when enabled', () => {
+    const landscapeLong = new Set<number>();
+    const portraitLong = new Set<number>();
+    for (let i = 0; i < 100; i++) {
+      const s = (i + 0.5) / 100;
+      landscapeLong.add(randomFilmLeak('sprocket', 1.5, s).turn);
+      portraitLong.add(randomFilmLeak('sprocket', 0.667, s).turn);
+    }
+    expect([...landscapeLong].every((t) => t === 1 || t === 3)).toBe(true);
+    expect([...portraitLong].every((t) => t === 0 || t === 2)).toBe(true);
+
+    const landscapeAll = new Set<number>();
+    for (let i = 0; i < 100; i++) {
+      landscapeAll.add(randomFilmLeak('sprocket', 1.5, (i + 0.5) / 100, true, true).turn);
+    }
+    expect(landscapeAll.has(0) || landscapeAll.has(2)).toBe(true);
+    expect(landscapeAll.has(1) || landscapeAll.has(3)).toBe(true);
+  });
 });
 
 const leakFromSeed = (s: number) => randomFilmLeak('edge', 1.5, s);

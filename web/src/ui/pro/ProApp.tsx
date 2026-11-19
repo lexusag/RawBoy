@@ -884,14 +884,14 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
                 }}
                 onUpdate={store.updateLeak}
                 onRemove={store.removeLeak}
-                onAddFilm={(type) => {
+                onAddFilm={(type, shortSideSprockets) => {
                   const aspect = shaderParams ? shaderParams.lens.width / shaderParams.lens.height : 1.5;
-                  const id = store.addFilmLeak(type, aspect);
+                  const id = store.addFilmLeak(type, aspect, Math.random(), shortSideSprockets);
                   if (id) setSelectedLeak(id);
                 }}
-                onRollFilm={(type) => {
+                onRollFilm={(type, shortSideSprockets) => {
                   const aspect = shaderParams ? shaderParams.lens.width / shaderParams.lens.height : 1.5;
-                  const id = store.rollFilmLeaks(type, aspect, leakId);
+                  const id = store.rollFilmLeaks(type, aspect, leakId, Math.random(), shortSideSprockets);
                   if (id) setSelectedLeak(id);
                 }}
                 onUpdateFilm={store.updateFilmLeak}

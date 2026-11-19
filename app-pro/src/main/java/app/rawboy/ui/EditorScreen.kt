@@ -560,8 +560,12 @@ fun EditorScreen(vm: EditorViewModel) {
                     onUpdate = vm::updateLeak,
                     onRemove = vm::removeLeak,
                     onSelectFilm = { selectedFilmLeakState = it; selectedLeakState = null },
-                    onAddFilm = { type -> vm.addFilmLeak(type, photoAspect)?.let { selectedFilmLeakState = it; selectedLeakState = null } },
-                    onRandomRoll = { vm.randomFilmRoll(photoAspect)?.let { selectedFilmLeakState = it; selectedLeakState = null } },
+                    onAddFilm = { type, shortSideSprockets ->
+                        vm.addFilmLeak(type, photoAspect, shortSideSprockets)?.let { selectedFilmLeakState = it; selectedLeakState = null }
+                    },
+                    onRandomRoll = { shortSideSprockets ->
+                        vm.randomFilmRoll(photoAspect, shortSideSprockets)?.let { selectedFilmLeakState = it; selectedLeakState = null }
+                    },
                     onUpdateFilm = vm::updateFilmLeak,
                     onRemoveFilm = vm::removeFilmLeak,
                     onMode = { mode = it },

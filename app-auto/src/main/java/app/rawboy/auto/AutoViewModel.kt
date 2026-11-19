@@ -667,12 +667,12 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setMode(id: String, mode: LookMode) = changeDevelop(id, force = true) { it.copy(mode = mode) }
 
-    fun rollFilmLeak(id: String) {
+    fun rollFilmLeak(id: String, shortSideSprockets: Boolean = false) {
         val aspect = photo(id)?.analysis?.let {
             it.base.width.toFloat() / it.base.height.coerceAtLeast(1)
         } ?: 1.5f
         changeDevelop(id, force = true) {
-            it.copy(filmLeaks = FilmLeaks.randomRoll(aspect, FilmLeaks.newSeed()))
+            it.copy(filmLeaks = FilmLeaks.randomRoll(aspect, FilmLeaks.newSeed(), shortSideSprockets = shortSideSprockets))
         }
     }
 

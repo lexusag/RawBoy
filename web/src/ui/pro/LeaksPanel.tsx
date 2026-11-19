@@ -60,8 +60,8 @@ interface Props {
   onAdd: (kind: LeakKind) => void;
   onUpdate: (id: string, change: (l: LightLeak) => LightLeak, force?: boolean) => void;
   onRemove: (id: string) => void;
-  onAddFilm?: (type?: FilmLeakType) => void;
-  onRollFilm?: (type: FilmLeakType | 'any') => void;
+  onAddFilm?: (type?: FilmLeakType, shortSideSprockets?: boolean) => void;
+  onRollFilm?: (type: FilmLeakType | 'any', shortSideSprockets?: boolean) => void;
   onUpdateFilm?: (id: string, change: (l: FilmLeak) => FilmLeak, force?: boolean) => void;
   onRemoveFilm?: (id: string) => void;
   onDone: () => void;
@@ -95,6 +95,7 @@ export function LeaksPanel({
   onDone,
 }: Props) {
   const [genType, setGenType] = useState<FilmLeakType | 'any'>('any');
+  const [shortSideSprockets, setShortSideSprockets] = useState(false);
   const leak = leaks.find((l) => l.id === selectedId) ?? null;
   const filmLeak = filmLeaks.find((l) => l.id === selectedId) ?? null;
   const set = (change: (l: LightLeak) => LightLeak, force = false) => leak && onUpdate(leak.id, change, force);
@@ -130,7 +131,7 @@ export function LeaksPanel({
             ))}
           </div>
           <div className="button-row">
-            <button type="button" className="primary" disabled={!canRoll} onClick={() => onRollFilm(genType)}>
+            <button type="button" className="primary" disabled={!canRoll} onClick={() => onRollFilm(genType, shortSideSprockets)}>
               🎲 Random
             </button>
             {filmLeak && (
@@ -139,11 +140,20 @@ export function LeaksPanel({
               </button>
             )}
             {onAddFilm && (
-              <button type="button" className="text" disabled={full} onClick={() => onAddFilm(genType === 'any' ? undefined : genType)}>
+              <button
+                type="button"
+                className="text"
+                disabled={full}
+                onClick={() => onAddFilm(genType === 'any' ? undefined : genType, shortSideSprockets)}
+              >
                 + Add
               </button>
             )}
           </div>
+          <label className="preset-group" title="Also generate sprocket holes on the short edges; off keeps them on the long edges only">
+            <input type="checkbox" checked={shortSideSprockets} onChange={(e) => setShortSideSprockets(e.target.checked)} />
+            Short-side sprockets
+          </label>
         </div>
       )}
       {total === 0 && (
