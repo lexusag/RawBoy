@@ -427,7 +427,7 @@ fun CameraScreen(
                 ) {
                     Viewfinder(
                         f, params, vm::onSurfaceTexture, vm::onViewfinderBase, Modifier.fillMaxSize(), loupe,
-                        onLuma = if (settings.scanQr) vm::onViewfinderLuma else null,
+                        onLuma = if (settings.scanQr && recordingMs == null) vm::onViewfinderLuma else null,
                         // Only while a tap's focus may be tracked: the copies cost nothing otherwise.
                         onTrackLuma = if (settings.trackFocus && focusPoint != null) vm::onTrackLuma else null,
                         turns = turns,

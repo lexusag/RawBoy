@@ -552,7 +552,7 @@ enum class BurstMode {
 enum class VideoQuality(val label: String, val bitrate: Int, val flatBitrate: Int) {
     LOW("Low", bitrate = 8_000_000, flatBitrate = 14_000_000),
     OPTIMAL("Optimal", bitrate = 16_000_000, flatBitrate = 28_000_000),
-    HIGH("High", bitrate = 28_000_000, flatBitrate = 48_000_000);
+    HIGH("High", bitrate = 24_000_000, flatBitrate = 38_000_000);
 
     fun bitrate(flat: Boolean): Int = if (flat) flatBitrate else bitrate
 }
