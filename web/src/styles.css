@@ -2257,25 +2257,234 @@ line.curve-grid,
   font-size: 13px;
 }
 
-/* Light leaks: the add buttons stay on one row beside Done, so the pinned heading stays short in the sidebar. */
-.geometry-head .leak-add {
-  flex-wrap: nowrap;
-  gap: 6px;
-  padding: 6px 0;
-  min-width: 0;
-}
-
-.geometry-head .leak-add button {
-  padding: 6px 8px;
-  white-space: nowrap;
-}
-
-.leak-generate {
+/* Light leaks panel: compact create bar, layer list, and grouped inspector. */
+.leak-create {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 6px 0 8px;
-  border-bottom: 1px solid var(--border);
+  padding: 8px 0 12px;
+}
+
+.leak-gen-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.leak-gen-row select,
+.leak-inspector-head select {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+}
+
+.leak-gen-row button,
+.leak-inspector-head button {
+  padding: 6px 10px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.leak-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.leak-option input {
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.leak-manual-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.leak-inline-label {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.leak-manual-buttons {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: 6px;
+}
+
+.leak-manual-buttons button {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 6px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.leak-layers {
+  border-top: 1px solid var(--border);
+  padding: 10px 0;
+}
+
+.leak-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.leak-section-head .section-label {
+  margin: 0;
+}
+
+.leak-count {
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.leak-inspector {
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.leak-inspector > .section-label {
+  margin: 6px 0 0;
+}
+
+.leak-inspector-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.leak-palette {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.leak-palette .leak-section-head {
+  margin-bottom: 0;
+}
+
+.leak-palette-name {
+  font-size: 12px;
+  color: var(--text);
+}
+
+.leak-palette-dots {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.leak-swatch-btn {
+  width: 26px;
+  height: 26px;
+  padding: 3px;
+  border-radius: 50%;
+  background: transparent;
+  border: 1.5px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.leak-swatch-btn:hover {
+  border-color: var(--border);
+}
+
+.leak-swatch-btn.active {
+  border-color: var(--accent);
+  background: var(--surface-2);
+}
+
+.leak-swatch-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: block;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.leak-placement {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.leak-dir {
+  flex: 1;
+  min-width: 0;
+}
+
+.leak-dir button {
+  padding: 5px 6px;
+  font-size: 13px;
+}
+
+.leak-flip {
+  padding: 5px 10px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.leak-flip.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.leak-disclosure {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0 4px;
+  margin-top: 4px;
+  background: none;
+  border: none;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  text-align: left;
+}
+
+.leak-disclosure .section-label {
+  margin: 0;
+}
+
+.leak-disclosure-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.leak-edited-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.leak-chevron {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.leak-grade-sliders {
+  display: flex;
+  flex-direction: column;
 }
 
 .leak-roll {
