@@ -1377,7 +1377,12 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
         )
 
         SettingsSection("Viewfinder")
-        SettingSwitch("Zoom buttons", null, settings.showZoomControl, onChange = vm::setShowZoomControl)
+        SettingSwitch(
+            title = "Zoom buttons",
+            subtitle = "Viewfinder helper only; does not affect the picture",
+            checked = settings.showZoomControl,
+            onChange = vm::setShowZoomControl,
+        )
         SettingSwitch("Grid", null, settings.showGrid, onChange = vm::setShowGrid)
         SettingSwitch("Level", null, settings.showLevel, onChange = vm::setShowLevel)
         SettingSwitch("Histogram", null, settings.showHistogram, onChange = vm::setShowHistogram)
