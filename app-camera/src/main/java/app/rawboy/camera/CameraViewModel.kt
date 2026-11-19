@@ -328,7 +328,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun hasAudioPermission() = audioGranted
 
     fun setVideoMode(on: Boolean) {
-        if (_recordingMs.value != null) return
+        if (_recordingMs.value != null || _longExposing.value || selfTimerJob != null) return
         _videoMode.value = on
         controller.setExposureBias(exposureBias(_settings.value)) // flat video raises it
         if (!on) setExposureLock(false) // the lock is video mode's: photos meter as always
@@ -851,19 +851,21 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Switches to the lens labelled [label] (UW, W, T) on the current side. */
     fun selectLens(label: String) {
-        if (_recordingMs.value != null) return // the camera session would restart under the recording
+        if (_recordingMs.value != null || _longExposing.value) return // the camera session would restart under the recording or exposure
         val lens = _lenses.value.firstOrNull { it.label == label } ?: return
         if (lens === info) return
+        cancelSelfTimer()
         switchTo(lens)
         change { it.copy(lens = label) }
     }
 
     /** Back cameras <-> selfie camera (its main lens). */
     fun switchFacing() {
-        if (_recordingMs.value != null) return
+        if (_recordingMs.value != null || _longExposing.value) return
         val front = !_settings.value.front
         val all = lensesBySide?.get(front).orEmpty()
         val lens = all.firstOrNull { it.label == "W" } ?: all.firstOrNull() ?: return
+        cancelSelfTimer()
         _lenses.value = all
         switchTo(lens)
         change { it.copy(front = front, lens = lens.label) }
@@ -1361,6 +1363,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
      */
     fun shutter() {
         if (_longExposing.value) {
+            _longExposing.value = false
             controller.stopLongExposure()
             return
         }
@@ -1441,7 +1444,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             _merging.value = true
             ShotSaver.beginMerge()
         }
-        if (longExposure != null) _longExposing.value = true
+        if (longExposure != null) {
+            controller.prepareLongExposure()
+            _longExposing.value = true
+        }
         // Runs in ShotSaver.scope so finishing the lock screen camera never cancels an in-flight capture.
         ShotSaver.scope.launch {
             try {
@@ -1514,7 +1520,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 val result = try {
                     withContext(Dispatchers.IO) {
                         val out = resolver.openOutputStream(uri, "w") ?: throw java.io.IOException("Cannot write $name")
-                        val result = out.buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix, longExposure, mergeNote, onExposed = { exposed.complete(Unit) }) { onShutter(screenFlash, exposed) } }
+                        val result = out.buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix, longExposure, mergeNote, onExposed = { exposed.complete(Unit); _longExposing.value = false }) { onShutter(screenFlash, exposed) } }
                         fix?.let { addGps(uri, it) }
                         MediaStoreOutput.publish(resolver, uri)
                         result
@@ -1529,7 +1535,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 val file = File(app.cacheDir, "$baseName-$shotId.dng")
                 val result = try {
                     withContext(Dispatchers.IO) {
-                        val result = file.outputStream().buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix, longExposure, mergeNote, onExposed = { exposed.complete(Unit) }) { onShutter(screenFlash, exposed) } }
+                        val result = file.outputStream().buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix, longExposure, mergeNote, onExposed = { exposed.complete(Unit); _longExposing.value = false }) { onShutter(screenFlash, exposed) } }
                         fix?.let { addGps(Uri.fromFile(file), it) }
                         result
                     }
