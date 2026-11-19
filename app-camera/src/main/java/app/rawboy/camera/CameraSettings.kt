@@ -85,8 +85,13 @@ data class CameraSettings(
     val geotag: Boolean = false,
     /** Save the JPEG as an Ultra HDR JPEG: the same picture plus a gain map that lets HDR screens show brighter highlights (`ultrahdr.h`). */
     val hdrGainMap: Boolean = false,
-    /** Add a completely random procedural film light leak (edge burn, blob, sprocket holes, rebate glow, flare, start of roll) per shot. */
+    /** Add a completely random procedural film light leak (edge burn, blob, sprocket holes, rebate glow, flare, start of roll) to saved shots. */
     val randomLightLeak: Boolean = false,
+    /**
+     * How many photos in each [LIGHT_LEAK_SEQUENCE_SIZE]-photo sequence get a random light leak (1..5; 5 = every shot).
+     * Within each 5-photo sequence the leak slots are shuffled randomly so the next leak cannot be predicted.
+     */
+    val randomLightLeakRate: Int = LIGHT_LEAK_SEQUENCE_SIZE,
     /** Allow randomly generated sprocket holes on the short edges of the frame as well as the long edges. */
     val shortSideSprockets: Boolean = false,
     /** Frame / stamp option: Off by default, or Date stamp / Pentax 645 (mutually exclusive). */
@@ -254,6 +259,12 @@ data class CameraSettings(
         /** Long exposure lengths in seconds (0 = off); the button cycles through them. */
         val LONG_EXPOSURES = listOf(0, 5, 10, 30, 60)
 
+        /** Length of a random light leak sequence (photos per cycle). */
+        const val LIGHT_LEAK_SEQUENCE_SIZE = 5
+
+        /** Choices for how many photos in each [LIGHT_LEAK_SEQUENCE_SIZE]-photo sequence get a random light leak. */
+        val LIGHT_LEAK_RATES = listOf(1, 2, 3, 4, 5)
+
         const val MIN_QUALITY = 70
 
         const val SMALL_LONG_SIDE = 3000
@@ -327,6 +338,8 @@ object CameraSettingsStore {
             geotag = p.getBoolean("geotag", d.geotag),
             hdrGainMap = p.getBoolean("hdrGainMap", d.hdrGainMap),
             randomLightLeak = p.getBoolean("randomLightLeak", d.randomLightLeak),
+            randomLightLeakRate = p.getInt("randomLightLeakRate", d.randomLightLeakRate)
+                .takeIf { it in CameraSettings.LIGHT_LEAK_RATES } ?: d.randomLightLeakRate,
             shortSideSprockets = p.getBoolean("shortSideSprockets", d.shortSideSprockets),
             photoFrame = p.getString("photoFrame", null)
                 ?.let { runCatching { PhotoFrame.valueOf(it) }.getOrNull() }
@@ -414,6 +427,7 @@ object CameraSettingsStore {
             .putBoolean("geotag", s.geotag)
             .putBoolean("hdrGainMap", s.hdrGainMap)
             .putBoolean("randomLightLeak", s.randomLightLeak)
+            .putInt("randomLightLeakRate", s.randomLightLeakRate)
             .putBoolean("shortSideSprockets", s.shortSideSprockets)
             .putString("photoFrame", s.photoFrame.name)
             .putString("lastPhotoFrame", (if (s.photoFrame != PhotoFrame.NONE) s.photoFrame else s.lastPhotoFrame).name)
@@ -494,6 +508,18 @@ object CameraSettingsStore {
         return next
     }
 
+    /**
+     * Draws whether the next shot should receive a random light leak under [rate] (1..5 out of 5 photos),
+     * persisting the remaining shuffled sequence across app launches.
+     */
+    @Synchronized
+    fun nextLightLeak(context: Context, rate: Int): Boolean {
+        val p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val (leak, next) = LightLeakSequence.next(p.getString("randomLightLeakSeq", null), rate)
+        p.edit().putString("randomLightLeakSeq", next).apply()
+        return leak
+    }
+
     /** "W=1.1;T=0.95;FW=1.0" -> map; malformed entries are skipped. */
     private fun parseScales(text: String?, min: Float = CameraSettings.MIN_SCALE, max: Float = CameraSettings.MAX_SCALE): Map<String, Float> =
         text.orEmpty().split(';').mapNotNull { entry ->
@@ -555,3 +581,56 @@ object LowLight {
         return if (previous) v >= EXIT_PRODUCT else v >= ENTER_PRODUCT
     }
 }
+
+/**
+ * Draws random light leak decisions in shuffled sequences of [CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE] (5) photos:
+ * in every 5-photo sequence, exactly `rate` photos (1..5) get a leak at uniformly random positions so the next
+ * leak cannot be predicted.
+ *
+ * State is encoded as `"<rate>:<remainingBits>"` (e.g. `"2:0101"`) so it can be persisted across app launches.
+ */
+object LightLeakSequence {
+    /**
+     * Consumes the next shot's decision for [rate] (clamped to `1..sequenceSize`) from [state], returning
+     * `(shouldLeak, nextState)`. When [state] is null, malformed, empty, or belongs to a different rate, a fresh
+     * shuffled sequence of [sequenceSize] slots with `rate` leaks is dealt.
+     */
+    fun next(
+        state: String?,
+        rate: Int,
+        sequenceSize: Int = CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE,
+        random: kotlin.random.Random = kotlin.random.Random.Default,
+    ): Pair<Boolean, String> {
+        val k = rate.coerceIn(1, sequenceSize)
+        if (k >= sequenceSize) return true to ""
+        val remaining = parseRemaining(state, k, sequenceSize)
+        val queue = if (remaining.isNullOrEmpty()) deal(k, sequenceSize, random) else remaining
+        val decision = queue[0] == '1'
+        val rest = queue.substring(1)
+        val nextState = if (rest.isEmpty()) "" else "$k:$rest"
+        return decision to nextState
+    }
+
+    private fun parseRemaining(state: String?, rate: Int, sequenceSize: Int): String? {
+        if (state.isNullOrEmpty()) return null
+        val sep = state.indexOf(':')
+        if (sep <= 0 || sep == state.lastIndex) return null
+        val storedRate = state.substring(0, sep).toIntOrNull() ?: return null
+        if (storedRate != rate) return null
+        val bits = state.substring(sep + 1)
+        if (bits.length > sequenceSize || bits.any { it != '0' && it != '1' }) return null
+        return bits
+    }
+
+    private fun deal(rate: Int, sequenceSize: Int, random: kotlin.random.Random): String {
+        val slots = CharArray(sequenceSize) { if (it < rate) '1' else '0' }
+        for (i in sequenceSize - 1 downTo 1) {
+            val j = random.nextInt(i + 1)
+            val tmp = slots[i]
+            slots[i] = slots[j]
+            slots[j] = tmp
+        }
+        return String(slots)
+    }
+}
+
