@@ -353,9 +353,13 @@ class VideoRecorder private constructor(
         private fun videoCodecOf(width: Int, height: Int, mime: String, flat: Boolean, bitrate: Int, name: String? = null): MediaCodec? {
             var codec: MediaCodec? = null
             try {
+                codec = if (name != null) MediaCodec.createByCodecName(name) else MediaCodec.createEncoderByType(mime)
+                val effectiveBitrate = runCatching {
+                    codec.codecInfo.getCapabilitiesForType(mime).videoCapabilities?.bitrateRange?.clamp(bitrate)
+                }.getOrNull() ?: bitrate
                 val format = MediaFormat.createVideoFormat(mime, width, height).apply {
                     setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-                    setInteger(MediaFormat.KEY_BIT_RATE, bitrate)
+                    setInteger(MediaFormat.KEY_BIT_RATE, effectiveBitrate)
                     setInteger(MediaFormat.KEY_FRAME_RATE, 30)
                     setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, 1)
                     setInteger(MediaFormat.KEY_BITRATE_MODE, MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR)
@@ -375,9 +379,10 @@ class VideoRecorder private constructor(
                     }
                     setInteger(MediaFormat.KEY_COLOR_RANGE, MediaFormat.COLOR_RANGE_LIMITED)
                 }
-                codec = if (name != null) MediaCodec.createByCodecName(name) else MediaCodec.createEncoderByType(mime)
                 codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-                Log.i(TAG, "video encoder ${codec.name} ($mime, ${width}x$height, ${bitrate / 1_000_000} Mbps)")
+                val mbps = String.format(Locale.US, "%.1f", effectiveBitrate / 1_000_000f)
+                val clamped = if (effectiveBitrate != bitrate) " (clamped from ${bitrate / 1_000_000} Mbps)" else ""
+                Log.i(TAG, "video encoder ${codec.name} ($mime, ${width}x$height, $mbps Mbps$clamped)")
                 return codec
             } catch (e: Exception) {
                 Log.w(TAG, "no $mime encoder", e)

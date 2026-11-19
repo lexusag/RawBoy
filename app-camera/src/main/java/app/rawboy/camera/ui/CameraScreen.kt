@@ -132,6 +132,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -721,7 +722,7 @@ fun CameraScreen(
 
     if (showSettings) {
         ModalBottomSheet(onDismissRequest = { showSettings = false }) {
-            SettingsContent(settings, vm, requestLocation, shareDeviceReport)
+            SettingsContent(settings, vm, recordingMs != null, requestLocation, shareDeviceReport)
         }
     }
 }
@@ -1203,7 +1204,7 @@ private fun LookSlider(
 private val LOOK_LABEL_WIDTH = 88.dp
 
 @Composable
-private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, requestLocation: () -> Unit, shareDeviceReport: () -> Unit) {
+private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recording: Boolean, requestLocation: () -> Unit, shareDeviceReport: () -> Unit) {
     val maxResMp by vm.maxResMp.collectAsState()
     var showFrames by remember { mutableStateOf(false) }
     if (showFrames) {
@@ -1350,11 +1351,13 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             selected = settings.videoQuality,
             label = { it.label },
             onSelect = vm::setVideoQuality,
+            enabled = !recording,
         )
         SettingSwitch(
             title = "Flat video for grading",
             subtitle = "No look: Apple Log, to grade on the web video page",
             checked = settings.flatVideo,
+            enabled = !recording,
             onChange = vm::setFlatVideo,
         )
         SettingSwitch(
@@ -1682,6 +1685,7 @@ private fun <T> SettingChoice(
     label: (T) -> String,
     onSelect: (T) -> Unit,
     indent: Boolean = false,
+    enabled: Boolean = true,
 ) {
     Column(Modifier.padding(start = if (indent) 16.dp else 0.dp, top = 8.dp, bottom = 8.dp)) {
         Text(title, style = MaterialTheme.typography.bodyMedium)
@@ -1692,6 +1696,7 @@ private fun <T> SettingChoice(
             Modifier
                 .padding(top = 8.dp)
                 .fillMaxWidth()
+                .alpha(if (enabled) 1f else 0.38f)
                 .clip(RoundedCornerShape(8.dp))
                 .background(MaterialTheme.colorScheme.surfaceContainerHighest),
         ) {
@@ -1704,7 +1709,7 @@ private fun <T> SettingChoice(
                         .padding(2.dp)
                         .clip(RoundedCornerShape(6.dp))
                         .background(if (on) MaterialTheme.colorScheme.primary else Color.Transparent)
-                        .clickable { onSelect(o) }
+                        .clickable(enabled = enabled) { onSelect(o) }
                         .semantics { stateDescription = if (on) "Selected" else "Not selected" },
                     contentAlignment = Alignment.Center,
                 ) {
