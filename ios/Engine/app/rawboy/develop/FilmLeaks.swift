@@ -268,9 +268,15 @@ public enum FilmLeaks {
         }
     }
 
-    private static func sideFor(_ r: Mulberry32, _ type: FilmLeakType, _ aspect: Double) -> Int {
+    private static func sideFor(
+        _ r: Mulberry32, _ type: FilmLeakType, _ aspect: Double, shortSideSprockets: Bool = false
+    ) -> Int {
         let shortSides = aspect >= 1 ? [0, 2] : [1, 3]
         let longSides = aspect >= 1 ? [1, 3] : [0, 2]
+        if type == .sprocket {
+            let pool = shortSideSprockets ? [0, 1, 2, 3] : longSides
+            return pool[Int(Foundation.floor(r.next() * Double(pool.count)))]
+        }
         let pref = sidePref(for: type)
         let pool: [Int]
         if pref == .any {
@@ -300,12 +306,12 @@ public enum FilmLeaks {
     }
 
     public static func random(
-        type: FilmLeakType? = nil, aspect: Float, seed: Double, grade: Bool = true
+        type: FilmLeakType? = nil, aspect: Float, seed: Double, grade: Bool = true, shortSideSprockets: Bool = false
     ) -> FilmLeak {
         let asp = Double(max(aspect, 0.01))
         let r = Mulberry32(seedBits(seed))
         let t = type ?? pick(r, typeWeights)
-        let turn = sideFor(r, t, asp)
+        let turn = sideFor(r, t, asp, shortSideSprockets: shortSideSprockets)
         let palette = pick(r, paletteWeights(for: t))
         var box: (cx: Double, cy: Double, w: Double, h: Double) = (0.5, 0.5, 1.04, 1.04)
         var amount = between(r, 30, 80)
@@ -394,15 +400,15 @@ public enum FilmLeaks {
         )
     }
 
-    public static func randomRoll(aspect: Float, seed: Double) -> [FilmLeak] {
+    public static func randomRoll(aspect: Float, seed: Double, shortSideSprockets: Bool = false) -> [FilmLeak] {
         let r = Mulberry32(seedBits(seed) ^ 0x9e3779b9)
-        let main = random(type: nil, aspect: aspect, seed: r.next())
+        let main = random(type: nil, aspect: aspect, seed: r.next(), grade: true, shortSideSprockets: shortSideSprockets)
         var out = [main]
         if main.type != .dust && main.type != .scratches && r.next() < 0.3 {
-            out.append(random(type: r.next() < 0.45 ? .scratches : .dust, aspect: aspect, seed: r.next(), grade: false))
+            out.append(random(type: r.next() < 0.45 ? .scratches : .dust, aspect: aspect, seed: r.next(), grade: false, shortSideSprockets: shortSideSprockets))
         }
         if main.type != .rebate && main.type != .end && r.next() < 0.15 {
-            var rebate = random(type: .rebate, aspect: aspect, seed: r.next(), grade: false)
+            var rebate = random(type: .rebate, aspect: aspect, seed: r.next(), grade: false, shortSideSprockets: shortSideSprockets)
             rebate.palette = main.palette == .cool ? .red : main.palette
             out.append(rebate)
         }

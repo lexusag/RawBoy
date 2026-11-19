@@ -360,6 +360,10 @@ button.icon.active {
   min-width: 0;
 }
 
+.auto-controls .preset-group {
+  margin: 8px 12px 0;
+}
+
 .photo-lens select {
   min-width: 0;
   max-width: 60%;

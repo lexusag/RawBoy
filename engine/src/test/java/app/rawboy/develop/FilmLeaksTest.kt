@@ -144,4 +144,25 @@ class FilmLeaksTest {
         assertNotEquals(params.filmLeaks[0].id, applied.filmLeaks[0].id)
         assertEquals(FilmLeakType.SCRATCHES, applied.filmLeaks[0].type)
     }
+
+    @Test
+    fun sprocketLongSidesByDefaultAndShortSidesWhenEnabled() {
+        val landscapeLong = mutableSetOf<Int>()
+        val portraitLong = mutableSetOf<Int>()
+        for (i in 0 until 100) {
+            val s = (i + 0.5) / 100.0
+            landscapeLong += FilmLeaks.random(type = FilmLeakType.SPROCKET, aspect = 1.5f, seed = s).turn
+            portraitLong += FilmLeaks.random(type = FilmLeakType.SPROCKET, aspect = 0.667f, seed = s).turn
+        }
+        assertTrue(landscapeLong.all { it == 1 || it == 3 })
+        assertTrue(portraitLong.all { it == 0 || it == 2 })
+
+        val landscapeAll = mutableSetOf<Int>()
+        for (i in 0 until 100) {
+            val s = (i + 0.5) / 100.0
+            landscapeAll += FilmLeaks.random(type = FilmLeakType.SPROCKET, aspect = 1.5f, seed = s, shortSideSprockets = true).turn
+        }
+        assertTrue(0 in landscapeAll || 2 in landscapeAll)
+        assertTrue(1 in landscapeAll || 3 in landscapeAll)
+    }
 }

@@ -886,11 +886,11 @@ export class AutoStore {
   removePhotoPreset = (id: string) => this.changeDevelop(id, (p) => ({ ...p, preset: null }), true);
 
   /** Places or rerolls a random generated film leak on photo [id] (one undo step). */
-  rollFilmLeak = (id: string, seed = Math.random()) => {
+  rollFilmLeak = (id: string, seed = Math.random(), shortSideSprockets = false) => {
     const p = this.photo(id);
     if (!p || this._state.export) return;
     const aspect = p.analysis ? p.analysis.lens.width / p.analysis.lens.height : 1.5;
-    const filmLeaks = randomFilmRoll(aspect, seed);
+    const filmLeaks = randomFilmRoll(aspect, seed, shortSideSprockets);
     this.changeDevelop(
       id,
       (q) => (q.edits ? { ...q, edits: { ...q.edits, filmLeaks } } : { ...q, filmLeaks }),

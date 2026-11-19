@@ -97,8 +97,8 @@ fun LeaksPanel(
     onUpdate: (String, Boolean, (LightLeak) -> LightLeak) -> Unit,
     onRemove: (String) -> Unit,
     onSelectFilm: (String) -> Unit,
-    onAddFilm: (FilmLeakType?) -> Unit,
-    onRandomRoll: () -> Unit,
+    onAddFilm: (FilmLeakType?, Boolean) -> Unit,
+    onRandomRoll: (Boolean) -> Unit,
     onUpdateFilm: (String, Boolean, (FilmLeak) -> FilmLeak) -> Unit,
     onRemoveFilm: (String) -> Unit,
     onMode: (EditorMode) -> Unit,
@@ -110,6 +110,7 @@ fun LeaksPanel(
     val selectedFilm = filmLeaks.firstOrNull { it.id == selectedFilmId }
     var menuFor by remember { mutableStateOf<String?>(null) }
     var genType by remember { mutableStateOf<FilmLeakType?>(null) }
+    var shortSideSprockets by remember { mutableStateOf(false) }
     val budgetLeft = leaks.size + filmLeaks.size < LightLeaks.MAX_LEAKS
 
     Column(modifier) {
@@ -174,10 +175,15 @@ fun LeaksPanel(
         Row(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 12.dp),
+            modifier = Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp),
         ) {
-            TextButton(onClick = { onAddFilm(genType) }, enabled = budgetLeft) { Text("🎲 Random") }
-            TextButton(onClick = onRandomRoll, enabled = leaks.size < LightLeaks.MAX_LEAKS) { Text("Roll") }
+            TextButton(onClick = { onAddFilm(genType, shortSideSprockets) }, enabled = budgetLeft) { Text("🎲 Random") }
+            TextButton(onClick = { onRandomRoll(shortSideSprockets) }, enabled = leaks.size < LightLeaks.MAX_LEAKS) { Text("Roll") }
+            FilterChip(
+                selected = shortSideSprockets,
+                onClick = { shortSideSprockets = !shortSideSprockets },
+                label = { Text("Short-side sprockets") },
+            )
             if (selectedFilm != null) {
                 TextButton(
                     onClick = {
@@ -188,7 +194,7 @@ fun LeaksPanel(
                 ) { Text("New variation") }
             }
             if (budgetLeft && genType != null) {
-                TextButton(onClick = { onAddFilm(genType) }) { Text("+ Add ${genType!!.label}") }
+                TextButton(onClick = { onAddFilm(genType, shortSideSprockets) }) { Text("+ Add ${genType!!.label}") }
             }
         }
         if (selectedFilm != null) {

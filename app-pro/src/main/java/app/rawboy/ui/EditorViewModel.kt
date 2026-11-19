@@ -425,19 +425,25 @@ class EditorViewModel(application: Application) : AndroidViewModel(application) 
 
     // Generated film leaks (see FilmLeaks.kt).
 
-    fun addFilmLeak(type: FilmLeakType? = null, aspect: Float): String? {
+    fun addFilmLeak(type: FilmLeakType? = null, aspect: Float, shortSideSprockets: Boolean = false): String? {
         val p = _state.value.params
         if (p.leaks.size + p.filmLeaks.size >= LightLeaks.MAX_LEAKS) return null
-        val leak = FilmLeaks.random(type = type, aspect = aspect, seed = FilmLeaks.newSeed(), grade = p.filmLeaks.isEmpty())
+        val leak = FilmLeaks.random(
+            type = type,
+            aspect = aspect,
+            seed = FilmLeaks.newSeed(),
+            grade = p.filmLeaks.isEmpty(),
+            shortSideSprockets = shortSideSprockets,
+        )
         commit(p.copy(filmLeaks = p.filmLeaks + leak), force = true)
         return leak.id
     }
 
-    fun randomFilmRoll(aspect: Float): String? {
+    fun randomFilmRoll(aspect: Float, shortSideSprockets: Boolean = false): String? {
         val p = _state.value.params
         val cap = (LightLeaks.MAX_LEAKS - p.leaks.size).coerceAtLeast(0)
         if (cap == 0) return null
-        val roll = FilmLeaks.randomRoll(aspect, FilmLeaks.newSeed()).take(cap)
+        val roll = FilmLeaks.randomRoll(aspect, FilmLeaks.newSeed(), shortSideSprockets = shortSideSprockets).take(cap)
         commit(p.copy(filmLeaks = roll), force = true)
         return roll.firstOrNull()?.id
     }

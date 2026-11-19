@@ -1274,6 +1274,15 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
             checked = settings.randomLightLeak,
             onChange = vm::setRandomLightLeak,
         )
+        if (settings.randomLightLeak) {
+            SettingSwitch(
+                title = "Short-side sprockets",
+                subtitle = "Also generate sprocket holes on the short edges; off keeps them on the long edges only",
+                checked = settings.shortSideSprockets,
+                onChange = vm::setShortSideSprockets,
+                indent = true,
+            )
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()

@@ -458,10 +458,10 @@ export class ProStore {
   };
 
   /** Adds a generated film leak (sharing MAX_LEAKS with hand-made leaks); returns its id, or null when full. */
-  addFilmLeak = (type?: FilmLeakType, aspect = 1.5, seed = Math.random()): string | null => {
+  addFilmLeak = (type?: FilmLeakType, aspect = 1.5, seed = Math.random(), shortSideSprockets = false): string | null => {
     const p = this._state.params;
     if (p.leaks.length + p.filmLeaks.length >= MAX_LEAKS) return null;
-    const leak = randomFilmLeak(type, aspect, seed, p.filmLeaks.length === 0);
+    const leak = randomFilmLeak(type, aspect, seed, p.filmLeaks.length === 0, shortSideSprockets);
     this.commit({ ...p, filmLeaks: [...p.filmLeaks, leak] }, true);
     return leak.id;
   };
@@ -470,17 +470,23 @@ export class ProStore {
    * Random in the Light leaks panel: 'any' rolls a full set of generated film leaks (fitting in the remaining
    * MAX_LEAKS slots); a chosen type rerolls the selected generated leak (or adds one when none is selected).
    */
-  rollFilmLeaks = (type: FilmLeakType | 'any', aspect = 1.5, selectedId: string | null = null, seed = Math.random()): string | null => {
+  rollFilmLeaks = (
+    type: FilmLeakType | 'any',
+    aspect = 1.5,
+    selectedId: string | null = null,
+    seed = Math.random(),
+    shortSideSprockets = false,
+  ): string | null => {
     const p = this._state.params;
     const room = Math.max(0, MAX_LEAKS - p.leaks.length);
     if (room === 0) return null;
     if (type === 'any') {
-      const filmLeaks = randomFilmRoll(aspect, seed).slice(0, room);
+      const filmLeaks = randomFilmRoll(aspect, seed, shortSideSprockets).slice(0, room);
       this.commit({ ...p, filmLeaks }, true);
       return filmLeaks[0]?.id ?? null;
     }
     const idx = selectedId ? p.filmLeaks.findIndex((l) => l.id === selectedId) : -1;
-    const leak = randomFilmLeak(type, aspect, seed, idx <= 0 && p.filmLeaks.length <= 1);
+    const leak = randomFilmLeak(type, aspect, seed, idx <= 0 && p.filmLeaks.length <= 1, shortSideSprockets);
     if (idx >= 0) {
       const replaced = { ...leak, id: p.filmLeaks[idx].id };
       this.commit({ ...p, filmLeaks: p.filmLeaks.map((l, i) => (i === idx ? replaced : l)) }, true);

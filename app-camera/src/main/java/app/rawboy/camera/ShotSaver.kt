@@ -428,7 +428,7 @@ internal object ShotSaver {
             val noise = img.measureNoise()
             val aspect = a.base.width.toFloat() / a.base.height.coerceAtLeast(1)
             val filmLeaks = if (s.randomLightLeak) {
-                listOf(FilmLeaks.randomForCamera(aspect = aspect, seed = FilmLeaks.newSeed()))
+                listOf(FilmLeaks.randomForCamera(aspect = aspect, seed = FilmLeaks.newSeed(), shortSideSprockets = s.shortSideSprockets))
             } else {
                 emptyList()
             }

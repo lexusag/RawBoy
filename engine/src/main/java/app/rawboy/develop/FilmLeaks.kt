@@ -186,9 +186,13 @@ object FilmLeaks {
         -> SidePref.ANY
     }
 
-    private fun sideFor(r: Mulberry32, t: FilmLeakType, aspect: Double): Int {
+    private fun sideFor(r: Mulberry32, t: FilmLeakType, aspect: Double, shortSideSprockets: Boolean = false): Int {
         val shortSides = if (aspect >= 1) intArrayOf(0, 2) else intArrayOf(1, 3)
         val longSides = if (aspect >= 1) intArrayOf(1, 3) else intArrayOf(0, 2)
+        if (t == FilmLeakType.SPROCKET) {
+            val pool = if (shortSideSprockets) intArrayOf(0, 1, 2, 3) else longSides
+            return pool[floor(r.next() * pool.size).toInt()]
+        }
         val pref = sidePref(t)
         val pool = when {
             pref == SidePref.ANY -> intArrayOf(0, 1, 2, 3)
@@ -212,11 +216,17 @@ object FilmLeaks {
 
     private fun jsRound(v: Double): Float = floor(v + 0.5).toFloat()
 
-    fun random(type: FilmLeakType? = null, aspect: Float, seed: Double, grade: Boolean = true): FilmLeak {
+    fun random(
+        type: FilmLeakType? = null,
+        aspect: Float,
+        seed: Double,
+        grade: Boolean = true,
+        shortSideSprockets: Boolean = false,
+    ): FilmLeak {
         val asp = max(aspect.toDouble(), 0.01)
         val r = Mulberry32(seedBits(seed))
         val t = type ?: pick(r, TYPE_WEIGHTS)
-        val turn = sideFor(r, t, asp)
+        val turn = sideFor(r, t, asp, shortSideSprockets)
         val palette = pick(r, paletteWeights(t))
         var box = Box(0.5, 0.5, 1.04, 1.04)
         var amount = between(r, 30.0, 80.0)
@@ -320,16 +330,16 @@ object FilmLeaks {
         )
     }
 
-    fun randomRoll(aspect: Float, seed: Double): List<FilmLeak> {
+    fun randomRoll(aspect: Float, seed: Double, shortSideSprockets: Boolean = false): List<FilmLeak> {
         val r = Mulberry32(seedBits(seed) xor 0x9e3779b9.toInt())
-        val main = random(null, aspect, r.next())
+        val main = random(null, aspect, r.next(), grade = true, shortSideSprockets = shortSideSprockets)
         val out = mutableListOf(main)
         if (main.type != FilmLeakType.DUST && main.type != FilmLeakType.SCRATCHES && r.next() < 0.3) {
             val dmgType = if (r.next() < 0.45) FilmLeakType.SCRATCHES else FilmLeakType.DUST
-            out += random(dmgType, aspect, r.next(), grade = false)
+            out += random(dmgType, aspect, r.next(), grade = false, shortSideSprockets = shortSideSprockets)
         }
         if (main.type != FilmLeakType.REBATE && main.type != FilmLeakType.END && r.next() < 0.15) {
-            val rebate = random(FilmLeakType.REBATE, aspect, r.next(), grade = false)
+            val rebate = random(FilmLeakType.REBATE, aspect, r.next(), grade = false, shortSideSprockets = shortSideSprockets)
             out += rebate.copy(palette = if (main.palette == FilmPalette.COOL) FilmPalette.RED else main.palette)
         }
         if ((main.type == FilmLeakType.EDGE || main.type == FilmLeakType.BLOB) && r.next() < 0.2) {
@@ -343,10 +353,10 @@ object FilmLeaks {
     }
 
     /** Completely random single leak from [CAMERA_TYPES] for Android Camera's "Random light leak" setting. */
-    fun randomForCamera(aspect: Float, seed: Double): FilmLeak {
+    fun randomForCamera(aspect: Float, seed: Double, shortSideSprockets: Boolean = false): FilmLeak {
         val r = Mulberry32(seedBits(seed))
         val type = CAMERA_TYPES[floor(r.next() * CAMERA_TYPES.size).toInt()]
-        return random(type = type, aspect = aspect, seed = r.next(), grade = true)
+        return random(type = type, aspect = aspect, seed = r.next(), grade = true, shortSideSprockets = shortSideSprockets)
     }
 
     fun newVariation(l: FilmLeak, seed: Float): FilmLeak = l.copy(seed = seed)

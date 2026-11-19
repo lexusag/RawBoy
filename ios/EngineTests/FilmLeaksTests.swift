@@ -93,4 +93,24 @@ final class FilmLeaksTests: XCTestCase {
         XCTAssertNotEqual(target.filmLeaks[0].id, params.filmLeaks[0].id)
         XCTAssertEqual(target.filmLeaks[0].type, .scratches)
     }
+
+    func testSprocketLongSidesByDefaultAndShortSidesWhenEnabled() {
+        var landscapeLong = Set<Int>()
+        var portraitLong = Set<Int>()
+        for i in 0..<100 {
+            let s = (Double(i) + 0.5) / 100.0
+            landscapeLong.insert(FilmLeaks.random(type: .sprocket, aspect: 1.5, seed: s).turn)
+            portraitLong.insert(FilmLeaks.random(type: .sprocket, aspect: 0.667, seed: s).turn)
+        }
+        XCTAssertTrue(landscapeLong.allSatisfy { $0 == 1 || $0 == 3 })
+        XCTAssertTrue(portraitLong.allSatisfy { $0 == 0 || $0 == 2 })
+
+        var landscapeAll = Set<Int>()
+        for i in 0..<100 {
+            let s = (Double(i) + 0.5) / 100.0
+            landscapeAll.insert(FilmLeaks.random(type: .sprocket, aspect: 1.5, seed: s, shortSideSprockets: true).turn)
+        }
+        XCTAssertTrue(landscapeAll.contains(0) || landscapeAll.contains(2))
+        XCTAssertTrue(landscapeAll.contains(1) || landscapeAll.contains(3))
+    }
 }

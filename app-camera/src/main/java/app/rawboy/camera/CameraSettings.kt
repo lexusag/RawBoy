@@ -87,6 +87,8 @@ data class CameraSettings(
     val hdrGainMap: Boolean = false,
     /** Add a completely random procedural film light leak (edge burn, blob, sprocket holes, rebate glow, flare, start of roll) per shot. */
     val randomLightLeak: Boolean = false,
+    /** Allow randomly generated sprocket holes on the short edges of the frame as well as the long edges. */
+    val shortSideSprockets: Boolean = false,
     /** Frame / stamp option: Off by default, or Date stamp / Pentax 645 (mutually exclusive). */
     val photoFrame: PhotoFrame = PhotoFrame.NONE,
     /** Last enabled frame / stamp option, restored when toggling frames back on from the top bar. */
@@ -325,6 +327,7 @@ object CameraSettingsStore {
             geotag = p.getBoolean("geotag", d.geotag),
             hdrGainMap = p.getBoolean("hdrGainMap", d.hdrGainMap),
             randomLightLeak = p.getBoolean("randomLightLeak", d.randomLightLeak),
+            shortSideSprockets = p.getBoolean("shortSideSprockets", d.shortSideSprockets),
             photoFrame = p.getString("photoFrame", null)
                 ?.let { runCatching { PhotoFrame.valueOf(it) }.getOrNull() }
                 ?: if (p.getBoolean("dateStamp", false)) PhotoFrame.DATE_STAMP else d.photoFrame,
@@ -411,6 +414,7 @@ object CameraSettingsStore {
             .putBoolean("geotag", s.geotag)
             .putBoolean("hdrGainMap", s.hdrGainMap)
             .putBoolean("randomLightLeak", s.randomLightLeak)
+            .putBoolean("shortSideSprockets", s.shortSideSprockets)
             .putString("photoFrame", s.photoFrame.name)
             .putString("lastPhotoFrame", (if (s.photoFrame != PhotoFrame.NONE) s.photoFrame else s.lastPhotoFrame).name)
             .putBoolean("dateStamp", s.photoFrame == PhotoFrame.DATE_STAMP)

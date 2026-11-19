@@ -784,6 +784,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
   const [cropMode, setCropMode] = useState(false);
   const [cropAspect, setCropAspectState] = useState<CropAspect>(sessionCropAspect);
   const [cropPortrait, setCropPortrait] = useState<boolean | null>(null);
+  const [shortSideSprockets, setShortSideSprockets] = useState(false);
   // The shape is remembered for the session (not saved): the next photo opens with the last one used.
   const setCropAspect = (aspect: CropAspect) => {
     sessionCropAspect = aspect;
@@ -985,6 +986,10 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
           )}
         </div>
       )}
+      <label className="preset-group" title="Also generate sprocket holes on the short edges; off keeps them on the long edges only">
+        <input type="checkbox" checked={shortSideSprockets} onChange={(e) => setShortSideSprockets(e.target.checked)} />
+        Short-side sprockets
+      </label>
     </>
   );
   const tabs = (
@@ -997,7 +1002,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
       <LeakRollButton
         active={hasFilmLeak(photo)}
         disabled={state.export != null}
-        onRoll={() => store.rollFilmLeak(id)}
+        onRoll={() => store.rollFilmLeak(id, Math.random(), shortSideSprockets)}
         onClear={() => store.clearFilmLeak(id)}
       />
       {/* By the controls it changes; the top bar is full on phones. */}
