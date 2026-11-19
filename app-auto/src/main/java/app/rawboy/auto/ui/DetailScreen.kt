@@ -147,6 +147,7 @@ fun DetailScreen(
     val scope = rememberCoroutineScope()
     var showAuto by remember { mutableStateOf(false) }
     var pickingWhite by remember { mutableStateOf(false) }
+    var shortSideSprockets by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(id) { pickingWhite = false }
     // Crop & rotate: the photo shows whole with a crop frame on it. The shape lock is UI only (portrait null = follow the frame).
     var cropping by rememberSaveable { mutableStateOf(false) }
@@ -501,7 +502,6 @@ fun DetailScreen(
                     if (preset == null && photo.edits == null) {
                         AutoSlider("Strength", photo.strength, 0f..100f, LookApplier.DEFAULT_STRENGTH) { vm.setStrength(id, it) }
                     }
-                    var shortSideSprockets by remember { mutableStateOf(false) }
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically,
