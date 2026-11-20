@@ -63,6 +63,16 @@ struct FxPanelActions {
     let onDone: () -> Void
 }
 
+#if os(macOS)
+private func hasFxShapeEdits(_ fx: LightEffect?, aspect: Float) -> Bool {
+    guard let fx else { return false }
+    let cover = LightEffects.coverSize(aspect: aspect)
+    return abs(fx.rx - cover.rx) > 0.005
+        || abs(fx.ry - cover.ry) > 0.005
+        || abs(fx.angle - fx.kind.angle) > 0.5
+}
+#endif
+
 /**
  * Light effects, "lomo" (mirrors Android's FxPanel and RawBoy Web's): lightning, electric sparks, light trails and
  * neon swirls, generated at random and dragged into place on the photo like light leaks. A top-bar mode like Leaks:
@@ -76,8 +86,267 @@ struct FxPanel: View {
     let aspect: Float
     let zoomed: Bool
     let actions: FxPanelActions
+    #if os(macOS)
+    @State private var shapeOpen = false
+    #endif
+
+    private var budgetLeft: Bool { effects.count < LightEffects.maxEffects }
 
     var body: some View {
+        #if os(macOS)
+        macBody
+        #else
+        iosBody
+        #endif
+    }
+
+    #if os(macOS)
+    private var macBody: some View {
+        let selected = effects.first { $0.id == selectedId }
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 8) {
+                Picker("", selection: Binding(get: { true }, set: { if !$0 { actions.onLeaks() } })) {
+                    Text("Light leaks").tag(false)
+                    Text("Effects").tag(true)
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .neutralSegments()
+                Button(zoomed ? "Fit" : "100%", action: actions.onToggleZoom)
+                    .controlSize(.small)
+                Button("Done", action: actions.onDone)
+                    .fontWeight(.semibold)
+                    .controlSize(.small)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+
+            Divider()
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    macAddSection
+                    Divider()
+                    macLayersSection
+                    if let fx = selected {
+                        Divider()
+                        macInspector(fx)
+                    }
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+            }
+        }
+        .onAppear {
+            shapeOpen = hasFxShapeEdits(effects.first { $0.id == selectedId }, aspect: aspect)
+        }
+        .onChange(of: selectedId) { _, newId in
+            shapeOpen = hasFxShapeEdits(effects.first { $0.id == newId }, aspect: aspect)
+        }
+    }
+
+    private var macAddSection: some View {
+        let columns = [GridItem(.flexible(), spacing: 6), GridItem(.flexible(), spacing: 6)]
+        return LazyVGrid(columns: columns, spacing: 6) {
+            ForEach(FxKind.allCases, id: \.self) { k in
+                Button("+ \(k.label)") { actions.onAdd(k) }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity)
+                    .disabled(!budgetLeft)
+                    .help("Add \(k.label.lowercased()) (a new random one each time)")
+            }
+        }
+    }
+
+    private var macLayersSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            if effects.isEmpty {
+                Note("Add lightning, electric sparks, light trails or a neon swirl above. Up to \(LightEffects.maxEffects) layers; effects reset for each new photo.")
+            } else {
+                HStack {
+                    Text("Layers")
+                        .font(.caption.weight(.semibold))
+                        .textCase(.uppercase)
+                        .tracking(0.6)
+                        .foregroundStyle(.secondary)
+                        .accessibilityAddTraits(.isHeader)
+                    Spacer()
+                    Text("\(effects.count) / \(LightEffects.maxEffects)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                }
+
+                VStack(spacing: 3) {
+                    ForEach(Array(effects.enumerated()), id: \.element.id) { i, e in
+                        macLayerRow(e, i)
+                    }
+                }
+            }
+        }
+    }
+
+    private func macLayerRow(_ e: LightEffect, _ i: Int) -> some View {
+        let selected = e.id == selectedId
+        return HStack(spacing: 8) {
+            Button {
+                actions.onUpdate(e.id, true) { $0.enabled.toggle() }
+            } label: {
+                Image(systemName: e.enabled ? "eye" : "eye.slash")
+                    .font(.caption)
+                    .foregroundStyle(e.enabled ? Color.secondary : Color.secondary.opacity(0.45))
+                    .frame(width: 18, height: 18)
+            }
+            .buttonStyle(.plain)
+            .help(e.enabled ? "Hide effect" : "Show effect")
+
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(fxColor(e.hue))
+                    .frame(width: 9, height: 9)
+                    .opacity(e.enabled ? 1 : 0.4)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("\(e.kind.label) \(i + 1)")
+                        .font(.subheadline.weight(selected ? .medium : .regular))
+                        .foregroundStyle(e.enabled ? .primary : .secondary)
+                        .lineLimit(1)
+                    Text("\(hueName(e.hue)) · \(Int(e.intensity.rounded()))%")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Spacer(minLength: 4)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture { actions.onSelect(e.id) }
+
+            Button {
+                actions.onRemove(e.id)
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 18, height: 18)
+            }
+            .buttonStyle(.plain)
+            .help("Delete effect")
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(selected ? Color.primary.opacity(0.09) : Color.clear)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(selected ? Color.accentColor.opacity(0.5) : Color.clear, lineWidth: 1)
+        )
+    }
+
+    @ViewBuilder
+    private func macInspector(_ fx: LightEffect) -> some View {
+        let cover = LightEffects.coverSize(aspect: aspect)
+        let shapeEdited = hasFxShapeEdits(fx, aspect: aspect)
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 6) {
+                Picker("", selection: Binding(get: { fx.kind }, set: { k in set(fx, true) { $0 = $0.withKind(k) } })) {
+                    ForEach(FxKind.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .neutralSegments()
+                .controlSize(.small)
+
+                HStack {
+                    Button {
+                        set(fx, true) { $0.seed = LightEffects.newSeed() }
+                    } label: {
+                        Label("New random", systemImage: "dice")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .help("Generate a new random pattern with the same settings")
+                    Spacer()
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 0) {
+                SectionLabel("Look")
+                ParamSlider(label: "Intensity", value: fx.intensity, range: 0...100, defaultValue: 100,
+                            format: { "\(Int($0.rounded()))%" }) { v in set(fx) { $0.intensity = v } }
+                ParamSlider(label: amountName(fx.kind), value: fx.amount, range: 0...100, defaultValue: fx.kind.amount,
+                            format: formatPlain) { v in set(fx) { $0.amount = v } }
+                ParamSlider(label: "Thickness", value: fx.thickness, range: 0...100, defaultValue: fx.kind.thickness,
+                            format: formatPlain) { v in set(fx) { $0.thickness = v } }
+                ParamSlider(label: "Glow", value: fx.glow, range: 0...100, defaultValue: fx.kind.glow, format: formatPlain) { v in
+                    set(fx) { $0.glow = v }
+                }
+                ParamSlider(label: "Colour", value: fx.hue, range: 0...360, defaultValue: fx.kind.hue, format: hueName,
+                            trackGradient: hueTrack) { v in set(fx) { $0.hue = v } }
+                ParamSlider(label: "Colour mix", value: fx.spread, range: 0...100, defaultValue: fx.kind.spread,
+                            format: formatPlain) { v in set(fx) { $0.spread = v } }
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 0) {
+                Button {
+                    shapeOpen.toggle()
+                } label: {
+                    HStack {
+                        Text("Shape")
+                            .font(.caption.weight(.semibold))
+                            .textCase(.uppercase)
+                            .tracking(0.6)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        if shapeEdited {
+                            Circle()
+                                .fill(Color.accentColor)
+                                .frame(width: 6, height: 6)
+                        }
+                        Image(systemName: shapeOpen ? "chevron.down" : "chevron.right")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                if shapeOpen {
+                    ParamSlider(label: "Size", value: sizeSlider.to(sizeOf(fx)), range: 0...100,
+                                defaultValue: sizeSlider.to((cover.rx * cover.ry).squareRoot()),
+                                format: { percent(sizeSlider.from($0)) }) { v in
+                        set(fx) { e in
+                            let k = sizeSlider.from(v) / sizeOf(e)
+                            e.rx *= k
+                            e.ry *= k
+                        }
+                    }
+                    ParamSlider(label: "Stretch", value: stretchOf(fx.rx, fx.ry), range: -100...100,
+                                defaultValue: stretchOf(cover.rx, cover.ry),
+                                format: { String(format: "%.2f:1", powf(4, $0 / 100)) }) { v in
+                        set(fx) { e in
+                            let s = sizeOf(e)
+                            let ratio = powf(4, v / 100).squareRoot()
+                            e.rx = s * ratio
+                            e.ry = s / ratio
+                        }
+                    }
+                    ParamSlider(label: "Rotation", value: fx.angle, range: -180...180, defaultValue: fx.kind.angle,
+                                format: { "\(Int($0.rounded()))°" }) { v in set(fx) { $0.angle = v } }
+                }
+            }
+
+            Note("Drag the box to move, dots to resize, round knob to turn. Effects stay on this photo only.")
+        }
+    }
+    #endif
+
+    #if !os(macOS)
+    private var iosBody: some View {
         VStack(alignment: .leading, spacing: 4) {
             HStack {
                 Picker("", selection: Binding(get: { true }, set: { if !$0 { actions.onLeaks() } })) {
@@ -93,7 +362,7 @@ struct FxPanel: View {
             ScrollView(.horizontal) {
                 HStack(spacing: 6) {
                     ForEach(Array(effects.enumerated()), id: \.element.id) { i, e in chip(e, i) }
-                    if effects.count < LightEffects.maxEffects {
+                    if budgetLeft {
                         ForEach(FxKind.allCases, id: \.self) { k in
                             Button { actions.onAdd(k) } label: {
                                 Text("+ \(k.label)").font(.subheadline).padding(.horizontal, 10).padding(.vertical, 6)
@@ -134,11 +403,6 @@ struct FxPanel: View {
             Button(e.enabled ? "Hide" : "Show") { actions.onUpdate(e.id, true) { $0.enabled.toggle() } }
             Button("Delete", role: .destructive) { actions.onRemove(e.id) }
         }
-    }
-
-    /** A slider's change to [fx] ([force] false), or a button's (true). */
-    private func set(_ fx: LightEffect, _ force: Bool = false, _ change: (inout LightEffect) -> Void) {
-        actions.onUpdate(fx.id, force, change)
     }
 
     @ViewBuilder
@@ -190,5 +454,11 @@ struct FxPanel: View {
         ParamSlider(label: "Colour mix", value: fx.spread, range: 0...100, defaultValue: fx.kind.spread,
                     format: formatPlain) { v in set(fx) { $0.spread = v } }
         Note("Drag inside the box to move the effect, the dots to size it along and across, the round knob to turn it. New random draws a new pattern with the same settings. Colour mix lets each line drift from the colour (sparks in blue, violet and green). Effects aren't saved in presets: they belong to this photo.")
+    }
+    #endif
+
+    /** A slider's change to [fx] ([force] false), or a button's (true). */
+    private func set(_ fx: LightEffect, _ force: Bool = false, _ change: (inout LightEffect) -> Void) {
+        actions.onUpdate(fx.id, force, change)
     }
 }
