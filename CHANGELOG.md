@@ -1,3 +1,7 @@
+**RawBoy Web: ACES, PBR Neutral, GT, OpenDRT, Reinhard, Hable and Lottes tone mappers (2026-11-20)**
+
+- Added 7 new tone mappers to RawBoy Web's Light tab (`shaders/develop.glsl`, `web/src/engine/develop/DevelopParams.ts`): **ACES** (Stephen Hill's RRT+ODT fit with Rec.2020 ↔ AP1 matrices), **Neutral** (Khronos PBR Neutral), **GT** (Gran Turismo / Uchimura), **OpenDRT** (Michaelis–Menten tone scale with hue-preserving highlight dechroma), **Reinhard** (Reinhard-Jodie), **Hable** (Uncharted 2 filmic), and **Lottes** (AMD GDC 2016). All are exposure-aligned to AgX's middle grey (`0.4967` in display 2.2) so switching tone mappers keeps overall brightness consistent, and round-trip in Light presets. Web only for now (Android, iOS and Desktop keep AgX / Filmic / Sigmoid).
+
 **Camera (Android): fewer dropped video frames (2026-11-19)**
 
 - Muxer writes moved to their own thread (`RawBoy-muxer`) so the encoder's output buffers are released at once, the encoder is asked for real-time priority without B-frames, and while recording a look the develop shader runs once per frame (at encoder size) for both the screen and the encoder. QR scanning pauses while recording. High video quality is now 24 Mbit/s (38 Mbit/s flat).
