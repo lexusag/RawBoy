@@ -113,10 +113,14 @@ describe('shader params', () => {
   });
 
   it('maps the tone mapper to its shader id', () => {
-    const d = developParams({ toneMapper: 'sigmoid' });
-    expect(ShaderParams.from(d, d, null, new LensTransform(LensInfo.none(100, 100), d), null, null, null).toneMapper).toBe(2);
-    const aces = developParams({ toneMapper: 'aces' });
-    expect(ShaderParams.from(aces, aces, null, new LensTransform(LensInfo.none(100, 100), aces), null, null, null).toneMapper).toBe(3);
+    const cases = [
+      ['agx', 0], ['filmic', 1], ['sigmoid', 2], ['aces', 3],
+      ['neutral', 4], ['gt', 5], ['opendrt', 6], ['reinhard', 7], ['hable', 8], ['lottes', 9],
+    ] as const;
+    for (const [toneMapper, id] of cases) {
+      const d = developParams({ toneMapper });
+      expect(ShaderParams.from(d, d, null, new LensTransform(LensInfo.none(100, 100), d), null, null, null).toneMapper).toBe(id);
+    }
   });
 
   it('luma contrast is a neutral 0 exponent by default and 2^0.7 - 1 at +100', () => {
@@ -621,9 +625,11 @@ describe('presets', () => {
     const [p] = decodePresets(encodePresets([capturePreset('F', developParams({ toneMapper: 'filmic' }), ['light'])]));
     expect(p.values.toneMapper).toBe('filmic');
     expect(applyPreset(p, developParams()).toneMapper).toBe('filmic');
-    const [aces] = decodePresets(encodePresets([capturePreset('A', developParams({ toneMapper: 'aces' }), ['light'])]));
-    expect(aces.values.toneMapper).toBe('aces');
-    expect(applyPreset(aces, developParams()).toneMapper).toBe('aces');
+    for (const tm of ['aces', 'neutral', 'gt', 'opendrt', 'reinhard', 'hable', 'lottes'] as const) {
+      const [decoded] = decodePresets(encodePresets([capturePreset(tm, developParams({ toneMapper: tm }), ['light'])]));
+      expect(decoded.values.toneMapper).toBe(tm);
+      expect(applyPreset(decoded, developParams()).toneMapper).toBe(tm);
+    }
     const bad = { ...p, values: { toneMapper: 'unknown' } };
     expect(applyPreset(bad, developParams({ toneMapper: 'sigmoid' })).toneMapper).toBe('sigmoid');
   });

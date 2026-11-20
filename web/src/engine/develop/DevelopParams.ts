@@ -11,13 +11,19 @@ import { DEFAULT_CURVES, type ToneCurves } from './ToneCurve';
  * Contrast behave consistently; they differ in toe/shoulder and colour (see shaders/develop.glsl).
  * The value is the key stored in presets (as in DevelopParams.kt).
  */
-export type ToneMapper = 'agx' | 'filmic' | 'sigmoid' | 'aces';
+export type ToneMapper = 'agx' | 'filmic' | 'sigmoid' | 'aces' | 'neutral' | 'gt' | 'opendrt' | 'reinhard' | 'hable' | 'lottes';
 
 export const TONE_MAPPERS: readonly { key: ToneMapper; label: string; shaderId: number }[] = [
   { key: 'agx', label: 'AgX', shaderId: 0 },
   { key: 'filmic', label: 'Filmic', shaderId: 1 },
   { key: 'sigmoid', label: 'Sigmoid', shaderId: 2 },
   { key: 'aces', label: 'ACES', shaderId: 3 },
+  { key: 'neutral', label: 'Neutral', shaderId: 4 },
+  { key: 'gt', label: 'GT', shaderId: 5 },
+  { key: 'opendrt', label: 'OpenDRT', shaderId: 6 },
+  { key: 'reinhard', label: 'Reinhard', shaderId: 7 },
+  { key: 'hable', label: 'Hable', shaderId: 8 },
+  { key: 'lottes', label: 'Lottes', shaderId: 9 },
 ];
 
 /** `uToneMapper` for a tone mapper (AgX for anything unknown). */

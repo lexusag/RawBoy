@@ -56,6 +56,7 @@ Web, Desktop and iOS take every field of `DevelopParams` except where noted (che
 | Feature | Since | Web | Desktop | iOS | Android | Notes |
 |---|---|---|---|---|---|---|
 | Tone mapper AgX / Filmic / Sigmoid | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
+| Tone mappers ACES / Neutral / GT / OpenDRT / Reinhard / Hable / Lottes | unreleased | ✓ | — | — | — | Web only; all middle-grey aligned to AgX (`shaders/develop.glsl`) |
 | Film tone mapper (stocks, grain, halation) | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | Mouse wheel steps stocks: web 1.9.0, Desktop 1.18.3 |
 | Exposure, Contrast, Highlights, Shadows, Whites, Blacks | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
 | Luma contrast | 1.12.5 | ✓ | ✓ 1.18.3 | ✓ 1.18.3 | — | Android has no slider |
