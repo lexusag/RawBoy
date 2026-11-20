@@ -7,16 +7,17 @@ import type { LightLeak } from './LightLeaks';
 import { DEFAULT_CURVES, type ToneCurves } from './ToneCurve';
 
 /**
- * Scene -> display tone mapping. All three share AgX's log range, middle grey and slope there, so the
- * sliders mean the same; they differ in toe/shoulder and in colour (see shaders/develop.glsl).
+ * Scene -> display tone mapping. All share AgX's log range and middle grey, so Exposure, grain and
+ * Contrast behave consistently; they differ in toe/shoulder and colour (see shaders/develop.glsl).
  * The value is the key stored in presets (as in DevelopParams.kt).
  */
-export type ToneMapper = 'agx' | 'filmic' | 'sigmoid';
+export type ToneMapper = 'agx' | 'filmic' | 'sigmoid' | 'aces';
 
 export const TONE_MAPPERS: readonly { key: ToneMapper; label: string; shaderId: number }[] = [
   { key: 'agx', label: 'AgX', shaderId: 0 },
   { key: 'filmic', label: 'Filmic', shaderId: 1 },
   { key: 'sigmoid', label: 'Sigmoid', shaderId: 2 },
+  { key: 'aces', label: 'ACES', shaderId: 3 },
 ];
 
 /** `uToneMapper` for a tone mapper (AgX for anything unknown). */

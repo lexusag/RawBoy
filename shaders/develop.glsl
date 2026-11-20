@@ -7,7 +7,7 @@ uniform float uContrast;    // slope in AgX log space, 1 = neutral
 uniform float uLumaContrast; // exponent of a luminance-only gain pow(Y / 0.18, x) that keeps channel ratios, 0 = neutral
 uniform float uSaturation;  // 1 = neutral
 uniform float uGamutSoft;   // 1 = purity-limited saturation + soft Rec.709 gamut compression, 0 = hard clipping
-uniform int uToneMapper;    // 0 = AgX, 1 = filmic, 2 = sigmoid
+uniform int uToneMapper;    // 0 = AgX, 1 = filmic, 2 = sigmoid, 3 = ACES
 uniform float uDisplaySource; // 1 = a JPEG/HEIC decoded by display_inverse.cpp: AgX per channel, no gamut compression
 uniform float uClipLevel;     // decoded value of blown highlights (DecodedImage::clipLevel), 0 = unknown
 uniform float uShadows;     // -1..1
@@ -204,6 +204,28 @@ vec3 sigmoidTone(vec3 x) {
         y = yMin + (l - lMin) / (lMax - lMin) * (yMax - yMin);
     }
     return pow(y, vec3(1.0 / 2.2));
+}
+
+// ACES (Stephen Hill's RRT+ODT fit): converts linear Rec.2020 into ACES AP1 (with the RRT
+// input matrix), applies the fitted rational curve, and converts back to linear Rec.2020 so the
+// shared levels and Rec.2020->Rec.709 gamut steps after it work unchanged. Exposure-aligned so
+// 0.18 middle grey lands on TONE_GREY (0.4967) like the other tone mappers.
+const mat3 ACES_IN = mat3(
+    vec3(0.9465901, 0.0127789, 0.0152832),
+    vec3(0.0459193, 0.9828225, 0.0506650),
+    vec3(0.0074906, 0.0043986, 0.9340518));
+const mat3 ACES_OUT = mat3(
+    vec3(0.9730716, 0.0169800, 0.0143912),
+    vec3(0.0285353, 0.9814474, 0.0236615),
+    vec3(-0.0016073, 0.0015725, 0.9619384));
+const float ACES_EXPOSURE = 1.675490;
+
+vec3 acesTone(vec3 x) {
+    vec3 v = ACES_IN * (exp2(x * (AGX_MAX_EV - AGX_MIN_EV) + AGX_MIN_EV) * ACES_EXPOSURE);
+    vec3 a = v * (v + 0.0245786) - 0.000090537;
+    vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081;
+    vec3 y = ACES_OUT * (a / b);
+    return pow(clamp(y, 0.0, 1.0), vec3(1.0 / 2.2));
 }
 
 vec3 srgbEncode(vec3 c) {
@@ -1094,6 +1116,8 @@ vec3 develop(vec3 c, vec2 fullPx, float lm[MAX_LAYERS]) {
         c = filmicTone(c);
     } else if (uToneMapper == 2) {
         c = sigmoidTone(c);
+    } else if (uToneMapper == 3) {
+        c = acesTone(c);
     } else {
         c = agxSigmoid(c);
         if (agxMatrices) c = AGX_OUTSET * c;

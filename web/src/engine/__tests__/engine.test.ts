@@ -115,6 +115,8 @@ describe('shader params', () => {
   it('maps the tone mapper to its shader id', () => {
     const d = developParams({ toneMapper: 'sigmoid' });
     expect(ShaderParams.from(d, d, null, new LensTransform(LensInfo.none(100, 100), d), null, null, null).toneMapper).toBe(2);
+    const aces = developParams({ toneMapper: 'aces' });
+    expect(ShaderParams.from(aces, aces, null, new LensTransform(LensInfo.none(100, 100), aces), null, null, null).toneMapper).toBe(3);
   });
 
   it('luma contrast is a neutral 0 exponent by default and 2^0.7 - 1 at +100', () => {
@@ -619,7 +621,10 @@ describe('presets', () => {
     const [p] = decodePresets(encodePresets([capturePreset('F', developParams({ toneMapper: 'filmic' }), ['light'])]));
     expect(p.values.toneMapper).toBe('filmic');
     expect(applyPreset(p, developParams()).toneMapper).toBe('filmic');
-    const bad = { ...p, values: { toneMapper: 'aces' } };
+    const [aces] = decodePresets(encodePresets([capturePreset('A', developParams({ toneMapper: 'aces' }), ['light'])]));
+    expect(aces.values.toneMapper).toBe('aces');
+    expect(applyPreset(aces, developParams()).toneMapper).toBe('aces');
+    const bad = { ...p, values: { toneMapper: 'unknown' } };
     expect(applyPreset(bad, developParams({ toneMapper: 'sigmoid' })).toneMapper).toBe('sigmoid');
   });
 
