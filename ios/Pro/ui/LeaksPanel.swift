@@ -68,6 +68,20 @@ private func hasColourGrade(_ fl: FilmLeak?) -> Bool {
     guard let fl else { return false }
     return fl.warmth != 0 || fl.tint != 0 || fl.fade != 0 || fl.contrast != 0
 }
+
+private func hasShapeEdits(_ l: LightLeak?) -> Bool {
+    guard let l else { return false }
+    return abs(l.rx - l.kind.rx) > 0.001
+        || abs(l.ry - l.kind.ry) > 0.001
+        || abs(l.angle - l.kind.angle) > 0.5
+        || abs(l.bend) > 0.5
+        || abs(l.taper) > 0.5
+}
+
+private func hasDetailEdits(_ l: LightLeak?) -> Bool {
+    guard let l else { return false }
+    return l.warp > 0 || l.texture > 0
+}
 #endif
 
 /**
@@ -85,6 +99,8 @@ struct LeaksPanel: View {
     @State private var shortSideSprockets = false
     #if os(macOS)
     @State private var gradeOpen = false
+    @State private var shapeOpen = false
+    @State private var detailOpen = false
     #endif
 
     private var budgetLeft: Bool { leaks.count + filmLeaks.count < LightLeaks.maxLeaks }
@@ -141,9 +157,17 @@ struct LeaksPanel: View {
         }
         .onAppear {
             gradeOpen = hasColourGrade(filmLeaks.first { $0.id == selectedFilmId })
+            let manual = leaks.first { $0.id == selectedId }
+            shapeOpen = hasShapeEdits(manual)
+            detailOpen = hasDetailEdits(manual)
         }
         .onChange(of: selectedFilmId) { _, newId in
             gradeOpen = hasColourGrade(filmLeaks.first { $0.id == newId })
+        }
+        .onChange(of: selectedId) { _, newId in
+            let manual = leaks.first { $0.id == newId }
+            shapeOpen = hasShapeEdits(manual)
+            detailOpen = hasDetailEdits(manual)
         }
     }
 
@@ -474,92 +498,135 @@ struct LeaksPanel: View {
         }
     }
 
+    private func macDisclosureHeader(_ title: String, open: Binding<Bool>, edited: Bool) -> some View {
+        Button {
+            open.wrappedValue.toggle()
+        } label: {
+            HStack {
+                Text(title)
+                    .font(.caption.weight(.semibold))
+                    .textCase(.uppercase)
+                    .tracking(0.6)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                if edited {
+                    Circle()
+                        .fill(Color.accentColor)
+                        .frame(width: 6, height: 6)
+                }
+                Image(systemName: open.wrappedValue ? "chevron.down" : "chevron.right")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
     @ViewBuilder
     private func macManualInspector(_ leak: LightLeak) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Picker("", selection: Binding(get: { leak.kind }, set: { k in set(leak, true) { $0 = $0.withKind(k) } })) {
-                ForEach(LeakKind.allCases, id: \.self) { Text($0.label).tag($0) }
-            }
-            .labelsHidden()
-            .pickerStyle(.segmented)
-            .neutralSegments()
-            .controlSize(.small)
-            .padding(.bottom, 4)
-
-            SectionLabel("Look")
-            ParamSlider(label: "Intensity", value: leak.intensity, range: 0...100, defaultValue: 100,
-                        format: { "\(Int($0.rounded()))%" }) { v in set(leak) { $0.intensity = v } }
-            ParamSlider(label: "Softness", value: leak.softness, range: 0...100, defaultValue: leak.kind.softness,
-                        format: formatPlain) { v in set(leak) { $0.softness = v } }
-            ParamSlider(label: "Glow", value: leak.glow, range: 0...100, defaultValue: leak.kind.glow, format: formatPlain) { v in
-                set(leak) { $0.glow = v }
-            }
-            ParamSlider(label: "Cover", value: leak.cover, range: 0...100, defaultValue: 0,
-                        format: { "\(Int($0.rounded()))%" }) { v in set(leak) { $0.cover = v } }
-            ParamSlider(label: "Colour", value: leak.hue, range: LightLeaks.hueMin...LightLeaks.hueMax,
-                        defaultValue: LightLeaks.hue, format: hueName, trackGradient: hueTrack) { v in set(leak) { $0.hue = v } }
-
-            SectionLabel("Shape")
-            if leak.kind == .streak {
-                ParamSlider(label: "Width", value: widthSlider.to(leak.ry), range: 0...100,
-                            defaultValue: widthSlider.to(LeakKind.streak.ry),
-                            format: { percent(widthSlider.from($0)) }) { v in set(leak) { $0.ry = widthSlider.from(v) } }
-                ParamSlider(label: "Length", value: lengthSlider.to(leak.rx), range: 0...100,
-                            defaultValue: lengthSlider.to(LeakKind.streak.rx),
-                            format: { percent(lengthSlider.from($0)) }) { v in set(leak) { $0.rx = lengthSlider.from(v) } }
-            } else {
-                ParamSlider(label: "Size", value: sizeSlider.to(sizeOf(leak)), range: 0...100,
-                            defaultValue: sizeSlider.to((leak.kind.rx * leak.kind.ry).squareRoot()),
-                            format: { percent(sizeSlider.from($0)) }) { v in
-                    set(leak) { l in
-                        let k = sizeSlider.from(v) / sizeOf(l)
-                        l.rx *= k
-                        l.ry *= k
-                    }
+        let shapeEdited = hasShapeEdits(leak)
+        let detailEdited = hasDetailEdits(leak)
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 6) {
+                Picker("", selection: Binding(get: { leak.kind }, set: { k in set(leak, true) { $0 = $0.withKind(k) } })) {
+                    ForEach(LeakKind.allCases, id: \.self) { Text($0.label).tag($0) }
                 }
-                ParamSlider(label: "Stretch", value: stretchOf(leak.rx, leak.ry), range: -100...100,
-                            defaultValue: stretchOf(leak.kind.rx, leak.kind.ry),
-                            format: { String(format: "%.2f:1", powf(4, $0 / 100)) }) { v in
-                    set(leak) { l in
-                        let s = sizeOf(l)
-                        let ratio = powf(4, v / 100).squareRoot()
-                        l.rx = s * ratio
-                        l.ry = s / ratio
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .neutralSegments()
+                .controlSize(.small)
+
+                if leak.warp > 0 || leak.texture > 0 || LightLeaks.reshaped(leak) {
+                    HStack(spacing: 6) {
+                        if leak.warp > 0 || leak.texture > 0 {
+                            Button("New pattern") { set(leak, true) { $0.seed = LightLeaks.newSeed() } }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                        }
+                        if LightLeaks.reshaped(leak) {
+                            Button("Round outline") { set(leak, true) { $0.radii = LightLeaks.roundRadii } }
+                                .buttonStyle(.bordered)
+                                .controlSize(.small)
+                        }
+                        Spacer()
                     }
                 }
             }
-            ParamSlider(label: "Rotation", value: leak.angle, range: -180...180, defaultValue: leak.kind.angle,
-                        format: { "\(Int($0.rounded()))°" }) { v in set(leak) { $0.angle = v } }
-            ParamSlider(label: "Bend", value: leak.bend, range: -100...100, defaultValue: 0) { v in set(leak) { $0.bend = v } }
-            ParamSlider(label: "Taper", value: leak.taper, range: -100...100, defaultValue: 0) { v in set(leak) { $0.taper = v } }
 
-            SectionLabel("Detail")
-            ParamSlider(label: "Warp", value: leak.warp, range: 0...100, defaultValue: 0, format: formatPlain) { v in
-                set(leak) { $0.warp = v }
+            VStack(alignment: .leading, spacing: 0) {
+                SectionLabel("Look")
+                ParamSlider(label: "Intensity", value: leak.intensity, range: 0...100, defaultValue: 100,
+                            format: { "\(Int($0.rounded()))%" }) { v in set(leak) { $0.intensity = v } }
+                ParamSlider(label: "Softness", value: leak.softness, range: 0...100, defaultValue: leak.kind.softness,
+                            format: formatPlain) { v in set(leak) { $0.softness = v } }
+                ParamSlider(label: "Glow", value: leak.glow, range: 0...100, defaultValue: leak.kind.glow, format: formatPlain) { v in
+                    set(leak) { $0.glow = v }
+                }
+                ParamSlider(label: "Cover", value: leak.cover, range: 0...100, defaultValue: 0,
+                            format: { "\(Int($0.rounded()))%" }) { v in set(leak) { $0.cover = v } }
+                ParamSlider(label: "Colour", value: leak.hue, range: LightLeaks.hueMin...LightLeaks.hueMax,
+                            defaultValue: LightLeaks.hue, format: hueName, trackGradient: hueTrack) { v in set(leak) { $0.hue = v } }
             }
-            ParamSlider(label: "Texture", value: leak.texture, range: 0...100, defaultValue: 0, format: formatPlain) { v in
-                set(leak) { $0.texture = v }
-            }
-            if leak.warp > 0 || leak.texture > 0 || LightLeaks.reshaped(leak) {
-                HStack(spacing: 8) {
-                    if leak.warp > 0 || leak.texture > 0 {
-                        Button("New pattern") { set(leak, true) { $0.seed = LightLeaks.newSeed() } }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 0) {
+                macDisclosureHeader("Shape", open: $shapeOpen, edited: shapeEdited)
+                if shapeOpen {
+                    if leak.kind == .streak {
+                        ParamSlider(label: "Width", value: widthSlider.to(leak.ry), range: 0...100,
+                                    defaultValue: widthSlider.to(LeakKind.streak.ry),
+                                    format: { percent(widthSlider.from($0)) }) { v in set(leak) { $0.ry = widthSlider.from(v) } }
+                        ParamSlider(label: "Length", value: lengthSlider.to(leak.rx), range: 0...100,
+                                    defaultValue: lengthSlider.to(LeakKind.streak.rx),
+                                    format: { percent(lengthSlider.from($0)) }) { v in set(leak) { $0.rx = lengthSlider.from(v) } }
+                    } else {
+                        ParamSlider(label: "Size", value: sizeSlider.to(sizeOf(leak)), range: 0...100,
+                                    defaultValue: sizeSlider.to((leak.kind.rx * leak.kind.ry).squareRoot()),
+                                    format: { percent(sizeSlider.from($0)) }) { v in
+                            set(leak) { l in
+                                let k = sizeSlider.from(v) / sizeOf(l)
+                                l.rx *= k
+                                l.ry *= k
+                            }
+                        }
+                        ParamSlider(label: "Stretch", value: stretchOf(leak.rx, leak.ry), range: -100...100,
+                                    defaultValue: stretchOf(leak.kind.rx, leak.kind.ry),
+                                    format: { String(format: "%.2f:1", powf(4, $0 / 100)) }) { v in
+                            set(leak) { l in
+                                let s = sizeOf(l)
+                                let ratio = powf(4, v / 100).squareRoot()
+                                l.rx = s * ratio
+                                l.ry = s / ratio
+                            }
+                        }
                     }
-                    if LightLeaks.reshaped(leak) {
-                        Button("Round outline") { set(leak, true) { $0.radii = LightLeaks.roundRadii } }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
+                    ParamSlider(label: "Rotation", value: leak.angle, range: -180...180, defaultValue: leak.kind.angle,
+                                format: { "\(Int($0.rounded()))°" }) { v in set(leak) { $0.angle = v } }
+                    ParamSlider(label: "Bend", value: leak.bend, range: -100...100, defaultValue: 0) { v in set(leak) { $0.bend = v } }
+                    ParamSlider(label: "Taper", value: leak.taper, range: -100...100, defaultValue: 0) { v in set(leak) { $0.taper = v } }
+                }
+            }
+
+            Divider()
+
+            VStack(alignment: .leading, spacing: 0) {
+                macDisclosureHeader("Detail", open: $detailOpen, edited: detailEdited)
+                if detailOpen {
+                    ParamSlider(label: "Warp", value: leak.warp, range: 0...100, defaultValue: 0, format: formatPlain) { v in
+                        set(leak) { $0.warp = v }
+                    }
+                    ParamSlider(label: "Texture", value: leak.texture, range: 0...100, defaultValue: 0, format: formatPlain) { v in
+                        set(leak) { $0.texture = v }
                     }
                 }
-                .padding(.top, 6)
             }
 
             Note("Drag on the photo to move, dots to resize, round knob to turn, square to bend." +
                  (leak.kind == .glow ? " Hollow dots reshape the outline." : "") +
                  " Manual leaks stay on this photo only.")
-                .padding(.top, 6)
         }
     }
     #endif
