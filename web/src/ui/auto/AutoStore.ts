@@ -6,6 +6,7 @@ import { ALL_FILM_LOOKS, FilmLooks } from '../../engine/auto/looks/FilmLooks';
 import { suggestFilm, suggestLook } from '../../engine/auto/looks/LookSuggester';
 import { autoDevelop } from '../../engine/auto/analysis/AutoTone';
 import type { DevelopParams } from '../../engine/develop/DevelopParams';
+import { randomFilmRoll, type FilmLeak } from '../../engine/develop/FilmLeaks';
 import { applyPreset, chosenLensPreset, decodePresets, isLensPreset, layerPreset, NO_LENS_PRESET, PRESET_GROUPS, putLensPreset, replacesLook, sameLensPreset, type Preset } from '../../engine/develop/Presets';
 import { PresetStore } from '../pro/PresetStore';
 import { exportImage } from '../../engine/export/Exporter';
@@ -110,7 +111,7 @@ export function photoDate(p: AutoPhoto): string | null {
  * same fields, so a photo that comes back edited is not unedited.
  */
 export function isUnedited(p: AutoPhoto): boolean {
-  return p.plain && activeLook(p) === Looks.NATURAL && !p.preset && !p.lensPreset && !p.edits
+  return p.plain && activeLook(p) === Looks.NATURAL && !p.preset && !p.lensPreset && !p.edits && !p.filmLeaks?.length
     && sameAdjustments(p.adjust, NO_ADJUSTMENTS);
 }
 
@@ -223,13 +224,15 @@ export interface AutoPhoto {
    * colour denoise and sharpening of the auto develop's noise settings (autoNoiseOf) under its look or preset. Ignored for other photos.
    */
   autoDenoise: boolean;
+  /** Generated film leaks rolled directly in Auto (on top of the look or preset). */
+  filmLeaks?: readonly FilmLeak[];
 }
 
 /** A photo's edits, as Undo and Redo bring them back. */
-type Develop = Pick<AutoPhoto, 'look' | 'mode' | 'filmLook' | 'strength' | 'adjust' | 'preset' | 'edits' | 'looksApplied' | 'autoDenoise'>;
+type Develop = Pick<AutoPhoto, 'look' | 'mode' | 'filmLook' | 'strength' | 'adjust' | 'preset' | 'edits' | 'looksApplied' | 'autoDenoise' | 'filmLeaks'>;
 
-const developOf = ({ look, mode, filmLook, strength, adjust, preset, edits, looksApplied, autoDenoise }: AutoPhoto): Develop =>
-  ({ look, mode, filmLook, strength, adjust, preset, edits, looksApplied, autoDenoise });
+const developOf = ({ look, mode, filmLook, strength, adjust, preset, edits, looksApplied, autoDenoise, filmLeaks }: AutoPhoto): Develop =>
+  ({ look, mode, filmLook, strength, adjust, preset, edits, looksApplied, autoDenoise, filmLeaks });
 
 /**
  * [p] with the look (or preset), strength, warmth, tint, contrast, luma contrast, saturation and grain of [source] ("Apply to all", "Copy previous");
@@ -305,7 +308,16 @@ export function paramsOf(p: AutoPhoto): DevelopParams | null {
   if (!a) return null;
   // Edits read back from a sidecar don't know the photo is display-referred; the analysis does.
   if (p.edits) return applyEditsDevelop({ ...p.edits, displaySource: a.defaults.displaySource }, p.adjust);
-  return developAuto(autoBaseOf(p, a), activeLook(p), p.strength, p.adjust, a.stats.hasFace, p.preset, p.lensPreset);
+  const developed = developAuto(autoBaseOf(p, a), activeLook(p), p.strength, p.adjust, a.stats.hasFace, p.preset, p.lensPreset);
+  return p.filmLeaks?.length ? { ...developed, filmLeaks: p.filmLeaks } : developed;
+}
+
+/** True when [p] has any generated film leaks (rolled in Auto, in its RawBoy edits, or from a preset). */
+export function hasFilmLeak(p: AutoPhoto): boolean {
+  if (p.edits) return p.edits.filmLeaks.length > 0;
+  if (p.filmLeaks?.length) return true;
+  const presetLeaks = p.preset?.values.filmLeaks;
+  return Array.isArray(presetLeaks) && presetLeaks.length > 0;
 }
 
 /**
@@ -861,7 +873,7 @@ export class AutoStore {
       p = find();
       if (!p) return false;
     }
-    this.changeDevelop(p.id, (q) => ({ ...q, edits: params, adjust: NO_ADJUSTMENTS }), true);
+    this.changeDevelop(p.id, (q) => ({ ...q, edits: params, adjust: NO_ADJUSTMENTS, filmLeaks: undefined }), true);
     if (p.analysis) this.openDetail(p.id);
     else {
       this.closeDetail();
@@ -872,6 +884,31 @@ export class AutoStore {
 
   /** Takes the preset off one photo, back to its look; the batch preset stays for photos added later. */
   removePhotoPreset = (id: string) => this.changeDevelop(id, (p) => ({ ...p, preset: null }), true);
+
+  /** Places or rerolls a random generated film leak on photo [id] (one undo step). */
+  rollFilmLeak = (id: string, seed = Math.random(), shortSideSprockets = false) => {
+    const p = this.photo(id);
+    if (!p || this._state.export) return;
+    const aspect = p.analysis ? p.analysis.lens.width / p.analysis.lens.height : 1.5;
+    const filmLeaks = randomFilmRoll(aspect, seed, shortSideSprockets);
+    this.changeDevelop(
+      id,
+      (q) => (q.edits ? { ...q, edits: { ...q.edits, filmLeaks } } : { ...q, filmLeaks }),
+      true,
+    );
+  };
+
+  /** Removes any generated film leak from photo [id]. */
+  clearFilmLeak = (id: string) =>
+    this.changeDevelop(
+      id,
+      (q) => ({
+        ...q,
+        filmLeaks: undefined,
+        edits: q.edits ? { ...q.edits, filmLeaks: [] } : null,
+      }),
+      true,
+    );
 
   /** The presets in a RawBoy preset file (.rawboy.json, as RawBoy exports them, also from Android); null if it isn't one. */
   async readPresetFile(file: File): Promise<Preset[] | null> {

@@ -58,10 +58,11 @@ export const PRO_HELP: HelpSection[] = [
   {
     title: 'Light leaks',
     items: [
+      { how: 'Generate (🎲 Random, New variation)', text: 'Generates a procedural film leak or defect (Edge burn, Blob, Streak, Sprocket holes, Fog, Rebate glow, Flare, Start of roll, End of roll, Film tear, Dust & scratches, Chemical stain, Scratches), sharing the 4-layer budget with hand-placed leaks. Pick Any for a full roll or a type chip to reroll just that type; New variation changes only the pattern seed. Drag inside the box to move it, or drag its 8 handles to stretch it along x and y; the solid edge marks where the leak enters from (or choose ↔ Horizontal / ↕ Vertical for scratches). Generated leaks can be saved in presets under the Light leaks (generated) group.' },
       { how: '+ Streak, + Glow, + Triangle', text: 'Adds a film-style light leak (up to 4), made like a Photoshop one: a white shape with an orange and a red glow, in Screen mode, so the photo shows through the glow and the grain stays on top. Drag it anywhere inside to move it, the dots to resize, a glow\'s hollow dots to reshape its outline (Round outline undoes it), the round knob to turn it, the square to bend it. The switch changes the selected leak\'s shape.' },
       { how: 'Intensity, Cover', text: 'Cover at 100% hides everything in the leak\'s whitish middle (about half way out to its outline), however the light falls on it; make the leak a little larger than what it hides: a natural-looking way to cover part of a nude for social media. Cover 0 lets the photo show through the light; Intensity fades the whole leak.' },
       { how: 'Bend, Taper, Warp, Texture', text: 'Bend curves the leak into an arc, Taper narrows it towards one end, Warp makes its outline organic (it only grows). Texture burns the light in like film: white in the middle, yellow, orange and red towards the edge, mottled and streaked. New pattern picks another warp and texture.' },
-      { how: 'Softness, Glow, Colour', text: 'Softness blurs the white core, Glow sets how far the coloured light reaches, Colour goes from magenta-red to amber. Leaks belong to the photo: presets don\'t keep them.' },
+      { how: 'Softness, Glow, Colour', text: 'Softness blurs the white core, Glow sets how far the coloured light reaches, Colour goes from magenta-red to amber. Hand-placed leaks belong to the photo: presets don\'t keep them.' },
     ],
   },
   {

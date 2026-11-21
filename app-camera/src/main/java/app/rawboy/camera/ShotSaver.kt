@@ -22,9 +22,13 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import app.rawboy.auto.AutoAnalysis
+import app.rawboy.camera.debug.DebugProbe
+import app.rawboy.camera.platform.CameraPlatform
+import app.rawboy.camera.platform.PreviewLevel
 import app.rawboy.auto.analysis.AutoTone
 import app.rawboy.auto.analysis.MeterArea
-import app.rawboy.auto.analysis.SceneStats
+import app.rawboy.auto.analysis.NoiseLevel
+import app.rawboy.develop.FilmLeaks
 import app.rawboy.export.DateStamp
 import app.rawboy.export.ExportFormat
 import app.rawboy.export.ExportGpu
@@ -76,6 +80,8 @@ internal data class Shot(
     val name: String,
     val temporary: File?,
     val settings: CameraSettings,
+    /** The phone's platform profile the raw was captured with; the shot develops with it. */
+    val platform: CameraPlatform,
     /** The viewfinder's scene key at the shutter, for calibrating [CameraSettings.previewScale]. */
     val viewfinderKey: Float?,
     /** Sensor ISO from the capture, in case the DNG lacks it. */
@@ -100,6 +106,8 @@ internal data class Shot(
     val timeMs: Long = System.currentTimeMillis(),
     /** 1-based daily frame counter, used when [PhotoFrame.PENTAX_645] is selected. */
     val frameNumber: Int = 0,
+    /** The camera that shot it (the stand-alone or physical camera's id), for per-camera sensor numbers; null if unknown. */
+    val cameraId: String? = null,
 )
 
 /** A finished shot and the sequence number assigned at its shutter, so lock screen launches hide earlier ones. */
@@ -127,23 +135,6 @@ internal object ShotSaver {
     private const val FLASH_LIFT_EV = 0.5f
     private const val MIN_FLASH_GUIDE = 1e-2f
     private const val MAX_FLASH_GUIDE = 1e4f
-
-    /**
-     * A phone sensor is roughly as noisy as the camera raws the auto denoise was tuned on at
-     * ~4x (2 stops more) its ISO, so the develop picks denoise/sharpening for that ISO.
-     */
-    private const val PHONE_NOISE_ISO_SCALE = 4f
-
-    /** Selfie sensors are smaller still: a first guess, to tune on photos. */
-    private const val FRONT_NOISE_ISO_SCALE = 8f
-
-    /**
-     * Black beyond the DNG's (a fraction of the white range, ~1.4 DN of 959 on the Pixel 9 Pro): the phone's ISP
-     * renders black that much deeper than the DNG's BlackLevel (which is the frame's dynamic black), measured
-     * against the viewfinder at ISO 170-250. Without it the photo's deepest shadows were lifted, and bluish
-     * after the white balance's blue gain, compared with the viewfinder.
-     */
-    const val EXTRA_BLACK = 1.46e-3f
 
     /** Nice value of the decode and develop threads: normal priority so OpenMP / GPU develop keeps the big cores. */
     private const val DEVELOP_THREAD_PRIORITY = 0
@@ -213,8 +204,15 @@ internal object ShotSaver {
     private val developDispatcher = developExecutor.asCoroutineDispatcher()
     private val compressExecutor = stageThread("RawBoy-dng", COMPRESS_THREAD_PRIORITY)
 
-    /** Used only on the develop thread; low GPU priority so the viewfinder's frames come first. */
-    private val exportGpu = ExportGpu(lowPriority = true)
+    /**
+     * Used only on the develop thread, at the GPU priority the platform asks for
+     * ([app.rawboy.camera.platform.StillProfile.lowPriorityDevelop]); each makes its context on first use, and a
+     * process runs with one profile, so one of them stays empty.
+     */
+    private val exportGpuLow = ExportGpu(lowPriority = true)
+    private val exportGpuNormal = ExportGpu(lowPriority = false)
+
+    private fun exportGpu(platform: CameraPlatform) = if (platform.still.lowPriorityDevelop) exportGpuLow else exportGpuNormal
 
     /** A shot decoded and analysed by [prepare], ready for [finish]; owns [image] until [finish] closes it. */
     private class Prepared(
@@ -389,7 +387,10 @@ internal object ShotSaver {
     private fun releaseGpuIfIdle() {
         // The export GL context belongs to the develop thread: release it there once all queued work has drained.
         developExecutor.execute {
-            if (_pending.value == 0 && activeViews.get() <= 0) exportGpu.close()
+            if (_pending.value == 0 && activeViews.get() <= 0) {
+                exportGpuLow.close()
+                exportGpuNormal.close()
+            }
         }
     }
 
@@ -402,12 +403,13 @@ internal object ShotSaver {
         val started = System.nanoTime()
         val decodeStart = System.nanoTime()
         Log.d(TAG, "${shot.name}: decode starts, ${memoryNote(app)}")
-        val img = RawImage.open(app, shot.dng, EXTRA_BLACK)
+        // The ISP's black beyond the DNG's, so the photo's shadows match the viewfinder (StillProfile.extraBlack), and how
+        // the DNG's own black is taken off (StillProfile.exactBlack, blackPedestal, blackOffsets).
+        val img = RawImage.open(app, shot.dng, shot.platform.still.extraBlack, ShotDevelop.blackFix(shot.platform.still, shot.cameraId, shot.iso))
         try {
             val decodeMs = ms(decodeStart)
             val analysisStart = System.nanoTime()
-            // A merged burst is as clean as one frame at 1/frames the ISO: denoise for that.
-            val noiseScale = (if (s.front) FRONT_NOISE_ISO_SCALE else PHONE_NOISE_ISO_SCALE) / shot.effectiveFrames
+            val noiseScale = ShotDevelop.noiseIsoScale(shot.platform.noise, s.front, shot.effectiveFrames)
             // The phone's auto exposure already metered the raw (Camera2 AE on the same box, its post-raw boost in
             // the DNG's BaselineExposure): keep it, but lift it where the AE protected a highlight and took the
             // scene down (AutoTone.PHONE_KEY). Re-metering it to Auto's camera-raw target pulled ordinary rooms 1-2 EV
@@ -418,14 +420,27 @@ internal object ShotSaver {
                 phoneAe = shot.flashGuide == null, captureEv = shot.compensationEv, splitLuma = false,
             )
             val analysisMs = ms(analysisStart)
-            val looked = CameraSettings.withPhoneIspLook(s.develop(a.autoBase, a.stats.hasFace), img.make)
+            DebugProbe.dump(app, "${shot.id}-raw", a.base, "lens ${s.lensKey(shot.hiRes)} key ${a.stats.key} iso ${shot.iso} frames ${shot.effectiveFrames} " +
+                "make ${img.make} exposure ${a.autoBase.exposure}")
+            val looked = ShotDevelop.looked(s, a.autoBase, a.stats.hasFace, shot.platform)
             // High ISO: more denoise than the auto develop's table, up to the coarse stage (denoise > 65).
             val denoise = maxOf(looked.denoise, highIsoDenoise(a.stats.iso * noiseScale))
+            val noise = img.measureNoise()
+            val aspect = a.base.width.toFloat() / a.base.height.coerceAtLeast(1)
+            val filmLeaks = if (s.randomLightLeak && CameraSettingsStore.nextLightLeak(app, s.randomLightLeakRate)) {
+                listOf(FilmLeaks.randomForCamera(aspect = aspect, seed = FilmLeaks.newSeed(), shortSideSprockets = s.shortSideSprockets))
+            } else {
+                emptyList()
+            }
             val params = looked.copy(
                 denoise = denoise,
-                colorDenoise = maxOf(measuredColorDenoise(img, looked.exposure, denoise) ?: denoise, looked.colorDenoise ?: 0f),
-                shadows = maxOf(looked.shadows, backlightShadows(a.stats)),
+                colorDenoise = maxOf(measuredColorDenoise(noise, looked.exposure, denoise) ?: denoise, looked.colorDenoise ?: 0f),
+                shadows = maxOf(looked.shadows, ShotDevelop.backlightShadows(a.stats)),
+                filmLeaks = filmLeaks,
             )
+            Log.d(TAG, "${shot.name}: noise ISO ${a.stats.iso} x $noiseScale (frames ${shot.effectiveFrames}), measured luma " +
+                "${noise.luma} chroma ${noise.chroma}${if (noise.measured) "" else " (unmeasured)"} -> denoise ${params.denoise}, colour " +
+                "${params.colorDenoise}, sharpening ${params.sharpening}; key ${a.stats.key}, exposure ${params.exposure}")
             val lut = params.lut?.let { loadLut(app, it) }
             val film = params.film?.let { loadFilm(app, it) }
             val shader = ShaderParams.from(
@@ -489,7 +504,7 @@ internal object ShotSaver {
         val waitMs = ms(p.started)
         val saved = withContext(developDispatcher) {
             val exportStart = System.nanoTime()
-            Exporter(app).exportFile(p.image, shot.dng, shot.name, p.shader, p.export, CameraViewModel.JPEG_NAMING, exportGpu) {}
+            Exporter(app).exportFile(p.image, shot.dng, shot.name, p.shader, p.export, CameraViewModel.JPEG_NAMING, exportGpu(shot.platform)) {}
                 .also {
                     val took = ms(exportStart)
                     Log.d(TAG, "${shot.name}: develop + JPEG $took ms")
@@ -498,8 +513,8 @@ internal object ShotSaver {
         }
         Log.d(TAG, "saved ${saved.name} in ${ms(p.started)} ms (develop started after $waitMs ms)")
         val key = s.lensKey(shot.hiRes)
-        shot.viewfinderKey?.let { calibrate(app, p.rawKey, it, key, s.previewScale(shot.hiRes)) }
-        shot.flashGuide?.let { calibrateFlash(app, p.autoEv, it, CameraSettings.flashGuideKey(key, shot.flashDistanceKnown)) }
+        shot.viewfinderKey?.let { calibrate(app, shot.platform.calibrationSlot, shot.platform.preview.level, p.rawKey, it, key, s.previewScale(shot.hiRes)) }
+        shot.flashGuide?.let { calibrateFlash(app, shot.platform.calibrationSlot, p.autoEv, it, CameraSettings.flashGuideKey(key, shot.flashDistanceKnown)) }
         withContext(Dispatchers.IO) { thumbnail(app, saved.uri) }?.let { _lastShot.value = SavedShot(shot.id, LastShot(saved.uri, it)) }
         // The JPEG came from the uncompressed raw; now the kept DNG shrinks to a lossy JPEG XL one, on its own queue
         // so the next shot's JPEG doesn't wait for it. It counts as pending, so SaveService keeps the process up.
@@ -536,12 +551,12 @@ internal object ShotSaver {
      * for T3), so a lens's first shot takes the full correction; later shots move halfway (in stops), which
      * smooths out scene-to-scene noise (about ±0.3 stop between shots of the same view).
      */
-    private fun calibrate(app: Context, rawKey: Float, viewfinderKey: Float, lens: String, scaleAtShutter: Float) {
+    private fun calibrate(app: Context, slot: String, level: PreviewLevel, rawKey: Float, viewfinderKey: Float, lens: String, scaleAtShutter: Float) {
         if (!(rawKey > 0f) || !(viewfinderKey > 0f)) return
         // The gain that would have matched this shot. Judged against the gain in use at its shutter: shots taken
         // back to back are calibrated after both were captured.
         val estimate = scaleAtShutter * (rawKey / viewfinderKey).coerceIn(1f / 64, 64f)
-        val clamped = CameraSettingsStore.updatePreviewScale(app, lens, estimate)
+        val clamped = CameraSettingsStore.updatePreviewScale(app, slot, level, lens, estimate)
         Log.d(TAG, "calibrate $lens: raw key $rawKey, viewfinder key $viewfinderKey (raw/viewfinder ${rawKey / viewfinderKey}) -> preview scale $clamped")
         _calibrations.tryEmit(Calibration.PreviewScale(lens, clamped))
     }
@@ -551,10 +566,10 @@ internal object ShotSaver {
      * where it should be; aiming [FLASH_LIFT_EV] under it keeps highlights in the raw (dark raws are recoverable,
      * clipped ones aren't). First flash shot on a lens takes the full correction, later ones move halfway.
      */
-    private fun calibrateFlash(app: Context, autoEv: Float, guideUsed: Float, lens: String) {
+    private fun calibrateFlash(app: Context, slot: String, autoEv: Float, guideUsed: Float, lens: String) {
         if (!(guideUsed > 0f)) return
         val estimate = guideUsed * 2f.pow(autoEv - FLASH_LIFT_EV)
-        val guide = CameraSettingsStore.updateFlashGuide(app, lens, estimate, MIN_FLASH_GUIDE, MAX_FLASH_GUIDE)
+        val guide = CameraSettingsStore.updateFlashGuide(app, slot, lens, estimate, MIN_FLASH_GUIDE, MAX_FLASH_GUIDE)
         Log.d(TAG, "calibrate flash $lens: auto exposure $autoEv EV at guide $guideUsed -> flash guide $guide")
         _calibrations.tryEmit(Calibration.FlashGuide(lens, guide))
     }
@@ -566,19 +581,6 @@ internal object ShotSaver {
     }.getOrNull()
 
     /**
-     * Backlit scenes (a window, a lamp in frame): the phone's own preview lifts the dark parts locally, and the plain
-     * raw develop left them near black (owner preferred the preview). Shadows rise with the scene's range, p98 - p5:
-     * ordinary scenes span 3-5 stops (no change), a room against a window 7 (75, which matched the iPhone's
-     * viewfinder on that shot). Fades out from ISO 800 to 3200, where lifting would mostly lift noise. Shots only:
-     * the viewfinder's frames come already lifted.
-     */
-    private fun backlightShadows(s: SceneStats): Float {
-        val lift = ((s.p98 - s.p5 - 5f) * 37.5f).coerceIn(0f, 80f)
-        val t = ((s.iso - 800f) / 2400f).coerceIn(0f, 1f)
-        return (lift * (1f - t * t * (3f - 2f * t))).roundToInt().toFloat()
-    }
-
-    /**
      * Colour denoise from the shot's measured colour noise (~30 ms; Auto's calibration, [AutoTone.measuredNoiseSettings]
      * at the develop's [exposure]), at least the luma [denoise] it used to follow; null (follows [denoise]) when the
      * raw can't be measured. The ISO table under-rated low-ISO night shots: a merged burst at ISO 20-150 got no colour
@@ -586,8 +588,7 @@ internal object ShotSaver {
      * speckle (Pixel 9 Pro test, 2026-10-30). Luma stays on the ISO table (the owner's call: luma noise is right).
      * The shader scales this towards the corners by the shading gain (develop.glsl `colorNoiseScale`).
      */
-    private fun measuredColorDenoise(img: RawImage, exposure: Float, denoise: Float): Float? {
-        val noise = img.measureNoise()
+    private fun measuredColorDenoise(noise: NoiseLevel, exposure: Float, denoise: Float): Float? {
         if (!noise.measured) return null
         return maxOf(AutoTone.measuredNoiseSettings(noise, exposure).second, denoise)
     }

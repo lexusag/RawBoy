@@ -10,6 +10,7 @@ The develop pipeline's GLSL (ES 3.00), the single source of truth for every plat
   hand ports in `ios/Engine/app/rawboy/metal/Helpers.metal`: keep them in step.
 - `bokeh_prep.glsl` (appended after `develop.glsl` and the film formation in place of `main_body.glsl`) and
   `bokeh_gather.frag` (complete shader): the masks' lens blur passes (see `engine/.../gl/BokehTexture.kt`).
+- `film_leak.glsl`: Pro's procedural film leak and film damage generator (edge burns, blobs, streaks, sprocket holes, fog, rebate glow, flare, start/end of roll, film tear, dust & scratches, chemical stains, horizontal/vertical scratches) after the hand-made light leaks; web only so far (included by `web/src/engine/gl/Shaders.ts`; see `web/src/engine/develop/FilmLeaks.ts`).
 - `light_fx.glsl`: Pro's light effects (lightning, sparks, trails, swirls) after the light leaks; web only so far
   (included by `web/src/engine/gl/Shaders.ts`; see `web/src/engine/develop/LightEffects.ts`).
 - `main_body.glsl`: the start of `main()`, in stage order. The platform code appends the output lines

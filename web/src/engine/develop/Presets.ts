@@ -1,6 +1,7 @@
 import { isMonochromeLut } from '../auto/looks/Look';
 import { RetiredLooks } from '../auto/looks/RetiredLooks';
 import { ANAMORPHIC_COLORS, TONE_MAPPERS, type DevelopParams } from './DevelopParams';
+import { parseFilmLeaks, type FilmLeak } from './FilmLeaks';
 import { forPreset, parseLayers, type MaskLayer } from './Masks';
 import { parseCurves, type ToneCurves } from './ToneCurve';
 
@@ -8,7 +9,7 @@ import { parseCurves, type ToneCurves } from './ToneCurve';
  * Groups of sliders a preset can hold (port of develop/Presets.kt). Geometry (rotation, flips, straighten, crop) belongs
  * to one photo and is never part of a preset. The key is the name in preset files (shared with Android).
  */
-export type PresetGroup = 'light' | 'whiteBalance' | 'curves' | 'color' | 'detail' | 'denoise' | 'retouch' | 'lut' | 'lens' | 'masks';
+export type PresetGroup = 'light' | 'whiteBalance' | 'curves' | 'color' | 'detail' | 'denoise' | 'retouch' | 'lut' | 'lens' | 'masks' | 'leaks';
 
 export const PRESET_GROUPS: readonly { key: PresetGroup; label: string; fields: readonly (keyof DevelopParams)[] }[] = [
   {
@@ -36,14 +37,15 @@ export const PRESET_GROUPS: readonly { key: PresetGroup; label: string; fields: 
   { key: 'lut', label: 'LUT', fields: ['lut', 'lutAmount'] },
   { key: 'lens', label: 'Lens', fields: ['lensProfile', 'lensDistortion', 'lensAnamorphic', 'lensFisheye', 'lensFisheyeFov', 'lensFisheyeAuto', 'lensFisheyeCircle', 'lensFisheyeX', 'lensFisheyeY', 'lensCrop', 'caRed', 'caBlue', 'vignetteAmount', 'vignetteMidpoint'] },
   { key: 'masks', label: 'Masks (gradients only)', fields: ['masks'] },
+  { key: 'leaks', label: 'Light leaks (generated)', fields: ['filmLeaks'] },
 ];
 
 /**
- * What the save dialog ticks first: lens corrections are usually specific to one camera and lens, masks to one
- * composition, denoise to one photo's noise (Auto measures it per photo), and Detail (grain, bloom, flare) is a look
- * rather than a correction, so it is a deliberate choice.
+ * What the save dialog ticks first: lens corrections are usually specific to one camera and lens, masks and generated
+ * leaks to one composition, denoise to one photo's noise (Auto measures it per photo), and Detail (grain, bloom, flare)
+ * is a look rather than a correction, so it is a deliberate choice.
  */
-export const DEFAULT_PRESET_GROUPS: readonly PresetGroup[] = PRESET_GROUPS.map((g) => g.key).filter((k) => k !== 'lens' && k !== 'masks' && k !== 'denoise' && k !== 'detail');
+export const DEFAULT_PRESET_GROUPS: readonly PresetGroup[] = PRESET_GROUPS.map((g) => g.key).filter((k) => k !== 'lens' && k !== 'masks' && k !== 'denoise' && k !== 'detail' && k !== 'leaks');
 
 /**
  * A named set of slider values. values holds only the fields of groups; applying it overrides those and leaves
@@ -54,7 +56,7 @@ export interface Preset {
   id: string;
   name: string;
   groups: PresetGroup[];
-  values: Partial<Record<keyof DevelopParams, number | boolean | string | null | readonly MaskLayer[] | ToneCurves>>;
+  values: Partial<Record<keyof DevelopParams, number | boolean | string | null | readonly MaskLayer[] | readonly FilmLeak[] | ToneCurves>>;
   lens?: string;
 }
 
@@ -189,6 +191,8 @@ export function applyPreset(preset: Preset, params: DevelopParams): DevelopParam
   for (const [field, value] of Object.entries(preset.values)) {
     if (field === 'masks') {
       p.masks = parseLayers(value); // fresh ids, so two photos never share a layer id
+    } else if (field === 'filmLeaks') {
+      p.filmLeaks = parseFilmLeaks(value);
     } else if (field === 'curves') {
       const c = parseCurves(value);
       if (c) p.curves = c;
@@ -246,6 +250,7 @@ export function decodePresets(text: string): Preset[] {
       for (const f of g.fields) {
         const x = v[f];
         if (f === 'masks') values.masks = parseLayers(x);
+        else if (f === 'filmLeaks') values.filmLeaks = parseFilmLeaks(x);
         else if (f === 'curves') {
           const c = parseCurves(x);
           if (c) values.curves = c;

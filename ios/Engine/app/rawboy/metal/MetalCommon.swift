@@ -302,6 +302,7 @@ struct DevelopProgram {
         u.vec2("uBokehTexel", bokeh.texelX, bokeh.texelY)
         bindLayers(&u, p.layers)
         bindLeaks(&u, p.leaks)
+        bindFilmLeaks(&u, p.filmLeaks)
         bindFx(&u, p.fx)
         bindFilm(&u, p, g)
         return u
@@ -346,6 +347,17 @@ struct DevelopProgram {
         u.array("uLeakForm", l.form, components: 4)
         u.array("uLeakLook", l.look, components: 4)
         u.array("uLeakRadii", l.radii, components: 4)
+    }
+
+    /** Generated film leaks (shaders/film_leak.glsl): count 0 = off. */
+    private static func bindFilmLeaks(_ u: inout UniformBlock, _ fl: FilmLeakUniforms) {
+        u.int("uFlCount", fl.count)
+        u.array("uFlBox", fl.box, components: 4)
+        u.array("uFlForm", fl.form, components: 4)
+        u.array("uFlTint", fl.tint, components: 4)
+        u.array("uFlTint2", fl.tint2, components: 4)
+        u.array("uFlLook", fl.look, components: 4)
+        u.array("uFlGrade", fl.grade, components: 4)
     }
 
     /** Light effects (shaders/light_fx.glsl): count 0 = off; the segment data is the `uFx` texture (DevelopTextures.fx). */

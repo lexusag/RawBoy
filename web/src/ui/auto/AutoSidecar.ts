@@ -4,6 +4,7 @@ import { isFullCrop, type CropRect } from '../../engine/develop/CropMath';
 import { NO_ADJUSTMENTS, type Adjustments } from '../../engine/auto/looks/LookApplier';
 import { developParams, type DevelopParams } from '../../engine/develop/DevelopParams';
 import { decodeEdits, encodeEdits, EDITS_FORMAT, EDITS_VERSION } from '../../engine/develop/Edits';
+import { parseFilmLeaks, type FilmLeak } from '../../engine/develop/FilmLeaks';
 import { decodePresets, encodePresets, isLensPreset, NO_LENS_PRESET, type Preset } from '../../engine/develop/Presets';
 
 /**
@@ -28,6 +29,8 @@ export interface SavedAuto {
   plain: boolean;
   /** Auto denoise given to a photo added "As is" (AutoPhoto.autoDenoise). */
   autoDenoise: boolean;
+  /** Generated film leaks rolled in Auto on top of the look or preset. */
+  filmLeaks?: readonly FilmLeak[];
 }
 
 export const AUTO_FORMAT = 'rawboy-auto';
@@ -35,12 +38,14 @@ export const AUTO_VERSION = 1;
 
 export function encodeAuto(s: SavedAuto): string {
   const edits = s.edits ? JSON.parse(encodeEdits(s.edits, developParams()) ?? JSON.stringify({ format: EDITS_FORMAT, version: EDITS_VERSION, values: {} })) : null;
+  const filmLeaks = s.filmLeaks?.length ? s.filmLeaks.map(({ id: _id, ...l }) => l) : undefined;
   return JSON.stringify({
     format: AUTO_FORMAT, version: AUTO_VERSION, mode: s.mode, look: s.look.id, filmLook: s.filmLook.id, strength: s.strength,
     adjust: s.adjust, preset: s.preset ? JSON.parse(encodePresets([s.preset])) : null, edits,
     // By lens is the default and isn't kept: the photo's lens finds its preset again.
     plain: s.plain || undefined,
     autoDenoise: s.autoDenoise || undefined,
+    filmLeaks,
     lens: s.lensChoice === NO_LENS_PRESET ? NO_LENS_PRESET : s.lensChoice !== null && s.lensPreset ? JSON.parse(encodePresets([s.lensPreset])) : undefined,
   });
 }
@@ -97,5 +102,6 @@ export function decodeAuto(text: string): SavedAuto | null {
     lensPreset,
     plain: o.plain === true,
     autoDenoise: o.autoDenoise === true,
+    ...(Array.isArray(o.filmLeaks) ? { filmLeaks: parseFilmLeaks(o.filmLeaks) } : {}),
   };
 }

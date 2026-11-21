@@ -53,6 +53,12 @@ class ViewfinderRenderer(
         val fullHeight: Int,
         /** Tone curve the ISP applied: <= 0 means the sRGB curve, otherwise a plain power. */
         val gamma: Float = 0f,
+        /**
+         * With the sRGB curve ([gamma] <= 0): the linear input up to which the ISP drew it as a straight line from
+         * black, its first point when the curve was sent at evenly spaced points (1/63). Codes below that point's are
+         * decoded along the same line; the plain inverse sRGB read them up to 35% dark. 0 = the exact sRGB curve.
+         */
+        val linearToe: Float = 0f,
         /** Gain from linearised preview values to raw units (1.0 = sensor clip). */
         val scale: Float = 1f,
         /** Show a mirror image (front camera), like a selfie preview. */
@@ -105,6 +111,10 @@ class ViewfinderRenderer(
      */
     @Volatile
     var videoSink: VideoSink? = null
+        set(value) {
+            value?.requestRender = requestRender
+            field = value
+        }
 
     /** Grain moves with the frame counter on the screen too (video mode, so the viewfinder grain looks as the file's). */
     @Volatile
@@ -184,6 +194,8 @@ class ViewfinderRenderer(
         screen.reset()
         videoTurned.reset()
         // The context is new: the old EGL surface (and the program state it shared) is gone with it.
+        // Only an encoder context of its own outlives it (and is let go here); a surface in the old context went with it.
+        encoder?.takeIf { it.ownContext }?.discard()
         encoder = null
         encoderFor = null
         pending = null
@@ -285,6 +297,41 @@ class ViewfinderRenderer(
         val k = ((turns % 4) + 4) % 4
         val viewWidth = if (k % 2 == 1) this.viewHeight else this.viewWidth
         val viewHeight = if (k % 2 == 1) this.viewWidth else this.viewHeight
+        val outW = p.lens.outputWidth
+        val outH = p.lens.outputHeight
+        val r = ZoomMath.fitRect(viewWidth, viewHeight, outW, outH, 0)
+        val input = PixelRect(0, 0, f.fullWidth, f.fullHeight)
+        val output = PixelRect(0, 0, outW, outH)
+        val geometry = SampleGeometry(w, h, input, output, f.fullWidth, f.fullHeight)
+        frameIndex = (frameIndex + 1) % GRAIN_FRAME_PERIOD
+        val grainFrame = if (videoSink != null || animateGrain) frameIndex.toFloat() else 0f
+
+        // Recording a non-flat video without the loupe: run the heavy develop pass once into an offscreen target sized
+        // for 1:1 encoder pixels, then blit/turn to both the screen and the encoder (halving GPU shader work).
+        val activeSink = videoSink?.takeIf { !it.closing && !it.flat && loupe == null }
+        if (activeSink != null) {
+            val vk = ((activeSink.turns % 4) + 4) % 4
+            val pw = if (vk % 2 == 1) activeSink.height else activeSink.width
+            val ph = if (vk % 2 == 1) activeSink.width else activeSink.height
+            val cover = max(pw.toFloat() / outW, ph.toFloat() / outH)
+            val devW = (outW * cover).roundToInt().coerceAtLeast(1)
+            val devH = (outH * cover).roundToInt().coerceAtLeast(1)
+            videoTurned.ensure(devW, devH, mipmapped = false)
+            videoTurned.bindForDrawing()
+            bindDevelopTextures(p)
+            develop!!.bind(p, geometry, 1f, 1f, flipY = true)
+            develop!!.bindLiveCopies(p, sw, sh, tw, th * BloomTail.BANDS)
+            develop!!.setGrainFrame(grainFrame)
+            quad!!.draw()
+
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+            GLES30.glViewport(0, 0, this.viewWidth, this.viewHeight)
+            turn!!.draw(quad!!, videoTurned.texture, k, r[2] / viewWidth, r[3] / viewHeight)
+            drawVideoFromTexture(activeSink, videoTurned.texture, vk, outW * cover / pw, outH * cover / ph, frameNs)
+            stats.frame(SystemClock.uptimeMillis() - now)
+            return
+        }
+
         if (k != 0) {
             screen.ensure(viewWidth, viewHeight, mipmapped = false)
             screen.bindForDrawing()
@@ -293,25 +340,9 @@ class ViewfinderRenderer(
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
             GLES30.glViewport(0, 0, viewWidth, viewHeight)
         }
-        lutTexture!!.bind(p.lut)
-        filmTextures!!.bind(p.film)
-        shadingTexture!!.bind(p.lens.info.shading)
-        bindUnit(ImageTexture.BASE_UNIT, small.texture)
-        bindUnit(ImageTexture.BLOOM_HALO_UNIT, halo.texture)
-        bindUnit(ImageTexture.BLOOM_TAIL_UNIT, tail.texture)
-        maskTexture!!.bind(p.skinMask)
-        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, linear.texture)
-        val outW = p.lens.outputWidth
-        val outH = p.lens.outputHeight
-        val r = ZoomMath.fitRect(viewWidth, viewHeight, outW, outH, 0)
-        val input = PixelRect(0, 0, f.fullWidth, f.fullHeight)
-        val output = PixelRect(0, 0, outW, outH)
-        val geometry = SampleGeometry(w, h, input, output, f.fullWidth, f.fullHeight)
+        bindDevelopTextures(p)
         develop!!.bind(p, geometry, r[2] / viewWidth, r[3] / viewHeight, flipY = true)
         develop!!.bindLiveCopies(p, sw, sh, tw, th * BloomTail.BANDS)
-        frameIndex = (frameIndex + 1) % GRAIN_FRAME_PERIOD
-        val grainFrame = if (videoSink != null || animateGrain) frameIndex.toFloat() else 0f
         develop!!.setGrainFrame(grainFrame)
         quad!!.draw()
         loupe?.let { l ->
@@ -337,6 +368,73 @@ class ViewfinderRenderer(
         stats.frame(SystemClock.uptimeMillis() - now)
     }
 
+    private fun bindDevelopTextures(p: ShaderParams) {
+        lutTexture!!.bind(p.lut)
+        filmTextures!!.bind(p.film)
+        shadingTexture!!.bind(p.lens.info.shading)
+        bindUnit(ImageTexture.BASE_UNIT, small.texture)
+        bindUnit(ImageTexture.BLOOM_HALO_UNIT, halo.texture)
+        bindUnit(ImageTexture.BLOOM_TAIL_UNIT, tail.texture)
+        maskTexture!!.bind(p.skinMask)
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, linear.texture)
+    }
+
+    private fun ensureEncoder(sink: VideoSink): EncoderSurface? {
+        var enc = encoder
+        if (enc == null || encoderFor !== sink) {
+            enc?.release()
+            enc = EncoderSurface(sink)
+            if (!enc.create()) {
+                sink.failed = true
+                sink.closing = true
+                return null
+            }
+            encoder = enc
+            encoderFor = sink
+            lastEncodedNs = Long.MIN_VALUE
+        }
+        return enc
+    }
+
+    /** Sends an already-developed upright texture to the video encoder, cropped/scaled to cover and turned by [k]. */
+    private fun drawVideoFromTexture(
+        sink: VideoSink, texture: Int, k: Int, scaleX: Float, scaleY: Float, frameNs: Long,
+    ) {
+        val enc = ensureEncoder(sink) ?: return
+        if (frameNs <= lastEncodedNs) return
+        val pts = sink.presentationNs(frameNs)
+        if (pts < 0) return
+        lastEncodedNs = frameNs
+        if (enc.ownContext) {
+            val fence = GLES30.glFenceSync(GLES30.GL_SYNC_GPU_COMMANDS_COMPLETE, 0)
+            GLES30.glFlush()
+            if (!enc.makeCurrent()) {
+                GLES30.glDeleteSync(fence)
+                sink.failed = true
+                sink.closing = true
+                return
+            }
+            GLES30.glWaitSync(fence, 0, GLES30.GL_TIMEOUT_IGNORED)
+            GLES30.glDeleteSync(fence)
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+            GLES30.glViewport(0, 0, sink.width, sink.height)
+            turn!!.draw(enc.quad!!, texture, k, scaleX, scaleY)
+        } else {
+            if (!enc.makeCurrent()) {
+                sink.failed = true
+                sink.closing = true
+                return
+            }
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+            GLES30.glViewport(0, 0, sink.width, sink.height)
+            turn!!.draw(quad!!, texture, k, scaleX, scaleY)
+        }
+        enc.swapAndRestore(pts)
+        if (sink.framesSent == 0) sink.firstSentAtMs = SystemClock.uptimeMillis()
+        sink.framesSent++
+    }
+
     /**
      * The same develop again, into the video encoder's surface, filling it (the 4:3 picture cropped to 16:9) and turned
      * like the window. Draws each camera frame once: a redraw for a slider change keeps the frame's timestamp.
@@ -354,24 +452,14 @@ class ViewfinderRenderer(
             sink?.released = true
             return
         }
-        var enc = encoder
-        if (enc == null || encoderFor !== sink) {
-            enc?.release()
-            enc = EncoderSurface(sink)
-            if (!enc.create()) {
-                sink.failed = true
-                sink.closing = true
-                return
-            }
-            encoder = enc
-            encoderFor = sink
-            lastEncodedNs = Long.MIN_VALUE
-        }
+        val enc = ensureEncoder(sink) ?: return
         if (frameNs <= lastEncodedNs) return
         val pts = sink.presentationNs(frameNs)
         if (pts < 0) return
         lastEncodedNs = frameNs
-        if (!enc.makeCurrent()) {
+        // In the viewfinder's context, the encoder's surface is current while drawing; in its own context, the
+        // picture is drawn here into [videoTurned] and copied over after (see finishVideo).
+        if (!enc.ownContext && !enc.makeCurrent()) {
             sink.failed = true
             sink.closing = true
             return
@@ -380,7 +468,7 @@ class ViewfinderRenderer(
         // The picture is drawn upright at the encoder's size turned back, then turned onto the encoder's surface.
         val pw = if (k % 2 == 1) sink.height else sink.width
         val ph = if (k % 2 == 1) sink.width else sink.height
-        if (k != 0) {
+        if (k != 0 || enc.ownContext) {
             videoTurned.ensure(pw, ph, mipmapped = false)
             videoTurned.bindForDrawing()
         } else {
@@ -394,23 +482,10 @@ class ViewfinderRenderer(
         if (sink.flat) {
             // No look: the linear frame, exposed as the viewfinder's auto develop would, Apple Log encoded.
             flatVideo!!.draw(quad!!, linear.texture, pw / (outW * cover), ph / (outH * cover), p.exposure / BASE_EXPOSURE_GAIN * 2f.pow(sink.raiseEv))
-            if (k != 0) {
-                GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
-                GLES30.glViewport(0, 0, sink.width, sink.height)
-                turn!!.draw(quad!!, videoTurned.texture, k)
-            }
-            enc.swapAndRestore(pts)
+            finishVideo(sink, enc, k, pts)
             return
         }
-        lutTexture!!.bind(p.lut)
-        filmTextures!!.bind(p.film)
-        shadingTexture!!.bind(p.lens.info.shading)
-        bindUnit(ImageTexture.BASE_UNIT, small.texture)
-        bindUnit(ImageTexture.BLOOM_HALO_UNIT, halo.texture)
-        bindUnit(ImageTexture.BLOOM_TAIL_UNIT, tail.texture)
-        maskTexture!!.bind(p.skinMask)
-        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, linear.texture)
+        bindDevelopTextures(p)
         val geometry = SampleGeometry(
             w, h, PixelRect(0, 0, f.fullWidth, f.fullHeight), PixelRect(0, 0, outW, outH), f.fullWidth, f.fullHeight,
         )
@@ -418,12 +493,34 @@ class ViewfinderRenderer(
         develop!!.bindLiveCopies(p, sw, sh, tw, th * BloomTail.BANDS)
         develop!!.setGrainFrame(grainFrame)
         quad!!.draw()
-        if (k != 0) {
+        finishVideo(sink, enc, k, pts)
+    }
+
+    /** Turns the drawn picture onto the encoder's surface (in the encoder's own context if it has one) and sends it. */
+    private fun finishVideo(sink: VideoSink, enc: EncoderSurface, k: Int, pts: Long) {
+        if (enc.ownContext) {
+            // The other context reads the texture only after this one's commands are done.
+            val fence = GLES30.glFenceSync(GLES30.GL_SYNC_GPU_COMMANDS_COMPLETE, 0)
+            GLES30.glFlush()
+            if (!enc.makeCurrent()) {
+                GLES30.glDeleteSync(fence)
+                sink.failed = true
+                sink.closing = true
+                return
+            }
+            GLES30.glWaitSync(fence, 0, GLES30.GL_TIMEOUT_IGNORED)
+            GLES30.glDeleteSync(fence)
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+            GLES30.glViewport(0, 0, sink.width, sink.height)
+            turn!!.draw(enc.quad!!, videoTurned.texture, k)
+        } else if (k != 0) {
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
             GLES30.glViewport(0, 0, sink.width, sink.height)
             turn!!.draw(quad!!, videoTurned.texture, k)
         }
         enc.swapAndRestore(pts)
+        if (sink.framesSent == 0) sink.firstSentAtMs = SystemClock.uptimeMillis()
+        sink.framesSent++
     }
 
     /** A readback in flight: its pixel buffer, fence and size. */
@@ -691,6 +788,7 @@ class ViewfinderRenderer(
         private val uTexMatrix = GLES30.glGetUniformLocation(id, "uTexMatrix")
         private val uRotation = GLES30.glGetUniformLocation(id, "uRotation")
         private val uGamma = GLES30.glGetUniformLocation(id, "uGamma")
+        private val uLinearToe = GLES30.glGetUniformLocation(id, "uLinearToe")
         private val uScale = GLES30.glGetUniformLocation(id, "uScale")
         private val uMirror = GLES30.glGetUniformLocation(id, "uMirror")
         private val uZoom = GLES30.glGetUniformLocation(id, "uZoom")
@@ -715,6 +813,7 @@ class ViewfinderRenderer(
             GLES30.glUniform1f(uMirror, if (f.mirror && determinant < 0f) 1f else 0f)
             GLES30.glUniform1f(uZoom, zoom)
             GLES30.glUniform1f(uGamma, f.gamma)
+            GLES30.glUniform1f(uLinearToe, f.linearToe)
             GLES30.glUniform1f(uScale, f.scale)
             GLES30.glUniformMatrix3fv(uColor, 1, false, f.color ?: SRGB_TO_REC2020, 0)
             if (yuv) {
@@ -794,6 +893,7 @@ uniform samplerExternalOES uCamera;
 uniform mat4 uTexMatrix;
 uniform int uRotation; // clockwise quarter turns from buffer to upright
 uniform float uGamma;  // <= 0: sRGB curve
+uniform float uLinearToe; // > 0: the sRGB curve is a straight line from black up to this input (Frame.linearToe)
 uniform float uScale;
 uniform float uMirror; // 1: show a mirror image
 uniform float uZoom;   // digital zoom: the centre 1/uZoom of the frame
@@ -817,6 +917,10 @@ void main() {
     vec3 lin = uGamma > 0.0
         ? pow(c, vec3(uGamma))
         : mix(c / 12.92, pow((c + 0.055) / 1.055, vec3(2.4)), step(0.04045, c));
+    if (uGamma <= 0.0 && uLinearToe > 0.0) {
+        float toeCode = 1.055 * pow(uLinearToe, 1.0 / 2.4) - 0.055;
+        lin = mix(c * (uLinearToe / toeCode), lin, step(toeCode, c));
+    }
     fragColor = vec4(uColor * lin * uScale, 1.0);
 }
 """
@@ -970,13 +1074,15 @@ void main() {
         private val id = GlUtil.createProgram(LinearizeProgram.VERTEX, FRAGMENT)
         private val uSource = GLES30.glGetUniformLocation(id, "uSource")
         private val uTurns = GLES30.glGetUniformLocation(id, "uTurns")
+        private val uScale = GLES30.glGetUniformLocation(id, "uScale")
 
-        fun draw(quad: FullscreenQuad, texture: Int, turns: Int) {
+        fun draw(quad: FullscreenQuad, texture: Int, turns: Int, scaleX: Float = 1f, scaleY: Float = 1f) {
             GLES30.glUseProgram(id)
             GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
             GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, texture)
             GLES30.glUniform1i(uSource, 0)
             GLES30.glUniform1i(uTurns, turns)
+            GLES30.glUniform2f(uScale, scaleX, scaleY)
             quad.draw()
         }
 
@@ -986,6 +1092,7 @@ precision highp float;
 precision highp int;
 uniform sampler2D uSource;
 uniform int uTurns;
+uniform vec2 uScale;
 in vec2 vUp;
 out vec4 fragColor;
 void main() {
@@ -995,7 +1102,12 @@ void main() {
     else if (uTurns == 2) p = 1.0 - vUp;
     else if (uTurns == 3) p = vec2(vUp.y, 1.0 - vUp.x);
     else p = vUp;
-    fragColor = vec4(texture(uSource, p).rgb, 1.0);
+    vec2 uv = 0.5 + (p - 0.5) / uScale;
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+        fragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    } else {
+        fragColor = vec4(texture(uSource, uv).rgb, 1.0);
+    }
 }
 """
         }

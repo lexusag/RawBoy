@@ -17,8 +17,8 @@ object Edits {
     const val EXTRA_PHOTO = "app.rawboy.extra.PHOTO"
     const val EXTRA_EDITS = "app.rawboy.extra.EDITS"
 
-    /** Every preset group's fields; masks are written with their strokes (below), not as a preset keeps them. */
-    private val SLIDERS = PresetGroup.entries.flatMap { it.fields } - "masks"
+    /** Every preset group's fields; masks and filmLeaks are written below, not as presets keep them. */
+    private val SLIDERS = PresetGroup.entries.flatMap { it.fields } - "masks" - "filmLeaks"
 
     private fun values(p: DevelopParams): LinkedHashMap<String, Any> {
         val values = LinkedHashMap<String, Any>()
@@ -43,6 +43,7 @@ object Edits {
         values["cropBottom"] = num(p.cropBottom)
         values["masks"] = Masks.toJson(p.masks, strokes = true)
         values["leaks"] = LightLeaks.toJson(p.leaks)
+        values["filmLeaks"] = FilmLeaks.toJson(p.filmLeaks)
         values["fx"] = LightEffects.toJson(p.fx)
         return values
     }
@@ -99,6 +100,7 @@ object Edits {
             cropBottom = if (cropOk) bottom else p.cropBottom,
             masks = if (v.has("masks")) Masks.parseLayers(v.opt("masks"), strokes = true) else p.masks,
             leaks = if (v.has("leaks")) LightLeaks.parseLeaks(v.opt("leaks")) else p.leaks,
+            filmLeaks = if (v.has("filmLeaks")) FilmLeaks.parseLeaks(v.opt("filmLeaks")) else p.filmLeaks,
             fx = if (v.has("fx")) LightEffects.parseEffects(v.opt("fx")) else p.fx,
         )
     }

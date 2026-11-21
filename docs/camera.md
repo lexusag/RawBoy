@@ -1,8 +1,8 @@
 # RawBoy Camera
 
-A camera for the back lenses (made for the Pixel 9 Pro; any phone whose camera offers RAW works). The
+A camera for the back lenses (made for the Pixel 9 Pro and measured on the OnePlus 11; any phone whose camera offers RAW works, see Phones below). The
 viewfinder shows the photo developed live: RawBoy Auto's automatic develop plus the **look** chosen from the
-**Look** menu under the viewfinder, with **Brightness** and **Warmth** as in Auto (one thin row each; **Strength** is in Settings › Look strength, so the viewfinder keeps the room). **Brightness** also changes the exposure the camera shoots with (exposure compensation, up to the camera's limit, usually ±2 to ±4 EV): a brighter setting gathers more light, so its shadows are cleaner, and a darker one keeps more highlights; the picture's brightness is the same as before. Flash shots keep their own exposure. **Tap** to lock focus and exposure at that point: a ring
+**Look** menu under the viewfinder, with **Brightness** and **Warmth** as in Auto (one thin row each; **Strength** is in Settings › Look strength, so the viewfinder keeps the room). **Brightness** also changes the exposure the camera shoots with (exposure compensation, up to the camera's limit, usually ±2 to ±4 EV): a brighter setting gathers more light, so its shadows are cleaner, and a darker one keeps more highlights; the picture's brightness is the same as before. In the dark the camera may already be at its longest exposure and highest gain (the OnePlus 11 at about 1/15 s and ISO 6400): a brighter setting then gathers nothing more, and the picture is brightened in the develop alone. Flash shots keep their own exposure (where the camera's own flash metering exposes them, on OnePlus phones, Brightness moves it too). **Tap** to lock focus and exposure at that point: a ring
 shows it (pulsing while focusing, white when locked, red when focus wasn't found) and stays locked, also for the
 shot, until you tap **AF LOCK ✕** or tap somewhere else. Exposure is metered on a box about the ring's size; focus
 uses the small square inside it (5% of the frame's short side), so a thin subject in front of a busy background
@@ -37,7 +37,8 @@ the filters beside the shutter. The Look menu is above them, with the Film and B
 Settings move to a column at the left. The viewfinder stays upright and photos come out the right way round, as in
 portrait. With auto-rotate off the screen stays portrait.
 **UW · W · T** at the bottom of the viewfinder switches between the ultrawide, wide and telephoto lenses, as in
-Google Camera (each lens that can deliver RAW is offered). The button right of the shutter switches to the
+Google Camera (each lens that can deliver RAW is offered; W is the lens a logical back camera starts on, else the only
+camera, else the one nearest 26 mm). The button right of the shutter switches to the
 **selfie camera**, shown only when the front camera delivers RAW; selfies are saved mirrored, as the viewfinder
 shows them.
 
@@ -57,13 +58,18 @@ shows them.
   focus region moves with it at most ten times a second.
 - **Selfie flash (Android):** the selfie camera has no flash unit, so the bolt button there turns on a **screen flash**: on the
   shutter the screen goes to full brightness with a wide warm-white frame around the picture, and the shot is taken
-  about half a second later, exposed by the camera's AE under that light (single frame, no burst merging).
+  about half a second later, exposed by the camera's AE under that light (single frame, no burst merging). On phones
+  whose camera starts the exposure late (the OnePlus 11: about 0.36 s after the shutter request), the frame stays lit
+  until the exposure is over.
 - **Flash:** the bolt button in the top bar (shown when the lens has a flash) turns
   **Focus-flash** (bolt with "AF") on or off. It works like Google Camera's: the light comes on, the camera focuses with it (unless focus is locked), then the flash fires.
   Exposure works like a flash guide number: the photo is exposed for the distance the lens is focused at (the flash's
   light falls off with its square), never brighter than without flash, and each lens learns its flash strength from
-  its flash shots (the camera's own flash metering left the raw several stops overexposed). Flash shots don't
-  recalibrate the viewfinder's exposure. The choice is remembered.
+  its flash shots (the camera's own flash metering left the raw several stops overexposed on the Pixel). On phones
+  where that manual way gets none of the flash's light (OnePlus), the camera's own flash metering exposes the shot
+  instead: a pre-flash, then the photo, 1 EV darker in the raw than the camera picks (the OnePlus 11's ultrawide
+  clipped white paper otherwise), which the develop brightens back. Flash shots don't recalibrate the viewfinder's
+  exposure. The choice is remembered.
 - **Shooting:** each shot is one raw frame from the selected lens (Camera2 `RAW_SENSOR`, 12 MP on the Pixel's main lens), saved as DNG to
   `Pictures/RawBoy Camera/RAW/IMG_<date>_<time>.dng`. It is then developed in the background exactly as RawBoy Auto
   develops a raw (tone and noise from the raw itself, then the look with the controls as they were at the shutter)
@@ -92,6 +98,7 @@ shows them.
 - **JPEG:** encoded with Google's **jpegli** from 16-bit pixels, full-resolution colour (4:4:4), quality 95 by
   default (Settings: 70–100). jpegli's adaptive quantisation gives fewer artefacts per byte than libjpeg.
 - **HDR gain map** (Android, **Settings → HDR gain map**, off by default): saves the JPEG as an **Ultra HDR JPEG**. The picture itself is unchanged; a small second image (the gain map) tells HDR screens to show highlights brighter, up to 2 stops, easing in from the upper highlights (about 72% of the look's white) and reaching the full boost near its brightest white (scaled by the active film stock or LUT's white level so dimmed film whites still lift without blowing out midtones). Apps that don't know gain maps show the normal photo. The gain map is worked out from the finished picture, so it makes the highlights brighter on an HDR screen but doesn't bring back detail the picture already lost; a photo with nothing bright stays an ordinary JPEG. (`kKnee`, `kWhite`, `kHeadroomEv` in `ultrahdr.h`).
+- **Random light leak** (Android, **Settings → Random light leak**, off by default): adds one random procedural film leak to saved JPEGs: an edge burn, blob, sprocket holes, rebate glow, flare or start of roll, with random colours and placement. **Frequency** (1/5, 2/5, 3/5, 4/5 or 5/5, default 5/5) picks how many shots in each 5-photo sequence get a leak at randomly shuffled positions, so lower frequencies stay unpredictable. **Short-side sprockets** (off by default) also allows sprocket holes on the short edges. The DNG is untouched and the viewfinder doesn't show it.
 - **RAW:** the **RAW** button in the top bar keeps the DNG next to the JPEG (lit) or not (struck through); the same
   setting as in Settings.
 - **Settings:** JPEG quality; **Look strength** (0-100, how much of the look the photo gets; it used to be a slider under the look menu); whether to keep the DNG (off by default: only the JPEG is saved); **Lossy JPEG XL DNG** (Android, shown while the DNG
@@ -105,7 +112,7 @@ shows them.
   **Geotag** (off by default; see below); **Frames** (off by default, also toggled on/off from the top-bar Frames button which restores the last enabled frame or **Pentax 645** by default: a submenu offering either **Date stamp** — imprints today's date in the bottom-right corner of the JPEG in `DD MM 'YY` by default, or `'YY MM DD` / `MM DD 'YY`, drawn like a quartz film data back with chamfered 7-segment LED light — or **Pentax 645** — wraps the photo in a dark film-base rebate with convexly rounded black stripe ends and 5×7 dot-matrix LED shoot info always along the shorter side of the photo: today's 1-based frame number (`#1`), mode `FILM` / `LOOK` / `BW`, shutter speed, aperture, exposure compensation EV, metering icon — larger multi-pattern frame when auto-metered, smaller spot icon when tap-metered — lens focal length (`24mm`), ISO (`ISO400`), and separate **Date** (`DD MM 'YY`, `'YY MM DD`, `MM DD 'YY`, or `jan 26`) and **Time** (`24h` or `12h (am/pm)`), with an option to **Flip info upside down** 180° and drag-and-drop reordering of items under **Shoot info**; in B&W mode both Date stamp and Pentax 645 render in neutral black and white); **Grain** (on by default; off removes the look's grain, Film's included, from the viewfinder and photos); **QR codes** (on by default; see above); **Track subject after tap** (off by
   default; see above);
   **Remember camera & settings** (off by default: each start uses the
-  back W lens, Yellow Portrait 400 and default sliders; on keeps lens, side, look and sliders); **Reset settings to defaults** (returns photo, capture, video, viewfinder, experimental, look and camera choices to their defaults after confirmation, keeping learned camera calibration).
+  back W lens, Yellow Portrait 400 and default sliders; on keeps lens, side, look and sliders); **Reset settings to defaults** (returns photo, capture, video, viewfinder, experimental, look and camera choices to their defaults after confirmation, keeping learned camera calibration). Below it, before the credits, the **phone profile** (see below).
 - **Geotag:** with it on, each JPEG and DNG gets the GPS tags of where it was taken: latitude, longitude, altitude
   above sea level and the fix's UTC date and time. Location access is asked for only when you turn it on (approximate
   location is enough on Android too, just less exact); without it the switch stays off. The position comes from the
@@ -123,7 +130,53 @@ shows them.
   denoise/sharpening appear only in the final.
 - **Noise:** a phone sensor is noisier than the camera raws Auto's noise settings were tuned on, so Camera picks
   denoise and sharpening as for 4× the shot's ISO (2 stops): base ISO stays clean, ISO 400 gets Denoise 20,
-  ISO 1600 gets 45, ISO 6400 and up 65. Looks outside Film mode (LUT looks, Natural) have no film grain to hide shadow noise, so they get at least Denoise 12 and Color denoise 35 (Experimental looks such as Redscale 22 and 70, which also reaches the coarse colour stage).
+  ISO 1600 gets 45, ISO 6400 and up 65. Looks outside Film mode (LUT looks, Natural) have no film grain to hide shadow noise, so they get at least Denoise 12 and Color denoise 70, which reaches the coarse colour stage (Experimental looks such as Redscale: 22 and 70).
+- **Phone profile** (Android): some of the camera's numbers and workarounds belong to one chip or phone maker
+  (the preview's colour path and the raw's extra black were measured on a Pixel 9 Pro's Tensor chip; Samsung phones add
+  a punchier look to saved photos). At start the camera reads the phone's chip maker (`Build.SOC_MANUFACTURER`, on
+  Android 10-11 `Build.HARDWARE`), manufacturer and model and builds its profile from layers: neutral, then the chip
+  maker's, the phone maker's and the model's, where they exist. The end of Settings shows the result, e.g. *Phone
+  profile: Google Tensor* or *Phone profile: neutral (this phone hasn't been tested)*, with the chip and model it
+  detected; logcat has the same and every value under the tag `RawBoyPlatform`. Today there are layers for Google
+  Tensor, Qualcomm Snapdragon, Samsung and OnePlus; other phones get the neutral profile, which takes the preview as
+  plain sRGB and adds no extra black. Snapdragon phones (older Pixels included) develop photos at normal GPU priority:
+  on a phone hot from long shooting, the low priority the Pixel uses let the viewfinder starve the develop (a photo
+  without Film took minutes instead of ~3 s on the OnePlus 11); Samsung phones keep the low priority. OnePlus phones ask for the preview's sRGB curve at evenly spaced
+  points (the OnePlus 11 reads the points that way, whatever their spacing: with the points packed near black, as other
+  phones get them, its viewfinder came out about twice as contrasty and saturated as the photo), and list their
+  stand-alone cameras rather than the logical camera that also covers them (RAW through the logical camera froze the
+  preview). On OnePlus phones the viewfinder also takes the preview as being as bright as the photo's raw, with the
+  camera's white balance in it, so its learned brightness stays near 1 in any light and needs no raw metering before
+  the first photo; it shows the shadow lift backlit photos get (their preview has no local lift of its own), and it
+  reads the curve's darkest step as the straight line the camera draws there. OnePlus photos are decoded with the
+  DNG's exact black level (the decoder used to drop its fraction, up to 0.8 of a raw level at high ISO) and keep the
+  noise below black instead of clipping it, so the deepest shadows of night shots stay neutral instead of turning
+  magenta. The OnePlus 11's model layer brings the ultrawide's paler preview up to its photos' saturation, corrects its
+  main and ultrawide cameras' black at high ISO (measured on the sensors) and denoises its selfie camera as the noisier
+  sensor it is (*Phone profile: Qualcomm + OnePlus + OnePlus 11*). Debug builds can take the phone for another chip (*Take the phone
+  for*, from the next start); calibration learned under such a profile is kept apart from the phone's own.
+  How profiles are built, what each value does and how to add a phone: [Camera phone profiles](camera-platforms.md).
+- **Phones:** tuned on the **Pixel 9 Pro** (Google Tensor; other Tensor Pixels get the same values) and measured on
+  the **OnePlus 11** (all its features checked, with the limits below). **Samsung** phones keep exactly what they did
+  before phones were told apart (the Pixel's preview colour path and extra black plus the +25 look), unchecked since.
+  Every other phone, Pixels before the Pixel 6 included, gets the neutral profile (Snapdragon phones also the normal
+  develop priority): photos, video and the viewfinder work wherever the camera offers RAW, but the viewfinder may differ
+  from the photo until each lens has learned its calibration over a few shots, and nobody has checked those phones.
+- **Known limits on the OnePlus 11:** no telephoto (it is a system-only camera) and no full-resolution RAW (binned only,
+  so the 50 MP switch doesn't show); flash on a near, light subject comes out brighter than the scene without flash
+  (+2.4 to +2.8 EV at about 1 m, no clipped highlights); Brightness in the dark is accurate to about ±0.4 EV; the
+  viewfinder is 10-15% less saturated than the photo at ISO 6400; single ultrawide frames at ISO 6400 have slightly
+  red deep shadows (merged shots don't); videos don't get the backlight shadow lift photos and the viewfinder get.
+- **Share device report** (Android; Settings, under the phone profile): gathers what a profile for a new phone is made
+  from into a plain text file and opens the system share sheet; nothing is sent unless you send it. It lists the phone
+  as detected and the profile's layers and values; every camera and physical lens (support level, capabilities, RAW
+  and preview sizes, tone map modes and curve points, ISO, exposure, frame rate and boost ranges, exposure
+  compensation step, flash, OIS, stabilization, lens shading map, focus calibration, session keys); which lenses the
+  camera lists as UW / W / T and why it passes over the others; the GPU (`GL_RENDERER`, the extensions the camera uses,
+  the EGL window configs and how many are recordable); the H.264 and HEVC encoders with their input colour formats; the
+  video probe's result (the way video is recorded on this phone, see Video); and the calibration learned per lens. One `key: value` per line in a fixed order, numbers written the same in every
+  language, so two phones' reports compare line by line. It holds no serial numbers, accounts, locations, file names or
+  photos.
 
 ## Black and white
 
@@ -174,16 +227,17 @@ printed). Colour negatives are printed on colour paper. **Natural** is the AgX d
 
 ## Video (Android)
 
-Video is always available: the **PHOTO / VIDEO** pill under the viewfinder, above the shutter (or a swipe left or right on the shutter area; in landscape the pill stands in the shutter column), switches to video mode (the RAW, Frames, Burst and Flash buttons hide). The shutter becomes a red record button, the volume buttons start and stop too, and the timer shows beside the status. The recording is the viewfinder as it looks, with the chosen look or film stock baked in: 1080p, 30 fps, HEVC (16 Mbit/s; H.264 on a phone without an HEVC encoder) and stereo AAC from the microphone (asked for the first time video mode is switched on; refusing gives silent videos), saved to `Movies/RawBoy Camera/VID_<date>_<time>-camera.mp4`. **Settings › Video stabilization** (off by default) steadies the picture while in video mode: the phone's preview stabilization (else its standard video stabilization) plus the lens stabilizer, at the price of a slightly tighter picture and a few frames of delay in the viewfinder. Photos are never stabilized.
+Video is always available: the **PHOTO / VIDEO** pill under the viewfinder, above the shutter (or a swipe left or right on the shutter area; in landscape the pill stands in the shutter column), switches to video mode (the RAW, Frames, Burst and Flash buttons hide). The shutter becomes a red record button, the volume buttons start and stop too, and the timer shows beside the status. The recording is the viewfinder as it looks, with the chosen look or film stock baked in: 1080p, 30 fps, HEVC (H.264 on a phone without an HEVC encoder; bitrate by **Settings › Video quality**: Low 8, Optimal 16 (the default) or High 24 Mbit/s, fixed while recording and clamped to what the encoder accepts) and stereo AAC from the microphone (asked for the first time video mode is switched on; refusing gives silent videos), saved to `Movies/RawBoy Camera/VID_<date>_<time>-camera.mp4`. **Settings › Video stabilization** (off by default) steadies the picture while in video mode: the phone's preview stabilization (else its standard video stabilization) plus the lens stabilizer, at the price of a slightly tighter picture and a few frames of delay in the viewfinder. Photos are never stabilized.
 
 In video mode, **AE LOCK** (top right of the viewfinder) holds the exposure and tapping the picture locks focus (**AF LOCK**); the two are independent. **Settings › Optical video stabilization** uses the lens stabilizer only (no crop, no delay).
 
-**Settings › Flat video for grading** records without the look: an Apple Log picture in Rec.2020 colours (no grain, bloom or grading, 28 Mbit/s HEVC), named `...-flat+1.0ev.mp4` (exposed 1 EV higher for the shadows; undo it with -1 EV when grading). It plays washed out; grade it later on the web video page (Apple Log input): pick a look or film stock.
+**Settings › Flat video for grading** records without the look: an Apple Log picture in Rec.2020 colours (no grain, bloom or grading; 14, 28 or 38 Mbit/s HEVC by Video quality), named `...-flat+1.0ev.mp4` (exposed 1 EV higher for the shadows; undo it with -1 EV when grading). It plays washed out; grade it later on the web video page (Apple Log input): pick a look or film stock.
 
 - The viewfinder is 4:3, a video is 16:9: the parts the file will not have are darkened. A phone held sideways records a landscape file.
 - Film grain moves with the frames in video mode. The live exposure eases much slower than for photos, so brightness does not pump.
 - Skin retouch, the ISO-based denoise and sharpening, bursts, flash and raw are photo-only. The lens and the camera (selfie) can't be changed while recording, and leaving the app stops the recording.
-- Prototype: no video stabilisation, no 4K, no log; the lens/stream setup is the photo one. How it works: `ViewfinderRenderer.videoSink` draws the same develop pass into the `MediaCodec` input surface through an EGL window surface in the viewfinder's own context (`gl/VideoOutput.kt`); `capture/VideoRecorder.kt` runs the encoders and the MP4 muxer. Findings and the plan: `docs/video.md`.
+- No 4K, no 10-bit, no log beyond Flat video; the lens/stream setup is the photo one. How it works: `ViewfinderRenderer.videoSink` draws the same develop pass into the `MediaCodec` input surface through an EGL window surface (`gl/VideoOutput.kt`: in the viewfinder's own context, or in one of its own on phones that need it, see below); `capture/VideoRecorder.kt` runs the encoders and the MP4 muxer. The original exploration and staged plan: `docs/video.md`.
+- **Finding the way to record on a new phone.** Phones differ in what their GPU driver and video encoder accept, so the first recording tries, in order: the standard path (an EGL surface in the viewfinder's context: the Pixel 9 Pro's, the only one it ever uses); the encoder's surface in a GL context of its own (the OnePlus 11's Snapdragon encoder refused the standard path's buffers); the viewfinder itself on a recordable config; the phone's software H.264 encoder (slower, lower frame rate). A way counts as working when the encoder hands out its first frame, usually 0.2-0.3 s after the start; a failed try is taken down and the next one starts at once, so the recording just begins a fraction of a second later. The working way is remembered until the next system or app update. The way a phone records with gives way only after failing in two recordings in a row (the first time, another way is used for that recording only), and another way than the standard one is remembered only after the standard one failed outright (a refused surface or an encoder error), never after a slow start. If the next way needs the viewfinder made again, the viewfinder restarts once with *Video is set up for this phone: the viewfinder restarts once. Press record again*. When nothing works, the message says so at once (instead of a timer running and *Nothing was recorded* at the end); an encoder (or its surface) that fails during a recording stops it at once, keeps what was recorded and says so. The device report's *Video probe* section shows the way in use and the last probe's tries; logcat has them under `RawBoyVideo` and `RawBoyCamera`.
 
 ## Self-timer and long exposure (Android prototype)
 

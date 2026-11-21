@@ -272,6 +272,7 @@ final class EditorViewModel: ObservableObject {
         p.scale = newDefaults.scale
         p.masks = newDefaults.masks
         p.leaks = newDefaults.leaks
+        p.filmLeaks = newDefaults.filmLeaks
         p.fx = newDefaults.fx
         p.healSpots = newDefaults.healSpots
         p = p.withCrop(newDefaults.crop)
@@ -465,10 +466,10 @@ final class EditorViewModel: ObservableObject {
 
     // MARK: - Light leaks (see LightLeaks.swift)
 
-    /** Adds a light leak (up to LightLeaks.maxLeaks) in the middle; returns its id, or nil when full. */
+    /** Adds a light leak (up to LightLeaks.maxLeaks total with filmLeaks) in the middle; returns its id, or nil when full. */
     @discardableResult
     func addLeak(_ kind: LeakKind = .streak) -> String? {
-        if state.params.leaks.count >= LightLeaks.maxLeaks { return nil }
+        if state.params.leaks.count + state.params.filmLeaks.count >= LightLeaks.maxLeaks { return nil }
         let leak = LightLeaks.newLeak(kind)
         edit(force: true) { $0.leaks.append(leak) }
         return leak.id
@@ -483,6 +484,41 @@ final class EditorViewModel: ObservableObject {
 
     func removeLeak(_ id: String) {
         edit(force: true) { $0.leaks.removeAll { $0.id == id } }
+    }
+
+    // MARK: - Generated film leaks (see FilmLeaks.swift)
+
+    @discardableResult
+    func addFilmLeak(_ type: FilmLeakType? = nil, aspect: Float, shortSideSprockets: Bool = false) -> String? {
+        if state.params.leaks.count + state.params.filmLeaks.count >= LightLeaks.maxLeaks { return nil }
+        let leak = FilmLeaks.random(
+            type: type,
+            aspect: aspect,
+            seed: FilmLeaks.newSeed(),
+            grade: state.params.filmLeaks.isEmpty,
+            shortSideSprockets: shortSideSprockets
+        )
+        edit(force: true) { $0.filmLeaks.append(leak) }
+        return leak.id
+    }
+
+    @discardableResult
+    func randomFilmRoll(aspect: Float, shortSideSprockets: Bool = false) -> String? {
+        let cap = max(0, LightLeaks.maxLeaks - state.params.leaks.count)
+        guard cap > 0 else { return nil }
+        let roll = Array(FilmLeaks.randomRoll(aspect: aspect, seed: FilmLeaks.newSeed(), shortSideSprockets: shortSideSprockets).prefix(cap))
+        edit(force: true) { $0.filmLeaks = roll }
+        return roll.first?.id
+    }
+
+    func updateFilmLeak(_ id: String, force: Bool = false, _ change: (inout FilmLeak) -> Void) {
+        edit(force: force) { p in
+            if let i = p.filmLeaks.firstIndex(where: { $0.id == id }) { change(&p.filmLeaks[i]) }
+        }
+    }
+
+    func removeFilmLeak(_ id: String) {
+        edit(force: true) { $0.filmLeaks.removeAll { $0.id == id } }
     }
 
     // MARK: - Healing brush (see HealSpots.swift)

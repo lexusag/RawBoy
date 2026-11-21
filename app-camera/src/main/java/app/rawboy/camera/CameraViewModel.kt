@@ -7,6 +7,7 @@ import android.hardware.camera2.CameraMetadata
 import android.location.Location
 import android.location.altitude.AltitudeConverter
 import android.net.Uri
+import androidx.core.content.FileProvider
 import android.os.Build
 import android.os.Process
 import android.os.SystemClock
@@ -20,6 +21,13 @@ import app.rawboy.auto.analysis.SceneAnalyzer
 import app.rawboy.auto.analysis.SceneStats
 import app.rawboy.auto.looks.LookApplier
 import app.rawboy.camera.capture.CameraController
+import app.rawboy.camera.capture.ViewfinderGain
+import app.rawboy.camera.platform.ActivePlatform
+import app.rawboy.camera.report.DeviceReport
+import app.rawboy.camera.report.DeviceReportCollector
+import app.rawboy.camera.platform.ChipVendor
+import app.rawboy.camera.platform.PreviewLevel
+import app.rawboy.camera.debug.DebugProbe
 import app.rawboy.camera.capture.FlashMode
 import app.rawboy.camera.capture.LocationTracker
 import app.rawboy.camera.capture.ShutterSound
@@ -48,9 +56,18 @@ import app.rawboy.lens.LensInfo
 import app.rawboy.lens.LensTransform
 import app.rawboy.retouch.SkinMask
 import app.rawboy.track.PatternTracker
+import app.rawboy.camera.capture.NoEncoderException
+import app.rawboy.camera.capture.PrefsVideoProbeStore
+import app.rawboy.camera.capture.VideoDebug
+import app.rawboy.camera.capture.VideoFailure
+import app.rawboy.camera.capture.VideoProbe
+import app.rawboy.camera.capture.VideoProgress
 import app.rawboy.camera.capture.VideoRecorder
+import app.rawboy.camera.capture.VideoVariant
 import app.rawboy.gl.VideoSink
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
@@ -67,6 +84,7 @@ import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
@@ -94,7 +112,38 @@ class LastShot(val uri: Uri, val thumbnail: Bitmap)
  */
 class CameraViewModel(application: Application) : AndroidViewModel(application) {
     private val app get() = getApplication<Application>()
-    val controller = CameraController(application)
+
+    /** This phone's platform; the only reader of [ActivePlatform], its profile handed on explicitly. */
+    val resolvedPlatform = ActivePlatform.get(application)
+    private val platform = resolvedPlatform.profile
+
+    private val _chosenChip = MutableStateFlow(ActivePlatform.chosen(application))
+    /** Debug builds: the chip the phone is taken for from the next start (null = as detected). */
+    val chosenChip = _chosenChip.asStateFlow()
+
+    /** Debug builds: what [choosePlatform] offers (null = as detected). */
+    val platformChoices: List<ChipVendor?> = ActivePlatform.choices
+
+    /** Debug builds: take the phone for [chip] (null = as detected) from the next start of the app. */
+    fun choosePlatform(chip: ChipVendor?) {
+        ActivePlatform.choose(app, chip)
+        _chosenChip.value = ActivePlatform.chosen(app)
+    }
+
+    val controller = CameraController(application, platform)
+
+    /**
+     * Settings › Share device report: gathers [DeviceReportCollector]'s report into a text file in the cache (one,
+     * overwritten each time) and returns its content URI from the app's FileProvider. Nothing is sent anywhere.
+     */
+    suspend fun writeDeviceReport(): Uri = withContext(Dispatchers.Default) {
+        val text = DeviceReport.render(DeviceReportCollector.collect(app, resolvedPlatform, controller))
+        val dir = File(app.cacheDir, "reports").apply { mkdirs() }
+        dir.listFiles()?.forEach { it.delete() }
+        val model = resolvedPlatform.phone.model.replace(Regex("[^A-Za-z0-9_-]"), "_").ifEmpty { "phone" }
+        val file = File(dir, "rawboy-camera-device-report-$model.txt").apply { writeText(text) }
+        FileProvider.getUriForFile(app, "${app.packageName}.reports", file)
+    }
 
     /** The scene is dark enough for [BurstMode.AUTO] to merge frames ([LowLight]); follows the preview's exposure. */
     val lowLight = controller.frames
@@ -102,7 +151,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.Eagerly, false)
 
-    private val _settings = MutableStateFlow(CameraSettingsStore.load(application))
+    private val _settings = MutableStateFlow(CameraSettingsStore.load(application, platform.calibrationSlot, platform.preview.level))
     val settings = _settings.asStateFlow()
 
     private val _status = MutableStateFlow(CameraStatus.NEEDS_PERMISSION)
@@ -257,6 +306,15 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     val recordingMs = _recordingMs.asStateFlow()
 
     private var recorder: VideoRecorder? = null
+    private val videoProbeStore = PrefsVideoProbeStore(application)
+
+    private val _recordableViewfinder = MutableStateFlow(VideoProbe(videoProbeStore, VideoProbe.buildKey(application)).recordableViewfinder())
+
+    /**
+     * Whether the viewfinder is made with a recordable RGBA config ([VideoVariant.RECORDABLE_VIEWFINDER]); a change
+     * makes the view again (the camera restarts on its new surface).
+     */
+    val recordableViewfinder = _recordableViewfinder.asStateFlow()
     private var recordingJob: Job? = null
     private var audioGranted = false
 
@@ -270,7 +328,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun hasAudioPermission() = audioGranted
 
     fun setVideoMode(on: Boolean) {
-        if (_recordingMs.value != null) return
+        if (_recordingMs.value != null || _longExposing.value || selfTimerJob != null) return
         _videoMode.value = on
         controller.setExposureBias(exposureBias(_settings.value)) // flat video raises it
         if (!on) setExposureLock(false) // the lock is video mode's: photos meter as always
@@ -299,6 +357,11 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         if (_recordingMs.value == null) change { it.copy(flatVideo = on) }
     }
 
+    /** Not in the middle of a recording: the file's bitrate is fixed when it starts. */
+    fun setVideoQuality(quality: VideoQuality) {
+        if (_recordingMs.value == null) change { it.copy(videoQuality = quality) }
+    }
+
     fun setVideoStabilization(on: Boolean) {
         change { it.copy(videoStabilization = on) }
         // Changing it restarts the preview (a visible blink and a new crop): not in the middle of a recording.
@@ -306,51 +369,143 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun toggleRecording() {
-        if (recorder != null) stopRecording() else startRecording()
+        // Recording, or still finding the way to record ([probing]): either way a press stops it.
+        if (_recordingMs.value != null) stopRecording() else startRecording()
     }
+
+    /** True while [VideoProbe] tries variants; a stop then waits for it ([stopRequested]). */
+    private var probing = false
 
     private fun startRecording() {
         if (recorder != null || _recordingMs.value != null) return
+        val debug = DebugProbe.videoDebug(app)
         // As photos do: the phone's own rotation, so a phone held sideways with auto-rotate off still records upright.
-        val turns = (deviceDegrees / 90) % 4
+        val turns = debug?.turns ?: ((deviceDegrees / 90) % 4)
         val withAudio = audioGranted
         val flat = _settings.value.flatVideo
+        val quality = _settings.value.videoQuality
         stopRequested = false
         _recordingMs.value = 0
         recordingJob = viewModelScope.launch {
-            val r = try {
-                withContext(Dispatchers.IO) { VideoRecorder.create(app, turns, withAudio, flat) { /* the view's requestRender is on the sink */ } }
+            val probe = videoProbe(debug)
+            probing = true
+            val result = try {
+                probe.run(_recordableViewfinder.value) { variant -> attemptRecording(variant, turns, withAudio, flat, quality, debug) }
             } catch (e: Exception) {
+                probing = false
+                // The file couldn't be made (not the encoder's doing).
                 Log.w(TAG, "recording did not start", e)
                 _message.value = "Could not start recording: ${e.message}"
                 _recordingMs.value = null
                 stopRequested = false
                 return@launch
+            } finally {
+                probing = false
             }
-            recorder = r
-            _videoSink.value = r.sink
-            if (stopRequested) {
-                stopRequested = false
-                stopRecording()
-                return@launch
-            }
-            // The timer, and a watch on the renderer: no encoder surface means no video, so stop instead of recording nothing.
-            while (recorder === r) {
-                _recordingMs.value = r.elapsedMs
-                if (r.failed) {
-                    _message.value = "Recording failed: this phone refused the encoder surface"
-                    stopRecording()
-                    return@launch
+            when (result) {
+                is VideoProbe.Result.Recording -> watchRecording(result.recording)
+                is VideoProbe.Result.NeedsViewfinder -> {
+                    Log.i(TAG, "video: ${result.variant} needs a recordable viewfinder; making it again")
+                    _recordingMs.value = null
+                    _recordableViewfinder.value = true
+                    _message.value = "Video is set up for this phone: the viewfinder restarts once. Press record again"
                 }
-                delay(200)
+                is VideoProbe.Result.AllFailed -> {
+                    Log.w(TAG, "video: every variant failed: ${result.tries}")
+                    _recordingMs.value = null
+                    _message.value = "Video recording doesn't work on this phone (${result.tries.joinToString { it.second.text }})"
+                }
+                VideoProbe.Result.Aborted -> {
+                    _recordingMs.value = null
+                    _message.value = if (stopRequested) "Nothing was recorded" else "Nothing was recorded: the camera sent no frames"
+                }
+            }
+            stopRequested = false
+        }
+    }
+
+    /** This phone's video probe; a debug override may narrow the variants. */
+    private fun videoProbe(debug: VideoDebug?) =
+        VideoProbe(videoProbeStore, VideoProbe.buildKey(app), debug?.order ?: VideoVariant.ORDER)
+
+    /**
+     * One try of [variant] for [VideoProbe]: starts a recorder, publishes its sink and waits for its first encoded
+     * frame. A failed try is taken down completely (the next one starts on a clean slate).
+     */
+    private suspend fun attemptRecording(
+        variant: VideoVariant, turns: Int, withAudio: Boolean, flat: Boolean, quality: VideoQuality, debug: VideoDebug?,
+    ): VideoProbe.Attempt<VideoRecorder> {
+        if (stopRequested) return VideoProbe.Attempt.Aborted
+        val r = try {
+            withContext(Dispatchers.IO) {
+                VideoRecorder.create(app, turns, withAudio, flat, variant, debug, quality)
+            }
+        } catch (e: NoEncoderException) {
+            Log.w(TAG, "video: $variant has no encoder", e)
+            return VideoProbe.Attempt.Failed(VideoFailure.NO_ENCODER)
+        }
+        recorder = r
+        _videoSink.value = r.sink
+        while (true) {
+            _recordingMs.value = r.elapsedMs
+            if (stopRequested) {
+                // Stop pressed before the encoder answered: keep what it has, but a try with no frame proves nothing.
+                if (r.progress() == VideoProgress.Encoding) return VideoProbe.Attempt.Started(r)
+                discard(r)
+                return VideoProbe.Attempt.Aborted
+            }
+            when (val p = r.progress()) {
+                VideoProgress.Encoding, is VideoProgress.Broken -> return VideoProbe.Attempt.Started(r)
+                is VideoProgress.Failed -> {
+                    Log.w(TAG, "video: $variant failed (${p.failure})")
+                    discard(r)
+                    return VideoProbe.Attempt.Failed(p.failure)
+                }
+                VideoProgress.NoCamera -> {
+                    discard(r)
+                    return VideoProbe.Attempt.Aborted
+                }
+                VideoProgress.Waiting -> delay(50)
             }
         }
     }
 
-    /** Ends the recording and saves the file (on a worker thread); shows where it went. */
-    fun stopRecording() {
-        val r = recorder ?: run {
-            // Still starting up: the start stops again as soon as it has a recorder.
+    /** Takes a recorder that recorded nothing down, then lets the viewfinder forget its sink. */
+    private suspend fun discard(r: VideoRecorder) {
+        withContext(Dispatchers.IO + NonCancellable) { r.discard() }
+        if (recorder === r) recorder = null
+        _videoSink.value = null
+    }
+
+    /** The timer while recording, and a watch on the encoder: one that breaks stops the recording, keeping the file. */
+    private suspend fun watchRecording(r: VideoRecorder) {
+        if (stopRequested) {
+            stopRecording()
+            return
+        }
+        while (recorder === r) {
+            _recordingMs.value = r.elapsedMs
+            val p = r.progress()
+            if (p is VideoProgress.Broken) {
+                val why = if (p.failure == VideoFailure.EGL_SURFACE) "the encoder's surface was lost" else "the video encoder failed"
+                // Said now: saving what was recorded can take a few seconds with a dead encoder.
+                _message.value = "Recording stopped: $why"
+                Log.w(TAG, "video: ${r.variant} broke while recording (${p.failure}); stopping")
+                stopRecording(failure = "Recording stopped: $why")
+                return
+            }
+            delay(200)
+        }
+    }
+
+    /**
+     * Ends the recording and saves the file (on a worker thread); shows where it went. [failure]: why it stopped on
+     * its own, shown instead of the usual message.
+     */
+    fun stopRecording(failure: String? = null) {
+        val r = recorder
+        if (probing || r == null) {
+            // Still starting up or finding the way to record: the start stops as soon as it has a recorder.
             if (_recordingMs.value != null) stopRequested = true
             return
         }
@@ -361,7 +516,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             _videoSink.value = null
             _recordingMs.value = null
             applyStabilization() // a switch flipped during the recording takes effect now
-            _message.value = if (uri != null) "Video saved to Movies/${Edition.FOLDER}" else "Nothing was recorded"
+            _message.value = when {
+                uri != null && failure != null -> "$failure. Video saved to Movies/${Edition.FOLDER}"
+                uri != null -> "Video saved to Movies/${Edition.FOLDER}"
+                failure != null -> failure
+                else -> "Nothing was recorded"
+            }
         }
     }
 
@@ -407,14 +567,27 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         _tilt.value = tiltFilter.update(degrees)
     }
 
-    /** The latest analysed viewfinder frame. */
-    private class Live(val base: ViewfinderBase, val stats: SceneStats, val defaults: DevelopParams, val auto: DevelopParams, val scale: Float = 1f)
+    /**
+     * The latest analysed viewfinder frame; [scale] and [neutralFloor]: the gain it was drawn with and its frame's
+     * neutral floor; [shadowLift]: the backlight lift the live develop adds (eased; 0 where the preview has its own).
+     */
+    private class Live(
+        val base: ViewfinderBase, val stats: SceneStats, val defaults: DevelopParams, val auto: DevelopParams,
+        val scale: Float = 1f, val neutralFloor: Float = 1f, val shadowLift: Float = 0f,
+    )
+
+    /** The viewfinder's gain hasn't been set from a frame of the lens started last ([ViewfinderGain]). */
+    private var scaleFromStart = true
+
+    /** Whether a long exposure was running at the last viewfinder gain (onViewfinderBase). */
+    private var wasExposing = false
 
     @Volatile
     private var live: Live? = null
     private var liveJob: Job? = null
 
     init {
+        DebugProbe.init(app)
         ShotSaver.attachView()
         viewModelScope.launch(Dispatchers.Main.immediate) {
             ShotSaver.calibrations.collect { cal ->
@@ -520,6 +693,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 controller.setExposureBias(exposureBias(_settings.value))
                 applyStabilization()
                 controller.start(inf, st)
+                scaleFromStart = true
                 _frame.value = ViewfinderRenderer.Frame(
                     bufferWidth = inf.previewSize.width,
                     bufferHeight = inf.previewSize.height,
@@ -527,7 +701,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     fullWidth = inf.viewfinderWidth,
                     fullHeight = inf.viewfinderHeight,
                     gamma = inf.previewGamma,
-                    scale = _settings.value.previewScale(inf.hiRes),
+                    linearToe = controller.previewLinearToe(inf),
+                    // STILL_WHITE_BALANCED: from the last frame's neutral floor (any lens: the same light), not twice the target.
+                    scale = _settings.value.previewScale(inf.hiRes) *
+                        if (platform.preview.level == PreviewLevel.STILL_WHITE_BALANCED) neutralFloor(controller.frames.value) else 1f,
                     mirror = inf.isFront,
                 )
                 _status.value = CameraStatus.READY
@@ -674,19 +851,21 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Switches to the lens labelled [label] (UW, W, T) on the current side. */
     fun selectLens(label: String) {
-        if (_recordingMs.value != null) return // the camera session would restart under the recording
+        if (_recordingMs.value != null || _longExposing.value) return // the camera session would restart under the recording or exposure
         val lens = _lenses.value.firstOrNull { it.label == label } ?: return
         if (lens === info) return
+        cancelSelfTimer()
         switchTo(lens)
         change { it.copy(lens = label) }
     }
 
     /** Back cameras <-> selfie camera (its main lens). */
     fun switchFacing() {
-        if (_recordingMs.value != null) return
+        if (_recordingMs.value != null || _longExposing.value) return
         val front = !_settings.value.front
         val all = lensesBySide?.get(front).orEmpty()
         val lens = all.firstOrNull { it.label == "W" } ?: all.firstOrNull() ?: return
+        cancelSelfTimer()
         _lenses.value = all
         switchTo(lens)
         change { it.copy(front = front, lens = lens.label) }
@@ -717,13 +896,28 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val stillGain = state?.let { controller.stillGain(it) } ?: 1f
         // With Long exposure on, show what its frames will give (the same maths as the shutter's) instead of the still's.
         val settings = _settings.value
-        val longGain = if (info?.hiRes != true && settings.flash == FlashMode.OFF && activeCaptures == 0 && (state?.exposureNs ?: 0L) < 250_000_000L) {
-            settings.longExposureSpec(sceneKey())?.let { controller.longExposureGainOverPreview(it) }
+        // Under STILL_WHITE_BALANCED the frames decide, not the shutter: AE frames show what the long exposure's frames
+        // will give, its own manual frames (while it runs, `CameraController.longExposureDng`) are already that.
+        val whiteBalanced = platform.preview.level == PreviewLevel.STILL_WHITE_BALANCED
+        val exposing = controller.longExposureProgress.value != null
+        val aeFrames = if (whiteBalanced) !exposing else activeCaptures == 0
+        val longGain = if (info?.hiRes != true && settings.flash == FlashMode.OFF && aeFrames && (state?.exposureNs ?: 0L) < 250_000_000L) {
+            settings.longExposureSpec(sceneKey(), platform.preview.level, neutralFloor(state))?.let { controller.longExposureGainOverPreview(it) }
         } else null
-        val target = settings.previewScale(info?.hiRes == true) / boost * (longGain ?: stillGain)
+        val target = ViewfinderGain.target(platform.preview.level, settings.previewScale(info?.hiRes == true), boost, stillGain, longGain, neutralFloor(state))
         // The gain eases to its target (a fade) instead of jumping: a long exposure starts and ends with the viewfinder
         // changing exposure under the preview, and a step there reads as a flash. (Live.scale keeps the key honest.)
-        val scale = if (f.scale > 0f && target > 0f) f.scale * (target / f.scale).coerceIn(1f / SCALE_FADE_STEP, SCALE_FADE_STEP) else target
+        // Under STILL_WHITE_BALANCED a lens starts at the bare calibration, about twice its first target (the neutral
+        // floor comes with the first frame): that first step is taken at once, not over a second or two.
+        val first = scaleFromStart && whiteBalanced && state?.neutral != null
+        if (state != null) scaleFromStart = false
+        // There, a long exposure's start and end change the frames and the gain together (the gain shown before the
+        // shutter is the frames' own): a fade would show the step it is meant to hide, up to 1.7 EV for several seconds
+        // on the OnePlus 11, whose viewfinder updates every ~1.4 s while the exposure runs. Turning Long exposure on or
+        // off changes only the gain, so that still fades (with the live exposure following).
+        val longSwitched = whiteBalanced && exposing != wasExposing
+        wasExposing = exposing
+        val scale = if (!first && !longSwitched && f.scale > 0f && target > 0f) f.scale * (target / f.scale).coerceIn(1f / SCALE_FADE_STEP, SCALE_FADE_STEP) else target
         // The raw's colours for the ISP's current white balance and colour matrix (they follow AWB).
         val color = state?.previewColor
         if (scale != f.scale || !color.contentEquals(f.color)) _frame.value = f.copy(scale = scale, color = color)
@@ -745,7 +939,13 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             // Video eases much slower: a 0.3 EV step every 300 ms would pump visibly in a recording.
             val step = if (_videoMode.value) VIDEO_EV_STEP else MAX_EV_STEP
             val eased = if (last == null) auto else auto.copy(exposure = last + (auto.exposure - last).coerceIn(-step, step))
-            live = Live(base, stats, defaults, eased, f.scale)
+            // A preview without the ISP's local lift (PreviewProfile.liftsShadows false) shows the backlight lift the
+            // shot will get, eased like the exposure: a window panning into view would otherwise lift the shadows at
+            // once. Not in video, whose recordings keep the plain develop.
+            val lift = if (platform.preview.liftsShadows || _videoMode.value) 0f else ShotDevelop.backlightShadows(stats)
+            val lastLift = live?.shadowLift
+            val easedLift = if (lastLift == null) lift else lastLift + (lift - lastLift).coerceIn(-SHADOW_LIFT_STEP, SHADOW_LIFT_STEP)
+            live = Live(base, stats, defaults, eased, f.scale, neutralFloor(state), easedLift)
             if (activeCaptures == 0 && SystemClock.uptimeMillis() - captureEndedAt > SCENE_KEY_SETTLE_MS && f.scale > 0f) sceneKeyHeld = stats.key / f.scale
             publish()
             withContext(Dispatchers.Main) { meterRawIfUncalibrated() }
@@ -758,6 +958,17 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
      * feeding back on itself. Null before the first analysed frame.
      */
     private fun sceneKey(): Float? = sceneKeyHeld
+
+    /** [l]'s scene key for calibrating [CameraSettings.previewScale] from [stored] ([ViewfinderGain.calibrationKey]). */
+    private fun calibrationKey(l: Live, stored: Float): Float =
+        ViewfinderGain.calibrationKey(platform.preview.level, l.stats.key, stored, l.scale, l.neutralFloor)
+
+    /**
+     * The smallest component of [state]'s as-shot neutral: the decoder scales the raw by the white balance's largest
+     * multiplier, the ISP's preview by green's ([PreviewLevel.STILL_WHITE_BALANCED]). 1 when the frame doesn't say.
+     */
+    private fun neutralFloor(state: CameraController.FrameState?): Float =
+        state?.neutral?.minOrNull()?.takeIf { it > 0.0 }?.toFloat() ?: 1f
 
     /** [sceneKey]'s last reading from a frame the AE preview made (not a long exposure's manual frames, which come after the shutter). */
     private var sceneKeyHeld: Float? = null
@@ -772,13 +983,17 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
      * from it, as a photo would ([ShotSaver]'s calibrate). Without it the viewfinder stayed at gain 1 until the first
      * shot, which suits the Pixel (0.5-0.8) but on a Galaxy Tab S11 Ultra, whose ISP adds ~4.4 stops the raw never
      * gets, showed a blown-out picture. Waits [RAW_METER_DELAY_MS] after the lens's first analysed frame for AE to
-     * settle; skipped while a shot runs, focus is locked (spot metering) or for maximum-resolution lenses. Main thread.
+     * settle; skipped while a shot runs, focus is locked (spot metering), for maximum-resolution lenses and under
+     * [PreviewLevel.STILL_WHITE_BALANCED]. Main thread.
      */
     private fun meterRawIfUncalibrated() {
         val lens = info ?: return
         val settings = _settings.value
         val key = settings.lensKey(lens.hiRes)
         if (lens.hiRes || key in settings.previewScales || key in rawMetered || meterJob?.isActive == true) return
+        // There the calibration is ~1 on every lens, the default, while a raw frame this soon after a lens starts can
+        // catch AE unsettled (numbers in the OnePlus layer).
+        if (platform.preview.level == PreviewLevel.STILL_WHITE_BALANCED) return
         rawMetered += key
         meterJob = viewModelScope.launch {
             delay(RAW_METER_DELAY_MS)
@@ -798,7 +1013,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             }
             if (key in _settings.value.previewScales) return@launch // a shot calibrated it meanwhile
             val estimate = scale * (rawKey / viewfinderKey).coerceIn(1f / 64, 64f)
-            val calibrated = withContext(Dispatchers.IO) { CameraSettingsStore.updatePreviewScale(app, key, estimate) }
+            val calibrated = withContext(Dispatchers.IO) { CameraSettingsStore.updatePreviewScale(app, platform.calibrationSlot, platform.preview.level, key, estimate) }
             Log.d(TAG, "raw meter $key: raw key $rawKey, viewfinder key $viewfinderKey (raw/viewfinder ${rawKey / viewfinderKey}) -> preview scale $calibrated")
             _settings.value = _settings.value.let { it.copy(previewScales = it.previewScales + (key to calibrated)) }
             republish()
@@ -843,10 +1058,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val l = live ?: return
         val f = _frame.value ?: return
         val s = _settings.value
-        val developed = if (_compare.value) l.auto else s.develop(l.auto, l.stats.hasFace)
+        val developed = if (_compare.value) l.auto else s.develop(l.auto, l.stats.hasFace, platform.noise).let { d ->
+            if (l.shadowLift > 0f && !_videoMode.value) d.copy(shadows = maxOf(d.shadows, l.shadowLift)) else d
+        }
         // The ISP has already denoised and sharpened the preview stream.
         // Video also drops the colour denoise: its coarse stages are many taps per pixel, drawn twice a frame (screen and
-        // encoder), and a clip on a non-Film look (colour floor 70) ran at 12 fps instead of 30.
+        // encoder), and a clip on a non-Film look (its colour floor reaches the coarse stages) ran at 12 fps instead of 30.
         val p = developed.copy(
             denoise = 0f, sharpening = 0f, skinRetouch = 0f,
             colorDenoise = if (_videoMode.value) 0f else developed.colorDenoise,
@@ -961,6 +1178,13 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setLongExposureLighten(on: Boolean) = change { it.copy(longExposureLighten = on) }
     fun setShutterSound(on: Boolean) = change { it.copy(shutterSound = on) }
     fun setHdrGainMap(on: Boolean) = change { it.copy(hdrGainMap = on) }
+    fun setRandomLightLeak(on: Boolean) = change { it.copy(randomLightLeak = on) }
+
+    fun setRandomLightLeakRate(rate: Int) = change {
+        it.copy(randomLightLeakRate = rate.coerceIn(1, CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE))
+    }
+
+    fun setShortSideSprockets(on: Boolean) = change { it.copy(shortSideSprockets = on) }
     fun setPhotoFrame(frame: PhotoFrame) = change {
         it.copy(
             photoFrame = frame,
@@ -1046,7 +1270,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val prev = _settings.value
         val recording = _recordingMs.value != null
         val next = prev.resetToDefaults().let {
-            if (recording) it.copy(maxRes = prev.maxRes, front = prev.front, lens = prev.lens, flatVideo = prev.flatVideo) else it
+            if (recording) it.copy(maxRes = prev.maxRes, front = prev.front, lens = prev.lens, flatVideo = prev.flatVideo, videoQuality = prev.videoQuality) else it
         }
         change { next }
         if (!recording) {
@@ -1139,6 +1363,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
      */
     fun shutter() {
         if (_longExposing.value) {
+            _longExposing.value = false
             controller.stopLongExposure()
             return
         }
@@ -1179,7 +1404,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         // The selfie camera: the screen's frame is the light, the shot itself is an ordinary one exposed by AE.
         val screenFlash = settings.flash != FlashMode.OFF && _screenFlashCamera.value
         // Flash and maximum-resolution shots are single frames (CameraController.captureDng).
-        val longExposure = settings.longExposureSpec(sceneKey()).takeIf { !hiRes && !screenFlash && flash == FlashMode.OFF }
+        val longExposure = settings.longExposureSpec(sceneKey(), platform.preview.level, neutralFloor(controller.frames.value)).takeIf { !hiRes && !screenFlash && flash == FlashMode.OFF }
         val burstFrames = if (hiRes || screenFlash || longExposure != null) 1 else settings.burstFrames(lowLight.value)
         // A long exposure holds the shutter like a merging burst does (the stack and its DNG write).
         val burst = (burstFrames > 1 || longExposure != null) && flash == FlashMode.OFF
@@ -1191,26 +1416,38 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 hiRes -> " reason=max-res"
                 screenFlash -> " reason=screen-flash"
                 else -> " reason=not-low-light"
-            }
+            } +
+            " ${settings.descriptionNote()}"
         // A flash shot's raw is lit by the flash, the viewfinder wasn't: no calibration from it.
         // A long exposure's raw is lifted away from what the viewfinder predicted for a still: it must not calibrate the preview.
-        val viewfinderKey = if (flash == FlashMode.OFF && !screenFlash && longExposure == null) live?.stats?.key else null
+        val viewfinderKey = if (flash == FlashMode.OFF && !screenFlash && longExposure == null) live?.let { calibrationKey(it, settings.previewScale(hiRes)) } else null
         val mayHaveFace = info?.hasFaceDetection != true || controller.frames.value?.faces?.isNotEmpty() != false
         controller.frames.value?.let { f ->
             Log.d(TAG, "shutter ${settings.lensKey(hiRes)}: preview ISO ${f.iso.toInt()}, ${f.exposureNs / 1000} µs, boost ${f.postRawBoost}, " +
                 "tonemap ${f.tonemapMode}, viewfinder key $viewfinderKey, preview scale ${settings.previewScale(hiRes)}, " +
                 "colour ${f.previewColor?.joinToString(" ") { "%.3f".format(it) } ?: "sRGB"}, " +
                 "wb ${live?.defaults?.let { "${it.temperature.toInt()}K/${it.tint.toInt()}" }} -> " +
-                "${live?.auto?.let { "${it.temperature.toInt()}K/${it.tint.toInt()}" }}")
+                "${live?.auto?.let { "${it.temperature.toInt()}K/${it.tint.toInt()}" }}, live exposure ${live?.auto?.exposure} + brightness " +
+                "${settings.exposureCompensationEv} EV")
         }
         val shotId = ShotSaver.beginCapture(app)
+        DebugProbe.describe(controller.lastPreviewResult).takeIf { it.isNotEmpty() }?.let { probe ->
+            Log.d(TAG, "shutter $shotId ${settings.lensKey(hiRes)} result: $probe")
+            live?.let { l ->
+                DebugProbe.dump(app, "$shotId-vf", l.base.base, "lens ${settings.lensKey(hiRes)} scale ${l.scale} key ${l.stats.key} " +
+                    "colour ${_frame.value?.color?.joinToString(" ")} $probe")
+            }
+        }
         activeCaptures++
         _capturing.value = activeCaptures
         if (burst) {
             _merging.value = true
             ShotSaver.beginMerge()
         }
-        if (longExposure != null) _longExposing.value = true
+        if (longExposure != null) {
+            controller.prepareLongExposure()
+            _longExposing.value = true
+        }
         // Runs in ShotSaver.scope so finishing the lock screen camera never cancels an in-flight capture.
         ShotSaver.scope.launch {
             try {
@@ -1245,13 +1482,17 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     /** As the request goes to the camera: the click (if on, or required here) and the UI's shutter feedback. */
-    private fun onShutter(screenFlash: Boolean = false) {
+    private fun onShutter(screenFlash: Boolean = false, exposed: Deferred<Unit>? = null) {
         if (_settings.value.shutterSound || shutterSoundRequired) shutterSound.play()
         _shutterEvents.tryEmit(Unit)
-        // The exposure runs right after the request goes out: keep the frame lit through it, then switch it off.
+        // The exposure runs right after the request goes out: keep the frame lit through it, then switch it off. Where
+        // the HAL starts it later (OnePlus 11: 0.36 s after the request), also until the still's result has come.
         if (screenFlash) viewModelScope.launch {
+            val sent = SystemClock.elapsedRealtime()
             delay(SCREEN_FLASH_HOLD_MS)
+            if (platform.flash.screenFlashUntilExposed) withTimeoutOrNull(SCREEN_FLASH_MAX_WAIT_MS) { exposed?.await() }
             _screenFlashLit.value = false
+            Log.d(TAG, "screen flash: dark ${SystemClock.elapsedRealtime() - sent} ms after the request, exposure ${if (exposed?.isCompleted == true) "over" else "not over"}")
         }
     }
 
@@ -1265,38 +1506,47 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val meter = meterArea().let { if (it is MeterArea.Spot) it.turned(degrees) else it }
         val fix = if (settings.geotag) location.current() else null
         val frameNumber = CameraSettingsStore.nextFrameNumber(app)
-        return if (settings.keepDng) {
-            val (uri, name) = withContext(Dispatchers.IO) {
-                MediaStoreOutput.create(resolver, baseName, "dng", DNG_MIME, RAW_NAMING)
-            }
-            val dngStart = System.nanoTime()
-            val result = try {
-                withContext(Dispatchers.IO) {
-                    val out = resolver.openOutputStream(uri, "w") ?: throw java.io.IOException("Cannot write $name")
-                    val result = out.buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix, longExposure, mergeNote) { onShutter(screenFlash) } }
-                    fix?.let { addGps(uri, it) }
-                    MediaStoreOutput.publish(resolver, uri)
-                    result
+        // The still's exposure is over: screen flash may go dark (FlashProfile.screenFlashUntilExposed).
+        val exposed = CompletableDeferred<Unit>()
+        // The stand-alone or physical camera that shoots it, for the profile's per-camera sensor numbers.
+        val cameraId = info?.let { it.physicalId ?: it.openId }
+        // A failed capture never reports its exposure: let a waiting screen flash go dark now, not up to 2 s later.
+        return try {
+            if (settings.keepDng) {
+                val (uri, name) = withContext(Dispatchers.IO) {
+                    MediaStoreOutput.create(resolver, baseName, "dng", DNG_MIME, RAW_NAMING)
                 }
-            } catch (t: Throwable) {
-                withContext(Dispatchers.IO + NonCancellable) { resolver.delete(uri, null, null) }
-                throw t
-            }
-            Log.d(TAG, "$name: capture + DNG write ${(System.nanoTime() - dngStart) / 1_000_000} ms")
-            Shot(shotId, uri, name, null, settings, viewfinderKey, isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber)
-        } else {
-            val file = File(app.cacheDir, "$baseName-$shotId.dng")
-            val result = try {
-                withContext(Dispatchers.IO) {
-                    val result = file.outputStream().buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix, longExposure, mergeNote) { onShutter(screenFlash) } }
-                    fix?.let { addGps(Uri.fromFile(file), it) }
-                    result
+                val dngStart = System.nanoTime()
+                val result = try {
+                    withContext(Dispatchers.IO) {
+                        val out = resolver.openOutputStream(uri, "w") ?: throw java.io.IOException("Cannot write $name")
+                        val result = out.buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix, longExposure, mergeNote, onExposed = { exposed.complete(Unit); _longExposing.value = false }) { onShutter(screenFlash, exposed) } }
+                        fix?.let { addGps(uri, it) }
+                        MediaStoreOutput.publish(resolver, uri)
+                        result
+                    }
+                } catch (t: Throwable) {
+                    withContext(Dispatchers.IO + NonCancellable) { resolver.delete(uri, null, null) }
+                    throw t
                 }
-            } catch (t: Throwable) {
-                file.delete()
-                throw t
+                Log.d(TAG, "$name: capture + DNG write ${(System.nanoTime() - dngStart) / 1_000_000} ms")
+                Shot(shotId, uri, name, null, settings, platform = platform, viewfinderKey = viewfinderKey, iso = isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber, cameraId = cameraId)
+            } else {
+                val file = File(app.cacheDir, "$baseName-$shotId.dng")
+                val result = try {
+                    withContext(Dispatchers.IO) {
+                        val result = file.outputStream().buffered(1 shl 20).use { controller.captureDng(orientation, it, flash, settings.flashGuide(hiRes), burstFrames, fix, longExposure, mergeNote, onExposed = { exposed.complete(Unit); _longExposing.value = false }) { onShutter(screenFlash, exposed) } }
+                        fix?.let { addGps(Uri.fromFile(file), it) }
+                        result
+                    }
+                } catch (t: Throwable) {
+                    file.delete()
+                    throw t
+                }
+                Shot(shotId, Uri.fromFile(file), "$baseName.dng", file, settings, platform = platform, viewfinderKey = viewfinderKey, iso = isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber, cameraId = cameraId)
             }
-            Shot(shotId, Uri.fromFile(file), "$baseName.dng", file, settings, viewfinderKey, isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber)
+        } finally {
+            exposed.complete(Unit)
         }
     }
 
@@ -1371,6 +1621,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         /** Screen flash: how long the frame is lit before the shot (screen at full brightness, AE caught up), and after the request. */
         private const val SCREEN_FLASH_SETTLE_MS = 450L
         private const val SCREEN_FLASH_HOLD_MS = 250L
+        /** FlashProfile.screenFlashUntilExposed: at most this much longer for the still's result (a stuck capture). */
+        private const val SCREEN_FLASH_MAX_WAIT_MS = 2000L
         /** After a lens's first analysed viewfinder frame, how long AE gets to settle before its raw is metered. */
         private const val RAW_METER_DELAY_MS = 300L
         /** Smallest move of a tracked subject (share of the frame) that moves the focus point. */
@@ -1383,6 +1635,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         private val SCALE_FADE_STEP = 2f.pow(0.25f)
         private const val SCENE_KEY_SETTLE_MS = 2000L
         private const val MAX_EV_STEP = 0.3f
+
+        /** The most the viewfinder's backlight lift moves per update (Shadows units): 0 to the full 80 in ~1.6 s. */
+        private const val SHADOW_LIFT_STEP = 15f
 
         const val MIN_ZOOM = 1f
 

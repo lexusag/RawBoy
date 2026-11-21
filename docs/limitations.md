@@ -9,7 +9,8 @@
   little RAM Android may kill the app) and holds the DNG until the burst is merged; no manual exposure
   or digital zoom yet. Lenses other than the main one are streamed as physical cameras of the phone's logical back
   camera; if a phone refuses that, RawBoy Camera tries opening the lens on its own, and logs what it found
-  (`adb logcat -s RawBoyCamera`). The Android emulator's back camera can't write DNGs (its metadata lacks the post-raw boost
+  (`adb logcat -s RawBoyCamera`). Only the Pixel 9 Pro and the OnePlus 11 have been measured; other phones get a
+  neutral profile ([Camera phone profiles](camera-platforms.md), with the OnePlus 11's known limits). The Android emulator's back camera can't write DNGs (its metadata lacks the post-raw boost
   DngCreator needs), so camera captures are tested on the phone.
 - TIFF has no embedded ICC profile (pixels are sRGB).
 - JPEG/HEIC/PNG/TIFF input: output stays sRGB (wide-gamut colours are clipped as before); HEIC gain maps are ignored

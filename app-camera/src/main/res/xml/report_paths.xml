@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The device report (Settings › Share device report, CameraViewModel.writeDeviceReport). -->
+<paths>
+    <cache-path name="reports" path="reports/" />
+</paths>

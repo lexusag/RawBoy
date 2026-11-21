@@ -13,7 +13,7 @@ let autoHelp = [
     ]),
     HelpSection("Grid", [
         HelpItem("Arrows, Return", "Move between photos and open one; a click opens too."),
-        HelpItem("Selecting", "⌘A selects all, ⌘-click adds or removes a photo, ⇧-click selects the range from the last one clicked; Esc clears the selection. A selection can be rotated, given a preset or lens preset, denoised, removed from the batch or exported."),
+        HelpItem("Selecting", "⌘A selects all, ⌘-click adds or removes a photo, ⇧-click selects the range from the last one clicked; Esc clears the selection, ⌫ / ⌦ removes the selected photos from the batch (after confirming; the files stay). A selection can be rotated, given a preset or lens preset, denoised, removed from the batch or exported."),
         HelpItem("Look name", "Under each photo, with \"suggested\" when Auto picked it; hover for the whole text."),
         HelpItem("Reset all photos…", "Next to Clear batch (and in the Mode menu): puts every photo back to one look, one film stock, or As is, and clears its adjustments, crop and any RawBoy preset. Undo in a photo's view brings its edits back."),
     ]),

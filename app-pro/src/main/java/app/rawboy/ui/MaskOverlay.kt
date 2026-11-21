@@ -25,6 +25,7 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import app.rawboy.develop.BrushStroke
+import app.rawboy.develop.FilmLeak
 import app.rawboy.develop.LeakKind
 import app.rawboy.develop.LightLeaks
 import app.rawboy.develop.MaskLayer
@@ -575,5 +576,167 @@ private fun DrawScope.ring(c: Offset, r: Float, hardness: Float, px: Float) {
             Color.White, r * hardness / 100f * 0.95f, c,
             style = Stroke(1 * px, pathEffect = PathEffect.dashPathEffect(floatArrayOf(3 * px, 3 * px))),
         )
+    }
+}
+
+private enum class BoxHandle { PIN, MOVE, TL, T, TR, R, BR, B, BL, L }
+
+private class FilmLeakInputs(
+    val lens: LensTransform,
+    val leaks: List<FilmLeak>,
+    val selectedId: String?,
+    val frame: Int,
+    val zoomFrame: Int,
+    val zoomCenter: Pair<Float, Float>?,
+    val zoomScale: Float,
+    val onSelect: (String) -> Unit,
+    val onChange: (String, (FilmLeak) -> FilmLeak) -> Unit,
+)
+
+@Composable
+fun rememberFilmLeakGestures(
+    lens: LensTransform,
+    leaks: List<FilmLeak>,
+    selectedId: String?,
+    frame: Int,
+    zoomFrame: Int,
+    zoomCenter: Pair<Float, Float>?,
+    onSelect: (String) -> Unit,
+    onChange: (String, (FilmLeak) -> FilmLeak) -> Unit,
+    zoomScale: Float = 1f,
+): Modifier {
+    val grab = with(LocalDensity.current) { 24.dp.toPx() }
+    val current = rememberUpdatedState(
+        FilmLeakInputs(lens, leaks, selectedId, frame, zoomFrame, zoomCenter, zoomScale, onSelect, onChange),
+    )
+    return Modifier.pointerInput(Unit) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            val inp = current.value
+            val g = MaskGeometry(inp.lens, size, inp.frame, inp.zoomFrame, inp.zoomCenter, inp.zoomScale)
+            fun pt(x: Float, y: Float) = g.toScreen(x * g.w, y * g.h)
+            fun near(p: Offset) = (p - down.position).getDistance() < grab
+
+            var hitId: String? = null
+            var hitHandle: BoxHandle? = null
+            val sel = inp.leaks.firstOrNull { it.id == inp.selectedId }
+            if (sel != null) {
+                val x0 = sel.cx - sel.w / 2f; val x1 = sel.cx + sel.w / 2f
+                val y0 = sel.cy - sel.h / 2f; val y1 = sel.cy + sel.h / 2f
+                val handles = listOf(
+                    BoxHandle.TL to pt(x0, y0), BoxHandle.T to pt(sel.cx, y0),
+                    BoxHandle.TR to pt(x1, y0), BoxHandle.R to pt(x1, sel.cy),
+                    BoxHandle.BR to pt(x1, y1), BoxHandle.B to pt(sel.cx, y1),
+                    BoxHandle.BL to pt(x0, y1), BoxHandle.L to pt(x0, sel.cy),
+                )
+                hitHandle = handles.firstOrNull { near(it.second) }?.first
+                if (hitHandle != null) {
+                    hitId = sel.id
+                } else {
+                    val img = g.toImage(down.position)
+                    val nx = img.x / g.w; val ny = img.y / g.h
+                    if (nx in x0..x1 && ny in y0..y1) {
+                        hitId = sel.id
+                        hitHandle = BoxHandle.MOVE
+                    }
+                }
+            }
+            if (hitId == null) {
+                val other = inp.leaks.lastOrNull { it.id != inp.selectedId && near(pt(it.cx, it.cy)) }
+                if (other != null) {
+                    hitId = other.id
+                    hitHandle = BoxHandle.PIN
+                }
+            }
+            val id = hitId ?: return@awaitEachGesture
+            val handle = hitHandle ?: return@awaitEachGesture
+            down.consume()
+            if (handle == BoxHandle.PIN) {
+                inp.onSelect(id)
+                return@awaitEachGesture
+            }
+            val start = inp.leaks.firstOrNull { it.id == id } ?: return@awaitEachGesture
+            val from = g.toImage(down.position)
+            while (true) {
+                val ev = awaitPointerEvent()
+                val c = ev.changes.firstOrNull { it.id == down.id } ?: break
+                if (!c.pressed) break
+                if (ev.changes.count { it.pressed } >= 2) {
+                    inp.onChange(id) { start }
+                    return@awaitEachGesture
+                }
+                c.consume()
+                val now = g.toImage(c.position)
+                val dx = (now.x - from.x) / g.w
+                val dy = (now.y - from.y) / g.h
+                inp.onChange(id) { l ->
+                    if (handle == BoxHandle.MOVE) {
+                        return@onChange l.copy(
+                            cx = (start.cx + dx).coerceIn(-0.5f, 1.5f),
+                            cy = (start.cy + dy).coerceIn(-0.5f, 1.5f),
+                        )
+                    }
+                    var left = start.cx - start.w / 2f; var right = start.cx + start.w / 2f
+                    var top = start.cy - start.h / 2f; var bottom = start.cy + start.h / 2f
+                    when (handle) {
+                        BoxHandle.TL -> { left += dx; top += dy }
+                        BoxHandle.T -> top += dy
+                        BoxHandle.TR -> { right += dx; top += dy }
+                        BoxHandle.R -> right += dx
+                        BoxHandle.BR -> { right += dx; bottom += dy }
+                        BoxHandle.B -> bottom += dy
+                        BoxHandle.BL -> { left += dx; bottom += dy }
+                        BoxHandle.L -> left += dx
+                        else -> Unit
+                    }
+                    val nw = max(0.02f, right - left)
+                    val nh = max(0.02f, bottom - top)
+                    if (handle == BoxHandle.TL || handle == BoxHandle.L || handle == BoxHandle.BL) left = right - nw else right = left + nw
+                    if (handle == BoxHandle.TL || handle == BoxHandle.T || handle == BoxHandle.TR) top = bottom - nh else bottom = top + nh
+                    l.copy(cx = (left + right) / 2f, cy = (top + bottom) / 2f, w = nw, h = nh)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun FilmLeakOverlay(
+    lens: LensTransform,
+    leaks: List<FilmLeak>,
+    selectedId: String?,
+    frame: Int,
+    zoomFrame: Int,
+    zoomCenter: Pair<Float, Float>?,
+    modifier: Modifier = Modifier,
+    zoomScale: Float = 1f,
+) {
+    Canvas(modifier) {
+        val g = MaskGeometry(lens, IntSize(size.width.roundToInt(), size.height.roundToInt()), frame, zoomFrame, zoomCenter, zoomScale)
+        val px = density
+        fun pt(x: Float, y: Float) = g.toScreen(x * g.w, y * g.h)
+        for (fl in leaks) {
+            val c = pt(fl.cx, fl.cy)
+            if (fl.id != selectedId) {
+                dot(c, 6 * px, filled = false, alpha = if (fl.enabled) 1f else 0.5f)
+                continue
+            }
+            val x0 = fl.cx - fl.w / 2f; val x1 = fl.cx + fl.w / 2f
+            val y0 = fl.cy - fl.h / 2f; val y1 = fl.cy + fl.h / 2f
+            val tl = pt(x0, y0); val tr = pt(x1, y0); val br = pt(x1, y1); val bl = pt(x0, y1)
+            val edges = listOf(Triple(bl, tl, 0), Triple(tl, tr, 1), Triple(tr, br, 2), Triple(br, bl, 3))
+            val sourceTurn = Math.floorMod(fl.turn, 4)
+            for ((a, b, side) in edges) {
+                val isSource = side == sourceTurn
+                line(listOf(a, b), width = (if (isSource) 2.5f else 1.5f) * px, alpha = 1f, dashed = !isSource)
+            }
+            val handles = listOf(tl, pt(fl.cx, y0), tr, pt(x1, fl.cy), br, pt(fl.cx, y1), bl, pt(x0, fl.cy))
+            for (h in handles) {
+                val r = 5 * px
+                drawRect(Color.Black.copy(alpha = 0.45f), Offset(h.x - r, h.y - r), Size(2 * r, 2 * r))
+                drawRect(Color.White, Offset(h.x - r, h.y - r), Size(2 * r, 2 * r), style = Stroke(1.5f * px))
+            }
+            dot(c, 6 * px, filled = true, alpha = 1f)
+        }
     }
 }

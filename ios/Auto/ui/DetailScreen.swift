@@ -17,6 +17,7 @@ struct DetailScreen: View {
     @State private var pickingWhite = false
     /** Crop & rotate's shape lock (UI only; the crop itself is in the photo's adjustments). Portrait nil = follow the frame. */
     @State private var cropPortrait: Bool?
+    @State private var shortSideSprockets = false
 
     /** Photos that can be opened, in grid order. */
     private var pages: [AutoPhoto] { vm.photos.filter { $0.analysis != nil } }
@@ -146,6 +147,20 @@ struct DetailScreen: View {
                         vm.setStrength(id, $0)
                     }
                 }
+                ScrollView(.horizontal) {
+                    HStack(spacing: 8) {
+                        Button("🎲 Leak") { vm.rollFilmLeak(id, shortSideSprockets: shortSideSprockets) }.font(.subheadline)
+                        Toggle("Short-side sprockets", isOn: $shortSideSprockets)
+                            .toggleStyle(.button)
+                            .controlSize(.mini)
+                        if photo.hasFilmLeak {
+                            Button("Clear leak") { vm.clearFilmLeaks(id) }.font(.caption).foregroundStyle(.secondary)
+                        }
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 4)
+                }
+                .scrollIndicators(.hidden)
                 ValueSlider("Brightness", value: a.brightness, range: -100...100, defaultValue: 0) { v in
                     vm.setAdjust(id) { $0.brightness = v }
                 }
@@ -458,6 +473,22 @@ extension DetailScreen {
                         }
                         LookGrid(vm: vm, photo: photo)
                     }
+                    HStack(spacing: 8) {
+                        Button("🎲 Leak") { vm.rollFilmLeak(photo.id, shortSideSprockets: shortSideSprockets) }
+                            .controlSize(.small)
+                            .help("Generate a random film light leak or damage roll")
+                        Toggle("Short-side sprockets", isOn: $shortSideSprockets)
+                            .controlSize(.small)
+                            .help("Also generate sprocket holes on the short edges; off keeps them on the long edges only")
+                        if photo.hasFilmLeak {
+                            Button("Clear") { vm.clearFilmLeaks(photo.id) }
+                                .controlSize(.small)
+                                .help("Remove generated film leaks")
+                        }
+                        Spacer()
+                    }
+                    .disabled(disabled)
+                    .padding(.top, 6)
                 }
                 // This photo's lens preset, to check or change it photo by photo (the web's lens preset select).
                 if !vm.lensPresets.isEmpty {

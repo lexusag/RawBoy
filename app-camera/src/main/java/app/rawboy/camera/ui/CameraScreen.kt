@@ -132,6 +132,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
@@ -152,11 +153,14 @@ import app.rawboy.gl.ViewfinderRenderer
 import kotlin.math.min
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import android.content.pm.ApplicationInfo
+import app.rawboy.camera.platform.PlatformRegistry
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.rawboy.auto.looks.LookApplier
 import app.rawboy.color.BwFilter
 import app.rawboy.camera.BurstMode
+import app.rawboy.camera.VideoQuality
 import app.rawboy.camera.CameraSettings
 import app.rawboy.camera.CameraStatus
 import app.rawboy.camera.CameraViewModel
@@ -179,6 +183,7 @@ fun CameraScreen(
     requestAudio: () -> Unit,
     openPhoto: (Uri) -> Unit,
     openQr: (QrPayload) -> Unit,
+    shareDeviceReport: () -> Unit,
 ) {
     val status by vm.status.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
@@ -210,6 +215,7 @@ fun CameraScreen(
     val videoMode by vm.videoMode.collectAsStateWithLifecycle()
     val recordingMs by vm.recordingMs.collectAsStateWithLifecycle()
     val videoSink by vm.videoSink.collectAsStateWithLifecycle()
+    val recordableViewfinder by vm.recordableViewfinder.collectAsStateWithLifecycle()
     // Only the AF state of the camera's per-frame metadata, so the screen doesn't recompose 30 times a second.
     val afState by remember(vm) { vm.controller.frames.map { it?.afState }.distinctUntilChanged() }
         .collectAsStateWithLifecycle(null)
@@ -308,11 +314,18 @@ fun CameraScreen(
                 }
             }
         }
+        val stopLabel = when {
+            recordingMs != null -> "Stop recording"
+            longExposing -> "Stop long exposure"
+            selfTimerLeft != null -> "Cancel timer"
+            else -> null
+        }
+        val modeSwitchEnabled = recordingMs == null && !longExposing && selfTimerLeft == null
         val shutterButton = @Composable {
             Shutter(
-                enabled = status == CameraStatus.READY && (!merging || longExposing),
+                enabled = selfTimerLeft != null || (status == CameraStatus.READY && (!merging || longExposing)),
                 video = videoMode,
-                recording = recordingMs != null,
+                stopLabel = stopLabel,
                 onClick = vm::shutter,
                 modifier = Modifier.graphicsLayer {
                     scaleX = shutterScale.value
@@ -414,7 +427,7 @@ fun CameraScreen(
                 ) {
                     Viewfinder(
                         f, params, vm::onSurfaceTexture, vm::onViewfinderBase, Modifier.fillMaxSize(), loupe,
-                        onLuma = if (settings.scanQr) vm::onViewfinderLuma else null,
+                        onLuma = if (settings.scanQr && recordingMs == null) vm::onViewfinderLuma else null,
                         // Only while a tap's focus may be tracked: the copies cost nothing otherwise.
                         onTrackLuma = if (settings.trackFocus && focusPoint != null) vm::onTrackLuma else null,
                         turns = turns,
@@ -422,6 +435,7 @@ fun CameraScreen(
 
                         videoSink = videoSink,
                         videoMode = videoMode,
+                        eglConfig = if (recordableViewfinder) ViewfinderEglConfig.RECORDABLE_RGBA8888 else null,
                     )
                     // The self-timer's countdown, big and upright over the picture.
                     selfTimerLeft?.let { left ->
@@ -655,7 +669,7 @@ fun CameraScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         extras()
-                        ModeSwitch(videoMode, enabled = recordingMs == null, vertical = true) { vm.setVideoMode(it) }
+                        ModeSwitch(videoMode, enabled = modeSwitchEnabled, vertical = true) { vm.setVideoMode(it) }
                         switchButton()
                         shutterButton()
                         lastPhoto()
@@ -663,8 +677,8 @@ fun CameraScreen(
                 } else {
                     // Swiping sideways anywhere on the shutter area switches too: left for video, right back to photo.
                     Column(
-                        Modifier.pointerInput(recordingMs == null) {
-                            if (recordingMs != null) return@pointerInput
+                        Modifier.pointerInput(modeSwitchEnabled) {
+                            if (!modeSwitchEnabled) return@pointerInput
                             var drag = 0f
                             detectHorizontalDragGestures(
                                 onDragStart = { drag = 0f },
@@ -683,7 +697,7 @@ fun CameraScreen(
                             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
                                 if (!videoMode && settings.experimental) TimerButton(settings.selfTimer) { vm.cycleSelfTimer() }
                             }
-                            ModeSwitch(videoMode, enabled = recordingMs == null) { vm.setVideoMode(it) }
+                            ModeSwitch(videoMode, enabled = modeSwitchEnabled) { vm.setVideoMode(it) }
                             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                                 if (!videoMode && settings.experimental) {
                                     LongExposureButton(settings.longExposure, settings.longExposureLighten, hiRes) { vm.cycleLongExposure() }
@@ -715,7 +729,7 @@ fun CameraScreen(
 
     if (showSettings) {
         ModalBottomSheet(onDismissRequest = { showSettings = false }) {
-            SettingsContent(settings, vm, requestLocation)
+            SettingsContent(settings, vm, recordingMs != null, requestLocation, shareDeviceReport)
         }
     }
 }
@@ -1002,25 +1016,26 @@ private fun loupeAt(x: Float, y: Float, view: IntSize, side: Float, gap: Float):
 }
 
 @Composable
-private fun Shutter(enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, video: Boolean = false, recording: Boolean = false) {
+private fun Shutter(enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, video: Boolean = false, stopLabel: String? = null) {
+    val stopping = stopLabel != null
     val ring = if (enabled) Color.White else Color.Gray
-    // Video: a red dot, which becomes a red square while recording.
+    // Video: a red dot; while recording, shooting a long exposure, or counting down a timer, a stop square.
     val fill = if (!video) ring else if (enabled) Color(0xFFE53935) else Color.Gray
-    val shape = if (recording) RoundedCornerShape(8.dp) else CircleShape
+    val shape = if (stopping) RoundedCornerShape(8.dp) else CircleShape
     Box(
         modifier
             .size(76.dp)
             .border(BorderStroke(4.dp, ring), CircleShape)
-            .padding(if (recording) 20.dp else 8.dp)
+            .padding(if (stopping) 20.dp else 8.dp)
             .clip(shape)
             .background(fill)
             .clickable(
                 enabled = enabled,
-                onClickLabel = if (!video) "Take a photo" else if (recording) "Stop recording" else "Start recording",
+                onClickLabel = stopLabel ?: if (video) "Start recording" else "Take a photo",
                 role = Role.Button,
                 onClick = onClick,
             )
-            .semantics { contentDescription = if (video) "Record" else "Shutter" },
+            .semantics { contentDescription = stopLabel ?: if (video) "Record" else "Shutter" },
     )
 }
 
@@ -1197,7 +1212,7 @@ private fun LookSlider(
 private val LOOK_LABEL_WIDTH = 88.dp
 
 @Composable
-private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, requestLocation: () -> Unit) {
+private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recording: Boolean, requestLocation: () -> Unit, shareDeviceReport: () -> Unit) {
     val maxResMp by vm.maxResMp.collectAsState()
     var showFrames by remember { mutableStateOf(false) }
     if (showFrames) {
@@ -1261,6 +1276,34 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             checked = settings.hdrGainMap,
             onChange = vm::setHdrGainMap,
         )
+        SettingSwitch(
+            title = "Random light leak",
+            subtitle = "Adds a random film light leak (edge burn, blob, sprocket holes, rebate glow, flare or start of roll) to saved shots",
+            checked = settings.randomLightLeak,
+            onChange = vm::setRandomLightLeak,
+        )
+        if (settings.randomLightLeak) {
+            SettingChoice(
+                title = "Frequency",
+                subtitle = if (settings.randomLightLeakRate == CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE) {
+                    "Every shot"
+                } else {
+                    "${settings.randomLightLeakRate} random out of every ${CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE} shots"
+                },
+                options = CameraSettings.LIGHT_LEAK_RATES,
+                selected = settings.randomLightLeakRate,
+                label = { "$it/${CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE}" },
+                onSelect = vm::setRandomLightLeakRate,
+                indent = true,
+            )
+            SettingSwitch(
+                title = "Short-side sprockets",
+                subtitle = "Also generate sprocket holes on the short edges; off keeps them on the long edges only",
+                checked = settings.shortSideSprockets,
+                onChange = vm::setShortSideSprockets,
+                indent = true,
+            )
+        }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1331,10 +1374,20 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
         )
 
         SettingsSection("Video")
+        SettingChoice(
+            title = "Video quality",
+            subtitle = "Higher quality uses more storage (1080p at 30 fps)",
+            options = VideoQuality.entries,
+            selected = settings.videoQuality,
+            label = { it.label },
+            onSelect = vm::setVideoQuality,
+            enabled = !recording,
+        )
         SettingSwitch(
             title = "Flat video for grading",
             subtitle = "No look: Apple Log, to grade on the web video page",
             checked = settings.flatVideo,
+            enabled = !recording,
             onChange = vm::setFlatVideo,
         )
         SettingSwitch(
@@ -1345,7 +1398,12 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
         )
 
         SettingsSection("Viewfinder")
-        SettingSwitch("Zoom buttons", null, settings.showZoomControl, onChange = vm::setShowZoomControl)
+        SettingSwitch(
+            title = "Zoom buttons",
+            subtitle = "Viewfinder helper only; does not affect the picture",
+            checked = settings.showZoomControl,
+            onChange = vm::setShowZoomControl,
+        )
         SettingSwitch("Grid", null, settings.showGrid, onChange = vm::setShowGrid)
         SettingSwitch("Level", null, settings.showLevel, onChange = vm::setShowLevel)
         SettingSwitch("Histogram", null, settings.showHistogram, onChange = vm::setShowHistogram)
@@ -1418,6 +1476,8 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
             )
         }
 
+        PlatformInfo(vm, shareDeviceReport)
+
         Spacer(Modifier.height(16.dp))
         for (line in Edition.credits) {
             Text(line, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -1426,6 +1486,49 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, reque
         var showLicences by remember { mutableStateOf(false) }
         TextButton(onClick = { showLicences = true }, contentPadding = PaddingValues(0.dp)) { Text("Open-source licences") }
         if (showLicences) LicensesDialog(onDismiss = { showLicences = false })
+    }
+}
+
+/**
+ * Which platform profile the camera runs with (layers, or the neutral profile on a phone nobody has tested), what
+ * was detected, the device report for tuning a profile, and in a debug build the chip to take the phone for from the
+ * next start.
+ */
+@Composable
+private fun PlatformInfo(vm: CameraViewModel, shareDeviceReport: () -> Unit) {
+    val resolved = vm.resolvedPlatform
+    val layers = resolved.profile.layers.drop(1)
+    val profile = if (layers.isEmpty()) "neutral (this phone hasn't been tested)" else layers.joinToString(" + ") { PlatformRegistry.title(it) }
+    val phone = resolved.phone
+    val chip = phone.chip.title + phone.socModel.takeIf { it.isNotEmpty() }?.let { " ($it)" }.orEmpty()
+    Spacer(Modifier.height(16.dp))
+    Text(
+        "Phone profile: $profile" + if (resolved.chosenChip != null) " (chosen by hand)" else "",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Text(
+        "Detected: $chip chip, ${phone.manufacturer} ${phone.model}",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    TextButton(onClick = shareDeviceReport, contentPadding = PaddingValues(0.dp)) { Text("Share device report") }
+    Text(
+        "A text file about this phone's cameras, GPU and video encoders, for tuning the camera to it. It goes only where you send it",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    val debuggable = (LocalContext.current.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+    if (debuggable) {
+        val chosen by vm.chosenChip.collectAsState()
+        SettingChoice(
+            title = "Take the phone for (debug)",
+            subtitle = "From the next start of the app. Calibration learned under another profile is kept apart",
+            options = vm.platformChoices,
+            selected = chosen,
+            label = { it?.shortTitle ?: "Auto" },
+            onSelect = vm::choosePlatform,
+        )
     }
 }
 
@@ -1617,6 +1720,7 @@ private fun <T> SettingChoice(
     label: (T) -> String,
     onSelect: (T) -> Unit,
     indent: Boolean = false,
+    enabled: Boolean = true,
 ) {
     Column(Modifier.padding(start = if (indent) 16.dp else 0.dp, top = 8.dp, bottom = 8.dp)) {
         Text(title, style = MaterialTheme.typography.bodyMedium)
@@ -1627,6 +1731,7 @@ private fun <T> SettingChoice(
             Modifier
                 .padding(top = 8.dp)
                 .fillMaxWidth()
+                .alpha(if (enabled) 1f else 0.38f)
                 .clip(RoundedCornerShape(8.dp))
                 .background(MaterialTheme.colorScheme.surfaceContainerHighest),
         ) {
@@ -1639,7 +1744,7 @@ private fun <T> SettingChoice(
                         .padding(2.dp)
                         .clip(RoundedCornerShape(6.dp))
                         .background(if (on) MaterialTheme.colorScheme.primary else Color.Transparent)
-                        .clickable { onSelect(o) }
+                        .clickable(enabled = enabled) { onSelect(o) }
                         .semantics { stateDescription = if (on) "Selected" else "Not selected" },
                     contentAlignment = Alignment.Center,
                 ) {

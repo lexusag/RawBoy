@@ -50,6 +50,7 @@ struct EditorScreen: View {
     @State private var sizeRingAt = Date.distantPast
     // Light leaks (UI state; the leaks are in the params). The overlay draws and drags them as radial shapes.
     @State private var selectedLeak: String?
+    @State private var selectedFilmLeak: String?
     // Light effects, the same way: radial shapes (an ellipse round the effect's box, no feather ring).
     @State private var selectedFx: String?
     // Healing brush (UI state; the strokes are in the params): the stroke picked in the list, and what new strokes start with.
@@ -69,8 +70,15 @@ struct EditorScreen: View {
         selectedLayer.flatMap { id in layers.contains { $0.id == id } ? id : nil } ?? layers.first?.id
     }
     private var leaks: [LightLeak] { state.params.leaks }
+    private var filmLeaks: [FilmLeak] { state.params.filmLeaks }
+    private var selectedFilmId: String? {
+        if let id = selectedFilmLeak, filmLeaks.contains(where: { $0.id == id }) { return id }
+        if let id = selectedLeak, leaks.contains(where: { $0.id == id }) { return nil }
+        return filmLeaks.last?.id
+    }
     private var selectedLeakId: String? {
-        selectedLeak.flatMap { id in leaks.contains { $0.id == id } ? id : nil } ?? leaks.last?.id
+        if selectedFilmId != nil { return nil }
+        return selectedLeak.flatMap { id in leaks.contains { $0.id == id } ? id : nil } ?? leaks.last?.id
     }
     private var leakShapes: [MaskLayer] { leaks.map { MaskLayer(id: $0.id, name: "", enabled: $0.enabled, shape: $0.shape) } }
     private var leakForms: [String: LeakForm] {
@@ -312,23 +320,32 @@ struct EditorScreen: View {
                 }
                 if let shader, mode == .leaks, session.preview != nil, !showOriginal {
                     let frame = framePx + marginPx
-                    MaskOverlay(lens: shader.lens, layers: leakShapes, selectedId: selectedLeakId, frame: frame,
-                                zoomCenter: session.zoomCenter, zoomScale: session.zoomScale, zoomFrame: framePx,
-                                tool: .move, brush: vm.brush, paintAt: nil, sizeRing: false,
-                                leaks: leakForms)
-                    MaskTouchLayer(inputs: MaskInputs(
-                        lens: shader.lens, layers: leakShapes, selectedId: selectedLeakId, frame: frame,
-                        zoomCenter: session.zoomCenter, zoomScale: session.zoomScale, zoomFrame: framePx,
-                        tool: .move, brush: vm.brush,
-                        actions: MaskActions(
-                            onSelect: { selectedLeak = $0 },
-                            onChange: { id, shape in vm.updateLeak(id) { $0 = $0.withShape(shape) } },
-                            onStrokeBegin: { _, _ in }, onStrokeExtend: { _, _, _ in }, onStrokeCancel: { _ in },
-                            onPan: vm.pan, onZoom: pinchZoom),
-                        onPaintAt: { _ in },
-                        grabInside: true, leaks: leakForms,
-                        onBend: { id, bend in vm.updateLeak(id) { $0.bend = bend } },
-                        onReshape: { id, radii in vm.updateLeak(id) { $0.radii = radii } }))
+                    if !leaks.isEmpty {
+                        MaskOverlay(lens: shader.lens, layers: leakShapes, selectedId: selectedLeakId, frame: frame,
+                                    zoomCenter: session.zoomCenter, zoomScale: session.zoomScale, zoomFrame: framePx,
+                                    tool: .move, brush: vm.brush, paintAt: nil, sizeRing: false,
+                                    leaks: leakForms)
+                        MaskTouchLayer(inputs: MaskInputs(
+                            lens: shader.lens, layers: leakShapes, selectedId: selectedLeakId, frame: frame,
+                            zoomCenter: session.zoomCenter, zoomScale: session.zoomScale, zoomFrame: framePx,
+                            tool: .move, brush: vm.brush,
+                            actions: MaskActions(
+                                onSelect: { selectedLeak = $0; selectedFilmLeak = nil },
+                                onChange: { id, shape in vm.updateLeak(id) { $0 = $0.withShape(shape) } },
+                                onStrokeBegin: { _, _ in }, onStrokeExtend: { _, _, _ in }, onStrokeCancel: { _ in },
+                                onPan: vm.pan, onZoom: pinchZoom),
+                            onPaintAt: { _ in },
+                            grabInside: true, leaks: leakForms,
+                            onBend: { id, bend in vm.updateLeak(id) { $0.bend = bend } },
+                            onReshape: { id, radii in vm.updateLeak(id) { $0.radii = radii } }))
+                    }
+                    if !filmLeaks.isEmpty {
+                        FilmLeakOverlay(
+                            lens: shader.lens, leaks: filmLeaks, selectedId: selectedFilmId, frame: frame,
+                            zoomCenter: session.zoomCenter, zoomScale: session.zoomScale, zoomFrame: framePx,
+                            onSelect: { selectedFilmLeak = $0; selectedLeak = nil },
+                            onChange: { id, change in vm.updateFilmLeak(id, change) })
+                    }
                 }
                 if let shader, mode == .fx, session.preview != nil, !showOriginal {
                     let frame = framePx + marginPx
@@ -565,12 +582,27 @@ struct EditorScreen: View {
                 .frame(maxHeight: maxHeight)
             case .leaks:
                 LeaksPanel(
-                    leaks: leaks, selectedId: selectedLeakId, zoomed: session.zoomCenter != nil,
+                    leaks: leaks, selectedId: selectedLeakId,
+                    filmLeaks: filmLeaks, selectedFilmId: selectedFilmId,
+                    zoomed: session.zoomCenter != nil,
                     actions: LeakPanelActions(
-                        onSelect: { selectedLeak = $0 },
-                        onAdd: { kind in if let id = vm.addLeak(kind) { selectedLeak = id } },
+                        onSelect: { selectedLeak = $0; selectedFilmLeak = nil },
+                        onAdd: { kind in if let id = vm.addLeak(kind) { selectedLeak = id; selectedFilmLeak = nil } },
                         onUpdate: { id, force, change in vm.updateLeak(id, force: force, change) },
                         onRemove: vm.removeLeak,
+                        onSelectFilm: { selectedFilmLeak = $0; selectedLeak = nil },
+                        onAddFilm: { type, shortSideSprockets in
+                            if let id = vm.addFilmLeak(type, aspect: photoAspect, shortSideSprockets: shortSideSprockets) {
+                                selectedFilmLeak = id; selectedLeak = nil
+                            }
+                        },
+                        onRandomRoll: { shortSideSprockets in
+                            if let id = vm.randomFilmRoll(aspect: photoAspect, shortSideSprockets: shortSideSprockets) {
+                                selectedFilmLeak = id; selectedLeak = nil
+                            }
+                        },
+                        onUpdateFilm: { id, force, change in vm.updateFilmLeak(id, force: force, change) },
+                        onRemoveFilm: vm.removeFilmLeak,
                         onFx: { mode = .fx },
                         onToggleZoom: {
                             if session.zoomCenter != nil {

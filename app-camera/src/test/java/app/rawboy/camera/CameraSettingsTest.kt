@@ -1,5 +1,8 @@
 package app.rawboy.camera
 
+import app.rawboy.auto.looks.Looks
+import app.rawboy.camera.platform.PreviewLevel
+import app.rawboy.camera.platform.generic.neutralPlatform
 import app.rawboy.develop.DevelopParams
 import app.rawboy.export.DateStampFormat
 import app.rawboy.export.DateStampStyle
@@ -8,7 +11,7 @@ import app.rawboy.export.PhotoFrame
 import app.rawboy.export.TimeStampFormat
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class CameraSettingsTest {
@@ -21,6 +24,7 @@ class CameraSettingsTest {
         assertEquals(DateStampStyle.CLASSIC, s.dateStampStyle)
         assertEquals(TimeStampFormat.H24, s.timeStampFormat)
         assertFalse(s.pentax645Flip)
+        assertFalse(s.showZoomControl)
         assertEquals(Pentax645Field.DEFAULT, s.pentax645Fields)
         assertEquals(Pentax645Field.DEFAULT_ORDER, s.pentax645Order)
         val subset = setOf(Pentax645Field.SHUTTER, Pentax645Field.ISO, Pentax645Field.DATE, Pentax645Field.TIME)
@@ -38,29 +42,9 @@ class CameraSettingsTest {
         val base = DevelopParams(grain = 20f, filmGrain = 75f)
         val on = CameraSettings()
         assertEquals(true, on.grain)
-        val off = on.copy(grain = false).develop(base, false)
+        val off = on.copy(grain = false).develop(base, false, neutralPlatform.noise)
         assertEquals(0f, off.grain, 0f)
         assertEquals(0f, off.filmGrain, 0f)
-    }
-
-    @Test
-    fun samsungGetsTheIspLook() {
-        val base = DevelopParams()
-        val p = CameraSettings.withPhoneIspLook(base, "samsung")
-        assertEquals(base.contrast + CameraSettings.SAMSUNG_CONTRAST, p.contrast, 1e-4f)
-        assertEquals(base.saturation + CameraSettings.SAMSUNG_SATURATION, p.saturation, 1e-4f)
-    }
-
-    @Test
-    fun otherMakersAreUntouched() {
-        val base = DevelopParams()
-        assertSame(base, CameraSettings.withPhoneIspLook(base, "Google"))
-    }
-
-    @Test
-    fun blackAndWhiteStaysGrey() {
-        val p = CameraSettings.withPhoneIspLook(DevelopParams(saturation = -100f), "SAMSUNG")
-        assertEquals(-100f, p.saturation, 0f)
     }
 
     @Test
@@ -80,6 +64,7 @@ class CameraSettingsTest {
             showGrid = true,
             showLevel = true,
             showHistogram = true,
+            videoQuality = VideoQuality.HIGH,
             grain = false,
             scanQr = false,
             photoFrame = PhotoFrame.PENTAX_645,
@@ -93,4 +78,127 @@ class CameraSettingsTest {
         assertEquals(scales, reset.previewScales)
         assertEquals(guides, reset.flashGuides)
     }
+
+    @Test
+    fun automaticCalibrationKeepsItsStorageKeys() {
+        // The owner's learned calibration lives under these keys; a debug build's chosen profile learns beside them.
+        assertEquals("previewScales3", CameraSettingsStore.scalesKey(""))
+        assertEquals("flashGuides", CameraSettingsStore.flashGuidesKey(""))
+        assertEquals("previewScales3@neutral+tensor", CameraSettingsStore.scalesKey("neutral+tensor"))
+        assertEquals("flashGuides@neutral", CameraSettingsStore.flashGuidesKey("neutral"))
+        assertEquals("previewScales3", CameraSettingsStore.scalesKey("", PreviewLevel.BOOSTED))
+    }
+
+    @Test
+    fun eachPreviewLevelLearnsItsOwnScales() {
+        // A scale learned under one level means something else under another (OnePlus: ~0.4 boosted, ~1.0 white balanced).
+        assertEquals("previewScalesWb", CameraSettingsStore.scalesKey("", PreviewLevel.STILL_WHITE_BALANCED))
+        assertEquals("previewScalesWb@neutral+tensor", CameraSettingsStore.scalesKey("neutral+tensor", PreviewLevel.STILL_WHITE_BALANCED))
+        assertEquals(PreviewLevel.entries.size, PreviewLevel.entries.map { it.scalesKey }.toSet().size)
+    }
+
+    @Test
+    fun descriptionNoteIncludesModeAndLut() {
+        assertEquals("cameraMode=film lut=${Edition.defaultFilmLookId}", CameraSettings().descriptionNote())
+        // Film mode only knows film stocks (plus Natural): a colour-only look id falls back to the default stock.
+        val stock = Edition.filmLooks.last().id
+        assertEquals("cameraMode=film lut=$stock", CameraSettings(film = true, filmLookId = stock).descriptionNote())
+        assertEquals(
+            "cameraMode=film lut=${Looks.NATURAL.id}",
+            CameraSettings(film = true, filmLookId = Looks.NATURAL.id).descriptionNote(),
+        )
+        assertEquals(
+            "cameraMode=film lut=${Edition.defaultFilmLookId}",
+            CameraSettings(film = true, filmLookId = Looks.MOVIE_GREEN.id).descriptionNote(),
+        )
+        assertEquals(
+            "cameraMode=look lut=${Looks.EKTAR_100.id}",
+            CameraSettings(film = false, lookId = Looks.EKTAR_100.id).descriptionNote(),
+        )
+        assertEquals(
+            "cameraMode=look lut=${Looks.NATURAL.id}",
+            CameraSettings(film = false, lookId = Looks.NATURAL.id).descriptionNote(),
+        )
+        assertEquals(
+            "cameraMode=bw lut=${Edition.defaultMonoLookId}",
+            CameraSettings(mono = true, film = true).descriptionNote(),
+        )
+    }
+
+    @Test
+    fun videoQualityDefaultsAndBitrates() {
+        assertEquals(VideoQuality.OPTIMAL, CameraSettings().videoQuality)
+        assertEquals(listOf(VideoQuality.LOW, VideoQuality.OPTIMAL, VideoQuality.HIGH), VideoQuality.entries)
+        assertEquals(listOf("Low", "Optimal", "High"), VideoQuality.entries.map { it.label })
+        assertTrue(VideoQuality.LOW.bitrate(false) < VideoQuality.OPTIMAL.bitrate(false))
+        assertTrue(VideoQuality.OPTIMAL.bitrate(false) < VideoQuality.HIGH.bitrate(false))
+        assertTrue(VideoQuality.LOW.bitrate(true) < VideoQuality.OPTIMAL.bitrate(true))
+        assertTrue(VideoQuality.OPTIMAL.bitrate(true) < VideoQuality.HIGH.bitrate(true))
+        for (q in VideoQuality.entries) {
+            assertTrue(q.bitrate(true) > q.bitrate(false))
+        }
+    }
+
+    @Test
+    fun randomLightLeakRateDefaultsAndExactCountsPerFivePhotoSequence() {
+        assertEquals(CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE, CameraSettings().randomLightLeakRate)
+        assertEquals(listOf(1, 2, 3, 4, 5), CameraSettings.LIGHT_LEAK_RATES)
+
+        val rng = kotlin.random.Random(42)
+        for (rate in CameraSettings.LIGHT_LEAK_RATES) {
+            var state: String? = null
+            repeat(20) {
+                var leaks = 0
+                repeat(CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE) {
+                    val (leak, next) = LightLeakSequence.next(state, rate, random = rng)
+                    if (leak) leaks++
+                    state = next
+                }
+                assertEquals("rate $rate should produce exactly $rate leaks per 5 shots", rate, leaks)
+                assertEquals("", state)
+            }
+        }
+    }
+
+    @Test
+    fun randomLightLeakOneOfFiveHitsAllPositionsUnpredictably() {
+        val rng = kotlin.random.Random(12345)
+        var state: String? = null
+        val positions = mutableSetOf<Int>()
+        repeat(50) {
+            var hitIndex = -1
+            repeat(CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE) { idx ->
+                val (leak, next) = LightLeakSequence.next(state, rate = 1, random = rng)
+                if (leak) hitIndex = idx
+                state = next
+            }
+            assertTrue(hitIndex in 0 until CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE)
+            positions += hitIndex
+        }
+        assertEquals(setOf(0, 1, 2, 3, 4), positions)
+    }
+
+    @Test
+    fun randomLightLeakSequenceResetsOnRateChangeOrCorruptState() {
+        val rng = kotlin.random.Random(7)
+        val (_, midState) = LightLeakSequence.next(null, rate = 1, random = rng)
+        assertTrue(midState.startsWith("1:"))
+
+        // Switching rate mid-sequence deals a fresh 5-shot sequence for the new rate.
+        var state: String? = midState
+        var leaks = 0
+        repeat(CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE) {
+            val (leak, next) = LightLeakSequence.next(state, rate = 3, random = rng)
+            if (leak) leaks++
+            state = next
+        }
+        assertEquals(3, leaks)
+
+        // Malformed states fall back cleanly without crashing.
+        for (bad in listOf("", "bad", "2:", ":0101", "2:abc", "2:010101")) {
+            val (_, next) = LightLeakSequence.next(bad, rate = 2, random = rng)
+            assertTrue(next.startsWith("2:"))
+        }
+    }
 }
+

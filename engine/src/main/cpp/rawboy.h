@@ -6,8 +6,12 @@
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include <system_error>
 #include <thread>
 #include <vector>
+#ifdef __EMSCRIPTEN__
+#include <emscripten/threading.h>
+#endif
 
 #include "lens.h"
 
@@ -86,18 +90,32 @@ struct DecodedImage {
     std::vector<HealBackup> healBackups;
 };
 
-/** Runs fn(rowBegin, rowEnd) on up to 8 threads. */
+/** Runs fn(rowBegin, rowEnd) on up to 8 threads (the calling thread takes a slice too). */
 template <typename Fn>
 void parallelRows(int rows, Fn&& fn) {
-    const int threads = std::max(1, std::min(8, static_cast<int>(std::thread::hardware_concurrency())));
-    std::vector<std::thread> pool;
+    if (rows <= 0) return;
+    int threads = std::max(1, std::min(8, static_cast<int>(std::thread::hardware_concurrency())));
+#ifdef __EMSCRIPTEN__
+    if (!emscripten_has_threading_support()) threads = 1;
+#endif
     const int step = (rows + threads - 1) / threads;
-    for (int t = 0; t < threads; ++t) {
+    std::vector<std::thread> pool;
+    pool.reserve(static_cast<size_t>(threads - 1));
+    int fallbackBegin = rows;
+    for (int t = 1; t < threads; ++t) {
         const int begin = t * step;
         const int end = std::min(rows, begin + step);
         if (begin >= end) break;
-        pool.emplace_back([&fn, begin, end] { fn(begin, end); });
+        try {
+            pool.emplace_back([&fn, begin, end] { fn(begin, end); });
+        } catch (const std::system_error&) {
+            // Pool exhausted or threads unavailable (e.g. WebKit/iOS): run the rest here instead of aborting.
+            fallbackBegin = begin;
+            break;
+        }
     }
+    fn(0, std::min(rows, step));
+    if (fallbackBegin < rows) fn(fallbackBegin, rows);
     for (auto& th : pool) th.join();
 }
 
@@ -135,6 +153,15 @@ inline uint16_t floatToHalf(float f) {
 #endif
 }
 
+// floatToHalf keeping negatives down to [floor] (<= 0): noise below black that BlackFix::pedestal keeps.
+inline uint16_t floatToHalfSigned(float f, float floor) {
+    if (!(f >= 0.0f)) {
+        if (!(f < 0.0f)) return 0;  // NaN
+        return static_cast<uint16_t>(floatToHalf(-std::max(f, floor)) | 0x8000u);
+    }
+    return floatToHalf(f);
+}
+
 inline float halfToFloat(uint16_t h) {
     const uint32_t sign = static_cast<uint32_t>(h & 0x8000) << 16;
     const uint32_t exp = (h >> 10) & 0x1f;
@@ -154,10 +181,28 @@ inline float halfToFloat(uint16_t h) {
     return f;
 }
 
+/**
+ * How the black level of a raw with a 2x2 per-site BlackLevel (DNG BlackLevelRepeatDim 2 2, as Android's DngCreator
+ * writes) is taken off, beyond LibRaw's own handling; the default is LibRaw's (RawBoy Camera sets it per phone).
+ * LibRaw keeps such blacks as integers, dropping their fraction (a phone's 64.81 becomes 64), and clips what falls
+ * below black at zero, which lifts and tints the deepest shadows of a noisy frame. Ignored for other raws.
+ */
+struct BlackFix {
+    /** Subtract the file's fractional per-site black exactly instead of its integer part. */
+    bool exact = false;
+    /** DN of noise kept below black instead of clipped at zero (0 = LibRaw's clip); the output may go negative. */
+    float pedestal = 0.0f;
+    /** DN of black beyond the file's per camera colour (R, G, B): the sensor's black where the file's is off. */
+    float offset[3] = {0.0f, 0.0f, 0.0f};
+
+    bool any() const { return exact || pedestal > 0.0f || offset[0] != 0.0f || offset[1] != 0.0f || offset[2] != 0.0f; }
+};
+
 // extraBlack: black to subtract beyond the file's, as a fraction of the white range (0 = none).
 // draft: half size without demosaic, about 2-4x faster (see DecodedImage::fullWidth).
+// black: see BlackFix (LibRaw's handling by default).
 bool decodeWithLibRaw(const uint8_t* data, size_t size, DecodedImage& out, std::string& error, float extraBlack = 0.0f,
-                      bool draft = false);
+                      bool draft = false, const BlackFix& black = BlackFix());
 
 /**
  * Decodes a JPEG (decodeJpeg), or a raw with LibRaw, falling back to the Adobe DNG SDK (when built in) for DNGs
@@ -165,7 +210,7 @@ bool decodeWithLibRaw(const uint8_t* data, size_t size, DecodedImage& out, std::
  * On failure, [error] holds both decoders' reasons.
  */
 bool decodeAny(const uint8_t* data, size_t size, DecodedImage& out, std::string& error, float extraBlack = 0.0f,
-               bool draft = false);
+               bool draft = false, const BlackFix& black = BlackFix());
 
 bool looksLikeJpeg(const uint8_t* data, size_t size);
 

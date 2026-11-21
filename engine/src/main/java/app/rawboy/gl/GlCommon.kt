@@ -2,6 +2,7 @@ package app.rawboy.gl
 
 import android.opengl.GLES30
 import app.rawboy.develop.BrushRaster
+import app.rawboy.develop.FilmLeakUniforms
 import app.rawboy.develop.FxData
 import app.rawboy.develop.FxUniforms
 import app.rawboy.develop.LeakUniforms
@@ -222,6 +223,13 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
     private val uLeakForm = GLES30.glGetUniformLocation(id, "uLeakForm")
     private val uLeakLook = GLES30.glGetUniformLocation(id, "uLeakLook")
     private val uLeakRadii = GLES30.glGetUniformLocation(id, "uLeakRadii")
+    private val uFlCount = GLES30.glGetUniformLocation(id, "uFlCount")
+    private val uFlBox = GLES30.glGetUniformLocation(id, "uFlBox")
+    private val uFlForm = GLES30.glGetUniformLocation(id, "uFlForm")
+    private val uFlTint = GLES30.glGetUniformLocation(id, "uFlTint")
+    private val uFlTint2 = GLES30.glGetUniformLocation(id, "uFlTint2")
+    private val uFlLook = GLES30.glGetUniformLocation(id, "uFlLook")
+    private val uFlGrade = GLES30.glGetUniformLocation(id, "uFlGrade")
     private val uFx = GLES30.glGetUniformLocation(id, "uFx")
     private val uFxCount = GLES30.glGetUniformLocation(id, "uFxCount")
     private val uFxGeom = GLES30.glGetUniformLocation(id, "uFxGeom")
@@ -330,6 +338,7 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
         bindLens(p.lens)
         bindLayers(p.layers)
         bindLeaks(p.leaks)
+        bindFilmLeaks(p.filmLeaks)
         bindFx(p.fx)
         GLES30.glUniform1i(uBokeh, BokehTexture.UNIT)
         val bokeh = BokehTexture.geometry(p)
@@ -433,6 +442,17 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
         GLES30.glUniform4fv(uLeakForm, n, l.form, 0)
         GLES30.glUniform4fv(uLeakLook, n, l.look, 0)
         GLES30.glUniform4fv(uLeakRadii, n * 2, l.radii, 0)
+    }
+
+    private fun bindFilmLeaks(fl: FilmLeakUniforms) {
+        val n = app.rawboy.develop.FilmLeaks.MAX_LEAKS
+        GLES30.glUniform1i(uFlCount, fl.count)
+        GLES30.glUniform4fv(uFlBox, n, fl.box, 0)
+        GLES30.glUniform4fv(uFlForm, n, fl.form, 0)
+        GLES30.glUniform4fv(uFlTint, n, fl.tint, 0)
+        GLES30.glUniform4fv(uFlTint2, n, fl.tint2, 0)
+        GLES30.glUniform4fv(uFlLook, n, fl.look, 0)
+        GLES30.glUniform4fv(uFlGrade, n, fl.grade, 0)
     }
 
     /** Light effects (shaders/light_fx.glsl): their uniforms; the segment data is on [FxTexture.UNIT]. */

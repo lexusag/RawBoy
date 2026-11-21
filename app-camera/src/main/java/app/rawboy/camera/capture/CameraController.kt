@@ -32,7 +32,14 @@ import android.util.Log
 import android.util.Range
 import android.view.Surface
 import androidx.exifinterface.media.ExifInterface
+import app.rawboy.auto.analysis.AutoTone
 import app.rawboy.auto.analysis.MeterArea
+import app.rawboy.camera.debug.DebugProbe
+import app.rawboy.camera.platform.CameraPlatform
+import app.rawboy.camera.platform.CompensationModel
+import app.rawboy.camera.platform.FlashMetering
+import app.rawboy.camera.platform.PreviewColor
+import app.rawboy.camera.platform.PreviewColorInput
 import app.rawboy.color.Mat3
 import app.rawboy.color.WhiteBalance
 import app.rawboy.raw.BurstNative
@@ -57,7 +64,6 @@ import kotlin.math.abs
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.pow
-import kotlin.math.roundToInt
 import kotlin.math.sqrt
 
 /** The camera's flash for a shot. */
@@ -73,7 +79,7 @@ enum class FlashMode {
 class LongExposure(
     val seconds: Int,
     val lighten: Boolean,
-    /** The viewfinder's metered key (1 = sensor clip) at the preview's exposure, to lift a dark scene towards [LONG_EXPOSURE_KEY]; null = no lift. */
+    /** The viewfinder's metered key (1 = sensor clip) at the preview's exposure, to lift a dark scene towards [AutoTone.PHONE_KEY]; null = no lift. */
     val key: Float? = null,
 )
 
@@ -107,9 +113,10 @@ class FlashGuides(
  * known tone curve (so it can be linearised), and RAW_SENSOR captures written as DNG: one frame, or a burst merged
  * into one (BurstNative).
  *
- * Camera callbacks run on a private thread; the suspend functions may be called from any thread.
+ * Camera callbacks run on a private thread; the suspend functions may be called from any thread. What differs between
+ * phones (the preview's colour path, black, still exposure limit, flash starting points) comes from [platform].
  */
-class CameraController(context: Context) : AutoCloseable {
+class CameraController(context: Context, private val platform: CameraPlatform) : AutoCloseable {
     private val manager = context.getSystemService(CameraManager::class.java)
     private val thread = HandlerThread("RawBoy-camera").apply { start() }
     private val handler = Handler(thread.looper)
@@ -154,7 +161,7 @@ class CameraController(context: Context) : AutoCloseable {
         /** [rawSize] is the [maxResSize]: the raw stream and its stills use the maximum-resolution sensor mode. */
         val hiRes: Boolean = false,
         /** The lens's aperture (f-number); the flash default for a lens that hasn't learned its own scales with it. */
-        val fNumber: Float = FLASH_REFERENCE_F_NUMBER,
+        val fNumber: Float,
     ) {
         /** The lens can focus (a fixed-focus lens reports a minimum focus distance of 0). */
         val canFocus get() = (characteristics.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f) > 0f
@@ -181,6 +188,9 @@ class CameraController(context: Context) : AutoCloseable {
 
 
         val isFront get() = facing == CameraMetadata.LENS_FACING_FRONT
+
+        /** "2", or "0/3" for physical lens 3 streamed from logical camera 0. */
+        val name get() = physicalId?.let { "$openId/$it" } ?: openId
 
         fun labelled(label: String) = Info(
             openId, physicalId, label, facing, equivalentFocal, characteristics, regionArray, rawSize, previewSize,
@@ -224,16 +234,23 @@ class CameraController(context: Context) : AutoCloseable {
         val exposureNs: Long,
         /** TONEMAP_MODE the camera actually applied to the preview (null if not reported). */
         val tonemapMode: Int?,
-        /** Linear preview RGB -> Rec.2020 with the raw's colours (see [previewToRec2020]), GL column-major; or null. */
+        /** Linear preview RGB -> Rec.2020 with the raw's colours (the platform's [PreviewColor]), GL column-major; or null. */
         val previewColor: FloatArray?,
         /** LENS_FOCUS_DISTANCE in diopters (0 = infinity), or null if not reported. */
         val focusDiopters: Float? = null,
         /** AE compensation steps this frame was shot with (CONTROL_AE_EXPOSURE_COMPENSATION), or null if not reported. */
         val compensationSteps: Int? = null,
+        /** The frame's as-shot neutral (SENSOR_NEUTRAL_COLOR_POINT) in camera RGB, or null if not reported. */
+        val neutral: DoubleArray? = null,
     )
 
     private val _frames = MutableStateFlow<FrameState?>(null)
     val frames = _frames.asStateFlow()
+
+    /** The last preview result of the streaming lens (DebugProbe's shutter line). */
+    @Volatile
+    var lastPreviewResult: CaptureResult? = null
+        private set
 
     private var info: Info? = null
     private var device: CameraDevice? = null
@@ -283,6 +300,10 @@ class CameraController(context: Context) : AutoCloseable {
     @Volatile
     private var residualAtZero = 1f
 
+    /** AE compensation (EV) added to the user's while a [FlashMetering.CAMERA_AE] flash shot runs ([flashMetering]). */
+    @Volatile
+    private var flashBiasEv = 0f
+
     /** AE and flash modes for every request; changed only while a flash shot runs (see [torchFocus]). */
     @Volatile
     private var aeMode = CameraMetadata.CONTROL_AE_MODE_ON
@@ -293,58 +314,61 @@ class CameraController(context: Context) : AutoCloseable {
     private var precaptureWatch: ((TotalCaptureResult) -> Unit)? = null
 
     /**
-     * The back lenses that can deliver RAW_SENSOR, widest first, labelled UW / W / T. A logical
+     * The back lenses that can deliver RAW_SENSOR, widest first, labelled UW / W / T ([LensChoice]). A logical
      * multi-camera (Pixel: one "back camera" over the wide, ultrawide and tele) contributes its physical
      * lenses; the logical camera itself stands for the lens it starts on (W), since that path has the
-     * most complete 3A. Lenses are logged under RawBoyCamera for diagnosing other phones.
+     * most complete 3A, unless the platform prefers stand-alone cameras of the same focal length
+     * ([app.rawboy.camera.platform.LensProfile]). Lenses are logged under RawBoyCamera for diagnosing other phones.
      * [facing]: CameraMetadata.LENS_FACING_BACK or LENS_FACING_FRONT; empty when that side has no RAW.
+     * [onSkip] hears each camera ("2", or "0/3" for a physical lens) that isn't listed, and why (the device report).
      */
-    fun lenses(facing: Int = CameraMetadata.LENS_FACING_BACK, preferMaxRes: Boolean = false): List<Info> {
+    fun lenses(
+        facing: Int = CameraMetadata.LENS_FACING_BACK,
+        preferMaxRes: Boolean = false,
+        onSkip: ((camera: String, why: String) -> Unit)? = null,
+    ): List<Info> {
         val found = ArrayList<Info>()
+        val candidates = ArrayList<LensChoice.Candidate>()
         for (id in manager.cameraIdList) {
             val c = manager.getCameraCharacteristics(id)
             if (c.get(CameraCharacteristics.LENS_FACING) != facing) continue
             val region = c.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE) ?: Rect()
-            infoFor(id, null, c, region, preferMaxRes)?.let(found::add)
             val caps = c.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES) ?: IntArray(0)
-            if (CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA in caps) {
+            val logical = CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_LOGICAL_MULTI_CAMERA in caps
+            infoFor(id, null, c, region, preferMaxRes, onSkip)?.let {
+                found += it
+                candidates += LensChoice.Candidate(it.name, physical = false, logical = logical, focal = it.equivalentFocal)
+            }
+            if (logical) {
                 for (physical in c.physicalCameraIds) {
                     val pc = runCatching { manager.getCameraCharacteristics(physical) }.getOrNull() ?: continue
-                    val lens = infoFor(id, physical, pc, region, preferMaxRes)
-                    lens?.let { Log.d(TAG, "camera $id/$physical: RAW ${it.rawSize}, preview ${it.previewSize}, ${it.equivalentFocal.toInt()} mm") }
-                    lens?.let(found::add)
+                    val lens = infoFor(id, physical, pc, region, preferMaxRes, onSkip) ?: continue
+                    Log.d(TAG, "camera $id/$physical: RAW ${lens.rawSize}, preview ${lens.previewSize}, ${lens.equivalentFocal.toInt()} mm")
+                    found += lens
+                    candidates += LensChoice.Candidate(lens.name, physical = true, logical = false, focal = lens.equivalentFocal)
                 }
             }
         }
-        // One entry per lens: physical lenses with the focal length of a camera already listed are the same lens.
-        val lenses = ArrayList<Info>()
-        for (lens in found.sortedBy { if (it.physicalId == null) 0 else 1 }) {
-            if (lenses.none { abs(it.equivalentFocal - lens.equivalentFocal) < 0.12f * lens.equivalentFocal }) lenses += lens
-        }
-        if (lenses.isEmpty()) {
+        val choice = LensChoice.choose(candidates, platform.lenses.standaloneOverLogical)
+        for ((c, why) in choice.skipped) onSkip?.invoke(c.name, why)
+        if (choice.lenses.isEmpty()) {
             Log.d(TAG, "lenses (facing $facing): none with RAW")
             return emptyList()
         }
-        lenses.sortBy { it.equivalentFocal }
-        // The main lens is the one the logical camera opens on, else the one nearest 26 mm.
-        val main = lenses.firstOrNull { it.physicalId == null } ?: lenses.minBy { abs(it.equivalentFocal - 26f) }
-        val mainIndex = lenses.indexOf(main)
-        return lenses.mapIndexed { i, lens ->
-            val label = when {
-                i == mainIndex -> "W"
-                i < mainIndex -> if (mainIndex - i == 1) "UW" else "UW${mainIndex - i}"
-                else -> if (i - mainIndex == 1) "T" else "T${i - mainIndex}"
-            }
-            lens.labelled(label)
-        }.also { list ->
+        val byName = found.associateBy { it.name }
+        return choice.lenses.map { byName.getValue(it.candidate.name).labelled(it.label) }.also { list ->
             Log.d(TAG, "lenses (facing $facing): " + list.joinToString { "${it.label}=${it.openId}/${it.physicalId ?: "-"} ${it.equivalentFocal.toInt()}mm ${it.rawSize}" })
         }
     }
 
-    private fun infoFor(openId: String, physicalId: String?, c: CameraCharacteristics, regionArray: Rect, preferMaxRes: Boolean): Info? {
+    private fun infoFor(
+        openId: String, physicalId: String?, c: CameraCharacteristics, regionArray: Rect, preferMaxRes: Boolean,
+        onSkip: ((String, String) -> Unit)?,
+    ): Info? {
         val name = physicalId?.let { "$openId/$it" } ?: openId
         fun reject(why: String): Info? {
             Log.d(TAG, "camera $name: $why")
+            onSkip?.invoke(name, why)
             return null
         }
         val caps = c.get(CameraCharacteristics.REQUEST_AVAILABLE_CAPABILITIES) ?: return reject("no capabilities")
@@ -397,7 +421,7 @@ class CameraController(context: Context) : AutoCloseable {
             maxResSize = maxRes?.first,
             maxResFormat = maxResFormat,
             hiRes = hiRes,
-            fNumber = c.get(CameraCharacteristics.LENS_INFO_AVAILABLE_APERTURES)?.firstOrNull()?.takeIf { it > 0f } ?: FLASH_REFERENCE_F_NUMBER,
+            fNumber = c.get(CameraCharacteristics.LENS_INFO_AVAILABLE_APERTURES)?.firstOrNull()?.takeIf { it > 0f } ?: platform.flash.referenceFNumber,
         )
     }
 
@@ -437,6 +461,7 @@ class CameraController(context: Context) : AutoCloseable {
                 device = camera
                 try {
                     session = createSession(camera, outputs)
+                    DebugProbe.logTemplates(camera, info.label)
                     streamingPhysical = physical
                     repeatPreview()
                     return
@@ -455,6 +480,7 @@ class CameraController(context: Context) : AutoCloseable {
         val camera = open(physical ?: info.openId)
         device = camera
         session = createSession(camera, outputs(preview, reader, null, info.hiRes))
+        DebugProbe.logTemplates(camera, info.label)
         streamingPhysical = null
         repeatPreview()
     }
@@ -566,6 +592,7 @@ class CameraController(context: Context) : AutoCloseable {
         s.setRepeatingRequest(request, object : CameraCaptureSession.CaptureCallback() {
             override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
                 val lens = lensResult(result)
+                lastPreviewResult = lens
                 val state = frameState(inf, lens, result.get(CaptureResult.CONTROL_AE_EXPOSURE_COMPENSATION))
                 if (state.compensationSteps == 0) residualAtZero = residual(state)
                 _frames.value = state
@@ -725,6 +752,8 @@ class CameraController(context: Context) : AutoCloseable {
         longExposure: LongExposure? = null,
         /** Why the shot is a burst or not (mode, light), for the debug note; the frames actually merged are added here. */
         note: String = "",
+        /** A single still's exposure is over (its capture result has arrived): screen flash may go dark. */
+        onExposed: () -> Unit = {},
         onSubmitted: () -> Unit = {},
     ): Still = captureLock.withLock {
         try {
@@ -732,25 +761,36 @@ class CameraController(context: Context) : AutoCloseable {
             val inf = info ?: throw IOException("Camera not ready")
             val reader = rawReader ?: throw IOException("Camera not ready")
             val mode = if (inf.hasFlash) flash else FlashMode.OFF
-            if (mode == FlashMode.OFF && longExposure != null && !inf.hiRes) return@withLock longExposureDng(s, inf, longExposure, exifOrientation, location, note, out, onSubmitted)
-            if (mode == FlashMode.OFF && burstFrames > 1 && !inf.hiRes) return@withLock burstDng(s, inf, burstFrames, exifOrientation, location, note, out, onSubmitted)
+            // What reached the raw, judged on the frame at the shutter (a burst's or long exposure's AE moves on meanwhile).
+            // The Pixel's model keeps judging on the frame after the capture, as it was tuned.
+            val shutterEv = if (platform.still.compensation == CompensationModel.AE_GAIN_IN_RAW) appliedCompensationEv(_frames.value) else null
+            if (mode == FlashMode.OFF && longExposure != null && !inf.hiRes) return@withLock longExposureDng(s, inf, longExposure, exifOrientation, location, note, out, shutterEv, onExposed, onSubmitted)
+            if (mode == FlashMode.OFF && burstFrames > 1 && !inf.hiRes) return@withLock burstDng(s, inf, burstFrames, exifOrientation, location, note, out, shutterEv, onSubmitted)
             // Ambient exposure before any light comes on: the flash still never needs more.
             val ambient = _frames.value
             var focused = false
+            // The platform says who exposes a flash still: the flash guide by hand (AE off), or the camera's flash AE.
+            val cameraAe = mode != FlashMode.OFF && platform.flash.metering == FlashMetering.CAMERA_AE
             try {
                 if (mode == FlashMode.FOCUS_FLASH) focused = torchFocus(s, inf)
                 val diopters = _frames.value?.focusDiopters
-                val exposure = if (mode == FlashMode.OFF) null else flashExposure(inf, ambient, diopters, guides)
+                val exposure = if (mode == FlashMode.OFF || cameraAe) null else flashExposure(inf, ambient, diopters, guides)
+                if (cameraAe) flashMetering(s, inf)
                 val why = when {
                     burstFrames <= 1 -> ""
                     inf.hiRes -> " reason=max-res"
                     else -> " reason=flash"
                 }
                 val description = "RawBoy merge=off frames=1 $note$why".trim()
-                val result = stillDng(s, inf, reader, mode, exposure?.first, exifOrientation, location, description, out, onSubmitted)
+                val result = stillDng(s, inf, reader, mode, exposure?.first, exifOrientation, location, description, out, onExposed, onSubmitted)
                 Still(
                     result, exposure?.second, distanceKnown = diopters != null && diopters > 0f,
-                    compensationEv = if (exposure == null) appliedCompensationEv(ambient) else 0f,
+                    compensationEv = when {
+                        // The flash AE has the range to put all of it (the user's and the flash's) into the raw.
+                        cameraAe -> compensationEv()
+                        exposure == null -> appliedCompensationEv(ambient)
+                        else -> 0f
+                    },
                     description = description,
                 )
             } finally {
@@ -776,8 +816,9 @@ class CameraController(context: Context) : AutoCloseable {
         location: Location?,
         description: String,
         out: OutputStream,
+        onExposed: () -> Unit,
         onSubmitted: () -> Unit,
-    ): CaptureResult = captureOne(s, stillRequest(s, inf, reader, flash, manual), onSubmitted) { captureResult, img ->
+    ): CaptureResult = captureOne(s, stillRequest(s, inf, reader, flash, manual), onSubmitted, onExposed) { captureResult, img ->
         Log.d(TAG, "still (flash $flash${manual?.let { ", manual ${it.first / 1000} µs ISO ${it.second}" } ?: ""}, state ${captureResult.get(CaptureResult.FLASH_STATE)}, AE ${captureResult.get(CaptureResult.CONTROL_AE_STATE)}): ${(captureResult.get(CaptureResult.SENSOR_EXPOSURE_TIME) ?: 0L) / 1000} µs, ISO " +
             "${captureResult.get(CaptureResult.SENSOR_SENSITIVITY)}, boost ${captureResult.get(CaptureResult.CONTROL_POST_RAW_SENSITIVITY_BOOST)}, " +
             "black ${captureResult.get(CaptureResult.SENSOR_DYNAMIC_BLACK_LEVEL)?.joinToString()} " +
@@ -823,12 +864,13 @@ class CameraController(context: Context) : AutoCloseable {
             // zero-shutter-lag frame from before the flash.
             set(CaptureRequest.CONTROL_ENABLE_ZSL, false)
             // The camera's AE keeps the ambient exposure for a flash still (Pixel 9 Pro), so the raw clipped:
-            // expose it ourselves (see flashExposure) and fire the flash.
+            // expose it ourselves (see flashExposure) and fire the flash. Without [manual] the flash AE mode in
+            // force (FlashMetering.CAMERA_AE, see flashMetering) exposes it and fires the flash itself.
             if (manual != null) {
                 set(CaptureRequest.CONTROL_AE_MODE, CameraMetadata.CONTROL_AE_MODE_OFF)
                 setForLens(CaptureRequest.SENSOR_EXPOSURE_TIME, manual.first)
                 setForLens(CaptureRequest.SENSOR_SENSITIVITY, manual.second)
-                setForLens(CaptureRequest.SENSOR_FRAME_DURATION, max(manual.first, FLASH_FRAME_NS))
+                setForLens(CaptureRequest.SENSOR_FRAME_DURATION, max(manual.first, FlashExposure.FRAME_NS))
                 setForLens(CaptureRequest.CONTROL_POST_RAW_SENSITIVITY_BOOST, 100)
             }
             set(CaptureRequest.FLASH_MODE, CameraMetadata.FLASH_MODE_SINGLE)
@@ -848,6 +890,8 @@ class CameraController(context: Context) : AutoCloseable {
         s: CameraCaptureSession,
         request: CaptureRequest,
         onSubmitted: () -> Unit,
+        /** The result has arrived (the exposure is over); on the camera thread. */
+        onCompleted: () -> Unit = {},
         use: (CaptureResult, Image) -> T,
     ): T {
         val image = CompletableDeferred<Image>()
@@ -861,6 +905,7 @@ class CameraController(context: Context) : AutoCloseable {
                 override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, r: TotalCaptureResult) {
                     if (pendingResult === result) pendingResult = null
                     result.complete(r)
+                    onCompleted()
                 }
 
                 override fun onCaptureFailed(session: CameraCaptureSession, request: CaptureRequest, failure: CaptureFailure) {
@@ -926,7 +971,7 @@ class CameraController(context: Context) : AutoCloseable {
         val rowShorts = plane.rowStride / 2
         val step = plane.pixelStride / 2
         val started = System.nanoTime()
-        val key = RawMeter.key(img.width, img.height, cfa, black, white, neutral, meter.fraction, app.rawboy.camera.ShotSaver.EXTRA_BLACK) { x, y ->
+        val key = RawMeter.key(img.width, img.height, cfa, black, white, neutral, meter.fraction, platform.still.extraBlack) { x, y ->
             data.get(y * rowShorts + x * step).toInt() and 0xFFFF
         }
         Log.d(TAG, "raw meter: key $key in ${(System.nanoTime() - started) / 1_000_000} ms (${r.get(CaptureResult.SENSOR_EXPOSURE_TIME)?.div(1000)} µs, " +
@@ -948,6 +993,8 @@ class CameraController(context: Context) : AutoCloseable {
         location: Location?,
         note: String,
         out: OutputStream,
+        /** [appliedCompensationEv] at the shutter, or null to judge on the frame after the burst. */
+        shutterEv: Float?,
         onSubmitted: () -> Unit,
     ): Still {
         val reader = rawReader ?: throw IOException("Camera not ready")
@@ -1063,7 +1110,7 @@ class CameraController(context: Context) : AutoCloseable {
                 location?.let(dng::setLocation)
                 dng.writeByteBuffer(out, Size(width, height), merged, 0)
             }
-            return Still(reference, null, effectiveFrames = effective, compensationEv = appliedCompensationEv(_frames.value), description = description)
+            return Still(reference, null, effectiveFrames = effective, compensationEv = shutterEv ?: appliedCompensationEv(_frames.value), description = description)
         } finally {
             BurstNative.destroy(h)
         }
@@ -1076,9 +1123,18 @@ class CameraController(context: Context) : AutoCloseable {
     @Volatile
     private var longExposureStop = false
 
+    @Volatile
+    private var onLongExposureStop: (() -> Unit)? = null
+
+    /** Clears any previous early-stop flag before starting a new long exposure. */
+    fun prepareLongExposure() {
+        longExposureStop = false
+    }
+
     /** Ends the running long exposure early; the frames taken so far are stacked and saved. */
     fun stopLongExposure() {
         longExposureStop = true
+        onLongExposureStop?.invoke()
     }
 
     /**
@@ -1096,8 +1152,15 @@ class CameraController(context: Context) : AutoCloseable {
         location: Location?,
         note: String,
         out: OutputStream,
+        /** [appliedCompensationEv] at the shutter, or null for the Pixel's rule (below). */
+        shutterEv: Float?,
+        onExposed: () -> Unit,
         onSubmitted: () -> Unit,
     ): Still {
+        if (longExposureStop) {
+            longExposureStop = false
+            throw CancellationException("Long exposure stopped")
+        }
         val reader = rawReader ?: throw IOException("Camera not ready")
         val width = reader.width
         val height = reader.height
@@ -1109,7 +1172,7 @@ class CameraController(context: Context) : AutoCloseable {
             // The preview has converged by now: keep its colour for every frame (flicker otherwise).
             set(CaptureRequest.CONTROL_AE_LOCK, true)
             set(CaptureRequest.CONTROL_AWB_LOCK, true)
-            // Exposure: AE tops out at 1/30 s or 1/15 s and a dark scene stays dark however long the stack runs, so
+            // Exposure: AE tops out at the preview's or the still's exposure limit and a dark scene stays dark however long the stack runs, so
             // each frame is exposed by hand, as long as LONG_EXPOSURE_FRAME_NS allows (ISO falls to match: the same
             // picture with far less noise), and a dark scene is lifted to a normal key with the time AE refused.
             manual?.let { (t0, iso0) ->
@@ -1166,7 +1229,6 @@ class CameraController(context: Context) : AutoCloseable {
         val totalNs = spec.seconds * 1_000_000_000L
         var startNs = 0L
         val done = CompletableDeferred<Unit>()
-        longExposureStop = false
         fun finished() = longExposureStop || System.nanoTime() - startNs >= totalNs
         fun checkDone() {
             if (finished() && reference != null && arrived + failed >= submitted) done.complete(Unit)
@@ -1224,7 +1286,13 @@ class CameraController(context: Context) : AutoCloseable {
             runCatching { s.stopRepeating() }
         }
         handler.post {
+            if (longExposureStop) {
+                closed = true
+                done.complete(Unit)
+                return@post
+            }
             pendingBurst = done
+            onLongExposureStop = { handler.post { checkDone() } }
             burstSink = sink@{ img ->
                 if (closed) return@sink
                 if (handle == 0L) handle = LongExposureNative.create(width, height, spec.lighten)
@@ -1245,17 +1313,20 @@ class CameraController(context: Context) : AutoCloseable {
             withTimeoutOrNull(totalNs / 1_000_000 + LONG_EXPOSURE_GRACE_MS) { done.await() }
         } catch (e: CancellationException) {
             handler.post {
+                onLongExposureStop = null
                 burstSink = null
                 if (pendingBurst === done) pendingBurst = null
                 closed = true
                 if (handle != 0L) LongExposureNative.destroy(handle)
                 runCatching { repeatPreview() }
             }
+            longExposureStop = false
             _longExposureProgress.value = null
             throw e
         }
         val state = CompletableDeferred<Triple<Long, CaptureResult?, Int>>()
         if (!handler.post {
+            onLongExposureStop = null
             burstSink = null
             if (pendingBurst === done) pendingBurst = null
             closed = true
@@ -1265,7 +1336,13 @@ class CameraController(context: Context) : AutoCloseable {
             state.complete(Triple(handle, reference, arrived))
         }) state.completeExceptionally(IOException("Camera closed"))
         val (h, ref, frames) = try { state.await() } finally { _longExposureProgress.value = null }
-        if (h == 0L) throw IOException("Long exposure: no frames")
+        val stopped = longExposureStop
+        longExposureStop = false
+        onExposed()
+        if (h == 0L) {
+            if (stopped) throw CancellationException("Long exposure stopped")
+            throw IOException("Long exposure: no frames")
+        }
         try {
             if (ref == null) throw IOException("Long exposure: no result for the first frame")
             val stacked = withContext(Dispatchers.Default) { LongExposureNative.finish(h, width, height) }
@@ -1279,7 +1356,7 @@ class CameraController(context: Context) : AutoCloseable {
             }
             // Averaging N frames cuts noise about like merging N (see burstDng); a lighten stack keeps each frame's.
             val effective = if (spec.lighten) 1f else frames.toFloat().coerceIn(1f, 8f)
-            return Still(ref, null, effectiveFrames = effective, compensationEv = if (manualExposure) compensationEv() else appliedCompensationEv(_frames.value), description = description)
+            return Still(ref, null, effectiveFrames = effective, compensationEv = shutterEv ?: if (manualExposure) compensationEv() else appliedCompensationEv(_frames.value), description = description)
         } finally {
             LongExposureNative.destroy(h)
         }
@@ -1289,7 +1366,7 @@ class CameraController(context: Context) : AutoCloseable {
      * The (exposure ns, ISO) of one long-exposure frame, or null to leave it to AE (no preview reading yet). The
      * exposure is the preview's whole gain (time x ISO x the post-raw boost, which a manual raw doesn't get) times
      * Brightness's compensation and a lift of up to [LONG_EXPOSURE_MAX_LIFT_EV] that brings a dark scene to
-     * [LONG_EXPOSURE_KEY], spent as time first (up to [LONG_EXPOSURE_FRAME_NS], the sensor's limit) then as ISO.
+     * [AutoTone.PHONE_KEY] (the key Camera's auto develop aims for), spent as time first (up to [LONG_EXPOSURE_FRAME_NS], the sensor's limit) then as ISO.
      */
     private fun longExposureManual(inf: Info, spec: LongExposure): Pair<Long, Int>? {
         val f = _frames.value ?: return null
@@ -1319,7 +1396,7 @@ class CameraController(context: Context) : AutoCloseable {
         // the raw of the preview frame (viewfinder key x the calibrated preview scale; frames shot at the preview's time x ISO x boost give just this key); it
         // is null when the lens's preview isn't calibrated yet, which leaves the preview's exposure as it is.
         val lift = spec.key?.takeIf { it > 0f }?.let { key ->
-            kotlin.math.log2(LONG_EXPOSURE_KEY / key).coerceIn(0f, LONG_EXPOSURE_MAX_LIFT_EV)
+            kotlin.math.log2(AutoTone.PHONE_KEY / key).coerceIn(0f, LONG_EXPOSURE_MAX_LIFT_EV)
         } ?: 0f
         val target = gain * 2f.pow(lift)
         val tMax = min(LONG_EXPOSURE_FRAME_NS, timeRange.upper)
@@ -1367,51 +1444,45 @@ class CameraController(context: Context) : AutoCloseable {
     }
 
     /**
-     * Manual (exposure ns, ISO) for a flash still, and the guide it amounts to. The camera's own flash metering is no
-     * use for the raw (Pixel 9 Pro: the AE precapture fires no pre-flash for other apps, and the still keeps the
-     * ambient exposure, so the raw clipped), so this works like a flash guide number: the LED's light falls off with
-     * the square of the distance, so the gain (s x ISO) is [guide] x distance² (m), with the distance the lens is
-     * focused at; never more than the ambient exposure. A distance of exactly 0 is taken as unknown, not infinity: the
-     * Pixel 9 Pro's UW reports 0 on every frame, even with AF locked close up (as 5 m it got the ambient exposure plus
-     * the flash: clipped); then the gain is [FlashGuides.noDistance], learned on its own. [FLASH_EXPOSURE_NS], shorter
-     * when the ISO is at its minimum.
+     * [FlashMetering.CAMERA_AE]: the camera's own flash metering. Always-flash AE mode (it fires the flash for the still
+     * itself) and a precapture trigger, during which the HAL fires its pre-flash and meters with it; waits until AE has
+     * left its precapture state (OnePlus 11: 0.6-0.9 s). [FlashProfile.cameraAeCompensationEv] is added to the user's
+     * compensation until [endFlashSequence].
+     */
+    private suspend fun flashMetering(s: CameraCaptureSession, inf: Info) {
+        aeMode = CameraMetadata.CONTROL_AE_MODE_ON_ALWAYS_FLASH
+        flashMode = CameraMetadata.FLASH_MODE_OFF // the AE mode drives the flash
+        flashBiasEv = platform.flash.cameraAeCompensationEv
+        var metering = false
+        triggerAndWait(s, inf, "flash metering (compensation ${compensationEv()} EV)", FLASH_METERING_TIMEOUT_MS, {
+            set(CaptureRequest.CONTROL_AE_PRECAPTURE_TRIGGER, CameraMetadata.CONTROL_AE_PRECAPTURE_TRIGGER_START)
+        }) { r ->
+            val ae = r.get(CaptureResult.CONTROL_AE_STATE)
+            if (ae == CaptureResult.CONTROL_AE_STATE_PRECAPTURE) metering = true
+            ae == null || (metering && ae != CaptureResult.CONTROL_AE_STATE_PRECAPTURE)
+        }
+    }
+
+    /**
+     * Manual (exposure ns, ISO) for a flash still, and the guide it amounts to ([FlashExposure]). The camera's own flash
+     * metering is no use for the raw (Pixel 9 Pro: the AE precapture fires no pre-flash for other apps, and the still
+     * keeps the ambient exposure, so the raw clipped). Without a focus distance the gain is [FlashGuides.noDistance],
+     * learned on its own.
      */
     private fun flashExposure(inf: Info, ambient: FrameState?, diopters: Float?, guides: FlashGuides): Pair<Pair<Long, Int>, Float?> {
         val isoRange = inf.characteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE) ?: Range(50, 3200)
         val timeRange = inf.characteristics.get(CameraCharacteristics.SENSOR_INFO_EXPOSURE_TIME_RANGE) ?: Range(10_000L, 100_000_000L)
         val ambientGain = ambient?.let { it.exposureNs / 1e9f * it.iso }?.takeIf { it > 0f } ?: Float.MAX_VALUE
-        val known = diopters != null && diopters > 0f
-        val metres = if (known) (1f / diopters!!).coerceIn(MIN_FLASH_DISTANCE_M, MAX_FLASH_DISTANCE_M) else 1f
-        // A lens that hasn't learned its own guide starts from the default, scaled by its light gathering (a tele at f/2.8
-        // passes 2.7x less of the flash's light than the f/1.7 main lens the default was set on).
-        val apertureScale = (inf.fNumber / FLASH_REFERENCE_F_NUMBER).let { it * it }.coerceIn(0.5f, 8f)
+        val metres = FlashExposure.metres(diopters)
+        val known = metres != null
+        // A lens that hasn't learned its own guide starts from the platform's default, scaled by its light gathering.
         val guide = (if (known) guides.byDistance else guides.noDistance)
-            ?: ((if (known) DEFAULT_FLASH_GUIDE else DEFAULT_FLASH_GAIN_NO_DISTANCE) * apertureScale)
-        val falloff = flashFalloff(metres)
-        val byFlash = guide * falloff
-        val gain = min(byFlash, ambientGain).coerceAtMost(FLASH_EXPOSURE_NS / 1e9f * isoRange.upper)
-        var t = FLASH_EXPOSURE_NS.coerceIn(timeRange.lower, timeRange.upper)
-        var iso = gain / (t / 1e9f)
-        if (iso < isoRange.lower) {
-            t = (gain / isoRange.lower * 1e9f).toLong().coerceIn(timeRange.lower, timeRange.upper)
-            iso = isoRange.lower.toFloat()
-        }
-        val exposure = t to iso.toInt().coerceIn(isoRange.lower, isoRange.upper)
-        val used = exposure.first / 1e9f * exposure.second
-        Log.d(TAG, "flash exposure: focus ${diopters ?: "?"} dpt -> ${if (known) "%.2f m".format(metres) else "unknown"}, guide $guide -> gain $byFlash, " +
-            "ambient $ambientGain -> ${exposure.first / 1000} µs ISO ${exposure.second}")
-        // Calibrate only from shots the flash exposed (not those capped by ambient light or the sensor's range).
-        val guideUsed = if (byFlash <= ambientGain && abs(used / byFlash - 1f) < 0.1f) used / falloff else null
-        return exposure to guideUsed
+            ?: FlashStart.gain(platform.flash, inf.fNumber, known)
+        val plan = FlashExposure.plan(guide, metres, ambientGain, isoRange.lower, isoRange.upper, timeRange.lower, timeRange.upper)
+        Log.d(TAG, "flash exposure: focus ${diopters ?: "?"} dpt -> ${if (known) "%.2f m".format(metres) else "unknown"}, guide $guide -> gain ${plan.byFlash}, " +
+            "ambient $ambientGain -> ${plan.exposureNs / 1000} µs ISO ${plan.iso}")
+        return (plan.exposureNs to plan.iso) to plan.guideUsed
     }
-
-    /**
-     * How much more exposure than at 1 m a subject at [metres] needs: the square of the distance (a point source) and
-     * beyond 1 m a bit more ([FLASH_FAR_EXPONENT]), because the guide is learned on close subjects (a hand's length)
-     * while the phone's LED is no point source: the farther the subject, the more of the light is lost to the
-     * wide beam's spread over the scene and to the room's own ambient fill-in the flash must overcome.
-     */
-    private fun flashFalloff(metres: Float): Float = metres * metres * max(1f, metres).pow(FLASH_FAR_EXPONENT)
 
     /**
      * Restarts the repeating preview with the current [aeMode]/[flashMode], sends one preview request with [trigger],
@@ -1471,6 +1542,7 @@ class CameraController(context: Context) : AutoCloseable {
     private fun endFlashSequence(inf: Info, focused: Boolean) {
         aeMode = CameraMetadata.CONTROL_AE_MODE_ON
         flashMode = CameraMetadata.FLASH_MODE_OFF
+        flashBiasEv = 0f
         handler.post {
             val s = session ?: return@post
             runCatching {
@@ -1486,17 +1558,21 @@ class CameraController(context: Context) : AutoCloseable {
     }
 
     /**
+     * For `ViewfinderRenderer.Frame.linearToe`: the input up to which the preview's sRGB curve is a straight line from
+     * black, when this lens gets the curve at evenly spaced points (its first point); 0 otherwise.
+     */
+    fun previewLinearToe(inf: Info): Float =
+        if (!inf.hasPresetCurve && inf.hasContrastCurve && platform.preview.curveAtEvenPoints) PreviewCurve.evenToe else 0f
+
+    /**
      * How much brighter the still's raw will be than the preview frame [frame] (in raw terms: exposure time x ISO).
-     * In low light the preview is held at 1/30 s, and for the still AE moves exposure from its post-raw digital
-     * boost back into time, up to 1/15 s, at the same ISO (measured on the Pixel 9 Pro: preview 1/30 s, ISO 1410,
-     * boost 2.39 -> still 1/15 s, ISO 1410, boost 1.2). Otherwise the still matches the preview.
+     * In low light the preview is held at its frame-rate cap, and for the still AE moves exposure from its post-raw
+     * digital boost back into time, up to the platform's still limit, at the same ISO ([StillGain]). Otherwise the
+     * still matches the preview.
      */
     fun stillGain(frame: FrameState): Float {
         val range = info?.previewFpsRange ?: return 1f
-        if (frame.exposureNs <= 0L) return 1f
-        val capNs = 1_000_000_000L / range.upper
-        if (frame.exposureNs < capNs * 9 / 10) return 1f
-        return minOf(MAX_STILL_EXPOSURE_NS.toFloat() / frame.exposureNs, frame.postRawBoost).coerceAtLeast(1f)
+        return StillGain.over(frame.exposureNs, frame.postRawBoost, 1_000_000_000L / range.upper, platform.still.maxStillExposureNs)
     }
 
     /**
@@ -1627,7 +1703,7 @@ class CameraController(context: Context) : AutoCloseable {
             // left alone the preview gets their own scene-dependent tone mapping, which can't be undone).
             inf.hasContrastCurve -> {
                 setForLens(CaptureRequest.TONEMAP_MODE, CameraMetadata.TONEMAP_MODE_CONTRAST_CURVE)
-                setForLens(CaptureRequest.TONEMAP_CURVE, SRGB_CURVE)
+                setForLens(CaptureRequest.TONEMAP_CURVE, if (platform.preview.curveAtEvenPoints) SRGB_CURVE_EVEN else SRGB_CURVE)
             }
             inf.hasGammaCurve -> {
                 setForLens(CaptureRequest.TONEMAP_MODE, CameraMetadata.TONEMAP_MODE_GAMMA_VALUE)
@@ -1698,8 +1774,7 @@ class CameraController(context: Context) : AutoCloseable {
         val c = characteristicsOf(inf)
         val range = c.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_RANGE) ?: return 0
         val step = c.get(CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP)?.toFloat() ?: return 0
-        if (step <= 0f) return 0
-        return (exposureBiasEv / step).roundToInt().coerceIn(range.lower, range.upper)
+        return CompensationSteps.of(exposureBiasEv + flashBiasEv, step, range.lower, range.upper)
     }
 
     /** The EV of [compensationSteps]: what the preview and stills (without flash) are shot with. */
@@ -1724,10 +1799,28 @@ class CameraController(context: Context) : AutoCloseable {
             val inf = info
             if (steps != null && inf != null) {
                 val step = characteristicsOf(inf).get(CameraCharacteristics.CONTROL_AE_COMPENSATION_STEP)?.toFloat() ?: 0f
-                return AppliedCompensation.ev(steps * step, residual(frame), residualAtZero)
+                return appliedOf(steps * step, frame)
             }
         }
-        return AppliedCompensation.ev(requested, residual(frame), residualAtZero)
+        return appliedOf(requested, frame)
+    }
+
+    /** [ev] of compensation as [frame] took it, by the platform's [CompensationModel]. */
+    private fun appliedOf(ev: Float, frame: FrameState): Float = when (platform.still.compensation) {
+        CompensationModel.BOOST_STAYS_DIGITAL -> AppliedCompensation.ev(ev, residual(frame), residualAtZero)
+        CompensationModel.AE_GAIN_IN_RAW -> AppliedCompensation.evBelowCeiling(ev, frame.exposureNs / 1e9f * frame.iso * frame.postRawBoost, aeGainCeiling())
+    }
+
+    /**
+     * The most gain (exposure s x ISO x boost) AE gives a frame: the platform's measured one for this camera, else the
+     * still's longest exposure at the sensor's highest ISO (the OnePlus 11's main and ultrawide night previews topped out
+     * there, as 1/30 s x ISO 6400 x boost 2.0-2.22). 0 when unknown.
+     */
+    private fun aeGainCeiling(): Float {
+        val inf = info ?: return 0f
+        platform.still.aeGainCeilings[inf.physicalId ?: inf.openId]?.let { return it }
+        val isoMax = inf.characteristics.get(CameraCharacteristics.SENSOR_INFO_SENSITIVITY_RANGE)?.upper ?: return 0f
+        return platform.still.maxStillExposureNs / 1e9f * isoMax
     }
 
     private fun residual(frame: FrameState): Float = AppliedCompensation.residual(frame.postRawBoost, stillGain(frame))
@@ -1786,17 +1879,15 @@ class CameraController(context: Context) : AutoCloseable {
             afState = r.get(CaptureResult.CONTROL_AF_STATE),
             exposureNs = r.get(CaptureResult.SENSOR_EXPOSURE_TIME) ?: 0L,
             tonemapMode = r.get(CaptureResult.TONEMAP_MODE),
-            previewColor = previewToRec2020(inf, r, neutral)?.let(Mat3::toGlColumnMajor),
+            previewColor = platform.preview.color.toRec2020(previewColorInput(inf, r, neutral))?.let(Mat3::toGlColumnMajor),
             focusDiopters = r.get(CaptureResult.LENS_FOCUS_DISTANCE),
             compensationSteps = compensationSteps,
+            neutral = neutral?.takeIf { it.size >= 3 }?.let { n -> DoubleArray(3) { n[it].toDouble() } },
         )
     }
 
     companion object {
         private const val TAG = "RawBoyCamera"
-
-        /** Longest still exposure AE uses in low light: 1/15 s (its 15-30 fps range). */
-        private const val MAX_STILL_EXPOSURE_NS = 66_666_667L
 
         /** Focus-flash: how long the torch is on before the AF trigger, and how long AF may take with it. */
         private const val TORCH_WARMUP_MS = 300L
@@ -1816,8 +1907,10 @@ class CameraController(context: Context) : AutoCloseable {
 
         /** A dark scene is exposed up to this much (EV) brighter than the preview, towards the key AutoTone aims for. */
         private const val LONG_EXPOSURE_MAX_LIFT_EV = 4f
-        private const val LONG_EXPOSURE_KEY = 0.06f
         private const val FOCUS_TIMEOUT_MS = 1500L
+
+        /** How long [flashMetering] waits for the camera's pre-flash metering (OnePlus 11: 0.6-0.9 s), then shoots anyway. */
+        private const val FLASH_METERING_TIMEOUT_MS = 2000L
 
         /**
          * Tap focus: side of the AF box as a share of the sensor's short side (5%: about the reticle's square). Some
@@ -1826,31 +1919,8 @@ class CameraController(context: Context) : AutoCloseable {
         const val FOCUS_SIZE = 0.05f
 
 
-        /** Flash still: exposure time and the frame duration it needs at least. */
-        private const val FLASH_EXPOSURE_NS = 33_333_333L
-        private const val FLASH_FRAME_NS = 33_333_333L
-
-        /** The f-number [DEFAULT_FLASH_GUIDE] was set on (Pixel 9 Pro W, f/1.68). */
-        private const val FLASH_REFERENCE_F_NUMBER = 1.7f
-
-        /** Extra exponent on distances beyond 1 m, see [flashFalloff]: 2 m needs 1.23x (0.3 EV), 4 m 1.5x (0.6 EV) more. */
-        private const val FLASH_FAR_EXPONENT = 0.3f
-
-        /** How long [meterRaw] waits for its frame (a still in low light takes up to 1/15 s, plus the pipeline). */
+        /** How long [meterRaw] waits for its frame (a low-light still frame plus the pipeline, with room to spare). */
         private const val METER_TIMEOUT_MS = 2_000L
-
-        /**
-         * Flash still gain (s x ISO) at 1 m before a lens has learned its own: Pixel 9 Pro W exposed a desk at ~0.4 m
-         * well at about 2.5 (first tries).
-         */
-        const val DEFAULT_FLASH_GUIDE = 16f
-
-        /** Flash still gain without a focus distance, before a lens has learned its own: as for 0.5 m at the guide above. */
-        const val DEFAULT_FLASH_GAIN_NO_DISTANCE = 4f
-
-        /** Focus distances the flash exposure trusts (nearer: macro; farther: the flash hardly reaches). */
-        private const val MIN_FLASH_DISTANCE_M = 0.1f
-        private const val MAX_FLASH_DISTANCE_M = 5f
 
         private const val MAX_PREVIEW_WIDTH = 1920
 
@@ -1895,21 +1965,11 @@ class CameraController(context: Context) : AutoCloseable {
         /** Gamma for cameras without the sRGB preset curve. */
         private const val PREVIEW_GAMMA = 2.2f
 
-        /**
-         * The sRGB transfer curve as a TONEMAP_CURVE (64 segments, the Pixel's maximum is 65 points), with points
-         * spaced more densely near black, where the curve bends most. The viewfinder's inverse sRGB undoes it.
-         */
-        private val SRGB_CURVE: TonemapCurve = run {
-            val n = 65
-            val points = FloatArray(n * 2)
-            for (i in 0 until n) {
-                val x = (i.toFloat() / (n - 1)).let { it * it } // denser near 0
-                val y = if (x <= 0.0031308f) 12.92f * x else 1.055f * x.toDouble().pow(1 / 2.4).toFloat() - 0.055f
-                points[i * 2] = x
-                points[i * 2 + 1] = y.coerceIn(0f, 1f)
-            }
-            TonemapCurve(points, points, points)
-        }
+        /** The preview's sRGB curve ([PreviewCurve.dense]); the viewfinder's inverse sRGB undoes it. */
+        private val SRGB_CURVE: TonemapCurve = PreviewCurve.dense.let { TonemapCurve(it, it, it) }
+
+        /** The same at evenly spaced points ([PreviewCurve.even]), for HALs that ignore the points' x. */
+        private val SRGB_CURVE_EVEN: TonemapCurve = PreviewCurve.even.let { TonemapCurve(it, it, it) }
 
         private const val ILLUMINANT_D65 = CameraMetadata.SENSOR_REFERENCE_ILLUMINANT1_D65
 
@@ -1938,28 +1998,19 @@ class CameraController(context: Context) : AutoCloseable {
         }
 
         /**
-         * The ISP renders the preview with its own white balance gains and colour matrix (the Pixel's are more
-         * saturated than the DNG's, ~20-40% in reds), so a plain sRGB -> Rec.2020 viewfinder didn't match the photo.
-         * This undoes both (result COLOR_CORRECTION_GAINS / TRANSFORM) back to camera RGB and applies what the raw
-         * decoder does: 1 / AsShotNeutral, then rgb_cam. Scaled so the ISP's white keeps its luminance, which keeps
-         * the exposure calibration (previewScale) valid. Row-major; null when the camera doesn't report it all.
+         * What the platform's [PreviewColor] needs from a preview frame, as plain numbers: the raw decoder's matrix and
+         * the result's ISP colour matrix, white balance gains (greens averaged) and as-shot neutral, each null when
+         * not reported.
          */
-        private fun previewToRec2020(inf: Info, r: CaptureResult, neutral: Array<android.util.Rational>?): DoubleArray? {
-            val rgbCam = inf.cameraToSrgb ?: return null
-            val ccm = r.get(CaptureResult.COLOR_CORRECTION_TRANSFORM) ?: return null
-            val g = r.get(CaptureResult.COLOR_CORRECTION_GAINS) ?: return null
-            if (neutral == null || neutral.size < 3) return null
-            val n = DoubleArray(3) { neutral[it].toDouble() }
-            val gains = doubleArrayOf(g.red.toDouble(), (g.greenEven + g.greenOdd) / 2.0, g.blue.toDouble())
-            if (n.any { it <= 0.0 } || gains.any { it <= 0.0 }) return null
-            val ispInverse = runCatching { Mat3.inverse(toDoubles(ccm)) }.getOrNull() ?: return null
-            val toCamera = Mat3.multiply(Mat3.diagonal(1 / gains[0], 1 / gains[1], 1 / gains[2]), ispInverse)
-            val balance = Mat3.diagonal(1 / n[0], 1 / n[1], 1 / n[2])
-            val m = Mat3.multiply(SRGB_TO_REC2020, Mat3.multiply(rgbCam, Mat3.multiply(balance, toCamera)))
-            val white = Mat3.apply(m, doubleArrayOf(1.0, 1.0, 1.0))
-            val y = 0.2627 * white[0] + 0.6780 * white[1] + 0.0593 * white[2]
-            if (!(y > 0)) return null
-            return DoubleArray(9) { m[it] / y }
+        private fun previewColorInput(inf: Info, r: CaptureResult, neutral: Array<android.util.Rational>?): PreviewColorInput {
+            val g = r.get(CaptureResult.COLOR_CORRECTION_GAINS)
+            return PreviewColorInput(
+                cameraToSrgb = inf.cameraToSrgb,
+                ispMatrix = r.get(CaptureResult.COLOR_CORRECTION_TRANSFORM)?.let(::toDoubles),
+                ispGains = g?.let { doubleArrayOf(it.red.toDouble(), (it.greenEven + it.greenOdd) / 2.0, it.blue.toDouble()) },
+                neutral = neutral?.takeIf { it.size >= 3 }?.let { n -> DoubleArray(3) { n[it].toDouble() } },
+                cameraId = inf.physicalId ?: inf.openId,
+            )
         }
 
         /**
@@ -1989,13 +2040,6 @@ class CameraController(context: Context) : AutoCloseable {
             0.412453, 0.357580, 0.180423,
             0.212671, 0.715160, 0.072169,
             0.019334, 0.119193, 0.950227,
-        )
-
-        /** As the decoder's kSrgbToRec2020. */
-        private val SRGB_TO_REC2020 = doubleArrayOf(
-            0.6274040, 0.3292820, 0.0433136,
-            0.0690970, 0.9195400, 0.0113612,
-            0.0163916, 0.0880132, 0.8955950,
         )
 
         /** The DNG ColorMatrix for D65 (or the only one given), as the raw decoder sees it. */

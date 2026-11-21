@@ -15,6 +15,8 @@ struct GridScreen: View {
     var addFromFolder: (() -> Void)? = nil
     /** RawBoy Desktop: the "Clear batch" button (the root asks first). */
     var onClearBatch: (() -> Void)? = nil
+    /** RawBoy Desktop: the selection bar's Remove button (the root asks first). */
+    var onRemoveSelection: (() -> Void)? = nil
     /** RawBoy Desktop: the "Reset all photos…" button beside it (the root's sheet asks which look and confirms). */
     var onResetAll: (() -> Void)? = nil
     /** Opens a RawBoy preset file to apply to the batch (nil), or to the photos with these ids. */
@@ -550,10 +552,17 @@ struct GridScreen: View {
                     Button("Edit in Pro", systemImage: "slider.horizontal.3") { edit(p) }.disabled(exporting)
                 }
                 Button("Remove", systemImage: "trash", role: .destructive) {
-                    vm.remove(selection)
-                    selection = []
+                    if let onRemoveSelection {
+                        onRemoveSelection()
+                    } else {
+                        vm.remove(selection)
+                        selection = []
+                    }
                 }
                 .disabled(exporting)
+                #if os(macOS)
+                .help("Remove the selected photos from the batch (⌫)")
+                #endif
                 Button(exportableSelected > 1 ? "Export (\(exportableSelected))" : "Export") {
                     exportIds = selection
                     showExport = true

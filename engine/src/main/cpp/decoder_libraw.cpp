@@ -627,7 +627,7 @@ int removeColumnDefects(LibRaw& raw) {
 }  // namespace
 
 bool decodeWithLibRaw(const uint8_t* data, size_t size, DecodedImage& out, std::string& error, float extraBlack,
-                      bool draft) {
+                      bool draft, const BlackFix& blackFix) {
     auto raw = std::make_unique<RawBoyLibRaw>();  // LibRaw is large; keep it off the stack
 
     auto& p = raw->imgdata.params;
@@ -683,6 +683,41 @@ bool decodeWithLibRaw(const uint8_t* data, size_t size, DecodedImage& out, std::
             // Demosaiced planes (OpcodeList3, e.g. iPhone Bayer DNGs: one map, a gain plane per colour) or linear raws.
             // Before, every such map went to its first plane's colour only: red edges on iPhone telephoto shots.
             for (uint32_t p2 = g.plane; p2 < g.plane + g.planes && p2 < 3; ++p2) channelMaps[p2].push_back({&g, p2 - g.plane});
+        }
+    }
+    // BlackFix: LibRaw subtracts one integer black (user_black), pedestal DN below the lowest site's, and the rest of
+    // each site's black (its fraction, any inter-site integer delta, the pedestal, the offset) is taken off in float
+    // below, with the scale put back. Setting user_black clears cblack[4..5] so LibRaw's adjust_bl doesn't move the
+    // second green into cblack[3] (which copy_bayer ignores on 3-colour Bayer sensors before pre_interpolate).
+    // Only for a 2x2 per-site black (DngCreator's), where LibRaw keeps the sites' integer parts in cblack[6..9].
+    double fixRemainder[3] = {0, 0, 0};  // DN per camera colour still to subtract after LibRaw
+    int fixPedestal = 0;                 // DN LibRaw left above black
+    bool fixed = false;
+    if (rc == LIBRAW_SUCCESS && blackFix.any() && cfa) {
+        const auto& C = raw->imgdata.color;
+        const bool sites = C.cblack[4] == 2 && C.cblack[5] == 2 && C.black == 0 && !C.cblack[0] && !C.cblack[1] &&
+                           !C.cblack[2] && !C.cblack[3];
+        if (sites) {
+            double site[4];
+            double lowest = 1e9;
+            for (int i = 0; i < 4; ++i) {
+                const float exact = C.dng_levels.dng_fcblack[6 + i];
+                site[i] = blackFix.exact && exact > 0.0f ? exact : double(C.cblack[6 + i]);
+                lowest = std::min(lowest, double(C.cblack[6 + i]));
+            }
+            const int base = std::max(0, int(lowest) - std::max(0, int(std::lround(blackFix.pedestal))));
+            fixPedestal = int(lowest) - base;
+            int count[3] = {0, 0, 0};
+            for (int i = 0; i < 4; ++i) {
+                int c = raw->COLOR(i / 2, i % 2);
+                c = c == 3 ? 1 : std::clamp(c, 0, 2);
+                fixRemainder[c] += site[i] - base;
+                ++count[c];
+            }
+            for (int c = 0; c < 3; ++c)
+                fixRemainder[c] = (count[c] ? fixRemainder[c] / count[c] : double(fixPedestal)) + blackFix.offset[c];
+            p.user_black = base;
+            fixed = true;
         }
     }
     const auto t1b = std::chrono::steady_clock::now();
@@ -746,9 +781,26 @@ bool decodeWithLibRaw(const uint8_t* data, size_t size, DecodedImage& out, std::
     float blackOut[3] = {0, 0, 0};
     if (extraBlack != 0.0f)
         for (int c = 0; c < 3; ++c) blackOut[c] = extraBlack * 65535.0f * color.pre_mul[c];
+    // BlackFix: LibRaw scaled (raw - user_black) by 65535 / maximum, its range [fixPedestal] DN wider than the file's
+    // black would have made it; scale back to that range and take off the rest of the black per colour.
+    float fixGain = 1.0f;
+    if (fixed && color.maximum > float(fixPedestal)) {
+        const double range = double(color.maximum) - fixPedestal;
+        fixGain = float(double(color.maximum) / range);
+        for (int c = 0; c < 3; ++c) blackOut[c] += float(fixRemainder[c] * 65535.0 * color.pre_mul[c] / range);
+    }
+    // With a pedestal the noise below black reaches the output as negative values (an unbiased mean in the deepest
+    // shadows), down to the pedestal; elsewhere (and colours outside Rec.2020 after the matrix) clamped at 0 as before.
+    const float keepBelow = fixed && fixPedestal > 0 && color.maximum > float(fixPedestal)
+        ? -float(fixPedestal) / (float(color.maximum) - fixPedestal) * 65535.0f * scale
+        : 0.0f;
+    // Camera RGB (output units) below which a pixel counts as near black: twice the pedestal.
+    const float nearBlack = fixed && color.maximum > float(fixPedestal)
+        ? 2.0f * float(fixPedestal) / (float(color.maximum) - fixPedestal) * 65535.0f
+        : 0.0f;
     // Each channel's output at the sensor's clip (pre_mul is normalised to its largest, which reaches 65535).
     float clip[3];
-    for (int c = 0; c < 3; ++c) clip[c] = 65535.0f * color.pre_mul[c] - blackOut[c];
+    for (int c = 0; c < 3; ++c) clip[c] = 65535.0f * color.pre_mul[c] * fixGain - blackOut[c];
     out.clipLevel = (clip[0] + clip[1] + clip[2]) / 3.0f * scale;
 
     const GainEvaluator gains[3] = {GainEvaluator(channelMaps[0], w), GainEvaluator(channelMaps[1], w),
@@ -763,13 +815,24 @@ bool decodeWithLibRaw(const uint8_t* data, size_t size, DecodedImage& out, std::
             const OrientedRow dest = orientedRow(orientation, w, h, y);
             uint16_t* o = out.rgb.data() + dest.start;
             for (int x = 0; x < w; ++x, in += srcStep, o += dest.step) {
-                float cam[3] = {float(in[0]) - blackOut[0], float(in[1]) - blackOut[1], float(in[2]) - blackOut[2]};
+                float cam[3] = {float(in[0]) * fixGain - blackOut[0], float(in[1]) * fixGain - blackOut[1],
+                                float(in[2]) * fixGain - blackOut[2]};
                 blendClipped(cam, clip);
                 for (int c = 0; c < 3; ++c)
                     if (!gains[c].empty()) cam[c] *= gains[c].gain(rows[c], x);
-                o[0] = floatToHalf(m[0] * cam[0] + m[1] * cam[1] + m[2] * cam[2]);
-                o[1] = floatToHalf(m[3] * cam[0] + m[4] * cam[1] + m[5] * cam[2]);
-                o[2] = floatToHalf(m[6] * cam[0] + m[7] * cam[1] + m[8] * cam[2]);
+                const float v0 = m[0] * cam[0] + m[1] * cam[1] + m[2] * cam[2];
+                const float v1 = m[3] * cam[0] + m[4] * cam[1] + m[5] * cam[2];
+                const float v2 = m[6] * cam[0] + m[7] * cam[1] + m[8] * cam[2];
+                // Only near black: a saturated colour's negative channel after the matrix stays clamped as before.
+                if (keepBelow < 0.0f && std::max({cam[0], cam[1], cam[2]}) < nearBlack) {
+                    o[0] = floatToHalfSigned(v0, keepBelow);
+                    o[1] = floatToHalfSigned(v1, keepBelow);
+                    o[2] = floatToHalfSigned(v2, keepBelow);
+                } else {
+                    o[0] = floatToHalf(v0);
+                    o[1] = floatToHalf(v1);
+                    o[2] = floatToHalf(v2);
+                }
             }
         }
     });
@@ -794,6 +857,11 @@ bool decodeWithLibRaw(const uint8_t* data, size_t size, DecodedImage& out, std::
                         "LibRaw decode: unpack %ld ms, column defects %d + hot pixels %d in %ld ms, demosaic %ld ms, "
                         "convert + orient %ld ms",
                         ms(t0, t1), defectColumns, hotPixels, ms(t1, t1b), ms(t1b, t2), ms(t2, t3));
+    if (blackFix.any())
+        __android_log_print(ANDROID_LOG_DEBUG, "RawBoy",
+                            "black fix %s: exact %d, pedestal %d DN, remainder %.3f %.3f %.3f DN, gain %.5f",
+                            fixed ? "on" : "not applicable", blackFix.exact ? 1 : 0, fixPedestal, fixRemainder[0],
+                            fixRemainder[1], fixRemainder[2], fixGain);
 #else
     // RAWBOY_DECODE_TIMING=1 prints the same stage times where there is no Android log (the Mac's benchmark).
     if (std::getenv("RAWBOY_DECODE_TIMING")) {

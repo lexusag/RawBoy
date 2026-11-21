@@ -7,7 +7,7 @@ uniform float uContrast;    // slope in AgX log space, 1 = neutral
 uniform float uLumaContrast; // exponent of a luminance-only gain pow(Y / 0.18, x) that keeps channel ratios, 0 = neutral
 uniform float uSaturation;  // 1 = neutral
 uniform float uGamutSoft;   // 1 = purity-limited saturation + soft Rec.709 gamut compression, 0 = hard clipping
-uniform int uToneMapper;    // 0 = AgX, 1 = filmic, 2 = sigmoid
+uniform int uToneMapper;    // 0 = AgX, 1 = filmic, 2 = sigmoid, 3 = ACES, 4 = PBR Neutral, 5 = GT, 6 = OpenDRT, 7 = Reinhard, 8 = Hable, 9 = Lottes
 uniform float uDisplaySource; // 1 = a JPEG/HEIC decoded by display_inverse.cpp: AgX per channel, no gamut compression
 uniform float uClipLevel;     // decoded value of blown highlights (DecodedImage::clipLevel), 0 = unknown
 uniform float uShadows;     // -1..1
@@ -204,6 +204,93 @@ vec3 sigmoidTone(vec3 x) {
         y = yMin + (l - lMin) / (lMax - lMin) * (yMax - yMin);
     }
     return pow(y, vec3(1.0 / 2.2));
+}
+
+// ACES (Stephen Hill's RRT+ODT fit): converts linear Rec.2020 into ACES AP1 (with the RRT
+// input matrix), applies the fitted rational curve, and converts back to linear Rec.2020 so the
+// shared levels and Rec.2020->Rec.709 gamut steps after it work unchanged. Exposure-aligned so
+// 0.18 middle grey lands on TONE_GREY (0.4967) like the other tone mappers.
+const mat3 ACES_IN = mat3(
+    vec3(0.9465901, 0.0127789, 0.0152832),
+    vec3(0.0459193, 0.9828225, 0.0506650),
+    vec3(0.0074906, 0.0043986, 0.9340518));
+const mat3 ACES_OUT = mat3(
+    vec3(0.9730716, 0.0169800, 0.0143912),
+    vec3(0.0285353, 0.9814474, 0.0236615),
+    vec3(-0.0016073, 0.0015725, 0.9619384));
+const float ACES_EXPOSURE = 1.675490;
+
+vec3 acesTone(vec3 x) {
+    vec3 v = ACES_IN * (exp2(x * (AGX_MAX_EV - AGX_MIN_EV) + AGX_MIN_EV) * ACES_EXPOSURE);
+    vec3 a = v * (v + 0.0245786) - 0.000090537;
+    vec3 b = v * (0.983729 * v + 0.4329510) + 0.238081;
+    vec3 y = ACES_OUT * (a / b);
+    return pow(clamp(y, 0.0, 1.0), vec3(1.0 / 2.2));
+}
+
+// Khronos PBR Neutral: colour-faithful linear region up to 0.76 with gentle peak compression
+// and highlight desaturation only near clip. Exposure-aligned to TONE_GREY at 0.18.
+vec3 pbrNeutralTone(vec3 x) {
+    vec3 c = exp2(x * (AGX_MAX_EV - AGX_MIN_EV) + AGX_MIN_EV) * 1.413995;
+    float m = min(c.r, min(c.g, c.b));
+    c -= m < 0.08 ? m - 6.25 * m * m : 0.04;
+    float peak = max(c.r, max(c.g, c.b));
+    if (peak > 0.76) {
+        float newPeak = 1.0 - 0.0576 / (peak - 0.52);
+        c *= newPeak / peak;
+        float g = 1.0 - 1.0 / (0.15 * (peak - newPeak) + 1.0);
+        c = mix(c, vec3(newPeak), g);
+    }
+    return pow(clamp(c, 0.0, 1.0), vec3(1.0 / 2.2));
+}
+
+// Gran Turismo / Uchimura (CEDEC 2017): piecewise toe, linear midtones, exponential shoulder.
+vec3 gtTone(vec3 x) {
+    vec3 v = exp2(x * (AGX_MAX_EV - AGX_MIN_EV) + AGX_MIN_EV) * 1.191791;
+    const float m = 0.22;
+    const float S0 = 0.532;
+    vec3 w0 = 1.0 - smoothstep(0.0, m, v);
+    vec3 w2 = step(S0, v);
+    vec3 w1 = 1.0 - w0 - w2;
+    vec3 T = m * pow(v / m, vec3(1.33));
+    vec3 S = 1.0 - (1.0 - S0) * exp(-2.1367521 * (v - S0));
+    return pow(clamp(T * w0 + v * w1 + S * w2, 0.0, 1.0), vec3(1.0 / 2.2));
+}
+
+// OpenDRT-inspired display transform: max-RGB Michaelis-Menten tone scale with flare toe
+// and smooth hue-preserving highlight dechroma.
+vec3 opendrtTone(vec3 x) {
+    vec3 v = exp2(x * (AGX_MAX_EV - AGX_MIN_EV) + AGX_MIN_EV) * 1.868103;
+    float n = max(max(v.r, v.g), v.b);
+    float t = pow(n / (n + 0.85), 1.18);
+    float ts = (t * t) / (t + 0.012);
+    vec3 ratio = v / max(n, 1e-6);
+    vec3 y = ts * mix(ratio, vec3(1.0), ts * ts * ts * 0.85);
+    return pow(clamp(y, 0.0, 1.0), vec3(1.0 / 2.2));
+}
+
+// Reinhard-Jodie: blends luminance-preserving and per-channel Reinhard for soft open midtones
+// and natural highlight desaturation.
+vec3 reinhardTone(vec3 x) {
+    vec3 v = exp2(x * (AGX_MAX_EV - AGX_MIN_EV) + AGX_MIN_EV) * 1.517253;
+    float l = dot(v, LUMA_REC2020);
+    vec3 tv = v / (1.0 + v);
+    vec3 y = mix(v / (1.0 + l), tv, tv);
+    return pow(clamp(y, 0.0, 1.0), vec3(1.0 / 2.2));
+}
+
+// Uncharted 2 (John Hable): rational filmic curve with warm shoulder roll-off.
+vec3 hableTone(vec3 x) {
+    vec3 v = exp2(x * (AGX_MAX_EV - AGX_MIN_EV) + AGX_MIN_EV) * 3.596537;
+    vec3 y = ((v * (0.15 * v + 0.05) + 0.004) / (v * (0.15 * v + 0.50) + 0.06) - (0.02 / 0.30)) * 1.379064;
+    return pow(clamp(y, 0.0, 1.0), vec3(1.0 / 2.2));
+}
+
+// Lottes (AMD, GDC 2016): analytical contrast + shoulder curve pinned to TONE_GREY at 0.18.
+vec3 lottesTone(vec3 x) {
+    vec3 v = exp2(x * (AGX_MAX_EV - AGX_MIN_EV) + AGX_MIN_EV);
+    vec3 y = pow(v, vec3(1.6)) / (pow(v, vec3(1.5632)) * 1.104478 + 0.224212);
+    return pow(clamp(y, 0.0, 1.0), vec3(1.0 / 2.2));
 }
 
 vec3 srgbEncode(vec3 c) {
@@ -1094,6 +1181,20 @@ vec3 develop(vec3 c, vec2 fullPx, float lm[MAX_LAYERS]) {
         c = filmicTone(c);
     } else if (uToneMapper == 2) {
         c = sigmoidTone(c);
+    } else if (uToneMapper == 3) {
+        c = acesTone(c);
+    } else if (uToneMapper == 4) {
+        c = pbrNeutralTone(c);
+    } else if (uToneMapper == 5) {
+        c = gtTone(c);
+    } else if (uToneMapper == 6) {
+        c = opendrtTone(c);
+    } else if (uToneMapper == 7) {
+        c = reinhardTone(c);
+    } else if (uToneMapper == 8) {
+        c = hableTone(c);
+    } else if (uToneMapper == 9) {
+        c = lottesTone(c);
     } else {
         c = agxSigmoid(c);
         if (agxMatrices) c = AGX_OUTSET * c;
