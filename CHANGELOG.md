@@ -1,3 +1,7 @@
+**Pro, Auto and Camera: sprocket holes on the long sides by default (2026-11-19)**
+
+- Randomly generated `sprocket` film leaks now sit on the long edges of the frame only (before, 15% landed on the short edges). New **Short-side sprockets** option (off by default) allows the short edges too: a toggle beside the leak buttons in Pro's Light leaks panel and Auto's photo view (web, Android, iOS and Desktop), and under **Random light leak** in Camera's Settings (Android). Added with #432.
+
 **Camera (Android): Video quality setting (2026-11-21)**
 
 - Docs for **Settings › Video quality** (Low 8, Optimal 16, High 24 Mbit/s; flat video 14, 28, 38), added with #431 and tuned in #441: `docs/camera.md` still said a fixed 16 and 28 Mbit/s.
