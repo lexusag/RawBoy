@@ -300,6 +300,17 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
     @Volatile
     private var residualAtZero = 1f
 
+    /**
+     * AE's whole gain (exposure s x ISO x post-raw boost) on the last preview frame shot without AE compensation, 0 before
+     * one: what [AppliedCompensation.evPinned] measures a compensation against when AE is pinned at its ceiling.
+     */
+    @Volatile
+    private var gainAtZero = 0f
+
+    /** The highest AE gain a preview frame of this camera reached at the preview's longest exposure ([isPinned]). */
+    @Volatile
+    private var ceilingGain = 0f
+
     /** AE compensation (EV) added to the user's while a [FlashMetering.CAMERA_AE] flash shot runs ([flashMetering]). */
     @Volatile
     private var flashBiasEv = 0f
@@ -429,6 +440,8 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
     suspend fun start(info: Info, surfaceTexture: SurfaceTexture) {
         captureLock.withLock { stop(alreadyLocked = true) }
         this.info = info
+        gainAtZero = 0f
+        ceilingGain = 0f
         surfaceTexture.setDefaultBufferSize(info.previewSize.width, info.previewSize.height)
         val preview = Surface(surfaceTexture).also { previewSurface = it }
         val reader = ImageReader.newInstance(
@@ -619,7 +632,11 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
                 lastPreviewResult = lens
                 motionListener?.invoke(lens)
                 val state = frameState(inf, lens, result.get(CaptureResult.CONTROL_AE_EXPOSURE_COMPENSATION))
-                if (state.compensationSteps == 0) residualAtZero = residual(state)
+                if (state.compensationSteps == 0) {
+                    residualAtZero = residual(state)
+                    gainAtZero = aeGain(state)
+                }
+                if (atExposureCap(state)) ceilingGain = maxOf(ceilingGain, aeGain(state))
                 _frames.value = state
                 precaptureWatch?.invoke(result)
                 focusWatch?.invoke(lens)
@@ -1840,7 +1857,9 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
 
     /** [ev] of compensation as [frame] took it, by the platform's [CompensationModel]. */
     private fun appliedOf(ev: Float, frame: FrameState): Float = when (platform.still.compensation) {
-        CompensationModel.BOOST_STAYS_DIGITAL -> AppliedCompensation.ev(ev, residual(frame), residualAtZero)
+        CompensationModel.BOOST_STAYS_DIGITAL ->
+            if (gainAtZero > 0f && isPinned(frame)) AppliedCompensation.evPinned(ev, aeGain(frame), gainAtZero, residual(frame), residualAtZero)
+            else AppliedCompensation.ev(ev, residual(frame), residualAtZero)
         CompensationModel.AE_GAIN_IN_RAW -> AppliedCompensation.evBelowCeiling(ev, frame.exposureNs / 1e9f * frame.iso * frame.postRawBoost, aeGainCeiling())
     }
 
@@ -1857,6 +1876,24 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
     }
 
     private fun residual(frame: FrameState): Float = AppliedCompensation.residual(frame.postRawBoost, stillGain(frame))
+
+    /** [frame]'s whole AE gain: exposure s x ISO x post-raw boost. */
+    private fun aeGain(frame: FrameState): Float = frame.exposureNs / 1e9f * frame.iso * frame.postRawBoost
+
+    /** Whether [frame] is exposed at the preview's longest exposure (its frame-rate cap): AE is out of time. */
+    private fun atExposureCap(frame: FrameState): Boolean {
+        val fps = info?.previewFpsRange?.upper ?: return false
+        return fps > 0 && frame.exposureNs > 0L && frame.exposureNs >= AppliedCompensation.CAP_SHARE * 1e9f / fps
+    }
+
+    /**
+     * Whether AE is pinned at its ceiling on [frame]: at the longest exposure and within [AppliedCompensation.CEILING_SHARE]
+     * of the highest gain this camera reached there. A brighter compensation then often changes nothing at all (the
+     * Pixel 9 Pro at a candle-lit table, 2026-11-21): neither the raw nor the boost, so [AppliedCompensation.ev] read it
+     * as reaching the raw, and the develop took Brightness back out.
+     */
+    private fun isPinned(frame: FrameState): Boolean =
+        atExposureCap(frame) && ceilingGain > 0f && aeGain(frame) >= ceilingGain * AppliedCompensation.CEILING_SHARE
 
     /** The opened camera's characteristics (the logical camera when a physical lens is streamed). */
     private fun characteristicsOf(inf: Info): CameraCharacteristics =

@@ -29,6 +29,28 @@ object AppliedCompensation {
     }
 
     /**
+     * [CompensationModel.BOOST_STAYS_DIGITAL] while AE is pinned at its ceiling (the preview's longest exposure and its
+     * highest gain): there a compensation may change nothing (the Pixel 9 Pro at a candle-lit table: +3 EV moved neither
+     * the exposure, the ISO nor the boost), so it is measured instead of assumed. [gain] is the frame's whole AE gain
+     * (exposure s x ISO x post-raw boost), [gainAtZero] the last uncompensated frame's (0 = none: nothing is credited; the camera then keeps to [ev]);
+     * what AE delivered is their ratio, less what went into the boost (as in [ev]). Never more than asked for, never the
+     * opposite way.
+     */
+    fun evPinned(requestedEv: Float, gain: Float, gainAtZero: Float, residual: Float, residualAtZero: Float): Float {
+        if (requestedEv == 0f) return 0f
+        val delivered = if (gain > 0f && gainAtZero > 0f) (ln(gain.toDouble() / gainAtZero) / LN2).toFloat() else 0f
+        val digital = if (residual > 0f && residualAtZero > 0f) (ln(residual.toDouble() / residualAtZero) / LN2).toFloat() else 0f
+        val applied = delivered - digital
+        return if (requestedEv > 0f) applied.coerceIn(0f, requestedEv) else applied.coerceIn(requestedEv, 0f)
+    }
+
+    /**
+     * How close to the preview's frame-rate cap an exposure counts as at it (the Pixel's 1/30 s frames read 33.3 ms,
+     * the OnePlus 11's 30.0-33.3 ms).
+     */
+    const val CAP_SHARE = 0.9f
+
+    /**
      * [CompensationModel.AE_GAIN_IN_RAW]: EV of [requestedEv] that reached the raw of a frame whose whole AE gain
      * (exposure s x ISO x post-raw boost) is [gain], when AE never goes above [ceiling]. A darker compensation always
      * gets there; a brighter one too, unless the frame is within [CEILING_SHARE] of the ceiling: then AE had no room
