@@ -120,6 +120,11 @@ data class CameraSettings(
     val trackFocus: Boolean = false,
     /** Features still in testing (self-timer and long exposure today); hidden until switched on in Settings. */
     val experimental: Boolean = false,
+    /**
+     * Experimental: videos record the whole 4:3 frame and save a `.motion` file of gyroscope and frame data beside it
+     * (MotionRecording), to stabilize them afterwards. Only with [experimental] on ([activeMotionData]).
+     */
+    val videoMotionData: Boolean = false,
     /** Video stabilization while recording (video mode only; it crops the picture a little). */
     val videoStabilization: Boolean = false,
     /** Video mode records a flat Apple Log picture without the look, to be graded later (the web video page). */
@@ -235,6 +240,9 @@ data class CameraSettings(
 
     /** Self-timer and long exposure are experimental: they do nothing (and their buttons hide) unless [experimental] is on. */
     val activeSelfTimer: Int get() = if (experimental) selfTimer else 0
+
+    /** [videoMotionData], which is experimental. */
+    val activeMotionData: Boolean get() = experimental && videoMotionData
 
     /**
      * The long exposure to take, or null when the mode is off. [sceneKey]: the viewfinder's scene key per unit of scale,
@@ -362,6 +370,7 @@ object CameraSettingsStore {
             grain = p.getBoolean("grain", d.grain),
             trackFocus = p.getBoolean("trackFocus", d.trackFocus),
             experimental = p.getBoolean("experimental", d.experimental),
+            videoMotionData = p.getBoolean("videoMotionData", d.videoMotionData),
             videoStabilization = p.getBoolean("videoStabilization", d.videoStabilization),
             flatVideo = p.getBoolean("flatVideo", d.flatVideo),
             videoQuality = runCatching { VideoQuality.valueOf(p.getString("videoQuality", null)!!) }.getOrDefault(d.videoQuality),
@@ -443,6 +452,7 @@ object CameraSettingsStore {
             .putBoolean("grain", s.grain)
             .putBoolean("trackFocus", s.trackFocus)
             .putBoolean("experimental", s.experimental)
+            .putBoolean("videoMotionData", s.videoMotionData)
             .putBoolean("videoStabilization", s.videoStabilization)
             .putBoolean("flatVideo", s.flatVideo)
             .putString("videoQuality", s.videoQuality.name)

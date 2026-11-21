@@ -562,6 +562,30 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         }
     }
 
+    /** Video mode's motion data is on ([setMotionData]): the lens's OIS samples are asked for where it offers them. */
+    @Volatile
+    private var motionData = false
+
+    /** Each preview result of the streamed lens while set (camera thread): a recording's [MotionRecording]. */
+    @Volatile
+    var motionListener: ((CaptureResult) -> Unit)? = null
+
+    /**
+     * Asks for the lens's OIS lens-shift samples (STATISTICS_OIS_DATA_MODE) while [on], where the lens offers them
+     * (Pixel 9 Pro: the tele only), for the motion data saved with videos. Restarts the preview when it changes.
+     */
+    fun setMotionData(on: Boolean) {
+        handler.post {
+            if (motionData == on) return@post
+            motionData = on
+            runCatching { repeatPreview() }
+        }
+    }
+
+    private fun hasOisData(inf: Info): Boolean =
+        inf.characteristics.get(CameraCharacteristics.STATISTICS_INFO_AVAILABLE_OIS_DATA_MODES)
+            ?.contains(CameraMetadata.STATISTICS_OIS_DATA_MODE_ON) == true
+
     /** Exposure lock (AE lock) is on: the camera holds the exposure it has, separately from the focus lock. */
     @Volatile
     private var exposureLocked = false
@@ -593,6 +617,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
                 val lens = lensResult(result)
                 lastPreviewResult = lens
+                motionListener?.invoke(lens)
                 val state = frameState(inf, lens, result.get(CaptureResult.CONTROL_AE_EXPOSURE_COMPENSATION))
                 if (state.compensationSteps == 0) residualAtZero = residual(state)
                 _frames.value = state
@@ -1697,6 +1722,9 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
                 CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE,
                 if (on) CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_ON else CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_OFF,
             )
+        }
+        if (motionData && hasOisData(inf)) {
+            setForLens(CaptureRequest.STATISTICS_OIS_DATA_MODE, CameraMetadata.STATISTICS_OIS_DATA_MODE_ON)
         }
         // A known curve on the preview, so the viewfinder can undo it (ViewfinderRenderer).
         when {

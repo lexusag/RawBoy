@@ -257,6 +257,14 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   An encoder failing mid-recording stops it at once and keeps the file. Debug: `video-debug.txt` in the app's external
   files dir (`DebugProbe.videoDebug`: forced variants, hardware H.264, landscape, injected failures). Flat video
   (Apple Log, Rec.2020, 28 Mbit/s), stabilization settings and AE lock: `docs/camera.md`.
+- **Motion data** (Android Camera, experimental, 2026-11-21; phase 0 of the software video stabilization plan in the
+  project files' `video-stabilization/plan.md`): `CameraSettings.videoMotionData` (`activeMotionData` needs
+  `experimental`) → `VideoRecorder.create(fullFrame = true)` (1920×1440, no 16:9 crop, no `VideoFrameMask`) +
+  `capture/MotionRecording.kt` (gyro uncalibrated + accel at 2.5 ms, `HIGH_SAMPLING_RATE_SENSORS`; camera frames via
+  `CameraController.motionListener`, OIS samples via `setMotionData` → `STATISTICS_OIS_DATA_MODE` where offered;
+  encoded frames via `VideoRecorder.onPresented`) → `capture/MotionFormat.kt` (binary `.motion`, JSON header, JVM
+  tests `MotionFormatTest`; reader `tools/motion/dump.py`, keep both in step) in `getExternalFilesDir("motion")`.
+  Pixel 9 Pro (probed): timestamps REALTIME, gyro 400 Hz, OIS samples only on the tele (physical 6).
 - **`Edition`** (`app-camera/src/main/.../Edition.kt`, iOS `Camera/Edition.swift`; one app, no flavours since
   2026-10-31): looks, default looks, Pictures folder / albums, Settings credits. Film mode's looks are `FilmLooks.ALL`
   rendered by `film_form.glsl`, exactly as Auto's Film mode. **B&W mode** (`Edition.monoLooks` = the mono looks; the colour `looks` leave them out, and a remembered mono `lookId` moves into B&W mode on load): `CameraSettings.mono`/
