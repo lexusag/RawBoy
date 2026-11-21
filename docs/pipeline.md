@@ -27,7 +27,7 @@ flowchart TD
         spatial["Fine colour denoise → skin retouch → sharpening →<br/>local contrast → high-pass contrast → bloom"]
         vig["Lens vignetting"]
         light["WB re-balance × RGB primaries →<br/>exposure → shadows/highlights →<br/>purity-limited saturation"]
-        agx["Tone mapper: log2 → grain → contrast →<br/>AgX (inset/outset) · Filmic · Sigmoid"]
+        agx["Tone mapper: log2 → grain → contrast →<br/>AgX (inset/outset) · Filmic · Sigmoid · web only: ACES, Neutral, GT, OpenDRT, Reinhard, Hable, Lottes"]
         levels["Whites / blacks"]
         disp["Soft gamut compression →<br/>Rec.709 / sRGB encode"]
         lut["3D LUT × strength<br/>(film look)"]
@@ -54,7 +54,7 @@ raw ──LibRaw (or Adobe DNG SDK)──▶ defective column + hot pixel remova
     ──GPU, per output pixel──▶ crop ▶ rotate/straighten ▶ lens geometry (auto-scale, distortion, DNG warp)
        ▶ fine colour denoise ▶ skin retouch ▶ sharpening ▶ local contrast ▶ high-pass contrast ▶ bloom ▶ lens vignetting
        ▶ WB re-balance × RGB primaries ▶ exposure ▶ shadows/highlights ▶ purity-limited saturation
-       ▶ tone mapper (AgX: inset ▶ log2 ▶ grain ▶ contrast ▶ sigmoid ▶ outset; Filmic / Sigmoid: log2 ▶ grain ▶ contrast ▶ curve) ▶ whites/blacks ▶ soft gamut compression ▶ Rec.709/sRGB ▶ LUT ▶ point curves
+       ▶ tone mapper (AgX: inset ▶ log2 ▶ grain ▶ contrast ▶ sigmoid ▶ outset; every other tone mapper: log2 ▶ grain ▶ contrast ▶ curve) ▶ whites/blacks ▶ soft gamut compression ▶ Rec.709/sRGB ▶ LUT ▶ point curves
 ```
 
 - `engine/`: the shared library both apps use
