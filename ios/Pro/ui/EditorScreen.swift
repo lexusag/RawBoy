@@ -596,13 +596,13 @@ struct EditorScreen: View {
                                 selectedFilmLeak = id; selectedLeak = nil
                             }
                         },
-                        onRandomFilm: { type, shortSideSprockets in
-                            if let id = vm.rollFilmLeak(type, aspect: photoAspect, selectedId: selectedFilmLeak, shortSideSprockets: shortSideSprockets) {
+                        onRandomRoll: { shortSideSprockets in
+                            if let id = vm.randomFilmRoll(aspect: photoAspect, shortSideSprockets: shortSideSprockets) {
                                 selectedFilmLeak = id; selectedLeak = nil
                             }
                         },
-                        onRandomRoll: { shortSideSprockets in
-                            if let id = vm.randomFilmRoll(aspect: photoAspect, shortSideSprockets: shortSideSprockets) {
+                        onRandomFilm: { type, shortSideSprockets in
+                            if let id = vm.rollFilmLeak(type, aspect: photoAspect, selectedId: selectedFilmLeak, shortSideSprockets: shortSideSprockets) {
                                 selectedFilmLeak = id; selectedLeak = nil
                             }
                         },
