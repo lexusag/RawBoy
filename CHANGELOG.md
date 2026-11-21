@@ -1,3 +1,7 @@
+**Camera (Android): Video quality setting (2026-11-21)**
+
+- Docs for **Settings › Video quality** (Low 8, Optimal 16, High 24 Mbit/s; flat video 14, 28, 38), added with #431 and tuned in #441: `docs/camera.md` still said a fixed 16 and 28 Mbit/s.
+
 **RawBoy Web: ACES, PBR Neutral, GT, OpenDRT, Reinhard, Hable and Lottes tone mappers (2026-11-20)**
 
 - Added 7 new tone mappers to RawBoy Web's Light tab (`shaders/develop.glsl`, `web/src/engine/develop/DevelopParams.ts`): **ACES** (Stephen Hill's RRT+ODT fit with Rec.2020 ↔ AP1 matrices), **Neutral** (Khronos PBR Neutral), **GT** (Gran Turismo / Uchimura), **OpenDRT** (Michaelis–Menten tone scale with hue-preserving highlight dechroma), **Reinhard** (Reinhard-Jodie), **Hable** (Uncharted 2 filmic), and **Lottes** (AMD GDC 2016). All are exposure-aligned to AgX's middle grey (`0.4967` in display 2.2) so switching tone mappers keeps overall brightness consistent, and round-trip in Light presets. Web only for now (Android, iOS and Desktop keep AgX / Filmic / Sigmoid).
