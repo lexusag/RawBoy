@@ -1,3 +1,7 @@
+**RawBoy Desktop: pin RawBoy Viewer 0.2.11 (2026-11-21)**
+
+- **Videos in the browser** (opened in the default player), **all metadata in the viewer's details panel**, a **collage maker**, and a fix for **thumbnails and previews stalling in folders of ~1000 compressed DNGs**. Comes with RawBoy Viewer v0.2.11 (PRs 64, 65, 66, 67); the pin moves from 0.2.10 to 0.2.11. Not tried by hand (no Mac): CI's `desktop` job is the first build.
+
 **Camera (Android, experimental): motion data with videos (2026-11-21)**
 
 - Settings › Experimental › **Save motion data with videos**: videos record the whole 4:3 frame, and a `.motion` file beside them (in the app's own folder, `Android/data/app.rawboy.camera/files/motion/`) keeps the gyroscope and accelerometer at their highest rate plus each frame's timing, rolling shutter skew, focus and lens data. It is the groundwork for stabilizing videos afterwards; nothing is stabilized yet. `tools/motion/dump.py` summarises a file.
