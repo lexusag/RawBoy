@@ -18,14 +18,32 @@ export function isRawFileName(name: string, accept = RAW_ACCEPT): boolean {
 /** RawBoy's and Auto's picker: raws plus JPEG, HEIC, PNG and TIFF (decoded as display sources; HEIC needs Safari). */
 export const PHOTO_ACCEPT = `${RAW_ACCEPT},.jpg,.jpeg,.heic,.heif,.png,.tif,.tiff`;
 
-/** Opens the file picker. */
+/**
+ * Opens the file picker. iOS Safari and home-screen PWAs can garbage-collect an input that only a local variable holds
+ * once the picker is up, so its change event never fires and "nothing happens" after choosing a photo. The input is
+ * therefore attached to the document (hidden) and kept in a module-level set until it reports a choice or a cancel.
+ */
+const livePickers = new Set<HTMLInputElement>();
+
 export function pickFiles(multiple: boolean, accept = RAW_ACCEPT): Promise<File[]> {
   return new Promise((resolve) => {
     const input = document.createElement('input');
     input.type = 'file';
     input.multiple = multiple;
     input.accept = accept;
-    input.onchange = () => resolve(Array.from(input.files ?? []));
+    input.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0;pointer-events:none';
+    input.tabIndex = -1;
+    const done = () => {
+      // Read the files before removing the input: some WebKit versions empty `files` on removal.
+      const files = Array.from(input.files ?? []);
+      livePickers.delete(input);
+      input.remove();
+      resolve(files);
+    };
+    input.addEventListener('change', done);
+    input.addEventListener('cancel', done);
+    livePickers.add(input);
+    document.body.appendChild(input);
     input.click();
   });
 }
@@ -46,7 +64,9 @@ export function pickFolderFiles(accept = RAW_ACCEPT): Promise<PickFolderResult> 
     input.type = 'file';
     (input as unknown as { webkitdirectory: boolean }).webkitdirectory = true;
     input.multiple = true;
+    livePickers.add(input);
     input.onchange = () => {
+      livePickers.delete(input);
       const all = Array.from(input.files ?? []);
       const nonHidden = all.filter((f) => !f.name.startsWith('.'));
       const files = accept ? nonHidden.filter((f) => isRawFileName(f.name, accept)) : nonHidden;

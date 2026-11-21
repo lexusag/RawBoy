@@ -1,3 +1,30 @@
+**Web: picking a photo on iPhone (home-screen app) could do nothing (2026-11-21)**
+
+- `pickFiles` (and the folder picker) made an `<input type=file>` that nothing referenced once the picker was up. iOS WebKit can garbage-collect such an input, so the change event never fired and a photo chosen from the Photos library was silently ignored, often but not always. The input is now attached to the page (hidden) and held until it reports a choice or a cancel, and files are read before it is removed. Cause inferred from the known WebKit behaviour and the code: not reproduced on the phone (no Web Inspector session available), not tested on a device.
+
+**Camera: Brightness brightens in the dark (2026-11-21)**
+
+- In a dark scene (a candle-lit table, Pixel 9 Pro) Brightness +65 and +100 brightened the viewfinder for a moment, then it dropped back to where it was at 0 (measured on the owner's screen recording: +100 held 0.3 s, then back within 0.05 of 0's brightness); −100 still darkened by about 3 EV. AE was already at its longest preview exposure and highest gain, so the extra compensation changed nothing in the frames, neither the raw nor the post-raw boost. The Pixel's rule (`AppliedCompensation.ev`) counts compensation as reaching the raw unless it shows up as extra boost, so it credited all of it and the develop took Brightness back out (in photos too). Now, while AE is pinned (the frame at the preview's frame-rate cap and within 85% of the highest gain the camera reached there this session), the compensation is measured: AE's whole gain (exposure × ISO × boost) against the last frame shot without compensation, less what went into the boost (`AppliedCompensation.evPinned`, `CameraController.isPinned`). Below the ceiling, and when no uncompensated frame was seen since the camera opened (Brightness kept from an earlier session), the old rule holds. Same for photos, which take the compensation at the shutter from the same function. JVM tests in `AppliedCompensationTest`; not built or run on a phone here.
+
+**Camera: Brightness no longer overshoots in the viewfinder (2026-11-21)**
+
+- Moving **Brightness** made the viewfinder overshoot and then sink back: at +100 (+3 EV, of which the camera's AE compensation gives up to +2 EV on the Pixel and the develop the rest) the develop's +3 EV showed at once, then the camera's AE put its +2 EV into the frames within a few frames, while the live develop took that compensation back out only at its metering ease of 0.3 EV per update (~300 ms). The picture went to about +4.4 EV and drifted back to +3 over ~2 s, and the same downwards (−4.4 back to −3, and about −1.4 EV under normal for ~2 s on returning to 0). Now only the metering eases (a tap, a release, a tracked subject, the scene changing: auto exposure keeps working at any Brightness) and the compensation is taken out in the same update the frame carries it (`LiveExposure.ease`; iOS `CameraViewModel.easedExposure`). Modelled with AE converging half the step on the first analysed frame: one update about 0.7 EV short of the new setting, then exactly on it. Steady state was already right (0 = the phone's exposure lifted to the usual key, ±100 = ±3 EV) and photos are unchanged. JVM test `LiveExposureTest`; not built or run on a phone here.
+
+**RawBoy Desktop: pin RawBoy Viewer 0.2.13 (2026-11-21)**
+
+- **Videos in the browser** (opened in the default player), **all metadata in the viewer's details panel**, a **collage maker** (with 3:4, 2:3, 4:3, and 3:2 size presets, `_collages` output folder, and a JPEG quality slider with live file-size prediction), and a fix for **thumbnails and previews stalling in folders of ~1000 compressed DNGs**. Comes with RawBoy Viewer v0.2.13 (PRs 64, 65, 66, 67, 68, 69); the pin moves from 0.2.10 to 0.2.13. Not tried by hand (no Mac): CI's `desktop` job is the first build.
+
+**Camera (Android, experimental): motion data with videos (2026-11-21)**
+
+- Settings › Experimental › **Save motion data with videos**: videos record the whole 4:3 frame, and a `.motion` file beside them (in the app's own folder, `Android/data/app.rawboy.camera/files/motion/`) keeps the gyroscope and accelerometer at their highest rate plus each frame's timing, rolling shutter skew, focus and lens data. It is the groundwork for stabilizing videos afterwards; nothing is stabilized yet. `tools/motion/dump.py` summarises a file.
+- docs/camera.md no longer describes the old electronic video stabilization: the setting is the lens stabilizer only.
+
+**RawBoy: anamorphic flare Ghosts now show (2026-11-21)**
+
+- The **Ghosts** switch did nothing: its tall-oval source was blurred so widely that even a clipped lamp fell far under the flare's brightness knee, so no ghost was ever drawn. The ghost band is now scaled back up to about 1 for a clipped light (capped for lamps covering several texels) and read without the knee, and the ghosts are a little fainter (strength 0.8). Same fix in the web, Android and iOS/Desktop engines (the shader is shared).
+- What it is: faint reflections of the bright lights (two soft tall ovals each, cyan-green and pink) mirrored through the middle of the frame, like internal lens reflections. They follow the Anamorphic slider. Docs, Help and the web chip's tooltip now say so.
+- Checked by reading the code and the numbers only; **not rendered or built here** (no web dependencies or SDKs in the session): look at a night shot with a lamp, Anamorphic 60+, Ghosts on.
+
 **Camera (Android): faster start (2026-11-21)**
 
 - Measured on the Pixel 9 Pro (release build): about 1.15 s to the first screen, and the camera only began connecting ~1.7 s after the viewfinder surface existed, because lens discovery (reading ~10 cameras' characteristics) started only after the GL context had compiled its shaders. Discovery now starts when the screen's view model is made, and the viewfinder hands over its camera texture before compiling the shaders, so discovery, camera open and session set-up overlap the shader compile instead of following it. Nothing about the picture changes.
