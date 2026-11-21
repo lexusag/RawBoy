@@ -545,16 +545,16 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
     private fun lensResult(total: TotalCaptureResult): CaptureResult =
         streamingPhysical?.let { total.physicalCameraResults[it] } ?: total
 
-    /** Video mode's optical stabilization is on ([setVideoStabilization]); photos and the plain viewfinder leave the lens as the camera had it. */
+    /** Video mode's optical stabilization on/off ([setVideoStabilization]), null outside video mode; photos and the plain viewfinder leave the lens as the camera had it. */
     @Volatile
-    private var stabilizeVideo = false
+    private var stabilizeVideo: Boolean? = null
 
     /**
      * Turns the lens's optical stabilization (OIS) on or off for video mode. Only the physical option: the
      * electronic and preview stabilizations crop and delay the picture, so they are never used. Restarts the
      * preview when it changes.
      */
-    fun setVideoStabilization(on: Boolean) {
+    fun setVideoStabilization(on: Boolean?) {
         handler.post {
             if (stabilizeVideo == on) return@post
             stabilizeVideo = on
@@ -1690,8 +1690,13 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         // viewfinder showed a tighter frame than the photo. Always OFF; video mode's option is the lens's OIS only.
         set(CaptureRequest.CONTROL_VIDEO_STABILIZATION_MODE, CameraMetadata.CONTROL_VIDEO_STABILIZATION_MODE_OFF)
         set(CaptureRequest.CONTROL_AE_LOCK, exposureLocked)
-        if (stabilizeVideo && hasOis(inf)) {
-            set(CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE, CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_ON)
+        // The Pixel's preview template already has OIS on, so video mode with the switch off must say OFF
+        // explicitly (it was left alone and the switch changed nothing). Photos (null) leave the template's.
+        stabilizeVideo?.let { on ->
+            if (hasOis(inf)) setForLens(
+                CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE,
+                if (on) CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_ON else CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_OFF,
+            )
         }
         // A known curve on the preview, so the viewfinder can undo it (ViewfinderRenderer).
         when {
