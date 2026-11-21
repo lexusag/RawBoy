@@ -201,6 +201,22 @@ class ViewfinderRenderer(
         pending = null
         pixelBuffer = 0
         pixelBufferSize = 0
+        // The camera texture goes first: handing the SurfaceTexture over starts the camera (lens discovery, open, session)
+        // while the shaders below compile (~1 s on the Pixel), instead of after them.
+        val ids = IntArray(1)
+        GLES30.glGenTextures(1, ids, 0)
+        cameraTexture = ids[0]
+        GLES30.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, cameraTexture)
+        GLES30.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
+        GLES30.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
+        surfaceTexture?.release()
+        val st = SurfaceTexture(cameraTexture)
+        st.setOnFrameAvailableListener { requestRender() }
+        surfaceTexture = st
+        GLES30.glDisable(GLES30.GL_BLEND)
+        onSurfaceTexture(st)
         val yuv = GLES30.glGetString(GLES30.GL_EXTENSIONS)?.contains("GL_EXT_YUV_target") == true
         Log.d("RawBoyViewfinder", "camera frames: " + if (yuv) "YUV, converted here" else "RGB from the driver")
         linearize = LinearizeProgram(yuv)
@@ -218,20 +234,6 @@ class ViewfinderRenderer(
         shadingTexture = ShadingTexture()
         maskTexture = MaskTexture()
 
-        val ids = IntArray(1)
-        GLES30.glGenTextures(1, ids, 0)
-        cameraTexture = ids[0]
-        GLES30.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, cameraTexture)
-        GLES30.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
-        GLES30.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
-        GLES30.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES30.GL_TEXTURE_WRAP_S, GLES30.GL_CLAMP_TO_EDGE)
-        GLES30.glTexParameteri(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, GLES30.GL_TEXTURE_WRAP_T, GLES30.GL_CLAMP_TO_EDGE)
-        surfaceTexture?.release()
-        val st = SurfaceTexture(cameraTexture)
-        st.setOnFrameAvailableListener { requestRender() }
-        surfaceTexture = st
-        GLES30.glDisable(GLES30.GL_BLEND)
-        onSurfaceTexture(st)
     }
 
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
