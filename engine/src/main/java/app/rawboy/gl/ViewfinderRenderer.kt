@@ -160,6 +160,12 @@ class ViewfinderRenderer(
 
     private val linear = Target()
     private val small = Target()
+    /**
+     * The base copy again, in 32-bit floats, only for the readback: read from the half-float [small] as GL_FLOAT, the
+     * driver converts on the CPU, which makes glReadPixels wait for the GPU to finish everything queued (a stall of
+     * the GL thread every [baseIntervalMs] that dropped camera frames from videos). Null = no float render targets.
+     */
+    private var baseRead: Target? = null
     private val halo = Target()
     private val tailRaw = Target()
     private val tail = Target()
@@ -184,6 +190,7 @@ class ViewfinderRenderer(
         // A new context: every GL object (and the camera's texture) is gone.
         linear.reset()
         small.reset()
+        baseRead = null
         halo.reset()
         tailRaw.reset()
         tail.reset()
@@ -233,6 +240,9 @@ class ViewfinderRenderer(
         filmTextures = FilmTextures()
         shadingTexture = ShadingTexture()
         maskTexture = MaskTexture()
+        baseRead = Target(float32 = true).takeIf {
+            GLES30.glGetString(GLES30.GL_EXTENSIONS).orEmpty().contains("GL_EXT_color_buffer_float")
+        }
 
     }
 
@@ -243,9 +253,12 @@ class ViewfinderRenderer(
 
     override fun onDrawFrame(gl: GL10?) {
         val st = surfaceTexture ?: return
+        drops.begin()
         st.updateTexImage()
         st.getTransformMatrix(texMatrix)
         val frameNs = st.timestamp
+        drops.frame(frameNs, videoSink != null)
+        drops.mark(DropLog.LATCH)
 
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
         GLES30.glViewport(0, 0, viewWidth, viewHeight)
@@ -272,6 +285,7 @@ class ViewfinderRenderer(
         val tw = max(1, (sw * tailScale).toInt())
         val th = max(1, (sh * tailScale).toInt())
         makeCopies(sw, sh, tw, th)
+        drops.mark(DropLog.COPIES)
 
         // Every so often the 512 px copy is read back for the auto develop. The readback is asynchronous
         // (pixel buffer + fence), collected on a later frame, so the GL thread never waits for the GPU:
@@ -292,6 +306,7 @@ class ViewfinderRenderer(
         val trackListener = onTrackLuma
         track.collect()?.let { (tw, th, bytes) -> trackListener?.invoke(tw, th, bytes) }
         if (trackListener != null && !track.busy) startLuma(w, h, trackTarget, track, TRACK_MAX_DIMENSION)
+        drops.mark(DropLog.READBACKS)
 
         // Pass 2: develop to the screen, aspect-fit. The first params come from the first readback above.
         val p = params ?: return
@@ -329,7 +344,10 @@ class ViewfinderRenderer(
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
             GLES30.glViewport(0, 0, this.viewWidth, this.viewHeight)
             turn!!.draw(quad!!, videoTurned.texture, k, r[2] / viewWidth, r[3] / viewHeight)
+            drops.mark(DropLog.DEVELOP)
             drawVideoFromTexture(activeSink, videoTurned.texture, vk, outW * cover / pw, outH * cover / ph, frameNs)
+            drops.mark(DropLog.VIDEO)
+            drops.end()
             stats.frame(SystemClock.uptimeMillis() - now)
             return
         }
@@ -366,7 +384,10 @@ class ViewfinderRenderer(
             GLES30.glViewport(0, 0, this.viewWidth, this.viewHeight)
             turn!!.draw(quad!!, screen.texture, k)
         }
+        drops.mark(DropLog.DEVELOP)
         drawVideo(p, f, w, h, sw, sh, tw, th, frameNs, grainFrame)
+        drops.mark(DropLog.VIDEO)
+        drops.end()
         stats.frame(SystemClock.uptimeMillis() - now)
     }
 
@@ -566,7 +587,15 @@ class ViewfinderRenderer(
 
     /** Starts reading back the ~512 px base copy ([makeCopies] drew it this frame). */
     private fun startBase(sw: Int, sh: Int) {
-        small.bindForDrawing()
+        val f32 = baseRead
+        if (f32 != null) {
+            // The same pass as [small]'s, into a format glReadPixels(GL_FLOAT) copies without converting.
+            f32.ensure(sw, sh, mipmapped = false)
+            f32.bindForDrawing()
+            copy!!.draw(quad!!, linear.texture, sw, sh)
+        } else {
+            small.bindForDrawing()
+        }
         val bytes = sw * sh * 16
         if (pixelBuffer == 0) {
             val ids = IntArray(1)
@@ -688,6 +717,109 @@ class ViewfinderRenderer(
     }
 
     private val stats = FrameStats()
+    private val drops = DropLog()
+
+    /**
+     * While recording: finds camera frames that never reached the GL thread (the SurfaceTexture keeps only the newest,
+     * so a late draw loses the one before) and logs what the GL thread spent its time on around each (tag RawBoyVideo):
+     * the time since the last draw ended (the screen's swap, waiting for the GLSurfaceView), latching the frame, pass 1
+     * and the copies, the readbacks, the develop (screen), the video draw and the encoder's swap. Plus a summary every
+     * 5 s. Costs a few clock reads a frame.
+     */
+    private class DropLog {
+        private val marks = LongArray(STEPS)
+        private val previous = LongArray(STEPS + 1)
+        private var start = 0L
+        private var lastEnd = 0L
+        private var idle = 0L
+        private var lastFrameNs = 0L
+        private var period = 0L
+        private var recording = false
+        private var logged = 0
+        private var frames = 0
+        private var dropped = 0
+        private var worst = LongArray(STEPS + 1)
+        private var since = 0L
+
+        fun begin() {
+            start = System.nanoTime()
+            idle = if (lastEnd != 0L) start - lastEnd else 0L
+            marks.fill(0L)
+        }
+
+        fun mark(step: Int) {
+            marks[step] = System.nanoTime()
+        }
+
+        /** The latched frame: counts the camera frames between it and the last one. */
+        fun frame(frameNs: Long, recording: Boolean) {
+            if (recording != this.recording) {
+                this.recording = recording
+                lastFrameNs = 0L
+                period = 0L
+                logged = 0
+                frames = 0
+                dropped = 0
+                worst.fill(0L)
+                since = start
+                if (recording) Log.d(TAG, "recording: watching for dropped frames")
+            }
+            if (!recording || frameNs == lastFrameNs) return
+            val gap = if (lastFrameNs != 0L) frameNs - lastFrameNs else 0L
+            lastFrameNs = frameNs
+            if (gap <= 0L) return
+            // The frame period: the shortest gap seen (the camera runs at a fixed rate while recording).
+            period = if (period == 0L) gap else min(period, gap)
+            frames++
+            val missing = ((gap + period / 2) / period - 1).toInt()
+            if (missing <= 0) return
+            dropped += missing
+            if (logged++ < MAX_LINES) {
+                Log.d(
+                    TAG,
+                    "dropped %d frame(s) before %d (gap %.1f ms). Last draw: %s. This one: idle %.1f ms".format(
+                        missing, frameNs / 1_000_000, gap / 1e6, describe(previous), idle / 1e6,
+                    ),
+                )
+            }
+        }
+
+        fun end() {
+            val end = System.nanoTime()
+            previous[0] = idle
+            var t = start
+            for (i in 0 until STEPS) {
+                val m = if (marks[i] != 0L) marks[i] else t
+                previous[i + 1] = m - t
+                t = m
+            }
+            lastEnd = end
+            if (!recording) return
+            for (i in 0..STEPS) worst[i] = max(worst[i], previous[i])
+            if (end - since >= 5_000_000_000L) {
+                Log.d(TAG, "%d frames, %d dropped; worst %s".format(frames, dropped, describe(worst)))
+                frames = 0
+                dropped = 0
+                worst.fill(0L)
+                since = end
+            }
+        }
+
+        private fun describe(t: LongArray): String =
+            NAMES.indices.joinToString(", ") { "%s %.1f".format(NAMES[it], t[it] / 1e6) } + " ms"
+
+        companion object {
+            const val TAG = "RawBoyVideo"
+            const val LATCH = 0
+            const val COPIES = 1
+            const val READBACKS = 2
+            const val DEVELOP = 3
+            const val VIDEO = 4
+            const val STEPS = 5
+            const val MAX_LINES = 40
+            val NAMES = arrayOf("idle", "latch", "copies", "readbacks", "develop", "video")
+        }
+    }
 
     /** Logs frame rate and GL-thread time every few seconds (tag RawBoyViewfinder), for tuning on the phone. */
     private class FrameStats {
@@ -732,7 +864,7 @@ class ViewfinderRenderer(
     }
 
     /** A half-float colour target (RGBA8 with [bytes]); row 0 = top of the image. */
-    private class Target(private val bytes: Boolean = false) {
+    private class Target(private val bytes: Boolean = false, private val float32: Boolean = false) {
         var texture = 0
         private var framebuffer = 0
         private var width = 0
@@ -762,8 +894,19 @@ class ViewfinderRenderer(
             var lh = h
             for (level in 0 until levels) {
                 GLES30.glTexImage2D(
-                    GLES30.GL_TEXTURE_2D, level, if (bytes) GLES30.GL_RGBA8 else GLES30.GL_RGBA16F, lw, lh, 0,
-                    GLES30.GL_RGBA, if (bytes) GLES30.GL_UNSIGNED_BYTE else GLES30.GL_HALF_FLOAT, null,
+                    GLES30.GL_TEXTURE_2D, level,
+                    when {
+                        bytes -> GLES30.GL_RGBA8
+                        float32 -> GLES30.GL_RGBA32F
+                        else -> GLES30.GL_RGBA16F
+                    },
+                    lw, lh, 0, GLES30.GL_RGBA,
+                    when {
+                        bytes -> GLES30.GL_UNSIGNED_BYTE
+                        float32 -> GLES30.GL_FLOAT
+                        else -> GLES30.GL_HALF_FLOAT
+                    },
+                    null,
                 )
                 lw = max(1, lw / 2)
                 lh = max(1, lh / 2)
