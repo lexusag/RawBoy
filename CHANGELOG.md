@@ -1,3 +1,7 @@
+**Camera (Android): Optical stabilization switch now takes effect (2026-11-21)**
+
+- Settings › Optical stabilization changed nothing on the Pixel 9 Pro: the camera's preview template already has the lens stabilizer on, and the app only ever asked for it on. In video mode the switch now sends the lens stabilizer mode either way (off really turns it off); photos still leave the camera's own setting. Back lenses only: the front camera has no OIS.
+
 **Desktop and iOS Pro: 🎲 Random replaces the previous leak with a type picked (2026-11-21)**
 
 - With a specific film-leak type chosen, 🎲 Random added another leak on top of the earlier ones each press. It now replaces the selected leak (or the last one when the layers are full), as with *Any* and as on the web; only **+ Add** creates a new layer.

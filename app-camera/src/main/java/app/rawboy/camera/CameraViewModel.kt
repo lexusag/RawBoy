@@ -349,7 +349,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Optical stabilization is video mode's, and only when switched on in Settings. */
     private fun applyStabilization() {
-        controller.setVideoStabilization(_videoMode.value && _settings.value.videoStabilization)
+        controller.setVideoStabilization(if (_videoMode.value) _settings.value.videoStabilization else null)
     }
 
     /** Not in the middle of a recording: the file's format is fixed when it starts. */
