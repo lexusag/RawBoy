@@ -453,7 +453,8 @@ fun CameraScreen(
                         )
                     }
                     // Video is a 16:9 (or 9:16) slice of the 4:3 viewfinder: shade what the file will not have.
-                    if (videoMode) VideoFrameMask(if (turns % 2 == 1) 16f / 9f else 9f / 16f)
+                    // With motion data (experimental) the whole 4:3 frame is recorded: nothing to shade.
+                    if (videoMode && !settings.activeMotionData) VideoFrameMask(if (turns % 2 == 1) 16f / 9f else 9f / 16f)
                     // Taps, the focus handle, ring and loupe work in the upright picture's coordinates, turned with it.
                     Box(
                         Modifier
@@ -1445,6 +1446,14 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
                 selected = settings.longExposureLighten,
                 label = { if (it) "Lighten (trails)" else "Average (water)" },
                 onSelect = vm::setLongExposureLighten,
+                indent = true,
+            )
+            SettingSwitch(
+                title = "Save motion data with videos",
+                subtitle = "Whole 4:3 frame + a gyro file, to stabilize later",
+                checked = settings.videoMotionData,
+                accent = EXPERIMENTAL_ORANGE,
+                onChange = vm::setVideoMotionData,
                 indent = true,
             )
         }

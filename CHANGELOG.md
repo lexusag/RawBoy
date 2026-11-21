@@ -1,3 +1,8 @@
+**Camera (Android, experimental): motion data with videos (2026-11-21)**
+
+- Settings › Experimental › **Save motion data with videos**: videos record the whole 4:3 frame, and a `.motion` file beside them (in the app's own folder, `Android/data/app.rawboy.camera/files/motion/`) keeps the gyroscope and accelerometer at their highest rate plus each frame's timing, rolling shutter skew, focus and lens data. It is the groundwork for stabilizing videos afterwards; nothing is stabilized yet. `tools/motion/dump.py` summarises a file.
+- docs/camera.md no longer describes the old electronic video stabilization: the setting is the lens stabilizer only.
+
 **RawBoy: anamorphic flare Ghosts now show (2026-11-21)**
 
 - The **Ghosts** switch did nothing: its tall-oval source was blurred so widely that even a clipped lamp fell far under the flare's brightness knee, so no ghost was ever drawn. The ghost band is now scaled back up to about 1 for a clipped light (capped for lamps covering several texels) and read without the knee, and the ghosts are a little fainter (strength 0.8). Same fix in the web, Android and iOS/Desktop engines (the shader is shared).

@@ -43,6 +43,7 @@ import kotlin.math.abs
 class VideoRecorder private constructor(
     private val resolver: ContentResolver,
     private val uri: Uri,
+    private val displayName: String,
     private val descriptor: ParcelFileDescriptor,
     private val muxer: MediaMuxer,
     private val videoCodec: MediaCodec,
@@ -55,8 +56,20 @@ class VideoRecorder private constructor(
     /** The microphone and its AAC encoder. */
     private class Audio(val record: AudioRecord, val codec: MediaCodec, val bufferBytes: Int)
 
-    private val startNs = SystemClock.elapsedRealtimeNanos()
-    private var clockOffsetNs = Long.MIN_VALUE
+    /** The video's time 0 on the camera clock (plus [clockOffsetNs]); for the motion data. */
+    val startNs = SystemClock.elapsedRealtimeNanos()
+
+    /** Camera clock -> elapsedRealtimeNanos, set by the first frame (0 on a REALTIME camera); MIN_VALUE before. */
+    @Volatile
+    var clockOffsetNs = Long.MIN_VALUE
+        private set
+
+    /** The file's name without extension (`VID_<date>_<time>-camera`). */
+    val name: String get() = displayName.substringBeforeLast('.')
+
+    /** Told each camera frame that goes into the file and its presentation time (GL thread): the motion data. */
+    @Volatile
+    var onPresented: ((cameraNs: Long, ptsNs: Long) -> Unit)? = null
     private var lastVideoPtsNs = -1L
 
     private sealed interface MuxEvent {
@@ -130,6 +143,7 @@ class VideoRecorder private constructor(
         val pts = cameraNs + clockOffsetNs - startNs
         if (pts < 0 || pts <= lastVideoPtsNs) return -1
         lastVideoPtsNs = pts
+        onPresented?.invoke(cameraNs, pts)
         return pts
     }
 
@@ -446,6 +460,9 @@ class VideoRecorder private constructor(
         const val LONG_SIDE = 1920
         const val SHORT_SIDE = 1080
 
+        /** Short side of a full-frame (4:3) recording. */
+        const val FULL_FRAME_SHORT_SIDE = 1440
+
         /**
          * Sets up a recording of the viewfinder turned [turns] quarter turns (odd: the phone is sideways, a landscape
          * file). [withAudio]: stereo microphone, if RECORD_AUDIO is granted (the caller checks). Throws [IOException]
@@ -460,16 +477,20 @@ class VideoRecorder private constructor(
             debug: VideoDebug? = null,
             quality: VideoQuality = VideoQuality.OPTIMAL,
             requestRender: () -> Unit = {},
+            fullFrame: Boolean = false,
         ): VideoRecorder {
             val landscape = turns % 2 != 0
-            val width = if (landscape) LONG_SIDE else SHORT_SIDE
-            val height = if (landscape) SHORT_SIDE else LONG_SIDE
+            // Full frame: the whole 4:3 viewfinder (1920 x 1440), for stabilizing afterwards with the motion data.
+            val short = if (fullFrame) FULL_FRAME_SHORT_SIDE else SHORT_SIDE
+            val width = if (landscape) LONG_SIDE else short
+            val height = if (landscape) short else LONG_SIDE
             val bitrate = quality.bitrate(flat)
 
             val resolver = context.contentResolver
             val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+            val displayName = "VID_$stamp-${if (flat) String.format(Locale.US, "flat%+.1fev", FLAT_RAISE_EV) else Edition.JPEG_SUFFIX}.mp4"
             val values = ContentValues().apply {
-                put(MediaStore.MediaColumns.DISPLAY_NAME, "VID_$stamp-${if (flat) String.format(Locale.US, "flat%+.1fev", FLAT_RAISE_EV) else Edition.JPEG_SUFFIX}.mp4")
+                put(MediaStore.MediaColumns.DISPLAY_NAME, displayName)
                 put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
                 put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/" + Edition.FOLDER + "/")
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
@@ -512,7 +533,7 @@ class VideoRecorder private constructor(
                     requestRender = requestRender,
                 )
                 val fault = debug?.fault?.takeIf { it.variant == null || it.variant == variant }
-                recorder = VideoRecorder(resolver, uri, descriptor, muxer, video, microphone, sink, variant, fault)
+                recorder = VideoRecorder(resolver, uri, displayName, descriptor, muxer, video, microphone, sink, variant, fault)
                 recorder.begin()
                 return recorder
             } catch (e: Exception) {

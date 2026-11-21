@@ -21,6 +21,7 @@ import app.rawboy.auto.analysis.SceneAnalyzer
 import app.rawboy.auto.analysis.SceneStats
 import app.rawboy.auto.looks.LookApplier
 import app.rawboy.camera.capture.CameraController
+import app.rawboy.camera.capture.MotionRecording
 import app.rawboy.camera.capture.ViewfinderGain
 import app.rawboy.camera.platform.ActivePlatform
 import app.rawboy.camera.report.DeviceReport
@@ -363,7 +364,19 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     /** Optical stabilization is video mode's, and only when switched on in Settings. */
     private fun applyStabilization() {
         controller.setVideoStabilization(if (_videoMode.value) _settings.value.videoStabilization else null)
+        controller.setMotionData(_videoMode.value && _settings.value.activeMotionData)
     }
+
+    /** Experimental: record the whole 4:3 frame plus a `.motion` file. Not in the middle of a recording. */
+    fun setVideoMotionData(on: Boolean) {
+        if (_recordingMs.value != null) return
+        change { it.copy(videoMotionData = on) }
+        applyStabilization()
+    }
+
+    /** The recording's motion data ([MotionRecording]), with the recorder it belongs to. */
+    private var motion: MotionRecording? = null
+    private var motionFor: VideoRecorder? = null
 
     /** Not in the middle of a recording: the file's format is fixed when it starts. */
     fun setFlatVideo(on: Boolean) {
@@ -397,13 +410,14 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val withAudio = audioGranted
         val flat = _settings.value.flatVideo
         val quality = _settings.value.videoQuality
+        val motionData = _settings.value.activeMotionData
         stopRequested = false
         _recordingMs.value = 0
         recordingJob = viewModelScope.launch {
             val probe = videoProbe(debug)
             probing = true
             val result = try {
-                probe.run(_recordableViewfinder.value) { variant -> attemptRecording(variant, turns, withAudio, flat, quality, debug) }
+                probe.run(_recordableViewfinder.value) { variant -> attemptRecording(variant, turns, withAudio, flat, quality, debug, motionData) }
             } catch (e: Exception) {
                 probing = false
                 // The file couldn't be made (not the encoder's doing).
@@ -447,17 +461,19 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
      */
     private suspend fun attemptRecording(
         variant: VideoVariant, turns: Int, withAudio: Boolean, flat: Boolean, quality: VideoQuality, debug: VideoDebug?,
+        motionData: Boolean = false,
     ): VideoProbe.Attempt<VideoRecorder> {
         if (stopRequested) return VideoProbe.Attempt.Aborted
         val r = try {
             withContext(Dispatchers.IO) {
-                VideoRecorder.create(app, turns, withAudio, flat, variant, debug, quality)
+                VideoRecorder.create(app, turns, withAudio, flat, variant, debug, quality, fullFrame = motionData)
             }
         } catch (e: NoEncoderException) {
             Log.w(TAG, "video: $variant has no encoder", e)
             return VideoProbe.Attempt.Failed(VideoFailure.NO_ENCODER)
         }
         recorder = r
+        if (motionData) startMotion(r, turns, flat)
         _videoSink.value = r.sink
         while (true) {
             _recordingMs.value = r.elapsedMs
@@ -483,8 +499,34 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    /** Starts [r]'s motion data: sensors now, camera frames and encoded frames through the listeners. */
+    private fun startMotion(r: VideoRecorder, turns: Int, flat: Boolean) {
+        val lens = info ?: return
+        val m = MotionRecording.start(app, r.name, lens, turns, r.sink.width, r.sink.height, flat)
+        if (m == null) {
+            _message.value = "No motion data for this video (no gyroscope or no room)"
+            return
+        }
+        motion = m
+        motionFor = r
+        controller.motionListener = m::onFrame
+        r.onPresented = m::onEncoded
+    }
+
+    /** Detaches [r]'s motion data from the camera and the encoder and hands it over (null if it has none). */
+    private fun endMotion(r: VideoRecorder): MotionRecording? {
+        if (motionFor !== r) return null
+        controller.motionListener = null
+        r.onPresented = null
+        return motion.also {
+            motion = null
+            motionFor = null
+        }
+    }
+
     /** Takes a recorder that recorded nothing down, then lets the viewfinder forget its sink. */
     private suspend fun discard(r: VideoRecorder) {
+        endMotion(r)?.abort()
         withContext(Dispatchers.IO + NonCancellable) { r.discard() }
         if (recorder === r) recorder = null
         _videoSink.value = null
@@ -526,11 +568,19 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         recordingJob = null
         viewModelScope.launch {
             val uri = withContext(Dispatchers.IO + NonCancellable) { r.stop() }
+            // After the stop: the last frames' encoded times are in the motion file too.
+            val m = endMotion(r)
+            m?.let { mr ->
+                withContext(Dispatchers.IO + NonCancellable) {
+                    if (uri != null) mr.finish(r.startNs, r.clockOffsetNs.takeIf { it != Long.MIN_VALUE } ?: 0L) else mr.abort()
+                }
+            }
             _videoSink.value = null
             _recordingMs.value = null
             applyStabilization() // a switch flipped during the recording takes effect now
             _message.value = when {
                 uri != null && failure != null -> "$failure. Video saved to Movies/${Edition.FOLDER}"
+                uri != null && m != null -> "Video saved to Movies/${Edition.FOLDER} (motion data saved too)"
                 uri != null -> "Video saved to Movies/${Edition.FOLDER}"
                 failure != null -> failure
                 else -> "Nothing was recorded"
@@ -1245,6 +1295,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setExperimental(on: Boolean) {
         change { it.copy(experimental = on) }
         if (!on) cancelSelfTimer()
+        if (_recordingMs.value == null) applyStabilization() // motion data is experimental
     }
 
     fun setGrain(on: Boolean) {
@@ -1619,6 +1670,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         }
         location.stop()
         shutterSound.release()
+        // Normally ended by stopRecording; never leave the sensors running.
+        motionFor?.let { r -> endMotion(r)?.finish(r.startNs, r.clockOffsetNs.takeIf { it != Long.MIN_VALUE } ?: 0L) }
         controller.close()
         histogramRenderer.close()
         qrExecutor.shutdown()
