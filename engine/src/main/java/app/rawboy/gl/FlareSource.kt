@@ -33,6 +33,10 @@ object FlareSource {
     private const val BRIGHT_HI = 6.8f
     private const val BLOWN_LO = 1.5f
     private const val BLOWN_HI = 4.0f
+    /** The ghost band: the blur spreads a light over ~250 texels, so scale it back up (a lone clipped texel of 7 peaks
+     *  at 1) and cap lamps that cover several texels. The shader reads it without a knee. */
+    private const val GHOST_GAIN = 36f
+    private const val GHOST_MAX = 1.5f
 
     /** Rows of band 1 (and 2) for a copy of [rows] rows. */
     fun coarseRows(rows: Int) = ceil(rows / 3.0).toInt()
@@ -140,7 +144,7 @@ object FlareSource {
         }
 
         val lum = FloatArray(wf * rc) { coarse[it * 3] * 0.2627f + coarse[it * 3 + 1] * 0.678f + coarse[it * 3 + 2] * 0.0593f }
-        val ghost = gauss3(lum, wf, rc, 10f, 4f)
+        val ghost = gauss3(lum, wf, rc, 10f, 4f).map { minOf(GHOST_MAX, it * GHOST_GAIN) }
 
         val out = ByteBuffer.allocateDirect(wf * (h + 2 * rc) * 6).order(ByteOrder.nativeOrder())
         val dst = out.asShortBuffer()

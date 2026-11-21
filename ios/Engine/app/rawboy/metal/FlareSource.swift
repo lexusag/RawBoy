@@ -23,6 +23,10 @@ public enum FlareSource {
     private static let brightHi: Float = 6.8
     private static let blownLo: Float = 1.5
     private static let blownHi: Float = 4.0
+    /// The ghost band: the blur spreads a light over ~250 texels, so scale it back up (a lone clipped texel of 7 peaks
+    /// at 1) and cap lamps that cover several texels. The shader reads it without a knee.
+    private static let ghostGain: Float = 36
+    private static let ghostMax: Float = 1.5
 
     /** Rows of band 1 (and 2) for a copy of [rows] rows. */
     public static func coarseRows(_ rows: Int) -> Int { (rows + 2) / 3 }
@@ -131,7 +135,7 @@ public enum FlareSource {
 
         var lum = [Float](repeating: 0, count: wf * rc)
         for i in 0..<lum.count { lum[i] = coarse[i * 3] * 0.2627 + coarse[i * 3 + 1] * 0.678 + coarse[i * 3 + 2] * 0.0593 }
-        let ghost = gauss3(lum, wf, rc, sy: 10, sx: 4)
+        let ghost = gauss3(lum, wf, rc, sy: 10, sx: 4).map { min(ghostMax, $0 * ghostGain) }
 
         var out = [UInt16]()
         out.reserveCapacity(wf * (h + 2 * rc) * 3)
