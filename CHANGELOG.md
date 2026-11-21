@@ -1,3 +1,9 @@
+**RawBoy: anamorphic flare Ghosts now show (2026-11-21)**
+
+- The **Ghosts** switch did nothing: its tall-oval source was blurred so widely that even a clipped lamp fell far under the flare's brightness knee, so no ghost was ever drawn. The ghost band is now scaled back up to about 1 for a clipped light (capped for lamps covering several texels) and read without the knee, and the ghosts are a little fainter (strength 0.8). Same fix in the web, Android and iOS/Desktop engines (the shader is shared).
+- What it is: faint reflections of the bright lights (two soft tall ovals each, cyan-green and pink) mirrored through the middle of the frame, like internal lens reflections. They follow the Anamorphic slider. Docs, Help and the web chip's tooltip now say so.
+- Checked by reading the code and the numbers only; **not rendered or built here** (no web dependencies or SDKs in the session): look at a night shot with a lamp, Anamorphic 60+, Ghosts on.
+
 **Camera (Android): faster start (2026-11-21)**
 
 - Measured on the Pixel 9 Pro (release build): about 1.15 s to the first screen, and the camera only began connecting ~1.7 s after the viewfinder surface existed, because lens discovery (reading ~10 cameras' characteristics) started only after the GL context had compiled its shaders. Discovery now starts when the screen's view model is made, and the viewfinder hands over its camera texture before compiling the shaders, so discovery, camera open and session set-up overlap the shader compile instead of following it. Nothing about the picture changes.

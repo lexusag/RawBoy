@@ -560,6 +560,8 @@ function AnamorphicSliders({
               type="button"
               className={params.anamorphicGhosts ? 'active' : ''}
               aria-pressed={params.anamorphicGhosts}
+              title="Faint lens reflections of the bright lights, mirrored through the middle of the frame. Needs small, blown-out lights; strength follows the Anamorphic slider"
+
               onClick={() => onChange({ ...params, anamorphicGhosts: !params.anamorphicGhosts })}
             >
               Ghosts
