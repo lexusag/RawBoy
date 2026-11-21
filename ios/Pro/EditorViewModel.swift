@@ -502,6 +502,31 @@ final class EditorViewModel: ObservableObject {
         return leak.id
     }
 
+    /** 🎲 Random with a type picked (as web's `rollFilmLeaks`): replaces the selected film leak; with none selected adds one if there is room, else replaces the last. Only + Add makes a new layer on top of existing ones. */
+    @discardableResult
+    func rollFilmLeak(_ type: FilmLeakType, aspect: Float, selectedId: String?, shortSideSprockets: Bool = false) -> String? {
+        let p = state.params
+        let room = max(0, LightLeaks.maxLeaks - p.leaks.count)
+        guard room > 0 else { return nil }
+        let idx = selectedId.flatMap { id in p.filmLeaks.firstIndex { $0.id == id } }
+        var leak = FilmLeaks.random(
+            type: type, aspect: aspect, seed: FilmLeaks.newSeed(),
+            grade: (idx ?? 0) <= 0 && p.filmLeaks.count <= 1,
+            shortSideSprockets: shortSideSprockets)
+        if let i = idx {
+            leak.id = p.filmLeaks[i].id
+            edit(force: true) { $0.filmLeaks[i] = leak }
+        } else if p.filmLeaks.count < room {
+            edit(force: true) { $0.filmLeaks.append(leak) }
+        } else if let last = p.filmLeaks.last {
+            leak.id = last.id
+            edit(force: true) { $0.filmLeaks[$0.filmLeaks.count - 1] = leak }
+        } else {
+            return nil
+        }
+        return leak.id
+    }
+
     @discardableResult
     func randomFilmRoll(aspect: Float, shortSideSprockets: Bool = false) -> String? {
         let cap = max(0, LightLeaks.maxLeaks - state.params.leaks.count)
