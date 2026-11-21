@@ -82,6 +82,7 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -237,6 +238,18 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Lenses per side (true = front), discovered once (again when the maximum-resolution setting changes). */
     private var lensesBySide: Map<Boolean, List<CameraController.Info>>? = null
+
+    /**
+     * The first discovery, started in `init` on a worker thread: reading ~10 cameras' characteristics took ~1.7 s on
+     * the Pixel and used to begin only after the viewfinder's GL context existed, so it overlaps that and the permission
+     * check now. Dropped (null) whenever [lensesBySide] is reset, so a stale list is never used.
+     */
+    private var lensPrefetch: Deferred<Map<Boolean, List<CameraController.Info>>>? = null
+
+    private fun discoverLenses(maxRes: Boolean): Map<Boolean, List<CameraController.Info>> = mapOf(
+        false to controller.lenses(CameraMetadata.LENS_FACING_BACK, maxRes),
+        true to controller.lenses(CameraMetadata.LENS_FACING_FRONT, maxRes),
+    )
 
     /** Whether the front camera can deliver RAW (the selfie flip button shows only then). */
     private val _frontAvailable = MutableStateFlow(false)
@@ -589,6 +602,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     init {
         DebugProbe.init(app)
         ShotSaver.attachView()
+        val maxRes = _settings.value.maxRes
+        lensPrefetch = viewModelScope.async(Dispatchers.Default) { discoverLenses(maxRes) }
         viewModelScope.launch(Dispatchers.Main.immediate) {
             ShotSaver.calibrations.collect { cal ->
                 _settings.value = when (cal) {
@@ -670,12 +685,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         startJob = viewModelScope.launch {
             try {
                 val inf = info ?: run {
-                    val sides = lensesBySide ?: withContext(Dispatchers.Default) {
-                        mapOf(
-                            false to controller.lenses(CameraMetadata.LENS_FACING_BACK, _settings.value.maxRes),
-                            true to controller.lenses(CameraMetadata.LENS_FACING_FRONT, _settings.value.maxRes),
-                        )
-                    }.also { lensesBySide = it }
+                    val prefetch = lensPrefetch
+                    lensPrefetch = null
+                    val sides = lensesBySide ?: (prefetch?.let { runCatching { it.await() }.getOrNull() }
+                        ?: withContext(Dispatchers.Default) { discoverLenses(_settings.value.maxRes) }).also { lensesBySide = it }
                     _frontAvailable.value = sides[true].orEmpty().isNotEmpty()
                     if (sides[false].orEmpty().isEmpty()) throw java.io.IOException("No back camera with RAW support")
                     // The saved side may have no RAW (or another phone): fall back to the back cameras.
@@ -1147,6 +1160,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         if (on == _settings.value.maxRes) return
         change { it.copy(maxRes = on) }
         lensesBySide = null
+        lensPrefetch = null
         info = null
         live = null
         _shaderParams.value = null
@@ -1276,6 +1290,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         if (!recording) {
             if (prev.maxRes != next.maxRes) {
                 lensesBySide = null
+                lensPrefetch = null
                 info = null
                 live = null
                 _shaderParams.value = null

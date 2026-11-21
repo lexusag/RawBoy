@@ -1,3 +1,7 @@
+**Camera (Android): faster start (2026-11-21)**
+
+- Measured on the Pixel 9 Pro (release build): about 1.15 s to the first screen, and the camera only began connecting ~1.7 s after the viewfinder surface existed, because lens discovery (reading ~10 cameras' characteristics) started only after the GL context had compiled its shaders. Discovery now starts when the screen's view model is made, and the viewfinder hands over its camera texture before compiling the shaders, so discovery, camera open and session set-up overlap the shader compile instead of following it. Nothing about the picture changes.
+
 **Camera (Android): Optical stabilization switch now takes effect (2026-11-21)**
 
 - Settings › Optical stabilization changed nothing on the Pixel 9 Pro: the camera's preview template already has the lens stabilizer on, and the app only ever asked for it on. In video mode the switch now sends the lens stabilizer mode either way (off really turns it off); photos still leave the camera's own setting. Back lenses only: the front camera has no OIS.
