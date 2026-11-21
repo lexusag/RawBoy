@@ -1,3 +1,8 @@
+**Camera (Android): videos no longer drop frames (2026-11-21)**
+
+- Videos lost 1-8% of their frames in landscape and about 12% in portrait (counted from the motion data: camera frames with no encoded frame), in short runs about every 300 ms. Every 300 ms the viewfinder reads its 512 px copy back for the live auto develop; read from the half-float copy as GL_FLOAT, the driver converted on the CPU and made `glReadPixels` wait for the GPU, holding the GL thread past the next camera frame (the SurfaceTexture keeps only the newest). The copy is now drawn a second time into a 32-bit float target (`ViewfinderRenderer.baseRead`, where `GL_EXT_color_buffer_float` exists) and read from there without conversion. Pixel 9 Pro, two 10 s clips (landscape and portrait, W): 0 frames dropped while recording.
+- While recording, `RawBoyVideo` logs each dropped camera frame with the GL thread's timings around it (idle, latch, copies, readbacks, develop, video) and a summary every 5 s.
+
 **Web: picking a photo on iPhone (home-screen app) could do nothing (2026-11-21)**
 
 - `pickFiles` (and the folder picker) made an `<input type=file>` that nothing referenced once the picker was up. iOS WebKit can garbage-collect such an input, so the change event never fired and a photo chosen from the Photos library was silently ignored, often but not always. The input is now attached to the page (hidden) and held until it reports a choice or a cancel, and files are read before it is removed. Cause inferred from the known WebKit behaviour and the code: not reproduced on the phone (no Web Inspector session available), not tested on a device.
