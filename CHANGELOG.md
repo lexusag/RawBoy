@@ -1,6 +1,6 @@
-**RawBoy Desktop: pin RawBoy Viewer 0.2.11 (2026-11-21)**
+**RawBoy Desktop: pin RawBoy Viewer 0.2.13 (2026-11-21)**
 
-- **Videos in the browser** (opened in the default player), **all metadata in the viewer's details panel**, a **collage maker**, and a fix for **thumbnails and previews stalling in folders of ~1000 compressed DNGs**. Comes with RawBoy Viewer v0.2.11 (PRs 64, 65, 66, 67); the pin moves from 0.2.10 to 0.2.11. Not tried by hand (no Mac): CI's `desktop` job is the first build.
+- **Videos in the browser** (opened in the default player), **all metadata in the viewer's details panel**, a **collage maker** (with 3:4, 2:3, 4:3, and 3:2 size presets, `_collages` output folder, and a JPEG quality slider with live file-size prediction), and a fix for **thumbnails and previews stalling in folders of ~1000 compressed DNGs**. Comes with RawBoy Viewer v0.2.13 (PRs 64, 65, 66, 67, 68, 69); the pin moves from 0.2.10 to 0.2.13. Not tried by hand (no Mac): CI's `desktop` job is the first build.
 
 **Camera (Android, experimental): motion data with videos (2026-11-21)**
 
