@@ -309,13 +309,14 @@ export function paramsOf(p: AutoPhoto): DevelopParams | null {
   // Edits read back from a sidecar don't know the photo is display-referred; the analysis does.
   if (p.edits) return applyEditsDevelop({ ...p.edits, displaySource: a.defaults.displaySource }, p.adjust);
   const developed = developAuto(autoBaseOf(p, a), activeLook(p), p.strength, p.adjust, a.stats.hasFace, p.preset, p.lensPreset);
-  return p.filmLeaks?.length ? { ...developed, filmLeaks: p.filmLeaks } : developed;
+  // p.filmLeaks set (even empty: leaks cleared on top of a preset that has some) wins over the preset's.
+  return p.filmLeaks ? { ...developed, filmLeaks: p.filmLeaks } : developed;
 }
 
 /** True when [p] has any generated film leaks (rolled in Auto, in its RawBoy edits, or from a preset). */
 export function hasFilmLeak(p: AutoPhoto): boolean {
   if (p.edits) return p.edits.filmLeaks.length > 0;
-  if (p.filmLeaks?.length) return true;
+  if (p.filmLeaks) return p.filmLeaks.length > 0;
   const presetLeaks = p.preset?.values.filmLeaks;
   return Array.isArray(presetLeaks) && presetLeaks.length > 0;
 }
@@ -904,7 +905,8 @@ export class AutoStore {
       id,
       (q) => ({
         ...q,
-        filmLeaks: undefined,
+        // [] (not undefined) when the preset brings leaks, so they go too.
+        filmLeaks: q.preset?.values.filmLeaks ? [] : undefined,
         edits: q.edits ? { ...q.edits, filmLeaks: [] } : null,
       }),
       true,

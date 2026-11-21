@@ -38,7 +38,7 @@ export const AUTO_VERSION = 1;
 
 export function encodeAuto(s: SavedAuto): string {
   const edits = s.edits ? JSON.parse(encodeEdits(s.edits, developParams()) ?? JSON.stringify({ format: EDITS_FORMAT, version: EDITS_VERSION, values: {} })) : null;
-  const filmLeaks = s.filmLeaks?.length ? s.filmLeaks.map(({ id: _id, ...l }) => l) : undefined;
+  const filmLeaks = s.filmLeaks ? s.filmLeaks.map(({ id: _id, ...l }) => l) : undefined;
   return JSON.stringify({
     format: AUTO_FORMAT, version: AUTO_VERSION, mode: s.mode, look: s.look.id, filmLook: s.filmLook.id, strength: s.strength,
     adjust: s.adjust, preset: s.preset ? JSON.parse(encodePresets([s.preset])) : null, edits,
