@@ -364,7 +364,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     /** Optical stabilization is video mode's, and only when switched on in Settings. */
     private fun applyStabilization() {
         controller.setVideoStabilization(if (_videoMode.value) _settings.value.videoStabilization else null)
-        controller.setMotionData(_videoMode.value && _settings.value.activeMotionData)
+        controller.setMotionData(_videoMode.value && _settings.value.videoMotionData)
     }
 
     /** Experimental: record the whole 4:3 frame plus a `.motion` file. Not in the middle of a recording. */
@@ -410,7 +410,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val withAudio = audioGranted
         val flat = _settings.value.flatVideo
         val quality = _settings.value.videoQuality
-        val motionData = _settings.value.activeMotionData
+        val motionData = _settings.value.videoMotionData
         stopRequested = false
         _recordingMs.value = 0
         recordingJob = viewModelScope.launch {
@@ -1295,7 +1295,6 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setExperimental(on: Boolean) {
         change { it.copy(experimental = on) }
         if (!on) cancelSelfTimer()
-        if (_recordingMs.value == null) applyStabilization() // motion data is experimental
     }
 
     fun setGrain(on: Boolean) {
@@ -1335,7 +1334,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val prev = _settings.value
         val recording = _recordingMs.value != null
         val next = prev.resetToDefaults().let {
-            if (recording) it.copy(maxRes = prev.maxRes, front = prev.front, lens = prev.lens, flatVideo = prev.flatVideo, videoQuality = prev.videoQuality) else it
+            if (recording) it.copy(maxRes = prev.maxRes, front = prev.front, lens = prev.lens, flatVideo = prev.flatVideo, videoQuality = prev.videoQuality, videoMotionData = prev.videoMotionData) else it
         }
         change { next }
         if (!recording) {
@@ -1375,7 +1374,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         if (prev.geotag != next.geotag) {
             updateLocation()
         }
-        if (prev.videoStabilization != next.videoStabilization && !recording) {
+        if ((prev.videoStabilization != next.videoStabilization || prev.videoMotionData != next.videoMotionData) && !recording) {
             applyStabilization()
         }
     }

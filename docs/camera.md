@@ -241,7 +241,7 @@ In video mode, **AE LOCK** (top right of the viewfinder) holds the exposure and 
 
 ## Motion data with videos (Android, experimental)
 
-With **Settings › Experimental features** on, **Save motion data with videos** (off by default) prepares videos for stabilizing afterwards, the first step of the software stabilization plan:
+Under **Settings › Experimental**, **Save motion data with videos** (off by default) prepares videos for stabilizing afterwards, the first step of the software stabilization plan:
 
 - The video records the **whole 4:3 viewfinder** (1920 × 1440, or 1440 × 1920 upright) instead of the 16:9 slice, so a later stabilizer has room to crop into; the viewfinder then shows no darkened bands.
 - Beside it, a `.motion` file of the same name goes to `Android/data/app.rawboy.camera/files/motion/` (reach it with `adb pull` or over USB): the gyroscope (uncalibrated, at its highest rate, 400 Hz on the Pixel 9 Pro) and accelerometer, every camera frame's timestamp, exposure, rolling shutter skew, focus, active lens and crop, the lens stabilizer's shift samples where the lens reports them (Pixel 9 Pro: the telephoto only), and which frame went into the file at which time. Its header holds the lens's calibration (intrinsics, distortion, pose) and the sensors' details. Format: `capture/MotionFormat.kt`; `python3 tools/motion/dump.py <file>` summarises one.

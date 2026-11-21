@@ -122,7 +122,7 @@ data class CameraSettings(
     val experimental: Boolean = false,
     /**
      * Experimental: videos record the whole 4:3 frame and save a `.motion` file of gyroscope and frame data beside it
-     * (MotionRecording), to stabilize them afterwards. Only with [experimental] on ([activeMotionData]).
+     * (MotionRecording), to stabilize them afterwards.
      */
     val videoMotionData: Boolean = false,
     /** Video stabilization while recording (video mode only; it crops the picture a little). */
@@ -240,9 +240,6 @@ data class CameraSettings(
 
     /** Self-timer and long exposure are experimental: they do nothing (and their buttons hide) unless [experimental] is on. */
     val activeSelfTimer: Int get() = if (experimental) selfTimer else 0
-
-    /** [videoMotionData], which is experimental. */
-    val activeMotionData: Boolean get() = experimental && videoMotionData
 
     /**
      * The long exposure to take, or null when the mode is off. [sceneKey]: the viewfinder's scene key per unit of scale,

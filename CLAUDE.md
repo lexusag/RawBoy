@@ -258,8 +258,8 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   files dir (`DebugProbe.videoDebug`: forced variants, hardware H.264, landscape, injected failures). Flat video
   (Apple Log, Rec.2020, 28 Mbit/s), stabilization settings and AE lock: `docs/camera.md`.
 - **Motion data** (Android Camera, experimental, 2026-11-21; phase 0 of the software video stabilization plan in the
-  project files' `video-stabilization/plan.md`): `CameraSettings.videoMotionData` (`activeMotionData` needs
-  `experimental`) → `VideoRecorder.create(fullFrame = true)` (1920×1440, no 16:9 crop, no `VideoFrameMask`) +
+  project files' `video-stabilization/plan.md`): `CameraSettings.videoMotionData` (independent toggle under
+  Settings › Experimental) → `VideoRecorder.create(fullFrame = true)` (1920×1440, no 16:9 crop, no `VideoFrameMask`) +
   `capture/MotionRecording.kt` (gyro uncalibrated + accel at 2.5 ms, `HIGH_SAMPLING_RATE_SENSORS`; camera frames via
   `CameraController.motionListener`, OIS samples via `setMotionData` → `STATISTICS_OIS_DATA_MODE` where offered;
   encoded frames via `VideoRecorder.onPresented`) → `capture/MotionFormat.kt` (binary `.motion`, JSON header, JVM
