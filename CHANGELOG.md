@@ -1,3 +1,7 @@
+**Desktop and iOS Pro: 🎲 Random replaces the previous leak with a type picked (2026-11-21)**
+
+- With a specific film-leak type chosen, 🎲 Random added another leak on top of the earlier ones each press. It now replaces the selected leak (or the last one when the layers are full), as with *Any* and as on the web; only **+ Add** creates a new layer.
+
 **Camera (Android): Zoom buttons off by default (2026-11-21)**
 
 - Settings › Zoom buttons now starts off (pinch zoom is unchanged) and says it only helps the viewfinder and does not affect the picture. A choice already saved stays as it was; the Help text no longer claims the buttons are shown by default.

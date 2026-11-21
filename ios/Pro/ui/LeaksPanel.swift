@@ -48,6 +48,8 @@ struct LeakPanelActions {
     let onSelectFilm: (String) -> Void
     let onAddFilm: (FilmLeakType?, Bool) -> Void
     let onRandomRoll: (Bool) -> Void
+    /** 🎲 Random with a type picked: replaces the selected film leak (else the last one when full), never stacks. */
+    let onRandomFilm: (FilmLeakType, Bool) -> Void
     let onUpdateFilm: (String, Bool, (inout FilmLeak) -> Void) -> Void
     let onRemoveFilm: (String) -> Void
     /** Switches to the light effects tool (they share one top-bar button). */
@@ -172,7 +174,7 @@ struct LeaksPanel: View {
     }
 
     private var macCreateSection: some View {
-        let canRoll = genType == nil ? leaks.count < LightLeaks.maxLeaks : budgetLeft
+        let canRoll = leaks.count < LightLeaks.maxLeaks
         let showSprockets = genType == nil || genType == .sprocket
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 6) {
@@ -192,7 +194,7 @@ struct LeaksPanel: View {
 
                 Button("🎲 Random") {
                     if let t = genType {
-                        actions.onAddFilm(t, shortSideSprockets)
+                        actions.onRandomFilm(t, shortSideSprockets)
                     } else {
                         actions.onRandomRoll(shortSideSprockets)
                     }
@@ -737,9 +739,11 @@ struct LeaksPanel: View {
             .scrollIndicators(.hidden)
             ScrollView(.horizontal) {
                 HStack(spacing: 8) {
-                    Button("🎲 Random") { actions.onAddFilm(genType, shortSideSprockets) }
+                    Button("🎲 Random") {
+                        if let t = genType { actions.onRandomFilm(t, shortSideSprockets) } else { actions.onRandomRoll(shortSideSprockets) }
+                    }
                         .font(.subheadline).fontWeight(.medium)
-                        .disabled(!budgetLeft)
+                        .disabled(leaks.count >= LightLeaks.maxLeaks)
                     Button("Roll") { actions.onRandomRoll(shortSideSprockets) }
                         .font(.subheadline)
                         .disabled(leaks.count >= LightLeaks.maxLeaks)

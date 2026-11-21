@@ -601,6 +601,11 @@ struct EditorScreen: View {
                                 selectedFilmLeak = id; selectedLeak = nil
                             }
                         },
+                        onRandomFilm: { type, shortSideSprockets in
+                            if let id = vm.rollFilmLeak(type, aspect: photoAspect, selectedId: selectedFilmLeak, shortSideSprockets: shortSideSprockets) {
+                                selectedFilmLeak = id; selectedLeak = nil
+                            }
+                        },
                         onUpdateFilm: { id, force, change in vm.updateFilmLeak(id, force: force, change) },
                         onRemoveFilm: vm.removeFilmLeak,
                         onFx: { mode = .fx },
