@@ -82,6 +82,8 @@ final class CameraViewModel: ObservableObject {
         let stats: SceneStats
         let defaults: DevelopParams
         let auto: DevelopParams
+        /// The AE compensation `auto` took back out of the frame (see `easedExposure`).
+        var captureEv: Float = 0
     }
     private var live: Live?
     private var analysing = false
@@ -316,6 +318,16 @@ final class CameraViewModel: ObservableObject {
     private static let minFocusMove = 0.004
     /** Most the live develop's exposure moves per update (~3 a second), EV. */
     private static let maxEvStep: Float = 0.3
+
+    /// The viewfinder's live exposure: only the metering eases ([step] EV per update); Brightness's AE compensation
+    /// ([captureEv]) is taken out at once, as the phone's AE puts it into the frames within a few frames. Easing the whole
+    /// exposure overshot a Brightness move by over a stop and sank back over ~2 s. Port of Android's `LiveExposure.ease`.
+    static func easedExposure(last: Float?, lastCaptureEv: Float, exposure: Float, captureEv: Float, step: Float) -> Float {
+        guard let last else { return exposure }
+        let lastMetered = last + lastCaptureEv
+        let metered = exposure + captureEv
+        return lastMetered + min(max(metered - lastMetered, -step), step) - captureEv
+    }
     /** At most this often a tracked subject's move reconfigures the camera's focus. */
     private static let focusMoveInterval: TimeInterval = 0.1
 
@@ -425,17 +437,19 @@ final class CameraViewModel: ObservableObject {
             let stats = SceneAnalyzer.analyze(base, skin: skin, iso: state.iso, meter: meter)
             // The phone's auto exposure set the frame (and the shot's raw): keep it, lifted where it went dark, as the
             // shot does (see develop).
-            let auto = AutoTone.develop(stats, asShot: defaults, phoneAe: true, captureEv: state.compensationEv, splitLuma: false)
+            let captureEv = state.compensationEv
+            let auto = AutoTone.develop(stats, asShot: defaults, phoneAe: true, captureEv: captureEv, splitLuma: false)
             await MainActor.run {
                 guard let self else { return }
                 self.analysing = false
                 // A new metering area (a tap, a release, a tracked subject hiding) can move the exposure by a stop at
-                // once; the viewfinder eases there over a few updates instead of snapping.
+                // once; the viewfinder eases there over a few updates instead of snapping. Brightness's compensation isn't
+                // eased (see easedExposure).
                 var eased = auto
-                if let last = self.live?.auto.exposure {
-                    eased.exposure = last + min(max(auto.exposure - last, -Self.maxEvStep), Self.maxEvStep)
-                }
-                self.live = Live(base: base, stats: stats, defaults: defaults, auto: eased)
+                eased.exposure = Self.easedExposure(
+                    last: self.live?.auto.exposure, lastCaptureEv: self.live?.captureEv ?? 0,
+                    exposure: auto.exposure, captureEv: captureEv, step: Self.maxEvStep)
+                self.live = Live(base: base, stats: stats, defaults: defaults, auto: eased, captureEv: captureEv)
                 self.publish()
             }
         }

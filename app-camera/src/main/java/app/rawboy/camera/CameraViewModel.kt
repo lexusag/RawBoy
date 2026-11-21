@@ -632,11 +632,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     /**
      * The latest analysed viewfinder frame; [scale] and [neutralFloor]: the gain it was drawn with and its frame's
-     * neutral floor; [shadowLift]: the backlight lift the live develop adds (eased; 0 where the preview has its own).
+     * neutral floor; [shadowLift]: the backlight lift the live develop adds (eased; 0 where the preview has its own);
+     * [captureEv]: the AE compensation [auto] took back out of the frame (see [LiveExposure]).
      */
     private class Live(
         val base: ViewfinderBase, val stats: SceneStats, val defaults: DevelopParams, val auto: DevelopParams,
-        val scale: Float = 1f, val neutralFloor: Float = 1f, val shadowLift: Float = 0f,
+        val scale: Float = 1f, val neutralFloor: Float = 1f, val shadowLift: Float = 0f, val captureEv: Float = 0f,
     )
 
     /** The viewfinder's gain hasn't been set from a frame of the lens started last ([ViewfinderGain]). */
@@ -995,20 +996,21 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             val stats = SceneAnalyzer.analyze(base.base, skin, state?.iso ?: 0f, meterArea())
             // The phone's auto exposure set the frame (and the shot's raw): keep it, lifted where it went dark, as the
             // shot does (see develop).
-            val auto = AutoTone.develop(stats, defaults, phoneAe = true, captureEv = controller.appliedCompensationEv(state, ofFrame = true), splitLuma = false)
+            val captureEv = controller.appliedCompensationEv(state, ofFrame = true)
+            val auto = AutoTone.develop(stats, defaults, phoneAe = true, captureEv = captureEv, splitLuma = false)
             // A new metering area (a tap, a release, a tracked subject hiding) can move the exposure by a stop at once;
-            // the viewfinder eases there over a few updates instead of snapping.
-            val last = live?.auto?.exposure
+            // the viewfinder eases there over a few updates instead of snapping. Brightness's compensation isn't eased
+            // (see LiveExposure): it would overshoot by over a stop and sink back.
             // Video eases much slower: a 0.3 EV step every 300 ms would pump visibly in a recording.
             val step = if (_videoMode.value) VIDEO_EV_STEP else MAX_EV_STEP
-            val eased = if (last == null) auto else auto.copy(exposure = last + (auto.exposure - last).coerceIn(-step, step))
+            val eased = auto.copy(exposure = LiveExposure.ease(live?.auto?.exposure, live?.captureEv ?: 0f, auto.exposure, captureEv, step))
             // A preview without the ISP's local lift (PreviewProfile.liftsShadows false) shows the backlight lift the
             // shot will get, eased like the exposure: a window panning into view would otherwise lift the shadows at
             // once. Not in video, whose recordings keep the plain develop.
             val lift = if (platform.preview.liftsShadows || _videoMode.value) 0f else ShotDevelop.backlightShadows(stats)
             val lastLift = live?.shadowLift
             val easedLift = if (lastLift == null) lift else lastLift + (lift - lastLift).coerceIn(-SHADOW_LIFT_STEP, SHADOW_LIFT_STEP)
-            live = Live(base, stats, defaults, eased, f.scale, neutralFloor(state), easedLift)
+            live = Live(base, stats, defaults, eased, f.scale, neutralFloor(state), easedLift, captureEv)
             if (activeCaptures == 0 && SystemClock.uptimeMillis() - captureEndedAt > SCENE_KEY_SETTLE_MS && f.scale > 0f) sceneKeyHeld = stats.key / f.scale
             publish()
             withContext(Dispatchers.Main) { meterRawIfUncalibrated() }
