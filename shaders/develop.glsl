@@ -872,7 +872,7 @@ float anamorphicKnee(vec3 c, float gain) {
 const float FLARE_NEEDLE = 2.5;
 const float FLARE_WING = 2.0;
 const float FLARE_BAR = 1.5;
-const float FLARE_GHOSTS = 1.2;
+const float FLARE_GHOSTS = 0.8;
 
 // Flare energy of the texel at integer position [i] of the band starting at row [row0] with [rows] rows: the knee
 // on the texel, never on interpolated values (a nonlinear knee on bilinear samples shrank point lights to sub-texel
@@ -894,6 +894,20 @@ vec3 flareSample(vec2 t, float row0, float rows, float width) {
     vec3 e01 = flareTexel(i0 + ivec2(0, 1), row0, rows, width);
     vec3 e11 = flareTexel(i0 + ivec2(1, 1), row0, rows, width);
     return mix(mix(e00, e10, f.x), mix(e01, e11, f.x), f.y);
+}
+
+// Bilinear sample of the ghost band (2): already blurred, gated and scaled to about 1 for a clipped light, so no knee
+// (the knee made every ghost vanish: the blur spreads a lamp's light so thin that it never reached the knee).
+float ghostSample(vec2 t, float row0, float rows, float width) {
+    vec2 p0 = floor(t - 0.5);
+    vec2 f = t - 0.5 - p0;
+    ivec2 i0 = ivec2(p0);
+    ivec2 hi = ivec2(int(width) - 1, int(rows) - 1);
+    float g00 = texelFetch(uFlare, ivec2(clamp(i0, ivec2(0), hi) + ivec2(0, int(row0))), 0).r;
+    float g10 = texelFetch(uFlare, ivec2(clamp(i0 + ivec2(1, 0), ivec2(0), hi) + ivec2(0, int(row0))), 0).r;
+    float g01 = texelFetch(uFlare, ivec2(clamp(i0 + ivec2(0, 1), ivec2(0), hi) + ivec2(0, int(row0))), 0).r;
+    float g11 = texelFetch(uFlare, ivec2(clamp(i0 + ivec2(1, 1), ivec2(0), hi) + ivec2(0, int(row0))), 0).r;
+    return mix(mix(g00, g10, f.x), mix(g01, g11, f.x), f.y);
 }
 
 bool flareInside(vec2 t, float rows, float width) {
@@ -973,7 +987,7 @@ vec3 anamorphicFlare(vec3 x, vec2 imagePx) {
             vec2 q = uImageCenter + (imagePx - uImageCenter) / sc;
             vec2 tq = vec2(q.x / texPx.x, q.y / texPx.y);
             if (!flareInside(tq, rows1, width)) continue;
-            ghost += col * flareSample(tq, rows0 + rows1, rows1, width).r * (k == 0 ? 1.0 : 0.6);
+            ghost += col * ghostSample(tq, rows0 + rows1, rows1, width) * (k == 0 ? 1.0 : 0.6);
         }
         streak += FLARE_GHOSTS * ghost;
     }

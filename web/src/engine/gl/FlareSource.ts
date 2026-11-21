@@ -31,6 +31,11 @@ const BRIGHT_HI = 6.8;
 const BLOWN_LO = 1.5;
 const BLOWN_HI = 4.0;
 
+/** The ghost band: the blur (sigma 10 x 4 texels) spreads a light over ~250 texels, so scale it back up (2 pi 10 4 / 7:
+ * a lone clipped texel of 7 peaks at 1) and cap lamps that cover several texels. The shader reads it without a knee. */
+const GHOST_GAIN = 36;
+const GHOST_MAX = 1.5;
+
 const LUMA = [0.2627, 0.678, 0.0593];
 
 const smoothstep = (e0: number, e1: number, x: number) => {
@@ -147,7 +152,7 @@ export function makeFlareSource(src: PreviewImage): PreviewImage {
   // Band 2: the lights' luminance as tall ovals.
   const lum = new Float32Array(wf * rc);
   for (let i = 0; i < lum.length; i++) lum[i] = coarse[i * 3] * LUMA[0] + coarse[i * 3 + 1] * LUMA[1] + coarse[i * 3 + 2] * LUMA[2];
-  const ghost = gauss3(lum, wf, rc, 10, 4);
+  const ghost = gauss3(lum, wf, rc, 10, 4).map((v) => Math.min(GHOST_MAX, v * GHOST_GAIN));
 
   const out = new Uint16Array(wf * (h + 2 * rc) * 3);
   let o = 0;
