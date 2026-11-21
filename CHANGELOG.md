@@ -1,3 +1,7 @@
+**Camera (Android): Zoom buttons off by default (2026-11-21)**
+
+- Settings › Zoom buttons now starts off (pinch zoom is unchanged) and says it only helps the viewfinder and does not affect the picture. A choice already saved stays as it was; the Help text no longer claims the buttons are shown by default.
+
 **RawBoy Desktop: Pro opens a photo as Auto developed it (2026-11-17)**
 
 - A photo that is in Auto's batch and has no saved Pro edits (`rawboy:Develop`) now opens in Pro with its Auto develop (look or preset, adjustments) as the starting edits, from Browse's E, the filmstrip's arrows or the Open panel as well as from Edit in Pro. So the pipeline Browse → Auto → presets → Pro (heal strokes, blemishes) no longer restarts from the bare as-shot develop, and the strokes Pro saves are kept in the photo's sidecar. Once Pro has saved edits, its sidecar wins. Not compiled here (no Swift toolchain in the cloud session): CI's `desktop` job builds it.
