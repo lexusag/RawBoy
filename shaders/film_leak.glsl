@@ -306,11 +306,10 @@ vec3 applyFilmLeaks(vec3 c, vec2 p, vec2 fullPx) {
             // Authentic film dust, lint fibres and horizontal/vertical scratches (turn 0/2 vs 1/3 rotates the frame
             // 90°, so transport scratches run vertically or horizontally depending on the chosen edge):
             // - FL_DUST: cloudy swaths of grain-scale micro-flecks, crooked lint hairs and 2..5 transport scratches.
-            // - FL_SCRATCH: dedicated horizontal or vertical film scratches combining:
-            //   (a) long wavering/kinked white hairline scratches (often in small parallel groups, like grass ref),
-            //   (b) razor-thin tramline tracks with intermittent dark gouge ticks, tiny burr pinholes and a faint
-            //       adjacent bright ridge glint (like spider & forest refs),
-            //   (c) shorter angled scuff scratches.
+            // - FL_SCRATCH: dedicated horizontal or vertical film scratches, straight along the transport axis:
+            //   (a) ultra-fine hairline scratches with chaotic spacing, spans and stippled skips along their length,
+            //   (b) pitted tramline tracks with intermittent dark gouge ticks, tiny burr pinholes and a faint
+            //       adjacent bright ridge glint.
             bool scratchOnly = type == FL_SCRATCH;
             float white = 0.0;
             float black = 0.0;
@@ -410,6 +409,8 @@ vec3 applyFilmLeaks(vec3 c, vec2 p, vec2 fullPx) {
                 float yPx = bp.y / pxUnit;
                 // Straight line: only a tiny (<0.2°) transport alignment drift and sub-pixel (0.25 px) edge micro-roughness.
                 float tilt = (leakHash(ks + 3.6) - 0.5) * 0.003 * (bp.y - y0);
+                // Cheap rejection before the noise: the jitter below moves the line by under 0.4 px.
+                if (abs(bp.x - sx - tilt) > 2.6 * pxUnit) continue;
                 float microJit = (leakNoise(vec2(yPx * 0.04, fk * 9.1) + so) - 0.5) * pxUnit * 0.45
                                + (leakNoise(vec2(yPx * 0.35, fk * 13.7) + so) - 0.5) * pxUnit * 0.22;
                 float distPx = abs(bp.x - sx - tilt - microJit) / pxUnit;
@@ -438,6 +439,7 @@ vec3 applyFilmLeaks(vec3 c, vec2 p, vec2 fullPx) {
                 float bandSpread = (leakHash(ks) - 0.5) * 0.14;
                 float sx = clamp(bandCenter + bandSpread, 0.03, 0.97) * span.x;
                 float tilt = (leakHash(ks + 1.4) - 0.5) * 0.002 * (bp.y - 0.5 * span.y);
+                if (abs(bp.x - sx - tilt) > 3.2 * pxUnit) continue; // before the noise; the jitter is under 0.3 px
                 float yCoord = bp.y / pxUnit;
                 float microJit = (leakNoise(vec2(bp.y / scale * 3.0, fk * 6.1) + so) - 0.5) * pxUnit * 0.35
                                + (leakNoise(vec2(yCoord * 0.3, fk * 15.3) + so) - 0.5) * pxUnit * 0.18;
