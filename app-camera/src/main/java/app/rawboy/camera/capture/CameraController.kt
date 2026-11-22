@@ -779,9 +779,12 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         val inf = info ?: return
         val raw = rawStreams(inf) && rawReader != null
         val request = request(s, CameraDevice.TEMPLATE_PREVIEW).apply {
-            addTarget(previewSurface ?: return)
+            val preview = previewSurface ?: return
+            // Where the profile allows, the raw viewfinder streams the raw alone: the ISP's preview frames would only
+            // make the viewfinder redraw the raw it already shows.
+            if (!raw || !platform.preview.rawViewfinderAlone) addTarget(preview)
             if (raw) {
-                // Prototype raw viewfinder: every preview frame also to the raw reader, with the shading map to undo.
+                // Raw viewfinder: every frame to the raw reader, with the shading map to undo.
                 addTarget(rawReader!!.surface)
                 if (inf.hasLensShadingMap) {
                     setForLens(CaptureRequest.STATISTICS_LENS_SHADING_MAP_MODE, CameraMetadata.STATISTICS_LENS_SHADING_MAP_MODE_ON)

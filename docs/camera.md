@@ -271,6 +271,8 @@ and colours, with no per-lens calibration against the ISP's preview.
 
 - Turning it on or off restarts the camera. Maximum-resolution lenses keep the ISP's preview (their raw can't share
   a request with the preview). Long exposures freeze it on the last raw frame while they run.
+- Where the phone's profile allows (the Tensor Pixels), the camera then streams only the raw frames: the ISP's own
+  preview stops, which saves its work and the viewfinder's extra redraws (30 frames a second, the raw's own rate).
 - Logcat `RawBoyViewfinder` prints the fps every 5 s, and in this mode the raw upload time and frames copied/dropped.
 - Not yet: full demosaic, the decoder's exact highlight blend (a simple blend to neutral stands in), hot pixels, the
   DNG warp's lens correction in the viewfinder (the develop applies it as before), iOS (AVFoundation streams no raw).
