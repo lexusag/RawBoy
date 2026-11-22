@@ -37,9 +37,10 @@ class ViewfinderRenderer(
     private val requestRender: () -> Unit,
     /**
      * A ~512 px linear RGBA float copy of the current frame (row 0 = top), on the GL thread;
-     * hand it off quickly. The array is not reused.
+     * hand it off quickly. The array is not reused. [frameNs]: the camera frame's timestamp (SurfaceTexture's, the
+     * capture result's SENSOR_TIMESTAMP on Camera2), so the copy can be matched with its own metadata.
      */
-    private val onBase: (width: Int, height: Int, rgba: FloatArray) -> Unit,
+    private val onBase: (width: Int, height: Int, rgba: FloatArray, frameNs: Long) -> Unit,
 ) : GLSurfaceView.Renderer {
 
     /** How camera buffers map to the upright image. */
@@ -327,7 +328,7 @@ class ViewfinderRenderer(
         collectBase()
         if (pending == null && now - lastBase >= baseIntervalMs) {
             lastBase = now
-            startBase(sw, sh)
+            startBase(sw, sh, frameNs)
         }
         // QR codes need more pixels than the base has: a greyscale copy, read back the same way.
         val lumaListener = onLuma
@@ -615,7 +616,7 @@ class ViewfinderRenderer(
     }
 
     /** A readback in flight: its pixel buffer, fence and size. */
-    private class PendingRead(val buffer: Int, val fence: Long, val width: Int, val height: Int, val started: Long)
+    private class PendingRead(val buffer: Int, val fence: Long, val width: Int, val height: Int, val started: Long, val frameNs: Long)
 
     private var pending: PendingRead? = null
     private var pixelBuffer = 0
@@ -654,7 +655,7 @@ class ViewfinderRenderer(
     }
 
     /** Starts reading back the ~512 px base copy ([makeCopies] drew it this frame). */
-    private fun startBase(sw: Int, sh: Int) {
+    private fun startBase(sw: Int, sh: Int, frameNs: Long) {
         val f32 = baseRead
         if (f32 != null) {
             // The same pass as [small]'s, into a format glReadPixels(GL_FLOAT) copies without converting.
@@ -684,7 +685,7 @@ class ViewfinderRenderer(
             GLES30.glDeleteSync(fence)
             return
         }
-        pending = PendingRead(pixelBuffer, fence, sw, sh, SystemClock.uptimeMillis())
+        pending = PendingRead(pixelBuffer, fence, sw, sh, SystemClock.uptimeMillis(), frameNs)
     }
 
     /**
@@ -781,7 +782,7 @@ class ViewfinderRenderer(
         GLES30.glUnmapBuffer(GLES30.GL_PIXEL_PACK_BUFFER)
         GLES30.glBindBuffer(GLES30.GL_PIXEL_PACK_BUFFER, 0)
         stats.readback(SystemClock.uptimeMillis() - read.started)
-        if (rgba != null) onBase(read.width, read.height, rgba)
+        if (rgba != null) onBase(read.width, read.height, rgba, read.frameNs)
     }
 
     private val stats = FrameStats()
