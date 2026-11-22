@@ -1303,6 +1303,25 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
             checked = settings.randomLightLeak,
             onChange = vm::setRandomLightLeak,
         )
+        SettingChoice(
+            title = "Border",
+            subtitle = "A plain border over the photo, inside its size; leaks drawn over it",
+            options = CameraSettings.BORDER_WIDTHS,
+            selected = settings.border,
+            label = { when (it) { 0 -> "Off"; 2 -> "Thin"; 4 -> "Medium"; else -> "Thick" } },
+            onSelect = vm::setBorder,
+        )
+        if (settings.border > 0) {
+            SettingChoice(
+                title = "Border colour",
+                subtitle = null,
+                options = CameraSettings.BORDER_COLORS.map { it.second },
+                selected = settings.borderColor,
+                label = { hex -> CameraSettings.BORDER_COLORS.first { it.second == hex }.first },
+                onSelect = vm::setBorderColor,
+                indent = true,
+            )
+        }
         if (settings.randomLightLeak) {
             SettingChoice(
                 title = "Frequency",

@@ -48,6 +48,21 @@ class CameraSettingsTest {
     }
 
     @Test
+    fun borderAndMonoFxGoIntoTheDevelop() {
+        val base = DevelopParams()
+        val plain = CameraSettings().develop(base, false, neutralPlatform.noise)
+        assertEquals(0f, plain.frame, 0f)
+        assertFalse(plain.monoFx)
+        val bordered = CameraSettings(border = 4, borderColor = "#ffffff").develop(base, false, neutralPlatform.noise)
+        assertEquals(4f, bordered.frame, 0f)
+        assertEquals("#ffffff", bordered.frameColor)
+        assertFalse(bordered.monoFx)
+        // B&W (also with Film on): the border, leaks and effects go grey with the picture.
+        assertTrue(CameraSettings(mono = true).develop(base, false, neutralPlatform.noise).monoFx)
+        assertTrue(CameraSettings(mono = true, film = true).develop(base, false, neutralPlatform.noise).monoFx)
+    }
+
+    @Test
     fun resetToDefaultsKeepsCalibration() {
         val scales = mapOf("W" to 0.42f, "FW" to 0.6f)
         val guides = mapOf("W" to 12.5f)

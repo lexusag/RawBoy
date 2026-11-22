@@ -1347,6 +1347,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         it.copy(randomLightLeakRate = rate.coerceIn(1, CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE))
     }
 
+    fun setBorder(percent: Int) = change { it.copy(border = percent) }
+    fun setBorderColor(hex: String) = change { it.copy(borderColor = hex) }
     fun setShortSideSprockets(on: Boolean) = change { it.copy(shortSideSprockets = on) }
     fun setPhotoFrame(frame: PhotoFrame) = change {
         it.copy(

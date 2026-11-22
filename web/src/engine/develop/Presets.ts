@@ -1,6 +1,7 @@
 import { isMonochromeLut } from '../auto/looks/Look';
 import { RetiredLooks } from '../auto/looks/RetiredLooks';
 import { ANAMORPHIC_COLORS, TONE_MAPPERS, type DevelopParams } from './DevelopParams';
+import { FRAME_MAX, normalizeFrameColor } from './Frame';
 import { parseFilmLeaks, type FilmLeak } from './FilmLeaks';
 import { forPreset, parseLayers, type MaskLayer } from './Masks';
 import { parseCurves, type ToneCurves } from './ToneCurve';
@@ -9,7 +10,7 @@ import { parseCurves, type ToneCurves } from './ToneCurve';
  * Groups of sliders a preset can hold (port of develop/Presets.kt). Geometry (rotation, flips, straighten, crop) belongs
  * to one photo and is never part of a preset. The key is the name in preset files (shared with Android).
  */
-export type PresetGroup = 'light' | 'whiteBalance' | 'curves' | 'color' | 'detail' | 'denoise' | 'retouch' | 'lut' | 'lens' | 'masks' | 'leaks';
+export type PresetGroup = 'light' | 'whiteBalance' | 'curves' | 'color' | 'detail' | 'denoise' | 'retouch' | 'lut' | 'lens' | 'masks' | 'leaks' | 'frame';
 
 export const PRESET_GROUPS: readonly { key: PresetGroup; label: string; fields: readonly (keyof DevelopParams)[] }[] = [
   {
@@ -38,6 +39,7 @@ export const PRESET_GROUPS: readonly { key: PresetGroup; label: string; fields: 
   { key: 'lens', label: 'Lens', fields: ['lensProfile', 'lensDistortion', 'lensAnamorphic', 'lensFisheye', 'lensFisheyeFov', 'lensFisheyeAuto', 'lensFisheyeCircle', 'lensFisheyeX', 'lensFisheyeY', 'lensCrop', 'caRed', 'caBlue', 'vignetteAmount', 'vignetteMidpoint'] },
   { key: 'masks', label: 'Masks (gradients only)', fields: ['masks'] },
   { key: 'leaks', label: 'Light leaks (generated)', fields: ['filmLeaks'] },
+  { key: 'frame', label: 'Border', fields: ['frame', 'frameColor'] },
 ];
 
 /**
@@ -45,7 +47,7 @@ export const PRESET_GROUPS: readonly { key: PresetGroup; label: string; fields: 
  * leaks to one composition, denoise to one photo's noise (Auto measures it per photo), and Detail (grain, bloom, flare)
  * is a look rather than a correction, so it is a deliberate choice.
  */
-export const DEFAULT_PRESET_GROUPS: readonly PresetGroup[] = PRESET_GROUPS.map((g) => g.key).filter((k) => k !== 'lens' && k !== 'masks' && k !== 'denoise' && k !== 'detail' && k !== 'leaks');
+export const DEFAULT_PRESET_GROUPS: readonly PresetGroup[] = PRESET_GROUPS.map((g) => g.key).filter((k) => k !== 'lens' && k !== 'masks' && k !== 'denoise' && k !== 'detail' && k !== 'leaks' && k !== 'frame');
 
 /**
  * A named set of slider values. values holds only the fields of groups; applying it overrides those and leaves
@@ -199,6 +201,11 @@ export function applyPreset(preset: Preset, params: DevelopParams): DevelopParam
     } else if (field === 'lut' || field === 'film') {
       if (value === null) p[field] = value;
       else if (typeof value === 'string') p[field] = field === 'lut' ? RetiredLooks.lut(value) : RetiredLooks.stock(value);
+    } else if (field === 'frameColor') {
+      const c = normalizeFrameColor(value);
+      if (c) p.frameColor = c;
+    } else if (field === 'frame') {
+      if (typeof value === 'number' && Number.isFinite(value)) p.frame = Math.min(Math.max(value, 0), FRAME_MAX);
     } else if (field === 'colorDenoise') {
       if (value === null || (typeof value === 'number' && Number.isFinite(value))) p.colorDenoise = value;
     } else if (field === 'lensProfile' || field === 'lensFisheyeAuto' || field === 'anamorphicGhosts') {

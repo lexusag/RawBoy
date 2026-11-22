@@ -6,6 +6,7 @@ import app.rawboy.color.WhiteBalance
 import app.rawboy.develop.AnamorphicColor
 import app.rawboy.develop.BrushRaster
 import app.rawboy.develop.DevelopParams
+import app.rawboy.develop.Frame
 import app.rawboy.develop.FilmLeakUniforms
 import app.rawboy.develop.FilmLeaks
 import app.rawboy.develop.FxUniforms
@@ -99,6 +100,11 @@ class ShaderParams(
     val anamorphicBar: FloatArray = AnamorphicColor.NEUTRAL.barVec(),
     /** What the flare scatters light from ([FlareSource], `uFlare`), or null: no flare. */
     val flareSource: PreviewImage? = null,
+    /** `uFrame` thickness as a fraction of the output's short side (0 = off) and `uFrameColor` (display sRGB). */
+    val frame: Float = 0f,
+    val frameColor: FloatArray = floatArrayOf(0f, 0f, 0f),
+    /** `uMonoFx`: 1 when the picture is black and white, so the frame, leaks and effects go grey too. */
+    val monoFx: Float = 0f,
 ) {
     /**
      * Extra source pixels needed around an output region for the spatial effects
@@ -120,6 +126,10 @@ class ShaderParams(
          * clipped highlights near display white at Exposure 0.
          */
         private const val BASE_EXPOSURE_EV = 0.7f
+
+        /** The picture is black and white: Camera's B&W mode ([DevelopParams.monoFx]) or a bundled mono LUT at full strength. */
+        fun isMono(p: DevelopParams): Boolean =
+            p.monoFx || (p.film == null && p.lutAmount >= 100f && app.rawboy.auto.looks.Looks.isMonochromeLut(p.lut))
 
         /** Denoise above this adds the coarse stage, fully at 100 (high-ISO noise the fine stage can't reach). */
         const val WIDE_DENOISE_FROM = 65f
@@ -217,6 +227,9 @@ class ShaderParams(
                 anamorphicLength = p.anamorphicColor.lengthVec(),
                 anamorphicBar = p.anamorphicColor.barVec(),
                 flareSource = flareSource,
+                frame = p.frame.coerceIn(0f, Frame.MAX) / 100f,
+                frameColor = Frame.rgb(p.frameColor),
+                monoFx = if (isMono(p)) 1f else 0f,
             )
         }
 

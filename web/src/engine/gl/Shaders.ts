@@ -24,9 +24,11 @@ export const Shaders = {
     s += MAIN_BODY;
     s += '    if (uLutAmount > 0.0) c = clamp(applyLut(c), 0.0, 1.0);\n';
     s += '    if (uCurveOn > 0.0) c = applyCurves(c);\n';
+    s += '    if (uFrame.z > 0.0) c = applyFrame(c, outPx);\n';
     s += '    if (uLeakCount > 0) c = applyLeaks(c, srcG, outPx);\n';
     s += '    if (uFlCount > 0) c = applyFilmLeaks(c, srcG, outPx);\n';
     s += '    if (uFxCount > 0) c = applyLightFx(c, srcG, outPx);\n';
+    s += '    if (uMonoFx > 0.0) c = monoFx(c);\n';
     // 16-bit unsigned integer target for export: exact, core in WebGL2.
     s += forExport
       ? '    if (uClipFrame > 0.5) c *= frameMask(srcG);\n    fragColor = uvec4(uvec3(c * 65535.0 + 0.5), 65535u);\n'

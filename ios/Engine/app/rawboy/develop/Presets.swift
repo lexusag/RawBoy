@@ -5,7 +5,7 @@ import Foundation
  * never part of a preset. [key] is the name in preset files (shared with Android's Presets.kt and web's Presets.ts).
  */
 public enum PresetGroup: String, CaseIterable, Sendable {
-    case light, whiteBalance, curves, color, detail, denoise, retouch, lut, lens, masks, leaks
+    case light, whiteBalance, curves, color, detail, denoise, retouch, lut, lens, masks, leaks, frame
 
     public var key: String { rawValue }
 
@@ -22,6 +22,7 @@ public enum PresetGroup: String, CaseIterable, Sendable {
         case .lens: "Lens"
         case .masks: "Masks (gradients only)"
         case .leaks: "Light leaks (generated)"
+        case .frame: "Border"
         }
     }
 
@@ -44,6 +45,7 @@ public enum PresetGroup: String, CaseIterable, Sendable {
         case .lens: ["lensProfile", "lensDistortion", "lensAnamorphic", "lensFisheye", "lensFisheyeFov", "lensFisheyeAuto", "lensFisheyeCircle", "lensFisheyeX", "lensFisheyeY", "lensCrop", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint"]
         case .masks: ["masks"]
         case .leaks: ["filmLeaks"]
+        case .frame: ["frame", "frameColor"]
         }
     }
 
@@ -54,7 +56,7 @@ public enum PresetGroup: String, CaseIterable, Sendable {
      * composition, denoise to one photo's noise (Auto measures it per photo), and Detail (grain, bloom, flare) is a look
      * rather than a correction, so it is a deliberate choice.
      */
-    public static let defaultGroups: Set<PresetGroup> = Set(allCases).subtracting([.lens, .masks, .denoise, .detail, .leaks])
+    public static let defaultGroups: Set<PresetGroup> = Set(allCases).subtracting([.lens, .masks, .denoise, .detail, .leaks, .frame])
 }
 
 /** A stored field value: a number, an optional string (LUT id, tone mapper), a switch, mask layers, film leaks or curves. */
@@ -311,7 +313,7 @@ public enum Presets {
         "lensAnamorphic": \.lensAnamorphic, "lensFisheye": \.lensFisheye, "lensFisheyeFov": \.lensFisheyeFov,
         "lensFisheyeCircle": \.lensFisheyeCircle, "lensFisheyeX": \.lensFisheyeX, "lensFisheyeY": \.lensFisheyeY, "lensCrop": \.lensCrop, "caRed": \.caRed, "caBlue": \.caBlue,
         "vignetteAmount": \.vignetteAmount, "vignetteMidpoint": \.vignetteMidpoint,
-        "filmAmount": \.filmAmount, "filmGrain": \.filmGrain, "halation": \.halation,
+        "frame": \.frame, "filmAmount": \.filmAmount, "filmGrain": \.filmGrain, "halation": \.halation,
     ]
 
     static func get(_ p: DevelopParams, _ field: String) -> PresetValue {
@@ -327,6 +329,7 @@ public enum Presets {
         case "masks": .layers(Masks.forPreset(p.masks))  // strokes stay with the photo
         case "filmLeaks": .filmLeaks(p.filmLeaks)
         case "curves": .curves(p.curves)
+        case "frameColor": .text(p.frameColor)
         default: .number(p[keyPath: numberFields[field]!])
         }
     }
@@ -343,6 +346,7 @@ public enum Presets {
         case let ("colorDenoise", .number(n)): if n.isFinite { out.colorDenoise = n }
         case ("colorDenoise", .text(.none)): out.colorDenoise = nil
         case let ("curves", .curves(c)): out.curves = c
+        case let ("frameColor", .text(s)): if let c = Frame.normalize(s) { out.frameColor = c }
         case let ("toneMapper", .text(s)): if let t = ToneMapper.fromKey(s) { out.toneMapper = t }
         case let ("anamorphicColor", .text(s)): if let c = AnamorphicColor.fromKey(s) { out.anamorphicColor = c }
         case let ("masks", .layers(layers)):
@@ -350,6 +354,7 @@ public enum Presets {
             out.masks = layers.prefix(Masks.maxLayers).map { var l = $0; l.id = Masks.newId(); return l }
         case let ("filmLeaks", .filmLeaks(fl)):
             out.filmLeaks = fl.prefix(FilmLeaks.maxLeaks).map { var l = $0; l.id = Masks.newId(); return l }
+        case let ("frame", .number(n)): if n.isFinite { out.frame = n.clamped(0, Frame.max) }
         case let (f, .number(n)): if n.isFinite, let kp = numberFields[f] { out[keyPath: kp] = n }
         default: break
         }

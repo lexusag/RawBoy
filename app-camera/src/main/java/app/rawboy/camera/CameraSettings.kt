@@ -95,6 +95,10 @@ data class CameraSettings(
      * Within each 5-photo sequence the leak slots are shuffled randomly so the next leak cannot be predicted.
      */
     val randomLightLeakRate: Int = LIGHT_LEAK_SEQUENCE_SIZE,
+    /** Solid border drawn over the saved photo (inside its size, the engine's frame overlay), as % of the short side: one of [BORDER_WIDTHS], 0 = off. */
+    val border: Int = 0,
+    /** Colour of the [border], one of [BORDER_COLORS] (`#rrggbb`). */
+    val borderColor: String = BORDER_COLORS.first().second,
     /** Allow randomly generated sprocket holes on the short edges of the frame as well as the long edges. */
     val shortSideSprockets: Boolean = false,
     /** Frame / stamp option: Off by default, or Date stamp / Pentax 645 (mutually exclusive). */
@@ -213,7 +217,8 @@ data class CameraSettings(
      * [noise] gives the denoise floors of the non-Film colour looks (the phone's platform profile).
      */
     fun develop(base: DevelopParams, hasFace: Boolean, noise: NoiseProfile): DevelopParams {
-        val p = developLook(base, hasFace, noise)
+        // B&W: the border, leaks and effects go grey with the picture (monoFx).
+        val p = developLook(base, hasFace, noise).copy(frame = border.toFloat(), frameColor = borderColor, monoFx = monoMode)
         return if (grain) p else p.copy(grain = 0f, filmGrain = 0f)
     }
 
@@ -283,6 +288,12 @@ data class CameraSettings(
 
         /** Choices for how many photos in each [LIGHT_LEAK_SEQUENCE_SIZE]-photo sequence get a random light leak. */
         val LIGHT_LEAK_RATES = listOf(1, 2, 3, 4, 5)
+
+        /** Border thickness choices in % of the short side (0 = off). */
+        val BORDER_WIDTHS = listOf(0, 2, 4, 8)
+
+        /** Border colours: label and `#rrggbb`. */
+        val BORDER_COLORS = listOf("Black" to "#000000", "White" to "#ffffff")
 
         const val MIN_QUALITY = 70
 
@@ -360,6 +371,8 @@ object CameraSettingsStore {
             randomLightLeak = p.getBoolean("randomLightLeak", d.randomLightLeak),
             randomLightLeakRate = p.getInt("randomLightLeakRate", d.randomLightLeakRate)
                 .takeIf { it in CameraSettings.LIGHT_LEAK_RATES } ?: d.randomLightLeakRate,
+            border = p.getInt("border", d.border).takeIf { it in CameraSettings.BORDER_WIDTHS } ?: d.border,
+            borderColor = p.getString("borderColor", null)?.takeIf { c -> CameraSettings.BORDER_COLORS.any { it.second == c } } ?: d.borderColor,
             shortSideSprockets = p.getBoolean("shortSideSprockets", d.shortSideSprockets),
             photoFrame = p.getString("photoFrame", null)
                 ?.let { runCatching { PhotoFrame.valueOf(it) }.getOrNull() }
@@ -452,6 +465,8 @@ object CameraSettingsStore {
             .putBoolean("hdrGainMap", s.hdrGainMap)
             .putBoolean("randomLightLeak", s.randomLightLeak)
             .putInt("randomLightLeakRate", s.randomLightLeakRate)
+            .putInt("border", s.border)
+            .putString("borderColor", s.borderColor)
             .putBoolean("shortSideSprockets", s.shortSideSprockets)
             .putString("photoFrame", s.photoFrame.name)
             .putString("lastPhotoFrame", (if (s.photoFrame != PhotoFrame.NONE) s.photoFrame else s.lastPhotoFrame).name)

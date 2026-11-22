@@ -168,6 +168,10 @@ export class DevelopProgram {
     this.i1('uToneMapper', p.toneMapper);
     this.f1('uDisplaySource', p.displaySource);
     this.f1('uClipLevel', p.clipLevel);
+    // The frame sits on the output rectangle (thickness in output pixels of the short side).
+    gl.uniform4f(this.loc('uFrame'), p.lens.outputWidth, p.lens.outputHeight, p.frame * Math.min(p.lens.outputWidth, p.lens.outputHeight), 0);
+    gl.uniform3f(this.loc('uFrameColor'), p.frameColor[0], p.frameColor[1], p.frameColor[2]);
+    this.f1('uMonoFx', p.monoFx);
     this.f1('uShadows', p.shadows);
     this.f1('uHighlights', p.highlights);
     this.f1('uBlacks', p.blacks);

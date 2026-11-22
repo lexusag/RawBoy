@@ -111,6 +111,10 @@ struct CameraSettings: Equatable {
     var randomLightLeak = false
     /** How many photos in each `lightLeakSequenceSize`-photo sequence get a leak (1...5; 5 = every shot), at shuffled positions. */
     var randomLightLeakRate = CameraSettings.lightLeakSequenceSize
+    /** Solid border drawn over saved photos (inside their size, the engine's frame overlay) in % of the short side: one of `borderWidths`, 0 = off. */
+    var border = 0
+    /** Colour of the border, one of `borderColors` (`#rrggbb`). */
+    var borderColor = CameraSettings.borderColors[0].hex
     /** Also allow sprocket holes on the short edges (off: long edges only). */
     var shortSideSprockets = false
     /** After a tap, keep focus on what was tapped as it moves (CameraViewModel's tracker); off = the focus stays put. */
@@ -152,6 +156,10 @@ struct CameraSettings: Equatable {
      */
     func develop(_ base: DevelopParams, hasFace: Bool) -> DevelopParams {
         var p = developLook(base, hasFace: hasFace)
+        // B&W: the border, leaks and effects go grey with the picture (monoFx).
+        p.frame = Float(border)
+        p.frameColor = borderColor
+        p.monoFx = monoMode
         if !grain {
             p.grain = 0
             p.filmGrain = 0
@@ -182,6 +190,10 @@ struct CameraSettings: Equatable {
         }
         return p
     }
+
+    /// Border thickness choices in % of the short side (0 = off) and colours: label and `#rrggbb` (as Android's BORDER_WIDTHS / BORDER_COLORS).
+    static let borderWidths = [0, 2, 4, 8]
+    static let borderColors: [(label: String, hex: String)] = [("Black", "#000000"), ("White", "#ffffff")]
 
     /// Denoise floors for non-Film colour looks (2026-11-07); see Android CameraSettings.LUT_*.
     static let lutLumaDenoise: Float = 12
@@ -259,6 +271,10 @@ enum CameraSettingsStore {
         let savedRate = d.object(forKey: "camera.randomLightLeakRate") as? Int ?? def.randomLightLeakRate
         s.randomLightLeakRate = CameraSettings.lightLeakRates.contains(savedRate) ? savedRate : def.randomLightLeakRate
         s.shortSideSprockets = d.object(forKey: "camera.shortSideSprockets") as? Bool ?? def.shortSideSprockets
+        let savedBorder = d.object(forKey: "camera.border") as? Int ?? def.border
+        s.border = CameraSettings.borderWidths.contains(savedBorder) ? savedBorder : def.border
+        let savedBorderColor = d.string(forKey: "camera.borderColor")
+        s.borderColor = CameraSettings.borderColors.contains { $0.hex == savedBorderColor } ? savedBorderColor! : def.borderColor
         s.previewScales = parseScales(d.string(forKey: "camera.previewScales"))
         s.flash = d.string(forKey: "camera.flash").flatMap(FlashMode.init(rawValue:)) ?? def.flash
         s.rawFormat = d.string(forKey: "camera.rawFormat").flatMap(RawFormat.init(rawValue:)) ?? def.rawFormat
@@ -321,6 +337,8 @@ enum CameraSettingsStore {
         d.set(s.randomLightLeak, forKey: "camera.randomLightLeak")
         d.set(s.randomLightLeakRate, forKey: "camera.randomLightLeakRate")
         d.set(s.shortSideSprockets, forKey: "camera.shortSideSprockets")
+        d.set(s.border, forKey: "camera.border")
+        d.set(s.borderColor, forKey: "camera.borderColor")
         d.set(s.front, forKey: "camera.front")
         d.set(s.lens, forKey: "camera.lens")
         d.set(s.flash.rawValue, forKey: "camera.flash")
