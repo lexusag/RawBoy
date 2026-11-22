@@ -7,34 +7,34 @@ import org.junit.Test
 
 class StringsTest {
     @After
-    fun restore() = Strings.setPreference(AppLanguage.SYSTEM)
+    fun restore() = Strings.choose(AppLanguage.SYSTEM)
 
     @Test
     fun followsThePhoneByDefault() {
-        Strings.setPreference(AppLanguage.SYSTEM)
+        Strings.choose(AppLanguage.SYSTEM)
         assertEquals("uk", Strings.effective(Locale("uk", "UA")))
         assertEquals("en", Strings.effective(Locale.FRANCE))
     }
 
     @Test
     fun aPickedLanguageOverridesThePhone() {
-        Strings.setPreference(AppLanguage.ENGLISH)
+        Strings.choose(AppLanguage.ENGLISH)
         assertEquals("en", Strings.effective(Locale("uk")))
-        Strings.setPreference(AppLanguage.UKRAINIAN)
+        Strings.choose(AppLanguage.UKRAINIAN)
         assertEquals("uk", Strings.effective(Locale.US))
     }
 
     @Test
     fun englishAndUnknownTextComeBackAsWritten() {
-        Strings.setPreference(AppLanguage.ENGLISH)
+        Strings.choose(AppLanguage.ENGLISH)
         assertEquals("Saving 3…", tr("Saving %s…", 3))
-        Strings.setPreference(AppLanguage.UKRAINIAN)
+        Strings.choose(AppLanguage.UKRAINIAN)
         assertEquals("Not in the table 5", tr("Not in the table %s", 5))
     }
 
     @Test
     fun ukrainianFillsPlaceholdersInOrder() {
-        Strings.setPreference(AppLanguage.UKRAINIAN)
+        Strings.choose(AppLanguage.UKRAINIAN)
         assertEquals("Збереження 2…", tr("Saving %s…", 2))
         assertEquals("Довга витримка 40% · торкніться, щоб зупинити", tr("Long exposure %s% · tap to stop", 40))
     }

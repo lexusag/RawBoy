@@ -174,7 +174,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     val settings = _settings.asStateFlow()
 
     init {
-        Strings.setPreference(_settings.value.language)
+        Strings.choose(_settings.value.language)
     }
 
     private val _status = MutableStateFlow(CameraStatus.NEEDS_PERMISSION)
@@ -1463,7 +1463,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private fun change(edit: (CameraSettings) -> CameraSettings) {
         val s = edit(_settings.value)
         _settings.value = s
-        Strings.setPreference(s.language)
+        Strings.choose(s.language)
         controller.setExposureBias(exposureBias(s))
         // A slider drag changes settings every frame: save once it rests.
         saveJob?.cancel()

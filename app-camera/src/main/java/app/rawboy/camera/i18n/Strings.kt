@@ -31,7 +31,7 @@ object Strings {
     /** Languages with a translation table; English is the keys themselves. */
     private val tables: Map<String, Map<String, String>> = mapOf("uk" to UKRAINIAN)
 
-    fun setPreference(language: AppLanguage) {
+    fun choose(language: AppLanguage) {
         preference = language
     }
 
