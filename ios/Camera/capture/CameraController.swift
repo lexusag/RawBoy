@@ -166,6 +166,7 @@ final class CameraController: NSObject, @unchecked Sendable {
                     // After the commit: it rebuilds the connections for a new input, dropping their settings
                     // (the selfie camera came out sideways and stretched).
                     self.orientConnection(front: lens.isFront)
+                    self.applyFrameRate()
                     // Only once the configuration is committed: startRunning inside it throws.
                     if !self.session.isRunning { self.session.startRunning() }
                     c.resume(returning: used)
@@ -358,6 +359,34 @@ final class CameraController: NSObject, @unchecked Sendable {
     /** The recommended AAC settings for an MP4 from the microphone output; nil without the microphone. */
     func audioSettings() -> [String: Any]? {
         queue.sync { audioInput == nil ? nil : audioOutput.recommendedAudioSettingsForAssetWriter(writingTo: .mp4) as? [String: Any] }
+    }
+
+    /**
+     * Video mode records at a steady 30 fps: the frame duration is pinned so the camera raises its ISO in dim light instead
+     * of stretching exposures past 1/30 s and delivering fewer frames (the telephoto, with its small aperture, skipped
+     * frames). Photo mode keeps the camera's default range. On the queue, after the configuration is committed.
+     */
+    private func applyFrameRate() {
+        guard let device = input?.device else { return }
+        let thirty = CMTime(value: 1, timescale: 30)
+        let fits = device.activeFormat.videoSupportedFrameRateRanges.contains {
+            $0.minFrameDuration <= thirty && thirty <= $0.maxFrameDuration
+        }
+        do {
+            try device.lockForConfiguration()
+            if videoFormat && fits {
+                device.activeVideoMinFrameDuration = thirty
+                device.activeVideoMaxFrameDuration = thirty
+            } else {
+                device.activeVideoMinFrameDuration = .invalid
+                device.activeVideoMaxFrameDuration = .invalid
+            }
+            device.unlockForConfiguration()
+            let d = device.activeVideoMinFrameDuration
+            Self.log.notice("frame rate: pinned \(self.videoFormat && fits), min duration \(d.seconds)")
+        } catch {
+            Self.log.error("frame rate: \(error.localizedDescription)")
+        }
     }
 
     /**
