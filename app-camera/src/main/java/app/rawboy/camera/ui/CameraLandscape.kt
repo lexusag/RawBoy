@@ -1,5 +1,6 @@
 package app.rawboy.camera.ui
 
+import app.rawboy.camera.i18n.tr
 import android.hardware.display.DisplayManager
 import android.os.Handler
 import android.os.Looper
@@ -183,7 +184,7 @@ fun VerticalSlider(
                     change(v.coerceIn(range).roundToInt().toFloat())
                     true
                 }
-                customActions = listOf(CustomAccessibilityAction("Reset") { change(reset); true })
+                customActions = listOf(CustomAccessibilityAction(tr("Reset")) { change(reset); true })
             }
             .pointerInput(range) {
                 val travel = (size.height - thumbSize.toPx()).coerceAtLeast(1f)

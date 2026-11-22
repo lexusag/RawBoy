@@ -1,10 +1,16 @@
 package app.rawboy.camera.ui
 
+import app.rawboy.camera.i18n.tr
 import app.rawboy.view.HelpItem
 import app.rawboy.view.HelpSection
 
 /** RawBoy Camera's "?" sheet. Keep it in step with the Readme's RawBoy Camera section. */
-internal val CAMERA_HELP = listOf(
+internal val CAMERA_HELP: List<HelpSection>
+    get() = ENGLISH_HELP.map { section ->
+        HelpSection(tr(section.title), section.items.map { HelpItem(tr(it.how), tr(it.text)) })
+    }
+
+private val ENGLISH_HELP = listOf(
     HelpSection(
         "Shooting",
         listOf(

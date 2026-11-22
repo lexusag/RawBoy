@@ -24,6 +24,7 @@ import android.view.KeyEvent
 import android.view.OrientationEventListener
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
+import app.rawboy.camera.i18n.tr
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -188,7 +189,7 @@ class CameraActivity : ComponentActivity() {
         lifecycleScope.launch {
             val uri = runCatching { viewModel.writeDeviceReport() }.getOrElse {
                 Log.w("RawBoyCamera", "device report", it)
-                viewModel.showMessage("Could not make the device report")
+                viewModel.showMessage(tr("Could not make the device report"))
                 return@launch
             }
             val send = Intent(Intent.ACTION_SEND)
@@ -198,8 +199,8 @@ class CameraActivity : ComponentActivity() {
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             // The chooser's preview and the receiving app read the file through this grant.
             send.clipData = ClipData.newRawUri(null, uri)
-            runCatching { startOutside(Intent.createChooser(send, "Share device report")) }
-                .onFailure { viewModel.showMessage("No app to share the report with") }
+            runCatching { startOutside(Intent.createChooser(send, tr("Share device report"))) }
+                .onFailure { viewModel.showMessage(tr("No app to share the report with")) }
         }
     }
 
@@ -211,7 +212,7 @@ class CameraActivity : ComponentActivity() {
         lifecycleScope.launch {
             val uri = runCatching { viewModel.writeTuningBundle() }.getOrElse {
                 Log.w("RawBoyCamera", "tuning data", it)
-                viewModel.showMessage("Could not make the tuning data file")
+                viewModel.showMessage(tr("Could not make the tuning data file"))
                 return@launch
             }
             val send = Intent(Intent.ACTION_SEND)
@@ -220,8 +221,8 @@ class CameraActivity : ComponentActivity() {
                 .putExtra(Intent.EXTRA_SUBJECT, "RawBoy Camera tuning data")
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             send.clipData = ClipData.newRawUri(null, uri)
-            runCatching { startOutside(Intent.createChooser(send, "Share tuning data")) }
-                .onFailure { viewModel.showMessage("No app to share the file with") }
+            runCatching { startOutside(Intent.createChooser(send, tr("Share tuning data"))) }
+                .onFailure { viewModel.showMessage(tr("No app to share the file with")) }
         }
     }
 
@@ -273,7 +274,7 @@ class CameraActivity : ComponentActivity() {
             }
         }
         w.password?.let { copy("Wi-Fi password", it, sensitive = true) }
-        viewModel.showMessage(if (w.password != null) "Password copied: choose ${w.ssid} in Wi-Fi settings" else "Choose ${w.ssid} in Wi-Fi settings")
+        viewModel.showMessage(if (w.password != null) tr("Password copied: choose %s in Wi-Fi settings", w.ssid) else tr("Choose %s in Wi-Fi settings", w.ssid))
         runCatching { startOutside(Intent(Settings.ACTION_WIFI_SETTINGS)) }
     }
 
@@ -285,7 +286,7 @@ class CameraActivity : ComponentActivity() {
         }
         getSystemService(ClipboardManager::class.java).setPrimaryClip(clip)
         // Android 13+ confirms copies itself.
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) viewModel.showMessage("Copied")
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) viewModel.showMessage(tr("Copied"))
     }
 
     /** Runs [action] now, or after the user unlocks the phone when the camera is over the lock screen. */

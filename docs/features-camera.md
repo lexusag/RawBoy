@@ -78,6 +78,7 @@ lenses, burst merge), iOS drives AVFoundation (**ProRAW at 12 MP by default**, o
 | Settings regrouped, one line per setting | 1.15.0 | ✓ | ? | |
 | Burst, Flash, RAW, Frames buttons in the top bar | 1.1.2 | ✓ | ✓ | iOS has no experimental button; its RAW, Frames and Flash hide in video mode |
 | TalkBack / VoiceOver labels | 1.8.5 | ✓ | ✓ | |
+| **Interface language** (Settings › Language: Phone / English / Українська; Ukrainian translation of the whole Android camera UI, the help sheet and messages) | unreleased | ✓ | — | Follows the phone's language by default, a pick overrides it. `i18n/Strings.kt` + `StringsUk.kt`: the code keeps its English text as the key (`tr("…")`), an untranslated string shows in English. iOS is not translated yet |
 | Open-source licences in Settings | ≤1.1.1 | ✓ | ✓ | |
 
 ## What iOS lacks that Android has
@@ -88,6 +89,7 @@ In order of how much it changes the photo: **burst merge** (iOS is single-frame 
 screen flash**, **self-timer and long exposure**, **lossy JXL DNG**, **full-resolution (remosaic) raw** (iOS follows the
 system 48 MP option, unchecked), **phone profiles, Share device report and Collect tuning data** (n/a on iOS: one hardware family),
 **Pixel workarounds** (YUV matrix, tone curve, extra black, manual flash exposure: iOS uses the camera's own flash AE).
+**Ukrainian translation and the language setting** (Android only: iOS needs its own String Catalog).
 Random light leak and video recording are no longer on this list (ported 2026-11-22).
 
 ## Other platform gaps worth knowing

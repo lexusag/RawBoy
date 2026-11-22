@@ -2,6 +2,7 @@ package app.rawboy.camera
 
 import android.content.Context
 import android.content.SharedPreferences
+import app.rawboy.camera.i18n.AppLanguage
 import app.rawboy.auto.looks.Adjustments
 import app.rawboy.auto.looks.Look
 import app.rawboy.auto.looks.LookApplier
@@ -67,6 +68,8 @@ data class CameraSettings(
     val showHistogram: Boolean = false,
     /** A 3 x 3 grid over the viewfinder (rule of thirds). Off by default. */
     val showGrid: Boolean = false,
+    /** The interface language: the phone's by default, or one picked here. Kept when settings are reset. */
+    val language: AppLanguage = AppLanguage.SYSTEM,
     /** The zoom buttons (+, zoom, −) over the viewfinder. Pinching zooms either way. Off by default. */
     val showZoomControl: Boolean = false,
     /** A level line over the viewfinder that turns yellow when the phone is straight. Off by default. */
@@ -266,7 +269,7 @@ data class CameraSettings(
         } else null
 
     /** Resets all user settings to their defaults while keeping learned lens calibration. */
-    fun resetToDefaults(): CameraSettings = CameraSettings(previewScales = previewScales, flashGuides = flashGuides)
+    fun resetToDefaults(): CameraSettings = CameraSettings(previewScales = previewScales, flashGuides = flashGuides, language = language)
 
     companion object {
         /** Self-timer choices in seconds; the button cycles through them. */
@@ -344,6 +347,7 @@ object CameraSettingsStore {
             rememberLast = p.getBoolean("rememberLast", d.rememberLast),
             showHistogram = p.getBoolean("showHistogram", d.showHistogram),
             showGrid = p.getBoolean("showGrid", d.showGrid),
+            language = AppLanguage.of(p.getString("language", null)),
             showLevel = p.getBoolean("showLevel", d.showLevel),
             showZoomControl = p.getBoolean("showZoomControl", d.showZoomControl),
             burstMode = runCatching { BurstMode.valueOf(p.getString("burstMode", null)!!) }.getOrDefault(d.burstMode),
@@ -436,6 +440,7 @@ object CameraSettingsStore {
             .putBoolean("rememberLast", s.rememberLast)
             .putBoolean("showHistogram", s.showHistogram)
             .putBoolean("showGrid", s.showGrid)
+            .putString("language", s.language.name)
             .putBoolean("showLevel", s.showLevel)
             .putBoolean("showZoomControl", s.showZoomControl)
             .putString("burstMode", s.burstMode.name)
