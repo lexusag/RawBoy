@@ -1,3 +1,7 @@
+**RawBoy Desktop: pin RawBoy Viewer 0.2.14 (2026-11-22)**
+
+- **Collage: move a picture inside its frame**, **Refresh on right-click in Places** (Esc closes an open menu first), a fix for the **slowdown in long culling runs** (pooled ImageIO reads, O(1) LRU) and a **custom long edge in pixels** in the export sheet. Comes with RawBoy Viewer v0.2.14 (PRs 70, 71, 72, 73); the pin moves from 0.2.13 to 0.2.14. Not tried by hand (no Mac): CI's `desktop` job is the first build.
+
 **Pro and Auto: custom export long side (2026-11-22)**
 
 - The Export size has a **Custom…** entry beside the presets (Pro: 6000 / 4000 / 3000 / 2048; Auto: 5600 / 4096 / 2048 / 1080): type the long side in pixels, 64–20000, whole numbers only. A value outside the range or with anything but digits shows the range and leaves the last good size (the field never changes the export until it is valid). Android, iOS, Desktop and web; `ExportSettings.parseLongSide` (Kotlin, TS, Swift) is the one rule, `LongSidePicker` (Compose, SwiftUI) and `LongSideSelect` (web) the control. Saved sizes outside the presets are now kept (Auto used to drop them on load).
