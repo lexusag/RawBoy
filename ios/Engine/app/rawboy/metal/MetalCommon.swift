@@ -250,10 +250,6 @@ struct DevelopProgram {
         u.int("uToneMapper", p.toneMapper)
         u.float("uDisplaySource", p.displaySource)
         u.float("uClipLevel", p.clipLevel)
-        // The frame sits on the output rectangle (thickness in output pixels of the short side).
-        u.vec4("uFrame", Float(p.lens.outputWidth), Float(p.lens.outputHeight),
-               p.frame * Float(min(p.lens.outputWidth, p.lens.outputHeight)), 0)
-        u.vec3("uFrameColor", p.frameColor)
         u.float("uMonoFx", p.monoFx)
         u.float("uShadows", p.shadows)
         u.float("uHighlights", p.highlights)

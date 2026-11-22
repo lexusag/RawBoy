@@ -51,7 +51,6 @@ import app.rawboy.color.WhiteBalance
 import app.rawboy.develop.AnamorphicColor
 import app.rawboy.develop.CropAspect
 import app.rawboy.develop.DevelopParams
-import app.rawboy.develop.Frame
 import app.rawboy.develop.ToneMapper
 import app.rawboy.auto.looks.FilmLooks
 import app.rawboy.auto.looks.LookGroup
@@ -281,7 +280,6 @@ fun ControlsPanel(
                 }
                 AnamorphicSliders(params, defaults, onChange)
                 GrainSliders(params, defaults, onChange)
-                BorderSliders(params, defaults, onChange)
             } else if (tab == 4) {
                 LensPanel(params, defaults, lens, onChange, onSaveLensPreset)
             } else {
@@ -607,28 +605,6 @@ private fun AnamorphicSliders(params: DevelopParams, defaults: DevelopParams, on
             onClick = { onChange(params.copy(anamorphicGhosts = !params.anamorphicGhosts)) },
             label = { Text("Ghosts") },
         )
-    }
-}
-
-/** Border: a plain solid frame over the finished picture, inside its size; its colour chips show while it is on. */
-@Composable
-private fun BorderSliders(params: DevelopParams, defaults: DevelopParams, onChange: (DevelopParams) -> Unit) {
-    ParamSlider("Border", params.frame, 0f..Frame.MAX, defaults.frame, ::formatPlain) {
-        onChange(params.copy(frame = it))
-    }
-    if (params.frame <= 0f) return
-    Row(
-        Modifier.padding(start = 16.dp).horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        for ((name, hex) in Frame.COLORS) {
-            FilterChip(
-                selected = params.frameColor == hex,
-                onClick = { onChange(params.copy(frameColor = hex)) },
-                label = { Text(name) },
-            )
-        }
     }
 }
 

@@ -1,3 +1,7 @@
+**Border removed (2026-11-22)**
+
+- The Border overlay added earlier today (Pro Detail › Border, Camera Settings › Border, the Border preset group, `uFrame`) is gone from all apps. It was not wanted: the existing Pentax 645 / Contax 645 export frames are a different feature and are unchanged here. The B&W part (`uMonoFx`) stays. Old edits, presets and Camera settings that hold the border fields still load: the unknown keys are ignored.
+
 **Camera (Android): Easy mode prototype (2026-11-22)**
 
 - **Settings › Easy mode** (off by default): a point-and-shoot screen for someone who just wants photos. Viewfinder, lens buttons, RAW and Frames, flash, Photo / Video, **Colour / B&W**, a 96 dp shutter, the last photo and the selfie switch; no look menu, sliders, Film / B&W, Burst / help buttons, timer, overlays, loupe or hold-to-compare. Settings shows only Language, Easy mode, Shutter sound, Geotag and QR codes while it is on.
@@ -20,11 +24,10 @@
 - Web: the Add / Open source menu and Auto's ⋯ menu listen for Esc in the capture phase and stop it, so Esc closes the menu without also closing the photo view or clearing the selection.
 - RawBoy Viewer got the same (its Places sidebar also has **Refresh Places** on right-click).
 
-**All apps: Border, and B&W greys the leaks (2026-11-22)**
+**All apps: B&W greys the leaks and effects (2026-11-22)**
 
-- **Border** (RawBoy Pro on Android, iOS, Desktop and web: Detail › Border; Camera Android and iOS: Settings › Border): a plain solid border drawn inside the finished picture, 0–20% of the short side, in Black, White, Cream or Grey (any `#rrggbb` in a preset or edit). The export keeps its size. `applyFrame` in `shaders/develop.glsl` runs after the LUT and curves and before light leaks, generated film leaks and light effects, so they screen over it. Params `DevelopParams.frame` / `frameColor` (`Frame.kt/.ts/.swift`), uniforms `uFrame` (output size, thickness in pixels) and `uFrameColor`; default 0 = identical output. A **Border** preset group (off by default in Save preset) also carries it through edits and Auto's sidecars; Auto has no control of its own.
-- **B&W greys leaks, effects and border**: new `uMonoFx` (0 = identical output) and one last shader line, `c = mix(c, luma(c), uMonoFx)`, after the effects. It is 1 when the picture is black and white: Camera's B&W mode (also with Film on; `DevelopParams.monoFx`, set by `CameraSettings.develop`), or a bundled mono LUT at full strength with no Film stock (`ShaderParams.isMono`, all ports). Pro's own Saturation −100 does not count, so leaks stay coloured there. Camera's random light leak and border go grey in B&W shots.
-- Tests: `FrameTest` (engine), `CameraSettingsTest.borderAndMonoFxGoIntoTheDevelop`, `frame.test.ts`, `FrameTests` (Swift, also a Metal render of the border and the grey).
+- New `uMonoFx` (0 = identical output) and one last shader line, `c = mix(c, luma(c), uMonoFx)`, after the effects. It is 1 when the picture is black and white: Camera's B&W mode (also with Film on; `DevelopParams.monoFx`, set by `CameraSettings.develop`), or a bundled mono LUT at full strength with no Film stock (`ShaderParams.isMono`, all ports). Pro's own Saturation −100 does not count, so leaks stay coloured there. Camera's random light leak goes grey in B&W shots.
+- Tests: `MonoFxTest` (engine), `CameraSettingsTest.monoFxFollowsBwMode`, `monofx.test.ts`, `MonoFxTests` (Swift, with a Metal render).
 
 **Camera (Android): Brightness stays where the slider puts it (2026-11-22)**
 

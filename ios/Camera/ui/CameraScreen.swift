@@ -796,16 +796,6 @@ private struct SettingsSheet: View {
                         row("Short-side sprockets", "Also on the short edges; off keeps them on the long edges",
                             Binding(get: { vm.settings.shortSideSprockets }, set: vm.setShortSideSprockets))
                     }
-                    Picker("Border", selection: Binding(get: { vm.settings.border }, set: vm.setBorder)) {
-                        ForEach(CameraSettings.borderWidths, id: \.self) { w in
-                            Text(w == 0 ? "Off" : w == 2 ? "Thin" : w == 4 ? "Medium" : "Thick").tag(w)
-                        }
-                    }
-                    if vm.settings.border > 0 {
-                        Picker("Border colour", selection: Binding(get: { vm.settings.borderColor }, set: vm.setBorderColor)) {
-                            ForEach(CameraSettings.borderColors, id: \.hex) { Text($0.label).tag($0.hex) }
-                        }
-                    }
                     row("QR codes", "Tap to open a link or copy the text or Wi-Fi password",
                         Binding(get: { vm.settings.scanQr }, set: vm.setScanQr))
                 }

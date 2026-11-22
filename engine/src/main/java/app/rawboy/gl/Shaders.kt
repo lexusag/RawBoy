@@ -9,7 +9,7 @@ package app.rawboy.gl
  *        -> lens gains (vignetting) -> WB re-balance -> exposure -> shadows/highlights (log-luminance gain)
  *        -> purity-limited saturation -> tone mapper: AgX, filmic or sigmoid (log encode, grain, contrast, curve) -> whites/blacks
  *        -> soft gamut compression -> Rec.709 / sRGB encoding -> optional 3D LUT (display-referred, like the film LUTs expect)
- *        -> point curves (Pro's Curves: RGB, then per channel) -> frame overlay -> light leaks (Pro, shaders/light_leak.glsl)
+ *        -> point curves (Pro's Curves: RGB, then per channel) -> light leaks (Pro, shaders/light_leak.glsl)
  *        -> light effects (Pro, shaders/light_fx.glsl) -> B&W grey of it all (uMonoFx, Camera's B&W mode).
  * Film looks: scatter + halation before the lens gains, and the film, grain and print in place of the tone mapper,
  *        blended with the AgX render by Strength: shaders/film_form.glsl (RawBoy's own formation) in every app.
@@ -49,7 +49,6 @@ internal object Shaders {
         append(MAIN_BODY)
         append("    if (uLutAmount > 0.0) c = clamp(applyLut(c), 0.0, 1.0);\n")
         append("    if (uCurveOn > 0.0) c = applyCurves(c);\n")
-        append("    if (uFrame.z > 0.0) c = applyFrame(c, outPx);\n")
         append("    if (uLeakCount > 0) c = applyLeaks(c, srcG, outPx);\n")
         append("    if (uFlCount > 0) c = applyFilmLeaks(c, srcG, outPx);\n")
         append("    if (uFxCount > 0) c = applyLightFx(c, srcG, outPx);\n")

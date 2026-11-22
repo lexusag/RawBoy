@@ -19,7 +19,7 @@ class CameraSettingsTest {
     fun easyModeForcesThePlainShotAndKeepsTheStoredValues() {
         val pro = CameraSettings(
             brightness = 40f, warmth = -20f, keepDng = true, burstMode = BurstMode.ON, selfTimer = 5, longExposure = 10,
-            experimental = true, randomLightLeak = true, border = 4, photoFrame = PhotoFrame.DATE_STAMP, trackFocus = true,
+            experimental = true, randomLightLeak = true, photoFrame = PhotoFrame.DATE_STAMP, trackFocus = true,
             flatVideo = true, videoMotionData = true, showHistogram = true, showGrid = true, showLevel = true,
             showZoomControl = true, smallExport = false, jpegQuality = 90, lens = "T", film = false,
         )
@@ -34,7 +34,6 @@ class CameraSettingsTest {
         assertEquals(0, e.activeSelfTimer)
         assertEquals(null, e.longExposureSpec(null, PreviewLevel.BOOSTED, 1f))
         assertFalse(e.randomLightLeak)
-        assertEquals(0, e.border)
         assertFalse(e.trackFocus || e.flatVideo || e.videoMotionData)
         assertFalse(e.showHistogram || e.showGrid || e.showLevel || e.showZoomControl)
         // Colour: Film mode on the default film stock; B&W: Film + B&W on the default mono stock.
@@ -89,16 +88,10 @@ class CameraSettingsTest {
     }
 
     @Test
-    fun borderAndMonoFxGoIntoTheDevelop() {
+    fun monoFxFollowsBwMode() {
         val base = DevelopParams()
-        val plain = CameraSettings().develop(base, false, neutralPlatform.noise)
-        assertEquals(0f, plain.frame, 0f)
-        assertFalse(plain.monoFx)
-        val bordered = CameraSettings(border = 4, borderColor = "#ffffff").develop(base, false, neutralPlatform.noise)
-        assertEquals(4f, bordered.frame, 0f)
-        assertEquals("#ffffff", bordered.frameColor)
-        assertFalse(bordered.monoFx)
-        // B&W (also with Film on): the border, leaks and effects go grey with the picture.
+        assertFalse(CameraSettings().develop(base, false, neutralPlatform.noise).monoFx)
+        // B&W (also with Film on): the leaks and effects go grey with the picture.
         assertTrue(CameraSettings(mono = true).develop(base, false, neutralPlatform.noise).monoFx)
         assertTrue(CameraSettings(mono = true, film = true).develop(base, false, neutralPlatform.noise).monoFx)
     }
