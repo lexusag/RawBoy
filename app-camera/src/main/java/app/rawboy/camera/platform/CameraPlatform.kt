@@ -93,6 +93,11 @@ data class PreviewProfile(
      * a global preview tone; the live develop adds the shot's lift itself.
      */
     val liftsShadows: Boolean,
+    /**
+     * The phone can stream RAW_SENSOR next to the preview fast enough for a viewfinder built from the raw (prototype,
+     * `CameraSettings.rawViewfinder`, offered in Settings › Experimental only where this is true). Neutral false.
+     */
+    val rawViewfinder: Boolean = false,
 )
 
 /** How a preview frame's brightness relates to the still's raw ([PreviewProfile.level]). */

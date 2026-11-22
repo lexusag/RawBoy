@@ -126,6 +126,12 @@ data class CameraSettings(
      */
     val videoMotionData: Boolean = false,
     /**
+     * Experimental prototype: the viewfinder is built from the camera's RAW_SENSOR stream instead of the ISP's preview
+     * (`ViewfinderRenderer.Frame.raw`), so it shows the photo's own sensor data and colours. Offered only where the
+     * phone profile allows it (`PreviewProfile.rawViewfinder`).
+     */
+    val rawViewfinder: Boolean = false,
+    /**
      * Experimental, with [videoMotionData]: after each recording a stabilized copy is rendered from the motion data and
      * saved beside the video (`stab/`).
      */
@@ -373,6 +379,7 @@ object CameraSettingsStore {
             trackFocus = p.getBoolean("trackFocus", d.trackFocus),
             experimental = p.getBoolean("experimental", d.experimental),
             videoMotionData = p.getBoolean("videoMotionData", d.videoMotionData),
+            rawViewfinder = p.getBoolean("rawViewfinder", d.rawViewfinder),
             videoStabilizeAfter = p.getBoolean("videoStabilizeAfter", d.videoStabilizeAfter),
             videoStabilization = p.getBoolean("videoStabilization", d.videoStabilization),
             flatVideo = p.getBoolean("flatVideo", d.flatVideo),
@@ -456,6 +463,7 @@ object CameraSettingsStore {
             .putBoolean("trackFocus", s.trackFocus)
             .putBoolean("experimental", s.experimental)
             .putBoolean("videoMotionData", s.videoMotionData)
+            .putBoolean("rawViewfinder", s.rawViewfinder)
             .putBoolean("videoStabilizeAfter", s.videoStabilizeAfter)
             .putBoolean("videoStabilization", s.videoStabilization)
             .putBoolean("flatVideo", s.flatVideo)

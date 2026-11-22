@@ -42,6 +42,7 @@ import app.rawboy.camera.platform.PreviewColor
 import app.rawboy.camera.platform.PreviewColorInput
 import app.rawboy.color.Mat3
 import app.rawboy.color.WhiteBalance
+import app.rawboy.gl.RawPreviewFrames
 import app.rawboy.raw.BurstNative
 import app.rawboy.raw.LongExposureNative
 import kotlinx.coroutines.CancellationException
@@ -284,6 +285,35 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
     /** Gets each preview result (the streamed lens's) after a focus lock's AF trigger ([watchFocus]); camera thread only. */
     private var focusWatch: ((CaptureResult) -> Unit)? = null
 
+    /**
+     * Raw viewfinder (prototype, [setRawViewfinder]): where streamed RAW_SENSOR frames go. Set by the view model
+     * before [start] while the setting is on; null streams none.
+     */
+    @Volatile
+    var rawFrames: RawPreviewFrames? = null
+
+    /** The raw viewfinder is wanted ([setRawViewfinder]); it streams only on lenses that can ([rawStreams]). */
+    @Volatile
+    private var rawViewfinder = false
+
+    /**
+     * Sensor timestamps of the repeating request's frames while it carries the raw target, so their images go to
+     * [rawFrames] and never to a still waiting for its own ([pendingImage], [burstSink]). Camera thread only.
+     */
+    private val streamStamps = LinkedHashSet<Long>()
+
+    /** The last streamed frame's levels and shading map, which the next raw image is decoded with. Camera thread. */
+    private var streamLevels: StreamLevels? = null
+
+    private class StreamLevels(
+        val black: FloatArray,
+        val white: Float,
+        val neutral: FloatArray,
+        val shading: FloatArray?,
+        val shadingCols: Int,
+        val shadingRows: Int,
+    )
+
     /** The physical lens the session streams from the logical camera, or null. */
     @Volatile
     private var streamingPhysical: String? = null
@@ -445,10 +475,17 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         surfaceTexture.setDefaultBufferSize(info.previewSize.width, info.previewSize.height)
         val preview = Surface(surfaceTexture).also { previewSurface = it }
         val reader = ImageReader.newInstance(
-            info.rawSize.width, info.rawSize.height, if (info.hiRes) info.maxResFormat else ImageFormat.RAW_SENSOR, if (info.hiRes) 1 else 2,
+            info.rawSize.width, info.rawSize.height, if (info.hiRes) info.maxResFormat else ImageFormat.RAW_SENSOR,
+            // The raw viewfinder copies each streamed frame out at once, but a still may hold one while frames go on.
+            if (info.hiRes) 1 else if (rawViewfinder) 3 else 2,
         )
         reader.setOnImageAvailableListener({ r ->
             val image = r.acquireNextImage() ?: return@setOnImageAvailableListener
+            if (streamStamps.remove(image.timestamp)) {
+                // A raw viewfinder frame: copied for the GL thread and let go, never taken for a still or a burst.
+                image.use { offerRawFrame(info, it) }
+                return@setOnImageAvailableListener
+            }
             burstSink?.let { sink ->
                 // Copied out at once, so a burst never holds more than one of the reader's buffers.
                 image.use(sink)
@@ -617,18 +654,103 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             ?.contains(CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_ON) == true
 
 
+    /**
+     * Turns the raw viewfinder (prototype) on or off: the repeating request then also feeds the raw reader, whose frames
+     * go to [rawFrames]. Takes effect at once on a lens that can stream raw ([rawStreams]); the reader's size of
+     * buffers follows at the next [start] (a lens switch or reopening).
+     */
+    fun setRawViewfinder(on: Boolean) {
+        if (rawViewfinder == on) return
+        rawViewfinder = on
+        handler.post {
+            if (!on) {
+                streamStamps.clear()
+                streamLevels = null
+            }
+            if (session != null) repeatPreview()
+        }
+    }
+
+    /**
+     * Whether [inf] streams raw for the viewfinder: wanted, a sink set, and the default sensor mode (a maximum-resolution
+     * raw can't share a request with the preview).
+     */
+    fun rawStreams(inf: Info): Boolean = rawViewfinder && rawFrames != null && !inf.hiRes
+
+    /** Copies one streamed raw frame to [rawFrames] with the last frame's levels; camera thread. */
+    private fun offerRawFrame(inf: Info, img: Image) {
+        val sink = rawFrames ?: return
+        val levels = streamLevels ?: return
+        if (img.format != ImageFormat.RAW_SENSOR) return
+        val cfa = inf.characteristics.get(CameraCharacteristics.SENSOR_INFO_COLOR_FILTER_ARRANGEMENT) ?: return
+        val color = inf.cameraToSrgb ?: return
+        val plane = img.planes[0]
+        sink.offer(
+            plane.buffer, img.width, img.height, plane.rowStride, cfa, levels.black, levels.white, levels.neutral, color,
+            platform.still.extraBlack, levels.shading, levels.shadingCols, levels.shadingRows, img.timestamp,
+        )
+    }
+
+    /** Keeps [r]'s levels and shading map for the next streamed raw frame ([offerRawFrame]); camera thread. */
+    private fun keepStreamLevels(inf: Info, r: CaptureResult) {
+        val c = inf.characteristics
+        val black = r.get(CaptureResult.SENSOR_DYNAMIC_BLACK_LEVEL)?.takeIf { it.size >= 4 }
+            ?: c.get(CameraCharacteristics.SENSOR_BLACK_LEVEL_PATTERN)?.let { p ->
+                FloatArray(4) { i -> p.getOffsetForIndex(i % 2, i / 2).toFloat() }
+            } ?: return
+        val white = (r.get(CaptureResult.SENSOR_DYNAMIC_WHITE_LEVEL) ?: c.get(CameraCharacteristics.SENSOR_INFO_WHITE_LEVEL) ?: return).toFloat()
+        val neutral = r.get(CaptureResult.SENSOR_NEUTRAL_COLOR_POINT)?.takeIf { it.size >= 3 }
+            ?.let { n -> FloatArray(3) { n[it].toFloat() } }?.takeIf { n -> n.all { it > 0f } } ?: return
+        // The map's points span the whole sensor, gains per channel R, G even, G odd, B; the greens averaged.
+        val map = r.get(CaptureResult.STATISTICS_LENS_SHADING_CORRECTION_MAP)
+        val shading = map?.let { m ->
+            val v = FloatArray(m.gainFactorCount)
+            m.copyGainFactors(v, 0)
+            FloatArray(m.columnCount * m.rowCount * 4) { i ->
+                val point = i / 4
+                when (i % 4) {
+                    0 -> v[point * 4]
+                    1 -> (v[point * 4 + 1] + v[point * 4 + 2]) / 2f
+                    2 -> v[point * 4 + 3]
+                    else -> 1f
+                }
+            }
+        }
+        val old = streamLevels
+        // The same map as last frame: keep the old array, so the renderer sees it unchanged and doesn't upload it again.
+        val kept = if (shading != null && old?.shading != null && shading.contentEquals(old.shading)) old.shading else shading
+        streamLevels = StreamLevels(black, white, neutral, kept, map?.columnCount ?: 0, map?.rowCount ?: 0)
+    }
+
     /** (Re)starts the repeating preview, with the focus lock if there is one. */
     private fun repeatPreview() {
         val s = session ?: return
         val inf = info ?: return
+        val raw = rawStreams(inf) && rawReader != null
         val request = request(s, CameraDevice.TEMPLATE_PREVIEW).apply {
             addTarget(previewSurface ?: return)
+            if (raw) {
+                // Prototype raw viewfinder: every preview frame also to the raw reader, with the shading map to undo.
+                addTarget(rawReader!!.surface)
+                if (inf.hasLensShadingMap) {
+                    setForLens(CaptureRequest.STATISTICS_LENS_SHADING_MAP_MODE, CameraMetadata.STATISTICS_LENS_SHADING_MAP_MODE_ON)
+                }
+            }
             setCommon(inf)
             if (inf.hasFaceDetection) set(CaptureRequest.STATISTICS_FACE_DETECT_MODE, CameraMetadata.STATISTICS_FACE_DETECT_MODE_SIMPLE)
         }.build()
+        if (!raw) streamStamps.clear()
         s.setRepeatingRequest(request, object : CameraCaptureSession.CaptureCallback() {
+            override fun onCaptureStarted(session: CameraCaptureSession, request: CaptureRequest, timestamp: Long, frameNumber: Long) {
+                if (!raw) return
+                streamStamps.add(timestamp)
+                // Frames whose image never came (dropped) mustn't pile up.
+                while (streamStamps.size > STREAM_STAMPS) streamStamps.remove(streamStamps.first())
+            }
+
             override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
                 val lens = lensResult(result)
+                if (raw) keepStreamLevels(inf, lens)
                 lastPreviewResult = lens
                 motionListener?.invoke(lens)
                 val state = frameState(inf, lens, result.get(CaptureResult.CONTROL_AE_EXPOSURE_COMPENSATION))
@@ -1691,6 +1813,8 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         previewSurface = null
         val closed = IOException("Camera closed")
         handler.post {
+            streamStamps.clear()
+            streamLevels = null
             pendingResult?.completeExceptionally(closed)
             pendingResult = null
             pendingImage?.completeExceptionally(closed)
@@ -1958,6 +2082,8 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
     }
 
     companion object {
+        /** Raw viewfinder: streamed frames' timestamps remembered while their images are on the way. */
+        private const val STREAM_STAMPS = 16
         private const val TAG = "RawBoyCamera"
 
         /** Focus-flash: how long the torch is on before the AF trigger, and how long AF may take with it. */

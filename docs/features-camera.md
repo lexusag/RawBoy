@@ -52,6 +52,7 @@ lenses, burst merge), iOS drives AVFoundation (**ProRAW at 12 MP by default**, o
 | **Phone profiles** detected at start (chip, maker, model layers; *Phone profile* line in Settings) | unreleased (branch `camera-device-compat`) | ✓ | n/a | Pixel 9 Pro (Tensor) and OnePlus 11 measured; others neutral. See [camera-platforms.md](camera-platforms.md) |
 | Share device report (Settings) | unreleased (same) | ✓ | — | Plain text through the share sheet, for tuning a new phone |
 | Video motion data + **Stabilize after recording** (experimental, `-stab.mp4` copy) | unreleased | ✓ | — | Gyro/OIS capture and a software stabilizer; Settings › Experimental. Optical stabilization switch for video |
+| **Viewfinder from RAW** (experimental prototype) | unreleased | ✓ | — | The viewfinder is developed from the RAW_SENSOR stream instead of the ISP's preview; offered where the phone profile allows (Tensor). AVFoundation has no raw video stream, so iOS can't have it |
 | Video on phones whose standard encoder path fails (probe) | unreleased (same) | ✓ | — | OnePlus 11 records through the encoder's own GL context |
 
 ## Looks and output
@@ -81,7 +82,7 @@ lenses, burst merge), iOS drives AVFoundation (**ProRAW at 12 MP by default**, o
 ## What iOS lacks that Android has
 
 In order of how much it changes the photo: **burst merge** (iOS is single-frame ProRAW, which the changelog says gives
-"far less grain than a single Bayer frame in low light"), **video motion data and stabilized copies** (iOS records video, with the camera's own stabilization only, no flat video),
+"far less grain than a single Bayer frame in low light"), **video motion data and stabilized copies** (iOS records video, with the camera's own stabilization only, no flat video), the **viewfinder from RAW** prototype (AVFoundation offers no raw video stream),
 **HDR gain map** (Ultra HDR JPEG), **lock-screen and power-button launch**, **digital zoom up to 10×**, **selfie
 screen flash**, **self-timer and long exposure**, **lossy JXL DNG**, **full-resolution (remosaic) raw** (iOS follows the
 system 48 MP option, unchecked), **phone profiles and Share device report** (n/a on iOS: one hardware family),

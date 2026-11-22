@@ -68,6 +68,16 @@ class ViewfinderRenderer(
          * colour matrix is more saturated); null = plain sRGB primaries.
          */
         val color: FloatArray? = null,
+        /**
+         * Prototype: pass 1 builds the frame from the raw stream ([rawFrames]) instead of the ISP's preview; [bufferWidth]
+         * x [bufferHeight] are then the binned raw's (half the sensor, cropped to the preview's aspect) and [rotation]
+         * the sensor orientation. [gamma], [linearToe] and [color] are unused; [scale] is the still's gain over the
+         * preview raw.
+         */
+        val raw: Boolean = false,
+        /** With [raw]: share of the sensor's width / height shown (the preview's aspect), as `Info.previewCropX/Y`. */
+        val rawCropX: Float = 1f,
+        val rawCropY: Float = 1f,
     ) {
         val uprightWidth get() = if (rotation % 180 == 0) bufferWidth else bufferHeight
         val uprightHeight get() = if (rotation % 180 == 0) bufferHeight else bufferWidth
@@ -140,6 +150,22 @@ class ViewfinderRenderer(
      */
     @Volatile
     var onTrackLuma: ((width: Int, height: Int, luma: ByteArray) -> Unit)? = null
+
+    /**
+     * Raw frames for [Frame.raw] (prototype): the camera thread offers, pass 1 takes the newest. Set before the camera
+     * starts streaming them.
+     */
+    var rawFrames: RawPreviewFrames? = null
+        set(value) {
+            value?.onFrame = requestRender
+            field = value
+        }
+    private var rawLinearize: RawLinearizeProgram? = null
+    /** The raw frame on the GPU now, kept (out of the pool) until a newer one replaces it: its levels draw it. */
+    private var rawShown: RawPreviewFrame? = null
+    private var rawUploadNs = 0L
+    private var rawUploads = 0
+    private var rawStatsAt = 0L
 
     private var surfaceTexture: SurfaceTexture? = null
     private var cameraTexture = 0
@@ -227,6 +253,9 @@ class ViewfinderRenderer(
         val yuv = GLES30.glGetString(GLES30.GL_EXTENSIONS)?.contains("GL_EXT_YUV_target") == true
         Log.d("RawBoyViewfinder", "camera frames: " + if (yuv) "YUV, converted here" else "RGB from the driver")
         linearize = LinearizeProgram(yuv)
+        rawLinearize = RawLinearizeProgram()
+        rawShown?.let { rawFrames?.recycle(it) }
+        rawShown = null
         copy = PassProgram(PassProgram.COPY, trilinear = true)
         boost = PassProgram(PassProgram.BOOST, trilinear = false)
         boxDown = PassProgram(PassProgram.BOX_DOWN, trilinear = false)
@@ -271,9 +300,14 @@ class ViewfinderRenderer(
         val h = f.uprightHeight
         linear.ensure(w, h, mipmapped = true)
         linear.bindForDrawing()
-        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
-        GLES30.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, cameraTexture)
-        linearize!!.draw(quad!!, texMatrix, f, dataSpaceOf(st), zoom.coerceAtLeast(1f))
+        if (f.raw) {
+            // Prototype: the newest raw frame instead of the ISP's preview (nothing drawn until the first arrives).
+            if (!drawRaw(f)) return
+        } else {
+            GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+            GLES30.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, cameraTexture)
+            linearize!!.draw(quad!!, texMatrix, f, dataSpaceOf(st), zoom.coerceAtLeast(1f))
+        }
 
         // The whole-image copies, from this frame: built from a readback instead, they lagged the image by
         // a few hundred ms and bright lights left a trailing glow when the camera moved.
@@ -389,6 +423,40 @@ class ViewfinderRenderer(
         drops.mark(DropLog.VIDEO)
         drops.end()
         stats.frame(SystemClock.uptimeMillis() - now)
+    }
+
+    /**
+     * Pass 1 from the raw stream into the bound [linear] target: uploads the newest frame if one came, then draws the
+     * one on the GPU. False while none has arrived yet. Logs the upload time every 5 s (`RawBoyViewfinder`).
+     */
+    private fun drawRaw(f: Frame): Boolean {
+        val program = rawLinearize ?: return false
+        val source = rawFrames
+        source?.take()?.let { next ->
+            val started = System.nanoTime()
+            program.upload(next)
+            rawUploadNs += System.nanoTime() - started
+            rawUploads++
+            rawShown?.let(source::recycle)
+            rawShown = next
+        }
+        val shown = rawShown ?: return false
+        if (!program.ready) return false
+        program.draw(quad!!, shown, f.rotation, f.mirror, zoom.coerceAtLeast(1f), f.rawCropX, f.rawCropY, f.scale)
+        val now = SystemClock.uptimeMillis()
+        if (now - rawStatsAt >= 5000L) {
+            if (rawUploads > 0 && source != null) {
+                Log.d(
+                    "RawBoyViewfinder",
+                    "raw viewfinder: ${shown.width}x${shown.height}, upload ${rawUploadNs / rawUploads / 1000} µs avg over " +
+                        "$rawUploads frames, copied ${source.copied}, dropped ${source.dropped}",
+                )
+            }
+            rawStatsAt = now
+            rawUploadNs = 0L
+            rawUploads = 0
+        }
+        return true
     }
 
     private fun bindDevelopTextures(p: ShaderParams) {

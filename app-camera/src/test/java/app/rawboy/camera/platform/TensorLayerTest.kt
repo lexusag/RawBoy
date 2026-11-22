@@ -28,6 +28,8 @@ class TensorLayerTest {
         assertEquals(PreviewLevel.BOOSTED, tensor.preview.level)
         // The preview comes with the ISP's local shadow lift: the viewfinder adds no backlight lift of its own.
         assertEquals(true, tensor.preview.liftsShadows)
+        // The raw viewfinder prototype is offered on Tensor (off until switched on in Settings).
+        assertEquals(true, tensor.preview.rawViewfinder)
         // The former lens list: cameras in the order the camera list names them.
         assertEquals(false, tensor.lenses.standaloneOverLogical)
         // Stabilization's fitted picture-per-gyro scale (2026-11-21 clips).
@@ -83,7 +85,7 @@ class TensorLayerTest {
                     defaultGuide = 1f, referenceFNumber = 9f, defaultGainNoDistance = 1f,
                     metering = FlashMetering.CAMERA_AE, cameraAeCompensationEv = -2f, screenFlashUntilExposed = true,
                 ),
-                preview = p.preview.copy(color = SrgbPreviewColor, curveAtEvenPoints = true, level = PreviewLevel.STILL_WHITE_BALANCED, liftsShadows = false),
+                preview = p.preview.copy(color = SrgbPreviewColor, curveAtEvenPoints = true, level = PreviewLevel.STILL_WHITE_BALANCED, liftsShadows = false, rawViewfinder = false),
                 lenses = p.lenses.copy(standaloneOverLogical = true),
             )
         }
