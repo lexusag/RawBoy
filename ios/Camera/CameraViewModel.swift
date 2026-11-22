@@ -467,7 +467,18 @@ final class CameraViewModel: ObservableObject {
                     last: self.live?.auto.exposure, lastCaptureEv: self.live?.captureEv ?? 0,
                     exposure: auto.exposure, captureEv: captureEv,
                     step: self.videoMode ? Self.videoEvStep : Self.maxEvStep)
-                self.live = Live(base: base, stats: stats, defaults: defaults, auto: eased, captureEv: captureEv)
+                // Video: the auto tone (rounded to whole slider steps) and the as-shot white also glide, else each
+                // 300 ms analysis shows as a jump in gamma or colour.
+                var shownDefaults = defaults
+                if self.videoMode, let last = self.live {
+                    func glide(_ last: Float, _ new: Float, _ step: Float) -> Float { last + min(max(new - last, -step), step) }
+                    eased.highlights = glide(last.auto.highlights, eased.highlights, 1)
+                    eased.shadows = glide(last.auto.shadows, eased.shadows, 1)
+                    eased.contrast = glide(last.auto.contrast, eased.contrast, 1)
+                    shownDefaults.temperature = glide(last.defaults.temperature, defaults.temperature, 25)
+                    shownDefaults.tint = glide(last.defaults.tint, defaults.tint, 1)
+                }
+                self.live = Live(base: base, stats: stats, defaults: shownDefaults, auto: eased, captureEv: captureEv)
                 self.publish()
             }
         }
