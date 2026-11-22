@@ -144,6 +144,13 @@ class StabRenderer(
                 }
                 progress(next.toFloat() / outputs.size)
             }
+            // The last frame sent through the surface can still be on its way into the encoder; ending the stream
+            // at once lost it (every copy was a frame short). Wait until the encoder has given out what was drawn.
+            val deadline = System.currentTimeMillis() + LAST_FRAME_WAIT_MS
+            while (mux.written < next && System.currentTimeMillis() < deadline) {
+                mux.drain(false)
+                if (mux.written < next) Thread.sleep(5)
+            }
             encoder.signalEndOfInputStream()
             mux.drain(true)
             mux.finishAudio()
@@ -412,6 +419,7 @@ class StabRenderer(
         private const val TAG = "RawBoyStab"
         private const val TIMEOUT_US = 10_000L
         private const val FRAME_WAIT_MS = 2_500L
+        private const val LAST_FRAME_WAIT_MS = 1_000L
         private const val DEFAULT_BITRATE = 16_000_000
         private const val EGL_RECORDABLE_ANDROID = 0x3142
 
