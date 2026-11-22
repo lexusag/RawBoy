@@ -23,12 +23,18 @@ export function SourceMenu({ className, title, label, disabled, alignLeft = fals
     const close = (e: Event) => {
       if (!ref.current?.contains(e.target as Node)) setOpen(false);
     };
-    const esc = (e: KeyboardEvent) => e.key === 'Escape' && setOpen(false);
+    // Capture phase and stopped: Esc only closes the menu, the photo view / selection behind it stay as they are.
+    const esc = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      setOpen(false);
+    };
     document.addEventListener('pointerdown', close);
-    window.addEventListener('keydown', esc);
+    window.addEventListener('keydown', esc, true);
     return () => {
       document.removeEventListener('pointerdown', close);
-      window.removeEventListener('keydown', esc);
+      window.removeEventListener('keydown', esc, true);
     };
   }, [open]);
   if (!driveConfigured()) {

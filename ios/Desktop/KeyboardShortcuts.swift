@@ -26,6 +26,7 @@ final class KeyboardShortcuts {
 
     func start() {
         guard monitor == nil else { return }
+        MenuTracking.start()
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.keyDown, .keyUp]) { [weak self] event in
             guard let self else { return event }
             return MainActor.assumeIsolated { self.handle(event) }
@@ -140,6 +141,8 @@ final class KeyboardShortcuts {
 
     private func handle(_ event: NSEvent) -> NSEvent? {
         guard let key = Key(rawValue: event.keyCode) else { return event }
+        // A menu is open: Esc is its own (it closes it); the tool or screen behind stays as it is.
+        if key == .escape, MenuTracking.isOpen { return event }
         let commands = model.commands
         if model.mode == .auto { return handleAuto(event, key) }
         if model.mode == .browse { return handleBrowse(event, key) }
