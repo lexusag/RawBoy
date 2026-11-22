@@ -1,3 +1,9 @@
+**Camera (Android): Viewfinder from RAW is a regular setting (2026-11-22)**
+
+- Tried on the Pixel 9 Pro (owner: "pretty great"), so **Viewfinder from RAW** moved from Settings › Experimental to **Settings › Viewfinder**, without the experimental colour. Still off by default and shown only where the phone profile allows it (Tensor Pixels).
+- Shots develop at normal GPU priority while the viewfinder is from RAW: in the phone test, low-priority develops starved behind the viewfinder's per-frame raw upload (55 s and 198 s, one unfinished after 50 s, against 4-6 s with the ISP viewfinder), as hot Snapdragon phones did before.
+- Bursts no longer fail with *no result for the first frame* while the viewfinder is from RAW (3 of 5 Auto bursts in the phone test, one logging "9 of 8 frames"): a streamed frame whose image came before its `onCaptureStarted` was taken for a still. Such images now wait (`CameraController.parked`, up to 2, at most 150 ms) until a later stream frame's start shows whose they are; the reader keeps 4 buffers while on.
+
 **Camera (Android): Ukrainian translation and a language setting (2026-11-22)**
 
 - **Settings › Language › Interface language**: *Phone* (the default, follows the phone's language), *English* or *Українська*. Choosing one changes the viewfinder, Settings, the help sheet, accessibility labels and messages at once, with no restart. Look and film stock names stay as they are.

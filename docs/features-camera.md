@@ -53,7 +53,7 @@ lenses, burst merge), iOS drives AVFoundation (**ProRAW at 12 MP by default**, o
 | Share device report (Settings) | unreleased (same) | ✓ | — | Plain text through the share sheet, for tuning a new phone |
 | Collect tuning data (Settings) | unreleased (same) | ✓ | — | Viewfinder/photo 512 px copies of the next 10 shots + the camera's log, zipped with the device report for the share sheet |
 | Video motion data + **Stabilize after recording** (experimental, `-stab.mp4` copy) | unreleased | ✓ | — | Gyro/OIS capture and a software stabilizer; Settings › Experimental. Optical stabilization switch for video |
-| **Viewfinder from RAW** (experimental prototype) | unreleased | ✓ | — | The viewfinder is developed from the RAW_SENSOR stream instead of the ISP's preview; offered where the phone profile allows (Tensor). AVFoundation has no raw video stream, so iOS can't have it |
+| **Viewfinder from RAW** (Settings › Viewfinder, off by default) | unreleased | ✓ | — | The viewfinder is developed from the RAW_SENSOR stream instead of the ISP's preview; offered where the phone profile allows (Tensor). AVFoundation has no raw video stream, so iOS can't have it |
 | Video on phones whose standard encoder path fails (probe) | unreleased (same) | ✓ | — | OnePlus 11 records through the encoder's own GL context |
 
 ## Looks and output

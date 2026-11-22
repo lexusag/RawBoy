@@ -167,12 +167,12 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   `DevelopProgram`. Base (512), bloom halo (512, boosted) and tail (64, scattered by `BloomTail`'s kernel in a GPU pass) are rendered on the GPU **every frame**
   (`makeCopies`, bound via `DevelopProgram.bindLiveCopies`): built from the readback they lagged and bright lights
   left trails. Every ~300 ms the 512 px base is read back → `gl/ViewfinderBase.kt` (analysis only).
-  Raw viewfinder prototype (2026-11-22, `CameraSettings.rawViewfinder`, offered where `PreviewProfile.rawViewfinder`:
+  Raw viewfinder (2026-11-22, Settings › Viewfinder, `CameraSettings.rawViewfinder`, offered where `PreviewProfile.rawViewfinder`:
   Tensor): the repeating request also feeds the raw reader; `CameraController` tells streamed frames from stills by
   their `onCaptureStarted` timestamps (`streamStamps`) and copies them into `gl/RawViewfinder.kt`'s `RawPreviewFrames`
   pool; `ViewfinderRenderer.drawRaw` uploads the newest (R16UI) and `RawLinearizeProgram` replaces pass 1 (2×2 bin,
   levels, shading map, WB, raw decoder's matrix; `Frame.raw`, scale = `stillGain` only, no preview calibration).
-  Shader checked in WebGL2 (CFA order, rotation); untested on a phone when added.
+  Owner on the Pixel 9 Pro: "pretty great"; moved out of Experimental the same day.
 - `app-camera/src/main/java/app/rawboy/camera/` — `capture/CameraController.kt` (Camera2: back camera with RAW,
   preview with `TONEMAP_PRESET_CURVE_SRGB`, `DngCreator` with lens shading map on, tap-to-focus, as-shot white from
   `SENSOR_NEUTRAL_COLOR_POINT` + D65 ColorMatrix; `lenses()` (`capture/LensChoice.kt`): W = the logical camera if a side has exactly one, else the only camera

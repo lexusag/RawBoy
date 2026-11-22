@@ -259,9 +259,9 @@ Under **Settings › Experimental**, **Save motion data with videos** (off by de
 - The gyroscope runs while video mode with motion data is on (not only while recording), so the file starts half a second before the video's first frame.
 - **Stabilize after recording** (on by default, under the motion data switch): when a recording stops, a steadied copy is rendered from the motion data in the background and saved beside the video as `VID_…-stab.mp4` (dated like the original, so galleries show it next to it), same size, a 70% crop of the frame scaled up, with the original sound. The camera's rotation from the gyro is smoothed (half-second Gaussian, longer for the telephotos, up to a second at 10x and beyond, since they magnify the hand's slow sway); each output row is taken from the source row exposed at its time (rolling shutter), and the lens stabilizer's measured shift is added where the lens reports it. Where the crop would show the frame's edge, the steadied view follows the camera, easing in over about 0.4 s instead of jumping. A frame the recorder lost repeats the one before. Selfie videos aren't stabilized, nor videos from lenses whose optical stabilization can't report its movement (Pixel 9 Pro T2 and T3, with the Optical stabilization switch on): their optical stabilization is smoother than the software one, which can't know what the lens already took out. Switch Optical stabilization off to have them stabilized in software. Message *Stabilized copy saved* when done; logcat `RawBoyStab`.
 
-## Viewfinder from RAW (Android, experimental prototype)
+## Viewfinder from RAW (Android)
 
-Under **Settings › Experimental**, **Viewfinder from RAW** (off by default; shown only on phones whose profile allows
+Under **Settings › Viewfinder**, **Viewfinder from RAW** (off by default; shown only on phones whose profile allows
 it, the Pixels with a Tensor chip for now) builds the viewfinder from the camera's raw sensor data instead of the
 phone's processed preview. The camera then sends every preview frame twice: as before to the ISP's preview, and as a
 RAW_SENSOR frame. The viewfinder decodes the raw frame on the GPU as the photo's decoder does (black and white
@@ -271,9 +271,7 @@ and colours, with no per-lens calibration against the ISP's preview.
 
 - Turning it on or off restarts the camera. Maximum-resolution lenses keep the ISP's preview (their raw can't share
   a request with the preview). Long exposures freeze it on the last raw frame while they run.
-- Things to measure on the phone: frame rate (logcat `RawBoyViewfinder`: fps every 5 s, and the raw upload time and
-  frames copied/dropped), heat and battery, and how close the viewfinder is to the saved JPEG (the debug build's
-  `-vf.f16` / `-raw.f16` copies).
+- Logcat `RawBoyViewfinder` prints the fps every 5 s, and in this mode the raw upload time and frames copied/dropped.
 - Not yet: full demosaic, the decoder's exact highlight blend (a simple blend to neutral stands in), hot pixels, the
   DNG warp's lens correction in the viewfinder (the develop applies it as before), iOS (AVFoundation streams no raw).
 

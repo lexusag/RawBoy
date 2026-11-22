@@ -302,6 +302,17 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
      */
     private val streamStamps = LinkedHashSet<Long>()
 
+    /**
+     * Raw images that came before their frame's `onCaptureStarted`, while the repeating request streams raw: neither a
+     * stream frame nor a still's yet. Camera2 starts frames in order, so a later stream frame's start settles it
+     * ([claimParked]); [PARKED_MS] after arriving it goes to the still path anyway. On the Pixel 9 Pro a streamed
+     * frame taken for a burst's first frame failed it ("no result for the first frame"). Camera thread only.
+     */
+    private val parked = ArrayDeque<Image>()
+
+    /** The repeating request carries the raw target ([repeatPreview]). Camera thread only. */
+    private var streamingRaw = false
+
     /** The last streamed frame's levels and shading map, which the next raw image is decoded with. Camera thread. */
     private var streamLevels: StreamLevels? = null
 
@@ -476,8 +487,9 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         val preview = Surface(surfaceTexture).also { previewSurface = it }
         val reader = ImageReader.newInstance(
             info.rawSize.width, info.rawSize.height, if (info.hiRes) info.maxResFormat else ImageFormat.RAW_SENSOR,
-            // The raw viewfinder copies each streamed frame out at once, but a still may hold one while frames go on.
-            if (info.hiRes) 1 else if (rawViewfinder) 3 else 2,
+            // The raw viewfinder copies each streamed frame out at once, but a still may hold one while frames go on
+            // and up to MAX_PARKED wait to be claimed ([parked]).
+            if (info.hiRes) 1 else if (rawViewfinder) 2 + MAX_PARKED else 2,
         )
         reader.setOnImageAvailableListener({ r ->
             val image = r.acquireNextImage() ?: return@setOnImageAvailableListener
@@ -486,14 +498,14 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
                 image.use { offerRawFrame(info, it) }
                 return@setOnImageAvailableListener
             }
-            burstSink?.let { sink ->
-                // Copied out at once, so a burst never holds more than one of the reader's buffers.
-                image.use(sink)
+            if (streamingRaw) {
+                // Its frame hasn't started yet as far as the callbacks go: wait until it is clear whose it is.
+                parked.addLast(image)
+                if (parked.size > MAX_PARKED) toStill(parked.removeFirst())
+                handler.postDelayed({ if (parked.remove(image)) toStill(image) }, PARKED_MS)
                 return@setOnImageAvailableListener
             }
-            val waiting = pendingImage
-            pendingImage = null
-            if (waiting == null || !waiting.complete(image)) image.close()
+            toStill(image)
         }, handler)
         rawReader = reader
 
@@ -722,6 +734,45 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         streamLevels = StreamLevels(black, white, neutral, kept, map?.columnCount ?: 0, map?.rowCount ?: 0)
     }
 
+    /** Hands a raw image that isn't a stream frame to the burst or the still waiting for one; camera thread. */
+    private fun toStill(image: Image) {
+        burstSink?.let { sink ->
+            // Copied out at once, so a burst never holds more than one of the reader's buffers.
+            image.use(sink)
+            return
+        }
+        val waiting = pendingImage
+        pendingImage = null
+        if (waiting == null || !waiting.complete(image)) image.close()
+    }
+
+    /**
+     * A stream frame started at [timestamp]: a parked image of that frame is a stream frame; one of an earlier frame
+     * belongs to a still (its start came before this one, and it wasn't a stream frame's). Camera thread.
+     */
+    private fun claimParked(inf: Info, timestamp: Long) {
+        val iter = parked.iterator()
+        while (iter.hasNext()) {
+            val image = iter.next()
+            when {
+                image.timestamp == timestamp -> {
+                    iter.remove()
+                    streamStamps.remove(timestamp)
+                    image.use { img -> offerRawFrame(inf, img) }
+                }
+                image.timestamp < timestamp -> {
+                    iter.remove()
+                    toStill(image)
+                }
+            }
+        }
+    }
+
+    /** Lets go of parked images (stream stopped or camera closed): they go where a still would take them. */
+    private fun releaseParked() {
+        while (parked.isNotEmpty()) toStill(parked.removeFirst())
+    }
+
     /** (Re)starts the repeating preview, with the focus lock if there is one. */
     private fun repeatPreview() {
         val s = session ?: return
@@ -739,13 +790,18 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             setCommon(inf)
             if (inf.hasFaceDetection) set(CaptureRequest.STATISTICS_FACE_DETECT_MODE, CameraMetadata.STATISTICS_FACE_DETECT_MODE_SIMPLE)
         }.build()
-        if (!raw) streamStamps.clear()
+        if (!raw) {
+            streamStamps.clear()
+            releaseParked()
+        }
+        streamingRaw = raw
         s.setRepeatingRequest(request, object : CameraCaptureSession.CaptureCallback() {
             override fun onCaptureStarted(session: CameraCaptureSession, request: CaptureRequest, timestamp: Long, frameNumber: Long) {
                 if (!raw) return
                 streamStamps.add(timestamp)
                 // Frames whose image never came (dropped) mustn't pile up.
                 while (streamStamps.size > STREAM_STAMPS) streamStamps.remove(streamStamps.first())
+                if (parked.isNotEmpty()) claimParked(inf, timestamp)
             }
 
             override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
@@ -1814,6 +1870,8 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         val closed = IOException("Camera closed")
         handler.post {
             streamStamps.clear()
+            streamingRaw = false
+            while (parked.isNotEmpty()) parked.removeFirst().close()
             streamLevels = null
             pendingResult?.completeExceptionally(closed)
             pendingResult = null
@@ -2084,6 +2142,10 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
     companion object {
         /** Raw viewfinder: streamed frames' timestamps remembered while their images are on the way. */
         private const val STREAM_STAMPS = 16
+        /** Raw images held until it is clear whose frame they are ([parked]). */
+        private const val MAX_PARKED = 2
+        /** How long a parked image waits for a stream frame's start before it goes to the still path. */
+        private const val PARKED_MS = 150L
         private const val TAG = "RawBoyCamera"
 
         /** Focus-flash: how long the torch is on before the AF trigger, and how long AF may take with it. */
