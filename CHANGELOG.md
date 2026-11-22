@@ -1,3 +1,7 @@
+**Camera (Android, experimental): stabilize after recording (2026-11-22)**
+
+- With **Save motion data with videos** on, **Stabilize after recording** (on by default) renders a steadied copy of each video from its `.motion` file in the background and saves it beside the original as `VID_…-stab.mp4` (70% crop, the owner's pick from the prototype renders). `stab/StabPlan.kt` is the Python prototype's model ported (gyro integration with each lens's fitted picture-per-gyro scale, `LensProfile.motionGain`, set for the Pixel 9 Pro in the Tensor layer; rolling shutter per output point; OIS samples; Gaussian path σ 0.5 s; easing near the crop's limit; held frames), `StabRenderer.kt` decodes into a SurfaceTexture, draws a 33×33 warped mesh into the encoder and copies the audio. Checked against the prototype on three clips (paths within 0.02°, warps within 1.6 px; the prototype's path flipped on a clip turned through 180°, the port's doesn't) and with JVM tests (`StabPlanTest`); first build on the phone pending.
+
 **Camera (Android, experimental): motion data from the first frame, and no unreadable OIS (2026-11-22)**
 
 - The gyroscope started with the recording, and its first sample came 23-106 ms after the video's first frame (all 23 test clips of 2026-11-21), so the start of every clip couldn't be stabilized. The sensors now run while video mode with motion data is on (`MotionSensors`, stopped when the app leaves the screen) and keep the last half second, which a recording takes over at its start.

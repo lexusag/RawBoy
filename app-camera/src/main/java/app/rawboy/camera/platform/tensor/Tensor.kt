@@ -4,6 +4,7 @@ import app.rawboy.camera.platform.BlackOffsets
 import app.rawboy.camera.platform.ChipVendor
 import app.rawboy.camera.platform.FlashMetering
 import app.rawboy.camera.platform.LayerLevel
+import app.rawboy.camera.platform.MotionGain
 import app.rawboy.camera.platform.PlatformLayer
 import app.rawboy.camera.platform.PlatformPatch
 import app.rawboy.camera.platform.PreviewLevel
@@ -25,7 +26,19 @@ val tensorLayer = PlatformLayer(
     patch = ispBlackAsPixel9Pro + previewColorFromResult + PlatformPatch { p ->
         p.copy(
             // The Pixel 9 Pro has one logical camera per side and no stand-alone duplicates: lens order as found.
-            lenses = p.lenses.copy(standaloneOverLogical = false),
+            lenses = p.lenses.copy(
+                standaloneOverLogical = false,
+                // Pixel 9 Pro, 23 clips of 2026-11-21 fitted against KLT-measured motion: every lens moves 9-31% more
+                // up and down than its intrinsics say (cause unknown; UW error 4.1 -> 2.1 px/frame with it). T2 and T3
+                // are guesses between T and W, not yet fitted with OIS off.
+                motionGain = mapOf(
+                    "UW" to MotionGain(1.0f, 1.31f),
+                    "W" to MotionGain(0.98f, 1.20f),
+                    "T" to MotionGain(1.04f, 1.09f),
+                    "T2" to MotionGain(1.0f, 1.15f),
+                    "T3" to MotionGain(1.0f, 1.15f),
+                ),
+            ),
             // Everything on the Pixel 9 Pro was tuned with the curve's points packed near black.
             preview = p.preview.copy(curveAtEvenPoints = false, level = PreviewLevel.BOOSTED, liftsShadows = true),
             still = p.still.copy(

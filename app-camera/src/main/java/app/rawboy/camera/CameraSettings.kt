@@ -125,6 +125,11 @@ data class CameraSettings(
      * (MotionRecording), to stabilize them afterwards.
      */
     val videoMotionData: Boolean = false,
+    /**
+     * Experimental, with [videoMotionData]: after each recording a stabilized copy is rendered from the motion data and
+     * saved beside the video (`stab/`).
+     */
+    val videoStabilizeAfter: Boolean = true,
     /** Video stabilization while recording (video mode only; it crops the picture a little). */
     val videoStabilization: Boolean = false,
     /** Video mode records a flat Apple Log picture without the look, to be graded later (the web video page). */
@@ -368,6 +373,7 @@ object CameraSettingsStore {
             trackFocus = p.getBoolean("trackFocus", d.trackFocus),
             experimental = p.getBoolean("experimental", d.experimental),
             videoMotionData = p.getBoolean("videoMotionData", d.videoMotionData),
+            videoStabilizeAfter = p.getBoolean("videoStabilizeAfter", d.videoStabilizeAfter),
             videoStabilization = p.getBoolean("videoStabilization", d.videoStabilization),
             flatVideo = p.getBoolean("flatVideo", d.flatVideo),
             videoQuality = runCatching { VideoQuality.valueOf(p.getString("videoQuality", null)!!) }.getOrDefault(d.videoQuality),
@@ -450,6 +456,7 @@ object CameraSettingsStore {
             .putBoolean("trackFocus", s.trackFocus)
             .putBoolean("experimental", s.experimental)
             .putBoolean("videoMotionData", s.videoMotionData)
+            .putBoolean("videoStabilizeAfter", s.videoStabilizeAfter)
             .putBoolean("videoStabilization", s.videoStabilization)
             .putBoolean("flatVideo", s.flatVideo)
             .putString("videoQuality", s.videoQuality.name)

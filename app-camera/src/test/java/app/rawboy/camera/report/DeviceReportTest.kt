@@ -74,7 +74,7 @@ class DeviceReportTest {
             "choice: automatic",
             "layers: neutral + qualcomm + oneplus + cph2447",
             "calibration: own",
-            "lenses: LensProfile(standaloneOverLogical=true)",
+            "lenses: LensProfile(standaloneOverLogical=true, motionGain={})",
             "preview: PreviewProfile(color=CameraSaturation(SrgbPreviewColor, {3=1.25}), curveAtEvenPoints=true, level=STILL_WHITE_BALANCED, liftsShadows=false)",
             "camera ids: 0, 1, 2, 3",
             "back W: camera 3, 14.2 mm, f/2.2, RAW 4000x3000, preview 1920x1440, max res -, flash yes",

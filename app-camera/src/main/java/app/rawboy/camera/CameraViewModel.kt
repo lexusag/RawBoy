@@ -23,6 +23,7 @@ import app.rawboy.auto.looks.LookApplier
 import app.rawboy.camera.capture.CameraController
 import app.rawboy.camera.capture.MotionRecording
 import app.rawboy.camera.capture.MotionSensors
+import app.rawboy.camera.stab.VideoStabilizer
 import app.rawboy.camera.capture.ViewfinderGain
 import app.rawboy.camera.platform.ActivePlatform
 import app.rawboy.camera.report.DeviceReport
@@ -388,6 +389,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         applyStabilization()
     }
 
+    /** Experimental: a stabilized copy after each recording with motion data ([VideoStabilizer]). */
+    fun setVideoStabilizeAfter(on: Boolean) = change { it.copy(videoStabilizeAfter = on) }
+
     /** The recording's motion data ([MotionRecording]), with the recorder it belongs to. */
     private var motion: MotionRecording? = null
     private var motionFor: VideoRecorder? = null
@@ -588,12 +592,16 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 withContext(Dispatchers.IO + NonCancellable) {
                     if (uri != null) mr.finish(r.startNs, r.clockOffsetNs.takeIf { it != Long.MIN_VALUE } ?: 0L) else mr.abort()
                 }
+                if (uri != null && _settings.value.videoStabilizeAfter) {
+                    VideoStabilizer.enqueue(app, uri, r.name, mr.file, platform.lenses.motionGain) { _message.value = it }
+                }
             }
             _videoSink.value = null
             _recordingMs.value = null
             applyStabilization() // a switch flipped during the recording takes effect now
             _message.value = when {
                 uri != null && failure != null -> "$failure. Video saved to Movies/${Edition.FOLDER}"
+                uri != null && m != null && _settings.value.videoStabilizeAfter -> "Video saved to Movies/${Edition.FOLDER}; stabilizing a copy…"
                 uri != null && m != null -> "Video saved to Movies/${Edition.FOLDER} (motion data saved too)"
                 uri != null -> "Video saved to Movies/${Edition.FOLDER}"
                 failure != null -> failure
