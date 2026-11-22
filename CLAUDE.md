@@ -1101,6 +1101,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   `.cube` headers intact, record RawBoy's changes in `CHANGELOG.txt` (written by the generator), and don't use the
   name "spektrafilm" in app branding (factual credit only, as RawBoy Camera's Settings does).
 - **Camera features doc:** whenever a camera feature is added, changed, removed or ported between Android and iOS, update `docs/features-camera.md` in the same change (the feature row, the Android/iOS marks, and the "What iOS lacks" list), as well as `docs/camera.md`.
+- **Camera translations:** whenever user-visible text is added or changed in the Android camera (anything passed through `tr("...")`), add or update its Ukrainian line in `StringsUk.kt` in the same change, and keep `StringsTest` passing. iOS isn't translated yet; a future iOS String Catalog needs the same treatment.
 - **Features doc:** whenever a feature of Pro, Auto, Browse, Packer or Desktop is added, changed, removed or ported between platforms, update `docs/features.md` (the feature row and the platform marks) in the same change.
 - Update the docs with each user-visible change: the app's page in `docs/` (RawBoy's controls table is
   `docs/rawboy.md`) and a new entry at the top of `CHANGELOG.md`. The owner commits.
