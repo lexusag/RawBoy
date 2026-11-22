@@ -35,6 +35,7 @@ import app.rawboy.export.ExportFormat
 import app.rawboy.export.ExportSettings
 import app.rawboy.view.CompactSlider
 import app.rawboy.view.ExportFrameControls
+import app.rawboy.view.LongSidePicker
 import kotlin.math.roundToInt
 
 /**
@@ -99,24 +100,22 @@ fun ExportOptions(
                     ) { Text(format.name) }
                 }
             }
-            var open by remember { mutableStateOf(false) }
-            Box {
-                TextButton(onClick = { open = true }, enabled = enabled) {
-                    Text(sizeLabel(settings.maxLongSide))
-                    Icon(Icons.Default.ArrowDropDown, contentDescription = null)
-                }
-                DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                    AutoViewModel.EXPORT_SIZES.forEach { size ->
-                        DropdownMenuItem(
-                            text = { Text(sizeLabel(size)) },
-                            onClick = {
-                                open = false
-                                onChange(settings.copy(maxLongSide = size))
-                            },
-                        )
-                    }
-                }
-            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "Size",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.width(88.dp),
+            )
+            LongSidePicker(
+                value = settings.maxLongSide,
+                presets = AutoViewModel.EXPORT_SIZES,
+                fullLabel = "Original",
+                onChange = { onChange(settings.copy(maxLongSide = it)) },
+                modifier = Modifier.weight(1f).padding(end = 8.dp),
+                enabled = enabled,
+            )
         }
         when (settings.format) {
             ExportFormat.JPEG -> CompactSlider(
@@ -178,5 +177,3 @@ fun ExportOptions(
         )
     }
 }
-
-private fun sizeLabel(maxLongSide: Int?) = if (maxLongSide == null) "Original" else "$maxLongSide px"

@@ -362,7 +362,7 @@ final class AutoViewModel: ObservableObject {
         s.format = defaults.string(forKey: AutoViewModel.exportFormatKey)
             .flatMap(ExportFormat.init(rawValue:)) ?? s.format
         let size = defaults.integer(forKey: AutoViewModel.exportSizeKey)
-        s.maxLongSide = AutoViewModel.exportSizes.contains(size) ? size : nil
+        s.maxLongSide = ExportSettings.longSideRange.contains(size) ? size : nil
         if let q = defaults.object(forKey: AutoViewModel.exportQualityKey) as? Int { s.jpegQuality = q.clamped(1, 100) }
         if defaults.integer(forKey: AutoViewModel.exportBitsKey) == 8 { s.tiffBits = 8 }
         s.photoFrame = defaults.string(forKey: AutoViewModel.exportPhotoFrameKey)

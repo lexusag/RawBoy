@@ -122,6 +122,7 @@ Web, Desktop and iOS take every field of `DevelopParams` except where noted (che
 | Help sheet, version, licences, Ko-fi link | ≤1.1.1; 1.12.2 | ✓ | ✓ 1.17.0; version 1.17.6 | ✓ | ✓ | |
 | Zoom hint at the foot of the photo | ≤1.1.1 | ✓ | ? | ? | ✓ | |
 | Export JPEG (jpegli 4:4:4), TIFF 8/16, sizes, EXIF | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
+| **Custom export long side** (Export dialog › Size › Custom…: 64–20000 px, whole pixels; Android Pro now has the Size setting too, remembered) | unreleased | ✓ | ✓ | ✓ | ✓ | `ExportSettings.parseLongSide` (Kotlin/TS/Swift), `LongSidePicker` / `LongSideSelect`; photos are never enlarged |
 | Export Frame (date stamp, Pentax / Contax 645) | 1.16.12 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
 | Film scan 1.5× | 1.10.0 | ✓ | ✓ 1.17.4 | ✓ 1.17.4 | ✓ | |
 | Send to Auto (one photo) / back | ≤1.1.1 | ✓ | ✓ 1.17.8 (To Auto) | — | ✓ | iOS has no edits file |
@@ -159,7 +160,7 @@ Web, Desktop and iOS take every field of `DevelopParams` except where noted (che
 | Filter: focal length, Unedited | 1.12.6; 1.17.10 | ✓ | ✓ 1.17.8 / 1.17.10 | — | — | |
 | **ISO beside each photo** (grid and photo view) | ≤1.1.1 | ✓ | ✓ unreleased | ✓ unreleased | — | Shared SwiftUI cells and photo view |
 | Select: ⌘-click, ⇧-click range, ⌘A, Esc | ≤1.1.1 | ✓ | ✓ 1.17.2 | ✓ long-press | ✓ | Desktop (unreleased): after Esc or Cancel, the first ⇧-click selects only that photo and starts a new range, as on the web |
-| Export all / selected, JPEG / TIFF, sizes, Frame, Film scan | ≤1.1.1 | ✓ | ✓ 1.17.2 | ✓ | ✓ | 5600 px size ≤1.1.1 |
+| Export all / selected, JPEG / TIFF, sizes, Frame, Film scan | ≤1.1.1 | ✓ | ✓ 1.17.2 | ✓ | ✓ | 5600 px size ≤1.1.1; custom long side (Size › Custom…, 64–20000 px) unreleased |
 | **Export file name template** (`{name}`, `{date}`, `{look}`, `#`…) | 1.14.3 | ✓ | ✓ unreleased | — | — | `NameTemplate.swift`, a port of `NameTemplate.ts` with its tests. Desktop never overwrites now (`-001`, `-002`), as the web; it used to replace `NAME-auto.jpg`. iOS keeps `<name>-auto` (no field in its sheet) |
 | **Export progress: elapsed and time left** | 1.15.1 | ✓ | ✓ unreleased | ✓ unreleased | — | `BatchTime.swift`, the web's estimate |
 | Stop a batch export | 1.1.4 | ✓ | ✓ 1.17.2 | ✓ | ✓ | |

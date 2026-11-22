@@ -1,3 +1,9 @@
+**Pro and Auto: custom export long side (2026-11-22)**
+
+- The Export size has a **Custom…** entry beside the presets (Pro: 6000 / 4000 / 3000 / 2048; Auto: 5600 / 4096 / 2048 / 1080): type the long side in pixels, 64–20000, whole numbers only. A value outside the range or with anything but digits shows the range and leaves the last good size (the field never changes the export until it is valid). Android, iOS, Desktop and web; `ExportSettings.parseLongSide` (Kotlin, TS, Swift) is the one rule, `LongSidePicker` (Compose, SwiftUI) and `LongSideSelect` (web) the control. Saved sizes outside the presets are now kept (Auto used to drop them on load).
+- Android Pro had no Size setting in its Export dialog; it has the same presets as the other Pros now, and remembers the choice.
+- Tests: `LongSideTest` (engine), `ExportSettings.test.ts`, `LongSideTests` (Swift).
+
 **Esc closes an open menu first (2026-11-22)**
 
 - RawBoy Desktop's key monitor took Esc before the menu that was open (Auto: clear the selection, go back from a photo; Pro: put the tool down), so the menu stayed open and the screen behind it changed. `MenuTracking` (engine, macOS; `NSMenu` begin/end tracking notifications) lets Esc through while a menu is open, so it closes the menu alone.
@@ -32,6 +38,7 @@
 - **Settings › Language › Interface language**: *Phone* (the default, follows the phone's language), *English* or *Українська*. Choosing one changes the viewfinder, Settings, the help sheet, accessibility labels and messages at once, with no restart. Look and film stock names stay as they are.
 - How: `tr("English text")` (`app-camera/.../i18n/Strings.kt`) looks the text up in `StringsUk.kt` and shows the English when there is no entry, so adding a feature never breaks the screen, it just stays English until its line is added. The language is a Compose state set from `CameraSettings.language` (kept when settings are reset), so changing it redraws. Strings with values use `%s`. `StringsTest` checks the language rules and that every translation keeps its placeholders.
 - Written without an Android SDK here: not compiled or tried on a phone yet. Worth a look on the Pixel: Ukrainian text is longer than English, so check the Settings rows, the segmented choices and the viewfinder chips (AF ФІКС., СТЕЖЕННЯ, Ч/Б) in portrait and landscape. iOS is not translated yet.
+
 **Camera (Android): Collect tuning data, for tuning a phone without having it (2026-11-22)**
 
 - **Settings › Collect tuning data** (any build, under Share device report) keeps, for the next 10 shots, the viewfinder's and the shot's 512 px linear copies that only debug builds saved before (`DebugProbe.dump`), and RawBoy's own log lines (the app reads its own logcat, tags `RawBoyPlatform`, `RawBoyCamera`, `RawBoyViewfinder`, `RawBoyVideo`, `RawBoyProbe`, `RawBoy`, `RawBoyAuto`; appended after each shot, since the phone keeps only minutes). **Share tuning data** zips them with the device report and a README for the share sheet; **Delete** removes them. Nothing is sent otherwise (the camera has no network permission). First step of the remote phone bootstrap plan (tuning wizard and learned layer later).

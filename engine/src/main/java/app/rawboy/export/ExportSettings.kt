@@ -62,6 +62,19 @@ data class ExportSettings(
     /** When true (B&W mode), both [dateStamp] and [pentax645] render in neutral black-and-white. */
     val monochromeImprint: Boolean = false,
 ) {
+    companion object {
+        /** Custom long side limits in pixels (the same on every platform). */
+        const val MIN_LONG_SIDE = 64
+        const val MAX_LONG_SIDE = 20_000
+
+        /** A typed long side: whole pixels in [MIN_LONG_SIDE]..[MAX_LONG_SIDE], else null (blank, letters, fractions, out of range). */
+        fun parseLongSide(text: String): Int? {
+            val t = text.trim()
+            if (t.isEmpty() || t.length > 6 || !t.all { it in '0'..'9' }) return null
+            return t.toInt().takeIf { it in MIN_LONG_SIDE..MAX_LONG_SIDE }
+        }
+    }
+
     /** Output dimensions including any [PhotoFrame.PENTAX_645] / [PhotoFrame.CONTAX_645] film rebate. */
     fun outputSize(outputWidth: Int, outputHeight: Int): Pair<Int, Int> {
         val (w, h) = BandDownscaler.outputSize(outputWidth, outputHeight, maxLongSide)
@@ -130,6 +143,7 @@ object ExportSettingsStore {
             format = runCatching { ExportFormat.valueOf(p.getString("format", null)!!) }.getOrDefault(defaults.format),
             jpegQuality = p.getInt("jpegQuality", defaults.jpegQuality).coerceIn(1, 100),
             tiffBits = p.getInt("tiffBits", defaults.tiffBits).let { if (it == 8) 8 else 16 },
+            maxLongSide = p.getInt("maxLongSide", 0).takeIf { it in ExportSettings.MIN_LONG_SIDE..ExportSettings.MAX_LONG_SIDE },
             filmScan = p.getBoolean("filmScan", defaults.filmScan),
             photoFrame = runCatching { PhotoFrame.valueOf(p.getString("photoFrame", null)!!) }.getOrDefault(defaults.photoFrame),
             dateStampFormat = runCatching { DateStampFormat.valueOf(p.getString("dateStampFormat", null)!!) }.getOrDefault(defaults.dateStampFormat),
@@ -147,6 +161,7 @@ object ExportSettingsStore {
             .putString("format", settings.format.name)
             .putInt("jpegQuality", settings.jpegQuality)
             .putInt("tiffBits", settings.tiffBits)
+            .putInt("maxLongSide", settings.maxLongSide ?: 0)
             .putBoolean("filmScan", settings.filmScan)
             .putString("photoFrame", settings.photoFrame.name)
             .putString("dateStampFormat", settings.dateStampFormat.name)

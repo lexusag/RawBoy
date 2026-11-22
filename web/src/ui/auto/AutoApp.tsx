@@ -28,6 +28,7 @@ import { DenoiseIcon } from '../common/DenoiseIcon';
 import { UndoIcon } from '../common/UndoIcon';
 import { AppSwitcher, HelpButton } from '../common/AppNav';
 import { EXTENSIONS } from '../../engine/export/ExportSettings';
+import { LongSideSelect } from '../common/LongSideSelect';
 import { ExportFrameControls } from '../common/ExportFrameControls';
 import { DEFAULT_NAME_TEMPLATE, NAME_KEYWORDS } from '../../engine/export/NameTemplate';
 import { activeLook, availableFilterOptions, EDITS_NAME, EXPORT_SIZES, hasFilmLeak, isFilterActive, lookName, paramsOf, SETTINGS, type AutoPhoto, type AutoStore, type BatchExport, type ImportMode, type LookMode } from './AutoStore';
@@ -1512,16 +1513,7 @@ function ExportOptions({ store, disabled }: { store: AutoStore; disabled: boolea
             </button>
           ))}
         </div>
-        <select
-          aria-label="Export size"
-          value={s.maxLongSide ?? ''}
-          disabled={disabled}
-          onChange={(e) => store.setExportSettings({ ...s, maxLongSide: e.target.value ? Number(e.target.value) : null })}
-        >
-          {EXPORT_SIZES.map((v) => (
-            <option key={v ?? 'full'} value={v ?? ''}>{v ? `${v} px` : 'Original size'}</option>
-          ))}
-        </select>
+        <LongSideSelect label="Export size" value={s.maxLongSide} presets={EXPORT_SIZES} fullLabel="Original size" disabled={disabled} onChange={(v) => store.setExportSettings({ ...s, maxLongSide: v })} />
       </div>
       <div className="import-mode-row export-options">
         <span className="import-mode-label" />

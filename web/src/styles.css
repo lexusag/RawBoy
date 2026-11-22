@@ -3113,3 +3113,17 @@ line.curve-grid,
 .note.error {
   color: #ff8a80;
 }
+
+.long-side-custom {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.long-side-custom input[aria-invalid='true'] {
+  border-color: var(--accent);
+}
+
+.long-side-custom small.error {
+  color: var(--accent);
+}

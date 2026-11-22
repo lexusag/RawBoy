@@ -218,7 +218,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
             format = runCatching { ExportFormat.valueOf(prefs.getString(KEY_EXPORT_FORMAT, null)!!) }.getOrDefault(SETTINGS.format),
             jpegQuality = prefs.getInt(KEY_EXPORT_QUALITY, SETTINGS.jpegQuality).coerceIn(1, 100),
             tiffBits = if (prefs.getInt(KEY_EXPORT_BITS, SETTINGS.tiffBits) == 8) 8 else 16,
-            maxLongSide = prefs.getInt(KEY_EXPORT_SIZE, 0).takeIf { it in EXPORT_SIZES },
+            maxLongSide = prefs.getInt(KEY_EXPORT_SIZE, 0).takeIf { it in ExportSettings.MIN_LONG_SIDE..ExportSettings.MAX_LONG_SIDE },
             filmScan = prefs.getBoolean(KEY_EXPORT_SCAN, false),
             photoFrame = runCatching { PhotoFrame.valueOf(prefs.getString(KEY_EXPORT_FRAME, null)!!) }.getOrDefault(SETTINGS.photoFrame),
             dateStampFormat = runCatching { DateStampFormat.valueOf(prefs.getString(KEY_EXPORT_DATE_FORMAT, null)!!) }.getOrDefault(SETTINGS.dateStampFormat),
