@@ -392,6 +392,11 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     /** Experimental: a stabilized copy after each recording with motion data ([VideoStabilizer]). */
     fun setVideoStabilizeAfter(on: Boolean) = change { it.copy(videoStabilizeAfter = on) }
 
+    init {
+        // A stabilized copy being rendered waits while a new video records: the recording gets the GPU and encoder.
+        viewModelScope.launch { _recordingMs.collect { VideoStabilizer.recording = it != null } }
+    }
+
     /** The recording's motion data ([MotionRecording]), with the recorder it belongs to. */
     private var motion: MotionRecording? = null
     private var motionFor: VideoRecorder? = null

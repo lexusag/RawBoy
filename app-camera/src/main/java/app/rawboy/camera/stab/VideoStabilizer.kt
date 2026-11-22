@@ -44,6 +44,17 @@ object VideoStabilizer {
 
     private val _pending = MutableStateFlow(0)
 
+    /**
+     * True while the camera records: rendering pauses between frames (and a queued video waits), so the recording keeps
+     * the GPU and the video encoder to itself and drops no frames.
+     */
+    @Volatile
+    var recording = false
+
+    private fun waitWhileRecording() {
+        while (recording) Thread.sleep(100)
+    }
+
     /** Videos queued or being stabilized. */
     val pending: StateFlow<Int> = _pending
 
@@ -59,6 +70,7 @@ object VideoStabilizer {
                 .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "RawBoyCamera:stabilize")
             lock.acquire(WAKE_MS)
             try {
+                waitWhileRecording()
                 done(stabilize(app, video, name, motion, gain))
             } catch (e: Throwable) {
                 Log.w(TAG, "stabilizing $name failed", e)
@@ -94,7 +106,7 @@ object VideoStabilizer {
                 fd ?: throw IOException("Could not open the stabilized file")
                 val muxer = MediaMuxer(fd.fileDescriptor, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
                 try {
-                    StabRenderer(plan, { it.setDataSource(context, video, null) }, muxer).run()
+                    StabRenderer(plan, { it.setDataSource(context, video, null) }, muxer).run { waitWhileRecording() }
                     muxer.stop()
                 } finally {
                     muxer.release()
