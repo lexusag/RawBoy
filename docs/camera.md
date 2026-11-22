@@ -177,6 +177,14 @@ shows them.
   video probe's result (the way video is recorded on this phone, see Video); and the calibration learned per lens. One `key: value` per line in a fixed order, numbers written the same in every
   language, so two phones' reports compare line by line. It holds no serial numbers, accounts, locations, file names or
   photos.
+- **Collect tuning data** (Android; Settings, under Share device report): for the next 10 shots, keeps a 512 px copy of
+  what the viewfinder showed at the shutter and of the photo's raw (linear, no metadata), with the numbers behind each
+  (lens, exposure, the preview's colour and white balance) and the camera's own log lines. Take photos as usual: indoors
+  and outdoors, every lens and the selfie camera. **Share tuning data** zips them with the device report and opens the
+  share sheet (email, Drive, a GitHub issue); **Delete** removes them, **Stop collecting** stops early. Nothing leaves
+  the phone until you share it, and the camera has no network access. The file holds no full-size photos, locations or
+  sound; the log may show the photos' file names. This is how a phone is tuned without having it in hand
+  ([phone profiles](camera-platforms.md#adding-a-phone)).
 
 ## Black and white
 

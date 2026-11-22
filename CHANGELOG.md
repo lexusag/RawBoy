@@ -1,3 +1,9 @@
+**Camera (Android): Collect tuning data, for tuning a phone without having it (2026-11-22)**
+
+- **Settings › Collect tuning data** (any build, under Share device report) keeps, for the next 10 shots, the viewfinder's and the shot's 512 px linear copies that only debug builds saved before (`DebugProbe.dump`), and RawBoy's own log lines (the app reads its own logcat, tags `RawBoyPlatform`, `RawBoyCamera`, `RawBoyViewfinder`, `RawBoyVideo`, `RawBoyProbe`, `RawBoy`, `RawBoyAuto`; appended after each shot, since the phone keeps only minutes). **Share tuning data** zips them with the device report and a README for the share sheet; **Delete** removes them. Nothing is sent otherwise (the camera has no network permission). First step of the remote phone bootstrap plan (tuning wizard and learned layer later).
+- How: `report/TuningData.kt` (state in the `tuning` preferences, copies in `files/tuning`, numbered on across collections and restarts), `DebugProbe.writeCopy` (shared with the debug dumps) and `describe(always)`, `CameraViewModel.writeTuningBundle`, `CameraActivity.shareTuningData`, `TuningDataControls` in Settings. `tools/camera_fit/fit.py` reads such a zip directly and fits every pair when no id is given.
+- Written without an Android SDK here: CI compiles it; not tried on a phone yet.
+
 **Camera (Android, experimental): viewfinder from RAW, a prototype (2026-11-22)**
 
 - **Settings › Experimental › Viewfinder from RAW** (off by default; offered only where the phone profile's new `PreviewProfile.rawViewfinder` is true: the Tensor layer for now) streams RAW_SENSOR frames next to the preview and builds the viewfinder from them instead of the ISP's preview: no preview colour matrix, tone-curve inverse or learned per-lens preview scale. The viewfinder's gain is then only what the still gains over the preview frame (`stillGain`, or Long exposure's), and no preview calibration is learned or metered while it is on.

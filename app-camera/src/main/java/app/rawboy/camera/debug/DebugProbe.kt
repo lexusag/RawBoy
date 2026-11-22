@@ -96,9 +96,12 @@ object DebugProbe {
         }
     }
 
-    /** A preview result's colour, exposure and lens fields, for the shutter's log line. */
-    fun describe(r: CaptureResult?): String {
-        if (!enabled || r == null) return ""
+    /**
+     * A preview result's colour, exposure and lens fields, for the shutter's log line; [always] also in release
+     * builds (Settings › Collect tuning data, `report/TuningData.kt`).
+     */
+    fun describe(r: CaptureResult?, always: Boolean = false): String {
+        if (!(enabled || always) || r == null) return ""
         val ccm = r.get(CaptureResult.COLOR_CORRECTION_TRANSFORM)?.let { t -> (0 until 9).joinToString(" ") { "%.3f".format(t.getElement(it % 3, it / 3).toFloat()) } }
         val g = r.get(CaptureResult.COLOR_CORRECTION_GAINS)
         return "ccm [$ccm] gains ${g?.let { "%.3f %.3f %.3f %.3f".format(it.red, it.greenEven, it.greenOdd, it.blue) }} " +
@@ -116,8 +119,13 @@ object DebugProbe {
     /** Saves a 512 px linear copy (half floats, RGB) as files/debug/[name].f16 with a .txt beside it. */
     fun dump(context: Context, name: String, image: PreviewImage, note: String) {
         if (!enabled) return
+        writeCopy(File(context.filesDir, "debug"), name, image, note)
+    }
+
+    /** Writes [image] as [dir]/[name].f16 (half floats, RGB) with its size and [note] in [name].txt, in any build. */
+    fun writeCopy(dir: File, name: String, image: PreviewImage, note: String) {
         runCatching {
-            val dir = File(context.filesDir, "debug").apply { mkdirs() }
+            dir.mkdirs()
             val bytes = ByteArray(image.pixels.capacity())
             image.pixels.duplicate().apply { rewind() }.get(bytes)
             File(dir, "$name.f16").writeBytes(bytes)

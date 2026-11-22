@@ -28,6 +28,7 @@ import app.rawboy.camera.capture.ViewfinderGain
 import app.rawboy.camera.platform.ActivePlatform
 import app.rawboy.camera.report.DeviceReport
 import app.rawboy.camera.report.DeviceReportCollector
+import app.rawboy.camera.report.TuningData
 import app.rawboy.camera.platform.ChipVendor
 import app.rawboy.camera.platform.PreviewLevel
 import app.rawboy.camera.debug.DebugProbe
@@ -158,6 +159,27 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         dir.listFiles()?.forEach { it.delete() }
         val model = resolvedPlatform.phone.model.replace(Regex("[^A-Za-z0-9_-]"), "_").ifEmpty { "phone" }
         val file = File(dir, "rawboy-camera-device-report-$model.txt").apply { writeText(text) }
+        FileProvider.getUriForFile(app, "${app.packageName}.reports", file)
+    }
+
+    /** Settings › Collect tuning data ([TuningData]): shots still to collect and shots collected. */
+    val tuning = TuningData.state
+
+    fun startTuning() = TuningData.start(app)
+    fun stopTuning() = TuningData.stop(app)
+    fun clearTuning() = TuningData.clear(app)
+
+    /**
+     * Settings › Share tuning data: [TuningData]'s copies and log with the device report, zipped into the cache's
+     * reports folder (replacing what was there), as a content URI from the app's FileProvider. Nothing is sent anywhere.
+     */
+    suspend fun writeTuningBundle(): Uri = withContext(Dispatchers.IO) {
+        val report = DeviceReport.render(DeviceReportCollector.collect(app, resolvedPlatform, controller))
+        val dir = File(app.cacheDir, "reports").apply { mkdirs() }
+        dir.listFiles()?.forEach { it.delete() }
+        val model = resolvedPlatform.phone.model.replace(Regex("[^A-Za-z0-9_-]"), "_").ifEmpty { "phone" }
+        val file = File(dir, "rawboy-camera-tuning-$model.zip")
+        TuningData.writeBundle(app, report, file)
         FileProvider.getUriForFile(app, "${app.packageName}.reports", file)
     }
 
@@ -691,6 +713,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     init {
         DebugProbe.init(app)
+        TuningData.init(app)
         ShotSaver.attachView()
         controller.rawFrames = rawFrames
         controller.setRawViewfinder(rawViewfinderOn(_settings.value))
@@ -1570,11 +1593,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 "${settings.exposureCompensationEv} EV")
         }
         val shotId = ShotSaver.beginCapture(app)
-        DebugProbe.describe(controller.lastPreviewResult).takeIf { it.isNotEmpty() }?.let { probe ->
+        DebugProbe.describe(controller.lastPreviewResult, always = TuningData.collecting).takeIf { it.isNotEmpty() }?.let { probe ->
             Log.d(TAG, "shutter $shotId ${settings.lensKey(hiRes)} result: $probe")
             live?.let { l ->
-                DebugProbe.dump(app, "$shotId-vf", l.base.base, "lens ${settings.lensKey(hiRes)} scale ${l.scale} key ${l.stats.key} " +
-                    "colour ${_frame.value?.color?.joinToString(" ")} $probe")
+                val note = "lens ${settings.lensKey(hiRes)} scale ${l.scale} key ${l.stats.key} colour ${_frame.value?.color?.joinToString(" ")} $probe"
+                DebugProbe.dump(app, "$shotId-vf", l.base.base, note)
+                TuningData.saveViewfinder(app, shotId, l.base.base, note)
             }
         }
         activeCaptures++
