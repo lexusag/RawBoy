@@ -595,40 +595,6 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         }
     }
 
-    /**
-     * Lenses whose OIS gives no lens-shift samples ([watchOisSamples]), by [lensKey]. With motion data on, their OIS
-     * is turned off: the gyro records the hand's motion, and an OIS nobody can read would move the picture by an
-     * unknown part of it (Pixel 9 Pro T2 and T3: the picture moved ~0.57-0.80 of what the gyro said). Advertised
-     * STATISTICS_INFO_AVAILABLE_OIS_DATA_MODES doesn't tell: W and T send samples without listing them, T3 lists
-     * them and sends none. Camera thread.
-     */
-    private val noOisSamples = mutableSetOf<String>()
-    private val oisSamplesSeen = mutableSetOf<String>()
-    private val oisEmptyFrames = mutableMapOf<String, Int>()
-
-    private fun lensKey(inf: Info) = "${inf.openId}/${inf.physicalId}"
-
-    /**
-     * While motion data is on and nothing records: a lens whose OIS is on but whose results carry no OIS samples for
-     * [OIS_EMPTY_FRAMES] frames joins [noOisSamples], and the preview restarts with its OIS off, before the shutter.
-     */
-    private fun watchOisSamples(inf: Info, r: CaptureResult) {
-        if (!motionData || motionListener != null) return
-        val key = lensKey(inf)
-        if (key in noOisSamples || key in oisSamplesSeen) return
-        if (r.get(CaptureResult.LENS_OPTICAL_STABILIZATION_MODE) != CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_ON) return
-        if (!r.get(CaptureResult.STATISTICS_OIS_SAMPLES).isNullOrEmpty()) {
-            oisSamplesSeen += key
-            return
-        }
-        val n = (oisEmptyFrames[key] ?: 0) + 1
-        oisEmptyFrames[key] = n
-        if (n < OIS_EMPTY_FRAMES) return
-        noOisSamples += key
-        Log.i(TAG, "${inf.label}: OIS gives no samples, off while motion data is recorded")
-        handler.post { runCatching { repeatPreview() } }
-    }
-
     private fun hasOisData(inf: Info): Boolean =
         inf.characteristics.get(CameraCharacteristics.STATISTICS_INFO_AVAILABLE_OIS_DATA_MODES)
             ?.contains(CameraMetadata.STATISTICS_OIS_DATA_MODE_ON) == true
@@ -665,7 +631,6 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
                 val lens = lensResult(result)
                 lastPreviewResult = lens
                 motionListener?.invoke(lens)
-                watchOisSamples(inf, lens)
                 val state = frameState(inf, lens, result.get(CaptureResult.CONTROL_AE_EXPOSURE_COMPENSATION))
                 if (state.compensationSteps == 0) {
                     residualAtZero = residual(state)
@@ -1770,8 +1735,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         // The Pixel's preview template already has OIS on, so video mode with the switch off must say OFF
         // explicitly (it was left alone and the switch changed nothing). Photos (null) leave the template's.
         stabilizeVideo?.let { switch ->
-            // Motion data off-switches an OIS that can't be read (see noOisSamples).
-            val on = switch && !(motionData && lensKey(inf) in noOisSamples)
+            val on = switch
             if (hasOis(inf)) setForLens(
                 CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE,
                 if (on) CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_ON else CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_OFF,
@@ -1995,8 +1959,6 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
 
     companion object {
         private const val TAG = "RawBoyCamera"
-        /** Frames with OIS on and no OIS samples before a lens counts as unreadable (one second at 30 fps). */
-        private const val OIS_EMPTY_FRAMES = 30
 
         /** Focus-flash: how long the torch is on before the AF trigger, and how long AF may take with it. */
         private const val TORCH_WARMUP_MS = 300L

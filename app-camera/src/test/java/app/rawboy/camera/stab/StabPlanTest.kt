@@ -14,7 +14,7 @@ class StabPlanTest {
     private val frameNs = 33_333_333L
 
     /** [frames] frames at 30 fps, every [dropEvery]th one missing from the file; gyro at 400 Hz from [rate] (rad/s per axis, by time). */
-    private fun data(frames: Int, dropEvery: Int = 0, rate: (Double) -> DoubleArray = { doubleArrayOf(0.0, 0.0, 0.0) }): MotionData {
+    private fun data(frames: Int, dropEvery: Int = 0, ois: Int = 0, rate: (Double) -> DoubleArray = { doubleArrayOf(0.0, 0.0, 0.0) }): MotionData {
         val t0 = 1_000_000_000L
         val gyroT = LongArray(((frames + 4) * frameNs / 2_500_000L).toInt()) { t0 - 2 * frameNs + it * 2_500_000L }
         val gyro = FloatArray(gyroT.size * 6)
@@ -23,7 +23,7 @@ class StabPlanTest {
             gyro[i * 6] = r[0].toFloat(); gyro[i * 6 + 1] = r[1].toFloat(); gyro[i * 6 + 2] = r[2].toFloat()
         }
         val list = (0 until frames).map { i ->
-            MotionFrame(t0 + i * frameNs, 10_000_000L, frameNs, 20_000_000L, 0f, 6.9f, 0, "", intArrayOf(-1, -1, -1, -1),
+            MotionFrame(t0 + i * frameNs, 10_000_000L, frameNs, 20_000_000L, 0f, 6.9f, ois, "", intArrayOf(-1, -1, -1, -1),
                 floatArrayOf(2844f, 2844f, 2040f, 1536f, 0f), LongArray(0), FloatArray(0), FloatArray(0))
         }
         val encoded = list.filterIndexed { i, _ -> dropEvery == 0 || i % dropEvery != dropEvery - 1 }
@@ -78,6 +78,14 @@ class StabPlanTest {
     @Test
     fun selfiesAreLeftAlone() {
         assertNull(StabPlan.make(input(1440, 1920, 0, front = true), data(30), 0.7))
+    }
+
+    @Test
+    fun unreadableOisIsLeftAlone() {
+        // OIS on with no lens-shift samples (Pixel 9 Pro T2, T3): the optical stabilization keeps the video.
+        assertTrue(StabPlan.unreadOis(data(30, ois = 1)))
+        assertNull(StabPlan.make(input(1920, 1440, 3), data(30, ois = 1), 0.7))
+        assertNotNull(StabPlan.make(input(1920, 1440, 3), data(30, ois = 0), 0.7))
     }
 
     @Test

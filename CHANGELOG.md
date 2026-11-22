@@ -5,7 +5,7 @@
 **Camera (Android, experimental): motion data from the first frame, and no unreadable OIS (2026-11-22)**
 
 - The gyroscope started with the recording, and its first sample came 23-106 ms after the video's first frame (all 23 test clips of 2026-11-21), so the start of every clip couldn't be stabilized. The sensors now run while video mode with motion data is on (`MotionSensors`, stopped when the app leaves the screen) and keep the last half second, which a recording takes over at its start.
-- Lenses whose OIS sends no lens-shift samples (Pixel 9 Pro T2 and T3: their picture moved only 0.57-0.80 of what the gyro said, so the stabilizer over-corrected) get OIS off while motion data is on. Found by watching the preview before recording: OIS on and no samples for 30 frames (`CameraController.watchOisSamples`); the advertised OIS data modes don't tell (W and T send samples without listing them, T3 lists them and sends none). The Optical stabilization switch still decides for W and T.
+- Lenses whose OIS sends no lens-shift samples (Pixel 9 Pro T2 and T3: their picture moved only 0.57-0.80 of what the gyro said) aren't stabilized in software while their OIS is on (`StabPlan.unreadOis`; message *Not stabilized: T2 keeps its optical stabilization*). Tried first: OIS off while motion data is on (found from the preview: OIS on and no samples for 30 frames); with T2's gain fitted and 1 s smoothing, the owner still found optical better ("shakey, but smooth"), so that was taken out again. With the Optical stabilization switch off they're stabilized in software.
 
 **Camera (Android): videos no longer drop frames (2026-11-21)**
 

@@ -86,6 +86,7 @@ object VideoStabilizer {
         val started = SystemClock.elapsedRealtime()
         val data = MotionData.read(motion.readBytes())
         val input = inputOf(data.headerJson)
+        if (StabPlan.unreadOis(data)) return "Not stabilized: ${input.label} keeps its optical stabilization"
         val g = gain[input.label]
         val plan = StabPlan.make(input, data, CROP, floatArrayOf(g?.x ?: 1f, g?.y ?: 1f))
             ?: return "This video can't be stabilized (selfie camera or no motion data)"

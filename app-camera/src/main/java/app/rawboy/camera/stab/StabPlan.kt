@@ -173,17 +173,23 @@ class StabPlan private constructor(
         const val EASE_S = 0.4
 
         /**
-         * Lenses whose OIS is on but sends no samples move the picture by only part of what the gyro says (Pixel 9
-         * Pro T2, 2026-11-21: 0.57 sideways, 0.80 up/down). Recordings since 2026-11-22 have OIS off there.
+         * True when the lens's optical stabilization was on and sent no lens-shift samples: the picture then moved by
+         * an unknown part of what the gyro says (Pixel 9 Pro T2, 2026-11-21: 0.57 sideways, 0.80 up/down), so such
+         * videos are left to the optical stabilization. With OIS off instead (2026-11-22), software T2 stayed behind
+         * optical (owner: optical "shakey, but smooth"), so those lenses keep their OIS.
          */
-        private val UNREAD_OIS = doubleArrayOf(0.80, 0.57, 1.0)
+        fun unreadOis(data: MotionData): Boolean =
+            data.frames.isNotEmpty() && data.frames.none { it.oisT.isNotEmpty() } &&
+                data.frames.map { it.oisMode }.sorted()[data.frames.size / 2] == 1
 
         /**
-         * The plan for [data], or null when it can't be stabilized (no gyro, no encoded frames, the selfie camera).
+         * The plan for [data], or null when it can't be stabilized (no gyro, no encoded frames, the selfie camera, an
+         * optical stabilization that can't be read: [unreadOis]).
          * [gain] is the lens's picture-per-gyro scale (x, y) over its focal length (`LensProfile.motionGain`).
          */
         fun make(input: StabInput, data: MotionData, crop: Double, gain: FloatArray = floatArrayOf(1f, 1f)): StabPlan? {
             if (input.front || data.gyroT.size < 2 || data.encoded.size < 4 || data.frames.isEmpty()) return null
+            if (unreadOis(data)) return null
             val streamW = max(input.width, input.height)
             val streamH = min(input.width, input.height)
             val frames = data.frames.associateBy { it.t }
@@ -198,13 +204,11 @@ class StabPlan private constructor(
             val oisT = LongArray(samples.size) { samples[it].first }
             val oisX = FloatArray(samples.size) { samples[it].second }
             val oisY = FloatArray(samples.size) { samples[it].third }
-            val oisOn = data.frames.map { it.oisMode }.sorted()[data.frames.size / 2] == 1
 
             // The camera's orientation (camera to world) at each gyro sample: camera rotation = (-gy, -gx, -gz) of
             // the gyro for the landscape stream, each axis scaled by the lens's measured gain.
-            val damp = if (oisOn && samples.isEmpty()) UNREAD_OIS else doubleArrayOf(1.0, 1.0, 1.0)
-            val ax = damp[0] * gain[1] // camera x rotation moves the picture up and down
-            val ay = damp[1] * gain[0]
+            val ax = gain[1].toDouble() // camera x rotation moves the picture up and down
+            val ay = gain[0].toDouble()
             val n = data.gyroT.size
             val orientations = arrayOfNulls<Quat>(n)
             orientations[0] = Quat.IDENTITY
@@ -214,7 +218,7 @@ class StabPlan private constructor(
                 val g1 = k * 6
                 val wx = -(data.gyro[g0 + 1] + data.gyro[g1 + 1]) / 2.0 * ax
                 val wy = -(data.gyro[g0] + data.gyro[g1]) / 2.0 * ay
-                val wz = -(data.gyro[g0 + 2] + data.gyro[g1 + 2]) / 2.0 * damp[2]
+                val wz = -(data.gyro[g0 + 2] + data.gyro[g1 + 2]) / 2.0
                 orientations[k] = (orientations[k - 1]!! * Quat.fromRotvec(wx * dt, wy * dt, wz * dt)).normalized()
             }
             val orient = orientations.requireNoNulls()
