@@ -288,8 +288,12 @@ fun CameraScreen(
         }
         val barButtons = @Composable {
             if (easy) {
-                // Only the flash and the way back to Settings (where Easy mode is switched off).
-                if (!videoMode && flashAvailable) FlashButton(settings.flash, screenFlashCamera, vm::cycleFlash)
+                // RAW, Frames, the flash and the way back to Settings (where Easy mode is switched off).
+                if (!videoMode) {
+                    RawButton(settings.keepDng) { vm.setKeepDng(!settings.keepDng) }
+                    FrameButton(settings.photoFrame) { vm.togglePhotoFrame() }
+                    if (flashAvailable) FlashButton(settings.flash, screenFlashCamera, vm::cycleFlash)
+                }
             } else if (!videoMode) {
                 RawButton(settings.keepDng) { vm.setKeepDng(!settings.keepDng) }
                 FrameButton(settings.photoFrame) { vm.togglePhotoFrame() }

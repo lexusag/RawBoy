@@ -45,7 +45,7 @@ lenses, burst merge), iOS drives AVFoundation (**ProRAW at 12 MP by default**, o
 | QR codes (Open, Join Wi-Fi, Email, Call, Message, Map, Copy) | 1.5.6 | ✓ ZXing | ✓ AVFoundation | |
 | Geotag (JPEG and DNG GPS tags) | 1.4.0 | ✓ | ✓ 1.4.7 | Android writes a full GPS IFD into the DNG (`DngGps`) |
 | Landscape layout (controls on the right edge) | 1.7.0 | ✓ | ✓ | |
-| **Easy mode** (Settings › Easy mode, off by default; prototype): viewfinder, lenses, flash, Photo / Video, Colour / B&W (default film stock, or Film + B&W on the default mono stock) and a 96 dp shutter; a short Settings sheet | unreleased | ✓ | — | Forces a plain shot without changing the stored settings (`CameraSettings.effective`): no DNG, frame, border, leak, Brightness/Warmth, timer, long exposure, tracking, flat video, motion data, histogram, grid, level or zoom buttons; merging on Auto; no hold-to-compare or loupe |
+| **Easy mode** (Settings › Easy mode, off by default; prototype): viewfinder, lenses, RAW, Frames, flash, Photo / Video, Colour / B&W (default film stock, or Film + B&W on the default mono stock) and a 96 dp shutter; a short Settings sheet | unreleased | ✓ | — | Forces a plain shot without changing the stored settings (`CameraSettings.effective`): no border, leak, Brightness/Warmth, timer, long exposure, tracking, flat video, motion data, histogram, grid, level or zoom buttons; merging on Auto; no hold-to-compare or loupe |
 | Lock-screen camera, double-press power button | 1.5.5; 1.5.6 | ✓ | — | iOS: not done (needs LockedCameraCapture) |
 | Opens fast and saves while locking right after a shot | 1.5.7 | ✓ foreground service + wake lock | n/a | |
 | Saves back off when memory is low | 1.10.9 | ✓ | ? | |

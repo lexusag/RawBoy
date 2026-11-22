@@ -283,19 +283,19 @@ and colours, with no per-lens calibration against the ISP's preview.
 **Settings › Easy mode** (off by default, the first switch under Language) turns RawBoy Camera into a plain point-and-shoot,
 for handing the phone to someone who just wants photos.
 
-- **Shown:** the viewfinder (tap to focus, pinch to zoom, AF LOCK ✕ to let go), the lens buttons, the flash button
+- **Shown:** the viewfinder (tap to focus, pinch to zoom, AF LOCK ✕ to let go), the lens buttons, RAW and Frames, the flash button
   (photo mode, phones with a flash or the selfie screen flash), Photo / Video, **Colour / B&W**, a bigger shutter (96 dp),
   the last photo and the selfie switch, and the Settings gear. Landscape: the lenses and Colour / B&W in a narrow column
   beside the shutter.
 - **Colour** is Film mode on the default film stock (Yellow Portrait 400); **B&W** is Film + B&W on the default
   black and white stock (Yellow Mono 400) with the Yellow filter, both at the default Strength. The full camera's own look picks stay as
   they were.
-- **Hidden:** the look menu, Film and B&W buttons, Brightness and Warmth, RAW, Frames and Burst buttons, the help button,
+- **Hidden:** the look menu, Film and B&W buttons, Brightness and Warmth, the Burst and help buttons,
   the timer and long exposure, the zoom buttons, grid, level and histogram, the focus ring's drag and loupe, and press
   and hold to see the photo without the look.
 - **Forced while it is on** (the stored settings keep their values, so switching it off brings everything back as it was):
-  no DNG, no frame or date stamp, no border, no random light leak, Brightness and Warmth 0, frame merging on Auto, no
-  timer or long exposure, no subject tracking, no flat video or motion data. Size, JPEG quality, HDR gain map and grain
+  no border, no random light leak, Brightness and Warmth 0, frame merging on Auto, no
+  timer or long exposure, no subject tracking, no flat video or motion data. RAW (and its lossy JPEG XL choice), the frame and its options, size, JPEG quality, HDR gain map and grain
   stay as set outside Easy mode.
 - **Settings** then shows only Language, Easy mode, Shutter sound, Geotag and QR codes (and the licences).
 - Lighter as well: no histogram or level work, no tracking copies.

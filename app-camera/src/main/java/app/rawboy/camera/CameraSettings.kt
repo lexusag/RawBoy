@@ -129,7 +129,7 @@ data class CameraSettings(
     val experimental: Boolean = false,
     /**
      * Easy mode (prototype, 2026-11-22): a point-and-shoot screen for someone who just wants photos (viewfinder, lenses,
-     * flash, Photo / Video, a big shutter) and a short Settings sheet. The other settings keep their values but take
+     * RAW, Frames, flash, Photo / Video, Colour / B&W, a big shutter) and a short Settings sheet. The other settings keep their values but take
      * no part while it is on: see [effective]. Off by default.
      */
     val easy: Boolean = false,
@@ -286,10 +286,11 @@ data class CameraSettings(
 
     /**
      * The settings that take part: these, or in [easy] mode these with everything the easy screen has no control for
-     * set to what a plain point-and-shoot does (no DNG, frame, border, light leak or Brightness/Warmth offset; merging on
+     * set to what a plain point-and-shoot does (no border, light leak or Brightness/Warmth offset; merging on
      * Auto; no timer, long exposure, subject tracking, flat video or motion data; no histogram, grid, level or zoom
      * buttons, which also spares their per-frame work). The look is Film mode's default stock at the default Strength,
-     * or with [easyMono] Film + B&W on the default mono stock and filter (owner's choice, 2026-11-22). Photo size,
+     * or with [easyMono] Film + B&W on the default mono stock and filter (owner's choice, 2026-11-22). RAW and Frames keep
+     * their top bar buttons and values (owner's choice). Photo size,
      * quality, HDR gain map, grain, QR codes, lens, flash and the sensor modes (max resolution, raw viewfinder) stay as
      * set. The stored values are untouched, so leaving easy mode brings them all back.
      */
@@ -302,14 +303,12 @@ data class CameraSettings(
         strength = LookApplier.DEFAULT_STRENGTH,
         brightness = 0f,
         warmth = 0f,
-        keepDng = false,
         burstMode = BurstMode.AUTO,
         selfTimer = 0,
         longExposure = 0,
         experimental = false,
         randomLightLeak = false,
         border = 0,
-        photoFrame = PhotoFrame.NONE,
         trackFocus = false,
         flatVideo = false,
         videoMotionData = false,

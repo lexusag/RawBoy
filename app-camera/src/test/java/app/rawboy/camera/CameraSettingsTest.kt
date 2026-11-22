@@ -30,13 +30,11 @@ class CameraSettingsTest {
         assertEquals(0f, e.brightness)
         assertEquals(0f, e.warmth)
         assertEquals(0f, e.exposureCompensationEv)
-        assertFalse(e.keepDng)
         assertEquals(BurstMode.AUTO, e.burstMode)
         assertEquals(0, e.activeSelfTimer)
         assertEquals(null, e.longExposureSpec(null, PreviewLevel.BOOSTED, 1f))
         assertFalse(e.randomLightLeak)
         assertEquals(0, e.border)
-        assertEquals(PhotoFrame.NONE, e.photoFrame)
         assertFalse(e.trackFocus || e.flatVideo || e.videoMotionData)
         assertFalse(e.showHistogram || e.showGrid || e.showLevel || e.showZoomControl)
         // Colour: Film mode on the default film stock; B&W: Film + B&W on the default mono stock.
@@ -46,13 +44,15 @@ class CameraSettingsTest {
         assertTrue(bw.filmMono)
         assertEquals(Edition.monoLook(Edition.defaultMonoLookId), bw.look)
         assertFalse(pro.copy(easyMono = true).effective.monoMode)
-        // What Easy mode leaves alone: size, quality, lens.
+        // What Easy mode leaves alone: RAW, frames, size, quality, lens.
+        assertTrue(e.keepDng)
+        assertEquals(PhotoFrame.DATE_STAMP, e.photoFrame)
         assertFalse(e.smallExport)
         assertEquals(90, e.jpegQuality)
         assertEquals("T", e.lens)
         // The stored settings keep the user's own values for when Easy mode is off again.
         assertEquals(40f, easy.brightness)
-        assertTrue(easy.keepDng)
+        assertEquals(BurstMode.ON, easy.burstMode)
         assertEquals(pro, easy.copy(easy = false).effective)
     }
 
