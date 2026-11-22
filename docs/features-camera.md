@@ -45,6 +45,7 @@ lenses, burst merge), iOS drives AVFoundation (**ProRAW at 12 MP by default**, o
 | QR codes (Open, Join Wi-Fi, Email, Call, Message, Map, Copy) | 1.5.6 | ✓ ZXing | ✓ AVFoundation | |
 | Geotag (JPEG and DNG GPS tags) | 1.4.0 | ✓ | ✓ 1.4.7 | Android writes a full GPS IFD into the DNG (`DngGps`) |
 | Landscape layout (controls on the right edge) | 1.7.0 | ✓ | ✓ | |
+| **Easy mode** (Settings › Easy mode, off by default; prototype): viewfinder, lenses, flash, Photo / Video and a 96 dp shutter; a short Settings sheet | unreleased | ✓ | — | Forces a plain shot without changing the stored settings (`CameraSettings.effective`): no DNG, frame, border, leak, Brightness/Warmth, timer, long exposure, tracking, flat video, motion data, histogram, grid, level or zoom buttons; merging on Auto; no hold-to-compare or loupe. Keeps the look chosen outside it |
 | Lock-screen camera, double-press power button | 1.5.5; 1.5.6 | ✓ | — | iOS: not done (needs LockedCameraCapture) |
 | Opens fast and saves while locking right after a shot | 1.5.7 | ✓ foreground service + wake lock | n/a | |
 | Saves back off when memory is low | 1.10.9 | ✓ | ? | |
@@ -92,6 +93,7 @@ screen flash**, **self-timer and long exposure**, **lossy JXL DNG**, **full-reso
 system 48 MP option, unchecked), **phone profiles, Share device report and Collect tuning data** (n/a on iOS: one hardware family),
 **Pixel workarounds** (YUV matrix, tone curve, extra black, manual flash exposure: iOS uses the camera's own flash AE).
 **Ukrainian translation and the language setting** (Android only: iOS needs its own String Catalog).
+**Easy mode** (Android prototype, 2026-11-22).
 Random light leak and video recording are no longer on this list (ported 2026-11-22).
 
 ## Other platform gaps worth knowing

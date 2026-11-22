@@ -275,6 +275,12 @@ internal val UKRAINIAN: Map<String, String> = mapOf(
         "Пам’ятати камеру й налаштування",
     "Off: each start uses W, Yellow Portrait 400, default sliders" to
         "Вимкнено: щоразу W, Yellow Portrait 400, типові повзунки",
+    "Easy mode" to
+        "Простий режим",
+    "Big shutter and only the basics; the other settings wait" to
+        "Велика кнопка й лише основне; інші налаштування чекають",
+    "Settings › Easy mode: a simple camera for someone who just wants photos. Only the picture, the lenses, the flash, Photo / Video and a big shutter; the photo gets the look chosen before, without RAW, frames, borders, light leaks, timer or Brightness and Warmth. Settings shows only a few choices then; switch Easy mode off there to get everything back as it was." to
+        "Налаштування › Простий режим: проста камера для того, хто просто хоче фото. Лише зображення, об’єктиви, спалах, Фото / Відео й велика кнопка затвора; фото отримує стиль, вибраний раніше, без RAW, рамок, облямівок, засвічень, таймера, Яскравості й Теплоти. Налаштування тоді показують лише кілька пунктів; вимкніть там Простий режим, щоб усе повернулося як було.",
     "Experimental" to
         "Експериментальне",
     "Self-timer and long exposure" to

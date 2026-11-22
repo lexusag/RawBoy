@@ -16,6 +16,41 @@ import org.junit.Test
 
 class CameraSettingsTest {
     @Test
+    fun easyModeForcesThePlainShotAndKeepsTheStoredValues() {
+        val pro = CameraSettings(
+            brightness = 40f, warmth = -20f, keepDng = true, burstMode = BurstMode.ON, selfTimer = 5, longExposure = 10,
+            experimental = true, randomLightLeak = true, border = 4, photoFrame = PhotoFrame.DATE_STAMP, trackFocus = true,
+            flatVideo = true, videoMotionData = true, showHistogram = true, showGrid = true, showLevel = true,
+            showZoomControl = true, smallExport = false, jpegQuality = 90, lens = "T", film = false,
+        )
+        // Off: nothing changes.
+        assertEquals(pro, pro.effective)
+        val easy = pro.copy(easy = true)
+        val e = easy.effective
+        assertEquals(0f, e.brightness)
+        assertEquals(0f, e.warmth)
+        assertEquals(0f, e.exposureCompensationEv)
+        assertFalse(e.keepDng)
+        assertEquals(BurstMode.AUTO, e.burstMode)
+        assertEquals(0, e.activeSelfTimer)
+        assertEquals(null, e.longExposureSpec(null, PreviewLevel.BOOSTED, 1f))
+        assertFalse(e.randomLightLeak)
+        assertEquals(0, e.border)
+        assertEquals(PhotoFrame.NONE, e.photoFrame)
+        assertFalse(e.trackFocus || e.flatVideo || e.videoMotionData)
+        assertFalse(e.showHistogram || e.showGrid || e.showLevel || e.showZoomControl)
+        // What Easy mode leaves alone: the look, size, quality, lens.
+        assertEquals(easy.look, e.look)
+        assertFalse(e.smallExport)
+        assertEquals(90, e.jpegQuality)
+        assertEquals("T", e.lens)
+        // The stored settings keep the user's own values for when Easy mode is off again.
+        assertEquals(40f, easy.brightness)
+        assertTrue(easy.keepDng)
+        assertEquals(pro, easy.copy(easy = false).effective)
+    }
+
+    @Test
     fun defaultsHaveFramesDisabled() {
         val s = CameraSettings()
         assertEquals(PhotoFrame.NONE, s.photoFrame)

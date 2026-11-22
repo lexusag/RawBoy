@@ -128,6 +128,12 @@ data class CameraSettings(
     /** Features still in testing (self-timer and long exposure today); hidden until switched on in Settings. */
     val experimental: Boolean = false,
     /**
+     * Easy mode (prototype, 2026-11-22): a point-and-shoot screen for someone who just wants photos (viewfinder, lenses,
+     * flash, Photo / Video, a big shutter) and a short Settings sheet. The other settings keep their values but take
+     * no part while it is on: see [effective]. Off by default.
+     */
+    val easy: Boolean = false,
+    /**
      * Experimental: videos record the whole 4:3 frame and save a `.motion` file of gyroscope and frame data beside it
      * (MotionRecording), to stabilize them afterwards.
      */
@@ -273,6 +279,34 @@ data class CameraSettings(
             )
         } else null
 
+    /**
+     * The settings that take part: these, or in [easy] mode these with everything the easy screen has no control for
+     * set to what a plain point-and-shoot does (no DNG, frame, border, light leak or Brightness/Warmth offset; merging on
+     * Auto; no timer, long exposure, subject tracking, flat video or motion data; no histogram, grid, level or zoom
+     * buttons, which also spares their per-frame work). The look, Strength, photo size, quality, HDR gain map, grain,
+     * QR codes, lens, flash and the sensor modes (max resolution, raw viewfinder) stay as set. The stored values are
+     * untouched, so leaving easy mode brings them all back.
+     */
+    val effective: CameraSettings get() = if (!easy) this else copy(
+        brightness = 0f,
+        warmth = 0f,
+        keepDng = false,
+        burstMode = BurstMode.AUTO,
+        selfTimer = 0,
+        longExposure = 0,
+        experimental = false,
+        randomLightLeak = false,
+        border = 0,
+        photoFrame = PhotoFrame.NONE,
+        trackFocus = false,
+        flatVideo = false,
+        videoMotionData = false,
+        showHistogram = false,
+        showGrid = false,
+        showLevel = false,
+        showZoomControl = false,
+    )
+
     /** Resets all user settings to their defaults while keeping learned lens calibration. */
     fun resetToDefaults(): CameraSettings = CameraSettings(previewScales = previewScales, flashGuides = flashGuides, language = language)
 
@@ -395,6 +429,7 @@ object CameraSettingsStore {
             grain = p.getBoolean("grain", d.grain),
             trackFocus = p.getBoolean("trackFocus", d.trackFocus),
             experimental = p.getBoolean("experimental", d.experimental),
+            easy = p.getBoolean("easy", d.easy),
             videoMotionData = p.getBoolean("videoMotionData", d.videoMotionData),
             rawViewfinder = p.getBoolean("rawViewfinder", d.rawViewfinder),
             videoStabilizeAfter = p.getBoolean("videoStabilizeAfter", d.videoStabilizeAfter),
@@ -482,6 +517,7 @@ object CameraSettingsStore {
             .putBoolean("grain", s.grain)
             .putBoolean("trackFocus", s.trackFocus)
             .putBoolean("experimental", s.experimental)
+            .putBoolean("easy", s.easy)
             .putBoolean("videoMotionData", s.videoMotionData)
             .putBoolean("rawViewfinder", s.rawViewfinder)
             .putBoolean("videoStabilizeAfter", s.videoStabilizeAfter)
