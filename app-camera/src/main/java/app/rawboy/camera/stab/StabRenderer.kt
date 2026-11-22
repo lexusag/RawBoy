@@ -147,7 +147,7 @@ class StabRenderer(
             encoder.signalEndOfInputStream()
             mux.drain(true)
             mux.finishAudio()
-            Log.i(TAG, "stabilized: ${outputs.size} frames (${outputs.count { it.hold }} held), crop ${plan.crop}, eased ${"%.2f".format(plan.eased)}")
+            Log.i(TAG, "stabilized: ${outputs.size} frames (${outputs.count { it.hold }} held), $next drawn, ${mux.written} written, crop ${plan.crop}, eased ${"%.2f".format(plan.eased)}")
         } finally {
             runCatching { decoder?.stop() }
             runCatching { decoder?.release() }
@@ -241,6 +241,10 @@ class StabRenderer(
     ) {
         private val audioFormat = audioTrack?.let { audio.getTrackFormat(it) }
         private var videoOut = -1
+
+        /** Video frames written, for the log. */
+        var written = 0
+            private set
         private var audioOut = -1
         private var started = false
         private var audioDone = audioTrack == null
@@ -265,6 +269,7 @@ class StabRenderer(
                         if (info.size > 0 && started) {
                             buffer.position(info.offset).limit(info.offset + info.size)
                             muxer.writeSampleData(videoOut, buffer, info)
+                            written++
                             writeAudioUntil(info.presentationTimeUs)
                         }
                         encoder.releaseOutputBuffer(o, false)

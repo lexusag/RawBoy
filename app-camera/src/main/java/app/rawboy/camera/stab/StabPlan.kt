@@ -53,6 +53,10 @@ class StabPlan private constructor(
     val sources: List<MotionFrame?>,
     /** Their times in the file (ns), in the same order. */
     val sourcePtsNs: LongArray,
+    /** Their camera (sensor) times, in the same order. */
+    private val sourceT: LongArray,
+    private val typicalExposureNs: Long,
+    private val typicalSkewNs: Long,
     /** Share of the output frames where the crop's limit made the virtual camera follow the real one. */
     val eased: Double,
 ) {
@@ -72,9 +76,10 @@ class StabPlan private constructor(
     fun warp(index: Int, gx: Int, gy: Int): FloatArray {
         val out = outputs[index]
         val src = sources[out.source]
-        val ts = src?.t ?: 0L
-        val e = src?.exposureNs?.takeIf { it > 0 } ?: 0L
-        val skew = src?.skewNs?.takeIf { it > 0 } ?: 0L
+        val ts = sourceT[out.source]
+        // A frame whose capture result never came keeps the typical exposure and skew.
+        val e = src?.exposureNs?.takeIf { it > 0 } ?: typicalExposureNs
+        val skew = src?.skewNs?.takeIf { it > 0 } ?: typicalSkewNs
         val v = out.virtual.matrix()
         val result = FloatArray(gx * gy * 2)
         val p = DoubleArray(2)
@@ -205,14 +210,19 @@ class StabPlan private constructor(
             val encT = LongArray(data.encoded.size / 2) { data.encoded[it * 2] }
             val encPts = LongArray(data.encoded.size / 2) { data.encoded[it * 2 + 1] }
             val ptsOffset = encT[0] - encPts[0]
-            val camT = frames.keys.filter { it in encT.first()..encT.last() }.sorted()
+            // Camera frames: those with a capture result and those in the file. The camera sometimes drops a result
+            // while the frame itself is recorded (Pixel 9 Pro T2, 2026-11-22: two 100 ms holes in the results only).
+            val camT = (frames.keys.filter { it in encT.first()..encT.last() } + encT.toList()).distinct().sorted()
             if (camT.size < 4) return null
             val sources = encT.map { frames[it] }
+            fun median(v: List<Long>) = v.sorted().let { if (it.isEmpty()) 0L else it[it.size / 2] }
+            val typicalExposure = median(data.frames.map { it.exposureNs }.filter { it > 0 })
+            val typicalSkew = median(data.frames.map { it.skewNs }.filter { it > 0 })
 
             val fps = (camT.size - 1) / ((camT.last() - camT.first()) * 1e-9)
             val mids = LongArray(camT.size) { i ->
-                val f = frames[camT[i]]!!
-                camT[i] + max(0L, f.exposureNs) / 2 + max(0L, f.skewNs) / 2
+                val f = frames[camT[i]]
+                camT[i] + (f?.exposureNs?.takeIf { it > 0 } ?: typicalExposure) / 2 + (f?.skewNs?.takeIf { it > 0 } ?: typicalSkew) / 2
             }
             val cm = Array(camT.size) { orientationAt(data.gyroT, orient, mids[it]) }
             val oisAt = { t: Long -> doubleArrayOf(s * interp(oisT, oisX, t), s * interp(oisT, oisY, t)) }
@@ -274,7 +284,7 @@ class StabPlan private constructor(
                 outputs += Output(j, hold = j == last, ptsNs = camT[i] - ptsOffset, virtual = v[i])
                 last = j
             }
-            return StabPlan(input, crop, data.gyroT, orient, oisT, oisX, oisY, s, fx, outputs, sources, encPts, easedShare)
+            return StabPlan(input, crop, data.gyroT, orient, oisT, oisX, oisY, s, fx, outputs, sources, encPts, encT, typicalExposure, typicalSkew, easedShare)
         }
 
         /** 36 points around the crop's edge, in stream pixels. */
