@@ -75,6 +75,7 @@ lenses, burst merge), iOS drives AVFoundation (**ProRAW at 12 MP by default**, o
 | **Random light leak** (one random procedural film leak on saved JPEGs; Frequency 1/5–5/5 in shuffled 5-photo sequences; Short-side sprockets) | unreleased (branch `claude/project-thread-lw6gpc`; Android before that) | ✓ | ✓ | Same generator (`FilmLeaks.randomForCamera`, types edge, blob, sprocket, rebate, flare, start). The DNG and the viewfinder don't get it. iOS ported 2026-11-22, not yet tried on a phone |
 | **B&W greys the random light leak** (`monoFx`) | unreleased | ✓ | ✓ | In B&W mode (also with Film on) the random light leak goes grey with the picture |
 | Frames: Pentax 645 / Contax 645 rebate with shoot info | 1.15.16 | ✓ | ✓ | |
+| **Frames keep the photo's size** (Pentax / Contax 645 rebates cover its edges instead of extending it) | unreleased | ✓ | ✓ | 4:3 stays 4:3, 3:2 stays 3:2; the strips are as wide as before, drawn over the photo, which is not scaled |
 | Remember camera & settings (off by default) | ≤1.1.1 | ✓ | ✓ | |
 | Reset settings to defaults | 1.16.11 | ✓ | ✓ | |
 | Settings regrouped, one line per setting | 1.15.0 | ✓ | ? | |

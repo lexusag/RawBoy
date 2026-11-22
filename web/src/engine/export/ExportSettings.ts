@@ -13,7 +13,6 @@ import {
   parseExportFields,
   parseExportOrder,
   type FilmFrameColor,
-  type FilmFrameStyle,
   type Pentax645Field,
   type Pentax645Info,
   type PhotoFrame,
@@ -92,14 +91,9 @@ export const DEFAULT_EXPORT: ExportSettings = {
   frameColor: 'AMBER',
 };
 
-/** Pixel dimensions a [width] x [height] image will be saved at (including film rebate border when enabled). */
+/** Pixel dimensions a [width] x [height] image will be saved at: the size setting's (a film rebate frame covers the photo's edges and adds nothing). */
 export function exportOutputSize(width: number, height: number, settings: ExportSettings, scan = false): [number, number] {
-  const photoSize = scan ? scanSize(width, height) : BandDownscaler.outputSize(width, height, settings.maxLongSide);
-  const style: FilmFrameStyle | null = settings.pentax645?.style
-    ?? (settings.photoFrame === 'PENTAX_645' ? 'PENTAX_645' : settings.photoFrame === 'CONTAX_645' ? 'CONTAX_645' : null);
-  if (!style) return photoSize;
-  const layout = Pentax645Frame.layout(photoSize[0], photoSize[1], style);
-  return [layout.outWidth, layout.outHeight];
+  return scan ? scanSize(width, height) : BandDownscaler.outputSize(width, height, settings.maxLongSide);
 }
 
 /**

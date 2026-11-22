@@ -51,8 +51,11 @@ describe('DateStamp and Pentax645Frame', () => {
     expect(order.length).toBe(EXPORT_PENTAX645_FIELDS.length);
 
     const layout = Pentax645Frame.layout(600, 800, 'PENTAX_645');
-    expect(layout.outWidth).toBe(600 + 2 * layout.border);
-    expect(layout.outHeight).toBe(800 + 2 * layout.border);
+    // The frame covers the photo's edges: the output is the photo's size, the window inside it smaller.
+    expect(layout.outWidth).toBe(600);
+    expect(layout.outHeight).toBe(800);
+    expect(layout.photoWidth).toBe(600 - 2 * layout.border);
+    expect(layout.photoHeight).toBe(800 - 2 * layout.border);
 
     const info: Pentax645Info = {
       frameNumber: 3,
@@ -65,7 +68,7 @@ describe('DateStamp and Pentax645Frame', () => {
       color: 'AMBER',
       style: 'PENTAX_645',
     };
-    const src = new Uint16Array(600 * layout.infoBar * 3).fill(20000);
+    const src = new Uint16Array(layout.photoWidth * layout.infoBar * 3).fill(20000);
     const dst = new Uint16Array(layout.outWidth * layout.infoBar * 3);
     Pentax645Frame.wrapPhotoBand(src, dst, layout, 0, layout.infoBar, false, info);
     let brightOrange = 0;
@@ -118,5 +121,29 @@ describe('DateStamp and Pentax645Frame', () => {
     });
     expect(resolved.pentax645?.frameNumber).toBe(5);
     expect(resolved.pentax645?.fNumber).toBe(4.0);
+  });
+
+  it('covers the photo: same size, pixels not moved, rebate on the edges', () => {
+    for (const style of ['PENTAX_645', 'CONTAX_645'] as const) {
+      for (const [w, h] of [[600, 800], [800, 600], [600, 600]]) {
+        const layout = Pentax645Frame.layout(w, h, style);
+        expect([layout.outWidth, layout.outHeight]).toEqual([w, h]);
+        const info: Pentax645Info = { frameNumber: 3, exposureTime: 1 / 125, fNumber: 2.8, color: 'AMBER', style };
+        const src = new Uint16Array(w * h * 3);
+        for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) src.fill(20000 + x + y * 3, (y * w + x) * 3, (y * w + x) * 3 + 3);
+        const dst = new Uint16Array(w * h * 3);
+        for (let y = 0; y < h; ) {
+          const rows = Math.min(97, h - y);
+          const out = new Uint16Array(w * rows * 3);
+          Pentax645Frame.coverBand(src.slice(y * w * 3, (y + rows) * w * 3), out, layout, y, rows, false, info);
+          dst.set(out, y * w * 3);
+          y += rows;
+        }
+        const mid = ((layout.topPad + Math.floor(layout.photoHeight / 2)) * w + layout.leftPad + Math.floor(layout.photoWidth / 2)) * 3;
+        expect(dst[mid]).toBe(src[mid]);
+        expect(dst[0]).toBeLessThan(3000);
+        expect(dst[(w * h - 1) * 3]).toBeLessThan(3000);
+      }
+    }
   });
 });

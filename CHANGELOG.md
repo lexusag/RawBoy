@@ -1,3 +1,8 @@
+**Pentax 645 / Contax 645 export frames keep the photo's size (2026-11-22)**
+
+- The film rebate frames used to add pixels around the photo (a 4:3 photo came out taller and wider, with another ratio). They now cover its edges: the file has the photo's own size (4:3 stays 4:3, 3:2 stays 3:2), the strips are as wide as before (from the photo's short side) and are drawn over the edges, and the photo isn't scaled or moved. Same in Camera (Android, iOS), Auto and Pro's export (Android, iOS, Desktop, web). `Pentax645Frame.layout` now returns the window the photo shows through (the size minus the pads) and `coverBand` frames a band; `ExportSettings.outputSize` no longer adds the pads. Tests: `Pentax645FrameTest`, `frames.test.ts`, `FrameCoverTests`.
+- Not tried by eye on a real photo (no phone), only by the unit tests; the leaks-under-frame idea was dropped.
+
 **Border removed (2026-11-22)**
 
 - The Border overlay added earlier today (Pro Detail › Border, Camera Settings › Border, the Border preset group, `uFrame`) is gone from all apps. It was not wanted: the existing Pentax 645 / Contax 645 export frames are a different feature and are unchanged here. The B&W part (`uMonoFx`) stays. Old edits, presets and Camera settings that hold the border fields still load: the unknown keys are ignored.

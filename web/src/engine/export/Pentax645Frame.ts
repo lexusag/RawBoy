@@ -184,9 +184,11 @@ export const Pentax645Frame = {
     const bottomPad = style === 'CONTAX_645' && !infoOnLeft ? infoBar : border;
     const leftPad = style === 'CONTAX_645' && infoOnLeft ? infoBar : border;
     const rightPad = style === 'CONTAX_645' && infoOnLeft ? infoBar : border;
+    // The frame covers the photo's edges: the output is the photo's own size, and photoWidth x photoHeight is the
+    // window the photo shows through (the size minus the pads), whose pixel (x, y) is the photo's (x + leftPad, y + topPad).
     return {
-      photoWidth,
-      photoHeight,
+      photoWidth: photoWidth - leftPad - rightPad,
+      photoHeight: photoHeight - topPad - bottomPad,
       border,
       infoBar,
       style,
@@ -195,10 +197,43 @@ export const Pentax645Frame = {
       bottomPad,
       leftPad,
       rightPad,
-      outWidth: photoWidth + leftPad + rightPad,
-      outHeight: photoHeight + topPad + bottomPad,
+      outWidth: photoWidth,
+      outHeight: photoHeight,
       topBar: infoBar,
     };
+  },
+
+  /**
+   * Frames the photo rows [y, y + rows) of src (the photo's outWidth * rows * 3) into dst (the same size), drawing the
+   * rebate over the edges: the top pad, the photo window (wrapPhotoBand) and the bottom pad.
+   */
+  coverBand(src: Uint16Array, dst: Uint16Array, layout: Pentax645Layout, y: number, rows: number, monochrome: boolean, info: Pentax645Info) {
+    const ow = layout.outWidth;
+    const winTop = layout.topPad;
+    const winBottom = layout.topPad + layout.photoHeight;
+    const pw = layout.photoWidth;
+    let row = y;
+    const end = y + rows;
+    while (row < end) {
+      const region = row < winTop ? 0 : row < winBottom ? 1 : 2;
+      const stop = Math.min(end, region === 0 ? winTop : region === 1 ? winBottom : end);
+      const n = stop - row;
+      const tmp = new Uint16Array(ow * n * 3);
+      if (region === 0) {
+        Pentax645Frame.renderTopBarBand(tmp, layout, row, n, info, monochrome);
+      } else if (region === 1) {
+        const win = new Uint16Array(pw * n * 3);
+        for (let r = 0; r < n; r++) {
+          const from = ((row - y + r) * ow + layout.leftPad) * 3;
+          win.set(src.subarray(from, from + pw * 3), r * pw * 3);
+        }
+        Pentax645Frame.wrapPhotoBand(win, tmp, layout, row - winTop, n, monochrome, info);
+      } else {
+        Pentax645Frame.renderBorderBand(tmp, layout, row, n, monochrome, info);
+      }
+      dst.set(tmp, (row - y) * ow * 3);
+      row = stop;
+    }
   },
 
   formatFrameNumber(frameNumber: number): string {

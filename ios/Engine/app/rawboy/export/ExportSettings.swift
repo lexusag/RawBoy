@@ -105,19 +105,9 @@ public struct ExportSettings: Equatable, Sendable {
         self.captureDate = captureDate
     }
 
-    /** Pixel dimensions a [width] x [height] image will be saved at (including film rebate border when enabled). */
+    /** Pixel dimensions a [width] x [height] image will be saved at: the size setting's (a film rebate frame covers the photo's edges and adds nothing). */
     public func outputSize(_ width: Int, _ height: Int, scan: Bool = false) -> (Int, Int) {
-        let photoSize = scan ? ScanScale.size(width, height) : BandDownscaler.outputSize(width, height, maxLongSide: maxLongSide)
-        let style: FilmFrameStyle? = pentax645?.style ?? {
-            switch photoFrame {
-            case .pentax645: return .pentax645
-            case .contax645: return .contax645
-            default: return nil
-            }
-        }()
-        guard let style else { return photoSize }
-        let layout = Pentax645Frame.layout(photoWidth: photoSize.0, photoHeight: photoSize.1, style: style)
-        return (layout.outWidth, layout.outHeight)
+        scan ? ScanScale.size(width, height) : BandDownscaler.outputSize(width, height, maxLongSide: maxLongSide)
     }
 
     /**
@@ -760,11 +750,14 @@ public enum Pentax645Frame {
         public let border: Int
         public let infoBar: Int
         public let style: FilmFrameStyle
-        public var infoOnLeft: Bool { photoWidth > photoHeight }
+        /// True when the photo is landscape, so the shorter side is vertical (left/right edges).
+        public let infoOnLeft: Bool
         public var topPad: Int { (style == .contax645 && !infoOnLeft) ? infoBar : border }
         public var bottomPad: Int { (style == .contax645 && !infoOnLeft) ? infoBar : border }
         public var leftPad: Int { (style == .contax645 && infoOnLeft) ? infoBar : border }
         public var rightPad: Int { (style == .contax645 && infoOnLeft) ? infoBar : border }
+        /// The frame covers the photo's edges: the output is the photo's own size, and photoWidth x photoHeight is the
+        /// window the photo shows through (the size minus the pads), whose pixel (x, y) is the photo's (x + leftPad, y + topPad).
         public var outWidth: Int { photoWidth + leftPad + rightPad }
         public var outHeight: Int { photoHeight + topPad + bottomPad }
         public var topBar: Int { infoBar }
@@ -777,7 +770,48 @@ public enum Pentax645Frame {
         case .contax645: max(6, Int((shortSide * 0.012).rounded()))
         }
         let infoBar = max(28, Int((shortSide * 0.036).rounded()))
-        return Layout(photoWidth: photoWidth, photoHeight: photoHeight, border: border, infoBar: infoBar, style: style)
+        let onLeft = photoWidth > photoHeight
+        let pads = Layout(photoWidth: photoWidth, photoHeight: photoHeight, border: border, infoBar: infoBar, style: style, infoOnLeft: onLeft)
+        return Layout(photoWidth: photoWidth - pads.leftPad - pads.rightPad, photoHeight: photoHeight - pads.topPad - pads.bottomPad,
+                      border: border, infoBar: infoBar, style: style, infoOnLeft: onLeft)
+    }
+
+    /// Frames the photo rows [y, y + rows) of `src` (the photo's outWidth * rows * 3) into `dst` (the same size), drawing
+    /// the rebate over the edges: the top pad, the photo window (`wrapPhotoBand`) and the bottom pad.
+    public static func coverBand(src: UnsafePointer<UInt16>, dst: UnsafeMutablePointer<UInt16>, layout: Layout,
+                                 y: Int, rows: Int, monochrome: Bool = false, info: Pentax645Info) {
+        let ow = layout.outWidth
+        let winTop = layout.topPad
+        let winBottom = layout.topPad + layout.photoHeight
+        let pw = layout.photoWidth
+        var row = y
+        let end = y + rows
+        while row < end {
+            let region = row < winTop ? 0 : (row < winBottom ? 1 : 2)
+            let stop = min(end, region == 0 ? winTop : (region == 1 ? winBottom : end))
+            let n = stop - row
+            var tmp = [UInt16](repeating: 0, count: ow * n * 3)
+            tmp.withUnsafeMutableBufferPointer { t in
+                guard let tb = t.baseAddress else { return }
+                switch region {
+                case 0:
+                    renderTopBarBand(band: tb, layout: layout, bandY: row, bandRows: n, info: info, monochrome: monochrome)
+                case 1:
+                    var win = [UInt16](repeating: 0, count: pw * n * 3)
+                    for r in 0..<n {
+                        for i in 0..<(pw * 3) { win[r * pw * 3 + i] = src[((row - y + r) * ow + layout.leftPad) * 3 + i] }
+                    }
+                    win.withUnsafeBufferPointer { w in
+                        wrapPhotoBand(src: w.baseAddress!, dst: tb, layout: layout, photoY: row - winTop, bandRows: n,
+                                      monochrome: monochrome, info: info)
+                    }
+                default:
+                    renderBorderBand(band: tb, layout: layout, bandY: row, bandRows: n, monochrome: monochrome, info: info)
+                }
+            }
+            for i in 0..<(ow * n * 3) { dst[(row - y) * ow * 3 + i] = tmp[i] }
+            row = stop
+        }
     }
 
     public static func formatFrameNumber(_ frameNumber: Int) -> String {

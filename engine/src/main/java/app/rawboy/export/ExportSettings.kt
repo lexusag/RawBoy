@@ -75,16 +75,9 @@ data class ExportSettings(
         }
     }
 
-    /** Output dimensions including any [PhotoFrame.PENTAX_645] / [PhotoFrame.CONTAX_645] film rebate. */
-    fun outputSize(outputWidth: Int, outputHeight: Int): Pair<Int, Int> {
-        val (w, h) = BandDownscaler.outputSize(outputWidth, outputHeight, maxLongSide)
-        return when {
-            pentax645 != null -> Pentax645Frame.layout(w, h, pentax645.style).let { it.outWidth to it.outHeight }
-            photoFrame == PhotoFrame.PENTAX_645 -> Pentax645Frame.layout(w, h, FilmFrameStyle.PENTAX_645).let { it.outWidth to it.outHeight }
-            photoFrame == PhotoFrame.CONTAX_645 -> Pentax645Frame.layout(w, h, FilmFrameStyle.CONTAX_645).let { it.outWidth to it.outHeight }
-            else -> w to h
-        }
-    }
+    /** Output dimensions: the size setting's; a [PhotoFrame.PENTAX_645] / [PhotoFrame.CONTAX_645] rebate covers the photo's edges and adds nothing. */
+    fun outputSize(outputWidth: Int, outputHeight: Int): Pair<Int, Int> =
+        BandDownscaler.outputSize(outputWidth, outputHeight, maxLongSide)
 
     /**
      * Resolves [photoFrame] into [dateStamp] or [pentax645] from [image]'s EXIF metadata and [exifDate] when not

@@ -29,10 +29,8 @@ export async function exportImage(image: RawImage, params: ShaderParams, setting
     : BandDownscaler.outputSize(params.lens.outputWidth, params.lens.outputHeight, settings.maxLongSide);
   const isMono = params.saturation <= -100 || (params.lutAmount >= 100 && isMonochromeLut(params.lut?.id));
   const resolved = resolveExportFrame(settings, image, isMono);
-  const frameLayout = resolved.pentax645
-    ? Pentax645Frame.layout(size[0], size[1], resolved.pentax645.style ?? 'PENTAX_645')
-    : null;
-  const outSize: [number, number] = frameLayout ? [frameLayout.outWidth, frameLayout.outHeight] : size;
+  // The frame covers the photo's edges: the file has the photo's size.
+  const outSize: [number, number] = size;
   const dateStamp = resolved.pentax645 == null ? (resolved.dateStamp ?? '') : '';
   const dateStampStyle: DateStampStyle = resolved.dateStampStyle ?? 'CLASSIC';
   const mono = Boolean(resolved.monochromeImprint);
@@ -102,14 +100,15 @@ async function renderOutput(
 ) {
   const w = params.lens.outputWidth;
   const h = params.lens.outputHeight;
+  // The frame covers the photo's edges: same size out as in.
   const layout = pentax645 ? Pentax645Frame.layout(size[0], size[1], pentax645.style ?? 'PENTAX_645') : null;
   let framedBand = new Uint16Array(0);
-  const stamped: Consume = layout
+  const stamped: Consume = layout && pentax645
     ? async (y, rows, band) => {
         const need = layout.outWidth * rows * 3;
         if (framedBand.length < need) framedBand = new Uint16Array(need);
-        Pentax645Frame.wrapPhotoBand(band, framedBand, layout, y, rows, monochrome, pentax645);
-        await consume(layout.topPad + y, rows, framedBand);
+        Pentax645Frame.coverBand(band, framedBand, layout, y, rows, monochrome, pentax645);
+        await consume(y, rows, framedBand);
       }
     : dateStamp
       ? async (y, rows, band) => {
@@ -118,46 +117,12 @@ async function renderOutput(
         }
       : consume;
 
-  if (layout && pentax645) {
-    let barY = 0;
-    while (barY < layout.topPad) {
-      const rows = Math.min(TILE_HEIGHT, layout.topPad - barY);
-      const need = layout.outWidth * rows * 3;
-      if (framedBand.length < need) framedBand = new Uint16Array(need);
-      Pentax645Frame.renderTopBarBand(framedBand, layout, barY, rows, pentax645, monochrome);
-      await consume(barY, rows, framedBand);
-      barY += rows;
-    }
-  }
-
-  const emitBottom = async () => {
-    if (!layout) return;
-    let botY = 0;
-    while (botY < layout.bottomPad) {
-      const rows = Math.min(TILE_HEIGHT, layout.bottomPad - botY);
-      const need = layout.outWidth * rows * 3;
-      if (framedBand.length < need) framedBand = new Uint16Array(need);
-      Pentax645Frame.renderBorderBand(
-        framedBand,
-        layout,
-        layout.topPad + layout.photoHeight + botY,
-        rows,
-        monochrome,
-        pentax645,
-      );
-      await consume(layout.topPad + layout.photoHeight + botY, rows, framedBand);
-      botY += rows;
-    }
-  };
-
   if (scan) {
     await renderBands(image, params, 1, onProgress, stamped, SCAN_SCALE);
-    await emitBottom();
     return;
   }
   if (size[0] === w && size[1] === h) {
     await renderBands(image, params, 1, onProgress, stamped);
-    await emitBottom();
     return;
   }
   const scaler = await BandDownscaler.create(w, h, size[0], size[1], stamped);
@@ -170,7 +135,6 @@ async function renderOutput(
     throw e;
   }
   await scaler.finish();
-  await emitBottom();
 }
 
 /**

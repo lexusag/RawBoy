@@ -121,7 +121,7 @@ Web, Desktop and iOS take every field of `DevelopParams` except where noted (che
 | Zoom hint at the foot of the photo | ≤1.1.1 | ✓ | ? | ? | ✓ | |
 | Export JPEG (jpegli 4:4:4), TIFF 8/16, sizes, EXIF | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
 | **Custom export long side** (Export dialog › Size › Custom…: 64–20000 px, whole pixels; Android Pro now has the Size setting too, remembered) | unreleased | ✓ | ✓ | ✓ | ✓ | `ExportSettings.parseLongSide` (Kotlin/TS/Swift), `LongSidePicker` / `LongSideSelect`; photos are never enlarged |
-| Export Frame (date stamp, Pentax / Contax 645) | 1.16.12 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
+| Export Frame (date stamp, Pentax / Contax 645) | 1.16.12 | ✓ | ✓ 1.17.0 | ✓ | ✓ | Pentax / Contax 645 rebates cover the photo's edges and keep its size (unreleased; before, they added pixels around it) |
 | Film scan 1.5× | 1.10.0 | ✓ | ✓ 1.17.4 | ✓ 1.17.4 | ✓ | |
 | Send to Auto (one photo) / back | ≤1.1.1 | ✓ | ✓ 1.17.8 (To Auto) | — | ✓ | iOS has no edits file |
 | Google Drive open / save | 1.5.0 | ✓ | n/a | n/a | n/a | Drive's desktop folder covers it |

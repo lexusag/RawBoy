@@ -89,8 +89,8 @@ class Exporter(private val context: Context) {
             source?.let { app.rawboy.auto.CaptureDate.read(context, it) }
         } else null
         val resolved = settings.resolveFrame(image, exifDate = exifDate, monochrome = isMono)
-        val frameLayout = resolved.pentax645?.let { Pentax645Frame.layout(size.first, size.second, it.style) }
-        val outSize = frameLayout?.let { it.outWidth to it.outHeight } ?: size
+        // The frame covers the photo's edges: the file has the photo's size.
+        val outSize = size
         val dateStamp = if (resolved.pentax645 == null) resolved.dateStamp else ""
         val dateStampStyle = resolved.dateStampStyle
         val mono = resolved.monochromeImprint
@@ -271,14 +271,15 @@ class Exporter(private val context: Context) {
     ) {
         val w = params.lens.outputWidth
         val h = params.lens.outputHeight
+        // The frame covers the photo's edges: same size out as in.
         val layout = pentax645?.let { Pentax645Frame.layout(size.first, size.second, it.style) }
         var framedBand = ShortArray(0)
         val stamped: (Int, Int, ShortArray) -> Unit = when {
-            layout != null -> { y, rows, band ->
+            layout != null && pentax645 != null -> { y, rows, band ->
                 val need = layout.outWidth * rows * 3
                 if (framedBand.size < need) framedBand = ShortArray(need)
-                Pentax645Frame.wrapPhotoBand(band, framedBand, layout, y, rows, monochrome, pentax645)
-                consume(layout.topPad + y, rows, framedBand)
+                Pentax645Frame.coverBand(band, framedBand, layout, y, rows, monochrome, pentax645)
+                consume(y, rows, framedBand)
             }
             dateStamp.isNotEmpty() -> { y, rows, band ->
                 DateStamp.imprint(band, size.first, size.second, y, rows, dateStamp, monochrome, dateStampStyle)
@@ -286,38 +287,12 @@ class Exporter(private val context: Context) {
             }
             else -> consume
         }
-        if (layout != null && pentax645 != null) {
-            var barY = 0
-            while (barY < layout.topPad) {
-                val rows = minOf(TILE_HEIGHT, layout.topPad - barY)
-                val need = layout.outWidth * rows * 3
-                if (framedBand.size < need) framedBand = ShortArray(need)
-                Pentax645Frame.renderTopBarBand(framedBand, layout, barY, rows, pentax645, monochrome)
-                consume(barY, rows, framedBand)
-                barY += rows
-            }
-        }
-        val emitBottom: () -> Unit = {
-            if (layout != null) {
-                var botY = 0
-                while (botY < layout.bottomPad) {
-                    val rows = minOf(TILE_HEIGHT, layout.bottomPad - botY)
-                    val need = layout.outWidth * rows * 3
-                    if (framedBand.size < need) framedBand = ShortArray(need)
-                    Pentax645Frame.renderBorderBand(framedBand, layout, layout.topPad + layout.photoHeight + botY, rows, monochrome, pentax645)
-                    consume(layout.topPad + layout.photoHeight + botY, rows, framedBand)
-                    botY += rows
-                }
-            }
-        }
         if (scan) {
             renderBands(image, params, 1f, ScanScale.SCALE, onProgress, stamped)
-            emitBottom()
             return
         }
         if (size.first == w && size.second == h) {
             renderBands(image, params, 1f, 1f, onProgress, stamped)
-            emitBottom()
             return
         }
         var encodeNs = 0L
@@ -338,7 +313,6 @@ class Exporter(private val context: Context) {
             scaler.finish()
             scaleNs += System.nanoTime() - t
         }
-        emitBottom()
         Log.d(TAG, "export to ${size.first}x${size.second}: downscale ${(scaleNs - encodeNs) / 1_000_000} ms, encode ${encodeNs / 1_000_000} ms")
     }
 
