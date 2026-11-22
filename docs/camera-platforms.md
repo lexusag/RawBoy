@@ -164,6 +164,13 @@ after `STANDARD` failed definitely. The device report's *Video probe* section an
    scene, what was measured), one line in `PlatformRegistry.layers`, a test pinning its values and checking that the
    other layers don't change (`OnePlusLayerTest`, `Cph2447LayerTest`, `SamsungLayerTest` are the pattern). A new field
    needs its neutral value = today's behaviour, the Tensor layer repeating it, and `TensorLayerTest` extended.
+   - **Without the phone** (a tester's phone, a Play build): Settings › *Collect tuning data*, 10 shots of the scenes
+     above, then *Share tuning data*. The zip (`report/TuningData.kt`) holds the device report, the same viewfinder/raw
+     copy pairs as `DebugProbe` (numbered 1, 2, … across collections, so a restart doesn't overwrite them) and
+     RawBoy's own log lines (`log.txt`, appended after each shot since logcat keeps only minutes).
+     `python3 tools/camera_fit/fit.py <zip>` fits every pair in it. Flash, dark-frame and video checks still need the
+     tester to follow instructions; a guided wizard and a phone-side learned layer are the next steps (project files'
+     plan, 2026-11-22).
 5. **Check.** `./gradlew :app-camera:testDebugUnitTest :engine:testDebugUnitTest`, then the scenes again with the
    layer, and the same checks on a Pixel (Tensor must not move). Settings' *Phone profile* line and the `RawBoyPlatform`
    log line show the layers applied. Debug builds can take the phone for another chip (Settings › *Take the phone

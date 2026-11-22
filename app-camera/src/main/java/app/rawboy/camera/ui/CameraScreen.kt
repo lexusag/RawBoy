@@ -1,5 +1,7 @@
 package app.rawboy.camera.ui
 
+import app.rawboy.camera.i18n.AppLanguage
+import app.rawboy.camera.i18n.tr
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -184,6 +186,7 @@ fun CameraScreen(
     openPhoto: (Uri) -> Unit,
     openQr: (QrPayload) -> Unit,
     shareDeviceReport: () -> Unit,
+    shareTuningData: () -> Unit,
 ) {
     val status by vm.status.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
@@ -274,10 +277,10 @@ fun CameraScreen(
         val landscape = maxWidth > maxHeight
         val statusText = when {
             recordingMs != null -> "● " + formatRecordingTime(recordingMs ?: 0L)
-            longExposing -> "Long exposure " + ((longProgress ?: 0f) * 100).toInt() + "% · tap to stop"
-            selfTimerLeft != null -> "Timer · tap to cancel"
-            merging -> "Merging frames…"
-            pending > 0 -> "Saving $pending…"
+            longExposing -> tr("Long exposure %s% · tap to stop", ((longProgress ?: 0f) * 100).toInt())
+            selfTimerLeft != null -> tr("Timer · tap to cancel")
+            merging -> tr("Merging frames…")
+            pending > 0 -> tr("Saving %s…", pending)
             else -> ""
         }
         val barButtons = @Composable {
@@ -289,7 +292,7 @@ fun CameraScreen(
             }
             HelpButton(appName, CAMERA_HELP, onOpenChange = { showHelp = it })
             IconButton(onClick = { showSettings = true }) {
-                Icon(Icons.Filled.Settings, contentDescription = "Settings")
+                Icon(Icons.Filled.Settings, contentDescription = tr("Settings"))
             }
         }
         // Next to the shutter, under the thumb: the Photo / Video switch, with the experimental timer and long exposure beside it.
@@ -304,7 +307,7 @@ fun CameraScreen(
                 lastShot?.let { shot ->
                     Image(
                         shot.thumbnail.asImageBitmap(),
-                        contentDescription = "Last photo",
+                        contentDescription = tr("Last photo"),
                         contentScale = ContentScale.Crop,
                         modifier = Modifier
                             .fillMaxSize()
@@ -315,9 +318,9 @@ fun CameraScreen(
             }
         }
         val stopLabel = when {
-            recordingMs != null -> "Stop recording"
-            longExposing -> "Stop long exposure"
-            selfTimerLeft != null -> "Cancel timer"
+            recordingMs != null -> tr("Stop recording")
+            longExposing -> tr("Stop long exposure")
+            selfTimerLeft != null -> tr("Cancel timer")
             else -> null
         }
         val modeSwitchEnabled = recordingMs == null && !longExposing && selfTimerLeft == null
@@ -346,7 +349,7 @@ fun CameraScreen(
                     ) {
                         Icon(
                             CameraSwitchIcon,
-                            contentDescription = if (settings.front) "Back camera" else "Selfie camera",
+                            contentDescription = if (settings.front) tr("Back camera") else tr("Selfie camera"),
                         )
                     }
                 }
@@ -501,9 +504,9 @@ fun CameraScreen(
                         shownFocus?.let { (x, y) -> FocusHandle(x, y, viewSize, vm::focusAt, vm::dragFocus, vm::endDragFocus) }
                     }
                     when (status) {
-                        CameraStatus.NEEDS_PERMISSION -> Button(onClick = requestPermission) { Text("Allow camera") }
+                        CameraStatus.NEEDS_PERMISSION -> Button(onClick = requestPermission) { Text(tr("Allow camera")) }
                         CameraStatus.OPENING -> CircularProgressIndicator()
-                        CameraStatus.FAILED -> Text("Camera unavailable", color = MaterialTheme.colorScheme.error)
+                        CameraStatus.FAILED -> Text(tr("Camera unavailable"), color = MaterialTheme.colorScheme.error)
                         CameraStatus.READY -> if (params == null) CircularProgressIndicator()
                     }
                     // Landscape has them beside the S/B/W buttons, under the thumb.
@@ -549,7 +552,7 @@ fun CameraScreen(
                     ) {
                         if (focusPoint != null) {
                             Text(
-                                if (tracking) "TRACKING  ✕" else "AF LOCK  ✕",
+                                if (tracking) tr("TRACKING  ✕") else tr("AF LOCK  ✕"),
                                 style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                                 color = Color.Black,
                                 modifier = Modifier
@@ -562,7 +565,7 @@ fun CameraScreen(
                         if (videoMode) {
                             val aeLocked by vm.exposureLocked.collectAsStateWithLifecycle()
                             Text(
-                                if (aeLocked) "AE LOCK  ✕" else "AE LOCK",
+                                if (aeLocked) tr("AE LOCK  ✕") else tr("AE LOCK"),
                                 style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                                 color = if (aeLocked) Color.Black else Color.White,
                                 modifier = Modifier
@@ -597,7 +600,7 @@ fun CameraScreen(
                     }
                     if (compare) {
                         Text(
-                            "Without look",
+                            tr("Without look"),
                             style = MaterialTheme.typography.labelMedium,
                             modifier = Modifier
                                 .align(Alignment.BottomStart)
@@ -652,11 +655,11 @@ fun CameraScreen(
                     // A menu instead of a strip of chips, and one thin row per slider: the viewfinder keeps the screen.
                     Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 6.dp)) {
                         lookRow(88.dp)
-                        LookSlider("Brightness", settings.brightness, -100f..100f, 0f, vm::setBrightness)
+                        LookSlider(tr("Brightness"), settings.brightness, -100f..100f, 0f, vm::setBrightness)
                         if (settings.monoMode) {
                             FilterRow(settings.filter, vm::setFilter)
                         } else {
-                            LookSlider("Warmth", settings.warmth, -100f..100f, 0f, vm::setWarmth)
+                            LookSlider(tr("Warmth"), settings.warmth, -100f..100f, 0f, vm::setWarmth)
                         }
                     }
                 }
@@ -730,7 +733,7 @@ fun CameraScreen(
 
     if (showSettings) {
         ModalBottomSheet(onDismissRequest = { showSettings = false }) {
-            SettingsContent(settings, vm, recordingMs != null, requestLocation, shareDeviceReport)
+            SettingsContent(settings, vm, recordingMs != null, requestLocation, shareDeviceReport, shareTuningData)
         }
     }
 }
@@ -750,7 +753,7 @@ private fun QrChip(code: QrPayload, onOpen: () -> Unit, onDismiss: () -> Unit, m
             .padding(start = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(QrCodeIcon, contentDescription = "QR code", modifier = Modifier.size(18.dp))
+        Icon(QrCodeIcon, contentDescription = tr("QR code"), modifier = Modifier.size(18.dp))
         Spacer(Modifier.width(8.dp))
         Text(
             code.label,
@@ -765,7 +768,7 @@ private fun QrChip(code: QrPayload, onOpen: () -> Unit, onDismiss: () -> Unit, m
             Modifier
                 .size(44.dp)
                 .clickable(onClick = onDismiss)
-                .semantics { contentDescription = "Hide QR code" },
+                .semantics { contentDescription = tr("Hide QR code") },
             contentAlignment = Alignment.Center,
         ) {
             Text("✕", style = MaterialTheme.typography.labelLarge, color = Color.White.copy(alpha = 0.7f))
@@ -789,14 +792,14 @@ private fun ZoomControl(zoom: Float, onZoom: (Float) -> Unit, modifier: Modifier
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        ZoomStepButton("+", "Zoom in", 1, current, setZoom)
+        ZoomStepButton("+", tr("Zoom in"), 1, current, setZoom)
         Box(
             Modifier
                 .size(48.dp)
                 .clip(CircleShape)
                 .background(if (zoom > 1.05f) Color(0xFFD0D0D0) else Color.Transparent)
-                .clickable(role = Role.Button, onClickLabel = "Zoom ${zoomLabel(next)} times") { onZoom(next) }
-                .semantics { contentDescription = "Zoom $label times"; stateDescription = "$label times" },
+                .clickable(role = Role.Button, onClickLabel = tr("Zoom %s times", zoomLabel(next))) { onZoom(next) }
+                .semantics { contentDescription = tr("Zoom %s times", label); stateDescription = tr("%s times", label) },
             contentAlignment = Alignment.Center,
         ) {
             Text(
@@ -806,7 +809,7 @@ private fun ZoomControl(zoom: Float, onZoom: (Float) -> Unit, modifier: Modifier
                 maxLines = 1,
             )
         }
-        ZoomStepButton("−", "Zoom out", -1, current, setZoom)
+        ZoomStepButton("−", tr("Zoom out"), -1, current, setZoom)
     }
 }
 
@@ -1032,11 +1035,11 @@ private fun Shutter(enabled: Boolean, onClick: () -> Unit, modifier: Modifier = 
             .background(fill)
             .clickable(
                 enabled = enabled,
-                onClickLabel = stopLabel ?: if (video) "Start recording" else "Take a photo",
+                onClickLabel = stopLabel ?: if (video) tr("Start recording") else tr("Take a photo"),
                 role = Role.Button,
                 onClick = onClick,
             )
-            .semantics { contentDescription = stopLabel ?: if (video) "Record" else "Shutter" },
+            .semantics { contentDescription = stopLabel ?: if (video) tr("Record") else tr("Shutter") },
     )
 }
 
@@ -1073,16 +1076,16 @@ private fun ModeSwitch(video: Boolean, enabled: Boolean, vertical: Boolean = fal
                 .clip(RoundedCornerShape(16.dp))
                 .background(if (selected) MaterialTheme.colorScheme.primary else Color.Transparent)
                 .clickable(enabled = enabled && !selected) { onSelect(target) }
-                .semantics { stateDescription = if (selected) "Selected" else "Not selected" }
+                .semantics { stateDescription = if (selected) tr("Selected") else tr("Not selected") }
                 .padding(horizontal = 14.dp, vertical = 8.dp),
         )
     }
     val shape = RoundedCornerShape(20.dp)
     val mod = Modifier.clip(shape).background(Color(0xFF2A2A2A)).padding(3.dp)
     if (vertical) {
-        Column(mod, horizontalAlignment = Alignment.CenterHorizontally) { item("PHOTO", !video, false); item("VIDEO", video, true) }
+        Column(mod, horizontalAlignment = Alignment.CenterHorizontally) { item(tr("PHOTO"), !video, false); item(tr("VIDEO"), video, true) }
     } else {
-        Row(mod) { item("PHOTO", !video, false); item("VIDEO", video, true) }
+        Row(mod) { item(tr("PHOTO"), !video, false); item(tr("VIDEO"), video, true) }
     }
 }
 
@@ -1103,11 +1106,11 @@ private fun MonoToggle(on: Boolean, onChange: (Boolean) -> Unit) {
             .clip(RoundedCornerShape(10.dp))
             .background(if (on) Color.White else Color(0xFF2A2A2A))
             // A switch for TalkBack (checkable, on/off), named on the node that takes the tap.
-            .semantics { contentDescription = "Black and white" }
+            .semantics { contentDescription = tr("Black and white") }
             .toggleable(value = on, role = Role.Switch, onValueChange = onChange),
         contentAlignment = Alignment.Center,
     ) {
-        Text("B&W", style = MaterialTheme.typography.labelMedium, color = if (on) Color.Black else Color.White)
+        Text(tr("B&W"), style = MaterialTheme.typography.labelMedium, color = if (on) Color.Black else Color.White)
     }
 }
 
@@ -1124,7 +1127,7 @@ private fun FilmToggle(on: Boolean, onChange: (Boolean) -> Unit, modifier: Modif
             .clip(RoundedCornerShape(10.dp))
             .background(if (on) Color.White else Color(0xFF2A2A2A))
             // A switch for TalkBack (checkable, on/off), named on the node that takes the tap.
-            .semantics { contentDescription = "Film stocks" }
+            .semantics { contentDescription = tr("Film stocks") }
             .toggleable(value = on, role = Role.Switch, onValueChange = onChange),
         contentAlignment = Alignment.Center,
     ) {
@@ -1141,17 +1144,17 @@ private fun FilmToggle(on: Boolean, onChange: (Boolean) -> Unit, modifier: Modif
 private fun FilterRow(selected: BwFilter, onSelect: (BwFilter) -> Unit) {
     var open by remember { mutableStateOf(false) }
     Row(Modifier.height(36.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text("Filter", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(88.dp))
+        Text(tr("Filter"), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.width(88.dp))
         Box {
             OutlinedButton(
                 onClick = { open = true },
                 contentPadding = PaddingValues(start = 16.dp, end = 8.dp),
                 modifier = Modifier
                     .heightIn(min = 32.dp)
-                    .semantics { contentDescription = "Filter, ${selected.label}" },
+                    .semantics { contentDescription = tr("Filter, %s", tr(selected.label)) },
             ) {
                 FilterDot(selected)
-                Text(selected.label)
+                Text(tr(selected.label))
                 Icon(Icons.Filled.ArrowDropDown, contentDescription = null)
             }
             DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
@@ -1161,7 +1164,7 @@ private fun FilterRow(selected: BwFilter, onSelect: (BwFilter) -> Unit) {
                         leadingIcon = { FilterDot(f, Modifier.padding(start = 4.dp)) },
                         text = {
                             Text(
-                                f.label,
+                                tr(f.label),
                                 fontWeight = if (isSelected) FontWeight.Bold else null,
                                 color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
                             )
@@ -1213,7 +1216,7 @@ private fun LookSlider(
 private val LOOK_LABEL_WIDTH = 88.dp
 
 @Composable
-private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recording: Boolean, requestLocation: () -> Unit, shareDeviceReport: () -> Unit) {
+private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recording: Boolean, requestLocation: () -> Unit, shareDeviceReport: () -> Unit, shareTuningData: () -> Unit) {
     val maxResMp by vm.maxResMp.collectAsState()
     var showFrames by remember { mutableStateOf(false) }
     if (showFrames) {
@@ -1226,31 +1229,48 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
             .padding(horizontal = 24.dp)
             .padding(bottom = 32.dp),
     ) {
-        Text("Settings", style = MaterialTheme.typography.titleMedium)
+        Text(tr("Settings"), style = MaterialTheme.typography.titleMedium)
 
-        SettingsSection("Photo", first = true)
+        SettingsSection("Language", first = true)
+        SettingChoice(
+            title = "Interface language",
+            subtitle = null,
+            options = AppLanguage.entries,
+            selected = settings.language,
+            // Each language in its own name, so it can be found whatever the screen says now.
+            label = {
+                when (it) {
+                    AppLanguage.SYSTEM -> "Phone"
+                    AppLanguage.ENGLISH -> "English"
+                    AppLanguage.UKRAINIAN -> "Українська"
+                }
+            },
+            onSelect = vm::setLanguage,
+        )
+
+        SettingsSection("Photo")
         // One row each; double-tap a slider to reset it.
         CompactSlider(
-            "JPEG quality", settings.jpegQuality.toFloat(), CameraSettings.MIN_QUALITY.toFloat()..100f, 95f,
+            tr("JPEG quality"), settings.jpegQuality.toFloat(), CameraSettings.MIN_QUALITY.toFloat()..100f, 95f,
             rowHeight = 40.dp, labelWidth = 104.dp, valueWidth = 44.dp,
             format = { it.roundToInt().toString() },
             onChange = { vm.setJpegQuality(it.roundToInt()) },
         )
         CompactSlider(
-            "Look strength", settings.strength, 0f..100f, LookApplier.DEFAULT_STRENGTH,
+            tr("Look strength"), settings.strength, 0f..100f, LookApplier.DEFAULT_STRENGTH,
             rowHeight = 40.dp, labelWidth = 104.dp, valueWidth = 44.dp,
             format = { it.roundToInt().toString() },
             onChange = { vm.setStrength(it.roundToInt().toFloat()) },
         )
         SettingSwitch(
             title = "Smaller photos",
-            subtitle = "${CameraSettings.SMALL_LONG_SIDE} px long side; off saves full size",
+            subtitle = tr("%s px long side; off saves full size", CameraSettings.SMALL_LONG_SIDE),
             checked = settings.smallExport,
             onChange = vm::setSmallExport,
         )
         if (maxResMp > 0) {
             SettingSwitch(
-                title = "$maxResMp MP",
+                title = tr("%s MP", maxResMp),
                 subtitle = "Full sensor size: slower, no merging, viewfinder pauses",
                 checked = settings.maxRes,
                 onChange = vm::setMaxRes,
@@ -1258,7 +1278,7 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
         }
         SettingSwitch(
             title = "Keep raw (DNG)",
-            subtitle = "Saved to Pictures/${Edition.FOLDER}/RAW",
+            subtitle = tr("Saved to Pictures/%s/RAW", Edition.FOLDER),
             checked = settings.keepDng,
             onChange = vm::setKeepDng,
         )
@@ -1289,7 +1309,7 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
                 subtitle = if (settings.randomLightLeakRate == CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE) {
                     "Every shot"
                 } else {
-                    "${settings.randomLightLeakRate} random out of every ${CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE} shots"
+                    tr("%s random out of every %s shots", settings.randomLightLeakRate, CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE)
                 },
                 options = CameraSettings.LIGHT_LEAK_RATES,
                 selected = settings.randomLightLeakRate,
@@ -1313,7 +1333,7 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f).padding(end = 12.dp)) {
-                Text("Frames", style = MaterialTheme.typography.bodyLarge)
+                Text(tr("Frames"), style = MaterialTheme.typography.bodyLarge)
                 Text(
                     "Film border, shoot info or date stamp",
                     style = MaterialTheme.typography.bodySmall,
@@ -1321,7 +1341,7 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
                 )
             }
             Text(
-                settings.photoFrame.label,
+                tr(settings.photoFrame.label),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1334,7 +1354,7 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
 
         SettingsSection("Capture")
         SettingChoice(
-            title = "Merge ${CameraSettings.BURST_FRAMES} frames",
+            title = tr("Merge %s frames", CameraSettings.BURST_FRAMES),
             subtitle = "Less noise; hold still. Auto: low light only. Not with flash",
             options = listOf(BurstMode.ON, BurstMode.AUTO, BurstMode.OFF),
             selected = settings.burstMode,
@@ -1484,12 +1504,12 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
             onClick = { confirmReset = true },
             contentPadding = PaddingValues(0.dp),
             colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-        ) { Text("Reset settings to defaults") }
+        ) { Text(tr("Reset settings to defaults")) }
         if (confirmReset) {
             AlertDialog(
                 onDismissRequest = { confirmReset = false },
-                title = { Text("Reset settings to defaults?") },
-                text = { Text("Photo, capture, viewfinder and look settings return to their defaults. Learned camera calibration is kept.") },
+                title = { Text(tr("Reset settings to defaults?")) },
+                text = { Text(tr("Photo, capture, viewfinder and look settings return to their defaults. Learned camera calibration is kept.")) },
                 confirmButton = {
                     TextButton(
                         onClick = {
@@ -1497,15 +1517,15 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
                             vm.resetSettings()
                         },
                         colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                    ) { Text("Reset") }
+                    ) { Text(tr("Reset")) }
                 },
                 dismissButton = {
-                    TextButton(onClick = { confirmReset = false }) { Text("Cancel") }
+                    TextButton(onClick = { confirmReset = false }) { Text(tr("Cancel")) }
                 },
             )
         }
 
-        PlatformInfo(vm, shareDeviceReport)
+        PlatformInfo(vm, shareDeviceReport, shareTuningData)
 
         Spacer(Modifier.height(16.dp))
         for (line in Edition.credits) {
@@ -1513,8 +1533,46 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
             Spacer(Modifier.height(4.dp))
         }
         var showLicences by remember { mutableStateOf(false) }
-        TextButton(onClick = { showLicences = true }, contentPadding = PaddingValues(0.dp)) { Text("Open-source licences") }
+        TextButton(onClick = { showLicences = true }, contentPadding = PaddingValues(0.dp)) { Text(tr("Open-source licences")) }
         if (showLicences) LicensesDialog(onDismiss = { showLicences = false })
+    }
+}
+
+/**
+ * Settings › Collect tuning data ([app.rawboy.camera.report.TuningData]): start or stop collecting the next shots'
+ * viewfinder and photo copies, share them as one file with the device report, or delete them.
+ */
+@Composable
+private fun TuningDataControls(vm: CameraViewModel, shareTuningData: () -> Unit) {
+    val tuning by vm.tuning.collectAsState()
+    if (tuning.remaining > 0) {
+        Text(
+            tr("Collecting tuning data: %s more. ", tuning.remaining) +
+                tr("Take photos as usual: indoors and outdoors, with each lens and the selfie camera"),
+            style = MaterialTheme.typography.bodySmall,
+        )
+        TextButton(onClick = vm::stopTuning, contentPadding = PaddingValues(0.dp)) { Text(tr("Stop collecting")) }
+    } else {
+        TextButton(onClick = vm::startTuning, contentPadding = PaddingValues(0.dp)) { Text(tr("Collect tuning data")) }
+        Text(
+            tr(
+                "Keeps a small copy of the viewfinder and of the photo for the next %s shots, with the camera's log, so the camera can be tuned to this phone without having it. Nothing leaves the phone until you share it",
+                app.rawboy.camera.report.TuningData.SHOTS,
+            ),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    if (tuning.shots > 0) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = shareTuningData, contentPadding = PaddingValues(0.dp)) { Text(tr("Share tuning data (%s)", tuning.shots)) }
+            Spacer(Modifier.width(16.dp))
+            TextButton(
+                onClick = vm::clearTuning,
+                contentPadding = PaddingValues(0.dp),
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+            ) { Text(tr("Delete")) }
+        }
     }
 }
 
@@ -1524,7 +1582,7 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
  * next start.
  */
 @Composable
-private fun PlatformInfo(vm: CameraViewModel, shareDeviceReport: () -> Unit) {
+private fun PlatformInfo(vm: CameraViewModel, shareDeviceReport: () -> Unit, shareTuningData: () -> Unit) {
     val resolved = vm.resolvedPlatform
     val layers = resolved.profile.layers.drop(1)
     val profile = if (layers.isEmpty()) "neutral (this phone hasn't been tested)" else layers.joinToString(" + ") { PlatformRegistry.title(it) }
@@ -1541,12 +1599,13 @@ private fun PlatformInfo(vm: CameraViewModel, shareDeviceReport: () -> Unit) {
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
-    TextButton(onClick = shareDeviceReport, contentPadding = PaddingValues(0.dp)) { Text("Share device report") }
+    TextButton(onClick = shareDeviceReport, contentPadding = PaddingValues(0.dp)) { Text(tr("Share device report")) }
     Text(
         "A text file about this phone's cameras, GPU and video encoders, for tuning the camera to it. It goes only where you send it",
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+    TuningDataControls(vm, shareTuningData)
     val debuggable = (LocalContext.current.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
     if (debuggable) {
         val chosen by vm.chosenChip.collectAsState()
@@ -1571,9 +1630,9 @@ private fun FramesSettingsContent(settings: CameraSettings, vm: CameraViewModel,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
             IconButton(onClick = onBack, modifier = Modifier.padding(end = 4.dp)) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = tr("Back"))
             }
-            Text("Frames", style = MaterialTheme.typography.titleMedium)
+            Text(tr("Frames"), style = MaterialTheme.typography.titleMedium)
         }
         SettingChoice(
             title = "Frame",
@@ -1712,7 +1771,7 @@ private fun FramesSettingsContent(settings: CameraSettings, vm: CameraViewModel,
                         }
                         Spacer(Modifier.width(4.dp))
                         Text(
-                            field.label,
+                            tr(field.label),
                             style = MaterialTheme.typography.bodyMedium,
                             modifier = Modifier.weight(1f),
                         )
@@ -1732,7 +1791,7 @@ private fun FramesSettingsContent(settings: CameraSettings, vm: CameraViewModel,
 @Composable
 private fun SettingsSection(title: String, first: Boolean = false) {
     Text(
-        title,
+        tr(title),
         style = MaterialTheme.typography.labelLarge,
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(top = if (first) 12.dp else 24.dp, bottom = 4.dp),
@@ -1752,9 +1811,9 @@ private fun <T> SettingChoice(
     enabled: Boolean = true,
 ) {
     Column(Modifier.padding(start = if (indent) 16.dp else 0.dp, top = 8.dp, bottom = 8.dp)) {
-        Text(title, style = MaterialTheme.typography.bodyMedium)
+        Text(tr(title), style = MaterialTheme.typography.bodyMedium)
         if (subtitle != null) {
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(tr(subtitle), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         Row(
             Modifier
@@ -1774,11 +1833,11 @@ private fun <T> SettingChoice(
                         .clip(RoundedCornerShape(6.dp))
                         .background(if (on) MaterialTheme.colorScheme.primary else Color.Transparent)
                         .clickable(enabled = enabled) { onSelect(o) }
-                        .semantics { stateDescription = if (on) "Selected" else "Not selected" },
+                        .semantics { stateDescription = if (on) tr("Selected") else tr("Not selected") },
                     contentAlignment = Alignment.Center,
                 ) {
                     Text(
-                        label(o),
+                        tr(label(o)),
                         style = MaterialTheme.typography.labelLarge,
                         color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
                         maxLines = 1,
@@ -1792,7 +1851,7 @@ private fun <T> SettingChoice(
 /** Keep the DNG next to the JPEG (the same setting as in Settings): "RAW" lit when on, dimmed and struck through when off. */
 @Composable
 private fun RawButton(keep: Boolean, onClick: () -> Unit) {
-    IconButton(onClick = onClick, modifier = Modifier.semantics { stateDescription = if (keep) "On" else "Off" }) {
+    IconButton(onClick = onClick, modifier = Modifier.semantics { stateDescription = if (keep) tr("On") else tr("Off") }) {
         Text(
             "RAW",
             style = MaterialTheme.typography.labelSmall.copy(
@@ -1800,7 +1859,7 @@ private fun RawButton(keep: Boolean, onClick: () -> Unit) {
                 textDecoration = if (keep) null else TextDecoration.LineThrough,
             ),
             color = if (keep) MaterialTheme.colorScheme.primary else LocalContentColor.current.copy(alpha = 0.6f),
-            modifier = Modifier.semantics { contentDescription = "Keep RAW (DNG)" },
+            modifier = Modifier.semantics { contentDescription = tr("Keep RAW (DNG)") },
         )
     }
 }
@@ -1812,9 +1871,9 @@ private fun FrameButton(frame: PhotoFrame, onClick: () -> Unit) {
     val tint = if (active) MaterialTheme.colorScheme.primary else LocalContentColor.current.copy(alpha = 0.6f)
     IconButton(
         onClick = onClick,
-        modifier = Modifier.semantics { stateDescription = if (active) frame.label else "Off" },
+        modifier = Modifier.semantics { stateDescription = if (active) tr(frame.label) else tr("Off") },
     ) {
-        Icon(FrameIcon, contentDescription = "Frames", tint = tint)
+        Icon(FrameIcon, contentDescription = tr("Frames"), tint = tint)
     }
 }
 
@@ -1827,16 +1886,16 @@ private fun FrameButton(frame: PhotoFrame, onClick: () -> Unit) {
 private fun BurstButton(mode: BurstMode, lowLight: Boolean, hiRes: Boolean, flash: Boolean, onClick: () -> Unit) {
     val active = !hiRes && !flash && mode.merges(lowLight)
     val state = when {
-        hiRes -> "Inactive (full sensor resolution)"
-        flash -> "Inactive (flash)"
-        mode == BurstMode.ON -> "On"
-        mode == BurstMode.AUTO -> if (active) "Auto, merging (low light)" else "Auto, not merging (enough light)"
-        else -> "Off"
+        hiRes -> tr("Inactive (full sensor resolution)")
+        flash -> tr("Inactive (flash)")
+        mode == BurstMode.ON -> tr("On")
+        mode == BurstMode.AUTO -> if (active) tr("Auto, merging (low light)") else tr("Auto, not merging (enough light)")
+        else -> tr("Off")
     }
     val tint = if (active) MaterialTheme.colorScheme.primary else LocalContentColor.current.copy(alpha = 0.6f)
     IconButton(onClick = onClick, modifier = Modifier.semantics { stateDescription = state }) {
         Box {
-            Icon(BurstIcon, contentDescription = "Merge 8 frames", tint = tint)
+            Icon(BurstIcon, contentDescription = tr("Merge %s frames", CameraSettings.BURST_FRAMES), tint = tint)
             if (mode == BurstMode.AUTO) {
                 Text(
                     "A",
@@ -1856,10 +1915,10 @@ private fun TimerButton(seconds: Int, onClick: () -> Unit) {
     val tint = if (on) MaterialTheme.colorScheme.primary else LocalContentColor.current.copy(alpha = 0.6f)
     IconButton(
         onClick = onClick,
-        modifier = Modifier.size(40.dp).semantics { stateDescription = if (on) "$seconds seconds" else "Off" },
+        modifier = Modifier.size(40.dp).semantics { stateDescription = if (on) tr("%s seconds", seconds) else tr("Off") },
     ) {
         Box {
-            Icon(TimerIcon, contentDescription = "Self-timer", tint = tint)
+            Icon(TimerIcon, contentDescription = tr("Self-timer"), tint = tint)
             if (on) {
                 Text(
                     seconds.toString(),
@@ -1885,14 +1944,14 @@ private fun LongExposureButton(seconds: Int, lighten: Boolean, hiRes: Boolean, o
         onClick = onClick,
         modifier = Modifier.size(40.dp).semantics {
             stateDescription = when {
-                !on -> "Off"
-                hiRes -> "$seconds seconds, inactive (full sensor resolution)"
-                else -> "$seconds seconds, ${if (lighten) "light trails" else "average"}"
+                !on -> tr("Off")
+                hiRes -> tr("%s seconds, inactive (full sensor resolution)", seconds)
+                else -> tr("%s seconds, %s", seconds, if (lighten) tr("light trails") else tr("average"))
             }
         },
     ) {
         Box {
-            Icon(HourglassIcon, contentDescription = "Long exposure", tint = tint)
+            Icon(HourglassIcon, contentDescription = tr("Long exposure"), tint = tint)
             if (on) {
                 Text(
                     seconds.toString() + if (lighten) "L" else "",
@@ -1914,9 +1973,9 @@ private fun LongExposureButton(seconds: Int, lighten: Boolean, hiRes: Boolean, o
 @Composable
 private fun FlashButton(mode: FlashMode, screen: Boolean, onClick: () -> Unit) {
     val description = when {
-        mode == FlashMode.OFF -> "Flash off"
-        screen -> "Screen flash"
-        else -> "Flash with focus light"
+        mode == FlashMode.OFF -> tr("Flash off")
+        screen -> tr("Screen flash")
+        else -> tr("Flash with focus light")
     }
     IconButton(onClick = onClick) {
         Box {
@@ -2041,14 +2100,14 @@ private fun DefaultCameraChoice(action: String, title: String, whenSet: String, 
     }
     Row(Modifier.heightIn(min = 48.dp).padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium)
+            Text(tr(title), style = MaterialTheme.typography.bodyMedium)
             Text(
-                if (isDefault) whenSet else whenNotSet,
+                tr(if (isDefault) whenSet else whenNotSet),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
-        if (!isDefault) TextButton(onClick = { runCatching { context.startActivity(intent) } }) { Text("Choose") }
+        if (!isDefault) TextButton(onClick = { runCatching { context.startActivity(intent) } }) { Text(tr("Choose")) }
     }
 }
 
@@ -2072,9 +2131,9 @@ private fun SettingSwitch(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.bodyMedium, color = accent ?: Color.Unspecified)
+            Text(tr(title), style = MaterialTheme.typography.bodyMedium, color = accent ?: Color.Unspecified)
             if (subtitle != null) {
-                Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(tr(subtitle), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         Spacer(Modifier.width(12.dp))
@@ -2152,13 +2211,13 @@ private fun LandscapeControls(
                 verticalArrangement = Arrangement.spacedBy(8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                AdjustChip("B", "Brightness", formatSliderValue(settings.brightness, -100f..100f), adjust == Adjust.BRIGHTNESS,
+                AdjustChip("B", tr("Brightness"), formatSliderValue(settings.brightness, -100f..100f), adjust == Adjust.BRIGHTNESS,
                     onSelect = { onAdjust(Adjust.BRIGHTNESS) }, onReset = { vm.setBrightness(0f) })
                 if (mono) {
-                    AdjustChip("F", "Filter", settings.filter.label, adjust == Adjust.WARMTH,
+                    AdjustChip("F", tr("Filter"), tr(settings.filter.label), adjust == Adjust.WARMTH,
                         onSelect = { onAdjust(Adjust.WARMTH) }, onReset = { vm.setFilter(BwFilter.NONE) })
                 } else {
-                    AdjustChip("W", "Warmth", formatSliderValue(settings.warmth, -100f..100f), adjust == Adjust.WARMTH,
+                    AdjustChip("W", tr("Warmth"), formatSliderValue(settings.warmth, -100f..100f), adjust == Adjust.WARMTH,
                         onSelect = { onAdjust(Adjust.WARMTH) }, onReset = { vm.setWarmth(0f) })
                 }
             }
@@ -2174,8 +2233,8 @@ private fun LandscapeControls(
                     VerticalSlider(
                         value, range, default, set,
                         label = when (adjust) {
-                            Adjust.BRIGHTNESS -> "Brightness"
-                            Adjust.WARMTH -> "Warmth"
+                            Adjust.BRIGHTNESS -> tr("Brightness")
+                            Adjust.WARMTH -> tr("Warmth")
                         },
                         modifier = Modifier
                             .width(40.dp)
@@ -2220,12 +2279,12 @@ private fun AdjustChip(letter: String, name: String, value: String, selected: Bo
                 stateDescription = value
                 role = Role.Button
                 this.selected = selected
-                onClick(label = "Put on the slider") {
+                onClick(label = tr("Put on the slider")) {
                     onSelect()
                     true
                 }
                 customActions = listOf(
-                    CustomAccessibilityAction("Reset") {
+                    CustomAccessibilityAction(tr("Reset")) {
                         onSelect()
                         onReset()
                         true
@@ -2253,7 +2312,7 @@ private fun FilterColumn(selected: BwFilter, onSelect: (BwFilter) -> Unit) {
             FilterChip(
                 selected = f == selected,
                 onClick = { onSelect(f) },
-                label = { Text(f.label) },
+                label = { Text(tr(f.label)) },
                 leadingIcon = if (dot == null) null else {
                     { Box(Modifier.size(8.dp).clip(CircleShape).background(dot)) }
                 },

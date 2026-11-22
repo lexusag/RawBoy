@@ -101,6 +101,7 @@ shows them.
 - **Random light leak** (Android and iOS, **Settings → Random light leak**, off by default): adds one random procedural film leak to saved JPEGs: an edge burn, blob, sprocket holes, rebate glow, flare or start of roll, with random colours and placement. **Frequency** (1/5, 2/5, 3/5, 4/5 or 5/5, default 5/5) picks how many shots in each 5-photo sequence get a leak at randomly shuffled positions, so lower frequencies stay unpredictable. **Short-side sprockets** (off by default) also allows sprocket holes on the short edges. The DNG is untouched and the viewfinder doesn't show it. iOS draws the same leaks (`FilmLeaks.randomForCamera`) and the same shuffled 5-photo sequence (`LightLeakSequence`).
 - **RAW:** the **RAW** button in the top bar keeps the DNG next to the JPEG (lit) or not (struck through); the same
   setting as in Settings.
+- **Language** (Android, **Settings → Language → Interface language**): *Phone* (default) follows the phone's language, *English* and *Українська* (Ukrainian) override it, and the screen changes at once. The viewfinder, Settings, the help sheet, accessibility labels and messages are translated; look and film stock names, QR code contents and the device report stay as they are. Code: the text in the source stays English and goes through `tr("…")` (`i18n/Strings.kt`); `i18n/StringsUk.kt` maps each English string to Ukrainian, `%s` marking values; a string with no entry shows in English, so a new feature needs its Ukrainian line added there. Not on iOS yet.
 - **Settings:** JPEG quality; **Look strength** (0-100, how much of the look the photo gets; it used to be a slider under the look menu); whether to keep the DNG (off by default: only the JPEG is saved); **Lossy JPEG XL DNG** (Android, shown while the DNG
   is kept; off by default: once the JPEG is saved from the uncompressed raw, the DNG is re-saved as a DNG 1.7.1 with
   lossy JPEG XL compression, visually lossless and about a quarter of the size; it stays uncompressed if that fails); **Smaller photos**
@@ -177,6 +178,14 @@ shows them.
   video probe's result (the way video is recorded on this phone, see Video); and the calibration learned per lens. One `key: value` per line in a fixed order, numbers written the same in every
   language, so two phones' reports compare line by line. It holds no serial numbers, accounts, locations, file names or
   photos.
+- **Collect tuning data** (Android; Settings, under Share device report): for the next 10 shots, keeps a 512 px copy of
+  what the viewfinder showed at the shutter and of the photo's raw (linear, no metadata), with the numbers behind each
+  (lens, exposure, the preview's colour and white balance) and the camera's own log lines. Take photos as usual: indoors
+  and outdoors, every lens and the selfie camera. **Share tuning data** zips them with the device report and opens the
+  share sheet (email, Drive, a GitHub issue); **Delete** removes them, **Stop collecting** stops early. Nothing leaves
+  the phone until you share it, and the camera has no network access. The file holds no full-size photos, locations or
+  sound; the log may show the photos' file names. This is how a phone is tuned without having it in hand
+  ([phone profiles](camera-platforms.md#adding-a-phone)).
 
 ## Black and white
 
