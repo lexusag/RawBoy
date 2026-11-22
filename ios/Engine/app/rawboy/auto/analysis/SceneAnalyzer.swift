@@ -51,7 +51,10 @@ public enum SceneAnalyzer {
     public static let binsPerEv = 16
     private static let bins = Int((maxLog - minLog) * Float(binsPerEv)) + 1
 
-    static func bin(_ log2Luminance: Float) -> Int { Int((log2Luminance.clamped(minLog, maxLog) - minLog) * Float(binsPerEv)) }
+    static func bin(_ log2Luminance: Float) -> Int { log2Luminance.isNaN ? 0 : Int((log2Luminance.clamped(minLog, maxLog) - minLog) * Float(binsPerEv)) }
+
+    /** A pixel value kept in 0...65504: a NaN or infinite half (a bad frame) must not reach Int conversions. */
+    private static func finite(_ v: Float) -> Float { v.isNaN ? 0 : min(max(v, 0), 65504) }
 
     // Rec.2020 luminance weights.
     private static let kr: Float = 0.2627
@@ -87,10 +90,10 @@ public enum SceneAnalyzer {
         for y in 0..<h {
             for x in 0..<w {
                 let i = (y * w + x) * 3
-                let r = max(Float(Float16(bitPattern: px[i])), 0)
-                let g = max(Float(Float16(bitPattern: px[i + 1])), 0)
-                let b = max(Float(Float16(bitPattern: px[i + 2])), 0)
-                let lum = max(kr * r + kg * g + kb * b, 1e-6)
+                let r = Self.finite(Float(Float16(bitPattern: px[i])))
+                let g = Self.finite(Float(Float16(bitPattern: px[i + 1])))
+                let b = Self.finite(Float(Float16(bitPattern: px[i + 2])))
+                let lum = max(kr * r + kg * g + kb * b, 1e-6)  // NaN stays: bin() and the sums below tolerate it
                 let logLum = log2f(lum)
                 histogram[bin(logLum)] += 1
 

@@ -37,7 +37,8 @@ lenses, burst merge), iOS drives AVFoundation (**ProRAW at 12 MP by default**, o
 | Selfie flash (screen flash with a lit frame) | 1.10.0 | ✓ | — | |
 | Self-timer (2 / 5 / 10 s), experimental | 1.14.3 | ✓ | — | Behind Settings › Experimental |
 | Long exposure (5–60 s), experimental | 1.14.3 | ✓ | — | Gathers light in dark scenes 1.14.5 |
-| **Video** (PHOTO / VIDEO pill; HEVC; look baked in) | 1.10.1 prototype; 1.14.7 not experimental | ✓ | — | HEVC 1.10.3; stabilization 1.10.5 / 1.10.7; AE lock 1.10.7; flat video for grading 1.10.8 |
+| **Video** (PHOTO / VIDEO pill; HEVC; look baked in; AE LOCK; quality Low / Optimal / High) | 1.10.1 prototype; 1.14.7 not experimental | ✓ | ✓ | HEVC 1.10.3; stabilization 1.10.5 / 1.10.7; AE lock 1.10.7. iOS ported 2026-11-22 (1080p30 HEVC, AAC stereo where offered, saved to Photos › RawBoy Camera; the camera's own stabilization; not compiled or tried on a phone yet) |
+| Video: flat video for grading (Apple Log) | 1.10.8 | ✓ | — | Not planned for iOS |
 | Volume buttons take a photo | ≤1.1.1 | ✓ | ✓ volume + Camera Control click | Launching from Camera Control would need a LockedCameraCapture extension: not done |
 | Shutter sound (optional) | 1.3.0 | ✓ | ✓ 1.4.7 | iOS 18: `isShutterSoundSuppressionEnabled`; always on where the law requires |
 | Level and Grid options | 1.10.0 | ✓ | ✓ | Level follows the horizon 1.15.12, moves smoothly 1.15.1 |
@@ -73,19 +74,19 @@ lenses, burst merge), iOS drives AVFoundation (**ProRAW at 12 MP by default**, o
 | Remember camera & settings (off by default) | ≤1.1.1 | ✓ | ✓ | |
 | Reset settings to defaults | 1.16.11 | ✓ | ✓ | |
 | Settings regrouped, one line per setting | 1.15.0 | ✓ | ? | |
-| Burst, Flash, RAW, Frames buttons in the top bar | 1.1.2 | ✓ | ✓ | iOS has no video or experimental buttons |
+| Burst, Flash, RAW, Frames buttons in the top bar | 1.1.2 | ✓ | ✓ | iOS has no experimental button; its RAW, Frames and Flash hide in video mode |
 | TalkBack / VoiceOver labels | 1.8.5 | ✓ | ✓ | |
 | Open-source licences in Settings | ≤1.1.1 | ✓ | ✓ | |
 
 ## What iOS lacks that Android has
 
 In order of how much it changes the photo: **burst merge** (iOS is single-frame ProRAW, which the changelog says gives
-"far less grain than a single Bayer frame in low light"), **video** (with motion data and stabilized copies),
+"far less grain than a single Bayer frame in low light"), **video motion data and stabilized copies** (iOS records video, with the camera's own stabilization only, no flat video),
 **HDR gain map** (Ultra HDR JPEG), **lock-screen and power-button launch**, **digital zoom up to 10×**, **selfie
 screen flash**, **self-timer and long exposure**, **lossy JXL DNG**, **full-resolution (remosaic) raw** (iOS follows the
 system 48 MP option, unchecked), **phone profiles and Share device report** (n/a on iOS: one hardware family),
 **Pixel workarounds** (YUV matrix, tone curve, extra black, manual flash exposure: iOS uses the camera's own flash AE).
-Random light leak is no longer on this list (ported 2026-11-22).
+Random light leak and video recording are no longer on this list (ported 2026-11-22).
 
 ## Other platform gaps worth knowing
 
@@ -100,4 +101,4 @@ Random light leak is no longer on this list (ported 2026-11-22).
   tried and not adopted; the next step noted is a same-scene Pixel vs iPhone comparison.
 - iOS lacks the Pixel workarounds (YUV matrix, tone curve, extra black, manual flash exposure); the iPhone's own flash AE is used.
 - Subject tracking and focus-lock changes were marked "untested on the phones when added".
-- Video: no 4K, no log capture beyond "flat"; see `docs/video.md` for the staged plan.
+- Video: no 4K, no log capture beyond "flat" (Android only); see `docs/video.md` for the staged plan. iOS video is untried: stabilization may not be offered on the photo preset's format (the log line `video stabilization:` shows what the camera reports).

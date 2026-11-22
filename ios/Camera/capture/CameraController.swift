@@ -89,6 +89,18 @@ final class CameraController: NSObject, @unchecked Sendable {
     private let videoOutput = AVCaptureVideoDataOutput()
     private let photoOutput = AVCapturePhotoOutput()
     private let metadataOutput = AVCaptureMetadataOutput()
+    private let audioOutput = AVCaptureAudioDataOutput()
+    private let audioQueue = DispatchQueue(label: "RawBoy-audio", qos: .userInitiated)
+    private var audioInput: AVCaptureDeviceInput?
+    /** Video mode's state, applied after each (re)configuration; the camera queue's own. */
+    private var videoStabilizationOn = false
+    private var exposureLocked = false
+    /**
+     * Video mode runs the camera on its 1080p video format instead of the photo format: the photo format (4032 px) offers
+     * no standard video stabilization, the video formats do. No raw stills then (video mode takes none); the camera
+     * restarts on each switch of mode. The camera queue's own.
+     */
+    private var videoFormat = false
     private var input: AVCaptureDeviceInput?
     private var rotation: AVCaptureDevice.RotationCoordinator?
     private var rawType: OSType?
@@ -105,8 +117,11 @@ final class CameraController: NSObject, @unchecked Sendable {
     /** Log the next frame's size (after each start), to check its orientation. */
     private var logNextFrame = true
 
-    /** Each viewfinder frame (frame queue). */
-    var onFrame: ((CVPixelBuffer) -> Void)?
+    /** Each viewfinder frame with its presentation time (frame queue). */
+    var onFrame: ((CVPixelBuffer, CMTime) -> Void)?
+
+    /** A microphone buffer while video mode's microphone is on (audio queue). */
+    var onAudio: ((CMSampleBuffer) -> Void)?
 
     /** The text of a QR code the camera sees (frame queue), while setScanQr is on. */
     var onQr: ((String) -> Void)?
@@ -142,14 +157,16 @@ final class CameraController: NSObject, @unchecked Sendable {
     }
 
     /** Starts (or switches to) [lens], recording [format] (falling back to the other raw format, then failing). */
-    func start(_ lens: Info, format: RawFormat) async throws -> RawFormat {
+    func start(_ lens: Info, format: RawFormat, video: Bool = false) async throws -> RawFormat {
         try await withCheckedThrowingContinuation { (c: CheckedContinuation<RawFormat, Error>) in
             queue.async {
                 do {
+                    self.videoFormat = video
                     let used = try self.configure(lens, format)
                     // After the commit: it rebuilds the connections for a new input, dropping their settings
                     // (the selfie camera came out sideways and stretched).
                     self.orientConnection(front: lens.isFront)
+                    self.applyFrameRate()
                     // Only once the configuration is committed: startRunning inside it throws.
                     if !self.session.isRunning { self.session.startRunning() }
                     c.resume(returning: used)
@@ -164,7 +181,7 @@ final class CameraController: NSObject, @unchecked Sendable {
         guard let device = AVCaptureDevice(uniqueID: lens.deviceId) else { throw Failure(message: "camera not found") }
         session.beginConfiguration()
         defer { session.commitConfiguration() }
-        session.sessionPreset = .photo
+        session.sessionPreset = videoFormat ? .hd1920x1080 : .photo
         // sRGB frames, so the viewfinder's linearisation is exact up to a gain.
         session.automaticallyConfiguresCaptureDeviceForWideColor = false
         if let input { session.removeInput(input) }
@@ -197,8 +214,19 @@ final class CameraController: NSObject, @unchecked Sendable {
         if device.isFocusModeSupported(.continuousAutoFocus) { device.focusMode = .continuousAutoFocus }
         device.unlockForConfiguration()
         applyExposureBias(device)
+        applyExposureLock(device)
 
         rotation = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: nil)
+
+        if videoFormat {
+            // Video mode: the 1080p stream, upright 9:16 like the file; no stills.
+            rawType = nil
+            rawSize = CGSize(width: 1080, height: 1920)
+            current = lens
+            logNextFrame = true
+            Self.log.notice("camera \(lens.label) (\(device.localizedName)): video format")
+            return format
+        }
 
         // Raw: Bayer first (or ProRAW when asked), the other as fallback.
         photoOutput.maxPhotoQualityPrioritization = .quality
@@ -244,6 +272,7 @@ final class CameraController: NSObject, @unchecked Sendable {
         }
         if c.isVideoRotationAngleSupported(0) { c.videoRotationAngle = 0 }
         Self.log.notice("viewfinder connection: rotation \(c.videoRotationAngle), mirrored \(c.isVideoMirrored)")
+        applyVideoStabilization()
     }
 
     /**
@@ -270,6 +299,129 @@ final class CameraController: NSObject, @unchecked Sendable {
     func stop() {
         queue.async {
             if self.session.isRunning { self.session.stopRunning() }
+        }
+    }
+
+    // MARK: - Video
+
+    /**
+     * Video mode on or off: the microphone joins the session (when [audio]) so recordings carry sound, and the camera's
+     * own video stabilization is applied to the viewfinder's frames (which are the video). Photos are never
+     * stabilized: it crops the picture a little and delays it. Returns whether the microphone is in.
+     */
+    func setVideoMode(_ on: Bool, audio: Bool, stabilization: Bool) async -> Bool {
+        await withCheckedContinuation { (c: CheckedContinuation<Bool, Never>) in
+            queue.async {
+                self.videoStabilizationOn = on && stabilization
+                let hasMic = on && audio && self.setMicrophone(true)
+                if !on || !hasMic { _ = self.setMicrophone(false) }
+                self.applyVideoStabilization()
+                c.resume(returning: hasMic)
+            }
+        }
+    }
+
+    /** Stabilization on or off now (a Settings switch in video mode). */
+    func setVideoStabilization(_ on: Bool) {
+        queue.async {
+            self.videoStabilizationOn = on
+            self.applyVideoStabilization()
+        }
+    }
+
+    /** The microphone's input and output in or out of the session; on the queue. False when it can't be added. */
+    private func setMicrophone(_ on: Bool) -> Bool {
+        if on {
+            if audioInput != nil { return true }
+            guard let mic = AVCaptureDevice.default(for: .audio), let input = try? AVCaptureDeviceInput(device: mic) else {
+                return false
+            }
+            session.beginConfiguration()
+            defer { session.commitConfiguration() }
+            guard session.canAddInput(input), session.canAddOutput(audioOutput) else { return false }
+            session.addInput(input)
+            session.addOutput(audioOutput)
+            audioOutput.setSampleBufferDelegate(self, queue: audioQueue)
+            audioInput = input
+            // Both microphones, as the system camera's stereo video, where the device offers it.
+            if #available(iOS 18.0, *), input.isMultichannelAudioModeSupported(.stereo) { input.multichannelAudioMode = .stereo }
+        } else if let input = audioInput {
+            session.beginConfiguration()
+            audioOutput.setSampleBufferDelegate(nil, queue: nil)
+            session.removeOutput(audioOutput)
+            session.removeInput(input)
+            session.commitConfiguration()
+            audioInput = nil
+        }
+        return true
+    }
+
+    /** The recommended AAC settings for an MP4 from the microphone output; nil without the microphone. */
+    func audioSettings() -> [String: Any]? {
+        queue.sync { audioInput == nil ? nil : audioOutput.recommendedAudioSettingsForAssetWriter(writingTo: .mp4) as? [String: Any] }
+    }
+
+    /**
+     * Video mode records at a steady 30 fps: the frame duration is pinned so the camera raises its ISO in dim light instead
+     * of stretching exposures past 1/30 s and delivering fewer frames (the telephoto, with its small aperture, skipped
+     * frames). Photo mode keeps the camera's default range. On the queue, after the configuration is committed.
+     */
+    private func applyFrameRate() {
+        guard let device = input?.device else { return }
+        let thirty = CMTime(value: 1, timescale: 30)
+        let fits = device.activeFormat.videoSupportedFrameRateRanges.contains {
+            $0.minFrameDuration <= thirty && thirty <= $0.maxFrameDuration
+        }
+        do {
+            try device.lockForConfiguration()
+            if videoFormat && fits {
+                device.activeVideoMinFrameDuration = thirty
+                device.activeVideoMaxFrameDuration = thirty
+            } else {
+                device.activeVideoMinFrameDuration = .invalid
+                device.activeVideoMaxFrameDuration = .invalid
+            }
+            device.unlockForConfiguration()
+            let d = device.activeVideoMinFrameDuration
+            Self.log.notice("frame rate: pinned \(self.videoFormat && fits), min duration \(d.seconds)")
+        } catch {
+            Self.log.error("frame rate: \(error.localizedDescription)")
+        }
+    }
+
+    /**
+     * The camera's own stabilization (standard mode: a moderate crop and delay, over cinematic's larger ones) on the
+     * viewfinder connection, or off. The photo stream is separate and never stabilized. On the queue.
+     */
+    private func applyVideoStabilization() {
+        guard let c = videoOutput.connection(with: .video), let device = input?.device else { return }
+        // Standard (a moderate crop and delay) where the format offers it, else the camera's own pick.
+        let format = device.activeFormat
+        let want: AVCaptureVideoStabilizationMode = !videoStabilizationOn ? .off
+            : format.isVideoStabilizationModeSupported(.standard) ? .standard
+            : format.isVideoStabilizationModeSupported(.auto) ? .auto : .off
+        if c.preferredVideoStabilizationMode != want { c.preferredVideoStabilizationMode = want }
+        let modes = [AVCaptureVideoStabilizationMode.off, .standard, .cinematic, .cinematicExtended, .previewOptimized, .auto].filter { device.activeFormat.isVideoStabilizationModeSupported($0) }.map(\.rawValue)
+        Self.log.notice("video stabilization: format supports \(modes) on \(Int(CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription).width))px, asked \(self.videoStabilizationOn), preferred \(want.rawValue), active \(c.activeVideoStabilizationMode.rawValue)")
+    }
+
+    /** Video mode's exposure lock (AE LOCK): the exposure stays where it is until released. */
+    func setExposureLock(_ locked: Bool) {
+        queue.async {
+            self.exposureLocked = locked
+            if let device = self.input?.device { self.applyExposureLock(device) }
+        }
+    }
+
+    private func applyExposureLock(_ device: AVCaptureDevice) {
+        let mode: AVCaptureDevice.ExposureMode = exposureLocked ? .locked : .continuousAutoExposure
+        guard device.exposureMode != mode, device.isExposureModeSupported(mode) else { return }
+        do {
+            try device.lockForConfiguration()
+            device.exposureMode = mode
+            device.unlockForConfiguration()
+        } catch {
+            Self.log.error("exposure lock: \(error.localizedDescription)")
         }
     }
 
@@ -313,7 +465,7 @@ final class CameraController: NSObject, @unchecked Sendable {
                 // Setting the mode is also what applies a new point or rectangle of interest.
                 let mode: AVCaptureDevice.FocusMode = follow ? .continuousAutoFocus : .autoFocus
                 if device.isFocusModeSupported(mode) { device.focusMode = mode }
-                if device.isExposurePointOfInterestSupported {
+                if device.isExposurePointOfInterestSupported, !self.exposureLocked {
                     device.exposurePointOfInterest = meter ? point : CGPoint(x: 0.5, y: 0.5)
                     device.exposureMode = .continuousAutoExposure
                 }
@@ -358,7 +510,7 @@ final class CameraController: NSObject, @unchecked Sendable {
                 // Also resets a focus rectangle to the default one around the centre.
                 if device.isFocusPointOfInterestSupported { device.focusPointOfInterest = centre }
                 device.automaticallyAdjustsFaceDrivenAutoFocusEnabled = true
-                if device.isExposurePointOfInterestSupported { device.exposurePointOfInterest = centre }
+                if device.isExposurePointOfInterestSupported, !self.exposureLocked { device.exposurePointOfInterest = centre }
                 if device.isFocusModeSupported(.continuousAutoFocus) { device.focusMode = .continuousAutoFocus }
                 device.unlockForConfiguration()
             } catch {}
@@ -454,8 +606,13 @@ final class CameraController: NSObject, @unchecked Sendable {
     }
 }
 
-extension CameraController: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureMetadataOutputObjectsDelegate {
+extension CameraController: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudioDataOutputSampleBufferDelegate,
+    AVCaptureMetadataOutputObjectsDelegate {
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        if output === audioOutput {
+            onAudio?(sampleBuffer)
+            return
+        }
         guard let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         if let device = input?.device {
             // As-shot white for the live develop, from the camera's current white balance.
@@ -479,7 +636,7 @@ extension CameraController: AVCaptureVideoDataOutputSampleBufferDelegate, AVCapt
             logNextFrame = false
             Self.log.notice("first frame \(CVPixelBufferGetWidth(buffer))x\(CVPixelBufferGetHeight(buffer))")
         }
-        onFrame?(buffer)
+        onFrame?(buffer, CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
     }
 
     func metadataOutput(_ output: AVCaptureMetadataOutput, didOutput objects: [AVMetadataObject],

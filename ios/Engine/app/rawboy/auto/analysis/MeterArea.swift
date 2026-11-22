@@ -23,7 +23,8 @@ public enum MeterArea: Equatable, Sendable {
             let x0 = Int((1 - fraction) / 2 * Float(width))
             let y0 = Int((1 - fraction) / 2 * Float(height))
             return (x0, max(x0 + 1, width - x0), y0, max(y0 + 1, height - y0))
-        case let .spot(x, y, size):
+        case let .spot(x0, y0, size):
+            let x = x0.isFinite ? x0 : 0.5, y = y0.isFinite ? y0 : 0.5
             let short = min(width, height)
             let side = min(max(Int((size * Float(short)).rounded()), 1), short)
             let x0 = min(max(Int((x * Float(width) - Float(side) / 2).rounded()), 0), width - side)
