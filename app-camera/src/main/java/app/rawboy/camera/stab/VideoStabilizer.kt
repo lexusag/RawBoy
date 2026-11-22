@@ -7,6 +7,8 @@ import android.net.Uri
 import android.os.Environment
 import android.os.PowerManager
 import android.os.Process
+import android.system.Os
+import android.system.OsConstants
 import android.os.SystemClock
 import android.provider.MediaStore
 import android.util.Log
@@ -17,6 +19,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.json.JSONObject
 import java.io.File
+import java.io.FileDescriptor
+import java.nio.ByteBuffer
 import java.io.IOException
 import java.util.concurrent.Executors
 
@@ -93,8 +97,18 @@ object VideoStabilizer {
         Log.i(TAG, "$name: plan in ${SystemClock.elapsedRealtime() - started} ms, ${plan.outputs.size} frames, eased ${"%.2f".format(plan.eased)}")
 
         val resolver = context.contentResolver
+        // The original's dates, so galleries show the copy right after it instead of at the time it was rendered.
+        val taken = runCatching {
+            resolver.query(video, arrayOf(MediaStore.MediaColumns.DATE_TAKEN), null, null, null)?.use { c ->
+                if (c.moveToFirst() && !c.isNull(0)) c.getLong(0) else null
+            }
+        }.getOrNull()
+        val fileTimes = runCatching {
+            resolver.openFileDescriptor(video, "r")?.use { fd -> Mp4Times.read(fdIo(fd.fileDescriptor)) }
+        }.getOrNull()
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, "$name-stab.mp4")
+            taken?.let { put(MediaStore.MediaColumns.DATE_TAKEN, it + 1) }
             put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
             put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/" + Edition.FOLDER + "/")
             put(MediaStore.MediaColumns.IS_PENDING, 1)
@@ -113,7 +127,16 @@ object VideoStabilizer {
                     muxer.release()
                 }
             }
-            resolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
+            fileTimes?.let { t ->
+                runCatching {
+                    resolver.openFileDescriptor(uri, "rw")?.use { fd -> Mp4Times.write(fdIo(fd.fileDescriptor), t) }
+                }.onFailure { Log.w(TAG, "$name: couldn't copy the capture time", it) }
+            }
+            resolver.update(uri, ContentValues().apply {
+                put(MediaStore.MediaColumns.IS_PENDING, 0)
+                // Publishing rescans the file, which can reset the date from its own header (same second as the original).
+                taken?.let { put(MediaStore.MediaColumns.DATE_TAKEN, it + 1) }
+            }, null, null)
             ok = true
         } finally {
             if (!ok) runCatching { resolver.delete(uri, null, null) }
@@ -121,6 +144,13 @@ object VideoStabilizer {
         val seconds = (SystemClock.elapsedRealtime() - started) / 1000f
         Log.i(TAG, "$name: stabilized in ${"%.1f".format(seconds)} s")
         return "Stabilized copy saved to Movies/${Edition.FOLDER}"
+    }
+
+    /** [Mp4Times.Io] on a descriptor ([FileDescriptor] streams can only read or only write). */
+    private fun fdIo(fd: FileDescriptor) = object : Mp4Times.Io {
+        override val size: Long get() = Os.lseek(fd, 0, OsConstants.SEEK_END)
+        override fun read(buffer: ByteBuffer, position: Long) = Os.pread(fd, buffer, position)
+        override fun write(buffer: ByteBuffer, position: Long) = Os.pwrite(fd, buffer, position)
     }
 
     /** The geometry and lens [StabPlan] needs, from a `.motion` header. */

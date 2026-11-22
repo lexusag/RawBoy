@@ -1,6 +1,7 @@
-**Camera (Android, experimental): stabilized copies keep their last frame (2026-11-22)**
+**Camera (Android, experimental): stabilized copies keep their last frame and the original's date (2026-11-22)**
 
 - Every `-stab.mp4` was one frame short (329 of 330 frames, the original's last missing): the stream was ended right after the last frame was drawn into the encoder's surface, before the encoder had taken it. `StabRenderer` now waits (up to 1 s) until the encoder has given out every drawn frame.
+- The copy is dated like the original, so galleries show the two side by side: `Mp4Times` copies the original's creation time into the copy's `mvhd`/`tkhd`/`mdhd` (MediaMuxer stamps the render time), and MediaStore's DATE_TAKEN is the original's + 1 ms, so the copy sorts right after it.
 
 **Camera (Android, experimental): stabilize after recording (2026-11-22)**
 
