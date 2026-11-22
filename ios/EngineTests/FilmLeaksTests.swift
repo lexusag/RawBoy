@@ -113,4 +113,14 @@ final class FilmLeaksTests: XCTestCase {
         XCTAssertTrue(landscapeAll.contains(0) || landscapeAll.contains(2))
         XCTAssertTrue(landscapeAll.contains(1) || landscapeAll.contains(3))
     }
+
+    func testRandomForCameraDrawsOnlyCameraTypes() {
+        var seen = Set<FilmLeakType>()
+        for i in 0..<200 {
+            let l = FilmLeaks.randomForCamera(aspect: 1.333, seed: Double(i) / 200)
+            XCTAssertTrue(FilmLeaks.cameraTypes.contains(l.type), "unexpected \(l.type)")
+            seen.insert(l.type)
+        }
+        XCTAssertEqual(seen, Set(FilmLeaks.cameraTypes))
+    }
 }

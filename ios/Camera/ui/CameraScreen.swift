@@ -675,6 +675,18 @@ private struct SettingsSheet: View {
                         Binding(get: { vm.settings.trackFocus }, set: vm.setTrackFocus))
                     row("Grain", "Film grain on the viewfinder and photos",
                         Binding(get: { vm.settings.grain }, set: vm.setGrain))
+                    row("Random light leak", "Adds a random film light leak to saved photos",
+                        Binding(get: { vm.settings.randomLightLeak }, set: vm.setRandomLightLeak))
+                    if vm.settings.randomLightLeak {
+                        Picker("Frequency", selection: Binding(get: { vm.settings.randomLightLeakRate }, set: vm.setRandomLightLeakRate)) {
+                            ForEach(CameraSettings.lightLeakRates, id: \.self) { rate in
+                                Text(rate == CameraSettings.lightLeakSequenceSize ? "Every shot"
+                                     : "\(rate) of every \(CameraSettings.lightLeakSequenceSize) shots").tag(rate)
+                            }
+                        }
+                        row("Short-side sprockets", "Also on the short edges; off keeps them on the long edges",
+                            Binding(get: { vm.settings.shortSideSprockets }, set: vm.setShortSideSprockets))
+                    }
                     row("QR codes", "Tap to open a link or copy the text or Wi-Fi password",
                         Binding(get: { vm.settings.scanQr }, set: vm.setScanQr))
                 }

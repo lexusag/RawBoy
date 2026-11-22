@@ -400,6 +400,16 @@ public enum FilmLeaks {
         )
     }
 
+    /** Types RawBoy Camera's "Random light leak" may draw (Android `FilmLeaks.CAMERA_TYPES`). */
+    public static let cameraTypes: [FilmLeakType] = [.edge, .blob, .sprocket, .rebate, .flare, .start]
+
+    /** Completely random single leak from `cameraTypes` for Camera's "Random light leak" setting (Android `randomForCamera`). */
+    public static func randomForCamera(aspect: Float, seed: Double, shortSideSprockets: Bool = false) -> FilmLeak {
+        let r = Mulberry32(seedBits(seed))
+        let type = cameraTypes[Int(Foundation.floor(r.next() * Double(cameraTypes.count)))]
+        return random(type: type, aspect: aspect, seed: r.next(), grade: true, shortSideSprockets: shortSideSprockets)
+    }
+
     public static func randomRoll(aspect: Float, seed: Double, shortSideSprockets: Bool = false) -> [FilmLeak] {
         let r = Mulberry32(seedBits(seed) ^ 0x9e3779b9)
         let main = random(type: nil, aspect: aspect, seed: r.next(), grade: true, shortSideSprockets: shortSideSprockets)

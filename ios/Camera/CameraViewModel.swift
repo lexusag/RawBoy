@@ -650,6 +650,14 @@ final class CameraViewModel: ObservableObject {
         change { $0.grain = on }
     }
 
+    func setRandomLightLeak(_ on: Bool) { change { $0.randomLightLeak = on } }
+
+    func setRandomLightLeakRate(_ rate: Int) {
+        change { $0.randomLightLeakRate = min(max(rate, 1), CameraSettings.lightLeakSequenceSize) }
+    }
+
+    func setShortSideSprockets(_ on: Bool) { change { $0.shortSideSprockets = on } }
+
     func setScanQr(_ on: Bool) {
         change { $0.scanQr = on }
         controller.setScanQr(on)
@@ -880,6 +888,12 @@ final class CameraViewModel: ObservableObject {
                     params.colorDenoise = max(Self.measuredColorDenoise(img, exposure: params.exposure, denoise: params.denoise) ?? params.denoise,
                                               params.colorDenoise ?? 0)
                     params.shadows = max(params.shadows, Self.backlightShadows(a.stats))
+                    // Random light leak: one generated leak on saved JPEGs, as on Android (the DNG and viewfinder don't get it).
+                    if s.randomLightLeak, CameraSettingsStore.nextLightLeak(rate: s.randomLightLeakRate) {
+                        let aspect = Float(a.base.width) / Float(max(a.base.height, 1))
+                        params.filmLeaks = [FilmLeaks.randomForCamera(aspect: aspect, seed: FilmLeaks.newSeed(),
+                                                                      shortSideSprockets: s.shortSideSprockets)]
+                    }
                     let shader = ShaderParams.from(params, asShot: a.defaults, lut: lut,
                                                    lens: LensTransform(info: img.lens, params: params), base: a.base,
                                                    bloomSources: a.bloom, skinMask: a.skin,
