@@ -1,3 +1,7 @@
+**Camera (Android): the raw viewfinder streams the raw alone (2026-11-22)**
+
+- With **Viewfinder from RAW** on, phones whose profile sets the new `PreviewProfile.rawViewfinderAlone` (the Tensor layer only) leave the ISP's preview out of the repeating request: only the RAW_SENSOR stream runs. The ISP no longer processes a preview nobody sees, and the viewfinder no longer redraws the same raw frame on each preview frame (53 fps measured, of which 30 new frames). Stills, flash and focus requests still target the preview surface, as before.
+
 **Camera (Android): Viewfinder from RAW is a regular setting (2026-11-22)**
 
 - Tried on the Pixel 9 Pro (owner: "pretty great"), so **Viewfinder from RAW** moved from Settings › Experimental to **Settings › Viewfinder**, without the experimental colour. Still off by default and shown only where the phone profile allows it (Tensor Pixels).

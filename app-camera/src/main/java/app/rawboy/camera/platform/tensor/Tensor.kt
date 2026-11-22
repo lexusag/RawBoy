@@ -43,8 +43,10 @@ val tensorLayer = PlatformLayer(
             // Everything on the Pixel 9 Pro was tuned with the curve's points packed near black.
             preview = p.preview.copy(
                 curveAtEvenPoints = false, level = PreviewLevel.BOOSTED, liftsShadows = true,
-                // Prototype (2026-11-22), to be measured on the Pixel 9 Pro: fps, upload time, viewfinder vs photo.
+                // Pixel 9 Pro (2026-11-22): 30 raw frames a second, 0 dropped, shots 4-5 s at normal develop priority.
                 rawViewfinder = true,
+                // The raw stream alone, without the ISP preview (2026-11-22, to be confirmed on the Pixel 9 Pro).
+                rawViewfinderAlone = true,
             ),
             still = p.still.copy(
                 // Preview 1/30 s, ISO 1410, boost 2.39 -> still 1/15 s, ISO 1410, boost 1.2.

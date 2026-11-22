@@ -80,7 +80,8 @@ measurements behind its numbers.
 | `preview.curveAtEvenPoints` | The preview's sRGB `TONEMAP_CURVE` sent at 64 even input steps (`capture/PreviewCurve.kt`), and the viewfinder decodes the first step as a straight line (`Frame.linearToe`) | false (points packed near black) | false | | | **true** | |
 | `preview.level` | What the viewfinder's gain is made of besides calibration (`capture/ViewfinderGain.kt`) | `BOOSTED` (calibration / boost × still gain) | `BOOSTED` | | | **`STILL_WHITE_BALANCED`** (calibration × the frame's smallest neutral) | |
 | `preview.liftsShadows` | The ISP's preview already has the backlight shadow lift a shot adds; false = the live develop adds it (not in video mode) | true | true | | | **false** | |
-| `preview.rawViewfinder` | Settings › Experimental offers **Viewfinder from RAW** (prototype: the viewfinder built from the RAW_SENSOR stream, `gl/RawViewfinder.kt`) | false | **true** | | | | |
+| `preview.rawViewfinder` | Settings › Viewfinder offers **Viewfinder from RAW** (the viewfinder built from the RAW_SENSOR stream, `gl/RawViewfinder.kt`) | false | **true** | | | | |
+| `preview.rawViewfinderAlone` | With the raw viewfinder on, the repeating request streams the raw alone, without the ISP preview (`CameraController.repeatPreview`) | false | **true** | | | | |
 | `still.extraBlack` | Black beyond the DNG's, fraction of white, for shot decoding and the raw meter | 0 | **1.46e-3** | **1.46e-3** | | | |
 | `still.maxStillExposureNs` | Longest still exposure AE gives in low light (`stillGain` prediction, AE ceiling) | 1/15 s | 1/15 s | | | | |
 | `still.lookContrast` / `lookSaturation` | Added to saved photos only (`ShotDevelop.withIspLook`): the viewfinder shows an ISP rendering that can't be undone | 0 / 0 | | **+25 / +25** | | | |

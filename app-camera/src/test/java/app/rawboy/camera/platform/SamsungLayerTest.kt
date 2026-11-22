@@ -57,7 +57,7 @@ class SamsungLayerTest {
             val expected = before.copy(
                 layers = samsung(chip).layers,
                 lenses = before.lenses.copy(motionGain = emptyMap()),
-                preview = before.preview.copy(rawViewfinder = false),
+                preview = before.preview.copy(rawViewfinder = false, rawViewfinderAlone = false),
             )
             assertEquals("$chip", expected, samsung(chip))
         }

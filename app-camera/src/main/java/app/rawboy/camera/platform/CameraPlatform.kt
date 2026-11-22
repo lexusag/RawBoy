@@ -94,10 +94,16 @@ data class PreviewProfile(
      */
     val liftsShadows: Boolean,
     /**
-     * The phone can stream RAW_SENSOR next to the preview fast enough for a viewfinder built from the raw (prototype,
-     * `CameraSettings.rawViewfinder`, offered in Settings › Experimental only where this is true). Neutral false.
+     * The phone can stream RAW_SENSOR next to the preview fast enough for a viewfinder built from the raw
+     * (`CameraSettings.rawViewfinder`, offered in Settings › Viewfinder only where this is true). Neutral false.
      */
     val rawViewfinder: Boolean = false,
+    /**
+     * With the raw viewfinder on, the repeating request streams the raw alone, without the ISP's preview (saves the
+     * ISP's work and the viewfinder's redraws on its frames). Only where [rawViewfinder] is true and the phone keeps
+     * 3A and its frame rate without a preview stream. Neutral false.
+     */
+    val rawViewfinderAlone: Boolean = false,
 )
 
 /** How a preview frame's brightness relates to the still's raw ([PreviewProfile.level]). */
