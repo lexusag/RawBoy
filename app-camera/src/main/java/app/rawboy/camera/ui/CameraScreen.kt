@@ -184,6 +184,7 @@ fun CameraScreen(
     openPhoto: (Uri) -> Unit,
     openQr: (QrPayload) -> Unit,
     shareDeviceReport: () -> Unit,
+    shareTuningData: () -> Unit,
 ) {
     val status by vm.status.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
@@ -730,7 +731,7 @@ fun CameraScreen(
 
     if (showSettings) {
         ModalBottomSheet(onDismissRequest = { showSettings = false }) {
-            SettingsContent(settings, vm, recordingMs != null, requestLocation, shareDeviceReport)
+            SettingsContent(settings, vm, recordingMs != null, requestLocation, shareDeviceReport, shareTuningData)
         }
     }
 }
@@ -1213,7 +1214,7 @@ private fun LookSlider(
 private val LOOK_LABEL_WIDTH = 88.dp
 
 @Composable
-private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recording: Boolean, requestLocation: () -> Unit, shareDeviceReport: () -> Unit) {
+private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recording: Boolean, requestLocation: () -> Unit, shareDeviceReport: () -> Unit, shareTuningData: () -> Unit) {
     val maxResMp by vm.maxResMp.collectAsState()
     var showFrames by remember { mutableStateOf(false) }
     if (showFrames) {
@@ -1505,7 +1506,7 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
             )
         }
 
-        PlatformInfo(vm, shareDeviceReport)
+        PlatformInfo(vm, shareDeviceReport, shareTuningData)
 
         Spacer(Modifier.height(16.dp))
         for (line in Edition.credits) {
@@ -1519,12 +1520,48 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
 }
 
 /**
+ * Settings › Collect tuning data ([app.rawboy.camera.report.TuningData]): start or stop collecting the next shots'
+ * viewfinder and photo copies, share them as one file with the device report, or delete them.
+ */
+@Composable
+private fun TuningDataControls(vm: CameraViewModel, shareTuningData: () -> Unit) {
+    val tuning by vm.tuning.collectAsState()
+    if (tuning.remaining > 0) {
+        Text(
+            "Collecting tuning data: ${tuning.remaining} more shot${if (tuning.remaining == 1) "" else "s"}. " +
+                "Take photos as usual: indoors and outdoors, with each lens and the selfie camera",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        TextButton(onClick = vm::stopTuning, contentPadding = PaddingValues(0.dp)) { Text("Stop collecting") }
+    } else {
+        TextButton(onClick = vm::startTuning, contentPadding = PaddingValues(0.dp)) { Text("Collect tuning data") }
+        Text(
+            "Keeps a small copy of the viewfinder and of the photo for the next ${app.rawboy.camera.report.TuningData.SHOTS} shots, " +
+                "with the camera's log, so the camera can be tuned to this phone without having it. Nothing leaves the phone until you share it",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
+    if (tuning.shots > 0) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = shareTuningData, contentPadding = PaddingValues(0.dp)) { Text("Share tuning data (${tuning.shots})") }
+            Spacer(Modifier.width(16.dp))
+            TextButton(
+                onClick = vm::clearTuning,
+                contentPadding = PaddingValues(0.dp),
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+            ) { Text("Delete") }
+        }
+    }
+}
+
+/**
  * Which platform profile the camera runs with (layers, or the neutral profile on a phone nobody has tested), what
  * was detected, the device report for tuning a profile, and in a debug build the chip to take the phone for from the
  * next start.
  */
 @Composable
-private fun PlatformInfo(vm: CameraViewModel, shareDeviceReport: () -> Unit) {
+private fun PlatformInfo(vm: CameraViewModel, shareDeviceReport: () -> Unit, shareTuningData: () -> Unit) {
     val resolved = vm.resolvedPlatform
     val layers = resolved.profile.layers.drop(1)
     val profile = if (layers.isEmpty()) "neutral (this phone hasn't been tested)" else layers.joinToString(" + ") { PlatformRegistry.title(it) }
@@ -1547,6 +1584,7 @@ private fun PlatformInfo(vm: CameraViewModel, shareDeviceReport: () -> Unit) {
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+    TuningDataControls(vm, shareTuningData)
     val debuggable = (LocalContext.current.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
     if (debuggable) {
         val chosen by vm.chosenChip.collectAsState()
