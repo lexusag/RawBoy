@@ -287,8 +287,8 @@ for handing the phone to someone who just wants photos.
   (photo mode, phones with a flash or the selfie screen flash), Photo / Video, **Colour / B&W**, a bigger shutter (96 dp),
   the last photo and the selfie switch, and the Settings gear. Landscape: the lenses and Colour / B&W in a narrow column
   beside the shutter.
-- **Colour** is Film mode on the default film stock (Portrait 400 in the menu's naming); **B&W** is Film + B&W on the default
-  black and white stock with the Yellow filter, both at the default Strength. The full camera's own look picks stay as
+- **Colour** is Film mode on the default film stock (Yellow Portrait 400); **B&W** is Film + B&W on the default
+  black and white stock (Yellow Mono 400) with the Yellow filter, both at the default Strength. The full camera's own look picks stay as
   they were.
 - **Hidden:** the look menu, Film and B&W buttons, Brightness and Warmth, RAW, Frames and Burst buttons, the help button,
   the timer and long exposure, the zoom buttons, grid, level and histogram, the focus ring's drag and loupe, and press
