@@ -1,6 +1,7 @@
 **Camera (Android): Viewfinder from RAW is a regular setting (2026-11-22)**
 
 - Tried on the Pixel 9 Pro (owner: "pretty great"), so **Viewfinder from RAW** moved from Settings › Experimental to **Settings › Viewfinder**, without the experimental colour. Still off by default and shown only where the phone profile allows it (Tensor Pixels).
+- Shots develop at normal GPU priority while the viewfinder is from RAW: in the phone test, low-priority develops starved behind the viewfinder's per-frame raw upload (55 s and 198 s, one unfinished after 50 s, against 4-6 s with the ISP viewfinder), as hot Snapdragon phones did before.
 
 **Camera (Android, experimental): viewfinder from RAW, a prototype (2026-11-22)**
 

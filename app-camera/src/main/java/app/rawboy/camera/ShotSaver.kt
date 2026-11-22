@@ -206,13 +206,21 @@ internal object ShotSaver {
 
     /**
      * Used only on the develop thread, at the GPU priority the platform asks for
-     * ([app.rawboy.camera.platform.StillProfile.lowPriorityDevelop]); each makes its context on first use, and a
-     * process runs with one profile, so one of them stays empty.
+     * ([app.rawboy.camera.platform.StillProfile.lowPriorityDevelop], normal while the viewfinder is from RAW); each
+     * makes its context on first use, so one of them usually stays empty.
      */
     private val exportGpuLow = ExportGpu(lowPriority = true)
     private val exportGpuNormal = ExportGpu(lowPriority = false)
 
-    private fun exportGpu(platform: CameraPlatform) = if (platform.still.lowPriorityDevelop) exportGpuLow else exportGpuNormal
+    /**
+     * Normal priority while the viewfinder is built from RAW: its per-frame raw upload kept the GPU busy enough that
+     * low-priority develops starved (Pixel 9 Pro, 2026-11-22: 55 s and 198 s against 4-6 s), as on a hot Adreno
+     * (the Qualcomm layer's note).
+     */
+    private fun exportGpu(shot: Shot): ExportGpu {
+        val rawViewfinder = shot.settings.rawViewfinder && shot.platform.preview.rawViewfinder
+        return if (shot.platform.still.lowPriorityDevelop && !rawViewfinder) exportGpuLow else exportGpuNormal
+    }
 
     /** A shot decoded and analysed by [prepare], ready for [finish]; owns [image] until [finish] closes it. */
     private class Prepared(
@@ -504,7 +512,7 @@ internal object ShotSaver {
         val waitMs = ms(p.started)
         val saved = withContext(developDispatcher) {
             val exportStart = System.nanoTime()
-            Exporter(app).exportFile(p.image, shot.dng, shot.name, p.shader, p.export, CameraViewModel.JPEG_NAMING, exportGpu(shot.platform)) {}
+            Exporter(app).exportFile(p.image, shot.dng, shot.name, p.shader, p.export, CameraViewModel.JPEG_NAMING, exportGpu(shot)) {}
                 .also {
                     val took = ms(exportStart)
                     Log.d(TAG, "${shot.name}: develop + JPEG $took ms")
