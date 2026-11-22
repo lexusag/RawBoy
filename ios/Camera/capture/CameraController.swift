@@ -326,7 +326,7 @@ final class CameraController: NSObject, @unchecked Sendable {
             audioOutput.setSampleBufferDelegate(self, queue: audioQueue)
             audioInput = input
             // Both microphones, as the system camera's stereo video, where the device offers it.
-            if input.isMultichannelAudioModeSupported(.stereo) { input.multichannelAudioMode = .stereo }
+            if #available(iOS 18.0, *), input.isMultichannelAudioModeSupported(.stereo) { input.multichannelAudioMode = .stereo }
         } else if let input = audioInput {
             session.beginConfiguration()
             audioOutput.setSampleBufferDelegate(nil, queue: nil)
