@@ -22,6 +22,7 @@ import app.rawboy.auto.analysis.SceneStats
 import app.rawboy.auto.looks.LookApplier
 import app.rawboy.camera.capture.CameraController
 import app.rawboy.camera.capture.MotionRecording
+import app.rawboy.camera.capture.MotionSensors
 import app.rawboy.camera.capture.ViewfinderGain
 import app.rawboy.camera.platform.ActivePlatform
 import app.rawboy.camera.report.DeviceReport
@@ -365,6 +366,19 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private fun applyStabilization() {
         controller.setVideoStabilization(if (_videoMode.value) _settings.value.videoStabilization else null)
         controller.setMotionData(_videoMode.value && _settings.value.videoMotionData)
+        updateMotionSensors()
+    }
+
+    /** The gyro and accelerometer for motion data, null without a gyroscope. */
+    private val motionSensors by lazy { MotionSensors.create(app) }
+
+    /**
+     * Motion data's sensors run while video mode with motion data is on and the camera is in front, so a recording
+     * starts with the gyro already running ([MotionSensors]); a recording still being written keeps them.
+     */
+    private fun updateMotionSensors() {
+        val on = resumed && _videoMode.value && _settings.value.videoMotionData
+        if (on) motionSensors?.start() else if (motion == null) motionSensors?.takeIf { it.running }?.stop()
     }
 
     /** Experimental: record the whole 4:3 frame plus a `.motion` file. Not in the middle of a recording. */
@@ -502,7 +516,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     /** Starts [r]'s motion data: sensors now, camera frames and encoded frames through the listeners. */
     private fun startMotion(r: VideoRecorder, turns: Int, flat: Boolean) {
         val lens = info ?: return
-        val m = MotionRecording.start(app, r.name, lens, turns, r.sink.width, r.sink.height, flat)
+        val m = motionSensors?.let { MotionRecording.start(app, it, r.name, lens, turns, r.sink.width, r.sink.height, flat) }
         if (m == null) {
             _message.value = "No motion data for this video (no gyroscope or no room)"
             return
@@ -679,6 +693,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     fun onResume() {
         resumed = true
+        updateMotionSensors()
         // Location access taken away in the system settings: geotagging can't work, so it shows as off.
         if (_settings.value.geotag && !location.hasPermission()) {
             change { it.copy(geotag = false) }
@@ -692,6 +707,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         resumed = false
         cancelSelfTimer()
         stopRecording() // a recording never carries on in the background
+        updateMotionSensors() // a recording still finishing keeps them until it is written
         updateLocation()
         // The process may be killed in the background: write settings still waiting for a slider to rest.
         if (saveJob?.isActive == true) {
@@ -1673,6 +1689,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         shutterSound.release()
         // Normally ended by stopRecording; never leave the sensors running.
         motionFor?.let { r -> endMotion(r)?.finish(r.startNs, r.clockOffsetNs.takeIf { it != Long.MIN_VALUE } ?: 0L) }
+        motionSensors?.stop()
         controller.close()
         histogramRenderer.close()
         qrExecutor.shutdown()
