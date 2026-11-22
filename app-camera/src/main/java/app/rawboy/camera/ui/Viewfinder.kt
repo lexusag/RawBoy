@@ -55,7 +55,7 @@ fun Viewfinder(
     frame: ViewfinderRenderer.Frame?,
     params: ShaderParams?,
     onSurfaceTexture: (SurfaceTexture) -> Unit,
-    onBase: (width: Int, height: Int, rgba: FloatArray) -> Unit,
+    onBase: (width: Int, height: Int, rgba: FloatArray, frameNs: Long) -> Unit,
     modifier: Modifier = Modifier,
     loupe: ViewfinderRenderer.Loupe? = null,
     onLuma: ((width: Int, height: Int, luma: ByteArray) -> Unit)? = null,
@@ -78,7 +78,7 @@ fun Viewfinder(
             ViewfinderRenderer(
                 onSurfaceTexture = { surfaceCallback.value(it) },
                 requestRender = { view[0]?.requestRender() },
-                onBase = { w, h, rgba -> baseCallback.value(w, h, rgba) },
+                onBase = { w, h, rgba, ns -> baseCallback.value(w, h, rgba, ns) },
             )
         }
 

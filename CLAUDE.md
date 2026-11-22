@@ -205,6 +205,10 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   post-raw boost, so removing all of it undid Brightness (viewfinder brightened, then sank back). Measured as the
   still's residual digital gain (boost / `stillGain`) against the last zero-compensation preview frame's
   (`StillProfile.compensation = BOOST_STAYS_DIGITAL`; OnePlus `AE_GAIN_IN_RAW`, see the phone profiles below).
+  Under `BOOST_STAYS_DIGITAL` that rule is only the fallback (2026-11-22): `capture/CompensationTracker` measures it
+  per frame from AE's gain against the frame before each step change, until AE converges (the Pixel's AE often gives a
+  fraction of a brighter step, sometimes the rest seconds later), and the live develop takes the value of the frame
+  its copy came from (`ViewfinderRenderer.onBase` frameNs → `CameraController.frameAt`).
   iOS: the same (`AutoTone.exposure(phoneAe:)`, viewfinder and shots), flash shots included (the iPhone's flash is
   exposed by its own AE, no flash guide). Shutter sound: iOS 18's `isShutterSoundSuppressionEnabled` where
   `isShutterSoundSuppressionSupported` (not in Japan/Korea; before iOS 18 the click always plays).

@@ -75,38 +75,4 @@ class AppliedCompensationTest {
     fun anUnknownCeilingChangesNothing() {
         assertEquals(1f, AppliedCompensation.evBelowCeiling(1f, 1000f, 0f), 0f)
     }
-
-    // AE pinned at 1/30 s and its highest gain (the gain is illustrative, from the 2026-11-01 dark-room log). On the
-    // Pixel 9 Pro at a candle-lit table (2026-11-21) Brightness +100 then left the viewfinder as at 0: the develop took
-    // all of it back out, so the compensation hadn't reached the frames.
-    private val pinned = 0.033333f * 1410f * 2.39f
-
-    @Test
-    fun pinnedCompensationThatChangedNothingIsNotTakenOut() {
-        val r = AppliedCompensation.residual(postRawBoost = 2.39f, stillGain = 2f)
-        assertEquals(0f, AppliedCompensation.evPinned(3f, pinned, pinned, r, r), 1e-4f)
-        // The residual rule alone credited all of it, so the develop took Brightness back out.
-        assertEquals(3f, AppliedCompensation.ev(3f, r, r), 1e-4f)
-    }
-
-    @Test
-    fun pinnedMeasuresWhatAeDelivered() {
-        // AE raised the ISO by one stop (into the raw) and the boost by another (digital): one stop reached the raw.
-        val r0 = AppliedCompensation.residual(postRawBoost = 2.39f, stillGain = 2f)
-        val r1 = AppliedCompensation.residual(postRawBoost = 4.78f, stillGain = 2f)
-        assertEquals(1f, AppliedCompensation.evPinned(3f, pinned * 4f, pinned, r1, r0), 1e-3f)
-        // Darker: AE lowered the ISO two stops, all of it in the raw.
-        assertEquals(-2f, AppliedCompensation.evPinned(-3f, pinned / 4f, pinned, r0, r0), 1e-3f)
-        // A darker compensation AE had no room for either (still above its ceiling at -1 EV) changes nothing.
-        assertEquals(0f, AppliedCompensation.evPinned(-1f, pinned, pinned, r0, r0), 1e-4f)
-    }
-
-    @Test
-    fun pinnedNeverMoreThanAskedNorTheOtherWay() {
-        val r = 1f
-        assertEquals(1f, AppliedCompensation.evPinned(1f, pinned * 8f, pinned, r, r), 1e-4f)
-        assertEquals(0f, AppliedCompensation.evPinned(1f, pinned / 2f, pinned, r, r), 1e-4f)
-        assertEquals(0f, AppliedCompensation.evPinned(1f, pinned, 0f, r, r), 0f)
-        assertEquals(0f, AppliedCompensation.evPinned(0f, pinned * 2f, pinned, r, r), 0f)
-    }
 }

@@ -1034,8 +1034,11 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     // ---- Live develop ----
 
-    /** A small copy of the viewfinder frame (GL thread): analyse it unless the last one is still running. */
-    fun onViewfinderBase(width: Int, height: Int, rgba: FloatArray) {
+    /**
+     * A small copy of the viewfinder frame shot at [frameNs] (GL thread): analyse it unless the last one is still
+     * running.
+     */
+    fun onViewfinderBase(width: Int, height: Int, rgba: FloatArray, frameNs: Long) {
         if (liveJob?.isActive == true) return
         val f = _frame.value ?: return
         // The ISP's post-raw digital gain isn't in the raw: take it back out, and add what the still will gain
@@ -1084,7 +1087,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             val stats = SceneAnalyzer.analyze(base.base, skin, state?.iso ?: 0f, meterArea())
             // The phone's auto exposure set the frame (and the shot's raw): keep it, lifted where it went dark, as the
             // shot does (see develop).
-            val captureEv = controller.appliedCompensationEv(state, ofFrame = true)
+            // The compensation of the frame this copy is, not of the newest result: during a Brightness step AE moves by a
+            // stop within the frame or two between them.
+            val shot = controller.frameAt(frameNs)
+            val captureEv = controller.appliedCompensationEv(shot ?: state, ofFrame = true)
             val auto = AutoTone.develop(stats, defaults, phoneAe = true, captureEv = captureEv, splitLuma = false)
             // A new metering area (a tap, a release, a tracked subject hiding) can move the exposure by a stop at once;
             // the viewfinder eases there over a few updates instead of snapping. Brightness's compensation isn't eased
