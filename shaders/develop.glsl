@@ -98,9 +98,7 @@ uniform float uAnamorphicK;      // manual cylindrical (horizontal) distortion
 uniform float uFisheyeT;        // fisheye straightening 0..1 (0 = off)
 uniform float uFisheyeFe;       // fisheye focal length in pixels (equidistant: radius = fe * angle)
 uniform vec2 uFisheyeCenter;    // optical axis offset from the image centre, pixels
-uniform vec4 uFrame;             // frame overlay: output size (px), border thickness (px), 0 = off
-uniform vec3 uFrameColor;        // frame colour, display-encoded sRGB
-uniform float uMonoFx;           // 0..1: how far the picture, frame, leaks and effects go to grey at the very end (B&W)
+uniform float uMonoFx;           // 0..1: how far the picture, leaks and effects go to grey at the very end (B&W)
 uniform float uClipFrame;        // 1 = mask pixels outside [0, uImageSize] to black (when lensCrop < 0)
 uniform float uWarpOn;
 uniform float uWarpPlanes;
@@ -1033,16 +1031,7 @@ float frameMask(vec2 p) {
     return a.x * a.y;
 }
 
-// Frame overlay (Pro's Frame, Camera's frame setting): a solid border of uFrame.z pixels drawn inside the output
-// rectangle uFrame.xy, over the finished picture (after the LUT and curves) and before the leaks, which screen over it.
-// Anti-aliased like frameMask, so a small preview shows a clean edge.
-vec3 applyFrame(vec3 c, vec2 outPx) {
-    vec2 fw = max(fwidth(outPx), vec2(1e-4));
-    vec2 a = clamp((uFrame.z - min(outPx, uFrame.xy - outPx)) / fw + 0.5, 0.0, 1.0);
-    return mix(c, uFrameColor, max(a.x, a.y));
-}
-
-// End of the pipeline for B&W: leaks, effects and frame colours go to grey with the rest of the picture.
+// End of the pipeline for B&W: leaks and effects go to grey with the rest of the picture.
 vec3 monoFx(vec3 c) {
     return mix(c, vec3(dot(c, vec3(0.2126, 0.7152, 0.0722))), uMonoFx);
 }

@@ -161,15 +161,20 @@ data class Pentax645Info(
  */
 object Pentax645Frame {
 
+    /**
+     * The frame covers the photo's edges: [outWidth] x [outHeight] is the photo's own size. [photoWidth] x
+     * [photoHeight] is the window the photo shows through (the size minus the pads), whose pixel (x, y) is the photo's
+     * (x + [leftPad], y + [topPad]): the photo is neither scaled nor moved.
+     */
     data class Layout(
         val photoWidth: Int,
         val photoHeight: Int,
         val border: Int,
         val infoBar: Int,
         val style: FilmFrameStyle = FilmFrameStyle.PENTAX_645,
+        /** True when the photo is landscape, so the shorter side is vertical (left/right edges). */
+        val infoOnLeft: Boolean = photoWidth > photoHeight,
     ) {
-        /** True when the photo is landscape (`photoWidth > photoHeight`), so the shorter side is vertical (left/right edges). */
-        val infoOnLeft: Boolean get() = photoWidth > photoHeight
         val topPad: Int get() = if (style == FilmFrameStyle.CONTAX_645 && !infoOnLeft) infoBar else border
         val bottomPad: Int get() = if (style == FilmFrameStyle.CONTAX_645 && !infoOnLeft) infoBar else border
         val leftPad: Int get() = if (style == FilmFrameStyle.CONTAX_645 && infoOnLeft) infoBar else border
@@ -181,6 +186,7 @@ object Pentax645Frame {
         val topBar: Int get() = infoBar
     }
 
+    /** The frame's layout over a photo of [photoWidth] x [photoHeight]: its pads from the photo's short side, the output the photo's size. */
     fun layout(photoWidth: Int, photoHeight: Int, style: FilmFrameStyle = FilmFrameStyle.PENTAX_645): Layout {
         val shortSide = minOf(photoWidth, photoHeight).toFloat()
         val border = when (style) {
@@ -188,7 +194,54 @@ object Pentax645Frame {
             FilmFrameStyle.CONTAX_645 -> (shortSide * 0.012f).roundToInt().coerceAtLeast(6)
         }
         val infoBar = (shortSide * 0.036f).roundToInt().coerceAtLeast(28)
-        return Layout(photoWidth, photoHeight, border, infoBar, style)
+        val onLeft = photoWidth > photoHeight
+        val pads = Layout(photoWidth, photoHeight, border, infoBar, style, onLeft)
+        return Layout(
+            photoWidth - pads.leftPad - pads.rightPad, photoHeight - pads.topPad - pads.bottomPad,
+            border, infoBar, style, onLeft,
+        )
+    }
+
+    /**
+     * Frames the photo rows `[y, y + rows)` of [src] (the photo's `outWidth * rows * 3`) into [dst] (the same size),
+     * drawing the rebate over the edges: the top pad, the photo window (see [wrapPhotoBand]) and the bottom pad.
+     */
+    fun coverBand(
+        src: ShortArray,
+        dst: ShortArray,
+        layout: Layout,
+        y: Int,
+        rows: Int,
+        monochrome: Boolean = false,
+        info: Pentax645Info,
+    ) {
+        val ow = layout.outWidth
+        val winTop = layout.topPad
+        val winBottom = layout.topPad + layout.photoHeight
+        var tmp = ShortArray(0)
+        var win = ShortArray(0)
+        var row = y
+        val end = y + rows
+        while (row < end) {
+            val region = if (row < winTop) 0 else if (row < winBottom) 1 else 2
+            val stop = minOf(end, when (region) { 0 -> winTop; 1 -> winBottom; else -> end })
+            val n = stop - row
+            if (tmp.size < ow * n * 3) tmp = ShortArray(ow * n * 3)
+            when (region) {
+                0 -> renderTopBarBand(tmp, layout, row, n, info, monochrome)
+                1 -> {
+                    val pw = layout.photoWidth
+                    if (win.size < pw * n * 3) win = ShortArray(pw * n * 3)
+                    for (r in 0 until n) {
+                        System.arraycopy(src, ((row - y + r) * ow + layout.leftPad) * 3, win, r * pw * 3, pw * 3)
+                    }
+                    wrapPhotoBand(win, tmp, layout, row - winTop, n, monochrome, info)
+                }
+                else -> renderBorderBand(tmp, layout, row, n, monochrome, info)
+            }
+            System.arraycopy(tmp, 0, dst, (row - y) * ow * 3, ow * n * 3)
+            row = stop
+        }
     }
 
     fun formatFrameNumber(frameNumber: Int): String =

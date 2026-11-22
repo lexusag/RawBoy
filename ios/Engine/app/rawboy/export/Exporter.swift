@@ -78,8 +78,8 @@ public final class Exporter {
             : BandDownscaler.outputSize(params.lens.outputWidth, params.lens.outputHeight, maxLongSide: settings.maxLongSide)
         let isMono = params.saturation <= -100 || (params.lutAmount >= 100 && Looks.isMonochromeLut(params.lut?.id))
         let resolved = settings.resolveFrame(image: image, exifDate: settings.captureDate ?? image.metadata.dateTimeOriginal, monochrome: isMono)
-        let frameLayout = resolved.pentax645.map { Pentax645Frame.layout(photoWidth: size.0, photoHeight: size.1, style: $0.style) }
-        let outSize = frameLayout.map { ($0.outWidth, $0.outHeight) } ?? size
+        // The frame covers the photo's edges: the file has the photo's size.
+        let outSize = size
         let dateStamp = resolved.pentax645 == nil ? resolved.dateStamp : ""
         let dateStampStyle = resolved.dateStampStyle
         let mono = resolved.monochromeImprint
@@ -198,14 +198,14 @@ public final class Exporter {
         let layout = pentax645.map { Pentax645Frame.layout(photoWidth: size.0, photoHeight: size.1, style: $0.style) }
         var framedBand: [UInt16] = []
         let stamped: (Int, Int, UnsafeMutablePointer<UInt16>) throws -> Void
-        if let layout {
+        if let layout, let pentax645 {
             stamped = { y, rows, band in
                 let need = layout.outWidth * rows * 3
                 if framedBand.count < need { framedBand = [UInt16](repeating: 0, count: need) }
                 try framedBand.withUnsafeMutableBufferPointer { dst in
                     guard let base = dst.baseAddress else { return }
-                    Pentax645Frame.wrapPhotoBand(src: band, dst: base, layout: layout, photoY: y, bandRows: rows, monochrome: monochrome, info: pentax645)
-                    try consume(layout.topPad + y, rows, base)
+                    Pentax645Frame.coverBand(src: band, dst: base, layout: layout, y: y, rows: rows, monochrome: monochrome, info: pentax645)
+                    try consume(y, rows, base)
                 }
             }
         } else if !dateStamp.isEmpty {
@@ -216,44 +216,12 @@ public final class Exporter {
         } else {
             stamped = consume
         }
-        if let layout, let pentax645 {
-            var barY = 0
-            while barY < layout.topPad {
-                let rows = min(Self.tileHeight, layout.topPad - barY)
-                let need = layout.outWidth * rows * 3
-                if framedBand.count < need { framedBand = [UInt16](repeating: 0, count: need) }
-                try framedBand.withUnsafeMutableBufferPointer { dst in
-                    guard let base = dst.baseAddress else { return }
-                    Pentax645Frame.renderTopBarBand(band: base, layout: layout, bandY: barY, bandRows: rows, info: pentax645, monochrome: monochrome)
-                    try consume(barY, rows, base)
-                }
-                barY += rows
-            }
-        }
-        let emitBottom: () throws -> Void = {
-            if let layout {
-                var botY = 0
-                while botY < layout.bottomPad {
-                    let rows = min(Self.tileHeight, layout.bottomPad - botY)
-                    let need = layout.outWidth * rows * 3
-                    if framedBand.count < need { framedBand = [UInt16](repeating: 0, count: need) }
-                    try framedBand.withUnsafeMutableBufferPointer { dst in
-                        guard let base = dst.baseAddress else { return }
-                        Pentax645Frame.renderBorderBand(band: base, layout: layout, bandY: layout.topPad + layout.photoHeight + botY, bandRows: rows, monochrome: monochrome, info: pentax645)
-                        try consume(layout.topPad + layout.photoHeight + botY, rows, base)
-                    }
-                    botY += rows
-                }
-            }
-        }
         if scanExport {
             try renderBands(image, params, 1, onProgress, stamped, scale: ScanScale.scale)
-            try emitBottom()
             return
         }
         if size.0 == w && size.1 == h {
             try renderBands(image, params, 1, onProgress, stamped)
-            try emitBottom()
             return
         }
         let scaler = BandDownscaler(inWidth: w, inHeight: h, outWidth: size.0, outHeight: size.1,
@@ -262,7 +230,6 @@ public final class Exporter {
         let minGrain = Float(max(w, h)) / Float(max(size.0, size.1))
         try renderBands(image, params, minGrain, onProgress) { _, rows, band in try scaler.push(rows, band) }
         try scaler.finish()
-        try emitBottom()
     }
 
     /**

@@ -33,8 +33,7 @@ import app.rawboy.color.BwFilter
  * - caRed, caBlue: -100..100, lateral chromatic aberration: + enlarges the red (blue) plane around the image centre
  * - vignetteAmount: -100..100, + brightens corners; vignetteMidpoint: 0..100 (higher = only the corners)
  * - curves: point curves (RGB, then red, green, blue) on the final display-encoded image (see [ToneCurves])
- * - frame: 0..20 solid border over the finished picture in % of its short side, 0 = off; frameColor: `#rrggbb` (see [Frame])
- * - monoFx: the picture is black and white (Camera's B&W mode): the frame, leaks and effects go grey too (`uMonoFx`);
+ * - monoFx: the picture is black and white (Camera's B&W mode): leaks and effects go grey too (`uMonoFx`);
  *   a bundled monochrome LUT at full strength does the same without it. Not a slider or preset value.
  * - bwFilter: colour filter for black and white ([app.rawboy.color.BwFilter], RawBoy Camera's B&W mode; NONE = identity),
  *   channel gains after white balance and the RGB primaries
@@ -97,8 +96,6 @@ data class DevelopParams(
     val filmGrain: Float = 75f,
     val halation: Float = 100f,
     val curves: ToneCurves = ToneCurves.NONE,
-    val frame: Float = 0f,
-    val frameColor: String = Frame.DEFAULT_COLOR,
     val lensProfile: Boolean = true,
     val lensDistortion: Float = 0f,
     val lensAnamorphic: Float = 0f,

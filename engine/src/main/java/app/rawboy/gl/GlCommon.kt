@@ -190,8 +190,6 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
     private val uFisheyeFe = GLES30.glGetUniformLocation(id, "uFisheyeFe")
     private val uFisheyeCenter = GLES30.glGetUniformLocation(id, "uFisheyeCenter")
     private val uClipFrame = GLES30.glGetUniformLocation(id, "uClipFrame")
-    private val uFrame = GLES30.glGetUniformLocation(id, "uFrame")
-    private val uFrameColor = GLES30.glGetUniformLocation(id, "uFrameColor")
     private val uMonoFx = GLES30.glGetUniformLocation(id, "uMonoFx")
     private val uWarpOn = GLES30.glGetUniformLocation(id, "uWarpOn")
     private val uWarpPlanes = GLES30.glGetUniformLocation(id, "uWarpPlanes")
@@ -287,13 +285,6 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
         GLES30.glUniform1i(uToneMapper, p.toneMapper)
         GLES30.glUniform1f(uDisplaySource, p.displaySource)
         GLES30.glUniform1f(uClipLevel, p.clipLevel)
-        // The frame sits on the output rectangle (thickness in output pixels of the short side); the viewfinder's
-        // lens is the whole frame like any photo's.
-        GLES30.glUniform4f(
-            uFrame, p.lens.outputWidth.toFloat(), p.lens.outputHeight.toFloat(),
-            p.frame * minOf(p.lens.outputWidth, p.lens.outputHeight), 0f,
-        )
-        GLES30.glUniform3f(uFrameColor, p.frameColor[0], p.frameColor[1], p.frameColor[2])
         GLES30.glUniform1f(uMonoFx, p.monoFx)
         GLES30.glUniform1f(uShadows, p.shadows)
         GLES30.glUniform1f(uHighlights, p.highlights)

@@ -63,7 +63,7 @@ class Pentax645FrameTest {
             fieldOrder = listOf("time", "date", "frame"),
         )
         val infoFlipped = infoNormal.copy(flipped = true)
-        val src = ShortArray(600 * layout.infoBar * 3) { 20000.toShort() }
+        val src = ShortArray(layout.photoWidth * layout.infoBar * 3) { 20000.toShort() }
         val dstNormal = ShortArray(layout.outWidth * layout.infoBar * 3)
         val dstFlipped = ShortArray(layout.outWidth * layout.infoBar * 3)
         Pentax645Frame.wrapPhotoBand(src, dstNormal, layout, 0, layout.infoBar, monochrome = false, info = infoNormal)
@@ -86,8 +86,11 @@ class Pentax645FrameTest {
         val layout = Pentax645Frame.layout(600, 800)
         assertTrue(layout.border >= 3)
         assertTrue(layout.infoBar >= 28)
-        assertEquals(600 + 2 * layout.border, layout.outWidth)
-        assertEquals(800 + 2 * layout.border, layout.outHeight)
+        // The frame covers the photo's edges: the output is the photo's size, the window inside it smaller.
+        assertEquals(600, layout.outWidth)
+        assertEquals(800, layout.outHeight)
+        assertEquals(600 - 2 * layout.border, layout.photoWidth)
+        assertEquals(800 - 2 * layout.border, layout.photoHeight)
 
         val info = Pentax645Info(
             frameNumber = 3,
@@ -101,7 +104,7 @@ class Pentax645FrameTest {
             dateTime = "13.11.26 14:46",
         )
         val bandRows = layout.infoBar + 20
-        val src = ShortArray(600 * bandRows * 3) { 20000.toShort() }
+        val src = ShortArray(layout.photoWidth * bandRows * 3) { 20000.toShort() }
         val dst = ShortArray(layout.outWidth * bandRows * 3)
         Pentax645Frame.wrapPhotoBand(src, dst, layout, 0, bandRows, monochrome = false, info = info)
 
@@ -136,8 +139,8 @@ class Pentax645FrameTest {
     fun landscapePhotoPlacesPentax645InfoOnShorterLeftSide() {
         val layout = Pentax645Frame.layout(800, 600)
         assertTrue(layout.infoOnLeft)
-        assertEquals(800 + 2 * layout.border, layout.outWidth)
-        assertEquals(600 + 2 * layout.border, layout.outHeight)
+        assertEquals(800, layout.outWidth)
+        assertEquals(600, layout.outHeight)
 
         val info = Pentax645Info(
             frameNumber = 7,
@@ -146,12 +149,12 @@ class Pentax645FrameTest {
             fNumber = 2.8,
             focalLengthMm = 24.0,
         )
-        val src = ShortArray(800 * 600 * 3) { 20000.toShort() }
-        val dst = ShortArray(layout.outWidth * 600 * 3)
-        Pentax645Frame.wrapPhotoBand(src, dst, layout, 0, 600, monochrome = false, info = info)
+        val src = ShortArray(layout.photoWidth * layout.photoHeight * 3) { 20000.toShort() }
+        val dst = ShortArray(layout.outWidth * layout.photoHeight * 3)
+        Pentax645Frame.wrapPhotoBand(src, dst, layout, 0, layout.photoHeight, monochrome = false, info = info)
 
         var brightLeftStripePixels = 0
-        for (y in 0 until 600) {
+        for (y in 0 until layout.photoHeight) {
             for (x in layout.leftPad until layout.leftPad + layout.infoBar) {
                 val idx = (y * layout.outWidth + x) * 3
                 val r = dst[idx].toInt() and 0xFFFF
@@ -166,7 +169,7 @@ class Pentax645FrameTest {
     @Test
     fun monochromeModeRendersNeutralBlackAndWhiteForBothFrames() {
         val layout = Pentax645Frame.layout(600, 800)
-        val src = ShortArray(600 * layout.infoBar * 3) { 20000.toShort() }
+        val src = ShortArray(layout.photoWidth * layout.infoBar * 3) { 20000.toShort() }
         val topBand = ShortArray(layout.outWidth * layout.infoBar * 3)
         val info = Pentax645Info(
             frameNumber = 5,
@@ -209,7 +212,7 @@ class Pentax645FrameTest {
     @Test
     fun slideAndRedColorsRenderExpectedHues() {
         val layout = Pentax645Frame.layout(600, 800)
-        val src = ShortArray(600 * layout.infoBar * 3) { 20000.toShort() }
+        val src = ShortArray(layout.photoWidth * layout.infoBar * 3) { 20000.toShort() }
 
         val slideDst = ShortArray(layout.outWidth * layout.infoBar * 3)
         Pentax645Frame.wrapPhotoBand(
@@ -290,7 +293,7 @@ class Pentax645FrameTest {
         assertTrue("Expected Red LED shoot info in Contax 645 top bar", topRedPixels > 50)
 
         // Photo corners have cutouts with a shallower, soft-blurred gate edge than the middle dark gate shoulder.
-        val photoSrc = ShortArray(600 * 10 * 3) { 20000.toShort() }
+        val photoSrc = ShortArray(layout.photoWidth * 10 * 3) { 20000.toShort() }
         val photoDst = ShortArray(layout.outWidth * 10 * 3)
         Pentax645Frame.wrapPhotoBand(photoSrc, photoDst, layout, 0, 10, monochrome = false, info = info)
         val cutoutEdgePx = photoDst[(layout.leftPad + 8) * 3].toInt() and 0xFFFF
@@ -335,13 +338,13 @@ class Pentax645FrameTest {
             color = FilmFrameColor.RED,
             style = FilmFrameStyle.CONTAX_645,
         )
-        val src = ShortArray(800 * 600 * 3) { 20000.toShort() }
-        val dst = ShortArray(layout.outWidth * 600 * 3)
-        Pentax645Frame.wrapPhotoBand(src, dst, layout, 0, 600, monochrome = false, info = info)
+        val src = ShortArray(layout.photoWidth * layout.photoHeight * 3) { 20000.toShort() }
+        val dst = ShortArray(layout.outWidth * layout.photoHeight * 3)
+        Pentax645Frame.wrapPhotoBand(src, dst, layout, 0, layout.photoHeight, monochrome = false, info = info)
 
         var leftBarPixels = 0
         var rightBarPixels = 0
-        for (y in 0 until 600) {
+        for (y in 0 until layout.photoHeight) {
             for (x in 0 until layout.leftPad) {
                 val r = dst[(y * layout.outWidth + x) * 3].toInt() and 0xFFFF
                 if (r > 30000) leftBarPixels++
@@ -364,5 +367,38 @@ class Pentax645FrameTest {
         assertEquals(Pentax645Field.TIME, order.first())
         assertTrue(Pentax645Field.MODE !in order)
         assertEquals(Pentax645Field.EXPORT_FIELDS.size, order.size)
+    }
+
+    @Test
+    fun coverBandKeepsThePhotoSizeAndLeavesItsPixelsWhereTheyAre() {
+        for (style in FilmFrameStyle.entries) for ((w, h) in listOf(600 to 800, 800 to 600, 600 to 600)) {
+            val layout = Pentax645Frame.layout(w, h, style)
+            assertEquals("$style ${w}x$h", w, layout.outWidth)
+            assertEquals("$style ${w}x$h", h, layout.outHeight)
+            val info = Pentax645Info(frameNumber = 3, mode = "FILM", exposureTime = 1.0 / 125.0, fNumber = 2.8, style = style)
+            // Photo pixel (x, y) = 20000 + x + y * 3 (mod range), so a shifted or scaled photo shows.
+            val src = ShortArray(w * h * 3)
+            for (y in 0 until h) for (x in 0 until w) for (c in 0 until 3) src[(y * w + x) * 3 + c] = (20000 + x + y * 3).toShort()
+            val dst = ShortArray(w * h * 3)
+            // In bands that straddle the top pad, the window and the bottom pad.
+            var y = 0
+            while (y < h) {
+                val rows = minOf(97, h - y)
+                val band = src.copyOfRange(y * w * 3, (y + rows) * w * 3)
+                val out = ShortArray(w * rows * 3)
+                Pentax645Frame.coverBand(band, out, layout, y, rows, false, info)
+                System.arraycopy(out, 0, dst, y * w * 3, w * rows * 3)
+                y += rows
+            }
+            // The pads are rebate (dark); the window's middle is the photo, untouched and not moved.
+            val centre = (h / 2 * w + w / 2) * 3
+            assertEquals(src[centre], dst[centre])
+            val x0 = layout.leftPad + layout.photoWidth / 2
+            val y0 = layout.topPad + layout.photoHeight / 2
+            val mid = (y0 * w + x0) * 3
+            assertEquals("$style window middle", src[mid], dst[mid])
+            assertTrue("$style top-left corner is rebate", (dst[0].toInt() and 0xFFFF) < 3000)
+            assertTrue("$style bottom-right corner is rebate", (dst[(w * h - 1) * 3].toInt() and 0xFFFF) < 3000)
+        }
     }
 }

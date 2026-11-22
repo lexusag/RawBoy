@@ -179,22 +179,6 @@ internal val UKRAINIAN: Map<String, String> = mapOf(
         "Випадкове засвічення плівки",
     "Adds a random film light leak (edge burn, blob, sprocket holes, rebate glow, flare or start of roll) to saved shots" to
         "Додає до знімків випадкове засвічення плівки (край, пляма, перфорація, світіння рамки, відблиск або початок плівки)",
-    "Border" to
-        "Рамка",
-    "A plain border over the photo, inside its size; leaks drawn over it" to
-        "Проста рамка поверх фото, всередині його розміру; засвічення лягають зверху",
-    "Border colour" to
-        "Колір рамки",
-    "Thin" to
-        "Тонка",
-    "Medium" to
-        "Середня",
-    "Thick" to
-        "Товста",
-    "Black" to
-        "Чорна",
-    "White" to
-        "Біла",
     "Frequency" to
         "Частота",
     "Every shot" to

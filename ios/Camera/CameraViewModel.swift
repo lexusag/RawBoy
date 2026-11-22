@@ -694,9 +694,6 @@ final class CameraViewModel: ObservableObject {
         change { $0.randomLightLeakRate = min(max(rate, 1), CameraSettings.lightLeakSequenceSize) }
     }
 
-    func setBorder(_ percent: Int) { change { $0.border = percent } }
-    func setBorderColor(_ hex: String) { change { $0.borderColor = hex } }
-
     func setShortSideSprockets(_ on: Bool) { change { $0.shortSideSprockets = on } }
 
     func setScanQr(_ on: Bool) {

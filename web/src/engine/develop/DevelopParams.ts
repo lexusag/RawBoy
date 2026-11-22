@@ -4,7 +4,6 @@ import type { FilmLeak } from './FilmLeaks';
 import type { HealSpot } from './HealSpots';
 import type { LightEffect } from './LightEffects';
 import type { LightLeak } from './LightLeaks';
-import { FRAME_DEFAULT_COLOR } from './Frame';
 import { DEFAULT_CURVES, type ToneCurves } from './ToneCurve';
 
 /**
@@ -99,8 +98,7 @@ export const anamorphicBarOf = (c: AnamorphicColor): Float32Array => new Float32
  * - curves: point curves (RGB, then red, green, blue) on the final display-encoded image (see ToneCurve.ts)
  * - RGB primaries (after darktable): red/green/blueHue in degrees (-45..45), red/green/bluePurity -200..200,
  *   tintHue degrees (-180..180), tintPurity 0..100
- * - frame: 0..20 solid border over the finished picture in % of its short side, 0 = off; frameColor: `#rrggbb` (see Frame.ts)
- * - monoFx: the picture is black and white (Camera's B&W mode): the frame, leaks and effects go grey too (`uMonoFx`);
+ * - monoFx: the picture is black and white (Camera's B&W mode): leaks and effects go grey too (`uMonoFx`);
  *   a bundled monochrome LUT at full strength does the same without it. Not a slider or preset value.
  * - bwFilter: colour filter for black and white (BwFilter.ts, RawBoy Camera's B&W mode; 'none' = identity), channel gains
  *   after white balance and the RGB primaries
@@ -168,8 +166,6 @@ export interface DevelopParams {
   filmGrain: number;
   halation: number;
   curves: ToneCurves;
-  frame: number;
-  frameColor: string;
   lensProfile: boolean;
   lensDistortion: number;
   lensAnamorphic: number;
@@ -257,8 +253,6 @@ export const DEFAULT_PARAMS: Readonly<DevelopParams> = Object.freeze({
   filmGrain: 75,
   halation: 100,
   curves: DEFAULT_CURVES,
-  frame: 0,
-  frameColor: FRAME_DEFAULT_COLOR,
   lensProfile: true,
   lensDistortion: 0,
   lensAnamorphic: 0,
