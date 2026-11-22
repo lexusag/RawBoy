@@ -4,7 +4,8 @@ What RawBoy Camera does on **Android** (`app-camera`, `app.rawboy.camera`) and o
 release first shipped each feature. The editors (Pro, Auto, Browse, Packer) are in [features.md](features.md). There is
 no web or Desktop camera (a Mac or browser has no RAW camera path here), so those columns don't exist.
 
-Written 2026-11-17 against `main` at 4cbc445, from the Camera entries of `CHANGELOG.md` (dated by the first tag that
+Written 2026-11-17 against `main` at 4cbc445; updated 2026-11-22 (at 1af5290) for the iOS Random light leak and the Android
+video changes since (motion data, stabilized copies, no dropped frames). The original sources were from the Camera entries of `CHANGELOG.md` (dated by the first tag that
 contains each: `git blame` + `git tag --contains`), `docs/camera.md`, `docs/video.md` and the two source trees. Nothing
 was run (no phone or emulator in the session). RawBoy Film (`app.rawboy.camera.film`) was merged into Camera's Film mode
 in v1.7.0 (2026-10-31); its own history before that is not listed.
@@ -49,6 +50,7 @@ lenses, burst merge), iOS drives AVFoundation (**ProRAW at 12 MP by default**, o
 | Samsung tablets / phones match the viewfinder better | 1.8.11; 1.10.8 | ✓ | n/a | |
 | **Phone profiles** detected at start (chip, maker, model layers; *Phone profile* line in Settings) | unreleased (branch `camera-device-compat`) | ✓ | n/a | Pixel 9 Pro (Tensor) and OnePlus 11 measured; others neutral. See [camera-platforms.md](camera-platforms.md) |
 | Share device report (Settings) | unreleased (same) | ✓ | — | Plain text through the share sheet, for tuning a new phone |
+| Video motion data + **Stabilize after recording** (experimental, `-stab.mp4` copy) | unreleased | ✓ | — | Gyro/OIS capture and a software stabilizer; Settings › Experimental. Optical stabilization switch for video |
 | Video on phones whose standard encoder path fails (probe) | unreleased (same) | ✓ | — | OnePlus 11 records through the encoder's own GL context |
 
 ## Looks and output
@@ -66,6 +68,7 @@ lenses, burst merge), iOS drives AVFoundation (**ProRAW at 12 MP by default**, o
 | **HDR gain map** (Ultra HDR JPEG) | 1.10.1 | ✓ | — | Visible lift 1.15.11; scaled to the look's white 1.16.11 |
 | **Lossy JPEG XL DNG** re-save | 1.5.10 | ✓ | n/a | iOS keeps ProRAW |
 | Frames: Date stamp (Classic, Red LED, 3 orders) | 1.15.13; refined 1.15.14–1.15.15 | ✓ | ✓ | Pro and Auto got them in 1.16.12 |
+| **Random light leak** (one random procedural film leak on saved JPEGs; Frequency 1/5–5/5 in shuffled 5-photo sequences; Short-side sprockets) | unreleased (branch `claude/project-thread-lw6gpc`; Android before that) | ✓ | ✓ | Same generator (`FilmLeaks.randomForCamera`, types edge, blob, sprocket, rebate, flare, start). The DNG and the viewfinder don't get it. iOS ported 2026-11-22, not yet tried on a phone |
 | Frames: Pentax 645 / Contax 645 rebate with shoot info | 1.15.16 | ✓ | ✓ | |
 | Remember camera & settings (off by default) | ≤1.1.1 | ✓ | ✓ | |
 | Reset settings to defaults | 1.16.11 | ✓ | ✓ | |
@@ -77,8 +80,19 @@ lenses, burst merge), iOS drives AVFoundation (**ProRAW at 12 MP by default**, o
 ## What iOS lacks that Android has
 
 In order of how much it changes the photo: **burst merge** (iOS is single-frame ProRAW, which the changelog says gives
-"far less grain than a single Bayer frame in low light"), **video**, **HDR gain map**, **lock-screen and
-power-button launch**, **digital zoom**, **selfie screen flash**, **self-timer and long exposure**, **lossy JXL DNG**.
+"far less grain than a single Bayer frame in low light"), **video** (with motion data and stabilized copies),
+**HDR gain map** (Ultra HDR JPEG), **lock-screen and power-button launch**, **digital zoom up to 10×**, **selfie
+screen flash**, **self-timer and long exposure**, **lossy JXL DNG**, **full-resolution (remosaic) raw** (iOS follows the
+system 48 MP option, unchecked), **phone profiles and Share device report** (n/a on iOS: one hardware family),
+**Pixel workarounds** (YUV matrix, tone curve, extra black, manual flash exposure: iOS uses the camera's own flash AE).
+Random light leak is no longer on this list (ported 2026-11-22).
+
+## Other platform gaps worth knowing
+
+- iOS-only in Camera: ProRAW as the default raw and the Camera Control click.
+- Android has no Lensfun port (Pro on web, Desktop and iOS have it) and no `healStroke` JNI binding (healing brush on web and Desktop).
+- Android's Pro light leak overlay has no outline dots (web, iOS and Desktop do). Camera's random leaks are not shown in the viewfinder on either platform.
+- There is no web or Desktop camera (see top).
 
 ## Known open items (from the code and `CLAUDE.md`)
 

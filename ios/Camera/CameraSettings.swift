@@ -81,6 +81,12 @@ struct CameraSettings: Equatable {
     var scanQr = true
     /** Film grain on the viewfinder and the saved photos; off = a clean picture (no look's grain, Film's included). */
     var grain = true
+    /** Add one random procedural film light leak (edge burn, blob, sprocket holes, rebate glow, flare, start of roll) to saved JPEGs. */
+    var randomLightLeak = false
+    /** How many photos in each `lightLeakSequenceSize`-photo sequence get a leak (1...5; 5 = every shot), at shuffled positions. */
+    var randomLightLeakRate = CameraSettings.lightLeakSequenceSize
+    /** Also allow sprocket holes on the short edges (off: long edges only). */
+    var shortSideSprockets = false
     /** After a tap, keep focus on what was tapped as it moves (CameraViewModel's tracker); off = the focus stays put. */
     var trackFocus = false
     /**
@@ -172,6 +178,9 @@ struct CameraSettings: Equatable {
         return s
     }
 
+    /** Length of a random light leak sequence (photos per cycle). */
+    static let lightLeakSequenceSize = 5
+    static let lightLeakRates = [1, 2, 3, 4, 5]
     static let minQuality = 70
     static let smallLongSide = 3000
     /** Film + B&W: added to the Contrast slider's value (owner's choice, 2026-10-31: punchier than plain B&W). */
@@ -218,6 +227,10 @@ enum CameraSettingsStore {
         s.scanQr = d.object(forKey: "camera.scanQr") as? Bool ?? def.scanQr
         s.grain = d.object(forKey: "camera.grain") as? Bool ?? def.grain
         s.trackFocus = d.object(forKey: "camera.trackFocus") as? Bool ?? def.trackFocus
+        s.randomLightLeak = d.object(forKey: "camera.randomLightLeak") as? Bool ?? def.randomLightLeak
+        let savedRate = d.object(forKey: "camera.randomLightLeakRate") as? Int ?? def.randomLightLeakRate
+        s.randomLightLeakRate = CameraSettings.lightLeakRates.contains(savedRate) ? savedRate : def.randomLightLeakRate
+        s.shortSideSprockets = d.object(forKey: "camera.shortSideSprockets") as? Bool ?? def.shortSideSprockets
         s.previewScales = parseScales(d.string(forKey: "camera.previewScales"))
         s.flash = d.string(forKey: "camera.flash").flatMap(FlashMode.init(rawValue:)) ?? def.flash
         s.rawFormat = d.string(forKey: "camera.rawFormat").flatMap(RawFormat.init(rawValue:)) ?? def.rawFormat
@@ -275,11 +288,21 @@ enum CameraSettingsStore {
         d.set(s.scanQr, forKey: "camera.scanQr")
         d.set(s.grain, forKey: "camera.grain")
         d.set(s.trackFocus, forKey: "camera.trackFocus")
+        d.set(s.randomLightLeak, forKey: "camera.randomLightLeak")
+        d.set(s.randomLightLeakRate, forKey: "camera.randomLightLeakRate")
+        d.set(s.shortSideSprockets, forKey: "camera.shortSideSprockets")
         d.set(s.front, forKey: "camera.front")
         d.set(s.lens, forKey: "camera.lens")
         d.set(s.flash.rawValue, forKey: "camera.flash")
         d.set(s.rawFormat.rawValue, forKey: "camera.rawFormat")
         d.set(s.previewScales.map { "\($0.key)=\($0.value)" }.joined(separator: ";"), forKey: "camera.previewScales")
+    }
+
+    /** Whether the next shot gets a random light leak under `rate` (1...5 of 5 photos); the rest of the shuffled sequence is kept across launches. */
+    static func nextLightLeak(rate: Int) -> Bool {
+        let (leak, next) = LightLeakSequence.next(state: d.string(forKey: "camera.randomLightLeakSeq"), rate: rate)
+        d.set(next, forKey: "camera.randomLightLeakSeq")
+        return leak
     }
 
     /** Increments and returns today's 1-based frame counter (resetting to 1 at the start of each local calendar day). */
@@ -305,5 +328,44 @@ enum CameraSettingsStore {
             out[String(parts[0])] = min(max(v, CameraSettings.minScale), CameraSettings.maxScale)
         }
         return out
+    }
+}
+
+/**
+ * Random light leak decisions in shuffled sequences of `CameraSettings.lightLeakSequenceSize` (5) photos: each sequence has
+ * exactly `rate` leaks at random positions, so the next one can't be predicted (port of Android's `LightLeakSequence`).
+ * State is `"<rate>:<remainingBits>"`, e.g. `"2:0101"`.
+ */
+enum LightLeakSequence {
+    static func next(state: String?, rate: Int, sequenceSize: Int = CameraSettings.lightLeakSequenceSize)
+        -> (leak: Bool, state: String)
+    {
+        var rng = SystemRandomNumberGenerator()
+        return next(state: state, rate: rate, sequenceSize: sequenceSize, using: &rng)
+    }
+
+    static func next<G: RandomNumberGenerator>(state: String?, rate: Int, sequenceSize: Int = CameraSettings.lightLeakSequenceSize,
+                                               using rng: inout G) -> (leak: Bool, state: String) {
+        let k = min(max(rate, 1), sequenceSize)
+        if k >= sequenceSize { return (true, "") }
+        var queue = parseRemaining(state, k, sequenceSize) ?? []
+        if queue.isEmpty { queue = deal(k, sequenceSize, &rng) }
+        let decision = queue[0] == "1"
+        let rest = String(queue.dropFirst())
+        return (decision, rest.isEmpty ? "" : "\(k):\(rest)")
+    }
+
+    private static func parseRemaining(_ state: String?, _ rate: Int, _ size: Int) -> [Character]? {
+        guard let state, let sep = state.firstIndex(of: ":"), sep != state.startIndex else { return nil }
+        guard let stored = Int(state[..<sep]), stored == rate else { return nil }
+        let bits = Array(state[state.index(after: sep)...])
+        guard !bits.isEmpty, bits.count <= size, bits.allSatisfy({ $0 == "0" || $0 == "1" }) else { return nil }
+        return bits
+    }
+
+    private static func deal<G: RandomNumberGenerator>(_ rate: Int, _ size: Int, _ rng: inout G) -> [Character] {
+        var slots: [Character] = (0..<size).map { $0 < rate ? "1" : "0" }
+        slots.shuffle(using: &rng)
+        return slots
     }
 }

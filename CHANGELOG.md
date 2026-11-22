@@ -1,3 +1,8 @@
+**Camera (iOS): Random light leak (2026-11-22)**
+
+- Ported from Android: **Settings › Capture › Random light leak** (off by default) adds one random procedural film leak (edge burn, blob, sprocket holes, rebate glow, flare or start of roll) to saved JPEGs. **Frequency** (1 to 5 of every 5 shots, at shuffled positions kept across launches) and **Short-side sprockets** work as on Android. New `FilmLeaks.randomForCamera` / `cameraTypes` in the Swift engine, `LightLeakSequence` and the settings in `ios/Camera`. Written without a Mac to build it: not compiled or tried on a phone yet (CI's iOS build and `FilmLeaksTests` will tell).
+- `docs/features-camera.md` brought up to date, with the list of what iOS still lacks; `CLAUDE.md` now says to keep it current.
+
 **Camera (Android, experimental): stabilized copies keep their last frame and the original's date (2026-11-22)**
 
 - Every `-stab.mp4` was one frame short (329 of 330 frames, the original's last missing): the stream was ended right after the last frame was drawn into the encoder's surface, before the encoder had taken it. `StabRenderer` now waits (up to 1 s) until the encoder has given out every drawn frame.
