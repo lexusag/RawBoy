@@ -352,7 +352,8 @@ final class CameraController: NSObject, @unchecked Sendable {
         let want: AVCaptureVideoStabilizationMode =
             videoStabilizationOn && device.activeFormat.isVideoStabilizationModeSupported(.standard) ? .standard : .off
         if c.preferredVideoStabilizationMode != want { c.preferredVideoStabilizationMode = want }
-        Self.log.notice("video stabilization: asked \(self.videoStabilizationOn), preferred \(want.rawValue), active \(c.activeVideoStabilizationMode.rawValue)")
+        let modes = [AVCaptureVideoStabilizationMode.off, .standard, .cinematic, .cinematicExtended, .previewOptimized, .auto].filter { device.activeFormat.isVideoStabilizationModeSupported($0) }.map(\.rawValue)
+        Self.log.notice("video stabilization: format supports \(modes) on \(Int(CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription).width))px, asked \(self.videoStabilizationOn), preferred \(want.rawValue), active \(c.activeVideoStabilizationMode.rawValue)")
     }
 
     /** Video mode's exposure lock (AE LOCK): the exposure stays where it is until released. */

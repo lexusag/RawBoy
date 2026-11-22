@@ -35,6 +35,8 @@ final class VideoRecorder: @unchecked Sendable {
     private var firstTime = CMTime.invalid
     private var lastTime = CMTime.invalid
     private var framesWritten = 0
+    private var notReady = 0
+    private var outOfOrder = 0
     private var stopped = false
     private var failureValue: String?
 
@@ -145,8 +147,8 @@ final class VideoRecorder: @unchecked Sendable {
             firstTime = time
         }
         // Frames arrive in order; a repeated or earlier time would fail the writer.
-        if lastTime.isValid, time <= lastTime { return }
-        guard videoInput.isReadyForMoreMediaData else { return }
+        if lastTime.isValid, time <= lastTime { outOfOrder += 1; return }
+        guard videoInput.isReadyForMoreMediaData else { notReady += 1; return }
         if adaptor.append(buffer, withPresentationTime: time) {
             lastTime = time
             framesWritten += 1
@@ -172,6 +174,7 @@ final class VideoRecorder: @unchecked Sendable {
         let wrote: Bool = lock.withLock {
             stopped = true
             sink.onFrame = nil
+            Self.log.notice("recording ended: \(self.framesWritten) frames written, \(self.sink.framesSent) sent, \(self.sink.framesDropped) dropped (no free buffer), \(self.notReady) skipped (encoder busy), \(self.outOfOrder) out of order")
             return sessionStarted && framesWritten > 0
         }
         guard wrote else {

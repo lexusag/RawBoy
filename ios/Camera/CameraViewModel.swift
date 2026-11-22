@@ -463,9 +463,16 @@ final class CameraViewModel: ObservableObject {
                 // once; the viewfinder eases there over a few updates instead of snapping. Brightness's compensation isn't
                 // eased (see easedExposure).
                 var eased = auto
+                // Video: the phone's AE takes a second or so to bring a Brightness change into the frames, so the
+                // compensation the develop takes back out follows it with a lag, else the picture swings up and down.
+                var shownCaptureEv = captureEv
+                if self.videoMode, let last = self.live {
+                    shownCaptureEv = last.captureEv + 0.3 * (captureEv - last.captureEv)
+                    eased.exposure = auto.exposure + captureEv - shownCaptureEv
+                }
                 eased.exposure = Self.easedExposure(
                     last: self.live?.auto.exposure, lastCaptureEv: self.live?.captureEv ?? 0,
-                    exposure: auto.exposure, captureEv: captureEv,
+                    exposure: eased.exposure, captureEv: shownCaptureEv,
                     step: self.videoMode ? Self.videoEvStep : Self.maxEvStep)
                 // Video: the auto tone (rounded to whole slider steps) and the as-shot white also glide, else each
                 // 300 ms analysis shows as a jump in gamma or colour.
@@ -475,10 +482,10 @@ final class CameraViewModel: ObservableObject {
                     eased.highlights = glide(last.auto.highlights, eased.highlights, 1)
                     eased.shadows = glide(last.auto.shadows, eased.shadows, 1)
                     eased.contrast = glide(last.auto.contrast, eased.contrast, 1)
-                    shownDefaults.temperature = glide(last.defaults.temperature, defaults.temperature, 25)
-                    shownDefaults.tint = glide(last.defaults.tint, defaults.tint, 1)
+                    shownDefaults.temperature = last.defaults.temperature + 0.2 * (defaults.temperature - last.defaults.temperature)
+                    shownDefaults.tint = last.defaults.tint + 0.2 * (defaults.tint - last.defaults.tint)
                 }
-                self.live = Live(base: base, stats: stats, defaults: shownDefaults, auto: eased, captureEv: captureEv)
+                self.live = Live(base: base, stats: stats, defaults: shownDefaults, auto: eased, captureEv: shownCaptureEv)
                 self.publish()
             }
         }
