@@ -90,4 +90,13 @@ class StabPlanTest {
             assertTrue("frame $i off by $angle", angle < 0.01)
         }
     }
+
+    @Test
+    fun longLensesSmoothLonger() {
+        // Pixel 9 Pro focal lengths in 1920 px stream pixels: UW, W, T, T2.
+        assertEquals(StabPlan.SIGMA_S, StabPlan.sigmaSeconds(692.0, 1920), 1e-9)
+        assertEquals(StabPlan.SIGMA_S, StabPlan.sigmaSeconds(1390.0, 1920), 0.01)
+        assertEquals(0.69, StabPlan.sigmaSeconds(2760.0, 1920), 0.01)
+        assertEquals(StabPlan.MAX_SIGMA_S, StabPlan.sigmaSeconds(6100.0, 1920), 1e-9)
+    }
 }

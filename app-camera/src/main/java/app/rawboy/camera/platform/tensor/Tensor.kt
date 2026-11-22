@@ -28,15 +28,16 @@ val tensorLayer = PlatformLayer(
             // The Pixel 9 Pro has one logical camera per side and no stand-alone duplicates: lens order as found.
             lenses = p.lenses.copy(
                 standaloneOverLogical = false,
-                // Pixel 9 Pro, 23 clips of 2026-11-21 fitted against KLT-measured motion: every lens moves 9-31% more
-                // up and down than its intrinsics say (cause unknown; UW error 4.1 -> 2.1 px/frame with it). T2 and T3
-                // are guesses between T and W, not yet fitted with OIS off.
+                // Pixel 9 Pro, 23 clips of 2026-11-21 fitted against KLT-measured motion: UW, W and T move 9-31% more
+                // up and down than its intrinsics say (cause unknown; UW error 4.1 -> 2.1 px/frame with it). T2 fitted
+                // on two OIS-off clips of 2026-11-22 (x 1.01-1.07, y 1.00-1.02, r² 0.99); the 1.15 guess over-corrected
+                // up and down. T3 takes T2's until it has OIS-off clips of its own.
                 motionGain = mapOf(
                     "UW" to MotionGain(1.0f, 1.31f),
                     "W" to MotionGain(0.98f, 1.20f),
                     "T" to MotionGain(1.04f, 1.09f),
-                    "T2" to MotionGain(1.0f, 1.15f),
-                    "T3" to MotionGain(1.0f, 1.15f),
+                    "T2" to MotionGain(1.04f, 1.01f),
+                    "T3" to MotionGain(1.04f, 1.01f),
                 ),
             ),
             // Everything on the Pixel 9 Pro was tuned with the curve's points packed near black.

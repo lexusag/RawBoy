@@ -6,6 +6,7 @@ import kotlin.math.exp
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlin.math.sqrt
 
 /**
  * What [StabPlan] needs besides the motion data: the video's geometry and the lens. All of it is in the `.motion`
@@ -153,8 +154,20 @@ class StabPlan private constructor(
     private fun orientationAt(t: Long): Quat = orientationAt(gyroT, orientations, t)
 
     companion object {
-        /** Gaussian smoothing of the camera path, in seconds (prototype: σ 0.5 s). */
+        /** Gaussian smoothing of the camera path, in seconds (prototype: σ 0.5 s), for the main camera and wider. */
         const val SIGMA_S = 0.5
+
+        /**
+         * Longest smoothing, for long lenses: the smoothing grows with the square root of the focal length over the
+         * main camera's (≈ 0.75 frame widths), up to this. The focal length magnifies a hand's slow sway, and at 0.5 s
+         * the virtual camera followed it (Pixel 9 Pro T2, 2026-11-22: 1.0 s took the sway left after
+         * stabilizing from 37 to 25 px and 29 to 19 px; 1.5 s ran into the crop's limit on one clip).
+         */
+        const val MAX_SIGMA_S = 1.0
+
+        /** The smoothing for a lens of focal length [fx] on a stream [width] pixels wide, in seconds. */
+        fun sigmaSeconds(fx: Double, width: Int): Double =
+            (SIGMA_S * sqrt(fx / width / 0.75)).coerceIn(SIGMA_S, MAX_SIGMA_S)
 
         /** How far ahead and behind the virtual camera starts following the real one near the crop's limit. */
         const val EASE_S = 0.4
@@ -256,7 +269,7 @@ class StabPlan private constructor(
                 return lo
             }
 
-            val sigma = SIGMA_S * fps
+            val sigma = sigmaSeconds(fx, streamW) * fps
             var v = smooth(cm, sigma)
             var easedShare = 0.0
             for (iteration in 0 until 3) {
