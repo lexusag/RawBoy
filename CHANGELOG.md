@@ -1,3 +1,7 @@
+**Camera (Android): Viewfinder from RAW is a regular setting (2026-11-22)**
+
+- Tried on the Pixel 9 Pro (owner: "pretty great"), so **Viewfinder from RAW** moved from Settings › Experimental to **Settings › Viewfinder**, without the experimental colour. Still off by default and shown only where the phone profile allows it (Tensor Pixels).
+
 **Camera (Android, experimental): viewfinder from RAW, a prototype (2026-11-22)**
 
 - **Settings › Experimental › Viewfinder from RAW** (off by default; offered only where the phone profile's new `PreviewProfile.rawViewfinder` is true: the Tensor layer for now) streams RAW_SENSOR frames next to the preview and builds the viewfinder from them instead of the ISP's preview: no preview colour matrix, tone-curve inverse or learned per-lens preview scale. The viewfinder's gain is then only what the still gains over the preview frame (`stillGain`, or Long exposure's), and no preview calibration is learned or metered while it is on.

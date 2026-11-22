@@ -1399,6 +1399,16 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
         )
 
         SettingsSection("Viewfinder")
+        // Only phones whose profile allows it (PreviewProfile.rawViewfinder).
+        if (vm.rawViewfinderAvailable) {
+            SettingSwitch(
+                title = "Viewfinder from RAW",
+                subtitle = "Shows the sensor's raw data developed like the photo",
+                checked = settings.rawViewfinder,
+                enabled = !recording,
+                onChange = vm::setRawViewfinder,
+            )
+        }
         SettingSwitch(
             title = "Zoom buttons",
             subtitle = "Viewfinder helper only; does not affect the picture",
@@ -1457,16 +1467,6 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
             accent = EXPERIMENTAL_ORANGE,
             onChange = vm::setVideoMotionData,
         )
-        if (vm.rawViewfinderAvailable) {
-            SettingSwitch(
-                title = "Viewfinder from RAW",
-                subtitle = "Builds the viewfinder from the sensor's raw data, like the photo (prototype)",
-                checked = settings.rawViewfinder,
-                enabled = !recording,
-                accent = EXPERIMENTAL_ORANGE,
-                onChange = vm::setRawViewfinder,
-            )
-        }
         if (settings.videoMotionData) {
             SettingSwitch(
                 title = "Stabilize after recording",
