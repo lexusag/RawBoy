@@ -125,6 +125,7 @@ class CameraActivity : ComponentActivity() {
                     openPhoto = ::openPhoto,
                     openQr = ::openQr,
                     shareDeviceReport = ::shareDeviceReport,
+                    shareTuningData = ::shareTuningData,
                 )
             }
         }
@@ -200,6 +201,28 @@ class CameraActivity : ComponentActivity() {
             send.clipData = ClipData.newRawUri(null, uri)
             runCatching { startOutside(Intent.createChooser(send, tr("Share device report"))) }
                 .onFailure { viewModel.showMessage(tr("No app to share the report with")) }
+        }
+    }
+
+    /**
+     * Settings › Share tuning data: the share sheet with [CameraViewModel.writeTuningBundle]'s zip (after unlocking
+     * when the camera is over the lock screen). It goes only where the user sends it.
+     */
+    private fun shareTuningData() = whenUnlocked {
+        lifecycleScope.launch {
+            val uri = runCatching { viewModel.writeTuningBundle() }.getOrElse {
+                Log.w("RawBoyCamera", "tuning data", it)
+                viewModel.showMessage(tr("Could not make the tuning data file"))
+                return@launch
+            }
+            val send = Intent(Intent.ACTION_SEND)
+                .setType("application/zip")
+                .putExtra(Intent.EXTRA_STREAM, uri)
+                .putExtra(Intent.EXTRA_SUBJECT, "RawBoy Camera tuning data")
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            send.clipData = ClipData.newRawUri(null, uri)
+            runCatching { startOutside(Intent.createChooser(send, tr("Share tuning data"))) }
+                .onFailure { viewModel.showMessage(tr("No app to share the file with")) }
         }
     }
 

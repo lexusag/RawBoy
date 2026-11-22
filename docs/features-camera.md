@@ -51,6 +51,7 @@ lenses, burst merge), iOS drives AVFoundation (**ProRAW at 12 MP by default**, o
 | Samsung tablets / phones match the viewfinder better | 1.8.11; 1.10.8 | ✓ | n/a | |
 | **Phone profiles** detected at start (chip, maker, model layers; *Phone profile* line in Settings) | unreleased (branch `camera-device-compat`) | ✓ | n/a | Pixel 9 Pro (Tensor) and OnePlus 11 measured; others neutral. See [camera-platforms.md](camera-platforms.md) |
 | Share device report (Settings) | unreleased (same) | ✓ | — | Plain text through the share sheet, for tuning a new phone |
+| Collect tuning data (Settings) | unreleased (same) | ✓ | — | Viewfinder/photo 512 px copies of the next 10 shots + the camera's log, zipped with the device report for the share sheet |
 | Video motion data + **Stabilize after recording** (experimental, `-stab.mp4` copy) | unreleased | ✓ | — | Gyro/OIS capture and a software stabilizer; Settings › Experimental. Optical stabilization switch for video |
 | **Viewfinder from RAW** (experimental prototype) | unreleased | ✓ | — | The viewfinder is developed from the RAW_SENSOR stream instead of the ISP's preview; offered where the phone profile allows (Tensor). AVFoundation has no raw video stream, so iOS can't have it |
 | Video on phones whose standard encoder path fails (probe) | unreleased (same) | ✓ | — | OnePlus 11 records through the encoder's own GL context |
@@ -86,7 +87,7 @@ In order of how much it changes the photo: **burst merge** (iOS is single-frame 
 "far less grain than a single Bayer frame in low light"), **video motion data and stabilized copies** (iOS records video, with the camera's own stabilization only, no flat video), the **viewfinder from RAW** prototype (AVFoundation offers no raw video stream),
 **HDR gain map** (Ultra HDR JPEG), **lock-screen and power-button launch**, **digital zoom up to 10×**, **selfie
 screen flash**, **self-timer and long exposure**, **lossy JXL DNG**, **full-resolution (remosaic) raw** (iOS follows the
-system 48 MP option, unchecked), **phone profiles and Share device report** (n/a on iOS: one hardware family),
+system 48 MP option, unchecked), **phone profiles, Share device report and Collect tuning data** (n/a on iOS: one hardware family),
 **Pixel workarounds** (YUV matrix, tone curve, extra black, manual flash exposure: iOS uses the camera's own flash AE).
 **Ukrainian translation and the language setting** (Android only: iOS needs its own String Catalog).
 Random light leak and video recording are no longer on this list (ported 2026-11-22).
