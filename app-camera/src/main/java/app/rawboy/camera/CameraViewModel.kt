@@ -1420,6 +1420,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         if (prev.videoMotionData != next.videoMotionData) applyStabilization()
     }
 
+    /** Easy mode's Colour / B&W switch ([CameraSettings.easyMono]). */
+    fun setEasyMono(on: Boolean) = change { it.copy(easyMono = on) }
+
     /** Raw viewfinder (prototype) on or off; the camera restarts so the stream and the viewfinder change together. */
     fun setRawViewfinder(on: Boolean) {
         change { it.copy(rawViewfinder = on) }

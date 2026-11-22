@@ -134,6 +134,11 @@ data class CameraSettings(
      */
     val easy: Boolean = false,
     /**
+     * Easy mode's Colour / B&W switch: B&W = Film + B&W on the default mono stock ([filmMono]), Colour = Film on the
+     * default film stock. Kept apart from [mono] and [film], so the full camera's own picks stay as they were.
+     */
+    val easyMono: Boolean = false,
+    /**
      * Experimental: videos record the whole 4:3 frame and save a `.motion` file of gyroscope and frame data beside it
      * (MotionRecording), to stabilize them afterwards.
      */
@@ -283,11 +288,18 @@ data class CameraSettings(
      * The settings that take part: these, or in [easy] mode these with everything the easy screen has no control for
      * set to what a plain point-and-shoot does (no DNG, frame, border, light leak or Brightness/Warmth offset; merging on
      * Auto; no timer, long exposure, subject tracking, flat video or motion data; no histogram, grid, level or zoom
-     * buttons, which also spares their per-frame work). The look, Strength, photo size, quality, HDR gain map, grain,
-     * QR codes, lens, flash and the sensor modes (max resolution, raw viewfinder) stay as set. The stored values are
-     * untouched, so leaving easy mode brings them all back.
+     * buttons, which also spares their per-frame work). The look is Film mode's default stock at the default Strength,
+     * or with [easyMono] Film + B&W on the default mono stock and filter (owner's choice, 2026-11-22). Photo size,
+     * quality, HDR gain map, grain, QR codes, lens, flash and the sensor modes (max resolution, raw viewfinder) stay as
+     * set. The stored values are untouched, so leaving easy mode brings them all back.
      */
     val effective: CameraSettings get() = if (!easy) this else copy(
+        film = true,
+        filmLookId = Edition.defaultFilmLookId,
+        mono = easyMono,
+        monoLookId = Edition.defaultMonoLookId,
+        filter = BwFilter.YELLOW,
+        strength = LookApplier.DEFAULT_STRENGTH,
         brightness = 0f,
         warmth = 0f,
         keepDng = false,
@@ -430,6 +442,7 @@ object CameraSettingsStore {
             trackFocus = p.getBoolean("trackFocus", d.trackFocus),
             experimental = p.getBoolean("experimental", d.experimental),
             easy = p.getBoolean("easy", d.easy),
+            easyMono = p.getBoolean("easyMono", d.easyMono),
             videoMotionData = p.getBoolean("videoMotionData", d.videoMotionData),
             rawViewfinder = p.getBoolean("rawViewfinder", d.rawViewfinder),
             videoStabilizeAfter = p.getBoolean("videoStabilizeAfter", d.videoStabilizeAfter),
@@ -518,6 +531,7 @@ object CameraSettingsStore {
             .putBoolean("trackFocus", s.trackFocus)
             .putBoolean("experimental", s.experimental)
             .putBoolean("easy", s.easy)
+            .putBoolean("easyMono", s.easyMono)
             .putBoolean("videoMotionData", s.videoMotionData)
             .putBoolean("rawViewfinder", s.rawViewfinder)
             .putBoolean("videoStabilizeAfter", s.videoStabilizeAfter)

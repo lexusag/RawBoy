@@ -625,20 +625,31 @@ fun CameraScreen(
             },
             controls = {
                 if (easy) {
-                    // No look menu, sliders or toggles: the photo gets the look set outside Easy mode. Landscape keeps
-                    // the lenses in a column beside the shutter (portrait has them over the viewfinder).
-                    if (landscape && lenses.size > 1) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            LensSelector(
-                                labels = lenses.map { it.label },
-                                selected = settings.lens,
-                                onSelect = vm::selectLens,
-                                modifier = Modifier,
-                                vertical = true,
-                            )
+                    // No look menu or sliders: Colour (the default film stock) or B&W (Film + B&W, the default mono
+                    // stock). Landscape: in a column with the lenses beside the shutter (portrait has them over the
+                    // viewfinder).
+                    val tone = @Composable { vertical: Boolean ->
+                        TwoWaySwitch(tr("COLOUR"), tr("B&W"), settings.easyMono, enabled = true, vertical = vertical, onSelect = vm::setEasyMono)
+                    }
+                    if (landscape) {
+                        Column(
+                            Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.SpaceEvenly,
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            if (lenses.size > 1) {
+                                LensSelector(
+                                    labels = lenses.map { it.label },
+                                    selected = settings.lens,
+                                    onSelect = vm::selectLens,
+                                    modifier = Modifier,
+                                    vertical = true,
+                                )
+                            }
+                            tone(true)
                         }
                     } else {
-                        Spacer(Modifier.height(if (landscape) 0.dp else 8.dp))
+                        Box(Modifier.fillMaxWidth().padding(top = 10.dp), contentAlignment = Alignment.Center) { tone(false) }
                     }
                 } else if (landscape) {
                     LandscapeControls(
@@ -1100,7 +1111,19 @@ private fun VideoFrameMask(target: Float) {
  * landscape, where the shutter has its own column. Locked while recording.
  */
 @Composable
-private fun ModeSwitch(video: Boolean, enabled: Boolean, vertical: Boolean = false, onSelect: (Boolean) -> Unit) {
+private fun ModeSwitch(video: Boolean, enabled: Boolean, vertical: Boolean = false, onSelect: (Boolean) -> Unit) =
+    TwoWaySwitch(tr("PHOTO"), tr("VIDEO"), video, enabled, vertical, onSelect)
+
+/** A pill of two choices, [first] or [second], the selected one filled ([secondSelected] picks which). */
+@Composable
+private fun TwoWaySwitch(
+    first: String,
+    second: String,
+    secondSelected: Boolean,
+    enabled: Boolean,
+    vertical: Boolean = false,
+    onSelect: (Boolean) -> Unit,
+) {
     val item = @Composable { label: String, selected: Boolean, target: Boolean ->
         Text(
             label,
@@ -1117,9 +1140,9 @@ private fun ModeSwitch(video: Boolean, enabled: Boolean, vertical: Boolean = fal
     val shape = RoundedCornerShape(20.dp)
     val mod = Modifier.clip(shape).background(Color(0xFF2A2A2A)).padding(3.dp)
     if (vertical) {
-        Column(mod, horizontalAlignment = Alignment.CenterHorizontally) { item(tr("PHOTO"), !video, false); item(tr("VIDEO"), video, true) }
+        Column(mod, horizontalAlignment = Alignment.CenterHorizontally) { item(first, !secondSelected, false); item(second, secondSelected, true) }
     } else {
-        Row(mod) { item(tr("PHOTO"), !video, false); item(tr("VIDEO"), video, true) }
+        Row(mod) { item(first, !secondSelected, false); item(second, secondSelected, true) }
     }
 }
 

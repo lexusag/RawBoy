@@ -39,8 +39,14 @@ class CameraSettingsTest {
         assertEquals(PhotoFrame.NONE, e.photoFrame)
         assertFalse(e.trackFocus || e.flatVideo || e.videoMotionData)
         assertFalse(e.showHistogram || e.showGrid || e.showLevel || e.showZoomControl)
-        // What Easy mode leaves alone: the look, size, quality, lens.
-        assertEquals(easy.look, e.look)
+        // Colour: Film mode on the default film stock; B&W: Film + B&W on the default mono stock.
+        assertEquals(Edition.filmLook(Edition.defaultFilmLookId), e.look)
+        assertTrue(e.filmMode)
+        val bw = easy.copy(easyMono = true).effective
+        assertTrue(bw.filmMono)
+        assertEquals(Edition.monoLook(Edition.defaultMonoLookId), bw.look)
+        assertFalse(pro.copy(easyMono = true).effective.monoMode)
+        // What Easy mode leaves alone: size, quality, lens.
         assertFalse(e.smallExport)
         assertEquals(90, e.jpegQuality)
         assertEquals("T", e.lens)

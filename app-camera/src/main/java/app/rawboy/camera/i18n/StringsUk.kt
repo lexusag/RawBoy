@@ -277,10 +277,12 @@ internal val UKRAINIAN: Map<String, String> = mapOf(
         "Вимкнено: щоразу W, Yellow Portrait 400, типові повзунки",
     "Easy mode" to
         "Простий режим",
+    "COLOUR" to
+        "КОЛІР",
     "Big shutter and only the basics; the other settings wait" to
         "Велика кнопка й лише основне; інші налаштування чекають",
-    "Settings › Easy mode: a simple camera for someone who just wants photos. Only the picture, the lenses, the flash, Photo / Video and a big shutter; the photo gets the look chosen before, without RAW, frames, borders, light leaks, timer or Brightness and Warmth. Settings shows only a few choices then; switch Easy mode off there to get everything back as it was." to
-        "Налаштування › Простий режим: проста камера для того, хто просто хоче фото. Лише зображення, об’єктиви, спалах, Фото / Відео й велика кнопка затвора; фото отримує стиль, вибраний раніше, без RAW, рамок, облямівок, засвічень, таймера, Яскравості й Теплоти. Налаштування тоді показують лише кілька пунктів; вимкніть там Простий режим, щоб усе повернулося як було.",
+    "Settings › Easy mode: a simple camera for someone who just wants photos. Only the picture, the lenses, the flash, Photo / Video, Colour or B&W (the default colour film, or the default black and white film) and a big shutter; no RAW, frames, borders, light leaks, timer or Brightness and Warmth. Settings shows only a few choices then; switch Easy mode off there to get everything back as it was." to
+        "Налаштування › Простий режим: проста камера для того, хто просто хоче фото. Лише зображення, об’єктиви, спалах, Фото / Відео, Колір або Ч/Б (типова кольорова плівка або типова чорно-біла) й велика кнопка затвора; без RAW, рамок, облямівок, засвічень, таймера, Яскравості й Теплоти. Налаштування тоді показують лише кілька пунктів; вимкніть там Простий режим, щоб усе повернулося як було.",
     "Experimental" to
         "Експериментальне",
     "Self-timer and long exposure" to
