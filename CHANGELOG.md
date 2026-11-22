@@ -1,3 +1,9 @@
+**Esc closes an open menu first (2026-11-22)**
+
+- RawBoy Desktop's key monitor took Esc before the menu that was open (Auto: clear the selection, go back from a photo; Pro: put the tool down), so the menu stayed open and the screen behind it changed. `MenuTracking` (engine, macOS; `NSMenu` begin/end tracking notifications) lets Esc through while a menu is open, so it closes the menu alone.
+- Web: the Add / Open source menu and Auto's ⋯ menu listen for Esc in the capture phase and stop it, so Esc closes the menu without also closing the photo view or clearing the selection.
+- RawBoy Viewer got the same (its Places sidebar also has **Refresh Places** on right-click).
+
 **All apps: Border, and B&W greys the leaks (2026-11-22)**
 
 - **Border** (RawBoy Pro on Android, iOS, Desktop and web: Detail › Border; Camera Android and iOS: Settings › Border): a plain solid border drawn inside the finished picture, 0–20% of the short side, in Black, White, Cream or Grey (any `#rrggbb` in a preset or edit). The export keeps its size. `applyFrame` in `shaders/develop.glsl` runs after the LUT and curves and before light leaks, generated film leaks and light effects, so they screen over it. Params `DevelopParams.frame` / `frameColor` (`Frame.kt/.ts/.swift`), uniforms `uFrame` (output size, thickness in pixels) and `uFrameColor`; default 0 = identical output. A **Border** preset group (off by default in Save preset) also carries it through edits and Auto's sidecars; Auto has no control of its own.
