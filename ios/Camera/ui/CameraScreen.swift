@@ -37,7 +37,10 @@ struct CameraScreen: View {
             CameraLayout(landscape: landscape, controlsWidth: Self.landscapeControlsWidth) {
                 Group {
                     if landscape {
-                        VStack(spacing: 0) { barButtons.frame(maxHeight: .infinity) }
+                        VStack(spacing: 0) {
+                            if vm.recordingSeconds != nil { statusLabel }
+                            barButtons.frame(maxHeight: .infinity)
+                        }
                             .frame(width: 52)
                             .padding(.vertical, 8)
                     } else {
@@ -71,6 +74,7 @@ struct CameraScreen: View {
                         VStack(spacing: 0) {
                             switchButton
                             Spacer()
+                            modeSwitch(vertical: true)
                             shutterButton
                             Spacer()
                             lastPhoto
@@ -101,7 +105,7 @@ struct CameraScreen: View {
 
     private var topBar: some View {
         HStack(spacing: 18) {
-            Text(statusText).font(.caption).foregroundStyle(Color.cameraAccent)
+            statusLabel
             Spacer()
             barButtons
         }
@@ -112,9 +116,23 @@ struct CameraScreen: View {
 
     private var statusText: String { vm.pending > 0 ? "Saving \(vm.pending)…" : "" }
 
+    /** The recording's timer (red dot, m:ss) while recording, else the saving count. */
+    @ViewBuilder private var statusLabel: some View {
+        if let seconds = vm.recordingSeconds {
+            Text("● " + String(format: "%d:%02d", seconds / 60, seconds % 60))
+                .font(.caption.monospacedDigit().weight(.semibold)).foregroundStyle(Self.recordRed)
+                .accessibilityLabel("Recording \(seconds) seconds")
+        } else {
+            Text(statusText).font(.caption).foregroundStyle(Color.cameraAccent)
+        }
+    }
+
+    private static let recordRed = Color(red: 0xE5 / 255, green: 0x39 / 255, blue: 0x35 / 255)
+
     /** RAW, flash, help and Settings: a row on top in portrait, a column at the left in landscape. */
     @ViewBuilder private var barButtons: some View {
         Group {
+            if !vm.videoMode {
             Button { vm.setKeepDng(!vm.settings.keepDng) } label: {
                 Text("RAW").font(.caption.bold()).strikethrough(!vm.settings.keepDng)
                     .foregroundStyle(vm.settings.keepDng ? Color.cameraAccent : .white.opacity(0.6))
@@ -132,6 +150,7 @@ struct CameraScreen: View {
                         .foregroundStyle(vm.settings.flash == .on ? Color.cameraAccent : .white)
                 }
                 .accessibilityLabel(vm.settings.flash == .on ? "Flash on" : "Flash off")
+            }
             }
             HelpButton(Bundle.main.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "RawBoy Camera",
                        sections: cameraHelp, isPresented: $showHelp)
@@ -230,6 +249,7 @@ struct CameraScreen: View {
                             }
                         }
                         .coordinateSpace(.named(Self.viewfinderSpace))
+                        if vm.videoMode { VideoFrameMask() }
                         if vm.settings.showLevel, let tilt = vm.tilt { LevelOverlay(tilt: tilt) }
                     }
                 }
@@ -245,6 +265,7 @@ struct CameraScreen: View {
                 }
                 if vm.lenses.count > 1 {
                     LensSelector(labels: vm.lenses.map(\.label), selected: vm.settings.lens, onSelect: vm.selectLens)
+                        .disabled(vm.recordingSeconds != nil)
                         .frame(maxHeight: .infinity, alignment: .bottom)
                         .padding(.bottom, 16)
                 }
@@ -269,6 +290,23 @@ struct CameraScreen: View {
                     .buttonStyle(.plain)
                     .frame(maxHeight: .infinity, alignment: .top)
                     .padding(.top, 8)
+                }
+                if vm.videoMode {
+                    Button { vm.setExposureLock(!vm.exposureLocked) } label: {
+                        Text(vm.exposureLocked ? "AE LOCK  ✕" : "AE LOCK")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(vm.exposureLocked ? Color.black : .white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Capsule().fill(vm.exposureLocked ? Color(red: 1, green: 0.84, blue: 0.31) : Color.black.opacity(0.4)))
+                            .frame(minHeight: 44)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                    .padding(.leading, 12)
+                    .padding(.bottom, vm.lenses.count > 1 ? 56 : 8)
+                    .accessibilityLabel(vm.exposureLocked ? "Unlock exposure" : "Lock exposure")
                 }
                 if vm.compare {
                     OverlayLabel("Without look").frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -295,15 +333,25 @@ struct CameraScreen: View {
     }
 
     private var bottomBar: some View {
-        HStack {
-            lastPhoto
-            Spacer()
-            shutterButton
-            Spacer()
-            switchButton
+        VStack(spacing: 6) {
+            modeSwitch(vertical: false)
+            HStack {
+                lastPhoto
+                Spacer()
+                shutterButton
+                Spacer()
+                switchButton
+            }
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 8)
+        // Swiping sideways on the shutter area switches too: left for video, right back to photo.
+        .contentShape(Rectangle())
+        .simultaneousGesture(DragGesture(minimumDistance: 40).onEnded { drag in
+            if abs(drag.translation.width) > 2 * abs(drag.translation.height) {
+                vm.setVideoMode(drag.translation.width < 0)
+            }
+        })
     }
 
     private var lastPhoto: some View {
@@ -321,14 +369,75 @@ struct CameraScreen: View {
     }
 
     private var shutterButton: some View {
-        Button(action: vm.shutter) {
-            Circle().fill(vm.status == .ready ? Color.white : .gray).padding(8)
-                .overlay(Circle().stroke(vm.status == .ready ? Color.white : .gray, lineWidth: 4))
-                .frame(width: 76, height: 76)
+        let ready = vm.status == .ready
+        return Button(action: vm.shutter) {
+            Group {
+                if vm.videoMode {
+                    // Video: a red dot; while recording a red square in the ring.
+                    ZStack {
+                        Circle().stroke(ready ? Color.white : .gray, lineWidth: 4)
+                        if vm.recordingSeconds != nil {
+                            RoundedRectangle(cornerRadius: 8).fill(Self.recordRed).padding(24)
+                        } else {
+                            Circle().fill(ready ? Self.recordRed : .gray).padding(8)
+                        }
+                    }
+                } else {
+                    Circle().fill(ready ? Color.white : .gray).padding(8)
+                        .overlay(Circle().stroke(ready ? Color.white : .gray, lineWidth: 4))
+                }
+            }
+            .frame(width: 76, height: 76)
         }
-        .disabled(vm.status != .ready)
+        .disabled(!ready)
         .scaleEffect(shutterScale)
-        .accessibilityLabel("Shutter")
+        .accessibilityLabel(vm.videoMode ? (vm.recordingSeconds != nil ? "Stop recording" : "Record") : "Shutter")
+    }
+
+    /** PHOTO / VIDEO pill by the shutter (as Android's): the active side is filled. Not while recording. */
+    private func modeSwitch(vertical: Bool) -> some View {
+        Group {
+            if vertical {
+                VStack(spacing: 0) { modeItem("PHOTO", video: false); modeItem("VIDEO", video: true) }
+            } else {
+                HStack(spacing: 0) { modeItem("PHOTO", video: false); modeItem("VIDEO", video: true) }
+            }
+        }
+        .padding(2)
+        .background(Capsule().fill(Color(white: 0.16)))
+        .disabled(vm.recordingSeconds != nil || vm.status != .ready)
+        .opacity(vm.recordingSeconds != nil ? 0.4 : 1)
+    }
+
+    private func modeItem(_ title: String, video: Bool) -> some View {
+        let active = vm.videoMode == video
+        return Button { vm.setVideoMode(video) } label: {
+            Text(title).font(.caption.weight(.semibold))
+                .foregroundStyle(active ? Color.black : .white.opacity(0.8))
+                .padding(.horizontal, 12).padding(.vertical, 6)
+                .background(Capsule().fill(active ? Color.cameraAccent : .clear))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(title.capitalized)
+        .accessibilityAddTraits(active ? .isSelected : [])
+    }
+
+    /** Dims what a 9:16 video leaves out of the (4:3) viewfinder, in the upright picture's coordinates. */
+    private struct VideoFrameMask: View {
+        var body: some View {
+            GeometryReader { geo in
+                let target = 9.0 / 16.0
+                let aspect = geo.size.width / max(geo.size.height, 1)
+                let side = target < aspect ? (1 - target / aspect) / 2 * geo.size.width : 0
+                HStack(spacing: 0) {
+                    Color.black.opacity(0.55).frame(width: side)
+                    Spacer(minLength: 0)
+                    Color.black.opacity(0.55).frame(width: side)
+                }
+            }
+            .allowsHitTesting(false)
+        }
     }
 
     private var switchButton: some View {
@@ -339,7 +448,7 @@ struct CameraScreen: View {
                         .frame(width: 56, height: 56)
                         .background(RoundedRectangle(cornerRadius: 14).fill(Color(white: 0.16)))
                 }
-                .disabled(vm.status == .opening)
+                .disabled(vm.status == .opening || vm.recordingSeconds != nil)
                 .accessibilityLabel(vm.settings.front ? "Back camera" : "Selfie camera")
             } else {
                 Color.clear
@@ -689,6 +798,15 @@ private struct SettingsSheet: View {
                     }
                     row("QR codes", "Tap to open a link or copy the text or Wi-Fi password",
                         Binding(get: { vm.settings.scanQr }, set: vm.setScanQr))
+                }
+                Section("Video") {
+                    Picker("Video quality", selection: Binding(get: { vm.settings.videoQuality }, set: vm.setVideoQuality)) {
+                        ForEach(VideoQuality.allCases, id: \.self) { q in
+                            Text("\(q.label) · \(q.bitrate / 1_000_000) Mbit/s").tag(q)
+                        }
+                    }
+                    row("Video stabilization", "The camera's own: crops the picture a little, only in video mode",
+                        Binding(get: { vm.settings.videoStabilization }, set: vm.setVideoStabilization))
                 }
                 Section("Viewfinder") {
                     row("Grid", nil, Binding(get: { vm.settings.showGrid }, set: vm.setShowGrid))

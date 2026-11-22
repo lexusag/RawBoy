@@ -39,6 +39,12 @@ final class CameraViewModel: ObservableObject {
     @Published private(set) var shutterSoundRequired = false
     /** Focus lock point (upright normalised, as shown), or nil for continuous autofocus. */
     @Published private(set) var focusPoint: CGPoint?
+    /** Photo / Video switch; not remembered between starts. */
+    @Published private(set) var videoMode = false
+    /** Elapsed recording time in whole seconds, nil when not recording. */
+    @Published private(set) var recordingSeconds: Int?
+    /** Video mode's exposure lock (AE LOCK), separate from the focus lock. */
+    @Published private(set) var exposureLocked = false
     /** Where the focus ring is being dragged (upright normalised, as shown), or nil; it focuses there on release. */
     @Published private(set) var dragPoint: CGPoint?
     /** focusPoint follows the tapped subject (settings.trackFocus); the lock ends by itself once it is lost. */
@@ -72,6 +78,11 @@ final class CameraViewModel: ObservableObject {
 
     private var info: CameraController.Info?
     private var startTask: Task<Void, Never>?
+    private var recorder: VideoRecorder?
+    private var recordingTask: Task<Void, Never>?
+    private var audioGranted = false
+    /** The microphone is in the capture session (video mode with access). */
+    private var microphoneIn = false
     private var active = false
     /** The phone's position while geotagging is on and the app is in front. */
     private let location = LocationTracker()
@@ -145,8 +156,8 @@ final class CameraViewModel: ObservableObject {
     init() {
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
         if settings.showLevel { startTilt() }
-        controller.onFrame = { [renderer, subject] buffer in
-            renderer.enqueue(buffer)
+        controller.onFrame = { [renderer, subject] buffer, time in
+            renderer.enqueue(buffer, time: time)
             let frame = renderer.frame
             subject.feed(buffer, rotation: frame?.rotation ?? CameraController.viewfinderRotation,
                          mirror: frame?.mirror ?? false)
@@ -188,6 +199,8 @@ final class CameraViewModel: ObservableObject {
     }
 
     func deactivate() {
+        // A recording never carries on in the background: the file is finished and kept.
+        stopRecording()
         active = false
         updateLocation()
         if saveTask != nil {
@@ -318,6 +331,8 @@ final class CameraViewModel: ObservableObject {
     private static let minFocusMove = 0.004
     /** Most the live develop's exposure moves per update (~3 a second), EV. */
     private static let maxEvStep: Float = 0.3
+    /** Video eases much slower: a 0.3 EV step every 300 ms would pump visibly in a recording (Android's VIDEO_EV_STEP). */
+    private static let videoEvStep: Float = 0.05
 
     /// The viewfinder's live exposure: only the metering eases ([step] EV per update); Brightness's AE compensation
     /// ([captureEv]) is taken out at once, as the phone's AE puts it into the frames within a few frames. Easing the whole
@@ -373,13 +388,14 @@ final class CameraViewModel: ObservableObject {
 
     /** Switches to the lens labelled [label] (UW, W, T) on the current side. */
     func selectLens(_ label: String) {
-        guard let lens = lenses.first(where: { $0.label == label }), lens != info else { return }
+        guard recorder == nil, let lens = lenses.first(where: { $0.label == label }), lens != info else { return }
         switchTo(lens)
         change { $0.lens = label }
     }
 
     /** Back cameras <-> selfie camera. */
     func switchFacing() {
+        guard recorder == nil else { return }
         let front = !settings.front
         let all = CameraController.lenses(front: front)
         guard let lens = all.first(where: { $0.label == "W" }) ?? all.first else { return }
@@ -392,6 +408,7 @@ final class CameraViewModel: ObservableObject {
     }
 
     func setRawFormat(_ format: RawFormat) {
+        guard recorder == nil else { return }
         change { $0.rawFormat = format }
         if let info { switchTo(info) }
     }
@@ -448,7 +465,8 @@ final class CameraViewModel: ObservableObject {
                 var eased = auto
                 eased.exposure = Self.easedExposure(
                     last: self.live?.auto.exposure, lastCaptureEv: self.live?.captureEv ?? 0,
-                    exposure: auto.exposure, captureEv: captureEv, step: Self.maxEvStep)
+                    exposure: auto.exposure, captureEv: captureEv,
+                    step: self.videoMode ? Self.videoEvStep : Self.maxEvStep)
                 self.live = Live(base: base, stats: stats, defaults: defaults, auto: eased, captureEv: captureEv)
                 self.publish()
             }
@@ -464,6 +482,8 @@ final class CameraViewModel: ObservableObject {
         p.denoise = 0
         p.sharpening = 0
         p.skinRetouch = 0
+        // Video also drops the colour denoise: its coarse stages are many taps per pixel, drawn twice a frame (screen and file).
+        if videoMode { p.colorDenoise = 0 }
         let params = p
         let lutId = p.lut
         let filmId = p.film
@@ -794,10 +814,137 @@ final class CameraViewModel: ObservableObject {
         publish()
     }
 
+    // MARK: - Video
+
+    func setVideoMode(_ on: Bool) {
+        guard on != videoMode, recorder == nil, status == .ready else { return }
+        videoMode = on
+        renderer.animateGrain = on
+        if !on { setExposureLock(false) }  // the lock is video mode's: photos meter as always
+        let stabilization = settings.videoStabilization
+        Task {
+            // The microphone is asked for the first time video mode is switched on; refusing gives silent videos.
+            if on, !audioGranted { audioGranted = await Self.requestMicrophone() }
+            microphoneIn = await controller.setVideoMode(on, audio: audioGranted, stabilization: stabilization)
+            if on && !microphoneIn { message = "No microphone access: videos will have no sound" }
+        }
+        publish()  // the video viewfinder drops the colour denoise (see publish)
+    }
+
+    private static func requestMicrophone() async -> Bool {
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized: true
+        case .notDetermined: await AVCaptureDevice.requestAccess(for: .audio)
+        default: false
+        }
+    }
+
+    func setExposureLock(_ locked: Bool) {
+        if locked && !videoMode { return }
+        exposureLocked = locked
+        controller.setExposureLock(locked)
+    }
+
+    /** Not in the middle of a recording: the file's bitrate is fixed when it starts. */
+    func setVideoQuality(_ quality: VideoQuality) {
+        if recorder == nil { change { $0.videoQuality = quality } }
+    }
+
+    func setVideoStabilization(_ on: Bool) {
+        change { $0.videoStabilization = on }
+        // Changing it moves the viewfinder's framing: not in the middle of a recording.
+        if recorder == nil, videoMode { controller.setVideoStabilization(on) }
+    }
+
+    private func startRecording() {
+        guard status == .ready, recorder == nil else { return }
+        let s = settings
+        // As photos do: how the phone is held, so a phone held sideways records a landscape file.
+        let degrees = currentDeviceDegrees()
+        let name = "VID_" + Self.timestamp() + "-" + Edition.jpegSuffix
+        let audio = microphoneIn ? controller.audioSettings() : nil
+        do {
+            let r = try VideoRecorder(name: name, bitrate: s.videoQuality.bitrate, degrees: degrees, audioSettings: audio)
+            controller.onAudio = { [weak r] sample in r?.appendAudio(sample) }
+            recorder = r
+            renderer.videoSink = r.sink
+            recordingSeconds = 0
+            UIApplication.shared.isIdleTimerDisabled = true
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            recordingTask = Task { [weak self, weak r] in
+                let start = Date()
+                while !Task.isCancelled {
+                    try? await Task.sleep(nanoseconds: 250_000_000)
+                    guard let self, let r, self.recorder === r else { return }
+                    let elapsed = Date().timeIntervalSince(start)
+                    self.recordingSeconds = Int(elapsed)
+                    // A writer that failed stops the recording at once and keeps what was written; one that got no
+                    // frame at all (no params yet, a stalled camera) says so instead of timing on.
+                    if let why = r.failure {
+                        self.stopRecording(failure: "Recording stopped: \(why)")
+                        return
+                    }
+                    if elapsed > 3, r.sink.framesSent == 0 {
+                        self.stopRecording(failure: "Recording stopped: no picture from the camera")
+                        return
+                    }
+                }
+            }
+        } catch {
+            Self.log.error("recording did not start: \(error.localizedDescription)")
+            message = "Could not start recording: \(error.localizedDescription)"
+        }
+    }
+
+    /**
+     * Ends the recording and saves the file to Photos. [failure]: why it stopped on its own, shown with the usual
+     * message. The file is finished in the background even when the app has left the screen.
+     */
+    func stopRecording(failure: String? = nil) {
+        guard let r = recorder else { return }
+        recorder = nil
+        recordingTask?.cancel()
+        recordingTask = nil
+        renderer.videoSink = nil
+        controller.onAudio = nil
+        recordingSeconds = nil
+        UIApplication.shared.isIdleTimerDisabled = false
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        pending += 1
+        var task = UIBackgroundTaskIdentifier.invalid
+        task = UIApplication.shared.beginBackgroundTask(withName: "RawBoy video") {
+            UIApplication.shared.endBackgroundTask(task)
+        }
+        Task {
+            var saved = false
+            if let url = await r.stop() {
+                do {
+                    try await PhotoLibraryOutput.save(url, naming: Self.jpegNaming, video: true)
+                    saved = true
+                } catch {
+                    Self.log.error("video save: \(error.localizedDescription)")
+                    message = "Could not save the video: \(error.localizedDescription)"
+                }
+            }
+            pending -= 1
+            if task != .invalid { UIApplication.shared.endBackgroundTask(task) }
+            if saved {
+                message = failure.map { "\($0). Video saved to Photos › \(Edition.album)" } ?? "Video saved to Photos › \(Edition.album)"
+            } else if message == nil {
+                message = failure ?? "Nothing was recorded"
+            }
+        }
+    }
+
     // MARK: - Capture
 
     /** Takes a raw now; it is developed into a JPEG in the background. */
     func shutter() {
+        if videoMode {
+            // The shutter, the volume buttons and the Camera Control record in video mode.
+            if recorder != nil { stopRecording() } else { startRecording() }
+            return
+        }
         guard status == .ready else { return }
         let s = settings
         let flash = info?.hasFlash == true ? s.flash : .off

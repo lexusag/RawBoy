@@ -15,6 +15,28 @@ enum RawFormat: String, CaseIterable {
 
 enum FlashMode: String { case off, on }
 
+/** Video recording quality (bitrate), as Android's VideoQuality: Low, Optimal (the default) or High. */
+enum VideoQuality: String, CaseIterable {
+    case low, optimal, high
+
+    var label: String {
+        switch self {
+        case .low: "Low"
+        case .optimal: "Optimal"
+        case .high: "High"
+        }
+    }
+
+    /** HEVC bit rate at 1080p30, bit/s. */
+    var bitrate: Int {
+        switch self {
+        case .low: 8_000_000
+        case .optimal: 16_000_000
+        case .high: 24_000_000
+        }
+    }
+}
+
 /** The look controls, camera choice and output settings. */
 struct CameraSettings: Equatable {
     var lookId = Edition.defaultLookId
@@ -77,6 +99,10 @@ struct CameraSettings: Equatable {
     var frameColor = FilmFrameColor.amber
     /** Play the camera shutter click on each shot. Where the law requires it, iOS plays it regardless. */
     var shutterSound = false
+    /** Video recording quality (bitrate); fixed when a recording starts. */
+    var videoQuality = VideoQuality.optimal
+    /** The camera's own video stabilization in video mode (it crops the picture a little and delays it slightly). */
+    var videoStabilization = true
     /** Look for QR codes in the viewfinder and offer to open them, as the system camera does. */
     var scanQr = true
     /** Film grain on the viewfinder and the saved photos; off = a clean picture (no look's grain, Film's included). */
@@ -225,6 +251,8 @@ enum CameraSettingsStore {
         s.frameColor = d.string(forKey: "camera.frameColor").flatMap(FilmFrameColor.init(rawValue:)) ?? def.frameColor
         s.shutterSound = d.object(forKey: "camera.shutterSound") as? Bool ?? def.shutterSound
         s.scanQr = d.object(forKey: "camera.scanQr") as? Bool ?? def.scanQr
+        s.videoQuality = d.string(forKey: "camera.videoQuality").flatMap(VideoQuality.init(rawValue:)) ?? def.videoQuality
+        s.videoStabilization = d.object(forKey: "camera.videoStabilization") as? Bool ?? def.videoStabilization
         s.grain = d.object(forKey: "camera.grain") as? Bool ?? def.grain
         s.trackFocus = d.object(forKey: "camera.trackFocus") as? Bool ?? def.trackFocus
         s.randomLightLeak = d.object(forKey: "camera.randomLightLeak") as? Bool ?? def.randomLightLeak
@@ -286,6 +314,8 @@ enum CameraSettingsStore {
         d.set(s.frameColor.rawValue, forKey: "camera.frameColor")
         d.set(s.shutterSound, forKey: "camera.shutterSound")
         d.set(s.scanQr, forKey: "camera.scanQr")
+        d.set(s.videoQuality.rawValue, forKey: "camera.videoQuality")
+        d.set(s.videoStabilization, forKey: "camera.videoStabilization")
         d.set(s.grain, forKey: "camera.grain")
         d.set(s.trackFocus, forKey: "camera.trackFocus")
         d.set(s.randomLightLeak, forKey: "camera.randomLightLeak")

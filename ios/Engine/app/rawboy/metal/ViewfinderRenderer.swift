@@ -1,3 +1,4 @@
+import CoreMedia
 import CoreVideo
 import Foundation
 import Metal
@@ -85,6 +86,11 @@ public final class ViewfinderRenderer: NSObject, MTKViewDelegate, @unchecked Sen
     private let mipSampler: MTLSamplerState
 
     private var pendingBuffer: CVPixelBuffer?
+    private var pendingTime = CMTime.invalid
+    private var videoSinkValue: VideoSink?
+    private var animateGrainValue = false
+    /** Camera frames drawn so far: the video's grain moves with it. */
+    private var frameIndex: UInt32 = 0
     private var frameValue: Frame?
     private var paramsValue: ShaderParams?
     private var loupeValue: Loupe?
@@ -117,6 +123,22 @@ public final class ViewfinderRenderer: NSObject, MTKViewDelegate, @unchecked Sen
     public var loupe: Loupe? {
         get { lock.withLock { loupeValue } }
         set { lock.withLock { loupeValue = newValue } }
+    }
+
+    /**
+     * While set, every new camera frame's develop is drawn a second time into the sink's buffers (the video file),
+     * cropped to the file's aspect, and the grain moves with the frame counter (it is position-only for photos, a
+     * frozen pattern in a video).
+     */
+    public var videoSink: VideoSink? {
+        get { lock.withLock { videoSinkValue } }
+        set { lock.withLock { videoSinkValue = newValue } }
+    }
+
+    /** Grain moves on the screen too (video mode), so the viewfinder's grain looks as the file's. */
+    public var animateGrain: Bool {
+        get { lock.withLock { animateGrainValue } }
+        set { lock.withLock { animateGrainValue = newValue } }
     }
 
     public override init() {
@@ -157,23 +179,30 @@ public final class ViewfinderRenderer: NSObject, MTKViewDelegate, @unchecked Sen
     }
 
     /** A new camera frame (any thread): drawn with the next display refresh; older undrawn frames are dropped. */
-    public func enqueue(_ buffer: CVPixelBuffer) {
-        lock.withLock { pendingBuffer = buffer }
+    public func enqueue(_ buffer: CVPixelBuffer, time: CMTime = .invalid) {
+        lock.withLock {
+            pendingBuffer = buffer
+            pendingTime = time
+        }
     }
 
     public func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {}
 
     public func draw(in view: MTKView) {
         let start = Date()
-        let (buffer, f, p, loupe): (CVPixelBuffer?, Frame?, ShaderParams?, Loupe?) = lock.withLock {
+        let (buffer, time, f, p, loupe, sink, animate): (CVPixelBuffer?, CMTime, Frame?, ShaderParams?, Loupe?, VideoSink?, Bool) = lock.withLock {
             let b = pendingBuffer
             pendingBuffer = nil
-            return (b, frameValue, paramsValue, loupeValue)
+            if b != nil { frameIndex &+= 1 }
+            return (b, pendingTime, frameValue, paramsValue, loupeValue, videoSinkValue, animateGrainValue)
         }
         guard let commands = ctx.queue.makeCommandBuffer() else { return }
         if let buffer, let f, let camera = cameraTexture(buffer) {
             linearizeFrame(commands, camera, f)
+            // Only a new camera frame goes into the video, once.
+            if let sink, let p, time.isValid { encodeVideo(commands, sink, p, f, time: time, grain: Float(frameIndex & 0xFFFF)) }
         }
+        let grainFrame: Float = (animate || sink != nil) ? Float(frameIndex & 0xFFFF) : 0
         guard let pass = view.currentRenderPassDescriptor, let drawable = view.currentDrawable else {
             commands.commit()
             return
@@ -195,6 +224,7 @@ public final class ViewfinderRenderer: NSObject, MTKViewDelegate, @unchecked Sen
             let liveCopies: (inout UniformBlock) -> Void = { u in
                 DevelopProgram.liveCopies(&u, p, baseWidth: small.width, baseHeight: small.height,
                                           tailWidth: tail.width, tailHeight: tail.height)
+                u.float("uGrainFrame", grainFrame)
             }
             let overrides = ["uBase": small, "uBloomHalo": halo, "uBloomTail": tail]
             DevelopProgram.draw(
@@ -221,6 +251,51 @@ public final class ViewfinderRenderer: NSObject, MTKViewDelegate, @unchecked Sen
         commands.present(drawable)
         commands.commit()
         stats.frame(Date().timeIntervalSince(start))
+    }
+
+    /**
+     * The develop again, into a buffer of [sink]: the picture fills it (cover fit, centred crop), upright and mirrored as
+     * on the screen. Handed over when the GPU has finished it. Skipped when the sink has no free buffer.
+     */
+    private func encodeVideo(_ commands: MTLCommandBuffer, _ sink: VideoSink, _ p: ShaderParams, _ f: Frame,
+                             time: CMTime, grain: Float) {
+        guard let cache, let linear, let small, let halo, let tail, let buffer = sink.makeBuffer() else { return }
+        var cv: CVMetalTexture?
+        CVMetalTextureCacheCreateTextureFromImage(nil, cache, buffer, nil, MetalContext.previewPixelFormat,
+                                                  sink.width, sink.height, 0, &cv)
+        guard let keep = cv, let target = CVMetalTextureGetTexture(keep) else { return }
+        textures.bind(p)
+        let outW = p.lens.outputWidth
+        let outH = p.lens.outputHeight
+        // Cover fit: the part of the developed image the file shows, as fractions of it.
+        let imageAspect = Float(outW) / Float(max(1, outH))
+        let fileAspect = Float(sink.width) / Float(sink.height)
+        let uw = min(1, fileAspect / imageAspect)
+        let uh = min(1, imageAspect / fileAspect)
+        let uv = [(1 - uw) / 2, (1 - uh) / 2, uw, uh]
+        let geometry = SampleGeometry(
+            textureWidth: linear.width, textureHeight: linear.height,
+            input: PixelRect(x: 0, y: 0, width: f.fullWidth, height: f.fullHeight),
+            output: PixelRect(x: 0, y: 0, width: outW, height: outH),
+            imageWidth: f.fullWidth, imageHeight: f.fullHeight)
+        let pass = MTLRenderPassDescriptor()
+        pass.colorAttachments[0].texture = target
+        pass.colorAttachments[0].loadAction = .dontCare
+        pass.colorAttachments[0].storeAction = .store
+        guard let e = commands.makeRenderCommandEncoder(descriptor: pass) else { return }
+        DevelopProgram.draw(
+            e, pipeline: ctx.previewPipeline, params: p, geometry: geometry, image: linear, inputs: textures,
+            flipY: true, uvRect: uv, overrides: ["uBase": small, "uBloomHalo": halo, "uBloomTail": tail]
+        ) { u in
+            DevelopProgram.liveCopies(&u, p, baseWidth: small.width, baseHeight: small.height,
+                                      tailWidth: tail.width, tailHeight: tail.height)
+            u.float("uGrainFrame", grain)
+        }
+        e.endEncoding()
+        commands.addCompletedHandler { _ in
+            // Keeps the texture cache's reference alive until the GPU is done with the buffer.
+            withExtendedLifetime(keep) { sink.deliver(buffer, time) }
+        }
     }
 
     private func cameraTexture(_ buffer: CVPixelBuffer) -> MTLTexture? {

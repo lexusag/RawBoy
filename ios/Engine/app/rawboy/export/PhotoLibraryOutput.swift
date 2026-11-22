@@ -12,8 +12,8 @@ public enum PhotoLibraryOutput {
         public var errorDescription: String? { message }
     }
 
-    /** Moves [file] into Photos (the temporary file is deleted afterwards). */
-    public static func save(_ file: URL, naming: OutputNaming = OutputNaming()) async throws {
+    /** Moves [file] into Photos, as a video when [video] (the temporary file is deleted afterwards). */
+    public static func save(_ file: URL, naming: OutputNaming = OutputNaming(), video: Bool = false) async throws {
         defer { try? FileManager.default.removeItem(at: file) }
         var status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
         if status == .notDetermined { status = await PHPhotoLibrary.requestAuthorization(for: .readWrite) }
@@ -28,7 +28,7 @@ public enum PhotoLibraryOutput {
             let options = PHAssetResourceCreationOptions()
             options.originalFilename = file.lastPathComponent
             let request = PHAssetCreationRequest.forAsset()
-            request.addResource(with: .photo, fileURL: file, options: options)
+            request.addResource(with: video ? .video : .photo, fileURL: file, options: options)
             if let album, let placeholder = request.placeholderForCreatedAsset,
                let change = PHAssetCollectionChangeRequest(for: album) {
                 change.addAssets([placeholder] as NSArray)
