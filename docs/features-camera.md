@@ -72,6 +72,8 @@ lenses, burst merge), iOS drives AVFoundation (**ProRAW at 12 MP by default**, o
 | **Lossy JPEG XL DNG** re-save | 1.5.10 | ✓ | n/a | iOS keeps ProRAW |
 | Frames: Date stamp (Classic, Red LED, 3 orders) | 1.15.13; refined 1.15.14–1.15.15 | ✓ | ✓ | Pro and Auto got them in 1.16.12 |
 | **Random light leak** (one random procedural film leak on saved JPEGs; Frequency 1/5–5/5 in shuffled 5-photo sequences; Short-side sprockets) | unreleased (branch `claude/project-thread-lw6gpc`; Android before that) | ✓ | ✓ | Same generator (`FilmLeaks.randomForCamera`, types edge, blob, sprocket, rebate, flare, start). The DNG and the viewfinder don't get it. iOS ported 2026-11-22, not yet tried on a phone |
+| **Border** (Settings › Border: Off / Thin 2% / Medium 4% / Thick 8% of the short side; Black or White) | unreleased | ✓ | ✓ | A solid border over the saved JPEG, inside its size (the engine's frame overlay), shown in the viewfinder too; drawn before the random light leak, which screens over it. Not the same as *Frames* (date stamp, Pentax 645 rebate), which are added outside the picture. Ukrainian strings added; iOS and Android not yet tried on a phone |
+| **B&W greys leaks and border** (`monoFx`) | unreleased | ✓ | ✓ | In B&W mode (also with Film on) the random light leak and the border go grey with the picture |
 | Frames: Pentax 645 / Contax 645 rebate with shoot info | 1.15.16 | ✓ | ✓ | |
 | Remember camera & settings (off by default) | ≤1.1.1 | ✓ | ✓ | |
 | Reset settings to defaults | 1.16.11 | ✓ | ✓ | |

@@ -105,7 +105,7 @@ class ShotDevelopParityTest {
             contrast = if (s.filmMono) CameraSettings.FILM_MONO_CONTRAST else 0f,
         )
         val p = LookApplier.apply(base, s.look, s.strength, adjust, hasFace)
-        if (bw) return p.copy(saturation = -100f, bwFilter = s.filter)
+        if (bw) return p.copy(saturation = -100f, bwFilter = s.filter, monoFx = true)
         if (s.look.film != null) return p
         val experimental = s.look.experimental
         val luma = if (experimental) 22f /* LUT_LUMA_DENOISE_EXPERIMENTAL */ else 12f /* LUT_LUMA_DENOISE */

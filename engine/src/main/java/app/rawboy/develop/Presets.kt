@@ -43,6 +43,7 @@ enum class PresetGroup(val key: String, val label: String, val fields: List<Stri
     LENS("lens", "Lens", listOf("lensProfile", "lensDistortion", "lensAnamorphic", "lensFisheye", "lensFisheyeFov", "lensFisheyeAuto", "lensFisheyeCircle", "lensFisheyeX", "lensFisheyeY", "lensCrop", "caRed", "caBlue", "vignetteAmount", "vignetteMidpoint")),
     MASKS("masks", "Masks (gradients only)", listOf("masks")),
     LEAKS("leaks", "Light leaks (generated)", listOf("filmLeaks")),
+    FRAME("frame", "Frame", listOf("frame", "frameColor")),
     ;
 
     companion object {
@@ -53,7 +54,7 @@ enum class PresetGroup(val key: String, val label: String, val fields: List<Stri
          * composition, denoise to one photo's noise (Auto measures it per photo), and Detail (grain, bloom, flare) is a
          * look rather than a correction, so it is a deliberate choice.
          */
-        val DEFAULT: Set<PresetGroup> = entries.toSet() - LENS - MASKS - DENOISE - DETAIL - LEAKS
+        val DEFAULT: Set<PresetGroup> = entries.toSet() - LENS - MASKS - DENOISE - DETAIL - LEAKS - FRAME
     }
 }
 
@@ -252,6 +253,8 @@ object Presets {
         "filmGrain" -> p.filmGrain
         "halation" -> p.halation
         "curves" -> p.curves
+        "frame" -> p.frame
+        "frameColor" -> p.frameColor
         "exposure" -> p.exposure
         "contrast" -> p.contrast
         "highlights" -> p.highlights
@@ -315,6 +318,7 @@ object Presets {
         if (field == "lensFisheyeAuto") return if (value is Boolean) p.copy(lensFisheyeAuto = value) else p
         if (field == "toneMapper") return ToneMapper.fromKey(value as? String)?.let { p.copy(toneMapper = it) } ?: p
         if (field == "anamorphicColor") return AnamorphicColor.fromKey(value as? String)?.let { p.copy(anamorphicColor = it) } ?: p
+        if (field == "frameColor") return Frame.normalize(value as? String)?.let { p.copy(frameColor = it) } ?: p
         if (field == "curves") return if (value is ToneCurves) p.copy(curves = value) else p
         if (field == "masks") {
             // Fresh ids, so two photos never share a layer id.
@@ -361,6 +365,7 @@ object Presets {
             "skinRetouch" -> p.copy(skinRetouch = f)
             "blemishRemoval" -> p.copy(blemishRemoval = f)
             "lutAmount" -> p.copy(lutAmount = f)
+            "frame" -> p.copy(frame = f.coerceIn(0f, Frame.MAX))
             "lensDistortion" -> p.copy(lensDistortion = f)
             "lensAnamorphic" -> p.copy(lensAnamorphic = f)
             "lensFisheye" -> p.copy(lensFisheye = f)

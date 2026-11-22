@@ -77,6 +77,11 @@ public final class ShaderParams: @unchecked Sendable {
     public let skinFix: Float
     /** Exponent of the luminance-only gain `pow(Y / 0.18, x)` (`uLumaContrast`); 0 = neutral. */
     public let lumaContrast: Float
+    /** `uFrame` thickness as a fraction of the output's short side (0 = off) and `uFrameColor` (display sRGB). */
+    public let frame: Float
+    public let frameColor: [Float]
+    /** `uMonoFx`: 1 when the picture is black and white, so the frame, leaks and effects go grey too. */
+    public let monoFx: Float
 
     public init(whiteBalance: [Float], exposure: Float, contrast: Float, saturation: Float, shadows: Float,
                 highlights: Float, blacks: Float, whites: Float, denoise: Float, denoiseWide: Float,
@@ -93,7 +98,7 @@ public final class ShaderParams: @unchecked Sendable {
                 anamorphicLength: [Float] = AnamorphicColor.neutral.lengthVec,
                 anamorphicBar: [Float] = AnamorphicColor.neutral.barVec, flareSource: PreviewImage? = nil,
                 bokehSource: PreviewImage? = nil, retouchMap: RetouchMap? = nil, skinFix: Float = 0,
-                lumaContrast: Float = 0) {
+                lumaContrast: Float = 0, frame: Float = 0, frameColor: [Float] = [0, 0, 0], monoFx: Float = 0) {
         self.whiteBalance = whiteBalance
         self.exposure = exposure
         self.contrast = contrast
@@ -144,6 +149,9 @@ public final class ShaderParams: @unchecked Sendable {
         self.retouchMap = retouchMap
         self.skinFix = skinFix
         self.lumaContrast = lumaContrast
+        self.frame = frame
+        self.frameColor = frameColor
+        self.monoFx = monoFx
     }
 
     /**
@@ -252,7 +260,14 @@ public final class ShaderParams: @unchecked Sendable {
             anamorphicLength: p.anamorphicColor.lengthVec, anamorphicBar: p.anamorphicColor.barVec,
             flareSource: flareSource, bokehSource: bokehSource, retouchMap: retouchMap,
             skinFix: PortraitRetouch.skinFix(strength: p.portraitRetouch, map: retouchMap),
-            lumaContrast: powf(2, p.lumaContrast / 100 * 0.7) - 1)
+            lumaContrast: powf(2, p.lumaContrast / 100 * 0.7) - 1,
+            frame: p.frame.clamped(0, Frame.max) / 100, frameColor: Frame.rgb(p.frameColor),
+            monoFx: isMono(p) ? 1 : 0)
+    }
+
+    /** The picture is black and white: Camera's B&W mode (DevelopParams.monoFx) or a bundled mono LUT at full strength. */
+    public static func isMono(_ p: DevelopParams) -> Bool {
+        p.monoFx || (p.film == nil && p.lutAmount >= 100 && Looks.isMonochromeLut(p.lut))
     }
 
     /** Full layer temperature offset (100) moves the white this many mireds; + = warmer, as the global slider. */

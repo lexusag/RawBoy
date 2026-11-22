@@ -4,6 +4,8 @@ import { Primaries } from '../color/Primaries';
 import { WhiteBalance } from '../color/WhiteBalance';
 import { anamorphicBarOf, anamorphicLengthOf, anamorphicTintOf, effectiveColorDenoise, toneMapperId, type DevelopParams } from '../develop/DevelopParams';
 import type { BrushRaster } from '../develop/BrushRaster';
+import { FRAME_DEFAULT_COLOR, FRAME_MAX, frameRgb } from '../develop/Frame';
+import { isMonochromeLut } from '../auto/looks/Look';
 import { curveTable } from '../develop/ToneCurve';
 import { CURVE_SCALE, MAX_LAYERS, MAX_LENS_BLUR, layerIsIdentity, type MaskLayer } from '../develop/Masks';
 import { NO_FILM_LEAKS, packFilmLeaks, type FilmLeakUniforms } from '../develop/FilmLeaks';
@@ -225,6 +227,11 @@ export class ShaderParams {
     readonly skinFix = 0,
     /** Generated film leaks over the finished picture, after the hand-made leaks (shaders/film_leak.glsl). */
     readonly filmLeaks: FilmLeakUniforms = NO_FILM_LEAKS,
+    /** `uFrame` thickness as a fraction of the output's short side (0 = off) and `uFrameColor` (display sRGB). */
+    readonly frame = 0,
+    readonly frameColor: readonly [number, number, number] = [0, 0, 0],
+    /** `uMonoFx`: 1 when the picture is black and white, so the frame, leaks and effects go grey too. */
+    readonly monoFx = 0,
   ) {}
 
   /** Extra source pixels needed around an output region for the spatial effects, so tiles join seamlessly. */
@@ -331,6 +338,14 @@ export class ShaderParams {
       retouchMap,
       skinFixOf(p.portraitRetouch ?? 0, retouchMap),
       packFilmLeaks(p.filmLeaks ?? [], lens.width, lens.height),
+      Math.min(Math.max(p.frame ?? 0, 0), FRAME_MAX) / 100,
+      frameRgb(p.frameColor ?? FRAME_DEFAULT_COLOR),
+      ShaderParams.isMono(p) ? 1 : 0,
     );
+  }
+
+  /** The picture is black and white: Camera's B&W mode (DevelopParams.monoFx) or a bundled mono LUT at full strength. */
+  static isMono(p: DevelopParams): boolean {
+    return !!p.monoFx || (p.film == null && p.lutAmount >= 100 && isMonochromeLut(p.lut));
   }
 }

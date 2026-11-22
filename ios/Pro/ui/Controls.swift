@@ -284,6 +284,24 @@ struct ControlsPanel: View {
         slider("Bloom", \.bloom, 0...100, format: formatPlain)
         anamorphicSliders
         grainSliders
+        borderSliders
+    }
+
+    /** Border: a plain solid frame over the finished picture, inside its size; its colour choices show while it is on. As Controls.kt's BorderSliders. */
+    @ViewBuilder private var borderSliders: some View {
+        slider("Border", \.frame, 0...Frame.max, format: formatPlain)
+        if params.frame > 0 {
+            Picker("Border color", selection: Binding(
+                get: { params.frameColor },
+                set: { c in set { $0.frameColor = c } })) {
+                ForEach(Frame.colors, id: \.hex) { Text($0.label).tag($0.hex) }
+                if !Frame.colors.contains(where: { $0.hex == params.frameColor }) { Text("Custom").tag(params.frameColor) }
+            }
+            .pickerStyle(.segmented)
+            .neutralSegments()
+            .padding(.leading, 16)
+            .padding(.vertical, 4)
+        }
     }
 
     /**
@@ -441,6 +459,7 @@ extension ControlsPanel {
                     p.bloom = d.bloom; p.anamorphic = d.anamorphic; p.anamorphicColor = d.anamorphicColor
                     p.anamorphicGhosts = d.anamorphicGhosts; p.grain = d.grain; p.grainSize = d.grainSize
                     p.grainRoughness = d.grainRoughness; p.grainColor = d.grainColor
+                    p.frame = d.frame; p.frameColor = d.frameColor
                 }) { effects }
                 // Film replaces the user LUT (kept, not rendered), so the section goes while Film is on, as the phones' tab.
                 if params.film == nil {

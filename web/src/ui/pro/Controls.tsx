@@ -5,6 +5,7 @@ import { CROP_ASPECTS, cropAspectLabel, cropOf, isFullCrop, type CropAspect } fr
 import { FILM_STOCKS } from '../../engine/auto/looks/FilmLooks';
 import { LOOK_GROUP_LABELS, LOOK_GROUPS, lutGroup } from '../../engine/auto/looks/Look';
 import { ANAMORPHIC_COLORS, TONE_MAPPERS, effectiveColorDenoise, type DevelopParams, type SliderKey } from '../../engine/develop/DevelopParams';
+import { FRAME_COLORS, FRAME_MAX, normalizeFrameColor } from '../../engine/develop/Frame';
 import type { LensInfo } from '../../engine/lens/LensInfo';
 import type { LutEntry } from '../../engine/lut/LutData';
 import { LutRepository } from '../../engine/lut/LutRepository';
@@ -287,6 +288,7 @@ export function ControlsPanel({
             {slider('Bloom', 'bloom', 0, 100, formatPlain)}
             <AnamorphicSliders params={params} defaults={defaults} onChange={onChange} />
             <GrainSliders params={params} defaults={defaults} onChange={onChange} />
+            <BorderSliders params={params} defaults={defaults} onChange={onChange} />
             <Note>Denoise and grain are sized in full-resolution pixels: judge them in the 100% view (double-click the photo).</Note>
           </>
         )}
@@ -566,6 +568,41 @@ function AnamorphicSliders({
             >
               Ghosts
             </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+/** Border: a plain solid frame over the finished picture, inside its size; its colour chips show while it is on. */
+function BorderSliders({ params, defaults, onChange }: { params: DevelopParams; defaults: DevelopParams; onChange: (p: DevelopParams) => void }) {
+  return (
+    <>
+      <ParamSlider
+        key="frame"
+        label="Border"
+        value={params.frame}
+        min={0}
+        max={FRAME_MAX}
+        defaultValue={defaults.frame}
+        format={formatPlain}
+        onChange={(v) => onChange({ ...params, frame: v })}
+      />
+      {params.frame > 0 && (
+        <div className="slider-details">
+          <div className="chips" role="group" aria-label="Border color">
+            {FRAME_COLORS.map((c) => (
+              <button key={c.hex} type="button" className={params.frameColor === c.hex ? 'active' : ''} onClick={() => onChange({ ...params, frameColor: c.hex })}>
+                {c.label}
+              </button>
+            ))}
+            <input
+              type="color"
+              aria-label="Custom border color"
+              value={params.frameColor}
+              onChange={(e) => onChange({ ...params, frameColor: normalizeFrameColor(e.target.value) ?? params.frameColor })}
+            />
           </div>
         </div>
       )}

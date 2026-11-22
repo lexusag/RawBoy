@@ -35,6 +35,9 @@ import Foundation
  * - curves: point curves (RGB, then red, green, blue) on the final display-encoded image (see ToneCurves)
  * - RGB primaries (after darktable): redHue/greenHue/blueHue in degrees (-45..45),
  *   red/green/bluePurity -200..200 (0 = unchanged), tintHue degrees (-180..180), tintPurity 0..100
+ * - frame: 0..20 solid border over the finished picture in % of its short side, 0 = off; frameColor: `#rrggbb` (see Frame)
+ * - monoFx: the picture is black and white (Camera's B&W mode): the frame, leaks and effects go grey too (`uMonoFx`);
+ *   a bundled monochrome LUT at full strength does the same without it. Not a slider or preset value.
  * - bwFilter: colour filter for black and white (BwFilter, RawBoy Camera's B&W mode; .off = identity), channel gains
  *   after white balance and the RGB primaries
  * - rotation: clockwise quarter turns; straighten: degrees -45..45, + turns clockwise (auto crop).
@@ -71,6 +74,7 @@ public struct DevelopParams: Equatable, Sendable {
     public var tintHue: Float = 0
     public var tintPurity: Float = 0
     public var bwFilter: BwFilter = .off
+    public var monoFx = false
     public var denoise: Float = 0
     public var colorDenoise: Float? = nil
     public var grain: Float = 0
@@ -94,6 +98,8 @@ public struct DevelopParams: Equatable, Sendable {
     public var filmGrain: Float = 75
     public var halation: Float = 100
     public var curves = ToneCurves.none
+    public var frame: Float = 0
+    public var frameColor = Frame.defaultColor
     public var lensProfile: Bool = true
     public var lensDistortion: Float = 0
     public var lensAnamorphic: Float = 0
