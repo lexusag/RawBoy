@@ -30,6 +30,8 @@ class TensorLayerTest {
         assertEquals(true, tensor.preview.liftsShadows)
         // The former lens list: cameras in the order the camera list names them.
         assertEquals(false, tensor.lenses.standaloneOverLogical)
+        // Stabilization's fitted picture-per-gyro scale (2026-11-21 clips).
+        assertEquals(MotionGain(0.98f, 1.20f), tensor.lenses.motionGain["W"])
     }
 
     @Test

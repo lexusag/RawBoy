@@ -54,7 +54,17 @@ data class LensProfile(
      * RAW reliably. Neutral false: whichever the camera list names first (the logical camera on the OnePlus 11).
      */
     val standaloneOverLogical: Boolean,
+    /**
+     * Per lens label: how far the picture moves per radian of gyro rotation, over the lens's focal length, sideways
+     * ([MotionGain.x]) and up and down ([MotionGain.y]), for stabilizing videos from their motion data. Fitted against
+     * the measured image motion of real clips; a lens not listed takes 1 (the focal length's own scale). Neutral:
+     * none listed.
+     */
+    val motionGain: Map<String, MotionGain> = emptyMap(),
 )
+
+/** A lens's picture-per-gyro scale over its focal length, sideways and up and down ([LensProfile.motionGain]). */
+data class MotionGain(val x: Float, val y: Float)
 
 /** The live viewfinder: how the ISP's preview frames relate to the raw. */
 data class PreviewProfile(

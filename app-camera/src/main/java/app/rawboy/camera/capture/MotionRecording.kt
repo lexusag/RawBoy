@@ -2,14 +2,9 @@ package app.rawboy.camera.capture
 
 import android.content.Context
 import android.hardware.Sensor
-import android.hardware.SensorEvent
-import android.hardware.SensorEventListener
-import android.hardware.SensorManager
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CaptureResult
 import android.os.Build
-import android.os.Handler
-import android.os.HandlerThread
 import android.os.SystemClock
 import android.util.Log
 import org.json.JSONArray
@@ -24,15 +19,17 @@ import java.io.FileOutputStream
  * Written to the app's external files dir (`Android/data/<package>/files/motion/<video name>.motion`), where adb and
  * a computer over USB reach it. For stabilizing the video afterwards (video-stabilization plan, Phases 0 and 2).
  *
+ * Samples come from [MotionSensors], which runs before the recording starts and hands over the last half second, so
+ * the first frames have gyro around them.
+ *
  * Calls come from three threads: sensors (its own), [onFrame] (camera), [onEncoded] (GL); [MotionWriter] serialises
  * them.
  */
 class MotionRecording private constructor(
     val file: File,
     private val writer: MotionWriter,
-    private val sensors: SensorManager,
-    private val thread: HandlerThread,
-) : SensorEventListener {
+    private val sensors: MotionSensors,
+) : MotionSensors.Sink {
     @Volatile
     private var closed = false
 
@@ -44,23 +41,16 @@ class MotionRecording private constructor(
     private var firstGyroNs = 0L
     private var lastGyroNs = 0L
 
-    override fun onSensorChanged(e: SensorEvent) {
+    override fun gyro(t: Long, x: Float, y: Float, z: Float, dx: Float, dy: Float, dz: Float) {
         if (closed) return
-        val v = e.values
-        when (e.sensor.type) {
-            Sensor.TYPE_GYROSCOPE_UNCALIBRATED -> gyro(e.timestamp, v[0], v[1], v[2], v[3], v[4], v[5])
-            Sensor.TYPE_GYROSCOPE -> gyro(e.timestamp, v[0], v[1], v[2], Float.NaN, Float.NaN, Float.NaN)
-            Sensor.TYPE_ACCELEROMETER -> writer.accel(e.timestamp, v[0], v[1], v[2])
-        }
-    }
-
-    private fun gyro(t: Long, x: Float, y: Float, z: Float, dx: Float, dy: Float, dz: Float) {
         writer.gyro(t, x, y, z, dx, dy, dz)
         if (gyroSamples++ == 0) firstGyroNs = t
         lastGyroNs = t
     }
 
-    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+    override fun accel(t: Long, x: Float, y: Float, z: Float) {
+        if (!closed) writer.accel(t, x, y, z)
+    }
 
     /** A preview result of the streamed lens (its own result when a physical lens is streamed). Camera thread. */
     fun onFrame(r: CaptureResult) {
@@ -114,23 +104,20 @@ class MotionRecording private constructor(
     }
 
     private fun stopSensors() {
-        sensors.unregisterListener(this)
-        thread.quitSafely()
+        sensors.detach(this)
     }
 
     companion object {
         private const val TAG = "RawBoyMotion"
 
-        /** 400 Hz: the Pixel 9 Pro's gyro maximum (needs HIGH_SAMPLING_RATE_SENSORS from Android 12; else 200 Hz). */
-        private const val SAMPLING_US = 2_500
-
         /**
-         * Starts recording motion for the video called [videoName] (no extension), or returns null when the phone has
-         * no gyroscope or the file can't be made. [lens] is the streamed lens, [turns] the recording's quarter turns,
+         * Starts recording motion for the video called [videoName] (no extension) from [sensors] (started here if they
+         * aren't running yet), or returns null when the file can't be made. [lens] is the streamed lens, [turns] the recording's quarter turns,
          * [width] x [height] the video's size.
          */
         fun start(
             context: Context,
+            sensors: MotionSensors,
             videoName: String,
             lens: CameraController.Info,
             turns: Int,
@@ -138,21 +125,14 @@ class MotionRecording private constructor(
             height: Int,
             flat: Boolean,
         ): MotionRecording? {
-            val sensors = context.getSystemService(SensorManager::class.java) ?: return null
-            val gyro = sensors.getDefaultSensor(Sensor.TYPE_GYROSCOPE_UNCALIBRATED)
-                ?: sensors.getDefaultSensor(Sensor.TYPE_GYROSCOPE)
-                ?: return null.also { Log.w(TAG, "no gyroscope: no motion data") }
-            val accel = sensors.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
             val dir = context.getExternalFilesDir("motion") ?: return null
             val file = File(dir, "$videoName.motion")
             return try {
-                val header = header(context, videoName, lens, turns, width, height, flat, gyro, accel)
+                val header = header(context, videoName, lens, turns, width, height, flat, sensors.gyro, sensors.accel)
                 val writer = MotionWriter(BufferedOutputStream(FileOutputStream(file), 1 shl 16), header.toString())
-                val thread = HandlerThread("RawBoy-motion").apply { start() }
-                val recording = MotionRecording(file, writer, sensors, thread)
-                val handler = Handler(thread.looper)
-                sensors.registerListener(recording, gyro, SAMPLING_US, 0, handler)
-                accel?.let { sensors.registerListener(recording, it, SAMPLING_US, 0, handler) }
+                val recording = MotionRecording(file, writer, sensors)
+                sensors.start()
+                sensors.attach(recording)
                 recording
             } catch (e: Exception) {
                 Log.w(TAG, "no motion data", e)

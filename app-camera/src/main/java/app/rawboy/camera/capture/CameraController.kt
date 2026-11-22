@@ -1734,7 +1734,8 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         set(CaptureRequest.CONTROL_AE_LOCK, exposureLocked)
         // The Pixel's preview template already has OIS on, so video mode with the switch off must say OFF
         // explicitly (it was left alone and the switch changed nothing). Photos (null) leave the template's.
-        stabilizeVideo?.let { on ->
+        stabilizeVideo?.let { switch ->
+            val on = switch
             if (hasOis(inf)) setForLens(
                 CaptureRequest.LENS_OPTICAL_STABILIZATION_MODE,
                 if (on) CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_ON else CameraMetadata.LENS_OPTICAL_STABILIZATION_MODE_OFF,

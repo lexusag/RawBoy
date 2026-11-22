@@ -1457,6 +1457,16 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
             accent = EXPERIMENTAL_ORANGE,
             onChange = vm::setVideoMotionData,
         )
+        if (settings.videoMotionData) {
+            SettingSwitch(
+                title = "Stabilize after recording",
+                subtitle = "Saves a steadied copy (70% crop) beside each video",
+                checked = settings.videoStabilizeAfter,
+                accent = EXPERIMENTAL_ORANGE,
+                onChange = vm::setVideoStabilizeAfter,
+                indent = true,
+            )
+        }
 
         var confirmReset by remember { mutableStateOf(false) }
         Spacer(Modifier.height(16.dp))
