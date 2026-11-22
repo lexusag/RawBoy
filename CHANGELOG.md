@@ -1,3 +1,9 @@
+**Camera (Android): Ukrainian translation and a language setting (2026-11-22)**
+
+- **Settings › Language › Interface language**: *Phone* (the default, follows the phone's language), *English* or *Українська*. Choosing one changes the viewfinder, Settings, the help sheet, accessibility labels and messages at once, with no restart. Look and film stock names stay as they are.
+- How: `tr("English text")` (`app-camera/.../i18n/Strings.kt`) looks the text up in `StringsUk.kt` and shows the English when there is no entry, so adding a feature never breaks the screen, it just stays English until its line is added. The language is a Compose state set from `CameraSettings.language` (kept when settings are reset), so changing it redraws. Strings with values use `%s`. `StringsTest` checks the language rules and that every translation keeps its placeholders.
+- Written without an Android SDK here: not compiled or tried on a phone yet. Worth a look on the Pixel: Ukrainian text is longer than English, so check the Settings rows, the segmented choices and the viewfinder chips (AF ФІКС., СТЕЖЕННЯ, Ч/Б) in portrait and landscape. iOS is not translated yet.
+
 **Camera (Android, experimental): viewfinder from RAW, a prototype (2026-11-22)**
 
 - **Settings › Experimental › Viewfinder from RAW** (off by default; offered only where the phone profile's new `PreviewProfile.rawViewfinder` is true: the Tensor layer for now) streams RAW_SENSOR frames next to the preview and builds the viewfinder from them instead of the ISP's preview: no preview colour matrix, tone-curve inverse or learned per-lens preview scale. The viewfinder's gain is then only what the still gains over the preview frame (`stillGain`, or Long exposure's), and no preview calibration is learned or metered while it is on.

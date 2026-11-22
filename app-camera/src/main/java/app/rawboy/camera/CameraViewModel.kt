@@ -1,6 +1,9 @@
 package app.rawboy.camera
 
 import android.app.Application
+import app.rawboy.camera.i18n.AppLanguage
+import app.rawboy.camera.i18n.Strings
+import app.rawboy.camera.i18n.tr
 import android.graphics.Bitmap
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.CameraMetadata
@@ -169,6 +172,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     private val _settings = MutableStateFlow(CameraSettingsStore.load(application, platform.calibrationSlot, platform.preview.level))
     val settings = _settings.asStateFlow()
+
+    init {
+        Strings.setPreference(_settings.value.language)
+    }
 
     private val _status = MutableStateFlow(CameraStatus.NEEDS_PERMISSION)
     val status = _status.asStateFlow()
@@ -350,7 +357,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     fun onAudioPermission(granted: Boolean) {
         audioGranted = granted
-        if (!granted) _message.value = "No microphone access: videos will have no sound"
+        if (!granted) _message.value = tr("No microphone access: videos will have no sound")
     }
 
     fun hasAudioPermission() = audioGranted
@@ -457,7 +464,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 probing = false
                 // The file couldn't be made (not the encoder's doing).
                 Log.w(TAG, "recording did not start", e)
-                _message.value = "Could not start recording: ${e.message}"
+                _message.value = tr("Could not start recording: %s", e.message)
                 _recordingMs.value = null
                 stopRequested = false
                 return@launch
@@ -470,16 +477,16 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     Log.i(TAG, "video: ${result.variant} needs a recordable viewfinder; making it again")
                     _recordingMs.value = null
                     _recordableViewfinder.value = true
-                    _message.value = "Video is set up for this phone: the viewfinder restarts once. Press record again"
+                    _message.value = tr("Video is set up for this phone: the viewfinder restarts once. Press record again")
                 }
                 is VideoProbe.Result.AllFailed -> {
                     Log.w(TAG, "video: every variant failed: ${result.tries}")
                     _recordingMs.value = null
-                    _message.value = "Video recording doesn't work on this phone (${result.tries.joinToString { it.second.text }})"
+                    _message.value = tr("Video recording doesn't work on this phone (%s)", result.tries.joinToString { it.second.text })
                 }
                 VideoProbe.Result.Aborted -> {
                     _recordingMs.value = null
-                    _message.value = if (stopRequested) "Nothing was recorded" else "Nothing was recorded: the camera sent no frames"
+                    _message.value = if (stopRequested) tr("Nothing was recorded") else tr("Nothing was recorded: the camera sent no frames")
                 }
             }
             stopRequested = false
@@ -539,7 +546,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val lens = info ?: return
         val m = motionSensors?.let { MotionRecording.start(app, it, r.name, lens, turns, r.sink.width, r.sink.height, flat) }
         if (m == null) {
-            _message.value = "No motion data for this video (no gyroscope or no room)"
+            _message.value = tr("No motion data for this video (no gyroscope or no room)")
             return
         }
         motion = m
@@ -577,11 +584,11 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             _recordingMs.value = r.elapsedMs
             val p = r.progress()
             if (p is VideoProgress.Broken) {
-                val why = if (p.failure == VideoFailure.EGL_SURFACE) "the encoder's surface was lost" else "the video encoder failed"
+                val why = if (p.failure == VideoFailure.EGL_SURFACE) tr("the encoder's surface was lost") else tr("the video encoder failed")
                 // Said now: saving what was recorded can take a few seconds with a dead encoder.
-                _message.value = "Recording stopped: $why"
+                _message.value = tr("Recording stopped: %s", why)
                 Log.w(TAG, "video: ${r.variant} broke while recording (${p.failure}); stopping")
-                stopRecording(failure = "Recording stopped: $why")
+                stopRecording(failure = tr("Recording stopped: %s", why))
                 return
             }
             delay(200)
@@ -617,12 +624,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             _recordingMs.value = null
             applyStabilization() // a switch flipped during the recording takes effect now
             _message.value = when {
-                uri != null && failure != null -> "$failure. Video saved to Movies/${Edition.FOLDER}"
-                uri != null && m != null && _settings.value.videoStabilizeAfter -> "Video saved to Movies/${Edition.FOLDER}; stabilizing a copy…"
-                uri != null && m != null -> "Video saved to Movies/${Edition.FOLDER} (motion data saved too)"
-                uri != null -> "Video saved to Movies/${Edition.FOLDER}"
+                uri != null && failure != null -> tr("%s. Video saved to Movies/%s", failure, Edition.FOLDER)
+                uri != null && m != null && _settings.value.videoStabilizeAfter -> tr("Video saved to Movies/%s; stabilizing a copy…", Edition.FOLDER)
+                uri != null && m != null -> tr("Video saved to Movies/%s (motion data saved too)", Edition.FOLDER)
+                uri != null -> tr("Video saved to Movies/%s", Edition.FOLDER)
                 failure != null -> failure
-                else -> "Nothing was recorded"
+                else -> tr("Nothing was recorded")
             }
         }
     }
@@ -724,7 +731,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         // Location access taken away in the system settings: geotagging can't work, so it shows as off.
         if (_settings.value.geotag && !location.hasPermission()) {
             change { it.copy(geotag = false) }
-            _message.value = "Geotagging turned off: no location access"
+            _message.value = tr("Geotagging turned off: no location access")
         }
         updateLocation()
         startIfReady()
@@ -832,7 +839,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 throw e
             } catch (e: Exception) {
                 Log.w(TAG, "camera start", e)
-                _message.value = "Camera: ${e.message ?: e.javaClass.simpleName}"
+                _message.value = tr("Camera: %s", e.message ?: e.javaClass.simpleName)
                 _status.value = CameraStatus.FAILED
                 startJob = null
             }
@@ -928,7 +935,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             viewModelScope.launch {
                 if (synchronized(tracker) { generation != trackGeneration }) return@launch
                 releaseFocus()
-                _message.value = "Subject lost: autofocus"
+                _message.value = tr("Subject lost: autofocus")
             }
             return
         }
@@ -1284,6 +1291,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         change { it.copy(showHistogram = on) }
     }
     fun setShowZoomControl(on: Boolean) = change { it.copy(showZoomControl = on) }
+    fun setLanguage(language: AppLanguage) = change { it.copy(language = language) }
     fun setShowGrid(on: Boolean) = change { it.copy(showGrid = on) }
     fun setShowLevel(on: Boolean) {
         if (!on) {
@@ -1382,7 +1390,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun onLocationPermission(granted: Boolean) {
-        if (granted) setGeotag(true) else _message.value = "No location access: photos aren't geotagged"
+        if (granted) setGeotag(true) else _message.value = tr("No location access: photos aren't geotagged")
     }
 
     /** Listens for the position only while it is used: geotagging on and the camera in front. */
@@ -1455,6 +1463,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private fun change(edit: (CameraSettings) -> CameraSettings) {
         val s = edit(_settings.value)
         _settings.value = s
+        Strings.setPreference(s.language)
         controller.setExposureBias(exposureBias(s))
         // A slider drag changes settings every frame: save once it rests.
         saveJob?.cancel()
@@ -1600,7 +1609,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             } catch (e: Throwable) {
                 Log.w(TAG, "capture", e)
                 if (e !is CancellationException) {
-                    _message.value = "Capture failed: ${e.message ?: e.javaClass.simpleName}"
+                    _message.value = tr("Capture failed: %s", e.message ?: e.javaClass.simpleName)
                 }
                 ShotSaver.cancelCapture()
             } finally {
