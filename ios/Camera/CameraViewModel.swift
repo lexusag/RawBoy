@@ -239,7 +239,7 @@ final class CameraViewModel: ObservableObject {
                 info = lens
                 flashAvailable = lens.hasFlash
                 controller.setExposureBias(Self.exposureBias(settings))
-                recording = try await controller.start(lens, format: settings.rawFormat)
+                recording = try await controller.start(lens, format: settings.rawFormat, video: videoMode)
                 guard !Task.isCancelled else { return }
                 shutterSoundRequired = controller.shutterSoundRequired
                 let size = controller.rawSize
@@ -845,6 +845,8 @@ final class CameraViewModel: ObservableObject {
             if on, !audioGranted { audioGranted = await Self.requestMicrophone() }
             microphoneIn = await controller.setVideoMode(on, audio: audioGranted, stabilization: stabilization)
             if on && !microphoneIn { message = "No microphone access: videos will have no sound" }
+            // The camera runs its video format in video mode (it offers stabilization; the photo format doesn't), so it restarts.
+            if let info { switchTo(info) }
         }
         publish()  // the video viewfinder drops the colour denoise (see publish)
     }

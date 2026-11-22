@@ -95,6 +95,12 @@ final class CameraController: NSObject, @unchecked Sendable {
     /** Video mode's state, applied after each (re)configuration; the camera queue's own. */
     private var videoStabilizationOn = false
     private var exposureLocked = false
+    /**
+     * Video mode runs the camera on its 1080p video format instead of the photo format: the photo format (4032 px) offers
+     * no standard video stabilization, the video formats do. No raw stills then (video mode takes none); the camera
+     * restarts on each switch of mode. The camera queue's own.
+     */
+    private var videoFormat = false
     private var input: AVCaptureDeviceInput?
     private var rotation: AVCaptureDevice.RotationCoordinator?
     private var rawType: OSType?
@@ -151,10 +157,11 @@ final class CameraController: NSObject, @unchecked Sendable {
     }
 
     /** Starts (or switches to) [lens], recording [format] (falling back to the other raw format, then failing). */
-    func start(_ lens: Info, format: RawFormat) async throws -> RawFormat {
+    func start(_ lens: Info, format: RawFormat, video: Bool = false) async throws -> RawFormat {
         try await withCheckedThrowingContinuation { (c: CheckedContinuation<RawFormat, Error>) in
             queue.async {
                 do {
+                    self.videoFormat = video
                     let used = try self.configure(lens, format)
                     // After the commit: it rebuilds the connections for a new input, dropping their settings
                     // (the selfie camera came out sideways and stretched).
@@ -173,7 +180,7 @@ final class CameraController: NSObject, @unchecked Sendable {
         guard let device = AVCaptureDevice(uniqueID: lens.deviceId) else { throw Failure(message: "camera not found") }
         session.beginConfiguration()
         defer { session.commitConfiguration() }
-        session.sessionPreset = .photo
+        session.sessionPreset = videoFormat ? .hd1920x1080 : .photo
         // sRGB frames, so the viewfinder's linearisation is exact up to a gain.
         session.automaticallyConfiguresCaptureDeviceForWideColor = false
         if let input { session.removeInput(input) }
@@ -209,6 +216,16 @@ final class CameraController: NSObject, @unchecked Sendable {
         applyExposureLock(device)
 
         rotation = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: nil)
+
+        if videoFormat {
+            // Video mode: the 1080p stream, upright 9:16 like the file; no stills.
+            rawType = nil
+            rawSize = CGSize(width: 1080, height: 1920)
+            current = lens
+            logNextFrame = true
+            Self.log.notice("camera \(lens.label) (\(device.localizedName)): video format")
+            return format
+        }
 
         // Raw: Bayer first (or ProRAW when asked), the other as fallback.
         photoOutput.maxPhotoQualityPrioritization = .quality
@@ -349,8 +366,11 @@ final class CameraController: NSObject, @unchecked Sendable {
      */
     private func applyVideoStabilization() {
         guard let c = videoOutput.connection(with: .video), let device = input?.device else { return }
-        let want: AVCaptureVideoStabilizationMode =
-            videoStabilizationOn && device.activeFormat.isVideoStabilizationModeSupported(.standard) ? .standard : .off
+        // Standard (a moderate crop and delay) where the format offers it, else the camera's own pick.
+        let format = device.activeFormat
+        let want: AVCaptureVideoStabilizationMode = !videoStabilizationOn ? .off
+            : format.isVideoStabilizationModeSupported(.standard) ? .standard
+            : format.isVideoStabilizationModeSupported(.auto) ? .auto : .off
         if c.preferredVideoStabilizationMode != want { c.preferredVideoStabilizationMode = want }
         let modes = [AVCaptureVideoStabilizationMode.off, .standard, .cinematic, .cinematicExtended, .previewOptimized, .auto].filter { device.activeFormat.isVideoStabilizationModeSupported($0) }.map(\.rawValue)
         Self.log.notice("video stabilization: format supports \(modes) on \(Int(CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription).width))px, asked \(self.videoStabilizationOn), preferred \(want.rawValue), active \(c.activeVideoStabilizationMode.rawValue)")
