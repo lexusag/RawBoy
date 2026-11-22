@@ -54,6 +54,7 @@ import app.rawboy.gl.PreviewImage
 import app.rawboy.gl.ShaderParams
 import app.rawboy.gl.ThumbnailRenderer
 import app.rawboy.gl.ViewfinderBase
+import app.rawboy.gl.RawPreviewFrames
 import app.rawboy.gl.ViewfinderRenderer
 import app.rawboy.lens.LensInfo
 import app.rawboy.lens.LensTransform
@@ -135,6 +136,17 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     val controller = CameraController(application, platform)
+
+    /**
+     * Raw viewfinder frames (prototype, [CameraSettings.rawViewfinder]): the controller offers, the viewfinder's
+     * renderer takes. Its buffers are only made once a frame streams.
+     */
+    val rawFrames = RawPreviewFrames()
+
+    /** Settings offers the raw viewfinder (the phone profile's [app.rawboy.camera.platform.PreviewProfile.rawViewfinder]). */
+    val rawViewfinderAvailable: Boolean get() = platform.preview.rawViewfinder
+
+    private fun rawViewfinderOn(s: CameraSettings) = s.rawViewfinder && platform.preview.rawViewfinder
 
     /**
      * Settings › Share device report: gathers [DeviceReportCollector]'s report into a text file in the cache (one,
@@ -680,6 +692,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     init {
         DebugProbe.init(app)
         ShotSaver.attachView()
+        controller.rawFrames = rawFrames
+        controller.setRawViewfinder(rawViewfinderOn(_settings.value))
         val maxRes = _settings.value.maxRes
         lensPrefetch = viewModelScope.async(Dispatchers.Default) { discoverLenses(maxRes) }
         viewModelScope.launch(Dispatchers.Main.immediate) {
@@ -787,7 +801,19 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 applyStabilization()
                 controller.start(inf, st)
                 scaleFromStart = true
-                _frame.value = ViewfinderRenderer.Frame(
+                rawFrames.clear()
+                _frame.value = if (controller.rawStreams(inf)) ViewfinderRenderer.Frame(
+                    // Prototype: the raw stream, binned 2x2 and cropped to the preview's aspect as the ISP's preview is.
+                    bufferWidth = (inf.rawSize.width * inf.previewCropX / 2f).toInt().coerceAtLeast(1),
+                    bufferHeight = (inf.rawSize.height * inf.previewCropY / 2f).toInt().coerceAtLeast(1),
+                    rotation = inf.sensorOrientation,
+                    fullWidth = inf.viewfinderWidth,
+                    fullHeight = inf.viewfinderHeight,
+                    mirror = inf.isFront,
+                    raw = true,
+                    rawCropX = inf.previewCropX,
+                    rawCropY = inf.previewCropY,
+                ) else ViewfinderRenderer.Frame(
                     bufferWidth = inf.previewSize.width,
                     bufferHeight = inf.previewSize.height,
                     rotation = inf.sensorOrientation,
@@ -997,7 +1023,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val longGain = if (info?.hiRes != true && settings.flash == FlashMode.OFF && aeFrames && (state?.exposureNs ?: 0L) < 250_000_000L) {
             settings.longExposureSpec(sceneKey(), platform.preview.level, neutralFloor(state))?.let { controller.longExposureGainOverPreview(it) }
         } else null
-        val target = ViewfinderGain.target(platform.preview.level, settings.previewScale(info?.hiRes == true), boost, stillGain, longGain, neutralFloor(state))
+        // Raw viewfinder: the frames are the sensor's own data, so only what the still (or Long exposure) gains over the
+        // preview frame's exposure remains; no learned calibration, no boost.
+        val target = if (f.raw) longGain ?: stillGain
+        else ViewfinderGain.target(platform.preview.level, settings.previewScale(info?.hiRes == true), boost, stillGain, longGain, neutralFloor(state))
         // The gain eases to its target (a fade) instead of jumping: a long exposure starts and ends with the viewfinder
         // changing exposure under the preview, and a step there reads as a flash. (Live.scale keeps the key honest.)
         // Under STILL_WHITE_BALANCED a lens starts at the bare calibration, about twice its first target (the neutral
@@ -1012,7 +1041,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         wasExposing = exposing
         val scale = if (!first && !longSwitched && f.scale > 0f && target > 0f) f.scale * (target / f.scale).coerceIn(1f / SCALE_FADE_STEP, SCALE_FADE_STEP) else target
         // The raw's colours for the ISP's current white balance and colour matrix (they follow AWB).
-        val color = state?.previewColor
+        val color = if (f.raw) null else state?.previewColor
         if (scale != f.scale || !color.contentEquals(f.color)) _frame.value = f.copy(scale = scale, color = color)
         liveJob = viewModelScope.launch(Dispatchers.Default) {
             val base = ViewfinderBase.from(width, height, rgba, f.fullWidth, f.fullHeight)
@@ -1085,6 +1114,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val settings = _settings.value
         val key = settings.lensKey(lens.hiRes)
         if (lens.hiRes || key in settings.previewScales || key in rawMetered || meterJob?.isActive == true) return
+        // The raw viewfinder meters the raw itself: nothing to calibrate.
+        if (_frame.value?.raw == true) return
         // There the calibration is ~1 on every lens, the default, while a raw frame this soon after a lens starts can
         // catch AE unsettled (numbers in the OnePlus layer).
         if (platform.preview.level == PreviewLevel.STILL_WHITE_BALANCED) return
@@ -1328,6 +1359,13 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         if (!on) cancelSelfTimer()
     }
 
+    /** Raw viewfinder (prototype) on or off; the camera restarts so the stream and the viewfinder change together. */
+    fun setRawViewfinder(on: Boolean) {
+        change { it.copy(rawViewfinder = on) }
+        controller.setRawViewfinder(rawViewfinderOn(_settings.value))
+        if (activeCaptures == 0) restartCamera() else restartAfterCapture = true
+    }
+
     fun setGrain(on: Boolean) {
         change { it.copy(grain = on) }
     }
@@ -1407,6 +1445,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         }
         if ((prev.videoStabilization != next.videoStabilization || prev.videoMotionData != next.videoMotionData) && !recording) {
             applyStabilization()
+        }
+        if (prev.rawViewfinder != next.rawViewfinder && !recording) {
+            controller.setRawViewfinder(rawViewfinderOn(next))
+            if (activeCaptures == 0) restartCamera() else restartAfterCapture = true
         }
     }
 
@@ -1516,7 +1558,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             " ${settings.descriptionNote()}"
         // A flash shot's raw is lit by the flash, the viewfinder wasn't: no calibration from it.
         // A long exposure's raw is lifted away from what the viewfinder predicted for a still: it must not calibrate the preview.
-        val viewfinderKey = if (flash == FlashMode.OFF && !screenFlash && longExposure == null) live?.let { calibrationKey(it, settings.previewScale(hiRes)) } else null
+        // The raw viewfinder needs no preview calibration (its learned scale would mean nothing for the ISP's preview).
+        val viewfinderKey = if (flash == FlashMode.OFF && !screenFlash && longExposure == null && _frame.value?.raw != true) live?.let { calibrationKey(it, settings.previewScale(hiRes)) } else null
         val mayHaveFace = info?.hasFaceDetection != true || controller.frames.value?.faces?.isNotEmpty() != false
         controller.frames.value?.let { f ->
             Log.d(TAG, "shutter ${settings.lensKey(hiRes)}: preview ISO ${f.iso.toInt()}, ${f.exposureNs / 1000} µs, boost ${f.postRawBoost}, " +

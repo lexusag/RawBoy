@@ -50,10 +50,15 @@ class SamsungLayerTest {
     @Test
     fun developsAsWhenEveryPhoneWasTakenForTensor() {
         // Before chips were detected a Samsung got Tensor + Samsung; every value but the layer names stays, and the
-        // Pixel 9 Pro's lens motion gains (added later, measured on its sensors) don't come along.
+        // Pixel 9 Pro's lens motion gains (added later, measured on its sensors) and the raw viewfinder prototype (offered
+        // on Tensor only) don't come along.
         val before = PlatformRegistry.stack(listOf(app.rawboy.camera.platform.tensor.tensorLayer, samsungLayer))
         for (chip in listOf(ChipVendor.QUALCOMM, ChipVendor.MEDIATEK, ChipVendor.EXYNOS, ChipVendor.UNKNOWN)) {
-            val expected = before.copy(layers = samsung(chip).layers, lenses = before.lenses.copy(motionGain = emptyMap()))
+            val expected = before.copy(
+                layers = samsung(chip).layers,
+                lenses = before.lenses.copy(motionGain = emptyMap()),
+                preview = before.preview.copy(rawViewfinder = false),
+            )
             assertEquals("$chip", expected, samsung(chip))
         }
     }

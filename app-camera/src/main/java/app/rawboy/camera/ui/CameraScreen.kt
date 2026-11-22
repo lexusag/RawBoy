@@ -432,7 +432,7 @@ fun CameraScreen(
                         onTrackLuma = if (settings.trackFocus && focusPoint != null) vm::onTrackLuma else null,
                         turns = turns,
                         zoom = zoom,
-
+                        rawFrames = vm.rawFrames,
                         videoSink = videoSink,
                         videoMode = videoMode,
                         eglConfig = if (recordableViewfinder) ViewfinderEglConfig.RECORDABLE_RGBA8888 else null,
@@ -1457,6 +1457,16 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
             accent = EXPERIMENTAL_ORANGE,
             onChange = vm::setVideoMotionData,
         )
+        if (vm.rawViewfinderAvailable) {
+            SettingSwitch(
+                title = "Viewfinder from RAW",
+                subtitle = "Builds the viewfinder from the sensor's raw data, like the photo (prototype)",
+                checked = settings.rawViewfinder,
+                enabled = !recording,
+                accent = EXPERIMENTAL_ORANGE,
+                onChange = vm::setRawViewfinder,
+            )
+        }
         if (settings.videoMotionData) {
             SettingSwitch(
                 title = "Stabilize after recording",

@@ -14,6 +14,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import app.rawboy.gl.RawPreviewFrames
 import app.rawboy.gl.ShaderParams
 import app.rawboy.gl.VideoSink
 import app.rawboy.gl.ViewfinderRenderer
@@ -61,6 +62,8 @@ fun Viewfinder(
     onTrackLuma: ((width: Int, height: Int, luma: ByteArray) -> Unit)? = null,
     turns: Int = 0,
     zoom: Float = 1f,
+    /** Raw viewfinder frames (prototype, see [ViewfinderRenderer.rawFrames]); used only while the frame says [ViewfinderRenderer.Frame.raw]. */
+    rawFrames: RawPreviewFrames? = null,
     videoSink: VideoSink? = null,
     videoMode: Boolean = false,
     eglConfig: ViewfinderEglConfig? = null,
@@ -116,6 +119,9 @@ fun Viewfinder(
         LaunchedEffect(turns) {
             renderer.turns = turns
             view[0]?.requestRender()
+        }
+        LaunchedEffect(rawFrames) {
+            renderer.rawFrames = rawFrames
         }
         LaunchedEffect(zoom) {
             renderer.zoom = zoom
