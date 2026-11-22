@@ -15,6 +15,17 @@ public enum ExportFormat: String, CaseIterable, Sendable {
 public enum JpegEncoder: String, Sendable { case system, jpegli }
 
 public struct ExportSettings: Equatable, Sendable {
+    /** Custom long side limits in pixels (the same on every platform). */
+    public static let longSideRange = 64...20_000
+
+    /** A typed long side: whole pixels in `longSideRange`, else nil (blank, letters, fractions, out of range). */
+    public static func parseLongSide(_ text: String) -> Int? {
+        let t = text.trimmingCharacters(in: .whitespaces)
+        guard !t.isEmpty, t.utf8.count <= 6, t.utf8.allSatisfy({ $0 >= 48 && $0 <= 57 }), let n = Int(t),
+              longSideRange.contains(n) else { return nil }
+        return n
+    }
+
     public var format: ExportFormat = .jpeg
     public var jpegQuality: Int = 92  // 1..100
     public var tiffBits: Int = 16  // 8 or 16

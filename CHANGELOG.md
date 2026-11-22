@@ -1,3 +1,9 @@
+**Pro and Auto: custom export long side (2026-11-22)**
+
+- The Export size has a **Custom…** entry beside the presets (Pro: 6000 / 4000 / 3000 / 2048; Auto: 5600 / 4096 / 2048 / 1080): type the long side in pixels, 64–20000, whole numbers only. A value outside the range or with anything but digits shows the range and leaves the last good size (the field never changes the export until it is valid). Android, iOS, Desktop and web; `ExportSettings.parseLongSide` (Kotlin, TS, Swift) is the one rule, `LongSidePicker` (Compose, SwiftUI) and `LongSideSelect` (web) the control. Saved sizes outside the presets are now kept (Auto used to drop them on load).
+- Android Pro had no Size setting in its Export dialog; it has the same presets as the other Pros now, and remembers the choice.
+- Tests: `LongSideTest` (engine), `ExportSettings.test.ts`, `LongSideTests` (Swift).
+
 **All apps: Border, and B&W greys the leaks (2026-11-22)**
 
 - **Border** (RawBoy Pro on Android, iOS, Desktop and web: Detail › Border; Camera Android and iOS: Settings › Border): a plain solid border drawn inside the finished picture, 0–20% of the short side, in Black, White, Cream or Grey (any `#rrggbb` in a preset or edit). The export keeps its size. `applyFrame` in `shaders/develop.glsl` runs after the LUT and curves and before light leaks, generated film leaks and light effects, so they screen over it. Params `DevelopParams.frame` / `frameColor` (`Frame.kt/.ts/.swift`), uniforms `uFrame` (output size, thickness in pixels) and `uFrameColor`; default 0 = identical output. A **Border** preset group (off by default in Save preset) also carries it through edits and Auto's sidecars; Auto has no control of its own.

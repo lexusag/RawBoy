@@ -70,12 +70,9 @@ struct ExportDialog: View {
                          : "Upscales the photo and grows the grain on a finer pitch, as a finer scan of the negative. The size below doesn't apply.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
-                Picker("Size", selection: $settings.maxLongSide) {
-                    ForEach(Self.sizes, id: \.self) { s in
-                        Text(s.map { "\($0) px long side" } ?? "Full resolution").tag(s)
-                    }
-                }
-                .disabled(filmLook && settings.filmScan)
+                LongSidePicker(size: $settings.maxLongSide, presets: Self.sizes, fullLabel: "Full resolution",
+                               presetLabel: { "\($0) px long side" })
+                    .disabled(filmLook && settings.filmScan)
                 ExportFrameSections(settings: $settings)
                 if let destination { Section { destination } }
                 Section {

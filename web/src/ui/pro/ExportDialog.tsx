@@ -7,6 +7,7 @@ import {
   fileName,
   type ExportSettings,
 } from '../../engine/export/ExportSettings';
+import { LongSideSelect } from '../common/LongSideSelect';
 import { ExportFrameControls } from '../common/ExportFrameControls';
 import { ParamSlider, formatPlain } from '../common/ParamSlider';
 import { useExportDestination, type ExportDestination } from '../common/ExportDestination';
@@ -81,13 +82,7 @@ export function ExportDialog({ initial, sourceName, outputSize, film, onDismiss,
         )}
         <label className="field">
           <span>Size</span>
-          <select disabled={scan} value={s.maxLongSide ?? ''} onChange={(e) => setS({ ...s, maxLongSide: e.target.value ? Number(e.target.value) : null })}>
-            {SIZES.map((v) => (
-              <option key={v ?? 'full'} value={v ?? ''}>
-                {v ? `${v} px long side` : 'Full resolution'}
-              </option>
-            ))}
-          </select>
+          <LongSideSelect value={s.maxLongSide} presets={SIZES} fullLabel="Full resolution" disabled={scan} onChange={(v) => setS({ ...s, maxLongSide: v })} />
           <small>{w} × {h}</small>
         </label>
         <ExportFrameControls settings={s} onChange={setS} />

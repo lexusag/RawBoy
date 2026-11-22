@@ -30,6 +30,7 @@ import app.rawboy.export.ExportSettings
 import app.rawboy.export.MediaStoreOutput
 import app.rawboy.export.OutputNaming
 import app.rawboy.view.ExportFrameControls
+import app.rawboy.view.LongSidePicker
 import kotlin.math.roundToInt
 
 @Composable
@@ -83,6 +84,16 @@ fun ExportDialog(
                         }
                     }
                 }
+
+                Spacer(Modifier.height(16.dp))
+                Text("Size")
+                LongSidePicker(
+                    value = settings.maxLongSide,
+                    presets = listOf(null, 6000, 4000, 3000, 2048),
+                    fullLabel = "Full resolution",
+                    onChange = { settings = settings.copy(maxLongSide = it) },
+                    enabled = !(film && settings.filmScan),
+                )
 
                 if (film) {
                     Spacer(Modifier.height(16.dp))

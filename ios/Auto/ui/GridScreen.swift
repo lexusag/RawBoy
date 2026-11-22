@@ -824,11 +824,7 @@ struct ExportSheet: View {
                         Text("Film photos only: upscaled, with finer grain. The size below doesn't apply to them.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
-                    Picker("Size", selection: settingsBinding.maxLongSide) {
-                        ForEach(AutoViewModel.exportSizes, id: \.self) { size in
-                            Text(size.map { "\($0) px" } ?? "Original").tag(size)
-                        }
-                    }
+                    LongSidePicker(size: settingsBinding.maxLongSide, presets: AutoViewModel.exportSizes, fullLabel: "Original")
                 }
                 ExportFrameSections(settings: settingsBinding)
                 #if os(macOS)

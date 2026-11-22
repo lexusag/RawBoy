@@ -21,6 +21,18 @@ import {
 
 export type ExportFormat = 'jpeg' | 'tiff';
 
+/** Custom long side limits, in pixels (the same on every platform: ExportSettings.kt / .swift). */
+export const MIN_LONG_SIDE = 64;
+export const MAX_LONG_SIDE = 20000;
+
+/** A typed long side: whole pixels from MIN_LONG_SIDE to MAX_LONG_SIDE, else null (blank, letters, fractions, out of range). */
+export function parseLongSide(text: string): number | null {
+  const t = text.trim();
+  if (!/^[0-9]{1,6}$/.test(t)) return null;
+  const n = Number(t);
+  return n >= MIN_LONG_SIDE && n <= MAX_LONG_SIDE ? n : null;
+}
+
 export const EXTENSIONS: Record<ExportFormat, string> = { jpeg: 'jpg', tiff: 'tif' };
 export const MIME_TYPES: Record<ExportFormat, string> = { jpeg: 'image/jpeg', tiff: 'image/tiff' };
 
@@ -164,7 +176,7 @@ export const ExportSettingsStore = {
         format: s.format === 'tiff' ? 'tiff' : 'jpeg',
         jpegQuality: Math.min(100, Math.max(1, Number(s.jpegQuality) || DEFAULT_EXPORT.jpegQuality)),
         tiffBits: s.tiffBits === 8 ? 8 : 16,
-        maxLongSide: typeof s.maxLongSide === 'number' && s.maxLongSide > 0 ? s.maxLongSide : null,
+        maxLongSide: typeof s.maxLongSide === 'number' && Number.isInteger(s.maxLongSide) && s.maxLongSide >= MIN_LONG_SIDE && s.maxLongSide <= MAX_LONG_SIDE ? s.maxLongSide : null,
         filmScan: s.filmScan === true,
         photoFrame,
         dateStampFormat,

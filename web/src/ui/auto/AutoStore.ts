@@ -401,7 +401,7 @@ const FRAME_KEY = 'rawboy.auto.frame';
 /** Auto's own export choice, apart from RawBoy's; defaults are SETTINGS' (JPEG 92, 16-bit TIFF, full size). */
 function savedExportSettings(): ExportSettings {
   const s = ExportSettingsStore.load(EXPORT_KEY);
-  return { ...s, maxLongSide: EXPORT_SIZES.includes(s.maxLongSide) ? s.maxLongSide : null };
+  return { ...s, maxLongSide: s.maxLongSide };
 }
 
 function savedNameTemplate(): string {
