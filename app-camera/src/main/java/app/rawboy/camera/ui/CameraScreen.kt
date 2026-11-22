@@ -219,6 +219,9 @@ fun CameraScreen(
     val recordingMs by vm.recordingMs.collectAsStateWithLifecycle()
     val videoSink by vm.videoSink.collectAsStateWithLifecycle()
     val recordableViewfinder by vm.recordableViewfinder.collectAsStateWithLifecycle()
+    // Easy mode: the point-and-shoot screen. `shown` is what takes part (no grid, level, histogram... while it's on).
+    val easy = settings.easy
+    val shown = settings.effective
     // Only the AF state of the camera's per-frame metadata, so the screen doesn't recompose 30 times a second.
     val afState by remember(vm) { vm.controller.frames.map { it?.afState }.distinctUntilChanged() }
         .collectAsStateWithLifecycle(null)
@@ -284,20 +287,27 @@ fun CameraScreen(
             else -> ""
         }
         val barButtons = @Composable {
-            if (!videoMode) {
+            if (easy) {
+                // RAW, Frames, the flash and the way back to Settings (where Easy mode is switched off).
+                if (!videoMode) {
+                    RawButton(settings.keepDng) { vm.setKeepDng(!settings.keepDng) }
+                    FrameButton(settings.photoFrame) { vm.togglePhotoFrame() }
+                    if (flashAvailable) FlashButton(settings.flash, screenFlashCamera, vm::cycleFlash)
+                }
+            } else if (!videoMode) {
                 RawButton(settings.keepDng) { vm.setKeepDng(!settings.keepDng) }
                 FrameButton(settings.photoFrame) { vm.togglePhotoFrame() }
                 BurstButton(settings.burstMode, lowLight, hiRes, flashAvailable && settings.flash != FlashMode.OFF) { vm.setBurstMode(settings.burstMode.next()) }
                 if (flashAvailable) FlashButton(settings.flash, screenFlashCamera, vm::cycleFlash)
             }
-            HelpButton(appName, CAMERA_HELP, onOpenChange = { showHelp = it })
+            if (!easy) HelpButton(appName, CAMERA_HELP, onOpenChange = { showHelp = it })
             IconButton(onClick = { showSettings = true }) {
                 Icon(Icons.Filled.Settings, contentDescription = tr("Settings"))
             }
         }
         // Next to the shutter, under the thumb: the Photo / Video switch, with the experimental timer and long exposure beside it.
         val extras = @Composable {
-            if (!videoMode && settings.experimental) {
+            if (!videoMode && shown.experimental) {
                 TimerButton(settings.selfTimer) { vm.cycleSelfTimer() }
                 LongExposureButton(settings.longExposure, settings.longExposureLighten, hiRes) { vm.cycleLongExposure() }
             }
@@ -328,6 +338,7 @@ fun CameraScreen(
             Shutter(
                 enabled = selfTimerLeft != null || (status == CameraStatus.READY && (!merging || longExposing)),
                 video = videoMode,
+                size = if (easy) EASY_SHUTTER_SIZE else 76.dp,
                 stopLabel = stopLabel,
                 onClick = vm::shutter,
                 modifier = Modifier.graphicsLayer {
@@ -380,7 +391,7 @@ fun CameraScreen(
         }
         CameraLayout(
             landscape = landscape,
-            controlsWidth = LANDSCAPE_CONTROLS_WIDTH,
+            controlsWidth = if (easy) EASY_LANDSCAPE_CONTROLS_WIDTH else LANDSCAPE_CONTROLS_WIDTH,
             bar = {
                 if (landscape) {
                     Column(
@@ -432,7 +443,7 @@ fun CameraScreen(
                         f, params, vm::onSurfaceTexture, vm::onViewfinderBase, Modifier.fillMaxSize(), loupe,
                         onLuma = if (settings.scanQr && recordingMs == null) vm::onViewfinderLuma else null,
                         // Only while a tap's focus may be tracked: the copies cost nothing otherwise.
-                        onTrackLuma = if (settings.trackFocus && focusPoint != null) vm::onTrackLuma else null,
+                        onTrackLuma = if (shown.trackFocus && focusPoint != null) vm::onTrackLuma else null,
                         turns = turns,
                         zoom = zoom,
                         rawFrames = vm.rawFrames,
@@ -457,7 +468,7 @@ fun CameraScreen(
                     }
                     // Video is a 16:9 (or 9:16) slice of the 4:3 viewfinder: shade what the file will not have.
                     // With motion data (experimental) the whole 4:3 frame is recorded: nothing to shade.
-                    if (videoMode && !settings.videoMotionData) VideoFrameMask(if (turns % 2 == 1) 16f / 9f else 9f / 16f)
+                    if (videoMode && !shown.videoMotionData) VideoFrameMask(if (turns % 2 == 1) 16f / 9f else 9f / 16f)
                     // Taps, the focus handle, ring and loupe work in the upright picture's coordinates, turned with it.
                     Box(
                         Modifier
@@ -482,26 +493,30 @@ fun CameraScreen(
                                         } while (event.changes.any { it.pressed })
                                     }
                                 }
-                                .pointerInput(Unit) {
+                                .pointerInput(easy) {
                                     detectTapGestures(
                                         // Tap: focus lock at that point (a new tap moves it; the AF LOCK badge releases it).
                                         onTap = { vm.focusAt(it.x / size.width, it.y / size.height) },
                                         onLongPress = {}, // a hold compares (onPress); it mustn't also focus on release
                                         onPress = {
-                                            // Press and hold: the auto develop without the look.
-                                            val hold = scope.launch {
-                                                delay(COMPARE_DELAY_MS)
-                                                vm.setCompare(true)
+                                            // Easy mode: a hold does nothing special (a finger resting on the picture
+                                            // mustn't change what it shows).
+                                            if (!easy) {
+                                                // Press and hold: the auto develop without the look.
+                                                val hold = scope.launch {
+                                                    delay(COMPARE_DELAY_MS)
+                                                    vm.setCompare(true)
+                                                }
+                                                tryAwaitRelease()
+                                                hold.cancel()
+                                                if (vm.compare.value) vm.setCompare(false)
                                             }
-                                            tryAwaitRelease()
-                                            hold.cancel()
-                                            if (vm.compare.value) vm.setCompare(false)
                                         },
                                     )
                                 },
                         )
                         // Over the tap area, under the lens selector and the AF LOCK badge.
-                        shownFocus?.let { (x, y) -> FocusHandle(x, y, viewSize, vm::focusAt, vm::dragFocus, vm::endDragFocus) }
+                        if (!easy) shownFocus?.let { (x, y) -> FocusHandle(x, y, viewSize, vm::focusAt, vm::dragFocus, vm::endDragFocus) }
                     }
                     when (status) {
                         CameraStatus.NEEDS_PERMISSION -> Button(onClick = requestPermission) { Text(tr("Allow camera")) }
@@ -521,7 +536,7 @@ fun CameraScreen(
                         )
                     }
                     // A narrow column in the bottom right corner, beside the lens selector.
-                    if (settings.showZoomControl) {
+                    if (shown.showZoomControl) {
                         ZoomControl(
                             zoom = zoom,
                             onZoom = vm::setZoom,
@@ -577,8 +592,8 @@ fun CameraScreen(
                             )
                         }
                     }
-                    if (settings.showGrid) GridOverlay(Modifier.matchParentSize())
-                    if (settings.showLevel) LevelOverlay(tilt, Modifier.matchParentSize().turned(turns))
+                    if (shown.showGrid) GridOverlay(Modifier.matchParentSize())
+                    if (shown.showLevel) LevelOverlay(tilt, Modifier.matchParentSize().turned(turns))
                     // Shutter blink over the viewfinder.
                     if (blink.value > 0f) {
                         Box(
@@ -588,7 +603,7 @@ fun CameraScreen(
                         )
                     }
                     // Top right; the lock chips stack at the top left.
-                    if (settings.showHistogram && params != null) {
+                    if (shown.showHistogram && params != null) {
                         HistogramView(
                             histogram,
                             Modifier
@@ -613,7 +628,34 @@ fun CameraScreen(
                 }
             },
             controls = {
-                if (landscape) {
+                if (easy) {
+                    // No look menu or sliders: Colour (the default film stock) or B&W (Film + B&W, the default mono
+                    // stock). Landscape: in a column with the lenses beside the shutter (portrait has them over the
+                    // viewfinder).
+                    val tone = @Composable { vertical: Boolean ->
+                        TwoWaySwitch(tr("COLOUR"), tr("B&W"), settings.easyMono, enabled = true, vertical = vertical, onSelect = vm::setEasyMono)
+                    }
+                    if (landscape) {
+                        Column(
+                            Modifier.fillMaxSize(),
+                            verticalArrangement = Arrangement.SpaceEvenly,
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                        ) {
+                            if (lenses.size > 1) {
+                                LensSelector(
+                                    labels = lenses.map { it.label },
+                                    selected = settings.lens,
+                                    onSelect = vm::selectLens,
+                                    modifier = Modifier,
+                                    vertical = true,
+                                )
+                            }
+                            tone(true)
+                        }
+                    } else {
+                        Box(Modifier.fillMaxWidth().padding(top = 10.dp), contentAlignment = Alignment.Center) { tone(false) }
+                    }
+                } else if (landscape) {
                     LandscapeControls(
                         settings = settings,
                         status = statusText,
@@ -699,11 +741,11 @@ fun CameraScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
-                                if (!videoMode && settings.experimental) TimerButton(settings.selfTimer) { vm.cycleSelfTimer() }
+                                if (!videoMode && shown.experimental) TimerButton(settings.selfTimer) { vm.cycleSelfTimer() }
                             }
                             ModeSwitch(videoMode, enabled = modeSwitchEnabled) { vm.setVideoMode(it) }
                             Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                                if (!videoMode && settings.experimental) {
+                                if (!videoMode && shown.experimental) {
                                     LongExposureButton(settings.longExposure, settings.longExposureLighten, hiRes) { vm.cycleLongExposure() }
                                 }
                             }
@@ -711,7 +753,7 @@ fun CameraScreen(
                         Row(
                             Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 24.dp, vertical = 8.dp),
+                                .padding(horizontal = 24.dp, vertical = if (easy) 16.dp else 8.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             lastPhoto()
@@ -1020,7 +1062,14 @@ private fun loupeAt(x: Float, y: Float, view: IntSize, side: Float, gap: Float):
 }
 
 @Composable
-private fun Shutter(enabled: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier, video: Boolean = false, stopLabel: String? = null) {
+private fun Shutter(
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    video: Boolean = false,
+    stopLabel: String? = null,
+    size: Dp = 76.dp,
+) {
     val stopping = stopLabel != null
     val ring = if (enabled) Color.White else Color.Gray
     // Video: a red dot; while recording, shooting a long exposure, or counting down a timer, a stop square.
@@ -1028,9 +1077,9 @@ private fun Shutter(enabled: Boolean, onClick: () -> Unit, modifier: Modifier = 
     val shape = if (stopping) RoundedCornerShape(8.dp) else CircleShape
     Box(
         modifier
-            .size(76.dp)
+            .size(size)
             .border(BorderStroke(4.dp, ring), CircleShape)
-            .padding(if (stopping) 20.dp else 8.dp)
+            .padding(if (stopping) size * (20f / 76f) else 8.dp)
             .clip(shape)
             .background(fill)
             .clickable(
@@ -1066,7 +1115,19 @@ private fun VideoFrameMask(target: Float) {
  * landscape, where the shutter has its own column. Locked while recording.
  */
 @Composable
-private fun ModeSwitch(video: Boolean, enabled: Boolean, vertical: Boolean = false, onSelect: (Boolean) -> Unit) {
+private fun ModeSwitch(video: Boolean, enabled: Boolean, vertical: Boolean = false, onSelect: (Boolean) -> Unit) =
+    TwoWaySwitch(tr("PHOTO"), tr("VIDEO"), video, enabled, vertical, onSelect)
+
+/** A pill of two choices, [first] or [second], the selected one filled ([secondSelected] picks which). */
+@Composable
+private fun TwoWaySwitch(
+    first: String,
+    second: String,
+    secondSelected: Boolean,
+    enabled: Boolean,
+    vertical: Boolean = false,
+    onSelect: (Boolean) -> Unit,
+) {
     val item = @Composable { label: String, selected: Boolean, target: Boolean ->
         Text(
             label,
@@ -1083,9 +1144,9 @@ private fun ModeSwitch(video: Boolean, enabled: Boolean, vertical: Boolean = fal
     val shape = RoundedCornerShape(20.dp)
     val mod = Modifier.clip(shape).background(Color(0xFF2A2A2A)).padding(3.dp)
     if (vertical) {
-        Column(mod, horizontalAlignment = Alignment.CenterHorizontally) { item(tr("PHOTO"), !video, false); item(tr("VIDEO"), video, true) }
+        Column(mod, horizontalAlignment = Alignment.CenterHorizontally) { item(first, !secondSelected, false); item(second, secondSelected, true) }
     } else {
-        Row(mod) { item(tr("PHOTO"), !video, false); item(tr("VIDEO"), video, true) }
+        Row(mod) { item(first, !secondSelected, false); item(second, secondSelected, true) }
     }
 }
 
@@ -1248,303 +1309,314 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
             onSelect = vm::setLanguage,
         )
 
-        SettingsSection("Photo")
-        // One row each; double-tap a slider to reset it.
-        CompactSlider(
-            tr("JPEG quality"), settings.jpegQuality.toFloat(), CameraSettings.MIN_QUALITY.toFloat()..100f, 95f,
-            rowHeight = 40.dp, labelWidth = 104.dp, valueWidth = 44.dp,
-            format = { it.roundToInt().toString() },
-            onChange = { vm.setJpegQuality(it.roundToInt()) },
-        )
-        CompactSlider(
-            tr("Look strength"), settings.strength, 0f..100f, LookApplier.DEFAULT_STRENGTH,
-            rowHeight = 40.dp, labelWidth = 104.dp, valueWidth = 44.dp,
-            format = { it.roundToInt().toString() },
-            onChange = { vm.setStrength(it.roundToInt().toFloat()) },
-        )
+        SettingsSection("Easy mode")
+        // First under Language, so whoever set the phone up finds the way back to the full camera at once.
         SettingSwitch(
-            title = "Smaller photos",
-            subtitle = tr("%s px long side; off saves full size", CameraSettings.SMALL_LONG_SIDE),
-            checked = settings.smallExport,
-            onChange = vm::setSmallExport,
+            title = "Easy mode",
+            subtitle = "Big shutter and only the basics; the other settings wait",
+            checked = settings.easy,
+            enabled = !recording,
+            onChange = vm::setEasy,
         )
-        if (maxResMp > 0) {
+
+        if (settings.easy) {
+            // The few choices someone else's phone may need; the rest keep their values for when Easy mode is off.
+            SettingsSection("Capture")
+            ShutterSoundSetting(settings, vm)
+            GeotagSetting(settings, vm, requestLocation)
             SettingSwitch(
-                title = tr("%s MP", maxResMp),
-                subtitle = "Full sensor size: slower, no merging, viewfinder pauses",
-                checked = settings.maxRes,
-                onChange = vm::setMaxRes,
+                title = "QR codes",
+                subtitle = "Tap to open a link, join Wi-Fi or copy",
+                checked = settings.scanQr,
+                onChange = vm::setScanQr,
             )
-        }
-        SettingSwitch(
-            title = "Keep raw (DNG)",
-            subtitle = tr("Saved to Pictures/%s/RAW", Edition.FOLDER),
-            checked = settings.keepDng,
-            onChange = vm::setKeepDng,
-        )
-        if (settings.keepDng) {
-            SettingSwitch(
-                title = "Lossy JPEG XL DNG",
-                subtitle = "Much smaller, visually lossless; saving takes longer",
-                checked = settings.lossyDng,
-                onChange = vm::setLossyDng,
-                indent = true,
+        } else {
+            SettingsSection("Photo")
+            // One row each; double-tap a slider to reset it.
+            CompactSlider(
+                tr("JPEG quality"), settings.jpegQuality.toFloat(), CameraSettings.MIN_QUALITY.toFloat()..100f, 95f,
+                rowHeight = 40.dp, labelWidth = 104.dp, valueWidth = 44.dp,
+                format = { it.roundToInt().toString() },
+                onChange = { vm.setJpegQuality(it.roundToInt()) },
             )
-        }
-        SettingSwitch(
-            title = "HDR gain map",
-            subtitle = "Ultra HDR JPEGs with extra highlight range",
-            checked = settings.hdrGainMap,
-            onChange = vm::setHdrGainMap,
-        )
-        SettingSwitch(
-            title = "Random light leak",
-            subtitle = "Adds a random film light leak (edge burn, blob, sprocket holes, rebate glow, flare or start of roll) to saved shots",
-            checked = settings.randomLightLeak,
-            onChange = vm::setRandomLightLeak,
-        )
-        SettingChoice(
-            title = "Border",
-            subtitle = "A plain border over the photo, inside its size; leaks drawn over it",
-            options = CameraSettings.BORDER_WIDTHS,
-            selected = settings.border,
-            label = { when (it) { 0 -> "Off"; 2 -> "Thin"; 4 -> "Medium"; else -> "Thick" } },
-            onSelect = vm::setBorder,
-        )
-        if (settings.border > 0) {
-            SettingChoice(
-                title = "Border colour",
-                subtitle = null,
-                options = CameraSettings.BORDER_COLORS.map { it.second },
-                selected = settings.borderColor,
-                label = { hex -> CameraSettings.BORDER_COLORS.first { it.second == hex }.first },
-                onSelect = vm::setBorderColor,
-                indent = true,
-            )
-        }
-        if (settings.randomLightLeak) {
-            SettingChoice(
-                title = "Frequency",
-                subtitle = if (settings.randomLightLeakRate == CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE) {
-                    "Every shot"
-                } else {
-                    tr("%s random out of every %s shots", settings.randomLightLeakRate, CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE)
-                },
-                options = CameraSettings.LIGHT_LEAK_RATES,
-                selected = settings.randomLightLeakRate,
-                label = { "$it/${CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE}" },
-                onSelect = vm::setRandomLightLeakRate,
-                indent = true,
+            CompactSlider(
+                tr("Look strength"), settings.strength, 0f..100f, LookApplier.DEFAULT_STRENGTH,
+                rowHeight = 40.dp, labelWidth = 104.dp, valueWidth = 44.dp,
+                format = { it.roundToInt().toString() },
+                onChange = { vm.setStrength(it.roundToInt().toFloat()) },
             )
             SettingSwitch(
-                title = "Short-side sprockets",
-                subtitle = "Also generate sprocket holes on the short edges; off keeps them on the long edges only",
-                checked = settings.shortSideSprockets,
-                onChange = vm::setShortSideSprockets,
-                indent = true,
+                title = "Smaller photos",
+                subtitle = tr("%s px long side; off saves full size", CameraSettings.SMALL_LONG_SIDE),
+                checked = settings.smallExport,
+                onChange = vm::setSmallExport,
             )
-        }
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable { showFrames = true }
-                .padding(vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Column(Modifier.weight(1f).padding(end = 12.dp)) {
-                Text(tr("Frames"), style = MaterialTheme.typography.bodyLarge)
-                Text(
-                    "Film border, shoot info or date stamp",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+            if (maxResMp > 0) {
+                SettingSwitch(
+                    title = tr("%s MP", maxResMp),
+                    subtitle = "Full sensor size: slower, no merging, viewfinder pauses",
+                    checked = settings.maxRes,
+                    onChange = vm::setMaxRes,
                 )
             }
-            Text(
-                tr(settings.photoFrame.label),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Icon(
-                Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-
-        SettingsSection("Capture")
-        SettingChoice(
-            title = tr("Merge %s frames", CameraSettings.BURST_FRAMES),
-            subtitle = "Less noise; hold still. Auto: low light only. Not with flash",
-            options = listOf(BurstMode.ON, BurstMode.AUTO, BurstMode.OFF),
-            selected = settings.burstMode,
-            label = { it.name.lowercase().replaceFirstChar { c -> c.uppercase() } },
-            onSelect = vm::setBurstMode,
-        )
-        // Where the law requires the click, Android plays it anyway: shown on and locked.
-        SettingSwitch(
-            title = "Shutter sound",
-            subtitle = if (vm.shutterSoundRequired) "Required by law in this region" else null,
-            checked = settings.shutterSound || vm.shutterSoundRequired,
-            enabled = !vm.shutterSoundRequired,
-            onChange = vm::setShutterSound,
-        )
-        SettingSwitch(
-            title = "Geotag",
-            subtitle = "GPS position in the JPEG and DNG",
-            checked = settings.geotag,
-            onChange = { on -> if (on && !vm.hasLocationPermission) requestLocation() else vm.setGeotag(on) },
-        )
-        SettingSwitch(
-            title = "Track subject after tap",
-            subtitle = "Focus follows what you tapped",
-            checked = settings.trackFocus,
-            onChange = vm::setTrackFocus,
-        )
-        SettingSwitch(
-            title = "Grain",
-            subtitle = "Film grain on the viewfinder and photos",
-            checked = settings.grain,
-            onChange = vm::setGrain,
-        )
-        SettingSwitch(
-            title = "QR codes",
-            subtitle = "Tap to open a link, join Wi-Fi or copy",
-            checked = settings.scanQr,
-            onChange = vm::setScanQr,
-        )
-
-        SettingsSection("Video")
-        SettingChoice(
-            title = "Video quality",
-            subtitle = "Higher quality uses more storage (1080p at 30 fps)",
-            options = VideoQuality.entries,
-            selected = settings.videoQuality,
-            label = { it.label },
-            onSelect = vm::setVideoQuality,
-            enabled = !recording,
-        )
-        SettingSwitch(
-            title = "Flat video for grading",
-            subtitle = "No look: Apple Log, to grade on the web video page",
-            checked = settings.flatVideo,
-            enabled = !recording,
-            onChange = vm::setFlatVideo,
-        )
-        SettingSwitch(
-            title = "Optical stabilization",
-            subtitle = "The lens's own; no crop, gentler than software",
-            checked = settings.videoStabilization,
-            onChange = vm::setVideoStabilization,
-        )
-
-        SettingsSection("Viewfinder")
-        // Only phones whose profile allows it (PreviewProfile.rawViewfinder).
-        if (vm.rawViewfinderAvailable) {
             SettingSwitch(
-                title = "Viewfinder from RAW",
-                subtitle = "Shows the sensor's raw data developed like the photo",
-                checked = settings.rawViewfinder,
-                enabled = !recording,
-                onChange = vm::setRawViewfinder,
+                title = "Keep raw (DNG)",
+                subtitle = tr("Saved to Pictures/%s/RAW", Edition.FOLDER),
+                checked = settings.keepDng,
+                onChange = vm::setKeepDng,
             )
-        }
-        SettingSwitch(
-            title = "Zoom buttons",
-            subtitle = "Viewfinder helper only; does not affect the picture",
-            checked = settings.showZoomControl,
-            onChange = vm::setShowZoomControl,
-        )
-        SettingSwitch("Grid", null, settings.showGrid, onChange = vm::setShowGrid)
-        SettingSwitch("Level", null, settings.showLevel, onChange = vm::setShowLevel)
-        SettingSwitch("Histogram", null, settings.showHistogram, onChange = vm::setShowHistogram)
-
-        SettingsSection("Opening the camera")
-        DefaultCameraChoice(
-            MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA,
-            title = "Unlocked camera",
-            whenSet = "Power button double press opens RawBoy Camera",
-            whenNotSet = "Choose RawBoy Camera, then Always",
-        )
-        DefaultCameraChoice(
-            MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE,
-            title = "Lock screen camera",
-            whenSet = "Works on a locked phone",
-            whenNotSet = "Choose RawBoy Camera, then Always",
-        )
-        SettingSwitch(
-            title = "Remember camera & settings",
-            subtitle = "Off: each start uses W, Yellow Portrait 400, default sliders",
-            checked = settings.rememberLast,
-            onChange = vm::setRememberLast,
-        )
-
-        // Experimental sits last: its extra controls open below the switch.
-        SettingsSection("Experimental")
-        SettingSwitch(
-            title = "Self-timer and long exposure",
-            subtitle = "Two buttons beside the Photo / Video switch",
-            checked = settings.experimental,
-            accent = EXPERIMENTAL_ORANGE,
-            onChange = vm::setExperimental,
-        )
-        if (settings.experimental) {
+            if (settings.keepDng) {
+                SettingSwitch(
+                    title = "Lossy JPEG XL DNG",
+                    subtitle = "Much smaller, visually lossless; saving takes longer",
+                    checked = settings.lossyDng,
+                    onChange = vm::setLossyDng,
+                    indent = true,
+                )
+            }
+            SettingSwitch(
+                title = "HDR gain map",
+                subtitle = "Ultra HDR JPEGs with extra highlight range",
+                checked = settings.hdrGainMap,
+                onChange = vm::setHdrGainMap,
+            )
+            SettingSwitch(
+                title = "Random light leak",
+                subtitle = "Adds a random film light leak (edge burn, blob, sprocket holes, rebate glow, flare or start of roll) to saved shots",
+                checked = settings.randomLightLeak,
+                onChange = vm::setRandomLightLeak,
+            )
             SettingChoice(
-                title = "Long exposure stacks as",
-                subtitle = "5 to 60 s; use a tripod; not with flash or full sensor size. Timer: 2, 5 or 10 s",
-                options = listOf(false, true),
-                selected = settings.longExposureLighten,
-                label = { if (it) "Lighten (trails)" else "Average (water)" },
-                onSelect = vm::setLongExposureLighten,
-                indent = true,
+                title = "Border",
+                subtitle = "A plain border over the photo, inside its size; leaks drawn over it",
+                options = CameraSettings.BORDER_WIDTHS,
+                selected = settings.border,
+                label = { when (it) { 0 -> "Off"; 2 -> "Thin"; 4 -> "Medium"; else -> "Thick" } },
+                onSelect = vm::setBorder,
             )
-        }
-        SettingSwitch(
-            title = "Save motion data with videos",
-            subtitle = "Whole 4:3 frame + a gyro file, to stabilize later",
-            checked = settings.videoMotionData,
-            enabled = !recording,
-            accent = EXPERIMENTAL_ORANGE,
-            onChange = vm::setVideoMotionData,
-        )
-        if (settings.videoMotionData) {
+            if (settings.border > 0) {
+                SettingChoice(
+                    title = "Border colour",
+                    subtitle = null,
+                    options = CameraSettings.BORDER_COLORS.map { it.second },
+                    selected = settings.borderColor,
+                    label = { hex -> CameraSettings.BORDER_COLORS.first { it.second == hex }.first },
+                    onSelect = vm::setBorderColor,
+                    indent = true,
+                )
+            }
+            if (settings.randomLightLeak) {
+                SettingChoice(
+                    title = "Frequency",
+                    subtitle = if (settings.randomLightLeakRate == CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE) {
+                        "Every shot"
+                    } else {
+                        tr("%s random out of every %s shots", settings.randomLightLeakRate, CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE)
+                    },
+                    options = CameraSettings.LIGHT_LEAK_RATES,
+                    selected = settings.randomLightLeakRate,
+                    label = { "$it/${CameraSettings.LIGHT_LEAK_SEQUENCE_SIZE}" },
+                    onSelect = vm::setRandomLightLeakRate,
+                    indent = true,
+                )
+                SettingSwitch(
+                    title = "Short-side sprockets",
+                    subtitle = "Also generate sprocket holes on the short edges; off keeps them on the long edges only",
+                    checked = settings.shortSideSprockets,
+                    onChange = vm::setShortSideSprockets,
+                    indent = true,
+                )
+            }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showFrames = true }
+                    .padding(vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                    Text(tr("Frames"), style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        "Film border, shoot info or date stamp",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Text(
+                    tr(settings.photoFrame.label),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Icon(
+                    Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+
+            SettingsSection("Capture")
+            SettingChoice(
+                title = tr("Merge %s frames", CameraSettings.BURST_FRAMES),
+                subtitle = "Less noise; hold still. Auto: low light only. Not with flash",
+                options = listOf(BurstMode.ON, BurstMode.AUTO, BurstMode.OFF),
+                selected = settings.burstMode,
+                label = { it.name.lowercase().replaceFirstChar { c -> c.uppercase() } },
+                onSelect = vm::setBurstMode,
+            )
+            ShutterSoundSetting(settings, vm)
+            GeotagSetting(settings, vm, requestLocation)
             SettingSwitch(
-                title = "Stabilize after recording",
-                subtitle = "Saves a steadied copy (70% crop) beside each video",
-                checked = settings.videoStabilizeAfter,
+                title = "Track subject after tap",
+                subtitle = "Focus follows what you tapped",
+                checked = settings.trackFocus,
+                onChange = vm::setTrackFocus,
+            )
+            SettingSwitch(
+                title = "Grain",
+                subtitle = "Film grain on the viewfinder and photos",
+                checked = settings.grain,
+                onChange = vm::setGrain,
+            )
+            SettingSwitch(
+                title = "QR codes",
+                subtitle = "Tap to open a link, join Wi-Fi or copy",
+                checked = settings.scanQr,
+                onChange = vm::setScanQr,
+            )
+
+            SettingsSection("Video")
+            SettingChoice(
+                title = "Video quality",
+                subtitle = "Higher quality uses more storage (1080p at 30 fps)",
+                options = VideoQuality.entries,
+                selected = settings.videoQuality,
+                label = { it.label },
+                onSelect = vm::setVideoQuality,
+                enabled = !recording,
+            )
+            SettingSwitch(
+                title = "Flat video for grading",
+                subtitle = "No look: Apple Log, to grade on the web video page",
+                checked = settings.flatVideo,
+                enabled = !recording,
+                onChange = vm::setFlatVideo,
+            )
+            SettingSwitch(
+                title = "Optical stabilization",
+                subtitle = "The lens's own; no crop, gentler than software",
+                checked = settings.videoStabilization,
+                onChange = vm::setVideoStabilization,
+            )
+
+            SettingsSection("Viewfinder")
+            // Only phones whose profile allows it (PreviewProfile.rawViewfinder).
+            if (vm.rawViewfinderAvailable) {
+                SettingSwitch(
+                    title = "Viewfinder from RAW",
+                    subtitle = "Shows the sensor's raw data developed like the photo",
+                    checked = settings.rawViewfinder,
+                    enabled = !recording,
+                    onChange = vm::setRawViewfinder,
+                )
+            }
+            SettingSwitch(
+                title = "Zoom buttons",
+                subtitle = "Viewfinder helper only; does not affect the picture",
+                checked = settings.showZoomControl,
+                onChange = vm::setShowZoomControl,
+            )
+            SettingSwitch("Grid", null, settings.showGrid, onChange = vm::setShowGrid)
+            SettingSwitch("Level", null, settings.showLevel, onChange = vm::setShowLevel)
+            SettingSwitch("Histogram", null, settings.showHistogram, onChange = vm::setShowHistogram)
+
+            SettingsSection("Opening the camera")
+            DefaultCameraChoice(
+                MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA,
+                title = "Unlocked camera",
+                whenSet = "Power button double press opens RawBoy Camera",
+                whenNotSet = "Choose RawBoy Camera, then Always",
+            )
+            DefaultCameraChoice(
+                MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE,
+                title = "Lock screen camera",
+                whenSet = "Works on a locked phone",
+                whenNotSet = "Choose RawBoy Camera, then Always",
+            )
+            SettingSwitch(
+                title = "Remember camera & settings",
+                subtitle = "Off: each start uses W, Yellow Portrait 400, default sliders",
+                checked = settings.rememberLast,
+                onChange = vm::setRememberLast,
+            )
+
+            // Experimental sits last: its extra controls open below the switch.
+            SettingsSection("Experimental")
+            SettingSwitch(
+                title = "Self-timer and long exposure",
+                subtitle = "Two buttons beside the Photo / Video switch",
+                checked = settings.experimental,
                 accent = EXPERIMENTAL_ORANGE,
-                onChange = vm::setVideoStabilizeAfter,
-                indent = true,
+                onChange = vm::setExperimental,
             )
-        }
-
-        var confirmReset by remember { mutableStateOf(false) }
-        Spacer(Modifier.height(16.dp))
-        TextButton(
-            onClick = { confirmReset = true },
-            contentPadding = PaddingValues(0.dp),
-            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-        ) { Text(tr("Reset settings to defaults")) }
-        if (confirmReset) {
-            AlertDialog(
-                onDismissRequest = { confirmReset = false },
-                title = { Text(tr("Reset settings to defaults?")) },
-                text = { Text(tr("Photo, capture, viewfinder and look settings return to their defaults. Learned camera calibration is kept.")) },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            confirmReset = false
-                            vm.resetSettings()
-                        },
-                        colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                    ) { Text(tr("Reset")) }
-                },
-                dismissButton = {
-                    TextButton(onClick = { confirmReset = false }) { Text(tr("Cancel")) }
-                },
+            if (settings.experimental) {
+                SettingChoice(
+                    title = "Long exposure stacks as",
+                    subtitle = "5 to 60 s; use a tripod; not with flash or full sensor size. Timer: 2, 5 or 10 s",
+                    options = listOf(false, true),
+                    selected = settings.longExposureLighten,
+                    label = { if (it) "Lighten (trails)" else "Average (water)" },
+                    onSelect = vm::setLongExposureLighten,
+                    indent = true,
+                )
+            }
+            SettingSwitch(
+                title = "Save motion data with videos",
+                subtitle = "Whole 4:3 frame + a gyro file, to stabilize later",
+                checked = settings.videoMotionData,
+                enabled = !recording,
+                accent = EXPERIMENTAL_ORANGE,
+                onChange = vm::setVideoMotionData,
             )
-        }
+            if (settings.videoMotionData) {
+                SettingSwitch(
+                    title = "Stabilize after recording",
+                    subtitle = "Saves a steadied copy (70% crop) beside each video",
+                    checked = settings.videoStabilizeAfter,
+                    accent = EXPERIMENTAL_ORANGE,
+                    onChange = vm::setVideoStabilizeAfter,
+                    indent = true,
+                )
+            }
 
-        PlatformInfo(vm, shareDeviceReport, shareTuningData)
+            var confirmReset by remember { mutableStateOf(false) }
+            Spacer(Modifier.height(16.dp))
+            TextButton(
+                onClick = { confirmReset = true },
+                contentPadding = PaddingValues(0.dp),
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+            ) { Text(tr("Reset settings to defaults")) }
+            if (confirmReset) {
+                AlertDialog(
+                    onDismissRequest = { confirmReset = false },
+                    title = { Text(tr("Reset settings to defaults?")) },
+                    text = { Text(tr("Photo, capture, viewfinder and look settings return to their defaults. Learned camera calibration is kept.")) },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                confirmReset = false
+                                vm.resetSettings()
+                            },
+                            colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                        ) { Text(tr("Reset")) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { confirmReset = false }) { Text(tr("Cancel")) }
+                    },
+                )
+            }
+
+            PlatformInfo(vm, shareDeviceReport, shareTuningData)
+        }
 
         Spacer(Modifier.height(16.dp))
         for (line in Edition.credits) {
@@ -1555,6 +1627,29 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
         TextButton(onClick = { showLicences = true }, contentPadding = PaddingValues(0.dp)) { Text(tr("Open-source licences")) }
         if (showLicences) LicensesDialog(onDismiss = { showLicences = false })
     }
+}
+
+/** Where the law requires the click, Android plays it anyway: shown on and locked. */
+@Composable
+private fun ShutterSoundSetting(settings: CameraSettings, vm: CameraViewModel) {
+    SettingSwitch(
+        title = "Shutter sound",
+        subtitle = if (vm.shutterSoundRequired) "Required by law in this region" else null,
+        checked = settings.shutterSound || vm.shutterSoundRequired,
+        enabled = !vm.shutterSoundRequired,
+        onChange = vm::setShutterSound,
+    )
+}
+
+/** Turning it on asks for location access first. */
+@Composable
+private fun GeotagSetting(settings: CameraSettings, vm: CameraViewModel, requestLocation: () -> Unit) {
+    SettingSwitch(
+        title = "Geotag",
+        subtitle = "GPS position in the JPEG and DNG",
+        checked = settings.geotag,
+        onChange = { on -> if (on && !vm.hasLocationPermission) requestLocation() else vm.setGeotag(on) },
+    )
 }
 
 /**
@@ -2180,6 +2275,12 @@ private const val LOUPE_ZOOM = 3f
 
 /** Width of the landscape controls column (look menu, S/B/W picker and the tall slider) beside the shutter column. */
 private val LANDSCAPE_CONTROLS_WIDTH = 216.dp
+
+/** Easy mode's shutter: bigger than the usual 76 dp, so it can't be missed. */
+private val EASY_SHUTTER_SIZE = 96.dp
+
+/** Easy mode's landscape controls column: only the lenses. */
+private val EASY_LANDSCAPE_CONTROLS_WIDTH = 72.dp
 
 /** What the landscape slider changes: Brightness or Warmth (Filter in B&W mode). */
 private enum class Adjust { BRIGHTNESS, WARMTH }

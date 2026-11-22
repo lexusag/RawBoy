@@ -1,3 +1,9 @@
+**Camera (Android): Easy mode prototype (2026-11-22)**
+
+- **Settings › Easy mode** (off by default): a point-and-shoot screen for someone who just wants photos. Viewfinder, lens buttons, RAW and Frames, flash, Photo / Video, **Colour / B&W**, a 96 dp shutter, the last photo and the selfie switch; no look menu, sliders, Film / B&W, Burst / help buttons, timer, overlays, loupe or hold-to-compare. Settings shows only Language, Easy mode, Shutter sound, Geotag and QR codes while it is on.
+- What the hidden controls would do is forced off without touching the stored settings (`CameraSettings.effective`, read by the view model for the live develop, AE compensation and each shot): no border or light leak, Brightness and Warmth 0, merging on Auto, no timer, long exposure, tracking, flat video, motion data, histogram, grid, level or zoom buttons. Switching it off brings them all back. Colour = Film mode on the default film stock, B&W = Film + B&W on the default mono stock and Yellow filter, both at the default Strength (owner's choice); the full camera's own look picks are untouched. Size, quality, HDR gain map and grain stay as set.
+- Ukrainian strings in `StringsUk.kt`; help sheet item; test `CameraSettingsTest.easyModeForcesThePlainShotAndKeepsTheStoredValues`. Not tried on a phone yet. iOS not ported.
+
 **RawBoy Desktop: pin RawBoy Viewer 0.2.14 (2026-11-22)**
 
 - **Collage: move a picture inside its frame**, **Refresh on right-click in Places** (Esc closes an open menu first), a fix for the **slowdown in long culling runs** (pooled ImageIO reads, O(1) LRU) and a **custom long edge in pixels** in the export sheet. Comes with RawBoy Viewer v0.2.14 (PRs 70, 71, 72, 73); the pin moves from 0.2.13 to 0.2.14. Not tried by hand (no Mac): CI's `desktop` job is the first build.

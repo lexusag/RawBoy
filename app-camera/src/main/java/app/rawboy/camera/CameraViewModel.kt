@@ -195,6 +195,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private val _settings = MutableStateFlow(CameraSettingsStore.load(application, platform.calibrationSlot, platform.preview.level))
     val settings = _settings.asStateFlow()
 
+    /** The settings in effect: [settings] with Easy mode's forced values while it is on ([CameraSettings.effective]). */
+    private val current: CameraSettings get() = _settings.value.effective
+
     init {
         Strings.choose(_settings.value.language)
     }
@@ -387,7 +390,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     fun setVideoMode(on: Boolean) {
         if (_recordingMs.value != null || _longExposing.value || selfTimerJob != null) return
         _videoMode.value = on
-        controller.setExposureBias(exposureBias(_settings.value)) // flat video raises it
+        controller.setExposureBias(exposureBias(current)) // flat video raises it
         if (!on) setExposureLock(false) // the lock is video mode's: photos meter as always
         applyStabilization()
         republish() // the video viewfinder drops the colour denoise (see publish)
@@ -406,8 +409,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Optical stabilization is video mode's, and only when switched on in Settings. */
     private fun applyStabilization() {
-        controller.setVideoStabilization(if (_videoMode.value) _settings.value.videoStabilization else null)
-        controller.setMotionData(_videoMode.value && _settings.value.videoMotionData)
+        controller.setVideoStabilization(if (_videoMode.value) current.videoStabilization else null)
+        controller.setMotionData(_videoMode.value && current.videoMotionData)
         updateMotionSensors()
     }
 
@@ -419,7 +422,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
      * starts with the gyro already running ([MotionSensors]); a recording still being written keeps them.
      */
     private fun updateMotionSensors() {
-        val on = resumed && _videoMode.value && _settings.value.videoMotionData
+        val on = resumed && _videoMode.value && current.videoMotionData
         if (on) motionSensors?.start() else if (motion == null) motionSensors?.takeIf { it.running }?.stop()
     }
 
@@ -472,9 +475,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         // As photos do: the phone's own rotation, so a phone held sideways with auto-rotate off still records upright.
         val turns = debug?.turns ?: ((deviceDegrees / 90) % 4)
         val withAudio = audioGranted
-        val flat = _settings.value.flatVideo
-        val quality = _settings.value.videoQuality
-        val motionData = _settings.value.videoMotionData
+        val flat = current.flatVideo
+        val quality = current.videoQuality
+        val motionData = current.videoMotionData
         stopRequested = false
         _recordingMs.value = 0
         recordingJob = viewModelScope.launch {
@@ -638,7 +641,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 withContext(Dispatchers.IO + NonCancellable) {
                     if (uri != null) mr.finish(r.startNs, r.clockOffsetNs.takeIf { it != Long.MIN_VALUE } ?: 0L) else mr.abort()
                 }
-                if (uri != null && _settings.value.videoStabilizeAfter) {
+                if (uri != null && current.videoStabilizeAfter) {
                     VideoStabilizer.enqueue(app, uri, r.name, mr.file, platform.lenses.motionGain) { _message.value = it }
                 }
             }
@@ -647,7 +650,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             applyStabilization() // a switch flipped during the recording takes effect now
             _message.value = when {
                 uri != null && failure != null -> tr("%s. Video saved to Movies/%s", failure, Edition.FOLDER)
-                uri != null && m != null && _settings.value.videoStabilizeAfter -> tr("Video saved to Movies/%s; stabilizing a copy…", Edition.FOLDER)
+                uri != null && m != null && current.videoStabilizeAfter -> tr("Video saved to Movies/%s; stabilizing a copy…", Edition.FOLDER)
                 uri != null && m != null -> tr("Video saved to Movies/%s (motion data saved too)", Edition.FOLDER)
                 uri != null -> tr("Video saved to Movies/%s", Edition.FOLDER)
                 failure != null -> failure
@@ -690,7 +693,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     /** From the activity's orientation sensor: [degrees] is the device's turn clockwise from portrait, 0..359, or null when flat. */
     fun onTilt(degrees: Int?) {
-        if (degrees == null || !_settings.value.showLevel) {
+        if (degrees == null || !current.showLevel) {
             tiltFilter.reset()
             _tilt.value = null
             return
@@ -895,7 +898,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             stopTracking()
             _focusPoint.value = x to y
             // Focus first scans at the tap as usual; the tracker takes over from the next grey copy.
-            if (_settings.value.trackFocus) trackStart = x to y
+            if (current.trackFocus) trackStart = x to y
         }
         controller.focusAt(unzoom(x), unzoom(y))
     }
@@ -1047,7 +1050,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val boost = state?.postRawBoost ?: 1f
         val stillGain = state?.let { controller.stillGain(it) } ?: 1f
         // With Long exposure on, show what its frames will give (the same maths as the shutter's) instead of the still's.
-        val settings = _settings.value
+        val settings = current
         // Under STILL_WHITE_BALANCED the frames decide, not the shutter: AE frames show what the long exposure's frames
         // will give, its own manual frames (while it runs, `CameraController.longExposureDng`) are already that.
         val whiteBalanced = platform.preview.level == PreviewLevel.STILL_WHITE_BALANCED
@@ -1218,7 +1221,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private suspend fun publish() {
         val l = live ?: return
         val f = _frame.value ?: return
-        val s = _settings.value
+        val s = current
         val developed = if (_compare.value) l.auto else s.develop(l.auto, l.stats.hasFace, platform.noise).let { d ->
             if (l.shadowLift > 0f && !_videoMode.value) d.copy(shadows = maxOf(d.shadows, l.shadowLift)) else d
         }
@@ -1256,7 +1259,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
                 bitmap.recycle()
                 // Switched off while rendering: don't bring it back.
-                if (_settings.value.showHistogram) _histogram.value = Histogram.fromArgb(pixels)
+                if (current.showHistogram) _histogram.value = Histogram.fromArgb(pixels)
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -1398,6 +1401,28 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         if (!on) cancelSelfTimer()
     }
 
+    /**
+     * Easy mode on or off ([CameraSettings.easy]). Only what it forces changes, so this undoes what those settings had
+     * running: a self-timer, subject tracking, the histogram and level, and video's motion data.
+     */
+    fun setEasy(on: Boolean) {
+        if (_recordingMs.value != null || _longExposing.value) return
+        val prev = current
+        change { it.copy(easy = on) }
+        val next = current
+        if (prev.activeSelfTimer > 0 && next.activeSelfTimer == 0) cancelSelfTimer()
+        if (prev.trackFocus && !next.trackFocus && _tracking.value) _focusPoint.value?.let { (x, y) -> focusAt(x, y) }
+        if (!next.showHistogram) _histogram.value = null
+        if (!next.showLevel) {
+            tiltFilter.reset()
+            _tilt.value = null
+        }
+        if (prev.videoMotionData != next.videoMotionData) applyStabilization()
+    }
+
+    /** Easy mode's Colour / B&W switch ([CameraSettings.easyMono]). */
+    fun setEasyMono(on: Boolean) = change { it.copy(easyMono = on) }
+
     /** Raw viewfinder (prototype) on or off; the camera restarts so the stream and the viewfinder change together. */
     fun setRawViewfinder(on: Boolean) {
         change { it.copy(rawViewfinder = on) }
@@ -1495,7 +1520,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         val s = edit(_settings.value)
         _settings.value = s
         Strings.choose(s.language)
-        controller.setExposureBias(exposureBias(s))
+        controller.setExposureBias(exposureBias(s.effective))
         // A slider drag changes settings every frame: save once it rests.
         saveJob?.cancel()
         saveJob = viewModelScope.launch {
@@ -1549,7 +1574,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             cancelSelfTimer()
             return
         }
-        val seconds = _settings.value.activeSelfTimer
+        val seconds = current.activeSelfTimer
         if (seconds <= 0 || _videoMode.value) {
             shootNow()
             return
@@ -1576,7 +1601,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             toggleRecording()
             return
         }
-        val settings = _settings.value
+        val settings = current
         val hiRes = info?.hiRes == true
         val flash = settings.flash.takeIf { info?.hasFlash == true } ?: FlashMode.OFF
         // The selfie camera: the screen's frame is the light, the shot itself is an ordinary one exposed by AE.

@@ -16,6 +16,47 @@ import org.junit.Test
 
 class CameraSettingsTest {
     @Test
+    fun easyModeForcesThePlainShotAndKeepsTheStoredValues() {
+        val pro = CameraSettings(
+            brightness = 40f, warmth = -20f, keepDng = true, burstMode = BurstMode.ON, selfTimer = 5, longExposure = 10,
+            experimental = true, randomLightLeak = true, border = 4, photoFrame = PhotoFrame.DATE_STAMP, trackFocus = true,
+            flatVideo = true, videoMotionData = true, showHistogram = true, showGrid = true, showLevel = true,
+            showZoomControl = true, smallExport = false, jpegQuality = 90, lens = "T", film = false,
+        )
+        // Off: nothing changes.
+        assertEquals(pro, pro.effective)
+        val easy = pro.copy(easy = true)
+        val e = easy.effective
+        assertEquals(0f, e.brightness)
+        assertEquals(0f, e.warmth)
+        assertEquals(0f, e.exposureCompensationEv)
+        assertEquals(BurstMode.AUTO, e.burstMode)
+        assertEquals(0, e.activeSelfTimer)
+        assertEquals(null, e.longExposureSpec(null, PreviewLevel.BOOSTED, 1f))
+        assertFalse(e.randomLightLeak)
+        assertEquals(0, e.border)
+        assertFalse(e.trackFocus || e.flatVideo || e.videoMotionData)
+        assertFalse(e.showHistogram || e.showGrid || e.showLevel || e.showZoomControl)
+        // Colour: Film mode on the default film stock; B&W: Film + B&W on the default mono stock.
+        assertEquals(Edition.filmLook(Edition.defaultFilmLookId), e.look)
+        assertTrue(e.filmMode)
+        val bw = easy.copy(easyMono = true).effective
+        assertTrue(bw.filmMono)
+        assertEquals(Edition.monoLook(Edition.defaultMonoLookId), bw.look)
+        assertFalse(pro.copy(easyMono = true).effective.monoMode)
+        // What Easy mode leaves alone: RAW, frames, size, quality, lens.
+        assertTrue(e.keepDng)
+        assertEquals(PhotoFrame.DATE_STAMP, e.photoFrame)
+        assertFalse(e.smallExport)
+        assertEquals(90, e.jpegQuality)
+        assertEquals("T", e.lens)
+        // The stored settings keep the user's own values for when Easy mode is off again.
+        assertEquals(40f, easy.brightness)
+        assertEquals(BurstMode.ON, easy.burstMode)
+        assertEquals(pro, easy.copy(easy = false).effective)
+    }
+
+    @Test
     fun defaultsHaveFramesDisabled() {
         val s = CameraSettings()
         assertEquals(PhotoFrame.NONE, s.photoFrame)
