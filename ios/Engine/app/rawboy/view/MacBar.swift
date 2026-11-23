@@ -73,10 +73,13 @@ public struct InspectorSection<Content: View>: View {
     let edited: Bool
     let onToggle: () -> Void
     let onReset: (() -> Void)?
+    /** A switch for the section's edits: (is on, set it). nil = no switch (Auto's sections). Shown once the section has edits. */
+    let enabled: (on: Bool, set: (Bool) -> Void)?
     let content: Content
 
     public init(_ title: String, open: Bool, edited: Bool, onToggle: @escaping () -> Void, onReset: (() -> Void)?,
-                @ViewBuilder content: () -> Content) {
+                enabled: (on: Bool, set: (Bool) -> Void)? = nil, @ViewBuilder content: () -> Content) {
+        self.enabled = enabled
         self.title = title
         self.open = open
         self.edited = edited
@@ -94,10 +97,19 @@ public struct InspectorSection<Content: View>: View {
                     .rotationEffect(.degrees(open ? 90 : 0))
                     .frame(width: 12)
                 Text(title).font(.subheadline.weight(.semibold))
+                    .foregroundStyle(enabled?.on == false ? Color.secondary : Color.primary)
                 if edited {
-                    Circle().fill(Color.accentColor).frame(width: 6, height: 6).help("\(title) has edits")
+                    Circle().fill(enabled?.on == false ? Color.secondary : Color.accentColor).frame(width: 6, height: 6).help("\(title) has edits")
                 }
                 Spacer(minLength: 0)
+                if edited, let enabled {
+                    Toggle("", isOn: Binding(get: { enabled.on }, set: enabled.set))
+                        .toggleStyle(.switch)
+                        .controlSize(.mini)
+                        .labelsHidden()
+                        .help(enabled.on ? "Switch \(title) edits off (values are kept)" : "Switch \(title) edits back on")
+                        .accessibilityLabel("\(title) edits")
+                }
                 if edited, let onReset {
                     Button(action: onReset) {
                         Image(systemName: "arrow.counterclockwise").font(.caption)
@@ -119,6 +131,8 @@ public struct InspectorSection<Content: View>: View {
             if open {
                 VStack(alignment: .leading, spacing: 0) { content }
                     .padding(.bottom, 10)
+                    .opacity(enabled?.on == false ? 0.45 : 1)
+                    .allowsHitTesting(enabled?.on != false)
             }
             Divider()
         }

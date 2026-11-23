@@ -205,6 +205,11 @@ export interface DevelopParams {
   fx: readonly LightEffect[];
   healSpots: readonly HealSpot[];
   /**
+   * Editor sections (`EditSectionId`) switched off: their values stay here but render as the photo's defaults
+   * (`effectiveParams`). Per photo: not carried to the next one, not in presets.
+   */
+  disabledSections: readonly string[];
+  /**
    * The photo is display-referred (JPEG, HEIC: see display_inverse.cpp), rendered with AgX per channel. Set only on
    * a photo's as-shot defaults, from the decoder; never a slider or preset value.
    */
@@ -295,6 +300,7 @@ export const DEFAULT_PARAMS: Readonly<DevelopParams> = Object.freeze({
   filmLeaks: [],
   fx: [],
   healSpots: [],
+  disabledSections: [],
 });
 
 /** The colour denoise in effect: colorDenoise, or denoise while it isn't set. */

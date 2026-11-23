@@ -5,6 +5,7 @@ import { CROP_ASPECTS, cropAspectLabel, cropOf, isFullCrop, type CropAspect } fr
 import { FILM_STOCKS } from '../../engine/auto/looks/FilmLooks';
 import { LOOK_GROUP_LABELS, LOOK_GROUPS, lutGroup } from '../../engine/auto/looks/Look';
 import { ANAMORPHIC_COLORS, TONE_MAPPERS, effectiveColorDenoise, type DevelopParams, type SliderKey } from '../../engine/develop/DevelopParams';
+import { TAB_SECTIONS, sectionHasEdits, withSectionsEnabled } from '../../engine/develop/EditSections';
 import type { LensInfo } from '../../engine/lens/LensInfo';
 import type { LutEntry } from '../../engine/lut/LutData';
 import { LutRepository } from '../../engine/lut/LutRepository';
@@ -174,16 +175,33 @@ export function ControlsPanel({
     skinNote(params.portraitRetouch) ??
     (params.portraitRetouch <= 0 ? null : retouch.working ? 'Retouching…' : skin.kind === 'ready' && !retouch.ready ? 'No face found to size the retouch by' : null);
 
+  // A tab's edits can be switched off (values kept, the defaults render); the switch shows once the tab has edits.
+  const tabSections = TAB_SECTIONS[tab] ?? [];
+  const tabOff = tabSections.length > 0 && tabSections.every((s) => params.disabledSections?.includes(s));
+  const tabEdited = tabSections.some((s) => sectionHasEdits(params, defaults, s));
+
   return (
     <div className="controls">
       <nav className="tabs small">
         {shownTabs.map((t) => (
-          <button key={t} type="button" className={t === tab ? 'active' : ''} onClick={() => setTab(t)}>
+          <button
+            key={t}
+            type="button"
+            className={t === tab ? 'active' : ''}
+            style={(TAB_SECTIONS[t] ?? []).every((s) => params.disabledSections?.includes(s)) ? { opacity: 0.55 } : undefined}
+            onClick={() => setTab(t)}
+          >
             {t}
           </button>
         ))}
       </nav>
-      <div className="controls-body" ref={scroll.ref} onScroll={scroll.onScroll}>
+      <div className={`controls-body${tabOff ? ' edits-off' : ''}`} ref={scroll.ref} onScroll={scroll.onScroll}>
+        {tabEdited && (
+          <label className="switch-row edits-switch" title={tabOff ? `${tab} edits are off: the values are kept` : `Switch ${tab} edits off to compare; the values are kept`}>
+            <span>{tab} edits</span>
+            <input type="checkbox" checked={!tabOff} onChange={(e) => onChange(withSectionsEnabled(params, tabSections, e.target.checked))} />
+          </label>
+        )}
         {tab === 'Light' && (
           <>
             <SectionLabel>Tone mapper</SectionLabel>

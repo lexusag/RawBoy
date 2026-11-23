@@ -4,6 +4,7 @@ import { WhitePicker, type WhitePick } from '../color/WhitePicker';
 import { BrushRaster, makeGuide, type BrushGuide } from '../develop/BrushRaster';
 import type { CropRect } from '../develop/CropMath';
 import { developParams, effectiveColorDenoise, type DevelopParams } from '../develop/DevelopParams';
+import { effectiveParams } from '../develop/EditSections';
 import { healKey, healStrokes } from '../develop/HealSpots';
 import { maxLayerRetouch, type MaskLayer } from '../develop/Masks';
 import { exportImage } from '../export/Exporter';
@@ -351,6 +352,7 @@ export class PhotoSession {
     retouch: RetouchMap | null = this._state.retouchMap,
   ): ShaderParams {
     const s = this._state;
+    p = effectiveParams(p, defaults);
     return ShaderParams.from(
       p, defaults, lut, this.lensFor(p), s.base, s.bloomSources, s.skin.kind === 'ready' ? s.skin.mask : null, 1, 1, maskView,
       (l) => this.brushRaster(l), film, s.bokehSource, s.flareSource, retouch, s.depthMap,
@@ -823,6 +825,7 @@ export class PhotoSession {
   async export(p: DevelopParams, defaults: DevelopParams, settings: ExportSettings, onProgress: (f: number) => void): Promise<Blob> {
     const img = this.image;
     if (!img) throw new Error('No photo open');
+    p = effectiveParams(p, defaults);
     const lut = p.lut && p.film == null ? await loadLutCached(p.lut) : null;
     const film = p.film ? await FilmStocks.load(p.film) : null;
     this.ensureBokehSource(p);

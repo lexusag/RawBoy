@@ -282,7 +282,8 @@ public final class PhotoSession: ObservableObject {
     /** Uniforms for [p] with this photo's current textures; [maskView]: the layer whose mask is shown in red. */
     public func shaderParams(_ p: DevelopParams, defaults: DevelopParams, lut: LutData? = nil, useSelectedLut: Bool = true,
                              maskView: String? = nil, film: FilmData? = nil, retouch: RetouchMap? = nil) -> ShaderParams {
-        ShaderParams.from(p, asShot: defaults, lut: lut ?? (useSelectedLut ? lutData : nil), lens: lensFor(p), base: base,
+        let p = EditSections.effective(p, defaults: defaults)
+        return ShaderParams.from(p, asShot: defaults, lut: lut ?? (useSelectedLut ? lutData : nil), lens: lensFor(p), base: base,
                           bloomSources: bloomSources, skinMask: skin.mask, maskView: maskView,
                           brushFor: { [unowned self] in self.brushRaster($0) }, film: film ?? (useSelectedLut ? filmData : nil),
                           flareSource: flareSource, bokehSource: bokehSource, retouchMap: retouch ?? retouchMap,
@@ -727,6 +728,7 @@ public final class PhotoSession: ObservableObject {
                        naming: OutputNaming = OutputNaming(), directory: URL = FileManager.default.temporaryDirectory,
                        onProgress: @escaping @Sendable (Float) -> Void) async throws -> URL {
         guard let img = image else { throw RawImageError(message: "No photo open") }
+        let p = EditSections.effective(p, defaults: defaults)
         ensureFlareSource(p)
         await flareTask?.value
         ensureBokehSource(p)
