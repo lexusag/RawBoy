@@ -1279,6 +1279,7 @@ private val LOOK_LABEL_WIDTH = 88.dp
 @Composable
 private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recording: Boolean, requestLocation: () -> Unit, shareDeviceReport: () -> Unit, shareTuningData: () -> Unit) {
     val maxResMp by vm.maxResMp.collectAsState()
+    val hardwareDepth by vm.hardwareDepthAvailable.collectAsState()
     var showFrames by remember { mutableStateOf(false) }
     if (showFrames) {
         FramesSettingsContent(settings, vm, onBack = { showFrames = false })
@@ -1568,23 +1569,26 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
                     indent = true,
                 )
             }
-            SettingSwitch(
-                title = "Save depth map in DNG",
-                // Always the software estimate: nothing captures a DEPTH16 frame yet (Shot.hardwareDepth stays null).
-                subtitle = "Software depth map on this device; used for portrait blur in RawBoy Pro",
-                checked = settings.saveDepth,
-                accent = EXPERIMENTAL_ORANGE,
-                onChange = vm::setSaveDepth,
-            )
-            if (settings.saveDepth) {
+            // Only where the active lens has a depth output of its own (nothing is estimated); a switch left on
+            // stays visible so it can be turned off.
+            if (hardwareDepth || settings.saveDepth) {
                 SettingSwitch(
-                    title = "Generate portrait in camera",
-                    subtitle = "Blur the background of saved JPEGs when a person or pet is detected",
-                    checked = settings.depthPortrait,
+                    title = "Save depth map in DNG",
+                    subtitle = "Camera depth sensor on this lens; used for portrait blur in RawBoy Pro",
+                    checked = settings.saveDepth,
                     accent = EXPERIMENTAL_ORANGE,
-                    onChange = vm::setDepthPortrait,
-                    indent = true,
+                    onChange = vm::setSaveDepth,
                 )
+                if (settings.saveDepth) {
+                    SettingSwitch(
+                        title = "Generate portrait in camera",
+                        subtitle = "Blur the background of saved JPEGs with the depth map",
+                        checked = settings.depthPortrait,
+                        accent = EXPERIMENTAL_ORANGE,
+                        onChange = vm::setDepthPortrait,
+                        indent = true,
+                    )
+                }
             }
 
             var confirmReset by remember { mutableStateOf(false) }

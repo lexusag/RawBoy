@@ -295,12 +295,12 @@ internal val UKRAINIAN: Map<String, String> = mapOf(
         "Зберігає поруч стабілізовану копію (обрізання 70%)",
     "Save depth map in DNG" to
         "Зберігати карту глибини в DNG",
-    "Software depth map on this device; used for portrait blur in RawBoy Pro" to
-        "Програмна карта глибини на цьому пристрої; для портретного розмиття в RawBoy Pro",
+    "Camera depth sensor on this lens; used for portrait blur in RawBoy Pro" to
+        "Датчик глибини камери на цьому об'єктиві; для портретного розмиття в RawBoy Pro",
     "Generate portrait in camera" to
         "Генерувати портрет у камері",
-    "Blur the background of saved JPEGs when a person or pet is detected" to
-        "Розмиває фон збережених JPEG, коли виявлено людину або тварину",
+    "Blur the background of saved JPEGs with the depth map" to
+        "Розмиває фон збережених JPEG за картою глибини",
     "Take the phone for (debug)" to
         "Вважати телефон за (налагодження)",
     "From the next start of the app. Calibration learned under another profile is kept apart" to

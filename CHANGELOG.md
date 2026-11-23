@@ -1,8 +1,8 @@
-**Camera (Android) and web Pro: depth map in the DNG, portrait blur (2026-11-23)**
+**Camera (Android) and web Pro: camera depth map in the DNG, portrait blur (2026-11-23)**
 
-- Camera › Experimental: **Save depth map in DNG** and **Generate portrait in camera** (see `docs/camera.md`); Pro (web) Detail › **Portrait blur**, **Focus depth**, **Depth falloff** and a pick-focus-depth tool read the map from the DNG's `RBDP` trailer. The map is a software estimate (a subject matte, not measured depth); the hardware depth path is not wired up yet. Ukrainian strings in `StringsUk.kt`.
-- Review fixes: the depth map's texture unit collided with the wavelet denoise result (10), so with Denoise on the shader read the denoised image as depth; it is unit 13 now and the lens blur passes borrow 12 (Android and web). Metal binds a stand-in `uDepthMap` (the shader declares it; iOS and Desktop don't read depth). The web's lens blur cache also keys on the photo's depth map.
-- Not tried on a phone or in a browser by eye; only the CI compile and unit tests.
+- Camera › Experimental: **Save depth map in DNG** and **Generate portrait in camera**, shown only on lenses with a hardware depth output (`DEPTH16`). The camera's own depth frame is saved in the DNG (`RBDP` trailer, `docs/camera.md`) and, with the second switch, blurs the JPEG's background through the existing lens blur. Pro (web) Detail › **Portrait blur**, **Focus depth**, **Depth falloff** and a pick-focus-depth tool read it. No depth output, or a refused stream combination: nothing is saved. The first version estimated depth from the picture (a subject cut-out); that is gone.
+- Review fixes: the depth map's texture unit collided with the wavelet denoise result (10), so with Denoise on the shader read the denoised image as depth; it is unit 13 now and the lens blur passes borrow 12 (Android and web). Metal binds a stand-in `uDepthMap` (iOS and Desktop don't read depth). The web's lens blur cache also keys on the photo's depth map.
+- Not tried on a phone (none offers a depth output to apps among the owner's), only compiled by CI and unit tests; the field-of-view match between the depth frame and the raw is assumed.
 
 **Pentax 645 / Contax 645 export frames keep the photo's size (2026-11-22)**
 

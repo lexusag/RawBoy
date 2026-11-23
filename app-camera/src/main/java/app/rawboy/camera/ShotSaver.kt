@@ -53,7 +53,6 @@ import app.rawboy.lut.LutData
 import app.rawboy.lut.LutLoader
 import app.rawboy.raw.DngJxlNative
 import app.rawboy.raw.RawImage
-import app.rawboy.retouch.DepthEstimator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -466,27 +465,18 @@ internal object ShotSaver {
                 "${params.colorDenoise}, sharpening ${params.sharpening}; key ${a.stats.key}, exposure ${params.exposure}")
             val lut = params.lut?.let { loadLut(app, it) }
             val film = params.film?.let { loadFilm(app, it) }
+            // Only a depth frame the camera itself delivered (CameraController.depthFrame): without one nothing is saved
+            // and no portrait blur is made; the depth is never estimated from the picture.
             val depthMap = if (s.saveDepth) {
-                val (focusX, focusY) = (shot.meter as? MeterArea.Spot)?.let { it.x to it.y } ?: (0.5f to 0.5f)
-                val swDepth = runCatching { DepthEstimator.estimate(app, a.base, focusX, focusY) }.getOrNull()
-                val resolved = shot.hardwareDepth?.let { hw ->
-                    DepthMap(
-                        width = hw.width,
-                        height = hw.height,
-                        data = hw.data,
-                        hardware = true,
-                        subjectDetected = swDepth?.subjectDetected ?: hw.subjectDetected,
-                        focusDepth = hw.focusDepth,
-                    )
-                } ?: swDepth
-                if (resolved != null && s.keepDng) {
-                    writeDepthToDng(app, shot.dng, resolved)
-                }
-                resolved
+                shot.hardwareDepth?.let { hw ->
+                    // Focus where the shot was metered (a tap), else the middle.
+                    val (fx, fy) = (shot.meter as? MeterArea.Spot)?.let { it.x to it.y } ?: (0.5f to 0.5f)
+                    DepthMap(hw.width, hw.height, hw.data, hardware = true, subjectDetected = true, focusDepth = hw.sampleUv(fx, fy))
+                }?.also { if (s.keepDng) writeDepthToDng(app, shot.dng, it) }
             } else {
                 null
             }
-            val portraitActive = s.saveDepth && s.depthPortrait && depthMap?.subjectDetected == true
+            val portraitActive = s.saveDepth && s.depthPortrait && depthMap != null
             val bokehSource = if (portraitActive) {
                 img.createPreview(PORTRAIT_BOKEH_SOURCE_DIMENSION, boostHighlights = true)
             } else {

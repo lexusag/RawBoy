@@ -570,14 +570,11 @@ function DepthBlurSliders({
                 onChange={(v) => onChange({ ...params, depthFalloff: v })}
               />
               <Note>
-                {depthMap.hardware
-                  ? 'Hardware depth map from DNG'
-                  : 'Software depth map from DNG'}
-                {depthMap.subjectDetected ? ' · Subject detected' : ''}
+                Camera depth map from the DNG
               </Note>
             </>
           ) : (
-            <Note>No depth map in this file (turn on Save depth map in DNG in RawBoy Camera).</Note>
+            <Note>No depth map in this file (RawBoy Camera saves one on phones whose camera has a depth sensor).</Note>
           )}
         </div>
       )}

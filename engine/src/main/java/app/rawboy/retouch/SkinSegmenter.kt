@@ -218,55 +218,8 @@ object SkinSegmenter {
         w, h, ByteBuffer.allocateDirect(w * h * 4).order(ByteOrder.nativeOrder()).asFloatBuffer(), 3f, false, 0f,
     )
 
-    internal class SubjectSegmentation(
-        val personForeground: FloatArray,
-        val hairOrFur: FloatArray,
-        val otherForeground: FloatArray,
-        val skinAreaFraction: Float,
-        val hasFace: Boolean,
-    )
-
-    /**
-     * Runs the shared MediaPipe multiclass segmenter (`0: background, 1: hair, 2: body-skin, 3: face-skin, 4: clothes,
-     * 5: others`) and face landmarker on [bitmap] for [DepthEstimator].
-     */
-    @Synchronized
-    internal fun segmentSubject(context: Context, bitmap: Bitmap, w: Int, h: Int): SubjectSegmentation? {
-        val masks = segmenter(context).segment(BitmapImageBuilder(bitmap).build()).confidenceMasks().orElse(null)
-            ?: return null
-        fun read(index: Int): FloatArray {
-            if (index >= masks.size) return FloatArray(w * h)
-            val mask = masks[index]
-            val buffer = ByteBufferExtractor.extract(mask).order(ByteOrder.nativeOrder()).asFloatBuffer()
-            val out = FloatArray(mask.width * mask.height)
-            buffer.position(0)
-            buffer.get(out)
-            return if (mask.width == w && mask.height == h) out else resize(out, mask.width, mask.height, w, h)
-        }
-        val bg = read(0)
-        val hair = read(1)
-        val body = read(BODY_SKIN)
-        val face = read(FACE_SKIN)
-        val other = read(5)
-        masks.forEach { it.close() }
-        val fg = FloatArray(w * h)
-        var skinCount = 0
-        for (i in fg.indices) {
-            fg[i] = (1f - bg[i]).coerceIn(0f, 1f)
-            if (face[i] + body[i] > 0.5f) skinCount++
-        }
-        val hasFace = landmarker(context).detect(BitmapImageBuilder(bitmap).build()).faceLandmarks().isNotEmpty()
-        return SubjectSegmentation(
-            personForeground = fg,
-            hairOrFur = hair,
-            otherForeground = other,
-            skinAreaFraction = skinCount.toFloat() / max(1, w * h),
-            hasFace = hasFace,
-        )
-    }
-
     /** Linear Rec.2020 half floats -> an ordinary-looking sRGB bitmap for the model, plus its luminance. */
-    internal fun toDisplayBitmap(image: PreviewImage): Pair<Bitmap, FloatArray> {
+    private fun toDisplayBitmap(image: PreviewImage): Pair<Bitmap, FloatArray> {
         val n = image.width * image.height
         val halves = image.pixels.duplicate().order(ByteOrder.nativeOrder()).asShortBuffer()
         val rgb = FloatArray(n * 3)
@@ -302,7 +255,7 @@ object SkinSegmenter {
         return bitmap to gray
     }
 
-    internal fun resize(src: FloatArray, sw: Int, sh: Int, dw: Int, dh: Int): FloatArray {
+    private fun resize(src: FloatArray, sw: Int, sh: Int, dw: Int, dh: Int): FloatArray {
         val out = FloatArray(dw * dh)
         for (y in 0 until dh) {
             val fy = ((y + 0.5f) * sh / dh - 0.5f).coerceIn(0f, sh - 1f)
@@ -323,7 +276,7 @@ object SkinSegmenter {
     }
 
     /** Guided filter (He et al.): edge-preserving refinement of [p] using guide [g]. */
-    internal fun guidedFilter(g: FloatArray, p: FloatArray, w: Int, h: Int, radius: Int, eps: Float): FloatArray {
+    private fun guidedFilter(g: FloatArray, p: FloatArray, w: Int, h: Int, radius: Int, eps: Float): FloatArray {
         val meanG = box(g, w, h, radius)
         val meanP = box(p, w, h, radius)
         val corrGP = box(FloatArray(g.size) { g[it] * p[it] }, w, h, radius)
