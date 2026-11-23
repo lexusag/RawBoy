@@ -167,7 +167,9 @@ final class BokehTexture {
             f.bytes.withUnsafeBytes {
                 e.setFragmentBytes($0.baseAddress!, length: $0.count, index: DevelopLayout.bokehBufferIndex)
             }
-            let textures: [String: MTLTexture] = ["uBrushMask": brush, "uBokehSrc": source, "uDepthMap": depthStub]
+            let textures: [String: MTLTexture] = ["uBrushMask": brush, "uBokehSrc": source, "uDepthMap": depthStub,
+                                                   // Guides the depth map; with the stub depth map it is never read.
+                                                   "uBase": depthStub]
             for (name, index) in DevelopLayout.bokehTextures {
                 e.setFragmentTexture(textures[name], index: index)
                 e.setFragmentSamplerState(name == "uBokehSrc" ? mipSampler : ctx.sampler, index: index)

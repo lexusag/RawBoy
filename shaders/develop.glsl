@@ -1108,28 +1108,6 @@ float layerMask(int i, vec2 p) {
     return m * c.z;
 }
 
-// Portrait depth blur radius in full-resolution pixels at image pixel [p]: zero inside a deadzone around focus depth
-// uDepthBlur.y, ramping smoothly with falloff uDepthBlur.z (0 = deep DoF / gentle falloff, 1 = shallow DoF / steep).
-float depthBokehRadius(vec2 p) {
-    if (uDepthBlur.x <= 0.0) return 0.0;
-    float d = texture(uDepthMap, clamp(p / uImageSize, 0.0, 1.0)).r;
-    float dist = abs(d - uDepthBlur.y);
-    float deadzone = 0.04 + 0.16 * (1.0 - uDepthBlur.z);
-    float ramp = max(0.15, 0.85 * (1.0 - uDepthBlur.z));
-    return uDepthBlur.x * smoothstep(deadzone, deadzone + ramp, dist);
-}
-
-// Lens blur radius at a pixel in full-resolution pixels: the strongest layer's blur or portrait depth blur.
-float bokehRadius(float lm[MAX_LAYERS], vec2 p) {
-    float r = depthBokehRadius(p);
-    for (int i = 0; i < MAX_LAYERS; ++i) r = max(r, i < uLayerCount ? lm[i] * uLayerBlur[i] : 0.0);
-    return r;
-}
-
-// How much of the lens blur shows at a radius of [r] bokeh texels: below ~1.5 texels the small texture can't hold
-// the blur, so it fades in from the sharp image. The bokeh passes weight their samples by the same ramp.
-float bokehFade(float r) { return clamp(r / 1.5, 0.0, 1.0); }
-
 // Levels (Whites/Blacks) on the display-encoded signal.
 vec3 applyLevels(vec3 c) {
     float inBlack = max(-uBlacks, 0.0) * 0.2;        // raise black point
