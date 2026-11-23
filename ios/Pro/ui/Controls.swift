@@ -37,6 +37,7 @@ struct ControlsPanel: View {
     var lensfun: LensfunStore? = nil
     /** The photo's depth map from RawBoy Camera (Portrait blur); the sliders are offered only when there is one. */
     var depthMap: DepthMap? = nil
+    var depthState: DepthState = .none
 
     @AppStorage("pro.tab") private var chosenTab = 0
     #if os(macOS)
@@ -287,7 +288,7 @@ struct ControlsPanel: View {
      * the slider is raised or one of them is changed. Dimmed, with a hint, on photos without a depth map. As web's DepthBlurSliders.
      */
     @ViewBuilder private var portraitBlur: some View {
-        if let depthMap {
+        if depthMap != nil || (DepthEstimator.isAvailable && depthState != .failed) {
             let changed = params.depthFocus != defaults.depthFocus || params.depthFalloff != defaults.depthFalloff
                 || params.depthEdge != defaults.depthEdge
             let shown = params.depthBlur > 0 || changed
@@ -297,9 +298,7 @@ struct ControlsPanel: View {
                     slider("Focus depth", \.depthFocus, 0...100, format: formatPlain)
                     slider("Depth falloff", \.depthFalloff, 0...100, format: formatPlain)
                     slider("Edge softness", \.depthEdge, 0...100, format: formatPlain)
-                    Note(depthMap.millimetres != nil
-                         ? "Camera depth map from the DNG, with distances"
-                         : "Camera depth map from the DNG")
+                    Note(depthNote)
                 }
                 .padding(.leading, 16)
             }
@@ -307,10 +306,21 @@ struct ControlsPanel: View {
             // Shown dimmed so the control can be found; it needs a photo with a depth map.
             Group {
                 slider("Portrait blur", \.depthBlur, 0...100, format: formatPlain)
-                Note("Needs a photo with a depth map (a RawBoy Camera DNG saved with Save depth map)")
+                Note(depthState == .failed ? "The depth estimate failed for this photo"
+                     : "Needs a photo with a depth map (a RawBoy Camera DNG saved with Save depth map)")
             }
             .disabled(true)
             .opacity(0.45)
+        }
+    }
+
+    private var depthNote: String {
+        switch depthState {
+        case .estimating: return "Estimating depth from the picture…"
+        case .estimated: return "Depth estimated from the picture"
+        case .failed: return "The depth estimate failed for this photo"
+        default:
+            return depthMap?.millimetres != nil ? "Camera depth map from the DNG, with distances" : "Camera depth map from the DNG"
         }
     }
 

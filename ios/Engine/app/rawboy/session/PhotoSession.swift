@@ -26,6 +26,9 @@ public struct BlemishState: Equatable, Sendable {
     public var detected = 0
 }
 
+/** Where Portrait blur's depth map comes from. */
+public enum DepthState: Equatable, Sendable { case none, file, estimating, estimated, failed }
+
 /**
  * One open photo and everything the develop pipeline needs for it: the decoded raw,
  * its preview and whole-image textures, skin mask, blemish healing, the 100% view's
@@ -63,6 +66,12 @@ public final class PhotoSession: ObservableObject {
     @Published public private(set) var bokehSource: PreviewImage?
     /** Portrait retouch's gains map for the preview (nil until made, or with no face), and whether one is being made. */
     @Published public private(set) var retouchMap: RetouchMap?
+    /** Portrait blur's depth map estimated from the picture, for photos without one of their own (Desktop only). */
+    @Published public private(set) var estimatedDepth: DepthMap?
+    @Published public private(set) var depthState: DepthState = .none
+    /** Called with the estimate's focus depth (0..100) when it arrives, so the editor can focus on it. */
+    public var onDepthEstimated: ((Float) -> Void)?
+    private var depthTask: Task<Void, Never>?
     @Published public private(set) var retouchWorking = false
     /** Centre of the zoomed view in full-resolution pixels; nil = fit to view. */
     @Published public private(set) var zoomCenter: (Float, Float)?
@@ -162,6 +171,10 @@ public final class PhotoSession: ObservableObject {
         exitZoom()
         image?.close()
         image = loaded.image
+        depthTask?.cancel()
+        depthTask = nil
+        estimatedDepth = nil
+        depthState = loaded.image.depth != nil ? .file : .none
         lensInfo = loaded.image.lens
 
         let defaults = Self.asShotDefaults(loaded.image)
@@ -189,6 +202,7 @@ public final class PhotoSession: ObservableObject {
         guideSource = nil
         params = initialParams(defaults)
         ensureSkinMask()
+        ensureDepthMap() // Portrait blur restored from a sidecar
         // Camera and exposure (ISO, shutter, aperture, focal length); the decoder's summary if none of it is known.
         let line = loaded.image.shotInfo.line()
         return Opened(description: line.isEmpty ? loaded.image.description : line, defaults: defaults, params: params)
@@ -202,11 +216,35 @@ public final class PhotoSession: ObservableObject {
         if Self.retouchStrength(newParams) != Self.retouchStrength(before) { scheduleRetouch() }
         if newParams.blemishRemoval != before.blemishRemoval || newParams.healSpots != before.healSpots { scheduleBlemishes() }
         ensureFlareSource()
+        ensureDepthMap()
         ensureBokehSource()
         // A 90 degree turn or a new crop changes the output shape, and a flip moves the content, so the zoom position
         // no longer applies.
         let flipChanged = newParams.flipHorizontal != before.flipHorizontal || newParams.flipVertical != before.flipVertical
         if newParams.rotation != before.rotation || newParams.crop != before.crop || flipChanged { exitZoom() } else { recheckZoomTile() }
+    }
+
+    /** Estimates a depth map once Portrait blur is raised on a photo that has none of its own ([DepthEstimator]). */
+    private func ensureDepthMap(_ p: DevelopParams? = nil) {
+        guard let img = image, let small = base, depthState == .none, DepthEstimator.isAvailable,
+              (p ?? params).depthBlur > 0 else { return }
+        depthState = .estimating
+        depthTask = Task {
+            let result = await Task.detached(priority: .userInitiated) {
+                Result { try DepthEstimator.estimate(small) }
+            }.value
+            guard image === img, !Task.isCancelled else { return }
+            switch result {
+            case .success(let map):
+                estimatedDepth = map
+                depthState = .estimated
+                ensureBokehSource()
+                onDepthEstimated?(min(max(map.focusDepth, 0), 1) * 100)
+            case .failure(let error):
+                onMessage("Depth estimate failed: \(error.localizedDescription)")
+                depthState = .failed
+            }
+        }
     }
 
     /** Starts making the anamorphic flare's source once the flare is on (see FlareSource). */
@@ -230,7 +268,7 @@ public final class PhotoSession: ObservableObject {
     /** Starts making the lens blur's source copy once a mask layer of [p] or Portrait blur blurs (see BokehTexture). */
     private func ensureBokehSource(_ p: DevelopParams? = nil) {
         guard let img = image, bokehSource == nil, bokehTask == nil,
-              Self.blurs(p ?? params, depth: img.depth != nil) else { return }
+              Self.blurs(p ?? params, depth: depthMap != nil) else { return }
         bokehTask = Task {
             let source = await Task.detached(priority: .userInitiated) {
                 img.createPreview(maxDimension: BokehTexture.sourceMaxDimension, boostHighlights: true)
@@ -248,11 +286,11 @@ public final class PhotoSession: ObservableObject {
                           bloomSources: bloomSources, skinMask: skin.mask, maskView: maskView,
                           brushFor: { [unowned self] in self.brushRaster($0) }, film: film ?? (useSelectedLut ? filmData : nil),
                           flareSource: flareSource, bokehSource: bokehSource, retouchMap: retouch ?? retouchMap,
-                          depthMap: image?.depth)
+                          depthMap: depthMap)
     }
 
     /** The photo's portrait depth map (RawBoy Camera DNG), or nil: the Portrait blur controls need one. */
-    public var depthMap: DepthMap? { image?.depth }
+    public var depthMap: DepthMap? { image?.depth ?? estimatedDepth }
 
     /**
      * The painted mask of [layer] brought up to its strokes (incrementally while a stroke grows), or nil without
@@ -705,6 +743,7 @@ public final class PhotoSession: ObservableObject {
     }
 
     public func close() {
+        depthTask?.cancel()
         image?.close()
         image = nil
     }

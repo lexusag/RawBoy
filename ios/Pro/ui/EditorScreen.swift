@@ -714,7 +714,7 @@ struct EditorScreen: View {
                         let preset = vm.saveLensPreset(name: name)
                         if send { vm.sendPresetToAuto(preset) }
                     },
-                    lensfun: vm.lensfun, depthMap: session.depthMap)
+                    lensfun: vm.lensfun, depthMap: session.depthMap, depthState: session.depthState)
                 .frame(maxHeight: maxHeight)
             }
         } else if mode == .presets {
