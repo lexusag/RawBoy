@@ -52,6 +52,7 @@ function opened(handle: number): [OpenResult, Transferable[]] {
   };
   const transfer: Transferable[] = [result.lensInfo.buffer, result.lensShading.buffer];
   if (depthMap) transfer.push(depthMap.data.buffer);
+  if (depthMap?.millimetres) transfer.push(depthMap.millimetres.buffer);
   return [result, transfer];
 }
 

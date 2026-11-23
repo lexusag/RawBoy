@@ -307,6 +307,40 @@ internal val UKRAINIAN: Map<String, String> = mapOf(
         "Подвійні пікселі",
     "AI estimate" to
         "Оцінка ШІ",
+    "Calibrate dual-pixel distances" to
+        "Калібрувати відстані подвійних пікселів",
+    "Calibrate dual-pixel distances again" to
+        "Ще раз калібрувати відстані подвійних пікселів",
+    "Calibrated: this lens saves distances in millimetres" to
+        "Відкалібровано: цей об'єктив зберігає відстані в міліметрах",
+    "Once, with ARCore and a moving phone; then the main lens saves distances in millimetres" to
+        "Один раз, з ARCore і телефоном у русі; потім основний об'єктив зберігає відстані в міліметрах",
+    "Point the camera at a scene with near and far things (0.3 to 3 m), then move the phone slowly from side to side. Aim close and far now and then." to
+        "Наведіть камеру на сцену з близькими й далекими предметами (від 0,3 до 3 м) і повільно ведіть телефон з боку в бік. Час від часу цільтеся ближче й далі.",
+    "This phone's ARCore has no depth: calibration isn't possible here." to
+        "ARCore на цьому телефоні не має глибини: калібрування тут неможливе.",
+    "ARCore (Google Play Services for AR) isn't available: " to
+        "ARCore (Сервіси Google Play для AR) недоступний: ",
+    "This lens has no dual-pixel stream." to
+        "Цей об'єктив не має потоку подвійних пікселів.",
+    "The camera was taken by another app." to
+        "Камеру забрав інший застосунок.",
+    "The phone doesn't stream dual pixel next to ARCore." to
+        "Телефон не передає подвійні пікселі разом з ARCore.",
+    "Keep moving slowly. Samples: " to
+        "Рухайте далі повільно. Зразки: ",
+    "depth range: " to
+        "діапазон глибини: ",
+    "Aim at something nearer and something farther." to
+        "Цільтеся на щось ближче й на щось далі.",
+    "Calibrated. Photos on the main lens with Depth from: Dual pixel now save distances in millimetres." to
+        "Відкалібровано. Фото з основного об'єктива з «Глибина з: Подвійні пікселі» тепер зберігають відстані в міліметрах.",
+    "Calibration failed, try again with more near and far things: " to
+        "Калібрування не вдалося, спробуйте ще раз з більшою кількістю близьких і далеких предметів: ",
+    "Close" to
+        "Закрити",
+    "Done" to
+        "Готово",
     "Generate portrait in camera" to
         "Генерувати портрет у камері",
     "Blur the background of saved JPEGs with the depth map" to

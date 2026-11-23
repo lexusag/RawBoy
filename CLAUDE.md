@@ -286,6 +286,11 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   map 0.5 = focus plane). AI: `camera/depth/AiDepth.kt`, ONNX Runtime (`ai.onnxruntime` keep rule in
   `app-camera/proguard-rules.pro`) + Depth Anything V2 Small q4f16 (`noCompress onnx`). Time Kotlin on the phone with a
   non-debuggable build: the debuggable one ran `DualPixelDepth` ~3× slower.
+  Millimetres: `depth/DepthCalibrationActivity.kt` (ARCore shared camera + the dual-pixel app surface; ARCore replaces the
+  app's repeating request, so focus distances come through `SharedCamera.setCaptureCallback`; ARCore's depth timestamps
+  are on its own clock, convert with `frame.timestamp - frame.androidCameraTimestamp`) → `DualPixelCalibrations` (own
+  prefs, by camera id) → `ShotSaver.depthOf`: `DualPixelMetric.millimetres` (AI shape scaled by the dual pixel; per-pixel
+  dual pixel alone was worse than the focus distance) → `RBDP` v2 (8-bit + `uint16` mm; v1 without mm).
   Web Pro (no Camera depth in the file): `PhotoSession.ensureDepthMap` (on Portrait blur > 0, after the skin mask for
   `SkinMask.person`) → `retouch/DepthEstimator.ts` in `worker/depth.worker.ts` (ONNX Runtime Web WASM bundled by Vite; `optimizeDeps.exclude` it, or in dev its WASM URL serves index.html,
   model from Camera's assets via `vite.config.ts`, both same-origin for COEP); `state.depth` says file/ai.

@@ -12,6 +12,7 @@ junit = "4.13.2"
 orgJson = "20240303"
 zxing = "3.5.3"
 onnxruntime = "1.32.0"
+arcore = "1.57.0"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -30,6 +31,7 @@ androidx-exifinterface = { group = "androidx.exifinterface", name = "exifinterfa
 mediapipe-tasks-vision = { group = "com.google.mediapipe", name = "tasks-vision", version.ref = "mediapipe" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 onnxruntime-android = { group = "com.microsoft.onnxruntime", name = "onnxruntime-android", version.ref = "onnxruntime" }
+arcore = { group = "com.google.ar", name = "core", version.ref = "arcore" }
 kotlinx-coroutines-android = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-android", version.ref = "coroutines" }
 
 [plugins]

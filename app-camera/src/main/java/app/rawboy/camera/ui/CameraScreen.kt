@@ -163,6 +163,7 @@ import app.rawboy.auto.looks.LookApplier
 import app.rawboy.color.BwFilter
 import app.rawboy.camera.BurstMode
 import app.rawboy.camera.DepthSource
+import app.rawboy.camera.depth.DepthCalibrationActivity
 import app.rawboy.camera.VideoQuality
 import app.rawboy.camera.CameraSettings
 import app.rawboy.camera.CameraStatus
@@ -1593,6 +1594,25 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
                         onSelect = vm::setDepthSource,
                         indent = true,
                     )
+                }
+                // Dual pixel in millimetres: calibrated once against ARCore (the main back lens; ARCore uses no other).
+                if (dualPixel && settings.depthSource.usable(hardwareDepth, dualPixel) == DepthSource.DUAL_PIXEL) {
+                    val context = LocalContext.current
+                    val calibrated = remember(settings) { vm.dualPixelCalibrated() }
+                    Column(Modifier.padding(start = 16.dp)) {
+                        TextButton(
+                            onClick = { context.startActivity(Intent(context, DepthCalibrationActivity::class.java)) },
+                            contentPadding = PaddingValues(0.dp),
+                        ) { Text(tr(if (calibrated) "Calibrate dual-pixel distances again" else "Calibrate dual-pixel distances")) }
+                        Text(
+                            tr(
+                                if (calibrated) "Calibrated: this lens saves distances in millimetres"
+                                else "Once, with ARCore and a moving phone; then the main lens saves distances in millimetres",
+                            ),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
                 SettingSwitch(
                     title = "Generate portrait in camera",

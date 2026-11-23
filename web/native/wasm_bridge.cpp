@@ -266,7 +266,7 @@ val lensShading(uintptr_t h) {
     return toTyped(s.gains.data(), s.gains.size());
 }
 
-/** Embedded RawBoy Camera depth map ({width, height, hardware, subjectDetected, focusDepth, data}), or null. */
+/** Embedded RawBoy Camera depth map ({width, height, hardware, subjectDetected, focusDepth, data, millimetres?}), or null. */
 val depthMap(uintptr_t h) {
     const DecodedImage::DepthData& d = fromHandle(h)->depth;
     if (d.empty()) return val::null();
@@ -277,6 +277,7 @@ val depthMap(uintptr_t h) {
     o.set("subjectDetected", d.subjectDetected);
     o.set("focusDepth", d.focusDepth);
     o.set("data", toTyped(d.data.data(), d.data.size()));
+    if (!d.millimetres.empty()) o.set("millimetres", toTyped(d.millimetres.data(), d.millimetres.size()));
     return o;
 }
 

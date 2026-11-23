@@ -97,6 +97,8 @@ struct DecodedImage {
         bool subjectDetected = false;
         float focusDepth = 0.2f;
         std::vector<uint8_t> data;
+        // Distance per pixel in millimetres (0 = unknown, 65535 = farther), from a version 2 trailer; else empty.
+        std::vector<uint16_t> millimetres;
         bool empty() const { return data.empty(); }
     } depth;
 };

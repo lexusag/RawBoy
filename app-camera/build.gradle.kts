@@ -98,6 +98,9 @@ dependencies {
     implementation(libs.zxing.core)
     // Settings › Save depth map › AI estimate: runs Depth Anything V2 Small (assets/models, ONNX).
     implementation(libs.onnxruntime.android)
+    // Settings › Calibrate dual-pixel distances (DepthCalibrationActivity): ARCore's depth as the reference. AR Optional:
+    // the app runs without Google Play Services for AR; only the calibration needs it.
+    implementation(libs.arcore)
     debugImplementation(libs.androidx.compose.ui.tooling)
     // JVM unit tests (./gradlew :app-camera:testDebugUnitTest).
     testImplementation(libs.junit)

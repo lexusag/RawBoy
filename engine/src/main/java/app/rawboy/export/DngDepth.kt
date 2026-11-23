@@ -19,12 +19,28 @@ class DepthMap(
     val subjectDetected: Boolean = false,
     /** Default normalized focus depth (`0..1`) on the detected subject or focus region. */
     val focusDepth: Float = 0.2f,
+    /**
+     * Distance per pixel in millimetres (unsigned 16-bit in a [ShortArray], same layout as [data]; 0 = unknown,
+     * 65535 = farther), when the source measured it (calibrated dual pixel); else null. Written as trailer version 2.
+     */
+    val millimetres: ShortArray? = null,
 ) {
     init {
         require(width > 0 && height > 0 && data.size == width * height) {
             "Invalid depth map dimensions ${width}x$height (${data.size} bytes)"
         }
+        require(millimetres == null || millimetres.size == width * height) { "Millimetre plane size ${millimetres?.size}" }
     }
+
+    /** Distance in millimetres at pixel ([x], [y]) (clamped to the map), or null without [millimetres] or where unknown. */
+    fun millimetresAt(x: Int, y: Int): Int? {
+        val mm = millimetres ?: return null
+        val v = mm[y.coerceIn(0, height - 1) * width + x.coerceIn(0, width - 1)].toInt() and 0xffff
+        return v.takeIf { it > 0 }
+    }
+
+    /** A copy with another [focusDepth]. */
+    fun withFocus(focus: Float) = DepthMap(width, height, data, hardware, subjectDetected, focus, millimetres)
 
     /** Normalized depth (`0..1`) at pixel (`x`, `y`), clamped to the map's bounds. */
     fun sampleAt(x: Int, y: Int): Float {
@@ -58,33 +74,43 @@ class DepthMap(
  * 8-byte header and ignore trailing bytes at EOF; RawBoy's decoder (`decode.cpp`) and lossy JPEG XL transcoder
  * (`dng_transcode.cpp`) recognize the 20-byte `"RBDP"` footer in $O(1)$.
  *
- * Footer layout (20 bytes, little-endian, immediately following [DepthMap.data]):
+ * Payload: [DepthMap.data] (`width * height` bytes); version 2 follows it with [DepthMap.millimetres]
+ * (`width * height` little-endian `uint16`). Version 1 is written when there are no millimetres, so older readers
+ * (which accept only version 1) keep reading those files.
+ *
+ * Footer layout (20 bytes, little-endian, immediately following the payload):
  * - `0..3`: magic `"RBDP"`
- * - `4`: version (`1`)
- * - `5`: flags (bit 0 = [DepthMap.hardware], bit 1 = [DepthMap.subjectDetected])
+ * - `4`: version (`1`, or `2` with millimetres)
+ * - `5`: flags (bit 0 = [DepthMap.hardware], bit 1 = [DepthMap.subjectDetected], bit 2 = millimetres follow)
  * - `6..7`: `uint16` width
  * - `8..9`: `uint16` height
  * - `10..11`: `uint16` focusDepth (`0..65535` -> `0.0..1.0`)
- * - `12..15`: `uint32` payload size (`width * height`)
+ * - `12..15`: `uint32` payload size (`width * height`, version 2: `3 * width * height`)
  * - `16..19`: magic `"RBDP"`
  */
 object DngDepth {
     const val FOOTER_SIZE = 20
     private const val VERSION = 1
+    private const val VERSION_MM = 2
     private const val MAGIC = 0x50444252 // "RBDP" in little-endian
     private const val FLAG_HARDWARE = 1
     private const val FLAG_SUBJECT = 2
+    private const val FLAG_MM = 4
 
     /** Encodes [depth] as `[data bytes][20-byte RBDP footer]`. */
     fun encodeTrailer(depth: DepthMap): ByteArray {
-        val payloadSize = depth.width * depth.height
+        val n = depth.width * depth.height
+        val mm = depth.millimetres
+        val payloadSize = if (mm != null) 3 * n else n
         val out = ByteArray(payloadSize + FOOTER_SIZE)
-        System.arraycopy(depth.data, 0, out, 0, payloadSize)
-        val flags = (if (depth.hardware) FLAG_HARDWARE else 0) or (if (depth.subjectDetected) FLAG_SUBJECT else 0)
+        System.arraycopy(depth.data, 0, out, 0, n)
+        if (mm != null) ByteBuffer.wrap(out, n, 2 * n).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().put(mm)
+        val flags = (if (depth.hardware) FLAG_HARDWARE else 0) or (if (depth.subjectDetected) FLAG_SUBJECT else 0) or
+            (if (mm != null) FLAG_MM else 0)
         val focusU16 = (depth.focusDepth.coerceIn(0f, 1f) * 65535f).roundToInt().coerceIn(0, 65535)
         ByteBuffer.wrap(out, payloadSize, FOOTER_SIZE).order(ByteOrder.LITTLE_ENDIAN)
             .putInt(MAGIC)
-            .put(VERSION.toByte())
+            .put((if (mm != null) VERSION_MM else VERSION).toByte())
             .put(flags.toByte())
             .putShort(depth.width.toShort())
             .putShort(depth.height.toShort())
@@ -109,8 +135,11 @@ object DngDepth {
         val w = b.getShort(6).toInt() and 0xffff
         val h = b.getShort(8).toInt() and 0xffff
         val focusU16 = b.getShort(10).toInt() and 0xffff
-        val payloadSize = w * h
-        val data = read(payloadOffset, payloadSize)?.takeIf { it.size == payloadSize } ?: return null
+        val n = w * h
+        val withMm = (flags and FLAG_MM) != 0
+        val payload = read(payloadOffset, if (withMm) 3 * n else n)?.takeIf { it.size == if (withMm) 3 * n else n } ?: return null
+        val data = payload.copyOfRange(0, n)
+        val mm = if (withMm) ShortArray(n).also { ByteBuffer.wrap(payload, n, 2 * n).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer().get(it) } else null
         return DepthMap(
             width = w,
             height = h,
@@ -118,6 +147,7 @@ object DngDepth {
             hardware = (flags and FLAG_HARDWARE) != 0,
             subjectDetected = (flags and FLAG_SUBJECT) != 0,
             focusDepth = focusU16 / 65535f,
+            millimetres = mm,
         )
     }
 
@@ -143,12 +173,14 @@ object DngDepth {
         val footer = read(size - FOOTER_SIZE, FOOTER_SIZE)?.takeIf { it.size == FOOTER_SIZE } ?: return null
         val b = ByteBuffer.wrap(footer).order(ByteOrder.LITTLE_ENDIAN)
         if (b.getInt(0) != MAGIC || b.getInt(16) != MAGIC) return null
-        if ((b.get(4).toInt() and 0xff) != VERSION) return null
+        val version = b.get(4).toInt() and 0xff
+        if (version != VERSION && version != VERSION_MM) return null
+        val withMm = version == VERSION_MM && (b.get(5).toInt() and FLAG_MM) != 0
         val w = b.getShort(6).toInt() and 0xffff
         val h = b.getShort(8).toInt() and 0xffff
         val payloadSize = b.getInt(12).toLong() and 0xffffffffL
         if (w <= 0 || h <= 0 || w > 4096 || h > 4096) return null
-        if (payloadSize != w.toLong() * h.toLong()) return null
+        if (payloadSize != w.toLong() * h.toLong() * (if (withMm) 3 else 1)) return null
         val total = payloadSize + FOOTER_SIZE
         if (total >= size) return null
         return size - total

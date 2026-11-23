@@ -278,6 +278,8 @@ export class ProStore {
     const focus = this.session.pickDepth(x, y, this.frameWidth);
     if (focus == null) return;
     this.commit({ ...this._state.params, depthFocus: focus }, true);
+    const mm = this.session.pickedMillimetres;
+    if (mm) this.set({ message: mm >= 65535 ? 'Focus: far away' : `Focus: ${(mm / 1000).toFixed(mm < 10000 ? 2 : 1)} m away` });
   };
 
   /** Auto white balance for an area of the photo, setting temperature and tint. */

@@ -575,7 +575,11 @@ function DepthBlurSliders({
                 onChange={(v) => onChange({ ...params, depthFalloff: v })}
               />
               <Note>
-                {depthSource === 'ai' ? 'Depth estimated from the photo (Depth Anything V2)' : 'Camera depth map from the DNG'}
+                {depthSource === 'ai'
+                  ? 'Depth estimated from the photo (Depth Anything V2)'
+                  : depthMap.millimetres
+                    ? 'Camera depth map from the DNG, with distances: Pick focus depth shows them'
+                    : 'Camera depth map from the DNG'}
               </Note>
             </>
           ) : (

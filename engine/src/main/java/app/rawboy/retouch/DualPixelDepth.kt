@@ -53,7 +53,20 @@ object DualPixelDepth {
         format: Int,
         sensorAspect: Float,
         exifOrientation: Int,
-    ): DepthMap? {
+    ): DepthMap? = measure(bytes, width, height, rowStride, format)?.let { toMap(it, sensorAspect, exifOrientation) }
+
+    /**
+     * What a dual-pixel frame measures, on a grid in sensor orientation ([width]×[height]: half the frame's columns
+     * and rows, e.g. 1020×384 for 4080×768), in half-pixel columns of sideways shift (positive = behind focus):
+     * [disparity] and its [confidence] per cell as matched, and [smooth], filled in and snapped to the frame's edges.
+     */
+    class Measurement(val width: Int, val height: Int, val disparity: FloatArray, val confidence: FloatArray, val smooth: FloatArray) {
+        /** [smooth] at sensor position ([u], [v]) in 0..1. */
+        fun smoothAt(u: Float, v: Float): Float = bilinear(smooth, width, height, (u * width - 0.5f).coerceIn(0f, width - 1f), (v * height - 0.5f).coerceIn(0f, height - 1f))
+    }
+
+    /** Matches the frame's halves ([compute] without the map); null if it can't be read. */
+    fun measure(bytes: ByteArray, width: Int, height: Int, rowStride: Int, format: Int): Measurement? {
         if (width < 64 || height < 32) return null
         val img = unpack(bytes, width, height, rowStride, format) ?: return null
         // Black: the stream doesn't say; the darkest samples sit at it (never above the usual 64 of 10-bit sensors).
@@ -105,7 +118,14 @@ object DualPixelDepth {
             ln(left[y * hw + min(hw - 1, 2 * x)] + left[y * hw + min(hw - 1, 2 * x + 1)] + 1f)
         }
         val snapped = guidedFilter(guide, filled, gw, hh, rx = 6, ry = 3, eps = 1e-3f)
+        return Measurement(gw, hh, disp, conf, snapped)
+    }
 
+    /** The normalised map of a [Measurement]: 0.5 = the focus plane, the spread of the shifts to 0 / 1. */
+    fun toMap(m: Measurement, sensorAspect: Float, exifOrientation: Int): DepthMap {
+        val gw = m.width
+        val hh = m.height
+        val snapped = m.smooth
         val spread = max(MIN_RANGE, percentile(FloatArray(snapped.size) { abs(snapped[it]) }, 0.98f))
         // Sensor-orientation output grid with the raw's aspect.
         val (ow, oh) = if (sensorAspect >= 1f) OUT_MAX to max(1, (OUT_MAX / sensorAspect).roundToInt())
@@ -362,7 +382,7 @@ object DualPixelDepth {
     }
 
     /** The [q] quantile of [a] (a sorted copy of up to 64k samples). */
-    internal fun percentile(a: FloatArray, q: Float): Float {
+    fun percentile(a: FloatArray, q: Float): Float {
         if (a.isEmpty()) return 0f
         val stride = max(1, a.size / 65536)
         val sample = FloatArray((a.size + stride - 1) / stride) { a[it * stride] }

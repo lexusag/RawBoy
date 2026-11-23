@@ -119,4 +119,23 @@ class DngDepthTest {
         assertEquals(0.5f, depth.sampleUv(0.5f, 0.5f), 1e-4f)
         assertFalse(depth.hardware)
     }
+
+    @Test
+    fun millimetresWriteVersion2AndReadBack() {
+        val mm = ShortArray(6) { i -> (500 + 1000 * i).toShort() }.also { it[5] = 65535.toShort() }
+        val depth = DepthMap(3, 2, ByteArray(6) { it.toByte() }, hardware = true, subjectDetected = false, focusDepth = 0.5f, millimetres = mm)
+        val file = ByteArray(64) { 7 } + DngDepth.encodeTrailer(depth)
+        val footer = file.copyOfRange(file.size - DngDepth.FOOTER_SIZE, file.size)
+        assertEquals(2, footer[4].toInt())
+        val read = DngDepth.read(file.size.toLong()) { offset, length -> file.copyOfRange(offset.toInt(), offset.toInt() + length) }
+        assertNotNull(read)
+        assertArrayEquals(depth.data, read!!.data)
+        assertArrayEquals(mm, read.millimetres)
+        assertEquals(3500, read.millimetresAt(0, 1))
+        assertEquals(65535, read.millimetresAt(2, 1))
+        assertEquals(64L, DngDepth.trailerOffset(file.size.toLong()) { offset, length -> file.copyOfRange(offset.toInt(), offset.toInt() + length) })
+        // Without millimetres the trailer stays version 1 (what older readers accept).
+        val plain = DngDepth.encodeTrailer(DepthMap(3, 2, ByteArray(6)))
+        assertEquals(1, plain[plain.size - DngDepth.FOOTER_SIZE + 4].toInt())
+    }
 }

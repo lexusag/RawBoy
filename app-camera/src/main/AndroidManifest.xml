@@ -65,6 +65,14 @@
              No intent filter: one for STILL_IMAGE_CAMERA_SECURE listed each camera twice in the lock screen
              camera chooser. A default the system remembered for the alias no longer matches, so the chooser
              asks once more and the user picks CameraActivity. -->
+        <!-- AR Optional: only Settings › Calibrate dual-pixel distances uses ARCore (Google Play Services for AR). -->
+        <meta-data android:name="com.google.ar.core" android:value="optional" />
+
+        <activity
+            android:name=".depth.DepthCalibrationActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+
         <activity-alias
             android:name=".LockScreenCameraActivity"
             android:targetActivity=".CameraActivity"
