@@ -1,3 +1,7 @@
+**Trackpad scrolling no longer sticks on sliders (RawBoy Desktop and web, 2026-11-23)**
+
+- Scrolling a panel with a trackpad stopped whenever the pointer crossed a slider (or the Film stock list), because the wheel moved the slider instead. Now only a notched mouse wheel moves a slider or steps stocks; a trackpad (or Magic Mouse) scrolls the panel, and **Option + scroll** moves the slider on purpose. Desktop tells them by `hasPreciseScrollingDeltas` (`SliderWheel`, `StepWheel`); the web by `isTrackpadWheel` (a notched wheel's `wheelDeltaY` is a multiple of 120). Zooming the photo with the trackpad is unchanged. Android and iOS have no wheel. The Swift part is compiled and tested only by CI.
+
 **Extend canvas: gradual fill at the edge, now on Android, iOS and Desktop too (2026-11-23)**
 
 - The fill no longer starts as a hard seam of blur: next to the photo's edge it is the picture's edge mirrored and stretched outwards (a mirror that slows with distance, only the first 10% of the long side is read: smeared, not repeated) at full resolution (same detail and grain), fading to the blurred fill over 8% of the long side (`FILL_RAMP`, shaders/develop.glsl `fillColour`; `LensTransform.sourceBounds` reads that much more source around the picture for tiles and export).

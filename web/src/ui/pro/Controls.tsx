@@ -19,6 +19,7 @@ import {
   formatPlain,
   stepWheel,
   type WheelStepState,
+  isTrackpadWheel,
 } from '../common/ParamSlider';
 import { useTabScroll } from '../common/useTabScroll';
 import { CurvesPanel } from './CurvesPanel';
@@ -107,6 +108,7 @@ export function ControlsPanel({
     };
 
     const onWheel = (e: WheelEvent) => {
+      if (isTrackpadWheel(e) && !e.altKey) return;
       const canScrollBody =
         body != null &&
         ((e.deltaY < 0 && body.scrollTop > 0) ||

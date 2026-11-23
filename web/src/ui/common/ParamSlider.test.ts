@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { INITIAL_WHEEL_STATE, endSliderDrag, moveSliderDrag, startSliderDrag, stepWheel } from './ParamSlider';
+import { INITIAL_WHEEL_STATE, endSliderDrag, moveSliderDrag, startSliderDrag, isTrackpadWheel, stepWheel } from './ParamSlider';
 
 describe('ParamSlider pointer gestures', () => {
   it('drags horizontally with a stylus (pen), including fine moves under touch slop', () => {
@@ -141,3 +141,14 @@ describe('stepWheel discrete list stepping', () => {
   });
 });
 
+
+describe('isTrackpadWheel', () => {
+  it('tells a notched wheel from a trackpad by wheelDeltaY', () => {
+    expect(isTrackpadWheel({ deltaMode: 0, wheelDeltaY: -120 })).toBe(false);
+    expect(isTrackpadWheel({ deltaMode: 0, wheelDeltaY: 240 })).toBe(false);
+    expect(isTrackpadWheel({ deltaMode: 0, wheelDeltaY: -9 })).toBe(true);
+    expect(isTrackpadWheel({ deltaMode: 0, wheelDeltaY: 0, wheelDeltaX: 15 })).toBe(true);
+    expect(isTrackpadWheel({ deltaMode: 1, wheelDeltaY: -3 })).toBe(false);
+    expect(isTrackpadWheel({ deltaMode: 0 })).toBe(false);
+  });
+});
