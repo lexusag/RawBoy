@@ -10,6 +10,7 @@ void main() {
     vec3 base = texture(uImage, uvG).rgb;
     vec3 x = base;
     if (uDenoise > 0.0 || uColorDenoise > 0.0) x = denoise(uvG, srcG, x, colorNoiseScale(sG));
+    if (uFillOutside > 0.5) x = mix(fillColour(srcG), x, frameMask(srcG));
     if (perPlane || uCaShift != vec2(0.0)) {
         // Lateral chromatic aberration: shift R and B to their own warped positions (the profile's per-plane warp),
         // then by the manual Red/Cyan and Blue/Yellow scales.

@@ -9,7 +9,7 @@ import { Mat3 } from '../color/Mat3';
 import { PrimariesTrack } from '../color/PrimariesTrack';
 import { Primaries } from '../color/Primaries';
 import { WhiteBalance } from '../color/WhiteBalance';
-import { CROP_ASPECTS, cropAspectLabel, cropAspectRatio, cropHandleAt, cropWithAspect, dragCrop, FULL_CROP, flipped, rotateCrop, rotatePerspective, withCrop } from '../develop/CropMath';
+import { CROP_ASPECTS, cropAspectLabel, cropAspectRatio, cropFromView, cropHandleAt, cropToView, cropWithAspect, dragCrop, extendsFrame, FULL_CROP, MAX_EXTEND, flipped, rotateCrop, rotatePerspective, withCrop } from '../develop/CropMath';
 import { developParams, effectiveColorDenoise } from '../develop/DevelopParams';
 import { decodeEdits, encodeEdits } from '../develop/Edits';
 import { BrushRaster, type BrushGuide } from '../develop/BrushRaster';
@@ -345,6 +345,41 @@ describe('lens geometry', () => {
       const s = extreme.source(x, y);
       close(extreme.output(s[0], s[1]), [x, y], 1e-2);
     }
+  });
+});
+
+describe('extended crop', () => {
+  const frame = { left: 0, top: 0, right: 1, bottom: 1 };
+  it('stays inside the frame unless extending, then up to MAX_EXTEND past each edge', () => {
+    expect(dragCrop(frame, 'left', -0.5, 0, null, 1000, 800)).toEqual(frame);
+    const e = dragCrop(frame, 'left', -0.5, 0, null, 1000, 800, true);
+    expect(e.left).toBeCloseTo(-MAX_EXTEND);
+    expect(extendsFrame(e)).toBe(true);
+    const m = dragCrop(frame, 'move', 0.9, -0.9, null, 1000, 800, true);
+    expect(m.left).toBeCloseTo(MAX_EXTEND);
+    expect(m.top).toBeCloseTo(-MAX_EXTEND);
+    expect(m.right - m.left).toBeCloseTo(1);
+  });
+  it('keeps the aspect ratio when a corner is dragged out', () => {
+    const r = dragCrop(frame, 'bottomRight', 0.2, 0.2, 1.5, 1500, 1000, true);
+    expect(((r.right - r.left) * 1500) / ((r.bottom - r.top) * 1000)).toBeCloseTo(1.5, 3);
+    expect(r.right).toBeGreaterThan(1);
+  });
+  it('maps to and from the tool canvas', () => {
+    const c = { left: -0.2, top: 0.1, right: 1.1, bottom: 0.9 };
+    const back = cropFromView(cropToView(c));
+    for (const k of ['left', 'top', 'right', 'bottom'] as const) expect(back[k]).toBeCloseTo(c[k]);
+    expect(cropToView(frame).left).toBeGreaterThan(0);
+  });
+  it('a lens transform of an extended crop is larger than the frame and asks for the fill', () => {
+    const info = LensInfo.none(6000, 4000);
+    const t = new LensTransform(info, withCrop(developParams({}), { left: -0.1, top: 0, right: 1.1, bottom: 1 }));
+    expect(t.outputWidth).toBe(7200);
+    expect(t.cropRect.x).toBe(-600);
+    expect(t.fillOutside).toBe(true);
+    expect(new LensTransform(info, developParams({})).fillOutside).toBe(false);
+    // The output pixel at the new canvas's left edge maps 600 px left of the picture.
+    expect(t.source(0, 2000)[0]).toBeCloseTo(-600);
   });
 });
 

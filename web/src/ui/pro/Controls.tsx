@@ -419,6 +419,9 @@ interface GeometryProps {
   aspect: CropAspect;
   portrait: boolean;
   onAspect: (aspect: CropAspect, portrait: boolean) => void;
+  /** Extend: the crop may reach past the frame; the new canvas is filled from the picture's edges. */
+  extend: boolean;
+  onExtend: (on: boolean) => void;
   onResetCrop: () => void;
   onDone: () => void;
 }
@@ -426,13 +429,13 @@ interface GeometryProps {
 /**
  * Rotate in 90 degree steps, flip, straighten the horizon, correct perspective (both auto-cropped) and crop, optionally to a fixed aspect ratio.
  */
-export function GeometryPanel({ params, onChange, onRotate, onFlip, aspect, portrait, onAspect, onResetCrop, onDone }: GeometryProps) {
+export function GeometryPanel({ params, onChange, onRotate, onFlip, aspect, portrait, onAspect, extend, onExtend, onResetCrop, onDone }: GeometryProps) {
   return (
     <div className="controls geometry">
       <div className="geometry-head">
         <strong>Crop &amp; rotate</strong>
         <span>
-          <button type="button" className="text" onClick={onResetCrop} disabled={isFullCrop(cropOf(params)) && aspect === 'free'}>
+          <button type="button" className="text" onClick={onResetCrop} disabled={isFullCrop(cropOf(params)) && aspect === 'free' && !extend}>
             Reset crop
           </button>
           <button type="button" className="text" onClick={onDone}>
@@ -455,6 +458,11 @@ export function GeometryPanel({ params, onChange, onRotate, onFlip, aspect, port
             {cropAspectLabel(a, portrait)}
           </button>
         ))}
+      </div>
+      <div className="chips">
+        <button type="button" className={extend ? 'active' : ''} aria-pressed={extend} onClick={() => onExtend(!extend)} title="Let the crop reach past the photo's edges; the new canvas is filled from the picture itself">
+          Extend canvas
+        </button>
       </div>
       <ParamSlider
         label="Straighten"

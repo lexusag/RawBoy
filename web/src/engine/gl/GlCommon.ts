@@ -359,7 +359,8 @@ export class DevelopProgram {
     this.f1('uFisheyeT', l.fisheyeT);
     this.f1('uFisheyeFe', l.fisheyeFe);
     this.f2('uFisheyeCenter', l.fisheyeOffsetX, l.fisheyeOffsetY);
-    this.f1('uClipFrame', l.clipFrame ? 1 : 0);
+    this.f1('uClipFrame', l.clipFrame && !l.fillOutside ? 1 : 0);
+    this.f1('uFillOutside', l.fillOutside ? 1 : 0);
     const warp = l.warp;
     this.f1('uWarpOn', warp ? 1 : 0);
     this.f1('uWarpPlanes', l.warpPlanes);

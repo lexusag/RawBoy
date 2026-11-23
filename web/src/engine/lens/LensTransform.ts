@@ -1,5 +1,5 @@
 import { Mat3, type M3 } from '../color/Mat3';
-import { cropOf, isFullCrop } from '../develop/CropMath';
+import { cropOf, isFullCrop, MAX_EXTEND } from '../develop/CropMath';
 import type { DevelopParams } from '../develop/DevelopParams';
 import { bottom, right, type PixelRect } from '../gl/Zoom';
 import type { LensInfo, RadialVignette, Warp } from './LensInfo';
@@ -112,6 +112,8 @@ export class LensTransform {
   readonly fisheyeOffsetY: number;
   /** True when zoomed out past the auto crop, so pixels outside [0, width] x [0, height] render black. */
   readonly clipFrame: boolean;
+  /** True when the crop reaches past the frame: pixels outside the picture are filled from its edge, not black. */
+  readonly fillOutside: boolean;
   readonly warp: Warp | null;
   readonly vignette: RadialVignette | null;
   /** The decode applied the shading gain maps; with the profile off, take the luminance part back out. */
@@ -172,7 +174,8 @@ export class LensTransform {
     this.fisheyeOffsetX = (Math.min(50, Math.max(-50, offsetX)) / 100) * this.width;
     this.fisheyeOffsetY = (Math.min(50, Math.max(-50, offsetY)) / 100) * this.height;
     const cropScale = 2 ** (Math.min(100, Math.max(-100, params.lensCrop)) / 150);
-    this.clipFrame = params.lensCrop < 0;
+    this.fillOutside = this.cropRect.x < 0 || this.cropRect.y < 0 || this.cropRect.x + this.cropRect.width > this.frameWidth || this.cropRect.y + this.cropRect.height > this.frameHeight;
+    this.clipFrame = params.lensCrop < 0 || this.fillOutside;
     this.caScaleRed = 1 - (params.caRed / 100) * CA_MAX;
     this.caScaleBlue = 1 - (params.caBlue / 100) * CA_MAX;
     this.warp = useProfile ? info.warp : null;
@@ -379,10 +382,12 @@ export class LensTransform {
   private cropPixels(params: DevelopParams): PixelRect {
     const c = cropOf(params);
     if (isFullCrop(c)) return { x: 0, y: 0, width: this.frameWidth, height: this.frameHeight };
+    // A crop may reach MAX_EXTEND of the frame past each edge: that canvas is filled (see uFillOutside).
     const edges = (a: number, b: number, size: number): [number, number] => {
       const minSize = Math.min(16, size);
-      const lo = Math.min(size - minSize, Math.max(0, Math.round(Math.min(1, Math.max(0, a)) * size)));
-      const hi = Math.min(size, Math.max(lo + minSize, Math.round(Math.min(1, Math.max(0, b)) * size)));
+      const room = Math.round(MAX_EXTEND * size);
+      const lo = Math.min(size - minSize, Math.max(-room, Math.round(a * size)));
+      const hi = Math.min(size + room, Math.max(lo + minSize, Math.round(b * size)));
       return [lo, hi];
     };
     const [x0, x1] = edges(c.left, c.right, this.frameWidth);
