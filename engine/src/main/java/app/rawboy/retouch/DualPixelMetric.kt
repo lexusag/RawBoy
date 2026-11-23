@@ -77,7 +77,8 @@ object DualPixelMetric {
                 disp[y * ai.width + x] = m.disparity[g]
             }
         }
-        val anchor = focusAnchor(conf, disp, r) ?: return null
+        val person = if (ai.subjectDetected) ai.focusDepth else null
+        val anchor = focusAnchor(conf, disp, r, person, calibration.offset) ?: return null
         val (dFocus, rFocus) = anchor
         val focused = DepthMap(ai.width, ai.height, ai.data, hardware = true, subjectDetected = ai.subjectDetected, focusDepth = 1f - rFocus)
         if (focusDiopters <= 0f) return focused
@@ -130,18 +131,45 @@ object DualPixelMetric {
     private const val MAX_ALPHA = 50f
 
     /**
-     * Where the camera focused, as (dual-pixel shift, AI value) there: the sharpest cells (at least half the strongest
-     * confidence; it is highest on in-focus texture, however small a part of the frame that is), medians of both.
-     * Null without confident cells.
+     * Where the camera focused, as (dual-pixel shift, AI value) there.
+     *
+     * - A person in [personFocus] (the AI estimate found one; its value of them): the person. The phone's autofocus
+     *   goes for faces, and a backlit face is dark and smooth, so the dual pixel matches it less confidently than a
+     *   textured room behind (1.20.9: a selfie focused on the shelves and blurred the face).
+     * - Otherwise the confident cells whose shift is the lens's in-focus shift [inFocusShift] (within [IN_FOCUS]):
+     *   confidence alone also measures texture, not only focus. Only without any such cell the strongest ones.
+     *
+     * The shift there is the median over confident cells at that AI value. Null without confident cells.
      */
-    internal fun focusAnchor(conf: FloatArray, disp: FloatArray, r: FloatArray): Pair<Float, Float>? {
-        val top = SHARP * strongest(conf)
+    internal fun focusAnchor(conf: FloatArray, disp: FloatArray, r: FloatArray, personFocus: Float?, inFocusShift: Float): Pair<Float, Float>? {
+        val strongest = strongest(conf)
+        if (strongest <= 0f) return null
+        val usable = USABLE * strongest
+        val rFocus = if (personFocus != null) {
+            1f - personFocus
+        } else {
+            val rs = ArrayList<Float>()
+            for (i in conf.indices) if (conf[i] >= usable && abs(disp[i] - inFocusShift) <= IN_FOCUS) rs += r[i]
+            if (rs.size >= MIN_CELLS) {
+                DualPixelDepth.percentile(rs.toFloatArray(), 0.5f)
+            } else {
+                for (i in conf.indices) if (conf[i] >= SHARP * strongest) rs += r[i]
+                if (rs.size < MIN_CELLS) return null
+                DualPixelDepth.percentile(rs.toFloatArray(), 0.5f)
+            }
+        }
         val ds = ArrayList<Float>()
-        val rs = ArrayList<Float>()
-        for (i in conf.indices) if (conf[i] >= top && conf[i] > 0f) { ds += disp[i]; rs += r[i] }
-        if (ds.size < 20) return null
-        return DualPixelDepth.percentile(ds.toFloatArray(), 0.5f) to DualPixelDepth.percentile(rs.toFloatArray(), 0.5f)
+        for (i in conf.indices) if (conf[i] >= usable && abs(r[i] - rFocus) <= AT_FOCUS) ds += disp[i]
+        val dFocus = if (ds.size >= MIN_CELLS) DualPixelDepth.percentile(ds.toFloatArray(), 0.5f) else inFocusShift
+        return dFocus to rFocus
     }
+
+    /** A shift this close to the in-focus shift is in focus (half-pixel columns; ~0.5 D of defocus on the Pixel 9 Pro's W). */
+    private const val IN_FOCUS = 0.07f
+
+    /** Cells within this much of the focus's AI value give its shift; and the fewest cells to trust a median. */
+    private const val AT_FOCUS = 0.04f
+    private const val MIN_CELLS = 20
 
     /** y = a·x through the origin, Huber-weighted (IRLS, cut at 2 robust sigmas). */
     internal fun robustSlope(x: FloatArray, y: FloatArray): Float {
