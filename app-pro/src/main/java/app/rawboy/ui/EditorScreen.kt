@@ -195,9 +195,13 @@ fun EditorScreen(vm: EditorViewModel) {
     // Crop shape lock (UI only; the crop itself is in the params). Portrait null = follow the frame.
     var cropAspect by rememberSaveable { mutableStateOf(CropAspect.FREE) }
     var cropPortrait by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    // Extend: the tool shows the frame with room around it and the crop may reach into it (the canvas is filled).
+    var cropExtend by rememberSaveable { mutableStateOf(false) }
+    val extendOn = cropExtend || state.params.crop.extendsFrame
     LaunchedEffect(state.fileName) {
         cropAspect = CropAspect.FREE
         cropPortrait = null
+        cropExtend = false
         selectedLayer = null
         selectedLeakState = null
         selectedFilmLeakState = null
@@ -273,7 +277,7 @@ fun EditorScreen(vm: EditorViewModel) {
                         state.params
                     }
                     // The crop tool shows the whole frame with the crop drawn over it.
-                    val shown = if (geometryMode) edited.withoutCrop() else edited
+                    val shown = if (geometryMode) edited.withCrop(if (extendOn) CropMath.EXTENDED_VIEW else CropMath.FULL) else edited
                     val maskView = if (masksMode && showMask && !showOriginal) selectedId else null
                     val shaderParams = remember(shown, state.defaults, lutData, filmData, lensInfo, base, bloomSources, skinMask, maskView, preview, bokehSource, flareSource) {
                         ShaderParams.from(
@@ -422,8 +426,9 @@ fun EditorScreen(vm: EditorViewModel) {
                     }
                     if (geometryMode && zoomCenter == null && preview != null) {
                         CropOverlay(
-                            shaderParams.lens.outputWidth, shaderParams.lens.outputHeight, state.params.crop,
-                            cropRatio, framePx, vm::setCrop, Modifier.matchParentSize(),
+                            shaderParams.lens.outputWidth, shaderParams.lens.outputHeight,
+                            if (extendOn) CropMath.toView(state.params.crop) else state.params.crop,
+                            cropRatio, framePx, { vm.setCrop(if (extendOn) CropMath.fromView(it) else it) }, Modifier.matchParentSize(),
                         )
                     }
                     if (autoWb && !geometryMode && !shapesMode && zoomCenter == null && preview != null && !showOriginal) {
@@ -505,13 +510,19 @@ fun EditorScreen(vm: EditorViewModel) {
                     onFlip = vm::flip,
                     aspect = cropAspect,
                     portrait = portrait,
+                    extend = extendOn,
+                    onExtend = { on ->
+                        cropExtend = on
+                        if (!on) vm.setCrop(CropMath.insideFrame(state.params.crop))
+                    },
                     onAspect = { aspect, toPortrait ->
                         cropAspect = aspect
                         cropPortrait = toPortrait
                         val ratio = aspect.ratio(frame.frameWidth, frame.frameHeight, toPortrait)
-                        vm.setCrop(CropMath.withAspect(state.params.crop, ratio, frame.frameWidth, frame.frameHeight))
+                        vm.setCrop(CropMath.withAspect(state.params.crop, ratio, frame.frameWidth, frame.frameHeight, extendOn))
                     },
                     onResetCrop = {
+                        cropExtend = false
                         cropAspect = CropAspect.FREE
                         cropPortrait = null
                         vm.setCrop(CropMath.FULL)

@@ -191,6 +191,7 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
     private val uFisheyeFe = GLES30.glGetUniformLocation(id, "uFisheyeFe")
     private val uFisheyeCenter = GLES30.glGetUniformLocation(id, "uFisheyeCenter")
     private val uClipFrame = GLES30.glGetUniformLocation(id, "uClipFrame")
+    private val uFillOutside = GLES30.glGetUniformLocation(id, "uFillOutside")
     private val uMonoFx = GLES30.glGetUniformLocation(id, "uMonoFx")
     private val uWarpOn = GLES30.glGetUniformLocation(id, "uWarpOn")
     private val uWarpPlanes = GLES30.glGetUniformLocation(id, "uWarpPlanes")
@@ -529,7 +530,8 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
         GLES30.glUniform1f(uFisheyeT, l.fisheyeT.toFloat())
         GLES30.glUniform1f(uFisheyeFe, l.fisheyeFe.toFloat())
         GLES30.glUniform2f(uFisheyeCenter, l.fisheyeOffsetX.toFloat(), l.fisheyeOffsetY.toFloat())
-        GLES30.glUniform1f(uClipFrame, if (l.clipFrame) 1f else 0f)
+        GLES30.glUniform1f(uClipFrame, if (l.clipFrame && !l.fillOutside) 1f else 0f)
+        GLES30.glUniform1f(uFillOutside, if (l.fillOutside) 1f else 0f)
         val warp = l.warp
         GLES30.glUniform1f(uWarpOn, if (warp != null) 1f else 0f)
         GLES30.glUniform1f(uWarpPlanes, l.warpPlanes.toFloat())

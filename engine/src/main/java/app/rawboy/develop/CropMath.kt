@@ -13,7 +13,10 @@ import kotlin.math.sqrt
 data class CropRect(val left: Float, val top: Float, val right: Float, val bottom: Float) {
     val width: Float get() = right - left
     val height: Float get() = bottom - top
-    val isFull: Boolean get() = left <= 0f && top <= 0f && right >= 1f && bottom >= 1f
+    val isFull: Boolean get() = left == 0f && top == 0f && right == 1f && bottom == 1f
+
+    /** True when the crop reaches past the frame, so part of the output is canvas to fill. */
+    val extendsFrame: Boolean get() = left < 0f || top < 0f || right > 1f || bottom > 1f
 }
 
 val DevelopParams.crop: CropRect get() = CropRect(cropLeft, cropTop, cropRight, cropBottom)
@@ -63,6 +66,30 @@ enum class CropAspect(
 /** Pure crop geometry shared by the Pro UI (and mirrored in web's CropMath.ts). */
 object CropMath {
     val FULL = CropRect(0f, 0f, 1f, 1f)
+
+    /** How far a crop may reach past each edge of the frame (fraction of that side); the canvas there is filled. */
+    const val MAX_EXTEND = 0.3f
+    private const val VIEW_SPAN = 1f + 2f * MAX_EXTEND
+
+    /**
+     * The canvas the crop tool shows while extending: the frame plus [MAX_EXTEND] past each edge, as a crop of the
+     * frame. [toView] / [fromView] map a crop to and from fractions of that canvas, so the tool's frame, grid and
+     * drags work as on the plain frame.
+     */
+    val EXTENDED_VIEW = CropRect(-MAX_EXTEND, -MAX_EXTEND, 1f + MAX_EXTEND, 1f + MAX_EXTEND)
+
+    fun toView(r: CropRect) = CropRect(
+        (r.left + MAX_EXTEND) / VIEW_SPAN, (r.top + MAX_EXTEND) / VIEW_SPAN,
+        (r.right + MAX_EXTEND) / VIEW_SPAN, (r.bottom + MAX_EXTEND) / VIEW_SPAN,
+    )
+
+    fun fromView(v: CropRect) = CropRect(
+        v.left * VIEW_SPAN - MAX_EXTEND, v.top * VIEW_SPAN - MAX_EXTEND,
+        v.right * VIEW_SPAN - MAX_EXTEND, v.bottom * VIEW_SPAN - MAX_EXTEND,
+    )
+
+    /** [r] pulled back inside the frame (turning Extend off). */
+    fun insideFrame(r: CropRect) = CropRect(r.left.coerceIn(0f, 1f), r.top.coerceIn(0f, 1f), r.right.coerceIn(0f, 1f), r.bottom.coerceIn(0f, 1f))
 
     /** Smallest crop side in frame pixels. */
     const val MIN_PIXELS = 64
@@ -116,19 +143,20 @@ object CropMath {
      * [r] reshaped to [ratio] (width / height in pixels) with about the same area, around the same
      * centre, inside the frame. Null ratio = free: [r] unchanged.
      */
-    fun withAspect(r: CropRect, ratio: Double?, frameWidth: Int, frameHeight: Int): CropRect {
+    fun withAspect(r: CropRect, ratio: Double?, frameWidth: Int, frameHeight: Int, extend: Boolean = false): CropRect {
         if (ratio == null) return r
         val fw = frameWidth.toDouble()
         val fh = frameHeight.toDouble()
         val area = r.width * fw * r.height * fh
         var w = sqrt(area * ratio)
         var h = w / ratio
-        val fit = min(1.0, min(fw / w, fh / h))
+        val e = if (extend) MAX_EXTEND.toDouble() else 0.0
+        val fit = min(1.0, min(fw * (1 + 2 * e) / w, fh * (1 + 2 * e) / h))
         w *= fit
         h *= fit
-        val cx = ((r.left + r.right) / 2 * fw).coerceIn(w / 2, fw - w / 2)
-        val cy = ((r.top + r.bottom) / 2 * fh).coerceIn(h / 2, fh - h / 2)
-        return fromPixels(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2, fw, fh)
+        val cx = ((r.left + r.right) / 2 * fw).coerceIn(w / 2 - e * fw, fw * (1 + e) - w / 2)
+        val cy = ((r.top + r.bottom) / 2 * fh).coerceIn(h / 2 - e * fh, fh * (1 + e) - h / 2)
+        return fromPixels(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2, fw, fh, extend)
     }
 
     /**
@@ -137,10 +165,16 @@ object CropMath {
      */
     fun drag(
         start: CropRect, handle: Handle, dx: Float, dy: Float,
-        ratio: Double?, frameWidth: Int, frameHeight: Int,
+        ratio: Double?, frameWidth: Int, frameHeight: Int, extend: Boolean = false,
     ): CropRect {
         val fw = frameWidth.toDouble()
         val fh = frameHeight.toDouble()
+        // Bounds of the canvas the crop may use: the frame, plus MAX_EXTEND past each edge when extending.
+        val ex = if (extend) MAX_EXTEND.toDouble() else 0.0
+        val x0 = -ex * fw
+        val x1 = (1 + ex) * fw
+        val y0 = -ex * fh
+        val y1 = (1 + ex) * fh
         val minW = min(MIN_PIXELS.toDouble(), fw)
         val minH = min(MIN_PIXELS.toDouble(), fh)
         val l = start.left * fw
@@ -151,9 +185,9 @@ object CropMath {
         val my = dy * fh
 
         if (handle == Handle.MOVE) {
-            val ox = mx.coerceIn(-l, fw - r)
-            val oy = my.coerceIn(-t, fh - b)
-            return fromPixels(l + ox, t + oy, r + ox, b + oy, fw, fh)
+            val ox = mx.coerceIn(x0 - l, x1 - r)
+            val oy = my.coerceIn(y0 - t, y1 - b)
+            return fromPixels(l + ox, t + oy, r + ox, b + oy, fw, fh, extend)
         }
 
         val movesLeft = handle == Handle.LEFT || handle == Handle.TOP_LEFT || handle == Handle.BOTTOM_LEFT
@@ -162,11 +196,11 @@ object CropMath {
         val movesBottom = handle == Handle.BOTTOM || handle == Handle.BOTTOM_LEFT || handle == Handle.BOTTOM_RIGHT
 
         if (ratio == null) {
-            val nl = if (movesLeft) (l + mx).coerceIn(0.0, r - minW) else l
-            val nr = if (movesRight) (r + mx).coerceIn(l + minW, fw) else r
-            val nt = if (movesTop) (t + my).coerceIn(0.0, b - minH) else t
-            val nb = if (movesBottom) (b + my).coerceIn(t + minH, fh) else b
-            return fromPixels(nl, nt, nr, nb, fw, fh)
+            val nl = if (movesLeft) (l + mx).coerceIn(x0, r - minW) else l
+            val nr = if (movesRight) (r + mx).coerceIn(l + minW, x1) else r
+            val nt = if (movesTop) (t + my).coerceIn(y0, b - minH) else t
+            val nb = if (movesBottom) (b + my).coerceIn(t + minH, y1) else b
+            return fromPixels(nl, nt, nr, nb, fw, fh, extend)
         }
 
         val horizontal = movesLeft || movesRight
@@ -179,14 +213,14 @@ object CropMath {
         var w = max(wantW, wantH * ratio)
         // Room around the anchor, per axis (both halves when that axis stays centred).
         val roomW = when {
-            movesLeft -> ax
-            movesRight -> fw - ax
-            else -> 2 * min(ax, fw - ax)
+            movesLeft -> ax - x0
+            movesRight -> x1 - ax
+            else -> 2 * min(ax - x0, x1 - ax)
         }
         val roomH = when {
-            movesTop -> ay
-            movesBottom -> fh - ay
-            else -> 2 * min(ay, fh - ay)
+            movesTop -> ay - y0
+            movesBottom -> y1 - ay
+            else -> 2 * min(ay - y0, y1 - ay)
         }
         w = min(w, min(roomW, roomH * ratio))
         w = max(w, max(minW, minH * ratio)).coerceAtMost(min(roomW, roomH * ratio))
@@ -201,7 +235,7 @@ object CropMath {
             movesBottom -> ay
             else -> ay - h / 2
         }
-        return fromPixels(nl, nt, nl + w, nt + h, fw, fh)
+        return fromPixels(nl, nt, nl + w, nt + h, fw, fh, extend)
     }
 
     /**
@@ -229,8 +263,12 @@ object CropMath {
         }
     }
 
-    private fun fromPixels(l: Double, t: Double, r: Double, b: Double, fw: Double, fh: Double) = CropRect(
-        (l / fw).toFloat().coerceIn(0f, 1f), (t / fh).toFloat().coerceIn(0f, 1f),
-        (r / fw).toFloat().coerceIn(0f, 1f), (b / fh).toFloat().coerceIn(0f, 1f),
-    )
+    private fun fromPixels(l: Double, t: Double, r: Double, b: Double, fw: Double, fh: Double, extend: Boolean = false): CropRect {
+        val lo = if (extend) -MAX_EXTEND else 0f
+        val hi = if (extend) 1f + MAX_EXTEND else 1f
+        return CropRect(
+            (l / fw).toFloat().coerceIn(lo, hi), (t / fh).toFloat().coerceIn(lo, hi),
+            (r / fw).toFloat().coerceIn(lo, hi), (b / fh).toFloat().coerceIn(lo, hi),
+        )
+    }
 }

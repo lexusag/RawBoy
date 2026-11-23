@@ -95,6 +95,7 @@ import app.rawboy.develop.CropAspect
 import app.rawboy.develop.CropMath
 import app.rawboy.develop.DevelopParams
 import app.rawboy.develop.crop
+import app.rawboy.develop.withCrop
 import app.rawboy.develop.withoutCrop
 import app.rawboy.gl.ShaderParams
 import app.rawboy.session.SkinState
@@ -153,9 +154,13 @@ fun DetailScreen(
     var cropping by rememberSaveable { mutableStateOf(false) }
     val cropAspect by vm.cropAspect.collectAsStateWithLifecycle() // kept for the session: the next photo opens with it
     var cropPortrait by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    // Extend: the tool shows the frame with room around it and the crop may reach into it (the canvas is filled).
+    var cropExtend by rememberSaveable { mutableStateOf(false) }
+    val extendOn = cropExtend || photo.adjust.crop?.extendsFrame == true
     LaunchedEffect(id) {
         cropping = false
         cropPortrait = null
+        cropExtend = false
     }
     val loaded = ready == id
     val cropFrame = if (loaded) photo.params?.let { session.lensFor(it.withoutCrop()) } else null
@@ -228,7 +233,7 @@ fun DetailScreen(
                                     val f = cropFrame
                                     if (f != null && photo.adjust.crop == null && cropAspect != CropAspect.FREE && cropAspect != CropAspect.ORIGINAL) {
                                         val ratio = cropAspect.ratio(f.frameWidth, f.frameHeight, cropPortraitNow)
-                                        vm.setCrop(id, CropMath.withAspect(CropMath.FULL, ratio, f.frameWidth, f.frameHeight), force = true)
+                                        vm.setCrop(id, CropMath.withAspect(CropMath.FULL, ratio, f.frameWidth, f.frameHeight, extendOn), force = true)
                                     }
                                 },
                                 enabled = loaded && export == null,
@@ -284,7 +289,7 @@ fun DetailScreen(
                         // Until the raw is decoded, the photo's cached preview shows its develop (no 100% view yet).
                         val cachedImage = cached?.takeIf { pagePhoto.id == id && !loaded && it.first == id }?.second
                         val shownParams = (if (showAuto && loaded) analysis.autoBase else photo.params ?: analysis.autoBase)
-                            .let { if (cropping) it.withoutCrop() else it }
+                            .let { if (cropping) it.withCrop(if (extendOn) CropMath.EXTENDED_VIEW else CropMath.FULL) else it }
                         val cachedParams by produceState<ShaderParams?>(null, cachedImage, shownParams) {
                             value = cachedImage?.let { vm.cachedShaderParams(id, shownParams) }
                         }
@@ -337,8 +342,9 @@ fun DetailScreen(
                                 )
                                 if (live && cropping && zoomCenter == null) {
                                     CropOverlay(
-                                        shaderParams.lens.outputWidth, shaderParams.lens.outputHeight, photo.adjust.crop ?: CropMath.FULL,
-                                        cropRatio, framePx, { vm.setCrop(id, it) }, Modifier.matchParentSize(),
+                                        shaderParams.lens.outputWidth, shaderParams.lens.outputHeight,
+                                        (photo.adjust.crop ?: CropMath.FULL).let { if (extendOn) CropMath.toView(it) else it },
+                                        cropRatio, framePx, { vm.setCrop(id, if (extendOn) CropMath.fromView(it) else it) }, Modifier.matchParentSize(),
                                     )
                                 }
                             }
@@ -424,13 +430,18 @@ fun DetailScreen(
         ) { panel ->
             if (cropping) {
                 CropPanel(
-                    photo.adjust, cropAspect, cropPortraitNow, panel,
+                    photo.adjust, cropAspect, cropPortraitNow, extendOn,
+                    onExtend = { on ->
+                        cropExtend = on
+                        if (!on) photo.adjust.crop?.let { vm.setCrop(id, CropMath.insideFrame(it), force = true) }
+                    },
+                    modifier = panel,
                     onAspect = { aspect, toPortrait ->
                         vm.setCropAspect(aspect)
                         cropPortrait = toPortrait
                         cropFrame?.let { f ->
                             val ratio = aspect.ratio(f.frameWidth, f.frameHeight, toPortrait)
-                            vm.setCrop(id, CropMath.withAspect(photo.adjust.crop ?: CropMath.FULL, ratio, f.frameWidth, f.frameHeight), force = true)
+                            vm.setCrop(id, CropMath.withAspect(photo.adjust.crop ?: CropMath.FULL, ratio, f.frameWidth, f.frameHeight, extendOn), force = true)
                         }
                     },
                     onRotate = {
@@ -439,6 +450,7 @@ fun DetailScreen(
                     },
                     onStraighten = { vm.setStraighten(id, it) },
                     onReset = {
+                        cropExtend = false
                         vm.setCropAspect(CropAspect.ORIGINAL)
                         cropPortrait = null
                         vm.resetCrop(id)
@@ -761,6 +773,8 @@ private fun CropPanel(
     adjust: Adjustments,
     aspect: CropAspect,
     portrait: Boolean,
+    extend: Boolean,
+    onExtend: (Boolean) -> Unit,
     modifier: Modifier,
     onAspect: (CropAspect, Boolean) -> Unit,
     onRotate: (Int) -> Unit,
@@ -777,7 +791,7 @@ private fun CropPanel(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Crop & rotate", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-            TextButton(onClick = onReset, enabled = adjust.crop != null || adjust.straighten != 0f || aspect != CropAspect.ORIGINAL) { Text("Reset") }
+            TextButton(onClick = onReset, enabled = adjust.crop != null || adjust.straighten != 0f || aspect != CropAspect.ORIGINAL || extend) { Text("Reset") }
             TextButton(onClick = onDone) { Text("Done") }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(vertical = 4.dp)) {
@@ -793,6 +807,7 @@ private fun CropPanel(
                 FilterChip(selected = a == aspect, onClick = { onAspect(a, portrait) }, label = { Text(a.label(portrait)) })
             }
         }
+        FilterChip(selected = extend, onClick = { onExtend(!extend) }, label = { Text("Extend canvas") }, modifier = Modifier.padding(vertical = 2.dp))
         CompactSlider(
             "Straighten", adjust.straighten, -45f..45f, 0f,
             rowHeight = SLIDER_ROW, labelWidth = 88.dp, valueWidth = 56.dp,

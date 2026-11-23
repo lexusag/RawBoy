@@ -1,6 +1,7 @@
 package app.rawboy.lens
 
 import app.rawboy.color.Mat3
+import app.rawboy.develop.CropMath
 import app.rawboy.develop.DevelopParams
 import app.rawboy.develop.crop
 import app.rawboy.gl.PixelRect
@@ -88,7 +89,9 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
     private val cropScale = 2.0.pow(params.lensCrop.toDouble().coerceIn(-100.0, 100.0) / 150.0)
 
     /** True when zoomed out past the auto crop, so pixels outside [0, width] x [0, height] render black. */
-    val clipFrame: Boolean = params.lensCrop < 0f
+    /** True when the crop reaches past the frame: pixels outside the picture are filled from its edge, not black. */
+    val fillOutside: Boolean = cropRect.x < 0 || cropRect.y < 0 || cropRect.x + cropRect.width > frameWidth || cropRect.y + cropRect.height > frameHeight
+    val clipFrame: Boolean = params.lensCrop < 0f || fillOutside
 
     val warp: LensInfo.Warp? = info.warp.takeIf { useProfile }
     val vignette: LensInfo.RadialVignette? = info.vignette.takeIf { useProfile }
@@ -219,7 +222,9 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
     }
 
     /** Source pixels needed to render [out], plus [margin], clamped to the image. */
-    fun sourceBounds(out: PixelRect, margin: Int): PixelRect {
+    fun sourceBounds(out: PixelRect, margin0: Int): PixelRect {
+        // The fill next to the picture's edge mirrors the full-resolution picture over FILL_RAMP long sides (develop.glsl).
+        val margin = margin0 + if (fillOutside) kotlin.math.ceil(FILL_RAMP * max(width, height)).toInt() else 0
         if (!isGeometric && !hasManualCa && zoom == 1.0 && quarterTurns == 0 && !flipHorizontal && !flipVertical && straightenRadians == 0.0 && perspective == null && scaleFactor == 1.0 && cropRect.x == 0 && cropRect.y == 0) {
             return out.expand(margin, width, height)
         }
@@ -298,9 +303,11 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
         val c = params.crop
         if (c.isFull) return PixelRect(0, 0, frameWidth, frameHeight)
         fun edges(a: Float, b: Float, size: Int): Pair<Int, Int> {
+            // A crop may reach MAX_EXTEND of the frame past each edge: that canvas is filled (see uFillOutside).
             val minSize = min(16, size)
-            val lo = Math.round(a.coerceIn(0f, 1f) * size).coerceIn(0, size - minSize)
-            val hi = Math.round(b.coerceIn(0f, 1f) * size).coerceIn(lo + minSize, size)
+            val room = Math.round(CropMath.MAX_EXTEND * size)
+            val lo = Math.round(a * size).coerceIn(-room, size - minSize)
+            val hi = Math.round(b * size).coerceIn(lo + minSize, size + room)
             return lo to hi
         }
         val (x0, x1) = edges(c.left, c.right, frameWidth)
@@ -363,6 +370,9 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
     companion object {
         /** Plane scale at ±100 on a chromatic aberration slider: 0.2%, ~6 px in the corners of a 24 MP photo. */
         const val CA_MAX = 0.002
+
+        /** How far from the picture's edge the canvas fill goes from the mirrored picture to a blur, in long sides (develop.glsl's FILL_RAMP). */
+        const val FILL_RAMP = 0.08
 
         /**
          * The most the auto crop lets a fisheye straightening stretch the picture along the radius: the stretch at a

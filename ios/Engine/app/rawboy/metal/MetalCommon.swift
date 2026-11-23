@@ -428,7 +428,8 @@ struct DevelopProgram {
         u.float("uFisheyeT", Float(l.fisheyeT))
         u.float("uFisheyeFe", Float(l.fisheyeFe))
         u.vec2("uFisheyeCenter", Float(l.fisheyeOffsetX), Float(l.fisheyeOffsetY))
-        u.float("uClipFrame", l.clipFrame ? 1 : 0)
+        u.float("uClipFrame", l.clipFrame && !l.fillOutside ? 1 : 0)
+        u.float("uFillOutside", l.fillOutside ? 1 : 0)
         let warp = l.warp
         u.float("uWarpOn", warp != nil ? 1 : 0)
         u.float("uWarpPlanes", Float(l.warpPlanes))
