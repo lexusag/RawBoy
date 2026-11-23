@@ -78,7 +78,7 @@ android {
     }
     androidResources {
         // MediaPipe memory-maps the engine's models; the app that packages them must store them uncompressed.
-        noCompress += listOf("tflite", "task")
+        noCompress += listOf("tflite", "task", "onnx")
     }
 }
 
@@ -96,6 +96,8 @@ dependencies {
     implementation(libs.androidx.exifinterface)
     // QR codes in the viewfinder: pure Java, no Google Play services (Apache 2.0, as the notices say).
     implementation(libs.zxing.core)
+    // Settings › Save depth map › AI estimate: runs Depth Anything V2 Small (assets/models, ONNX).
+    implementation(libs.onnxruntime.android)
     debugImplementation(libs.androidx.compose.ui.tooling)
     // JVM unit tests (./gradlew :app-camera:testDebugUnitTest).
     testImplementation(libs.junit)

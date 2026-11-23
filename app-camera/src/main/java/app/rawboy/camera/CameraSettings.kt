@@ -152,10 +152,11 @@ data class CameraSettings(
     val videoStabilizeAfter: Boolean = true,
     /**
      * Experimental: embed an upright depth map in saved DNG files (`"RBDP"` trailer, [app.rawboy.export.DngDepth]) for
-     * portrait post-processing in RawBoy Pro. Uses a hardware depth sensor when available on the active lens, or
-     * on-device software depth estimation otherwise.
+     * portrait post-processing in RawBoy Pro, made the way [depthSource] says.
      */
     val saveDepth: Boolean = false,
+    /** Where [saveDepth]'s map comes from; a source the active lens lacks falls back ([DepthSource.usable]). */
+    val depthSource: DepthSource = DepthSource.AI,
     /**
      * Experimental, with [saveDepth]: when a person or pet is detected, apply natural portrait bokeh blur to the saved
      * JPEG in camera.
@@ -447,6 +448,7 @@ object CameraSettingsStore {
             videoStabilizeAfter = p.getBoolean("videoStabilizeAfter", d.videoStabilizeAfter),
             saveDepth = p.getBoolean("saveDepth", d.saveDepth),
             depthPortrait = p.getBoolean("depthPortrait", d.depthPortrait),
+            depthSource = runCatching { DepthSource.valueOf(p.getString("depthSource", null)!!) }.getOrDefault(d.depthSource),
             videoStabilization = p.getBoolean("videoStabilization", d.videoStabilization),
             flatVideo = p.getBoolean("flatVideo", d.flatVideo),
             videoQuality = runCatching { VideoQuality.valueOf(p.getString("videoQuality", null)!!) }.getOrDefault(d.videoQuality),
@@ -536,6 +538,7 @@ object CameraSettingsStore {
             .putBoolean("videoStabilizeAfter", s.videoStabilizeAfter)
             .putBoolean("saveDepth", s.saveDepth)
             .putBoolean("depthPortrait", s.depthPortrait)
+            .putString("depthSource", s.depthSource.name)
             .putBoolean("videoStabilization", s.videoStabilization)
             .putBoolean("flatVideo", s.flatVideo)
             .putString("videoQuality", s.videoQuality.name)
@@ -638,6 +641,31 @@ enum class BurstMode {
         ON -> AUTO
         AUTO -> OFF
         OFF -> ON
+    }
+}
+
+/**
+ * Where Settings › Save depth map gets its depth. [SENSOR] and [DUAL_PIXEL] need the active lens to offer them
+ * (`CameraController.Info.hasHardwareDepth` / `hasDualPixel`); [AI] works on any lens.
+ */
+enum class DepthSource(val label: String) {
+    /** The camera's own depth output (`ImageFormat.DEPTH16`): a ToF or stereo depth camera. */
+    SENSOR("Depth sensor"),
+
+    /** Depth from the sensor's dual-pixel autofocus data (a raw depth stream), streamed with the still. */
+    DUAL_PIXEL("Dual pixel"),
+
+    /** Estimated from the photo by an on-device model (Depth Anything V2 Small). */
+    AI("AI estimate");
+
+    /** This source if the lens offers it, else the next best it does: sensor, then dual pixel, then AI. */
+    fun usable(sensor: Boolean, dualPixel: Boolean): DepthSource = when {
+        this == SENSOR && sensor -> SENSOR
+        this == DUAL_PIXEL && dualPixel -> DUAL_PIXEL
+        this == AI -> AI
+        sensor -> SENSOR
+        dualPixel -> DUAL_PIXEL
+        else -> AI
     }
 }
 

@@ -23,6 +23,8 @@ import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
 import app.rawboy.auto.AutoAnalysis
+import app.rawboy.camera.capture.DualPixelFrame
+import app.rawboy.camera.depth.AiDepth
 import app.rawboy.camera.debug.DebugProbe
 import app.rawboy.camera.report.TuningData
 import app.rawboy.camera.platform.CameraPlatform
@@ -53,6 +55,7 @@ import app.rawboy.lut.LutData
 import app.rawboy.lut.LutLoader
 import app.rawboy.raw.DngJxlNative
 import app.rawboy.raw.RawImage
+import app.rawboy.retouch.DualPixelDepth
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -116,6 +119,8 @@ internal data class Shot(
     val cameraId: String? = null,
     /** Hardware depth map captured alongside the raw, if available. */
     val hardwareDepth: DepthMap? = null,
+    /** The sensor's dual-pixel frame captured alongside the raw ([app.rawboy.camera.DepthSource.DUAL_PIXEL]), if any. */
+    val dualPixel: DualPixelFrame? = null,
 )
 
 /** A finished shot and the sequence number assigned at its shutter, so lock screen launches hide earlier ones. */
@@ -418,6 +423,29 @@ internal object ShotSaver {
      * Decode stage: raw -> auto analysis -> the shot's develop (auto develop + look), as RawBoy Auto develops a photo.
      * On the decode thread. The returned [Prepared] owns the open image.
      */
+    /**
+     * The shot's depth map for Settings › Save depth map: the camera's own depth frame ([DepthSource.SENSOR]), depth from
+     * the dual-pixel frame ([DepthSource.DUAL_PIXEL]), or the AI estimate from the photo ([DepthSource.AI], and whenever
+     * the chosen stream brought no frame). Focused where the shot was metered (a tap), else where the source puts it
+     * (the middle; the dual-pixel focus plane; the person the AI found). [width]/[height]: the decoded photo, upright.
+     */
+    private fun depthOf(app: Application, shot: Shot, base: app.rawboy.gl.PreviewImage, width: Int, height: Int): DepthMap? {
+        val start = System.nanoTime()
+        val map = shot.hardwareDepth ?: shot.dualPixel?.let { f ->
+            DebugProbe.dumpDualPixel(app, shot.name, f)
+            val sensorAspect = if (f.exifOrientation in 5..8) height.toFloat() / width else width.toFloat() / height
+            DualPixelDepth.compute(f.bytes, f.width, f.height, f.rowStride, f.format, sensorAspect, f.exifOrientation)
+        } ?: AiDepth.estimate(app, base) ?: return null
+        val source = when {
+            shot.hardwareDepth != null -> "sensor"
+            shot.dualPixel != null -> "dual pixel"
+            else -> "AI"
+        }
+        Log.d(TAG, "${shot.name}: depth from $source ${map.width}x${map.height} in ${(System.nanoTime() - start) / 1_000_000} ms")
+        val tap = (shot.meter as? MeterArea.Spot)?.let { map.sampleUv(it.x, it.y) }
+        return if (tap == null) map else DepthMap(map.width, map.height, map.data, map.hardware, map.subjectDetected, tap)
+    }
+
     private suspend fun prepare(app: Application, shot: Shot): Prepared {
         val s = shot.settings
         val started = System.nanoTime()
@@ -465,14 +493,8 @@ internal object ShotSaver {
                 "${params.colorDenoise}, sharpening ${params.sharpening}; key ${a.stats.key}, exposure ${params.exposure}")
             val lut = params.lut?.let { loadLut(app, it) }
             val film = params.film?.let { loadFilm(app, it) }
-            // Only a depth frame the camera itself delivered (CameraController.depthFrame): without one nothing is saved
-            // and no portrait blur is made; the depth is never estimated from the picture.
             val depthMap = if (s.saveDepth) {
-                shot.hardwareDepth?.let { hw ->
-                    // Focus where the shot was metered (a tap), else the middle.
-                    val (fx, fy) = (shot.meter as? MeterArea.Spot)?.let { it.x to it.y } ?: (0.5f to 0.5f)
-                    DepthMap(hw.width, hw.height, hw.data, hardware = true, subjectDetected = true, focusDepth = hw.sampleUv(fx, fy))
-                }?.also { if (s.keepDng) writeDepthToDng(app, shot.dng, it) }
+                depthOf(app, shot, a.base, img.width, img.height)?.also { if (s.keepDng) writeDepthToDng(app, shot.dng, it) }
             } else {
                 null
             }

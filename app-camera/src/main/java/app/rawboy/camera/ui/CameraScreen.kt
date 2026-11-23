@@ -162,6 +162,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.rawboy.auto.looks.LookApplier
 import app.rawboy.color.BwFilter
 import app.rawboy.camera.BurstMode
+import app.rawboy.camera.DepthSource
 import app.rawboy.camera.VideoQuality
 import app.rawboy.camera.CameraSettings
 import app.rawboy.camera.CameraStatus
@@ -1280,6 +1281,7 @@ private val LOOK_LABEL_WIDTH = 88.dp
 private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recording: Boolean, requestLocation: () -> Unit, shareDeviceReport: () -> Unit, shareTuningData: () -> Unit) {
     val maxResMp by vm.maxResMp.collectAsState()
     val hardwareDepth by vm.hardwareDepthAvailable.collectAsState()
+    val dualPixel by vm.dualPixelAvailable.collectAsState()
     var showFrames by remember { mutableStateOf(false) }
     if (showFrames) {
         FramesSettingsContent(settings, vm, onBack = { showFrames = false })
@@ -1569,26 +1571,37 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
                     indent = true,
                 )
             }
-            // Only where the active lens has a depth output of its own (nothing is estimated); a switch left on
-            // stays visible so it can be turned off.
-            if (hardwareDepth || settings.saveDepth) {
-                SettingSwitch(
-                    title = "Save depth map in DNG",
-                    subtitle = "Camera depth sensor on this lens; used for portrait blur in RawBoy Pro",
-                    checked = settings.saveDepth,
-                    accent = EXPERIMENTAL_ORANGE,
-                    onChange = vm::setSaveDepth,
-                )
-                if (settings.saveDepth) {
-                    SettingSwitch(
-                        title = "Generate portrait in camera",
-                        subtitle = "Blur the background of saved JPEGs with the depth map",
-                        checked = settings.depthPortrait,
-                        accent = EXPERIMENTAL_ORANGE,
-                        onChange = vm::setDepthPortrait,
+            // Every lens can save one: the AI estimate needs no depth stream. Sources the active lens lacks aren't listed.
+            SettingSwitch(
+                title = "Save depth map in DNG",
+                subtitle = "For portrait blur in RawBoy Pro",
+                checked = settings.saveDepth,
+                accent = EXPERIMENTAL_ORANGE,
+                onChange = vm::setSaveDepth,
+            )
+            if (settings.saveDepth) {
+                val sources = DepthSource.entries.filter {
+                    it == DepthSource.AI || (it == DepthSource.SENSOR && hardwareDepth) || (it == DepthSource.DUAL_PIXEL && dualPixel)
+                }
+                if (sources.size > 1) {
+                    SettingChoice(
+                        title = "Depth from",
+                        subtitle = "Dual pixel: the sensor's focus pixels; AI: estimated from the photo",
+                        options = sources,
+                        selected = settings.depthSource.usable(hardwareDepth, dualPixel),
+                        label = { it.label },
+                        onSelect = vm::setDepthSource,
                         indent = true,
                     )
                 }
+                SettingSwitch(
+                    title = "Generate portrait in camera",
+                    subtitle = "Blur the background of saved JPEGs with the depth map",
+                    checked = settings.depthPortrait,
+                    accent = EXPERIMENTAL_ORANGE,
+                    onChange = vm::setDepthPortrait,
+                    indent = true,
+                )
             }
 
             var confirmReset by remember { mutableStateOf(false) }

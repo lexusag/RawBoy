@@ -969,6 +969,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
                   blemish={session.blemish}
                   retouch={{ working: session.retouchWorking, ready: session.retouchMap != null }}
                   depthMap={session.depthMap}
+                  depthSource={session.depth}
                   pickingDepth={pickingDepth}
                   onPickDepth={() => {
                     const next = !pickingDepth;

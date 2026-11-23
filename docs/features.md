@@ -83,7 +83,7 @@ Web, Desktop and iOS take every field of `DevelopParams` except where noted (che
 | Masks: brush, linear, radial | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
 | Masks: stripe | 1.4.3 | ✓ | ✓ 1.17.0 | ✓ 1.4.7 | ✓ | |
 | Masks: Lens blur | 1.3.0 | ✓ | ✓ 1.17.2 | ✓ 1.17.2 | ✓ | |
-| Portrait blur from a Camera DNG's depth map (Detail › Portrait blur, Focus depth, Falloff, pick focus depth) | unreleased | ✓ | — | — | — | Reads the `RBDP` trailer of RawBoy Camera DNGs (Android, experimental); other files show nothing |
+| Portrait blur from a depth map (Detail › Portrait blur, Focus depth, Falloff, pick focus depth) | unreleased | ✓ | — | — | — | Reads the `RBDP` trailer of RawBoy Camera DNGs (Android, experimental); any other photo gets a depth map estimated in the browser (Depth Anything V2 Small, ONNX Runtime Web) when Portrait blur is first raised, focused on the person if there is one |
 | Masks: Portrait retouch inside a layer | 1.13.4 | ✓ | ✓ 1.17.2 | — | — | |
 | Light leaks | 1.3.0 | ✓ | ✓ 1.17.0 | ✓ 1.4.7 | ✓ | Outline dots: web 1.11.0, Desktop and iOS 1.17.4, Android — |
 | **Light leaks: procedural generator** (Generate: 13 types, 🎲 Random, colour adjustment, x/y box) | unreleased | ✓ | ✓ | ✓ | ✓ | `shaders/film_leak.glsl`, `FilmLeaks.ts/.swift/.kt`: Edge burn, Blob, Streak, Sprocket holes, Fog, Rebate glow, Flare, Start/End of roll, Film tear, Dust & scratches, Chemical stain, Scratches (↔ Horizontal / ↕ Vertical); shares the `MAX_LEAKS` (4) budget |

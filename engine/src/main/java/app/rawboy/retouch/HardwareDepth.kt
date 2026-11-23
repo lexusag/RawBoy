@@ -7,7 +7,7 @@ import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
 
-/** Turns a camera's hardware depth frame (Android `ImageFormat.DEPTH16`) into a [DepthMap]. Nothing is estimated. */
+/** Turns a camera's hardware depth frame (Android `ImageFormat.DEPTH16`) into a [DepthMap]; [toDepthMap] is shared with the other depth sources. */
 object HardwareDepth {
 
     /**
@@ -67,29 +67,35 @@ object HardwareDepth {
             ((mm[i] - nearMm) / (farMm - nearMm)).coerceIn(0f, 1f)
         }
         val smoothed = Filters.box(norm, srcW, srcH, 1)
+        val upright = toDepthMap(smoothed, srcW, srcH, exifOrientation, hardware = true, subjectDetected = true, focusDepth = 0.2f)
+        val focusDepth = upright.sampleUv(focusX.coerceIn(0.1f, 0.9f), focusY.coerceIn(0.1f, 0.9f))
+        return DepthMap(upright.width, upright.height, upright.data, hardware = true, subjectDetected = true, focusDepth = focusDepth)
+    }
 
-        // Apply EXIF orientation (1..8) so the resulting DepthMap matches the upright decoded RawImage.
+    /**
+     * A 0..1 map ([norm], [w]×[h], row-major) in sensor orientation, turned upright by EXIF [exifOrientation] (1..8)
+     * like the decoded photo and quantised to a [DepthMap].
+     */
+    fun toDepthMap(
+        norm: FloatArray,
+        w: Int,
+        h: Int,
+        exifOrientation: Int,
+        hardware: Boolean,
+        subjectDetected: Boolean,
+        focusDepth: Float,
+    ): DepthMap {
         val swapAxes = exifOrientation in 5..8
-        val outW = if (swapAxes) srcH else srcW
-        val outH = if (swapAxes) srcW else srcH
+        val outW = if (swapAxes) h else w
+        val outH = if (swapAxes) w else h
         val outBytes = ByteArray(outW * outH)
-        for (sy in 0 until srcH) {
-            for (sx in 0 until srcW) {
-                val (dx, dy) = orientPixel(sx, sy, srcW, srcH, exifOrientation)
-                val b = (smoothed[sy * srcW + sx] * 255f).roundToInt().coerceIn(0, 255).toByte()
-                outBytes[dy * outW + dx] = b
+        for (sy in 0 until h) {
+            for (sx in 0 until w) {
+                val (dx, dy) = orientPixel(sx, sy, w, h, exifOrientation)
+                outBytes[dy * outW + dx] = (norm[sy * w + sx] * 255f).roundToInt().coerceIn(0, 255).toByte()
             }
         }
-        val prelim = DepthMap(outW, outH, outBytes, hardware = true, subjectDetected = true, focusDepth = 0.2f)
-        val focusDepth = prelim.sampleUv(focusX.coerceIn(0.1f, 0.9f), focusY.coerceIn(0.1f, 0.9f))
-        return DepthMap(
-            width = outW,
-            height = outH,
-            data = outBytes,
-            hardware = true,
-            subjectDetected = true,
-            focusDepth = focusDepth,
-        )
+        return DepthMap(outW, outH, outBytes, hardware = hardware, subjectDetected = subjectDetected, focusDepth = focusDepth)
     }
 
     private fun orientPixel(x: Int, y: Int, w: Int, h: Int, orientation: Int): Pair<Int, Int> = when (orientation) {

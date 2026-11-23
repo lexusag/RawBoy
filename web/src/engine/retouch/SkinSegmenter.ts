@@ -2,7 +2,7 @@ import { FaceLandmarker, FilesetResolver, ImageSegmenter } from '@mediapipe/task
 
 type WasmFileset = Awaited<ReturnType<typeof FilesetResolver.forVisionTasks>>;
 import type { PreviewImage } from '../gl/PreviewImage';
-import { halfToFloat } from '../util/half';
+import { toDisplayImage } from './DisplayImage';
 import type { SkinMask } from './SkinMask';
 
 /**
@@ -14,6 +14,7 @@ import type { SkinMask } from './SkinMask';
  */
 const MODEL = 'models/selfie_multiclass_256x256.tflite';
 const LANDMARK_MODEL = 'models/face_landmarker.task';
+const BACKGROUND = 0;
 const BODY_SKIN = 2;
 const FACE_SKIN = 3;
 
@@ -150,6 +151,7 @@ async function segment(image: PreviewImage, fullWidth: number, fullHeight: numbe
   };
   const face = read(FACE_SKIN);
   const body = read(BODY_SKIN);
+  const person = read(BACKGROUND).map((v) => Math.min(1, Math.max(0, 1 - v)));
   result.close();
   for (let i = 0; i < skin.length; i++) {
     skin[i] = Math.min(1, Math.max(0, face[i] + body[i]));
@@ -173,7 +175,7 @@ async function segment(image: PreviewImage, fullWidth: number, fullHeight: numbe
   const longEdge = Math.max(fullWidth, fullHeight);
   const faceDiameter = faceArea > 4 ? 2 * Math.sqrt(faceArea / Math.PI) * scale : 0;
   const sigma = Math.min(40, Math.max(3, faceArea > 4 ? 0.012 * faceDiameter : 0.002 * longEdge));
-  return { width: w, height: h, data: refined, sigmaPx: sigma, hasSkin: skinArea > 0.002 * w * h, faceDiameterPx: faceDiameter, face, faces };
+  return { width: w, height: h, data: refined, sigmaPx: sigma, hasSkin: skinArea > 0.002 * w * h, faceDiameterPx: faceDiameter, face, faces, person };
 }
 
 /**
@@ -245,43 +247,6 @@ function fillConvexHull(xs: number[], ys: number[], keep: Float32Array, w: numbe
 }
 
 const empty = (w: number, h: number): SkinMask => ({ width: w, height: h, data: new Float32Array(w * h), sigmaPx: 3, hasSkin: false, faceDiameterPx: 0 });
-
-/** Linear Rec.2020 half floats -> an ordinary-looking sRGB image for the model, plus its luminance. */
-function toDisplayImage(image: PreviewImage): { bitmap: ImageData; gray: Float32Array } {
-  const n = image.width * image.height;
-  const px = image.pixels;
-  const rgb = new Float32Array(n * 3);
-  let logSum = 0;
-  for (let i = 0; i < n; i++) {
-    const r = halfToFloat(px[i * 3]);
-    const g = halfToFloat(px[i * 3 + 1]);
-    const b = halfToFloat(px[i * 3 + 2]);
-    // Rec.2020 -> Rec.709/sRGB primaries
-    rgb[i * 3] = 1.6605 * r - 0.5876 * g - 0.0728 * b;
-    rgb[i * 3 + 1] = -0.1246 * r + 1.1329 * g - 0.0083 * b;
-    rgb[i * 3 + 2] = -0.0182 * r - 0.1006 * g + 1.1187 * b;
-    logSum += Math.log(Math.max(0.2627 * r + 0.678 * g + 0.0593 * b, 1e-5));
-  }
-  // Auto exposure: put the log-average at middle grey, then a soft shoulder.
-  const k = 0.18 / Math.exp(logSum / n);
-  const rgba = new Uint8ClampedArray(n * 4);
-  const gray = new Float32Array(n);
-  const weights = [0.2126, 0.7152, 0.0722];
-  for (let i = 0; i < n; i++) {
-    let y = 0;
-    for (let ch = 0; ch < 3; ch++) {
-      const v = Math.max(rgb[i * 3 + ch], 0) * k;
-      const t = (v / (1 + v)) * 1.6;
-      const e = t <= 0.0031308 ? t * 12.92 : 1.055 * t ** (1 / 2.4) - 0.055;
-      const e8 = Math.trunc(Math.min(1, Math.max(0, e)) * 255 + 0.5);
-      y += e8 * weights[ch];
-      rgba[i * 4 + ch] = e8;
-    }
-    rgba[i * 4 + 3] = 255;
-    gray[i] = y / 255;
-  }
-  return { bitmap: new ImageData(rgba, image.width, image.height), gray };
-}
 
 function resize(src: Float32Array, sw: number, sh: number, dw: number, dh: number): Float32Array {
   const out = new Float32Array(dw * dh);

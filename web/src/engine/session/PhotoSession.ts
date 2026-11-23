@@ -25,6 +25,7 @@ import { RawImage } from '../raw/RawImage';
 import { shotInfoLine } from '../raw/ShotInfo';
 import { retouchMap, type RetouchMap } from '../retouch/PortraitRetouch';
 import { segmentSkin } from '../retouch/SkinSegmenter';
+import { estimateDepth } from '../retouch/DepthEstimator';
 import type { SkinMask } from '../retouch/SkinMask';
 import { halfToFloat } from '../util/half';
 import { detectFisheyeCircle } from '../lens/FisheyeCircle';
@@ -54,8 +55,10 @@ export interface SessionState {
   bokehSource: PreviewImage | null;
   /** What the anamorphic flare scatters from (FlareSource); made the first time the flare is on. */
   flareSource: PreviewImage | null;
-  /** Embedded depth map from a RawBoy Camera DNG ("RBDP" trailer), or null when the file has none. */
+  /** Portrait blur's depth map: from a RawBoy Camera DNG ("RBDP" trailer) or estimated ([depth]); null until there is one. */
   depthMap: DepthMapData | null;
+  /** Where [depthMap] comes from: 'file', 'estimating' (the AI estimate is being made), 'ai', 'failed', or 'none' yet. */
+  depth: 'none' | 'file' | 'estimating' | 'ai' | 'failed';
   skin: SkinState;
   blemish: BlemishState;
   /** Portrait retouch's map for the preview (null until made, or with no face), and whether one is being made. */
@@ -126,6 +129,7 @@ export class PhotoSession {
     bokehSource: null,
     flareSource: null,
     depthMap: null,
+    depth: 'none',
     skin: { kind: 'notComputed' },
     blemish: { working: false, healed: 0, detected: 0 },
     retouchMap: null,
@@ -268,6 +272,7 @@ export class PhotoSession {
       bokehSource: null,
       flareSource: null,
       depthMap: img.depthMap,
+      depth: img.depthMap ? 'file' : 'none',
       skin: { kind: 'notComputed' },
       blemish: { working: false, healed: 0, detected: 0 },
       retouchMap: null,
@@ -276,6 +281,7 @@ export class PhotoSession {
     this.params = initialParams(defaults);
     this.ensureSkinMask();
     if (this.params.healSpots.length) this.scheduleBlemishes(); // restored from a sidecar
+    this.ensureDepthMap();
     this.ensureBokehSource();
     this.ensureFlareSource();
     // Camera and exposure (ISO, shutter, aperture, focal length); the decoder's summary if none of it is known.
@@ -289,6 +295,7 @@ export class PhotoSession {
     if (newParams.skinRetouch > 0 || newParams.blemishRemoval > 0 || retouchStrengthOf(newParams) > 0) this.ensureSkinMask();
     if (newParams.blemishRemoval !== before.blemishRemoval || healKey(newParams.healSpots) !== healKey(before.healSpots)) this.scheduleBlemishes();
     if (retouchStrengthOf(newParams) !== retouchStrengthOf(before)) this.scheduleRetouch();
+    this.ensureDepthMap();
     this.ensureBokehSource();
     this.ensureFlareSource();
     // A 90 degree turn or a new crop changes the output shape, and a flip moves the content, so the zoom position
@@ -348,6 +355,38 @@ export class PhotoSession {
       p, defaults, lut, this.lensFor(p), s.base, s.bloomSources, s.skin.kind === 'ready' ? s.skin.mask : null, 1, 1, maskView,
       (l) => this.brushRaster(l), film, s.bokehSource, s.flareSource, retouch, s.depthMap,
     );
+  }
+
+  /**
+   * Hears the focus depth (0..100) of a depth map estimated for the open photo, so the app can focus on the subject
+   * while the user hasn't picked a focus depth.
+   */
+  onDepthEstimated: ((focus: number) => void) | null = null;
+
+  /**
+   * Estimates a depth map ([estimateDepth]) once Portrait blur is raised on a photo that has none of its own. Waits
+   * for the skin segmentation, whose person mask keeps glasses from reading as background.
+   */
+  private ensureDepthMap(p: DevelopParams = this.params) {
+    const img = this.image;
+    const base = this._state.base;
+    if (!img || !base || (p.depthBlur ?? 0) <= 0 || this._state.depth !== 'none') return;
+    this.update({ depth: 'estimating' });
+    void (async () => {
+      try {
+        const person = (await this.skinMask())?.person ?? null;
+        if (this.image !== img) return;
+        const map = await estimateDepth(base, person);
+        if (this.image !== img) return;
+        this.update({ depthMap: map, depth: 'ai' });
+        this.ensureBokehSource();
+        this.onDepthEstimated?.(Math.round(Math.min(1, Math.max(0, map.focusDepth)) * 100));
+      } catch (e) {
+        if (this.image !== img) return;
+        this.onMessage(`Depth estimate failed: ${e instanceof Error ? e.message : String(e)}`);
+        this.update({ depth: 'failed' });
+      }
+    })();
   }
 
   /** Makes the lens blur's source copy once a mask layer of [p] or portrait depth blur blurs (see BokehTexture). */

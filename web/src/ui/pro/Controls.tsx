@@ -8,7 +8,7 @@ import { ANAMORPHIC_COLORS, TONE_MAPPERS, effectiveColorDenoise, type DevelopPar
 import type { LensInfo } from '../../engine/lens/LensInfo';
 import type { LutEntry } from '../../engine/lut/LutData';
 import { LutRepository } from '../../engine/lut/LutRepository';
-import type { BlemishState, SkinState } from '../../engine/session/PhotoSession';
+import type { BlemishState, SessionState, SkinState } from '../../engine/session/PhotoSession';
 import type { DepthMapData } from '../../worker/protocol';
 import { pickFiles } from '../common/files';
 import {
@@ -43,8 +43,10 @@ interface Props {
   blemish: BlemishState;
   /** Portrait retouch: its map is being made / there is one (none on a ready mask = no face to size it by). */
   retouch: { working: boolean; ready: boolean };
-  /** Embedded RawBoy Camera depth map ("RBDP" trailer), or null when the file has none. */
+  /** Portrait blur's depth map (the file's, or estimated), or null when there is none yet. */
   depthMap?: DepthMapData | null;
+  /** Where [depthMap] comes from (PhotoSession's `depth`). */
+  depthSource?: SessionState['depth'];
   /** Focus depth picker armed: the next click on the photo sets depthFocus. */
   pickingDepth?: boolean;
   onPickDepth?: () => void;
@@ -66,7 +68,7 @@ interface Props {
 /** The editor's tabs Light, Color, Detail, LUTs, Lens (port of app-pro's Controls.kt). */
 export function ControlsPanel({
   params, defaults, onChange, lutLoading, onSelectLut, filmLoading, onToneMapper, onFilm, onSelectFilm, onStepFilm,
-  lens, lensfun, skin, blemish, retouch, depthMap = null, pickingDepth = false, onPickDepth,
+  lens, lensfun, skin, blemish, retouch, depthMap = null, depthSource = 'none', pickingDepth = false, onPickDepth,
   pickingWhite, onPickWhite, autoWb, onAutoWb, onResetWb, onSaveLensPreset, chosenTab, onTab: setTab,
 }: Props) {
   // Film replaces the tone mapper and the user LUT (kept, but not rendered), so the LUTs tab hides while Film is on.
@@ -296,6 +298,7 @@ export function ControlsPanel({
               defaults={defaults}
               onChange={onChange}
               depthMap={depthMap}
+              depthSource={depthSource}
               pickingDepth={pickingDepth}
               onPickDepth={onPickDepth}
             />
@@ -506,6 +509,7 @@ function DepthBlurSliders({
   defaults,
   onChange,
   depthMap,
+  depthSource,
   pickingDepth,
   onPickDepth,
 }: {
@@ -513,6 +517,7 @@ function DepthBlurSliders({
   defaults: DevelopParams;
   onChange: (p: DevelopParams) => void;
   depthMap: DepthMapData | null;
+  depthSource: SessionState['depth'];
   pickingDepth: boolean;
   onPickDepth?: () => void;
 }) {
@@ -570,11 +575,17 @@ function DepthBlurSliders({
                 onChange={(v) => onChange({ ...params, depthFalloff: v })}
               />
               <Note>
-                Camera depth map from the DNG
+                {depthSource === 'ai' ? 'Depth estimated from the photo (Depth Anything V2)' : 'Camera depth map from the DNG'}
               </Note>
             </>
           ) : (
-            <Note>No depth map in this file (RawBoy Camera saves one on phones whose camera has a depth sensor).</Note>
+            <Note>
+              {depthSource === 'estimating'
+                ? 'Estimating depth from the photo…'
+                : depthSource === 'failed'
+                  ? 'The depth estimate failed'
+                  : 'No depth map in this file: raising Portrait blur estimates one from the photo'}
+            </Note>
           )}
         </div>
       )}
