@@ -5,6 +5,7 @@ import { cropOf, flipped, rotateCrop, rotatePerspective, withCrop, type CropRect
 import type { EditsSidecar } from '../../engine/browse/XmpSidecar';
 import { developParams, type DevelopParams } from '../../engine/develop/DevelopParams';
 import { decodeEdits, encodeEdits } from '../../engine/develop/Edits';
+import { effectiveParams } from '../../engine/develop/EditSections';
 import { MAX_LAYERS, SHAPE_NAMES, newBrushLayer, newLinearLayer, newRadialLayer, newStripeLayer, type BrushStroke, type MaskLayer } from '../../engine/develop/Masks';
 import { MAX_EFFECTS, newLightEffect, type FxKind, type LightEffect } from '../../engine/develop/LightEffects';
 import { randomFilmLeak, randomFilmRoll, type FilmLeak, type FilmLeakType } from '../../engine/develop/FilmLeaks';
@@ -203,6 +204,7 @@ export class ProStore {
         filmLeaks: base.filmLeaks,
         fx: base.fx,
         healSpots: base.healSpots,
+        disabledSections: [],
       },
       cropOf(base),
     );
@@ -346,7 +348,7 @@ export class ProStore {
   private show(params: DevelopParams) {
     const before = this._state.params;
     this.set({ params, canUndo: this.history.canUndo, canRedo: this.history.canRedo });
-    this.session.setParams(params);
+    this.session.setParams(effectiveParams(params, this._state.defaults));
     this.saveToSidecar();
     if (params.lut !== before.lut) this.session.selectLut(params.lut, (m) => this.lutFailed(params.lut, m));
     if (params.film !== before.film) this.session.selectFilm(params.film, (m) => this.filmFailed(params.film, m));

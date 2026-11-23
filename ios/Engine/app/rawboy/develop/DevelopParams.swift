@@ -149,6 +149,11 @@ public struct DevelopParams: Equatable, Sendable {
      * (`uClipLevel`); 0 = unknown. Set only on a photo's as-shot defaults, from the decoder, like displaySource.
      */
     public var clipLevel: Float = 0
+    /**
+     * Inspector sections (`EditSection` raw values) switched off: their values stay here but render as the photo's defaults
+     * (`EditSections.effective`). Per photo: not carried to the next one, not in presets.
+     */
+    public var disabledSections: Set<String> = []
 
     public init() {}
 

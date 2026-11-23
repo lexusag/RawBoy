@@ -284,6 +284,7 @@ final class EditorViewModel: ObservableObject {
         p.masks = newDefaults.masks
         p.leaks = newDefaults.leaks
         p.filmLeaks = newDefaults.filmLeaks
+        p.disabledSections = []
         p.fx = newDefaults.fx
         p.healSpots = newDefaults.healSpots
         p = p.withCrop(newDefaults.crop)
@@ -360,7 +361,7 @@ final class EditorViewModel: ObservableObject {
         if let source { persistence?.changed(source, params: params, defaults: state.defaults) }
         state.canUndo = history.canUndo
         state.canRedo = history.canRedo
-        session.setParams(params)
+        session.setParams(EditSections.effective(params, defaults: state.defaults))
         if params.lut != before.lut { loadSelectedLut(params.lut) }
         if params.film != before.film { loadSelectedFilm(params.film) }
         scheduleHistogram()

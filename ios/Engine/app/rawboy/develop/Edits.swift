@@ -20,7 +20,7 @@ public enum Edits {
 
     private static let geometry = [
         "rotation", "flipHorizontal", "flipVertical", "straighten", "perspectiveVertical", "perspectiveHorizontal", "scale",
-        "cropLeft", "cropTop", "cropRight", "cropBottom", "masks", "leaks", "filmLeaks", "fx", "healSpots",
+        "cropLeft", "cropTop", "cropRight", "cropBottom", "masks", "leaks", "filmLeaks", "fx", "healSpots", "disabled",
     ]
     private static let known = Set(sliders + geometry)
 
@@ -57,6 +57,7 @@ public enum Edits {
         out["filmLeaks"] = FilmLeaks.toJson(p.filmLeaks)
         out["fx"] = LightEffects.toJson(p.fx)
         out["healSpots"] = HealSpots.toJson(p.healSpots)
+        out["disabled"] = p.disabledSections.sorted()
         return out
     }
 
@@ -147,6 +148,7 @@ public enum Edits {
         if v["filmLeaks"] != nil { p.filmLeaks = FilmLeaks.parseLeaks(v["filmLeaks"]) }
         if v["fx"] != nil { p.fx = LightEffects.parseEffects(v["fx"]) }
         if v["healSpots"] != nil { p.healSpots = HealSpots.parse(v["healSpots"]) }
+        if let ids = v["disabled"] as? [String] { p.disabledSections = Set(ids.filter { EditSection(rawValue: $0) != nil }) }
         return Decoded(params: p, extras: v.filter { !known.contains($0.key) })
     }
 }

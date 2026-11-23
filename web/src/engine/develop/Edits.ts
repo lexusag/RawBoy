@@ -4,6 +4,7 @@ import { parseHealSpots, type HealSpot } from './HealSpots';
 import { parseEffects, type LightEffect } from './LightEffects';
 import { parseLeaks, type LightLeak } from './LightLeaks';
 import { parseLayers, type MaskLayer } from './Masks';
+import { EDIT_SECTIONS } from './EditSections';
 import { applyPreset } from './Presets';
 
 /**
@@ -54,7 +55,7 @@ export function decodeEdits(text: string, defaults: DevelopParams): DevelopParam
   }
   if (!parsed || typeof parsed !== 'object' || (parsed as { format?: unknown }).format !== EDITS_FORMAT) return null;
   const raw = (parsed as { values?: unknown }).values;
-  const { masks, leaks, filmLeaks, fx, healSpots, flipHorizontal, flipVertical, ...values } = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
+  const { masks, leaks, filmLeaks, fx, healSpots, flipHorizontal, flipVertical, disabledSections, ...values } = raw && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
   const p = applyPreset({ id: '', name: '', groups: [], values: values as never }, defaults);
   return {
     ...p,
@@ -66,5 +67,6 @@ export function decodeEdits(text: string, defaults: DevelopParams): DevelopParam
     filmLeaks: filmLeaks === undefined ? defaults.filmLeaks : parseFilmLeaks(filmLeaks),
     fx: fx === undefined ? defaults.fx : parseEffects(fx),
     healSpots: healSpots === undefined ? defaults.healSpots : parseHealSpots(healSpots),
+    disabledSections: Array.isArray(disabledSections) ? EDIT_SECTIONS.filter((s) => disabledSections.includes(s)) : defaults.disabledSections,
   };
 }

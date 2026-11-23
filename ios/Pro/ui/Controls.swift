@@ -462,49 +462,22 @@ extension ControlsPanel {
     fileprivate var inspector: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                section("Light", reset: { p, d in
-                    p.exposure = d.exposure; p.contrast = d.contrast; p.lumaContrast = d.lumaContrast; p.highlights = d.highlights; p.shadows = d.shadows
-                    p.whites = d.whites; p.blacks = d.blacks
-                    p.filmAmount = d.filmAmount; p.filmGrain = d.filmGrain; p.halation = d.halation
-                }) { lightSliders }
-                section("Curve", reset: { p, d in p.curves = d.curves }) { curves }
-                section("Colour", reset: { p, d in p.temperature = d.temperature; p.tint = d.tint; p.saturation = d.saturation }) {
-                    whiteBalance
-                }
-                section("Primaries", reset: { p, d in
-                    p.redHue = d.redHue; p.redPurity = d.redPurity; p.greenHue = d.greenHue; p.greenPurity = d.greenPurity
-                    p.blueHue = d.blueHue; p.bluePurity = d.bluePurity; p.tintHue = d.tintHue; p.tintPurity = d.tintPurity
-                }) { primariesSliders }
-                section("Detail", reset: { p, d in
-                    p.denoise = d.denoise; p.colorDenoise = d.colorDenoise; p.sharpening = d.sharpening
-                    p.localContrast = d.localContrast; p.highpassContrast = d.highpassContrast
-                }) { sharpness }
-                section("Portrait", reset: { p, d in
-                    p.depthBlur = d.depthBlur; p.depthFocus = d.depthFocus; p.depthFalloff = d.depthFalloff
-                    p.depthEdge = d.depthEdge
-                    p.skinRetouch = d.skinRetouch; p.blemishRemoval = d.blemishRemoval; p.portraitRetouch = d.portraitRetouch
-                }) { portrait }
-                section("Effects", reset: { p, d in
-                    p.bloom = d.bloom; p.anamorphic = d.anamorphic; p.anamorphicColor = d.anamorphicColor
-                    p.anamorphicGhosts = d.anamorphicGhosts; p.grain = d.grain; p.grainSize = d.grainSize
-                    p.grainRoughness = d.grainRoughness; p.grainColor = d.grainColor
-                }) { effects }
+                section(.light) { lightSliders }
+                section(.curve) { curves }
+                section(.colour) { whiteBalance }
+                section(.primaries) { primariesSliders }
+                section(.detail) { sharpness }
+                section(.portrait) { portrait }
+                section(.effects) { effects }
                 // Film replaces the user LUT (kept, not rendered), so the section goes while Film is on, as the phones' tab.
                 if params.film == nil {
-                    section("LUT", reset: { p, d in p.lut = d.lut; p.lutAmount = d.lutAmount }) {
+                    section(.lut) {
                         LutPanel(params: params, luts: luts, loading: lutLoading, onChange: onChange, onSelect: onSelectLut,
                                  onLutsChanged: onLutsTabShown)
                             .onAppear(perform: onLutsTabShown)  // rescan the user's folder when opened
                     }
                 }
-                section("Lens", reset: { p, d in
-                    p.lensProfile = d.lensProfile; p.lensDistortion = d.lensDistortion; p.lensAnamorphic = d.lensAnamorphic
-                    p.lensCrop = d.lensCrop; p.lensFisheye = d.lensFisheye; p.lensFisheyeFov = d.lensFisheyeFov
-                    p.lensFisheyeAuto = d.lensFisheyeAuto; p.lensFisheyeCircle = d.lensFisheyeCircle
-                    p.lensFisheyeX = d.lensFisheyeX; p.lensFisheyeY = d.lensFisheyeY
-                    p.vignetteAmount = d.vignetteAmount; p.vignetteMidpoint = d.vignetteMidpoint
-                    p.caRed = d.caRed; p.caBlue = d.caBlue
-                }) { lensPanel }
+                section(.lens) { lensPanel }
             }
             .reportsWidth("tab content")
             .padding(.horizontal, 16)
@@ -517,15 +490,23 @@ extension ControlsPanel {
     }
 
     /**
-     * A section: its header (chevron, name, the edited dot, reset) and, while open, its controls. [reset] puts the
-     * section's fields back to the photo's defaults; the section counts as edited when that would change anything.
+     * A section: its header (chevron, name, the edited dot, a switch, reset) and, while open, its controls. Reset puts the
+     * section's fields back to the photo's defaults (and switches it on); the section counts as edited when that would
+     * change anything, so a switched-off section keeps its switch. The switch keeps the values and renders the defaults.
      */
-    private func section<Content: View>(_ title: String, reset: @escaping (inout DevelopParams, DevelopParams) -> Void,
-                                        @ViewBuilder content: () -> Content) -> some View {
+    private func section<Content: View>(_ section: EditSection, @ViewBuilder content: () -> Content) -> some View {
+        let title = section.title
         var restored = params
-        reset(&restored, defaults)
+        section.restore(&restored, from: defaults)
+        restored.disabledSections.remove(section.rawValue)
+        let off = params.disabledSections.contains(section.rawValue)
         return InspectorSection(title, open: !InspectorSections.closed(closedSections).contains(title), edited: restored != params,
-                                onToggle: { toggle(title) }, onReset: { onChange(restored) }, content: content)
+                                onToggle: { toggle(title) }, onReset: { onChange(restored) },
+                                enabled: (on: !off, set: { on in
+                                    var p = params
+                                    if on { p.disabledSections.remove(section.rawValue) } else { p.disabledSections.insert(section.rawValue) }
+                                    onChange(p)
+                                }), content: content)
     }
 }
 #endif
