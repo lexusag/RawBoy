@@ -1,3 +1,7 @@
+**Zoom with the healing brush out (RawBoy Desktop, 2026-11-23)**
+
+- A trackpad pinch now zooms the photo while the healing brush is open (the brush's overlay covered the photo and swallowed it). The wheel (around the pointer), Z (100%), Space + drag and the middle button already worked there. Checked against: the notched-wheel-only sliders (#489: the photo isn't a slider), Ctrl/⌘ C and V (#490: keys only), brush size (`[` `]`, no wheel binding), Crop & rotate (zoom stays off there) and Masks (own pinch). Not compiled here (no Swift toolchain in the cloud session): CI's `desktop` job builds it.
+
 **Copy and paste edits: Ctrl/⌘ C and V in Pro and Auto, web and RawBoy Desktop (2026-11-23)**
 
 - **Ctrl/⌘ C** copies the open photo's edits as a preset made of the groups a new preset ticks (Light, White balance, Curves, Colour, Retouch, LUT; not Lens, Masks, Denoise, Detail or generated leaks, and never crop, rotation or other geometry). **Ctrl/⌘ C pressed twice within 0.6 s** opens a dialog to choose the groups (Lightroom-style). **Ctrl/⌘ V** pastes onto the open photo (one undo step), or in Auto's grid onto the selected photos (one undo step each; with one photo selected, ⌘C copies from it). Pro and Auto share the clipboard, so edits copied in one paste in the other. A focused text field, selected text or an open dialog keep the browser's or Mac's own copy and paste. Copy previous (⇧C) is unchanged.

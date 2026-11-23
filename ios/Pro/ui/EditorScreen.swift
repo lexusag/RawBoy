@@ -389,7 +389,8 @@ struct EditorScreen: View {
                                 if let s = healSpots.first(where: { $0.id == id }) { healBrush.offset = [x - s.x, y - s.y] }
                                 vm.updateHeal(id) { $0.source = [x, y] }
                             },
-                            onPan: { dx, dy in if session.zoomCenter != nil { vm.pan(dx, dy) } }),
+                            onPan: { dx, dy in if session.zoomCenter != nil { vm.pan(dx, dy) } },
+                            onZoom: pinchZoom),
                         panning: { commands.spaceHeld })
                 }
                 if let shader, mode == .geometry, session.zoomCenter == nil, session.preview != nil {
