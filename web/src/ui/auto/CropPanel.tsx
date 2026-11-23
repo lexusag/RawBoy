@@ -9,6 +9,8 @@ interface Props {
   aspect: CropAspect;
   portrait: boolean;
   onAspect: (aspect: CropAspect, portrait: boolean) => void;
+  extend: boolean;
+  onExtend: (on: boolean) => void;
   onRotate: (quarterTurns: number) => void;
   onStraighten: (degrees: number) => void;
   onReset: () => void;
@@ -19,14 +21,14 @@ interface Props {
  * Auto's Crop & rotate: the aspect shapes, turning in quarter steps and the horizon slider. Drag the frame on the photo
  * for the rest. Flip and perspective stay in the RawBoy tab.
  */
-export function CropPanel({ photo, aspect, portrait, onAspect, onRotate, onStraighten, onReset, onDone }: Props) {
+export function CropPanel({ photo, aspect, portrait, onAspect, extend, onExtend, onRotate, onStraighten, onReset, onDone }: Props) {
   const { crop, straighten } = photo.adjust;
   return (
     <div className="controls geometry">
       <div className="geometry-head">
         <strong>Crop &amp; rotate</strong>
         <span>
-          <button type="button" className="text" onClick={onReset} disabled={!crop && straighten === 0 && aspect === 'original'}>
+          <button type="button" className="text" onClick={onReset} disabled={!crop && straighten === 0 && aspect === 'original' && !extend}>
             Reset
           </button>
           <button type="button" className="text" onClick={onDone}>
@@ -47,6 +49,11 @@ export function CropPanel({ photo, aspect, portrait, onAspect, onRotate, onStrai
             {cropAspectLabel(a, portrait)}
           </button>
         ))}
+      </div>
+      <div className="chips">
+        <button type="button" className={extend ? 'active' : ''} aria-pressed={extend} onClick={() => onExtend(!extend)} title="Let the crop reach past the photo's edges; the new canvas is filled from the picture itself">
+          Extend canvas
+        </button>
       </div>
       <ParamSlider label="Straighten" value={straighten} min={-45} max={45} step={0.01} defaultValue={0} format={formatDegrees} onChange={onStraighten} />
       <div className="note">Drag the corners, edges or inside of the frame to crop, or drag outside it to rotate. Straightening crops automatically so no empty corners show. Enter or Done confirms it. The crop is part of the export.</div>

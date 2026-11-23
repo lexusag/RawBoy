@@ -1,6 +1,6 @@
 import { filmLookById } from '../../engine/auto/looks/FilmLooks';
 import { lookById, type Look } from '../../engine/auto/looks/Look';
-import { isFullCrop, type CropRect } from '../../engine/develop/CropMath';
+import { isFullCrop, MAX_EXTEND, type CropRect } from '../../engine/develop/CropMath';
 import { NO_ADJUSTMENTS, type Adjustments } from '../../engine/auto/looks/LookApplier';
 import { developParams, type DevelopParams } from '../../engine/develop/DevelopParams';
 import { decodeEdits, encodeEdits, EDITS_FORMAT, EDITS_VERSION } from '../../engine/develop/Edits';
@@ -53,11 +53,11 @@ export function encodeAuto(s: SavedAuto): string {
 const num = (v: unknown, min: number, max: number, fallback: number) =>
   typeof v === 'number' && Number.isFinite(v) ? Math.min(max, Math.max(min, v)) : fallback;
 
-/** A saved crop: four edges in 0..1 with something left between them, else none. */
+/** A saved crop: four edges in 0..1 (or past it, up to MAX_EXTEND: a filled canvas) with something left between them, else none. */
 function decodeCrop(v: unknown): CropRect | null {
   if (!v || typeof v !== 'object') return null;
   const c = v as Record<string, unknown>;
-  const r = { left: num(c.left, 0, 1, 0), top: num(c.top, 0, 1, 0), right: num(c.right, 0, 1, 1), bottom: num(c.bottom, 0, 1, 1) };
+  const r = { left: num(c.left, -MAX_EXTEND, 1 + MAX_EXTEND, 0), top: num(c.top, -MAX_EXTEND, 1 + MAX_EXTEND, 0), right: num(c.right, -MAX_EXTEND, 1 + MAX_EXTEND, 1), bottom: num(c.bottom, -MAX_EXTEND, 1 + MAX_EXTEND, 1) };
   return r.right - r.left > 0.001 && r.bottom - r.top > 0.001 && !isFullCrop(r) ? r : null;
 }
 

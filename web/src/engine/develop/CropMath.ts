@@ -17,7 +17,13 @@ export const FULL_CROP: Readonly<CropRect> = Object.freeze({ left: 0, top: 0, ri
 /** Smallest crop side in frame pixels. */
 export const MIN_CROP_PIXELS = 64;
 
-export const isFullCrop = (r: CropRect): boolean => r.left <= 0 && r.top <= 0 && r.right >= 1 && r.bottom >= 1;
+/** How far a crop may reach past each edge of the frame (fraction of that side); the canvas there is filled. */
+export const MAX_EXTEND = 0.3;
+
+export const isFullCrop = (r: CropRect): boolean => r.left === 0 && r.top === 0 && r.right === 1 && r.bottom === 1;
+
+/** True when r reaches past the frame, so part of the output is canvas to fill. */
+export const extendsFrame = (r: CropRect): boolean => r.left < 0 || r.top < 0 || r.right > 1 || r.bottom > 1;
 
 export const cropOf = (p: DevelopParams): CropRect => ({ left: p.cropLeft, top: p.cropTop, right: p.cropRight, bottom: p.cropBottom });
 
@@ -27,6 +33,34 @@ export const withCrop = (p: DevelopParams, r: CropRect): DevelopParams => ({
   cropTop: r.top,
   cropRight: r.right,
   cropBottom: r.bottom,
+});
+
+/**
+ * The canvas the crop tool shows while extending: the frame plus MAX_EXTEND past each edge, as a crop of the frame.
+ * [cropToView] / [cropFromView] map a crop to and from fractions of that canvas, so the tool's frame, grid and drags
+ * work as on the plain frame.
+ */
+export const EXTENDED_VIEW: Readonly<CropRect> = Object.freeze({ left: -MAX_EXTEND, top: -MAX_EXTEND, right: 1 + MAX_EXTEND, bottom: 1 + MAX_EXTEND });
+const VIEW_SPAN = 1 + 2 * MAX_EXTEND;
+export const cropToView = (r: CropRect): CropRect => ({
+  left: (r.left + MAX_EXTEND) / VIEW_SPAN,
+  top: (r.top + MAX_EXTEND) / VIEW_SPAN,
+  right: (r.right + MAX_EXTEND) / VIEW_SPAN,
+  bottom: (r.bottom + MAX_EXTEND) / VIEW_SPAN,
+});
+export const cropFromView = (v: CropRect): CropRect => ({
+  left: v.left * VIEW_SPAN - MAX_EXTEND,
+  top: v.top * VIEW_SPAN - MAX_EXTEND,
+  right: v.right * VIEW_SPAN - MAX_EXTEND,
+  bottom: v.bottom * VIEW_SPAN - MAX_EXTEND,
+});
+
+/** r pulled back inside the frame (turning Extend off). */
+export const cropInsideFrame = (r: CropRect): CropRect => ({
+  left: Math.max(0, Math.min(1, r.left)),
+  top: Math.max(0, Math.min(1, r.top)),
+  right: Math.max(0, Math.min(1, r.right)),
+  bottom: Math.max(0, Math.min(1, r.bottom)),
 });
 
 /** The same edit on the whole frame: what the Crop & rotate tool shows while it is open. */
@@ -60,8 +94,10 @@ export type CropHandle = 'move' | 'left' | 'top' | 'right' | 'bottom' | 'topLeft
 
 const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
 
-function fromPixels(l: number, t: number, r: number, b: number, fw: number, fh: number): CropRect {
-  return { left: clamp(l / fw, 0, 1), top: clamp(t / fh, 0, 1), right: clamp(r / fw, 0, 1), bottom: clamp(b / fh, 0, 1) };
+function fromPixels(l: number, t: number, r: number, b: number, fw: number, fh: number, extend = false): CropRect {
+  const e = extend ? MAX_EXTEND : 0;
+  const lo = e ? -e : 0; // not -0
+  return { left: clamp(l / fw, lo, 1 + e), top: clamp(t / fh, lo, 1 + e), right: clamp(r / fw, lo, 1 + e), bottom: clamp(b / fh, lo, 1 + e) };
 }
 
 /** The crop after turning the picture by quarterTurns clockwise quarter turns. */
@@ -105,19 +141,22 @@ export function rotatePerspective(p: DevelopParams, quarterTurns: number): Devel
  * r reshaped to ratio (width / height in pixels) with about the same area, around the same centre, inside the
  * frame. Null ratio = free: r unchanged.
  */
-export function cropWithAspect(r: CropRect, ratio: number | null, frameWidth: number, frameHeight: number): CropRect {
+export function cropWithAspect(r: CropRect, ratio: number | null, frameWidth: number, frameHeight: number, extend = false): CropRect {
   if (ratio == null) return r;
   const fw = frameWidth;
   const fh = frameHeight;
   const area = (r.right - r.left) * fw * (r.bottom - r.top) * fh;
   let w = Math.sqrt(area * ratio);
   let h = w / ratio;
-  const fit = Math.min(1, fw / w, fh / h);
+  const e = extend ? MAX_EXTEND : 0;
+  const bw = fw * (1 + 2 * e);
+  const bh = fh * (1 + 2 * e);
+  const fit = Math.min(1, bw / w, bh / h);
   w *= fit;
   h *= fit;
-  const cx = clamp(((r.left + r.right) / 2) * fw, w / 2, fw - w / 2);
-  const cy = clamp(((r.top + r.bottom) / 2) * fh, h / 2, fh - h / 2);
-  return fromPixels(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2, fw, fh);
+  const cx = clamp(((r.left + r.right) / 2) * fw, w / 2 - e * fw, fw * (1 + e) - w / 2);
+  const cy = clamp(((r.top + r.bottom) / 2) * fh, h / 2 - e * fh, fh * (1 + e) - h / 2);
+  return fromPixels(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2, fw, fh, extend);
 }
 
 /**
@@ -132,9 +171,16 @@ export function dragCrop(
   ratio: number | null,
   frameWidth: number,
   frameHeight: number,
+  extend = false,
 ): CropRect {
   const fw = frameWidth;
   const fh = frameHeight;
+  // Bounds of the canvas the crop may use: the frame, plus MAX_EXTEND past each edge when extending.
+  const ex = extend ? MAX_EXTEND : 0;
+  const x0 = -ex * fw;
+  const x1 = (1 + ex) * fw;
+  const y0 = -ex * fh;
+  const y1 = (1 + ex) * fh;
   const minW = Math.min(MIN_CROP_PIXELS, fw);
   const minH = Math.min(MIN_CROP_PIXELS, fh);
   const l = start.left * fw;
@@ -145,9 +191,9 @@ export function dragCrop(
   const my = dy * fh;
 
   if (handle === 'move') {
-    const ox = clamp(mx, -l, fw - r);
-    const oy = clamp(my, -t, fh - b);
-    return fromPixels(l + ox, t + oy, r + ox, b + oy, fw, fh);
+    const ox = clamp(mx, x0 - l, x1 - r);
+    const oy = clamp(my, y0 - t, y1 - b);
+    return fromPixels(l + ox, t + oy, r + ox, b + oy, fw, fh, extend);
   }
 
   const movesLeft = handle === 'left' || handle === 'topLeft' || handle === 'bottomLeft';
@@ -156,11 +202,11 @@ export function dragCrop(
   const movesBottom = handle === 'bottom' || handle === 'bottomLeft' || handle === 'bottomRight';
 
   if (ratio == null) {
-    const nl = movesLeft ? clamp(l + mx, 0, r - minW) : l;
-    const nr = movesRight ? clamp(r + mx, l + minW, fw) : r;
-    const nt = movesTop ? clamp(t + my, 0, b - minH) : t;
-    const nb = movesBottom ? clamp(b + my, t + minH, fh) : b;
-    return fromPixels(nl, nt, nr, nb, fw, fh);
+    const nl = movesLeft ? clamp(l + mx, x0, r - minW) : l;
+    const nr = movesRight ? clamp(r + mx, l + minW, x1) : r;
+    const nt = movesTop ? clamp(t + my, y0, b - minH) : t;
+    const nb = movesBottom ? clamp(b + my, t + minH, y1) : b;
+    return fromPixels(nl, nt, nr, nb, fw, fh, extend);
   }
 
   const horizontal = movesLeft || movesRight;
@@ -172,14 +218,14 @@ export function dragCrop(
   const wantH = vertical ? Math.abs((movesTop ? t + my : b + my) - ay) : 0;
   let w = Math.max(wantW, wantH * ratio);
   // Room around the anchor, per axis (both halves when that axis stays centred).
-  const roomW = movesLeft ? ax : movesRight ? fw - ax : 2 * Math.min(ax, fw - ax);
-  const roomH = movesTop ? ay : movesBottom ? fh - ay : 2 * Math.min(ay, fh - ay);
+  const roomW = movesLeft ? ax - x0 : movesRight ? x1 - ax : 2 * Math.min(ax - x0, x1 - ax);
+  const roomH = movesTop ? ay - y0 : movesBottom ? y1 - ay : 2 * Math.min(ay - y0, y1 - ay);
   const room = Math.min(roomW, roomH * ratio);
   w = Math.min(Math.max(Math.min(w, room), minW, minH * ratio), room);
   const h = w / ratio;
   const nl = movesLeft ? ax - w : movesRight ? ax : ax - w / 2;
   const nt = movesTop ? ay - h : movesBottom ? ay : ay - h / 2;
-  return fromPixels(nl, nt, nl + w, nt + h, fw, fh);
+  return fromPixels(nl, nt, nl + w, nt + h, fw, fh, extend);
 }
 
 /**
