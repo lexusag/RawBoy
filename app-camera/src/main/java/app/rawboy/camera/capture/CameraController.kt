@@ -164,7 +164,12 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         val hiRes: Boolean = false,
         /** The lens's aperture (f-number); the flash default for a lens that hasn't learned its own scales with it. */
         val fNumber: Float,
+        /** The lens's largest hardware `ImageFormat.DEPTH16` output size when `DEPTH_OUTPUT` is supported, or null. */
+        val depthSize: Size? = null,
     ) {
+        /** The lens offers a hardware `ImageFormat.DEPTH16` depth sensor output. */
+        val hasHardwareDepth: Boolean get() = depthSize != null
+
         /** The lens can focus (a fixed-focus lens reports a minimum focus distance of 0). */
         val canFocus get() = (characteristics.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f) > 0f
 
@@ -197,7 +202,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         fun labelled(label: String) = Info(
             openId, physicalId, label, facing, equivalentFocal, characteristics, regionArray, rawSize, previewSize,
             sensorOrientation, previewGamma, toneMapModes, shadingMapModes, faceModes, activeArray, xyzToCamera,
-            cameraToSrgb, hasFlash, maxResSize, maxResFormat, hiRes, fNumber,
+            cameraToSrgb, hasFlash, maxResSize, maxResFormat, hiRes, fNumber, depthSize,
         )
 
         /**
@@ -461,6 +466,11 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         }
         // The flash belongs to the camera the requests go to: the logical one for a physical lens.
         val opened = if (physicalId != null) runCatching { manager.getCameraCharacteristics(openId) }.getOrNull() ?: c else c
+        val depthSize = if (CameraMetadata.REQUEST_AVAILABLE_CAPABILITIES_DEPTH_OUTPUT in caps) {
+            runCatching {
+                map.getOutputSizes(ImageFormat.DEPTH16)?.maxByOrNull { it.width.toLong() * it.height }
+            }.getOrNull()
+        } else null
         return Info(
             openId = openId,
             physicalId = physicalId,
@@ -484,6 +494,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             maxResFormat = maxResFormat,
             hiRes = hiRes,
             fNumber = c.get(CameraCharacteristics.LENS_INFO_AVAILABLE_APERTURES)?.firstOrNull()?.takeIf { it > 0f } ?: platform.flash.referenceFNumber,
+            depthSize = depthSize,
         )
     }
 

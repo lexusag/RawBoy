@@ -264,6 +264,27 @@ JNIEXPORT jstring JNICALL Java_app_rawboy_raw_RawNative_lensName(JNIEnv* env, jc
     return env->NewStringUTF(fromHandle(handle)->lensName.c_str());
 }
 
+// [0] width, [1] height, [2] hardware (0/1), [3] subjectDetected (0/1), [4] focusDepth (0..65535); empty if none.
+JNIEXPORT jintArray JNICALL Java_app_rawboy_raw_RawNative_depthInfo(JNIEnv* env, jclass, jlong handle) {
+    const DecodedImage::DepthData& d = fromHandle(handle)->depth;
+    if (d.empty()) return env->NewIntArray(0);
+    const jint focusU16 = std::clamp(static_cast<int>(std::lround(d.focusDepth * 65535.0f)), 0, 65535);
+    const jint v[5] = {d.width, d.height, d.hardware ? 1 : 0, d.subjectDetected ? 1 : 0, focusU16};
+    jintArray result = env->NewIntArray(5);
+    env->SetIntArrayRegion(result, 0, 5, v);
+    return result;
+}
+
+JNIEXPORT jbyteArray JNICALL Java_app_rawboy_raw_RawNative_depthData(JNIEnv* env, jclass, jlong handle) {
+    const DecodedImage::DepthData& d = fromHandle(handle)->depth;
+    jbyteArray result = env->NewByteArray(static_cast<jsize>(d.data.size()));
+    if (!d.data.empty()) {
+        env->SetByteArrayRegion(result, 0, static_cast<jsize>(d.data.size()),
+                                reinterpret_cast<const jbyte*>(d.data.data()));
+    }
+    return result;
+}
+
 // Area-average downscale into a direct buffer of dstW*dstH RGB half floats.
 // With boostHighlights, each full-resolution pixel near/above clipping is scaled up
 // first (pre-clip highlight reconstruction), so small light sources keep

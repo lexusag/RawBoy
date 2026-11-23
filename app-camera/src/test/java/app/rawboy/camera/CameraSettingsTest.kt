@@ -20,7 +20,8 @@ class CameraSettingsTest {
         val pro = CameraSettings(
             brightness = 40f, warmth = -20f, keepDng = true, burstMode = BurstMode.ON, selfTimer = 5, longExposure = 10,
             experimental = true, randomLightLeak = true, photoFrame = PhotoFrame.DATE_STAMP, trackFocus = true,
-            flatVideo = true, videoMotionData = true, showHistogram = true, showGrid = true, showLevel = true,
+            flatVideo = true, videoMotionData = true, saveDepth = true, depthPortrait = true,
+            showHistogram = true, showGrid = true, showLevel = true,
             showZoomControl = true, smallExport = false, jpegQuality = 90, lens = "T", film = false,
         )
         // Off: nothing changes.
@@ -34,7 +35,7 @@ class CameraSettingsTest {
         assertEquals(0, e.activeSelfTimer)
         assertEquals(null, e.longExposureSpec(null, PreviewLevel.BOOSTED, 1f))
         assertFalse(e.randomLightLeak)
-        assertFalse(e.trackFocus || e.flatVideo || e.videoMotionData)
+        assertFalse(e.trackFocus || e.flatVideo || e.videoMotionData || e.saveDepth || e.depthPortrait)
         assertFalse(e.showHistogram || e.showGrid || e.showLevel || e.showZoomControl)
         // Colour: Film mode on the default film stock; B&W: Film + B&W on the default mono stock.
         assertEquals(Edition.filmLook(Edition.defaultFilmLookId), e.look)

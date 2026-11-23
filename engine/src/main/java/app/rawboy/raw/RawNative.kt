@@ -30,4 +30,6 @@ internal object RawNative {
     @JvmStatic external fun downsample(handle: Long, dstWidth: Int, dstHeight: Int, out: ByteBuffer, boostHighlights: Boolean)
     @JvmStatic external fun copyTile(handle: Long, x: Int, y: Int, width: Int, height: Int, out: ByteBuffer)
     @JvmStatic external fun noiseLevel(handle: Long): FloatArray
+    @JvmStatic external fun depthInfo(handle: Long): IntArray
+    @JvmStatic external fun depthData(handle: Long): ByteArray
 }

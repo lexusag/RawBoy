@@ -18,6 +18,7 @@ import android.os.IBinder
 import android.os.PowerManager
 import android.os.Process
 import android.provider.MediaStore
+import android.system.Os
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.content.ContextCompat
@@ -30,7 +31,10 @@ import app.rawboy.auto.analysis.AutoTone
 import app.rawboy.auto.analysis.MeterArea
 import app.rawboy.auto.analysis.NoiseLevel
 import app.rawboy.develop.FilmLeaks
+import app.rawboy.develop.Masks
 import app.rawboy.export.DateStamp
+import app.rawboy.export.DepthMap
+import app.rawboy.export.DngDepth
 import app.rawboy.export.ExportFormat
 import app.rawboy.export.ExportGpu
 import app.rawboy.export.ExportSettings
@@ -49,6 +53,7 @@ import app.rawboy.lut.LutData
 import app.rawboy.lut.LutLoader
 import app.rawboy.raw.DngJxlNative
 import app.rawboy.raw.RawImage
+import app.rawboy.retouch.DepthEstimator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -71,6 +76,7 @@ import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
 import kotlin.math.log2
+import kotlin.math.max
 import kotlin.math.pow
 import kotlin.math.roundToInt
 
@@ -109,6 +115,8 @@ internal data class Shot(
     val frameNumber: Int = 0,
     /** The camera that shot it (the stand-alone or physical camera's id), for per-camera sensor numbers; null if unknown. */
     val cameraId: String? = null,
+    /** Hardware depth map captured alongside the raw, if available. */
+    val hardwareDepth: DepthMap? = null,
 )
 
 /** A finished shot and the sequence number assigned at its shutter, so lock screen launches hide earlier ones. */
@@ -136,6 +144,10 @@ internal object ShotSaver {
     private const val FLASH_LIFT_EV = 0.5f
     private const val MIN_FLASH_GUIDE = 1e-2f
     private const val MAX_FLASH_GUIDE = 1e4f
+
+    /** In-camera portrait bokeh blur strength (`0..1` of [Masks.MAX_LENS_BLUR]) when a person or pet is detected. */
+    private const val PORTRAIT_BLUR = 0.40f
+    private const val PORTRAIT_BOKEH_SOURCE_DIMENSION = 1536
 
     /** Nice value of the decode and develop threads: normal priority so OpenMP / GPU develop keeps the big cores. */
     private const val DEVELOP_THREAD_PRIORITY = 0
@@ -454,9 +466,42 @@ internal object ShotSaver {
                 "${params.colorDenoise}, sharpening ${params.sharpening}; key ${a.stats.key}, exposure ${params.exposure}")
             val lut = params.lut?.let { loadLut(app, it) }
             val film = params.film?.let { loadFilm(app, it) }
+            val depthMap = if (s.saveDepth) {
+                val (focusX, focusY) = (shot.meter as? MeterArea.Spot)?.let { it.x to it.y } ?: (0.5f to 0.5f)
+                val swDepth = runCatching { DepthEstimator.estimate(app, a.base, focusX, focusY) }.getOrNull()
+                val resolved = shot.hardwareDepth?.let { hw ->
+                    DepthMap(
+                        width = hw.width,
+                        height = hw.height,
+                        data = hw.data,
+                        hardware = true,
+                        subjectDetected = swDepth?.subjectDetected ?: hw.subjectDetected,
+                        focusDepth = hw.focusDepth,
+                    )
+                } ?: swDepth
+                if (resolved != null && s.keepDng) {
+                    writeDepthToDng(app, shot.dng, resolved)
+                }
+                resolved
+            } else {
+                null
+            }
+            val portraitActive = s.saveDepth && s.depthPortrait && depthMap?.subjectDetected == true
+            val bokehSource = if (portraitActive) {
+                img.createPreview(PORTRAIT_BOKEH_SOURCE_DIMENSION, boostHighlights = true)
+            } else {
+                null
+            }
+            val depthBlurPx = if (portraitActive) {
+                PORTRAIT_BLUR * Masks.MAX_LENS_BLUR * max(img.width, img.height)
+            } else {
+                0f
+            }
             val shader = ShaderParams.from(
                 params, a.defaults, lut, LensTransform(img.lens, params), a.base, a.bloom, a.skin,
                 CameraViewModel.GRAIN_SIZE_SCALE, CameraViewModel.grainStrength(s), film = film,
+                bokehSource = bokehSource, depthMap = depthMap, depthBlurPx = depthBlurPx,
+                depthFocus = depthMap?.focusDepth ?: 0.2f, depthFalloff = 0.5f,
             )
             val export = ExportSettings(
                 format = ExportFormat.JPEG,
@@ -553,6 +598,36 @@ internal object ShotSaver {
         } catch (e: Throwable) {
             Log.w(TAG, "lossy DNG ${shot.name}", e)
             _errors.tryEmit("${shot.name}.dng stays uncompressed: ${e.message ?: e.javaClass.simpleName}")
+        }
+    }
+
+    /** Appends [depth] (`"RBDP"` trailer, [DngDepth]) to the saved DNG file at [dng]. Best effort. */
+    private fun writeDepthToDng(app: Context, dng: Uri, depth: DepthMap) {
+        try {
+            app.contentResolver.openFileDescriptor(dng, "rw")?.use { pfd ->
+                val fd = pfd.fileDescriptor
+                DngDepth.write(
+                    depth = depth,
+                    size = Os.fstat(fd).st_size,
+                    read = { offset, length ->
+                        val b = ByteArray(length)
+                        var n = 0
+                        while (n < length) {
+                            val got = Os.pread(fd, b, n, length - n, offset + n)
+                            if (got <= 0) break
+                            n += got
+                        }
+                        b.copyOf(n)
+                    },
+                    writeAt = { offset, bytes ->
+                        var n = 0
+                        while (n < bytes.size) n += Os.pwrite(fd, bytes, n, bytes.size - n, offset + n)
+                        Os.ftruncate(fd, offset + bytes.size)
+                    },
+                )
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "DNG depth write", e)
         }
     }
 

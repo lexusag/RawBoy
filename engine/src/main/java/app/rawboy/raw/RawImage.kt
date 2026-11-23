@@ -7,6 +7,7 @@ import android.graphics.ColorSpace
 import android.graphics.ImageDecoder
 import android.net.Uri
 import app.rawboy.auto.analysis.NoiseLevel
+import app.rawboy.export.DepthMap
 import app.rawboy.gl.DetailTile
 import app.rawboy.lens.LensInfo
 import app.rawboy.retouch.SkinMask
@@ -56,6 +57,18 @@ class RawImage private constructor(private var handle: Long) : AutoCloseable {
     val lens: LensInfo = LensInfo.fromNative(
         RawNative.lensName(handle), width, height, RawNative.lensInfo(handle), RawNative.lensShading(handle),
     )
+
+    /** Embedded depth map from a RawBoy Camera DNG (`"RBDP"` trailer), or `null` if the file has none. */
+    val depth: DepthMap? = RawNative.depthInfo(handle).takeIf { it.size == 5 }?.let { info ->
+        DepthMap(
+            width = info[0],
+            height = info[1],
+            data = RawNative.depthData(handle),
+            hardware = info[2] != 0,
+            subjectDetected = info[3] != 0,
+            focusDepth = info[4] / 65535f,
+        )
+    }
 
     /** Downscaled copy; [boostHighlights] makes it a bloom source (see RawNative.downsample). */
     fun createPreview(maxDimension: Int, boostHighlights: Boolean = false): PreviewImage {

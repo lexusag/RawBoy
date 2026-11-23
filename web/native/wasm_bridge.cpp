@@ -266,6 +266,20 @@ val lensShading(uintptr_t h) {
     return toTyped(s.gains.data(), s.gains.size());
 }
 
+/** Embedded RawBoy Camera depth map ({width, height, hardware, subjectDetected, focusDepth, data}), or null. */
+val depthMap(uintptr_t h) {
+    const DecodedImage::DepthData& d = fromHandle(h)->depth;
+    if (d.empty()) return val::null();
+    val o = val::object();
+    o.set("width", d.width);
+    o.set("height", d.height);
+    o.set("hardware", d.hardware);
+    o.set("subjectDetected", d.subjectDetected);
+    o.set("focusDepth", d.focusDepth);
+    o.set("data", toTyped(d.data.data(), d.data.size()));
+    return o;
+}
+
 /** [dstW] x [dstH] RGB half floats (Uint16Array), area-averaged; see rawboy::downsample. */
 val downsample(uintptr_t h, int dstW, int dstH, bool boostHighlights) {
     std::vector<uint16_t> out(static_cast<size_t>(dstW) * dstH * 3);
@@ -549,6 +563,7 @@ EMSCRIPTEN_BINDINGS(rawboy) {
     function("lensInfo", &lensInfo);
     function("metadata", &metadata);
     function("lensShading", &lensShading);
+    function("depthMap", &depthMap);
     function("downsample", &downsample);
     function("copyTile", &copyTile);
     function("noiseLevel", &noiseLevel);

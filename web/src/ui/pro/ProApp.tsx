@@ -106,17 +106,23 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   const [healMode, setHealMode] = useState(false);
   // White balance picker: armed from the Color tab, the next click on the photo picks.
   const [pickingWhite, setPickingWhite] = useState(false);
+  // Focus depth picker: armed from the Detail tab (Portrait blur), the next click on the photo picks depthFocus.
+  const [pickingDepth, setPickingDepth] = useState(false);
   // Auto white balance: armed from the Color tab with a draggable extendable rectangle.
   const [autoWb, setAutoWb] = useState(false);
   const [autoWbRect, setAutoWbRect] = useState<CropRect>({ left: 0.15, top: 0.15, right: 0.85, bottom: 0.85 });
   useEffect(() => {
     setPickingWhite(false);
+    setPickingDepth(false);
     setAutoWb(false);
   }, [geometryMode, masksMode, leaksMode, fxMode, healMode, presetsMode, state.fileName]);
   useEffect(() => {
     if (state.controlsTab !== 'Color') {
       setPickingWhite(false);
       setAutoWb(false);
+    }
+    if (state.controlsTab !== 'Detail') {
+      setPickingDepth(false);
     }
   }, [state.controlsTab]);
   // Look selector (prototype): armed from the top bar, the next click on the photo opens it there.
@@ -130,12 +136,12 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
     setLooksArmed(false);
     setLooksAt(null);
   }, [geometryMode, masksMode, leaksMode, fxMode, healMode, presetsMode, autoWb, state.fileName]);
-  // Esc puts down the active tool (white picker, auto WB rectangle, Looks, Crop & rotate, Masks, Leaks, Light effects,
+  // Esc puts down the active tool (white picker, depth picker, auto WB rectangle, Looks, Crop & rotate, Masks, Leaks, Light effects,
   // Presets), one per press. Not while typing, over a dialog (they handle Esc themselves) or when something else
   // already took the key.
   const exportOpen = useRef(false);
-  const escState = useRef({ pickingWhite, autoWb, looksArmed, geometryMode, masksMode, leaksMode, fxMode, healMode, presetsMode });
-  escState.current = { pickingWhite, autoWb, looksArmed, geometryMode, masksMode, leaksMode, fxMode, healMode, presetsMode };
+  const escState = useRef({ pickingWhite, pickingDepth, autoWb, looksArmed, geometryMode, masksMode, leaksMode, fxMode, healMode, presetsMode });
+  escState.current = { pickingWhite, pickingDepth, autoWb, looksArmed, geometryMode, masksMode, leaksMode, fxMode, healMode, presetsMode };
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key !== 'Escape' || e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || e.shiftKey) return;
@@ -146,6 +152,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
       const k = escState.current;
       if (exportOpen.current) return;
       if (k.pickingWhite) setPickingWhite(false);
+      else if (k.pickingDepth) setPickingDepth(false);
       else if (k.autoWb) setAutoWb(false);
       else if (k.looksArmed) {
         setLooksArmed(false);
@@ -270,7 +277,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   const shaderParams = useMemo(
     () => (session.preview ? store.session.shaderParams(shown, state.defaults, session.lutData, maskView, session.filmData) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [shown, state.defaults, session.lutData, session.filmData, session.lensInfo, session.base, session.bloomSources, session.bokehSource, session.flareSource, skinMask, session.retouchMap, session.preview, maskView],
+    [shown, state.defaults, session.lutData, session.filmData, session.lensInfo, session.base, session.bloomSources, session.bokehSource, session.flareSource, session.depthMap, skinMask, session.retouchMap, session.preview, maskView],
   );
 
   // Histogram of the edited photo (not the crop tool's whole frame, no mask overlay), from the 512 px base copy,
@@ -294,7 +301,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
     }, 150);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editedKey, state.defaults, session.lutData, session.filmData, session.base, session.bloomSources, session.bokehSource, session.flareSource, skinMask, session.retouchMap, session.preview]);
+  }, [editedKey, state.defaults, session.lutData, session.filmData, session.base, session.bloomSources, session.bokehSource, session.flareSource, session.depthMap, skinMask, session.retouchMap, session.preview]);
 
   // Z: 100% at the pointer (or the middle of the photo when the pointer isn't on it), again to fit. Every mode but
   // Crop & rotate, which works on the uncropped fit view.
@@ -608,6 +615,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
             else {
               setLooksArmed(true);
               setPickingWhite(false);
+              setPickingDepth(false);
             }
           }}
           disabled={!hasImage || busy || geometryMode || shapesMode || presetsMode || autoWb}
@@ -638,7 +646,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
         <button type="button" className="primary" onClick={() => setShowExport(true)} disabled={!hasImage || busy}>Export</button>
         <HelpButton />
       </header>
-      <div className={`workspace${pickingWhite ? ' picking-white' : ''}`}>
+      <div className={`workspace${pickingWhite || pickingDepth ? ' picking-white' : ''}`}>
         <Preview
           session={session}
           params={shaderParams}
@@ -663,6 +671,9 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
             } else if (pickingWhite) {
               setPickingWhite(false);
               void store.pickWhite(x, y);
+            } else if (pickingDepth) {
+              setPickingDepth(false);
+              store.pickDepth(x, y);
             } else {
               store.onPreviewClick(x, y);
             }
@@ -957,11 +968,25 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
                   skin={session.skin}
                   blemish={session.blemish}
                   retouch={{ working: session.retouchWorking, ready: session.retouchMap != null }}
+                  depthMap={session.depthMap}
+                  pickingDepth={pickingDepth}
+                  onPickDepth={() => {
+                    const next = !pickingDepth;
+                    setPickingDepth(next);
+                    if (next) {
+                      setPickingWhite(false);
+                      setAutoWb(false);
+                      setLooksArmed(false);
+                    }
+                  }}
                   pickingWhite={pickingWhite}
                   onPickWhite={() => {
                     const next = !pickingWhite;
                     setPickingWhite(next);
-                    if (next) setAutoWb(false);
+                    if (next) {
+                      setAutoWb(false);
+                      setPickingDepth(false);
+                    }
                   }}
                   autoWb={autoWb}
                   onAutoWb={() => {

@@ -76,6 +76,8 @@ uniform float uLayerBlur[MAX_LAYERS]; // lens blur radius at full mask, full-res
 uniform sampler2D uBokeh;
 uniform vec2 uBokehTexel;             // 1 / bokeh texture size
 uniform float uBokehScale;            // bokeh texels per full-resolution pixel; 0 = off
+uniform sampler2D uDepthMap;          // 0..1 normalized depth map (0 = near, 1 = far) embedded in DNG
+uniform vec3 uDepthBlur;              // x = max blur radius (full-res px, 0 = off), y = focus depth 0..1, z = falloff 0..1
 
 // Sampling geometry, so spatial effects are sized in full-resolution pixels
 // in both the downscaled preview and the full-resolution export tiles.
@@ -1106,9 +1108,20 @@ float layerMask(int i, vec2 p) {
     return m * c.z;
 }
 
-// Lens blur radius at a pixel in full-resolution pixels: the strongest layer's blur times its mask weight.
-float bokehRadius(float lm[MAX_LAYERS]) {
-    float r = 0.0;
+// Portrait depth blur radius in full-resolution pixels at image pixel [p]: zero inside a deadzone around focus depth
+// uDepthBlur.y, ramping smoothly with falloff uDepthBlur.z (0 = deep DoF / gentle falloff, 1 = shallow DoF / steep).
+float depthBokehRadius(vec2 p) {
+    if (uDepthBlur.x <= 0.0) return 0.0;
+    float d = texture(uDepthMap, clamp(p / uImageSize, 0.0, 1.0)).r;
+    float dist = abs(d - uDepthBlur.y);
+    float deadzone = 0.04 + 0.16 * (1.0 - uDepthBlur.z);
+    float ramp = max(0.15, 0.85 * (1.0 - uDepthBlur.z));
+    return uDepthBlur.x * smoothstep(deadzone, deadzone + ramp, dist);
+}
+
+// Lens blur radius at a pixel in full-resolution pixels: the strongest layer's blur or portrait depth blur.
+float bokehRadius(float lm[MAX_LAYERS], vec2 p) {
+    float r = depthBokehRadius(p);
     for (int i = 0; i < MAX_LAYERS; ++i) r = max(r, i < uLayerCount ? lm[i] * uLayerBlur[i] : 0.0);
     return r;
 }

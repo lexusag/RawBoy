@@ -9,6 +9,7 @@ import type { LensInfo } from '../../engine/lens/LensInfo';
 import type { LutEntry } from '../../engine/lut/LutData';
 import { LutRepository } from '../../engine/lut/LutRepository';
 import type { BlemishState, SkinState } from '../../engine/session/PhotoSession';
+import type { DepthMapData } from '../../worker/protocol';
 import { pickFiles } from '../common/files';
 import {
   INITIAL_WHEEL_STATE,
@@ -42,6 +43,11 @@ interface Props {
   blemish: BlemishState;
   /** Portrait retouch: its map is being made / there is one (none on a ready mask = no face to size it by). */
   retouch: { working: boolean; ready: boolean };
+  /** Embedded RawBoy Camera depth map ("RBDP" trailer), or null when the file has none. */
+  depthMap?: DepthMapData | null;
+  /** Focus depth picker armed: the next click on the photo sets depthFocus. */
+  pickingDepth?: boolean;
+  onPickDepth?: () => void;
   /** White balance picker armed: the next click on the photo sets temperature and tint. */
   pickingWhite: boolean;
   onPickWhite: () => void;
@@ -60,7 +66,8 @@ interface Props {
 /** The editor's tabs Light, Color, Detail, LUTs, Lens (port of app-pro's Controls.kt). */
 export function ControlsPanel({
   params, defaults, onChange, lutLoading, onSelectLut, filmLoading, onToneMapper, onFilm, onSelectFilm, onStepFilm,
-  lens, lensfun, skin, blemish, retouch, pickingWhite, onPickWhite, autoWb, onAutoWb, onResetWb, onSaveLensPreset, chosenTab, onTab: setTab,
+  lens, lensfun, skin, blemish, retouch, depthMap = null, pickingDepth = false, onPickDepth,
+  pickingWhite, onPickWhite, autoWb, onAutoWb, onResetWb, onSaveLensPreset, chosenTab, onTab: setTab,
 }: Props) {
   // Film replaces the tone mapper and the user LUT (kept, but not rendered), so the LUTs tab hides while Film is on.
   const filmOn = params.film != null;
@@ -284,6 +291,14 @@ export function ControlsPanel({
             {blemishNote && <Note>{blemishNote}</Note>}
             {slider('Portrait retouch', 'portraitRetouch', 0, 100, formatPlain)}
             {retouchNote && <Note>{retouchNote}</Note>}
+            <DepthBlurSliders
+              params={params}
+              defaults={defaults}
+              onChange={onChange}
+              depthMap={depthMap}
+              pickingDepth={pickingDepth}
+              onPickDepth={onPickDepth}
+            />
             {slider('Bloom', 'bloom', 0, 100, formatPlain)}
             <AnamorphicSliders params={params} defaults={defaults} onChange={onChange} />
             <GrainSliders params={params} defaults={defaults} onChange={onChange} />
@@ -481,6 +496,94 @@ export function GeometryPanel({ params, onChange, onRotate, onFlip, aspect, port
 
 export const SectionLabel = ({ children }: { children: React.ReactNode }) => <div className="section-label">{children}</div>;
 export const Note = ({ children }: { children: React.ReactNode }) => <div className="note">{children}</div>;
+
+/**
+ * Portrait / depth blur controls using the depth map embedded in a RawBoy Camera DNG (`"RBDP"` trailer).
+ * Opens Focus depth, Depth falloff and the click-to-focus picker when raised or when its label is clicked.
+ */
+function DepthBlurSliders({
+  params,
+  defaults,
+  onChange,
+  depthMap,
+  pickingDepth,
+  onPickDepth,
+}: {
+  params: DevelopParams;
+  defaults: DevelopParams;
+  onChange: (p: DevelopParams) => void;
+  depthMap: DepthMapData | null;
+  pickingDepth: boolean;
+  onPickDepth?: () => void;
+}) {
+  const [open, setOpen] = useState<boolean | null>(null);
+  const active =
+    params.depthBlur > 0 ||
+    params.depthFocus !== defaults.depthFocus ||
+    params.depthFalloff !== defaults.depthFalloff;
+  const shown = open ?? active;
+  return (
+    <>
+      <ParamSlider
+        key="depthBlur"
+        label={shown ? 'Portrait blur ▾' : 'Portrait blur ▸'}
+        value={params.depthBlur}
+        min={0}
+        max={100}
+        defaultValue={defaults.depthBlur}
+        format={formatPlain}
+        onLabelClick={() => setOpen(!shown)}
+        onChange={(v) => {
+          if (v === 0 && open === false) setOpen(null);
+          onChange({ ...params, depthBlur: v });
+        }}
+      />
+      {shown && (
+        <div className="slider-details">
+          {depthMap ? (
+            <>
+              {onPickDepth && (
+                <div className="chips">
+                  <button type="button" className={pickingDepth ? 'active' : ''} onClick={onPickDepth}>
+                    {pickingDepth ? 'Click subject to focus' : 'Pick focus depth'}
+                  </button>
+                </div>
+              )}
+              <ParamSlider
+                key="depthFocus"
+                label="Focus depth"
+                value={params.depthFocus}
+                min={0}
+                max={100}
+                defaultValue={defaults.depthFocus}
+                format={formatPlain}
+                onChange={(v) => onChange({ ...params, depthFocus: v })}
+              />
+              <ParamSlider
+                key="depthFalloff"
+                label="Depth falloff"
+                value={params.depthFalloff}
+                min={0}
+                max={100}
+                defaultValue={defaults.depthFalloff}
+                format={formatPlain}
+                onChange={(v) => onChange({ ...params, depthFalloff: v })}
+              />
+              <Note>
+                {depthMap.hardware
+                  ? 'Hardware depth map from DNG'
+                  : 'Software depth map from DNG'}
+                {depthMap.subjectDetected ? ' · Subject detected' : ''}
+              </Note>
+            </>
+          ) : (
+            <Note>No depth map in this file (turn on Save depth map in DNG in RawBoy Camera).</Note>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
 
 /**
  * The Lens tab's lens preset name (the lens by default) and Save button. Manual lenses record no lens name: their

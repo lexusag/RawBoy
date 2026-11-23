@@ -3,7 +3,7 @@ import type { PreviewImage } from '../gl/PreviewImage';
 import type { DetailTile, PixelRect } from '../gl/Zoom';
 import { LensInfo } from '../lens/LensInfo';
 import type { SkinMask } from '../retouch/SkinMask';
-import type { OpenResult, PhotoMetadata } from '../../worker/protocol';
+import type { DepthMapData, OpenResult, PhotoMetadata } from '../../worker/protocol';
 import { rawWorker, type RawWorker } from './RawWorker';
 
 /**
@@ -37,6 +37,8 @@ export class RawImage {
   readonly lens: LensInfo;
   /** EXIF essentials, written into exported JPEGs. */
   readonly metadata: PhotoMetadata;
+  /** Embedded RawBoy Camera depth map ("RBDP" trailer), or null when the file has none. */
+  readonly depthMap: DepthMapData | null;
 
   private constructor(private readonly worker: RawWorker, private readonly handle: number, r: OpenResult) {
     this.width = r.fullWidth;
@@ -52,6 +54,7 @@ export class RawImage {
     this.asShotWhite = r.asShotWhite;
     this.lens = LensInfo.fromNative(r.lensName, r.fullWidth, r.fullHeight, r.lensInfo, r.lensShading);
     this.metadata = r.metadata;
+    this.depthMap = r.depthMap ?? null;
   }
 
   /**

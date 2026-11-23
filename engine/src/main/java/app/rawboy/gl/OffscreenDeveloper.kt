@@ -35,6 +35,7 @@ internal class OffscreenDeveloper(
     private val bloomTailTexture: ImageTexture
     private val flareTexture: ImageTexture
     private val maskTexture: MaskTexture
+    private val depthTexture: DepthTexture
     private val brushTexture: BrushTexture
     private val bokehTexture: BokehTexture
     private val fxTexture: FxTexture
@@ -87,6 +88,7 @@ internal class OffscreenDeveloper(
         bloomTailTexture = ImageTexture(ImageTexture.BLOOM_TAIL_UNIT)
         flareTexture = ImageTexture(ImageTexture.FLARE_UNIT)
         maskTexture = MaskTexture()
+        depthTexture = DepthTexture()
         brushTexture = BrushTexture()
         bokehTexture = BokehTexture(quad)
         fxTexture = FxTexture()
@@ -178,8 +180,9 @@ internal class OffscreenDeveloper(
         bloomTailTexture.bind(params.bloomTail)
         flareTexture.bind(params.flareSource)
         maskTexture.bind(params.skinMask)
+        depthTexture.bind(params.depthMap)
         brushTexture.bind(params.layers.brush)
-        bokehTexture.bind(params) // after the brush atlas: its mask pass reads it
+        bokehTexture.bind(params) // after the brush atlas and depth map: its mask pass reads them
         fxTexture.bind(params.fx.data)
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
     }
@@ -236,6 +239,7 @@ internal class OffscreenDeveloper(
         bloomTailTexture.release()
         flareTexture.release()
         maskTexture.release()
+        depthTexture.release()
         brushTexture.release()
         bokehTexture.release()
         fxTexture.release()

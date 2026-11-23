@@ -15,6 +15,7 @@ import type { LensTransform } from '../lens/LensTransform';
 import type { LutData } from '../lut/LutData';
 import { skinFixOf, type RetouchMap } from '../retouch/PortraitRetouch';
 import type { SkinMask } from '../retouch/SkinMask';
+import type { DepthMapData } from '../../worker/protocol';
 import type { BloomSources, PreviewImage } from './PreviewImage';
 import { WAVELET_DENOISE_MARGIN } from './WaveletDenoise';
 import { ZoomMath } from './Zoom';
@@ -228,6 +229,13 @@ export class ShaderParams {
     readonly filmLeaks: FilmLeakUniforms = NO_FILM_LEAKS,
     /** `uMonoFx`: 1 when the picture is black and white, so the leaks and effects go grey too. */
     readonly monoFx = 0,
+    /** Upright normalized depth map (`uDepthMap`), or null when none is available. */
+    readonly depthMap: DepthMapData | null = null,
+    /** Max portrait depth blur disc radius in full-resolution pixels (`uDepthBlur.x`); 0 = off. */
+    readonly depthBlurPx = 0,
+    /** Normalized focus depth `0..1` (`uDepthBlur.y`) and depth-of-field falloff `0..1` (`uDepthBlur.z`). */
+    readonly depthFocus = 0.2,
+    readonly depthFalloff = 0.5,
   ) {}
 
   /** Extra source pixels needed around an output region for the spatial effects, so tiles join seamlessly. */
@@ -272,10 +280,16 @@ export class ShaderParams {
     flareSource: PreviewImage | null = null,
     /** Portrait retouch's map for this photo (PhotoSession.retouchMap), or null: none (yet). */
     retouchMap: RetouchMap | null = null,
+    /** Embedded depth map from the DNG (PhotoSession.depthMap), or null. */
+    depthMap: DepthMapData | null = null,
   ): ShaderParams {
     const filmUsed = film && film.stock.id === p.film ? film : null;
     const sourceWhite = WhiteBalance.xyFromTempTint(asShot.temperature, asShot.tint);
     const targetWhite = WhiteBalance.xyFromTempTint(p.temperature, p.tint);
+    const long = Math.max(lens.width, lens.height);
+    const depthBlurPx = depthMap && (p.depthBlur ?? 0) > 0 ? ((p.depthBlur ?? 0) / 100) * MAX_LENS_BLUR * long : 0;
+    const depthFocus = Math.min(1, Math.max(0, (p.depthFocus ?? 20) / 100));
+    const depthFalloff = Math.min(1, Math.max(0, (p.depthFalloff ?? 50) / 100));
     return new ShaderParams(
       // White balance, then the RGB primaries adjustment, then the B&W filter; all 3x3 in linear Rec.2020.
       Mat3.toGlColumnMajor(
@@ -335,6 +349,10 @@ export class ShaderParams {
       skinFixOf(p.portraitRetouch ?? 0, retouchMap),
       packFilmLeaks(p.filmLeaks ?? [], lens.width, lens.height),
       ShaderParams.isMono(p) ? 1 : 0,
+      depthMap,
+      depthBlurPx,
+      depthFocus,
+      depthFalloff,
     );
   }
 

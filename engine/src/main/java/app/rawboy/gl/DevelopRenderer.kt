@@ -54,6 +54,7 @@ class DevelopRenderer : GLSurfaceView.Renderer {
     private var bloomTailTexture: ImageTexture? = null
     private var flareTexture: ImageTexture? = null
     private var maskTexture: MaskTexture? = null
+    private var depthTexture: DepthTexture? = null
     private var brushTexture: BrushTexture? = null
     private var filmTextures: FilmTextures? = null
     private var bokehTexture: BokehTexture? = null
@@ -91,6 +92,7 @@ class DevelopRenderer : GLSurfaceView.Renderer {
         bloomTailTexture = ImageTexture(ImageTexture.BLOOM_TAIL_UNIT)
         flareTexture = ImageTexture(ImageTexture.FLARE_UNIT)
         maskTexture = MaskTexture()
+        depthTexture = DepthTexture()
         brushTexture = BrushTexture()
         filmTextures = FilmTextures()
         bokehTexture = BokehTexture(quad!!)
@@ -151,9 +153,10 @@ class DevelopRenderer : GLSurfaceView.Renderer {
         bloomTailTexture!!.bind(p.bloomTail)
         flareTexture!!.bind(p.flareSource)
         maskTexture!!.bind(p.skinMask)
+        depthTexture!!.bind(p.depthMap)
         brushTexture!!.bind(p.layers.brush)
         filmTextures!!.bind(p.film)
-        bokehTexture!!.bind(p) // after the brush atlas: its mask pass reads it
+        bokehTexture!!.bind(p) // after the brush atlas and depth map: its mask pass reads them
         fxTexture!!.bind(p.fx.data)
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         val z = zoom

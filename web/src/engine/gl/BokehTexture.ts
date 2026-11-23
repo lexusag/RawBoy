@@ -35,7 +35,7 @@ export interface BokehGeometry {
 
 export function bokehGeometry(p: ShaderParams): BokehGeometry | null {
   const src = p.bokehSource;
-  const maxPx = Math.max(0, ...p.layers.blur.subarray(0, p.layers.count));
+  const maxPx = Math.max(0, p.depthBlurPx, ...p.layers.blur.subarray(0, p.layers.count));
   if (!src || maxPx <= 0) return null;
   const imageLong = Math.max(src.fullWidth, src.fullHeight);
   const long = Math.min(Math.max(src.width, src.height), Math.max(BOKEH_MIN_DIMENSION, Math.round((BOKEH_RADIUS * imageLong) / maxPx)));
@@ -128,7 +128,7 @@ export class BokehTexture {
     }
     const l = p.layers;
     const brushVersions = l.brush.map((r) => (r ? `${r.width}x${r.height}@${r.version}` : '-'));
-    const key = JSON.stringify([g.width, g.height, l.count, [...l.geom], [...l.shape], [...l.color], [...l.blur], brushVersions]);
+    const key = JSON.stringify([g.width, g.height, l.count, [...l.geom], [...l.shape], [...l.color], [...l.blur], brushVersions, p.depthBlurPx, p.depthFocus, p.depthFalloff]);
     if (key === this.key) return;
 
     if (g.width !== this.width || g.height !== this.height) {

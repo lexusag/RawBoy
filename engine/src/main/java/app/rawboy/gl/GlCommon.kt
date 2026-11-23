@@ -10,6 +10,7 @@ import app.rawboy.develop.LightEffects
 import app.rawboy.develop.LightLeaks
 import app.rawboy.develop.Masks
 import app.rawboy.develop.ToneCurves
+import app.rawboy.export.DepthMap
 import app.rawboy.film.FilmData
 import app.rawboy.color.Mat3
 import app.rawboy.lens.LensInfo
@@ -244,6 +245,8 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
     private val uBokehSrc = GLES30.glGetUniformLocation(id, "uBokehSrc")
     private val uBokehSrcLod = GLES30.glGetUniformLocation(id, "uBokehSrcLod")
     private val uBokehSize = GLES30.glGetUniformLocation(id, "uBokehSize")
+    private val uDepthMap = GLES30.glGetUniformLocation(id, "uDepthMap")
+    private val uDepthBlur = GLES30.glGetUniformLocation(id, "uDepthBlur")
     private val uClipWarn = GLES30.glGetUniformLocation(id, "uClipWarn")
     private val uBrushMask = GLES30.glGetUniformLocation(id, "uBrushMask")
     private val uBrushSlot = GLES30.glGetUniformLocation(id, "uBrushSlot")
@@ -346,6 +349,8 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
         val bokeh = BokehTexture.geometry(p)
         GLES30.glUniform1f(uBokehScale, bokeh?.scale ?: 0f)
         GLES30.glUniform2f(uBokehTexel, 1f / (bokeh?.width ?: 1), 1f / (bokeh?.height ?: 1))
+        GLES30.glUniform1i(uDepthMap, DepthTexture.UNIT)
+        GLES30.glUniform3f(uDepthBlur, p.depthBlurPx, p.depthFocus, p.depthFalloff)
         bindFilm(p, g)
     }
 
@@ -360,6 +365,8 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
         GLES30.glUseProgram(id)
         GLES30.glUniform2f(uImageSize, imageWidth.toFloat(), imageHeight.toFloat())
         bindLayers(p.layers)
+        GLES30.glUniform1i(uDepthMap, DepthTexture.UNIT)
+        GLES30.glUniform3f(uDepthBlur, p.depthBlurPx, p.depthFocus, p.depthFalloff)
     }
 
     /**
@@ -377,6 +384,7 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
         GLES30.glUniform1i(uBrushMask, BrushTexture.UNIT)
         GLES30.glUniform1i(uFilmLut, FilmTextures.FILM_UNIT)
         GLES30.glUniform1i(uPrintLut, FilmTextures.PRINT_UNIT)
+        GLES30.glUniform1i(uDepthMap, DepthTexture.UNIT)
         GLES30.glUniform1i(uBokeh, BokehTexture.UNIT)
         GLES30.glUniform1i(uFlare, ImageTexture.FLARE_UNIT)
         GLES30.glUniform2f(uScale, 1f, 1f) // the whole target (develop.vert)
@@ -606,6 +614,49 @@ internal class MaskTexture {
 
     companion object {
         const val UNIT = 6
+    }
+}
+
+/** The normalized depth map (R8, 0..1) on its own unit; re-uploads when it changes. */
+internal class DepthTexture {
+    private val id = GlUtil.createTexture(GLES30.GL_LINEAR)
+    private var uploaded: DepthMap? = null
+
+    init {
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + UNIT)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, id)
+        GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 1)
+        GLES30.glTexImage2D(
+            GLES30.GL_TEXTURE_2D, 0, GLES30.GL_R8, 1, 1, 0,
+            GLES30.GL_RED, GLES30.GL_UNSIGNED_BYTE, ByteBuffer.allocateDirect(1),
+        )
+        GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 4)
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+    }
+
+    fun bind(depth: DepthMap?) {
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + UNIT)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, id)
+        if (depth != null && depth !== uploaded) {
+            val buf = ByteBuffer.allocateDirect(depth.data.size).apply {
+                put(depth.data)
+                position(0)
+            }
+            GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 1)
+            GLES30.glTexImage2D(
+                GLES30.GL_TEXTURE_2D, 0, GLES30.GL_R8, depth.width, depth.height, 0,
+                GLES30.GL_RED, GLES30.GL_UNSIGNED_BYTE, buf,
+            )
+            GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 4)
+            uploaded = depth
+        }
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+    }
+
+    fun release() = GLES30.glDeleteTextures(1, intArrayOf(id), 0)
+
+    companion object {
+        const val UNIT = 10
     }
 }
 

@@ -92,6 +92,7 @@ TranscodeResult transcodeToLossyJxlDng(const uint8_t* data, size_t size, float d
         out.resize(static_cast<size_t>(length));
         outStream.SetReadPosition(0);
         outStream.Get(out.data(), static_cast<uint32>(length));
+        copyDngDepthTrailer(data, size, out);
         return TranscodeResult::Done;
     } catch (const dng_exception& e) {
         error = "DNG SDK error " + std::to_string(e.ErrorCode());

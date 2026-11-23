@@ -1279,6 +1279,7 @@ private val LOOK_LABEL_WIDTH = 88.dp
 @Composable
 private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recording: Boolean, requestLocation: () -> Unit, shareDeviceReport: () -> Unit, shareTuningData: () -> Unit) {
     val maxResMp by vm.maxResMp.collectAsState()
+    val hardwareDepth by vm.hardwareDepthAvailable.collectAsState()
     var showFrames by remember { mutableStateOf(false) }
     if (showFrames) {
         FramesSettingsContent(settings, vm, onBack = { showFrames = false })
@@ -1565,6 +1566,27 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
                     checked = settings.videoStabilizeAfter,
                     accent = EXPERIMENTAL_ORANGE,
                     onChange = vm::setVideoStabilizeAfter,
+                    indent = true,
+                )
+            }
+            SettingSwitch(
+                title = "Save depth map in DNG",
+                subtitle = if (hardwareDepth) {
+                    "Hardware depth map on this device; used for portrait blur in RawBoy Pro"
+                } else {
+                    "Software depth map on this device; used for portrait blur in RawBoy Pro"
+                },
+                checked = settings.saveDepth,
+                accent = EXPERIMENTAL_ORANGE,
+                onChange = vm::setSaveDepth,
+            )
+            if (settings.saveDepth) {
+                SettingSwitch(
+                    title = "Generate portrait in camera",
+                    subtitle = "Blur the background of saved JPEGs when a person or pet is detected",
+                    checked = settings.depthPortrait,
+                    accent = EXPERIMENTAL_ORANGE,
+                    onChange = vm::setDepthPortrait,
                     indent = true,
                 )
             }

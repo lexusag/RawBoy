@@ -35,6 +35,18 @@ export interface PhotoMetadata {
   } | null;
 }
 
+/** Upright 8-bit normalized depth map (0 = near foreground, 255 = far background) embedded in a RawBoy Camera DNG. */
+export interface DepthMapData {
+  width: number;
+  height: number;
+  hardware: boolean;
+  subjectDetected: boolean;
+  /** Default normalized focus depth (0..1) on the detected subject. */
+  focusDepth: number;
+  /** width * height bytes (0..255 -> 0.0..1.0 depth). */
+  data: Uint8Array;
+}
+
 export interface OpenResult {
   handle: number;
   /** Size of the decoded pixels: about half of fullWidth x fullHeight for a draft. */
@@ -57,6 +69,8 @@ export interface OpenResult {
   lensInfo: Float64Array;
   lensShading: Float32Array;
   metadata: PhotoMetadata;
+  /** Embedded RawBoy Camera depth map ("RBDP" trailer), or null when the file has none. */
+  depthMap: DepthMapData | null;
 }
 
 export type Request =

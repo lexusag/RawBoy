@@ -91,6 +91,7 @@ internal class BokehTexture(private val quad: FullscreenQuad) {
         val newKey = listOf(
             src, g.width, g.height, l.count, l.geom.toList(), l.shape.toList(), l.color.toList(), l.blur.toList(),
             l.brush.map { r -> r?.let { "${it.width}x${it.height}@${it.version}" } ?: "-" },
+            p.depthMap ?: "-", p.depthBlurPx, p.depthFocus, p.depthFalloff,
         )
         if (newKey == key) return
 
@@ -159,7 +160,7 @@ internal class BokehTexture(private val quad: FullscreenQuad) {
         fun geometry(p: ShaderParams): Geometry? {
             val src = p.bokehSource ?: return null
             val l = p.layers
-            var maxPx = 0f
+            var maxPx = p.depthBlurPx
             for (i in 0 until l.count) maxPx = max(maxPx, l.blur[i])
             if (maxPx <= 0f) return null
             val imageLong = max(src.fullWidth, src.fullHeight)

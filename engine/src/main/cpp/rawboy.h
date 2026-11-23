@@ -88,6 +88,17 @@ struct DecodedImage {
 
     // Blemish healing applied to rgb, newest last (see blemish.cpp).
     std::vector<HealBackup> healBackups;
+
+    // Upright 8-bit normalized depth map (0 = near, 255 = far) from a RawBoy Camera DNG trailer ("RBDP"), if present.
+    struct DepthData {
+        int width = 0;
+        int height = 0;
+        bool hardware = false;
+        bool subjectDetected = false;
+        float focusDepth = 0.2f;
+        std::vector<uint8_t> data;
+        bool empty() const { return data.empty(); }
+    } depth;
 };
 
 /** Runs fn(rowBegin, rowEnd) on up to 8 threads (the calling thread takes a slice too). */
@@ -238,6 +249,12 @@ enum class DisplayPixels {
  */
 bool decodeDisplayPixels(const void* pixels, DisplayPixels format, int width, int height, size_t rowBytes,
                          int orientation, const uint8_t* file, size_t fileSize, DecodedImage& out, std::string& error);
+
+/** Reads an embedded RawBoy Camera depth map trailer ("RBDP") from the end of [data], if present. */
+bool readDngDepth(const uint8_t* data, size_t size, DecodedImage::DepthData& out);
+
+/** Copies a RawBoy Camera depth map trailer ("RBDP") from [src] to the end of [dst], if [src] has one. */
+void copyDngDepthTrailer(const uint8_t* src, size_t srcSize, std::vector<uint8_t>& dst);
 
 #if RAWBOY_WITH_DNG_SDK
 bool decodeWithDngSdk(const uint8_t* data, size_t size, DecodedImage& out, std::string& error);
