@@ -151,6 +151,7 @@ Web, Desktop and iOS take every field of `DevelopParams` except where noted (che
 | Partial presets (only the groups they hold) | 1.1.2 | ✓ | ✓ 1.17.2 | ✓ | ? | Denoise & sharpening group: unreleased on Desktop, iOS and Android |
 | Lens presets (by lens, per batch / selection / photo) | ≤1.1.1 | ✓ | ✓ 1.17.2; usable unreleased | ✓ | ✓ | Desktop before unreleased: Auto read its own list, which Pro's Lens tab never filled, so the picker didn't show. Now Auto lists the lens presets saved in Pro (one presets file), with a menu in the sidebar (batch), the selection's toolbar and the photo panel; iOS has no per-photo picker. Apply to all and Copy previous carry the lens preset choice: unreleased on all platforms |
 | Edit in RawBoy / Back to Auto (RawBoy edits per photo) | ≤1.1.1 | ✓ | ✓ 1.17.8 | — | ✓ | |
+| Copy / paste edits (Ctrl/⌘ C, Ctrl/⌘ V; C twice picks groups) | unreleased | ✓ | ✓ | — | — | Keyboard only, so not on iOS or Android. Copies the preset-default groups (not Lens, Masks, Denoise, Detail, generated leaks; never geometry); pastes onto the open photo or Auto's selection; shared between Pro and Auto |
 | Apply to all, Copy previous (⇧C) | ≤1.1.1 | ✓ | ✓ 1.17.2; ⇧C 1.17.8 | ✓ | ✓ | |
 | Auto denoise all / selection | 1.4.0 | ✓ | ✓ 1.17.2 | ✓ 1.4.7 | ✓ | |
 | Remove from batch, Clear batch | 1.2.1 | ✓ | ✓ 1.17.2 | ✓ 1.4.7 | ✓ | |

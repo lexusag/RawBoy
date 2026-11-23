@@ -55,6 +55,8 @@ export const AUTO_HELP: HelpSection[] = [
       { keys: ['C'], how: 'Crop (toolbar)', text: 'Crop & rotate: drag the corners, edges or inside of the frame (or outside it, to rotate), pick a shape (Original, 1:1, 4:3, 3:2, 16:9...), turn the photo in quarter steps and straighten the horizon. Extend canvas lets the frame reach past the photo\'s edges, filled from the picture. The crop is in the exports and in Undo; Apply to all leaves each photo\'s crop alone.' },
       { how: 'Pick white balance', text: 'Adjust tab: click something neutral grey and Warmth and Tint make it grey.' },
       { how: 'Apply to all', text: 'Copies the look and its settings to every photo (brightness and denoise stay per photo).' },
+      { keys: ['Ctrl/⌘ C'], how: 'Copy edits', text: 'Copies this photo\'s edits (not Lens, Masks, Denoise, Detail or generated leaks; never crop or rotation). Press it twice quickly to choose which groups. In the grid, with one photo selected.' },
+      { keys: ['Ctrl/⌘ V'], how: 'Paste edits', text: 'Gives the copied edits to this photo, or to the selected photos in the grid (also from RawBoy).' },
       { keys: ['Shift+C'], how: 'Copy previous', text: 'Gives this photo the look, brightness and settings of the photo before it (denoise stays).' },
       { how: 'Apply RawBoy preset… (top bar / ⋯)', text: 'Develop this photo with a RawBoy preset instead of its look (from your RawBoy tab presets, or a preset file).' },
       { how: 'Edit in RawBoy', text: 'Opens the photo in the RawBoy tab with this look as the starting edits. Back to Auto there brings it back with your RawBoy edits (crop, masks, lens blur and light leaks too, in Export all as well), the sliders here adjust on top, and Use a look drops them.' },

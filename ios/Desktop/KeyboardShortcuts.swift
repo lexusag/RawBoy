@@ -60,6 +60,9 @@ final class KeyboardShortcuts {
             case .o: model.addPhotosPanel()
             case .e: if auto.photos.contains(where: { $0.analysis != nil }) { auto.requestExport() }
             case .a: if auto.selected == nil { auto.selectAll() }
+            // Copy and paste edits (the web's Ctrl+C / Ctrl+V); a text field keeps its own (`typing` above).
+            case .c: model.copyKey()
+            case .v: model.pasteEdits()
             case .return, .keypadEnter: model.editInPro()
             case .one: model.mode = .pro
             case .three: model.mode = .browse
@@ -162,6 +165,9 @@ final class KeyboardShortcuts {
             case .e: commands.send(.export)
             // Every photo in the filmstrip, for a batch export.
             case .a: model.filmstrip.selectAll()
+            // Copy and paste edits: ⌘C twice asks which groups.
+            case .c: model.copyKey()
+            case .v: model.pasteEdits()
             case .slash: commands.send(.help)
             case .three: model.mode = .browse
             default: return event

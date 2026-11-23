@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { developParams, type DevelopParams } from '../../engine/develop/DevelopParams';
 import { newLightLeak } from '../../engine/develop/LightLeaks';
+import { clearCopiedEdits } from '../common/EditClipboard';
 import { ProStore } from './ProStore';
 
 beforeEach(() => {
@@ -127,5 +128,47 @@ describe('ProStore.copyPreviousEdits', () => {
     vi.spyOn(store.session, 'pickDepth').mockReturnValue(24);
     store.pickDepth(100, 120);
     expect(store.state.params.depthFocus).toBe(24);
+  });
+});
+
+describe('ProStore.copyEdits / pasteEdits', () => {
+  it('copies the default groups from one photo and pastes them as one undo step, keeping geometry and lens', async () => {
+    const { store } = setupStore();
+    clearCopiedEdits();
+    await store.open(new File([], 'first.dng'));
+    store.update({ ...store.state.params, exposure: 1.5, saturation: 20, rotation: 1, lensDistortion: 30, grain: 40 });
+    store.copyEdits();
+    await store.open(new File([], 'second.dng'));
+    store.update({ ...store.state.params, exposure: 0, saturation: 0, grain: 0, lensDistortion: 0 }); // edits carry over by themselves
+    store.pasteEdits();
+    const p = store.state.params;
+    expect(p.exposure).toBe(1.5);
+    expect(p.saturation).toBe(20);
+    expect(p.rotation).toBe(0); // geometry never
+    expect(p.lensDistortion).toBe(0); // Lens is off by default
+    expect(p.grain).toBe(0); // so is Detail
+    store.undo();
+    expect(store.state.params.exposure).toBe(0);
+  });
+
+  it('copies only the chosen groups', async () => {
+    const { store } = setupStore();
+    clearCopiedEdits();
+    await store.open(new File([], 'first.dng'));
+    store.update({ ...store.state.params, exposure: 1.5, saturation: 20, grain: 40 });
+    store.copyEdits(['detail']);
+    await store.open(new File([], 'second.dng'));
+    store.update({ ...store.state.params, exposure: 0, saturation: 0, grain: 0 });
+    store.pasteEdits();
+    expect(store.state.params.grain).toBe(40);
+    expect(store.state.params.exposure).toBe(0);
+  });
+
+  it('says so when nothing was copied', async () => {
+    const { store } = setupStore();
+    clearCopiedEdits();
+    await store.open(new File([], 'first.dng'));
+    store.pasteEdits();
+    expect(store.state.message).toMatch(/Nothing copied/);
   });
 });

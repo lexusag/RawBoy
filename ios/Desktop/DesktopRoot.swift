@@ -70,6 +70,9 @@ struct DesktopRoot: View {
             }
             return true
         }
+        .sheet(isPresented: $model.copyingGroups) {
+            CopyEditsSheet(isPresented: $model.copyingGroups) { model.copyEdits($0) }
+        }
         .background(WindowSetup())
     }
 

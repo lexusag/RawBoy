@@ -305,6 +305,26 @@ final class EditorViewModel: ObservableObject {
         message = "Copied the settings of \(previous.name)"
     }
 
+    /**
+     * ⌘C: keeps the open photo's [groups] of edits (the preset defaults when nil: not Lens, Masks, Denoise, Detail or
+     * generated leaks; geometry never) for [pasteEdits], here or in Auto.
+     */
+    func copyEdits(_ groups: Set<PresetGroup>? = nil) {
+        guard state.hasImage, !state.busy else { return }
+        message = EditClipboard.summary(EditClipboard.copy(state.params, groups ?? PresetGroup.defaultGroups))
+    }
+
+    /** ⌘V: gives the open photo the copied edits, as one undo step. */
+    func pasteEdits() {
+        guard state.hasImage, !state.busy else { return }
+        guard let preset = EditClipboard.preset else {
+            message = EditClipboard.nothingCopied
+            return
+        }
+        commit(Presets.apply(preset, state.params), force: true)
+        message = "Pasted edits"
+    }
+
     /** A slider or drag: quick changes in a row are one undo step. */
     func update(_ params: DevelopParams) { commit(params, force: false) }
 
