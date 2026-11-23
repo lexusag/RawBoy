@@ -2014,6 +2014,19 @@ licences, listed in its ThirdPartyNotices.txt
 (https://github.com/microsoft/onnxruntime/blob/v1.32.0/ThirdPartyNotices.txt).
 
 ================================================================================
+ARCore SDK for Android (RawBoy Camera, Calibrate dual-pixel distances)
+================================================================================
+
+Copyright Google LLC. The ARCore SDK for Android is licensed under the Apache
+License, Version 2.0 (https://github.com/google-ar/arcore-android-sdk); see the
+full text above under "MediaPipe". Use of ARCore is also subject to the Google
+APIs Terms of Service and the ARCore Additional Terms of Service.
+
+This application runs on Google Play Services for AR (ARCore), which is
+provided by Google LLC and governed by the Google Privacy Policy
+(https://policies.google.com/privacy). It is used only while calibrating.
+
+================================================================================
 spectral_film_lut (used to generate the bundled film LUTs)
 ================================================================================
 

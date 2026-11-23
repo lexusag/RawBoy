@@ -7,6 +7,7 @@ import app.rawboy.camera.i18n.tr
 import android.graphics.Bitmap
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.CameraMetadata
+import android.hardware.camera2.CaptureResult
 import android.location.Location
 import android.location.altitude.AltitudeConverter
 import android.net.Uri
@@ -23,6 +24,7 @@ import app.rawboy.auto.analysis.MeterArea
 import app.rawboy.auto.analysis.SceneAnalyzer
 import app.rawboy.auto.analysis.SceneStats
 import app.rawboy.auto.looks.LookApplier
+import app.rawboy.camera.depth.DualPixelCalibrations
 import app.rawboy.camera.capture.CameraController
 import app.rawboy.camera.capture.MotionRecording
 import app.rawboy.camera.capture.MotionSensors
@@ -449,6 +451,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Experimental: save an upright depth map in the DNG file for portrait blur in RawBoy Pro. */
     fun setSaveDepth(on: Boolean) = change { it.copy(saveDepth = on) }
+
+    /** The active lens has a dual-pixel calibration ([app.rawboy.camera.depth.DepthCalibrationActivity]): its depth maps carry millimetres. */
+    fun dualPixelCalibrated(): Boolean = info?.let { DualPixelCalibrations.get(app, it.physicalId ?: it.openId) } != null
 
     /** Experimental: where the saved depth map comes from ([DepthSource]). */
     fun setDepthSource(source: DepthSource) = change { it.copy(depthSource = source) }
@@ -1764,7 +1769,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     throw t
                 }
                 Log.d(TAG, "$name: capture + DNG write ${(System.nanoTime() - dngStart) / 1_000_000} ms")
-                Shot(shotId, uri, name, null, settings, platform = platform, viewfinderKey = viewfinderKey, iso = isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber, cameraId = cameraId, hardwareDepth = result.depth, dualPixel = result.dualPixel)
+                Shot(shotId, uri, name, null, settings, platform = platform, viewfinderKey = viewfinderKey, iso = isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber, cameraId = cameraId, hardwareDepth = result.depth, dualPixel = result.dualPixel, focusDiopters = result.result.get(CaptureResult.LENS_FOCUS_DISTANCE))
             } else {
                 val file = File(app.cacheDir, "$baseName-$shotId.dng")
                 val result = try {
@@ -1777,7 +1782,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     file.delete()
                     throw t
                 }
-                Shot(shotId, Uri.fromFile(file), "$baseName.dng", file, settings, platform = platform, viewfinderKey = viewfinderKey, iso = isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber, cameraId = cameraId, hardwareDepth = result.depth, dualPixel = result.dualPixel)
+                Shot(shotId, Uri.fromFile(file), "$baseName.dng", file, settings, platform = platform, viewfinderKey = viewfinderKey, iso = isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber, cameraId = cameraId, hardwareDepth = result.depth, dualPixel = result.dualPixel, focusDiopters = result.result.get(CaptureResult.LENS_FOCUS_DISTANCE))
             }
         } finally {
             exposed.complete(Unit)

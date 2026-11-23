@@ -21,19 +21,25 @@ uint32_t readLe32(const uint8_t* p) {
            (static_cast<uint32_t>(p[2]) << 16) | (static_cast<uint32_t>(p[3]) << 24);
 }
 
+// Version 1: the 8-bit map. Version 2 (flag bit 2): the 8-bit map, then the same size of little-endian uint16
+// millimetres (DngDepth.kt).
+constexpr uint8_t DEPTH_FLAG_MM = 4;
+
 bool parseDepthFooter(const uint8_t* data, size_t size, int& w, int& h, uint8_t& flags, uint16_t& focusU16,
                       size_t& payloadOffset) {
     if (!data || size <= DEPTH_FOOTER_SIZE + 8) return false;
     const uint8_t* f = data + size - DEPTH_FOOTER_SIZE;
     if (std::memcmp(f, "RBDP", 4) != 0 || std::memcmp(f + 16, "RBDP", 4) != 0) return false;
-    if (f[4] != 1) return false;  // version 1
+    if (f[4] != 1 && f[4] != 2) return false;
     flags = f[5];
+    if (f[4] == 1) flags &= static_cast<uint8_t>(~DEPTH_FLAG_MM);
     w = readLe16(f + 6);
     h = readLe16(f + 8);
     focusU16 = readLe16(f + 10);
     const uint32_t payloadSize = readLe32(f + 12);
     if (w <= 0 || h <= 0 || w > 4096 || h > 4096) return false;
-    if (payloadSize != static_cast<uint32_t>(w) * static_cast<uint32_t>(h)) return false;
+    const uint32_t planes = (flags & DEPTH_FLAG_MM) ? 3 : 1;
+    if (payloadSize != static_cast<uint32_t>(w) * static_cast<uint32_t>(h) * planes) return false;
     const size_t total = static_cast<size_t>(payloadSize) + DEPTH_FOOTER_SIZE;
     if (total >= size) return false;
     payloadOffset = size - total;
@@ -55,6 +61,12 @@ bool readDngDepth(const uint8_t* data, size_t size, DecodedImage::DepthData& out
     out.subjectDetected = (flags & 2) != 0;
     out.focusDepth = static_cast<float>(focusU16) / 65535.0f;
     out.data.assign(data + payloadOffset, data + payloadOffset + n);
+    out.millimetres.clear();
+    if (flags & DEPTH_FLAG_MM) {
+        out.millimetres.resize(n);
+        const uint8_t* mm = data + payloadOffset + n;
+        for (size_t i = 0; i < n; i++) out.millimetres[i] = readLe16(mm + 2 * i);
+    }
     return true;
 }
 

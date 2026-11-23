@@ -45,6 +45,8 @@ export interface DepthMapData {
   focusDepth: number;
   /** width * height bytes (0..255 -> 0.0..1.0 depth). */
   data: Uint8Array;
+  /** Distance per pixel in millimetres (0 = unknown, 65535 = farther), from a version 2 trailer (calibrated dual pixel). */
+  millimetres?: Uint16Array;
 }
 
 export interface OpenResult {

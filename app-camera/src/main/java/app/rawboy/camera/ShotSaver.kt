@@ -25,6 +25,7 @@ import androidx.core.content.ContextCompat
 import app.rawboy.auto.AutoAnalysis
 import app.rawboy.camera.capture.DualPixelFrame
 import app.rawboy.camera.depth.AiDepth
+import app.rawboy.camera.depth.DualPixelCalibrations
 import app.rawboy.camera.debug.DebugProbe
 import app.rawboy.camera.report.TuningData
 import app.rawboy.camera.platform.CameraPlatform
@@ -56,6 +57,7 @@ import app.rawboy.lut.LutLoader
 import app.rawboy.raw.DngJxlNative
 import app.rawboy.raw.RawImage
 import app.rawboy.retouch.DualPixelDepth
+import app.rawboy.retouch.DualPixelMetric
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -121,6 +123,8 @@ internal data class Shot(
     val hardwareDepth: DepthMap? = null,
     /** The sensor's dual-pixel frame captured alongside the raw ([app.rawboy.camera.DepthSource.DUAL_PIXEL]), if any. */
     val dualPixel: DualPixelFrame? = null,
+    /** The lens's focus distance at the shutter in dioptres (`LENS_FOCUS_DISTANCE`), for millimetre depth; null if unknown. */
+    val focusDiopters: Float? = null,
 )
 
 /** A finished shot and the sequence number assigned at its shutter, so lock screen launches hide earlier ones. */
@@ -431,19 +435,25 @@ internal object ShotSaver {
      */
     private fun depthOf(app: Application, shot: Shot, base: app.rawboy.gl.PreviewImage, width: Int, height: Int): DepthMap? {
         val start = System.nanoTime()
-        val map = shot.hardwareDepth ?: shot.dualPixel?.let { f ->
+        var source = "AI"
+        val map = shot.hardwareDepth?.also { source = "sensor" } ?: shot.dualPixel?.let { f ->
             DebugProbe.dumpDualPixel(app, shot.name, f)
             val sensorAspect = if (f.exifOrientation in 5..8) height.toFloat() / width else width.toFloat() / height
-            DualPixelDepth.compute(f.bytes, f.width, f.height, f.rowStride, f.format, sensorAspect, f.exifOrientation)
+            val m = DualPixelDepth.measure(f.bytes, f.width, f.height, f.rowStride, f.format) ?: return@let null
+            // A calibrated lens: distances in millimetres, the AI estimate's shape at the dual pixel's scale.
+            val calibration = shot.cameraId?.let { DualPixelCalibrations.get(app, it) }
+            val focus = shot.focusDiopters
+            val metric = if (calibration != null && focus != null && focus > 0f) {
+                AiDepth.estimate(app, base)?.let { ai -> DualPixelMetric.millimetres(m, ai, calibration, focus, f.exifOrientation) }
+            } else {
+                null
+            }
+            source = if (metric != null) "dual pixel + AI, mm (focus ${"%.2f".format(focus)} D)" else "dual pixel"
+            metric ?: DualPixelDepth.toMap(m, sensorAspect, f.exifOrientation)
         } ?: AiDepth.estimate(app, base) ?: return null
-        val source = when {
-            shot.hardwareDepth != null -> "sensor"
-            shot.dualPixel != null -> "dual pixel"
-            else -> "AI"
-        }
         Log.d(TAG, "${shot.name}: depth from $source ${map.width}x${map.height} in ${(System.nanoTime() - start) / 1_000_000} ms")
         val tap = (shot.meter as? MeterArea.Spot)?.let { map.sampleUv(it.x, it.y) }
-        return if (tap == null) map else DepthMap(map.width, map.height, map.data, map.hardware, map.subjectDetected, tap)
+        return if (tap == null) map else map.withFocus(tap)
     }
 
     private suspend fun prepare(app: Application, shot: Shot): Prepared {

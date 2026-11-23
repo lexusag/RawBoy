@@ -491,8 +491,12 @@ export class PhotoSession {
     const v = Math.min(1, Math.max(0, src[1] / Math.max(1, img.height)));
     const dx = Math.min(depth.width - 1, Math.max(0, Math.round(u * (depth.width - 1))));
     const dy = Math.min(depth.height - 1, Math.max(0, Math.round(v * (depth.height - 1))));
+    this.pickedMillimetres = depth.millimetres?.[dy * depth.width + dx] || null;
     return Math.round((depth.data[dy * depth.width + dx] / 255) * 100);
   }
+
+  /** The distance at the last [pickDepth] spot in millimetres, when the depth map has distances (65535 = farther). */
+  pickedMillimetres: number | null = null;
 
   /**
    * Auto white balance for an area of the photo ([rect], fractions 0..1 of the visible output picture).

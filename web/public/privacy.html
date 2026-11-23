@@ -21,7 +21,7 @@
   </head>
   <body>
     <h1>Privacy policy</h1>
-    <p class="muted">RawBoy Web (app.rawboy.link) · Last updated 26 October 2026</p>
+    <p class="muted">RawBoy Web (app.rawboy.link) · Last updated 23 November 2026</p>
 
     <p>
       RawBoy Web is a free raw photo editor that runs in your browser. It is made by an independent developer, not a
@@ -33,6 +33,9 @@
       <li>Photos you open (from your device or from Google Drive) are decoded and developed inside your browser, with
         WebAssembly and your GPU. They are never uploaded to RawBoy or to any server run by RawBoy. There is no such
         server: the site is only static files.</li>
+      <li>If you raise <em>Portrait blur</em> on a photo that has no depth map of its own, a depth model (Depth
+        Anything V2, about 19 MB) is downloaded from this site and run inside your browser to estimate one. The photo
+        is not sent anywhere for this.</li>
       <li>Exports are saved where you choose: a download, a folder on your device, your photo library (iPhone and iPad),
         or a Google Drive folder you pick.</li>
     </ul>
