@@ -21,7 +21,7 @@
   </head>
   <body>
     <h1>Privacy policy</h1>
-    <p class="muted">RawBoy, RawBoy Auto and RawBoy Camera for Android · Last updated 1 November 2026</p>
+    <p class="muted">RawBoy, RawBoy Auto and RawBoy Camera for Android · Last updated 23 November 2026</p>
     <p>
       The RawBoy apps are free photo apps made by an independent developer, Oleksii Mitskevych, not a company. They
       have no accounts, no ads, no in-app purchases and no analytics of their own. This page explains what happens to
@@ -36,6 +36,9 @@
         where only you and the apps you allow can see them.</li>
       <li>Faces and skin are found on the phone (for exposure, skin retouch and blemish removal) with Google's
         MediaPipe library. The photo never leaves the phone for this.</li>
+      <li>Depth maps (RawBoy Camera, only if you turn on the experimental <em>Save depth map</em>) are made on the
+        phone: from the camera's own depth or focus pixels, or estimated from the photo by an AI model that ships
+        inside the app (Depth Anything V2). The map is saved inside the photo's own file. Nothing is uploaded.</li>
     </ul>
 
     <h2>Permissions</h2>
@@ -50,8 +53,8 @@
 
     <h2>What is stored on your phone</h2>
     <p>
-      Your settings, presets, the batch you are working on and lens presets are kept in the app's private storage on
-      your phone. They are deleted when you uninstall the app or clear its data in Android's settings.
+      Your settings, presets, the batch you are working on, lens presets and RawBoy Camera's learned camera
+      calibration (including the dual-pixel distance calibration) are kept in the app's private storage on your phone. They are deleted when you uninstall the app or clear its data in Android's settings.
     </p>
 
     <h2>Usage statistics sent by Google's MediaPipe library</h2>
@@ -61,6 +64,17 @@
       the Android version. It sends no photos, no images, no location and nothing that identifies you. RawBoy does not
       receive this data. Google handles it under
       <a href="https://policies.google.com/privacy">Google's privacy policy</a>.
+    </p>
+
+    <h2>Google Play Services for AR (ARCore)</h2>
+    <p>
+      RawBoy Camera runs on Google Play Services for AR (ARCore), which is provided by Google LLC and governed by the
+      <a href="https://policies.google.com/privacy">Google Privacy Policy</a>. RawBoy Camera uses it only while you run
+      the experimental <em>Calibrate dual-pixel distances</em> in Settings: ARCore measures distances from the camera's
+      picture on the phone, and RawBoy keeps only the few calibration numbers it works out, in the app's private
+      storage. RawBoy sends nothing to Google for this and does not receive any data from Google. Google Play Services
+      for AR is a separate app from Google; how it handles data is described in Google's privacy policy. If it isn't
+      installed, RawBoy Camera offers to install it from Google Play, and only when you start the calibration.
     </p>
 
     <h2>Children</h2>
