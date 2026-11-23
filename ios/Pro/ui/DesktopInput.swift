@@ -53,6 +53,8 @@ final class EditorCommands: ObservableObject {
     /** RawBoy Desktop: a section for the export sheet choosing the folder, the file written there, and the folder chosen. */
     var exportDestination: AnyView?
     @Published var exportFolder: URL?
+    /** RawBoy Desktop: the subfolder typed in the export sheet, as typed (ExportSubfolder.clean makes the name; "" = none). */
+    @Published var exportSubfolder = ""
     var exportHandler: ((ExportSettings) -> Void)?
     /** RawBoy Desktop: adds the open photo to Auto's batch and shows Auto (nil elsewhere: no button). */
     var sendToAuto: (() -> Void)?

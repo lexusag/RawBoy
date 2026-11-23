@@ -32,10 +32,10 @@ final class ProBatchExport: ObservableObject {
     var running: Bool { progress != nil }
 
     /**
-     * Exports [urls] into [directory] (nil: each beside its photo). [edited]: the editor's photo and its edits now;
+     * Exports [urls] into [directory] (nil: each beside its photo), inside [subfolder] (as typed; made when missing). [edited]: the editor's photo and its edits now;
      * [restore]: a photo's saved edits for its as-shot defaults (nil = none); [finished] gets the closing message.
      */
-    func start(_ urls: [URL], settings: ExportSettings, directory: URL?, edited: (url: URL, params: DevelopParams)?,
+    func start(_ urls: [URL], settings: ExportSettings, directory: URL?, subfolder: String = "", edited: (url: URL, params: DevelopParams)?,
                restore: @escaping @MainActor (URL, DevelopParams) -> DevelopParams?,
                finished: @escaping @MainActor (String) -> Void) {
         guard progress == nil, !urls.isEmpty else { return }
@@ -61,8 +61,10 @@ final class ProBatchExport: ObservableObject {
                     await session.healNow()
                     var itemSettings = settings
                     itemSettings.frameNumber = index + 1
+                    let target = ExportSubfolder.apply(subfolder, to: directory ?? url.deletingLastPathComponent())
+                    try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
                     let file = try await session.export(opened.params, defaults: opened.defaults, sourceName: url.lastPathComponent,
-                                                        settings: itemSettings, directory: directory ?? url.deletingLastPathComponent()) { f in
+                                                        settings: itemSettings, directory: target) { f in
                         Task { @MainActor in self.progress?.current = f }
                     }
                     lastFile = file
@@ -76,7 +78,9 @@ final class ProBatchExport: ObservableObject {
                 progress?.current = 0
             }
             let saved = attempted - failed
-            let place = directory?.lastPathComponent ?? "each photo's folder"
+            var place = directory?.lastPathComponent ?? "each photo's folder"
+            let sub = ExportSubfolder.clean(subfolder)
+            if !sub.isEmpty { place += " › \(sub)" }
             var text = (stopped ? "Stopped · " : "") + "Saved \(saved) \(saved == 1 ? "photo" : "photos") to \(place)"
             if failed > 0 { text += " · \(failed) failed" + (firstError.map { " (\($0))" } ?? "") }
             progress = nil

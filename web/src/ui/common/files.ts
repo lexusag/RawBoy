@@ -252,12 +252,19 @@ export interface OutputFolder {
   name: string;
   /** Writes [blob] under the first free name from [nameFor] (counter 0, 1, ...); returns the name used. */
   write(nameFor: (counter: number) => string, blob: Blob): Promise<string>;
+  /** The folder named [name] inside this one, made if missing (one level; [name] is already clean). */
+  child(name: string): Promise<OutputFolder>;
 }
+
+/** [folder], or its subfolder [name] (cleaned by cleanSubfolder; "" = the folder itself). */
+export const intoSubfolder = (folder: OutputFolder, name: string): Promise<OutputFolder> =>
+  name ? folder.child(name) : Promise.resolve(folder);
 
 /** A folder picked on this device as an OutputFolder. */
 export const localFolder = (dir: FileSystemDirectoryHandle): OutputFolder => ({
   name: dir.name,
   write: (nameFor, blob) => writeUnique(dir, nameFor, blob),
+  child: async (name) => localFolder(await dir.getDirectoryHandle(name, { create: true })),
 });
 
 /** Writes [blob] into [dir] under the first free name from [nameFor] (counter 0, 1, ...), like MediaStoreOutput. */

@@ -11,8 +11,11 @@ import { LongSideSelect } from '../common/LongSideSelect';
 import { ExportFrameControls } from '../common/ExportFrameControls';
 import { ParamSlider, formatPlain } from '../common/ParamSlider';
 import { useExportDestination, type ExportDestination } from '../common/ExportDestination';
+import { canUseSubfolder, useExportSubfolder } from '../common/ExportSubfolder';
+import { cleanSubfolder } from '../../engine/export/Subfolder';
 
 const SIZES: (number | null)[] = [null, 6000, 4000, 3000, 2048];
+const SUBFOLDER_KEY = 'rawboy.exportSubfolder';
 
 /** Format, quality / bit depth, size and frame of the export (port of app-pro's ExportDialog.kt). */
 export function ExportDialog({ initial, sourceName, outputSize, film, onDismiss, onExport }: {
@@ -24,10 +27,12 @@ export function ExportDialog({ initial, sourceName, outputSize, film, onDismiss,
   film: boolean;
   onDismiss: () => void;
   /** Called from the Export click (Google Drive opens its folder picker from it). */
-  onExport: (s: ExportSettings, destination: ExportDestination) => void;
+  onExport: (s: ExportSettings, destination: ExportDestination, subfolder: string) => void;
 }) {
   const [s, setS] = useState(initial);
   const [destination, destinationRow] = useExportDestination(true);
+  const [subfolder, subfolderRow] = useExportSubfolder(SUBFOLDER_KEY, canUseSubfolder(destination), true);
+  const folder = canUseSubfolder(destination) ? cleanSubfolder(subfolder) : '';
   const scan = film && s.filmScan;
   const [w, h] = exportOutputSize(outputSize[0], outputSize[1], s, scan);
   return (
@@ -87,13 +92,15 @@ export function ExportDialog({ initial, sourceName, outputSize, film, onDismiss,
         </label>
         <ExportFrameControls settings={s} onChange={setS} />
         {destinationRow}
+        {subfolderRow}
         <small className="muted">
           {fileName(baseNameOf(sourceName), EXTENSIONS[s.format], 0, { suffix: 'rawboy' })}
           {destination === 'drive' && ', in a Google Drive folder you pick next'}
+          {destination === 'device' && folder && ', in a folder you pick next'}
         </small>
         <div className="dialog-actions">
           <button type="button" className="text" onClick={onDismiss}>Cancel</button>
-          <button type="button" className="primary" onClick={() => onExport(s, destination)}>Export</button>
+          <button type="button" className="primary" onClick={() => onExport(s, destination, folder)}>Export</button>
         </div>
       </div>
     </div>

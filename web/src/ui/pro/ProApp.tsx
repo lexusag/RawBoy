@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import { filmScanApplies } from '../../engine/gl/ScanScale';
 import { FrameColors } from '../../engine/gl/DevelopRenderer';
 import { anySide, cropAspectRatio, cropFromView, cropOf, cropToView, cropWithin, extendedView, FULL_CROP, NO_SIDES, sameSides, sidesOf, unionSides, withCrop, withoutCrop, cropWithAspect, type CropAspect, type CropRect, type ExtendSides } from '../../engine/develop/CropMath';
-import { PHOTO_ACCEPT, pickFiles } from '../common/files';
+import { PHOTO_ACCEPT, canPickOutputFolder, intoSubfolder, localFolder, pickFiles, pickOutputFolder, type OutputFolder } from '../common/files';
 import { isTabShown } from '../common/tabs';
 import { Preview, PreviewLabel, zoomLabel } from '../common/Preview';
 import { AutoWbOverlay } from './AutoWbOverlay';
@@ -1040,12 +1040,19 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
           outputSize={[shaderParams.lens.outputWidth, shaderParams.lens.outputHeight]}
           film={filmScanApplies(shaderParams)}
           onDismiss={() => setShowExport(false)}
-          onExport={async (s, destination) => {
+          onExport={async (s, destination, subfolder) => {
             setShowExport(false);
-            if (destination === 'device') return void store.export(s);
+            // A subfolder needs a folder to make it in: asked here, from the click, where the browser can write into one.
+            if (destination === 'device' && !(subfolder && canPickOutputFolder())) return void store.export(s);
             try {
-              const folder = await pickDriveFolder();
-              if (folder) void store.export(s, folder);
+              let folder: OutputFolder | null;
+              if (destination === 'drive') {
+                folder = await pickDriveFolder();
+              } else {
+                const dir = await pickOutputFolder().catch(() => null); // cancelled
+                folder = dir && localFolder(dir);
+              }
+              if (folder) void store.export(s, await intoSubfolder(folder, subfolder));
             } catch (e) {
               store.showMessage(e instanceof Error ? e.message : String(e));
             }

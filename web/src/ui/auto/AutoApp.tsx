@@ -4,9 +4,11 @@ import { DEFAULT_STRENGTH, type Adjustments } from '../../engine/auto/looks/Look
 import { FrameColors } from '../../engine/gl/DevelopRenderer';
 import type { PreviewImage } from '../../engine/gl/PreviewImage';
 import type { ShaderParams } from '../../engine/gl/ShaderParams';
-import { canPickOutputFolder, localFolder, PHOTO_ACCEPT, pickFiles, pickOutputFolder, savesToPhotos, type OutputFolder } from '../common/files';
+import { canPickOutputFolder, intoSubfolder, localFolder, PHOTO_ACCEPT, pickFiles, pickOutputFolder, savesToPhotos, type OutputFolder } from '../common/files';
 import { SourceMenu } from '../common/SourceMenu';
 import { useExportDestination, type ExportDestination } from '../common/ExportDestination';
+import { canUseSubfolder, useExportSubfolder } from '../common/ExportSubfolder';
+import { cleanSubfolder } from '../../engine/export/Subfolder';
 import { driveConfigured, openFromDrive, pickDriveFolder } from '../../drive/Drive';
 import { isTabShown } from '../common/tabs';
 import { ParamSlider, formatPlain, formatSigned } from '../common/ParamSlider';
@@ -54,21 +56,31 @@ export function AutoApp({ store, onEditInRawBoy }: { store: AutoStore; onEditInR
  * Asks for a Google Drive folder, or where to save when the browser can write to a folder; null = downloads / ZIP,
  * undefined = cancelled. Call from the Export click: the Drive window is opened before the first await.
  */
-async function outputFolder(store: AutoStore, destination: ExportDestination): Promise<OutputFolder | null | undefined> {
+async function outputFolder(store: AutoStore, destination: ExportDestination, subfolder: string): Promise<OutputFolder | null | undefined> {
+  let folder: OutputFolder | null;
   if (destination === 'drive') {
     try {
-      return (await pickDriveFolder()) ?? undefined;
+      folder = (await pickDriveFolder()) ?? null;
+      if (!folder) return undefined;
     } catch (e) {
       store.showMessage(e instanceof Error ? e.message : String(e));
       return undefined;
     }
+  } else {
+    if (!canPickOutputFolder()) return null;
+    try {
+      const dir = await pickOutputFolder();
+      folder = dir && localFolder(dir);
+    } catch {
+      return undefined; // cancelled
+    }
   }
-  if (!canPickOutputFolder()) return null;
+  if (!folder) return folder;
   try {
-    const dir = await pickOutputFolder();
-    return dir && localFolder(dir);
-  } catch {
-    return undefined; // cancelled
+    return await intoSubfolder(folder, subfolder);
+  } catch (e) {
+    store.showMessage(`Couldn’t make the folder ${subfolder}: ${e instanceof Error ? e.message : String(e)}`);
+    return undefined;
   }
 }
 
@@ -502,12 +514,12 @@ function GridView({ store, scroll, lastViewed }: {
           count={exportSheet === 'all' ? exportable : state.photos.filter((p) => p.analysis && exportSheet.has(p.id)).length}
           sample={(exportSheet === 'all' ? photos : state.photos.filter((p) => exportSheet.has(p.id))).find((p) => p.analysis)}
           onDismiss={() => setExportSheet(null)}
-          onExport={async (destination) => {
+          onExport={async (destination, subfolder) => {
             const ids = exportSheet === 'all'
               ? (filtered ? new Set(photos.map((p) => p.id)) : undefined)
               : exportSheet;
             setExportSheet(null);
-            const folder = await outputFolder(store, destination);
+            const folder = await outputFolder(store, destination, subfolder);
             if (folder === undefined) return;
             if (ids) setSelection(new Set()); // the grid's badges then show each photo's export
             void store.exportAll(folder, ids);
@@ -1156,9 +1168,9 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
           count={1}
           sample={state.photos.find((p) => p.id === state.selected)}
           onDismiss={() => setExportOpen(false)}
-          onExport={async (destination) => {
+          onExport={async (destination, subfolder) => {
             setExportOpen(false);
-            const folder = await outputFolder(store, destination);
+            const folder = await outputFolder(store, destination, subfolder);
             if (folder !== undefined) void store.exportSelected(folder);
           }}
         />
@@ -1449,9 +1461,10 @@ function ExportSheet({ store, count, sample, onDismiss, onExport }: {
   sample: AutoPhoto | undefined;
   onDismiss: () => void;
   /** Called from the Export click (Google Drive opens its folder picker from it). */
-  onExport: (destination: ExportDestination) => void;
+  onExport: (destination: ExportDestination, subfolder: string) => void;
 }) {
   const [destination, destinationRow] = useExportDestination(false);
+  const [subfolder, subfolderRow] = useExportSubfolder('rawboy.auto.exportSubfolder', canUseSubfolder(destination), false);
   const where = destination === 'drive'
     ? 'You pick the Google Drive folder next.'
     : canPickOutputFolder()
@@ -1469,10 +1482,11 @@ function ExportSheet({ store, count, sample, onDismiss, onExport }: {
         <ExportOptions store={store} disabled={false} />
         <FileNameRow store={store} sample={sample} count={count} />
         {destinationRow}
+        {subfolderRow}
         <small className="muted">{where}</small>
         <div className="dialog-actions">
           <button type="button" className="text" onClick={onDismiss}>Cancel</button>
-          <button type="button" className="primary" onClick={() => onExport(destination)}>Export</button>
+          <button type="button" className="primary" onClick={() => onExport(destination, canUseSubfolder(destination) ? cleanSubfolder(subfolder) : '')}>Export</button>
         </div>
       </div>
     </div>
