@@ -252,6 +252,9 @@ targets:
         buildPhase: resources
       - path: ../engine/src/main/assets/models
         buildPhase: resources
+      # Apple's Core ML build of Depth Anything V2 Small (Apache 2.0), Desktop's depth estimate: retouch/DepthEstimator.swift.
+      # Xcode compiles it to DepthAnythingV2SmallF16.mlmodelc in the resource bundle.
+      - path: models/DepthAnythingV2SmallF16.mlpackage
     preBuildScripts:
       - name: Generate develop shaders
         script: shaders/gen.sh
@@ -294,6 +297,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         MTL_LANGUAGE_REVISION: Metal21
         SWIFT_OPTIMIZATION_LEVEL: -O
+        COREML_CODEGEN_LANGUAGE: None
         # Swift's Float16 (used all over the engine) is unavailable on Intel macOS: the Swift side is arm64 only.
         ARCHS: arm64
         ONLY_ACTIVE_ARCH: NO
