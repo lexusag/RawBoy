@@ -87,8 +87,8 @@ public struct PointerSurface: NSViewRepresentable {
 }
 
 /**
- * The wheel over a slider moves it, as on the web (and darktable): 1/200 of the range a notch, Shift 10x coarser, Cmd
- * 10x finer. A wheel that was just scrolling the panel keeps scrolling it. One monitor serves all sliders: it finds
+ * The mouse wheel over a slider moves it, as on the web (and darktable): 1/200 of the range a notch, Shift 10x coarser, Cmd
+ * 10x finer. A trackpad (precise deltas) scrolls the panel instead, unless Option is held. A wheel that was just scrolling the panel keeps scrolling it. One monitor serves all sliders: it finds
  * the slider under the pointer, and notes the scrolls no slider took.
  */
 public struct SliderWheel: NSViewRepresentable {
@@ -145,6 +145,12 @@ public struct SliderWheel: NSViewRepresentable {
 
         private static func handle(_ event: NSEvent) -> NSEvent? {
             guard event.scrollingDeltaY != 0 else { return event }
+            // A trackpad (or Magic Mouse) scrolls the panel: a slider under the pointer would catch the scroll and the
+            // panel would stop. Option hands the gesture to the slider on purpose.
+            if event.hasPreciseScrollingDeltas && !event.modifierFlags.contains(.option) {
+                lastPanelScroll = event.timestamp
+                return event
+            }
             let hit = views.compactMap(\.view).first { v in
                 guard let w = v.window, w === event.window, !v.isHiddenOrHasHiddenAncestor else { return false }
                 return v.bounds.contains(v.convert(event.locationInWindow, from: nil))
@@ -223,6 +229,11 @@ public struct StepWheel: NSViewRepresentable {
 
         private static func handle(_ event: NSEvent) -> NSEvent? {
             guard event.scrollingDeltaY != 0 else { return event }
+            // A trackpad scrolls the panel (a stepping area under the pointer would catch it); Option steps on purpose.
+            if event.hasPreciseScrollingDeltas && !event.modifierFlags.contains(.option) {
+                lastPanelScroll = event.timestamp
+                return event
+            }
             let hit = views.compactMap(\.view).first { v in
                 guard v.enabled, let w = v.window, w === event.window, !v.isHiddenOrHasHiddenAncestor else { return false }
                 return v.bounds.contains(v.convert(event.locationInWindow, from: nil))
