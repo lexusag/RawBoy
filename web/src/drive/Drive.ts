@@ -134,7 +134,31 @@ function driveFolder(id: string, name: string): OutputFolder {
       }
       throw new Error(`Too many files named ${nameFor(0)}`);
     },
+    async child(sub) {
+      return driveFolder(await findOrMakeFolder(id, sub), `${name}/${sub}`);
+    },
   };
+}
+
+const FOLDER_TYPE = 'application/vnd.google-apps.folder';
+
+/** The folder [name] inside [parent] (among those this app can see), made if there is none; returns its id. */
+async function findOrMakeFolder(parent: string, name: string): Promise<string> {
+  const q = new URLSearchParams({
+    q: `${quote(parent)} in parents and name = ${quote(name)} and mimeType = '${FOLDER_TYPE}' and trashed = false`,
+    fields: 'files(id)',
+    pageSize: '1',
+    supportsAllDrives: 'true',
+    includeItemsFromAllDrives: 'true',
+  });
+  const found = ((await (await api(`${API}/files?${q}`)).json()) as { files: { id: string }[] }).files;
+  if (found.length) return found[0].id;
+  const made = await api(`${API}/files?supportsAllDrives=true&fields=id`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+    body: JSON.stringify({ name, mimeType: FOLDER_TYPE, parents: [parent] }),
+  });
+  return ((await made.json()) as { id: string }).id;
 }
 
 /** Whether [folder] holds [name] (among the files this app can see: those it wrote, with drive.file). */

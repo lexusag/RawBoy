@@ -115,6 +115,8 @@ Edits carry over when you open the next file (on RawBoy Desktop only on demand: 
 
 **Film scan 1.5×** (Export dialog, Android, web, iOS and RawBoy Desktop; only while the Film tone mapper is on): renders the photo 1.5× larger. The photo is upscaled by iterative back-projection and lightly sharpened before the grain, and the film grain is generated at the finer pitch. The Size setting is ignored for a scan.
 
+**Export subfolder** (Export dialog, RawBoy Desktop and web): type a name to save into a folder of that name inside the export folder (made if missing); empty saves in the folder itself. `{date}` is today's date, the last name is remembered, and `/ \\ : * ? " < > |` become `-` (one level only). On the web it applies where the browser writes into a folder you pick (Chrome, Edge) and to Google Drive folders; Pro then asks for the folder, since it only downloaded before. Safari and Firefox only download, so there is no field.
+
 **Export size** (Export dialog, all platforms): full resolution, a preset long side, or **Custom…**: type any whole number of pixels from 64 to 20000 for the long side. An invalid entry shows the range and keeps the last good size; photos are never enlarged beyond their own size. The choice is remembered. Needs float render targets, otherwise it is a plain enlargement.
 
 **Frame** (Export dialog, Android, iOS and web; remembered, off by default): imprints a film data-back date stamp or wraps the exported JPEG or TIFF in a medium-format film rebate:

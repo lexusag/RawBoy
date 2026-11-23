@@ -537,7 +537,7 @@ describe('Auto export', () => {
     const s = store as unknown as { _state: { photos: { id: string; analysis: unknown; status: string }[] } };
     s._state.photos = s._state.photos.map((p) => ({ ...p, analysis, status: 'exported' }));
 
-    const mockFolder = { name: 'Exports', write: vi.fn().mockResolvedValue('a.jpg') } as unknown as import('../../ui/common/files').OutputFolder;
+    const mockFolder = { name: 'Exports', write: vi.fn().mockResolvedValue('a.jpg'), child: vi.fn() } as unknown as import('../../ui/common/files').OutputFolder;
 
     let firstExportStatus: string[] = [];
     (store as unknown as { exportOne: () => Promise<Blob> }).exportOne = vi.fn().mockImplementation(async () => {

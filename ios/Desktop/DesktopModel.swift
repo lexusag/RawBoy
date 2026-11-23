@@ -97,6 +97,7 @@ final class DesktopModel: ObservableObject {
     }
 
     private static let folderKey = "desktop.export.folder"
+    private static let subfolderKey = "desktop.export.subfolder"
 
     init() {
         // Photos the viewer or the browser hand over open here, with no round trip through the system.
@@ -117,12 +118,14 @@ final class DesktopModel: ObservableObject {
             self.mode = .auto
             self.auto.applyChosenPreset(preset, to: nil)
         }
+        commands.exportSubfolder = UserDefaults.standard.string(forKey: Self.subfolderKey) ?? ""
         updateAutoDestination()
         commands.exportFolder = UserDefaults.standard.string(forKey: Self.folderKey).map { URL(fileURLWithPath: $0, isDirectory: true) }
         commands.exportHandler = { [weak self] settings in self?.export(settings) }
         commands.exportNote = { [weak self] folder in
             let name = folder?.lastPathComponent ?? self?.vm.currentURL?.deletingLastPathComponent().lastPathComponent ?? "the photo's folder"
-            return "\(name) › "
+            let sub = ExportSubfolder.clean(self?.commands.exportSubfolder ?? "")
+            return sub.isEmpty ? "\(name) › " : "\(name) › \(sub) › "
         }
         commands.exportDestination = AnyView(ExportDestinationSection(commands: commands, model: self))
         commands.exportBatch = { [weak self] in self?.filmstrip.batch.map(\.lastPathComponent) ?? [] }
@@ -183,8 +186,17 @@ final class DesktopModel: ObservableObject {
         if let url = filmstrip.neighbour(delta) { open(url) }
     }
 
-    /** The folder an export goes to: the chosen one, else the photo's own. */
-    var exportDirectory: URL? { commands.exportFolder ?? vm.currentURL?.deletingLastPathComponent() }
+    /** The folder an export goes to: the chosen one, else the photo's own, and the export sheet's subfolder inside it. */
+    var exportDirectory: URL? {
+        (commands.exportFolder ?? vm.currentURL?.deletingLastPathComponent()).map { ExportSubfolder.apply(commands.exportSubfolder, to: $0) }
+    }
+
+    /** Remembers the export sheet's subfolder (as typed). */
+    func setExportSubfolder(_ text: String) {
+        commands.exportSubfolder = text
+        UserDefaults.standard.set(text, forKey: Self.subfolderKey)
+        updateAutoDestination()
+    }
 
     func setExportFolder(_ url: URL?) {
         commands.exportFolder = url
@@ -193,7 +205,9 @@ final class DesktopModel: ObservableObject {
     }
 
     private func updateAutoDestination() {
-        auto.destinationLabel = commands.exportFolder.map { "\($0.lastPathComponent) (\($0.path))" } ?? "the folder of each photo"
+        let base = commands.exportFolder.map { "\($0.lastPathComponent) (\($0.path))" } ?? "the folder of each photo"
+        let sub = ExportSubfolder.clean(commands.exportSubfolder)
+        auto.destinationLabel = sub.isEmpty ? base : "\(base) › \(sub)"
     }
 
     /** Auto's exported [file] goes to the chosen folder, else the photo's own; an existing file of that name is replaced. */
@@ -202,7 +216,7 @@ final class DesktopModel: ObservableObject {
      * taken there gets -001, -002... (NameTemplate.freeName, as the web's folder export): an export never overwrites.
      */
     private func saveAutoExport(_ file: URL, source: URL) throws -> String {
-        let dir = commands.exportFolder ?? source.deletingLastPathComponent()
+        let dir = ExportSubfolder.apply(commands.exportSubfolder, to: commands.exportFolder ?? source.deletingLastPathComponent())
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         guard let name = NameTemplate.freeName(file.deletingPathExtension().lastPathComponent, file.pathExtension, in: dir) else {
             throw CocoaError(.fileWriteFileExists, userInfo: [NSFilePathErrorKey: dir.appendingPathComponent(file.lastPathComponent).path])
@@ -224,6 +238,12 @@ final class DesktopModel: ObservableObject {
             return
         }
         guard let dir = exportDirectory else { return }
+        do {
+            try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        } catch {
+            vm.message = "Couldn't make the folder \(dir.lastPathComponent): \(error.localizedDescription)"
+            return
+        }
         vm.export(settings, to: dir)
     }
 
@@ -240,7 +260,7 @@ final class DesktopModel: ObservableObject {
         sidecars.flush()
         var edited: (url: URL, params: DevelopParams)?
         if let url = vm.currentURL, vm.state.hasImage { edited = (url: url, params: vm.state.params) }
-        batchExport.start(urls, settings: settings, directory: commands.exportFolder, edited: edited,
+        batchExport.start(urls, settings: settings, directory: commands.exportFolder, subfolder: commands.exportSubfolder, edited: edited,
                           restore: { [weak self] url, defaults in self?.sidecars.restore(url, defaults: defaults) },
                           finished: { [weak self] text in
                               self?.vm.message = text
@@ -469,7 +489,17 @@ struct ExportDestinationSection: View {
                     Button("Choose…") { chooseFolder() }.controlSize(.small)
                 }
             }
+            TextField("Subfolder", text: Binding(get: { commands.exportSubfolder }, set: { model.setExportSubfolder($0) }),
+                      prompt: Text("None"))
+                .textFieldStyle(.roundedBorder)
+            Text(subfolderNote).font(.caption).foregroundStyle(.secondary)
         }
+    }
+
+    private var subfolderNote: String {
+        let name = ExportSubfolder.clean(commands.exportSubfolder)
+        return name.isEmpty ? "Optional: a folder to make inside it. {date} is today's date."
+            : "Saved in a folder named “\(name)”, made if it isn't there yet. {date} is today's date."
     }
 
     private func chooseFolder() {
