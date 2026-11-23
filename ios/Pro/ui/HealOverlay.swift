@@ -15,6 +15,8 @@ struct HealOverlayActions {
     let onSource: (String, Float, Float) -> Void
     /** A pan (view pixels) while Space is held. */
     let onPan: (Float, Float) -> Void
+    /** A pinch: zoom by factor around (x, y), view pixels. */
+    var onZoom: (Float, Float, Float) -> Void = { _, _, _ in }
 }
 
 /**
@@ -41,6 +43,7 @@ struct HealOverlay: View {
     @State private var drag: Drag?
     @State private var last = CGPoint.zero
     @State private var panLast = CGSize.zero
+    @State private var pinchLast: CGFloat?
 
     private static let grab: CGFloat = 20
 
@@ -65,6 +68,15 @@ struct HealOverlay: View {
             Canvas { ctx, size in draw(ctx, geometry(size)) }
                 .contentShape(Rectangle())
                 .gesture(DragGesture(minimumDistance: 0).onChanged { v in changed(v, geo.size) }.onEnded { _ in ended() })
+                // A trackpad pinch zooms while the brush is out: this view sits over the photo's own gestures, so it
+                // takes the pinch itself. It starts no stroke (a pinch is no mouse press).
+                .simultaneousGesture(MagnifyGesture()
+                    .onChanged { v in
+                        let factor = v.magnification / (pinchLast ?? 1)
+                        pinchLast = v.magnification
+                        actions.onZoom(Float(v.startLocation.x * scale), Float(v.startLocation.y * scale), Float(factor))
+                    }
+                    .onEnded { _ in pinchLast = nil })
                 .onContinuousHover { phase in
                     switch phase {
                     case let .active(p): hover = p
