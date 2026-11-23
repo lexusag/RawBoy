@@ -284,7 +284,7 @@ struct ControlsPanel: View {
 
     /**
      * Portrait blur from the depth map RawBoy Camera saved in the DNG: Focus depth, Falloff and Edge softness open when
-     * the slider is raised or one of them is changed. Not offered on photos without a depth map. As web's DepthBlurSliders.
+     * the slider is raised or one of them is changed. Dimmed, with a hint, on photos without a depth map. As web's DepthBlurSliders.
      */
     @ViewBuilder private var portraitBlur: some View {
         if let depthMap {
@@ -303,6 +303,14 @@ struct ControlsPanel: View {
                 }
                 .padding(.leading, 16)
             }
+        } else {
+            // Shown dimmed so the control can be found; it needs a photo with a depth map.
+            Group {
+                slider("Portrait blur", \.depthBlur, 0...100, format: formatPlain)
+                Note("Needs a photo with a depth map (a RawBoy Camera DNG saved with Save depth map)")
+            }
+            .disabled(true)
+            .opacity(0.45)
         }
     }
 
