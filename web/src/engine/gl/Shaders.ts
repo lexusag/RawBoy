@@ -3,6 +3,7 @@
 import DEVELOP from '../../../../shaders/develop.glsl?raw';
 import DEVELOP_VERT from '../../../../shaders/develop.vert?raw';
 import FILM_FORM from '../../../../shaders/film_form.glsl?raw';
+import LENS_BLUR from '../../../../shaders/lens_blur.glsl?raw';
 import FILM_LEAK from '../../../../shaders/film_leak.glsl?raw';
 import LIGHT_FX from '../../../../shaders/light_fx.glsl?raw';
 import LIGHT_LEAK from '../../../../shaders/light_leak.glsl?raw';
@@ -18,6 +19,7 @@ export const Shaders = {
     s += forExport ? 'out uvec4 fragColor;\n' : 'out vec4 fragColor;\n';
     s += DEVELOP;
     s += FILM_FORM;
+    s += LENS_BLUR;
     s += LIGHT_LEAK;
     s += FILM_LEAK;
     s += LIGHT_FX;
@@ -39,6 +41,6 @@ export const Shaders = {
   /** The develop library (uniforms, layerMask, ...) with its own [main] instead of main_body.glsl; float output. */
   fragmentWithMain(main: string): string {
     return '#version 300 es\nprecision highp float;\nprecision highp int;\nprecision highp sampler2D;\nprecision highp sampler3D;\n'
-      + 'out vec4 fragColor;\n' + DEVELOP + FILM_FORM + main;
+      + 'out vec4 fragColor;\n' + DEVELOP + FILM_FORM + LENS_BLUR + main;
   },
 };

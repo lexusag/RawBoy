@@ -22,9 +22,10 @@ header() {  # header <out declaration>
     printf '%s\n' "$1"
 }
 
-body() {  # develop.glsl, the film formation, light_leak.glsl, film_leak.glsl, light_fx.glsl, main_body.glsl
+body() {  # develop.glsl, the film formation, lens_blur.glsl, light_leak.glsl, film_leak.glsl, light_fx.glsl, main_body.glsl
     cat "$SRC/develop.glsl"
     cat "$SRC/film_form.glsl"
+    cat "$SRC/lens_blur.glsl"
     cat "$SRC/light_leak.glsl"
     cat "$SRC/film_leak.glsl"
     cat "$SRC/light_fx.glsl"
@@ -43,7 +44,7 @@ body() {  # develop.glsl, the film formation, light_leak.glsl, film_leak.glsl, l
 } > "$TMP/develop_export.frag"
 
 # The lens blur's mask pass (shaders/bokeh_prep.glsl, after develop.glsl and the film formation: the develop shader's own layerMask).
-{ header "out vec4 fragColor;"; cat "$SRC/develop.glsl" "$SRC/film_form.glsl" "$SRC/bokeh_prep.glsl"; } > "$TMP/bokeh_prep.frag"
+{ header "out vec4 fragColor;"; cat "$SRC/develop.glsl" "$SRC/film_form.glsl" "$SRC/lens_blur.glsl" "$SRC/bokeh_prep.glsl"; } > "$TMP/bokeh_prep.frag"
 
 # The film scan export's upscale pre-pass (shaders/scan.frag: one complete program, run in six passes).
 sed 's/#version 300 es/#version 310 es/' "$SRC/scan.frag" > "$TMP/scan.frag"

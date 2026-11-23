@@ -292,7 +292,8 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   prefs, by camera id) → `ShotSaver.depthOf`: `DualPixelMetric.millimetres` (the AI map focused on the AI's person, else the
   confident cells at the in-focus shift: never just the most confident ones, which follow texture (1.20.9 selfie); mm anchored at the focus distance there, only the scale fitted, from physically possible shifts; a free fit
   collapsed on portraits in 1.20.8 and blurred the subject; per-pixel dual pixel alone was worse than the focus distance) → `RBDP` v2 (8-bit + `uint16` mm; v1 without mm).
-  The shader reads the map through `depthBokehRadius(p, guide)`: a weighted median of the 4×4 texels by distance and
+  The shader reads the map through `depthBokehRadius(p, guide)` (`shaders/lens_blur.glsl`, assembled after film_form.glsl in
+  Shaders.kt/.ts and gen.sh; split out because a generated Kotlin string constant must stay under 64 KB): a weighted median of the 4×4 texels by distance and
   likeness of the 512 px base copy to the pixel (joint bilateral upsampling); a plain bilinear read notched straight
   edges in steps of the map's texels, and a weighted mean left lumps (the blur starts just behind the focus depth).
   Web Pro (no Camera depth in the file): `PhotoSession.ensureDepthMap` (on Portrait blur > 0, after the skin mask for

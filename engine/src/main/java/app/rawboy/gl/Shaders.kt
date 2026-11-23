@@ -25,6 +25,7 @@ internal object Shaders {
     private const val DEVELOP = ShaderSources.DEVELOP
     private const val MAIN_BODY = ShaderSources.MAIN_BODY
     private const val FILM_FORM = ShaderSources.FILM_FORM
+    private const val LENS_BLUR = ShaderSources.LENS_BLUR
     private const val LIGHT_LEAK = ShaderSources.LIGHT_LEAK
     private const val FILM_LEAK = ShaderSources.FILM_LEAK
     private const val LIGHT_FX = ShaderSources.LIGHT_FX
@@ -36,6 +37,7 @@ internal object Shaders {
         append(out)
         append(DEVELOP)
         append(FILM_FORM)
+        append(LENS_BLUR)
     }
 
     /** develop.glsl with its own [main] in place of main_body.glsl (the lens blur's mask pass, BokehTexture). */
