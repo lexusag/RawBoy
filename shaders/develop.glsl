@@ -1034,52 +1034,6 @@ float frameMask(vec2 p) {
     return a.x * a.y;
 }
 
-// Fill for the canvas a crop extends past the picture: the picture's edge mirrored and stretched outwards, blurred more the farther
-// out, from sharp at the edge (a disc of 12 taps, rotated per pixel so the leftover reads as grain), read from the whole-image copy so
-// preview, 100% and export tiles agree. Light, not display colour: the rest of the develop runs on it as on any pixel.
-// The source position for a pixel outside the picture: mirrored about the edge, but only the first FILL_STRETCH long
-// sides of the picture are ever read, the mirror slowing down with distance (d' = L (1 - e^(-d/L))), so the edge is
-// stretched outwards, smeared further the farther out, instead of repeated. Per axis, so corners stretch both ways.
-const float FILL_STRETCH = 0.1;
-
-vec2 fillReflect(vec2 p) {
-    float reach = FILL_STRETCH * max(uImageSize.x, uImageSize.y);
-    vec2 lo = max(-p, vec2(0.0));
-    vec2 hi = max(p - uImageSize, vec2(0.0));
-    vec2 inward = reach * (vec2(1.0) - exp(-(lo + hi) / reach));
-    return clamp(p, vec2(0.0), uImageSize) + inward * (vec2(greaterThan(lo, vec2(0.0))) - vec2(greaterThan(hi, vec2(0.0))));
-}
-
-vec3 fillTap(vec2 q) {
-    if (uBaseTexel.x < 0.5) return texture(uBase, q / uImageSize).rgb;
-    return texture(uImage, (q - uInOrigin) / uInSpan).rgb;
-}
-
-// How far from the picture's edge the fill takes to go from the mirrored picture itself to the blur, in long sides.
-// LensTransform adds the same reach to the source region a tile reads (FILL_RAMP).
-const float FILL_RAMP = 0.08;
-
-vec3 fillColour(vec2 p) {
-    float away = length(max(max(-p, p - uImageSize), vec2(0.0)));
-    float ramp = smoothstep(0.0, FILL_RAMP * max(uImageSize.x, uImageSize.y), away);
-    float texel = max(uImageSize.x * uBaseTexel.x, uImageSize.y * uBaseTexel.y);
-    float radius = (texel * 1.5 + 0.15 * away) * ramp;
-    vec3 h = fract(vec3(p.xyx) * 0.1031);
-    h += dot(h, h.yzx + 33.33);
-    float turn = fract((h.x + h.y) * h.z) * 6.2831853;
-    vec3 sum = vec3(0.0);
-    for (int i = 0; i < 12; ++i) {
-        float a = turn + float(i) * 2.3999632;
-        float r = radius * sqrt((float(i) + 0.5) / 12.0);
-        sum += fillTap(fillReflect(p + r * vec2(cos(a), sin(a))));
-    }
-    vec3 blurred = sum / 12.0;
-    if (ramp >= 1.0) return blurred;
-    // Next to the edge the mirrored full-resolution picture continues it (same detail and grain), fading to the blur.
-    vec3 sharp = texture(uImage, (fillReflect(p) - uInOrigin) / uInSpan).rgb;
-    return mix(sharp, blurred, ramp);
-}
-
 // End of the pipeline for B&W: leaks and effects go to grey with the rest of the picture.
 vec3 monoFx(vec3 c) {
     return mix(c, vec3(dot(c, vec3(0.2126, 0.7152, 0.0722))), uMonoFx);

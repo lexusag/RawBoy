@@ -5,7 +5,7 @@ import type { DevelopParams } from '../develop/DevelopParams';
 import { bottom, right, type PixelRect } from '../gl/Zoom';
 import type { LensInfo, RadialVignette, Warp } from './LensInfo';
 
-/** How far from the picture's edge the canvas fill goes from the mirrored picture to a blur, in long sides (develop.glsl's FILL_RAMP). */
+/** How far from the picture's edge the canvas fill goes from the mirrored picture to a blur, in long sides (lens_blur.glsl's FILL_RAMP). */
 export const FILL_RAMP = 0.08;
 
 /** Plane scale at ±100 on a chromatic aberration slider: 0.2%, ~6 px in the corners of a 24 MP photo. */
@@ -294,7 +294,7 @@ export class LensTransform {
 
   /** Source pixels needed to render [out], plus [margin], clamped to the image. */
   sourceBounds(out: PixelRect, margin0: number): PixelRect {
-    // The fill next to the picture's edge mirrors the full-resolution picture over FILL_RAMP long sides (develop.glsl).
+    // The fill next to the picture's edge mirrors the full-resolution picture over FILL_RAMP long sides (lens_blur.glsl).
     const margin = margin0 + (this.fillOutside ? Math.ceil(FILL_RAMP * Math.max(this.width, this.height)) : 0);
     if (!this.isGeometric && !this.hasManualCa && this.zoom === 1 && this.quarterTurns === 0 && !this.flipHorizontal && !this.flipVertical && this.straightenRadians === 0 && this.perspective == null && this.scaleFactor === 1 && this.cropRect.x === 0 && this.cropRect.y === 0) {
       const x0 = Math.max(0, out.x - margin);

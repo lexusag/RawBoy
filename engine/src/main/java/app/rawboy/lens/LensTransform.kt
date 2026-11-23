@@ -223,7 +223,7 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
 
     /** Source pixels needed to render [out], plus [margin], clamped to the image. */
     fun sourceBounds(out: PixelRect, margin0: Int): PixelRect {
-        // The fill next to the picture's edge mirrors the full-resolution picture over FILL_RAMP long sides (develop.glsl).
+        // The fill next to the picture's edge mirrors the full-resolution picture over FILL_RAMP long sides (lens_blur.glsl).
         val margin = margin0 + if (fillOutside) kotlin.math.ceil(FILL_RAMP * max(width, height)).toInt() else 0
         if (!isGeometric && !hasManualCa && zoom == 1.0 && quarterTurns == 0 && !flipHorizontal && !flipVertical && straightenRadians == 0.0 && perspective == null && scaleFactor == 1.0 && cropRect.x == 0 && cropRect.y == 0) {
             return out.expand(margin, width, height)
@@ -371,7 +371,7 @@ class LensTransform(val info: LensInfo, params: DevelopParams, knownZoom: Double
         /** Plane scale at ±100 on a chromatic aberration slider: 0.2%, ~6 px in the corners of a 24 MP photo. */
         const val CA_MAX = 0.002
 
-        /** How far from the picture's edge the canvas fill goes from the mirrored picture to a blur, in long sides (develop.glsl's FILL_RAMP). */
+        /** How far from the picture's edge the canvas fill goes from the mirrored picture to a blur, in long sides (lens_blur.glsl's FILL_RAMP). */
         const val FILL_RAMP = 0.08
 
         /**

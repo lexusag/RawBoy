@@ -84,7 +84,7 @@ public final class LensTransform: @unchecked Sendable {
     /** True when the crop reaches past the frame: pixels outside the picture are filled from its edge, not black. */
     public private(set) var fillOutside = false
 
-    /** How far from the picture's edge the canvas fill goes from the mirrored picture to a blur, in long sides (develop.glsl's FILL_RAMP). */
+    /** How far from the picture's edge the canvas fill goes from the mirrored picture to a blur, in long sides (lens_blur.glsl's FILL_RAMP). */
     public static let fillRamp = 0.08
 
     public let warp: LensInfo.Warp?
@@ -270,7 +270,7 @@ public final class LensTransform: @unchecked Sendable {
 
     /** Source pixels needed to render [out], plus [margin], clamped to the image. */
     public func sourceBounds(_ out: PixelRect, margin margin0: Int) -> PixelRect {
-        // The fill next to the picture's edge mirrors the full-resolution picture over fillRamp long sides (develop.glsl).
+        // The fill next to the picture's edge mirrors the full-resolution picture over fillRamp long sides (lens_blur.glsl).
         let margin = margin0 + (fillOutside ? Int(ceil(Self.fillRamp * Double(max(width, height)))) : 0)
         if !isGeometric && !hasManualCa && zoom == 1.0 && quarterTurns == 0 && !flipHorizontal && !flipVertical && straightenRadians == 0 && perspective == nil && scaleFactor == 1.0 && cropRect.x == 0 && cropRect.y == 0 {
             return out.expand(margin, maxW: width, maxH: height)

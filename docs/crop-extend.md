@@ -10,7 +10,7 @@ CPU pass would need a bigger image, memory and a second path for the live previe
 needed: pixels outside the picture are found per output pixel (`frameMask`), and the whole-image 512 px copy (`uBase`)
 is the same in preview, 100% view and export tiles. So the fill is mirrored-and-blurred edge, read from that copy:
 
-- `fillColour(srcG)` (shaders/develop.glsl): the source position is the picture's edge mirrored but *stretched*: d' = L(1 − e^(−d/L)) with L = 10% of the long side, per axis, so only the first L of the picture is read and it is smeared further the farther out (no repeated copies of the subject). Next to the edge
+- `fillColour(srcG)` (shaders/lens_blur.glsl, split out of develop.glsl for the JVM's 64 KB constant): the source position is the picture's edge mirrored but *stretched*: d' = L(1 − e^(−d/L)) with L = 10% of the long side, per axis, so only the first L of the picture is read and it is smeared further the farther out (no repeated copies of the subject). Next to the edge
   (within `FILL_RAMP` = 8% of the long side) the mirrored **full-resolution** picture continues it, with its detail and
   grain; with distance it fades (smoothstep) to a blur of 12 taps in a disc on the 512 px copy, radius 1.5 copy texels
   + 0.15 × distance, rotated per pixel. A hard seam between sharp photo and blurred fill was the first version's flaw.
@@ -29,7 +29,7 @@ canvas gets smaller on screen as it grows.
 
 | Piece | Web | Android | iOS / Desktop | Viewer |
 |---|---|---|---|---|
-| Shader (`develop.glsl`, `main_body.glsl`) | shared | shared (Shaders.kt assembles it) | shared (gen.sh → Metal) | n/a |
+| Shader (`lens_blur.glsl`, `main_body.glsl`) | shared | shared (Shaders.kt assembles it) | shared (gen.sh → Metal) | n/a |
 | `uFillOutside` binding | `GlCommon.ts` | `GlCommon.kt` | `MetalCommon.swift` | n/a |
 | `LensTransform.fillOutside` + crop pixels allowed past the frame | `LensTransform.ts` | `LensTransform.kt` | `LensTransform.swift` | n/a |
 | `CropMath` (`MAX_EXTEND`, `dragCrop(extend)`, view mapping) | `CropMath.ts` | `CropMath.kt` | `CropMath.swift` | `CropMath.swift` (own port) |
