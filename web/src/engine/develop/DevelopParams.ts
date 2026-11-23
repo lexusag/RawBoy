@@ -162,6 +162,8 @@ export interface DevelopParams {
   depthFocus: number;
   /** Depth-of-field falloff (0..100, 0 = deep DoF / gentle transition, 100 = shallow DoF / steep falloff). */
   depthFalloff: number;
+  /** How gradually the portrait blur starts at a subject's edge (0..100, 0 = a crisp edge). */
+  depthEdge: number;
   skinRetouch: number;
   blemishRemoval: number;
   portraitRetouch: number;
@@ -252,6 +254,7 @@ export const DEFAULT_PARAMS: Readonly<DevelopParams> = Object.freeze({
   depthBlur: 0,
   depthFocus: 20,
   depthFalloff: 50,
+  depthEdge: 30,
   skinRetouch: 0,
   blemishRemoval: 0,
   portraitRetouch: 0,

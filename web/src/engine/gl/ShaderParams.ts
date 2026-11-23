@@ -236,6 +236,8 @@ export class ShaderParams {
     /** Normalized focus depth `0..1` (`uDepthBlur.y`) and depth-of-field falloff `0..1` (`uDepthBlur.z`). */
     readonly depthFocus = 0.2,
     readonly depthFalloff = 0.5,
+    /** Edge softness `0..1` (`uDepthBlur.w`). */
+    readonly depthEdge = 0.3,
   ) {}
 
   /** Extra source pixels needed around an output region for the spatial effects, so tiles join seamlessly. */
@@ -290,6 +292,7 @@ export class ShaderParams {
     const depthBlurPx = depthMap && (p.depthBlur ?? 0) > 0 ? ((p.depthBlur ?? 0) / 100) * MAX_LENS_BLUR * long : 0;
     const depthFocus = Math.min(1, Math.max(0, (p.depthFocus ?? 20) / 100));
     const depthFalloff = Math.min(1, Math.max(0, (p.depthFalloff ?? 50) / 100));
+    const depthEdge = Math.min(1, Math.max(0, (p.depthEdge ?? 30) / 100));
     return new ShaderParams(
       // White balance, then the RGB primaries adjustment, then the B&W filter; all 3x3 in linear Rec.2020.
       Mat3.toGlColumnMajor(
@@ -353,6 +356,7 @@ export class ShaderParams {
       depthBlurPx,
       depthFocus,
       depthFalloff,
+      depthEdge,
     );
   }
 

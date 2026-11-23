@@ -109,6 +109,8 @@ class ShaderParams(
     /** Normalized focus depth `0..1` (`uDepthBlur.y`) and depth-of-field falloff `0..1` (`uDepthBlur.z`). */
     val depthFocus: Float = 0.2f,
     val depthFalloff: Float = 0.5f,
+    /** Edge softness `0..1` (`uDepthBlur.w`): how gradually the blur starts at a subject's edge. */
+    val depthEdge: Float = DEFAULT_DEPTH_EDGE,
 ) {
     /**
      * Extra source pixels needed around an output region for the spatial effects
@@ -130,6 +132,9 @@ class ShaderParams(
          * clipped highlights near display white at Exposure 0.
          */
         private const val BASE_EXPOSURE_EV = 0.7f
+
+        /** Portrait blur edge softness 0..1 (`uDepthBlur.w`) for Camera's portraits; web Pro's slider defaults to the same 30. */
+        const val DEFAULT_DEPTH_EDGE = 0.3f
 
         /** The picture is black and white: Camera's B&W mode ([DevelopParams.monoFx]) or a bundled mono LUT at full strength. */
         fun isMono(p: DevelopParams): Boolean =
@@ -176,6 +181,7 @@ class ShaderParams(
             depthBlurPx: Float = 0f,
             depthFocus: Float = depthMap?.focusDepth ?: 0.2f,
             depthFalloff: Float = 0.5f,
+            depthEdge: Float = DEFAULT_DEPTH_EDGE,
         ): ShaderParams {
             val filmUsed = film?.takeIf { it.stock.id == p.film }
             val sourceWhite = WhiteBalance.xyFromTempTint(asShot.temperature.toDouble(), asShot.tint.toDouble())
@@ -241,6 +247,7 @@ class ShaderParams(
                 depthBlurPx = if (depthMap != null) depthBlurPx else 0f,
                 depthFocus = depthFocus,
                 depthFalloff = depthFalloff,
+                depthEdge = depthEdge,
             )
         }
 

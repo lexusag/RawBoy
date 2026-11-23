@@ -525,7 +525,8 @@ function DepthBlurSliders({
   const active =
     params.depthBlur > 0 ||
     params.depthFocus !== defaults.depthFocus ||
-    params.depthFalloff !== defaults.depthFalloff;
+    params.depthFalloff !== defaults.depthFalloff ||
+    params.depthEdge !== defaults.depthEdge;
   const shown = open ?? active;
   return (
     <>
@@ -573,6 +574,16 @@ function DepthBlurSliders({
                 defaultValue={defaults.depthFalloff}
                 format={formatPlain}
                 onChange={(v) => onChange({ ...params, depthFalloff: v })}
+              />
+              <ParamSlider
+                key="depthEdge"
+                label="Edge softness"
+                value={params.depthEdge}
+                min={0}
+                max={100}
+                defaultValue={defaults.depthEdge}
+                format={formatPlain}
+                onChange={(v) => onChange({ ...params, depthEdge: v })}
               />
               <Note>
                 {depthSource === 'ai'

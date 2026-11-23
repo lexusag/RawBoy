@@ -77,7 +77,7 @@ uniform sampler2D uBokeh;
 uniform vec2 uBokehTexel;             // 1 / bokeh texture size
 uniform float uBokehScale;            // bokeh texels per full-resolution pixel; 0 = off
 uniform sampler2D uDepthMap;          // 0..1 normalized depth map (0 = near, 1 = far) embedded in DNG
-uniform vec3 uDepthBlur;              // x = max blur radius (full-res px, 0 = off), y = focus depth 0..1, z = falloff 0..1
+uniform vec4 uDepthBlur;              // x = max blur radius (full-res px, 0 = off), y = focus depth 0..1, z = falloff 0..1, w = edge softness 0..1
 
 // Sampling geometry, so spatial effects are sized in full-resolution pixels
 // in both the downscaled preview and the full-resolution export tiles.

@@ -28,7 +28,7 @@ export const PRESET_GROUPS: readonly { key: PresetGroup; label: string; fields: 
   {
     key: 'detail',
     label: 'Detail',
-    fields: ['localContrast', 'highpassContrast', 'grain', 'grainSize', 'grainRoughness', 'grainColor', 'bloom', 'anamorphic', 'anamorphicColor', 'anamorphicGhosts', 'depthBlur', 'depthFalloff'],
+    fields: ['localContrast', 'highpassContrast', 'grain', 'grainSize', 'grainRoughness', 'grainColor', 'bloom', 'anamorphic', 'anamorphicColor', 'anamorphicGhosts', 'depthBlur', 'depthFalloff', 'depthEdge'],
   },
   // Its own group, off by default: RawBoy Auto measures denoise and sharpening on each photo (its ISO and noise), and
   // a preset overrides that only when it holds this group.

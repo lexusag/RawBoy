@@ -91,7 +91,7 @@ internal class BokehTexture(private val quad: FullscreenQuad) {
         val newKey = listOf(
             src, g.width, g.height, l.count, l.geom.toList(), l.shape.toList(), l.color.toList(), l.blur.toList(),
             l.brush.map { r -> r?.let { "${it.width}x${it.height}@${it.version}" } ?: "-" },
-            p.depthMap ?: "-", p.depthBlurPx, p.depthFocus, p.depthFalloff,
+            p.depthMap ?: "-", p.depthBlurPx, p.depthFocus, p.depthFalloff, p.depthEdge,
         )
         if (newKey == key) return
 

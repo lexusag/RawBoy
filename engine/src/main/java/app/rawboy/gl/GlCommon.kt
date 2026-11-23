@@ -350,7 +350,7 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
         GLES30.glUniform1f(uBokehScale, bokeh?.scale ?: 0f)
         GLES30.glUniform2f(uBokehTexel, 1f / (bokeh?.width ?: 1), 1f / (bokeh?.height ?: 1))
         GLES30.glUniform1i(uDepthMap, DepthTexture.UNIT)
-        GLES30.glUniform3f(uDepthBlur, p.depthBlurPx, p.depthFocus, p.depthFalloff)
+        GLES30.glUniform4f(uDepthBlur, p.depthBlurPx, p.depthFocus, p.depthFalloff, p.depthEdge)
         bindFilm(p, g)
     }
 
@@ -366,7 +366,7 @@ internal class DevelopProgram(forExport: Boolean, fragment: String = Shaders.fra
         GLES30.glUniform2f(uImageSize, imageWidth.toFloat(), imageHeight.toFloat())
         bindLayers(p.layers)
         GLES30.glUniform1i(uDepthMap, DepthTexture.UNIT)
-        GLES30.glUniform3f(uDepthBlur, p.depthBlurPx, p.depthFocus, p.depthFalloff)
+        GLES30.glUniform4f(uDepthBlur, p.depthBlurPx, p.depthFocus, p.depthFalloff, p.depthEdge)
     }
 
     /**

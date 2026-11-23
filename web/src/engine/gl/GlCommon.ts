@@ -278,7 +278,7 @@ export class DevelopProgram {
     gl.uniform4fv(this.loc('uBrushSlot'), slots);
     this.f2('uBrushTexel', 1 / (2 * brushW), 1 / (2 * brushH));
     this.i1('uDepthMap', Units.DEPTH);
-    gl.uniform3f(this.loc('uDepthBlur'), p.depthBlurPx, p.depthFocus, p.depthFalloff);
+    gl.uniform4f(this.loc('uDepthBlur'), p.depthBlurPx, p.depthFocus, p.depthFalloff, p.depthEdge);
   }
 
   /**
