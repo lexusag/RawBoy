@@ -283,10 +283,6 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private val _hiRes = MutableStateFlow(false)
     val hiRes = _hiRes.asStateFlow()
 
-    /** Whether the active lens offers a hardware `ImageFormat.DEPTH16` depth sensor output. */
-    private val _hardwareDepthAvailable = MutableStateFlow(false)
-    val hardwareDepthAvailable = _hardwareDepthAvailable.asStateFlow()
-
     /** Lenses per side (true = front), discovered once (again when the maximum-resolution setting changes). */
     private var lensesBySide: Map<Boolean, List<CameraController.Info>>? = null
 
@@ -840,7 +836,6 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 _screenFlashCamera.value = inf.isFront && !inf.hasFlash
                 _flashAvailable.value = inf.hasFlash || _screenFlashCamera.value
                 _hiRes.value = inf.hiRes
-                _hardwareDepthAvailable.value = inf.hasHardwareDepth
                 controller.setExposureBias(exposureBias(_settings.value))
                 applyStabilization()
                 controller.start(inf, st)
@@ -1037,7 +1032,6 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private fun switchTo(lens: CameraController.Info) {
         info = lens
         _hiRes.value = lens.hiRes
-        _hardwareDepthAvailable.value = lens.hasHardwareDepth
         stopTracking(clearPoint = true) // the restart ends any focus lock
         _dragPoint.value = null
         // The live develop belongs to the old lens: start the new one fresh.

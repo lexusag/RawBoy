@@ -19,9 +19,10 @@ import type { PixelRect } from './Zoom';
 /** Port of engine/.../gl/GlCommon.kt for WebGL2. Texture units match Android's. */
 export const Units = {
   IMAGE: 0, LUT: 1, SHADING: 2, BASE: 3, BLOOM_HALO: 4, BLOOM_TAIL: 5, SKIN: 6, BRUSH: 7, FILM_LUT: 8, PRINT_LUT: 9,
-  DEPTH: 10,
-  // 10, 11: the wavelet denoise pre-pass (before DevelopProgram); 13: the lens blur passes.
+  // 10, 11: the wavelet denoise result; 12: the lens blur result (its passes borrow 12 while they run, BokehTexture).
   BOKEH: 12,
+  /** Portrait depth map; also read by the lens blur passes, so it cannot be their pass unit. */
+  DEPTH: 13,
   FLARE: 14,
   /** Light effects' segment data (LightEffects.ts, web only). */
   FX: 15,

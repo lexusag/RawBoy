@@ -644,7 +644,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   its taps the same way); keep the knee's constants in step in all those places.
 - Texture units: 0 image, 1 LUT (3D), 2 lens shading, 3 base (512), 4 bloom halo, 5 bloom tail, 6 skin mask, 7 brush atlas,
   8 film LUT, 9 print LUT (film looks: Camera's and Auto's Film modes, all platforms), 10–11 the wavelet denoise
-  passes, 12 the lens blur result (`uBokeh`), 13 the lens blur's own passes.
+  passes, 12 the lens blur result (`uBokeh`; its passes borrow 12 while they run and `bind` puts the result back), 13 the portrait depth map (`uDepthMap`, Camera DNG trailer), 14 flare, 15 effects. All 16 are used.
 - Pinch and wheel zoom (`PhotoSession.zoomBy`, all platforms): the web's mouse wheel on desktop
   and its two-finger pinch (`Preview`'s `onZoomBy`, pointer events; `MaskOverlay` lets a second finger through),
   Android's pinch (`view/PanAndPinch.kt`: `rememberPanAndPinch` in the preview's gesture layer between the tap

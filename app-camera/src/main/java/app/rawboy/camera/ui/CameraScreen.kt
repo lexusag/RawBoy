@@ -1279,7 +1279,6 @@ private val LOOK_LABEL_WIDTH = 88.dp
 @Composable
 private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recording: Boolean, requestLocation: () -> Unit, shareDeviceReport: () -> Unit, shareTuningData: () -> Unit) {
     val maxResMp by vm.maxResMp.collectAsState()
-    val hardwareDepth by vm.hardwareDepthAvailable.collectAsState()
     var showFrames by remember { mutableStateOf(false) }
     if (showFrames) {
         FramesSettingsContent(settings, vm, onBack = { showFrames = false })
@@ -1571,11 +1570,8 @@ private fun SettingsContent(settings: CameraSettings, vm: CameraViewModel, recor
             }
             SettingSwitch(
                 title = "Save depth map in DNG",
-                subtitle = if (hardwareDepth) {
-                    "Hardware depth map on this device; used for portrait blur in RawBoy Pro"
-                } else {
-                    "Software depth map on this device; used for portrait blur in RawBoy Pro"
-                },
+                // Always the software estimate: nothing captures a DEPTH16 frame yet (Shot.hardwareDepth stays null).
+                subtitle = "Software depth map on this device; used for portrait blur in RawBoy Pro",
                 checked = settings.saveDepth,
                 accent = EXPERIMENTAL_ORANGE,
                 onChange = vm::setSaveDepth,

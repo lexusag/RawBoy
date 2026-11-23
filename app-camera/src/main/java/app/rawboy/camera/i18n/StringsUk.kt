@@ -295,8 +295,6 @@ internal val UKRAINIAN: Map<String, String> = mapOf(
         "Зберігає поруч стабілізовану копію (обрізання 70%)",
     "Save depth map in DNG" to
         "Зберігати карту глибини в DNG",
-    "Hardware depth map on this device; used for portrait blur in RawBoy Pro" to
-        "Апаратна карта глибини на цьому пристрої; для портретного розмиття в RawBoy Pro",
     "Software depth map on this device; used for portrait blur in RawBoy Pro" to
         "Програмна карта глибини на цьому пристрої; для портретного розмиття в RawBoy Pro",
     "Generate portrait in camera" to

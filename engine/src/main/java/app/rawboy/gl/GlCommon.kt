@@ -617,7 +617,10 @@ internal class MaskTexture {
     }
 }
 
-/** The normalized depth map (R8, 0..1) on its own unit; re-uploads when it changes. */
+/**
+ * The normalized depth map (R8, 0..1) on its own unit; re-uploads when it changes. Unit 13: 10-11 hold the wavelet
+ * denoise result in the develop draw, and the lens blur passes (which also read this map) moved to 12.
+ */
 internal class DepthTexture {
     private val id = GlUtil.createTexture(GLES30.GL_LINEAR)
     private var uploaded: DepthMap? = null
@@ -656,7 +659,7 @@ internal class DepthTexture {
     fun release() = GLES30.glDeleteTextures(1, intArrayOf(id), 0)
 
     companion object {
-        const val UNIT = 10
+        const val UNIT = 13
     }
 }
 

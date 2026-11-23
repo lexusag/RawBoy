@@ -146,8 +146,8 @@ internal class BokehTexture(private val quad: FullscreenQuad) {
         /** Develop shader's unit for the result (`uBokeh`). */
         const val UNIT = 12
 
-        /** Pass-local unit, past the develop shader's and the denoise pre-pass's. */
-        private const val UNIT_PASS = 13
+        /** Pass-local unit: [UNIT]'s own, borrowed while the passes run ([bind] puts the result back). 13 holds the depth map. */
+        private const val UNIT_PASS = 12
 
         /** Largest blur radius in bokeh texels: the texture is sized so a layer's strongest blur lands near it. */
         const val RADIUS = 16
