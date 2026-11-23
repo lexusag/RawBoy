@@ -35,6 +35,7 @@ export const PRO_HELP: HelpSection[] = [
   {
     title: 'Sliders and tools',
     items: [
+      { how: 'Tab switch', text: 'Once a tab has edits, its switch at the top turns them off and on again: the values are kept and the photo shows the defaults, to compare.' },
       { how: 'Double-click a slider', text: 'Reset it (clicking its value does too).' },
       { how: 'Mouse wheel over a slider', text: 'Move it without clicking; with Shift in big steps, with Ctrl/⌘ in fine ones. A wheel that is scrolling the panel keeps scrolling it.' },
       { how: 'Mouse wheel over Film or stock', text: 'Step through the film stocks without clicking. A wheel scrolling the panel leaves it alone.' },

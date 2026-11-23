@@ -97,6 +97,7 @@ Web, Desktop and iOS take every field of `DevelopParams` except where noted (che
 | Presets: batch select to delete / export | 1.9.2 | ✓ | ✓ 1.17.0 | ✓ | ? | |
 | Presets: **Denoise & sharpening group** | 1.1.3 | ✓ | ✓ unreleased | ✓ unreleased | ✓ unreleased | `PresetGroup.denoise` / `DENOISE`, off by default in Save preset; old Detail-only presets keep their denoise, ones with Light leave it to Auto (as `Presets.ts`). Auto: a preset sets denoise and sharpening only with this group; Auto denoise all drops it |
 | Presets: Masks, Retouch groups | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
+| Pro: **Switch a section's edits off / on** (values kept) | unreleased | | ✓ | | ✓ | Desktop: a switch in each inspector section header; web: one per controls tab. `disabledSections` in the edits JSON (`disabled`), not in presets or carry-over; `EditSections.swift/.ts` |
 | Presets: **Light leaks (generated) group** | unreleased | ✓ | ✓ | ✓ | ✓ | `PresetGroup.leaks` / `LEAKS` (`filmLeaks`), off by default in Save preset; layers on top of Auto looks (`replacesLook` false) |
 | **B&W leaks and effects go grey** (`uMonoFx`) | unreleased | ✓ | ✓ | ✓ | ✓ | A black and white picture (Camera's B&W mode, or a bundled mono LUT at full strength and no Film) greys the leaks and effects drawn on it: last line of the shader, `monoFx`. Pro's own Saturation −100 is not B&W here (leaks stay coloured) |
 | Presets with no photo open | 1.17.8 | ✓ | ✓ 1.17.8 | ? | ? | |

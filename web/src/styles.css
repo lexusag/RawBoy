@@ -1024,6 +1024,11 @@ input[type='range'] {
   padding: 6px 0;
 }
 
+.controls-body.edits-off > :not(.edits-switch) {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
 .switch-row input {
   accent-color: var(--accent);
   width: 18px;
