@@ -171,9 +171,9 @@ object CropMath {
         val fh = frameHeight.toDouble()
         // Bounds of the canvas the crop may use: the frame, plus MAX_EXTEND past each edge when extending.
         val ex = if (extend) MAX_EXTEND.toDouble() else 0.0
-        val x0 = -ex * fw
+        val x0 = 0.0 - ex * fw // not -0.0
         val x1 = (1 + ex) * fw
-        val y0 = -ex * fh
+        val y0 = 0.0 - ex * fh
         val y1 = (1 + ex) * fh
         val minW = min(MIN_PIXELS.toDouble(), fw)
         val minH = min(MIN_PIXELS.toDouble(), fh)
