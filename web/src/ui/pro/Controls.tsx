@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { PrimariesTrack, type PrimariesSlider } from '../../engine/color/PrimariesTrack';
 import { WhiteBalance } from '../../engine/color/WhiteBalance';
-import { CROP_ASPECTS, cropAspectLabel, cropOf, isFullCrop, type CropAspect } from '../../engine/develop/CropMath';
+import { anySide, CROP_ASPECTS, cropAspectLabel, cropOf, isFullCrop, type CropAspect, type ExtendSides } from '../../engine/develop/CropMath';
+import { ExtendChips } from '../common/ExtendChips';
 import { FILM_STOCKS } from '../../engine/auto/looks/FilmLooks';
 import { LOOK_GROUP_LABELS, LOOK_GROUPS, lutGroup } from '../../engine/auto/looks/Look';
 import { ANAMORPHIC_COLORS, TONE_MAPPERS, effectiveColorDenoise, type DevelopParams, type SliderKey } from '../../engine/develop/DevelopParams';
@@ -439,9 +440,9 @@ interface GeometryProps {
   aspect: CropAspect;
   portrait: boolean;
   onAspect: (aspect: CropAspect, portrait: boolean) => void;
-  /** Extend: the crop may reach past the frame; the new canvas is filled from the picture's edges. */
-  extend: boolean;
-  onExtend: (on: boolean) => void;
+  /** Extend: the sides the crop may reach past; the new canvas is filled from the picture's edges. */
+  sides: ExtendSides;
+  onSides: (sides: ExtendSides) => void;
   onResetCrop: () => void;
   onDone: () => void;
 }
@@ -449,13 +450,13 @@ interface GeometryProps {
 /**
  * Rotate in 90 degree steps, flip, straighten the horizon, correct perspective (both auto-cropped) and crop, optionally to a fixed aspect ratio.
  */
-export function GeometryPanel({ params, onChange, onRotate, onFlip, aspect, portrait, onAspect, extend, onExtend, onResetCrop, onDone }: GeometryProps) {
+export function GeometryPanel({ params, onChange, onRotate, onFlip, aspect, portrait, onAspect, sides, onSides, onResetCrop, onDone }: GeometryProps) {
   return (
     <div className="controls geometry">
       <div className="geometry-head">
         <strong>Crop &amp; rotate</strong>
         <span>
-          <button type="button" className="text" onClick={onResetCrop} disabled={isFullCrop(cropOf(params)) && aspect === 'free' && !extend}>
+          <button type="button" className="text" onClick={onResetCrop} disabled={isFullCrop(cropOf(params)) && aspect === 'free' && !anySide(sides)}>
             Reset crop
           </button>
           <button type="button" className="text" onClick={onDone}>
@@ -479,11 +480,7 @@ export function GeometryPanel({ params, onChange, onRotate, onFlip, aspect, port
           </button>
         ))}
       </div>
-      <div className="chips">
-        <button type="button" className={extend ? 'active' : ''} aria-pressed={extend} onClick={() => onExtend(!extend)} title="Let the crop reach past the photo's edges; the new canvas is filled from the picture itself">
-          Extend canvas
-        </button>
-      </div>
+      <ExtendChips sides={sides} onSides={onSides} />
       <ParamSlider
         label="Straighten"
         value={params.straighten}

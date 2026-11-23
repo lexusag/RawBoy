@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import app.rawboy.develop.CropMath
 import app.rawboy.develop.CropRect
+import app.rawboy.develop.CropSnap
 import app.rawboy.gl.ZoomMath
 import kotlin.math.roundToInt
 
@@ -38,7 +39,8 @@ private val EXCLUSION_BUDGET = 190.dp
 /**
  * Crop frame over the aspect-fit picture of the whole (uncropped) frame of [frameWidth] x [frameHeight]:
  * dims what's cut, draws a grid for straightening, and edits [crop] by dragging corners, edges or the inside.
- * [ratio] (width / height in pixels) locks the shape; null = free.
+ * [ratio] (width / height in pixels) locks the shape; null = free. [snapTo] is the photo's own rectangle in the crop's
+ * fractions while extending: the crop's edges stick a little to it.
  * The left and right handles are kept out of Android's edge swipe-back gesture: on a landscape photo they sit at the
  * screen's edges.
  */
@@ -51,15 +53,18 @@ fun CropOverlay(
     framePx: Int,
     onCropChange: (CropRect) -> Unit,
     modifier: Modifier = Modifier,
+    snapTo: CropRect? = null,
 ) {
     val currentCrop by rememberUpdatedState(crop)
     val currentRatio by rememberUpdatedState(ratio)
     val currentChange by rememberUpdatedState(onCropChange)
+    val currentSnap by rememberUpdatedState(snapTo)
     var viewSize by remember { mutableStateOf(IntSize.Zero) }
     Box(modifier.onSizeChanged { viewSize = it }) {
         Canvas(
             Modifier.fillMaxSize().pointerInput(frameWidth, frameHeight, framePx) {
                 val grab = GRAB.toPx()
+                val pull = CropMath.SNAP_DP.dp.toPx()
                 var start = currentCrop
                 var handle: CropMath.Handle? = null
                 var total = Offset.Zero
@@ -77,7 +82,8 @@ fun CropOverlay(
                     change.consume()
                     total += drag
                     val r = ZoomMath.fitRect(size.width, size.height, frameWidth, frameHeight, framePx)
-                    currentChange(CropMath.drag(start, h, total.x / r[2], total.y / r[3], currentRatio, frameWidth, frameHeight))
+                    val snap = currentSnap?.let { CropSnap(it, pull / r[2], pull / r[3]) }
+                    currentChange(CropMath.drag(start, h, total.x / r[2], total.y / r[3], currentRatio, frameWidth, frameHeight, snap = snap))
                 }
             },
         ) {

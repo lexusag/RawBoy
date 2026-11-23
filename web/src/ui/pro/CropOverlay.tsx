@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { cropHandleAt, dragCrop, type CropHandle, type CropRect } from '../../engine/develop/CropMath';
+import { cropHandleAt, dragCrop, SNAP_PIXELS, type CropHandle, type CropRect } from '../../engine/develop/CropMath';
 import { ZoomMath } from '../../engine/gl/Zoom';
 
 /** Grab distance around edges and corners, CSS pixels. */
@@ -15,6 +15,8 @@ interface Props {
   /** Frame around the photo, CSS pixels. */
   frame: number;
   onChange: (crop: CropRect) => void;
+  /** The photo's own rectangle in the crop's fractions while extending: the crop's edges stick a little to it. */
+  snapTo?: CropRect;
   /**
    * Drag outside the crop frame to rotate (Pro's and Auto's Crop & rotate): [angle] is the straighten angle in degrees (+ turns
    * clockwise) and [onChange] gets the new one while the pointer circles the frame's centre. Without it, presses
@@ -40,7 +42,7 @@ const CURSORS: Record<CropHandle, string> = {
  * straightening, and edits the crop by dragging corners, edges or the inside. Presses outside the crop fall
  * through to the preview (press and hold still compares).
  */
-export function CropOverlay({ frameWidth, frameHeight, crop, ratio, frame, onChange, rotate }: Props) {
+export function CropOverlay({ frameWidth, frameHeight, crop, ratio, frame, onChange, snapTo, rotate }: Props) {
   const [box, setBox] = useState<{ w: number; h: number } | null>(null);
   const [hover, setHover] = useState<CropHandle | null>(null);
   const drag = useRef<{ handle: CropHandle; start: CropRect; x: number; y: number } | null>(null);
@@ -152,7 +154,8 @@ export function CropOverlay({ frameWidth, frameHeight, crop, ratio, frame, onCha
         }
         if (!r) return;
         e.stopPropagation();
-        onChange(dragCrop(d.start, d.handle, (e.clientX - d.x) / r[2], (e.clientY - d.y) / r[3], ratio, frameWidth, frameHeight));
+        const snap = snapTo ? { photo: snapTo, tolX: SNAP_PIXELS / r[2], tolY: SNAP_PIXELS / r[3] } : null;
+        onChange(dragCrop(d.start, d.handle, (e.clientX - d.x) / r[2], (e.clientY - d.y) / r[3], ratio, frameWidth, frameHeight, false, snap));
       }}
       onPointerUp={(e) => {
         if (turning.current) {

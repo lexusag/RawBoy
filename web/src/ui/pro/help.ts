@@ -24,7 +24,7 @@ export const PRO_HELP: HelpSection[] = [
       { how: 'Pinch (touch screens)', text: 'Two fingers zoom around their middle, up to 400% (stops once at 100%), and pan with it; the finger left keeps panning. Out past the whole photo shrinks it to a quarter; a double-tap goes back to the whole photo.' },
       { how: 'Press and hold', text: 'Compare with the as-shot render.' },
       { keys: ['\\'], how: 'or Compare', text: 'Show the as-shot render until pressed again.' },
-      { keys: ['C'], how: 'or Crop (top bar)', text: 'Open or close Crop & rotate. Drag the corners, edges or inside of the frame to crop, or outside it to rotate (straighten, up to 45° each way). Extend canvas lets the crop reach past the photo\'s edges; the new area is filled from the picture.' },
+      { keys: ['C'], how: 'or Crop (top bar)', text: 'Open or close Crop & rotate. Drag the corners, edges or inside of the frame to crop, or outside it to rotate (straighten, up to 45° each way). Extend canvas lets the crop reach past the photo\'s edges (the Left, Right, Top and Bottom chips choose which; the frame sticks a little to the photo\'s edges as you drag); the new area is filled from the picture.' },
       { keys: ['Ctrl/⌘ C'], how: 'Copy edits', text: 'Copies this photo\'s edits (not Lens, Masks, Denoise, Detail or generated leaks; never crop or rotation). Press it twice quickly to choose which groups.' },
       { keys: ['Ctrl/⌘ V'], how: 'Paste edits', text: 'Gives this photo the copied edits (also from Auto), as one undo step.' },
       { keys: ['Shift+C'], how: 'or Copy previous edits', text: 'Copies the previous photo\'s edits onto this photo (white balance only if changed; crop, rotation, flips, perspective, masks, light leaks, effects and healing stay).' },

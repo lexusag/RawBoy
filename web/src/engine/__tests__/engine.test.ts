@@ -9,7 +9,7 @@ import { Mat3 } from '../color/Mat3';
 import { PrimariesTrack } from '../color/PrimariesTrack';
 import { Primaries } from '../color/Primaries';
 import { WhiteBalance } from '../color/WhiteBalance';
-import { CROP_ASPECTS, cropAspectLabel, cropAspectRatio, cropFromView, cropHandleAt, cropToView, cropWithAspect, dragCrop, extendsFrame, FULL_CROP, MAX_EXTEND, flipped, rotateCrop, rotatePerspective, withCrop } from '../develop/CropMath';
+import { CROP_ASPECTS, cropAspectLabel, cropAspectRatio, cropFromView, cropHandleAt, cropToView, cropWithAspect, cropWithin, dragCrop, extendedView, extendsFrame, sidesOf, FULL_CROP, MAX_EXTEND, flipped, rotateCrop, rotatePerspective, withCrop } from '../develop/CropMath';
 import { developParams, effectiveColorDenoise } from '../develop/DevelopParams';
 import { decodeEdits, encodeEdits } from '../develop/Edits';
 import { BrushRaster, type BrushGuide } from '../develop/BrushRaster';
@@ -370,6 +370,35 @@ describe('extended crop', () => {
     const back = cropFromView(cropToView(c));
     for (const k of ['left', 'top', 'right', 'bottom'] as const) expect(back[k]).toBeCloseTo(c[k]);
     expect(cropToView(frame).left).toBeGreaterThan(0);
+  });
+  it('maps the tool canvas per extended side, and it ends at the photo on the others', () => {
+    const sides = { left: true, top: false, right: false, bottom: true };
+    const v = extendedView(sides);
+    expect(v).toEqual({ left: -MAX_EXTEND, top: 0, right: 1, bottom: 1 + MAX_EXTEND });
+    expect(cropToView(frame, sides).left).toBeCloseTo(MAX_EXTEND / (1 + MAX_EXTEND));
+    expect(cropToView(frame, sides).top).toBe(0);
+    const c = { left: -0.2, top: 0.1, right: 0.9, bottom: 1.1 };
+    const back = cropFromView(cropToView(c, sides), sides);
+    for (const k of ['left', 'top', 'right', 'bottom'] as const) expect(back[k]).toBeCloseTo(c[k]);
+    expect(sidesOf(c)).toEqual({ left: true, top: false, right: false, bottom: true });
+    expect(cropWithin({ left: -0.2, top: -0.2, right: 1.2, bottom: 1.2 }, sides)).toEqual({ left: -0.2, top: 0, right: 1, bottom: 1.2 });
+  });
+  it('keeps a crop aspect inside the sides that are extended', () => {
+    const r = cropWithAspect({ left: 0, top: 0, right: 1, bottom: 1 }, 1, 1000, 1000, { left: true, top: false, right: false, bottom: false });
+    expect(r.top).toBeGreaterThanOrEqual(0);
+    expect(r.right).toBeLessThanOrEqual(1);
+    expect(r.left).toBeGreaterThanOrEqual(-MAX_EXTEND);
+  });
+  it('sticks to the photo edge, and lets go past the pull', () => {
+    const view = { left: 0.1875, top: 0.1875, right: 0.8125, bottom: 0.8125 }; // inside an all-sides canvas
+    const snap = { photo: view, tolX: 0.01, tolY: 0.01 };
+    const near = dragCrop({ left: 0.3, top: 0.3, right: 0.7, bottom: 0.7 }, 'left', -0.1, 0, null, 1000, 1000, false, snap);
+    expect(near.left).toBeCloseTo(0.2); // 0.3 - 0.1: outside the pull of 0.1875
+    const stuck = dragCrop({ left: 0.3, top: 0.3, right: 0.7, bottom: 0.7 }, 'left', -0.1125 + 0.005, 0, null, 1000, 1000, false, snap);
+    expect(stuck.left).toBeCloseTo(0.1875);
+    const moved = dragCrop({ left: 0.25, top: 0.3, right: 0.7, bottom: 0.7 }, 'move', 0.1125 - 0.004, 0, null, 1000, 1000, false, snap);
+    expect(moved.right).toBeCloseTo(0.8125); // the right edge, not the left, is the closer to its photo edge
+    expect(moved.right - moved.left).toBeCloseTo(0.45);
   });
   it('a lens transform of an extended crop is larger than the frame and asks for the fill', () => {
     const info = LensInfo.none(6000, 4000);
