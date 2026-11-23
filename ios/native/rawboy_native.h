@@ -81,6 +81,16 @@ RB_API void rb_lens_info(const RBImage* image, double* out);
 /** Luminance shading gains (pointsV x pointsH), *count = 0 when there are none. */
 RB_API const float* rb_lens_shading(const RBImage* image, size_t* count);
 
+/**
+ * The RawBoy Camera depth map in the file's "RBDP" trailer (DecodedImage::depth): false when there is none, else
+ * out[0..4] = width, height, hardware (0/1), subject detected (0/1), focus depth (0..65535 = 0..1).
+ */
+RB_API bool rb_depth_info(const RBImage* image, int32_t* out);
+/** The 8-bit map (width x height, 0 = near, 255 = far), valid while the image is open; *count = 0 when there is none. */
+RB_API const uint8_t* rb_depth_data(const RBImage* image, size_t* count);
+/** Distance per map pixel in millimetres (0 unknown, 65535 farther), version 2 trailers only; *count = 0 otherwise. */
+RB_API const uint16_t* rb_depth_millimetres(const RBImage* image, size_t* count);
+
 /** Area-average downscale into dst (dstW x dstH RGB half floats); see rawboy::downsample. */
 RB_API void rb_downsample(const RBImage* image, int dstW, int dstH, uint16_t* dst, bool boostHighlights);
 /** Copies a full-resolution tile (RGB half floats, tightly packed); false if it's out of bounds. */

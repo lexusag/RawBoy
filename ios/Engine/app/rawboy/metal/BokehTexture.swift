@@ -33,7 +33,7 @@ final class BokehTexture {
     /** nil = no lens blur (no source, or no layer blurs). */
     static func geometry(_ p: ShaderParams) -> Geometry? {
         guard let src = p.bokehSource else { return nil }
-        let maxPx = p.layers.blur.prefix(p.layers.count).max() ?? 0
+        let maxPx = max(p.depthBlurPx, p.layers.blur.prefix(p.layers.count).max() ?? 0)
         guard maxPx > 0 else { return nil }
         let imageLong = Float(max(src.fullWidth, src.fullHeight))
         let long = min(Float(max(src.width, src.height)), max(minDimension, (radius * imageLong / maxPx).rounded()))
@@ -53,8 +53,6 @@ final class BokehTexture {
     private let prepPipeline: MTLRenderPipelineState
     private let gatherPipeline: MTLRenderPipelineState
     private let mipSampler: MTLSamplerState
-    /** The prep shader declares the portrait depth map (web and Android only); a 1x1 stand-in keeps its sampler bound. */
-    private let depthStub = MetalContext.shared.makeTexture(.r8Unorm, 1, 1)!
     private var source: MTLTexture?
     private var uploaded: UnsafePointer<UInt16>?
     private var radii: MTLTexture?
@@ -85,10 +83,13 @@ final class BokehTexture {
         output.replace(region: MTLRegionMake2D(0, 0, 1, 1), mipmapLevel: 0, withBytes: &zero, bytesPerRow: 8)
     }
 
-    /** Brings the blur up to date for [p]; [brush] is the brush atlas the masks read (already uploaded). */
-    func bind(_ p: ShaderParams, brush: MTLTexture) {
+    /**
+     * Brings the blur up to date for [p]; [brush] is the brush atlas the masks read, [depth] the portrait depth map
+     * and [base] the 512 px copy that guides it along the photo's edges (all already uploaded).
+     */
+    func bind(_ p: ShaderParams, brush: MTLTexture, depth: MTLTexture, base: MTLTexture) {
         guard let g = Self.geometry(p), let src = p.bokehSource else { return }
-        render(p, src, g, brush)
+        render(p, src, g, brush, depth, base)
     }
 
     private func upload(_ src: PreviewImage) -> Bool {
@@ -118,12 +119,16 @@ final class BokehTexture {
         return true
     }
 
-    private func render(_ p: ShaderParams, _ src: PreviewImage, _ g: Geometry, _ brush: MTLTexture) {
+    private func render(_ p: ShaderParams, _ src: PreviewImage, _ g: Geometry, _ brush: MTLTexture,
+                        _ depth: MTLTexture, _ base: MTLTexture) {
         let fresh = upload(src)
         guard let source else { return }
         let l = p.layers
         let brushes = l.brush.map { r in r.map { "\(ObjectIdentifier($0).hashValue)@\($0.version)" } ?? "-" }
+        let depthKey = p.depthMap.map { String(ObjectIdentifier($0).hashValue) } ?? "-"
+        // base.width: the depth map follows the photo's edges by the 512 px copy, a stand-in until it is uploaded.
         let newKey = "\(g.width)x\(g.height)|\(l.count)|\(l.geom)|\(l.shape)|\(l.form)|\(l.color)|\(l.blur)|\(brushes)"
+            + "|\(depthKey)|\(p.depthBlurPx)|\(p.depthFocus)|\(p.depthFalloff)|\(p.depthEdge)|\(base.width)"
         if newKey == key { return }
         if g.width != width || g.height != height || radii == nil {
             let usage: MTLTextureUsage = [.renderTarget, .shaderRead]
@@ -167,9 +172,8 @@ final class BokehTexture {
             f.bytes.withUnsafeBytes {
                 e.setFragmentBytes($0.baseAddress!, length: $0.count, index: DevelopLayout.bokehBufferIndex)
             }
-            let textures: [String: MTLTexture] = ["uBrushMask": brush, "uBokehSrc": source, "uDepthMap": depthStub,
-                                                   // Guides the depth map; with the stub depth map it is never read.
-                                                   "uBase": depthStub]
+            let textures: [String: MTLTexture] = ["uBrushMask": brush, "uBokehSrc": source, "uDepthMap": depth,
+                                                   "uBase": base]
             for (name, index) in DevelopLayout.bokehTextures {
                 e.setFragmentTexture(textures[name], index: index)
                 e.setFragmentSamplerState(name == "uBokehSrc" ? mipSampler : ctx.sampler, index: index)

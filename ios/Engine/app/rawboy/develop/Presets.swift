@@ -35,7 +35,7 @@ public enum PresetGroup: String, CaseIterable, Sendable {
         case .color: ["saturation", "redHue", "redPurity", "greenHue", "greenPurity", "blueHue", "bluePurity", "tintHue",
                       "tintPurity"]
         case .detail: ["localContrast", "highpassContrast", "grain", "grainSize", "grainRoughness", "grainColor", "bloom",
-                       "anamorphic", "anamorphicColor", "anamorphicGhosts"]
+                       "anamorphic", "anamorphicColor", "anamorphicGhosts", "depthBlur", "depthFalloff", "depthEdge"]
         // Its own group, off by default: RawBoy Auto measures denoise and sharpening on each photo (its ISO and noise),
         // and a preset overrides that only when it holds this group.
         case .denoise: ["denoise", "colorDenoise", "sharpening"]
@@ -306,7 +306,8 @@ public enum Presets {
         "tintPurity": \.tintPurity, "denoise": \.denoise, "sharpening": \.sharpening, "localContrast": \.localContrast,
         "highpassContrast": \.highpassContrast, "grain": \.grain, "grainSize": \.grainSize,
         "grainRoughness": \.grainRoughness, "grainColor": \.grainColor, "bloom": \.bloom,
-        "anamorphic": \.anamorphic, "skinRetouch": \.skinRetouch,
+        "anamorphic": \.anamorphic, "depthBlur": \.depthBlur, "depthFocus": \.depthFocus, "depthFalloff": \.depthFalloff,
+        "depthEdge": \.depthEdge, "skinRetouch": \.skinRetouch,
         "blemishRemoval": \.blemishRemoval, "portraitRetouch": \.portraitRetouch, "lutAmount": \.lutAmount, "lensDistortion": \.lensDistortion,
         "lensAnamorphic": \.lensAnamorphic, "lensFisheye": \.lensFisheye, "lensFisheyeFov": \.lensFisheyeFov,
         "lensFisheyeCircle": \.lensFisheyeCircle, "lensFisheyeX": \.lensFisheyeX, "lensFisheyeY": \.lensFisheyeY, "lensCrop": \.lensCrop, "caRed": \.caRed, "caBlue": \.caBlue,

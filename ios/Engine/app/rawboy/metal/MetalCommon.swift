@@ -301,6 +301,7 @@ struct DevelopProgram {
         let bokeh = BokehTexture.uniforms(p)
         u.float("uBokehScale", bokeh.scale)
         u.vec2("uBokehTexel", bokeh.texelX, bokeh.texelY)
+        u.vec4("uDepthBlur", p.depthBlurPx, p.depthFocus, p.depthFalloff, p.depthEdge)
         bindLayers(&u, p.layers)
         bindLeaks(&u, p.leaks)
         bindFilmLeaks(&u, p.filmLeaks)
@@ -474,7 +475,7 @@ final class DevelopTextures {
     private(set) var flare: MTLTexture
     private(set) var skinMask: MTLTexture
     private(set) var brush: MTLTexture
-    /** The portrait depth map (Camera DNG trailer; web and Android only): a 1x1 stand-in so the shader's sampler is bound. */
+    /** The portrait depth map (R8, Camera DNG trailer; see DepthTexture): a 1x1 stand-in until a photo has one. */
     private(set) var depth: MTLTexture
     /** The light effects' segment data (RGBA32F, LightEffects.row texels wide, read with texelFetch). */
     private(set) var fx: MTLTexture
@@ -493,6 +494,7 @@ final class DevelopTextures {
     private var uploadedMask: [Float]?
     private var uploadedMap: [Float]?
     private var uploadedFx: FxData?
+    private var uploadedDepth: DepthMap?
     private var brushSlotW = 0
     private var brushSlotH = 0
     private var brushSlotRaster = [BrushRaster?](repeating: nil, count: 4)
@@ -539,7 +541,20 @@ final class DevelopTextures {
         bindMask(p.skinMask, map: fixing ? p.retouchMap : nil)
         bindBrush(p.layers.brush)
         bindFx(p.fx.data)
-        bokehTexture.bind(p, brush: brush)
+        bindDepth(p.depthMap)
+        bokehTexture.bind(p, brush: brush, depth: depth, base: base)  // after the brush atlas and depth map: its mask pass reads them
+    }
+
+    /** The depth map (R8, 0..1) for `uDepthMap`; re-uploaded only when the photo's map changes. */
+    private func bindDepth(_ map: DepthMap?) {
+        guard let map, map !== uploadedDepth, map.width > 0, map.height > 0, map.data.count >= map.width * map.height,
+              let tex = ctx.makeTexture(.r8Unorm, map.width, map.height) else { return }
+        map.data.withUnsafeBufferPointer {
+            tex.replace(region: MTLRegionMake2D(0, 0, map.width, map.height), mipmapLevel: 0,
+                        withBytes: $0.baseAddress!, bytesPerRow: map.width)
+        }
+        depth = tex
+        uploadedDepth = map
     }
 
     /** The light effects' segment data; re-uploaded only when the packer hands out new data (not while an effect is dragged). */

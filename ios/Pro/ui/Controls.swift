@@ -35,6 +35,8 @@ struct ControlsPanel: View {
     var onSaveLensPreset: (_ name: String, _ sendToAuto: Bool) -> Void = { _, _ in }
     /** Lens tab: lens corrections from the Lensfun database (nil = not offered). */
     var lensfun: LensfunStore? = nil
+    /** The photo's depth map from RawBoy Camera (Portrait blur); the sliders are offered only when there is one. */
+    var depthMap: DepthMap? = nil
 
     @AppStorage("pro.tab") private var chosenTab = 0
     #if os(macOS)
@@ -254,6 +256,7 @@ struct ControlsPanel: View {
 
     /** What works on skin (the Mac's Portrait section). */
     @ViewBuilder private var portrait: some View {
+        portraitBlur
         slider("Skin retouch", \.skinRetouch, 0...100, format: formatPlain)
         if params.skinRetouch > 0, let note = skinNote { Note(note) }
         slider("Blemish removal", \.blemishRemoval, 0...100, format: formatPlain)
@@ -277,6 +280,30 @@ struct ControlsPanel: View {
             }
         }
         #endif
+    }
+
+    /**
+     * Portrait blur from the depth map RawBoy Camera saved in the DNG: Focus depth, Falloff and Edge softness open when
+     * the slider is raised or one of them is changed. Not offered on photos without a depth map. As web's DepthBlurSliders.
+     */
+    @ViewBuilder private var portraitBlur: some View {
+        if let depthMap {
+            let changed = params.depthFocus != defaults.depthFocus || params.depthFalloff != defaults.depthFalloff
+                || params.depthEdge != defaults.depthEdge
+            let shown = params.depthBlur > 0 || changed
+            slider("Portrait blur", \.depthBlur, 0...100, format: formatPlain)
+            if shown {
+                Group {
+                    slider("Focus depth", \.depthFocus, 0...100, format: formatPlain)
+                    slider("Depth falloff", \.depthFalloff, 0...100, format: formatPlain)
+                    slider("Edge softness", \.depthEdge, 0...100, format: formatPlain)
+                    Note(depthMap.millimetres != nil
+                         ? "Camera depth map from the DNG, with distances"
+                         : "Camera depth map from the DNG")
+                }
+                .padding(.leading, 16)
+            }
+        }
     }
 
     /** Bloom, flare and grain (the Mac's Effects section). */
@@ -435,6 +462,8 @@ extension ControlsPanel {
                     p.localContrast = d.localContrast; p.highpassContrast = d.highpassContrast
                 }) { sharpness }
                 section("Portrait", reset: { p, d in
+                    p.depthBlur = d.depthBlur; p.depthFocus = d.depthFocus; p.depthFalloff = d.depthFalloff
+                    p.depthEdge = d.depthEdge
                     p.skinRetouch = d.skinRetouch; p.blemishRemoval = d.blemishRemoval; p.portraitRetouch = d.portraitRetouch
                 }) { portrait }
                 section("Effects", reset: { p, d in

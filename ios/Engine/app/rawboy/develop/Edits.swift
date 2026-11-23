@@ -16,7 +16,7 @@ public enum Edits {
     public static let version = 1
 
     /** Every preset group's fields; masks are written with their strokes (below), not as a preset keeps them. */
-    private static let sliders: [String] = PresetGroup.allCases.flatMap(\.fields).filter { $0 != "masks" }
+    private static let sliders: [String] = (PresetGroup.allCases.flatMap(\.fields) + ["depthFocus"]).filter { $0 != "masks" }
 
     private static let geometry = [
         "rotation", "flipHorizontal", "flipVertical", "straighten", "perspectiveVertical", "perspectiveHorizontal", "scale",
