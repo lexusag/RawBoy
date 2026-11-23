@@ -108,10 +108,11 @@ public enum AutoSidecar {
         return min(hi, max(lo, n.floatValue))
     }
 
-    /** A saved crop: four edges in 0..1 with something left between them, else none. */
+    /** A saved crop: four edges in 0..1 (or past it, up to `CropMath.maxExtend`: a filled canvas) with something left between them, else none. */
     private static func crop(_ v: Any?) -> CropRect? {
         guard let c = v as? [String: Any] else { return nil }
-        let r = CropRect(num(c["left"], 0, 1, 0), num(c["top"], 0, 1, 0), num(c["right"], 0, 1, 1), num(c["bottom"], 0, 1, 1))
+        let lo = -CropMath.maxExtend, hi = 1 + CropMath.maxExtend
+        let r = CropRect(num(c["left"], lo, hi, 0), num(c["top"], lo, hi, 0), num(c["right"], lo, hi, 1), num(c["bottom"], lo, hi, 1))
         return r.right - r.left > 0.001 && r.bottom - r.top > 0.001 && !r.isFull ? r : nil
     }
 

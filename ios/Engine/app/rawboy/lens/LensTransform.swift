@@ -80,7 +80,12 @@ public final class LensTransform: @unchecked Sendable {
     public static let fisheyeMaxAngle = 75.0 * .pi / 180
 
     /** True when zoomed out past the auto crop, so pixels outside [0, width] x [0, height] render black. */
-    public let clipFrame: Bool
+    public private(set) var clipFrame = false
+    /** True when the crop reaches past the frame: pixels outside the picture are filled from its edge, not black. */
+    public private(set) var fillOutside = false
+
+    /** How far from the picture's edge the canvas fill goes from the mirrored picture to a blur, in long sides (lens_blur.glsl's FILL_RAMP). */
+    public static let fillRamp = 0.08
 
     public let warp: LensInfo.Warp?
     public let vignette: LensInfo.RadialVignette?
@@ -146,7 +151,6 @@ public final class LensTransform: @unchecked Sendable {
         fisheyeOffsetX = (found.map { $0.offsetX * 100 } ?? Double(params.lensFisheyeX)).clamped(-50, 50) / 100 * Double(width)
         fisheyeOffsetY = (found.map { $0.offsetY * 100 } ?? Double(params.lensFisheyeY)).clamped(-50, 50) / 100 * Double(height)
         let cropScale = pow(2.0, Double(params.lensCrop).clamped(-100, 100) / 150.0)
-        clipFrame = params.lensCrop < 0
         caScaleRed = 1 - Double(params.caRed) / 100 * Self.caMax
         caScaleBlue = 1 - Double(params.caBlue) / 100 * Self.caMax
         warp = useProfile ? info.warp : nil
@@ -162,6 +166,8 @@ public final class LensTransform: @unchecked Sendable {
         vignetteCenterY = (vignette?.centerY ?? 0.5) * Double(info.sensorHeight)
         warpPlanes = warp?.planes ?? 1
         cropRect = cropPixels(params)
+        fillOutside = cropRect.x < 0 || cropRect.y < 0 || cropRect.x + cropRect.width > frameWidth || cropRect.y + cropRect.height > frameHeight
+        clipFrame = params.lensCrop < 0 || fillOutside
         outToImage = rotationMatrix()
         warpNorm = maxCornerDistance(warpCenterX, warpCenterY)
         vignetteNorm = maxCornerDistance(vignetteCenterX, vignetteCenterY)
@@ -263,7 +269,9 @@ public final class LensTransform: @unchecked Sendable {
     }
 
     /** Source pixels needed to render [out], plus [margin], clamped to the image. */
-    public func sourceBounds(_ out: PixelRect, margin: Int) -> PixelRect {
+    public func sourceBounds(_ out: PixelRect, margin margin0: Int) -> PixelRect {
+        // The fill next to the picture's edge mirrors the full-resolution picture over fillRamp long sides (lens_blur.glsl).
+        let margin = margin0 + (fillOutside ? Int(ceil(Self.fillRamp * Double(max(width, height)))) : 0)
         if !isGeometric && !hasManualCa && zoom == 1.0 && quarterTurns == 0 && !flipHorizontal && !flipVertical && straightenRadians == 0 && perspective == nil && scaleFactor == 1.0 && cropRect.x == 0 && cropRect.y == 0 {
             return out.expand(margin, maxW: width, maxH: height)
         }
@@ -338,9 +346,11 @@ public final class LensTransform: @unchecked Sendable {
         let c = params.crop
         if c.isFull { return PixelRect(x: 0, y: 0, width: frameWidth, height: frameHeight) }
         func edges(_ a: Float, _ b: Float, _ size: Int) -> (Int, Int) {
+            // A crop may reach maxExtend of the frame past each edge: that canvas is filled (see uFillOutside).
             let minSize = min(16, size)
-            let lo = (a.clamped(0, 1) * Float(size)).roundToInt().clamped(0, size - minSize)
-            let hi = (b.clamped(0, 1) * Float(size)).roundToInt().clamped(lo + minSize, size)
+            let room = (CropMath.maxExtend * Float(size)).roundToInt()
+            let lo = (a * Float(size)).roundToInt().clamped(-room, size - minSize)
+            let hi = (b * Float(size)).roundToInt().clamped(lo + minSize, size + room)
             return (lo, hi)
         }
         let (x0, x1) = edges(c.left, c.right, frameWidth)

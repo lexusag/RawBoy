@@ -17,6 +17,9 @@ struct DetailScreen: View {
     @State private var pickingWhite = false
     /** Crop & rotate's shape lock (UI only; the crop itself is in the photo's adjustments). Portrait nil = follow the frame. */
     @State private var cropPortrait: Bool?
+    /** Extend: the tool shows the frame with room around it and the crop may reach into it (the canvas is filled). */
+    @State private var cropExtend = false
+    private func extendOn(_ photo: AutoPhoto) -> Bool { cropExtend || photo.adjust.crop?.extendsFrame == true }
     @State private var shortSideSprockets = false
 
     /** Photos that can be opened, in grid order. */
@@ -111,7 +114,7 @@ struct DetailScreen: View {
         ScrollView(.horizontal) {
             LazyHStack(spacing: 0) {
                 ForEach(pages) { p in
-                    PhotoPage(vm: vm, session: session, photo: p, current: p.id == id, pickingWhite: $pickingWhite, cropRatio: cropRatio)
+                    PhotoPage(vm: vm, session: session, photo: p, current: p.id == id, pickingWhite: $pickingWhite, cropRatio: cropRatio, cropExtend: cropExtend)
                         .containerRelativeFrame(.horizontal)
                         .id(p.id)
                 }
@@ -130,6 +133,7 @@ struct DetailScreen: View {
             if page != new { page = new }
             pickingWhite = false
             cropPortrait = nil
+            cropExtend = false
         }
         .onChange(of: tab) { _, _ in pickingWhite = false }
         .overlay(alignment: .bottom) {
@@ -224,11 +228,12 @@ struct DetailScreen: View {
                     Text("Crop & rotate").font(.headline)
                     Spacer()
                     Button("Reset") {
+                        cropExtend = false
                         vm.cropAspect = .original
                         cropPortrait = nil
                         vm.resetCrop(photo.id)
                     }
-                    .disabled(a.crop == nil && a.straighten == 0 && vm.cropAspect == .original)
+                    .disabled(a.crop == nil && a.straighten == 0 && vm.cropAspect == .original && !extendOn(photo))
                     Button("Done") { vm.cropping = false }.fontWeight(.semibold)
                 }
                 HStack(spacing: 12) {
@@ -248,6 +253,13 @@ struct DetailScreen: View {
                     }
                 }
                 .scrollIndicators(.hidden)
+                Button("Extend canvas") {
+                    let on = !extendOn(photo)
+                    cropExtend = on
+                    if !on, let c = photo.adjust.crop { vm.setCrop(photo.id, CropMath.insideFrame(c), force: true) }
+                }
+                .buttonStyle(.bordered)
+                .tint(extendOn(photo) ? .accentColor : .gray)
                 ValueSlider("Straighten", value: a.straighten, range: -45...45, defaultValue: 0,
                             format: { String(format: "%+.1f°", abs($0) < 0.05 ? 0 : $0) }) { v in
                     vm.setStraighten(photo.id, v)
@@ -268,7 +280,7 @@ struct DetailScreen: View {
             let portrait = cropPortrait ?? (f.frameHeight > f.frameWidth)
             let ratio = vm.cropAspect.ratio(frameWidth: f.frameWidth, frameHeight: f.frameHeight, portrait: portrait)
             vm.setCrop(id, CropMath.withAspect(CropMath.full, ratio: ratio, frameWidth: f.frameWidth,
-                                               frameHeight: f.frameHeight), force: true)
+                                               frameHeight: f.frameHeight, extend: extendOn(photo)), force: true)
         }
     }
 
@@ -283,7 +295,7 @@ struct DetailScreen: View {
         cropPortrait = toPortrait
         let ratio = aspect.ratio(frameWidth: f.frameWidth, frameHeight: f.frameHeight, portrait: toPortrait)
         vm.setCrop(id, CropMath.withAspect(photo.adjust.crop ?? CropMath.full, ratio: ratio, frameWidth: f.frameWidth,
-                                           frameHeight: f.frameHeight), force: true)
+                                           frameHeight: f.frameHeight, extend: extendOn(photo)), force: true)
     }
 
     @ToolbarContentBuilder
@@ -341,7 +353,7 @@ extension DetailScreen {
         VStack(spacing: 0) {
             macBar(photo).interfaceScaled()  // the Viewer's Settings › Interface size; the panel scales in PhotoWithControls
             PhotoWithControls {
-                PhotoPage(vm: vm, session: session, photo: photo, current: true, pickingWhite: $pickingWhite, cropRatio: cropRatio)
+                PhotoPage(vm: vm, session: session, photo: photo, current: true, pickingWhite: $pickingWhite, cropRatio: cropRatio, cropExtend: cropExtend)
                     // Room between the photo's frame and the window's edges and bar.
                     .padding(macPhotoMargin)
                     .overlay(alignment: .bottom) {
@@ -602,6 +614,9 @@ private struct PhotoPage: View {
     @Binding var pickingWhite: Bool
     /** Crop & rotate's locked shape, width / height in pixels (nil = free). */
     let cropRatio: Double?
+    /** Crop & rotate's Extend chip is on (the crop may reach past the frame). */
+    let cropExtend: Bool
+    private func extendOn(_ photo: AutoPhoto) -> Bool { cropExtend || photo.adjust.crop?.extendsFrame == true }
 
     /** Press and hold shows the auto develop without the look. */
     @State private var showAuto = false
@@ -622,7 +637,7 @@ private struct PhotoPage: View {
                     // Press and hold shows the auto develop without the look.
                     let uncropped = showAuto && live ? analysis.autoBase : photo.params ?? analysis.autoBase
                     let cropping = live && vm.cropping
-                    let shown = cropping ? uncropped.withoutCrop() : uncropped
+                    let shown = cropping ? uncropped.withCrop(extendOn(photo) ? CropMath.extendedView : CropMath.full) : uncropped
                     #if os(macOS)
                     // The wheel zooms around the pointer (as Pro's and the web's), the middle button pans.
                     PointerSurface(
@@ -654,8 +669,10 @@ private struct PhotoPage: View {
                         let shader = session.shaderParams(shown, defaults: analysis.defaults, useSelectedLut: shown.lut != nil,
                                                           film: shown.film != nil ? session.filmData : nil)
                         CropOverlay(frameWidth: shader.lens.outputWidth, frameHeight: shader.lens.outputHeight,
-                                    crop: photo.adjust.crop ?? CropMath.full, ratio: cropRatio, framePx: framePx,
-                                    onCropChange: { vm.setCrop(photo.id, $0) },
+                                    crop: extendOn(photo) ? CropMath.toView(photo.adjust.crop ?? CropMath.full)
+                                        : photo.adjust.crop ?? CropMath.full,
+                                    ratio: cropRatio, framePx: framePx,
+                                    onCropChange: { vm.setCrop(photo.id, extendOn(photo) ? CropMath.fromView($0) : $0) },
                                     rotate: (angle: photo.adjust.straighten, onChange: { vm.setStraighten(photo.id, $0) }))
                     }
                     // The ISO in the bottom-left corner, to judge noise without zooming in (as the web's photo view).

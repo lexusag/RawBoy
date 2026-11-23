@@ -20,7 +20,10 @@ public struct CropRect: Equatable, Sendable {
 
     public var width: Float { right - left }
     public var height: Float { bottom - top }
-    public var isFull: Bool { left <= 0 && top <= 0 && right >= 1 && bottom >= 1 }
+    public var isFull: Bool { left == 0 && top == 0 && right == 1 && bottom == 1 }
+
+    /** True when the crop reaches past the frame, so part of the output is canvas to fill. */
+    public var extendsFrame: Bool { left < 0 || top < 0 || right > 1 || bottom > 1 }
 }
 
 public extension DevelopParams {
@@ -83,6 +86,32 @@ public enum CropAspect: CaseIterable, Sendable {
 public enum CropMath {
     public static let full = CropRect(0, 0, 1, 1)
 
+    /** How far a crop may reach past each edge of the frame (fraction of that side); the canvas there is filled. */
+    public static let maxExtend: Float = 0.3
+    private static let viewSpan: Float = 1 + 2 * maxExtend
+
+    /**
+     * The canvas the crop tool shows while extending: the frame plus `maxExtend` past each edge, as a crop of the
+     * frame. `toView` / `fromView` map a crop to and from fractions of that canvas, so the tool's frame, grid and
+     * drags work as on the plain frame.
+     */
+    public static let extendedView = CropRect(-maxExtend, -maxExtend, 1 + maxExtend, 1 + maxExtend)
+
+    public static func toView(_ r: CropRect) -> CropRect {
+        CropRect((r.left + maxExtend) / viewSpan, (r.top + maxExtend) / viewSpan,
+                 (r.right + maxExtend) / viewSpan, (r.bottom + maxExtend) / viewSpan)
+    }
+
+    public static func fromView(_ v: CropRect) -> CropRect {
+        CropRect(v.left * viewSpan - maxExtend, v.top * viewSpan - maxExtend,
+                 v.right * viewSpan - maxExtend, v.bottom * viewSpan - maxExtend)
+    }
+
+    /** [r] pulled back inside the frame (turning Extend off). */
+    public static func insideFrame(_ r: CropRect) -> CropRect {
+        CropRect(r.left.clamped(0, 1), r.top.clamped(0, 1), r.right.clamped(0, 1), r.bottom.clamped(0, 1))
+    }
+
     /** Smallest crop side in frame pixels. */
     public static let minPixels = 64
 
@@ -135,19 +164,20 @@ public enum CropMath {
      * [r] reshaped to [ratio] (width / height in pixels) with about the same area, around the same
      * centre, inside the frame. Nil ratio = free: [r] unchanged.
      */
-    public static func withAspect(_ r: CropRect, ratio: Double?, frameWidth: Int, frameHeight: Int) -> CropRect {
+    public static func withAspect(_ r: CropRect, ratio: Double?, frameWidth: Int, frameHeight: Int, extend: Bool = false) -> CropRect {
         guard let ratio else { return r }
         let fw = Double(frameWidth)
         let fh = Double(frameHeight)
         let area = Double(r.width) * fw * Double(r.height) * fh
         var w = (area * ratio).squareRoot()
         var h = w / ratio
-        let fit = min(1.0, min(fw / w, fh / h))
+        let e = extend ? Double(maxExtend) : 0
+        let fit = min(1.0, min(fw * (1 + 2 * e) / w, fh * (1 + 2 * e) / h))
         w *= fit
         h *= fit
-        let cx = (Double(r.left + r.right) / 2 * fw).clamped(w / 2, fw - w / 2)
-        let cy = (Double(r.top + r.bottom) / 2 * fh).clamped(h / 2, fh - h / 2)
-        return fromPixels(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2, fw, fh)
+        let cx = (Double(r.left + r.right) / 2 * fw).clamped(w / 2 - e * fw, fw * (1 + e) - w / 2)
+        let cy = (Double(r.top + r.bottom) / 2 * fh).clamped(h / 2 - e * fh, fh * (1 + e) - h / 2)
+        return fromPixels(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2, fw, fh, extend: extend)
     }
 
     /**
@@ -155,9 +185,15 @@ public enum CropMath {
      * [minPixels] wide and high, and at [ratio] (width / height in pixels) when not nil.
      */
     public static func drag(_ start: CropRect, handle: Handle, dx: Float, dy: Float, ratio: Double?,
-                            frameWidth: Int, frameHeight: Int) -> CropRect {
+                            frameWidth: Int, frameHeight: Int, extend: Bool = false) -> CropRect {
         let fw = Double(frameWidth)
         let fh = Double(frameHeight)
+        // Bounds of the canvas the crop may use: the frame, plus maxExtend past each edge when extending.
+        let ex = extend ? Double(maxExtend) : 0
+        let x0 = -ex * fw
+        let x1 = (1 + ex) * fw
+        let y0 = -ex * fh
+        let y1 = (1 + ex) * fh
         let minW = min(Double(minPixels), fw)
         let minH = min(Double(minPixels), fh)
         let l = Double(start.left) * fw
@@ -168,9 +204,9 @@ public enum CropMath {
         let my = Double(dy) * fh
 
         if handle == .move {
-            let ox = mx.clamped(-l, fw - r)
-            let oy = my.clamped(-t, fh - b)
-            return fromPixels(l + ox, t + oy, r + ox, b + oy, fw, fh)
+            let ox = mx.clamped(x0 - l, x1 - r)
+            let oy = my.clamped(y0 - t, y1 - b)
+            return fromPixels(l + ox, t + oy, r + ox, b + oy, fw, fh, extend: extend)
         }
 
         let movesLeft = handle == .left || handle == .topLeft || handle == .bottomLeft
@@ -179,11 +215,11 @@ public enum CropMath {
         let movesBottom = handle == .bottom || handle == .bottomLeft || handle == .bottomRight
 
         guard let ratio else {
-            let nl = movesLeft ? (l + mx).clamped(0, r - minW) : l
-            let nr = movesRight ? (r + mx).clamped(l + minW, fw) : r
-            let nt = movesTop ? (t + my).clamped(0, b - minH) : t
-            let nb = movesBottom ? (b + my).clamped(t + minH, fh) : b
-            return fromPixels(nl, nt, nr, nb, fw, fh)
+            let nl = movesLeft ? (l + mx).clamped(x0, r - minW) : l
+            let nr = movesRight ? (r + mx).clamped(l + minW, x1) : r
+            let nt = movesTop ? (t + my).clamped(y0, b - minH) : t
+            let nb = movesBottom ? (b + my).clamped(t + minH, y1) : b
+            return fromPixels(nl, nt, nr, nb, fw, fh, extend: extend)
         }
 
         let horizontal = movesLeft || movesRight
@@ -195,14 +231,14 @@ public enum CropMath {
         let wantH = vertical ? abs((movesTop ? t + my : b + my) - ay) : 0
         var w = max(wantW, wantH * ratio)
         // Room around the anchor, per axis (both halves when that axis stays centred).
-        let roomW = movesLeft ? ax : movesRight ? fw - ax : 2 * min(ax, fw - ax)
-        let roomH = movesTop ? ay : movesBottom ? fh - ay : 2 * min(ay, fh - ay)
+        let roomW = movesLeft ? ax - x0 : movesRight ? x1 - ax : 2 * min(ax - x0, x1 - ax)
+        let roomH = movesTop ? ay - y0 : movesBottom ? y1 - ay : 2 * min(ay - y0, y1 - ay)
         w = min(w, min(roomW, roomH * ratio))
         w = min(max(w, max(minW, minH * ratio)), min(roomW, roomH * ratio))
         let h = w / ratio
         let nl = movesLeft ? ax - w : movesRight ? ax : ax - w / 2
         let nt = movesTop ? ay - h : movesBottom ? ay : ay - h / 2
-        return fromPixels(nl, nt, nl + w, nt + h, fw, fh)
+        return fromPixels(nl, nt, nl + w, nt + h, fw, fh, extend: extend)
     }
 
     /**
@@ -229,8 +265,10 @@ public enum CropMath {
     }
 
     private static func fromPixels(_ l: Double, _ t: Double, _ r: Double, _ b: Double, _ fw: Double,
-                                   _ fh: Double) -> CropRect {
-        CropRect(Float(l / fw).clamped(0, 1), Float(t / fh).clamped(0, 1),
-                 Float(r / fw).clamped(0, 1), Float(b / fh).clamped(0, 1))
+                                   _ fh: Double, extend: Bool = false) -> CropRect {
+        let lo: Float = extend ? -maxExtend : 0
+        let hi: Float = extend ? 1 + maxExtend : 1
+        return CropRect(Float(l / fw).clamped(lo, hi), Float(t / fh).clamped(lo, hi),
+                        Float(r / fw).clamped(lo, hi), Float(b / fh).clamped(lo, hi))
     }
 }

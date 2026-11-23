@@ -736,6 +736,8 @@ struct GeometryPanel: View {
     let onFlip: (_ vertical: Bool) -> Void
     let aspect: CropAspect
     let portrait: Bool
+    let extend: Bool
+    let onExtend: (Bool) -> Void
     let onAspect: (CropAspect, Bool) -> Void
     let onResetCrop: () -> Void
     let onDone: () -> Void
@@ -745,7 +747,7 @@ struct GeometryPanel: View {
             HStack {
                 Text("Crop & rotate").font(.headline)
                 Spacer()
-                Button("Reset crop", action: onResetCrop).disabled(params.crop.isFull && aspect == .original)
+                Button("Reset crop", action: onResetCrop).disabled(params.crop.isFull && aspect == .original && !extend)
                 Button("Done", action: onDone).fontWeight(.semibold)
             }
             HStack(spacing: 12) {
@@ -769,6 +771,9 @@ struct GeometryPanel: View {
                 }
             }
             .scrollIndicators(.hidden)
+            Button("Extend canvas") { onExtend(!extend) }
+                .buttonStyle(.bordered)
+                .tint(extend ? .accentColor : .gray)
             ParamSlider(label: "Straighten", value: params.straighten, range: -45...45, defaultValue: 0,
                         format: { String(format: "%+.1f°", abs($0) < 0.05 ? 0 : $0) }) { v in
                 var p = params

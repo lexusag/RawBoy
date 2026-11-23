@@ -1034,35 +1034,6 @@ float frameMask(vec2 p) {
     return a.x * a.y;
 }
 
-// Fill for the canvas a crop extends past the picture: the picture mirrored about its edge, blurred more the farther
-// out (a disc of 12 taps, rotated per pixel so the leftover reads as grain), read from the whole-image copy so
-// preview, 100% and export tiles agree. Light, not display colour: the rest of the develop runs on it as on any pixel.
-vec2 fillReflect(vec2 p) {
-    vec2 q = mod(p, 2.0 * uImageSize);
-    return mix(q, 2.0 * uImageSize - q, step(uImageSize, q));
-}
-
-vec3 fillTap(vec2 q) {
-    if (uBaseTexel.x < 0.5) return texture(uBase, q / uImageSize).rgb;
-    return texture(uImage, (q - uInOrigin) / uInSpan).rgb;
-}
-
-vec3 fillColour(vec2 p) {
-    float away = length(max(max(-p, p - uImageSize), vec2(0.0)));
-    float texel = max(uImageSize.x * uBaseTexel.x, uImageSize.y * uBaseTexel.y);
-    float radius = texel * 1.5 + 0.15 * away;
-    vec3 h = fract(vec3(p.xyx) * 0.1031);
-    h += dot(h, h.yzx + 33.33);
-    float turn = fract((h.x + h.y) * h.z) * 6.2831853;
-    vec3 sum = vec3(0.0);
-    for (int i = 0; i < 12; ++i) {
-        float a = turn + float(i) * 2.3999632;
-        float r = radius * sqrt((float(i) + 0.5) / 12.0);
-        sum += fillTap(fillReflect(p + r * vec2(cos(a), sin(a))));
-    }
-    return sum / 12.0;
-}
-
 // End of the pipeline for B&W: leaks and effects go to grey with the rest of the picture.
 vec3 monoFx(vec3 c) {
     return mix(c, vec3(dot(c, vec3(0.2126, 0.7152, 0.0722))), uMonoFx);

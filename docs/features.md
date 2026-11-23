@@ -79,7 +79,7 @@ Web, Desktop and iOS take every field of `DevelopParams` except where noted (che
 | Lens: **Lensfun database** | 1.14.0 | ✓ | ✓ 1.17.2 | ✓ 1.17.2 | — | |
 | Lens presets (by lens; named for manual lenses) | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
 | Crop & rotate, Straighten, Flip | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | Drag outside the crop frame to rotate: web, Desktop and iOS unreleased (Android has only the Straighten slider); the shape starts on Original (Free if already cropped): Desktop and iOS unreleased, web and Android start on Free |
-| Extend canvas (crop past the edges, filled from the picture's edge) | unreleased | ✓ | — | — | — | Planned for the other ports: `docs/crop-extend.md` |
+| Extend canvas (crop past the edges, filled from the picture's edge) | unreleased | ✓ | ✓ | ✓ | ✓ | Fill fades from the mirrored picture to a blur; `docs/crop-extend.md` |
 | Perspective (Vertical, Horizontal), Scale | 1.9.2 / 1.14.0 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
 | Masks: brush, linear, radial | ≤1.1.1 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
 | Masks: stripe | 1.4.3 | ✓ | ✓ 1.17.0 | ✓ 1.4.7 | ✓ | |
@@ -145,7 +145,7 @@ Web, Desktop and iOS take every field of `DevelopParams` except where noted (che
 | White balance picker | 1.9.0 | ✓ | ✓ 1.17.2 | ✓ | ✓ | |
 | **Retouch** (portrait retouch adjustment) | 1.12.0 | ✓ | ✓ unreleased | — | — | Desktop: its own Retouch section in the panel. `Adjustments.retouch` is in the Swift engine too (sidecar, Apply to all, Copy previous); iOS has no slider (its MediaPipe skin mask has no face landmarks yet) |
 | Crop & rotate in the photo view | 1.15.3 | ✓ | ✓ 1.17.2 | ✓ 1.15.3 | ✓ 1.15.3 | Drag outside the frame to rotate: web 1.15.5, Desktop and iOS unreleased (open hand cursor on the Mac); Android — |
-| Extend canvas in Auto's Crop & rotate | unreleased | ✓ | — | — | — | Same fill as Pro; planned for the other ports: `docs/crop-extend.md` |
+| Extend canvas in Auto's Crop & rotate | unreleased | ✓ | ✓ | ✓ | ✓ | Same fill as Pro |
 | **🎲 Leak** (random generated film leak in the photo view) | unreleased | ✓ | ✓ | ✓ | ✓ | Rolls a procedural film leak (`FilmLeaks.ts/.swift/.kt`) on top of the look, preset or RawBoy edits; Clear removes it |
 | RawBoy preset for the batch / a selection | ≤1.1.1 | ✓ | ✓ 1.17.8 (list of Pro's presets) | ✓ | ✓ | Desktop and iOS keep the selection after a preset or lens preset (unreleased); web and Android clear it |
 | Partial presets (only the groups they hold) | 1.1.2 | ✓ | ✓ 1.17.2 | ✓ | ? | Denoise & sharpening group: unreleased on Desktop, iOS and Android |
