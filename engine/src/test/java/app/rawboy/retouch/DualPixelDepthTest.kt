@@ -93,8 +93,8 @@ class DualPixelDepthTest {
         val bottom = map.sampleUv(0.5f, 0.8f)
         assertTrue("top $top", top > 0.7f)
         assertTrue("bottom $bottom", bottom < 0.3f)
-        // Focus on the sharpest cells: here both bands are equally sharp, so either one.
-        assertTrue("focus ${map.focusDepth}", map.focusDepth < 0.3f || map.focusDepth > 0.7f)
+        // No cell is at the in-focus shift (both bands are 2 off): the focus stays the map's middle.
+        assertEquals(0.5f, map.focusDepth, 0.02f)
     }
 
     @Test

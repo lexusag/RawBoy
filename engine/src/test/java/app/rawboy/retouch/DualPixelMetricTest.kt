@@ -119,4 +119,46 @@ class DualPixelMetricTest {
         val expected = 1000f / (0.5f + 3f * (x + 0.5f) / ai.width)
         assertEquals(expected, map.millimetresAt(x, ai.height / 2)!!.toFloat(), expected * 0.1f)
     }
+
+    /**
+     * The 1.20.9 selfie: the lens focused on the subject at u = 0.8 (inverse distance 2.9 D), a textured room behind
+     * (u < 0.5) matches far more confidently than the smooth, backlit face.
+     */
+    private fun selfie(person: Boolean): Triple<DualPixelDepth.Measurement, DepthMap, DualPixelCalibration> {
+        val calibration = DualPixelCalibration(slope = -0.1f, offset = 0.034f)
+        val focus = 0.5f + 3f * 0.8f
+        val aw = 96
+        val ah = 128
+        val ai = DepthMap(
+            aw, ah, ByteArray(aw * ah) { i -> ((1f - (i % aw + 0.5f) / aw) * 255f).roundToInt().toByte() },
+            subjectDetected = person, focusDepth = if (person) 0.2f else 0.5f,
+        )
+        val gw = 256
+        val gh = 96
+        val rnd = Random(5)
+        val disparity = FloatArray(gw * gh)
+        val confidence = FloatArray(gw * gh)
+        for (gy in 0 until gh) for (gx in 0 until gw) {
+            val u = 1f - (gy + 0.5f) / gh
+            disparity[gy * gw + gx] = calibration.slope * (0.5f + 3f * u - focus) + calibration.offset + (rnd.nextFloat() - 0.5f) * 0.06f
+            confidence[gy * gw + gx] = if (u < 0.5f) 0.9f + 0.1f * rnd.nextFloat() else 0.3f + 0.05f * rnd.nextFloat()
+        }
+        return Triple(DualPixelDepth.Measurement(gw, gh, disparity, confidence, disparity), ai, calibration)
+    }
+
+    @Test
+    fun aPersonIsTheFocusEvenWhenTheRoomBehindMatchesBetter() {
+        val (m, ai, calibration) = selfie(person = true)
+        val map = DualPixelMetric.millimetres(m, ai, calibration, 0.5f + 3f * 0.8f, 6)!!
+        assertEquals(0.2f, map.focusDepth, 0.02f)
+        map.millimetres?.let { assertEquals(1000f / 2.9f, map.millimetresAt((0.8f * ai.width).toInt(), ai.height / 2)!!.toFloat(), 40f) }
+    }
+
+    @Test
+    fun withoutAPersonTheFocusIsWhereTheShiftSaysInFocusNotWhereMatchingIsStrongest() {
+        val (m, ai, calibration) = selfie(person = false)
+        val map = DualPixelMetric.millimetres(m, ai, calibration, 0.5f + 3f * 0.8f, 6)!!
+        // The subject (u = 0.8) is 0.2 on the AI map; the room behind is 0.5..1.
+        assertEquals(0.2f, map.focusDepth, 0.08f)
+    }
 }

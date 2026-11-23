@@ -289,8 +289,8 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   Millimetres: `depth/DepthCalibrationActivity.kt` (ARCore shared camera + the dual-pixel app surface; ARCore replaces the
   app's repeating request, so focus distances come through `SharedCamera.setCaptureCallback`; ARCore's depth timestamps
   are on its own clock, convert with `frame.timestamp - frame.androidCameraTimestamp`) → `DualPixelCalibrations` (own
-  prefs, by camera id) → `ShotSaver.depthOf`: `DualPixelMetric.millimetres` (the AI map focused on the sharpest dual-pixel
-  cells; mm anchored at the focus distance there, only the scale fitted, from physically possible shifts; a free fit
+  prefs, by camera id) → `ShotSaver.depthOf`: `DualPixelMetric.millimetres` (the AI map focused on the AI's person, else the
+  confident cells at the in-focus shift: never just the most confident ones, which follow texture (1.20.9 selfie); mm anchored at the focus distance there, only the scale fitted, from physically possible shifts; a free fit
   collapsed on portraits in 1.20.8 and blurred the subject; per-pixel dual pixel alone was worse than the focus distance) → `RBDP` v2 (8-bit + `uint16` mm; v1 without mm).
   Web Pro (no Camera depth in the file): `PhotoSession.ensureDepthMap` (on Portrait blur > 0, after the skin mask for
   `SkinMask.person`) → `retouch/DepthEstimator.ts` in `worker/depth.worker.ts` (ONNX Runtime Web WASM bundled by Vite; `optimizeDeps.exclude` it, or in dev its WASM URL serves index.html,

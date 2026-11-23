@@ -139,11 +139,12 @@ object DualPixelDepth {
                 norm[y * ow + x] = (0.5f + 0.5f * d / spread).coerceIn(0f, 1f)
             }
         }
-        // The focus: where the camera focused, i.e. the sharpest cells (highest confidence), not a shift of exactly 0
-        // (the lens's in-focus shift isn't quite 0, and a calibrated offset was off on portraits).
-        val top = 0.5f * percentile(m.confidence, 0.995f)
-        val sharp = m.disparity.indices.filter { m.confidence[it] >= top && m.confidence[it] > 0f }.map { m.disparity[it] }
-        val focus = if (sharp.size < 20) 0.5f else (0.5f + 0.5f * percentile(sharp.toFloatArray(), 0.5f) / spread).coerceIn(0f, 1f)
+        // The focus: the in-focus shift as the confident cells near 0 show it (the lens's in-focus shift isn't quite 0).
+        // Not the most confident cells: confidence also measures texture, and a textured room behind a smooth face won
+        // (1.20.9).
+        val usable = 0.1f * percentile(m.confidence, 0.995f)
+        val inFocus = m.disparity.indices.filter { m.confidence[it] >= usable && m.confidence[it] > 0f && abs(m.disparity[it]) <= 0.07f }.map { m.disparity[it] }
+        val focus = if (inFocus.size < 20) 0.5f else (0.5f + 0.5f * percentile(inFocus.toFloatArray(), 0.5f) / spread).coerceIn(0f, 1f)
         return HardwareDepth.toDepthMap(norm, ow, oh, exifOrientation, hardware = true, subjectDetected = true, focusDepth = focus)
     }
 
