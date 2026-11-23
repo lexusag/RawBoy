@@ -16,7 +16,7 @@ import type { BloomSources, PreviewImage } from '../gl/PreviewImage';
 import { WAVELET_DENOISE_MARGIN } from '../gl/WaveletDenoise';
 import { ShaderParams, WIDE_DENOISE_MARGIN, wideDenoise, type BrushLookup } from '../gl/ShaderParams';
 import { ZoomMath, contains, rect, type DetailTile } from '../gl/Zoom';
-import type { PhotoMetadata } from '../../worker/protocol';
+import type { DepthMapData, PhotoMetadata } from '../../worker/protocol';
 import { LensInfo, type RadialVignette, type Warp } from '../lens/LensInfo';
 import { LensTransform } from '../lens/LensTransform';
 import type { LutData } from '../lut/LutData';
@@ -54,6 +54,8 @@ export interface SessionState {
   bokehSource: PreviewImage | null;
   /** What the anamorphic flare scatters from (FlareSource); made the first time the flare is on. */
   flareSource: PreviewImage | null;
+  /** Embedded depth map from a RawBoy Camera DNG ("RBDP" trailer), or null when the file has none. */
+  depthMap: DepthMapData | null;
   skin: SkinState;
   blemish: BlemishState;
   /** Portrait retouch's map for the preview (null until made, or with no face), and whether one is being made. */
@@ -87,9 +89,11 @@ export interface Prepared {
   bloom: BloomSources;
 }
 
-/** The file's own white balance as slider defaults; everything else untouched. */
+/** The file's own white balance and depth focus as slider defaults; everything else untouched. */
 export function asShotDefaults(image: RawImage): DevelopParams {
-  return asShotDefaultsOf(image.asShotWhite, image.displayReferred, image.clipLevel);
+  const base = asShotDefaultsOf(image.asShotWhite, image.displayReferred, image.clipLevel);
+  if (!image.depthMap) return base;
+  return { ...base, depthFocus: Math.round(Math.min(1, Math.max(0, image.depthMap.focusDepth)) * 100) };
 }
 
 /** [asShotDefaults] from what it reads of the image (RawBoy Auto keeps these for photos it analysed before). */
@@ -121,6 +125,7 @@ export class PhotoSession {
     bloomSources: null,
     bokehSource: null,
     flareSource: null,
+    depthMap: null,
     skin: { kind: 'notComputed' },
     blemish: { working: false, healed: 0, detected: 0 },
     retouchMap: null,
@@ -262,6 +267,7 @@ export class PhotoSession {
       bloomSources: loaded.bloom,
       bokehSource: null,
       flareSource: null,
+      depthMap: img.depthMap,
       skin: { kind: 'notComputed' },
       blemish: { working: false, healed: 0, detected: 0 },
       retouchMap: null,
@@ -340,15 +346,17 @@ export class PhotoSession {
     const s = this._state;
     return ShaderParams.from(
       p, defaults, lut, this.lensFor(p), s.base, s.bloomSources, s.skin.kind === 'ready' ? s.skin.mask : null, 1, 1, maskView,
-      (l) => this.brushRaster(l), film, s.bokehSource, s.flareSource, retouch,
+      (l) => this.brushRaster(l), film, s.bokehSource, s.flareSource, retouch, s.depthMap,
     );
   }
 
-  /** Makes the lens blur's source copy once a mask layer of [p] blurs (see BokehTexture). */
+  /** Makes the lens blur's source copy once a mask layer of [p] or portrait depth blur blurs (see BokehTexture). */
   private ensureBokehSource(p: DevelopParams = this.params) {
     const img = this.image;
     if (!img || this._state.bokehSource || this.bokehJob) return;
-    if (!p.masks.some((l) => l.enabled && l.opacity > 0 && l.adjust.lensBlur > 0)) return;
+    const layerBlurs = p.masks.some((l) => l.enabled && l.opacity > 0 && l.adjust.lensBlur > 0);
+    const depthBlurs = (p.depthBlur ?? 0) > 0 && this._state.depthMap != null;
+    if (!layerBlurs && !depthBlurs) return;
     this.bokehJob = (async () => {
       try {
         const source = await img.createPreview(BOKEH_SOURCE_MAX_DIMENSION, true);
@@ -418,6 +426,33 @@ export class PhotoSession {
     const halves = await img.copyTile(rect(x0, y0, x1 - x0, y1 - y0));
     const rgb = Float32Array.from(halves, halfToFloat);
     return WhitePicker.pick(rgb, defaults.temperature, defaults.tint);
+  }
+
+  /**
+   * Samples the embedded depth map (`0..100`) at a point of the preview (fit or zoomed view, mapped through crop,
+   * rotation and lens correction). Returns null if the point is outside the photo or no depth map is present.
+   */
+  pickDepth(viewX: number, viewY: number, frameWidth: number): number | null {
+    const img = this.image;
+    const depth = this._state.depthMap;
+    if (!img || !depth || this.viewWidth <= 0 || this.viewHeight <= 0) return null;
+    const lens = this.lensFor(this.params);
+    const w = lens.outputWidth;
+    const h = lens.outputHeight;
+    const zoom = this._state.zoomCenter;
+    const r = zoom
+      ? ZoomMath.zoomedRect(zoom[0], zoom[1], this.viewWidth, this.viewHeight, w, h, this._state.zoomScale, this.viewFrame)
+      : ZoomMath.fitRect(this.viewWidth, this.viewHeight, w, h, frameWidth);
+    const outX = ((viewX - r[0]) / r[2]) * w;
+    const outY = ((viewY - r[1]) / r[3]) * h;
+    if (!(outX >= 0 && outX <= w && outY >= 0 && outY <= h)) return null;
+    const src = lens.source(outX, outY);
+    if (lens.clipFrame && (src[0] < 0 || src[1] < 0 || src[0] > img.width || src[1] > img.height)) return null;
+    const u = Math.min(1, Math.max(0, src[0] / Math.max(1, img.width)));
+    const v = Math.min(1, Math.max(0, src[1] / Math.max(1, img.height)));
+    const dx = Math.min(depth.width - 1, Math.max(0, Math.round(u * (depth.width - 1))));
+    const dy = Math.min(depth.height - 1, Math.max(0, Math.round(v * (depth.height - 1))));
+    return Math.round((depth.data[dy * depth.width + dx] / 255) * 100);
   }
 
   /**

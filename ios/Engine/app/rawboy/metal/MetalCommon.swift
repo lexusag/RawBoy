@@ -229,7 +229,7 @@ struct DevelopProgram {
             "uBloomHalo": inputs.bloomHalo, "uBloomTail": inputs.bloomTail, "uSkinMask": inputs.skinMask,
             "uBrushMask": inputs.brush, "uFilmLut": inputs.filmLut, "uPrintLut": inputs.printLut,
             "uFlare": inputs.flare, "uFx": inputs.fx,
-            "uBokeh": inputs.bokeh,
+            "uBokeh": inputs.bokeh, "uDepthMap": inputs.depth,
         ].merging(overrides) { $1 }
         for (name, index) in DevelopLayout.textures {
             encoder.setFragmentTexture(textures[name], index: index)
@@ -474,6 +474,8 @@ final class DevelopTextures {
     private(set) var flare: MTLTexture
     private(set) var skinMask: MTLTexture
     private(set) var brush: MTLTexture
+    /** The portrait depth map (Camera DNG trailer; web and Android only): a 1x1 stand-in so the shader's sampler is bound. */
+    private(set) var depth: MTLTexture
     /** The light effects' segment data (RGBA32F, LightEffects.row texels wide, read with texelFetch). */
     private(set) var fx: MTLTexture
     /** The masks' lens blur (BokehTexture): 1x1 transparent until the first blur, so the develop shader then shows none. */
@@ -517,6 +519,7 @@ final class DevelopTextures {
         flare = empty(.rgba16Float)
         skinMask = empty(.r16Float)
         brush = empty(.rg8Unorm)
+        depth = empty(.r8Unorm)
         fx = empty(.rgba32Float)
     }
 

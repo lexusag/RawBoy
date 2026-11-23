@@ -53,6 +53,8 @@ final class BokehTexture {
     private let prepPipeline: MTLRenderPipelineState
     private let gatherPipeline: MTLRenderPipelineState
     private let mipSampler: MTLSamplerState
+    /** The prep shader declares the portrait depth map (web and Android only); a 1x1 stand-in keeps its sampler bound. */
+    private let depthStub = MetalContext.shared.makeTexture(.r8Unorm, 1, 1)!
     private var source: MTLTexture?
     private var uploaded: UnsafePointer<UInt16>?
     private var radii: MTLTexture?
@@ -165,7 +167,7 @@ final class BokehTexture {
             f.bytes.withUnsafeBytes {
                 e.setFragmentBytes($0.baseAddress!, length: $0.count, index: DevelopLayout.bokehBufferIndex)
             }
-            let textures: [String: MTLTexture] = ["uBrushMask": brush, "uBokehSrc": source]
+            let textures: [String: MTLTexture] = ["uBrushMask": brush, "uBokehSrc": source, "uDepthMap": depthStub]
             for (name, index) in DevelopLayout.bokehTextures {
                 e.setFragmentTexture(textures[name], index: index)
                 e.setFragmentSamplerState(name == "uBokehSrc" ? mipSampler : ctx.sampler, index: index)

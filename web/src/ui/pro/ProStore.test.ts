@@ -110,4 +110,22 @@ describe('ProStore.copyPreviousEdits', () => {
     store.copyPreviousEdits();
     expect(store.state.params.exposure).toBe(1.5);
   });
+
+  it('carries depthBlur and depthFalloff while keeping the new photo default depthFocus, and supports pickDepth', async () => {
+    const { store, setNextDefaults } = setupStore();
+    await store.open(new File([], 'first.dng'));
+    store.update({ ...store.state.params, depthBlur: 45, depthFocus: 15, depthFalloff: 65 });
+
+    setNextDefaults({ depthFocus: 32 });
+    await store.open(new File([], 'second.dng'), developParams({ depthFocus: 32 }));
+    store.copyPreviousEdits();
+
+    expect(store.state.params.depthBlur).toBe(45);
+    expect(store.state.params.depthFalloff).toBe(65);
+    expect(store.state.params.depthFocus).toBe(32);
+
+    vi.spyOn(store.session, 'pickDepth').mockReturnValue(24);
+    store.pickDepth(100, 120);
+    expect(store.state.params.depthFocus).toBe(24);
+  });
 });

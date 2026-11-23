@@ -7,6 +7,7 @@ import type { ShadingMap } from '../lens/LensInfo';
 import type { LutData } from '../lut/LutData';
 import type { RetouchMap } from '../retouch/PortraitRetouch';
 import type { SkinMask } from '../retouch/SkinMask';
+import type { DepthMapData } from '../../worker/protocol';
 import type { PreviewImage } from './PreviewImage';
 import type { ShaderParams } from './ShaderParams';
 import { SCAN_GRAIN } from './ScanScale';
@@ -18,8 +19,10 @@ import type { PixelRect } from './Zoom';
 /** Port of engine/.../gl/GlCommon.kt for WebGL2. Texture units match Android's. */
 export const Units = {
   IMAGE: 0, LUT: 1, SHADING: 2, BASE: 3, BLOOM_HALO: 4, BLOOM_TAIL: 5, SKIN: 6, BRUSH: 7, FILM_LUT: 8, PRINT_LUT: 9,
-  // 10, 11: the wavelet denoise pre-pass; 13: the lens blur passes.
+  // 10, 11: the wavelet denoise result; 12: the lens blur result (its passes borrow 12 while they run, BokehTexture).
   BOKEH: 12,
+  /** Portrait depth map; also read by the lens blur passes, so it cannot be their pass unit. */
+  DEPTH: 13,
   FLARE: 14,
   /** Light effects' segment data (LightEffects.ts, web only). */
   FX: 15,
@@ -274,6 +277,8 @@ export class DevelopProgram {
     });
     gl.uniform4fv(this.loc('uBrushSlot'), slots);
     this.f2('uBrushTexel', 1 / (2 * brushW), 1 / (2 * brushH));
+    this.i1('uDepthMap', Units.DEPTH);
+    gl.uniform3f(this.loc('uDepthBlur'), p.depthBlurPx, p.depthFocus, p.depthFalloff);
   }
 
   /**
@@ -284,8 +289,8 @@ export class DevelopProgram {
     for (const [name, unit] of [
       ['uImage', Units.IMAGE], ['uLut', Units.LUT], ['uShading', Units.SHADING], ['uBase', Units.BASE],
       ['uBloomHalo', Units.BLOOM_HALO], ['uBloomTail', Units.BLOOM_TAIL], ['uSkinMask', Units.SKIN],
-      ['uBrushMask', Units.BRUSH], ['uFilmLut', Units.FILM_LUT], ['uPrintLut', Units.PRINT_LUT], ['uBokeh', Units.BOKEH],
-      ['uFlare', Units.FLARE],
+      ['uBrushMask', Units.BRUSH], ['uFilmLut', Units.FILM_LUT], ['uPrintLut', Units.PRINT_LUT],
+      ['uDepthMap', Units.DEPTH], ['uBokeh', Units.BOKEH], ['uFlare', Units.FLARE],
     ] as const) this.i1(name, unit);
     this.f2('uScale', 1, 1); // the whole target (develop.vert)
     this.f1('uFlipY', 0);
@@ -627,6 +632,38 @@ export class FullscreenQuad {
   }
 }
 
+/** The normalized depth map (R8, 0..1) on its own unit; re-uploads when it changes. */
+export class DepthTexture {
+  private readonly id: WebGLTexture;
+  private uploaded: DepthMapData | null = null;
+
+  constructor(private readonly gl: WebGL2RenderingContext) {
+    gl.activeTexture(gl.TEXTURE0 + Units.DEPTH);
+    this.id = createTexture(gl, gl.LINEAR);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, 1, 1, 0, gl.RED, gl.UNSIGNED_BYTE, new Uint8Array([0]));
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    gl.activeTexture(gl.TEXTURE0);
+  }
+
+  bind(depth: DepthMapData | null) {
+    const gl = this.gl;
+    gl.activeTexture(gl.TEXTURE0 + Units.DEPTH);
+    gl.bindTexture(gl.TEXTURE_2D, this.id);
+    if (depth && depth !== this.uploaded) {
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, depth.width, depth.height, 0, gl.RED, gl.UNSIGNED_BYTE, depth.data);
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+      this.uploaded = depth;
+    }
+    gl.activeTexture(gl.TEXTURE0);
+  }
+
+  release() {
+    this.gl.deleteTexture(this.id);
+  }
+}
+
 /** All the textures a develop pass reads besides the image itself. */
 export class DevelopInputs {
   readonly base: ImageTexture;
@@ -634,6 +671,7 @@ export class DevelopInputs {
   readonly tail: ImageTexture;
   readonly flare: ImageTexture;
   readonly skin: MaskTexture;
+  readonly depth: DepthTexture;
   readonly shading: ShadingTexture;
   readonly lut: LutTexture;
   readonly brush: BrushTexture;
@@ -647,6 +685,7 @@ export class DevelopInputs {
     this.tail = new ImageTexture(gl, Units.BLOOM_TAIL);
     this.flare = new ImageTexture(gl, Units.FLARE);
     this.skin = new MaskTexture(gl);
+    this.depth = new DepthTexture(gl);
     this.shading = new ShadingTexture(gl);
     this.lut = new LutTexture(gl);
     this.brush = new BrushTexture(gl);
@@ -663,14 +702,15 @@ export class DevelopInputs {
     this.tail.bind(p.bloomTail);
     this.flare.bind(p.flareSource);
     this.skin.bind(p.skinMask, p.retouchMap && (p.skinFix !== 0 || p.layers.retouch.some((v) => v > 0)) ? p.retouchMap : null);
+    this.depth.bind(p.depthMap);
     this.brush.bind(p.layers.brush);
     this.film.bind(p.film);
-    this.bokeh.bind(p); // after the brush atlas: its mask pass reads it
+    this.bokeh.bind(p); // after the brush atlas and depth map: its mask pass reads them
     this.fx.bind(p.fx.data);
   }
 
   release() {
-    for (const t of [this.base, this.halo, this.tail, this.flare, this.skin, this.shading, this.lut, this.brush, this.film, this.bokeh, this.fx]) t.release();
+    for (const t of [this.base, this.halo, this.tail, this.flare, this.skin, this.depth, this.shading, this.lut, this.brush, this.film, this.bokeh, this.fx]) t.release();
   }
 }
 

@@ -15,6 +15,7 @@ import app.rawboy.develop.LightLeaks
 import app.rawboy.develop.MaskLayer
 import app.rawboy.develop.MaskShape
 import app.rawboy.develop.Masks
+import app.rawboy.export.DepthMap
 import app.rawboy.film.FilmData
 import app.rawboy.lens.LensTransform
 import app.rawboy.lut.LutData
@@ -101,6 +102,13 @@ class ShaderParams(
     val flareSource: PreviewImage? = null,
     /** `uMonoFx`: 1 when the picture is black and white, so the leaks and effects go grey too. */
     val monoFx: Float = 0f,
+    /** Upright normalized depth map (`uDepthMap`), or null when none is available. */
+    val depthMap: DepthMap? = null,
+    /** Max portrait depth blur disc radius in full-resolution pixels (`uDepthBlur.x`); 0 = off. */
+    val depthBlurPx: Float = 0f,
+    /** Normalized focus depth `0..1` (`uDepthBlur.y`) and depth-of-field falloff `0..1` (`uDepthBlur.z`). */
+    val depthFocus: Float = 0.2f,
+    val depthFalloff: Float = 0.5f,
 ) {
     /**
      * Extra source pixels needed around an output region for the spatial effects
@@ -163,6 +171,11 @@ class ShaderParams(
             bokehSource: PreviewImage? = null,
             /** See [ShaderParams.flareSource]; the anamorphic flare stays off without it. */
             flareSource: PreviewImage? = null,
+            /** See [ShaderParams.depthMap] and [ShaderParams.depthBlurPx] (in-camera portrait blur). */
+            depthMap: DepthMap? = null,
+            depthBlurPx: Float = 0f,
+            depthFocus: Float = depthMap?.focusDepth ?: 0.2f,
+            depthFalloff: Float = 0.5f,
         ): ShaderParams {
             val filmUsed = film?.takeIf { it.stock.id == p.film }
             val sourceWhite = WhiteBalance.xyFromTempTint(asShot.temperature.toDouble(), asShot.tint.toDouble())
@@ -224,6 +237,10 @@ class ShaderParams(
                 anamorphicBar = p.anamorphicColor.barVec(),
                 flareSource = flareSource,
                 monoFx = if (isMono(p)) 1f else 0f,
+                depthMap = depthMap,
+                depthBlurPx = if (depthMap != null) depthBlurPx else 0f,
+                depthFocus = depthFocus,
+                depthFalloff = depthFalloff,
             )
         }
 

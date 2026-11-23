@@ -283,6 +283,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private val _hiRes = MutableStateFlow(false)
     val hiRes = _hiRes.asStateFlow()
 
+    /** The active lens has a hardware depth output (`DEPTH16`): Settings offers the depth map switches only then. */
+    private val _hardwareDepthAvailable = MutableStateFlow(false)
+    val hardwareDepthAvailable = _hardwareDepthAvailable.asStateFlow()
+
     /** Lenses per side (true = front), discovered once (again when the maximum-resolution setting changes). */
     private var lensesBySide: Map<Boolean, List<CameraController.Info>>? = null
 
@@ -435,6 +439,12 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
 
     /** Experimental: a stabilized copy after each recording with motion data ([VideoStabilizer]). */
     fun setVideoStabilizeAfter(on: Boolean) = change { it.copy(videoStabilizeAfter = on) }
+
+    /** Experimental: save an upright depth map in the DNG file for portrait blur in RawBoy Pro. */
+    fun setSaveDepth(on: Boolean) = change { it.copy(saveDepth = on) }
+
+    /** Experimental, with [setSaveDepth]: apply portrait bokeh blur in camera when a person or pet is detected. */
+    fun setDepthPortrait(on: Boolean) = change { it.copy(depthPortrait = on) }
 
     init {
         // A stabilized copy being rendered waits while a new video records: the recording gets the GPU and encoder.
@@ -830,6 +840,8 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                 _screenFlashCamera.value = inf.isFront && !inf.hasFlash
                 _flashAvailable.value = inf.hasFlash || _screenFlashCamera.value
                 _hiRes.value = inf.hiRes
+                _hardwareDepthAvailable.value = inf.hasHardwareDepth
+                controller.setCaptureDepth(current.saveDepth)
                 controller.setExposureBias(exposureBias(_settings.value))
                 applyStabilization()
                 controller.start(inf, st)
@@ -1026,6 +1038,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     private fun switchTo(lens: CameraController.Info) {
         info = lens
         _hiRes.value = lens.hiRes
+        _hardwareDepthAvailable.value = lens.hasHardwareDepth
         stopTracking(clearPoint = true) // the restart ends any focus lock
         _dragPoint.value = null
         // The live develop belongs to the old lens: start the new one fresh.
@@ -1508,6 +1521,10 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
         if ((prev.videoStabilization != next.videoStabilization || prev.videoMotionData != next.videoMotionData) && !recording) {
             applyStabilization()
         }
+        if (prev.saveDepth != next.saveDepth && !recording) {
+            controller.setCaptureDepth(next.effective.saveDepth)
+            if (activeCaptures == 0) restartCamera() else restartAfterCapture = true
+        }
         if (prev.rawViewfinder != next.rawViewfinder && !recording) {
             controller.setRawViewfinder(rawViewfinderOn(next))
             if (activeCaptures == 0) restartCamera() else restartAfterCapture = true
@@ -1733,7 +1750,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     throw t
                 }
                 Log.d(TAG, "$name: capture + DNG write ${(System.nanoTime() - dngStart) / 1_000_000} ms")
-                Shot(shotId, uri, name, null, settings, platform = platform, viewfinderKey = viewfinderKey, iso = isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber, cameraId = cameraId)
+                Shot(shotId, uri, name, null, settings, platform = platform, viewfinderKey = viewfinderKey, iso = isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber, cameraId = cameraId, hardwareDepth = result.depth)
             } else {
                 val file = File(app.cacheDir, "$baseName-$shotId.dng")
                 val result = try {
@@ -1746,7 +1763,7 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     file.delete()
                     throw t
                 }
-                Shot(shotId, Uri.fromFile(file), "$baseName.dng", file, settings, platform = platform, viewfinderKey = viewfinderKey, iso = isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber, cameraId = cameraId)
+                Shot(shotId, Uri.fromFile(file), "$baseName.dng", file, settings, platform = platform, viewfinderKey = viewfinderKey, iso = isoOf(result.result), flashGuide = result.flashGuide, flashDistanceKnown = result.distanceKnown, meter = meter, effectiveFrames = result.effectiveFrames, hiRes = hiRes, compensationEv = result.compensationEv, description = result.description, frameNumber = frameNumber, cameraId = cameraId, hardwareDepth = result.depth)
             }
         } finally {
             exposed.complete(Unit)

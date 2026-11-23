@@ -9,8 +9,9 @@ uniform vec2 uBokehSize;      // bokeh texture size
 void main() {
     vec2 uv = gl_FragCoord.xy / uBokehSize;
     float lm[MAX_LAYERS];
-    for (int i = 0; i < MAX_LAYERS; ++i) lm[i] = i < uLayerCount ? layerMask(i, uv * uImageSize) : 0.0;
-    float r = bokehRadius(lm) * uBokehScale;
+    vec2 p = uv * uImageSize;
+    for (int i = 0; i < MAX_LAYERS; ++i) lm[i] = i < uLayerCount ? layerMask(i, p) : 0.0;
+    float r = bokehRadius(lm, p) * uBokehScale;
     vec3 c = textureLod(uBokehSrc, uv, uBokehSrcLod).rgb;
     fragColor = vec4(c * bokehFade(r), r);
 }

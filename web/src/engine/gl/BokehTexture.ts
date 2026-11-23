@@ -35,7 +35,7 @@ export interface BokehGeometry {
 
 export function bokehGeometry(p: ShaderParams): BokehGeometry | null {
   const src = p.bokehSource;
-  const maxPx = Math.max(0, ...p.layers.blur.subarray(0, p.layers.count));
+  const maxPx = Math.max(0, p.depthBlurPx, ...p.layers.blur.subarray(0, p.layers.count));
   if (!src || maxPx <= 0) return null;
   const imageLong = Math.max(src.fullWidth, src.fullHeight);
   const long = Math.min(Math.max(src.width, src.height), Math.max(BOKEH_MIN_DIMENSION, Math.round((BOKEH_RADIUS * imageLong) / maxPx)));
@@ -54,8 +54,18 @@ export function bokehUniforms(p: ShaderParams): { scale: number; texelX: number;
   return g ? { scale: g.scale, texelX: 1 / g.width, texelY: 1 / g.height } : { scale: 0, texelX: 1, texelY: 1 };
 }
 
-/** Pass-local unit, past the develop shader's and the denoise pre-pass's. */
-const UNIT_PASS = 13;
+/** A number per depth map object, so a new photo's map invalidates the blur (the key is a string). */
+const depthIds = new WeakMap<object, number>();
+let nextDepthId = 1;
+function depthId(d: object | null): number {
+  if (!d) return 0;
+  let id = depthIds.get(d);
+  if (id === undefined) depthIds.set(d, (id = nextDepthId++));
+  return id;
+}
+
+/** Pass-local unit: Units.BOKEH's own, borrowed while the passes run (bind() puts the result back). 13 holds the depth map. */
+const UNIT_PASS = 12;
 
 /** RGB half floats -> RGBA (alpha 1), so the copy can be mipmapped (RGB16F isn't renderable). */
 function rgbaHalf(img: PreviewImage): Uint16Array {
@@ -128,7 +138,7 @@ export class BokehTexture {
     }
     const l = p.layers;
     const brushVersions = l.brush.map((r) => (r ? `${r.width}x${r.height}@${r.version}` : '-'));
-    const key = JSON.stringify([g.width, g.height, l.count, [...l.geom], [...l.shape], [...l.color], [...l.blur], brushVersions]);
+    const key = JSON.stringify([g.width, g.height, l.count, [...l.geom], [...l.shape], [...l.color], [...l.blur], brushVersions, p.depthBlurPx, p.depthFocus, p.depthFalloff, depthId(p.depthMap)]);
     if (key === this.key) return;
 
     if (g.width !== this.width || g.height !== this.height) {

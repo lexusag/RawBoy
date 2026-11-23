@@ -196,7 +196,11 @@ export class ProStore {
       cropOf(base),
     );
     const wbEdited = p.temperature !== previous.defaults.temperature || p.tint !== previous.defaults.tint;
-    return wbEdited ? p : { ...p, temperature: defaults.temperature, tint: defaults.tint };
+    return {
+      ...p,
+      ...(wbEdited ? {} : { temperature: defaults.temperature, tint: defaults.tint }),
+      depthFocus: defaults.depthFocus,
+    };
   }
 
   /**
@@ -256,6 +260,14 @@ export class ProStore {
     if (pick.kind === 'white') this.commit({ ...this._state.params, temperature: pick.kelvin, tint: pick.tint }, true);
     else if (pick.kind === 'clipped') this.set({ message: "That spot is blown out: pick a grey that isn't clipped" });
     else this.set({ message: 'No white balance makes that spot grey' });
+  };
+
+  /** Focus depth picker: sets depthFocus (0..100) from the embedded depth map at the clicked spot of the preview. */
+  pickDepth = (x: number, y: number) => {
+    if (!this.hasImage || this.busy) return;
+    const focus = this.session.pickDepth(x, y, this.frameWidth);
+    if (focus == null) return;
+    this.commit({ ...this._state.params, depthFocus: focus }, true);
   };
 
   /** Auto white balance for an area of the photo, setting temperature and tint. */

@@ -156,6 +156,12 @@ export interface DevelopParams {
   anamorphic: number;
   anamorphicColor: AnamorphicColor;
   anamorphicGhosts: boolean;
+  /** Portrait / depth blur strength (0..100, 0 = off) using the depth map embedded in a RawBoy Camera DNG. */
+  depthBlur: number;
+  /** Focus depth plane (0..100, 0 = near foreground, 100 = far background). */
+  depthFocus: number;
+  /** Depth-of-field falloff (0..100, 0 = deep DoF / gentle transition, 100 = shallow DoF / steep falloff). */
+  depthFalloff: number;
   skinRetouch: number;
   blemishRemoval: number;
   portraitRetouch: number;
@@ -243,6 +249,9 @@ export const DEFAULT_PARAMS: Readonly<DevelopParams> = Object.freeze({
   anamorphic: 0,
   anamorphicColor: 'neutral',
   anamorphicGhosts: false,
+  depthBlur: 0,
+  depthFocus: 20,
+  depthFalloff: 50,
   skinRetouch: 0,
   blemishRemoval: 0,
   portraitRetouch: 0,

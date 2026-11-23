@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 // Hosts the WASM build of the engine's native code (web/native): decoding, previews, tiles, blemish healing,
 // export downscaling and jpegli. Full-resolution pixels stay in this worker's WASM heap.
-import type { JxlPixels, OpenResult, Request } from './protocol';
+import type { DepthMapData, JxlPixels, OpenResult, Request } from './protocol';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Module = any;
@@ -30,6 +30,7 @@ async function init(wasmBase: string) {
 
 function opened(handle: number): [OpenResult, Transferable[]] {
   const m = module;
+  const depthMap = typeof m.depthMap === 'function' ? (m.depthMap(handle) as DepthMapData | null) : null;
   const result: OpenResult = {
     handle,
     width: m.width(handle),
@@ -47,8 +48,11 @@ function opened(handle: number): [OpenResult, Transferable[]] {
     lensInfo: m.lensInfo(handle),
     lensShading: m.lensShading(handle),
     metadata: m.metadata(handle),
+    depthMap,
   };
-  return [result, [result.lensInfo.buffer, result.lensShading.buffer]];
+  const transfer: Transferable[] = [result.lensInfo.buffer, result.lensShading.buffer];
+  if (depthMap) transfer.push(depthMap.data.buffer);
+  return [result, transfer];
 }
 
 function run(req: Request): [unknown, Transferable[]] {

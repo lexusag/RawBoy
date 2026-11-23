@@ -150,6 +150,17 @@ data class CameraSettings(
      * saved beside the video (`stab/`).
      */
     val videoStabilizeAfter: Boolean = true,
+    /**
+     * Experimental: embed an upright depth map in saved DNG files (`"RBDP"` trailer, [app.rawboy.export.DngDepth]) for
+     * portrait post-processing in RawBoy Pro. Uses a hardware depth sensor when available on the active lens, or
+     * on-device software depth estimation otherwise.
+     */
+    val saveDepth: Boolean = false,
+    /**
+     * Experimental, with [saveDepth]: when a person or pet is detected, apply natural portrait bokeh blur to the saved
+     * JPEG in camera.
+     */
+    val depthPortrait: Boolean = false,
     /** Video stabilization while recording (video mode only; it crops the picture a little). */
     val videoStabilization: Boolean = false,
     /** Video mode records a flat Apple Log picture without the look, to be graded later (the web video page). */
@@ -307,6 +318,8 @@ data class CameraSettings(
         trackFocus = false,
         flatVideo = false,
         videoMotionData = false,
+        saveDepth = false,
+        depthPortrait = false,
         showHistogram = false,
         showGrid = false,
         showLevel = false,
@@ -432,6 +445,8 @@ object CameraSettingsStore {
             videoMotionData = p.getBoolean("videoMotionData", d.videoMotionData),
             rawViewfinder = p.getBoolean("rawViewfinder", d.rawViewfinder),
             videoStabilizeAfter = p.getBoolean("videoStabilizeAfter", d.videoStabilizeAfter),
+            saveDepth = p.getBoolean("saveDepth", d.saveDepth),
+            depthPortrait = p.getBoolean("depthPortrait", d.depthPortrait),
             videoStabilization = p.getBoolean("videoStabilization", d.videoStabilization),
             flatVideo = p.getBoolean("flatVideo", d.flatVideo),
             videoQuality = runCatching { VideoQuality.valueOf(p.getString("videoQuality", null)!!) }.getOrDefault(d.videoQuality),
@@ -519,6 +534,8 @@ object CameraSettingsStore {
             .putBoolean("videoMotionData", s.videoMotionData)
             .putBoolean("rawViewfinder", s.rawViewfinder)
             .putBoolean("videoStabilizeAfter", s.videoStabilizeAfter)
+            .putBoolean("saveDepth", s.saveDepth)
+            .putBoolean("depthPortrait", s.depthPortrait)
             .putBoolean("videoStabilization", s.videoStabilization)
             .putBoolean("flatVideo", s.flatVideo)
             .putString("videoQuality", s.videoQuality.name)
