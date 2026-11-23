@@ -10,6 +10,8 @@ export interface SkinMask {
   faceDiameterPx: number;
   /** Face-skin confidence alone (the model's face class, 0..1), same size as [data]; Portrait retouch. */
   face?: Float32Array;
+  /** Where a person is (everything but the model's background class, 0..1), same size as [data]; the AI depth map. */
+  person?: Float32Array;
   /** Face landmarks per face (MediaPipe's 478-point mesh): x, y pairs in fractions of the image; Portrait retouch. */
   faces?: Float32Array[];
 }

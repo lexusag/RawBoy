@@ -75,6 +75,16 @@ export class ProStore {
   private readonly listeners = new Set<() => void>();
   /** The open photo; the pipeline state comes from it. */
   readonly session = new PhotoSession((m) => this.set({ message: m }));
+
+  constructor() {
+    // An estimated depth map focuses on its subject, unless a focus depth was already picked (it becomes the default).
+    this.session.onDepthEstimated = (focus) => {
+      const s = this._state;
+      const untouched = s.params.depthFocus === s.defaults.depthFocus;
+      this.set({ defaults: { ...s.defaults, depthFocus: focus } });
+      if (untouched) this.show({ ...this._state.params, depthFocus: focus });
+    };
+  }
   /** Lens corrections from the Lensfun database (the Lens tab). */
   readonly lensfun = new LensfunStore(this.session);
   private frameWidth = 0;

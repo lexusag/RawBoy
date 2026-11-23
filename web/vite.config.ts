@@ -7,8 +7,8 @@ import { defineConfig, type Plugin } from 'vite';
 const repo = resolve(__dirname, '..');
 
 /**
- * Copies the MediaPipe models from the engine's assets (like the Android build packages them) and MediaPipe's
- * WASM runtime into public/, so they are served from the same origin (needed under cross-origin isolation).
+ * Copies the MediaPipe models from the engine's assets (like the Android build packages them), the depth model
+ * from RawBoy Camera's, and MediaPipe's WASM runtime into public/, so they are served from the same origin (needed under cross-origin isolation).
  */
 function copyModels(): Plugin {
   return {
@@ -22,6 +22,10 @@ function copyModels(): Plugin {
         if (existsSync(src)) cpSync(src, resolve(models, f));
       }
       cpSync(resolve(__dirname, 'node_modules/@mediapipe/tasks-vision/wasm'), resolve(__dirname, 'public/mediapipe'), { recursive: true });
+      // Portrait blur's AI depth map (DepthEstimator): the model RawBoy Camera bundles. ONNX Runtime Web's WASM is
+      // bundled by Vite itself (the wasm bundle references it by URL), so it is same-origin already.
+      const depthModel = resolve(repo, 'app-camera/src/main/assets/models/depth_anything_v2_small_q4f16.onnx');
+      if (existsSync(depthModel)) cpSync(depthModel, resolve(models, 'depth_anything_v2_small_q4f16.onnx'));
       // Static hosts (GitHub Pages...) can't send the isolation headers; this service worker adds them.
       cpSync(resolve(__dirname, 'node_modules/coi-serviceworker/coi-serviceworker.min.js'), resolve(__dirname, 'public/coi-serviceworker.min.js'));
       // Third-party licences, shown by the Licences dialog (the Android apps package the same file).
@@ -124,5 +128,7 @@ export default defineConfig({
     },
   },
   worker: { format: 'es' },
+  // Pre-bundled, ONNX Runtime Web's `new URL('…wasm', import.meta.url)` points into .vite/deps, where the file isn't.
+  optimizeDeps: { exclude: ['onnxruntime-web'] },
   define: { __RAWBOY_VERSION__: JSON.stringify(version), __RAWBOY_BUILD__: JSON.stringify(build), __RAWBOY_COMMIT__: JSON.stringify(commit) },
 });

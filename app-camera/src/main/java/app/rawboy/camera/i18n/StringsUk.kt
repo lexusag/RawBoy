@@ -295,8 +295,18 @@ internal val UKRAINIAN: Map<String, String> = mapOf(
         "Зберігає поруч стабілізовану копію (обрізання 70%)",
     "Save depth map in DNG" to
         "Зберігати карту глибини в DNG",
-    "Camera depth sensor on this lens; used for portrait blur in RawBoy Pro" to
-        "Датчик глибини камери на цьому об'єктиві; для портретного розмиття в RawBoy Pro",
+    "For portrait blur in RawBoy Pro" to
+        "Для портретного розмиття в RawBoy Pro",
+    "Depth from" to
+        "Глибина з",
+    "Dual pixel: the sensor's focus pixels; AI: estimated from the photo" to
+        "Подвійні пікселі: пікселі фокусування сенсора; ШІ: оцінка за фото",
+    "Depth sensor" to
+        "Датчик глибини",
+    "Dual pixel" to
+        "Подвійні пікселі",
+    "AI estimate" to
+        "Оцінка ШІ",
     "Generate portrait in camera" to
         "Генерувати портрет у камері",
     "Blur the background of saved JPEGs with the depth map" to

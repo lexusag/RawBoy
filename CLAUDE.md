@@ -275,6 +275,20 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   encoded frames via `VideoRecorder.onPresented`) → `capture/MotionFormat.kt` (binary `.motion`, JSON header, JVM
   tests `MotionFormatTest`; reader `tools/motion/dump.py`, keep both in step) in `getExternalFilesDir("motion")`.
   Pixel 9 Pro (probed): timestamps REALTIME, gyro 400 Hz, OIS samples only on the tele (physical 6).
+- **Depth map** (Android Camera, experimental; user side in `docs/camera.md`): `CameraSettings.saveDepth` + `depthSource`
+  (`DepthSource` SENSOR / DUAL_PIXEL / AI, `usable()` falls back per lens) → `CameraController.setCaptureDepth` adds one
+  depth `ImageReader` to the session (stills only; a burst only on its reference frame) → `Still.depth` (DEPTH16 via
+  `HardwareDepth`) or `Still.dualPixel` → `ShotSaver.depthOf` (AI fallback) → `RBDP` trailer + portrait blur.
+  Dual pixel: `capture/DualPixel.kt` finds `RAW_DEPTH10`/`RAW_DEPTH` (hidden format ints 0x1003/0x1002) among a lens's or
+  its physical cameras' depth configs; the output needs `setPhysicalCameraId`; which physical camera the phone accepts
+  next to RAW is found by `isSessionConfigurationSupported` (Pixel 9 Pro: W on physical 2; the selfie refuses 7 and 8,
+  remembered in `dualPixelRefused`). `retouch/DualPixelDepth.kt` (even columns = left halves; positive shift = farther;
+  map 0.5 = focus plane). AI: `camera/depth/AiDepth.kt`, ONNX Runtime (`ai.onnxruntime` keep rule in
+  `app-camera/proguard-rules.pro`) + Depth Anything V2 Small q4f16 (`noCompress onnx`). Time Kotlin on the phone with a
+  non-debuggable build: the debuggable one ran `DualPixelDepth` ~3× slower.
+  Web Pro (no Camera depth in the file): `PhotoSession.ensureDepthMap` (on Portrait blur > 0, after the skin mask for
+  `SkinMask.person`) → `retouch/DepthEstimator.ts` in `worker/depth.worker.ts` (ONNX Runtime Web WASM bundled by Vite; `optimizeDeps.exclude` it, or in dev its WASM URL serves index.html,
+  model from Camera's assets via `vite.config.ts`, both same-origin for COEP); `state.depth` says file/ai.
 - **`Edition`** (`app-camera/src/main/.../Edition.kt`, iOS `Camera/Edition.swift`; one app, no flavours since
   2026-10-31): looks, default looks, Pictures folder / albums, Settings credits. Film mode's looks are `FilmLooks.ALL`
   rendered by `film_form.glsl`, exactly as Auto's Film mode. **B&W mode** (`Edition.monoLooks` = the mono looks; the colour `looks` leave them out, and a remembered mono `lookId` moves into B&W mode on load): `CameraSettings.mono`/

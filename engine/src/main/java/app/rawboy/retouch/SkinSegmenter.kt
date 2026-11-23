@@ -149,6 +149,35 @@ object SkinSegmenter {
     }
 
     /**
+     * Where a person is (hair, skin, clothes, accessories: everything but the model's background), 0..1 over [image]'s
+     * pixels, or null if segmentation fails. For depth maps, whose estimates see through glasses.
+     */
+    @Synchronized
+    fun personMask(context: Context, image: PreviewImage): FloatArray? = try {
+        val (bitmap, _) = toDisplayBitmap(image)
+        val result = segmenter(context).segment(BitmapImageBuilder(bitmap).build())
+        bitmap.recycle()
+        val masks = result.confidenceMasks().orElse(null)
+        masks?.let {
+            val bg = masks[0]
+            val buffer = ByteBufferExtractor.extract(bg).order(ByteOrder.nativeOrder()).asFloatBuffer()
+            val raw = FloatArray(bg.width * bg.height).also { buffer.position(0); buffer.get(it) }
+            val w = bg.width
+            val h = bg.height
+            masks.forEach { it.close() }
+            val sized = if (w == image.width && h == image.height) raw else resize(raw, w, h, image.width, image.height)
+            FloatArray(sized.size) { (1f - sized[it]).coerceIn(0f, 1f) }
+        }
+    } catch (t: Throwable) {
+        // MediaPipe failures can be Errors (see CLAUDE.md): fail softly.
+        Log.w(TAG, "person mask", t)
+        null
+    }
+
+    /** [image] (the small linear Rec.2020 copy) as an ordinary-looking sRGB bitmap, as the models see it. */
+    fun displayBitmap(image: PreviewImage): Bitmap = toDisplayBitmap(image).first
+
+    /**
      * Zeroes the mask inside each facial feature (polygon grown around its centre),
      * with a soft edge. Faces the landmarker can't find are left as they are.
      */

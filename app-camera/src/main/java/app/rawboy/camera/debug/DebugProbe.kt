@@ -117,6 +117,18 @@ object DebugProbe {
     }
 
     /** Saves a 512 px linear copy (half floats, RGB) as files/debug/[name].f16 with a .txt beside it. */
+    /** A shot's dual-pixel frame as streamed, in the app's external files (`dualpixel/`), for working out its layout. */
+    fun dumpDualPixel(context: Context, name: String, f: app.rawboy.camera.capture.DualPixelFrame) {
+        if (!enabled) return
+        runCatching {
+            val dir = File(context.getExternalFilesDir(null) ?: return, "dualpixel").apply { mkdirs() }
+            val base = name.substringBeforeLast('.')
+            File(dir, "$base.bin").writeBytes(f.bytes)
+            File(dir, "$base.txt").writeText("${f.width} ${f.height} ${f.rowStride} ${f.format} ${f.exifOrientation}\n")
+            Log.d(TAG, "dual pixel ${f.width}x${f.height} stride ${f.rowStride} format 0x${f.format.toString(16)} -> $dir/$base.bin")
+        }.onFailure { Log.w(TAG, "dual pixel dump", it) }
+    }
+
     fun dump(context: Context, name: String, image: PreviewImage, note: String) {
         if (!enabled) return
         writeCopy(File(context.filesDir, "debug"), name, image, note)

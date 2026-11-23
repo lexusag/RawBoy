@@ -37,6 +37,7 @@ import android.view.Surface
 import androidx.exifinterface.media.ExifInterface
 import app.rawboy.auto.analysis.AutoTone
 import app.rawboy.auto.analysis.MeterArea
+import app.rawboy.camera.DepthSource
 import app.rawboy.camera.debug.DebugProbe
 import app.rawboy.camera.platform.CameraPlatform
 import app.rawboy.camera.platform.CompensationModel
@@ -105,6 +106,8 @@ class Still(
     val description: String = "",
     /** The camera's own depth frame for this still, upright, if one was captured ([CameraController.setCaptureDepth]). */
     val depth: DepthMap? = null,
+    /** The sensor's dual-pixel frame for this still, as streamed (sensor orientation), if one was captured. */
+    val dualPixel: DualPixelFrame? = null,
 )
 
 /** A lens's learned flash exposure (see [CameraController.flashExposure]). */
@@ -171,9 +174,14 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         val fNumber: Float,
         /** The lens's largest hardware `ImageFormat.DEPTH16` output size when `DEPTH_OUTPUT` is supported, or null. */
         val depthSize: Size? = null,
+        /** The lens's dual-pixel raw depth stream ([DualPixelStream]), or null. */
+        val dualPixel: DualPixelStream? = null,
     ) {
         /** The lens offers a hardware `ImageFormat.DEPTH16` depth sensor output. */
         val hasHardwareDepth: Boolean get() = depthSize != null
+
+        /** The lens offers its sensor's dual-pixel data as a raw depth stream. */
+        val hasDualPixel: Boolean get() = dualPixel != null
 
         /** The lens can focus (a fixed-focus lens reports a minimum focus distance of 0). */
         val canFocus get() = (characteristics.get(CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE) ?: 0f) > 0f
@@ -207,7 +215,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         fun labelled(label: String) = Info(
             openId, physicalId, label, facing, equivalentFocal, characteristics, regionArray, rawSize, previewSize,
             sensorOrientation, previewGamma, toneMapModes, shadingMapModes, faceModes, activeArray, xyzToCamera,
-            cameraToSrgb, hasFlash, maxResSize, maxResFormat, hiRes, fNumber, depthSize,
+            cameraToSrgb, hasFlash, maxResSize, maxResFormat, hiRes, fNumber, depthSize, dualPixel,
         )
 
         /**
@@ -276,13 +284,28 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
     private var previewSurface: Surface? = null
     private var rawReader: ImageReader? = null
 
-    /** Settings › Save depth map: stream the camera's `DEPTH16` output with the stills where the phone allows it. */
-    @Volatile private var depthWanted = false
+    /**
+     * Settings › Save depth map: which depth stream goes with the stills where the phone allows it ([DepthSource.SENSOR]:
+     * `DEPTH16`, [DepthSource.DUAL_PIXEL]: the raw dual-pixel stream); null or [DepthSource.AI] = none.
+     */
+    @Volatile private var depthWanted: DepthSource? = null
     private var depthReader: ImageReader? = null
+    /**
+     * Lenses ([Info.name]) whose dual-pixel stream the phone refused next to the raw (Pixel 9 Pro selfie), so Settings
+     * stops offering it there; learned when the stream is first asked for.
+     */
+    private val _dualPixelRefused = MutableStateFlow<Set<String>>(emptySet())
+    val dualPixelRefused = _dualPixelRefused.asStateFlow()
+
+    /** [inf] has a dual-pixel stream the phone hasn't refused (yet). */
+    fun dualPixelUsable(inf: Info): Boolean = inf.hasDualPixel && inf.name !in _dualPixelRefused.value
+
+    /** The cameras [depthReader]'s stream may belong to, in order to try ([DualPixelStream.cameraIds]); `[null]` = the camera opened. */
+    private var depthCameras: List<String?> = listOf(null)
     private val depthLock = Any()
 
-    /** The newest `DEPTH16` frame, copied out of its [Image] (stills only: the preview request doesn't feed the reader). */
-    private class DepthFrame(val timestamp: Long, val width: Int, val height: Int, val rowStride: Int, val pixelStride: Int, val bytes: ByteArray)
+    /** The newest depth frame, copied out of its [Image] (stills only: the preview request doesn't feed the reader). */
+    private class DepthFrame(val timestamp: Long, val format: Int, val width: Int, val height: Int, val rowStride: Int, val pixelStride: Int, val bytes: ByteArray)
     private var latestDepth: DepthFrame? = null
     private var pendingImage: CompletableDeferred<Image>? = null
     private var pendingResult: CompletableDeferred<TotalCaptureResult>? = null
@@ -485,6 +508,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
                 map.getOutputSizes(ImageFormat.DEPTH16)?.maxByOrNull { it.width.toLong() * it.height }
             }.getOrNull()
         } else null
+        val dualPixel = DualPixelStream.find(manager, physicalId ?: openId, c)
         return Info(
             openId = openId,
             physicalId = physicalId,
@@ -509,6 +533,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             hiRes = hiRes,
             fNumber = c.get(CameraCharacteristics.LENS_INFO_AVAILABLE_APERTURES)?.firstOrNull()?.takeIf { it > 0f } ?: platform.flash.referenceFNumber,
             depthSize = depthSize,
+            dualPixel = dualPixel,
         )
     }
 
@@ -542,7 +567,15 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             toStill(image)
         }, handler)
         rawReader = reader
-        depthReader = info.depthSize?.takeIf { depthWanted && !info.hiRes }?.let { newDepthReader(it) }
+        // The source asked for, or the next best this lens has (Settings shows which).
+        val depthSource = depthWanted?.usable(info.hasHardwareDepth, dualPixelUsable(info))
+        depthReader = if (info.hiRes) null else when (depthSource) {
+            DepthSource.SENSOR -> info.depthSize?.let { newDepthReader(it, ImageFormat.DEPTH16) }
+            DepthSource.DUAL_PIXEL -> info.dualPixel?.let { dp -> runCatching { newDepthReader(dp.size, dp.format) }
+                .onFailure { Log.w(TAG, "${info.label}: no dual-pixel reader", it) }.getOrNull() }
+            else -> null
+        }
+        depthCameras = info.dualPixel?.cameraIds?.takeIf { depthSource == DepthSource.DUAL_PIXEL && depthReader != null } ?: listOf(null)
 
         // A physical lens of a logical camera: stream it from the logical camera if the phone allows that
         // combination; otherwise try opening the lens on its own.
@@ -608,7 +641,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         }
     }
 
-    private fun outputs(preview: Surface, reader: ImageReader, physicalId: String?, hiRes: Boolean, depth: ImageReader? = null) =
+    private fun outputs(preview: Surface, reader: ImageReader, physicalId: String?, hiRes: Boolean, depth: ImageReader? = null, depthCamera: String? = null) =
         listOf(
             OutputConfiguration(preview),
             // The raw stream alone uses the maximum-resolution sensor mode; the preview keeps the default one.
@@ -618,59 +651,67 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
                 }
             },
         ).onEach { o -> physicalId?.let { o.setPhysicalCameraId(it) } } +
-            // The depth output belongs to the logical camera, whichever physical lens is streamed.
-            listOfNotNull(depth?.let { OutputConfiguration(it.surface) })
+            // A DEPTH16 output belongs to the logical camera, whichever physical lens is streamed; a dual-pixel stream
+            // to its own sensor's camera ([depthCamera], a physical one of the logical camera opened).
+            listOfNotNull(depth?.let { d -> OutputConfiguration(d.surface).also { o -> depthCamera?.let { o.setPhysicalCameraId(it) } } })
 
     /**
      * The session's outputs, with the depth stream if the phone says it supports it next to the raw: an unsupported
      * combination would fail the whole session, so then there is no depth (and the reader goes).
      */
     private fun sessionOutputs(camera: CameraDevice, preview: Surface, reader: ImageReader, physicalId: String?, inf: Info): List<OutputConfiguration> {
-        val depth = depthReader
-        val withDepth = outputs(preview, reader, physicalId, inf.hiRes, depth)
-        if (depth == null) return withDepth
-        val ok = runCatching {
-            camera.isSessionConfigurationSupported(SessionConfiguration(SessionConfiguration.SESSION_REGULAR, withDepth, executor, NO_SESSION))
-        }.getOrDefault(false)
-        Log.d(TAG, "${inf.label}: depth stream with raw: supported=$ok")
-        if (ok) return withDepth
+        val depth = depthReader ?: return outputs(preview, reader, physicalId, inf.hiRes)
+        // Opened on its own (the fallback), the stream's camera is the device itself.
+        for (candidate in depthCameras.map { it?.takeIf { id -> id != camera.id } }.distinct()) {
+            val withDepth = outputs(preview, reader, physicalId, inf.hiRes, depth, candidate)
+            val ok = runCatching {
+                camera.isSessionConfigurationSupported(SessionConfiguration(SessionConfiguration.SESSION_REGULAR, withDepth, executor, NO_SESSION))
+            }.getOrDefault(false)
+            Log.d(TAG, "${inf.label}: depth stream ${depth.imageFormat.toString(16)} ${depth.width}x${depth.height}${candidate?.let { " on $it" } ?: ""} with raw: supported=$ok")
+            if (ok) return withDepth
+        }
+        if (depth.imageFormat != ImageFormat.DEPTH16) _dualPixelRefused.value = _dualPixelRefused.value + inf.name
         depth.close()
         depthReader = null
         return outputs(preview, reader, physicalId, inf.hiRes)
     }
 
-    private fun newDepthReader(size: Size): ImageReader = ImageReader.newInstance(size.width, size.height, ImageFormat.DEPTH16, 2).also { r ->
+    private fun newDepthReader(size: Size, format: Int): ImageReader = ImageReader.newInstance(size.width, size.height, format, 2).also { r ->
         r.setOnImageAvailableListener({ rd ->
             val image = rd.acquireNextImage() ?: return@setOnImageAvailableListener
             image.use { img ->
                 val plane = img.planes[0]
                 val bytes = ByteArray(plane.buffer.remaining()).also { plane.buffer.get(it) }
                 synchronized(depthLock) {
-                    latestDepth = DepthFrame(img.timestamp, img.width, img.height, plane.rowStride, plane.pixelStride, bytes)
+                    latestDepth = DepthFrame(img.timestamp, format, img.width, img.height, plane.rowStride, plane.pixelStride, bytes)
                 }
             }
         }, handler)
     }
 
     /**
-     * The upright depth map of the still whose capture result is [result], from the frame the camera streamed with it
-     * (same sensor timestamp, within 40 ms for a separate depth camera), or null: no depth stream, no frame in time, or
-     * too few valid samples. Never estimated.
+     * The depth frame the camera streamed with the still whose capture result is [result] (same sensor timestamp,
+     * within 40 ms for a separate depth camera): a `DEPTH16` frame as an upright map (first), or a dual-pixel frame as
+     * streamed (second, decoded later by the saver); nulls when there is no depth stream, no frame in time, or a
+     * `DEPTH16` frame with too few valid samples.
      */
-    private suspend fun depthFor(result: CaptureResult, exifOrientation: Int): DepthMap? {
-        if (depthReader == null) return null
-        val stamp = result.get(CaptureResult.SENSOR_TIMESTAMP) ?: return null
+    private suspend fun depthFor(result: CaptureResult, exifOrientation: Int): Pair<DepthMap?, DualPixelFrame?> {
+        if (depthReader == null) return null to null
+        val stamp = result.get(CaptureResult.SENSOR_TIMESTAMP) ?: return null to null
         repeat(DEPTH_WAIT_MS / 20) {
             val f = synchronized(depthLock) { latestDepth }
             if (f != null && abs(f.timestamp - stamp) <= DEPTH_STAMP_SLACK_NS) {
+                if (f.format != ImageFormat.DEPTH16) {
+                    return null to DualPixelFrame(f.width, f.height, f.rowStride, f.bytes, exifOrientation, f.format)
+                }
                 return HardwareDepth.fromDepth16(
                     ByteBuffer.wrap(f.bytes), f.width, f.height, f.rowStride, f.pixelStride, exifOrientation,
-                )
+                ) to null
             }
             delay(20)
         }
         Log.d(TAG, "no depth frame for the still")
-        return null
+        return null to null
     }
 
     private suspend fun createSession(camera: CameraDevice, outputs: List<OutputConfiguration>): CameraCaptureSession =
@@ -773,11 +814,12 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
     }
 
     /**
-     * Wants the camera's hardware depth with each still. Takes effect at the next [start]; a lens without a depth output
-     * ([Info.hasHardwareDepth]) or a stream combination the phone refuses with raw simply saves no depth.
+     * Wants a depth stream with each still: the camera's hardware depth ([DepthSource.SENSOR]) or the sensor's
+     * dual-pixel data ([DepthSource.DUAL_PIXEL]); null or [DepthSource.AI] streams none. Takes effect at the next
+     * [start]; a lens without that stream or a combination the phone refuses with raw simply gets no frame.
      */
-    fun setCaptureDepth(on: Boolean) {
-        depthWanted = on
+    fun setCaptureDepth(source: DepthSource?) {
+        depthWanted = source
     }
 
     /**
@@ -1112,7 +1154,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
                 val description = "RawBoy merge=off frames=1 $note$why".trim()
                 synchronized(depthLock) { latestDepth = null }
                 val result = stillDng(s, inf, reader, mode, exposure?.first, exifOrientation, location, description, out, onExposed, onSubmitted)
-                val depth = depthFor(result, exifOrientation)
+                val (depth, dualPixel) = depthFor(result, exifOrientation)
                 Still(
                     result, exposure?.second, distanceKnown = diopters != null && diopters > 0f,
                     compensationEv = when {
@@ -1123,6 +1165,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
                     },
                     description = description,
                     depth = depth,
+                    dualPixel = dualPixel,
                 )
             } finally {
                 if (mode != FlashMode.OFF) endFlashSequence(inf, focused)
@@ -1335,7 +1378,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         val c = inf.characteristics
         val white = (c.get(CameraCharacteristics.SENSOR_INFO_WHITE_LEVEL) ?: 1023).toFloat()
         val staticBlack = c.get(CameraCharacteristics.SENSOR_BLACK_LEVEL_PATTERN)
-        val request = request(s, CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
+        val builder = request(s, CameraDevice.TEMPLATE_STILL_CAPTURE).apply {
             addTarget(reader.surface)
             addTarget(previewSurface ?: throw IOException("Camera not ready"))
             setCommon(inf)
@@ -1345,7 +1388,11 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
             if (inf.hasLensShadingMap) {
                 setForLens(CaptureRequest.STATISTICS_LENS_SHADING_MAP_MODE, CameraMetadata.STATISTICS_LENS_SHADING_MAP_MODE_ON)
             }
-        }.build()
+        }
+        val request = builder.build()
+        // Only the first frame, the merge's reference, also feeds the depth stream: the depth is that frame's.
+        val first = depthReader?.let { d -> builder.addTarget(d.surface); builder.build() } ?: request
+        synchronized(depthLock) { latestDepth = null }
 
         // Camera thread only. Each frame is paired with its result by timestamp; the pair hands the merger the frame's
         // exposure (and, for the reference, its levels), so it can merge that frame while the burst goes on.
@@ -1389,7 +1436,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
                 checkDone()
             }
         }
-        s.captureBurst(List(frames) { request }, object : CameraCaptureSession.CaptureCallback() {
+        s.captureBurst(List(frames) { if (it == 0) first else request }, object : CameraCaptureSession.CaptureCallback() {
             override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, r: TotalCaptureResult) {
                 val lr = lensResult(r)
                 lr.get(CaptureResult.SENSOR_TIMESTAMP)?.let { stamp ->
@@ -1442,7 +1489,11 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
                 location?.let(dng::setLocation)
                 dng.writeByteBuffer(out, Size(width, height), merged, 0)
             }
-            return Still(reference, null, effectiveFrames = effective, compensationEv = shutterEv ?: appliedCompensationEv(_frames.value), description = description)
+            val (depth, dualPixel) = depthFor(reference, exifOrientation)
+            return Still(
+                reference, null, effectiveFrames = effective, compensationEv = shutterEv ?: appliedCompensationEv(_frames.value),
+                description = description, depth = depth, dualPixel = dualPixel,
+            )
         } finally {
             BurstNative.destroy(h)
         }
@@ -1963,6 +2014,7 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
         device = null
         depthReader?.close()
         depthReader = null
+        depthCameras = listOf(null)
         synchronized(depthLock) { latestDepth = null }
         if (alreadyLocked) {
             readerCloseDeferred = false
