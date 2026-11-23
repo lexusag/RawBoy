@@ -114,7 +114,7 @@ struct DetailScreen: View {
         ScrollView(.horizontal) {
             LazyHStack(spacing: 0) {
                 ForEach(pages) { p in
-                    PhotoPage(vm: vm, session: session, photo: p, current: p.id == id, pickingWhite: $pickingWhite, cropRatio: cropRatio)
+                    PhotoPage(vm: vm, session: session, photo: p, current: p.id == id, pickingWhite: $pickingWhite, cropRatio: cropRatio, cropExtend: cropExtend)
                         .containerRelativeFrame(.horizontal)
                         .id(p.id)
                 }
@@ -353,7 +353,7 @@ extension DetailScreen {
         VStack(spacing: 0) {
             macBar(photo).interfaceScaled()  // the Viewer's Settings › Interface size; the panel scales in PhotoWithControls
             PhotoWithControls {
-                PhotoPage(vm: vm, session: session, photo: photo, current: true, pickingWhite: $pickingWhite, cropRatio: cropRatio)
+                PhotoPage(vm: vm, session: session, photo: photo, current: true, pickingWhite: $pickingWhite, cropRatio: cropRatio, cropExtend: cropExtend)
                     // Room between the photo's frame and the window's edges and bar.
                     .padding(macPhotoMargin)
                     .overlay(alignment: .bottom) {
@@ -614,6 +614,9 @@ private struct PhotoPage: View {
     @Binding var pickingWhite: Bool
     /** Crop & rotate's locked shape, width / height in pixels (nil = free). */
     let cropRatio: Double?
+    /** Crop & rotate's Extend chip is on (the crop may reach past the frame). */
+    let cropExtend: Bool
+    private func extendOn(_ photo: AutoPhoto) -> Bool { cropExtend || photo.adjust.crop?.extendsFrame == true }
 
     /** Press and hold shows the auto develop without the look. */
     @State private var showAuto = false
