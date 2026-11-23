@@ -50,6 +50,7 @@ import app.rawboy.color.PrimariesTrack
 import app.rawboy.color.WhiteBalance
 import app.rawboy.develop.AnamorphicColor
 import app.rawboy.develop.CropAspect
+import app.rawboy.develop.ExtendSides
 import app.rawboy.develop.DevelopParams
 import app.rawboy.develop.ToneMapper
 import app.rawboy.auto.looks.FilmLooks
@@ -59,6 +60,7 @@ import app.rawboy.develop.crop
 import app.rawboy.session.BlemishState
 import app.rawboy.session.SkinState
 import app.rawboy.view.CompactSlider
+import app.rawboy.view.ExtendChips
 import app.rawboy.view.LookDropdown
 import java.util.Locale
 import kotlin.math.ln
@@ -480,9 +482,9 @@ fun GeometryPanel(
     aspect: CropAspect,
     portrait: Boolean,
     onAspect: (CropAspect, Boolean) -> Unit,
-    /** Extend canvas: the crop may reach past the frame; the new canvas is filled from the picture's edges. */
-    extend: Boolean,
-    onExtend: (Boolean) -> Unit,
+    /** Extend canvas: the sides the crop may reach past; the new canvas is filled from the picture's edges. */
+    sides: ExtendSides,
+    onSides: (ExtendSides) -> Unit,
     onResetCrop: () -> Unit,
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
@@ -490,7 +492,7 @@ fun GeometryPanel(
     Column(modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Crop & rotate", style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-            TextButton(onClick = onResetCrop, enabled = !params.crop.isFull || aspect != CropAspect.FREE || extend) { Text("Reset crop") }
+            TextButton(onClick = onResetCrop, enabled = !params.crop.isFull || aspect != CropAspect.FREE || sides.any) { Text("Reset crop") }
             TextButton(onClick = onDone) { Text("Done") }
         }
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(vertical = 4.dp)) {
@@ -517,12 +519,7 @@ fun GeometryPanel(
                 )
             }
         }
-        FilterChip(
-            selected = extend,
-            onClick = { onExtend(!extend) },
-            label = { Text("Extend canvas") },
-            modifier = Modifier.padding(vertical = 4.dp),
-        )
+        ExtendChips(sides, onSides)
         ParamSlider(
             "Straighten", params.straighten, -45f..45f, 0f,
             format = { String.format(Locale.ROOT, "%+.1f°", if (kotlin.math.abs(it) < 0.05f) 0f else it) },

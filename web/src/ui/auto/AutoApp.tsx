@@ -15,7 +15,7 @@ import { Preview, PreviewLabel, zoomLabel } from '../common/Preview';
 import { CropOverlay } from '../pro/CropOverlay';
 import { CropRotateIcon } from '../pro/ProApp';
 import { CropPanel } from './CropPanel';
-import { cropAspectRatio, cropFromView, cropInsideFrame, cropToView, cropWithAspect, extendsFrame, EXTENDED_VIEW, FULL_CROP, withCrop, withoutCrop, type CropAspect } from '../../engine/develop/CropMath';
+import { anySide, cropAspectRatio, cropFromView, cropToView, cropWithAspect, cropWithin, extendedView, FULL_CROP, NO_SIDES, sameSides, sidesOf, unionSides, withCrop, withoutCrop, type CropAspect, type ExtendSides } from '../../engine/develop/CropMath';
 import { useTabScroll } from '../common/useTabScroll';
 import { PHONE_WIDTH, SHORT_SCREEN, useMediaQuery } from '../common/useMediaQuery';
 import { ALL_FILM_LOOKS } from '../../engine/auto/looks/FilmLooks';
@@ -843,8 +843,8 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
   const [cropMode, setCropMode] = useState(false);
   const [cropAspect, setCropAspectState] = useState<CropAspect>(sessionCropAspect);
   const [cropPortrait, setCropPortrait] = useState<boolean | null>(null);
-  // Extend: the tool shows room around the frame and the crop may reach into it (the canvas is filled).
-  const [cropExtend, setCropExtend] = useState(false);
+  // Extend: the tool shows room around the chosen sides and the crop may reach into it (the canvas is filled).
+  const [cropSides, setCropSides] = useState<ExtendSides>(NO_SIDES);
   const [shortSideSprockets, setShortSideSprockets] = useState(false);
   // The shape is remembered for the session (not saved): the next photo opens with the last one used.
   const setCropAspect = (aspect: CropAspect) => {
@@ -853,7 +853,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
   };
   useEffect(() => {
     setCropMode(false);
-    setCropExtend(false);
+    setCropSides(NO_SIDES);
     setCropAspectState(sessionCropAspect);
     setCropPortrait(null);
   }, [id]);
@@ -872,8 +872,11 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
   const params = useMemo(() => (photo ? paramsOf(photo) : null), [photo]);
   // Press and hold shows the auto develop without the look.
   const shownUncropped = showAuto ? analysis?.autoBase : params ?? analysis?.autoBase;
-  const extendOn = cropExtend || (photo?.adjust.crop ? extendsFrame(photo.adjust.crop) : false);
-  const shown = useMemo(() => (cropMode && shownUncropped ? withCrop(shownUncropped, extendOn ? EXTENDED_VIEW : FULL_CROP) : shownUncropped), [cropMode, shownUncropped, extendOn]);
+  const sidesNow = unionSides(cropSides, photo?.adjust.crop ? sidesOf(photo.adjust.crop) : NO_SIDES);
+  const extendOn = anySide(sidesNow);
+  const sidesKey = `${+sidesNow.left}${+sidesNow.top}${+sidesNow.right}${+sidesNow.bottom}`;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const shown = useMemo(() => (cropMode && shownUncropped ? withCrop(shownUncropped, extendedView(sidesNow)) : shownUncropped), [cropMode, shownUncropped, sidesKey]);
   const shaderParams = useMemo(
     () => (loaded && shown && analysis && session.preview
       ? store.session.shaderParams(shown, analysis.defaults, shown.lut != null ? session.lutData : null, null, shown.film != null ? session.filmData : null)
@@ -903,7 +906,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
     setCropPortrait(toPortrait);
     const ratio = cropAspectRatio(aspect, frameLens.frameWidth, frameLens.frameHeight, toPortrait);
     const current = photo.adjust.crop ?? { left: 0, top: 0, right: 1, bottom: 1 };
-    store.setCrop(id, cropWithAspect(current, ratio, frameLens.frameWidth, frameLens.frameHeight, extendOn), true);
+    store.setCrop(id, cropWithAspect(current, ratio, frameLens.frameWidth, frameLens.frameHeight, sidesNow), true);
   };
   const startCrop = () => {
     if (session.zoomCenter) store.session.exitZoom(); // the crop tool works on the fit view
@@ -1211,10 +1214,11 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
               <CropOverlay
                 frameWidth={shaderParams.lens.outputWidth}
                 frameHeight={shaderParams.lens.outputHeight}
-                crop={extendOn ? cropToView(photo.adjust.crop ?? FULL_CROP) : photo.adjust.crop ?? FULL_CROP}
+                crop={cropToView(photo.adjust.crop ?? FULL_CROP, sidesNow)}
                 ratio={cropRatio}
                 frame={FRAME_WIDTH}
-                onChange={(c) => store.setCrop(id, extendOn ? cropFromView(c) : c)}
+                onChange={(c) => store.setCrop(id, cropFromView(c, sidesNow))}
+                snapTo={extendOn ? cropToView(FULL_CROP, sidesNow) : undefined}
                 rotate={{ angle: photo.adjust.straighten, onChange: (deg) => store.setStraighten(id, deg) }}
               />
             )}
@@ -1247,10 +1251,10 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
               photo={photo}
               aspect={cropAspect}
               portrait={cropPortraitNow}
-              extend={extendOn}
-              onExtend={(on) => {
-                setCropExtend(on);
-                if (!on && photo.adjust.crop) store.setCrop(id, cropInsideFrame(photo.adjust.crop), true);
+              sides={sidesNow}
+              onSides={(next) => {
+                setCropSides(next);
+                if (!sameSides(next, sidesNow) && photo.adjust.crop) store.setCrop(id, cropWithin(photo.adjust.crop, next), true);
               }}
               onAspect={chooseAspect}
               onRotate={(q) => {
@@ -1259,7 +1263,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
               }}
               onStraighten={(v) => store.setStraighten(id, v)}
               onReset={() => {
-                setCropExtend(false);
+                setCropSides(NO_SIDES);
                 setCropAspect(DEFAULT_CROP_ASPECT);
                 setCropPortrait(null);
                 store.setAdjust(id, { crop: null, straighten: 0 }, true);

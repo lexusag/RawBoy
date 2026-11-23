@@ -1,5 +1,45 @@
 import Foundation
 
+/** Which edges of the frame the crop may reach past (Extend canvas, chosen per side). */
+public struct ExtendSides: Equatable, Sendable {
+    public var left: Bool
+    public var top: Bool
+    public var right: Bool
+    public var bottom: Bool
+
+    public init(left: Bool = false, top: Bool = false, right: Bool = false, bottom: Bool = false) {
+        self.left = left
+        self.top = top
+        self.right = right
+        self.bottom = bottom
+    }
+
+    public static let off = ExtendSides()
+    public static let all = ExtendSides(left: true, top: true, right: true, bottom: true)
+
+    public var any: Bool { left || top || right || bottom }
+
+    public func union(_ o: ExtendSides) -> ExtendSides {
+        ExtendSides(left: left || o.left, top: top || o.top, right: right || o.right, bottom: bottom || o.bottom)
+    }
+}
+
+/**
+ * How far the crop's edges are drawn to the photo's own edges while dragging (Extend canvas): `photo` is the photo's
+ * rectangle in the same fractions as the crop, `tolX` / `tolY` the pull in those fractions (a few screen points).
+ */
+public struct CropSnap: Sendable {
+    public var photo: CropRect
+    public var tolX: Float
+    public var tolY: Float
+
+    public init(photo: CropRect, tolX: Float, tolY: Float) {
+        self.photo = photo
+        self.tolX = tolX
+        self.tolY = tolY
+    }
+}
+
 /**
  * User crop: edges as fractions (0..1) of the rotated + straightened frame, i.e. the whole picture the
  * Crop & rotate tool shows. The crop is the last geometry step and never changes lens correction or the
@@ -24,6 +64,9 @@ public struct CropRect: Equatable, Sendable {
 
     /** True when the crop reaches past the frame, so part of the output is canvas to fill. */
     public var extendsFrame: Bool { left < 0 || top < 0 || right > 1 || bottom > 1 }
+
+    /** The sides the crop reaches past the frame. */
+    public var sides: ExtendSides { ExtendSides(left: left < 0, top: top < 0, right: right > 1, bottom: bottom > 1) }
 }
 
 public extension DevelopParams {
@@ -88,29 +131,41 @@ public enum CropMath {
 
     /** How far a crop may reach past each edge of the frame (fraction of that side); the canvas there is filled. */
     public static let maxExtend: Float = 0.3
-    private static let viewSpan: Float = 1 + 2 * maxExtend
+
+    /** Screen points the crop sticks to a photo edge. */
+    public static let snapPoints: CGFloat = 8
 
     /**
-     * The canvas the crop tool shows while extending: the frame plus `maxExtend` past each edge, as a crop of the
-     * frame. `toView` / `fromView` map a crop to and from fractions of that canvas, so the tool's frame, grid and
-     * drags work as on the plain frame.
+     * The canvas the crop tool shows while extending: the frame plus `maxExtend` past each chosen edge, as a crop of
+     * the frame. `toView` / `fromView` map a crop to and from fractions of that canvas, so the tool's frame, grid and
+     * drags work as on the plain frame, and a side that is not extended ends at the photo's edge.
      */
-    public static let extendedView = CropRect(-maxExtend, -maxExtend, 1 + maxExtend, 1 + maxExtend)
-
-    public static func toView(_ r: CropRect) -> CropRect {
-        CropRect((r.left + maxExtend) / viewSpan, (r.top + maxExtend) / viewSpan,
-                 (r.right + maxExtend) / viewSpan, (r.bottom + maxExtend) / viewSpan)
+    public static func extendedView(_ s: ExtendSides) -> CropRect {
+        CropRect(s.left ? -maxExtend : 0, s.top ? -maxExtend : 0,
+                 1 + (s.right ? maxExtend : 0), 1 + (s.bottom ? maxExtend : 0))
     }
 
-    public static func fromView(_ v: CropRect) -> CropRect {
-        CropRect(v.left * viewSpan - maxExtend, v.top * viewSpan - maxExtend,
-                 v.right * viewSpan - maxExtend, v.bottom * viewSpan - maxExtend)
+    public static func toView(_ r: CropRect, _ s: ExtendSides = .all) -> CropRect {
+        let v = extendedView(s)
+        return CropRect((r.left - v.left) / v.width, (r.top - v.top) / v.height,
+                        (r.right - v.left) / v.width, (r.bottom - v.top) / v.height)
+    }
+
+    public static func fromView(_ c: CropRect, _ s: ExtendSides = .all) -> CropRect {
+        let v = extendedView(s)
+        return CropRect(c.left * v.width + v.left, c.top * v.height + v.top,
+                        c.right * v.width + v.left, c.bottom * v.height + v.top)
+    }
+
+    /** [r] with each edge held to the canvas of [s]: the frame, plus `maxExtend` past the chosen sides (turning a side off). */
+    public static func within(_ r: CropRect, _ s: ExtendSides) -> CropRect {
+        let v = extendedView(s)
+        return CropRect(r.left.clamped(v.left, v.right), r.top.clamped(v.top, v.bottom),
+                        r.right.clamped(v.left, v.right), r.bottom.clamped(v.top, v.bottom))
     }
 
     /** [r] pulled back inside the frame (turning Extend off). */
-    public static func insideFrame(_ r: CropRect) -> CropRect {
-        CropRect(r.left.clamped(0, 1), r.top.clamped(0, 1), r.right.clamped(0, 1), r.bottom.clamped(0, 1))
-    }
+    public static func insideFrame(_ r: CropRect) -> CropRect { within(r, .off) }
 
     /** Smallest crop side in frame pixels. */
     public static let minPixels = 64
@@ -164,28 +219,30 @@ public enum CropMath {
      * [r] reshaped to [ratio] (width / height in pixels) with about the same area, around the same
      * centre, inside the frame. Nil ratio = free: [r] unchanged.
      */
-    public static func withAspect(_ r: CropRect, ratio: Double?, frameWidth: Int, frameHeight: Int, extend: Bool = false) -> CropRect {
+    public static func withAspect(_ r: CropRect, ratio: Double?, frameWidth: Int, frameHeight: Int,
+                                  sides: ExtendSides = .off) -> CropRect {
         guard let ratio else { return r }
         let fw = Double(frameWidth)
         let fh = Double(frameHeight)
         let area = Double(r.width) * fw * Double(r.height) * fh
         var w = (area * ratio).squareRoot()
         var h = w / ratio
-        let e = extend ? Double(maxExtend) : 0
-        let fit = min(1.0, min(fw * (1 + 2 * e) / w, fh * (1 + 2 * e) / h))
+        let v = extendedView(sides)
+        let fit = min(1.0, min(Double(v.width) * fw / w, Double(v.height) * fh / h))
         w *= fit
         h *= fit
-        let cx = (Double(r.left + r.right) / 2 * fw).clamped(w / 2 - e * fw, fw * (1 + e) - w / 2)
-        let cy = (Double(r.top + r.bottom) / 2 * fh).clamped(h / 2 - e * fh, fh * (1 + e) - h / 2)
-        return fromPixels(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2, fw, fh, extend: extend)
+        let cx = (Double(r.left + r.right) / 2 * fw).clamped(Double(v.left) * fw + w / 2, Double(v.right) * fw - w / 2)
+        let cy = (Double(r.top + r.bottom) / 2 * fh).clamped(Double(v.top) * fh + h / 2, Double(v.bottom) * fh - h / 2)
+        return fromPixels(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2, fw, fh, sides: sides)
     }
 
     /**
      * [start] after dragging [handle] by ([dx], [dy]) in frame fractions, kept inside the frame, at least
-     * [minPixels] wide and high, and at [ratio] (width / height in pixels) when not nil.
+     * [minPixels] wide and high, and at [ratio] (width / height in pixels) when not nil. With [snap], an edge that
+     * comes within its pull of the photo's edge lands on it (dragging on past the pull lets go).
      */
     public static func drag(_ start: CropRect, handle: Handle, dx: Float, dy: Float, ratio: Double?,
-                            frameWidth: Int, frameHeight: Int, extend: Bool = false) -> CropRect {
+                            frameWidth: Int, frameHeight: Int, extend: Bool = false, snap: CropSnap? = nil) -> CropRect {
         let fw = Double(frameWidth)
         let fh = Double(frameHeight)
         // Bounds of the canvas the crop may use: the frame, plus maxExtend past each edge when extending.
@@ -200,13 +257,25 @@ public enum CropMath {
         let t = Double(start.top) * fh
         let r = Double(start.right) * fw
         let b = Double(start.bottom) * fh
-        let mx = Double(dx) * fw
-        let my = Double(dy) * fh
+        var mx = Double(dx) * fw
+        var my = Double(dy) * fh
+
+        if let snap {
+            let all = handle == .move
+            var xs: [Double] = []
+            var ys: [Double] = []
+            if all || handle == .left || handle == .topLeft || handle == .bottomLeft { xs.append(Double(snap.photo.left) * fw - l) }
+            if all || handle == .right || handle == .topRight || handle == .bottomRight { xs.append(Double(snap.photo.right) * fw - r) }
+            if all || handle == .top || handle == .topLeft || handle == .topRight { ys.append(Double(snap.photo.top) * fh - t) }
+            if all || handle == .bottom || handle == .bottomLeft || handle == .bottomRight { ys.append(Double(snap.photo.bottom) * fh - b) }
+            mx = pull(mx, xs, Double(snap.tolX) * fw)
+            my = pull(my, ys, Double(snap.tolY) * fh)
+        }
 
         if handle == .move {
             let ox = mx.clamped(x0 - l, x1 - r)
             let oy = my.clamped(y0 - t, y1 - b)
-            return fromPixels(l + ox, t + oy, r + ox, b + oy, fw, fh, extend: extend)
+            return fromPixels(l + ox, t + oy, r + ox, b + oy, fw, fh, sides: extend ? .all : .off)
         }
 
         let movesLeft = handle == .left || handle == .topLeft || handle == .bottomLeft
@@ -219,7 +288,7 @@ public enum CropMath {
             let nr = movesRight ? (r + mx).clamped(l + minW, x1) : r
             let nt = movesTop ? (t + my).clamped(y0, b - minH) : t
             let nb = movesBottom ? (b + my).clamped(t + minH, y1) : b
-            return fromPixels(nl, nt, nr, nb, fw, fh, extend: extend)
+            return fromPixels(nl, nt, nr, nb, fw, fh, sides: extend ? .all : .off)
         }
 
         let horizontal = movesLeft || movesRight
@@ -238,7 +307,7 @@ public enum CropMath {
         let h = w / ratio
         let nl = movesLeft ? ax - w : movesRight ? ax : ax - w / 2
         let nt = movesTop ? ay - h : movesBottom ? ay : ay - h / 2
-        return fromPixels(nl, nt, nl + w, nt + h, fw, fh, extend: extend)
+        return fromPixels(nl, nt, nl + w, nt + h, fw, fh, sides: extend ? .all : .off)
     }
 
     /**
@@ -264,11 +333,21 @@ public enum CropMath {
         return .move
     }
 
+    /** The offset among [offsets] that puts an edge on the photo's edge, when [want] is within [tol] of one; else [want]. */
+    private static func pull(_ want: Double, _ offsets: [Double], _ tol: Double) -> Double {
+        var best = want
+        var gap = tol
+        for o in offsets where abs(o - want) <= gap {
+            best = o
+            gap = abs(o - want)
+        }
+        return best
+    }
+
     private static func fromPixels(_ l: Double, _ t: Double, _ r: Double, _ b: Double, _ fw: Double,
-                                   _ fh: Double, extend: Bool = false) -> CropRect {
-        let lo: Float = extend ? -maxExtend : 0
-        let hi: Float = extend ? 1 + maxExtend : 1
-        return CropRect(Float(l / fw).clamped(lo, hi), Float(t / fh).clamped(lo, hi),
-                        Float(r / fw).clamped(lo, hi), Float(b / fh).clamped(lo, hi))
+                                   _ fh: Double, sides: ExtendSides = .off) -> CropRect {
+        let v = extendedView(sides)
+        return CropRect(Float(l / fw).clamped(v.left, v.right), Float(t / fh).clamped(v.top, v.bottom),
+                        Float(r / fw).clamped(v.left, v.right), Float(b / fh).clamped(v.top, v.bottom))
     }
 }

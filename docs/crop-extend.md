@@ -25,6 +25,20 @@ extensions over detailed subjects look wrong (a generative fill would be a separ
 is 0.3 of each side (a 3:2 photo reaches 4:5 or 1:1 and a little more); raise it in `CropMath` if wanted, the tool's
 canvas gets smaller on screen as it grows.
 
+## Sides and snapping
+
+- **Sides** (`ExtendSides`: left, top, right, bottom): the tool's canvas (`extendedView(sides)`) is the frame plus
+  `MAX_EXTEND` only past the chosen sides, so `toView` / `fromView`, the overlay and `drag` need no other change: a side that
+  is off ends at the photo's edge, and the crop is clamped there by the canvas itself. `withAspect(sides)` fits the
+  shape into that canvas; `within(r, sides)` pulls a crop in when a side is turned off. State is UI only: the sides in use are
+  the chosen ones plus those the crop already reaches past.
+- **Snap** (`drag(snap: CropSnap)`, 8 px on screen): the overlay passes the photo's rectangle in the canvas fractions
+  (`toView(FULL, sides)`) and the pull. Before the drag is applied, the offset of each moving edge that would put it on
+  the photo's edge replaces the pointer's offset when the pointer is within the pull (the closest one wins; a moved frame
+  can snap by its left or right edge). It is computed from the pointer every time, so there is no lock to break: dragging
+  farther just stops matching. Only on while Extend is on; plain crop already stops at the edge.
+- Viewer: not changed.
+
 ## Pieces per platform
 
 | Piece | Web | Android | iOS / Desktop | Viewer |
@@ -33,7 +47,7 @@ canvas gets smaller on screen as it grows.
 | `uFillOutside` binding | `GlCommon.ts` | `GlCommon.kt` | `MetalCommon.swift` | n/a |
 | `LensTransform.fillOutside` + crop pixels allowed past the frame | `LensTransform.ts` | `LensTransform.kt` | `LensTransform.swift` | n/a |
 | `CropMath` (`MAX_EXTEND`, `dragCrop(extend)`, view mapping) | `CropMath.ts` | `CropMath.kt` | `CropMath.swift` | `CropMath.swift` (own port) |
-| Tool: extended canvas + Extend toggle | `CropOverlay` + panels | `CropOverlay.kt`, Pro/Auto | `CropOverlay.swift`, Pro/Auto | `CropTool.swift` |
+| Tool: extended canvas + Extend chips (`ExtendChips`) + edge snap | `CropOverlay` + panels | `CropOverlay.kt`, Pro/Auto | `CropOverlay.swift`, Pro/Auto | `CropTool.swift` |
 | Sidecar / edits parse of crops outside 0..1 | `AutoSidecar.ts` (Edits is generic) | `Edits.kt` | `Edits.swift`, `AutoSidecar.swift` | `DevelopEdits` |
 
 Web, Android, iOS and Desktop are all done (Android and Swift only compiled by CI). RawBoy Viewer is not.

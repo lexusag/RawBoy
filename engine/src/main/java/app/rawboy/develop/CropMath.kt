@@ -10,6 +10,28 @@ import kotlin.math.sqrt
  * Crop & rotate tool shows. The crop is the last geometry step and never changes lens correction or the
  * straighten auto crop, which always work on the full frame.
  */
+/** Which edges of the frame the crop may reach past (Extend canvas, chosen per side). */
+data class ExtendSides(val left: Boolean = false, val top: Boolean = false, val right: Boolean = false, val bottom: Boolean = false) {
+    val any: Boolean get() = left || top || right || bottom
+
+    fun union(o: ExtendSides) = ExtendSides(left || o.left, top || o.top, right || o.right, bottom || o.bottom)
+
+    /** The sides as four bits (left 1, top 2, right 4, bottom 8), for state that survives a rotation. */
+    val bits: Int get() = (if (left) 1 else 0) or (if (top) 2 else 0) or (if (right) 4 else 0) or (if (bottom) 8 else 0)
+
+    companion object {
+        val NONE = ExtendSides()
+        val ALL = ExtendSides(left = true, top = true, right = true, bottom = true)
+        fun fromBits(b: Int) = ExtendSides(b and 1 != 0, b and 2 != 0, b and 4 != 0, b and 8 != 0)
+    }
+}
+
+/**
+ * How far the crop's edges are drawn to the photo's own edges while dragging (Extend canvas): [photo] is the photo's
+ * rectangle in the same fractions as the crop, [tolX] / [tolY] the pull in those fractions (a few screen pixels).
+ */
+data class CropSnap(val photo: CropRect, val tolX: Float, val tolY: Float)
+
 data class CropRect(val left: Float, val top: Float, val right: Float, val bottom: Float) {
     val width: Float get() = right - left
     val height: Float get() = bottom - top
@@ -17,6 +39,9 @@ data class CropRect(val left: Float, val top: Float, val right: Float, val botto
 
     /** True when the crop reaches past the frame, so part of the output is canvas to fill. */
     val extendsFrame: Boolean get() = left < 0f || top < 0f || right > 1f || bottom > 1f
+
+    /** The sides the crop reaches past the frame. */
+    val sides: ExtendSides get() = ExtendSides(left < 0f, top < 0f, right > 1f, bottom > 1f)
 }
 
 val DevelopParams.crop: CropRect get() = CropRect(cropLeft, cropTop, cropRight, cropBottom)
@@ -69,27 +94,38 @@ object CropMath {
 
     /** How far a crop may reach past each edge of the frame (fraction of that side); the canvas there is filled. */
     const val MAX_EXTEND = 0.3f
-    private const val VIEW_SPAN = 1f + 2f * MAX_EXTEND
+
+    /** Screen pixels the crop sticks to a photo edge. */
+    const val SNAP_DP = 8
 
     /**
-     * The canvas the crop tool shows while extending: the frame plus [MAX_EXTEND] past each edge, as a crop of the
-     * frame. [toView] / [fromView] map a crop to and from fractions of that canvas, so the tool's frame, grid and
-     * drags work as on the plain frame.
+     * The canvas the crop tool shows while extending: the frame plus [MAX_EXTEND] past each chosen edge, as a crop of
+     * the frame. [toView] / [fromView] map a crop to and from fractions of that canvas, so the tool's frame, grid and
+     * drags work as on the plain frame, and a side that is not extended ends at the photo's edge.
      */
-    val EXTENDED_VIEW = CropRect(-MAX_EXTEND, -MAX_EXTEND, 1f + MAX_EXTEND, 1f + MAX_EXTEND)
-
-    fun toView(r: CropRect) = CropRect(
-        (r.left + MAX_EXTEND) / VIEW_SPAN, (r.top + MAX_EXTEND) / VIEW_SPAN,
-        (r.right + MAX_EXTEND) / VIEW_SPAN, (r.bottom + MAX_EXTEND) / VIEW_SPAN,
+    fun extendedView(s: ExtendSides) = CropRect(
+        if (s.left) -MAX_EXTEND else 0f, if (s.top) -MAX_EXTEND else 0f,
+        1f + if (s.right) MAX_EXTEND else 0f, 1f + if (s.bottom) MAX_EXTEND else 0f,
     )
 
-    fun fromView(v: CropRect) = CropRect(
-        v.left * VIEW_SPAN - MAX_EXTEND, v.top * VIEW_SPAN - MAX_EXTEND,
-        v.right * VIEW_SPAN - MAX_EXTEND, v.bottom * VIEW_SPAN - MAX_EXTEND,
-    )
+    fun toView(r: CropRect, s: ExtendSides = ExtendSides.ALL): CropRect {
+        val v = extendedView(s)
+        return CropRect((r.left - v.left) / v.width, (r.top - v.top) / v.height, (r.right - v.left) / v.width, (r.bottom - v.top) / v.height)
+    }
+
+    fun fromView(c: CropRect, s: ExtendSides = ExtendSides.ALL): CropRect {
+        val v = extendedView(s)
+        return CropRect(c.left * v.width + v.left, c.top * v.height + v.top, c.right * v.width + v.left, c.bottom * v.height + v.top)
+    }
+
+    /** [r] with each edge held to the canvas of [s]: the frame, plus [MAX_EXTEND] past the chosen sides (turning a side off). */
+    fun within(r: CropRect, s: ExtendSides): CropRect {
+        val v = extendedView(s)
+        return CropRect(r.left.coerceIn(v.left, v.right), r.top.coerceIn(v.top, v.bottom), r.right.coerceIn(v.left, v.right), r.bottom.coerceIn(v.top, v.bottom))
+    }
 
     /** [r] pulled back inside the frame (turning Extend off). */
-    fun insideFrame(r: CropRect) = CropRect(r.left.coerceIn(0f, 1f), r.top.coerceIn(0f, 1f), r.right.coerceIn(0f, 1f), r.bottom.coerceIn(0f, 1f))
+    fun insideFrame(r: CropRect) = within(r, ExtendSides.NONE)
 
     /** Smallest crop side in frame pixels. */
     const val MIN_PIXELS = 64
@@ -143,29 +179,30 @@ object CropMath {
      * [r] reshaped to [ratio] (width / height in pixels) with about the same area, around the same
      * centre, inside the frame. Null ratio = free: [r] unchanged.
      */
-    fun withAspect(r: CropRect, ratio: Double?, frameWidth: Int, frameHeight: Int, extend: Boolean = false): CropRect {
+    fun withAspect(r: CropRect, ratio: Double?, frameWidth: Int, frameHeight: Int, sides: ExtendSides = ExtendSides.NONE): CropRect {
         if (ratio == null) return r
         val fw = frameWidth.toDouble()
         val fh = frameHeight.toDouble()
         val area = r.width * fw * r.height * fh
         var w = sqrt(area * ratio)
         var h = w / ratio
-        val e = if (extend) MAX_EXTEND.toDouble() else 0.0
-        val fit = min(1.0, min(fw * (1 + 2 * e) / w, fh * (1 + 2 * e) / h))
+        val v = extendedView(sides)
+        val fit = min(1.0, min(v.width * fw / w, v.height * fh / h))
         w *= fit
         h *= fit
-        val cx = ((r.left + r.right) / 2 * fw).coerceIn(w / 2 - e * fw, fw * (1 + e) - w / 2)
-        val cy = ((r.top + r.bottom) / 2 * fh).coerceIn(h / 2 - e * fh, fh * (1 + e) - h / 2)
-        return fromPixels(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2, fw, fh, extend)
+        val cx = ((r.left + r.right) / 2 * fw).coerceIn(v.left * fw + w / 2, v.right * fw - w / 2)
+        val cy = ((r.top + r.bottom) / 2 * fh).coerceIn(v.top * fh + h / 2, v.bottom * fh - h / 2)
+        return fromPixels(cx - w / 2, cy - h / 2, cx + w / 2, cy + h / 2, fw, fh, sides)
     }
 
     /**
      * [start] after dragging [handle] by ([dx], [dy]) in frame fractions, kept inside the frame, at least
-     * [MIN_PIXELS] wide and high, and at [ratio] (width / height in pixels) when not null.
+     * [MIN_PIXELS] wide and high, and at [ratio] (width / height in pixels) when not null. With [snap], an edge that
+     * comes within its pull of the photo's edge lands on it (dragging on past the pull lets go).
      */
     fun drag(
         start: CropRect, handle: Handle, dx: Float, dy: Float,
-        ratio: Double?, frameWidth: Int, frameHeight: Int, extend: Boolean = false,
+        ratio: Double?, frameWidth: Int, frameHeight: Int, extend: Boolean = false, snap: CropSnap? = null,
     ): CropRect {
         val fw = frameWidth.toDouble()
         val fh = frameHeight.toDouble()
@@ -181,13 +218,25 @@ object CropMath {
         val t = start.top * fh
         val r = start.right * fw
         val b = start.bottom * fh
-        val mx = dx * fw
-        val my = dy * fh
+        var mx = dx * fw
+        var my = dy * fh
+
+        if (snap != null) {
+            val all = handle == Handle.MOVE
+            val xs = ArrayList<Double>(2)
+            val ys = ArrayList<Double>(2)
+            if (all || handle == Handle.LEFT || handle == Handle.TOP_LEFT || handle == Handle.BOTTOM_LEFT) xs += snap.photo.left * fw - l
+            if (all || handle == Handle.RIGHT || handle == Handle.TOP_RIGHT || handle == Handle.BOTTOM_RIGHT) xs += snap.photo.right * fw - r
+            if (all || handle == Handle.TOP || handle == Handle.TOP_LEFT || handle == Handle.TOP_RIGHT) ys += snap.photo.top * fh - t
+            if (all || handle == Handle.BOTTOM || handle == Handle.BOTTOM_LEFT || handle == Handle.BOTTOM_RIGHT) ys += snap.photo.bottom * fh - b
+            mx = pull(mx, xs, snap.tolX * fw)
+            my = pull(my, ys, snap.tolY * fh)
+        }
 
         if (handle == Handle.MOVE) {
             val ox = mx.coerceIn(x0 - l, x1 - r)
             val oy = my.coerceIn(y0 - t, y1 - b)
-            return fromPixels(l + ox, t + oy, r + ox, b + oy, fw, fh, extend)
+            return fromPixels(l + ox, t + oy, r + ox, b + oy, fw, fh, if (extend) ExtendSides.ALL else ExtendSides.NONE)
         }
 
         val movesLeft = handle == Handle.LEFT || handle == Handle.TOP_LEFT || handle == Handle.BOTTOM_LEFT
@@ -200,7 +249,7 @@ object CropMath {
             val nr = if (movesRight) (r + mx).coerceIn(l + minW, x1) else r
             val nt = if (movesTop) (t + my).coerceIn(y0, b - minH) else t
             val nb = if (movesBottom) (b + my).coerceIn(t + minH, y1) else b
-            return fromPixels(nl, nt, nr, nb, fw, fh, extend)
+            return fromPixels(nl, nt, nr, nb, fw, fh, if (extend) ExtendSides.ALL else ExtendSides.NONE)
         }
 
         val horizontal = movesLeft || movesRight
@@ -235,7 +284,7 @@ object CropMath {
             movesBottom -> ay
             else -> ay - h / 2
         }
-        return fromPixels(nl, nt, nl + w, nt + h, fw, fh, extend)
+        return fromPixels(nl, nt, nl + w, nt + h, fw, fh, if (extend) ExtendSides.ALL else ExtendSides.NONE)
     }
 
     /**
@@ -263,12 +312,24 @@ object CropMath {
         }
     }
 
-    private fun fromPixels(l: Double, t: Double, r: Double, b: Double, fw: Double, fh: Double, extend: Boolean = false): CropRect {
-        val lo = if (extend) -MAX_EXTEND else 0f
-        val hi = if (extend) 1f + MAX_EXTEND else 1f
+    /** The offset among [offsets] that puts an edge on the photo's edge, when [want] is within [tol] of one; else [want]. */
+    private fun pull(want: Double, offsets: List<Double>, tol: Double): Double {
+        var best = want
+        var gap = tol
+        for (o in offsets) {
+            if (abs(o - want) <= gap) {
+                best = o
+                gap = abs(o - want)
+            }
+        }
+        return best
+    }
+
+    private fun fromPixels(l: Double, t: Double, r: Double, b: Double, fw: Double, fh: Double, sides: ExtendSides = ExtendSides.NONE): CropRect {
+        val v = extendedView(sides)
         return CropRect(
-            (l / fw).toFloat().coerceIn(lo, hi), (t / fh).toFloat().coerceIn(lo, hi),
-            (r / fw).toFloat().coerceIn(lo, hi), (b / fh).toFloat().coerceIn(lo, hi),
+            (l / fw).toFloat().coerceIn(v.left, v.right), (t / fh).toFloat().coerceIn(v.top, v.bottom),
+            (r / fw).toFloat().coerceIn(v.left, v.right), (b / fh).toFloat().coerceIn(v.top, v.bottom),
         )
     }
 }

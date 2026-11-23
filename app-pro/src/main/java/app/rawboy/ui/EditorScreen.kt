@@ -31,6 +31,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -56,6 +57,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import app.rawboy.develop.CropRect
 import app.rawboy.develop.CropAspect
 import app.rawboy.develop.CropMath
+import app.rawboy.develop.ExtendSides
 import app.rawboy.develop.Preset
 import app.rawboy.develop.crop
 import app.rawboy.develop.withCrop
@@ -195,13 +197,14 @@ fun EditorScreen(vm: EditorViewModel) {
     // Crop shape lock (UI only; the crop itself is in the params). Portrait null = follow the frame.
     var cropAspect by rememberSaveable { mutableStateOf(CropAspect.FREE) }
     var cropPortrait by rememberSaveable { mutableStateOf<Boolean?>(null) }
-    // Extend: the tool shows the frame with room around it and the crop may reach into it (the canvas is filled).
-    var cropExtend by rememberSaveable { mutableStateOf(false) }
-    val extendOn = cropExtend || state.params.crop.extendsFrame
+    // Extend: the tool shows the frame with room around the chosen sides and the crop may reach into it (the canvas is filled).
+    var cropSideBits by rememberSaveable { mutableIntStateOf(0) }
+    val sidesNow = ExtendSides.fromBits(cropSideBits).union(state.params.crop.sides)
+    val extendOn = sidesNow.any
     LaunchedEffect(state.fileName) {
         cropAspect = CropAspect.FREE
         cropPortrait = null
-        cropExtend = false
+        cropSideBits = 0
         selectedLayer = null
         selectedLeakState = null
         selectedFilmLeakState = null
@@ -277,7 +280,7 @@ fun EditorScreen(vm: EditorViewModel) {
                         state.params
                     }
                     // The crop tool shows the whole frame with the crop drawn over it.
-                    val shown = if (geometryMode) edited.withCrop(if (extendOn) CropMath.EXTENDED_VIEW else CropMath.FULL) else edited
+                    val shown = if (geometryMode) edited.withCrop(CropMath.extendedView(sidesNow)) else edited
                     val maskView = if (masksMode && showMask && !showOriginal) selectedId else null
                     val shaderParams = remember(shown, state.defaults, lutData, filmData, lensInfo, base, bloomSources, skinMask, maskView, preview, bokehSource, flareSource) {
                         ShaderParams.from(
@@ -427,8 +430,9 @@ fun EditorScreen(vm: EditorViewModel) {
                     if (geometryMode && zoomCenter == null && preview != null) {
                         CropOverlay(
                             shaderParams.lens.outputWidth, shaderParams.lens.outputHeight,
-                            if (extendOn) CropMath.toView(state.params.crop) else state.params.crop,
-                            cropRatio, framePx, { vm.setCrop(if (extendOn) CropMath.fromView(it) else it) }, Modifier.matchParentSize(),
+                            CropMath.toView(state.params.crop, sidesNow),
+                            cropRatio, framePx, { vm.setCrop(CropMath.fromView(it, sidesNow)) }, Modifier.matchParentSize(),
+                            snapTo = if (extendOn) CropMath.toView(CropMath.FULL, sidesNow) else null,
                         )
                     }
                     if (autoWb && !geometryMode && !shapesMode && zoomCenter == null && preview != null && !showOriginal) {
@@ -510,19 +514,19 @@ fun EditorScreen(vm: EditorViewModel) {
                     onFlip = vm::flip,
                     aspect = cropAspect,
                     portrait = portrait,
-                    extend = extendOn,
-                    onExtend = { on ->
-                        cropExtend = on
-                        if (!on) vm.setCrop(CropMath.insideFrame(state.params.crop))
+                    sides = sidesNow,
+                    onSides = { next ->
+                        cropSideBits = next.bits
+                        if (next != sidesNow) vm.setCrop(CropMath.within(state.params.crop, next))
                     },
                     onAspect = { aspect, toPortrait ->
                         cropAspect = aspect
                         cropPortrait = toPortrait
                         val ratio = aspect.ratio(frame.frameWidth, frame.frameHeight, toPortrait)
-                        vm.setCrop(CropMath.withAspect(state.params.crop, ratio, frame.frameWidth, frame.frameHeight, extendOn))
+                        vm.setCrop(CropMath.withAspect(state.params.crop, ratio, frame.frameWidth, frame.frameHeight, sidesNow))
                     },
                     onResetCrop = {
-                        cropExtend = false
+                        cropSideBits = 0
                         cropAspect = CropAspect.FREE
                         cropPortrait = null
                         vm.setCrop(CropMath.FULL)

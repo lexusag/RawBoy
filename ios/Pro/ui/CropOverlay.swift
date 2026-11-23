@@ -24,6 +24,8 @@ struct CropOverlay: View {
     let crop: CropRect
     let ratio: Double?
     let framePx: Int
+    /** The photo's own rectangle in the crop's fractions while extending: the crop's edges stick a little to it. */
+    var snapTo: CropRect?
     let onCropChange: (CropRect) -> Void
     /** How dark the outside is, and the grid's cells per side (the Auto WB area: lighter, thirds only). */
     var shadeOpacity = 0.55
@@ -93,9 +95,13 @@ struct CropOverlay: View {
                                 return
                             }
                             guard let s = start, let h = handle else { return }
+                            let snap = snapTo.map {
+                                CropSnap(photo: $0, tolX: Float(CropMath.snapPoints / r.width),
+                                         tolY: Float(CropMath.snapPoints / r.height))
+                            }
                             onCropChange(CropMath.drag(s, handle: h, dx: Float(v.translation.width / r.width),
                                                        dy: Float(v.translation.height / r.height), ratio: ratio,
-                                                       frameWidth: frameWidth, frameHeight: frameHeight))
+                                                       frameWidth: frameWidth, frameHeight: frameHeight, snap: snap))
                         }
                         .onEnded { v in
                             start = nil

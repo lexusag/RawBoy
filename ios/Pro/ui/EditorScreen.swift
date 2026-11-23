@@ -60,9 +60,10 @@ struct EditorScreen: View {
     /** The shape chosen in Crop & rotate for this photo; nil = [defaultCropAspect]. */
     @State private var chosenCropAspect: CropAspect?
     @State private var cropPortrait: Bool?
-    /** Extend: the tool shows the frame with room around it and the crop may reach into it (the canvas is filled). */
-    @State private var cropExtend = false
-    private var extendOn: Bool { cropExtend || state.params.crop.extendsFrame }
+    /** Extend: the tool shows the frame with room around the chosen sides and the crop may reach into it (the canvas is filled). */
+    @State private var cropSides = ExtendSides.off
+    private var sidesNow: ExtendSides { cropSides.union(state.params.crop.sides) }
+    private var extendOn: Bool { sidesNow.any }
     @State private var viewSize = CGSize.zero
     /** RawBoy Desktop's focus mode (Tab, F): the bar and the panel hide and the photo takes the window. */
     @State private var photoOnly = false
@@ -145,7 +146,7 @@ struct EditorScreen: View {
         .onChange(of: state.fileName) { _, _ in
             chosenCropAspect = nil
             cropPortrait = nil
-            cropExtend = false
+            cropSides = .off
             selectedLayer = nil
             selectedLeak = nil
             selectedFx = nil
@@ -279,7 +280,7 @@ struct EditorScreen: View {
         // Compare keeps the current rotation, flips and crop so the frame doesn't jump.
         let edited = showOriginal ? originalParams : state.params
         // The crop tool shows the whole frame with the crop drawn over it.
-        return mode == .geometry ? edited.withCrop(extendOn ? CropMath.extendedView : CropMath.full) : edited
+        return mode == .geometry ? edited.withCrop(CropMath.extendedView(sidesNow)) : edited
     }
 
     private var previewArea: some View {
@@ -395,12 +396,13 @@ struct EditorScreen: View {
                 }
                 if let shader, mode == .geometry, session.zoomCenter == nil, session.preview != nil {
                     CropOverlay(frameWidth: shader.lens.outputWidth, frameHeight: shader.lens.outputHeight,
-                                crop: extendOn ? CropMath.toView(state.params.crop) : state.params.crop,
+                                crop: CropMath.toView(state.params.crop, sidesNow),
                                 ratio: cropRatio, framePx: framePx,
+                                snapTo: extendOn ? CropMath.toView(CropMath.full, sidesNow) : nil,
                                 onCropChange: { r in
                                     // Keep the shape the drag started with: the default follows whether a crop is set.
                                     if chosenCropAspect == nil { chosenCropAspect = defaultCropAspect }
-                                    vm.setCrop(extendOn ? CropMath.fromView(r) : r)
+                                    vm.setCrop(CropMath.fromView(r, sidesNow))
                                 },
                                 rotate: (angle: state.params.straighten, onChange: { d in vm.update { $0.straighten = d } }))
                 }
@@ -545,10 +547,10 @@ struct EditorScreen: View {
                     },
                     onFlip: vm.flip,
                     aspect: cropAspect, portrait: portrait,
-                    extend: extendOn,
-                    onExtend: { on in
-                        cropExtend = on
-                        if !on { vm.setCrop(CropMath.insideFrame(state.params.crop)) }
+                    sides: sidesNow,
+                    onSides: { next in
+                        cropSides = next
+                        if next != sidesNow { vm.setCrop(CropMath.within(state.params.crop, next)) }
                     },
                     onAspect: { aspect, toPortrait in
                         chosenCropAspect = aspect
@@ -556,10 +558,10 @@ struct EditorScreen: View {
                         let f = frameLens
                         let ratio = aspect.ratio(frameWidth: f.frameWidth, frameHeight: f.frameHeight, portrait: toPortrait)
                         vm.setCrop(CropMath.withAspect(state.params.crop, ratio: ratio, frameWidth: f.frameWidth,
-                                                       frameHeight: f.frameHeight, extend: extendOn))
+                                                       frameHeight: f.frameHeight, sides: sidesNow))
                     },
                     onResetCrop: {
-                        cropExtend = false
+                        cropSides = .off
                         chosenCropAspect = nil
                         cropPortrait = nil
                         vm.setCrop(CropMath.full)

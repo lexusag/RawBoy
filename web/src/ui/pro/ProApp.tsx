@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { filmScanApplies } from '../../engine/gl/ScanScale';
 import { FrameColors } from '../../engine/gl/DevelopRenderer';
-import { cropAspectRatio, cropFromView, cropInsideFrame, cropOf, cropToView, extendsFrame, EXTENDED_VIEW, withCrop, withoutCrop, FULL_CROP, cropWithAspect, type CropAspect, type CropRect } from '../../engine/develop/CropMath';
+import { anySide, cropAspectRatio, cropFromView, cropOf, cropToView, cropWithin, extendedView, FULL_CROP, NO_SIDES, sameSides, sidesOf, unionSides, withCrop, withoutCrop, cropWithAspect, type CropAspect, type CropRect, type ExtendSides } from '../../engine/develop/CropMath';
 import { PHOTO_ACCEPT, pickFiles } from '../common/files';
 import { isTabShown } from '../common/tabs';
 import { Preview, PreviewLabel, zoomLabel } from '../common/Preview';
@@ -191,8 +191,8 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
   // Crop shape lock (UI only; the crop itself is in the params). Portrait null = follow the frame.
   const [cropAspect, setCropAspect] = useState<CropAspect>('free');
   const [cropPortrait, setCropPortrait] = useState<boolean | null>(null);
-  // Extend: the tool shows the frame with room around it and the crop may reach into it (the canvas is filled).
-  const [cropExtend, setCropExtend] = useState(false);
+  // Extend: the tool shows the frame with room around the chosen sides and the crop may reach into it (the canvas is filled).
+  const [cropSides, setCropSides] = useState<ExtendSides>(NO_SIDES);
   useEffect(() => {
     setCropAspect('free');
     setCropPortrait(null);
@@ -263,8 +263,9 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
         cropOf(state.params),
       )
     : state.params;
-  const extendOn = cropExtend || extendsFrame(cropOf(state.params));
-  const toolView = extendOn ? EXTENDED_VIEW : FULL_CROP;
+  const sidesNow = unionSides(cropSides, sidesOf(cropOf(state.params)));
+  const extendOn = anySide(sidesNow);
+  const toolView = extendedView(sidesNow);
   const shownKey = JSON.stringify(geometryMode ? withCrop(edited, toolView) : edited);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const shown = useMemo(() => (geometryMode ? withCrop(edited, toolView) : edited), [shownKey]);
@@ -276,7 +277,7 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
     setCropAspect(aspect);
     setCropPortrait(toPortrait);
     const ratio = cropAspectRatio(aspect, frameLens.frameWidth, frameLens.frameHeight, toPortrait);
-    store.setCrop(cropWithAspect(cropOf(state.params), ratio, frameLens.frameWidth, frameLens.frameHeight, extendOn));
+    store.setCrop(cropWithAspect(cropOf(state.params), ratio, frameLens.frameWidth, frameLens.frameHeight, sidesNow));
   };
   const maskView = masksMode && showMask && !showOriginal ? selectedId : null;
   const shaderParams = useMemo(
@@ -694,10 +695,11 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
             <CropOverlay
               frameWidth={shaderParams.lens.outputWidth}
               frameHeight={shaderParams.lens.outputHeight}
-              crop={extendOn ? cropToView(cropOf(state.params)) : cropOf(state.params)}
+              crop={cropToView(cropOf(state.params), sidesNow)}
               ratio={cropRatio}
               frame={FRAME_WIDTH}
-              onChange={(c) => store.setCrop(extendOn ? cropFromView(c) : c)}
+              onChange={(c) => store.setCrop(cropFromView(c, sidesNow))}
+              snapTo={extendOn ? cropToView(FULL_CROP, sidesNow) : undefined}
               rotate={{ angle: state.params.straighten, onChange: (deg) => store.update({ ...state.params, straighten: deg }) }}
             />
           )}
@@ -860,14 +862,14 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
                 onFlip={store.flip}
                 aspect={cropAspect}
                 portrait={portrait}
-                extend={extendOn}
-                onExtend={(on) => {
-                  setCropExtend(on);
-                  if (!on) store.setCrop(cropInsideFrame(cropOf(state.params)));
+                sides={sidesNow}
+                onSides={(next) => {
+                  setCropSides(next);
+                  if (!sameSides(next, sidesNow)) store.setCrop(cropWithin(cropOf(state.params), next));
                 }}
                 onAspect={chooseAspect}
                 onResetCrop={() => {
-                  setCropExtend(false);
+                  setCropSides(NO_SIDES);
                   setCropAspect('free');
                   setCropPortrait(null);
                   store.setCrop(FULL_CROP);
