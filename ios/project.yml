@@ -28,10 +28,6 @@ packages:
     url: https://github.com/lexusag/RawBoyImageViewer
     from: 0.2.14
   # viewer-package:end
-  # ONNX Runtime (MIT), RawBoy Desktop's depth estimate for Portrait blur (retouch/DepthEstimator.swift); only the Mac engine links it.
-  OnnxRuntime:
-    url: https://github.com/microsoft/onnxruntime-swift-package-manager
-    exactVersion: 1.24.2
 targets:
   RawBoyEngine:
     type: framework
@@ -256,6 +252,9 @@ targets:
         buildPhase: resources
       - path: ../engine/src/main/assets/models
         buildPhase: resources
+      # Apple's Core ML build of Depth Anything V2 Small (Apache 2.0), Desktop's depth estimate: retouch/DepthEstimator.swift.
+      # Xcode compiles it to DepthAnythingV2SmallF16.mlmodelc in the resource bundle.
+      - path: models/DepthAnythingV2SmallF16.mlpackage
     preBuildScripts:
       - name: Generate develop shaders
         script: shaders/gen.sh
@@ -278,8 +277,6 @@ targets:
           - $(SRCROOT)/build/generated/scan.metal
           - $(SRCROOT)/build/generated/DevelopLayout.swift
     dependencies:
-      - package: OnnxRuntime
-        product: onnxruntime
       - package: RawBoyViewerPackages
         product: RawBoyBrowseKit
       - framework: native/out/RawBoyNative.xcframework
@@ -300,6 +297,7 @@ targets:
         GENERATE_INFOPLIST_FILE: YES
         MTL_LANGUAGE_REVISION: Metal21
         SWIFT_OPTIMIZATION_LEVEL: -O
+        COREML_CODEGEN_LANGUAGE: None
         # Swift's Float16 (used all over the engine) is unavailable on Intel macOS: the Swift side is arm64 only.
         ARCHS: arm64
         ONLY_ACTIVE_ARCH: NO

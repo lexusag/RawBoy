@@ -1971,14 +1971,15 @@ Licensed under the Apache License, Version 2.0; see the full text above under
 "MediaPipe".
 
 ================================================================================
-Depth Anything V2 Small model (RawBoy Camera and RawBoy Web, AI depth estimate)
+Depth Anything V2 Small model (RawBoy Camera, RawBoy Web and RawBoy Desktop, AI depth estimate)
 ================================================================================
 
 Depth Anything V2: Copyright 2024 Lihe Yang, Bingyi Kang, Zilong Huang,
 Zhen Zhao, Xiaogang Xu, Jiashi Feng, Hengshuang Zhao. The Small model is
 licensed under the Apache License, Version 2.0. RawBoy Camera and RawBoy Web use
 the ONNX export with 4-bit weights published by onnx-community on Hugging Face
-(onnx-community/depth-anything-v2-small, Apache License 2.0), unmodified.
+(onnx-community/depth-anything-v2-small, Apache License 2.0), unmodified. RawBoy Desktop
+uses Apple's Core ML build (apple/coreml-depth-anything-v2-small, Apache License 2.0), unmodified.
 
 Licensed under the Apache License, Version 2.0; see the full text above under
 "MediaPipe".
