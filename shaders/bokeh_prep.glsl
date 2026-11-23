@@ -11,7 +11,9 @@ void main() {
     float lm[MAX_LAYERS];
     vec2 p = uv * uImageSize;
     for (int i = 0; i < MAX_LAYERS; ++i) lm[i] = i < uLayerCount ? layerMask(i, p) : 0.0;
-    float r = bokehRadius(lm, p) * uBokehScale;
     vec3 c = textureLod(uBokehSrc, uv, uBokehSrcLod).rgb;
+    // The depth map follows the photo's edges here too (its own colour as the guide; only highlights are boosted):
+    // texels of a sharp subject read as background would be spread around it in steps.
+    float r = bokehRadius(lm, p, c) * uBokehScale;
     fragColor = vec4(c * bokehFade(r), r);
 }
