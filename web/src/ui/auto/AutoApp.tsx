@@ -33,6 +33,7 @@ import { ExportFrameControls } from '../common/ExportFrameControls';
 import { DEFAULT_NAME_TEMPLATE, NAME_KEYWORDS } from '../../engine/export/NameTemplate';
 import { activeLook, availableFilterOptions, EDITS_NAME, EXPORT_SIZES, hasFilmLeak, isFilterActive, lookName, paramsOf, SETTINGS, type AutoPhoto, type AutoStore, type BatchExport, type ImportMode, type LookMode } from './AutoStore';
 import { shortcutKey } from '../common/shortcutKey';
+import { useEditClipboardKeys } from '../common/EditClipboardKeys';
 
 /** The frame around the photo in the fit view, CSS pixels, as RawBoy's (grey, white or black: click outside the photo). */
 const FRAME_WIDTH = 12;
@@ -167,8 +168,17 @@ function GridView({ store, scroll, lastViewed }: {
     window.getSelection()?.removeAllRanges(); // Shift-click also extends the page's text selection
   };
 
+  // Cmd/Ctrl+C on one selected photo copies its edits, Cmd/Ctrl+V gives them to the selected photos.
+  const copySource = selection.size === 1 ? [...selection][0] : null;
+  const copyDialog = useEditClipboardKeys(
+    'auto',
+    !exporting,
+    (groups) => store.copyEdits(copySource, groups),
+    () => store.pasteEdits(selectionRef.current),
+  );
   return (
     <div className="editor">
+      {copyDialog}
       <header className={`toolbar${selecting ? ' selection-bar' : ''}`}>
         {selecting ? (
           <>
@@ -978,6 +988,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
   });
   // Swipe left/right on touch screens, when not zoomed (one finger pans then; the ‹ › buttons still work).
   const swipe = useRef<{ x: number; y: number } | null>(null);
+  const copyDialog = useEditClipboardKeys('auto', loaded && !cropMode, (groups) => store.copyEdits(id, groups), () => store.pasteEdits(new Set([id])));
   if (!photo || !analysis) return null;
   // What the look strip's place holds and what press-and-hold takes away: RawBoy edits, a preset or the look.
   const develop = photo.edits ? 'RawBoy edits' : photo.preset ? 'preset' : 'look';
@@ -1079,6 +1090,7 @@ function DetailView({ store, id, onEditInRawBoy }: { store: AutoStore; id: strin
 
   return (
     <div className="editor">
+      {copyDialog}
       <header className="toolbar">
         <AppSwitcher />
         <button type="button" className="icon" title="Back" onClick={() => store.closeDetail()}>←</button>

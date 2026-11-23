@@ -25,6 +25,8 @@ export const PRO_HELP: HelpSection[] = [
       { how: 'Press and hold', text: 'Compare with the as-shot render.' },
       { keys: ['\\'], how: 'or Compare', text: 'Show the as-shot render until pressed again.' },
       { keys: ['C'], how: 'or Crop (top bar)', text: 'Open or close Crop & rotate. Drag the corners, edges or inside of the frame to crop, or outside it to rotate (straighten, up to 45° each way). Extend canvas lets the crop reach past the photo\'s edges; the new area is filled from the picture.' },
+      { keys: ['Ctrl/⌘ C'], how: 'Copy edits', text: 'Copies this photo\'s edits (not Lens, Masks, Denoise, Detail or generated leaks; never crop or rotation). Press it twice quickly to choose which groups.' },
+      { keys: ['Ctrl/⌘ V'], how: 'Paste edits', text: 'Gives this photo the copied edits (also from Auto), as one undo step.' },
       { keys: ['Shift+C'], how: 'or Copy previous edits', text: 'Copies the previous photo\'s edits onto this photo (white balance only if changed; crop, rotation, flips, perspective, masks, light leaks, effects and healing stay).' },
       { keys: ['D'], how: 'or click outside the photo', text: 'Change the frame around it: grey, white or black.' },
       { how: 'Histogram', text: 'Above the tabs: red, green and blue levels of the developed photo, with the share of crushed shadows (left) and clipped highlights (right). Click it to mark them blue and red on the photo.' },

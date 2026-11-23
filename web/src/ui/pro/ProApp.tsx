@@ -33,6 +33,7 @@ import { PresetsIcon } from '../common/PresetsIcon';
 import { histogramFromRgba, type Histogram } from '../../engine/develop/Histogram';
 import { renderThumbnail } from '../../engine/gl/ThumbnailRenderer';
 import { shortcutKey } from '../common/shortcutKey';
+import { useEditClipboardKeys } from '../common/EditClipboardKeys';
 
 /** Frame around the photo in the fit view, CSS pixels (click outside the photo to change its colour). */
 const FRAME_WIDTH = 12;
@@ -486,8 +487,10 @@ export function ProApp({ store, backToAuto, onSendToAuto }: { store: ProStore; b
     }
   };
 
+  const copyDialog = useEditClipboardKeys('pro', hasImage && !busy, store.copyEdits, store.pasteEdits);
   return (
     <div className="editor">
+      {copyDialog}
       <header className="toolbar pro-toolbar">
         <AppSwitcher />
         <div className="title">

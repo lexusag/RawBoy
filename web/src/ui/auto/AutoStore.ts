@@ -7,7 +7,8 @@ import { suggestFilm, suggestLook } from '../../engine/auto/looks/LookSuggester'
 import { autoDevelop } from '../../engine/auto/analysis/AutoTone';
 import type { DevelopParams } from '../../engine/develop/DevelopParams';
 import { randomFilmRoll, type FilmLeak } from '../../engine/develop/FilmLeaks';
-import { applyPreset, chosenLensPreset, decodePresets, isLensPreset, layerPreset, NO_LENS_PRESET, PRESET_GROUPS, putLensPreset, replacesLook, sameLensPreset, type Preset } from '../../engine/develop/Presets';
+import { copiedEdits, copyEdits } from '../common/EditClipboard';
+import { applyPreset, chosenLensPreset, decodePresets, isLensPreset, layerPreset, NO_LENS_PRESET, PRESET_GROUPS, putLensPreset, replacesLook, sameLensPreset, type Preset, type PresetGroup } from '../../engine/develop/Presets';
 import { PresetStore } from '../pro/PresetStore';
 import { exportImage } from '../../engine/export/Exporter';
 import { EXTENSIONS, ExportSettingsStore, type ExportSettings } from '../../engine/export/ExportSettings';
@@ -768,6 +769,43 @@ export class AutoStore {
     const photos = this._state.photos.filter((p) => ids.has(p.id));
     for (const p of photos) this.changeDevelop(p.id, (q) => withPreset(q, preset), true);
     this.update({ message: `${preset.name} applied to ${photos.length === 1 ? '1 photo' : `${photos.length} photos`}` });
+  }
+
+  /**
+   * Cmd/Ctrl+C: keeps photo [id]'s develop (look, preset or RawBoy edits, with its sliders) as [groups] of edits (the
+   * preset defaults when null) for pasteEdits, here or in Pro. Crop and rotation never.
+   */
+  copyEdits(id: string | null, groups: readonly PresetGroup[] | null = null) {
+    const p = id ? this.photo(id) : undefined;
+    if (!id) {
+      this.update({ message: 'Select one photo to copy its edits' });
+      return;
+    }
+    const params = p && paramsOf(p);
+    if (!p || !params) {
+      this.update({ message: 'Wait until the photo is analysed to copy its edits' });
+      return;
+    }
+    const copied = copyEdits(params, groups ?? undefined);
+    this.update({ message: copied ? `Copied ${copied.groups.length === 1 ? '1 group' : `${copied.groups.length} groups`} of edits from ${p.name}` : 'Nothing to copy: no group chosen' });
+  }
+
+  /**
+   * Cmd/Ctrl+V: gives the photos in [ids] (the opened photo, or the grid's selection) the copied edits like a preset of
+   * those groups (see withPreset), one undo step each. Not while exporting.
+   */
+  pasteEdits(ids: ReadonlySet<string>) {
+    const preset = copiedEdits();
+    if (!preset) {
+      this.update({ message: 'Nothing copied yet: press Cmd/Ctrl+C on a photo first' });
+      return;
+    }
+    if (ids.size === 0) {
+      this.update({ message: 'Select photos to paste the copied edits onto' });
+      return;
+    }
+    this.applyPresetTo(preset, ids);
+    if (!isLensPreset(preset) && !this._state.export) this.update({ message: `Pasted edits onto ${ids.size === 1 ? '1 photo' : `${ids.size} photos`}` });
   }
 
   /**

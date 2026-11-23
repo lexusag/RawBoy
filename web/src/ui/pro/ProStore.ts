@@ -10,6 +10,7 @@ import { MAX_EFFECTS, newLightEffect, type FxKind, type LightEffect } from '../.
 import { randomFilmLeak, randomFilmRoll, type FilmLeak, type FilmLeakType } from '../../engine/develop/FilmLeaks';
 import { MAX_HEAL_POINTS, MAX_HEAL_SPOTS, type HealSpot } from '../../engine/develop/HealSpots';
 import { MAX_LEAKS, newLightLeak, type LeakKind, type LightLeak } from '../../engine/develop/LightLeaks';
+import { copiedEdits, copyEdits } from '../common/EditClipboard';
 import { applyPreset, captureLensPreset, capturePreset, decodePresets, encodePresets, putLensPreset, type Preset, type PresetGroup } from '../../engine/develop/Presets';
 import { EXTENSIONS, ExportSettingsStore, baseNameOf, fileName, type ExportSettings } from '../../engine/export/ExportSettings';
 import { FrameColors } from '../../engine/gl/DevelopRenderer';
@@ -227,6 +228,34 @@ export class ProStore {
     if (next.film) this.lastFilm = next.film;
     this.commit(next, true);
     this.set({ message: `Copied edits from ${prev.fileName}` });
+  };
+
+  /**
+   * Cmd/Ctrl+C: keeps the open photo's [groups] of edits (the preset defaults when null: not Lens, Masks, Denoise,
+   * Detail or generated leaks) for pasteEdits, here or in Auto. Geometry never.
+   */
+  copyEdits = (groups: readonly PresetGroup[] | null = null) => {
+    if (!this.hasImage || this.busy) return;
+    this.flushStroke();
+    this.flushHeal();
+    const copied = copyEdits(this._state.params, groups ?? undefined);
+    this.set({ message: copied ? `Copied ${copied.groups.length === 1 ? '1 group' : `${copied.groups.length} groups`} of edits` : 'Nothing to copy: no group chosen' });
+  };
+
+  /** Cmd/Ctrl+V: gives the open photo the copied edits as one undo step. */
+  pasteEdits = () => {
+    if (!this.hasImage || this.busy) return;
+    const preset = copiedEdits();
+    if (!preset) {
+      this.set({ message: 'Nothing copied yet: press Cmd/Ctrl+C on a photo first' });
+      return;
+    }
+    this.flushStroke();
+    this.flushHeal();
+    const next = applyPreset(preset, this._state.params);
+    if (next.film) this.lastFilm = next.film;
+    this.commit(next, true);
+    this.set({ message: 'Pasted edits' });
   };
 
   setViewSize(width: number, height: number, frame: number) {

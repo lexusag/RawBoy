@@ -274,6 +274,48 @@ final class DesktopModel: ObservableObject {
 
     // MARK: Moving a photo between Pro and Auto
 
+    /** The "which groups to copy" sheet (⌘C pressed twice, or Photo › Copy Edits…). */
+    @Published var copyingGroups = false
+    private var lastCopyKey: Date?
+    /** Two ⌘C presses this close open the sheet. */
+    private static let doubleCopy: TimeInterval = 0.6
+
+    /** The Auto photo ⌘C copies from: the open one, else the only selected one. */
+    private var autoCopySource: String? {
+        if let id = auto.selected { return id }
+        return auto.selection.count == 1 ? auto.selection.first : nil
+    }
+
+    /** ⌘C: copies the open photo's edits (the preset defaults); pressed again at once it asks which groups. */
+    func copyKey() {
+        let now = Date()
+        if let last = lastCopyKey, now.timeIntervalSince(last) < Self.doubleCopy {
+            lastCopyKey = nil
+            copyingGroups = true
+            return
+        }
+        lastCopyKey = now
+        copyEdits(nil)
+    }
+
+    /** Copies [groups] of the open photo's edits (nil: the preset defaults), in Pro or Auto. */
+    func copyEdits(_ groups: Set<PresetGroup>?) {
+        switch mode {
+        case .pro: vm.copyEdits(groups)
+        case .auto: auto.copyEdits(autoCopySource, groups)
+        case .browse: break
+        }
+    }
+
+    /** ⌘V: gives the copied edits to the open photo, or in Auto's grid to the selected photos. */
+    func pasteEdits() {
+        switch mode {
+        case .pro: vm.pasteEdits()
+        case .auto: auto.pasteEdits(auto.selected.map { Set([$0]) } ?? auto.selection)
+        case .browse: break
+        }
+    }
+
     /** The Auto photo "Edit in Pro" means: the open one, else the only selected one, else the focused one. */
     var autoPhotoForPro: AutoPhoto? {
         if let id = auto.selected { return auto.photo(id) }

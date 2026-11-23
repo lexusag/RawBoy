@@ -1325,6 +1325,56 @@ final class AutoViewModel: ObservableObject {
         message = "Copied from \(source.name)"
     }
 
+    /**
+     * ⌘C: keeps photo [id]'s develop (look, preset or RawBoy edits, with its sliders) as [groups] of edits (the preset
+     * defaults when nil) for [pasteEdits], here or in Pro. Crop and rotation never.
+     */
+    func copyEdits(_ id: String?, _ groups: Set<PresetGroup>? = nil) {
+        guard let id else {
+            message = "Select one photo to copy its edits"
+            return
+        }
+        guard let params = photo(id)?.params else {
+            message = "Wait until the photo is analysed to copy its edits"
+            return
+        }
+        message = EditClipboard.summary(EditClipboard.copy(params, groups ?? PresetGroup.defaultGroups))
+    }
+
+    /**
+     * ⌘V: gives the photos in [ids] (the opened photo, or the grid's selection) the copied edits, one undo step each.
+     * A photo with RawBoy edits takes them into those; any other gets them as its preset, on top of its look (and over
+     * a preset it already has, field by field). Not while exporting.
+     */
+    func pasteEdits(_ ids: Set<String>) {
+        guard export == nil else { return }
+        guard let copied = EditClipboard.preset else {
+            message = EditClipboard.nothingCopied
+            return
+        }
+        let chosen = photos.filter { ids.contains($0.id) }
+        guard !chosen.isEmpty else {
+            message = "Select photos to paste the copied edits onto"
+            return
+        }
+        if copied.isLensPreset {
+            applyChosenPreset(copied, to: nil)
+            return
+        }
+        for p in chosen {
+            changeDevelop(p.id, force: true) {
+                if let e = $0.edits {
+                    $0.edits = Presets.apply(copied, e)
+                } else if let under = $0.preset, !under.isLensPreset {
+                    $0.preset = copied.groups.contains(.light) ? copied : EditClipboard.layer(under, copied)
+                } else {
+                    $0.preset = copied
+                }
+            }
+        }
+        message = "Pasted edits onto \(chosen.count == 1 ? "1 photo" : "\(chosen.count) photos")"
+    }
+
     /** [force]: its own undo step (false: a slider, coalesced; nil: Undo or Redo itself, not recorded). */
     private func changeDevelop(_ id: String, force: Bool? = false, persist: Bool = true, _ change: (inout AutoPhoto) -> Void) {
         let old = photo(id)
