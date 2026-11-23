@@ -114,7 +114,7 @@ Web, Desktop and iOS take every field of `DevelopParams` except where noted (che
 | Open JPEG / HEIC / PNG / TIFF, Ultra HDR input | 1.4.7 | ✓ | ✓ 1.17.0 | ✓ | ✓ | |
 | Drag and drop, file associations | ≤1.1.1 | ✓ drop | ✓ drop, Open With (opens Browse) | ✓ | ✓ Open with | |
 | Wheel zoom (also past the whole photo), `Z`, pinch | 1.3.0; 1.13.4 | ✓ | ✓ 1.17.0 | ✓ pinch 1.4.7 | ✓ pinch | |
-| Wheel over a slider (Shift, ⌘ fine) | 1.2.0 | ✓ | ✓ 1.17.0 | n/a | n/a | |
+| Wheel over a slider (Shift, ⌘ fine) | 1.2.0 | ✓ | ✓ 1.17.0 | n/a | n/a | Mouse wheel only; a trackpad scrolls the panel, Option + scroll moves the slider (unreleased) |
 | Middle button pans, Space pans | 1.15.3 | ✓ | ✓ 1.17.0 | n/a | n/a | |
 | Keyboard shortcuts + non-Latin layouts | 1.2.0 | ✓ | ✓ 1.17.0 (physical key codes) | n/a | n/a | |
 | `D` frame colour | 1.14.0 | ✓ | ✓ 1.17.0 | — | — | tap outside the photo on the phones |

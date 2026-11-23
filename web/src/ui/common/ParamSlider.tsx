@@ -26,6 +26,18 @@ if (typeof window !== 'undefined') {
 export const continuesPageScroll = (e: WheelEvent) => e.timeStamp - lastPageScroll < SCROLL_GRACE;
 
 /**
+ * Whether a wheel event comes from a trackpad (or another smooth-scroll surface) rather than a notched wheel. A notched
+ * wheel's legacy `wheelDeltaY` is always a multiple of 120 (also in line and page mode); a trackpad's is not. Sliders
+ * and stock lists leave such events to the page, so a trackpad scrolling a panel never gets caught by a slider under
+ * the pointer; Alt makes a trackpad turn them on purpose. Without `wheelDeltaY` (not a real browser) it is a mouse.
+ */
+export function isTrackpadWheel(e: Pick<WheelEvent, 'deltaMode'> & { wheelDeltaY?: number; wheelDeltaX?: number }): boolean {
+  if (e.deltaMode !== 0) return false;
+  const w = e.wheelDeltaY || e.wheelDeltaX;
+  return typeof w === 'number' && w % 120 !== 0;
+}
+
+/**
  * Wheel notches in a wheel event, positive for up. A mouse wheel gives one per click (100 px in Chrome, ~50 in
  * Firefox, 3 lines in line mode); a trackpad gives fractions. Shift turns the wheel horizontal in most browsers.
  */
@@ -213,7 +225,7 @@ export function ParamSlider({ label, value, min, max, defaultValue, step, format
     // Not React's onWheel: that listener is passive, so it couldn't stop the page from scrolling.
     const onWheel = (e: WheelEvent) => {
       const { value, min, max, s, disabled, onChange } = live.current;
-      if (disabled || continuesPageScroll(e)) return;
+      if (disabled || continuesPageScroll(e) || (isTrackpadWheel(e) && !e.altKey)) return;
       const notches = wheelNotches(e);
       if (notches === 0) return;
       e.preventDefault(); // also keeps Ctrl+wheel from zooming the page
