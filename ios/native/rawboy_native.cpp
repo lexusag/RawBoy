@@ -5,6 +5,8 @@
 #include "blemish.h"
 #include "rawboy.h"
 
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -160,6 +162,27 @@ bool rb_copy_tile(const RBImage* image, int x, int y, int width, int height, uin
     if (x < 0 || y < 0 || width <= 0 || height <= 0 || x + width > img.width || y + height > img.height) return false;
     rawboy::copyTile(img, x, y, width, height, dst);
     return true;
+}
+
+bool rb_depth_info(const RBImage* image, int32_t* out) {
+    const DecodedImage::DepthData& d = image->image.depth;
+    if (d.empty()) return false;
+    out[0] = d.width;
+    out[1] = d.height;
+    out[2] = d.hardware ? 1 : 0;
+    out[3] = d.subjectDetected ? 1 : 0;
+    out[4] = std::clamp(static_cast<int32_t>(std::lround(d.focusDepth * 65535.0f)), 0, 65535);
+    return true;
+}
+
+const uint8_t* rb_depth_data(const RBImage* image, size_t* count) {
+    *count = image->image.depth.data.size();
+    return *count ? image->image.depth.data.data() : nullptr;
+}
+
+const uint16_t* rb_depth_millimetres(const RBImage* image, size_t* count) {
+    *count = image->image.depth.millimetres.size();
+    return *count ? image->image.depth.millimetres.data() : nullptr;
 }
 
 void rb_noise_level(const RBImage* image, float* out) {

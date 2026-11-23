@@ -72,6 +72,12 @@ public final class ShaderParams: @unchecked Sendable {
     public let flareSource: PreviewImage?
     /** The highlight-boosted whole image the masks' lens blur starts from (BokehTexture, `uBokeh`), or nil: no lens blur. */
     public let bokehSource: PreviewImage?
+    /** The portrait depth map (`uDepthMap`) and `uDepthBlur`: max disc radius in full-resolution pixels (0 = off), focus, falloff, edge softness (0..1). */
+    public let depthMap: DepthMap?
+    public let depthBlurPx: Float
+    public let depthFocus: Float
+    public let depthFalloff: Float
+    public let depthEdge: Float
     /** Portrait retouch: the gains map (PortraitRetouch, packed into the skin texture) and `uSkinFix`, 0 = off. */
     public let retouchMap: RetouchMap?
     public let skinFix: Float
@@ -95,7 +101,8 @@ public final class ShaderParams: @unchecked Sendable {
                 anamorphicLength: [Float] = AnamorphicColor.neutral.lengthVec,
                 anamorphicBar: [Float] = AnamorphicColor.neutral.barVec, flareSource: PreviewImage? = nil,
                 bokehSource: PreviewImage? = nil, retouchMap: RetouchMap? = nil, skinFix: Float = 0,
-                lumaContrast: Float = 0, monoFx: Float = 0) {
+                lumaContrast: Float = 0, monoFx: Float = 0, depthMap: DepthMap? = nil, depthBlurPx: Float = 0,
+                depthFocus: Float = 0.2, depthFalloff: Float = 0.5, depthEdge: Float = 0.3) {
         self.whiteBalance = whiteBalance
         self.exposure = exposure
         self.contrast = contrast
@@ -147,6 +154,11 @@ public final class ShaderParams: @unchecked Sendable {
         self.skinFix = skinFix
         self.lumaContrast = lumaContrast
         self.monoFx = monoFx
+        self.depthMap = depthMap
+        self.depthBlurPx = depthMap != nil ? depthBlurPx : 0
+        self.depthFocus = depthFocus
+        self.depthFalloff = depthFalloff
+        self.depthEdge = depthEdge
     }
 
     /**
@@ -199,7 +211,8 @@ public final class ShaderParams: @unchecked Sendable {
                             grainSizeScale: Float = 1, grainStrength: Float = 1, maskView: String? = nil,
                             brushFor: (MaskLayer) -> BrushRaster? = { _ in nil },
                             film: FilmData? = nil, flareSource: PreviewImage? = nil,
-                            bokehSource: PreviewImage? = nil, retouchMap: RetouchMap? = nil) -> ShaderParams {
+                            bokehSource: PreviewImage? = nil, retouchMap: RetouchMap? = nil,
+                            depthMap: DepthMap? = nil) -> ShaderParams {
         let filmUsed = film.flatMap { $0.stock.id == p.film ? $0 : nil }
         let sourceWhite = WhiteBalance.xyFromTempTint(Double(asShot.temperature), Double(asShot.tint))
         let targetWhite = WhiteBalance.xyFromTempTint(Double(p.temperature), Double(p.tint))
@@ -256,7 +269,11 @@ public final class ShaderParams: @unchecked Sendable {
             flareSource: flareSource, bokehSource: bokehSource, retouchMap: retouchMap,
             skinFix: PortraitRetouch.skinFix(strength: p.portraitRetouch, map: retouchMap),
             lumaContrast: powf(2, p.lumaContrast / 100 * 0.7) - 1,
-            monoFx: isMono(p) ? 1 : 0)
+            monoFx: isMono(p) ? 1 : 0,
+            depthMap: depthMap,
+            depthBlurPx: p.depthBlur / 100 * Masks.maxLensBlur * Float(max(lens.width, lens.height)),
+            depthFocus: (p.depthFocus / 100).clamped(0, 1), depthFalloff: (p.depthFalloff / 100).clamped(0, 1),
+            depthEdge: (p.depthEdge / 100).clamped(0, 1))
     }
 
     /// The picture is black and white: Camera's B&W mode (DevelopParams.monoFx) or a bundled mono LUT at full strength.

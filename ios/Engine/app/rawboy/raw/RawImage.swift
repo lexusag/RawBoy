@@ -11,6 +11,34 @@ public struct RawImageError: LocalizedError {
 }
 
 /**
+ * The portrait depth map of a RawBoy Camera DNG (its `"RBDP"` trailer): upright, 8 bits, 0 = near and 255 = far.
+ * A class so a texture upload and the lens blur's cache can tell one map from another by identity.
+ */
+public final class DepthMap: @unchecked Sendable {
+    public let width: Int
+    public let height: Int
+    /** From a depth sensor, not an estimate. */
+    public let hardware: Bool
+    public let subjectDetected: Bool
+    /** The depth the camera focused on (0..1). */
+    public let focusDepth: Float
+    public let data: [UInt8]
+    /** Distance per pixel in millimetres (0 unknown, 65535 farther), version 2 trailers only. */
+    public let millimetres: [UInt16]?
+
+    public init(width: Int, height: Int, hardware: Bool, subjectDetected: Bool, focusDepth: Float, data: [UInt8],
+                millimetres: [UInt16]? = nil) {
+        self.width = width
+        self.height = height
+        self.hardware = hardware
+        self.subjectDetected = subjectDetected
+        self.focusDepth = focusDepth
+        self.data = data
+        self.millimetres = millimetres
+    }
+}
+
+/**
  * A decoded raw file held in native memory as linear Rec.2020 half floats,
  * white balanced for the as-shot illuminant and oriented for display.
  * (Kotlin's RawNative is the JNI surface; here the C API in rawboy_native.h is called directly.)
@@ -47,6 +75,9 @@ public final class RawImage: @unchecked Sendable {
     /** Lens name and embedded lens corrections. */
     public let lens: LensInfo
 
+    /** The depth map RawBoy Camera saved in the DNG (Portrait blur), or nil. */
+    public let depth: DepthMap?
+
     /** The photo's EXIF essentials, for exports (Android copies EXIF from the file instead). */
     public let metadata: PhotoMetadata
 
@@ -77,6 +108,18 @@ public final class RawImage: @unchecked Sendable {
         let shading = gains.map { Array(UnsafeBufferPointer(start: $0, count: count)) } ?? []
         lens = LensInfo.fromNative(
             name: String(cString: rb_lens_name(handle)), width: width, height: height, v: info, shadingGains: shading)
+        var depthInfo = [Int32](repeating: 0, count: 5)
+        var depthCount = 0
+        if rb_depth_info(handle, &depthInfo), let bytes = rb_depth_data(handle, &depthCount), depthCount > 0 {
+            var mmCount = 0
+            let mm = rb_depth_millimetres(handle, &mmCount).map { Array(UnsafeBufferPointer(start: $0, count: mmCount)) }
+            depth = DepthMap(
+                width: Int(depthInfo[0]), height: Int(depthInfo[1]), hardware: depthInfo[2] != 0,
+                subjectDetected: depthInfo[3] != 0, focusDepth: Float(depthInfo[4]) / 65535,
+                data: Array(UnsafeBufferPointer(start: bytes, count: depthCount)), millimetres: mm)
+        } else {
+            depth = nil
+        }
     }
 
     deinit { close() }

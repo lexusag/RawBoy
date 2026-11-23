@@ -222,10 +222,15 @@ public final class PhotoSession: ObservableObject {
         }
     }
 
-    /** Starts making the lens blur's source copy once a mask layer of [p] blurs (see BokehTexture). */
+    /** [p] asks for lens blur: a mask layer's, or Portrait blur on a photo with a depth map. */
+    private nonisolated static func blurs(_ p: DevelopParams, depth: Bool) -> Bool {
+        p.masks.contains(where: { $0.enabled && $0.adjust.lensBlur > 0 }) || (depth && p.depthBlur > 0)
+    }
+
+    /** Starts making the lens blur's source copy once a mask layer of [p] or Portrait blur blurs (see BokehTexture). */
     private func ensureBokehSource(_ p: DevelopParams? = nil) {
         guard let img = image, bokehSource == nil, bokehTask == nil,
-              (p ?? params).masks.contains(where: { $0.enabled && $0.adjust.lensBlur > 0 }) else { return }
+              Self.blurs(p ?? params, depth: img.depth != nil) else { return }
         bokehTask = Task {
             let source = await Task.detached(priority: .userInitiated) {
                 img.createPreview(maxDimension: BokehTexture.sourceMaxDimension, boostHighlights: true)
@@ -242,8 +247,12 @@ public final class PhotoSession: ObservableObject {
         ShaderParams.from(p, asShot: defaults, lut: lut ?? (useSelectedLut ? lutData : nil), lens: lensFor(p), base: base,
                           bloomSources: bloomSources, skinMask: skin.mask, maskView: maskView,
                           brushFor: { [unowned self] in self.brushRaster($0) }, film: film ?? (useSelectedLut ? filmData : nil),
-                          flareSource: flareSource, bokehSource: bokehSource, retouchMap: retouch ?? retouchMap)
+                          flareSource: flareSource, bokehSource: bokehSource, retouchMap: retouch ?? retouchMap,
+                          depthMap: image?.depth)
     }
+
+    /** The photo's portrait depth map (RawBoy Camera DNG), or nil: the Portrait blur controls need one. */
+    public var depthMap: DepthMap? { image?.depth }
 
     /**
      * The painted mask of [layer] brought up to its strokes (incrementally while a stroke grows), or nil without
@@ -709,6 +718,7 @@ public final class PhotoSession: ObservableObject {
         p.tint = Float(tt[1])
         p.displaySource = image.displayReferred
         p.clipLevel = image.clipLevel
+        if let depth = image.depth { p.depthFocus = (depth.focusDepth.clamped(0, 1) * 100).rounded() }
         return p
     }
 

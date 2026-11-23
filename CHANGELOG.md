@@ -1,3 +1,9 @@
+**RawBoy Desktop and iOS Pro: Portrait blur from a Camera DNG's depth map (2026-11-23)**
+
+- Portrait section › **Portrait blur**, **Focus depth**, **Depth falloff**, **Edge softness**, only on photos with a depth map (RawBoy Camera's `RBDP` trailer, Android experimental setting). Same numbers and look as the web: the existing lens blur passes (`BokehTexture`) now read the real depth map (`DepthTexture` in `DevelopTextures`, R8) and the 512 px base copy that makes the blur follow the photo's edges, where Metal used to bind 1x1 stand-ins. The sliders are in the Detail preset group (Focus depth stays per photo, like web) and in edits sidecars; focus starts at the camera's own focus depth.
+- Native: `rb_depth_info` / `rb_depth_data` / `rb_depth_millimetres` expose `DecodedImage::depth` to Swift (`RawImage.depth`). Export uses the same map. Without a map the sliders are not offered and the shader is unchanged.
+- Not ported: Pick focus depth, the depth estimate for photos without a map (web only: ONNX Runtime), the distance readout, and iOS Camera depth capture (AVDepthData). Only compiled and unit-tested by CI (`DepthBlurTests`), not tried on a Mac or an iPhone with a Camera DNG yet.
+
 **Portrait blur follows the photo's edges, not the depth map's pixels (all apps, 2026-11-23)**
 
 - Bug: Camera portraits (and the same DNG's Portrait blur in Pro) notched straight edges in regular steps: a phone stand's arms came out saw-toothed. The raw was clean; the sharp/blurred boundary came from the stored depth map, 518×392 (~8 raw px a texel) with hard steps, read bilinearly, so it followed the map's texel grid (the steps repeated every ~23 raw px along an edge sloped 0.35, one texel every ~3 rows). Not the burst merge (a synthetic slanted-edge burst merged to the reference frame's edge), the lossy JPEG XL re-save (distance 0.2, and the camera JPEG is developed before it) or the demosaic.

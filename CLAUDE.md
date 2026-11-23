@@ -296,6 +296,7 @@ Gradle modules: `:engine` (Android library, namespace `app.rawboy.engine`; Kotli
   Shaders.kt/.ts and gen.sh; split out because a generated Kotlin string constant must stay under 64 KB): a weighted median of the 4×4 texels by distance and
   likeness of the 512 px base copy to the pixel (joint bilateral upsampling); a plain bilinear read notched straight
   edges in steps of the map's texels, and a weighted mean left lumps (the blur starts just behind the focus depth).
+  Swift (Desktop, iOS Pro; 2026-11-23): `RawImage.depth` (`rb_depth_*`) → `ShaderParams.from(depthMap:)` (`depthBlurPx` = `depthBlur` × `Masks.maxLensBlur` × long side) → `DevelopTextures.bindDepth` (`uDepthMap`, R8) and `BokehTexture` (also gets `uBase`, the edge guide); sliders in `ControlsPanel.portraitBlur` only when the photo has a map. No estimate, pick tool or Camera capture on Swift yet.
   Web Pro (no Camera depth in the file): `PhotoSession.ensureDepthMap` (on Portrait blur > 0, after the skin mask for
   `SkinMask.person`) → `retouch/DepthEstimator.ts` in `worker/depth.worker.ts` (ONNX Runtime Web WASM bundled by Vite; `optimizeDeps.exclude` it, or in dev its WASM URL serves index.html,
   model from Camera's assets via `vite.config.ts`, both same-origin for COEP); `state.depth` says file/ai.
