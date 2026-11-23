@@ -458,6 +458,14 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
     /** Experimental: where the saved depth map comes from ([DepthSource]). */
     fun setDepthSource(source: DepthSource) = change { it.copy(depthSource = source) }
 
+    /**
+     * The top bar's Portrait button: on = Save depth map and Generate portrait in camera together; off = no portrait
+     * blur (the depth map keeps being saved if it was on before).
+     */
+    fun togglePortrait() = change {
+        if (it.saveDepth && it.depthPortrait) it.copy(depthPortrait = false) else it.copy(saveDepth = true, depthPortrait = true)
+    }
+
     /** Experimental, with [setSaveDepth]: apply portrait bokeh blur in camera when a person or pet is detected. */
     fun setDepthPortrait(on: Boolean) = change { it.copy(depthPortrait = on) }
 

@@ -62,6 +62,8 @@ import kotlin.math.min
  */
 class DepthCalibrationActivity : Activity(), GLSurfaceView.Renderer {
     private lateinit var glView: GLSurfaceView
+    /** What to do: stays on screen the whole time (it used to be replaced by the progress within a second). */
+    private lateinit var instructions: TextView
     private lateinit var status: TextView
     private lateinit var finishButton: Button
     private val cameraThread = HandlerThread("RawBoy-calibration").apply { start() }
@@ -99,6 +101,13 @@ class DepthCalibrationActivity : Activity(), GLSurfaceView.Renderer {
             setRenderer(this@DepthCalibrationActivity)
             renderMode = GLSurfaceView.RENDERMODE_CONTINUOUSLY
         }
+        instructions = TextView(this).apply {
+            setTextColor(Color.WHITE)
+            setBackgroundColor(0x99000000.toInt())
+            textSize = 17f
+            setPadding(48, 48, 48, 24)
+            text = tr("Point the camera at a scene with near and far things (0.3 to 3 m), then move the phone slowly from side to side. Aim close and far now and then.")
+        }
         status = TextView(this).apply {
             setTextColor(Color.WHITE)
             setBackgroundColor(0x99000000.toInt())
@@ -111,6 +120,7 @@ class DepthCalibrationActivity : Activity(), GLSurfaceView.Renderer {
         }
         val overlay = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            addView(instructions)
             addView(status)
             addView(finishButton, LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { gravity = Gravity.END; setMargins(0, 24, 48, 0) })
         }
@@ -118,7 +128,7 @@ class DepthCalibrationActivity : Activity(), GLSurfaceView.Renderer {
             addView(glView)
             addView(overlay, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM).apply { bottomMargin = 96 })
         })
-        say(tr("Point the camera at a scene with near and far things (0.3 to 3 m), then move the phone slowly from side to side. Aim close and far now and then."))
+        say(tr("Starting the camera…"))
     }
 
     private fun say(text: String) = runOnUiThread { status.text = text }
@@ -176,6 +186,7 @@ class DepthCalibrationActivity : Activity(), GLSurfaceView.Renderer {
         running = false
         runOnUiThread {
             status.text = message
+            instructions.visibility = android.view.View.GONE
             finishButton.text = tr("Close")
         }
     }
@@ -383,6 +394,7 @@ class DepthCalibrationActivity : Activity(), GLSurfaceView.Renderer {
                     DualPixelCalibrations.put(this, calibratedCamera, fit.calibration)
                     Log.d(TAG, "calibrated: $fit from $pairs pairs")
                     runOnUiThread {
+                        instructions.visibility = android.view.View.GONE
                         status.text = tr("Calibrated. Photos on the main lens with Depth from: Dual pixel now save distances in millimetres.") +
                             "\n(%.3f px/D, %d samples)".format(fit.calibration.slope, fit.calibration.samples)
                         finishButton.text = tr("Done")

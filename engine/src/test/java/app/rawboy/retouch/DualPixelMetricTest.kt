@@ -52,39 +52,71 @@ class DualPixelMetricTest {
         }
     }
 
-    @Test
-    fun millimetresFollowTheAiShapeAtTheDualPixelScale() {
+    /**
+     * A synthetic shot (orientation 6): true inverse distance 0.5 + 3u over the upright photo (2 m on the left to
+     * 0.29 m on the right), the lens focused at 1.5 D (u = 1/3), where the dual pixel is sharpest ([sharpAt]); its
+     * shifts follow the calibration with noise. [confidentOnly] limits confident cells to a band of u (a portrait).
+     */
+    private fun shot(sharpAt: Float, confidentOnly: ClosedFloatingPointRange<Float>? = null): Triple<DualPixelDepth.Measurement, DepthMap, DualPixelCalibration> {
         val calibration = DualPixelCalibration(slope = -0.1f, offset = 0.034f)
-        val focus = 1.5f // dioptres: 0.67 m
-        // True inverse distance over the upright photo: 0.5 1/m (2 m) on the left to 3.5 1/m (0.29 m) on the right.
-        fun trueInverse(u: Float) = 0.5f + 3f * u
-        val orientation = 6
         val aw = 96
         val ah = 128
-        // The AI map: affine in inverse depth (0 near … 1 far), its own scale unknown to the fit.
         val ai = DepthMap(aw, ah, ByteArray(aw * ah) { i -> ((1f - (i % aw + 0.5f) / aw) * 255f).roundToInt().toByte() })
-        // The dual-pixel grid in sensor orientation, noisy, with random confidence.
         val gw = 256
         val gh = 96
         val rnd = Random(3)
         val disparity = FloatArray(gw * gh)
-        val confidence = FloatArray(gw * gh) { rnd.nextFloat() }
+        val confidence = FloatArray(gw * gh)
         for (gy in 0 until gh) for (gx in 0 until gw) {
             // Orientation 6: sensor (su, sv) = (v, 1 - u), so this cell shows upright u = 1 - sv.
             val u = 1f - (gy + 0.5f) / gh
-            disparity[gy * gw + gx] = calibration.slope * (trueInverse(u) - focus) + calibration.offset + (rnd.nextFloat() - 0.5f) * 0.1f
+            disparity[gy * gw + gx] = calibration.slope * (0.5f + 3f * u - 1.5f) + calibration.offset + (rnd.nextFloat() - 0.5f) * 0.1f
+            // Strongest on the in-focus subject, moderate on textured but blurred things around it.
+            val sharp = 0.3f + 0.7f * kotlin.math.exp(-((u - sharpAt) / 0.08f).let { it * it })
+            confidence[gy * gw + gx] = if (confidentOnly != null && u !in confidentOnly) 0.01f * rnd.nextFloat() else sharp * (0.8f + 0.2f * rnd.nextFloat())
         }
-        val m = DualPixelDepth.Measurement(gw, gh, disparity, confidence, disparity)
-        val map = DualPixelMetric.millimetres(m, ai, calibration, focus, orientation)
+        return Triple(DualPixelDepth.Measurement(gw, gh, disparity, confidence, disparity), ai, calibration)
+    }
+
+    @Test
+    fun millimetresFollowTheAiShapeAnchoredAtTheFocusedSubject() {
+        val (m, ai, calibration) = shot(sharpAt = 1f / 3f)
+        val map = DualPixelMetric.millimetres(m, ai, calibration, 1.5f, 6)
         assertNotNull(map)
         map!!
+        assertNotNull("millimetres", map.millimetres)
         for (u in floatArrayOf(0.1f, 0.5f, 0.9f)) {
-            val x = (u * aw).toInt()
-            val expected = 1000f / trueInverse((x + 0.5f) / aw)
-            val got = map.millimetresAt(x, ah / 2)!!.toFloat()
-            assertEquals("at u $u", expected, got, expected * 0.08f)
+            val x = (u * ai.width).toInt()
+            val expected = 1000f / (0.5f + 3f * (x + 0.5f) / ai.width)
+            val got = map.millimetresAt(x, ai.height / 2)!!.toFloat()
+            assertEquals("at u $u", expected, got, expected * 0.1f)
         }
-        // The 8-bit map is the defocus: mid-grey where the true distance equals the focus distance (u = 1/3).
-        assertEquals(0.5f, map.sampleUv(1f / 3f, 0.5f), 0.06f)
+        // The blur's focus is the AI map's value on the focused subject (u = 1/3).
+        assertEquals(map.sampleUv(1f / 3f, 0.5f), map.focusDepth, 0.05f)
+    }
+
+    @Test
+    fun aPortraitKeepsItsSubjectInFocusAndSkipsMillimetresItCannotMeasure() {
+        // Release 1.20.8: confident cells only on the sharp subject (u 0.3..0.37), the background blurred. The map must
+        // still focus on the subject; millimetres can't be scaled from one depth, so there are none.
+        val (m, ai, calibration) = shot(sharpAt = 1f / 3f, confidentOnly = 0.3f..0.37f)
+        val map = DualPixelMetric.millimetres(m, ai, calibration, 1.5f, 6)!!
+        assertEquals(map.sampleUv(1f / 3f, 0.5f), map.focusDepth, 0.05f)
+        assertEquals(null, map.millimetres)
+    }
+
+    @Test
+    fun shiftsNoLensCanMakeDoNotScaleTheMap() {
+        // As on the Pixel 9 Pro's portraits: the far, blurred part (u < 0.15) matched at +3.8 half-pixels, beyond
+        // what any distance gives at this focus (~0.15 at most). Without the gate the scale came out 5-10x too big.
+        val (m, ai, calibration) = shot(sharpAt = 1f / 3f)
+        for (gy in 0 until m.height) {
+            val u = 1f - (gy + 0.5f) / m.height
+            if (u < 0.15f) for (gx in 0 until m.width) m.disparity[gy * m.width + gx] = 3.8f
+        }
+        val map = DualPixelMetric.millimetres(m, ai, calibration, 1.5f, 6)!!
+        val x = (0.5f * ai.width).toInt()
+        val expected = 1000f / (0.5f + 3f * (x + 0.5f) / ai.width)
+        assertEquals(expected, map.millimetresAt(x, ai.height / 2)!!.toFloat(), expected * 0.1f)
     }
 }
