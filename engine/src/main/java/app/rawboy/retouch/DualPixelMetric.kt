@@ -20,9 +20,9 @@ data class DualPixelCalibration(val slope: Float, val offset: Float, val samples
  * Millimetre depth from dual pixel (2026-11-23, Pixel 9 Pro W; tools in the PR's notes). Per pixel the dual-pixel shift is
  * too weak for distances: on the main lens it is ~0.1 half-pixel column per dioptre of defocus, the size of its noise
  * (held-out frames against ARCore: 22-27% median error, worse than calling everything the focus distance, 17-19%).
- * Over a whole frame the noise averages out, so the shape comes from the AI estimate (sharp, relative inverse depth)
- * and the dual pixel only sets its scale and offset: `1/z = α × ai + β`, fitted robustly to the dual-pixel's
- * inverse distances on its confident cells. Held out: 8% median error, p90 ~30%.
+ * Over a whole frame the noise averages out, so the shape comes from the AI estimate (sharp, relative inverse depth),
+ * anchored at the lens's focus distance on the sharpest cells, and the dual pixel only sets its scale ([millimetres]).
+ * A free scale-and-offset fit scored 8% median error on desk scenes but collapsed on portraits (see [millimetres]).
  */
 object DualPixelMetric {
     /** At least this many matched samples, spread over at least [MIN_SPREAD] dioptres of defocus, make a calibration. */
@@ -51,41 +51,115 @@ object DualPixelMetric {
     }
 
     /**
-     * The millimetre [DepthMap] of a shot: [ai] (the AI estimate, upright, 0 near … 1 far: affine in inverse depth)
-     * scaled by the dual-pixel measurement [m] (sensor orientation; [exifOrientation] as the photo's) through
-     * [calibration] at [focusDiopters]. The 8-bit map is the defocus (0.5 = the focus distance, like
-     * [DualPixelDepth.compute]); null if the fit has too little to go on or comes out reversed.
+     * The [DepthMap] of a shot on a calibrated lens. The 8-bit map is [ai] itself (0 near … 1 far), focused on what the
+     * camera focused on: the sharpest dual-pixel cells (the lens put them at [focusDiopters]); that part never
+     * depends on the fit, so the portrait blur keeps the subject sharp. Millimetres are added when the frame supports
+     * them: `1/z = D + α × (ai − ai_focus)`, anchored at the focus distance on that subject, with only the scale α
+     * fitted (robustly, through the origin) to the dual pixel's inverse distances relative to the same sharp cells.
+     *
+     * Why anchored: in a portrait the dual pixel is confident only where things are sharp, i.e. on the subject; the
+     * blurred background gives it little. A free scale-and-offset fit then collapsed (release 1.20.8: every distance
+     * ~0.4 m, the subject placed far in front of the focus plane, so the blur hit the subject and spared the
+     * background). Without samples spread over enough of the AI map's depth ([MIN_AI_SPREAD]) there are no millimetres
+     * (a version 1 trailer) rather than wrong ones. Null only when [ai] can't be paired with the frame at all.
      */
     fun millimetres(m: DualPixelDepth.Measurement, ai: DepthMap, calibration: DualPixelCalibration, focusDiopters: Float, exifOrientation: Int): DepthMap? {
-        if (focusDiopters <= 0f) return null
-        val threshold = DualPixelDepth.percentile(m.confidence, 0.5f)
-        val rs = ArrayList<Float>()
-        val invs = ArrayList<Float>()
+        val n = ai.width * ai.height
+        val r = FloatArray(n) { i -> 1f - (ai.data[i].toInt() and 0xff) / 255f }
+        // Each AI pixel's dual-pixel cell.
+        val conf = FloatArray(n)
+        val disp = FloatArray(n)
         for (y in 0 until ai.height) {
             for (x in 0 until ai.width) {
                 val (su, sv) = sensorUv((x + 0.5f) / ai.width, (y + 0.5f) / ai.height, exifOrientation)
-                val gx = (su * m.width).toInt().coerceIn(0, m.width - 1)
-                val gy = (sv * m.height).toInt().coerceIn(0, m.height - 1)
-                val g = gy * m.width + gx
-                if (m.confidence[g] <= threshold) continue
-                val inv = calibration.inverseDistance(m.disparity[g], focusDiopters)
-                if (!(inv > 0.05f && inv < 20f)) continue
-                rs += 1f - (ai.data[y * ai.width + x].toInt() and 0xff) / 255f
-                invs += inv
+                val g = (sv * m.height).toInt().coerceIn(0, m.height - 1) * m.width + (su * m.width).toInt().coerceIn(0, m.width - 1)
+                conf[y * ai.width + x] = m.confidence[g]
+                disp[y * ai.width + x] = m.disparity[g]
             }
         }
-        if (rs.size < 300) return null
-        val (alpha, beta) = robustLine(rs.toFloatArray(), invs.toFloatArray(), rs.size)
-        if (alpha <= 0f) return null
-        val n = ai.width * ai.height
-        val inverse = FloatArray(n) { i -> alpha * (1f - (ai.data[i].toInt() and 0xff) / 255f) + beta }
+        val anchor = focusAnchor(conf, disp, r) ?: return null
+        val (dFocus, rFocus) = anchor
+        val focused = DepthMap(ai.width, ai.height, ai.data, hardware = true, subjectDetected = ai.subjectDetected, focusDepth = 1f - rFocus)
+        if (focusDiopters <= 0f) return focused
+
+        // α: (d − d_focus) / slope = 1/z − D against r − r_focus, over the confident cells: at least a tenth of the
+        // strongest (a median threshold let a blurred background's noise in on portraits).
+        val threshold = USABLE * strongest(conf)
+        // Only shifts the lens can make: from infinity (1/z = 0) to [NEAREST_M]. Blurred, textureless backgrounds
+        // matched at ~+3.8 half-pixels on the Pixel 9 Pro's portraits, where a wall a few metres behind a 40 cm focus
+        // can shift ~0.35: kept, they scaled distances 5-10× and put rooms at infinity.
+        val farthest = -calibration.slope * focusDiopters * 1.2f + SHIFT_SLACK
+        val nearest = calibration.slope * (1f / NEAREST_M - focusDiopters) - SHIFT_SLACK
+        val xs = ArrayList<Float>()
+        val ys = ArrayList<Float>()
+        for (i in 0 until n) {
+            if (conf[i] <= threshold) continue
+            val shift = disp[i] - dFocus
+            if (shift > farthest || shift < nearest) continue
+            xs += r[i] - rFocus
+            ys += shift / calibration.slope
+        }
+        if (xs.size < 300) return focused
+        val x = xs.toFloatArray()
+        if (DualPixelDepth.percentile(x, 0.9f) - DualPixelDepth.percentile(x, 0.1f) < MIN_AI_SPREAD) return focused
+        val alpha = robustSlope(x, ys.toFloatArray())
+        if (!(alpha > MIN_ALPHA && alpha < MAX_ALPHA)) return focused
         val mm = ShortArray(n) { i ->
-            val inv = inverse[i]
+            val inv = focusDiopters + alpha * (r[i] - rFocus)
             (if (inv <= 1f / 65.534f) 65535 else (1000f / inv).roundToInt().coerceIn(1, 65534)).toShort()
         }
-        val spread = max(0.3f, DualPixelDepth.percentile(FloatArray(n) { abs(focusDiopters - inverse[it]) }, 0.98f))
-        val bytes = ByteArray(n) { i -> ((0.5f + 0.5f * (focusDiopters - inverse[i]) / spread).coerceIn(0f, 1f) * 255f).roundToInt().toByte() }
-        return DepthMap(ai.width, ai.height, bytes, hardware = true, subjectDetected = ai.subjectDetected, focusDepth = 0.5f, millimetres = mm)
+        return DepthMap(ai.width, ai.height, ai.data, hardware = true, subjectDetected = ai.subjectDetected, focusDepth = 1f - rFocus, millimetres = mm)
+    }
+
+    /** The nearest distance a shift may stand for (metres), and the matching noise allowed past the physical limits. */
+    private const val NEAREST_M = 0.1f
+    private const val SHIFT_SLACK = 0.05f
+
+    /** The strongest confidence, ignoring the top 0.5% (stray matches). */
+    internal fun strongest(conf: FloatArray): Float = DualPixelDepth.percentile(conf, 0.995f)
+
+    /** Shares of [strongest]: the sharp (in-focus) cells, and those confident enough to scale the map. */
+    private const val SHARP = 0.5f
+    private const val USABLE = 0.1f
+
+    /** The cells sampled must span at least this much of the AI map's 0..1 range (10th to 90th percentile). */
+    const val MIN_AI_SPREAD = 0.2f
+
+    /** Dioptres per unit of the AI map: below, the scale is noise; above, absurd (0 to 1 of the map = 50 D). */
+    private const val MIN_ALPHA = 0.1f
+    private const val MAX_ALPHA = 50f
+
+    /**
+     * Where the camera focused, as (dual-pixel shift, AI value) there: the sharpest cells (at least half the strongest
+     * confidence; it is highest on in-focus texture, however small a part of the frame that is), medians of both.
+     * Null without confident cells.
+     */
+    internal fun focusAnchor(conf: FloatArray, disp: FloatArray, r: FloatArray): Pair<Float, Float>? {
+        val top = SHARP * strongest(conf)
+        val ds = ArrayList<Float>()
+        val rs = ArrayList<Float>()
+        for (i in conf.indices) if (conf[i] >= top && conf[i] > 0f) { ds += disp[i]; rs += r[i] }
+        if (ds.size < 20) return null
+        return DualPixelDepth.percentile(ds.toFloatArray(), 0.5f) to DualPixelDepth.percentile(rs.toFloatArray(), 0.5f)
+    }
+
+    /** y = a·x through the origin, Huber-weighted (IRLS, cut at 2 robust sigmas). */
+    internal fun robustSlope(x: FloatArray, y: FloatArray): Float {
+        val n = min(x.size, y.size)
+        val w = DoubleArray(n) { 1.0 }
+        var a = 0.0
+        val residual = FloatArray(n)
+        repeat(10) {
+            var sxx = 0.0
+            var sxy = 0.0
+            for (i in 0 until n) { sxx += w[i] * x[i] * x[i]; sxy += w[i] * x[i] * y[i] }
+            if (sxx < 1e-12) return 0f
+            a = sxy / sxx
+            for (i in 0 until n) residual[i] = abs(y[i] - (a * x[i]).toFloat())
+            val sigma = max(1e-6f, 1.4826f * DualPixelDepth.percentile(residual, 0.5f))
+            for (i in 0 until n) w[i] = 1.0 / max(1.0, residual[i] / (2.0 * sigma))
+        }
+        return a.toFloat()
     }
 
     /** The sensor-orientation position (0..1) of upright position ([u], [v]) under EXIF [orientation] (inverse of [HardwareDepth.toDepthMap]'s turn). */

@@ -339,6 +339,12 @@ internal val UKRAINIAN: Map<String, String> = mapOf(
         "Калібрування не вдалося, спробуйте ще раз з більшою кількістю близьких і далеких предметів: ",
     "Close" to
         "Закрити",
+    "Starting the camera…" to
+        "Запуск камери…",
+    "Portrait" to
+        "Портрет",
+    "Blurs the background of saved photos from a depth map (the same as Settings › Experimental › Save depth map with Generate portrait in camera; Depth from picks how the depth is found). Lit when on; the focused subject stays sharp. Saving takes a few seconds longer." to
+        "Розмиває фон збережених фото за картою глибини (те саме, що Налаштування › Експериментальне › Зберігати карту глибини з «Генерувати портрет у камері»; «Глибина з» обирає, як знайти глибину). Світиться, коли ввімкнено; предмет у фокусі лишається різким. Збереження триває на кілька секунд довше.",
     "Done" to
         "Готово",
     "Generate portrait in camera" to
@@ -451,8 +457,8 @@ internal val UKRAINIAN: Map<String, String> = mapOf(
         "Світліше чи темніше, тепліше чи холодніше. Двічі торкніться повзунка, щоб скинути. Скільки стилю отримає фото (Сила), налаштовується в Налаштуваннях.",
     "Phone held sideways" to
         "Телефон горизонтально",
-    "The controls move to the right, under your thumb: the shutter in the middle of the edge, a tall slider beside it, and B and W (F, the filter, in B&W) to pick what the slider changes, with the lenses in a column beside them. Double-tap a letter or the slider to reset it. RAW, Frames, Burst, Flash, ? and Settings are at the left." to
-        "Елементи керування переходять праворуч, під великий палець: затвор посередині краю, поруч високий повзунок, а B і W (F, фільтр, у Ч/Б) обирають, що він змінює; кнопки об’єктивів стоять колонкою поряд. Двічі торкніться літери або повзунка, щоб скинути. RAW, Рамки, Серія, Спалах, ? і Налаштування зліва.",
+    "The controls move to the right, under your thumb: the shutter in the middle of the edge, a tall slider beside it, and B and W (F, the filter, in B&W) to pick what the slider changes, with the lenses in a column beside them. Double-tap a letter or the slider to reset it. RAW, Frames, Portrait, Burst, Flash, ? and Settings are at the left." to
+        "Елементи керування переходять праворуч, під великий палець: затвор посередині краю, поруч високий повзунок, а B і W (F, фільтр, у Ч/Б) обирають, що він змінює; кнопки об’єктивів стоять колонкою поряд. Двічі торкніться літери або повзунка, щоб скинути. RAW, Рамки, Портрет, Серія, Спалах, ? і Налаштування зліва.",
     "The B&W button left of the Look menu switches to black and white: the menu lists the black and white films, and Filter (Yellow, Orange, Red, Green) takes Warmth's place. Like a coloured filter on the lens, it lightens its own colour and darkens the others: Red gives dark skies and smooth skin, Green darker skin and lighter leaves. The DNG stays in colour." to
         "Кнопка Ч/Б зліва від меню стилів вмикає чорно-біле: у меню чорно-білі плівки, а Фільтр (жовтий, помаранчевий, червоний, зелений) заступає Теплоту. Як кольоровий фільтр на об’єктиві, він освітлює свій колір і затемнює інші: червоний дає темне небо й гладку шкіру, зелений — темнішу шкіру й світліше листя. DNG залишається кольоровим.",
     "Top bar" to

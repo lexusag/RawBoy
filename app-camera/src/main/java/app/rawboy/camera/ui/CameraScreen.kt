@@ -102,6 +102,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -299,6 +300,7 @@ fun CameraScreen(
             } else if (!videoMode) {
                 RawButton(settings.keepDng) { vm.setKeepDng(!settings.keepDng) }
                 FrameButton(settings.photoFrame) { vm.togglePhotoFrame() }
+                PortraitButton(settings.saveDepth && settings.depthPortrait, vm::togglePortrait)
                 BurstButton(settings.burstMode, lowLight, hiRes, flashAvailable && settings.flash != FlashMode.OFF) { vm.setBurstMode(settings.burstMode.next()) }
                 if (flashAvailable) FlashButton(settings.flash, screenFlashCamera, vm::cycleFlash)
             }
@@ -2011,6 +2013,18 @@ private fun RawButton(keep: Boolean, onClick: () -> Unit) {
             color = if (keep) MaterialTheme.colorScheme.primary else LocalContentColor.current.copy(alpha = 0.6f),
             modifier = Modifier.semantics { contentDescription = tr("Keep RAW (DNG)") },
         )
+    }
+}
+
+/**
+ * Portrait: blur the saved JPEG's background from the depth map (Settings' Save depth map + Generate portrait in camera,
+ * both switched on together). Lit while on.
+ */
+@Composable
+private fun PortraitButton(on: Boolean, onClick: () -> Unit) {
+    val tint = if (on) MaterialTheme.colorScheme.primary else LocalContentColor.current.copy(alpha = 0.6f)
+    IconButton(onClick = onClick, modifier = Modifier.semantics { stateDescription = if (on) tr("On") else tr("Off") }) {
+        Icon(Icons.Filled.Person, contentDescription = tr("Portrait"), tint = tint)
     }
 }
 
