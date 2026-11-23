@@ -101,17 +101,6 @@ final class EditorViewModel: ObservableObject {
             flow: min(max(f("brush.flow", d.flow), 1), 100),
             auto: s.bool(forKey: "brush.auto"))
         onMessage = { [weak self] in self?.message = $0 }
-        // An estimated depth map focuses on its subject, unless a focus depth was already picked (it becomes the default).
-        photo.onDepthEstimated = { [weak self] focus in
-            guard let self else { return }
-            let untouched = self.state.params.depthFocus == self.state.defaults.depthFocus
-            self.state.defaults.depthFocus = focus
-            if untouched {
-                var p = self.state.params
-                p.depthFocus = focus
-                self.show(p)
-            }
-        }
         filmLoader = { [unowned self] in try await self.loadFilm($0) }
         presets = PresetStore.load()
         // RawBoy Desktop: Auto saves lens presets into the same file (picked from a sidecar, or removed there).

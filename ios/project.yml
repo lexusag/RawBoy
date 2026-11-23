@@ -28,10 +28,6 @@ packages:
     url: https://github.com/lexusag/RawBoyImageViewer
     from: 0.2.14
   # viewer-package:end
-  # ONNX Runtime (MIT), RawBoy Desktop's depth estimate for Portrait blur (retouch/DepthEstimator.swift); only the Mac engine links it.
-  OnnxRuntime:
-    url: https://github.com/microsoft/onnxruntime-swift-package-manager
-    exactVersion: 1.24.2
 targets:
   RawBoyEngine:
     type: framework
@@ -278,8 +274,6 @@ targets:
           - $(SRCROOT)/build/generated/scan.metal
           - $(SRCROOT)/build/generated/DevelopLayout.swift
     dependencies:
-      - package: OnnxRuntime
-        product: onnxruntime
       - package: RawBoyViewerPackages
         product: RawBoyBrowseKit
       - framework: native/out/RawBoyNative.xcframework
