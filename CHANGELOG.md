@@ -1,3 +1,8 @@
+**Lens blur and portrait bokeh no longer blow out bright areas (all platforms, 2026-11-24)**
+
+- The lens blur source (mask lens blur and portrait depth bokeh) was made with the highlight boost that bloom uses (up to ~10x above 0.6). Bloom only adds a little scattered light on top of the picture, but lens blur replaces the pixel, so a bright blue backdrop, sky or white wall inside a blur mask or out-of-focus depth region went white, and the colour-guided depth lookup read the boosted colours. The source is now the plain downsample, and Auto's thumbnails use the 512 px base instead of the bloom halo copy.
+- Code: `PhotoSession`, `editTexturesOf`, `ShotSaver`, `AutoStore`/`AutoViewModel` (Kotlin, Swift, TS); test `BokehTests.testBrightFlatFieldDoesNotBlowOutWhenBlurred`.
+
 **Camera: video recording with Viewfinder from RAW (Android, 2026-11-24)**
 
 - Recording video with **Viewfinder from RAW** on phones that stream raw alone (`PreviewProfile.rawViewfinderAlone`, Tensor Pixels, #470) produced a clip frozen on its first frame while audio kept running: `ViewfinderRenderer.onDrawFrame` still read `frameNs` from `SurfaceTexture.timestamp`, which never advances when the ISP preview isn't targeted, so every video frame after the first was dropped as a duplicate (`frameNs <= lastEncodedNs`).
