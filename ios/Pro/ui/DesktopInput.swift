@@ -49,6 +49,8 @@ final class EditorCommands: ObservableObject {
     var spaceHeld = false
     /** The Look selector is armed or open: ← → turn its pages instead of stepping through the folder. */
     var looksOpen = false
+    /** The Masks tool is open: E selects its Erase tool instead of sending the photo back to Auto. */
+    var masksOpen = false
 
     /** RawBoy Desktop: a section for the export sheet choosing the folder, the file written there, and the folder chosen. */
     var exportDestination: AnyView?

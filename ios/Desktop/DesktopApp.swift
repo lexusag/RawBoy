@@ -192,9 +192,9 @@ struct DesktopCommands: Commands {
             Button("Crop & Rotate Photo") { auto.requestCrop() }.disabled(!autoReady || auto.selected == nil || auto.sessionReady != auto.selected)
             Button("Remove Photo from Batch") { if let id = auto.selected { auto.removeOpened(id) } }
                 .keyboardShortcut(.deleteForward, modifiers: []).disabled(!autoReady || auto.selected == nil)
-            Button("Edit in Pro") { model.editInPro() }.keyboardShortcut(.return, modifiers: .command)
+            Button("Edit in Pro (E)") { model.editInPro() }.keyboardShortcut(.return, modifiers: .command)
                 .disabled(!autoReady || model.autoPhotoForPro == nil)
-            Button("Send to Auto") { model.sendToAuto() }.keyboardShortcut("a", modifiers: [.command, .shift])
+            Button("Send to Auto (E)") { model.sendToAuto() }.keyboardShortcut("a", modifiers: [.command, .shift])
                 .disabled(!proMode || model.vm.currentURL == nil)
             Divider()
             Button("Select All Photos") { auto.selectAll() }.disabled(!autoReady || auto.selected != nil || auto.photos.isEmpty)
@@ -248,7 +248,7 @@ struct DesktopCommands: Commands {
         }
         CommandMenu("Masks") {
             Button("Brush (Healing brush outside Masks)") { model.commands.send(.maskTool(.brush)) }.keyboardShortcut("b", modifiers: []).disabled(!ready)
-            Button("Erase") { model.commands.send(.maskTool(.erase)) }.keyboardShortcut("e", modifiers: []).disabled(!ready)
+            Button("Erase (To Auto outside Masks)") { model.commands.send(.maskTool(.erase)) }.keyboardShortcut("e", modifiers: []).disabled(!ready)
             Button("Move") { model.commands.send(.maskTool(.move)) }.keyboardShortcut("v", modifiers: []).disabled(!ready)
             Button("Smaller Brush") { model.commands.send(.brushSize(-1)) }.keyboardShortcut("[", modifiers: []).disabled(!ready)
             Button("Larger Brush") { model.commands.send(.brushSize(1)) }.keyboardShortcut("]", modifiers: []).disabled(!ready)
