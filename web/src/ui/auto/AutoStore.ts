@@ -9,7 +9,7 @@ import type { DevelopParams } from '../../engine/develop/DevelopParams';
 import { decodeEdits } from '../../engine/develop/Edits';
 import { randomFilmRoll, type FilmLeak } from '../../engine/develop/FilmLeaks';
 import { copiedEdits, copyEdits } from '../common/EditClipboard';
-import { applyPreset, chosenLensPreset, decodePresets, isLensPreset, layerPreset, NO_LENS_PRESET, PRESET_GROUPS, putLensPreset, replacesLook, sameLensPreset, type Preset, type PresetGroup } from '../../engine/develop/Presets';
+import { applyPreset, chosenLensPreset, decodePresets, hasBrush, isLensPreset, layerPreset, NO_LENS_PRESET, PRESET_GROUPS, putLensPreset, replacesLook, sameLensPreset, type Preset, type PresetGroup } from '../../engine/develop/Presets';
 import { PresetStore } from '../pro/PresetStore';
 import { exportImage } from '../../engine/export/Exporter';
 import { EXTENSIONS, ExportSettingsStore, type ExportSettings } from '../../engine/export/ExportSettings';
@@ -251,13 +251,15 @@ function withLookOf(p: AutoPhoto, source: AutoPhoto): AutoPhoto {
 }
 
 /**
- * [p] given [preset]: one with the Light group (replacesLook) develops it in place of its look and RawBoy edits; any
- * other changes only its own groups, in the RawBoy edits, the preset or on top of the look the photo has, and leaves
- * the rest as it was. [layered] is what the photo's preset becomes when it has one (layerPreset by default).
+ * [p] given [preset]: one with the Light group (replacesLook) develops it in place of its look and RawBoy edits,
+ * except when those edits hold brush work (healing brush or mask brush), which stays and takes only the preset's
+ * groups; any other preset changes only its own groups, in the RawBoy edits, the preset or on top of the look the
+ * photo has, and leaves the rest as it was. [layered] is what the photo's preset becomes when it has one (layerPreset
+ * by default).
  */
 export function withPreset(p: AutoPhoto, preset: Preset, layered: (under: Preset) => Preset = (under) => layerPreset(under, preset)): AutoPhoto {
+  if (p.edits && (!replacesLook(preset) || hasBrush(p.edits))) return { ...p, edits: applyPreset(preset, p.edits) };
   if (replacesLook(preset)) return { ...p, preset, edits: null };
-  if (p.edits) return { ...p, edits: applyPreset(preset, p.edits) };
   return { ...p, preset: p.preset ? layered(p.preset) : preset };
 }
 
@@ -1116,7 +1118,7 @@ export class AutoStore {
       const fromSidecar = developText != null ? decodeEdits(developText, analysis.defaults) : null;
       this.updatePhoto(next.id, (p) => ({
         ...p, status: 'ready', analysis, suggested: look, suggestedFilm: filmLook,
-        ...(fromSidecar && p.edits == null ? { edits: fromSidecar, adjust: NO_ADJUSTMENTS } : {}),
+        ...(fromSidecar && p.edits == null ? { edits: p.preset ? applyPreset(p.preset, fromSidecar) : fromSidecar, adjust: NO_ADJUSTMENTS } : {}),
         lensPreset: chosenLensPreset(this._state.lensPresets, p.lensChoice, matchLensName(p, analysis)),
         // A plain photo stays Natural (nothing added); its film suggestion is there if it switches to Film.
         look: p.looksApplied || p.plain ? p.look : look, filmLook: p.looksApplied ? p.filmLook : filmLook,

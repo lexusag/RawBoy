@@ -934,3 +934,51 @@ describe('Browser Send to Auto › As is (sidecarOnly)', () => {
   });
 });
 
+describe('Auto presets keep brush edits', () => {
+  it('applying a full preset keeps healing brush and mask brush on RawBoy edits, while replacing non-brush edits', async () => {
+    vi.stubGlobal('window', { setTimeout: () => 0 });
+    const { developParams } = await import('../develop/DevelopParams');
+    const { newBrushLayer, newLinearLayer, NO_ADJUST } = await import('../develop/Masks');
+    const { capturePreset } = await import('../develop/Presets');
+    const store = new AutoStore();
+    store.add([new File(['a'], 'a.CR2'), new File(['b'], 'b.CR2'), new File(['c'], 'c.CR2')]);
+    const analysis = { autoBase: developParams({ exposure: 0.4 }), defaults: developParams(), stats: { hasFace: false } };
+    const s = store as unknown as { _state: { photos: { analysis: unknown }[] } };
+    s._state.photos = s._state.photos.map((p) => ({ ...p, analysis }));
+    const [a, b, c] = store.state.photos;
+
+    const spot = { id: 'h1', x: 0.3, y: 0.4, radius: 0.01, source: null, feather: 80, path: [] as number[] };
+    const brushLayer = { ...newBrushLayer('Face'), adjust: { ...NO_ADJUST, exposure: 0.5 }, strokes: [{ id: 's1', erase: false, auto: false, radius: 0.05, hardness: 50, flow: 100, points: [0.5, 0.5] }] };
+    const oldGrad = { ...newLinearLayer('Old'), adjust: { ...NO_ADJUST, exposure: -0.5 } };
+    const presetGrad = { ...newLinearLayer('Sky'), adjust: { ...NO_ADJUST, exposure: -1 } };
+
+    store.receiveEdits(a.file, developParams({ exposure: 1.5, healSpots: [spot] }), a.id);
+    store.receiveEdits(b.file, developParams({ exposure: 1.5, masks: [brushLayer, oldGrad] }), b.id);
+    store.receiveEdits(c.file, developParams({ exposure: 1.5, contrast: 20 }), c.id);
+
+    const moody = capturePreset('Moody', developParams({ exposure: -0.3, contrast: 35, masks: [presetGrad] }), ['light', 'masks']);
+    store.applyPresetToAll(moody);
+
+    const [pa, pb, pc] = store.state.photos;
+    // Healing brush photo keeps its healSpots and gets the preset's Light and gradient mask.
+    expect(pa.edits).not.toBeNull();
+    expect(pa.edits!.healSpots).toEqual([spot]);
+    expect(pa.edits!.exposure).toBeCloseTo(-0.3, 4);
+    expect(pa.edits!.contrast).toBe(35);
+    expect(pa.edits!.masks.map((m) => m.name)).toEqual(['Sky']);
+
+    // Mask brush photo keeps its brush layer, replaces the old gradient with the preset's gradient, and gets Light.
+    expect(pb.edits).not.toBeNull();
+    expect(pb.edits!.exposure).toBeCloseTo(-0.3, 4);
+    expect(pb.edits!.masks.map((m) => [m.shape.kind, m.name])).toEqual([['brush', 'Face'], ['linear', 'Sky']]);
+    expect(pb.edits!.masks[0].id).toBe(brushLayer.id);
+    expect(pb.edits!.masks[0].strokes).toEqual(brushLayer.strokes);
+
+    // Non-brush RawBoy edits are replaced by the full preset as before.
+    expect(pc.edits).toBeNull();
+    expect(pc.preset?.name).toBe('Moody');
+    vi.unstubAllGlobals();
+  });
+});
+
+

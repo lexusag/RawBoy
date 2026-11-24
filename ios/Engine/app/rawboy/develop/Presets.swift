@@ -208,6 +208,11 @@ public enum Presets {
         return Preset(id: preset.id, name: preset.name, groups: groups, values: values, lens: preset.lens)
     }
 
+    /** True when [params] hold per-photo brush work (healing brush strokes, brush mask layers, or strokes on a mask). */
+    public static func hasBrush(_ params: DevelopParams) -> Bool {
+        !params.healSpots.isEmpty || params.masks.contains { $0.shape.isBrush || !$0.strokes.isEmpty }
+    }
+
     /** [params] with the preset's stored fields; fields it doesn't hold (or doesn't know) stay. */
     public static func apply(_ preset: Preset, _ params: DevelopParams) -> DevelopParams {
         preset.values.reduce(params) { set($0, $1.key, $1.value) }
@@ -347,8 +352,12 @@ public enum Presets {
         case let ("toneMapper", .text(s)): if let t = ToneMapper.fromKey(s) { out.toneMapper = t }
         case let ("anamorphicColor", .text(s)): if let c = AnamorphicColor.fromKey(s) { out.anamorphicColor = c }
         case let ("masks", .layers(layers)):
-            // Fresh ids, so two photos never share a layer id.
-            out.masks = layers.prefix(Masks.maxLayers).map { var l = $0; l.id = Masks.newId(); return l }
+            // Fresh ids, so two photos never share a layer id; existing brush layers belong to the photo and stay.
+            let brush = p.masks.filter(\.shape.isBrush)
+            let incoming = layers.filter { !$0.shape.isBrush }
+                .prefix(max(0, Masks.maxLayers - brush.count))
+                .map { var l = $0; l.id = Masks.newId(); return l }
+            out.masks = brush + incoming
         case let ("filmLeaks", .filmLeaks(fl)):
             out.filmLeaks = fl.prefix(FilmLeaks.maxLeaks).map { var l = $0; l.id = Masks.newId(); return l }
         case let (f, .number(n)): if n.isFinite, let kp = numberFields[f] { out[keyPath: kp] = n }

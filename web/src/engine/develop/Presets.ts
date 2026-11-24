@@ -2,7 +2,7 @@ import { isMonochromeLut } from '../auto/looks/Look';
 import { RetiredLooks } from '../auto/looks/RetiredLooks';
 import { ANAMORPHIC_COLORS, TONE_MAPPERS, type DevelopParams } from './DevelopParams';
 import { parseFilmLeaks, type FilmLeak } from './FilmLeaks';
-import { forPreset, parseLayers, type MaskLayer } from './Masks';
+import { forPreset, MAX_LAYERS, parseLayers, type MaskLayer } from './Masks';
 import { parseCurves, type ToneCurves } from './ToneCurve';
 
 /**
@@ -185,12 +185,19 @@ export function layerPreset(under: Preset, over: Preset): Preset {
   return preset;
 }
 
+/** True when params hold per-photo brush work (healing brush strokes, brush mask layers, or strokes on a mask). */
+export const hasBrush = (params: DevelopParams): boolean =>
+  params.healSpots.length > 0 || params.masks.some((l) => l.shape.kind === 'brush' || l.strokes.length > 0);
+
 /** params with the preset's stored fields; a value of the wrong type (a hand-edited file) leaves the field. */
 export function applyPreset(preset: Preset, params: DevelopParams): DevelopParams {
   const p: Record<string, unknown> = { ...params };
   for (const [field, value] of Object.entries(preset.values)) {
     if (field === 'masks') {
-      p.masks = parseLayers(value); // fresh ids, so two photos never share a layer id
+      // Fresh ids on the preset's gradients; existing brush layers belong to the photo and stay.
+      const brush = params.masks.filter((l) => l.shape.kind === 'brush');
+      const incoming = parseLayers(value).slice(0, Math.max(0, MAX_LAYERS - brush.length));
+      p.masks = [...brush, ...incoming];
     } else if (field === 'filmLeaks') {
       p.filmLeaks = parseFilmLeaks(value);
     } else if (field === 'curves') {
