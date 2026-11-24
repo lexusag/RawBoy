@@ -413,7 +413,7 @@ extension DetailScreen {
             }
             Spacer(minLength: 8)
             if let edit = vm.editInPro {
-                BarTool("slider.horizontal.3", "Edit in Pro", "Open this photo in the Pro editor (⌘↩)") { edit(photo) }
+                BarTool("slider.horizontal.3", "Edit in Pro", "Open this photo in the Pro editor (E, ⌘↩)") { edit(photo) }
             }
             BarTool("doc.on.doc", "Copy", "Copy the previous photo's look and adjustments (⇧C)") { vm.copyPrevious(id) }
                 .disabled(!idle || vm.previousPhoto(id) == nil)
