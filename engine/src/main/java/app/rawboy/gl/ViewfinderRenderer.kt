@@ -37,8 +37,9 @@ class ViewfinderRenderer(
     private val requestRender: () -> Unit,
     /**
      * A ~512 px linear RGBA float copy of the current frame (row 0 = top), on the GL thread;
-     * hand it off quickly. The array is not reused. [frameNs]: the camera frame's timestamp (SurfaceTexture's, the
-     * capture result's SENSOR_TIMESTAMP on Camera2), so the copy can be matched with its own metadata.
+     * hand it off quickly. The array is not reused. [frameNs]: the camera frame's timestamp (SurfaceTexture's, or the
+     * raw frame's when [Frame.raw] — the capture result's SENSOR_TIMESTAMP on Camera2), so the copy can be matched with
+     * its own metadata.
      */
     private val onBase: (width: Int, height: Int, rgba: FloatArray, frameNs: Long) -> Unit,
 ) : GLSurfaceView.Renderer {
@@ -286,8 +287,6 @@ class ViewfinderRenderer(
         drops.begin()
         st.updateTexImage()
         st.getTransformMatrix(texMatrix)
-        val frameNs = st.timestamp
-        drops.frame(frameNs, videoSink != null)
         drops.mark(DropLog.LATCH)
 
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
@@ -301,14 +300,17 @@ class ViewfinderRenderer(
         val h = f.uprightHeight
         linear.ensure(w, h, mipmapped = true)
         linear.bindForDrawing()
-        if (f.raw) {
-            // Prototype: the newest raw frame instead of the ISP's preview (nothing drawn until the first arrives).
-            if (!drawRaw(f)) return
+        val frameNs = if (f.raw) {
+            // The newest raw frame instead of the ISP's preview (nothing drawn until the first arrives).
+            // With rawViewfinderAlone the SurfaceTexture receives no frames, so its timestamp never advances.
+            drawRaw(f) ?: return
         } else {
             GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
             GLES30.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, cameraTexture)
             linearize!!.draw(quad!!, texMatrix, f, dataSpaceOf(st), zoom.coerceAtLeast(1f))
+            st.timestamp
         }
+        drops.frame(frameNs, videoSink != null)
 
         // The whole-image copies, from this frame: built from a readback instead, they lagged the image by
         // a few hundred ms and bright lights left a trailing glow when the camera moved.
@@ -428,10 +430,11 @@ class ViewfinderRenderer(
 
     /**
      * Pass 1 from the raw stream into the bound [linear] target: uploads the newest frame if one came, then draws the
-     * one on the GPU. False while none has arrived yet. Logs the upload time every 5 s (`RawBoyViewfinder`).
+     * one on the GPU. Returns the drawn frame's sensor timestamp, or null while none has arrived yet. Logs the upload
+     * time every 5 s (`RawBoyViewfinder`).
      */
-    private fun drawRaw(f: Frame): Boolean {
-        val program = rawLinearize ?: return false
+    private fun drawRaw(f: Frame): Long? {
+        val program = rawLinearize ?: return null
         val source = rawFrames
         source?.take()?.let { next ->
             val started = System.nanoTime()
@@ -441,8 +444,8 @@ class ViewfinderRenderer(
             rawShown?.let(source::recycle)
             rawShown = next
         }
-        val shown = rawShown ?: return false
-        if (!program.ready) return false
+        val shown = rawShown ?: return null
+        if (!program.ready) return null
         program.draw(quad!!, shown, f.rotation, f.mirror, zoom.coerceAtLeast(1f), f.rawCropX, f.rawCropY, f.scale)
         val now = SystemClock.uptimeMillis()
         if (now - rawStatsAt >= 5000L) {
@@ -457,7 +460,7 @@ class ViewfinderRenderer(
             rawUploadNs = 0L
             rawUploads = 0
         }
-        return true
+        return shown.timestampNs
     }
 
     private fun bindDevelopTextures(p: ShaderParams) {
