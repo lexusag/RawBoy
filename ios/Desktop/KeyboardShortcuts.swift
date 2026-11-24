@@ -211,10 +211,10 @@ final class KeyboardShortcuts {
         case .backslash: commands.send(.toggleCompare)
         case .y: commands.send(.toggleSplit)
         case .b: commands.send(.maskTool(.brush))
-        // Inside Masks: Erase; outside Masks: Send to Auto with the new edits (matching E on an opened Auto photo).
+        // Inside Masks: Erase; outside Masks: Send to Auto with the new edits (matching E on an opened Auto photo), but not while Crop & rotate is open.
         case .e:
             if commands.masksOpen { commands.send(.maskTool(.erase)) }
-            else if flags.isEmpty { model.sendToAuto() }
+            else if flags.isEmpty { if !commands.cropOpen { model.sendToAuto() } }
             else { return event }
         case .v: commands.send(.maskTool(.move))
         case .leftBracket: commands.send(.brushSize(-1))

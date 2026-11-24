@@ -143,9 +143,13 @@ struct EditorScreen: View {
             }
         }
         .onChange(of: commands.serial) { _, _ in if let a = commands.action { perform(a) } }
-        .onChange(of: mode) { _, m in commands.masksOpen = m == .masks }
+        .onChange(of: mode) { _, m in
+            commands.masksOpen = m == .masks
+            commands.cropOpen = m == .geometry
+        }
         .onDisappear {
             commands.masksOpen = false
+            commands.cropOpen = false
             commands.looksOpen = false
         }
         .onChange(of: state.fileName) { _, _ in
