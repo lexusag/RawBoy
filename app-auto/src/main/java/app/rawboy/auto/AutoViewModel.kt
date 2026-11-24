@@ -882,7 +882,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
 
     /**
      * Uniforms for [params] on the analysis's small copies (thumbnails, the cached preview): RawBoy edits' painted masks
-     * are rasterised on the 512 px base (once per edit) and their lens blur starts from the boosted bloom copy, so a
+     * are rasterised on the 512 px base (once per edit) and their lens blur starts from the 512 px base copy, so a
      * thumbnail shows them as the export will, only coarser.
      */
     private fun smallShader(id: String, a: Analysis, params: DevelopParams, lut: LutData?, film: FilmData?): ShaderParams {
@@ -894,7 +894,7 @@ class AutoViewModel(application: Application) : AndroidViewModel(application) {
         }
         return ShaderParams.from(
             params, a.defaults, lut, LensTransform(a.lens, params), a.base, a.bloom, a.skin, film = film, brushFor = brushFor,
-            bokehSource = a.bloom.halo,
+            bokehSource = a.base,
         )
     }
 

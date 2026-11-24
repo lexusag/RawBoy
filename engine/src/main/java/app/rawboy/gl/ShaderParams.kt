@@ -91,7 +91,7 @@ class ShaderParams(
     val filmLeaks: FilmLeakUniforms = FilmLeakUniforms.NONE,
     /** Light effects over the finished picture, after the leaks (shaders/light_fx.glsl). */
     val fx: FxUniforms = FxUniforms.NONE,
-    /** Highlight-boosted ~1536 px copy of the whole image the masks' lens blur works from (BokehTexture), or null. */
+    /** ~1536 px copy of the whole image the lens blur works from (BokehTexture), or null. */
     val bokehSource: PreviewImage? = null,
     /** Horizontal anamorphic flare strength (`uAnamorphic`, 0 = off) and coating tint (`uAnamorphicTint`). */
     val anamorphic: Float = 0f,

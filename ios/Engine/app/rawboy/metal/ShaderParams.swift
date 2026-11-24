@@ -70,7 +70,7 @@ public final class ShaderParams: @unchecked Sendable {
     public let anamorphicBar: [Float]
     /** What the flare scatters light from (FlareSource, `uFlare`), or nil: no flare. */
     public let flareSource: PreviewImage?
-    /** The highlight-boosted whole image the masks' lens blur starts from (BokehTexture, `uBokeh`), or nil: no lens blur. */
+    /** The whole-image copy the lens blur starts from (BokehTexture, `uBokeh`), or nil: no lens blur. */
     public let bokehSource: PreviewImage?
     /** The portrait depth map (`uDepthMap`) and `uDepthBlur`: max disc radius in full-resolution pixels (0 = off), focus, falloff, edge softness (0..1). */
     public let depthMap: DepthMap?

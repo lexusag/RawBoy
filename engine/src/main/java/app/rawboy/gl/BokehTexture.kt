@@ -14,7 +14,7 @@ import kotlin.math.roundToInt
  * The masks' lens blur (ports: web's gl/BokehTexture.ts). Like bloom it works on a small whole-image copy, so the fit
  * view, the 100% view and export tiles all sample the same texture: no tile seams and no spatial margin. Two passes on
  * the GPU, re-run only when the masks, their blur or the source change:
- * 1. bokeh_prep.glsl (after develop.glsl, so the masks are the develop shader's own layerMask): the highlight-boosted
+ * 1. bokeh_prep.glsl (after develop.glsl, so the masks are the develop shader's own layerMask): the whole-image
  *    copy at the bokeh size, premultiplied by its fade-in, with each texel's blur radius.
  * 2. bokeh_gather.frag: an exact round disc gather (every texel inside the radius), sharp texels never smeared.
  * The develop shader mixes the result in by the radius at each pixel (main_body.glsl, `uBokeh`).

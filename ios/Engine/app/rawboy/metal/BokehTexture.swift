@@ -6,7 +6,7 @@ import Metal
  * whole-image copy, so the fit view, the 100% view and export tiles all sample the same texture: no tile seams and no
  * spatial margin. Two GPU passes, re-run only when the masks, their blur or the source change:
  * 1. `bokehPrepFragment` (shaders/bokeh_prep.glsl, built after develop.glsl so the masks are the develop shader's own
- *    layerMask): the highlight-boosted copy at the bokeh size, premultiplied by its fade-in, with each texel's blur
+ *    layerMask): the whole-image copy at the bokeh size, premultiplied by its fade-in, with each texel's blur
  *    radius in texels.
  * 2. `bokehGatherFragment` (Helpers.metal): an exact round disc gather (every texel inside the radius), sharp texels
  *    never smeared.
