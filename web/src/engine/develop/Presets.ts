@@ -196,7 +196,7 @@ export function applyPreset(preset: Preset, params: DevelopParams): DevelopParam
     if (field === 'masks') {
       // Fresh ids on the preset's gradients; existing brush layers belong to the photo and stay.
       const brush = params.masks.filter((l) => l.shape.kind === 'brush');
-      const incoming = parseLayers(value).slice(0, Math.max(0, MAX_LAYERS - brush.length));
+      const incoming = parseLayers(value).filter((l) => l.shape.kind !== 'brush').slice(0, Math.max(0, MAX_LAYERS - brush.length));
       p.masks = [...brush, ...incoming];
     } else if (field === 'filmLeaks') {
       p.filmLeaks = parseFilmLeaks(value);
