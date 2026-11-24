@@ -180,7 +180,7 @@ internal class OffscreenDeveloper(
         bloomTailTexture.bind(params.bloomTail)
         flareTexture.bind(params.flareSource)
         maskTexture.bind(params.skinMask)
-        depthTexture.bind(params.depthMap)
+        depthTexture.bind(params.depthMap, params.base, params.depthEdge)
         brushTexture.bind(params.layers.brush)
         bokehTexture.bind(params) // after the brush atlas and depth map: its mask pass reads them
         fxTexture.bind(params.fx.data)

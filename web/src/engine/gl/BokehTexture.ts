@@ -138,7 +138,7 @@ export class BokehTexture {
     }
     const l = p.layers;
     const brushVersions = l.brush.map((r) => (r ? `${r.width}x${r.height}@${r.version}` : '-'));
-    const key = JSON.stringify([g.width, g.height, l.count, [...l.geom], [...l.shape], [...l.color], [...l.blur], brushVersions, p.depthBlurPx, p.depthFocus, p.depthFalloff, p.depthEdge, depthId(p.depthMap)]);
+    const key = JSON.stringify([g.width, g.height, l.count, [...l.geom], [...l.shape], [...l.color], [...l.blur], brushVersions, p.depthBlurPx, p.depthFocus, p.depthFalloff, p.depthEdge, p.base ? p.base.width : 0, depthId(p.depthMap)]);
     if (key === this.key) return;
 
     if (g.width !== this.width || g.height !== this.height) {

@@ -1,3 +1,9 @@
+**Portrait blur: colour guided-filter depth upsampling (all platforms, 2026-11-24)**
+
+- Replaces the per-pixel 4×4 joint bilateral quantile/band lookup (`7d8dca1` / `c92ce67`) with a 3-channel colour Guided Image Filter (He et al.) computed once when the depth map, base guide or Edge softness changes, and uploaded to `uDepthMap` as `RGBA16F` (`mean_a.rgb`, `mean_b`).
+- `lens_blur.glsl` now evaluates `clamp(dot(ab.rgb, sqrt(guide)) + ab.a, 0, 1)` in a single bilinear fetch, and `main_body.glsl` returns to `bokehFade(bokehRadius(...))`. Eliminates texel stair-stepping, foreground-into-background halo smearing, double-exposure edge veils, and discrete snapping on smoothly receding surfaces, while preserving the photo's natural edge anti-aliasing. Edge softness (`0..100`) controls the guided filter's regularization `eps` (`3e-4 * 100^edge`).
+- Code: `GuidedDepth.ts` / `GuidedDepth.kt` / `GuidedDepth.swift`, `DepthTexture` (`GlCommon.ts` / `GlCommon.kt`), `MetalCommon.swift` (`bindDepth`), `shaders/lens_blur.glsl`, `shaders/main_body.glsl`. Tests: `guideddepth.test.ts` (Android and Swift compiled and tested by CI).
+
 **Desktop: E sends an opened photo between Auto and Pro with its edits (RawBoy Desktop, 2026-11-24)**
 
 - Pressing **E** on an opened photo in Auto opens it in Pro with its Auto edits (same as Edit in Pro / ⌘↩, ignored while Crop & rotate is open or while typing/exporting). Pressing **E** in Pro outside Masks sends the photo back to Auto with the new edits (same as To Auto / ⇧⌘A); inside Masks, **E** stays the Erase tool so the two never overlap (matching **B** for Brush inside Masks and Healing brush outside). Neither works while Crop & rotate is open. Key repeats are ignored so holding **E** does not bounce between modes.
