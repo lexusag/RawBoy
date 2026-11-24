@@ -1,3 +1,9 @@
+**Camera: video recording with Viewfinder from RAW (Android, 2026-11-24)**
+
+- Recording video with **Viewfinder from RAW** on phones that stream raw alone (`PreviewProfile.rawViewfinderAlone`, Tensor Pixels, #470) produced a clip frozen on its first frame while audio kept running: `ViewfinderRenderer.onDrawFrame` still read `frameNs` from `SurfaceTexture.timestamp`, which never advances when the ISP preview isn't targeted, so every video frame after the first was dropped as a duplicate (`frameNs <= lastEncodedNs`).
+- `ViewfinderRenderer.drawRaw` now returns the drawn `RawPreviewFrame.timestampNs` (Camera2 `SENSOR_TIMESTAMP`) and `onDrawFrame` uses it as `frameNs` whenever `Frame.raw` is true, fixing video encoding, dropped-frame logging, motion-data timestamps, and `CompensationTracker`'s base-readback matching in raw viewfinder mode.
+- Code: `ViewfinderRenderer.kt`.
+
 **Presets keep brush masks and healing brush strokes (RawBoy Desktop, iOS and web, 2026-11-24)**
 
 - **Masks group in presets no longer wipes brush layers:** applying a preset that includes the *Masks (gradients only)* group (`Presets.ts` `applyPreset`, `Presets.swift` `Presets.set`) now keeps existing brush mask layers untouched (same ids, strokes and adjustments) and replaces only gradient layers, capping incoming gradients to the remaining slots within the 4-layer limit so no brush layer is dropped. `ProStore.applyPreset` also flushes any in-progress brush or healing stroke first.
