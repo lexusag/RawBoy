@@ -10,7 +10,7 @@
 # VIEWER_BRANCH (instead of `from: VIEWER_FROM`).
 set -e
 cd "$(dirname "$0")"
-VIEWER_FROM="${VIEWER_FROM:-0.2.14}"
+VIEWER_FROM="${VIEWER_FROM:-0.2.15}"
 VIEWER_URL="${VIEWER_URL:-https://github.com/lexusag/RawBoyImageViewer}"
 case "$1" in
 local) block="  RawBoyViewerPackages:

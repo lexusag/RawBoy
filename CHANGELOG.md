@@ -1,3 +1,7 @@
+**RawBoy Desktop: pin RawBoy Viewer 0.2.15 (2026-11-24)**
+
+- **Places: always-visible draggable scroll bar** in the sidebar (Places and the pinned Favourites/Recent strip). Comes with RawBoy Viewer v0.2.15 (PR 74); the pin moves from 0.2.14 to 0.2.15. Not tried by hand (no Mac): CI's `desktop` job is the first build.
+
 **Camera: video recording with Viewfinder from RAW (Android, 2026-11-24)**
 
 - Recording video with **Viewfinder from RAW** on phones that stream raw alone (`PreviewProfile.rawViewfinderAlone`, Tensor Pixels, #470) produced a clip frozen on its first frame while audio kept running: `ViewfinderRenderer.onDrawFrame` still read `frameNs` from `SurfaceTexture.timestamp`, which never advances when the ISP preview isn't targeted, so every video frame after the first was dropped as a duplicate (`frameNs <= lastEncodedNs`).
