@@ -620,40 +620,39 @@ internal class MaskTexture {
 }
 
 /**
- * The normalized depth map (R8, 0..1) on its own unit; re-uploads when it changes. Unit 13: 10-11 hold the wavelet
- * denoise result in the develop draw, and the lens blur passes (which also read this map) moved to 12.
+ * The colour guided-filter depth coefficients (`RGBA16F`: `mean_a.rgb`, `mean_b`) on their own unit; re-uploads when
+ * the depth map, base guide or edge softness changes. Unit 13: 10-11 hold the wavelet denoise result in the develop
+ * draw, and the lens blur passes (which also read this map) moved to 12.
  */
 internal class DepthTexture {
     private val id = GlUtil.createTexture(GLES30.GL_LINEAR)
     private var uploaded: DepthMap? = null
+    private var uploadedBase: PreviewImage? = null
+    private var uploadedEdge = -1f
 
     init {
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + UNIT)
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, id)
-        GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 1)
         GLES30.glTexImage2D(
-            GLES30.GL_TEXTURE_2D, 0, GLES30.GL_R8, 1, 1, 0,
-            GLES30.GL_RED, GLES30.GL_UNSIGNED_BYTE, ByteBuffer.allocateDirect(1),
+            GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA16F, 1, 1, 0,
+            GLES30.GL_RGBA, GLES30.GL_FLOAT, ByteBuffer.allocateDirect(16),
         )
-        GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 4)
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
     }
 
-    fun bind(depth: DepthMap?) {
+    fun bind(depth: DepthMap?, base: PreviewImage? = null, edge: Float = ShaderParams.DEFAULT_DEPTH_EDGE) {
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0 + UNIT)
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, id)
-        if (depth != null && depth !== uploaded) {
-            val buf = ByteBuffer.allocateDirect(depth.data.size).apply {
-                put(depth.data)
-                position(0)
-            }
-            GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 1)
-            GLES30.glTexImage2D(
-                GLES30.GL_TEXTURE_2D, 0, GLES30.GL_R8, depth.width, depth.height, 0,
-                GLES30.GL_RED, GLES30.GL_UNSIGNED_BYTE, buf,
-            )
+        if (depth != null && (depth !== uploaded || base !== uploadedBase || edge != uploadedEdge)) {
+            val buf = GuidedDepth.compute(depth, base, edge)
             GLES30.glPixelStorei(GLES30.GL_UNPACK_ALIGNMENT, 4)
+            GLES30.glTexImage2D(
+                GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA16F, depth.width, depth.height, 0,
+                GLES30.GL_RGBA, GLES30.GL_FLOAT, buf,
+            )
             uploaded = depth
+            uploadedBase = base
+            uploadedEdge = edge
         }
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
     }

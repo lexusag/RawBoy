@@ -153,7 +153,7 @@ class DevelopRenderer : GLSurfaceView.Renderer {
         bloomTailTexture!!.bind(p.bloomTail)
         flareTexture!!.bind(p.flareSource)
         maskTexture!!.bind(p.skinMask)
-        depthTexture!!.bind(p.depthMap)
+        depthTexture!!.bind(p.depthMap, p.base, p.depthEdge)
         brushTexture!!.bind(p.layers.brush)
         filmTextures!!.bind(p.film)
         bokehTexture!!.bind(p) // after the brush atlas and depth map: its mask pass reads them

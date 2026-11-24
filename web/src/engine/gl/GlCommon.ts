@@ -14,6 +14,7 @@ import { SCAN_GRAIN } from './ScanScale';
 import { Shaders } from './Shaders';
 import { BokehTexture, bokehUniforms, type BokehGeometry } from './BokehTexture';
 import { flareCoarseRows, flareRows } from './FlareSource';
+import { computeGuidedDepth } from './GuidedDepth';
 import type { PixelRect } from './Zoom';
 
 /** Port of engine/.../gl/GlCommon.kt for WebGL2. Texture units match Android's. */
@@ -633,29 +634,31 @@ export class FullscreenQuad {
   }
 }
 
-/** The normalized depth map (R8, 0..1) on its own unit; re-uploads when it changes. */
+/** The colour guided-filter depth coefficients (RGBA16F: mean_a.rgb, mean_b) on its own unit; re-uploads when inputs change. */
 export class DepthTexture {
   private readonly id: WebGLTexture;
   private uploaded: DepthMapData | null = null;
+  private uploadedBase: PreviewImage | null = null;
+  private uploadedEdge = -1;
 
   constructor(private readonly gl: WebGL2RenderingContext) {
     gl.activeTexture(gl.TEXTURE0 + Units.DEPTH);
     this.id = createTexture(gl, gl.LINEAR);
-    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, 1, 1, 0, gl.RED, gl.UNSIGNED_BYTE, new Uint8Array([0]));
-    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, 1, 1, 0, gl.RGBA, gl.FLOAT, new Float32Array(4));
     gl.activeTexture(gl.TEXTURE0);
   }
 
-  bind(depth: DepthMapData | null) {
+  bind(depth: DepthMapData | null, base: PreviewImage | null = null, edge = 0.3) {
     const gl = this.gl;
     gl.activeTexture(gl.TEXTURE0 + Units.DEPTH);
     gl.bindTexture(gl.TEXTURE_2D, this.id);
-    if (depth && depth !== this.uploaded) {
-      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
-      gl.texImage2D(gl.TEXTURE_2D, 0, gl.R8, depth.width, depth.height, 0, gl.RED, gl.UNSIGNED_BYTE, depth.data);
+    if (depth && (depth !== this.uploaded || base !== this.uploadedBase || edge !== this.uploadedEdge)) {
+      const coeffs = computeGuidedDepth(depth, base, edge);
       gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA16F, depth.width, depth.height, 0, gl.RGBA, gl.FLOAT, coeffs);
       this.uploaded = depth;
+      this.uploadedBase = base;
+      this.uploadedEdge = edge;
     }
     gl.activeTexture(gl.TEXTURE0);
   }
@@ -703,7 +706,7 @@ export class DevelopInputs {
     this.tail.bind(p.bloomTail);
     this.flare.bind(p.flareSource);
     this.skin.bind(p.skinMask, p.retouchMap && (p.skinFix !== 0 || p.layers.retouch.some((v) => v > 0)) ? p.retouchMap : null);
-    this.depth.bind(p.depthMap);
+    this.depth.bind(p.depthMap, p.base, p.depthEdge);
     this.brush.bind(p.layers.brush);
     this.film.bind(p.film);
     this.bokeh.bind(p); // after the brush atlas and depth map: its mask pass reads them

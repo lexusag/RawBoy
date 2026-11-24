@@ -476,7 +476,7 @@ final class DevelopTextures {
     private(set) var flare: MTLTexture
     private(set) var skinMask: MTLTexture
     private(set) var brush: MTLTexture
-    /** The portrait depth map (R8, Camera DNG trailer; see DepthTexture): a 1x1 stand-in until a photo has one. */
+    /** The portrait depth guided-filter coefficients (RGBA16F: mean_a.rgb, mean_b): a 1x1 stand-in until a photo has one. */
     private(set) var depth: MTLTexture
     /** The light effects' segment data (RGBA32F, LightEffects.row texels wide, read with texelFetch). */
     private(set) var fx: MTLTexture
@@ -496,6 +496,8 @@ final class DevelopTextures {
     private var uploadedMap: [Float]?
     private var uploadedFx: FxData?
     private var uploadedDepth: DepthMap?
+    private var uploadedDepthBase: [UInt16]?
+    private var uploadedDepthEdge: Float = -1
     private var brushSlotW = 0
     private var brushSlotH = 0
     private var brushSlotRaster = [BrushRaster?](repeating: nil, count: 4)
@@ -522,7 +524,7 @@ final class DevelopTextures {
         flare = empty(.rgba16Float)
         skinMask = empty(.r16Float)
         brush = empty(.rg8Unorm)
-        depth = empty(.r8Unorm)
+        depth = empty(.rgba16Float)
         fx = empty(.rgba32Float)
     }
 
@@ -542,20 +544,32 @@ final class DevelopTextures {
         bindMask(p.skinMask, map: fixing ? p.retouchMap : nil)
         bindBrush(p.layers.brush)
         bindFx(p.fx.data)
-        bindDepth(p.depthMap)
+        bindDepth(p.depthMap, base: p.base, edge: p.depthEdge)
         bokehTexture.bind(p, brush: brush, depth: depth, base: base)  // after the brush atlas and depth map: its mask pass reads them
     }
 
-    /** The depth map (R8, 0..1) for `uDepthMap`; re-uploaded only when the photo's map changes. */
-    private func bindDepth(_ map: DepthMap?) {
-        guard let map, map !== uploadedDepth, map.width > 0, map.height > 0, map.data.count >= map.width * map.height,
-              let tex = ctx.makeTexture(.r8Unorm, map.width, map.height) else { return }
-        map.data.withUnsafeBufferPointer {
+    /** The colour guided-filter depth coefficients (RGBA16F: mean_a.rgb, mean_b) for `uDepthMap`; re-uploaded when inputs change. */
+    private func bindDepth(_ map: DepthMap?, base: PreviewImage?, edge: Float) {
+        guard let map, map.width > 0, map.height > 0, map.data.count >= map.width * map.height else { return }
+        let sameBase: Bool = switch (uploadedDepthBase, base?.pixels) {
+        case (nil, nil): true
+        case let (u?, b?): u.withUnsafeBufferPointer({ $0.baseAddress }) == b.withUnsafeBufferPointer({ $0.baseAddress })
+        default: false
+        }
+        guard map !== uploadedDepth || !sameBase || edge != uploadedDepthEdge else { return }
+        let tex = depth.width == map.width && depth.height == map.height && depth.pixelFormat == .rgba16Float
+            ? depth
+            : ctx.makeTexture(.rgba16Float, map.width, map.height)
+        guard let tex else { return }
+        let coeffs = GuidedDepth.compute(map, base: base, edge: edge)
+        coeffs.withUnsafeBufferPointer {
             tex.replace(region: MTLRegionMake2D(0, 0, map.width, map.height), mipmapLevel: 0,
-                        withBytes: $0.baseAddress!, bytesPerRow: map.width)
+                        withBytes: $0.baseAddress!, bytesPerRow: map.width * 8)
         }
         depth = tex
         uploadedDepth = map
+        uploadedDepthBase = base?.pixels
+        uploadedDepthEdge = edge
     }
 
     /** The light effects' segment data; re-uploaded only when the packer hands out new data (not while an effect is dragged). */

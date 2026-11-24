@@ -1,3 +1,9 @@
+**Portrait blur: colour guided-filter depth upsampling (all platforms, 2026-11-24)**
+
+- Replaces the per-pixel 4×4 joint bilateral quantile/band lookup (`7d8dca1` / `c92ce67`) with a 3-channel colour Guided Image Filter (He et al.) computed once when the depth map, base guide or Edge softness changes, and uploaded to `uDepthMap` as `RGBA16F` (`mean_a.rgb`, `mean_b`).
+- `lens_blur.glsl` now evaluates `clamp(dot(ab.rgb, sqrt(guide)) + ab.a, 0, 1)` in a single bilinear fetch, and `main_body.glsl` returns to `bokehFade(bokehRadius(...))`. Eliminates texel stair-stepping, foreground-into-background halo smearing, double-exposure edge veils, and discrete snapping on smoothly receding surfaces, while preserving the photo's natural edge anti-aliasing. Edge softness (`0..100`) controls the guided filter's regularization `eps` (`3e-4 * 100^edge`).
+- Code: `GuidedDepth.ts` / `GuidedDepth.kt` / `GuidedDepth.swift`, `DepthTexture` (`GlCommon.ts` / `GlCommon.kt`), `MetalCommon.swift` (`bindDepth`), `shaders/lens_blur.glsl`, `shaders/main_body.glsl`. Tests: `guideddepth.test.ts` (Android and Swift compiled and tested by CI).
+
 **Camera: softer default portrait blur (Android, 2026-11-24)**
 
 - Generate portrait in camera now blurs less and starts the blur more gradually at a subject's edge: blur amount 20 (was 40) and edge softness 50 (was 30), on the same 0-100 scales as Pro's Portrait blur sliders. Camera only; Pro's slider defaults are unchanged. iOS has no in-camera portrait yet.
