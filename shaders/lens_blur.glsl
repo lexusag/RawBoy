@@ -25,11 +25,6 @@ float depthAt(vec2 p, vec3 guide) {
     return clamp(dot(ab.rgb, g) + ab.a, 0.0, 1.0);
 }
 
-float depthBokehRadius(vec2 p) {
-    if (uDepthBlur.x <= 0.0) return 0.0;
-    return depthBlurOf(texture(uDepthMap, clamp(p / uImageSize, 0.0, 1.0)).a);
-}
-
 float depthBokehRadius(vec2 p, vec3 guide) {
     if (uDepthBlur.x <= 0.0) return 0.0;
     return depthBlurOf(depthAt(p, guide));
@@ -40,8 +35,6 @@ float layersBokehRadius(float r, float lm[MAX_LAYERS]) {
     for (int i = 0; i < MAX_LAYERS; ++i) r = max(r, i < uLayerCount ? lm[i] * uLayerBlur[i] : 0.0);
     return r;
 }
-
-float bokehRadius(float lm[MAX_LAYERS], vec2 p) { return layersBokehRadius(depthBokehRadius(p), lm); }
 
 // As above with the portrait depth map guided by the photo's colour at this pixel ([guide]: linear RGB).
 float bokehRadius(float lm[MAX_LAYERS], vec2 p, vec3 guide) { return layersBokehRadius(depthBokehRadius(p, guide), lm); }

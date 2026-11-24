@@ -557,10 +557,8 @@ final class DevelopTextures {
         default: false
         }
         guard map !== uploadedDepth || !sameBase || edge != uploadedDepthEdge else { return }
-        let tex = depth.width == map.width && depth.height == map.height && depth.pixelFormat == .rgba16Float
-            ? depth
-            : ctx.makeTexture(.rgba16Float, map.width, map.height)
-        guard let tex else { return }
+        // A new texture each time: replacing the bytes of one a frame in flight still reads could flicker.
+        guard let tex = ctx.makeTexture(.rgba16Float, map.width, map.height) else { return }
         let coeffs = GuidedDepth.compute(map, base: base, edge: edge)
         coeffs.withUnsafeBufferPointer {
             tex.replace(region: MTLRegionMake2D(0, 0, map.width, map.height), mipmapLevel: 0,
