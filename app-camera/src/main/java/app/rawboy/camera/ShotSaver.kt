@@ -154,7 +154,10 @@ internal object ShotSaver {
     private const val MAX_FLASH_GUIDE = 1e4f
 
     /** In-camera portrait bokeh blur strength (`0..1` of [Masks.MAX_LENS_BLUR]) when a person or pet is detected. */
-    private const val PORTRAIT_BLUR = 0.40f
+    private const val PORTRAIT_BLUR = 0.20f
+
+    /** In-camera portrait blur edge softness (`0..1`, the slider's 50): how gradually the blur starts at a subject's edge. */
+    private const val PORTRAIT_EDGE = 0.5f
     private const val PORTRAIT_BOKEH_SOURCE_DIMENSION = 1536
 
     /** Nice value of the decode and develop threads: normal priority so OpenMP / GPU develop keeps the big cores. */
@@ -523,7 +526,7 @@ internal object ShotSaver {
                 params, a.defaults, lut, LensTransform(img.lens, params), a.base, a.bloom, a.skin,
                 CameraViewModel.GRAIN_SIZE_SCALE, CameraViewModel.grainStrength(s), film = film,
                 bokehSource = bokehSource, depthMap = depthMap, depthBlurPx = depthBlurPx,
-                depthFocus = depthMap?.focusDepth ?: 0.2f, depthFalloff = 0.5f,
+                depthFocus = depthMap?.focusDepth ?: 0.2f, depthFalloff = 0.5f, depthEdge = PORTRAIT_EDGE,
             )
             val export = ExportSettings(
                 format = ExportFormat.JPEG,

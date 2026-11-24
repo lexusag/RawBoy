@@ -1,3 +1,8 @@
+**Camera: softer default portrait blur (Android, 2026-11-24)**
+
+- Generate portrait in camera now blurs less and starts the blur more gradually at a subject's edge: blur amount 20 (was 40) and edge softness 50 (was 30), on the same 0-100 scales as Pro's Portrait blur sliders. Camera only; Pro's slider defaults are unchanged. iOS has no in-camera portrait yet.
+- Code: `ShotSaver.PORTRAIT_BLUR` / `PORTRAIT_EDGE`.
+
 **Pro and Auto: export into a custom subfolder (RawBoy Desktop and web, 2026-11-23)**
 
 - The export sheet of Pro and Auto has a **Subfolder** field. Type a name and the files are written into `<export folder>/<name>`, made when it isn't there yet; empty (the default) keeps today's behaviour. The last name is remembered (Pro and Auto keep their own). `{date}` becomes today's date (`2026-11-23`). The name is one level only: `/ \ : * ? " < > |` and control characters become `-`, blanks and dots around it are dropped (so no `..` and no hidden folders), at most 100 characters.
