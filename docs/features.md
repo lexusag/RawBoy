@@ -127,7 +127,7 @@ Web, Desktop and iOS take every field of `DevelopParams` except where noted (che
 | **Export to a custom subfolder** (Export dialog › Subfolder: made inside the export folder when missing; `{date}`; remembered; empty = as before) | unreleased | ✓ Chrome / Edge folder export and Google Drive | ✓ | — | — | `ExportSubfolder.swift` / `Subfolder.ts`; Safari / Firefox download only, so no field; Auto's ZIP too |
 | Export Frame (date stamp, Pentax / Contax 645) | 1.16.12 | ✓ | ✓ 1.17.0 | ✓ | ✓ | Pentax / Contax 645 rebates cover the photo's edges and keep its size (unreleased; before, they added pixels around it) |
 | Film scan 1.5× | 1.10.0 | ✓ | ✓ 1.17.4 | ✓ 1.17.4 | ✓ | |
-| Send to Auto (one photo) / back | ≤1.1.1 | ✓ | ✓ 1.17.8 (To Auto) | — | ✓ | iOS has no edits file |
+| Send to Auto (one photo) / back | ≤1.1.1 | ✓ | ✓ 1.17.8 (To Auto; E in Auto photo view and Pro outside Masks) | — | ✓ | iOS has no edits file |
 | Google Drive open / save | 1.5.0 | ✓ | n/a | n/a | n/a | Drive's desktop folder covers it |
 | "New version available" banner | 1.6.0 | ✓ | — | n/a | n/a (Play) | **Gap.** Desktop has no updater; releases are DMGs on GitHub |
 | Warning before closing mid-work | 1.14.0 | ✓ | ✓ 1.18.3 (quit) | n/a | n/a | |

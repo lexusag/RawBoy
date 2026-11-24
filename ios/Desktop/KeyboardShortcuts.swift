@@ -47,8 +47,8 @@ final class KeyboardShortcuts {
     /**
      * Auto: the arrows move through the grid (and between photos in the photo view, as Space and ⌫ do there), Return opens,
      * Esc goes back, ⌫ / ⌦ in the grid removes the selection after confirming, ⌦ in the photo view removes the photo from
-     * the batch, C opens Crop & rotate, ⇧C copies the previous photo's look; ⌘E, ⌘O, ⌘Z and the mode keys are the menu's.
-     * Nothing here fires while text is being typed or a sheet is open.
+     * the batch, C opens Crop & rotate, E opens the photo in Pro with its edits, ⇧C copies the previous photo's look; ⌘E,
+     * ⌘O, ⌘Z and the mode keys are the menu's. Nothing here fires while text is being typed or a sheet is open.
      */
     private func handleAuto(_ event: NSEvent, _ key: Key) -> NSEvent? {
         guard event.type == .keyDown, !typing else { return event }
@@ -92,8 +92,8 @@ final class KeyboardShortcuts {
         }
         if let id = auto.selected {
             // Crop & rotate open: Return, Esc or C put it down (the crop stays as drawn); the batch keys wait until then.
-            // A held C doesn't flick the tool open and shut.
-            if key == .c, event.isARepeat { return nil }
+            // A held C doesn't flick the tool open and shut, and a held E doesn't bounce between Auto and Pro.
+            if (key == .c || key == .e), event.isARepeat { return nil }
             if auto.cropping {
                 switch key {
                 case .return, .keypadEnter, .escape, .c: auto.cropping = false
@@ -108,6 +108,7 @@ final class KeyboardShortcuts {
             // ⌦ (fn-Delete, the web's Delete): out of the batch, on to the next photo.
             case .forwardDelete: auto.removeOpened(id)
             case .c: auto.requestCrop()
+            case .e: model.editInPro()
             case .escape: auto.goBack()
             default: return event
             }
@@ -210,7 +211,11 @@ final class KeyboardShortcuts {
         case .backslash: commands.send(.toggleCompare)
         case .y: commands.send(.toggleSplit)
         case .b: commands.send(.maskTool(.brush))
-        case .e: commands.send(.maskTool(.erase))
+        // Inside Masks: Erase; outside Masks: Send to Auto with the new edits (matching E on an opened Auto photo), but not while Crop & rotate is open.
+        case .e:
+            if commands.masksOpen { commands.send(.maskTool(.erase)) }
+            else if flags.isEmpty { if !commands.cropOpen { model.sendToAuto() } }
+            else { return event }
         case .v: commands.send(.maskTool(.move))
         case .leftBracket: commands.send(.brushSize(-1))
         case .rightBracket: commands.send(.brushSize(1))
