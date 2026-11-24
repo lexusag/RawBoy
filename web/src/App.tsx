@@ -170,7 +170,7 @@ export function App() {
   };
   const browserToAuto = (files: File[], sidecars: (EditsSidecar | null)[], mode: ImportMode) => {
     const note = auto.state.message;
-    const added = auto.add(files, sidecars, mode);
+    const added = auto.add(files, sidecars, mode, mode === 'plain');
     const skipped = files.length - added;
     // Auto's own note (such as JPEGs being lower quality than raws) wins over the count.
     if (auto.state.message === note) {

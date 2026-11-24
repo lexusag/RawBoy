@@ -429,7 +429,8 @@ final class DesktopModel: ObservableObject {
               let items = URLComponents(url: link, resolvingAgainstBaseURL: false)?.queryItems else { return false }
         let paths = items.filter { $0.name == "path" }.compactMap(\.value).map { URL(fileURLWithPath: $0) }
         guard !paths.isEmpty else { return false }
-        addToAuto(paths, as: items.first { $0.name == "as" }?.value.flatMap(ImportMode.init(rawValue:)))
+        let how = items.first { $0.name == "as" }?.value.flatMap(ImportMode.init(rawValue:))
+        addToAuto(paths, as: how, sidecarOnly: how == .plain)
         return true
     }
 

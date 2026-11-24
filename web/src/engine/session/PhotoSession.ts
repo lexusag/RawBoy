@@ -150,6 +150,8 @@ export class PhotoSession {
   /** The lens blur's source copy being made, so export can wait for it. */
   private bokehJob: Promise<void> | null = null;
   private flareJob: Promise<void> | null = null;
+  /** The healing pass in progress, so export waits for restored or newly painted strokes. */
+  private blemishJob: Promise<void> | null = null;
   private viewWidth = 0;
   private viewHeight = 0;
   /** The frame the zoomed view keeps around the photo, device pixels (ZoomMath's [frame]). */
@@ -258,6 +260,7 @@ export class PhotoSession {
     this.image?.close();
     this.image = img;
     this.blemishRun++;
+    this.blemishJob = null;
     this.blemishSpots = null;
     this.healedKey = '';
     this.brushes.clear();
@@ -281,7 +284,7 @@ export class PhotoSession {
     });
     this.params = initialParams(defaults);
     this.ensureSkinMask();
-    if (this.params.healSpots.length) this.scheduleBlemishes(); // restored from a sidecar
+    if (this.params.healSpots.length) this.scheduleBlemishes(0); // restored from a sidecar
     this.ensureDepthMap();
     this.ensureBokehSource();
     this.ensureFlareSource();
@@ -648,10 +651,10 @@ export class PhotoSession {
    * Heals the blemishes the slider asks for, ~300 ms after it settles: spots are detected once per photo, then the
    * most obvious ones (by score) are healed in the full-resolution image and the previews rebuilt from it.
    */
-  private scheduleBlemishes() {
+  private scheduleBlemishes(wait = 300) {
     const run = ++this.blemishRun;
-    void (async () => {
-      await delay(300);
+    this.blemishJob = (async () => {
+      if (wait > 0) await delay(wait);
       const img = this.image;
       if (run !== this.blemishRun || !img) return;
       const level = this.params.blemishRemoval;
@@ -826,6 +829,7 @@ export class PhotoSession {
     const img = this.image;
     if (!img) throw new Error('No photo open');
     p = effectiveParams(p, defaults);
+    await this.blemishJob;
     const lut = p.lut && p.film == null ? await loadLutCached(p.lut) : null;
     const film = p.film ? await FilmStocks.load(p.film) : null;
     this.ensureBokehSource(p);
