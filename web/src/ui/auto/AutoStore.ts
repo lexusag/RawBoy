@@ -1386,7 +1386,7 @@ export class AutoStore {
 
   /**
    * Uniforms for [params] on the analysis's small copies (thumbnails, the cached preview): RawBoy edits' painted masks
-   * are rasterised on the 512 px base (once per edit, see brushes) and their lens blur starts from the boosted bloom
+   * are rasterised on the 512 px base (once per edit, see brushes) and their lens blur starts from the 512 px base
    * copy, so a thumbnail shows them as the export will, only coarser.
    */
   private smallShader(a: Analysis, params: DevelopParams, lut: LutData | null, film: FilmData | null): ShaderParams {
@@ -1396,7 +1396,7 @@ export class AutoStore {
       this.brushes.set(params.masks, brushFor);
     }
     return ShaderParams.from(
-      params, a.defaults, lut, new LensTransform(a.lens, params), a.base, a.bloom, a.skin, 1, 1, null, brushFor, film, a.bloom.halo,
+      params, a.defaults, lut, new LensTransform(a.lens, params), a.base, a.bloom, a.skin, 1, 1, null, brushFor, film, a.base,
     );
   }
 

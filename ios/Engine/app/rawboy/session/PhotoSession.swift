@@ -62,7 +62,7 @@ public final class PhotoSession: ObservableObject {
     @Published public private(set) var bloomSources: BloomSources?
     /** What the anamorphic flare scatters light from (FlareSource); made the first time the flare is on. */
     @Published public private(set) var flareSource: PreviewImage?
-    /** The highlight-boosted whole-image copy the masks' lens blur starts from (BokehTexture), made once a layer blurs. */
+    /** The whole-image copy the lens blur starts from (BokehTexture), made once a layer or depth map blurs. */
     @Published public private(set) var bokehSource: PreviewImage?
     /** Portrait retouch's gains map for the preview (nil until made, or with no face), and whether one is being made. */
     @Published public private(set) var retouchMap: RetouchMap?
@@ -274,7 +274,7 @@ public final class PhotoSession: ObservableObject {
               Self.blurs(p ?? params, depth: depthMap != nil) else { return }
         bokehTask = Task {
             let source = await Task.detached(priority: .userInitiated) {
-                img.createPreview(maxDimension: BokehTexture.sourceMaxDimension, boostHighlights: true)
+                img.createPreview(maxDimension: BokehTexture.sourceMaxDimension)
             }.value
             bokehTask = nil
             guard image === img else { ensureBokehSource(); return }

@@ -94,7 +94,7 @@ class PhotoSession(
     private val _bloomSources = MutableStateFlow<BloomSources?>(null)
     val bloomSources = _bloomSources.asStateFlow()
 
-    /** Highlight-boosted ~1536 px copy the masks' lens blur works from; made the first time a layer blurs. */
+    /** ~1536 px copy the masks' lens blur works from; made the first time a layer blurs. */
     private val _bokehSource = MutableStateFlow<PreviewImage?>(null)
     val bokehSource = _bokehSource.asStateFlow()
     private var bokehJob: Job? = null
@@ -237,7 +237,7 @@ class PhotoSession(
         bokehJob = scope.launch {
             try {
                 val source = withContext(Dispatchers.Default) {
-                    img.createPreview(BokehTexture.SOURCE_MAX_DIMENSION, boostHighlights = true)
+                    img.createPreview(BokehTexture.SOURCE_MAX_DIMENSION)
                 }
                 if (image === img) _bokehSource.value = source
             } catch (e: CancellationException) {
@@ -751,12 +751,12 @@ class EditTextures(val brushFor: (MaskLayer) -> BrushRaster?, val bokehSource: P
 
 /**
  * The painted masks and the lens blur source for exporting [p] from [image] without a session (Auto's batch export),
- * made as [PhotoSession] makes them (brush rasters at the preview's size, the boosted bokeh copy), so the export
+ * made as [PhotoSession] makes them (brush rasters at the preview's size, the bokeh source copy), so the export
  * matches what RawBoy showed. Call after any blemish healing: the session makes them from the healed image too.
  */
 fun editTexturesOf(image: RawImage, p: DevelopParams): EditTextures {
     val blurs = p.masks.any { it.enabled && it.opacity > 0f && it.adjust.lensBlur > 0f }
-    val bokehSource = if (blurs) image.createPreview(BokehTexture.SOURCE_MAX_DIMENSION, boostHighlights = true) else null
+    val bokehSource = if (blurs) image.createPreview(BokehTexture.SOURCE_MAX_DIMENSION) else null
     val flareSource = if (p.anamorphic > 0f) FlareSource.make(image.createPreview(FlareSource.SOURCE_MAX_DIMENSION, boostHighlights = true)) else null
     if (p.masks.none { it.strokes.isNotEmpty() }) return EditTextures({ null }, bokehSource, flareSource)
     return EditTextures(brushLookup(image.createPreview(PhotoSession.PREVIEW_MAX_DIMENSION), p.masks), bokehSource, flareSource)

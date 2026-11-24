@@ -90,4 +90,30 @@ final class BokehTests: XCTestCase {
         // The same masks again: nothing is redrawn (cached), and the result is the same.
         XCTAssertEqual(try render(img), blurred)
     }
+
+    /** A bright flat field (above bloom's 0.6 highlight-boost threshold) must blur to itself without blowing out. */
+    func testBrightFlatFieldDoesNotBlowOutWhenBlurred() throws {
+        let w = 128, h = 96
+        var px = [UInt16](repeating: 0, count: w * h * 3)
+        let r = Float16(0.25).bitPattern, g = Float16(0.65).bitPattern, b = Float16(0.95).bitPattern
+        for i in 0..<(w * h) {
+            px[i * 3] = r; px[i * 3 + 1] = g; px[i * 3 + 2] = b
+        }
+        let img = PreviewImage(width: w, height: h, pixels: px, fullWidth: w, fullHeight: h)
+        let dev = OffscreenDeveloper(imageWidth: w, imageHeight: h)
+        func render(_ source: PreviewImage?) throws -> [UInt16] {
+            var out = [UInt16](repeating: 0, count: w * h * 4)
+            try out.withUnsafeMutableBufferPointer {
+                try dev.renderPreview(params([layer(blur: 100)], source: source, size: (w, h)), preview: img, width: w, height: h,
+                                      output: $0.baseAddress!)
+            }
+            return out
+        }
+        let sharp = try render(nil)
+        let blurred = try render(img)
+        let mid = ((h / 2) * w + (w / 2)) * 4
+        for c in 0..<3 {
+            XCTAssertEqual(Double(blurred[mid + c]), Double(sharp[mid + c]), accuracy: 200)
+        }
+    }
 }

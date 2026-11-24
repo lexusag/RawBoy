@@ -1,3 +1,8 @@
+**Lens blur and portrait bokeh no longer blow out bright areas (all platforms, 2026-11-24)**
+
+- The lens blur source (mask lens blur and portrait depth bokeh) was made with the highlight boost that bloom uses (up to ~10x above 0.6). Bloom only adds a little scattered light on top of the picture, but lens blur replaces the pixel, so a bright blue backdrop, sky or white wall inside a blur mask or out-of-focus depth region went white, and the colour-guided depth lookup read the boosted colours. The source is now the plain downsample, and Auto's thumbnails use the 512 px base instead of the bloom halo copy.
+- Code: `PhotoSession`, `editTexturesOf`, `ShotSaver`, `AutoStore`/`AutoViewModel` (Kotlin, Swift, TS); test `BokehTests.testBrightFlatFieldDoesNotBlowOutWhenBlurred`.
+
 **RawBoy Desktop: pin RawBoy Viewer 0.2.16 (2026-11-24)**
 
 - **Places: always-visible draggable scroll bar** in the sidebar (Places and the pinned Favourites/Recent strip) and a fix for **Browser layout overflow with the preview pane on half-ultrawide/narrow windows**. Comes with RawBoy Viewer v0.2.16 (PRs 74, 75); the pin moves from 0.2.14 to 0.2.16. Not tried by hand (no Mac): CI's `desktop` job is the first build.

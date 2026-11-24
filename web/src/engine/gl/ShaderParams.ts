@@ -211,7 +211,7 @@ export class ShaderParams {
     readonly clipLevel = 0,
     /** Light leaks over the finished picture (shaders/light_leak.glsl). */
     readonly leaks: LeakUniforms = NO_LEAKS,
-    /** Highlight-boosted whole-image copy the lens blur starts from (BokehTexture), or null: no lens blur. */
+    /** Whole-image copy the lens blur starts from (BokehTexture), or null: no lens blur. */
     readonly bokehSource: PreviewImage | null = null,
     /** Horizontal anamorphic flare strength (`uAnamorphic`, 0 = off) and coating (`uAnamorphicTint`, `Len`, `Bar`). */
     readonly anamorphic = 0,
@@ -276,7 +276,7 @@ export class ShaderParams {
     brushFor: BrushLookup = () => null,
     /** Loaded film stock for DevelopParams.film (Auto's Film mode). */
     film: FilmData | null = null,
-    /** Highlight-boosted copy for the masks' lens blur (PhotoSession.bokehSource). */
+    /** Whole-image copy for the lens blur (PhotoSession.bokehSource). */
     bokehSource: PreviewImage | null = null,
     /** The anamorphic flare's source (PhotoSession.flareSource). */
     flareSource: PreviewImage | null = null,

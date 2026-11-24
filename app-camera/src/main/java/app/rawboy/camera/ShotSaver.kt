@@ -513,7 +513,7 @@ internal object ShotSaver {
             }
             val portraitActive = s.saveDepth && s.depthPortrait && depthMap != null
             val bokehSource = if (portraitActive) {
-                img.createPreview(PORTRAIT_BOKEH_SOURCE_DIMENSION, boostHighlights = true)
+                img.createPreview(PORTRAIT_BOKEH_SOURCE_DIMENSION)
             } else {
                 null
             }

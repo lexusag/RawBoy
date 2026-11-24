@@ -52,7 +52,7 @@ export interface SessionState {
   base: PreviewImage | null;
   /** Highlight-boosted small copies that bloom scatters light from. */
   bloomSources: BloomSources | null;
-  /** Highlight-boosted copy the masks' lens blur starts from; made the first time a layer blurs. */
+  /** Whole-image copy the lens blur starts from; made the first time a layer or depth map blurs. */
   bokehSource: PreviewImage | null;
   /** What the anamorphic flare scatters from (FlareSource); made the first time the flare is on. */
   flareSource: PreviewImage | null;
@@ -403,7 +403,7 @@ export class PhotoSession {
     if (!layerBlurs && !depthBlurs) return;
     this.bokehJob = (async () => {
       try {
-        const source = await img.createPreview(BOKEH_SOURCE_MAX_DIMENSION, true);
+        const source = await img.createPreview(BOKEH_SOURCE_MAX_DIMENSION);
         if (this.image === img) this.update({ bokehSource: source });
       } catch (e) {
         this.onMessage(`Lens blur failed: ${e instanceof Error ? e.message : String(e)}`);
@@ -885,12 +885,12 @@ export interface EditTextures {
 
 /**
  * The painted masks and the lens blur source for exporting [p] from [image] without a session (Auto's batch export),
- * made as the session makes them (brush rasters at the preview's size, the boosted bokeh copy), so the export matches
+ * made as the session makes them (brush rasters at the preview's size, the bokeh source copy), so the export matches
  * what RawBoy showed. Call after any blemish healing: the session makes them from the healed image too.
  */
 export async function editTexturesOf(image: RawImage, p: DevelopParams): Promise<EditTextures> {
   const blurs = p.masks.some((l) => l.enabled && l.opacity > 0 && l.adjust.lensBlur > 0);
-  const bokehSource = blurs ? await image.createPreview(BOKEH_SOURCE_MAX_DIMENSION, true) : null;
+  const bokehSource = blurs ? await image.createPreview(BOKEH_SOURCE_MAX_DIMENSION) : null;
   const flareSource = p.anamorphic > 0 ? makeFlareSource(await image.createPreview(FLARE_SOURCE_MAX_DIMENSION, true)) : null;
   if (!p.masks.some((l) => l.strokes.length)) return { brushFor: () => null, bokehSource, flareSource };
   return { brushFor: brushLookup(await image.createPreview(PREVIEW_MAX_DIMENSION), p.masks), bokehSource, flareSource };
