@@ -202,7 +202,10 @@ public final class PhotoSession: ObservableObject {
         guideSource = nil
         params = initialParams(defaults)
         ensureSkinMask()
+        if !params.healSpots.isEmpty { scheduleBlemishes(wait: 0) } // restored from a sidecar
         ensureDepthMap() // Portrait blur restored from a sidecar
+        ensureBokehSource()
+        ensureFlareSource()
         // Camera and exposure (ISO, shutter, aperture, focal length); the decoder's summary if none of it is known.
         let line = loaded.image.shotInfo.line()
         return Opened(description: line.isEmpty ? loaded.image.description : line, defaults: defaults, params: params)
@@ -523,7 +526,11 @@ public final class PhotoSession: ObservableObject {
      */
     public func healNow() async {
         guard params.blemishRemoval > 0 || !params.healSpots.isEmpty else { return }
-        scheduleBlemishes()
+        if params.blemishRemoval > 0 {
+            ensureSkinMask()
+            await skinTask?.value
+        }
+        scheduleBlemishes(wait: 0)
         await blemishTask?.value
     }
 
@@ -532,10 +539,10 @@ public final class PhotoSession: ObservableObject {
      * detected once per photo, then the most obvious ones (by score) are healed in the
      * full-resolution image and the previews rebuilt from it.
      */
-    private func scheduleBlemishes() {
+    private func scheduleBlemishes(wait: UInt64 = 300_000_000) {
         blemishTask?.cancel()
         blemishTask = Task {
-            try? await Task.sleep(nanoseconds: 300_000_000)
+            if wait > 0 { try? await Task.sleep(nanoseconds: wait) }
             guard !Task.isCancelled, let img = image else { return }
             let level = params.blemishRemoval
             let brush = params.healSpots
@@ -729,6 +736,11 @@ public final class PhotoSession: ObservableObject {
                        onProgress: @escaping @Sendable (Float) -> Void) async throws -> URL {
         guard let img = image else { throw RawImageError(message: "No photo open") }
         let p = EditSections.effective(p, defaults: defaults)
+        if let task = blemishTask {
+            await task.value
+        } else if !p.healSpots.isEmpty || p.blemishRemoval > 0 {
+            await healNow()
+        }
         ensureFlareSource(p)
         await flareTask?.value
         ensureBokehSource(p)

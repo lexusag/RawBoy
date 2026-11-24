@@ -1,3 +1,9 @@
+**Sidecar healing brushes in Pro & Auto, and Send to Auto › As is from Viewer/Browser (RawBoy Desktop, iOS, web, 2026-11-24)**
+
+- **Pro and Auto detail view now apply healing brushes restored from sidecars:** `PhotoSession.swift`'s `adopt()` now schedules healing immediately (`scheduleBlemishes(wait: 0)`) when the opened parameters contain `healSpots` (and ensures bokeh/flare sources), matching web's `PhotoSession.ts`. Both `PhotoSession.swift` and `PhotoSession.ts` also wait for any in-flight healing pass before exporting, and `healNow()` awaits skin detection when `blemishRemoval > 0`. Previously, opening a photo with healing strokes in its XMP sidecar loaded the spot list into state without healing the preview or single-photo export.
+- **Send to Auto › As is from Viewer/Browser loads full sidecar edits:** `DesktopModel.handle(link:)` now passes `sidecarOnly: how == .plain` for `rawboy-desktop://auto?as=plain` links from standalone RawBoy Viewer (matching Desktop Browse's `DesktopHandOff`). Web's `AutoStore.add` also supports `sidecarOnly` when sent from Browser as *As is*: it restores `rawboy:Auto` if present, else `rawboy:Develop` (including healing brushes, masks, crop and tone) once analysed, without applying the batch preset, lens preset or auto denoise.
+- Code: `PhotoSession.swift`, `DesktopModel.swift`, `web/src/App.tsx`, `AutoStore.ts`, `PhotoSession.ts`. Tests: `autostore.test.ts`, `HealBrushTests.swift` (the Swift part is compiled and tested by CI).
+
 **Portrait blur: colour guided-filter depth upsampling (all platforms, 2026-11-24)**
 
 - Replaces the per-pixel 4×4 joint bilateral quantile/band lookup (`7d8dca1` / `c92ce67`) with a 3-channel colour Guided Image Filter (He et al.) computed once when the depth map, base guide or Edge softness changes, and uploaded to `uDepthMap` as `RGBA16F` (`mean_a.rgb`, `mean_b`).

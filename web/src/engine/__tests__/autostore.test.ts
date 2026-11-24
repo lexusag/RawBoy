@@ -841,3 +841,96 @@ describe('Auto grid: unedited filter', () => {
     expect(store.shown).toHaveLength(5);
   });
 });
+
+describe('Browser Send to Auto › As is (sidecarOnly)', () => {
+  it('loads rawboy:Develop including healing brushes, skips batch preset/lens/autoDenoise, and leaves photos without sidecars untouched', async () => {
+    const { developParams } = await import('../develop/DevelopParams');
+    const { encodeEdits } = await import('../develop/Edits');
+    const { capturePreset, NO_LENS_PRESET } = await import('../develop/Presets');
+    const { encodeAuto } = await import('../../ui/auto/AutoSidecar');
+    const { Looks } = await import('../auto/looks/Look');
+    const { FilmLooks } = await import('../auto/looks/FilmLooks');
+    const { NO_ADJUSTMENTS } = await import('../auto/looks/LookApplier');
+
+    const store = new AutoStore();
+    // Batch has a preset and a lens choice set; sidecarOnly must not apply them.
+    const batchPreset = capturePreset('Moody', developParams({ contrast: 30 }), ['light']);
+    store.applyPresetToAll(batchPreset);
+
+    const defaults = developParams({ temperature: 5500 });
+    const proEdits = developParams({
+      temperature: 6100,
+      exposure: 0.75,
+      cropLeft: 0.1,
+      cropRight: 0.9,
+      healSpots: [{ id: 's1', x: 0.4, y: 0.5, radius: 0.012, source: [0.45, 0.5], feather: 75, path: [0.42, 0.51] }],
+    });
+    const developJson = encodeEdits(proEdits, defaults)!;
+    const autoJson = encodeAuto({
+      mode: 'looks',
+      look: Looks.PORTRA_400,
+      filmLook: FilmLooks.PORTRA_400,
+      strength: 80,
+      adjust: NO_ADJUSTMENTS,
+      preset: null,
+      edits: null,
+      lensChoice: NO_LENS_PRESET,
+      lensPreset: null,
+      plain: false,
+      autoDenoise: false,
+    });
+
+    const sidecarDevelop = {
+      name: 'a.xmp',
+      read: async (field?: 'Develop' | 'Auto') => (field === 'Develop' ? developJson : null),
+      write: async () => undefined,
+    };
+    const sidecarAuto = {
+      name: 'b.xmp',
+      read: async (field?: 'Develop' | 'Auto') => (field === 'Auto' ? autoJson : developJson),
+      write: async () => undefined,
+    };
+    const sidecarEmpty = {
+      name: 'c.xmp',
+      read: async () => null,
+      write: async () => undefined,
+    };
+
+    store.add(
+      [new File(['a'], 'a.CR2'), new File(['b'], 'b.CR2'), new File(['c'], 'c.CR2')],
+      [sidecarDevelop, sidecarAuto, sidecarEmpty],
+      'plain',
+      true,
+    );
+    await (store as unknown as { restoring: Promise<unknown> }).restoring;
+
+    const byName = (name: string) => store.state.photos.find((p) => p.name === name)!;
+    const a = byName('a.CR2');
+    const b = byName('b.CR2');
+    const c = byName('c.CR2');
+
+    // None of them get the batch preset, auto lens preset, or measured autoDenoise.
+    expect([a.preset, c.preset]).toEqual([null, null]);
+    expect([a.lensChoice, c.lensChoice]).toEqual([NO_LENS_PRESET, NO_LENS_PRESET]);
+    expect([a.autoDenoise, c.autoDenoise]).toEqual([false, false]);
+    // b had rawboy:Auto, so it restored its Auto look.
+    expect(b.look).toBe(Looks.PORTRA_400);
+    expect(b.strength).toBe(80);
+    // a had rawboy:Develop queued for analysis; simulate finishAnalysis decoding it against defaults.
+    const pending = (store as unknown as { pendingSidecarEdits: Map<string, string> }).pendingSidecarEdits;
+    expect(pending.get(a.id)).toBe(developJson);
+    expect(pending.has(b.id)).toBe(false);
+    expect(pending.has(c.id)).toBe(false);
+
+    const { decodeEdits } = await import('../develop/Edits');
+    const decoded = decodeEdits(pending.get(a.id)!, defaults)!;
+    expect(decoded.exposure).toBeCloseTo(0.75, 4);
+    expect(decoded.temperature).toBeCloseTo(6100, 1);
+    expect(decoded.cropLeft).toBeCloseTo(0.1, 4);
+    expect(decoded.healSpots).toHaveLength(1);
+    expect(decoded.healSpots[0].x).toBeCloseTo(0.4, 4);
+    expect(decoded.healSpots[0].source).toEqual([0.45, 0.5]);
+    expect(decoded.healSpots[0].path).toEqual([0.42, 0.51]);
+  });
+});
+

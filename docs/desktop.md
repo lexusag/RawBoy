@@ -51,8 +51,8 @@ ViewerUI installs its own key monitor while Browse shows; Desktop's `KeyboardSho
 menu is the Viewer's Photo menu (`ViewerPhotoCommands`), on while Browse shows. Browse's settings (the Viewer's Settings window, `ViewerSettingsRoot`) are the app's Settings… (⌘,); they apply to Browse only, except **Interface size** (85–150 %), which sizes the whole app: Pro's bar, panel and filmstrip, Auto's grid, sidebar, bar and panel, and the Packer window follow it as soon as it changes (`DesktopModel.interfaceScale` → `EnvironmentValues.interfaceScale` → `interfaceScaled()`, the Viewer's own lay-out-smaller-then-scale method). The photo is never scaled, so it stays sharp at every size. `Desktop/DesktopHandOff.swift`
 implements the Viewer's `PhotoHandOff` in-process: E in the viewer opens the photo in Pro (whichever mode was showing; Auto's
 batch is kept), Send to RawBoy Auto adds photos or folders to Auto's batch as Looks, Film or As is. **As is** from Browse
-brings each photo with its sidecar and nothing else: its `rawboy:Auto` settings if it has them, else its RawBoy edits
-(`rawboy:Develop`: the Viewer's crop and turn, Pro's edits) developing it in place of a look, else the file as it is;
+(and from standalone RawBoy Viewer via `rawboy-desktop://auto?as=plain`) brings each photo with its sidecar and nothing else: its `rawboy:Auto` settings if it has them, else its RawBoy edits
+(`rawboy:Develop`: the Viewer's crop and turn, Pro's edits including healing brushes) developing it in place of a look, else the file as it is;
 no measured denoise, batch preset or lens preset is added (`AutoViewModel.add(sidecarOnly:)`, `SidecarEdits.develop`). Real previews (R, and Compare's) are the
 engine's as-shot develop (`Desktop/EngineRealPreview.swift`, a `RealPreviewProvider` given to ViewerUI through
 `ViewerHost.realPreview` before the model is made): `RawImage.open`, the as-shot `DevelopParams` with no edits, then

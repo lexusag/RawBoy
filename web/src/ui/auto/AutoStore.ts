@@ -6,6 +6,7 @@ import { ALL_FILM_LOOKS, FilmLooks } from '../../engine/auto/looks/FilmLooks';
 import { suggestFilm, suggestLook } from '../../engine/auto/looks/LookSuggester';
 import { autoDevelop } from '../../engine/auto/analysis/AutoTone';
 import type { DevelopParams } from '../../engine/develop/DevelopParams';
+import { decodeEdits } from '../../engine/develop/Edits';
 import { randomFilmRoll, type FilmLeak } from '../../engine/develop/FilmLeaks';
 import { copiedEdits, copyEdits } from '../common/EditClipboard';
 import { applyPreset, chosenLensPreset, decodePresets, isLensPreset, layerPreset, NO_LENS_PRESET, PRESET_GROUPS, putLensPreset, replacesLook, sameLensPreset, type Preset, type PresetGroup } from '../../engine/develop/Presets';
@@ -495,6 +496,8 @@ export class AutoStore {
   private readonly saveTimers = new Map<string, number>();
   /** What each photo's sidecar was last given, so unchanged settings aren't written again. */
   private readonly saved = new Map<string, string>();
+  /** RawBoy edits (`rawboy:Develop`) of photos sent from Browser As is (`sidecarOnly`), decoded once analysed. */
+  private readonly pendingSidecarEdits = new Map<string, string>();
   /** Grid thumbnails from the files' own previews, made one at a time while photos wait for their analysis. */
   private quickThumbs: Promise<unknown> = Promise.resolve();
   /** Look-strip thumbnails: the latest per photo and look, with the adjustments it was rendered at. */
@@ -540,21 +543,27 @@ export class AutoStore {
    * Adds photos; files already listed (same name, size and date) are skipped. Returns how many were added. [sidecars]
    * (same order as [files]; RawBoy Browser's): photos come back with the Auto settings kept there, and keep them there.
    * [importMode]: how they're added (RawBoy Browser's Send to Auto asks), else the batch's Import as.
+   * [sidecarOnly] (RawBoy Browser's Send to Auto › As is): only what their sidecars hold (`rawboy:Auto`, else
+   * `rawboy:Develop` once analysed), no measured denoise, batch preset or lens preset added.
    */
-  add(files: File[], sidecars: readonly (EditsSidecar | null)[] = [], importMode: ImportMode = this._state.importMode): number {
+  add(files: File[], sidecars: readonly (EditsSidecar | null)[] = [], importMode: ImportMode = this._state.importMode, sidecarOnly = false): number {
     const known = new Set(this._state.photos.map((p) => fileKey(p.file)));
     const fresh: AutoPhoto[] = [];
-    const plain = importMode === 'plain';
-    const mode: LookMode = importMode === 'plain' ? 'looks' : importMode;
+    const effectiveMode: ImportMode = sidecarOnly ? 'plain' : importMode;
+    const plain = effectiveMode === 'plain';
+    const mode: LookMode = plain ? 'looks' : effectiveMode;
+    const preset = sidecarOnly ? null : this._state.preset;
+    const lensChoice = sidecarOnly ? NO_LENS_PRESET : this._state.lensChoice;
     for (const [i, file] of files.entries()) {
       if (known.has(fileKey(file))) continue;
       known.add(fileKey(file));
       fresh.push({ sidecar: sidecars[i] ?? null,
         id: String(this.nextId++), file, name: file.name, date: fileDate(file.lastModified), status: 'queued', error: null, analysis: null,
         look: Looks.NATURAL, suggested: Looks.NATURAL, mode, plain, filmLook: FilmLooks.PORTRA_400,
-        suggestedFilm: FilmLooks.PORTRA_400, strength: DEFAULT_STRENGTH, adjust: NO_ADJUSTMENTS, preset: this._state.preset, edits: null,
+        suggestedFilm: FilmLooks.PORTRA_400, strength: DEFAULT_STRENGTH, adjust: NO_ADJUSTMENTS, preset, edits: null,
         // "As is": the file as it is; a raw gets its measured denoise (Auto denoise), a finished file nothing.
-        lensChoice: this._state.lensChoice, lensPreset: null, looksApplied: false, autoDenoise: plain && isRawName(file.name),
+        // From Browser As is (sidecarOnly) it gets nothing at all.
+        lensChoice, lensPreset: null, looksApplied: false, autoDenoise: plain && !sidecarOnly && isRawName(file.name),
         thumbnail: null,
       });
     }
@@ -564,7 +573,7 @@ export class AutoStore {
     this.update({ photos: sortPhotos([...this._state.photos, ...fresh], this._state.sort), ...(note ? { message: note } : {}) });
     void this.readDates(fresh);
     for (const p of fresh) this.quickThumbs = this.quickThumbs.then(() => this.quickThumbnail(p.id)).catch(() => undefined);
-    const restore = Promise.all(fresh.filter((p) => p.sidecar).map((p) => this.restoreSaved(p.id, p.sidecar!)));
+    const restore = Promise.all(fresh.filter((p) => p.sidecar).map((p) => this.restoreSaved(p.id, p.sidecar!, sidecarOnly)));
     this.restoring = Promise.all([this.restoring, restore]);
     void this.processQueue();
     return fresh.length;
@@ -646,7 +655,7 @@ export class AutoStore {
   }
 
   /** Gives photo [id] the settings kept in its sidecar, if any (they count as given, so analysis keeps the look). */
-  private async restoreSaved(id: string, sidecar: EditsSidecar) {
+  private async restoreSaved(id: string, sidecar: EditsSidecar, sidecarOnly = false) {
     let text: string | null = null;
     try {
       text = await sidecar.read('Auto');
@@ -654,7 +663,20 @@ export class AutoStore {
       return; // unreadable: starts as a new photo, and the first change rewrites it
     }
     const saved = text != null ? decodeAuto(text) : null;
-    if (!saved || !this.photo(id)) return;
+    if (!saved) {
+      if (!sidecarOnly) return;
+      let develop: string | null = null;
+      try {
+        develop = await sidecar.read('Develop');
+      } catch {
+        return;
+      }
+      if (develop == null || !this.photo(id)) return;
+      this.pendingSidecarEdits.set(id, develop);
+      this.updatePhoto(id, (p) => ({ ...p, looksApplied: true }));
+      return;
+    }
+    if (!this.photo(id)) return;
     this.saved.set(id, text!);
     // A picked lens preset is found in this browser's lens presets (by lens, or name for manual lenses), else kept there.
     let lens = saved.lensPreset ? sameLensPreset(this._state.lensPresets, saved.lensPreset) : null;
@@ -998,6 +1020,7 @@ export class AutoStore {
       clearTimeout(this.thumbTimers.get(p.id));
       if (this.saveTimers.has(p.id)) void this.saveSidecar(p.id); // the photo's last change still reaches its sidecar
       this.histories.delete(p.id);
+      this.pendingSidecarEdits.delete(p.id);
       void this.previews.remove(p.id);
       this.neighbours.forget(p.id);
     }
@@ -1087,8 +1110,13 @@ export class AutoStore {
       if (!this.photo(next.id)) void this.previews.remove(next.id); // removed while it was analysed
       const look = suggestLook(analysis.stats, analysis.defaults.temperature);
       const filmLook = suggestFilm(analysis.stats, analysis.defaults.temperature);
+      // Sent from Browser As is: its sidecar's RawBoy edits, against the as-shot defaults the analysis has just found.
+      const developText = this.pendingSidecarEdits.get(next.id);
+      this.pendingSidecarEdits.delete(next.id);
+      const fromSidecar = developText != null ? decodeEdits(developText, analysis.defaults) : null;
       this.updatePhoto(next.id, (p) => ({
         ...p, status: 'ready', analysis, suggested: look, suggestedFilm: filmLook,
+        ...(fromSidecar && p.edits == null ? { edits: fromSidecar, adjust: NO_ADJUSTMENTS } : {}),
         lensPreset: chosenLensPreset(this._state.lensPresets, p.lensChoice, matchLensName(p, analysis)),
         // A plain photo stays Natural (nothing added); its film suggestion is there if it switches to Film.
         look: p.looksApplied || p.plain ? p.look : look, filmLook: p.looksApplied ? p.filmLook : filmLook,

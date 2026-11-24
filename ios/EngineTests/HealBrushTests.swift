@@ -42,6 +42,32 @@ final class HealBrushTests: XCTestCase {
         image.healBlemishes([], strokes: [])
         XCTAssertEqual(image.createPreview(maxDimension: 1024).pixels, before.pixels)
     }
+
+    /** Opening a photo whose sidecar has healing strokes (Pro, or Auto's detail view) heals it without a slider move. */
+    @MainActor
+    func testOpeningWithRestoredHealSpotsHealsPreview() async throws {
+        let dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().appendingPathComponent(".raw")
+        let files = ((try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [])
+            .filter { !$0.hasDirectoryPath && !$0.lastPathComponent.hasPrefix(".") }.sorted { $0.path < $1.path }
+        guard let file = files.first else { throw XCTSkip("no test file in \(dir.path)") }
+        let session = PhotoSession(onMessage: { _ in })
+        defer { session.close() }
+        var stroke = HealSpot(x: 0.5, y: 0.5, radius: 0.015, source: nil, feather: 80)
+        stroke.path = [0.55, 0.5]
+        _ = try await session.open(file) { defaults in
+            var p = defaults
+            p.healSpots = [stroke]
+            return p
+        }
+        let unhealed = try XCTUnwrap(session.preview?.pixels)
+        // Wait for the healing pass adopt() scheduled (no setParams / healNow call).
+        for _ in 0..<200 {
+            if session.preview?.pixels != unhealed { break }
+            try await Task.sleep(nanoseconds: 25_000_000)
+        }
+        XCTAssertNotEqual(session.preview?.pixels, unhealed)
+    }
 }
 
 /** A photo closed while a background task still works on it (Auto's quick photo changes) must not trap. */
