@@ -29,7 +29,7 @@ import {
   sampleCurve,
   type CurvePoint,
 } from '../develop/ToneCurve';
-import { applyPreset, captureLensPreset, capturePreset, chosenLensPreset, decodePresets, DEFAULT_PRESET_GROUPS, encodePresets, isLensPreset, isMonochromePreset, lensPresetFor, NO_LENS_PRESET, presetSections, putLensPreset, type Preset } from '../develop/Presets';
+import { applyPreset, captureLensPreset, capturePreset, chosenLensPreset, decodePresets, DEFAULT_PRESET_GROUPS, encodePresets, hasBrush, isLensPreset, isMonochromePreset, lensPresetFor, NO_LENS_PRESET, presetSections, putLensPreset, type Preset } from '../develop/Presets';
 import { BandDownscaler } from '../export/BandDownscaler';
 import { FilmStocks } from '../film/FilmStocks';
 import { baseNameOf, fileName } from '../export/ExportSettings';
@@ -930,6 +930,41 @@ describe('brush', () => {
     expect(kept[0].strokes).toEqual([]);
     const [p] = decodePresets(encodePresets([capturePreset('M', developParams({ masks: [sky, painted] }), ['masks'])]));
     expect(applyPreset(p, developParams()).masks.map((l) => [l.shape.kind, l.strokes.length])).toEqual([['linear', 0]]);
+  });
+
+  it('keeps existing brush layers and healing spots when applying a preset with masks', () => {
+    const brush = { ...newBrushLayer('Face'), adjust: { ...NO_ADJUST, exposure: 0.6 }, strokes: [a] };
+    const oldGrad = { ...newLinearLayer('Old'), adjust: { ...NO_ADJUST, exposure: -0.5 } };
+    const spot = { id: 'h1', x: 0.4, y: 0.5, radius: 0.01, source: null, feather: 80, path: [] as number[] };
+    const target = developParams({ masks: [oldGrad, brush], healSpots: [spot] });
+
+    const presetGrad = { ...newRadialLayer('Vignette'), adjust: { ...NO_ADJUST, exposure: -1 } };
+    const [p] = decodePresets(encodePresets([capturePreset('Grad', developParams({ masks: [presetGrad] }), ['masks'])]));
+    const out = applyPreset(p, target);
+    expect(out.masks.length).toBe(2);
+    expect(out.masks[0]).toEqual(brush);
+    expect(out.masks[1].name).toBe('Vignette');
+    expect(out.masks[1].id).not.toBe(presetGrad.id);
+    expect(out.healSpots).toEqual([spot]);
+
+    // An empty masks group in a preset still keeps existing brush layers.
+    const emptyMasks = capturePreset('Empty', developParams(), ['masks']);
+    expect(applyPreset(emptyMasks, target).masks).toEqual([brush]);
+
+    // Caps total layers at 4 without dropping any existing brush layer.
+    const threeBrushes = [0, 1, 2].map((i) => ({ ...newBrushLayer(`B${i}`), strokes: [a] }));
+    const twoGrads = capturePreset('Two', developParams({ masks: [newLinearLayer('G1'), newRadialLayer('G2')] }), ['masks']);
+    const capped = applyPreset(twoGrads, developParams({ masks: threeBrushes }));
+    expect(capped.masks.length).toBe(4);
+    expect(capped.masks.slice(0, 3)).toEqual(threeBrushes);
+    expect(capped.masks[3].name).toBe('G1');
+
+    // hasBrush detects healing spots, brush layers, and strokes on gradient layers.
+    expect(hasBrush(developParams())).toBe(false);
+    expect(hasBrush(developParams({ masks: [oldGrad] }))).toBe(false);
+    expect(hasBrush(developParams({ healSpots: [spot] }))).toBe(true);
+    expect(hasBrush(developParams({ masks: [newBrushLayer()] }))).toBe(true);
+    expect(hasBrush(developParams({ masks: [{ ...oldGrad, strokes: [a] }] }))).toBe(true);
   });
 
   it('places the 100% view consistently with viewRect', () => {

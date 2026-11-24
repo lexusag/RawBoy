@@ -768,26 +768,48 @@ final class AutoViewModel: ObservableObject {
     /**
      * Develops every photo, and those added later, with [preset] in place of its look: all the preset holds, lens
      * corrections included, on top of each photo's auto develop. Each photo keeps its look for when the preset is removed.
+     * Photos whose RawBoy edits hold brush work (healing brush or mask brush) keep them and take only the preset's groups.
      */
     func applyPresetToAll(_ preset: Preset, confirmed: Bool = false) {
         presetChoices = []
         if export != nil { return }
-        if !confirmed, askOverwrite(photos.map(\.id), "\(preset.name)", { [weak self] in self?.applyPresetToAll(preset, confirmed: true) }) { return }
+        let dropped = photos.filter { $0.edits.map { !Presets.hasBrush($0) } == true }.map(\.id)
+        if !confirmed, askOverwrite(dropped, "\(preset.name)", { [weak self] in self?.applyPresetToAll(preset, confirmed: true) }) { return }
         self.preset = preset
-        for p in photos { changeDevelop(p.id, force: true) { $0.preset = preset; $0.edits = nil } }
+        for p in photos {
+            changeDevelop(p.id, force: true) {
+                if let e = $0.edits, Presets.hasBrush(e) {
+                    $0.edits = Presets.apply(preset, e)
+                } else {
+                    $0.preset = preset
+                    $0.edits = nil
+                }
+            }
+        }
         message = "\(preset.name) applied to all photos"
     }
 
     /**
      * Develops only the photos in [ids] (the grid's selection, e.g. one scene) with [preset], so one batch can hold a
-     * preset per scene. The batch preset, which photos added later get, stays as it is.
+     * preset per scene. The batch preset, which photos added later get, stays as it is. Photos whose RawBoy edits hold
+     * brush work (healing brush or mask brush) keep them and take only the preset's groups.
      */
     func applyPreset(_ preset: Preset, to ids: Set<String>, confirmed: Bool = false) {
         presetChoices = []
         if export != nil { return }
-        if !confirmed, askOverwrite(Array(ids), "\(preset.name)", { [weak self] in self?.applyPreset(preset, to: ids, confirmed: true) }) { return }
+        let dropped = ids.filter { photo($0)?.edits.map { !Presets.hasBrush($0) } == true }
+        if !confirmed, askOverwrite(Array(dropped), "\(preset.name)", { [weak self] in self?.applyPreset(preset, to: ids, confirmed: true) }) { return }
         let chosen = photos.filter { ids.contains($0.id) }
-        for p in chosen { changeDevelop(p.id, force: true) { $0.preset = preset; $0.edits = nil } }
+        for p in chosen {
+            changeDevelop(p.id, force: true) {
+                if let e = $0.edits, Presets.hasBrush(e) {
+                    $0.edits = Presets.apply(preset, e)
+                } else {
+                    $0.preset = preset
+                    $0.edits = nil
+                }
+            }
+        }
         message = "\(preset.name) applied to \(chosen.count == 1 ? "1 photo" : "\(chosen.count) photos")"
     }
 
@@ -954,7 +976,7 @@ final class AutoViewModel: ObservableObject {
                 updatePhoto(next.id) {
                     $0.status = .ready
                     if let fromSidecar, $0.edits == nil {
-                        $0.edits = fromSidecar.params
+                        $0.edits = $0.preset.map { Presets.apply($0, fromSidecar.params) } ?? fromSidecar.params
                         $0.editsExtras = fromSidecar.extras
                         $0.adjust = .none
                     }

@@ -737,6 +737,8 @@ export class ProStore {
 
   /** Applies the preset's groups to the current photo; a LUT goes through selectLut (load, error message). */
   applyPreset = (preset: Preset) => {
+    this.flushStroke();
+    this.flushHeal();
     this.commit(applyPreset(preset, this._state.params), true);
     this.set({ message: `Applied ${preset.name}` });
   };
