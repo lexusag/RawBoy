@@ -1,6 +1,6 @@
-**RawBoy Desktop: pin RawBoy Viewer 0.2.15 (2026-11-24)**
+**RawBoy Desktop: pin RawBoy Viewer 0.2.16 (2026-11-24)**
 
-- **Places: always-visible draggable scroll bar** in the sidebar (Places and the pinned Favourites/Recent strip). Comes with RawBoy Viewer v0.2.15 (PR 74); the pin moves from 0.2.14 to 0.2.15. Not tried by hand (no Mac): CI's `desktop` job is the first build.
+- **Places: always-visible draggable scroll bar** in the sidebar (Places and the pinned Favourites/Recent strip) and a fix for **Browser layout overflow with the preview pane on half-ultrawide/narrow windows**. Comes with RawBoy Viewer v0.2.16 (PRs 74, 75); the pin moves from 0.2.14 to 0.2.16. Not tried by hand (no Mac): CI's `desktop` job is the first build.
 
 **Camera: video recording with Viewfinder from RAW (Android, 2026-11-24)**
 
