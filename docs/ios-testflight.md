@@ -6,7 +6,7 @@
 
 - **Versioning.** `MARKETING_VERSION` comes from the `version` workflow input (e.g. `1.0` or `1.6.2`; a leading `v` is stripped if passed). `CURRENT_PROJECT_VERSION` uses `build_number` if provided, or `GITHUB_RUN_NUMBER` otherwise, so every run gets a strictly higher build number automatically. `manageAppVersionAndBuildNumber` is set to `false` in `ExportOptions.plist` so Xcode keeps these exact values.
 - **Cloud-managed distribution signing.** `xcodebuild archive` runs with `CODE_SIGNING_ALLOWED=NO` (no Apple Development certificate needed on the runner), and `xcodebuild -exportArchive` uses `-allowProvisioningUpdates` with an App Store Connect API key (`method: app-store-connect`, `destination: upload`, `signingStyle: automatic`). Apple manages the distribution certificate and provisioning profile automatically — no `.p12` or `.mobileprovision` secrets to export or renew.
-- **External TestFlight eligible.** `testFlightInternalOnly` is off, so every uploaded build can be distributed to both Internal and External Testing groups (and submitted to the App Store).
+- **Internal vs. closed testing.** The **TestFlight distribution** input defaults to `internal` (`testFlightInternalTestingOnly: true` — internal testers only, not eligible for external groups or App Store submission). Pick `closed` (`testFlightInternalTestingOnly: false`) when you want a build eligible for closed/external TestFlight groups or App Store submission.
 
 ## One-time setup
 
@@ -44,6 +44,7 @@ Actions → **Publish to TestFlight** → **Run workflow**:
 | Use workflow from | the branch or tag to build (`main`, or a release tag such as `v1.6.2`) |
 | Version | marketing version shown to users, e.g. `1.0` or `1.6.2` |
 | Build number | leave empty to use the GitHub run number, or enter a positive integer to override it |
+| TestFlight distribution | `internal` (default, internal testers only) or `closed` (eligible for closed/external testing & App Store) |
 
 ## Troubleshooting
 

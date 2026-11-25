@@ -443,7 +443,7 @@ jobs:
             --key "$key_path" \
             --key-id "$APPLE_NOTARY_KEY_ID" \
             --issuer "$APPLE_NOTARY_ISSUER_ID" \
-            --wait --output-format json > "$notary_json"
+            --wait --timeout 15m --output-format json > "$notary_json"
           notary_rc=$?
           set -e
           cat "$notary_json"
@@ -451,15 +451,19 @@ jobs:
           sub_id=$(jq -r '.id // empty' "$notary_json" 2>/dev/null || true)
           status=$(jq -r '.status // empty' "$notary_json" 2>/dev/null || true)
           if [ "$notary_rc" -ne 0 ] || [ "$status" != "Accepted" ]; then
-            if [ -n "$sub_id" ]; then
-              echo "::group::Notarization log ($sub_id)"
-              xcrun notarytool log "$sub_id" \
-                --key "$key_path" \
-                --key-id "$APPLE_NOTARY_KEY_ID" \
-                --issuer "$APPLE_NOTARY_ISSUER_ID" || true
-              echo "::endgroup::"
+            if [ "$status" = "In Progress" ] && [ -n "$sub_id" ]; then
+              echo "::error::Notarization timed out after 15m (submission $sub_id is still In Progress on Apple's servers; check with 'xcrun notarytool info $sub_id' and re-run once Accepted)"
+            else
+              if [ -n "$sub_id" ]; then
+                echo "::group::Notarization log ($sub_id)"
+                xcrun notarytool log "$sub_id" \
+                  --key "$key_path" \
+                  --key-id "$APPLE_NOTARY_KEY_ID" \
+                  --issuer "$APPLE_NOTARY_ISSUER_ID" || true
+                echo "::endgroup::"
+              fi
+              echo "::error::Notarization failed (status: ${status:-unknown})"
             fi
-            echo "::error::Notarization failed (status: ${status:-unknown})"
             exit 1
           fi
 
