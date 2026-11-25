@@ -91,6 +91,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: app.rawboy.engine
         GENERATE_INFOPLIST_FILE: YES
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
         MTL_LANGUAGE_REVISION: Metal21
         # Optimised in Debug too: the engine's pixel loops are ~10x slower unoptimised, and Debug is what goes on the phone.
         SWIFT_OPTIMIZATION_LEVEL: -O
@@ -298,6 +300,8 @@ targets:
         PRODUCT_MODULE_NAME: RawBoyEngine
         PRODUCT_BUNDLE_IDENTIFIER: app.rawboy.engine
         GENERATE_INFOPLIST_FILE: YES
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
         MTL_LANGUAGE_REVISION: Metal21
         SWIFT_OPTIMIZATION_LEVEL: -O
         COREML_CODEGEN_LANGUAGE: None
