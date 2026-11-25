@@ -18,6 +18,13 @@ on:
         description: Build number (leave empty to use GitHub run number)
         required: false
         default: ""
+      testing:
+        description: TestFlight distribution (internal = internal testers only; closed = eligible for closed/external testing & App Store)
+        type: choice
+        default: internal
+        options:
+          - internal
+          - closed
 
 permissions:
   contents: read
@@ -139,6 +146,7 @@ jobs:
 
       - name: Sign and upload to TestFlight
         env:
+          TESTING: ${{ inputs.testing }}
           ASC_KEY: ${{ secrets.APP_STORE_CONNECT_KEY || secrets.APPLE_NOTARY_KEY }}
           ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID || secrets.APPLE_NOTARY_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID || secrets.APPLE_NOTARY_ISSUER_ID }}
@@ -148,7 +156,10 @@ jobs:
           printf '%s' "$ASC_KEY" | tr -d '[:space:]' | base64 --decode > "$key_path"
           chmod 600 "$key_path"
 
-          cat > "$export_plist" << 'EOF'
+          internal_only="true"
+          [ "$TESTING" = "closed" ] && internal_only="false"
+
+          cat > "$export_plist" << EOF
           <?xml version="1.0" encoding="UTF-8"?>
           <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
           <plist version="1.0">
@@ -165,6 +176,8 @@ jobs:
             <true/>
             <key>manageAppVersionAndBuildNumber</key>
             <false/>
+            <key>testFlightInternalTestingOnly</key>
+            <${internal_only}/>
           </dict>
           </plist>
           EOF
@@ -178,7 +191,7 @@ jobs:
             -authenticationKeyID "$ASC_KEY_ID" \
             -authenticationKeyIssuerID "$ASC_ISSUER_ID"
 
-          echo "Uploaded **RawBoy Camera $VERSION_NAME (build $BUILD_NUMBER)** to TestFlight." >> "$GITHUB_STEP_SUMMARY"
+          echo "Uploaded **RawBoy Camera $VERSION_NAME (build $BUILD_NUMBER)** to TestFlight ($TESTING)." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Remove signing files
         if: always()
