@@ -35,7 +35,6 @@ targets:
     sources:
       - path: Engine
       - path: build/generated
-        group: Generated
         excludes:
           - "*Info.plist"
       - path: ../luts
@@ -243,7 +242,6 @@ targets:
           - app/rawboy/metal/ViewfinderRenderer.swift
           - app/rawboy/export/PhotoLibraryOutput.swift
       - path: build/generated
-        group: Generated
         excludes:
           - "*Info.plist"
       - path: ../luts
