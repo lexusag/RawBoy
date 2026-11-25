@@ -1,11 +1,13 @@
-# Also builds RawBoy Desktop's DMG (macOS; Developer ID signed & notarized when MACOS_CERT_P12 is set, see docs/macos-release.md).
+# Also builds RawBoy Desktop's DMG (macOS; Developer ID signed & notarized when MACOS_CERT_P12 is set, see docs/macos-release.md)
+# and uploads RawBoy Camera (iOS) to TestFlight when APP_STORE_CONNECT_KEY is set (see docs/ios-testflight.md).
 # Builds signed release APKs of all three apps (RawBoy, Auto, Camera) and attaches them to the GitHub release,
 # and deploys the public web build to Cloudflare Pages (project "rawboy", and RawBoy Packer's page as project
 # "rawboy-packer").
 # Secrets: KEYSTORE_FILE (base64 of the .jks), KEYSTORE_PASS (store and key password; key alias "rawboy"),
 # CLOUDFLARE_API_TOKEN (Account > Cloudflare Pages > Edit), CLOUDFLARE_ACCOUNT_ID,
-# and (for signed & notarized macOS DMGs) MACOS_CERT_P12, MACOS_CERT_PASSWORD, APPLE_NOTARY_KEY,
-# APPLE_NOTARY_KEY_ID, APPLE_NOTARY_ISSUER_ID.
+# (for signed & notarized macOS DMGs) MACOS_CERT_P12, MACOS_CERT_PASSWORD, APPLE_NOTARY_KEY,
+# APPLE_NOTARY_KEY_ID, APPLE_NOTARY_ISSUER_ID,
+# and (for iOS TestFlight uploads) APP_STORE_CONNECT_KEY, APP_STORE_CONNECT_KEY_ID, APP_STORE_CONNECT_ISSUER_ID.
 # Variable (optional): SITE_URL, overrides the web app's main address for search engines (default
 # https://app.rawboy.link; see docs/cloudflare.md).
 # The web deploy is skipped when nothing the web build reads changed since the commit the live site was built from
@@ -41,6 +43,10 @@ on:
         default: false
       skip_desktop:
         description: Skip building RawBoy Desktop's DMG
+        type: boolean
+        default: false
+      skip_ios:
+        description: Skip uploading RawBoy Camera to TestFlight
         type: boolean
         default: false
 
@@ -477,6 +483,183 @@ jobs:
         run: |
           security delete-keychain "$RUNNER_TEMP/build.keychain-db" 2>/dev/null || true
           rm -f "$RUNNER_TEMP/cert.p12" "$RUNNER_TEMP/AuthKey.p8" "$RUNNER_TEMP/notary.json"
+
+  # RawBoy Camera (iOS): archives and uploads to TestFlight using App Store Connect API key cloud signing
+  # (see docs/ios-testflight.md). Marketing version follows the release tag (vX.Y.Z -> X.Y.Z) and the build number
+  # uses GITHUB_RUN_NUMBER so every release and manual re-run gets a strictly higher build number.
+  ios-testflight:
+    name: RawBoy Camera (iOS TestFlight)
+    if: github.event_name == 'workflow_dispatch' && !inputs.skip_ios
+    runs-on: macos-26
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      TAG: ${{ inputs.tag }}
+    steps:
+      - name: Check App Store Connect credentials
+        id: creds
+        env:
+          ASC_KEY: ${{ secrets.APP_STORE_CONNECT_KEY || secrets.APPLE_NOTARY_KEY }}
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID || secrets.APPLE_NOTARY_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID || secrets.APPLE_NOTARY_ISSUER_ID }}
+        run: |
+          if [ -z "${ASC_KEY:-}" ]; then
+            echo "::warning::Neither APP_STORE_CONNECT_KEY nor APPLE_NOTARY_KEY is set; skipping TestFlight upload (see docs/ios-testflight.md)"
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          for var in ASC_KEY_ID ASC_ISSUER_ID; do
+            if [ -z "${!var:-}" ]; then
+              echo "::error::App Store Connect key is set, but $var is missing (see docs/ios-testflight.md)"
+              exit 1
+            fi
+          done
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v7
+        if: steps.creds.outputs.configured == 'true'
+        with:
+          ref: ${{ env.TAG }}
+
+      - name: Version from tag
+        if: steps.creds.outputs.configured == 'true'
+        run: |
+          name="${TAG#v}"
+          if [[ ! "$name" =~ ^[0-9]+(\.[0-9]+){1,2}$ ]]; then
+            echo "::error::Release tag '$TAG' must be vX.Y or vX.Y.Z"; exit 1
+          fi
+          echo "VERSION_NAME=$name" >> "$GITHUB_ENV"
+          echo "RawBoy Camera $name (build $GITHUB_RUN_NUMBER)"
+
+      - uses: actions/cache@v6
+        if: steps.creds.outputs.configured == 'true'
+        id: native
+        with:
+          path: ios/native/out
+          key: ios-native-${{ runner.os }}-${{ hashFiles('engine/src/main/cpp/**', 'ios/native/**', 'engine/src/main/cpp/dng_sdk.cmake') }}
+
+      - uses: actions/cache@v6
+        if: steps.creds.outputs.configured == 'true' && steps.native.outputs.cache-hit != 'true'
+        with:
+          path: third_party/dng_sdk_1_7_1.zip
+          key: dng_sdk_1_7_1.zip
+
+      - name: Download Adobe DNG SDK
+        if: steps.creds.outputs.configured == 'true' && steps.native.outputs.cache-hit != 'true'
+        run: |
+          cd third_party
+          [ -f dng_sdk_1_7_1.zip ] || curl -fsSLO https://download.adobe.com/pub/adobe/dng/dng_sdk_1_7_1.zip
+          unzip -q dng_sdk_1_7_1.zip && mv dng_sdk_1_7_1 dng_sdk
+
+      - name: Select the newest Xcode
+        if: steps.creds.outputs.configured == 'true'
+        run: |
+          xcode=$(ls -d /Applications/Xcode_*.app | grep -iv -e beta -e rc | sort -V | tail -1)
+          sudo xcode-select -s "$xcode/Contents/Developer"
+          xcodebuild -version
+
+      - name: Tools
+        if: steps.creds.outputs.configured == 'true'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+        run: |
+          brew install xcodegen glslang spirv-cross
+          xcrun -f metal >/dev/null 2>&1 || xcodebuild -downloadComponent MetalToolchain
+
+      - name: Build the native libraries (iOS slice)
+        if: steps.creds.outputs.configured == 'true' && steps.native.outputs.cache-hit != 'true'
+        run: ios/native/build.sh ios
+
+      - uses: actions/cache@v6
+        if: steps.creds.outputs.configured == 'true'
+        with:
+          path: ios/mediapipe/out
+          key: ios-mediapipe-${{ runner.os }}-${{ hashFiles('ios/mediapipe/fetch.sh') }}
+
+      - name: RawBoy Viewer libraries
+        if: steps.creds.outputs.configured == 'true'
+        id: viewer
+        run: |
+          if grep -q 'path: ../../RawBoyImageViewer' ios/project.yml; then
+            ref="v$(sed -n 's/^VIEWER_FROM="${VIEWER_FROM:-\([^}]*\)}"/\1/p' ios/viewer-source.sh)"
+            git clone --depth 1 --branch "$ref" https://github.com/lexusag/RawBoyImageViewer ../RawBoyImageViewer
+          fi
+          echo "pin=$(sed -n '/viewer-package:begin/,/viewer-package:end/p' ios/project.yml | shasum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v6
+        if: steps.creds.outputs.configured == 'true'
+        with:
+          path: ${{ runner.temp }}/dd/SourcePackages
+          key: viewer-spm-${{ runner.os }}-${{ steps.viewer.outputs.pin }}
+
+      - name: Generate the project
+        if: steps.creds.outputs.configured == 'true'
+        run: cd ios && xcodegen
+
+      - name: Archive RawBoy Camera
+        if: steps.creds.outputs.configured == 'true'
+        run: |
+          cd ios
+          xcodebuild archive \
+            -project RawBoy.xcodeproj \
+            -scheme RawBoyCamera \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/RawBoyCamera.xcarchive" \
+            -derivedDataPath "$RUNNER_TEMP/dd" \
+            CODE_SIGNING_ALLOWED=NO \
+            MARKETING_VERSION="$VERSION_NAME" \
+            CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER"
+
+      - name: Sign and upload to TestFlight
+        if: steps.creds.outputs.configured == 'true'
+        env:
+          ASC_KEY: ${{ secrets.APP_STORE_CONNECT_KEY || secrets.APPLE_NOTARY_KEY }}
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID || secrets.APPLE_NOTARY_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID || secrets.APPLE_NOTARY_ISSUER_ID }}
+        run: |
+          key_path="$RUNNER_TEMP/AuthKey.p8"
+          export_plist="$RUNNER_TEMP/ExportOptions.plist"
+          printf '%s' "$ASC_KEY" | tr -d '[:space:]' | base64 --decode > "$key_path"
+          chmod 600 "$key_path"
+
+          cat > "$export_plist" << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>destination</key>
+            <string>upload</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
+            <key>teamID</key>
+            <string>PB2FFKSMC8</string>
+            <key>uploadSymbols</key>
+            <true/>
+            <key>manageAppVersionAndBuildNumber</key>
+            <false/>
+          </dict>
+          </plist>
+          EOF
+
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/RawBoyCamera.xcarchive" \
+            -exportOptionsPlist "$export_plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$key_path" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+
+          echo "Uploaded **RawBoy Camera $VERSION_NAME (build $GITHUB_RUN_NUMBER)** to TestFlight." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove signing files
+        if: always()
+        run: rm -f "$RUNNER_TEMP/AuthKey.p8" "$RUNNER_TEMP/ExportOptions.plist"
 
   # Compares the tag with the commit the live site was built from. No marker on the site (first deploy, or it
   # can't be fetched) counts as changed.
