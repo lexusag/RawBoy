@@ -500,18 +500,18 @@ jobs:
       - name: Check App Store Connect credentials
         id: creds
         env:
-          APP_STORE_CONNECT_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
-          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_KEY: ${{ secrets.APP_STORE_CONNECT_KEY || secrets.APPLE_NOTARY_KEY }}
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID || secrets.APPLE_NOTARY_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID || secrets.APPLE_NOTARY_ISSUER_ID }}
         run: |
-          if [ -z "${APP_STORE_CONNECT_KEY:-}" ]; then
-            echo "::warning::APP_STORE_CONNECT_KEY is not set; skipping TestFlight upload (see docs/ios-testflight.md)"
+          if [ -z "${ASC_KEY:-}" ]; then
+            echo "::warning::Neither APP_STORE_CONNECT_KEY nor APPLE_NOTARY_KEY is set; skipping TestFlight upload (see docs/ios-testflight.md)"
             echo "configured=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          for var in APP_STORE_CONNECT_KEY_ID APP_STORE_CONNECT_ISSUER_ID; do
+          for var in ASC_KEY_ID ASC_ISSUER_ID; do
             if [ -z "${!var:-}" ]; then
-              echo "::error::APP_STORE_CONNECT_KEY is set, but $var is missing (see docs/ios-testflight.md)"
+              echo "::error::App Store Connect key is set, but $var is missing (see docs/ios-testflight.md)"
               exit 1
             fi
           done
@@ -616,13 +616,13 @@ jobs:
       - name: Sign and upload to TestFlight
         if: steps.creds.outputs.configured == 'true'
         env:
-          APP_STORE_CONNECT_KEY: ${{ secrets.APP_STORE_CONNECT_KEY }}
-          APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
-          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_KEY: ${{ secrets.APP_STORE_CONNECT_KEY || secrets.APPLE_NOTARY_KEY }}
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID || secrets.APPLE_NOTARY_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID || secrets.APPLE_NOTARY_ISSUER_ID }}
         run: |
           key_path="$RUNNER_TEMP/AuthKey.p8"
           export_plist="$RUNNER_TEMP/ExportOptions.plist"
-          printf '%s' "$APP_STORE_CONNECT_KEY" | tr -d '[:space:]' | base64 --decode > "$key_path"
+          printf '%s' "$ASC_KEY" | tr -d '[:space:]' | base64 --decode > "$key_path"
           chmod 600 "$key_path"
 
           cat > "$export_plist" << 'EOF'
@@ -652,8 +652,8 @@ jobs:
             -exportPath "$RUNNER_TEMP/export" \
             -allowProvisioningUpdates \
             -authenticationKeyPath "$key_path" \
-            -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID" \
-            -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID"
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
 
           echo "Uploaded **RawBoy Camera $VERSION_NAME (build $GITHUB_RUN_NUMBER)** to TestFlight." >> "$GITHUB_STEP_SUMMARY"
 

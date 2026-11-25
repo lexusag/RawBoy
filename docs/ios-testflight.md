@@ -2,7 +2,7 @@
 
 `.github/workflows/release.yml` (the `ios-testflight` job) archives `RawBoyCamera` for iOS, cloud-signs it for App Store Connect / TestFlight, and uploads it automatically whenever a GitHub release is published.
 
-When `APP_STORE_CONNECT_KEY` is not set, the job skips with a warning so GitHub releases keep working before the secrets are configured.
+When neither `APP_STORE_CONNECT_KEY` nor `APPLE_NOTARY_KEY` is set, the job skips with a warning so GitHub releases keep working before the secrets are configured.
 
 ## How it fits together
 
@@ -27,13 +27,15 @@ When `APP_STORE_CONNECT_KEY` is not set, the job skips with a warning so GitHub 
 
 ### 2. Add the GitHub repository secrets
 
-Repository → **Settings → Secrets and variables → Actions → New repository secret**:
+The workflow checks `APP_STORE_CONNECT_*` first and falls back to the existing `APPLE_NOTARY_*` secrets from [macos-release.md](macos-release.md). If your existing `APPLE_NOTARY_*` key already has **App Manager** (or **Admin**) access in App Store Connect, you don't need to add any new secrets.
+
+Otherwise, either replace `APPLE_NOTARY_*` with an **App Manager** key (it works for macOS notarization too), or add separate secrets under Repository → **Settings → Secrets and variables → Actions → New repository secret**:
 
 | Secret | Value |
 | --- | --- |
-| `APP_STORE_CONNECT_KEY` | base64 of `AuthKey_<KEYID>.p8` |
-| `APP_STORE_CONNECT_KEY_ID` | the 10-character Key ID from App Store Connect |
-| `APP_STORE_CONNECT_ISSUER_ID` | the UUID Issuer ID from App Store Connect |
+| `APP_STORE_CONNECT_KEY` | base64 of `AuthKey_<KEYID>.p8` (optional; falls back to `APPLE_NOTARY_KEY`) |
+| `APP_STORE_CONNECT_KEY_ID` | the 10-character Key ID (optional; falls back to `APPLE_NOTARY_KEY_ID`) |
+| `APP_STORE_CONNECT_ISSUER_ID` | the UUID Issuer ID (optional; falls back to `APPLE_NOTARY_ISSUER_ID`) |
 
 ## Releasing via CI
 
