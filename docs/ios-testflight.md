@@ -1,12 +1,10 @@
-# Releasing RawBoy Camera to TestFlight (iOS)
+# Publishing RawBoy Camera to TestFlight (iOS)
 
-`.github/workflows/release.yml` (the `ios-testflight` job) archives `RawBoyCamera` for iOS, cloud-signs it for App Store Connect / TestFlight, and uploads it automatically whenever a GitHub release is published.
-
-When neither `APP_STORE_CONNECT_KEY` nor `APPLE_NOTARY_KEY` is set, the job skips with a warning so GitHub releases keep working before the secrets are configured.
+`.github/workflows/testflight.yml` ("Publish to TestFlight") archives `RawBoyCamera` for iOS, cloud-signs it for App Store Connect / TestFlight, and uploads it. It never runs by itself — only when you start it manually from the Actions tab (just like `play.yml` for Google Play).
 
 ## How it fits together
 
-- **Versioning.** `MARKETING_VERSION` comes from the release tag (`v1.6.2` → `1.6.2`), and `CURRENT_PROJECT_VERSION` uses `GITHUB_RUN_NUMBER`, so every release (and any manual re-dispatch for the same tag) gets a strictly higher build number automatically. `manageAppVersionAndBuildNumber` is set to `false` in `ExportOptions.plist` so Xcode keeps these exact values.
+- **Versioning.** `MARKETING_VERSION` comes from the `version` workflow input (e.g. `1.0` or `1.6.2`; a leading `v` is stripped if passed). `CURRENT_PROJECT_VERSION` uses `build_number` if provided, or `GITHUB_RUN_NUMBER` otherwise, so every run gets a strictly higher build number automatically. `manageAppVersionAndBuildNumber` is set to `false` in `ExportOptions.plist` so Xcode keeps these exact values.
 - **Cloud-managed distribution signing.** `xcodebuild archive` runs with `CODE_SIGNING_ALLOWED=NO` (no Apple Development certificate needed on the runner), and `xcodebuild -exportArchive` uses `-allowProvisioningUpdates` with an App Store Connect API key (`method: app-store-connect`, `destination: upload`, `signingStyle: automatic`). Apple manages the distribution certificate and provisioning profile automatically — no `.p12` or `.mobileprovision` secrets to export or renew.
 - **External TestFlight eligible.** `testFlightInternalOnly` is off, so every uploaded build can be distributed to both Internal and External Testing groups (and submitted to the App Store).
 
@@ -37,12 +35,17 @@ Otherwise, either replace `APPLE_NOTARY_*` with an **App Manager** key (it works
 | `APP_STORE_CONNECT_KEY_ID` | the 10-character Key ID (optional; falls back to `APPLE_NOTARY_KEY_ID`) |
 | `APP_STORE_CONNECT_ISSUER_ID` | the UUID Issuer ID (optional; falls back to `APPLE_NOTARY_ISSUER_ID`) |
 
-## Releasing via CI
+## Running it
 
-- **Automatic:** publishing a GitHub release (tag `vX.Y.Z`) dispatches `.github/workflows/release.yml`, whose `ios-testflight` job builds, signs, and uploads `RawBoy Camera` to TestFlight.
-- **Manual / TestFlight-only re-upload for an existing tag:** Actions → **Release RawBoy** → **Run workflow**, enter the existing tag (e.g. `v1.6.2`), and tick **Skip building the APKs** and **Skip building RawBoy Desktop's DMG** (leave **Skip uploading RawBoy Camera to TestFlight** unticked). Because `CURRENT_PROJECT_VERSION` uses `GITHUB_RUN_NUMBER`, re-running for the same tag automatically gets a higher build number.
+Actions → **Publish to TestFlight** → **Run workflow**:
+
+| Field | What to put |
+| --- | --- |
+| Use workflow from | the branch or tag to build (`main`, or a release tag such as `v1.6.2`) |
+| Version | marketing version shown to users, e.g. `1.0` or `1.6.2` |
+| Build number | leave empty to use the GitHub run number, or enter a positive integer to override it |
 
 ## Troubleshooting
 
 - **API key permission error during `-exportArchive`:** verify the key's role in App Store Connect is **App Manager** (or **Admin**), not **Developer**.
-- **Duplicate build number:** if you uploaded a higher build number manually from Xcode for the same `MARKETING_VERSION`, either publish a new tag or let `GITHUB_RUN_NUMBER` exceed it.
+- **Duplicate build number:** if you uploaded a higher build number manually from Xcode for the same marketing version, pass a higher **Build number** in the workflow input (or bump the marketing version).
