@@ -51,4 +51,4 @@ The iOS apps are built with Xcode on a Mac: see [Installing on your iPhone](ios-
    [Publishing to Google Play](google-play.md).
 
 ## RawBoy Desktop (macOS)
-Needs Xcode, `brew install xcodegen glslang spirv-cross` and the Metal toolchain (`xcodebuild -downloadComponent MetalToolchain`). `ios/native/build.sh` builds the native libraries (all slices; `build.sh macos` only the Mac one), then `cd ios && xcodegen` and build the `RawBoyDesktop` scheme (arm64). The release workflow's `desktop` job does the same and attaches an ad-hoc signed DMG to the release; see [RawBoy Desktop](desktop.md).
+Needs Xcode, `brew install xcodegen glslang spirv-cross` and the Metal toolchain (`xcodebuild -downloadComponent MetalToolchain`). `ios/native/build.sh` builds the native libraries (all slices; `build.sh macos` only the Mac one), then `cd ios && xcodegen` and build the `RawBoyDesktop` scheme (arm64). The release workflow's `desktop` job does the same and attaches a signed, notarized DMG to the release (falling back to ad-hoc signing when the signing secrets aren't set); see [Signing and notarizing RawBoy Desktop](macos-release.md) and [RawBoy Desktop](desktop.md).

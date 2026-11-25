@@ -1,9 +1,11 @@
-# Also builds RawBoy Desktop's DMG (macOS, ad-hoc signed).
+# Also builds RawBoy Desktop's DMG (macOS; Developer ID signed & notarized when MACOS_CERT_P12 is set, see docs/macos-release.md).
 # Builds signed release APKs of all three apps (RawBoy, Auto, Camera) and attaches them to the GitHub release,
 # and deploys the public web build to Cloudflare Pages (project "rawboy", and RawBoy Packer's page as project
 # "rawboy-packer").
 # Secrets: KEYSTORE_FILE (base64 of the .jks), KEYSTORE_PASS (store and key password; key alias "rawboy"),
-# CLOUDFLARE_API_TOKEN (Account > Cloudflare Pages > Edit), CLOUDFLARE_ACCOUNT_ID.
+# CLOUDFLARE_API_TOKEN (Account > Cloudflare Pages > Edit), CLOUDFLARE_ACCOUNT_ID,
+# and (for signed & notarized macOS DMGs) MACOS_CERT_P12, MACOS_CERT_PASSWORD, APPLE_NOTARY_KEY,
+# APPLE_NOTARY_KEY_ID, APPLE_NOTARY_ISSUER_ID.
 # Variable (optional): SITE_URL, overrides the web app's main address for search engines (default
 # https://app.rawboy.link; see docs/cloudflare.md).
 # The web deploy is skipped when nothing the web build reads changed since the commit the live site was built from
@@ -268,9 +270,10 @@ jobs:
         if: always()
         run: rm -f keystore.properties "$RUNNER_TEMP/release.jks"
 
-  # RawBoy Desktop (macOS): an ad-hoc signed, unnotarised DMG (arm64). First launch: right-click > Open. Built on every
-  # tag build unless "Skip building RawBoy Desktop's DMG" is ticked (independent of skip_apks, so a DMG can be rebuilt
-  # for an existing tag with the APKs skipped). The Mac engine has no MediaPipe, so only the macOS native slice is built.
+  # RawBoy Desktop (macOS, arm64): Developer ID signed, notarized and stapled DMG when MACOS_CERT_P12 is set
+  # (see docs/macos-release.md); falls back to ad-hoc signing otherwise. Built on every tag build unless
+  # "Skip building RawBoy Desktop's DMG" is ticked (independent of skip_apks, so a DMG can be rebuilt for an
+  # existing tag with the APKs skipped). The Mac engine has no MediaPipe, so only the macOS native slice is built.
   desktop:
     if: github.event_name == 'workflow_dispatch' && !inputs.skip_desktop
     runs-on: macos-26
@@ -356,19 +359,124 @@ jobs:
           xcodebuild build -scheme RawBoyDesktop -configuration Release -destination 'platform=macOS' \
             -derivedDataPath "$RUNNER_TEMP/dd" MARKETING_VERSION="$name" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER"
 
-      - name: Make the DMG
+      - name: Sign and make the DMG
+        id: dmg
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+          APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
         run: |
           app="$RUNNER_TEMP/dd/Build/Products/Release/RawBoy Desktop.app"
-          codesign --force --deep --sign - "$app"
+          dmg_path="dist/RawBoy-Desktop-$TAG.dmg"
           mkdir -p dist dmg
-          cp -R "$app" dmg/
+
+          if [ -z "${MACOS_CERT_P12:-}" ]; then
+            echo "::warning::MACOS_CERT_P12 is not set; building an ad-hoc signed, unnotarized DMG (see docs/macos-release.md)"
+            codesign --force --deep --sign - "$app"
+            ditto "$app" "dmg/RawBoy Desktop.app"
+            ln -s /Applications dmg/Applications
+            hdiutil create -volname "RawBoy Desktop" -srcfolder dmg -ov -format UDZO "$dmg_path"
+            echo "signed=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          for var in MACOS_CERT_PASSWORD APPLE_NOTARY_KEY APPLE_NOTARY_KEY_ID APPLE_NOTARY_ISSUER_ID; do
+            if [ -z "${!var:-}" ]; then
+              echo "::error::MACOS_CERT_P12 is set, but $var is missing (see docs/macos-release.md)"
+              exit 1
+            fi
+          done
+
+          keychain="$RUNNER_TEMP/build.keychain-db"
+          keychain_pass=$(openssl rand -base64 32)
+          cert_path="$RUNNER_TEMP/cert.p12"
+          printf '%s' "$MACOS_CERT_P12" | tr -d '[:space:]' | base64 --decode > "$cert_path"
+
+          security create-keychain -p "$keychain_pass" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$keychain_pass" "$keychain"
+          security import "$cert_path" -P "$MACOS_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$keychain_pass" "$keychain"
+          security list-keychains -d user -s "$keychain" login.keychain-db
+
+          identity=$(security find-identity -v -p codesigning "$keychain" | sed -n 's/.*"\(Developer ID Application: [^"]*\)".*/\1/p' | head -n 1)
+          if [ -z "$identity" ]; then
+            echo "::error::No 'Developer ID Application' certificate found in MACOS_CERT_P12"
+            security find-identity -v -p codesigning "$keychain"
+            exit 1
+          fi
+          echo "Signing with: $identity"
+
+          # Sign inside-out (embedded frameworks first, then the app bundle) with Hardened Runtime and secure timestamps.
+          if [ -d "$app/Contents/Frameworks" ]; then
+            find "$app/Contents/Frameworks" -maxdepth 1 \( -name "*.dylib" -o -name "*.framework" \) -print0 | \
+              while IFS= read -r -d '' item; do
+                codesign --force --timestamp --options runtime --keychain "$keychain" --sign "$identity" "$item"
+              done
+          fi
+          codesign --force --timestamp --options runtime --keychain "$keychain" --sign "$identity" "$app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+
+          ditto "$app" "dmg/RawBoy Desktop.app"
           ln -s /Applications dmg/Applications
-          hdiutil create -volname "RawBoy Desktop" -srcfolder dmg -ov -format UDZO "dist/RawBoy-Desktop-$TAG.dmg"
+          hdiutil create -volname "RawBoy Desktop" -srcfolder dmg -ov -format UDZO "$dmg_path"
+          codesign --force --timestamp --keychain "$keychain" --sign "$identity" "$dmg_path"
+          echo "signed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Notarize and staple the DMG
+        if: steps.dmg.outputs.signed == 'true'
+        env:
+          APPLE_NOTARY_KEY: ${{ secrets.APPLE_NOTARY_KEY }}
+          APPLE_NOTARY_KEY_ID: ${{ secrets.APPLE_NOTARY_KEY_ID }}
+          APPLE_NOTARY_ISSUER_ID: ${{ secrets.APPLE_NOTARY_ISSUER_ID }}
+        run: |
+          dmg_path="dist/RawBoy-Desktop-$TAG.dmg"
+          key_path="$RUNNER_TEMP/AuthKey.p8"
+          notary_json="$RUNNER_TEMP/notary.json"
+          printf '%s' "$APPLE_NOTARY_KEY" | tr -d '[:space:]' | base64 --decode > "$key_path"
+          chmod 600 "$key_path"
+
+          set +e
+          xcrun notarytool submit "$dmg_path" \
+            --key "$key_path" \
+            --key-id "$APPLE_NOTARY_KEY_ID" \
+            --issuer "$APPLE_NOTARY_ISSUER_ID" \
+            --wait --output-format json > "$notary_json"
+          notary_rc=$?
+          set -e
+          cat "$notary_json"
+
+          sub_id=$(jq -r '.id // empty' "$notary_json" 2>/dev/null || true)
+          status=$(jq -r '.status // empty' "$notary_json" 2>/dev/null || true)
+          if [ "$notary_rc" -ne 0 ] || [ "$status" != "Accepted" ]; then
+            if [ -n "$sub_id" ]; then
+              echo "::group::Notarization log ($sub_id)"
+              xcrun notarytool log "$sub_id" \
+                --key "$key_path" \
+                --key-id "$APPLE_NOTARY_KEY_ID" \
+                --issuer "$APPLE_NOTARY_ISSUER_ID" || true
+              echo "::endgroup::"
+            fi
+            echo "::error::Notarization failed (status: ${status:-unknown})"
+            exit 1
+          fi
+
+          xcrun stapler staple "$dmg_path"
+          xcrun stapler validate "$dmg_path"
+          spctl --assess --type open --context context:primary-signature --verbose "$dmg_path"
 
       - name: Upload to release
         env:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "$TAG" dist/*.dmg --clobber
+
+      - name: Remove signing files
+        if: always()
+        run: |
+          security delete-keychain "$RUNNER_TEMP/build.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/cert.p12" "$RUNNER_TEMP/AuthKey.p8" "$RUNNER_TEMP/notary.json"
 
   # Compares the tag with the commit the live site was built from. No marker on the site (first deploy, or it
   # can't be fetched) counts as changed.
