@@ -346,8 +346,26 @@ class CameraController(context: Context, private val platform: CameraPlatform) :
     private var rawViewfinder = false
 
     /**
+     * Experimental zero-shutter-lag burst ring buffer is active ([setRawRing]): repeating request streams RAW_SENSOR
+     * frames into [rawRingHandle] so shutter press can merge them immediately without waiting for a captureBurst.
+     */
+    @Volatile
+    private var rawRingWanted = false
+
+    /** Native `RawRingBuffer` handle (BurstNative.ring*); camera thread only. */
+    private var rawRingHandle = 0L
+    private var rawRingWidth = 0
+    private var rawRingHeight = 0
+
+    /** True while a ZSL merge is running so the ring does not reallocate ~200 MB on top of BurstMerger. Camera thread. */
+    private var rawRingPaused = false
+
+    /** Recent repeating-request results keyed by SENSOR_TIMESTAMP, paired with [rawRingHandle] on shutter press. Camera thread. */
+    private val rawRingResults = LinkedHashMap<Long, CaptureResult>()
+
+    /**
      * Sensor timestamps of the repeating request's frames while it carries the raw target, so their images go to
-     * [rawFrames] and never to a still waiting for its own ([pendingImage], [burstSink]). Camera thread only.
+     * [rawFrames] / [rawRingHandle] and never to a still waiting for its own ([pendingImage], [burstSink]). Camera thread only.
      */
     private val streamStamps = LinkedHashSet<Long>()
 
