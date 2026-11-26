@@ -119,8 +119,10 @@ final class CameraViewModel: ObservableObject {
         let compensationEv: Float
         /** The camera saw a face at the shutter: run skin detection. */
         let mayHaveFace: Bool
-        /** The viewfinder's 512 px copy at the shutter (debug snapshots). */
+        /** The viewfinder's 512 px copy at the shutter (debug snapshots and Pure RAW thumbnail). */
         let viewfinder: PreviewImage?
+        /** Live auto exposure (EV) at the shutter, used to tone-map the Pure RAW viewfinder thumbnail. */
+        let viewfinderExposure: Float
         /** Where the photo is metered, in the photo's own (level) orientation: see meterArea. */
         let meter: MeterArea
         /** Capture timestamp, used when settings.photoFrame is .dateStamp. */
@@ -987,7 +989,7 @@ final class CameraViewModel: ObservableObject {
                     Task { @MainActor in self?.shutterCount += 1 }
                 }
                 shots.append(Shot(dng: result.dng, name: name, settings: s, viewfinderKey: viewfinderKey,
-                                  iso: result.iso, compensationEv: result.compensationEv, mayHaveFace: mayHaveFace, viewfinder: live?.base, meter: meter, date: Date(), frameNumber: frameNumber, spotMetered: spotMetered))
+                                  iso: result.iso, compensationEv: result.compensationEv, mayHaveFace: mayHaveFace, viewfinder: live?.base, viewfinderExposure: live?.auto.exposure ?? 0, meter: meter, date: Date(), frameNumber: frameNumber, spotMetered: spotMetered))
                 developNext()
             } catch {
                 Self.log.error("capture: \(error.localizedDescription)")
@@ -1038,6 +1040,9 @@ final class CameraViewModel: ObservableObject {
 
         if s.pureRaw {
             // Pure RAW: no standalone JPEG and no embedded preview -> bypass decode, analysis and GPU develop.
+            if let vf = shot.viewfinder {
+                lastShot = Self.viewfinderThumbnail(vf, exposureEv: shot.viewfinderExposure)
+            }
             try shot.dng.write(to: dngURL)
             try await PhotoLibraryOutput.save(dngURL, naming: Self.rawNaming)
             Self.log.notice("saved pure RAW \(shot.name) in \(Int(Date().timeIntervalSince(started) * 1000)) ms")
@@ -1194,6 +1199,42 @@ final class CameraViewModel: ObservableObject {
         guard let dest = CGImageDestinationCreateWithData(out as CFMutableData, "public.jpeg" as CFString, 1, nil) else { return nil }
         CGImageDestinationAddImage(dest, cgImage, [kCGImageDestinationLossyCompressionQuality: Double(quality) / 100] as CFDictionary)
         return CGImageDestinationFinalize(dest) ? out as Data : nil
+    }
+
+    /**
+     * Builds a tiny (~160 px) sRGB thumbnail from the live 512 px linear Rec.2020 viewfinder frame in <1 ms,
+     * so Pure RAW shots still update the shutter thumbnail without decoding the DNG.
+     */
+    private nonisolated static func viewfinderThumbnail(_ preview: PreviewImage, exposureEv: Float) -> UIImage? {
+        let srcW = preview.width
+        let srcH = preview.height
+        guard srcW > 0, srcH > 0, preview.pixels.count >= srcW * srcH * 3 else { return nil }
+        let step = max(1, max(srcW, srcH) / 160)
+        let dstW = (srcW + step - 1) / step
+        let dstH = (srcH + step - 1) / step
+        let gain = powf(2, exposureEv)
+        var rgba = [UInt8](repeating: 255, count: dstW * dstH * 4)
+        var out = 0
+        for y in 0..<dstH {
+            let sy = min(y * step, srcH - 1)
+            for x in 0..<dstW {
+                let sx = min(x * step, srcW - 1)
+                let off = (sy * srcW + sx) * 3
+                let r2020 = Float(Float16(bitPattern: preview.pixels[off])) * gain
+                let g2020 = Float(Float16(bitPattern: preview.pixels[off + 1])) * gain
+                let b2020 = Float(Float16(bitPattern: preview.pixels[off + 2])) * gain
+                // Linear Rec.2020 -> sRGB, soft Reinhard roll-off, sRGB gamma.
+                let r = max(0, 1.6605 * r2020 - 0.5876 * g2020 - 0.0728 * b2020)
+                let g = max(0, -0.1246 * r2020 + 1.1329 * g2020 - 0.0083 * b2020)
+                let b = max(0, -0.0182 * r2020 - 0.1006 * g2020 + 1.1187 * b2020)
+                rgba[out] = UInt8(min(max((255 * powf(r / (1 + r), 1 / 2.2)).rounded(), 0), 255))
+                rgba[out + 1] = UInt8(min(max((255 * powf(g / (1 + g), 1 / 2.2)).rounded(), 0), 255))
+                rgba[out + 2] = UInt8(min(max((255 * powf(b / (1 + b), 1 / 2.2)).rounded(), 0), 255))
+                out += 4
+            }
+        }
+        guard let cg = try? ThumbnailRenderer.cgImage(rgba, dstW, dstH) else { return nil }
+        return UIImage(cgImage: cg)
     }
 
     /**

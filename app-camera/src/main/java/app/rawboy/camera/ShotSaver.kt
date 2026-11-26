@@ -129,6 +129,8 @@ internal data class Shot(
     val focusDiopters: Float? = null,
     /** The DNG is still marked IS_PENDING in MediaStore until preview embedding finishes (or fails). */
     val dngPending: Boolean = false,
+    /** Tiny viewfinder thumbnail used to update [_lastShot] immediately in Pure RAW mode without decoding the DNG. */
+    val pureRawThumbnail: Bitmap? = null,
 )
 
 /** A finished shot and the sequence number assigned at its shutter, so lock screen launches hide earlier ones. */
@@ -409,6 +411,7 @@ internal object ShotSaver {
         registerTrim(app)
         if (shot.settings.pureRaw) {
             // Pure RAW: no standalone JPEG and no embedded preview -> skip decode, analysis and GPU develop entirely.
+            shot.pureRawThumbnail?.let { _lastShot.value = SavedShot(shot.id, LastShot(shot.dng, it)) }
             if (shot.settings.saveDepth && shot.hardwareDepth != null) {
                 compressExecutor.execute {
                     writeDepthToDng(app, shot.dng, shot.hardwareDepth)

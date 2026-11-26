@@ -1705,7 +1705,9 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
                     _screenFlashLit.value = true
                     delay(SCREEN_FLASH_SETTLE_MS)
                 }
-                val shot = capture(shotId, settings, hiRes, viewfinderKey, flash, burstFrames, screenFlash, mergeNote, longExposure).copy(mayHaveFace = mayHaveFace)
+                val pureRawThumb = if (settings.pureRaw) live?.let { viewfinderThumbnail(it.base.base, it.auto.exposure) } else null
+                val shot = capture(shotId, settings, hiRes, viewfinderKey, flash, burstFrames, screenFlash, mergeNote, longExposure)
+                    .copy(mayHaveFace = mayHaveFace, pureRawThumbnail = pureRawThumb)
                 ShotSaver.enqueue(app, shot)
             } catch (e: Throwable) {
                 Log.w(TAG, "capture", e)
@@ -1831,6 +1833,42 @@ class CameraViewModel(application: Application) : AndroidViewModel(application) 
             Log.w(TAG, "DNG GPS", e)
         }
     }
+
+    /**
+     * Builds a tiny (~160 px) sRGB thumbnail from the live 512 px linear Rec.2020 viewfinder frame in <1 ms,
+     * so Pure RAW shots still update the shutter thumbnail without decoding the DNG.
+     */
+    private fun viewfinderThumbnail(preview: app.rawboy.gl.PreviewImage, exposureEv: Float): android.graphics.Bitmap? = runCatching {
+        val srcW = preview.width
+        val srcH = preview.height
+        if (srcW <= 0 || srcH <= 0) return null
+        val step = (maxOf(srcW, srcH) / 160).coerceAtLeast(1)
+        val dstW = (srcW + step - 1) / step
+        val dstH = (srcH + step - 1) / step
+        val gain = 2f.pow(exposureEv)
+        val buf = preview.pixels.duplicate().order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        val argb = IntArray(dstW * dstH)
+        var out = 0
+        for (y in 0 until dstH) {
+            val sy = (y * step).coerceAtMost(srcH - 1)
+            for (x in 0 until dstW) {
+                val sx = (x * step).coerceAtMost(srcW - 1)
+                val off = (sy * srcW + sx) * 6
+                val r2020 = android.util.Half.toFloat(buf.getShort(off)) * gain
+                val g2020 = android.util.Half.toFloat(buf.getShort(off + 2)) * gain
+                val b2020 = android.util.Half.toFloat(buf.getShort(off + 4)) * gain
+                // Linear Rec.2020 -> sRGB, soft Reinhard roll-off, sRGB gamma.
+                val r = (1.6605f * r2020 - 0.5876f * g2020 - 0.0728f * b2020).coerceAtLeast(0f)
+                val g = (-0.1246f * r2020 + 1.1329f * g2020 - 0.0083f * b2020).coerceAtLeast(0f)
+                val b = (-0.0182f * r2020 - 0.1006f * g2020 + 1.1187f * b2020).coerceAtLeast(0f)
+                val ri = (255f * (r / (1f + r)).pow(1f / 2.2f)).roundToInt().coerceIn(0, 255)
+                val gi = (255f * (g / (1f + g)).pow(1f / 2.2f)).roundToInt().coerceIn(0, 255)
+                val bi = (255f * (b / (1f + b)).pow(1f / 2.2f)).roundToInt().coerceIn(0, 255)
+                argb[out++] = (0xff shl 24) or (ri shl 16) or (gi shl 8) or bi
+            }
+        }
+        android.graphics.Bitmap.createBitmap(argb, dstW, dstH, android.graphics.Bitmap.Config.ARGB_8888)
+    }.getOrNull()
 
     /** [fix] as GPS tags. Altitude above sea level: Android 14+ converts the fix's height above the ellipsoid. */
     private fun gpsOf(fix: Location): ExifMetadata.Gps {
