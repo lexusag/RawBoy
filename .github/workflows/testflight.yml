@@ -2,7 +2,7 @@
 # Runs only by hand: Actions → "Publish to TestFlight" → Run workflow. Setup and usage: docs/ios-testflight.md.
 #
 # Secrets: APP_STORE_CONNECT_KEY, APP_STORE_CONNECT_KEY_ID, APP_STORE_CONNECT_ISSUER_ID
-# (each falls back to the existing APPLE_NOTARY_* secrets if unset; the API key needs App Manager or Admin access).
+# (each falls back to the existing APPLE_NOTARY_* secrets if unset; the API key needs Admin access for cloud signing).
 #
 # Version: MARKETING_VERSION comes from the `version` input (e.g. 1.0 or 1.6.2). CURRENT_PROJECT_VERSION comes from
 # `build_number` if provided, otherwise GITHUB_RUN_NUMBER so every run gets a strictly higher build number.
