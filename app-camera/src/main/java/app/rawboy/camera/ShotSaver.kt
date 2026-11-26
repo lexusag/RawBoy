@@ -43,6 +43,7 @@ import app.rawboy.export.ExportGpu
 import app.rawboy.export.ExportSettings
 import app.rawboy.export.Exporter
 import app.rawboy.export.JpegEncoder
+import app.rawboy.export.MediaStoreOutput
 import app.rawboy.export.FilmFrameStyle
 import app.rawboy.export.Pentax645Field
 import app.rawboy.export.Pentax645Frame
@@ -75,6 +76,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
@@ -125,6 +127,10 @@ internal data class Shot(
     val dualPixel: DualPixelFrame? = null,
     /** The lens's focus distance at the shutter in dioptres (`LENS_FOCUS_DISTANCE`), for millimetre depth; null if unknown. */
     val focusDiopters: Float? = null,
+    /** The DNG is still marked IS_PENDING in MediaStore until preview embedding finishes (or fails). */
+    val dngPending: Boolean = false,
+    /** Tiny viewfinder thumbnail used to update [_lastShot] immediately in Pure RAW mode without decoding the DNG. */
+    val pureRawThumbnail: Bitmap? = null,
 )
 
 /** A finished shot and the sequence number assigned at its shutter, so lock screen launches hide earlier ones. */
@@ -275,6 +281,7 @@ internal object ShotSaver {
                     }
                     withContext(decodeDispatcher) { prepare(app, shot) }
                 } catch (e: Throwable) {
+                    if (shot.dngPending) withContext(Dispatchers.IO) { publishDng(app, shot.dng) }
                     failed(shot, e)
                     shotDone(shot)
                     continue
@@ -289,6 +296,7 @@ internal object ShotSaver {
                 try {
                     finish(p)
                 } catch (e: Throwable) {
+                    if (p.shot.dngPending) withContext(Dispatchers.IO) { publishDng(p.app, p.shot.dng) }
                     failed(p.shot, e)
                 } finally {
                     runCatching { p.image.close() }
@@ -401,6 +409,31 @@ internal object ShotSaver {
 
     fun enqueue(app: Application, shot: Shot) {
         registerTrim(app)
+        if (shot.settings.pureRaw) {
+            // Pure RAW: no standalone JPEG and no embedded preview -> skip decode, analysis and GPU develop entirely.
+            shot.pureRawThumbnail?.let { _lastShot.value = SavedShot(shot.id, LastShot(shot.dng, it)) }
+            if (shot.settings.saveDepth && shot.hardwareDepth != null) {
+                compressExecutor.execute {
+                    writeDepthToDng(app, shot.dng, shot.hardwareDepth)
+                    if (shot.settings.lossyDng && shot.temporary == null) {
+                        rewriteDng(app, shot, lossyJxl = true, previewJpeg = null)
+                    }
+                    shotDone(shot)
+                }
+            } else if (shot.settings.lossyDng && shot.temporary == null) {
+                compressExecutor.execute {
+                    try {
+                        rewriteDng(app, shot, lossyJxl = true, previewJpeg = null)
+                    } finally {
+                        shotDone(shot)
+                    }
+                }
+            } else {
+                Log.d(TAG, "${shot.name}: pure RAW saved (no develop)")
+                shotDone(shot)
+            }
+            return
+        }
         shots.trySend(app to shot)
     }
 
@@ -577,54 +610,144 @@ internal object ShotSaver {
         }
     }
 
-    /** Develop stage: GPU develop + JPEG of a [prepare]d shot, then calibration, the thumbnail and the DNG re-save. */
+    /** Develop stage: GPU develop + JPEG / DNG preview of a [prepare]d shot, then calibration, thumbnail and DNG rewrite. */
     private suspend fun finish(p: Prepared) {
         val shot = p.shot
         val s = shot.settings
         val app = p.app
         val waitMs = ms(p.started)
-        val saved = withContext(developDispatcher) {
-            val exportStart = System.nanoTime()
-            Exporter(app).exportFile(p.image, shot.dng, shot.name, p.shader, p.export, CameraViewModel.JPEG_NAMING, exportGpu(shot)) {}
-                .also {
-                    val took = ms(exportStart)
-                    Log.d(TAG, "${shot.name}: develop + JPEG $took ms")
-                    if (took > SLOW_DEVELOP_MS) Log.w(TAG, "${shot.name}: slow develop, ${memoryNote(app)}")
+        var previewJpeg: ByteArray? = null
+        val previewMaxLongSide = s.rawPreview.maxLongSide
+        val previewExport = if (s.embedDngPreview) {
+            p.export.copy(
+                jpegQuality = CameraSettings.RAW_PREVIEW_QUALITY,
+                maxLongSide = previewMaxLongSide,
+                hdrGainMap = false,
+            )
+        } else null
+
+        if (s.saveJpeg) {
+            val saved = withContext(developDispatcher) {
+                val exportStart = System.nanoTime()
+                Exporter(app).exportFile(p.image, shot.dng, shot.name, p.shader, p.export, CameraViewModel.JPEG_NAMING, exportGpu(shot)) {}
+                    .also {
+                        val took = ms(exportStart)
+                        Log.d(TAG, "${shot.name}: develop + JPEG $took ms")
+                        if (took > SLOW_DEVELOP_MS) Log.w(TAG, "${shot.name}: slow develop, ${memoryNote(app)}")
+                    }
+            }
+            Log.d(TAG, "saved ${saved.name} in ${ms(p.started)} ms (develop started after $waitMs ms)")
+            if (previewExport != null) {
+                // If the standalone JPEG is smaller than the requested embedded preview (e.g. 3000 px JPEG with 12 MP
+                // preview), render the preview directly on the GPU; otherwise derive the Q85 preview from the saved JPEG
+                // on the CPU to avoid a second GPU develop pass.
+                val jpegMaxLongSide = s.maxLongSide
+                val jpegSmallerThanPreview = jpegMaxLongSide != null && previewMaxLongSide != null && previewMaxLongSide > jpegMaxLongSide
+                previewJpeg = if (jpegSmallerThanPreview) {
+                    withContext(developDispatcher) {
+                        Exporter(app).exportJpegBytes(p.image, p.shader, previewExport, exportGpu(shot))
+                    }
+                } else {
+                    withContext(Dispatchers.IO) {
+                        makePreviewJpeg(app, saved.uri, previewMaxLongSide, CameraSettings.RAW_PREVIEW_QUALITY)
+                    }
                 }
+            }
+            withContext(Dispatchers.IO) { thumbnail(app, saved.uri) }?.let { _lastShot.value = SavedShot(shot.id, LastShot(saved.uri, it)) }
+        } else if (previewExport != null) {
+            previewJpeg = withContext(developDispatcher) {
+                val exportStart = System.nanoTime()
+                Exporter(app).exportJpegBytes(p.image, p.shader, previewExport, exportGpu(shot))
+                    .also {
+                        val took = ms(exportStart)
+                        Log.d(TAG, "${shot.name}: develop + DNG preview (${it.size / 1024} KB) $took ms")
+                        if (took > SLOW_DEVELOP_MS) Log.w(TAG, "${shot.name}: slow develop, ${memoryNote(app)}")
+                    }
+            }
+            Log.d(TAG, "prepared DNG preview for ${shot.name} in ${ms(p.started)} ms (develop started after $waitMs ms)")
+            withContext(Dispatchers.IO) { thumbnailFromBytes(previewJpeg) }?.let {
+                _lastShot.value = SavedShot(shot.id, LastShot(shot.dng, it))
+            }
         }
-        Log.d(TAG, "saved ${saved.name} in ${ms(p.started)} ms (develop started after $waitMs ms)")
+
         val key = s.lensKey(shot.hiRes)
         shot.viewfinderKey?.let { calibrate(app, shot.platform.calibrationSlot, shot.platform.preview.level, p.rawKey, it, key, s.previewScale(shot.hiRes)) }
         shot.flashGuide?.let { calibrateFlash(app, shot.platform.calibrationSlot, p.autoEv, it, CameraSettings.flashGuideKey(key, shot.flashDistanceKnown)) }
-        withContext(Dispatchers.IO) { thumbnail(app, saved.uri) }?.let { _lastShot.value = SavedShot(shot.id, LastShot(saved.uri, it)) }
-        // The JPEG came from the uncompressed raw; now the kept DNG shrinks to a lossy JPEG XL one, on its own queue
-        // so the next shot's JPEG doesn't wait for it. It counts as pending, so SaveService keeps the process up.
-        if (s.keepDng && s.lossyDng && shot.temporary == null) {
-            _pending.update { it + 1 }
-            compressExecutor.execute {
-                try {
-                    compressDng(app, shot)
-                } finally {
-                    val left = _pending.updateAndGet { (it - 1).coerceAtLeast(0) }
-                    if (left == 0 && activeViews.get() == 0) releaseGpuIfIdle()
+
+        // Embed the developed preview and/or shrink the kept DNG to lossy JPEG XL in one DNG SDK pass, on its own
+        // queue so the next shot's develop doesn't wait for it. Counts as pending so SaveService stays up until done.
+        if (s.keepDng && shot.temporary == null) {
+            val needRewrite = previewJpeg != null || s.lossyDng
+            if (needRewrite) {
+                val previewBytes = previewJpeg
+                _pending.update { it + 1 }
+                compressExecutor.execute {
+                    try {
+                        rewriteDng(app, shot, lossyJxl = s.lossyDng, previewJpeg = previewBytes)
+                    } finally {
+                        if (shot.dngPending) publishDng(app, shot.dng)
+                        val left = _pending.updateAndGet { (it - 1).coerceAtLeast(0) }
+                        if (left == 0 && activeViews.get() == 0) releaseGpuIfIdle()
+                    }
                 }
+            } else if (shot.dngPending) {
+                withContext(Dispatchers.IO) { publishDng(app, shot.dng) }
             }
         }
     }
 
     private fun ms(from: Long) = (System.nanoTime() - from) / 1_000_000
 
-    /** Re-saves the kept DNG as a lossy JPEG XL DNG, in place. Best effort: the uncompressed DNG stays if it fails. [compressExecutor]. */
-    private fun compressDng(app: Context, shot: Shot) {
+    /**
+     * Re-saves the kept DNG in place through the Adobe DNG SDK, optionally compressing to lossy JPEG XL and/or
+     * embedding [previewJpeg]. Best effort: the original DNG stays if it fails. [compressExecutor].
+     */
+    private fun rewriteDng(app: Context, shot: Shot, lossyJxl: Boolean, previewJpeg: ByteArray?) {
         val start = System.nanoTime()
         try {
-            val result = app.contentResolver.openFileDescriptor(shot.dng, "rw")?.use { DngJxlNative.transcode(it.fd) }
-            Log.d(TAG, "${shot.name}: lossy JPEG XL DNG $result in ${(System.nanoTime() - start) / 1_000_000} ms")
+            val result = app.contentResolver.openFileDescriptor(shot.dng, "rw")?.use {
+                DngJxlNative.rewrite(it.fd, lossyJxl = lossyJxl, previewJpeg = previewJpeg)
+            }
+            Log.d(TAG, "${shot.name}: DNG rewrite (lossy=$lossyJxl, preview=${previewJpeg?.size ?: 0} B) $result in ${(System.nanoTime() - start) / 1_000_000} ms")
         } catch (e: Throwable) {
-            Log.w(TAG, "lossy DNG ${shot.name}", e)
-            _errors.tryEmit("${shot.name}.dng stays uncompressed: ${e.message ?: e.javaClass.simpleName}")
+            Log.w(TAG, "DNG rewrite ${shot.name}", e)
+            if (lossyJxl) {
+                _errors.tryEmit("${shot.name}.dng stays uncompressed: ${e.message ?: e.javaClass.simpleName}")
+            }
         }
     }
+
+    private fun publishDng(app: Context, dng: Uri) {
+        runCatching { MediaStoreOutput.publish(app.contentResolver, dng) }
+            .onFailure { Log.w(TAG, "DNG publish $dng", it) }
+    }
+
+    /** Downscales (if needed) and re-encodes the saved JPEG at [quality] for embedding as a clean SDR DNG preview. */
+    private fun makePreviewJpeg(app: Context, jpegUri: Uri, maxLongSide: Int?, quality: Int): ByteArray? = runCatching {
+        val bmp = app.contentResolver.openInputStream(jpegUri)?.use { BitmapFactory.decodeStream(it) } ?: return null
+        try {
+            val w = bmp.width
+            val h = bmp.height
+            val longSide = max(w, h)
+            val scaled = if (maxLongSide != null && longSide > maxLongSide) {
+                val scale = maxLongSide.toFloat() / longSide
+                Bitmap.createScaledBitmap(bmp, (w * scale).roundToInt().coerceAtLeast(1), (h * scale).roundToInt().coerceAtLeast(1), true)
+            } else bmp
+            try {
+                ByteArrayOutputStream().also { out ->
+                    scaled.compress(Bitmap.CompressFormat.JPEG, quality, out)
+                }.toByteArray()
+            } finally {
+                if (scaled !== bmp) scaled.recycle()
+            }
+        } finally {
+            bmp.recycle()
+        }
+    }.getOrNull()
+
+    private fun thumbnailFromBytes(jpeg: ByteArray): Bitmap? = runCatching {
+        BitmapFactory.decodeByteArray(jpeg, 0, jpeg.size, BitmapFactory.Options().apply { inSampleSize = 16 })
+    }.getOrNull()
 
     /** Appends [depth] (`"RBDP"` trailer, [DngDepth]) to the saved DNG file at [dng]. Best effort. */
     private fun writeDepthToDng(app: Context, dng: Uri, depth: DepthMap) {

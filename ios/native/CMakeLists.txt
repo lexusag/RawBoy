@@ -62,7 +62,7 @@ set(NATIVE_SOURCES
     ${ENGINE_CPP}/noise.cpp
     ${ENGINE_CPP}/orientation.cpp)
 if(RAWBOY_WITH_DNG_SDK)
-    list(APPEND NATIVE_SOURCES ${ENGINE_CPP}/decoder_dng.cpp)
+    list(APPEND NATIVE_SOURCES ${ENGINE_CPP}/decoder_dng.cpp ${ENGINE_CPP}/dng_transcode.cpp)
     # RawBoy Packer (RawBoy Desktop): the macOS slice only, the iPhone has no use for it.
     if(NOT CMAKE_SYSTEM_NAME STREQUAL "iOS")
         list(APPEND NATIVE_SOURCES rawboy_pack.cpp ${ENGINE_CPP}/dng_pack.cpp ${ENGINE_CPP}/camera_lens_data.cpp)

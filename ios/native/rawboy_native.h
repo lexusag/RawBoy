@@ -158,6 +158,18 @@ RB_API bool rb_pack(const uint8_t* data, size_t size, const RBPackOptions* optio
 
 RB_API void rb_pack_free(uint8_t* buffer);
 
+// ---- DNG preview embedding (RawBoy Camera; needs Adobe DNG SDK) ----
+
+/**
+ * Re-saves [dng] with [previewJpeg] (an upright sRGB JPEG) embedded as its primary DNG preview.
+ * Returns 0 on success (*out is a malloc'd buffer of *outSize bytes, free with rb_dng_free),
+ * 1 if unchanged, 2 if built without the Adobe DNG SDK, or -1 on error (with [error] populated).
+ */
+RB_API int rb_dng_embed_preview(const uint8_t* dng, size_t dngSize, const uint8_t* previewJpeg, size_t previewSize,
+                                uint8_t** out, size_t* outSize, char* error, size_t errorSize);
+
+RB_API void rb_dng_free(uint8_t* buffer);
+
 #ifdef __cplusplus
 }
 #endif

@@ -6,6 +6,7 @@
 #include "dng_pack.h"
 
 #include "camera_lens_data.h"
+#include "dng_preview_embed.h"
 #include "libraw_parallel.h"
 #include "rawboy.h"
 
@@ -261,56 +262,8 @@ void addLensOpcodes(dng_negative& negative, const CameraLensData& c, uint32 widt
 
 // ---- Previews ----
 
-class ReadyJpegPreview : public dng_jpeg_preview {
-public:
-    void Setup(uint32 w, uint32 h, uint32 subH, uint32 subV) {
-        fIFD.fNewSubFileType = sfPreviewImage;
-        fIFD.fImageWidth = w;
-        fIFD.fImageLength = h;
-        fIFD.fSamplesPerPixel = 3;
-        for (int i = 0; i < 3; ++i) {
-            fIFD.fBitsPerSample[i] = 8;
-            fIFD.fSampleFormat[i] = sfUnsignedInteger;
-        }
-        fIFD.SetSingleStrip();
-        fIFD.fCompression = ccJPEG;
-        SetYCbCr(subH, subV);
-    }
-};
-
-/** Size and luma subsampling from a baseline/progressive JPEG's SOF. */
-bool jpegFrame(const uint8_t* d, size_t n, uint32& w, uint32& h, uint32& sh, uint32& sv) {
-    if (n < 4 || d[0] != 0xFF || d[1] != 0xD8) return false;
-    for (size_t i = 2; i + 12 < n;) {
-        if (d[i] != 0xFF) return false;
-        const int m = d[i + 1];
-        const size_t len = (size_t(d[i + 2]) << 8) | d[i + 3];
-        if (m == 0xC0 || m == 0xC1 || m == 0xC2) {
-            h = (uint32(d[i + 5]) << 8) | d[i + 6];
-            w = (uint32(d[i + 7]) << 8) | d[i + 8];
-            if (d[i + 9] != 3) return false;  // grey or CMYK previews: not as YCbCr
-            sh = d[i + 11] >> 4;
-            sv = d[i + 11] & 15;
-            return w > 0 && h > 0;
-        }
-        i += 2 + len;
-    }
-    return false;
-}
-
 void appendJpegPreview(dng_host& host, const uint8_t* jpeg, size_t size, dng_preview_list& previews, bool ownData) {
-    uint32 w = 0, h = 0, sh = 1, sv = 1;
-    if (!jpegFrame(jpeg, size, w, h, sh, sv)) return;
-    AutoPtr<ReadyJpegPreview> p(new ReadyJpegPreview);
-    p->fInfo.fApplicationName.Set("RawBoy Packer");
-    p->fInfo.fColorSpace = previewColorSpace_sRGB;
-    p->fInfo.fIsPrimary = true;
-    p->Setup(w, h, sh, sv);
-    AutoPtr<dng_memory_block> block(host.Allocate(static_cast<uint32>(size)));
-    std::memcpy(block->Buffer(), jpeg, size);
-    p->SetCompressedData(block);
-    AutoPtr<dng_preview> base(p.Release());
-    previews.Append(base);
+    rawboy::appendJpegPreview(host, jpeg, size, "RawBoy Packer", previews);
     (void)ownData;
 }
 

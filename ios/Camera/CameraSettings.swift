@@ -37,6 +37,32 @@ enum VideoQuality: String, CaseIterable {
     }
 }
 
+/** Embedded processed JPEG preview written into saved DNG files (Adobe DNG SDK). */
+enum RawPreview: String, CaseIterable {
+    /** 3000 px long-side processed JPEG at quality 85 (default). */
+    case p3000
+    /** 12 MP (4000 px long-side cap) processed JPEG at quality 85. */
+    case mp12
+    /** Pure RAW: no embedded processed preview; skips develop when CameraSettings.rawWithJpeg is off. */
+    case none
+
+    var label: String {
+        switch self {
+        case .p3000: "3000 px"
+        case .mp12: "12 MP"
+        case .none: "Pure RAW"
+        }
+    }
+
+    var maxLongSide: Int? {
+        switch self {
+        case .p3000: 3000
+        case .mp12: 4000
+        case .none: nil
+        }
+    }
+}
+
 /** The look controls, camera choice and output settings. */
 struct CameraSettings: Equatable {
     var lookId = Edition.defaultLookId
@@ -62,8 +88,12 @@ struct CameraSettings: Equatable {
     var filter = BwFilter.yellow
     /** JPEG quality, minQuality...100. */
     var jpegQuality = 95
-    /** Keep the raw as DNG in Photos › RawBoy Camera RAW. */
+    /** Save the raw as DNG in Photos › RawBoy Camera RAW (RAW only by default unless rawWithJpeg is on). */
     var keepDng = false
+    /** When keepDng is on, also save a standalone developed JPEG alongside the DNG. */
+    var rawWithJpeg = false
+    /** Embedded processed JPEG preview written into saved DNGs (3000 px @ Q85 by default, 12 MP @ Q85, or Pure RAW). */
+    var rawPreview = RawPreview.p3000
     /** Save photos at smallLongSide px on the long side instead of full size. */
     var smallExport = true
     /**
@@ -199,6 +229,15 @@ struct CameraSettings: Equatable {
     /** The long side to save at, or nil for full size. */
     var maxLongSide: Int? { smallExport ? Self.smallLongSide : nil }
 
+    /** Save a standalone developed JPEG (always on when RAW is off; optional when RAW is on). */
+    var saveJpeg: Bool { !keepDng || rawWithJpeg }
+
+    /** Embed a processed JPEG preview inside the saved DNG. */
+    var embedDngPreview: Bool { keepDng && rawPreview != .none }
+
+    /** Pure RAW: save only the DNG with no embedded processed preview, bypassing develop entirely. */
+    var pureRaw: Bool { keepDng && !rawWithJpeg && rawPreview == .none }
+
     /** Resets all user settings to their defaults while keeping learned lens calibration. */
     func resetToDefaults() -> CameraSettings {
         var s = CameraSettings()
@@ -210,6 +249,8 @@ struct CameraSettings: Equatable {
     static let lightLeakSequenceSize = 5
     static let lightLeakRates = [1, 2, 3, 4, 5]
     static let minQuality = 70
+    /** JPEG quality for the processed preview embedded inside saved DNGs. */
+    static let rawPreviewQuality = 85
     static let smallLongSide = 3000
     /** Film + B&W: added to the Contrast slider's value (owner's choice, 2026-10-31: punchier than plain B&W). */
     static let filmMonoContrast: Float = 20
@@ -233,6 +274,8 @@ enum CameraSettingsStore {
         var s = CameraSettings()
         s.jpegQuality = min(max(d.object(forKey: "camera.jpegQuality") as? Int ?? def.jpegQuality, CameraSettings.minQuality), 100)
         s.keepDng = d.object(forKey: "camera.keepDng") as? Bool ?? def.keepDng
+        s.rawWithJpeg = d.object(forKey: "camera.rawWithJpeg") as? Bool ?? def.rawWithJpeg
+        s.rawPreview = d.string(forKey: "camera.rawPreview").flatMap(RawPreview.init(rawValue:)) ?? def.rawPreview
         s.smallExport = d.object(forKey: "camera.smallExport") as? Bool ?? def.smallExport
         s.rememberLast = d.bool(forKey: "camera.rememberLast")
         s.showHistogram = d.object(forKey: "camera.showHistogram") as? Bool ?? def.showHistogram
@@ -298,6 +341,8 @@ enum CameraSettingsStore {
         d.set(s.filter.key, forKey: "camera.filter")
         d.set(s.jpegQuality, forKey: "camera.jpegQuality")
         d.set(s.keepDng, forKey: "camera.keepDng")
+        d.set(s.rawWithJpeg, forKey: "camera.rawWithJpeg")
+        d.set(s.rawPreview.rawValue, forKey: "camera.rawPreview")
         d.set(s.smallExport, forKey: "camera.smallExport")
         d.set(s.rememberLast, forKey: "camera.rememberLast")
         d.set(s.showHistogram, forKey: "camera.showHistogram")

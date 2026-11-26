@@ -264,10 +264,16 @@ bool decodeWithDngSdk(const uint8_t* data, size_t size, DecodedImage& out, std::
 enum class TranscodeResult { Done, NotApplicable, Failed };
 
 /**
- * Re-saves the DNG in [data] as a lossy JPEG XL DNG (DNG 1.7.1) into [out]. [distance]: libjxl's quality (0.2 is
- * visually lossless, larger is smaller and lossier); [effort] 1..9. NotApplicable: the DNG isn't a 2x2 CFA mosaic or
- * is already lossy JPEG XL; [out] is untouched. Failed: [error] says why.
+ * Re-saves the DNG in [data] into [out], optionally compressing a 2x2 Bayer mosaic as lossy JPEG XL (DNG 1.7.1,
+ * [lossyJxl] with libjxl [distance] and [effort] 1..9) and/or embedding an already-encoded upright sRGB JPEG preview
+ * ([previewJpeg]/[previewSize]). Preserves any RawBoy Camera depth trailer ("RBDP").
+ * NotApplicable: neither lossy JXL nor a valid preview applied; [out] is untouched. Failed: [error] says why.
  */
+TranscodeResult rewriteDng(const uint8_t* data, size_t size, bool lossyJxl, float distance, int effort,
+                           const uint8_t* previewJpeg, size_t previewSize, std::vector<uint8_t>& out,
+                           std::string& error);
+
+/** Convenience wrapper: lossy JPEG XL transcode without an embedded preview. */
 TranscodeResult transcodeToLossyJxlDng(const uint8_t* data, size_t size, float distance, int effort,
                                        std::vector<uint8_t>& out, std::string& error);
 #endif

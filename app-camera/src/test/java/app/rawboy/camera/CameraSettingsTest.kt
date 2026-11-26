@@ -130,6 +130,53 @@ class CameraSettingsTest {
     }
 
     @Test
+    fun rawCaptureModeDefaultsAndHelpers() {
+        // Default (RAW off): saves JPEG only, no DNG preview, not Pure RAW.
+        val jpegOnly = CameraSettings()
+        assertFalse(jpegOnly.keepDng)
+        assertFalse(jpegOnly.rawWithJpeg)
+        assertEquals(RawPreview.P3000, jpegOnly.rawPreview)
+        assertEquals(85, CameraSettings.RAW_PREVIEW_QUALITY)
+        assertEquals(3000, RawPreview.P3000.maxLongSide)
+        assertEquals(4000, RawPreview.MP12.maxLongSide)
+        assertEquals(null, RawPreview.NONE.maxLongSide)
+        assertTrue(jpegOnly.saveJpeg)
+        assertFalse(jpegOnly.embedDngPreview)
+        assertFalse(jpegOnly.pureRaw)
+
+        // RAW on (default): RAW only with 3000 px embedded preview.
+        val rawDefault = jpegOnly.copy(keepDng = true)
+        assertFalse(rawDefault.saveJpeg)
+        assertTrue(rawDefault.embedDngPreview)
+        assertFalse(rawDefault.pureRaw)
+
+        // RAW + JPEG with 12 MP embedded preview.
+        val rawAndJpeg = rawDefault.copy(rawWithJpeg = true, rawPreview = RawPreview.MP12)
+        assertTrue(rawAndJpeg.saveJpeg)
+        assertTrue(rawAndJpeg.embedDngPreview)
+        assertFalse(rawAndJpeg.pureRaw)
+
+        // Pure RAW: RAW only, no embedded preview -> skips develop.
+        val pureRaw = rawDefault.copy(rawPreview = RawPreview.NONE)
+        assertFalse(pureRaw.saveJpeg)
+        assertFalse(pureRaw.embedDngPreview)
+        assertTrue(pureRaw.pureRaw)
+
+        // RAW + JPEG with embedded preview off: still saves JPEG, so not Pure RAW.
+        val rawAndJpegNoPreview = rawAndJpeg.copy(rawPreview = RawPreview.NONE)
+        assertTrue(rawAndJpegNoPreview.saveJpeg)
+        assertFalse(rawAndJpegNoPreview.embedDngPreview)
+        assertFalse(rawAndJpegNoPreview.pureRaw)
+
+        // Easy mode preserves RAW sub-options.
+        val easyPure = pureRaw.copy(easy = true).effective
+        assertTrue(easyPure.keepDng)
+        assertFalse(easyPure.rawWithJpeg)
+        assertEquals(RawPreview.NONE, easyPure.rawPreview)
+        assertTrue(easyPure.pureRaw)
+    }
+
+    @Test
     fun automaticCalibrationKeepsItsStorageKeys() {
         // The owner's learned calibration lives under these keys; a debug build's chosen profile learns beside them.
         assertEquals("previewScales3", CameraSettingsStore.scalesKey(""))

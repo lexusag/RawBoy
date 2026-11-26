@@ -1,6 +1,7 @@
 import AVFoundation
 import CoreMotion
 import Foundation
+import ImageIO
 import os
 import Photos
 import RawBoyEngine
@@ -118,8 +119,10 @@ final class CameraViewModel: ObservableObject {
         let compensationEv: Float
         /** The camera saw a face at the shutter: run skin detection. */
         let mayHaveFace: Bool
-        /** The viewfinder's 512 px copy at the shutter (debug snapshots). */
+        /** The viewfinder's 512 px copy at the shutter (debug snapshots and Pure RAW thumbnail). */
         let viewfinder: PreviewImage?
+        /** Live auto exposure (EV) at the shutter, used to tone-map the Pure RAW viewfinder thumbnail. */
+        let viewfinderExposure: Float
         /** Where the photo is metered, in the photo's own (level) orientation: see meterArea. */
         let meter: MeterArea
         /** Capture timestamp, used when settings.photoFrame is .dateStamp. */
@@ -575,6 +578,8 @@ final class CameraViewModel: ObservableObject {
     func setWarmth(_ v: Float) { change { $0.warmth = v } }
     func setJpegQuality(_ q: Int) { change { $0.jpegQuality = min(max(q, CameraSettings.minQuality), 100) } }
     func setKeepDng(_ keep: Bool) { change { $0.keepDng = keep } }
+    func setRawWithJpeg(_ on: Bool) { change { $0.rawWithJpeg = on } }
+    func setRawPreview(_ preview: RawPreview) { change { $0.rawPreview = preview } }
     func setSmallExport(_ on: Bool) { change { $0.smallExport = on } }
     func setRememberLast(_ on: Bool) { change { $0.rememberLast = on } }
     func setShutterSound(_ on: Bool) { change { $0.shutterSound = on } }
@@ -984,7 +989,7 @@ final class CameraViewModel: ObservableObject {
                     Task { @MainActor in self?.shutterCount += 1 }
                 }
                 shots.append(Shot(dng: result.dng, name: name, settings: s, viewfinderKey: viewfinderKey,
-                                  iso: result.iso, compensationEv: result.compensationEv, mayHaveFace: mayHaveFace, viewfinder: live?.base, meter: meter, date: Date(), frameNumber: frameNumber, spotMetered: spotMetered))
+                                  iso: result.iso, compensationEv: result.compensationEv, mayHaveFace: mayHaveFace, viewfinder: live?.base, viewfinderExposure: live?.auto.exposure ?? 0, meter: meter, date: Date(), frameNumber: frameNumber, spotMetered: spotMetered))
                 developNext()
             } catch {
                 Self.log.error("capture: \(error.localizedDescription)")
@@ -1019,21 +1024,38 @@ final class CameraViewModel: ObservableObject {
         }
     }
 
-    /** Raw -> auto develop + look -> JPEG (jpegli), as RawBoy Auto develops a photo. */
+    /** Raw -> auto develop + look -> JPEG / DNG with embedded preview, or Pure RAW directly to Photos. */
     private func develop(_ shot: Shot) async throws {
         let s = shot.settings
-        let look = s.look
         let started = Date()
+        var bgTask = UIBackgroundTaskIdentifier.invalid
+        bgTask = UIApplication.shared.beginBackgroundTask(withName: "RawBoy photo") {
+            UIApplication.shared.endBackgroundTask(bgTask)
+        }
+        defer { if bgTask != .invalid { UIApplication.shared.endBackgroundTask(bgTask) } }
+
         let tempDir = FileManager.default.temporaryDirectory
         let dngURL = tempDir.appendingPathComponent(shot.name + ".dng")
-        try shot.dng.write(to: dngURL)
-        defer { if !s.keepDng { try? FileManager.default.removeItem(at: dngURL) } }
+        defer { try? FileManager.default.removeItem(at: dngURL) }
+
+        if s.pureRaw {
+            // Pure RAW: no standalone JPEG and no embedded preview -> bypass decode, analysis and GPU develop.
+            if let vf = shot.viewfinder {
+                lastShot = Self.viewfinderThumbnail(vf, exposureEv: shot.viewfinderExposure)
+            }
+            try shot.dng.write(to: dngURL)
+            try await PhotoLibraryOutput.save(dngURL, naming: Self.rawNaming)
+            Self.log.notice("saved pure RAW \(shot.name) in \(Int(Date().timeIntervalSince(started) * 1000)) ms")
+            return
+        }
+
+        let look = s.look
         // LUT first, on the main actor (it's cached there).
         let preliminary = LookApplier.apply(DevelopParams(), look: look, strength: s.strength, adjust: .none, hasFace: false)
         let lut = try await preliminary.lut.asyncMap { try await loadLut($0) }
         let film = try await preliminary.film.asyncMap { try await loadFilm($0) }
         let gpu = exportGpu
-        let (jpeg, rawKey) = try await withCheckedThrowingContinuation { (c: CheckedContinuation<(URL, Float), Error>) in
+        let outcome = try await withCheckedThrowingContinuation { (c: CheckedContinuation<(jpeg: URL?, preview: Data?, dng: Data?, rawKey: Float), Error>) in
             developQueue.async {
                 do {
                     let decodeStart = Date()
@@ -1055,7 +1077,7 @@ final class CameraViewModel: ObservableObject {
                     params.colorDenoise = max(Self.measuredColorDenoise(img, exposure: params.exposure, denoise: params.denoise) ?? params.denoise,
                                               params.colorDenoise ?? 0)
                     params.shadows = max(params.shadows, Self.backlightShadows(a.stats))
-                    // Random light leak: one generated leak on saved JPEGs, as on Android (the DNG and viewfinder don't get it).
+                    // Random light leak: one generated leak on saved JPEGs/previews, as on Android (the DNG raw stays clean).
                     if s.randomLightLeak, CameraSettingsStore.nextLightLeak(rate: s.randomLightLeakRate) {
                         let aspect = Float(a.base.width) / Float(max(a.base.height, 1))
                         params.filmLeaks = [FilmLeaks.randomForCamera(aspect: aspect, seed: FilmLeaks.newSeed(),
@@ -1095,24 +1117,124 @@ final class CameraViewModel: ObservableObject {
                                                 dateStampStyle: s.dateStampStyle,
                                                 pentax645: pentax645,
                                                 monochromeImprint: s.monoMode)
+                    let previewMaxLongSide = s.rawPreview.maxLongSide
+                    var previewSettings = export
+                    previewSettings.jpegQuality = CameraSettings.rawPreviewQuality
+                    previewSettings.maxLongSide = previewMaxLongSide
+
                     let exportStart = Date()
-                    let file = try Exporter().export(img, sourceName: shot.name, params: shader, settings: export,
-                                                     naming: Self.jpegNaming, gpu: gpu)
+                    var jpegURL: URL?
+                    var previewData: Data?
+                    if s.saveJpeg {
+                        let file = try Exporter().export(img, sourceName: shot.name, params: shader, settings: export,
+                                                         naming: Self.jpegNaming, gpu: gpu)
+                        jpegURL = file
+                        if s.embedDngPreview {
+                            let jpegSmallerThanPreview = s.maxLongSide != nil && previewMaxLongSide != nil && previewMaxLongSide! > s.maxLongSide!
+                            if jpegSmallerThanPreview {
+                                previewData = try Exporter().exportJpegData(img, params: shader, settings: previewSettings, gpu: gpu)
+                            } else {
+                                previewData = Self.makePreviewJpeg(from: file, maxLongSide: previewMaxLongSide, quality: CameraSettings.rawPreviewQuality)
+                            }
+                        }
+                    } else if s.embedDngPreview {
+                        previewData = try Exporter().exportJpegData(img, params: shader, settings: previewSettings, gpu: gpu)
+                    }
                     Self.log.notice("\(shot.name): decode \(decodeMs) ms, develop + JPEG \(Int(Date().timeIntervalSince(exportStart) * 1000)) ms")
-                    c.resume(returning: (file, a.stats.key))
+
+                    var dngData: Data?
+                    if s.keepDng {
+                        if let previewData {
+                            let embedStart = Date()
+                            do {
+                                dngData = try DngPreview.embed(previewData, in: shot.dng) ?? shot.dng
+                                Self.log.notice("\(shot.name): embedded DNG preview (\(previewData.count / 1024) KB) in \(Int(Date().timeIntervalSince(embedStart) * 1000)) ms")
+                            } catch {
+                                Self.log.error("\(shot.name): DNG preview embed failed: \(error.localizedDescription)")
+                                dngData = shot.dng
+                            }
+                        } else {
+                            dngData = shot.dng
+                        }
+                    }
+                    c.resume(returning: (jpegURL, previewData, dngData, a.stats.key))
                 } catch {
                     c.resume(throwing: error)
                 }
             }
         }
-        lastShot = UIImage(contentsOfFile: jpeg.path)?.preparingThumbnail(of: CGSize(width: 160, height: 160))
-        #if DEBUG
-        DebugSnapshots.save(shot.name, jpeg: jpeg, viewfinder: shot.viewfinder, dng: shot.dng)
-        #endif
-        try await PhotoLibraryOutput.save(jpeg, naming: Self.jpegNaming)
-        if s.keepDng { try await PhotoLibraryOutput.save(dngURL, naming: Self.rawNaming) }
+        if let jpeg = outcome.jpeg {
+            lastShot = UIImage(contentsOfFile: jpeg.path)?.preparingThumbnail(of: CGSize(width: 160, height: 160))
+            #if DEBUG
+            DebugSnapshots.save(shot.name, jpeg: jpeg, viewfinder: shot.viewfinder, dng: outcome.dng ?? shot.dng)
+            #endif
+            try await PhotoLibraryOutput.save(jpeg, naming: Self.jpegNaming)
+        } else if let preview = outcome.preview {
+            lastShot = UIImage(data: preview)?.preparingThumbnail(of: CGSize(width: 160, height: 160))
+        }
+        if let dngData = outcome.dng {
+            try dngData.write(to: dngURL)
+            try await PhotoLibraryOutput.save(dngURL, naming: Self.rawNaming)
+        }
         Self.log.notice("saved \(shot.name) in \(Int(Date().timeIntervalSince(started) * 1000)) ms")
-        if let key = shot.viewfinderKey { calibrate(rawKey: rawKey, viewfinderKey: key, lens: s.lensKey, scaleAtShutter: s.previewScale) }
+        if let key = shot.viewfinderKey { calibrate(rawKey: outcome.rawKey, viewfinderKey: key, lens: s.lensKey, scaleAtShutter: s.previewScale) }
+    }
+
+    /** Downscales (if needed) and re-encodes the saved JPEG at [quality] for embedding as a DNG preview. */
+    private nonisolated static func makePreviewJpeg(from jpegURL: URL, maxLongSide: Int?, quality: Int) -> Data? {
+        guard let src = CGImageSourceCreateWithURL(jpegURL as CFURL, nil) else { return nil }
+        let cgImage: CGImage?
+        if let maxLongSide {
+            let opts: [CFString: Any] = [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceThumbnailMaxPixelSize: maxLongSide,
+            ]
+            cgImage = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary)
+        } else {
+            cgImage = CGImageSourceCreateImageAtIndex(src, 0, nil)
+        }
+        guard let cgImage else { return nil }
+        let out = NSMutableData()
+        guard let dest = CGImageDestinationCreateWithData(out as CFMutableData, "public.jpeg" as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(dest, cgImage, [kCGImageDestinationLossyCompressionQuality: Double(quality) / 100] as CFDictionary)
+        return CGImageDestinationFinalize(dest) ? out as Data : nil
+    }
+
+    /**
+     * Builds a tiny (~160 px) sRGB thumbnail from the live 512 px linear Rec.2020 viewfinder frame in <1 ms,
+     * so Pure RAW shots still update the shutter thumbnail without decoding the DNG.
+     */
+    private nonisolated static func viewfinderThumbnail(_ preview: PreviewImage, exposureEv: Float) -> UIImage? {
+        let srcW = preview.width
+        let srcH = preview.height
+        guard srcW > 0, srcH > 0, preview.pixels.count >= srcW * srcH * 3 else { return nil }
+        let step = max(1, max(srcW, srcH) / 160)
+        let dstW = (srcW + step - 1) / step
+        let dstH = (srcH + step - 1) / step
+        let gain = powf(2, exposureEv)
+        var rgba = [UInt8](repeating: 255, count: dstW * dstH * 4)
+        var out = 0
+        for y in 0..<dstH {
+            let sy = min(y * step, srcH - 1)
+            for x in 0..<dstW {
+                let sx = min(x * step, srcW - 1)
+                let off = (sy * srcW + sx) * 3
+                let r2020 = Float(Float16(bitPattern: preview.pixels[off])) * gain
+                let g2020 = Float(Float16(bitPattern: preview.pixels[off + 1])) * gain
+                let b2020 = Float(Float16(bitPattern: preview.pixels[off + 2])) * gain
+                // Linear Rec.2020 -> sRGB, soft Reinhard roll-off, sRGB gamma.
+                let r = max(0, 1.6605 * r2020 - 0.5876 * g2020 - 0.0728 * b2020)
+                let g = max(0, -0.1246 * r2020 + 1.1329 * g2020 - 0.0083 * b2020)
+                let b = max(0, -0.0182 * r2020 - 0.1006 * g2020 + 1.1187 * b2020)
+                rgba[out] = UInt8(min(max((255 * powf(r / (1 + r), 1 / 2.2)).rounded(), 0), 255))
+                rgba[out + 1] = UInt8(min(max((255 * powf(g / (1 + g), 1 / 2.2)).rounded(), 0), 255))
+                rgba[out + 2] = UInt8(min(max((255 * powf(b / (1 + b), 1 / 2.2)).rounded(), 0), 255))
+                out += 4
+            }
+        }
+        guard let cg = try? ThumbnailRenderer.cgImage(rgba, dstW, dstH) else { return nil }
+        return UIImage(cgImage: cg)
     }
 
     /**
