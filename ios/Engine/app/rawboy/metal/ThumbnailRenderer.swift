@@ -47,7 +47,7 @@ public final class ThumbnailRenderer: @unchecked Sendable {
     }
 
     /** 8-bit RGBA (alpha ignored) as an sRGB CGImage. */
-    static func cgImage(_ rgba: [UInt8], _ w: Int, _ h: Int) throws -> CGImage {
+    public static func cgImage(_ rgba: [UInt8], _ w: Int, _ h: Int) throws -> CGImage {
         guard let provider = CGDataProvider(data: Data(rgba) as CFData),
               let image = CGImage(
                 width: w, height: h, bitsPerComponent: 8, bitsPerPixel: 32, bytesPerRow: w * 4,
