@@ -38,6 +38,7 @@ jobs:
       camera: ${{ steps.filter.outputs.camera }}
       engine: ${{ steps.filter.outputs.engine }}
       desktop: ${{ steps.filter.outputs.desktop }}
+      ios: ${{ steps.filter.outputs.ios }}
     steps:
       - uses: actions/checkout@v7
 
@@ -77,6 +78,24 @@ jobs:
             # RawBoy Desktop (macOS): the Swift engine, Pro's and the Desktop's sources, bundled resources, shaders and native code.
             desktop:
               - 'ios/**'
+              - 'shaders/**'
+              - 'luts/**'
+              - 'web/public/lensfun/**'
+              - 'engine/src/main/assets/models/**'
+              - 'licenses/**'
+              - 'engine/src/main/cpp/**'
+              - '.github/workflows/ci.yml'
+            # RawBoy iOS apps (Camera, Pro, Auto): the iOS engine, app targets, MediaPipe, shaders and native code.
+            ios:
+              - 'ios/Camera/**'
+              - 'ios/Pro/**'
+              - 'ios/Auto/**'
+              - 'ios/Engine/**'
+              - 'ios/native/**'
+              - 'ios/mediapipe/**'
+              - 'ios/shaders/**'
+              - 'ios/project.yml'
+              - 'ios/viewer-source.sh'
               - 'shaders/**'
               - 'luts/**'
               - 'web/public/lensfun/**'
@@ -249,12 +268,94 @@ jobs:
             -derivedDataPath "$RUNNER_TEMP/dd" CODE_SIGN_IDENTITY=- 2>&1 | tee "$RUNNER_TEMP/test.log" | grep -E "error:|Test Case .*(failed|skipped)|Executed .* tests|TEST (SUCCEEDED|FAILED)" || true
           grep -q "TEST SUCCEEDED" "$RUNNER_TEMP/test.log" || { grep -E "error:|failed" -B2 -A6 "$RUNNER_TEMP/test.log" | head -300; exit 1; }
 
+  # RawBoy iOS (Camera, Pro, Auto): compiles the iOS app targets against RawBoyEngine (device SDK, unsigned) so
+  # iOS-only compile and module-visibility errors are caught on PRs instead of failing later in TestFlight.
+  # Shares native, MediaPipe, and SwiftPM cache keys with testflight.yml.
+  ios:
+    name: iOS apps build
+    needs: changes
+    if: github.event_name == 'workflow_dispatch' || needs.changes.outputs.ios == 'true'
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Select the newest Xcode
+        run: |
+          xcode=$(ls -d /Applications/Xcode_*.app | grep -iv -e beta -e rc | sort -V | tail -1)
+          sudo xcode-select -s "$xcode/Contents/Developer"
+          xcodebuild -version
+
+      - name: Tools
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          HOMEBREW_NO_INSTALL_CLEANUP: "1"
+        run: |
+          brew install xcodegen glslang spirv-cross
+          xcrun -f metal >/dev/null 2>&1 || xcodebuild -downloadComponent MetalToolchain
+
+      - uses: actions/cache@v6
+        id: native
+        with:
+          path: ios/native/out
+          key: ios-native-${{ runner.os }}-${{ hashFiles('engine/src/main/cpp/**', 'ios/native/**', 'engine/src/main/cpp/dng_sdk.cmake') }}
+
+      - uses: actions/cache@v6
+        if: steps.native.outputs.cache-hit != 'true'
+        with:
+          path: third_party/dng_sdk_1_7_1.zip
+          key: dng_sdk_1_7_1.zip
+
+      - name: Build the native libraries (iOS slice)
+        if: steps.native.outputs.cache-hit != 'true'
+        run: |
+          cd third_party
+          [ -f dng_sdk_1_7_1.zip ] || curl -fsSLO https://download.adobe.com/pub/adobe/dng/dng_sdk_1_7_1.zip
+          unzip -q dng_sdk_1_7_1.zip && mv dng_sdk_1_7_1 dng_sdk
+          cd ..
+          ios/native/build.sh ios
+
+      - uses: actions/cache@v6
+        with:
+          path: ios/mediapipe/out
+          key: ios-mediapipe-${{ runner.os }}-${{ hashFiles('ios/mediapipe/fetch.sh') }}
+
+      - name: RawBoy Viewer libraries
+        id: viewer
+        run: |
+          if grep -q 'path: ../../RawBoyImageViewer' ios/project.yml; then
+            ref="v$(sed -n 's/^VIEWER_FROM="${VIEWER_FROM:-\([^}]*\)}"/\1/p' ios/viewer-source.sh)"
+            git clone --depth 1 --branch "$ref" https://github.com/lexusag/RawBoyImageViewer ../RawBoyImageViewer
+          fi
+          echo "pin=$(sed -n '/viewer-package:begin/,/viewer-package:end/p' ios/project.yml | shasum | cut -c1-12)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/cache@v6
+        with:
+          path: ${{ runner.temp }}/dd/SourcePackages
+          key: viewer-spm-${{ runner.os }}-${{ steps.viewer.outputs.pin }}
+
+      - name: Generate the project
+        run: cd ios && xcodegen
+
+      - name: Build iOS apps (Camera, Pro, Auto)
+        run: |
+          cd ios
+          set -o pipefail
+          for scheme in RawBoyCamera RawBoyPro RawBoyAuto; do
+            echo "=== Building $scheme ==="
+            log="$RUNNER_TEMP/build-$scheme.log"
+            xcodebuild build -project RawBoy.xcodeproj -scheme "$scheme" -configuration Debug \
+              -destination 'generic/platform=iOS' -derivedDataPath "$RUNNER_TEMP/dd" \
+              CODE_SIGNING_ALLOWED=NO 2>&1 | tee "$log" | grep -E "error:|BUILD (SUCCEEDED|FAILED)" || true
+            grep -q "BUILD SUCCEEDED" "$log" || { grep -E "error:" -B2 -A6 "$log" | head -300; exit 1; }
+          done
+
   # The one required check. Passes when every needed job succeeded or was skipped (nothing relevant changed);
   # fails when any failed or was cancelled. `always()` makes it run (and report) even when a dependency is skipped;
   # it runs on pull requests only.
   pr-check:
     name: pr-check
-    needs: [changes, web, android, desktop]
+    needs: [changes, web, android, desktop, ios]
     # Only meaningful (and only required) on pull requests; pushes to main run the jobs above without it.
     if: always() && github.event_name == 'pull_request'
     runs-on: ubuntu-latest
