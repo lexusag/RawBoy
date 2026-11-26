@@ -15,7 +15,7 @@
 1. Open [appstoreconnect.apple.com](https://appstoreconnect.apple.com) → **Users and Access → Integrations → App Store Connect API**.
 2. Under **Team Keys**, click **+** (Generate API Key):
    - **Name:** `GitHub TestFlight` (or similar)
-   - **Access:** **App Manager** *(required for cloud-managed distribution signing; a Developer-only key is not sufficient)*
+   - **Access:** **Admin** *(required for cloud-managed distribution signing; Developer and App Manager keys fail with `Cloud signing permission error`)*
 3. Copy the **Issuer ID** shown at the top of the page and the **Key ID** of the new key.
 4. Click **Download** next to the key to save `AuthKey_<KEYID>.p8`. **You can only download a `.p8` file once** — keep a backup in a password manager.
 5. Base64-encode the `.p8` for GitHub Secrets:
@@ -25,9 +25,9 @@
 
 ### 2. Add the GitHub repository secrets
 
-The workflow checks `APP_STORE_CONNECT_*` first and falls back to the existing `APPLE_NOTARY_*` secrets from [macos-release.md](macos-release.md). If your existing `APPLE_NOTARY_*` key already has **App Manager** (or **Admin**) access in App Store Connect, you don't need to add any new secrets.
+The workflow checks `APP_STORE_CONNECT_*` first and falls back to the existing `APPLE_NOTARY_*` secrets from [macos-release.md](macos-release.md). If your existing `APPLE_NOTARY_*` key already has **Admin** access in App Store Connect, you don't need to add any new secrets.
 
-Otherwise, either replace `APPLE_NOTARY_*` with an **App Manager** key (it works for macOS notarization too), or add separate secrets under Repository → **Settings → Secrets and variables → Actions → New repository secret**:
+Otherwise, either replace `APPLE_NOTARY_*` with an **Admin** key (it works for macOS notarization too), or add separate secrets under Repository → **Settings → Secrets and variables → Actions → New repository secret**:
 
 | Secret | Value |
 | --- | --- |
@@ -48,5 +48,5 @@ Actions → **Publish to TestFlight** → **Run workflow**:
 
 ## Troubleshooting
 
-- **API key permission error during `-exportArchive`:** verify the key's role in App Store Connect is **App Manager** (or **Admin**), not **Developer**.
+- **`Cloud signing permission error` during `-exportArchive`:** verify the key's role in App Store Connect is **Admin** (neither **Developer** nor **App Manager** is sufficient for cloud-managed distribution signing), and that `APP_STORE_CONNECT_*` secrets are set if `APPLE_NOTARY_*` uses a lower-privilege key.
 - **Duplicate build number:** if you uploaded a higher build number manually from Xcode for the same marketing version, pass a higher **Build number** in the workflow input (or bump the marketing version).
